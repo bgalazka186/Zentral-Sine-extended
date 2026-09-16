@@ -1,0 +1,143 @@
+[
+  {
+    "property": "zen.workspace.apps.sidebar.enabled",
+    "label": "Enable Apps Sidebar Grid & Floating Panels",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.apps.sidebar.apps_per_row",
+    "label": "Apps Displayed Per Row",
+    "type": "dropdown",
+    "defaultValue": "7",
+    "options": [
+      { "label": "3 Apps", "value": "3" },
+      { "label": "4 Apps", "value": "4" },
+      { "label": "5 Apps", "value": "5" },
+      { "label": "6 Apps", "value": "6" },
+      { "label": "7 Apps (Default)", "value": "7" },
+      { "label": "8 Apps", "value": "8" },
+      { "label": "9 Apps", "value": "9" },
+      { "label": "10 Apps", "value": "10" }
+    ]
+  },
+  {
+    "property": "zen.workspace.apps.sidebar.max_rows",
+    "label": "Maximum Grid Rows",
+    "type": "dropdown",
+    "defaultValue": "3",
+    "options": [
+      { "label": "1 Row", "value": "1" },
+      { "label": "2 Rows", "value": "2" },
+      { "label": "3 Rows (Default)", "value": "3" },
+      { "label": "4 Rows", "value": "4" },
+      { "label": "5 Rows", "value": "5" }
+    ]
+  },
+  {
+    "property": "zen.workspace.apps.sidebar.hide_utility_section",
+    "label": "Hide Utility Section in App Box",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.apps.insta_peek.shortcut",
+    "label": "Insta-Peek Shortcut",
+    "type": "string",
+    "defaultValue": "Alt+Q"
+  },
+  {
+    "property": "zen.workspace.apps.sidebar.animation_type",
+    "label": "Panel Animation Easing Curve",
+    "type": "dropdown",
+    "defaultValue": "spring-gentle",
+    "options": [
+      { "label": "Smooth Slide", "value": "slide" },
+      { "label": "Gentle Spring (Default)", "value": "spring-gentle" },
+      { "label": "Bouncy Spring", "value": "spring-bouncy" },
+      { "label": "Elastic Curve", "value": "elastic" }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.debug",
+    "label": "Enable Diagnostic Logging in Console Buffer",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.debug.full",
+    "label": "Capture Full Diagnostic Log (All Modules)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.debug.core",
+    "label": "Core Engine & Gecko Errors (Always On)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.debug.tabs",
+    "label": "Tab Groups & Drag-and-Drop Tracing",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.debug.apps",
+    "label": "Apps Sidebar & Panels Tracing",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.debug.menus",
+    "label": "Context Menus & Popups Tracing",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.debug.layout",
+    "label": "Layout Inspector & CSS Computed Styles Snapshot",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.report_endpoint",
+    "label": "Serverless Issue Report Endpoint URL",
+    "type": "string",
+    "defaultValue": "https://zentral-issue-reporter.michele-pierini.workers.dev/"
+  },
+  {
+    "property": "zen.workspace.tabgroups.enabled",
+    "label": "Enable Enhanced Tab Groups & Color Picker",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.tabgroups.collapse_on_launch",
+    "label": "Collapse Tab Groups on Browser Startup",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.tabgroups.show_chevron",
+    "label": "Show Open/Close Indicator on Tab Group Pills",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.tabgroups.indicator_type",
+    "label": "Tab Group Indicator Style",
+    "type": "dropdown",
+    "defaultValue": "circle",
+    "options": [
+      { "label": "Circle Dot", "value": "circle" },
+      { "label": "Chevron Arrow", "value": "chevron" }
+    ]
+  },
+  {
+    "property": "zen.workspace.tabgroups.thumbnails",
+    "label": "Show Tab Thumbnails on Hover",
+    "type": "checkbox",
+    "defaultValue": true
+  }
+]

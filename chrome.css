@@ -1,0 +1,5670 @@
+/* ============================================================================ */
+/*               ZENTRAL TAB GROUPS & UI STYLESHEET (v1.0.2)                  */
+/* ============================================================================ */
+/*  Part of the Zentral userChrome.js suite for Zen Browser.                   */
+/*  License: CC BY-NC-SA 4.0                                                   */
+/* ============================================================================ */
+/* #region Original Mod */
+/* Remove focus frame/outline on click */
+tab-group.zentral-standard :is(*, *:focus, *:focus-visible, *:-moz-focusring) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+tab-group.zentral-standard {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  margin: 2px 0 !important;
+}
+
+/* Neutralize native pill backgrounds & aspect-ratio constraints */
+tab-group.zentral-standard > .tab-group-label-container,
+tab-group.zentral-standard > .tab-group-label-container .tab-group-label {
+  background: transparent !important;
+}
+
+/* Zero-gap & layout isolation for Split Views & Hidden Tabs */
+tab-group:is(
+  [split-view-group],
+  [zen-split-view],
+  [is-zen-split],
+  .zen-split-view
+) {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+}
+
+tab-group:is(
+    [split-view-group],
+    [zen-split-view],
+    [is-zen-split],
+    .zen-split-view
+  )
+  > :is(.tab-group-label-container, .tab-group-container::after) {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+/* Split View Resizing & Splitter Drag Isolation */
+.zen-split-view-splitter {
+  user-select: none !important;
+  -moz-user-select: none !important;
+  -moz-user-drag: none !important;
+  -webkit-user-drag: none !important;
+}
+
+#tabbrowser-tabpanels[zen-split-resizing] browser,
+#tabbrowser-tabpanels[zen-split-resizing] .browserSidebarContainer,
+#tabbrowser-tabpanels[zen-split-resizing] iframe {
+  pointer-events: none !important;
+  user-select: none !important;
+  -moz-user-select: none !important;
+}
+
+#tabbrowser-tabs :is(tab, .tabbrowser-tab)[hidden] {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  visibility: hidden !important;
+}
+
+/* ===========================================================================
+   Smooth Translucent Full-Width Header Card Tinted with Group Color
+   =========================================================================== */
+/* Base Container (Full width across the sidebar) */
+tab-group.zentral-standard > .tab-group-label-container {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  pointer-events: auto !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  height: var(--tab-min-height, 36px) !important;
+  min-height: var(--tab-min-height, 36px) !important;
+  max-height: var(--tab-min-height, 36px) !important;
+  aspect-ratio: auto !important;
+  margin: 2px 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  opacity: 1 !important;
+  position: relative !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+/* Extension Shelf retired */
+tab-group.zentral-standard > .tab-group-label-container::before {
+  display: none !important;
+  content: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Title Card (Left Sidebar default: 100% full-width, right-aligned content facing webpage) */
+tab-group.zentral-standard
+  > .tab-group-label-container
+  .zentral-tab-title-wrapper {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  height: var(--tab-min-height, 36px) !important;
+  min-height: var(--tab-min-height, 36px) !important;
+  max-height: var(--tab-min-height, 36px) !important;
+  padding: 0 8px 0 10px !important;
+  border-radius: 8px !important;
+  background-color: color-mix(
+    in srgb,
+    var(--zentral-custom-color, var(--tab-group-color, #777777))
+      calc(var(--zentral-tabgroup-label-opacity, 0.85) * 100%),
+    transparent
+  ) !important;
+  backdrop-filter: blur(16px) saturate(140%) !important;
+  z-index: 3 !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  transition:
+    background-color 0.2s ease,
+    border-radius 0.2s ease !important;
+}
+
+/* Nested Groups on Left Sidebar: 8px compact stepped indentation on the RIGHT (facing webpage content) */
+:is(
+    tab-group.zentral-standard tab-group.zentral-standard,
+    tab-group.zentral-standard[depth],
+    tab-group.zentral-standard[nesting-level]
+  )
+  > .tab-group-label-container
+  .zentral-tab-title-wrapper {
+  margin-right: 8px !important;
+  margin-left: 0 !important;
+  width: calc(100% - 8px) !important;
+  min-width: calc(100% - 8px) !important;
+}
+
+#zentral-group-color-picker,
+#zentral-group-color-picker::part(content),
+#zentral-group-color-picker::part(arrow),
+panel#zentral-group-color-picker,
+#zentral-group-color-picker .panel-arrowcontent,
+#zentral-group-color-picker .panel-subview-body {
+  --panel-background: transparent !important;
+  --panel-border-color: transparent !important;
+  --panel-box-shadow: none !important;
+  --panel-padding: 0 !important;
+  --arrowpanel-background: transparent !important;
+  --arrowpanel-border-color: transparent !important;
+  --arrowpanel-border-radius: 0px !important;
+  --arrowpanel-box-shadow: none !important;
+  --arrowpanel-padding: 0 !important;
+  --arrowpanel-margin: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  appearance: none !important;
+}
+
+.zentral-tg-cp-box {
+  padding: 12px 14px 14px 14px !important;
+  gap: 10px !important;
+  background: #1e1e24 !important;
+  color: #fbfbfe !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(20px) !important;
+  width: 184px !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  overflow: visible !important;
+}
+
+/* Right Sidebar Mode (Sidebar on Right side of screen -> Outer edge is on RIGHT, content on LEFT) */
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  tab-group.zentral-standard
+  > .tab-group-label-container {
+  justify-content: flex-start !important;
+}
+
+html[zen-sidebar-right="true"]
+  tab-group.zentral-standard
+  > .tab-group-label-container
+  .zentral-tab-title-wrapper,
+html[zen-right-side="true"]
+  tab-group.zentral-standard
+  > .tab-group-label-container
+  .zentral-tab-title-wrapper {
+  justify-content: flex-start !important;
+  padding: 0 10px 0 8px !important;
+  margin-left: 0 !important;
+  margin-right: auto !important;
+  width: 100% !important;
+  min-width: 100% !important;
+}
+
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  :is(
+    tab-group.zentral-standard tab-group.zentral-standard,
+    tab-group.zentral-standard[depth],
+    tab-group.zentral-standard[nesting-level]
+  )
+  > .tab-group-label-container
+  .zentral-tab-title-wrapper {
+  margin-left: 8px !important;
+  margin-right: 0 !important;
+  width: calc(100% - 8px) !important;
+  min-width: calc(100% - 8px) !important;
+}
+
+html[zen-sidebar-right="true"]
+  tab-group.zentral-standard
+  > .tab-group-label-container::before,
+html[zen-right-side="true"]
+  tab-group.zentral-standard
+  > .tab-group-label-container::before {
+  display: none !important;
+  content: none !important;
+}
+
+/* Hover State Highlights for Full-Width Group Card */
+tab-group.zentral-standard
+  > .tab-group-label-container:is(:hover, :has(tab:hover))
+  .zentral-tab-title-wrapper {
+  background-color: color-mix(
+    in srgb,
+    var(--zentral-custom-color, var(--tab-group-color, #777777)) 85%,
+    #ffffff 15%
+  ) !important;
+  border-radius: 8px !important;
+}
+
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  tab-group.zentral-standard
+  > .tab-group-label-container:is(:hover, :has(tab:hover))
+  .zentral-tab-title-wrapper {
+  border-radius: 8px !important;
+}
+
+html[zentral-label-opacity-below-85="true"]
+  tab-group.zentral-standard
+  > .tab-group-label-container:is(:hover, :has(tab:hover))
+  .zentral-tab-title-wrapper {
+  background-color: var(
+    --zentral-custom-color,
+    var(--tab-group-color, #777777)
+  ) !important;
+  border-radius: 8px !important;
+}
+
+html[zentral-label-opacity-below-85="true"]:is(
+    [zen-sidebar-right="true"],
+    [zen-right-side="true"]
+  )
+  tab-group.zentral-standard
+  > .tab-group-label-container:is(:hover, :has(tab:hover))
+  .zentral-tab-title-wrapper {
+  border-radius: 8px !important;
+}
+
+/* Label text - Dynamically Auto-Contrast (Black or White) based on Label Color */
+/* Left Sidebar: Text is order 1, Indicator is order 2 (closest to right / webpage content) */
+tab-group.zentral-standard > .tab-group-label-container .tab-group-label {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  flex: 0 1 auto !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  max-height: 100% !important;
+  line-height: 1 !important;
+  align-self: center !important;
+  text-align: end !important;
+  background-color: transparent !important;
+  opacity: 1 !important;
+  color: var(--zentral-tabgroup-contrast-color, #ffffff) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25) !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  padding: 0 !important;
+  margin: -2px 6px 0 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  width: auto !important;
+  max-width: 100% !important;
+  order: 1 !important;
+  transition: color 0.15s ease !important;
+}
+
+/* Right Sidebar: Indicator is order 1 (closest to left / webpage content), Text is order 2 */
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  #tabbrowser-tabs
+  tab-group
+  > .tab-group-label-container
+  .tab-group-label {
+  text-align: start !important;
+  order: 2 !important;
+  margin: -2px 0 0 6px !important;
+}
+
+/* Sub-Groups Counter Badge */
+.zentral-subgroups-badge {
+  display: none !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 2px 7px !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  border-radius: 10px !important;
+  background: color-mix(in srgb, currentColor 18%, transparent) !important;
+  backdrop-filter: blur(8px) !important;
+  color: var(--zentral-tabgroup-contrast-color, #ffffff) !important;
+  letter-spacing: 0.02em !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  order: 0 !important;
+  margin-right: auto !important;
+  margin-left: 0 !important;
+  transition: opacity 0.15s ease !important;
+}
+
+/* Right Sidebar: Place badge at the far right edge (opposite from left-aligned name) */
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  #tabbrowser-tabs
+  tab-group
+  > .tab-group-label-container
+  .zentral-subgroups-badge {
+  order: 3 !important;
+  margin-left: auto !important;
+  margin-right: 0 !important;
+}
+
+/* Reveal ONLY when the parent group is collapsed and has sub-groups */
+tab-group:is([collapsed="true"], [collapsed])[data-has-subgroups]
+  > .tab-group-label-container
+  .zentral-subgroups-badge {
+  display: inline-flex !important;
+}
+
+/* Hide in collapsed sidebar mode */
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  > .tab-group-label-container
+  .zentral-subgroups-badge {
+  display: none !important;
+}
+
+/* Icon container within title wrapper */
+/* Left Sidebar: Order 2 (closer to right / webpage content) */
+.tab-group-icon-container,
+#tabbrowser-tabs tab-group .tab-group-icon-container,
+#tabbrowser-tabs tab-group[collapsed] .tab-group-icon-container {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  max-width: 16px !important;
+  max-height: 16px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  flex-shrink: 0 !important;
+  order: 2 !important;
+  overflow: visible !important;
+}
+
+/* Right Sidebar: Order 1 (closer to left / webpage content) */
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  #tabbrowser-tabs
+  tab-group
+  .tab-group-icon-container,
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  #tabbrowser-tabs
+  tab-group[collapsed]
+  .tab-group-icon-container {
+  order: 1 !important;
+}
+
+/* Circular Group State Indicator - Dynamically Auto-Contrast (Black or White) based on Label Color */
+#tabbrowser-tabs tab-group > .tab-group-label-container .tab-group-icon,
+#tabbrowser-tabs
+  tab-group[collapsed]
+  > .tab-group-label-container
+  .tab-group-icon,
+tab-group .tab-group-icon,
+tab-group[collapsed] .tab-group-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+  opacity: 1 !important;
+  color: var(--zentral-tabgroup-contrast-color, #ffffff) !important;
+  fill: var(--zentral-tabgroup-contrast-color, #ffffff) !important;
+  stroke: var(--zentral-tabgroup-contrast-color, #ffffff) !important;
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  max-width: 16px !important;
+  max-height: 16px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  flex-shrink: 0 !important;
+  order: 1 !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  background-image: none !important;
+  text-decoration: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  cursor: pointer !important;
+  overflow: visible !important;
+}
+
+/* 1. Closed State: Small Solid full dot (Fixed size, pure opacity fade - zero zoom bounce) */
+tab-group .tab-group-icon::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  margin: auto !important;
+  width: 6.5px !important;
+  height: 6.5px !important;
+  border-radius: 50% !important;
+  background-color: currentColor !important;
+  opacity: 0 !important;
+  transform: none !important;
+  transition: opacity 0.16s ease !important;
+  pointer-events: none !important;
+}
+
+tab-group[collapsed] .tab-group-icon::before {
+  opacity: 1 !important;
+  transform: none !important;
+  transition: opacity 0.2s ease !important;
+}
+
+/* Complete obliteration of native image.group-marker and children inside .tab-group-icon on tabstrip ONLY */
+tab-group
+  :is(
+    .group-marker,
+    .tab-group-icon > *,
+    .tab-group-icon :is(image, img, svg, label, span)
+  ) {
+  display: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  opacity: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  list-style-image: none !important;
+  background: none !important;
+  background-image: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+tab-group .group-marker::before,
+tab-group .group-marker::after,
+tab-group[collapsed] .group-marker::before,
+tab-group[collapsed] .group-marker::after,
+.group-marker::before,
+.group-marker::after {
+  display: none !important;
+  content: none !important;
+  border: none !important;
+}
+
+/* 2. Open State: Concentric Circles with central dot (Zen logo style) */
+tab-group .tab-group-icon::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  margin: auto !important;
+  display: block !important;
+  width: 16px !important;
+  height: 16px !important;
+  background-color: currentColor !important;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='12' cy='12' r='10.4' stroke='black' stroke-width='2.0'/%3E%3Ccircle cx='12' cy='12' r='6.2' stroke='black' stroke-width='1.8'/%3E%3Ccircle cx='12' cy='12' r='1.6' fill='black'/%3E%3C/svg%3E") !important;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='12' cy='12' r='10.4' stroke='black' stroke-width='2.0'/%3E%3Ccircle cx='12' cy='12' r='6.2' stroke='black' stroke-width='1.8'/%3E%3Ccircle cx='12' cy='12' r='1.6' fill='black'/%3E%3C/svg%3E") !important;
+  -webkit-mask-size: contain !important;
+  mask-size: contain !important;
+  -webkit-mask-repeat: no-repeat !important;
+  mask-repeat: no-repeat !important;
+  -webkit-mask-position: center !important;
+  mask-position: center !important;
+  opacity: 1 !important;
+  transform: scale(1) !important;
+  transition:
+    opacity 0.22s ease,
+    transform 0.24s cubic-bezier(0.25, 1, 0.5, 1) !important;
+  pointer-events: none !important;
+  overflow: visible !important;
+}
+
+tab-group[collapsed] .tab-group-icon::after {
+  opacity: 0 !important;
+  transform: scale(0.41) !important;
+  transition:
+    opacity 0.18s ease,
+    transform 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Hide indicator icon completely when user disables Group Indicator in Zentral Settings */
+:is(html, :root, #main-window)[zentral-show-chevron="false"]
+  :is(#tabbrowser-tabs, tab-group, .tab-group-label-container)
+  :is(.tab-group-icon, .tab-group-icon-container),
+:is(html, :root, #main-window)[zentral-show-chevron="false"]
+  tab-group
+  :is(.tab-group-icon, .tab-group-icon-container),
+:is(html, :root, #main-window)[zentral-show-chevron="false"]
+  .tab-group-icon-container,
+:is(html, :root, #main-window)[zentral-show-chevron="false"] .tab-group-icon {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  pointer-events: none !important;
+}
+
+:is(html, :root, #main-window)[zentral-show-chevron="false"]
+  tab-group
+  :is(.tab-group-icon, .tab-group-icon-container)::before,
+:is(html, :root, #main-window)[zentral-show-chevron="false"]
+  tab-group
+  :is(.tab-group-icon, .tab-group-icon-container)::after {
+  display: none !important;
+  content: none !important;
+  opacity: 0 !important;
+}
+
+/* Chevron Indicator Option */
+:is(html, :root, #main-window)[zentral-indicator-type="chevron"]
+  tab-group
+  .tab-group-icon::before {
+  display: none !important;
+}
+
+:is(html, :root, #main-window)[zentral-indicator-type="chevron"]
+  tab-group
+  .tab-group-icon::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  margin: auto !important;
+  display: block !important;
+  width: 14px !important;
+  height: 14px !important;
+  background-color: currentColor !important;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  -webkit-mask-size: contain !important;
+  mask-size: contain !important;
+  -webkit-mask-repeat: no-repeat !important;
+  mask-repeat: no-repeat !important;
+  -webkit-mask-position: center !important;
+  mask-position: center !important;
+  opacity: 1 !important;
+  transform: rotate(0deg) !important;
+  transition:
+    transform 0.2s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.18s ease !important;
+  pointer-events: none !important;
+}
+
+:is(html, :root, #main-window)[zentral-indicator-type="chevron"]
+  tab-group[collapsed]
+  .tab-group-icon::after {
+  opacity: 1 !important;
+  transform: rotate(-90deg) !important;
+  transition:
+    transform 0.2s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.18s ease !important;
+}
+
+/* Hierarchy & Nested Groups Indentation (Mirrored for Left vs Right Sidebar) */
+tab-group.zentral-standard tab-group.zentral-standard {
+  margin-right: 8px !important;
+  margin-left: 0 !important;
+  position: relative !important;
+  width: calc(100% - 8px) !important;
+}
+
+/* No vertical line connecting parent label to nested group header */
+tab-group.zentral-standard tab-group.zentral-standard::before {
+  display: none !important;
+  content: none !important;
+}
+
+.zentral-group-initials {
+  display: none !important;
+}
+
+/* Top-level group tab container: flush margin and no guide line */
+tab-group.zentral-standard > .tab-group-container {
+  max-height: 100% !important;
+  position: relative !important;
+  margin: 0 !important;
+}
+
+tab-group.zentral-standard > .tab-group-container::after {
+  display: none !important;
+  content: none !important;
+}
+
+/* Nested Tab Group Container: 8px indented on the RIGHT (facing webpage content) */
+tab-group.zentral-standard tab-group.zentral-standard .tab-group-container {
+  max-height: 100% !important;
+  position: relative !important;
+  margin-right: 8px !important;
+  margin-left: 0 !important;
+  margin-inline-start: 0 !important;
+  margin-inline-end: 8px !important;
+}
+
+/* Vertical Guide Line: Only connects the nested label with its own tabs, using the nested label's color */
+tab-group.zentral-standard
+  tab-group.zentral-standard
+  .tab-group-container::after {
+  content: "" !important;
+  display: block !important;
+  position: absolute !important;
+  right: 0px !important;
+  left: auto !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  background-color: var(
+    --zentral-custom-color,
+    var(--tab-group-color, #777777)
+  ) !important;
+  height: 100% !important;
+  width: 2px !important;
+  border-radius: 1px !important;
+  z-index: 2 !important;
+  pointer-events: none !important;
+  opacity: 0.9 !important;
+}
+
+/* Right Sidebar Mode Overrides (Outer edge is on the RIGHT, webpage content on LEFT) */
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  tab-group.zentral-standard
+  tab-group.zentral-standard {
+  margin-left: 8px !important;
+  margin-right: 0 !important;
+}
+
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  tab-group.zentral-standard
+  tab-group.zentral-standard
+  .tab-group-container {
+  margin-left: 8px !important;
+  margin-right: 0 !important;
+  margin-inline-start: 8px !important;
+  margin-inline-end: 0 !important;
+}
+
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  tab-group.zentral-standard
+  tab-group.zentral-standard
+  .tab-group-container::after {
+  left: 0px !important;
+  right: auto !important;
+}
+
+tab-group.zentral-standard[collapsed] .tab-group-container::after {
+  display: none !important;
+}
+
+tab-group.zentral-standard .tab-group-container tab,
+tab-group.zentral-standard .tab-group-container tab-group {
+  transition:
+    max-height 0.15s ease,
+    opacity 0.15s ease !important;
+}
+
+tab-group.zentral-standard[collapsed] .tab-group-container tab:not([selected]),
+tab-group.zentral-standard[collapsed] .tab-group-container tab-group {
+  max-height: 0 !important;
+  min-height: 0 !important;
+  opacity: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+
+/* Hide tree guide lines and native pseudo-elements when a tab group is collapsed/closed or in Collapsed Sidebar Mode */
+tab-group[collapsed] .tab-group-container::after,
+tab-group[collapsed] .tab-group-container::before,
+tab-group[collapsed]::before,
+tab-group[collapsed]::after,
+tab-group[collapsed] > .tab-group-label-container::before,
+tab-group[collapsed] > .tab-group-label-container::after,
+tab-group:not([open]) .tab-group-container::after,
+tab-group:not([open]) .tab-group-container::before,
+#tabbrowser-tabs[zentral-sidebar-collapsed="true"] tab-group::before,
+#tabbrowser-tabs[zentral-sidebar-collapsed="true"] tab-group::after,
+#tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  tab-group
+  .tab-group-container::before,
+#tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  tab-group
+  .tab-group-container::after,
+#tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  tab-group
+  > .tab-group-label-container::before,
+#tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  tab-group
+  > .tab-group-label-container::after,
+html[zentral-sidebar-collapsed="true"] tab-group::before,
+html[zentral-sidebar-collapsed="true"] tab-group::after,
+html[zentral-sidebar-collapsed="true"] tab-group .tab-group-container::before,
+html[zentral-sidebar-collapsed="true"] tab-group .tab-group-container::after,
+html[zentral-sidebar-collapsed="true"]
+  tab-group
+  > .tab-group-label-container::before,
+html[zentral-sidebar-collapsed="true"]
+  tab-group
+  > .tab-group-label-container::after,
+html[zen-sidebar-collapsed="true"] tab-group::before,
+html[zen-sidebar-collapsed="true"] tab-group::after,
+html[zen-sidebar-collapsed="true"] tab-group .tab-group-container::before,
+html[zen-sidebar-collapsed="true"] tab-group .tab-group-container::after,
+html[zen-sidebar-collapsed="true"]
+  tab-group
+  > .tab-group-label-container::before,
+html[zen-sidebar-collapsed="true"]
+  tab-group
+  > .tab-group-label-container::after {
+  display: none !important;
+  content: none !important;
+  border: none !important;
+  width: 0 !important;
+  opacity: 0 !important;
+}
+
+/* Collapsed Sidebar Mode Styling */
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  > .tab-group-label-container {
+  justify-content: center !important;
+  align-items: center !important;
+  padding: 0 !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  height: var(--tab-min-height, 36px) !important;
+  min-height: var(--tab-min-height, 36px) !important;
+  max-height: var(--tab-min-height, 36px) !important;
+  box-sizing: border-box !important;
+}
+
+/* Disable Chevrons completely in Collapsed Sidebar Mode */
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  :is(.tab-group-icon, .tab-group-icon-container) {
+  display: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Hide Expanded Mode Label Title text in Collapsed Sidebar Mode */
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  > .tab-group-label-container
+  .tab-group-label {
+  display: none !important;
+}
+
+/* Title Wrapper in Collapsed Sidebar Mode: Left-align content & constrain within rounded pill */
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  > .tab-group-label-container
+  .zentral-tab-title-wrapper {
+  justify-content: flex-start !important;
+  padding: 0 4px 0 6px !important;
+  overflow: hidden !important;
+}
+
+/* Collapsed Label Text & Marquee Shell: Starts from the very first letter (never cut off) */
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  > .tab-group-label-container
+  .zentral-group-initials {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.02em !important;
+  color: var(--zentral-tabgroup-contrast-color, #ffffff) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
+  text-align: start !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+  overflow: hidden !important;
+  position: relative !important;
+  user-select: none !important;
+  pointer-events: none !important;
+  mask-image: linear-gradient(
+    to right,
+    black calc(100% - 6px),
+    transparent 100%
+  );
+}
+
+/* Marquee Track (Resting: Starts at x=0 showing first letters cleanly) */
+.zentral-group-initials .zentral-marquee-track {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  white-space: nowrap !important;
+  will-change: transform !important;
+  transform: translateX(0);
+}
+
+.zentral-group-initials .zentral-marquee-item {
+  display: inline-flex !important;
+  align-items: center !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+
+.zentral-group-initials .zentral-marquee-text {
+  white-space: nowrap !important;
+  display: inline-block !important;
+}
+
+.zentral-group-initials .zentral-marquee-spacer {
+  display: none !important;
+  padding: 0 4px !important;
+  opacity: 0.6 !important;
+  font-size: 9px !important;
+}
+
+.zentral-group-initials .zentral-marquee-item:nth-child(2) {
+  display: none !important;
+}
+
+/* On Hover: Trigger Continuous Marquee Carousel if overflowing */
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group:hover
+  > .tab-group-label-container
+  .zentral-group-initials[data-overflows="true"]
+  .zentral-marquee-track,
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  > .tab-group-label-container:hover
+  .zentral-group-initials[data-overflows="true"]
+  .zentral-marquee-track {
+  animation: zentral-collapsed-marquee var(--zentral-marquee-duration, 3.5s)
+    linear infinite !important;
+  animation-delay: 400ms !important;
+}
+
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group:hover
+  > .tab-group-label-container
+  .zentral-group-initials[data-overflows="true"]
+  .zentral-marquee-spacer,
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  > .tab-group-label-container:hover
+  .zentral-group-initials[data-overflows="true"]
+  .zentral-marquee-spacer {
+  display: inline-block !important;
+}
+
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group:hover
+  > .tab-group-label-container
+  .zentral-group-initials[data-overflows="true"]
+  .zentral-marquee-item:nth-child(2),
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  > .tab-group-label-container:hover
+  .zentral-group-initials[data-overflows="true"]
+  .zentral-marquee-item:nth-child(2) {
+  display: inline-flex !important;
+}
+
+@keyframes zentral-collapsed-marquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+/* ===========================================================================
+   Zentral - Tab Group Thumbnail Popup Styles
+   =========================================================================== */
+.zentral-tooltip-row {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 6px 10px !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  max-width: 320px !important;
+  border: 1px solid transparent !important;
+  box-sizing: border-box !important;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease !important;
+}
+
+.zentral-tooltip-row:hover {
+  background-color: color-mix(
+    in srgb,
+    currentColor 10%,
+    transparent
+  ) !important;
+}
+
+/* Active Tab in Thumbnail Preview */
+.zentral-tooltip-row[data-active="true"] {
+  background-color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #707ac2) 24%,
+    rgba(255, 255, 255, 0.12)
+  ) !important;
+  border: 1px solid
+    color-mix(in srgb, var(--zen-primary-color, #707ac2) 45%, transparent) !important;
+  opacity: 1 !important;
+}
+
+.zentral-tooltip-row[data-active="true"] .zentral-tooltip-title {
+  color: var(--zen-primary-color, currentColor) !important;
+  font-weight: 600 !important;
+}
+
+/* Unloaded / Dormant Tab in Thumbnail Preview */
+.zentral-tooltip-row[data-unloaded="true"]:not([data-active="true"]) {
+  opacity: 0.55 !important;
+}
+
+.zentral-tooltip-row[data-unloaded="true"]:not([data-active="true"]):hover {
+  opacity: 0.88 !important;
+}
+
+/* Close Tab ("X") Button on Thumbnail Hover */
+.zentral-tooltip-close-btn {
+  appearance: none !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 6px !important;
+  color: inherit !important;
+  padding: 3px !important;
+  width: 22px !important;
+  height: 22px !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease !important;
+  flex-shrink: 0 !important;
+  margin-left: auto !important;
+}
+
+.zentral-tooltip-row:hover .zentral-tooltip-close-btn {
+  opacity: 0.65 !important;
+  pointer-events: auto !important;
+}
+
+.zentral-tooltip-close-btn:hover {
+  opacity: 1 !important;
+  background-color: rgba(255, 77, 77, 0.22) !important;
+  color: #ff5555 !important;
+}
+
+.zentral-tooltip-close-btn svg {
+  width: 12px !important;
+  height: 12px !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 2 !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+  display: block !important;
+}
+
+/* ===========================================================================
+   Zentral - Compact / Collapsed Sidebar: Apps & Utility Button Styling
+   =========================================================================== */
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid
+  .zen-app-tile,
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid
+  .zen-app-add-btn,
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zentral-apps-utility-section
+  .zentral-utility-btn {
+  border-radius: var(--zen-border-radius, 8px) !important;
+  background-color: color-mix(in srgb, currentColor 8%, transparent) !important;
+  border: none !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease !important;
+}
+
+/* Unloaded App Styling - Desaturated appearance retaining subtle brand tint */
+.zen-app-tile[data-loaded="false"] img,
+.zen-app-tile[data-loaded="false"] svg,
+.zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  )
+  img,
+.zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  )
+  svg {
+  filter: saturate(35%) opacity(0.72) !important;
+  transition:
+    filter 0.2s ease,
+    opacity 0.2s ease !important;
+}
+
+.zen-app-tile[data-loaded="false"]:hover img,
+.zen-app-tile[data-loaded="false"]:hover svg,
+.zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  ):hover
+  img,
+.zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  ):hover
+  svg {
+  filter: saturate(75%) opacity(0.95) !important;
+}
+
+/* Loaded App Styling - A tiny bit more saturated than normal */
+.zen-app-tile[data-loaded="true"] img,
+.zen-app-tile[data-loaded="true"] svg {
+  filter: saturate(118%) !important;
+  opacity: 1 !important;
+  transition:
+    filter 0.2s ease,
+    opacity 0.2s ease !important;
+}
+
+.zen-app-tile[data-loaded="true"]:hover img,
+.zen-app-tile[data-loaded="true"]:hover svg {
+  filter: saturate(128%) !important;
+  opacity: 1 !important;
+}
+
+/* Vertical Bar Loaded & Unloaded App Styling */
+#zentral-apps-vertical-bar .zen-app-tile[data-loaded="true"] img,
+#zentral-apps-vertical-bar .zen-app-tile[data-loaded="true"] svg {
+  filter: saturate(118%) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) !important;
+  opacity: 1 !important;
+  transition:
+    transform 0.15s ease,
+    filter 0.2s ease,
+    opacity 0.2s ease !important;
+}
+
+#zentral-apps-vertical-bar .zen-app-tile[data-loaded="true"]:hover img,
+#zentral-apps-vertical-bar .zen-app-tile[data-loaded="true"]:hover svg {
+  filter: saturate(128%) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
+}
+
+#zentral-apps-vertical-bar .zen-app-tile[data-loaded="false"] img,
+#zentral-apps-vertical-bar .zen-app-tile[data-loaded="false"] svg,
+#zentral-apps-vertical-bar
+  .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  )
+  img,
+#zentral-apps-vertical-bar
+  .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  )
+  svg {
+  filter: saturate(35%) opacity(0.72) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) !important;
+  transition:
+    transform 0.15s ease,
+    filter 0.2s ease,
+    opacity 0.2s ease !important;
+}
+
+#zentral-apps-vertical-bar .zen-app-tile[data-loaded="false"]:hover img,
+#zentral-apps-vertical-bar .zen-app-tile[data-loaded="false"]:hover svg,
+#zentral-apps-vertical-bar
+  .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  ):hover
+  img,
+#zentral-apps-vertical-bar
+  .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  ):hover
+  svg {
+  filter: saturate(75%) opacity(0.95) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
+}
+
+#zentral-apps-vertical-bar .zen-app-add-btn svg {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) !important;
+  transition:
+    transform 0.15s ease,
+    filter 0.15s ease !important;
+}
+
+#zentral-apps-vertical-bar .zen-app-add-btn:hover svg {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
+}
+
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid
+  .zen-app-tile[data-loaded="true"]
+  img,
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid
+  .zen-app-tile[data-loaded="true"]
+  svg {
+  filter: saturate(118%) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) !important;
+  opacity: 1 !important;
+  transition:
+    transform 0.15s ease,
+    filter 0.2s ease,
+    opacity 0.2s ease !important;
+}
+
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)
+  .zen-app-tile[data-loaded="true"]:hover
+  img,
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)
+  .zen-app-tile[data-loaded="true"]:hover
+  svg {
+  filter: saturate(128%) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
+}
+
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zentral-apps-utility-section
+  .zentral-utility-btn
+  svg {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) !important;
+  transition:
+    transform 0.15s ease,
+    filter 0.15s ease !important;
+}
+
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid
+  .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  )
+  img,
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid
+  .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  )
+  svg {
+  filter: saturate(35%) opacity(0.72) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) !important;
+  transition:
+    transform 0.15s ease,
+    filter 0.2s ease,
+    opacity 0.2s ease !important;
+}
+
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)
+  .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  ):hover
+  img,
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)
+  .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  ):hover
+  svg {
+  filter: saturate(75%) opacity(0.95) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
+}
+
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)
+  .zen-app-tile:hover,
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zentral-apps-utility-section
+  .zentral-utility-btn:hover {
+  background-color: var(
+    --toolbarbutton-hover-background,
+    color-mix(in srgb, currentColor 14%, transparent)
+  ) !important;
+  transform: translateY(-1px) scale(1.04) !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)
+  .zen-app-add-btn:hover
+  svg,
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zentral-apps-utility-section
+  .zentral-utility-btn:hover
+  svg {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
+}
+
+/* Horizontal Top Toolbar Mode (Collapsed Sidebar): Clean native highlight, NO pop-out */
+#zen-apps-sidebar-grid.zen-apps-horizontal .zen-app-tile:hover,
+:is(
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid.zen-apps-horizontal
+  .zen-app-tile:hover {
+  background-color: var(
+    --toolbarbutton-hover-background,
+    color-mix(in srgb, currentColor 10%, transparent)
+  ) !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+#zen-apps-sidebar-grid.zen-apps-horizontal
+  .zen-app-tile[data-loaded="true"]:hover
+  img,
+#zen-apps-sidebar-grid.zen-apps-horizontal
+  .zen-app-tile[data-loaded="true"]:hover
+  svg,
+:is(
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid.zen-apps-horizontal
+  .zen-app-tile[data-loaded="true"]:hover
+  img,
+:is(
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid.zen-apps-horizontal
+  .zen-app-tile[data-loaded="true"]:hover
+  svg {
+  filter: saturate(128%) !important;
+}
+
+#zen-apps-sidebar-grid.zen-apps-horizontal
+  .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  ):hover
+  img,
+#zen-apps-sidebar-grid.zen-apps-horizontal
+  .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  ):hover
+  svg,
+:is(
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid.zen-apps-horizontal
+  .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  ):hover
+  img,
+:is(
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid.zen-apps-horizontal
+  .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  ):hover
+  svg {
+  filter: saturate(75%) opacity(0.95) !important;
+}
+
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid
+  .zen-app-tile:active,
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid
+  .zen-app-add-btn:active,
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zentral-apps-utility-section
+  .zentral-utility-btn:active {
+  transform: scale(0.96) !important;
+}
+
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid
+  .zen-app-tile[data-active="true"] {
+  background-color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #707ac2) 36%,
+    rgba(255, 255, 255, 0.18)
+  ) !important;
+  border: 1.5px solid
+    color-mix(
+      in srgb,
+      var(--zen-primary-color, #707ac2) 75%,
+      rgba(255, 255, 255, 0.4)
+    ) !important;
+  box-shadow:
+    0 0 10px
+      color-mix(in srgb, var(--zen-primary-color, #707ac2) 40%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.2) !important;
+}
+
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid
+  .zen-app-tile[data-active="true"]
+  img,
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid
+  .zen-app-tile[data-active="true"]
+  svg {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))
+    drop-shadow(
+      0 0 4px
+        color-mix(in srgb, var(--zen-primary-color, #707ac2) 60%, transparent)
+    ) !important;
+}
+
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid
+  .zen-app-add-btn {
+  border: 1.5px dashed color-mix(in srgb, currentColor 25%, transparent) !important;
+  opacity: 0.85 !important;
+}
+
+:is(
+    :root[zen-compact-mode="true"],
+    :root[zen-sidebar-collapsed="true"],
+    :root[zentral-sidebar-collapsed="true"]
+  )
+  #zen-apps-sidebar-grid
+  .zen-app-add-btn:hover {
+  opacity: 1 !important;
+  border-style: solid !important;
+  border-color: var(--zen-primary-color, currentColor) !important;
+  background-color: var(
+    --toolbarbutton-hover-background,
+    color-mix(in srgb, currentColor 15%, transparent)
+  ) !important;
+  transform: translateY(-1px) scale(1.04) !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* ===========================================================================
+   Zentral - Extended Native Sidebar Resizing & Width Flexibility
+   (Compatible with Sine Theme Manager & Sine Compact Sidebar Mods)
+   =========================================================================== */
+
+/* Allow sidebar to grow up to 50vw - ONLY when NOT in collapsed mode */
+:root:not([zentral-sidebar-collapsed="true"]):not(
+    [zen-sidebar-collapsed="true"]
+  ):not([zen-compact-mode="true"]):not([uidensity="compact"]):not(
+    [mod-sameerasw_zen_compact_sidebar_type]
+  )
+  #navigator-toolbox,
+:root:not([zentral-sidebar-collapsed="true"]):not(
+    [zen-sidebar-collapsed="true"]
+  ):not([zen-compact-mode="true"]):not([uidensity="compact"]):not(
+    [mod-sameerasw_zen_compact_sidebar_type]
+  )
+  #sidebar-box,
+:root:not([zentral-sidebar-collapsed="true"]):not(
+    [zen-sidebar-collapsed="true"]
+  ):not([zen-compact-mode="true"]):not([uidensity="compact"]):not(
+    [mod-sameerasw_zen_compact_sidebar_type]
+  )
+  #sidebar-container,
+:root:not([zentral-sidebar-collapsed="true"]):not(
+    [zen-sidebar-collapsed="true"]
+  ):not([zen-compact-mode="true"]):not([uidensity="compact"]):not(
+    [mod-sameerasw_zen_compact_sidebar_type]
+  )
+  .sidebar-panel {
+  max-width: 50vw !important;
+}
+
+/* Enforce minimum width for Sidebar ONLY when explicitly expanded */
+:root:not([zentral-sidebar-collapsed="true"]):not(
+    [zen-sidebar-collapsed="true"]
+  ):not([zen-compact-mode="true"]):not([uidensity="compact"]):not(
+    [mod-sameerasw_zen_compact_sidebar_type]
+  )
+  #navigator-toolbox,
+:root:not([zentral-sidebar-collapsed="true"]):not(
+    [zen-sidebar-collapsed="true"]
+  ):not([zen-compact-mode="true"]):not([uidensity="compact"]):not(
+    [mod-sameerasw_zen_compact_sidebar_type]
+  )
+  #sidebar-box,
+:root:not([zentral-sidebar-collapsed="true"]):not(
+    [zen-sidebar-collapsed="true"]
+  ):not([zen-compact-mode="true"]):not([uidensity="compact"]):not(
+    [mod-sameerasw_zen_compact_sidebar_type]
+  )
+  #sidebar-container {
+  min-width: var(--zentral-sidebar-min-width, 240px) !important;
+}
+
+/* In Collapsed Sidebar Mode, explicitly reset and allow Zen to collapse to icon strip width */
+:root[zentral-sidebar-collapsed="true"] #navigator-toolbox,
+:root[zentral-sidebar-collapsed="true"] #sidebar-box,
+:root[zentral-sidebar-collapsed="true"] #sidebar-container,
+:root[zen-sidebar-collapsed="true"] #navigator-toolbox,
+:root[zen-sidebar-collapsed="true"] #sidebar-box,
+:root[zen-sidebar-collapsed="true"] #sidebar-container {
+  min-width: 0 !important;
+}
+
+/* --------------------------------------------------------------------------
+ * Suppress Native Firefox/Zen Tab Group Editor Popups
+ * -------------------------------------------------------------------------- */
+#tab-group-editor,
+#tabgroup-editor-panel,
+#tabGroupEditor,
+tabgroup-editor-panel,
+.tab-group-editor,
+#tabGroupContextMenu,
+tabgroup-meu,
+panel[id*="tab-group-editor"],
+panel[id*="tabgroup-editor"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  max-height: 0 !important;
+  max-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* --------------------------------------------------------------------------
+ * Context Menu: Suppress Closed Groups from 'Add Tab to Group' Submenu
+ * -------------------------------------------------------------------------- */
+#context_moveTabToSavedGroup,
+#open-tab-groups-separator-lower,
+#context_moveTabToGroupPopupMenu > #context_moveTabToSavedGroup,
+#context_moveTabToGroupPopupMenu > #open-tab-groups-separator-lower {
+  display: none !important;
+}
+
+/* --------------------------------------------------------------------------
+ * Context Menu: Tab Group Icon Colors & Squircles in Submenu
+ * -------------------------------------------------------------------------- */
+#context_moveTabToGroupPopupMenu menuitem.tab-group-icon,
+#context_moveTabToGroupPopupMenu .menuitem-iconic.tab-group-icon {
+  --tab-group-color-undefined: #777777;
+}
+
+#context_moveTabToGroupPopupMenu menuitem.tab-group-icon .menu-iconic-icon,
+#context_moveTabToGroupPopupMenu menuitem.tab-group-icon image,
+#context_moveTabToGroupPopupMenu menuitem.tab-group-icon img,
+#context_moveTabToGroupPopupMenu
+  .menuitem-iconic.tab-group-icon
+  .menu-iconic-icon {
+  background-color: var(
+    --tab-group-color,
+    var(--zentral-custom-color, #777777)
+  ) !important;
+  fill: var(--tab-group-color, var(--zentral-custom-color, #777777)) !important;
+  border-radius: 4px !important;
+}
+
+/* Hide app-specific items and separators in Apps Grid context menu when right-clicking empty space */
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-sec1-sep[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-sec1-sep,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-sec1-sep,
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-sec2-sep[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-sec2-sep,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-sec2-sep,
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-sec3-sep[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-sec3-sep,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-sec3-sep,
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-refresh-item[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-refresh-item,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-refresh-item,
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-preload-item[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-preload-item,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-preload-item,
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-close-app-item[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-close-app-item,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-close-app-item,
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-pin-to-menu[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-pin-to-menu,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-pin-to-menu,
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-remove-item[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-remove-item,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-remove-item {
+  display: none !important;
+}
+
+/* Red styling for "Remove App" button to emphasize its destructive action */
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-remove-item {
+  color: #ff5555 !important;
+  font-weight: 500 !important;
+}
+
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-remove-item:hover,
+#zen-apps-sidebar-tile-context
+  #zen-apps-sidebar-remove-item[_moz-menuactive="true"] {
+  background-color: rgba(255, 68, 68, 0.2) !important;
+  color: #ff6b6b !important;
+  border-radius: var(--arrowpanel-menuitem-border-radius, 4px) !important;
+}
+
+/* Red styling for "Close Group" button in Tab Group context menu */
+#zentral-tabgroup-context-menu #zentral-tg-item-close {
+  color: #ff5555 !important;
+  font-weight: 500 !important;
+}
+
+#zentral-tabgroup-context-menu #zentral-tg-item-close:hover,
+#zentral-tabgroup-context-menu #zentral-tg-item-close[_moz-menuactive="true"] {
+  background-color: rgba(255, 68, 68, 0.2) !important;
+  color: #ff6b6b !important;
+  border-radius: var(--arrowpanel-menuitem-border-radius, 4px) !important;
+}
+
+/* --------------------------------------------------------------------------
+ * Zentral Settings Modal — Overhaul & Two-Tab Navigation System
+ * -------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+ * Zentral Settings Modal — Modern Cardless Design System
+ * -------------------------------------------------------------------------- */
+#zentral-settings-modal {
+  position: fixed !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 100vh !important;
+  background: rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(20px) saturate(140%) !important;
+  z-index: 2147483647 !important;
+  display: none !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-family:
+    "Inter",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif !important;
+}
+
+#zentral-settings-modal[data-open="true"] {
+  display: flex !important;
+  animation: zsFadeIn 0.18s ease-out !important;
+}
+
+#zentral-settings-modal[data-open="false"] {
+  display: none !important;
+}
+
+@keyframes zsFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes zsModalPop {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes zsTabFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+#zentral-settings-modal .zs-dialog {
+  background: #0d0d12 !important;
+  color: #e4e4e7 !important;
+  width: 1120px !important;
+  max-width: 95vw !important;
+  height: 780px !important;
+  max-height: 94vh !important;
+  border-radius: 14px !important;
+  box-shadow:
+    0 25px 70px rgba(0, 0, 0, 0.85),
+    0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  animation: zsModalPop 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* Top Header */
+#zentral-settings-modal .zs-header {
+  padding: 18px 32px 14px 32px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  background: #13131a !important;
+  color: #ffffff !important;
+  flex-shrink: 0 !important;
+}
+
+#zentral-settings-modal .zs-title-group {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+#zentral-settings-modal .zs-title {
+  margin: 0 !important;
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.02em !important;
+  color: #ffffff !important;
+}
+
+#zentral-settings-modal .zs-version-badge {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-size: 11px !important;
+  padding: 2px 8px !important;
+  border-radius: 9999px !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 12%,
+    transparent
+  ) !important;
+  border: 1px solid
+    color-mix(in srgb, var(--zen-primary-color, #6366f1) 25%, transparent) !important;
+  color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 85%,
+    #ffffff
+  ) !important;
+  font-weight: 500 !important;
+}
+
+#zentral-settings-modal .zs-header-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 20px !important;
+}
+
+#zentral-settings-modal .zs-kofi-btn {
+  -moz-appearance: none !important;
+  appearance: none !important;
+  outline: none !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 0 !important;
+  border-radius: 6px !important;
+  transition:
+    transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 0.18s ease !important;
+  text-decoration: none !important;
+}
+
+#zentral-settings-modal .zs-kofi-btn:hover {
+  transform: translateY(-1px) scale(1.03) !important;
+  filter: brightness(1) drop-shadow(0 3px 8px rgba(19, 195, 117, 0.45)) !important;
+}
+
+#zentral-settings-modal .zs-kofi-btn:active {
+  transform: translateY(0) scale(0.97) !important;
+  filter: brightness(0.95) !important;
+}
+
+#zentral-settings-modal .zs-kofi-btn svg {
+  height: 36px !important;
+  width: auto !important;
+  display: block !important;
+  pointer-events: none !important;
+}
+
+/* Clean Close Button "X" (no outside box) */
+#zentral-settings-modal .zs-close-btn {
+  -moz-appearance: none !important;
+  appearance: none !important;
+  outline: none !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  color: #71717a !important;
+  cursor: pointer !important;
+  width: 24px !important;
+  height: 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: color 0.15s ease !important;
+  padding: 0 !important;
+}
+
+#zentral-settings-modal .zs-close-btn * {
+  pointer-events: none !important;
+}
+
+#zentral-settings-modal .zs-close-btn:hover {
+  color: #ffffff !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+#zentral-settings-modal .zs-close-btn:active {
+  color: #d4d4d8 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  transform: scale(0.94) !important;
+}
+
+/* Tabs Navigation (no outside boxes) */
+#zentral-settings-modal .zs-tab-bar {
+  display: flex !important;
+  padding: 0 32px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+  background: #13131a !important;
+  gap: 24px !important;
+  flex-shrink: 0 !important;
+}
+
+#zentral-settings-modal .zs-tab-btn {
+  -moz-appearance: none !important;
+  appearance: none !important;
+  outline: none !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 10px 4px !important;
+  font-size: 13.5px !important;
+  font-weight: 500 !important;
+  color: #71717a !important;
+  cursor: pointer !important;
+  position: relative !important;
+  transition: color 0.15s ease !important;
+  user-select: none !important;
+}
+
+#zentral-settings-modal .zs-tab-btn:hover {
+  color: #d4d4d8 !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+#zentral-settings-modal .zs-tab-btn[data-active="true"] {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+#zentral-settings-modal .zs-tab-btn[data-active="true"]::after {
+  content: "" !important;
+  position: absolute !important;
+  bottom: -1px !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 2px !important;
+  background: var(--zen-primary-color, #6366f1) !important;
+}
+
+/* Modal Body & Tab Panels */
+#zentral-settings-modal .zs-body {
+  padding: 22px 32px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
+  background: #0d0d12 !important;
+}
+
+#zentral-settings-modal .zs-tab-panel {
+  display: none !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  flex: 1 1 auto !important;
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+#zentral-settings-modal .zs-tab-panel[data-active="true"] {
+  display: flex !important;
+  animation: zsTabFadeIn 0.18s ease-out !important;
+}
+
+/* 2-Column Side-by-Side Open Layout with Vertical Separator */
+#zentral-settings-modal .zs-columns {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 0 !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  height: 100% !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+#zentral-settings-modal .zs-col {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+#zentral-settings-modal #zs-ag-col {
+  padding-right: 24px !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+#zentral-settings-modal #zs-tg-col {
+  padding-left: 24px !important;
+  overflow: visible !important;
+}
+
+/* Section Header with Outside Divider Line */
+#zentral-settings-modal .zs-section-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+  padding-bottom: 8px !important;
+  margin-bottom: 4px !important;
+  flex-shrink: 0 !important;
+  pointer-events: auto !important;
+  position: sticky !important;
+  top: 0 !important;
+  background: #0d0d12 !important;
+  z-index: 10 !important;
+}
+
+#zentral-settings-modal .zs-section-title {
+  font-size: 13px !important;
+  text-transform: uppercase !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  color: #f4f4f5 !important;
+  margin: 0 !important;
+}
+
+#zentral-settings-modal .zs-header-toggle {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  pointer-events: auto !important;
+}
+
+#zentral-settings-modal .zs-toggle-status {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: #a1a1aa !important;
+  user-select: none !important;
+}
+
+/* Section Content Container (Scrollable with un-squeezed elements) */
+#zentral-settings-modal .zs-section-content {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 14px !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  padding-top: 8px !important;
+  padding-right: 4px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  transition:
+    opacity 0.2s ease,
+    filter 0.2s ease !important;
+}
+
+#zentral-settings-modal .zs-section-content > * {
+  flex-shrink: 0 !important;
+}
+
+#zentral-settings-modal .zs-section-content::-webkit-scrollbar,
+#zentral-settings-modal .zs-col::-webkit-scrollbar {
+  width: 5px !important;
+}
+
+#zentral-settings-modal .zs-section-content::-webkit-scrollbar-track,
+#zentral-settings-modal .zs-col::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+#zentral-settings-modal .zs-section-content::-webkit-scrollbar-thumb,
+#zentral-settings-modal .zs-col::-webkit-scrollbar-thumb {
+  background: #3f3f46 !important;
+  border-radius: 9999px !important;
+}
+
+#zentral-settings-modal .zs-section-content::-webkit-scrollbar-thumb:hover,
+#zentral-settings-modal .zs-col::-webkit-scrollbar-thumb:hover {
+  background: #52525b !important;
+}
+
+#zentral-settings-modal .zs-section-content[data-disabled="true"] {
+  opacity: 0.35 !important;
+  pointer-events: none !important;
+  filter: grayscale(0.65) !important;
+}
+
+/* Setting Rows */
+#zentral-settings-modal .zs-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 14px !important;
+  min-height: 30px !important;
+}
+
+#zentral-settings-modal .zs-label-container {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+
+#zentral-settings-modal .zs-label {
+  font-size: 13.5px !important;
+  font-weight: 500 !important;
+  color: #ffffff !important;
+}
+
+#zentral-settings-modal .zs-sublabel {
+  font-size: 11.5px !important;
+  color: #a1a1aa !important;
+  margin-top: 2px !important;
+  line-height: 1.35 !important;
+}
+
+/* Visual Placement Cards (No glow) */
+#zentral-settings-modal .zs-placement-group {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+#zentral-settings-modal .zs-placement-cards {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 12px !important;
+}
+
+#zentral-settings-modal .zs-placement-btn {
+  -moz-appearance: none !important;
+  appearance: none !important;
+  position: relative !important;
+  background: rgba(24, 24, 27, 0.4) !important;
+  border: 2px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
+  padding: 12px 10px 10px 10px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 8px !important;
+  cursor: pointer !important;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease !important;
+  color: #a1a1aa !important;
+  outline: none !important;
+  user-select: none !important;
+  box-sizing: border-box !important;
+  box-shadow: none !important;
+}
+
+#zentral-settings-modal .zs-placement-btn * {
+  pointer-events: none !important;
+}
+
+#zentral-settings-modal .zs-placement-btn:hover {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  background: rgba(39, 39, 42, 0.4) !important;
+  color: #f4f4f5 !important;
+  box-shadow: none !important;
+}
+
+#zentral-settings-modal .zs-placement-btn[data-active="true"] {
+  border-color: var(--zen-primary-color, #6366f1) !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 12%,
+    rgba(24, 24, 27, 0.7)
+  ) !important;
+  box-shadow: none !important;
+  color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 85%,
+    #ffffff
+  ) !important;
+}
+
+#zentral-settings-modal .zs-placement-btn .zs-placement-svg-box {
+  width: 128px !important;
+  height: 64px !important;
+  border-radius: 6px !important;
+  background: #18181b !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  padding: 5px !important;
+  gap: 5px !important;
+  box-sizing: border-box !important;
+}
+
+#zentral-settings-modal .zs-placement-sidebar-container {
+  width: 24px !important;
+  height: 100% !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 3px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 3px !important;
+  padding: 2px !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+}
+
+#zentral-settings-modal .zs-placement-appbox-indicator {
+  width: 100% !important;
+  height: 15px !important;
+  border-radius: 2px !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-sizing: border-box !important;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease !important;
+}
+
+#zentral-settings-modal
+  .zs-placement-btn[data-active="true"]
+  .zs-placement-appbox-indicator {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 40%,
+    transparent
+  ) !important;
+  border-color: var(--zen-primary-color, #6366f1) !important;
+}
+
+#zentral-settings-modal .zs-placement-sidebar-body {
+  width: 100% !important;
+  flex: 1 1 auto !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-radius: 2px !important;
+}
+
+#zentral-settings-modal .zs-placement-btn .zs-placement-bar-indicator {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 3px !important;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease !important;
+}
+
+#zentral-settings-modal
+  .zs-placement-btn[data-active="true"]
+  .zs-placement-bar-indicator {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 40%,
+    transparent
+  ) !important;
+  border-color: var(--zen-primary-color, #6366f1) !important;
+}
+
+#zentral-settings-modal .zs-placement-btn .zs-placement-content-preview {
+  flex: 1 1 auto !important;
+  height: 100% !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-radius: 3px !important;
+}
+
+#zentral-settings-modal .zs-placement-label {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  transition:
+    color 0.15s ease,
+    font-weight 0.15s ease !important;
+}
+
+#zentral-settings-modal
+  .zs-placement-btn[data-active="true"]
+  .zs-placement-label {
+  color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 85%,
+    #ffffff
+  ) !important;
+  font-weight: 700 !important;
+}
+
+/* Horizontal Capsule Stepper (- [value] +) */
+#zentral-settings-modal .zs-h-stepper {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+  background: #18181b !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 8px !important;
+  padding: 2px !important;
+  height: 32px !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+}
+
+#zentral-settings-modal .zs-h-btn {
+  -moz-appearance: none !important;
+  appearance: none !important;
+  outline: none !important;
+  width: 28px !important;
+  height: 28px !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 5px !important;
+  color: #a1a1aa !important;
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease !important;
+  user-select: none !important;
+  padding: 0 !important;
+}
+
+#zentral-settings-modal .zs-h-btn:hover {
+  background: #27272a !important;
+  color: #ffffff !important;
+}
+
+#zentral-settings-modal .zs-h-btn:active {
+  background: var(--zen-primary-color, #6366f1) !important;
+  color: #ffffff !important;
+}
+
+#zentral-settings-modal .zs-h-val {
+  width: 32px !important;
+  background: transparent !important;
+  border: none !important;
+  color: #ffffff !important;
+  text-align: center !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  outline: none !important;
+  -moz-appearance: textfield !important;
+  appearance: textfield !important;
+  padding: 0 !important;
+}
+
+#zentral-settings-modal .zs-h-val::-webkit-outer-spin-button,
+#zentral-settings-modal .zs-h-val::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+
+/* Insta-Peek Shortcut Recorder Button */
+#zentral-settings-modal .zs-shortcut-recorder {
+  display: inline-flex !important;
+  align-items: center !important;
+  position: relative !important;
+}
+
+#zentral-settings-modal .zs-shortcut-btn {
+  -moz-appearance: none !important;
+  appearance: none !important;
+  outline: none !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  background: #18181b !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
+  padding: 0 14px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.03em !important;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  cursor: pointer !important;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease !important;
+  box-sizing: border-box !important;
+  user-select: none !important;
+}
+
+#zentral-settings-modal .zs-shortcut-btn:hover {
+  background: #27272a !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+#zentral-settings-modal .zs-shortcut-btn[data-recording="true"] {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 22%,
+    #18181b
+  ) !important;
+  border-color: var(--zen-primary-color, #6366f1) !important;
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--zen-primary-color, #6366f1) 35%, transparent) !important;
+  color: #ffffff !important;
+}
+
+/* Stacked Sliders with Monospace Badge */
+#zentral-settings-modal .zs-stacked-slider {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  width: 100% !important;
+}
+
+#zentral-settings-modal .zs-stacked-slider-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-end !important;
+}
+
+#zentral-settings-modal .zs-mono-badge {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  font-size: 11px !important;
+  background: #27272a !important;
+  color: #d4d4d8 !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.02em !important;
+}
+
+#zentral-settings-modal .zs-range-slider {
+  width: 100% !important;
+  height: 5px !important;
+  border-radius: 9999px !important;
+  background: #27272a !important;
+  outline: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  cursor: pointer !important;
+  transition: background-color 0.15s ease !important;
+}
+
+#zentral-settings-modal .zs-range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none !important;
+  width: 15px !important;
+  height: 15px !important;
+  border-radius: 50% !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
+  cursor: pointer !important;
+  transition: transform 0.12s ease !important;
+}
+
+#zentral-settings-modal .zs-range-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15) !important;
+}
+
+/* 10x6 Selection Matrix (Full width, square ratio, squircle corners, equal gaps) */
+#zentral-settings-modal .zs-matrix-wrapper {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  background: rgba(24, 24, 27, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
+  padding: 12px 14px 14px 14px !important;
+  overflow: hidden !important;
+  flex-shrink: 0 !important;
+  max-height: 420px !important;
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+  box-sizing: border-box !important;
+  transition:
+    max-height 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.22s ease,
+    padding 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    margin 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    border-width 0.32s ease,
+    transform 0.32s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+#zentral-settings-modal .zs-matrix-wrapper[data-hidden="true"] {
+  max-height: 0 !important;
+  opacity: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  border-width: 0 !important;
+  transform: translateY(-8px) !important;
+  pointer-events: none !important;
+}
+
+#zentral-settings-modal .zs-matrix-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+#zentral-settings-modal .zs-matrix-title {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #ffffff !important;
+}
+
+#zentral-settings-modal .zs-matrix-readout {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: var(--zen-primary-color, #6366f1) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-shrink: 0 !important;
+}
+
+#zentral-settings-modal .zs-matrix-badge {
+  background: #18181b !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 85%,
+    #ffffff
+  ) !important;
+  padding: 3px 8px !important;
+  border-radius: 5px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+}
+
+#zentral-settings-modal .zs-matrix-grid {
+  display: grid !important;
+  grid-template-columns: repeat(10, 1fr) !important;
+  grid-template-rows: repeat(6, 1fr) !important;
+  gap: 6px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  user-select: none !important;
+  touch-action: none !important;
+  box-sizing: border-box !important;
+  padding: 4px 0 2px 0 !important;
+}
+
+#zentral-settings-modal .zs-matrix-cell {
+  aspect-ratio: 1 / 1 !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease !important;
+  box-shadow: none !important;
+  box-sizing: border-box !important;
+}
+
+#zentral-settings-modal .zs-matrix-cell:hover,
+#zentral-settings-modal .zs-matrix-cell[data-hover="true"] {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 45%,
+    rgba(255, 255, 255, 0.12)
+  ) !important;
+  border-color: var(--zen-primary-color, #6366f1) !important;
+  box-shadow: none !important;
+}
+
+#zentral-settings-modal .zs-matrix-cell[data-selected="true"] {
+  background: var(--zen-primary-color, #6366f1) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 75%,
+    #ffffff
+  ) !important;
+  box-shadow: none !important;
+}
+
+#zentral-settings-modal .zs-matrix-cell[data-selected="true"]:hover,
+#zentral-settings-modal
+  .zs-matrix-cell[data-selected="true"][data-hover="true"] {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 80%,
+    #ffffff
+  ) !important;
+  border-color: #ffffff !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: none !important;
+}
+
+/* Animation Preview Sandbox */
+#zentral-settings-modal .zs-anim-preview-group {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  background: rgba(24, 24, 27, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
+  padding: 8px 12px !important;
+}
+
+#zentral-settings-modal .zs-anim-preview-box {
+  position: relative !important;
+  height: 56px !important;
+  background: #131316 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  display: flex !important;
+  align-items: center !important;
+  cursor: pointer !important;
+  user-select: none !important;
+}
+
+#zentral-settings-modal .zs-anim-preview-sidebar {
+  width: 28px !important;
+  height: 100% !important;
+  background: rgba(255, 255, 255, 0.035) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  flex-shrink: 0 !important;
+  z-index: 2 !important;
+}
+
+#zentral-settings-modal .zs-anim-preview-dot {
+  width: 12px !important;
+  height: 12px !important;
+  border-radius: 3.5px !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
+#zentral-settings-modal .zs-anim-preview-panel {
+  position: absolute !important;
+  left: 29px !important;
+  top: 5px !important;
+  bottom: 5px !important;
+  width: 0 !important;
+  max-width: 140px !important;
+  opacity: 0 !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--zen-primary-color, #6366f1) 40%,
+      rgba(255, 255, 255, 0.1)
+    ) !important;
+  border-radius: 6px !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 5px 8px !important;
+  gap: 3px !important;
+  box-sizing: border-box !important;
+  pointer-events: none !important;
+  transform: translateX(-10px) scale(0.95) !important;
+  transition:
+    width var(--zs-preview-anim-duration, 0.45s)
+      var(--zs-preview-anim-curve, cubic-bezier(0.25, 1, 0.5, 1)),
+    opacity var(--zs-preview-anim-duration, 0.45s)
+      var(--zs-preview-anim-curve, cubic-bezier(0.25, 1, 0.5, 1)),
+    transform var(--zs-preview-anim-duration, 0.45s)
+      var(--zs-preview-anim-curve, cubic-bezier(0.25, 1, 0.5, 1)) !important;
+}
+
+#zentral-settings-modal .zs-anim-preview-box:hover .zs-anim-preview-panel,
+#zentral-settings-modal
+  .zs-anim-preview-box[data-preview-active="true"]
+  .zs-anim-preview-panel {
+  width: 125px !important;
+  opacity: 1 !important;
+  transform: translateX(0) scale(1) !important;
+}
+
+#zentral-settings-modal .zs-anim-preview-pill {
+  height: 5px !important;
+  width: 44px !important;
+  border-radius: 3px !important;
+  background: var(--zen-primary-color, #6366f1) !important;
+}
+
+#zentral-settings-modal .zs-anim-preview-line {
+  height: 3.5px !important;
+  border-radius: 2px !important;
+  background: rgba(255, 255, 255, 0.2) !important;
+  margin-top: 1px !important;
+}
+
+#zentral-settings-modal .zs-anim-preview-hint {
+  position: absolute !important;
+  right: 12px !important;
+  font-size: 11px !important;
+  color: #71717a !important;
+  pointer-events: none !important;
+  transition: opacity 0.15s ease !important;
+}
+
+#zentral-settings-modal .zs-anim-preview-box:hover .zs-anim-preview-hint,
+#zentral-settings-modal
+  .zs-anim-preview-box[data-preview-active="true"]
+  .zs-anim-preview-hint {
+  opacity: 0 !important;
+}
+
+#zentral-settings-modal #zs-panel-diagnostics {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-right: 8px !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #3f3f46 transparent !important;
+}
+
+#zentral-settings-modal #zs-panel-diagnostics::-webkit-scrollbar {
+  width: 5px !important;
+}
+
+#zentral-settings-modal #zs-panel-diagnostics::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+#zentral-settings-modal #zs-panel-diagnostics::-webkit-scrollbar-thumb {
+  background: #3f3f46 !important;
+  border-radius: 9999px !important;
+}
+
+#zentral-settings-modal #zs-panel-diagnostics::-webkit-scrollbar-thumb:hover {
+  background: #52525b !important;
+}
+
+/* Custom Sleek Dropdown (Completely Glitch-Free) */
+#zentral-settings-modal .zs-custom-select {
+  position: relative !important;
+  user-select: none !important;
+}
+
+#zentral-settings-modal .zs-custom-select-trigger {
+  -moz-appearance: none !important;
+  appearance: none !important;
+  outline: none !important;
+  width: 100% !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+  background: #18181b !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
+  padding: 0 12px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  cursor: pointer !important;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease !important;
+  box-sizing: border-box !important;
+  box-shadow: none !important;
+  white-space: nowrap !important;
+}
+
+#zentral-settings-modal .zs-custom-select-label {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  flex: 1 1 auto !important;
+  text-align: left !important;
+  font-size: 12.5px !important;
+  line-height: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+}
+
+#zentral-settings-modal .zs-custom-select-trigger * {
+  pointer-events: none !important;
+}
+
+#zentral-settings-modal .zs-custom-select-trigger:hover {
+  background-color: #27272a !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+#zentral-settings-modal
+  .zs-custom-select[data-open="true"]
+  .zs-custom-select-trigger {
+  border-color: var(--zen-primary-color, #6366f1) !important;
+}
+
+#zentral-settings-modal .zs-custom-select-arrow {
+  width: 14px !important;
+  height: 14px !important;
+  min-width: 14px !important;
+  min-height: 14px !important;
+  max-width: 14px !important;
+  max-height: 14px !important;
+  color: rgba(255, 255, 255, 0.65) !important;
+  transition: transform 0.18s ease !important;
+  flex-shrink: 0 !important;
+  display: block !important;
+}
+
+#zentral-settings-modal
+  .zs-custom-select[data-open="true"]
+  .zs-custom-select-arrow {
+  transform: rotate(180deg) !important;
+}
+
+#zentral-settings-modal .zs-custom-select-menu {
+  position: absolute !important;
+  top: calc(100% + 4px) !important;
+  right: 0 !important;
+  min-width: 100% !important;
+  width: max-content !important;
+  background: #18181b !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.65) !important;
+  padding: 4px !important;
+  z-index: 1000 !important;
+  display: none !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  animation: zsTabFadeIn 0.12s ease-out !important;
+}
+
+#zentral-settings-modal
+  .zs-custom-select[data-open="true"]
+  .zs-custom-select-menu {
+  display: flex !important;
+}
+
+#zentral-settings-modal .zs-custom-select-option {
+  padding: 6px 10px !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  color: #e4e4e7 !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  transition:
+    background-color 0.1s ease,
+    color 0.1s ease !important;
+  white-space: nowrap !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+}
+
+#zentral-settings-modal .zs-custom-select-option:hover {
+  background: #27272a !important;
+  color: #ffffff !important;
+}
+
+#zentral-settings-modal .zs-custom-select-option[data-selected="true"] {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 18%,
+    rgba(255, 255, 255, 0.05)
+  ) !important;
+  color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 85%,
+    #ffffff
+  ) !important;
+  font-weight: 600 !important;
+}
+
+#zentral-settings-modal .zs-cat-icon {
+  width: 14px !important;
+  height: 14px !important;
+  min-width: 14px !important;
+  min-height: 14px !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+  flex-shrink: 0 !important;
+  display: block !important;
+}
+
+#zentral-settings-modal .zs-custom-select-option:hover .zs-cat-icon,
+#zentral-settings-modal
+  .zs-custom-select-option[data-selected="true"]
+  .zs-cat-icon {
+  color: currentColor !important;
+}
+
+/* Conditional Indicator Type Row with Smooth Zero-Gap Slide */
+#zentral-settings-modal #zs-tg-content {
+  overflow: visible !important;
+}
+
+#zentral-settings-modal #zs-tg-indicator-type-row {
+  overflow: visible !important;
+  min-height: 30px !important;
+  max-height: 48px !important;
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+  transition:
+    max-height 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    min-height 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.2s ease,
+    margin 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    padding 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+#zentral-settings-modal #zs-tg-indicator-type-row[data-hidden="true"] {
+  min-height: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  opacity: 0 !important;
+  overflow: hidden !important;
+  margin-top: -14px !important;
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  transform: translateY(-6px) !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+/* Apple/Zen Toggle Switch */
+#zentral-settings-modal .zs-switch {
+  position: relative !important;
+  display: inline-block !important;
+  width: 36px !important;
+  height: 20px !important;
+  flex-shrink: 0 !important;
+  pointer-events: auto !important;
+}
+
+#zentral-settings-modal .zs-switch input {
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  pointer-events: auto !important;
+}
+
+#zentral-settings-modal .zs-slider {
+  position: absolute !important;
+  cursor: pointer !important;
+  inset: 0 !important;
+  background-color: #3f3f46 !important;
+  transition: background-color 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+  border-radius: 9999px !important;
+}
+
+#zentral-settings-modal .zs-slider:before {
+  position: absolute !important;
+  content: "" !important;
+  height: 16px !important;
+  width: 16px !important;
+  left: 2px !important;
+  bottom: 2px !important;
+  background-color: #ffffff !important;
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+  border-radius: 50% !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
+}
+
+#zentral-settings-modal .zs-switch input:checked + .zs-slider {
+  background-color: var(--zen-primary-color, #6366f1) !important;
+}
+
+#zentral-settings-modal .zs-switch input:checked + .zs-slider:before {
+  transform: translateX(16px) !important;
+}
+
+#zentral-settings-modal .zs-switch input:disabled + .zs-slider {
+  opacity: 0.55 !important;
+  cursor: not-allowed !important;
+}
+
+#zentral-settings-modal .zs-modules-subgroup {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  padding: 12px 14px !important;
+  background: rgba(255, 255, 255, 0.025) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 10px !important;
+  margin-top: -4px !important;
+  margin-bottom: 2px !important;
+  transition:
+    opacity 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+    max-height 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+}
+
+#zentral-settings-modal .zs-modules-subgroup[data-hidden="true"] {
+  display: none !important;
+}
+
+#zentral-settings-modal .zs-section-disabled {
+  opacity: 0.45 !important;
+  pointer-events: none !important;
+}
+
+#zentral-settings-modal .zs-text-input {
+  -moz-appearance: none !important;
+  appearance: none !important;
+  outline: none !important;
+  width: 100% !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+  background: #141417 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  color: #f4f4f5 !important;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  padding: 0 12px !important;
+  box-sizing: border-box !important;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease !important;
+}
+
+#zentral-settings-modal .zs-textarea-input {
+  -moz-appearance: none !important;
+  appearance: none !important;
+  outline: none !important;
+  width: 100% !important;
+  background: #141417 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  color: #f4f4f5 !important;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  padding: 8px 12px !important;
+  box-sizing: border-box !important;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease !important;
+  resize: vertical !important;
+  min-height: 76px !important;
+}
+
+#zentral-settings-modal .zs-text-input:focus,
+#zentral-settings-modal .zs-textarea-input:focus {
+  background: #18181b !important;
+  border-color: var(--zen-primary-color, #6366f1) !important;
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--zen-primary-color, #6366f1) 25%, transparent) !important;
+}
+
+#zentral-settings-modal .zs-text-input::placeholder,
+#zentral-settings-modal .zs-textarea-input::placeholder {
+  color: rgba(255, 255, 255, 0.35) !important;
+}
+
+/* Reset and Action Buttons */
+#zentral-settings-modal .zs-reset-btn {
+  -moz-appearance: none !important;
+  appearance: none !important;
+  outline: none !important;
+  align-self: flex-start !important;
+  background: #18181b !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #d4d4d8 !important;
+  padding: 6px 14px !important;
+  border-radius: 8px !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease !important;
+  margin-top: auto !important;
+}
+
+#zentral-settings-modal .zs-reset-btn:hover {
+  background: #27272a !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+#zentral-settings-modal .zs-reset-btn:active {
+  transform: scale(0.98) !important;
+}
+
+/* Footer Action Bar */
+#zentral-settings-modal .zs-footer {
+  padding: 16px 32px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  background: #13131a !important;
+  flex-shrink: 0 !important;
+}
+
+#zentral-settings-modal .zs-btn-cancel {
+  -moz-appearance: none !important;
+  appearance: none !important;
+  outline: none !important;
+  background: transparent !important;
+  border: none !important;
+  color: #a1a1aa !important;
+  padding: 8px 18px !important;
+  border-radius: 8px !important;
+  font-size: 13.5px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease !important;
+}
+
+#zentral-settings-modal .zs-btn-cancel:hover {
+  background: #27272a !important;
+  color: #ffffff !important;
+}
+
+#zentral-settings-modal .zs-btn-cancel:active {
+  transform: scale(0.98) !important;
+}
+
+#zentral-settings-modal .zs-btn-save {
+  -moz-appearance: none !important;
+  appearance: none !important;
+  outline: none !important;
+  background: var(--zen-primary-color, #6366f1) !important;
+  border: none !important;
+  color: #ffffff !important;
+  padding: 8px 22px !important;
+  border-radius: 8px !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  box-shadow: none !important;
+  transition:
+    filter 0.15s ease,
+    transform 0.15s ease !important;
+}
+
+#zentral-settings-modal .zs-btn-save:hover {
+  filter: brightness(1.1) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: none !important;
+}
+
+#zentral-settings-modal .zs-btn-save:active {
+  transform: scale(0.98) !important;
+}
+
+/* --------------------------------------------------------------------------
+ * Zentral Apps Vertical Bar
+ * -------------------------------------------------------------------------- */
+#zentral-apps-vertical-bar {
+  display: none !important;
+}
+
+/* Base style */
+:root[zentral-apps-placement="vertical-bar"] #zentral-apps-vertical-bar {
+  min-height: 0 !important;
+  max-height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  box-sizing: border-box !important;
+  color: var(--zen-colors-text, var(--arrowpanel-color, inherit)) !important;
+  padding: 8px 0 !important;
+  gap: 6px !important;
+  overflow: visible !important;
+  user-select: none !important;
+  border: none !important;
+}
+
+/* ==========================================================================
+ * Mode A: Autohide DISABLED (Pinned / Docked into Frame)
+ * - In-flow flex child inside #browser
+ * - Webpage width adjusts seamlessly
+ * - Transparent background reveals native window frame (Mica/Acrylic/theme)
+ * - No vertical divider line
+ * ========================================================================== */
+:root[zentral-apps-placement="vertical-bar"]:not([zentral-apps-autohide="true"])
+  #zentral-apps-vertical-bar {
+  position: relative !important;
+  width: 44px !important;
+  min-width: 44px !important;
+  max-width: 44px !important;
+  height: calc(100% - var(--zen-element-separation, 8px) * 2) !important;
+  max-height: calc(100% - var(--zen-element-separation, 8px) * 2) !important;
+  min-height: 0 !important;
+  flex: 0 0 44px !important;
+  flex-shrink: 0 !important;
+  z-index: 10 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  border: none !important;
+  border-radius: var(--zen-border-radius, 8px) !important;
+  transform: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+  padding: 8px 4px !important;
+  margin-top: var(--zen-element-separation, 8px) !important;
+  margin-bottom: var(--zen-element-separation, 8px) !important;
+  transition:
+    width 0.22s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.18s ease !important;
+}
+
+/* Outer margin matching Zen's element separation for exact visual symmetry */
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [zentral-apps-autohide="true"]
+  )[zen-right-side="true"]
+  #zentral-apps-vertical-bar,
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [zentral-apps-autohide="true"]
+  )[zen-sidebar-right="true"]
+  #zentral-apps-vertical-bar {
+  margin-left: var(--zen-element-separation, 8px) !important;
+  margin-right: 0 !important;
+}
+
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [zentral-apps-autohide="true"]
+  ):not([zen-right-side="true"]):not([zen-sidebar-right="true"])
+  #zentral-apps-vertical-bar {
+  margin-right: var(--zen-element-separation, 8px) !important;
+  margin-left: 0 !important;
+}
+
+:root[zentral-apps-placement="vertical-bar"]:not([zentral-apps-autohide="true"])
+  #zentral-apps-vertical-bar
+  #zen-apps-sidebar-grid {
+  padding: 0 !important;
+}
+
+/* ==========================================================================
+ * Mode B: Autohide ENABLED (Compact Floating Panel)
+ * - Fixed floating panel over webpage with rounded corners on all sides
+ * - Uses Zen's native frosted glass material (samples exact theme colors underneath)
+ * - Slides in/out with transform: translateX(...)
+ * ========================================================================== */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar {
+  position: fixed !important;
+  width: 48px !important;
+  min-width: 48px !important;
+  max-width: 48px !important;
+  z-index: 2147483500 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  transition:
+    transform 0.25s cubic-bezier(0.075, 0.82, 0.165, 1),
+    opacity 0.15s ease,
+    visibility 0.25s ease,
+    top 0.18s cubic-bezier(0.25, 1, 0.5, 1) !important;
+  will-change: transform, opacity;
+  overflow: visible !important;
+  padding: 8px 5px !important;
+  box-sizing: border-box !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  #zen-apps-sidebar-grid {
+  padding: 0 !important;
+}
+
+/* Zen Native Compact Toolbar Background Element (Inherits Zen's exact Compact Mode Sidebar theme & material) */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg {
+  display: flex !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: -1 !important;
+  pointer-events: none !important;
+  border-radius: var(--zen-border-radius, 8px) !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg::before,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg::after {
+  border-radius: inherit !important;
+}
+
+/* When Vertical Bar is on Left (Sidebar on Right): anchor gradient to top-left edge */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg::before,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg::after,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg::before,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg::after {
+  background-position: left top !important;
+}
+
+/* When Vertical Bar is on Right (Sidebar on Left): anchor gradient to top-right edge */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
+    [zen-right-side="true"]
+  ):not([zen-sidebar-right="true"])
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg::before,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
+    [zen-right-side="true"]
+  ):not([zen-sidebar-right="true"])
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg::after {
+  background-position: right top !important;
+}
+
+/* Soften film grain intensity to match Compact Sidebar visual density */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg
+  .zen-browser-grain {
+  opacity: calc(var(--zen-grainy-background-opacity, 0.4) * 0.35) !important;
+}
+
+/* Autohide Mode B: Position on Left (Sidebar on Right) */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+  #zentral-apps-vertical-bar,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+  #zentral-apps-vertical-bar {
+  left: 8px !important;
+  right: auto !important;
+}
+
+/* Autohide Mode B: Position on Right (Sidebar on Left) */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
+    [zen-right-side="true"]
+  ):not([zen-sidebar-right="true"])
+  #zentral-apps-vertical-bar {
+  right: 8px !important;
+  left: auto !important;
+}
+
+/* Autohide Mode B: Idle/Collapsed State on Left */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+  #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
+    [zentral-app-panel-open="true"]
+  ),
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+  #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
+    [zentral-app-panel-open="true"]
+  ) {
+  transform: translateX(calc(-100% - 16px)) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+/* Autohide Mode B: Idle/Collapsed State on Right */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
+    [zen-right-side="true"]
+  ):not([zen-sidebar-right="true"])
+  #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
+    [zentral-app-panel-open="true"]
+  ) {
+  transform: translateX(calc(100% + 16px)) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+/* Autohide Mode B: Revealed State on Hover / Active Panel */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar[data-revealed="true"],
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar[zentral-app-panel-open="true"] {
+  transform: translateX(0) !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+}
+
+#zen-app-panel-root {
+  position: fixed;
+  display: none;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 2147483600 !important;
+}
+#zen-app-panel-root[open] {
+  display: block;
+}
+#zen-app-panel-root[data-insta-peek="true"] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  transition: none !important;
+}
+
+/* Floating App Panel Frame & Soft 1px Border (Softens boundary against webpage) */
+#zen-app-panel-root #zen-app-panel-clip {
+  position: absolute !important;
+  inset: 0 !important;
+  overflow: hidden !important;
+  border-radius: var(--zen-border-radius, 8px) !important;
+  pointer-events: none !important;
+}
+
+#zen-app-panel-root #zen-app-panel-slider {
+  position: absolute !important;
+  inset: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  border-radius: inherit !important;
+  overflow: hidden !important;
+  background: var(--tabpanels-background-color, #1e1e24) !important;
+  border: 2px solid
+    color-mix(
+      in srgb,
+      var(--zen-primary-color, currentColor) 25%,
+      rgba(255, 255, 255, 0.14)
+    ) !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.55),
+    0 2px 10px rgba(0, 0, 0, 0.3) !important;
+  box-sizing: border-box !important;
+  pointer-events: auto !important;
+  will-change: transform;
+}
+
+#zentral-apps-vertical-bar #zen-apps-sidebar-grid {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  width: 100% !important;
+  height: 0 !important;
+  flex: 1 1 0px !important;
+  padding: 4px 0 2px 0 !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  gap: 6px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-width: none !important;
+  background: transparent !important;
+  box-sizing: border-box !important;
+}
+
+#zentral-apps-vertical-bar #zen-apps-sidebar-grid::-webkit-scrollbar {
+  display: none !important;
+}
+
+#zentral-apps-vertical-bar #zen-apps-sidebar-grid .zen-apps-scroll-box {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 6px !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: min-content !important;
+  max-height: none !important;
+  flex-shrink: 0 !important;
+  opacity: 1 !important;
+  transform: none !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  box-sizing: border-box !important;
+  padding: 4px 0 2px 0 !important;
+  margin: 0 !important;
+}
+
+#zentral-apps-vertical-bar-footer {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  width: 100% !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  gap: 6px !important;
+  padding: 4px 0 0 0 !important;
+  box-sizing: border-box !important;
+  margin-top: auto !important;
+  z-index: 10 !important;
+}
+
+#zentral-apps-vertical-bar .zen-app-tile,
+#zentral-apps-vertical-bar .zen-app-add-btn,
+#zentral-apps-vertical-bar .zen-app-vb-footer-btn {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  max-width: 36px !important;
+  max-height: 36px !important;
+  box-sizing: border-box !important;
+  margin: 0 auto !important;
+  flex-shrink: 0 !important;
+  overflow: visible !important;
+}
+
+.zen-app-badge {
+  position: absolute !important;
+  top: 0px !important;
+  right: 0px !important;
+  min-width: 14px !important;
+  height: 14px !important;
+  padding: 0 3px !important;
+  border-radius: 7px !important;
+  background-color: #ff3b30 !important;
+  color: #ffffff !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  line-height: 14px !important;
+  text-align: center !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+  pointer-events: none !important;
+  z-index: 20 !important;
+  box-sizing: border-box !important;
+}
+
+.zen-app-badge[data-dot="true"] {
+  min-width: 8px !important;
+  width: 8px !important;
+  height: 8px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  top: 2px !important;
+  right: 2px !important;
+  font-size: 0 !important;
+}
+
+#zentral-apps-vertical-bar .zen-app-vb-footer-btn svg {
+  width: 18px !important;
+  height: 18px !important;
+  pointer-events: none !important;
+}
+
+:root[zentral-apps-autohide="true"] #zentral-apps-vb-autohide-btn .zs-eye-open {
+  display: none !important;
+}
+:root[zentral-apps-autohide="true"]
+  #zentral-apps-vb-autohide-btn
+  .zs-eye-closed {
+  display: block !important;
+}
+:root:not([zentral-apps-autohide="true"])
+  #zentral-apps-vb-autohide-btn
+  .zs-eye-open {
+  display: block !important;
+}
+:root:not([zentral-apps-autohide="true"])
+  #zentral-apps-vb-autohide-btn
+  .zs-eye-closed {
+  display: none !important;
+}
+
+/* Autohide Mode B: Tile Button Enhancements (Scoped ONLY to autohide mode) */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  max-width: 36px !important;
+  max-height: 36px !important;
+  border-radius: var(--zen-border-radius, 8px) !important;
+  background-color: color-mix(in srgb, currentColor 8%, transparent) !important;
+  border: none !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+  flex-shrink: 0 !important;
+  opacity: 1 !important;
+  transform: none !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  color: inherit !important;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile
+  img,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile
+  svg {
+  width: 18px !important;
+  height: 18px !important;
+  object-fit: contain !important;
+  transition:
+    transform 0.15s ease,
+    filter 0.2s ease,
+    opacity 0.2s ease !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile[data-loaded="true"]
+  img,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile[data-loaded="true"]
+  svg {
+  filter: saturate(118%) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) !important;
+  opacity: 1 !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile[data-loaded="true"]:hover
+  img,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile[data-loaded="true"]:hover
+  svg {
+  filter: saturate(128%) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile[data-loaded="false"]
+  img,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile[data-loaded="false"]
+  svg,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  )
+  img,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  )
+  svg {
+  filter: saturate(35%) opacity(0.72) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile[data-loaded="false"]:hover
+  img,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile[data-loaded="false"]:hover
+  svg,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  ):hover
+  img,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
+    .zen-app-vb-footer-btn
+  ):hover
+  svg {
+  filter: saturate(75%) opacity(0.95) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile:hover {
+  background-color: var(
+    --toolbarbutton-hover-background,
+    color-mix(in srgb, currentColor 14%, transparent)
+  ) !important;
+  border: none !important;
+  transform: scale(1.04) !important;
+  transform-origin: center center !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-add-btn
+  svg {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-add-btn:hover
+  svg {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile:active {
+  transform: scale(0.96) !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile[data-active="true"] {
+  background-color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #707ac2) 36%,
+    rgba(255, 255, 255, 0.18)
+  ) !important;
+  border: 1.5px solid
+    color-mix(
+      in srgb,
+      var(--zen-primary-color, #707ac2) 75%,
+      rgba(255, 255, 255, 0.4)
+    ) !important;
+  box-shadow:
+    0 0 10px
+      color-mix(in srgb, var(--zen-primary-color, #707ac2) 40%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.2) !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile[data-active="true"]
+  img,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile[data-active="true"]
+  svg {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))
+    drop-shadow(
+      0 0 4px
+        color-mix(in srgb, var(--zen-primary-color, #707ac2) 60%, transparent)
+    ) !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-add-btn {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  max-width: 36px !important;
+  max-height: 36px !important;
+  border-radius: var(--zen-border-radius, 8px) !important;
+  background-color: color-mix(in srgb, currentColor 8%, transparent) !important;
+  border: 1.5px dashed color-mix(in srgb, currentColor 25%, transparent) !important;
+  opacity: 0.85 !important;
+  transform: none !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+  flex-shrink: 0 !important;
+  color: inherit !important;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-add-btn:hover {
+  opacity: 1 !important;
+  border-style: solid !important;
+  border-color: var(--zen-primary-color, currentColor) !important;
+  background-color: var(
+    --toolbarbutton-hover-background,
+    color-mix(in srgb, currentColor 15%, transparent)
+  ) !important;
+  transform: translateY(-1px) scale(1.04) !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-add-btn:active {
+  transform: scale(0.96) !important;
+}
+
+/* Default / Non-autohide Vertical Bar (Clean standard tile styling) */
+:root:not([zentral-apps-autohide="true"])[zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  max-width: 36px !important;
+  max-height: 36px !important;
+  border-radius: var(--zen-border-radius, 8px) !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  flex-shrink: 0 !important;
+  opacity: 1 !important;
+  transform: none !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  color: inherit !important;
+}
+
+:root:not([zentral-apps-autohide="true"])[zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile:hover {
+  background-color: var(
+    --toolbarbutton-hover-background,
+    color-mix(in srgb, currentColor 10%, transparent)
+  ) !important;
+}
+
+:root:not([zentral-apps-autohide="true"])[zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile[data-active="true"] {
+  background-color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #707ac2) 36%,
+    rgba(255, 255, 255, 0.18)
+  ) !important;
+  border: 1.5px solid
+    color-mix(
+      in srgb,
+      var(--zen-primary-color, #707ac2) 75%,
+      rgba(255, 255, 255, 0.4)
+    ) !important;
+  box-shadow:
+    0 0 10px
+      color-mix(in srgb, var(--zen-primary-color, #707ac2) 40%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.2) !important;
+}
+
+:root:not([zentral-apps-autohide="true"])[zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile[data-active="true"]
+  img,
+:root:not([zentral-apps-autohide="true"])[zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-tile[data-active="true"]
+  svg {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5))
+    drop-shadow(
+      0 0 4px
+        color-mix(in srgb, var(--zen-primary-color, #707ac2) 60%, transparent)
+    ) !important;
+}
+
+:root:not([zentral-apps-autohide="true"])[zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-add-btn {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  max-width: 36px !important;
+  max-height: 36px !important;
+  border-radius: var(--zen-border-radius, 8px) !important;
+  background-color: transparent !important;
+  border: 1px dashed color-mix(in srgb, currentColor 30%, transparent) !important;
+  opacity: 0.7 !important;
+  transform: none !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  box-shadow: none !important;
+  flex-shrink: 0 !important;
+  color: inherit !important;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease !important;
+}
+
+:root:not([zentral-apps-autohide="true"])[zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  .zen-app-add-btn:hover {
+  opacity: 1 !important;
+  border-style: solid !important;
+  background-color: var(
+    --toolbarbutton-hover-background,
+    color-mix(in srgb, currentColor 10%, transparent)
+  ) !important;
+  box-shadow: none !important;
+}
+
+#zentral-apps-vertical-bar .zen-apps-autohide-dots {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+#zentral-apps-vertical-bar-trigger {
+  display: none !important;
+}
+
+:root[zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar-trigger {
+  display: block !important;
+  position: fixed !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  width: 1px !important;
+  z-index: 2147483550 !important;
+  pointer-events: auto !important;
+  background: transparent !important;
+}
+
+:root[zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+  #zentral-apps-vertical-bar-trigger,
+:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+  #zentral-apps-vertical-bar-trigger {
+  left: 0 !important;
+  right: auto !important;
+}
+
+:root[zentral-apps-placement="vertical-bar"]:not([zen-right-side="true"]):not(
+    [zen-sidebar-right="true"]
+  )
+  #zentral-apps-vertical-bar-trigger {
+  right: 0 !important;
+  left: auto !important;
+}
+
+/* Autohide Vertical Bar Inner Hover Extension (1/2 width = 24px) */
+.zen-app-vb-hover-zone {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  width: 24px !important;
+  z-index: 15 !important;
+  pointer-events: none;
+  background: transparent !important;
+}
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar[data-revealed="true"]
+  .zen-app-vb-hover-zone {
+  pointer-events: auto !important;
+}
+
+:root[zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+  .zen-app-vb-hover-zone,
+:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+  .zen-app-vb-hover-zone {
+  right: -24px !important;
+  left: auto !important;
+}
+
+:root[zentral-apps-placement="vertical-bar"]:not([zen-right-side="true"]):not(
+    [zen-sidebar-right="true"]
+  )
+  .zen-app-vb-hover-zone {
+  left: -24px !important;
+  right: auto !important;
+}
+
+#zen-app-panel-root[data-panel-side="right"] #zen-app-panel-pill {
+  left: 0 !important;
+  right: auto !important;
+  transform: translate(-50%, -50%) !important;
+}
+#zen-app-panel-root[data-panel-side="left"] #zen-app-panel-pill {
+  right: 0 !important;
+  left: auto !important;
+  transform: translate(50%, -50%) !important;
+}
+#zen-app-panel-root[data-panel-side="right"] .zen-app-hover-zone {
+  left: -22px !important;
+  right: auto !important;
+}
+#zen-app-panel-root[data-panel-side="left"] .zen-app-hover-zone {
+  right: -22px !important;
+  left: auto !important;
+}
+#zen-app-panel-root[data-panel-side="right"] .zen-app-resize-strip {
+  left: -5px !important;
+  right: auto !important;
+}
+#zen-app-panel-root[data-panel-side="left"] .zen-app-resize-strip {
+  right: -5px !important;
+  left: auto !important;
+}
+
+/* Floating App Panel Pill: Refresh Button */
+.zen-app-refresh-btn svg {
+  transition: transform 0.45s cubic-bezier(0.25, 1, 0.5, 1) !important;
+}
+.zen-app-refresh-btn:active svg {
+  transform: scale(0.9) !important;
+}
+.zen-app-refresh-btn.zen-app-refresh-spinning svg {
+  transform: rotate(360deg) !important;
+}
+
+/* When Autohide is active in expanded vertical sidebar */
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal) {
+  min-height: 22px;
+  max-height: 22px;
+  padding: 0 10px !important;
+  cursor: pointer;
+  overflow: hidden !important;
+  border-radius: var(--toolbarbutton-border-radius, 6px);
+  position: relative !important;
+  background-color: transparent;
+  will-change: transform;
+  transition:
+    max-height 0.24s cubic-bezier(0.25, 1, 0.5, 1),
+    padding 0.24s cubic-bezier(0.25, 1, 0.5, 1),
+    background-color 0.18s ease !important;
+}
+
+/* Scrollbox grid layout in Vertical Sidebar */
+:root:not([zentral-apps-placement="vertical-bar"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)
+  .zen-apps-scroll-box {
+  display: grid !important;
+  grid-template-columns: repeat(
+    var(--zentral-grid-cols, 7),
+    minmax(0, 1fr)
+  ) !important;
+  justify-items: center !important;
+  align-items: center !important;
+  gap: 6px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  max-height: calc(var(--zentral-max-rows, 3) * 42px - 2px) !important;
+  overflow-y: auto !important;
+  scrollbar-width: none !important;
+  margin: 0 !important;
+  padding: 4px 2px !important;
+}
+#zen-apps-sidebar-grid:not(.zen-apps-horizontal)
+  .zen-apps-scroll-box::-webkit-scrollbar {
+  display: none !important;
+}
+
+/* Collapsed Strip State: Show 3 dots, hide all inner tiles and utility with Vertical Bar transition */
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal):not(
+    [data-revealed="true"]
+  ):not(:hover):not([zentral-app-panel-open="true"]) {
+  background: transparent;
+}
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal):not(
+    [data-revealed="true"]
+  ):not(:hover):not([zentral-app-panel-open="true"])
+  .zen-apps-autohide-dots {
+  display: flex !important;
+  opacity: 0.75;
+  transform: translate(-50%, -50%);
+  transition:
+    opacity 0.12s ease,
+    transform 0.24s cubic-bezier(0.25, 1, 0.5, 1);
+}
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal):not(
+    [data-revealed="true"]
+  ):not(:hover):not([zentral-app-panel-open="true"]):hover
+  .zen-apps-autohide-dots {
+  opacity: 1;
+}
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal):not(
+    [data-revealed="true"]
+  ):not(:hover):not([zentral-app-panel-open="true"])
+  #zentral-apps-utility-section,
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal):not(
+    [data-revealed="true"]
+  ):not(:hover):not([zentral-app-panel-open="true"])
+  .zen-app-tile,
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal):not(
+    [data-revealed="true"]
+  ):not(:hover):not([zentral-app-panel-open="true"])
+  .zen-app-add-btn {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  transition:
+    opacity 0.2s ease,
+    visibility 0.24s ease !important;
+}
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal):not(
+    [data-revealed="true"]
+  ):not(:hover):not([zentral-app-panel-open="true"])
+  #zentral-apps-utility-section {
+  max-height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Expanded Grid State: Hide 3 dots, reveal the solid single-piece grid with exact dimensions */
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)[data-revealed="true"],
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal):hover,
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not(
+    [zen-sidebar-collapsed="true"]
+  )[zentral-app-panel-open="true"]
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal) {
+  max-height: calc(
+    var(--zentral-apps-grid-expanded-height, 180px) + 8px
+  ) !important;
+  padding: 6px 10px !important;
+  margin: 0 !important;
+  overflow: visible !important;
+}
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)[data-revealed="true"]
+  .zen-apps-autohide-dots,
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal):hover
+  .zen-apps-autohide-dots,
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not(
+    [zen-sidebar-collapsed="true"]
+  )[zentral-app-panel-open="true"]
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)
+  .zen-apps-autohide-dots {
+  opacity: 0 !important;
+  transform: translate(-50%, -50%) scale(0.8) !important;
+  pointer-events: none !important;
+  transition:
+    opacity 0.12s ease,
+    transform 0.24s cubic-bezier(0.25, 1, 0.5, 1) !important;
+}
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not(
+    [zen-sidebar-collapsed="true"]
+  ):not([zentral-apps-hide-utility="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)[data-revealed="true"]
+  #zentral-apps-utility-section,
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not(
+    [zen-sidebar-collapsed="true"]
+  ):not([zentral-apps-hide-utility="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal):hover
+  #zentral-apps-utility-section,
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not(
+    [zen-sidebar-collapsed="true"]
+  ):not([zentral-apps-hide-utility="true"])[zentral-app-panel-open="true"]
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)
+  #zentral-apps-utility-section {
+  display: flex !important;
+  opacity: 1 !important;
+  max-height: 40px !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  overflow: visible !important;
+  transition:
+    opacity 0.2s ease,
+    visibility 0.24s ease !important;
+}
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)[data-revealed="true"]
+  .zen-app-tile,
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal):hover
+  .zen-app-tile,
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not(
+    [zen-sidebar-collapsed="true"]
+  )[zentral-app-panel-open="true"]
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)
+  .zen-app-tile,
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)[data-revealed="true"]
+  .zen-app-add-btn,
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal):hover
+  .zen-app-add-btn,
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not(
+    [zen-sidebar-collapsed="true"]
+  )[zentral-app-panel-open="true"]
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)
+  .zen-app-add-btn {
+  display: flex !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  transition:
+    opacity 0.2s ease,
+    visibility 0.24s ease !important;
+}
+
+/* Scoped to expanded / revealed state only in autohide */
+:root[zentral-apps-autohide="true"]:not([zentral-apps-hide-utility="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)[data-revealed="true"]
+  .zentral-apps-utility-content,
+:root[zentral-apps-autohide="true"]:not([zentral-apps-hide-utility="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal):hover
+  .zentral-apps-utility-content,
+:root[zentral-apps-autohide="true"]:not([zentral-apps-hide-utility="true"])
+  #zen-apps-sidebar-grid:not(
+    .zen-apps-horizontal
+  )[zentral-app-panel-open="true"]
+  .zentral-apps-utility-content {
+  max-height: 38px !important;
+  opacity: 1 !important;
+  transform: none !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  overflow: visible !important;
+  margin-bottom: 2px !important;
+}
+:root[zentral-apps-autohide="true"]:not([zentral-apps-hide-utility="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)[data-revealed="true"]
+  .zentral-apps-utility-divider,
+:root[zentral-apps-autohide="true"]:not([zentral-apps-hide-utility="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal):hover
+  .zentral-apps-utility-divider,
+:root[zentral-apps-autohide="true"]:not([zentral-apps-hide-utility="true"])
+  #zen-apps-sidebar-grid:not(
+    .zen-apps-horizontal
+  )[zentral-app-panel-open="true"]
+  .zentral-apps-utility-divider {
+  display: block !important;
+  opacity: 0.5 !important;
+  transform: none !important;
+}
+:root[zentral-apps-autohide="true"]
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)
+  .zentral-apps-utility-dots {
+  display: none !important;
+}
+
+/* ==========================================================================
+ * Zentral Apps Utility Section
+ * ========================================================================== */
+#zentral-apps-utility-section {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+  margin: 0 0 2px 0 !important;
+  padding: 0 !important;
+  z-index: 12 !important;
+  user-select: none !important;
+  grid-column: 1 / -1 !important;
+}
+
+/* 3 Horizontal Dots Trigger Strip (Vertical Sidebar mode) */
+.zentral-apps-utility-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3.5px;
+  width: 100%;
+  height: 8px;
+  min-height: 8px;
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 0.18s ease;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  order: 0;
+}
+
+.zentral-apps-utility-dots:hover {
+  opacity: 1;
+}
+
+.zentral-apps-utility-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background-color: currentColor;
+  opacity: 0.75;
+}
+
+/* Vertical 3 dots trigger (for Horizontal Toolbar mode) */
+.zentral-apps-utility-dots-vertical {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3.5px;
+  width: 10px;
+  height: 28px;
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 0.2s ease;
+  padding: 0 2px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  order: 0;
+}
+
+.zentral-apps-utility-dots-vertical:hover {
+  opacity: 1;
+}
+
+.zentral-apps-utility-dots-vertical:hover .zentral-apps-utility-dot {
+  opacity: 1;
+  transform: scale(1.2);
+}
+
+/* Utility Content Row & Single-Piece Slide Transition */
+.zentral-apps-utility-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transform: translateY(-8px);
+  order: 1;
+  will-change: transform, opacity;
+  transition:
+    max-height 0.24s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.12s ease,
+    transform 0.24s cubic-bezier(0.25, 1, 0.5, 1),
+    visibility 0.24s ease;
+}
+
+.zentral-apps-utility-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  justify-items: center;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+/* Utility Slot (Grid Column Cell) */
+.zentral-utility-slot {
+  width: 100%;
+  height: 28px;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-sizing: border-box;
+  border-radius: var(--toolbarbutton-border-radius, 6px);
+  transition: background-color 0.15s ease;
+}
+
+.zentral-utility-slot.zentral-utility-slot-dragover {
+  background-color: color-mix(
+    in srgb,
+    var(--zen-primary-color, currentColor) 20%,
+    transparent
+  );
+  outline: 1px dashed var(--zen-primary-color, currentColor);
+  outline-offset: -1px;
+}
+
+/* 28px Buttons */
+.zentral-utility-btn {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  max-width: 28px !important;
+  max-height: 28px !important;
+  padding: 0 !important;
+  border-radius: var(--toolbarbutton-border-radius, 6px) !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  color: inherit !important;
+  opacity: 0.85 !important;
+  flex-shrink: 0 !important;
+  transition:
+    background-color 0.15s ease,
+    opacity 0.15s ease,
+    transform 0.15s ease !important;
+}
+
+.zentral-utility-btn:hover {
+  background-color: var(
+    --toolbarbutton-hover-background,
+    color-mix(in srgb, currentColor 14%, transparent)
+  ) !important;
+  opacity: 1 !important;
+}
+
+.zentral-utility-btn:active {
+  transform: scale(0.94) !important;
+}
+
+.zentral-utility-btn svg {
+  width: 16px !important;
+  height: 16px !important;
+  pointer-events: none !important;
+}
+
+/* Morphing Divider Line (Lighter color) */
+.zentral-apps-utility-divider {
+  width: calc(100% - 16px);
+  height: 1px;
+  background-color: color-mix(in srgb, currentColor 12%, transparent);
+  margin: 2px auto 3px auto;
+  pointer-events: none;
+  order: 2;
+}
+
+/* When Hidden in Autohide OFF: Divider takes 0 space */
+:root:not([zentral-apps-autohide="true"])
+  #zentral-apps-utility-section:not([data-utility-revealed="true"])
+  .zentral-apps-utility-divider {
+  display: none !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* When Revealed (Autohide OFF): Dots disappear, Content slides down as a single piece */
+#zentral-apps-utility-section[data-utility-revealed="true"]
+  .zentral-apps-utility-dots {
+  display: none !important;
+}
+
+#zentral-apps-utility-section[data-utility-revealed="true"]
+  .zentral-apps-utility-content {
+  max-height: 38px !important;
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  overflow: visible !important;
+  margin-bottom: 2px !important;
+}
+
+#zentral-apps-utility-section[data-utility-revealed="true"]
+  .zentral-apps-utility-divider {
+  display: block !important;
+  opacity: 0.5 !important;
+}
+
+/* While grid is collapsed in autohide, utility section is hidden with the grid */
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal):not(
+    [data-revealed="true"]
+  ):not(:hover):not([zentral-app-panel-open="true"])
+  #zentral-apps-utility-section {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Eye open/closed visibility for utility autohide button */
+:root[zentral-apps-autohide="true"] #zentral-utility-autohide-btn .zs-eye-open {
+  display: none !important;
+}
+:root[zentral-apps-autohide="true"]
+  #zentral-utility-autohide-btn
+  .zs-eye-closed {
+  display: block !important;
+}
+:root:not([zentral-apps-autohide="true"])
+  #zentral-utility-autohide-btn
+  .zs-eye-open {
+  display: block !important;
+}
+:root:not([zentral-apps-autohide="true"])
+  #zentral-utility-autohide-btn
+  .zs-eye-closed {
+  display: none !important;
+}
+
+/* Horizontal Toolbar Mode Styling */
+.zen-apps-horizontal #zentral-apps-utility-section {
+  flex-direction: row !important;
+  align-items: center !important;
+  width: auto !important;
+  height: 100% !important;
+  margin: 0 0 0 2px !important;
+  grid-column: auto !important;
+  flex-shrink: 0 !important;
+}
+
+.zen-apps-horizontal #zentral-apps-utility-section .zentral-apps-utility-dots {
+  display: none !important;
+}
+
+.zen-apps-horizontal
+  #zentral-apps-utility-section
+  .zentral-apps-utility-dots-vertical {
+  display: flex !important;
+  order: 0 !important;
+}
+
+.zen-apps-horizontal
+  #zentral-apps-utility-section
+  .zentral-apps-utility-divider {
+  width: 1px !important;
+  height: 16px !important;
+  margin: 0 4px 0 2px !important;
+  background-color: color-mix(
+    in srgb,
+    currentColor 12%,
+    transparent
+  ) !important;
+  opacity: 0 !important;
+  transform: scaleY(0) !important;
+  transform-origin: center !important;
+  order: 1 !important;
+}
+
+.zen-apps-horizontal
+  #zentral-apps-utility-section
+  .zentral-apps-utility-content {
+  order: 2 !important;
+  flex-direction: row !important;
+  max-height: 100% !important;
+  max-width: 0 !important;
+  width: auto !important;
+  transform: translateX(-4px) !important;
+  transition:
+    max-width 0.24s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.12s ease,
+    transform 0.22s cubic-bezier(0.25, 1, 0.5, 1) !important;
+}
+
+.zen-apps-horizontal #zentral-apps-utility-section .zentral-apps-utility-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  padding: 0 !important;
+  width: auto !important;
+  gap: 4px !important;
+}
+
+.zen-apps-horizontal #zentral-apps-utility-section .zentral-utility-slot {
+  width: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+.zen-apps-horizontal
+  #zentral-apps-utility-section[data-utility-revealed="true"]
+  .zentral-apps-utility-dots-vertical {
+  display: none !important;
+}
+
+.zen-apps-horizontal
+  #zentral-apps-utility-section[data-utility-revealed="true"]
+  .zentral-apps-utility-divider {
+  opacity: 0.5 !important;
+  transform: scaleY(1) !important;
+}
+
+.zen-apps-horizontal
+  #zentral-apps-utility-section[data-utility-revealed="true"]
+  .zentral-apps-utility-content {
+  max-width: 36px !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transform: translateX(0) !important;
+}
+
+.zen-apps-horizontal #zentral-utility-autohide-btn {
+  display: none !important;
+}
+
+/* Hide Utility Section in Vertical Bar placement mode (VB uses its footer) */
+:root[zentral-apps-placement="vertical-bar"] #zentral-apps-utility-section {
+  display: none !important;
+}
+
+/* Permanently hide Utility Section when preference is enabled */
+:root[zentral-apps-hide-utility="true"] #zentral-apps-utility-section,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid
+  #zentral-apps-utility-section,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid:hover
+  #zentral-apps-utility-section,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid[data-revealed="true"]
+  #zentral-apps-utility-section,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid[zentral-app-panel-open="true"]
+  #zentral-apps-utility-section,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid
+  .zentral-apps-utility-content,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid:hover
+  .zentral-apps-utility-content,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid[data-revealed="true"]
+  .zentral-apps-utility-content,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid[zentral-app-panel-open="true"]
+  .zentral-apps-utility-content,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid
+  .zentral-utility-btn,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid
+  .zentral-apps-utility-dots,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid
+  .zentral-apps-utility-dots-vertical,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid
+  .zentral-apps-utility-divider,
+#zentral-apps-utility-section[data-permanently-hidden="true"],
+#zen-apps-sidebar-grid
+  #zentral-apps-utility-section[data-permanently-hidden="true"],
+#zen-apps-sidebar-grid:hover
+  #zentral-apps-utility-section[data-permanently-hidden="true"] {
+  display: none !important;
+  max-height: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+/* #endregion */
+/* =============================================================================================================
+ * BGALAZKA'S EXTENSION TO THE ZENTRAL MOD (v2)
+ * -------------------------------------------------------------------------------------------------------------
+ * ARCHITECTURAL NOTES & INSTRUCTIONS FOR FUTURE AI AGENTS:
+ * 1. ONLY modify or append code BELOW this marker when working on Bgalazka's Extension.
+ * 2. ALWAYS deliver fully compiled, complete ready-to-paste chunks for both the JS and CSS extension sections.
+ * 3. EXPLAIN THE "WHY" IN CODE COMMENTS: Document Gecko/Zen workarounds so future models do not undo working solutions.
+ * 4. TAB CRASH GUARD: NEVER attach a MutationObserver with { childList: true, subtree: true } to the tabstrip,
+ *    the settings modal's ancestor tree, or documentElement. Modifying/observing tab children during
+ *    gBrowser.pinTab() triggers a fatal C++ assertion crash in Gecko's frame constructor. This includes
+ *    observers that merely WATCH an ancestor of the tabstrip with subtree:true, even if they don't mutate
+ *    anything themselves — the previous version of this file did exactly that to detect the settings modal
+ *    opening (observing documentElement), which is the same forbidden pattern and the most likely cause of
+ *    "crashes when pinning". Detect UI state changes via method hooks instead (see section 5).
+ * 5. SCOPE BUG (CRITICAL): `ZentralApps`, `ZentralTabGroups`, and `ZentralSettings` are `class` declarations
+ *    scoped INSIDE the base mod's own top-level IIFE. They are NOT global identifiers. Referencing the bare
+ *    class name from this separately-appended IIFE (`typeof ZentralApps !== "undefined"`) always evaluates to
+ *    false, silently skipping any code guarded by it — this is what happened in the previous version and is
+ *    why the opposite-docking/pin-state hooks never actually ran. Always reach the class via the singleton
+ *    instance instead: `window.Zentral.Apps`, `window.Zentral.TabGroups`, `window.Zentral.Settings`.
+ * 6. TAB CLICK PASS-THROUGH: Any click on a tile inside a tab bubbles to the tab unless mousedown, mouseup,
+ *    click, and auxclick are stopped in the CAPTURE phase (e.stopPropagation()). This prevents essential tabs
+ *    from switching on LMB.
+ * 7. OPPOSITE-SIDE DOCKING MATH: Native Zentral's positionPanel() calculates targetRight as
+ *    (window.innerWidth - sidebarRect.left). If the sidebar is on the left, targetRight evaluates to ~1920px,
+ *    pushing the panel completely off the screen! We must hook positionPanel() and isPanelAttachedToRight()
+ *    on the Apps INSTANCE (see note 5) to force root.style.right/left = "12px" directly.
+ * 8. RESIZE INVERSION: Zentral's onDrag() internally checks this.isPanelAttachedToRight() ? (startW - diff) : (startW + diff).
+ *    Hooking isPanelAttachedToRight() to return true when docked opposite makes native Zentral invert resize
+ *    math automatically — no need to touch onDrag/startResize ourselves.
+ * 9. PANEL OPACITY: Web pages inside <browser> render opaque backgrounds. Applying only background-color to
+ *    the slider is invisible behind the page canvas. Real transparency requires setting CSS `opacity` on
+ *    #zen-app-panel-slider itself.
+ * 10. NATIVE FEATURE PARITY (v1.0.2): the base mod now natively sets data-loaded="true"/"false" on tiles
+ *     (in renderGrid/getOrCreateAppBrowser/closeApp, searched via a document-wide querySelectorAll so it stays
+ *     correct even after we move a tile into an essential tab's corner) and natively handles middle-click
+ *     unload on the tile itself (mousedown+auxclick, stopPropagation). We must NOT reimplement either of
+ *     these anymore — our old duplicate implementations were overwriting the native, more-accurate state and
+ *     silently blocking the native middle-click handler from ever running (capture-phase
+ *     stopImmediatePropagation upstream prevents the tile's own listeners from firing at all).
+ * 11. CORNER-TILE DOCKING STABILITY: assigning tiles to essential tabs by array INDEX reshuffles every
+ *     existing assignment whenever a tab is added/removed/reordered, and Zen's split-view feature can clone a
+ *     pinned tab (with whatever tile is docked inside it) producing a duplicate icon. Docking must be done by
+ *     a STABLE ID persisted on the tab element itself, and only against tabs that are genuine members of
+ *     gBrowser.tabs (not split-view clones).
+ * ============================================================================================================= */
+
+/* CSS Variable Defaults for Settings-Controlled Translucency */
+:root {
+  --bg-opacity-unpinned: 92%;
+  --bg-opacity-pinned-focus: 85%;
+  --bg-opacity-pinned-blur: 45%;
+  --bg-blur-intensity: 20px;
+}
+
+/* Settings Panel & Restart Browser Button */
+#zentral-settings-modal #zs-panel-bgalazka {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-right: 8px !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #3f3f46 transparent !important;
+}
+
+#zentral-settings-modal .zs-restart-btn {
+  appearance: none !important;
+  outline: none !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 8px !important;
+  color: #e4e4e7 !important;
+  padding: 6px 14px !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  font-family: inherit !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+}
+
+#zentral-settings-modal .zs-restart-btn:hover {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 25%,
+    rgba(255, 255, 255, 0.12)
+  ) !important;
+  border-color: var(--zen-primary-color, #6366f1) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px) !important;
+}
+
+#zentral-settings-modal .zs-restart-btn:active {
+  transform: scale(0.97) !important;
+}
+
+#zentral-settings-modal .zs-restart-btn svg {
+  color: inherit !important;
+  flex-shrink: 0 !important;
+}
+
+/* ==========================================================================
+   1. PINNED PANEL TRANSLUCENCY (LIVE SETTINGS LINKED)
+   ========================================================================== */
+:root[bgalazka-translucency="true"] #zen-app-panel-root #zen-app-panel-slider {
+  transition:
+    opacity 0.22s ease,
+    backdrop-filter 0.22s ease,
+    background-color 0.22s ease !important;
+}
+
+/* Unpinned State: Direct binding to CSS variables */
+:root[bgalazka-translucency="true"]
+  #zen-app-panel-root:not([data-pinned="true"])
+  #zen-app-panel-slider {
+  background-color: color-mix(
+    in srgb,
+    var(--tabpanels-background-color, #1e1e24) var(--bg-opacity-unpinned, 92%),
+    transparent
+  ) !important;
+  backdrop-filter: blur(var(--bg-blur-intensity, 20px)) saturate(140%) !important;
+  opacity: var(--bg-opacity-unpinned, 0.92) !important;
+}
+
+/* Pinned + Hovered or Focused */
+:root[bgalazka-translucency="true"]
+  #zen-app-panel-root[data-pinned="true"]:is(:hover, :focus-within)
+  #zen-app-panel-slider {
+  background-color: color-mix(
+    in srgb,
+    var(--tabpanels-background-color, #1e1e24)
+      var(--bg-opacity-pinned-focus, 85%),
+    transparent
+  ) !important;
+  backdrop-filter: blur(var(--bg-blur-intensity, 20px)) saturate(130%) !important;
+  opacity: var(--bg-opacity-pinned-focus, 0.85) !important;
+}
+
+/* Pinned + Unfocused */
+:root[bgalazka-translucency="true"]
+  #zen-app-panel-root[data-pinned="true"]:not(:hover):not(:focus-within)
+  #zen-app-panel-slider {
+  background-color: color-mix(
+    in srgb,
+    var(--tabpanels-background-color, #1e1e24)
+      var(--bg-opacity-pinned-blur, 45%),
+    transparent
+  ) !important;
+  backdrop-filter: blur(calc(var(--bg-blur-intensity, 20px) * 0.6))
+    saturate(120%) !important;
+  opacity: var(--bg-opacity-pinned-blur, 0.45) !important;
+}
+
+:root[bgalazka-translucency="true"] #zen-app-panel-root #zen-app-panel-pill {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* ==========================================================================
+   2. OPPOSITE-SIDE DOCKING, PILL MENU & RESIZE STRIP
+   ========================================================================== */
+:root[bgalazka-opposite-docking="true"]
+  :is(
+    #browser,
+    #tabbrowser-tabpanels,
+    #tabbrowser-tabbox,
+    .browserSidebarContainer,
+    #sidebar-box,
+    #navigator-toolbox
+  ) {
+  max-width: unset !important;
+}
+
+/* Panel on Right (Sidebar on Left) */
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"] {
+  right: 12px !important;
+  left: auto !important;
+}
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  .zen-app-resize-strip {
+  left: -8px !important;
+  right: auto !important;
+  width: 14px !important;
+  cursor: ew-resize !important;
+  z-index: 30 !important;
+  pointer-events: auto !important;
+}
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill {
+  left: 0px !important;
+  right: auto !important;
+  top: 50% !important;
+  transform: translate(-100%, -50%) !important;
+  pointer-events: auto !important;
+  z-index: 999999 !important;
+}
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  .zen-app-hover-zone {
+  left: -24px !important;
+  right: auto !important;
+  pointer-events: auto !important;
+}
+
+/* Panel on Left (Sidebar on Right) */
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"] {
+  right: auto !important;
+  left: 12px !important;
+}
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  .zen-app-resize-strip {
+  right: -8px !important;
+  left: auto !important;
+  width: 14px !important;
+  cursor: ew-resize !important;
+  z-index: 30 !important;
+  pointer-events: auto !important;
+}
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  #zen-app-panel-pill {
+  right: 0px !important;
+  left: auto !important;
+  top: 50% !important;
+  transform: translate(100%, -50%) !important;
+  pointer-events: auto !important;
+  z-index: 999999 !important;
+}
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  .zen-app-hover-zone {
+  right: -24px !important;
+  left: auto !important;
+  pointer-events: auto !important;
+}
+
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip {
+  min-width: 14px !important;
+}
+
+/* ==========================================================================
+   3. ISOLATE TABS & INDEPENDENT TILE STATES (COLOR SEPARATION)
+   ========================================================================== */
+/*
+ * High-specificity reset:
+ * Zen Browser applies `filter: grayscale(...)` directly to `#zen-essentials-container .tabbrowser-tab`.
+ * Because container filters flatten all children into a single bitmap group, a child cannot escape
+ * grayscale via `filter: none`. We must reset the parent tab itself to `filter: none`.
+ */
+:is(#zen-essentials-container, #zen-essentials, #tabbrowser-tabs, :root)
+  :is(
+    .tabbrowser-tab:has(.zen-app-tile),
+    .tabbrowser-tab[zen-essential="true"]:has(.zen-app-tile),
+    .tabbrowser-tab[pending]:has(.zen-app-tile),
+    .tabbrowser-tab[pending="true"]:has(.zen-app-tile),
+    .tabbrowser-tab[zen-dormant="true"]:has(.zen-app-tile)
+  ) {
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+/* Re-apply dormancy grayscale strictly to the tab's internal icon and label, leaving the docked tile colored */
+:is(#zen-essentials-container, #zen-essentials, #tabbrowser-tabs, :root)
+  :is(
+    .tabbrowser-tab[pending]:has(.zen-app-tile),
+    .tabbrowser-tab[pending="true"]:has(.zen-app-tile),
+    .tabbrowser-tab[zen-dormant="true"]:has(.zen-app-tile),
+    .tabbrowser-tab[zen-essential="true"][pending]:has(.zen-app-tile),
+    .tabbrowser-tab[zen-essential="true"][zen-dormant="true"]:has(.zen-app-tile)
+  )
+  :is(.tab-stack > :not(.zen-app-tile), .tab-icon-image, .tab-label-container) {
+  filter: grayscale(100%) !important;
+  opacity: 0.45 !important;
+}
+
+/* Selected / active tab state */
+:is(#zen-essentials-container, #zen-essentials, #tabbrowser-tabs, :root)
+  :is(
+    .tabbrowser-tab[selected="true"]:has(.zen-app-tile),
+    .tabbrowser-tab[zen-essential="true"][selected="true"]:has(.zen-app-tile)
+  )
+  :is(.tab-stack, .tab-icon-image) {
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+/* Corner tile self-isolation */
+:is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile {
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+/* Unloaded / dormant app panel tile: subtle desaturation */
+:root[bgalazka-tab-isolation="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile[data-unloaded="true"]:not([data-active="true"]),
+:root[bgalazka-tab-isolation="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile[data-loaded="false"]:not([data-active="true"]),
+:root[bgalazka-tab-isolation="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile:not([data-loaded="true"]):not([data-active="true"]) {
+  filter: grayscale(100%) !important;
+  opacity: 0.35 !important;
+  transition:
+    opacity 0.2s ease,
+    filter 0.2s ease !important;
+}
+
+:root[bgalazka-tab-isolation="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile[data-unloaded="true"]:not([data-active="true"]):hover,
+:root[bgalazka-tab-isolation="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile[data-loaded="false"]:not([data-active="true"]):hover,
+:root[bgalazka-tab-isolation="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile:not([data-loaded="true"]):not([data-active="true"]):hover {
+  opacity: 0.85 !important;
+  filter: grayscale(20%) !important;
+}
+
+/* Loaded or active app panel tile: full color */
+:root[bgalazka-tab-isolation="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile[data-loaded="true"],
+:root[bgalazka-tab-isolation="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile[data-active="true"] {
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+/* ==========================================================================
+   4. ENCLOSED CORNER-DOCKED BUTTONS (FLUSH BOTTOM-RIGHT EDGES)
+   ========================================================================== */
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  ) {
+  position: relative !important;
+}
+
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile {
+  position: absolute !important;
+  right: 0px !important;
+  bottom: 0px !important;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  max-width: 22px !important;
+  max-height: 22px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 6px 0 4px 0 !important;
+  /* Fix: pointer-events must be auto in HTML/CSS (all is invalid syntax in HTML and causes Gecko to drop it) */
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  box-shadow: -1px -1px 3px rgba(0, 0, 0, 0.55) !important;
+  /* Opaque base background prevents essential tab gradient and container tints from bleeding through */
+  background: var(--tabpanels-background-color, #18181f) !important;
+  border-top: 1px solid
+    color-mix(in srgb, currentColor 20%, rgba(255, 255, 255, 0.2)) !important;
+  border-left: 1px solid
+    color-mix(in srgb, currentColor 20%, rgba(255, 255, 255, 0.2)) !important;
+  border-right: none !important;
+  border-bottom: none !important;
+  transform: none !important;
+  z-index: 2147483647 !important;
+  /* Prevent Gecko from mistaking clicks on the tile as tab/window drag operations */
+  -moz-window-dragging: no-drag !important;
+  -moz-user-drag: none !important;
+  user-drag: none !important;
+  user-select: none !important;
+}
+
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile:hover {
+  background: color-mix(
+    in srgb,
+    var(--tabpanels-background-color, #272730) 80%,
+    rgba(255, 255, 255, 0.15)
+  ) !important;
+  border-top-color: color-mix(
+    in srgb,
+    currentColor 35%,
+    rgba(255, 255, 255, 0.4)
+  ) !important;
+  border-left-color: color-mix(
+    in srgb,
+    currentColor 35%,
+    rgba(255, 255, 255, 0.4)
+  ) !important;
+}
+
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile[data-active="true"] {
+  background-color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #707ac2) 36%,
+    rgba(22, 22, 28, 0.95)
+  ) !important;
+  border-top: 1.5px solid
+    color-mix(
+      in srgb,
+      var(--zen-primary-color, #707ac2) 75%,
+      rgba(255, 255, 255, 0.4)
+    ) !important;
+  border-left: 1.5px solid
+    color-mix(
+      in srgb,
+      var(--zen-primary-color, #707ac2) 75%,
+      rgba(255, 255, 255, 0.4)
+    ) !important;
+  box-shadow:
+    -1px -1px 6px
+      color-mix(in srgb, var(--zen-primary-color, #707ac2) 40%, transparent),
+    -1px -1px 3px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Ensure child elements do not swallow mouse events so the tile container receives the click */
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile
+  * {
+  pointer-events: none !important;
+}
+
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  :is(.zen-app-tile img, .zen-app-tile svg, .zen-app-tile image) {
+  width: 14px !important;
+  height: 14px !important;
+  min-width: 14px !important;
+  min-height: 14px !important;
+  max-width: 14px !important;
+  max-height: 14px !important;
+  pointer-events: none !important;
+}
+
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile
+  .zen-app-badge {
+  top: -3px !important;
+  right: -3px !important;
+  min-width: 10px !important;
+  height: 10px !important;
+  font-size: 7px !important;
+  line-height: 10px !important;
+  padding: 0 2px !important;
+  pointer-events: none !important;
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+:root[bgalazka-corner-tiles="true"]
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)
+  :is(.zen-apps-autohide-dots, #zentral-apps-utility-section) {
+  display: none !important;
+}
+
+/* ==========================================================================
+   5. PILL MENU, UI COMPONENT TOGGLES & MODAL HIGH-CONTRAST THEME
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+ * Global Zentral Settings Modal: High-Visibility Controls & Colors
+ * -------------------------------------------------------------------------- */
+
+/* Global Toggled Switch Track — High-Visibility Accent with Soft Outer Glow */
+#zentral-settings-modal .zs-switch input:checked + .zs-slider {
+  background-color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 90%,
+    #ffffff
+  ) !important;
+  box-shadow:
+    0 0 10px
+      color-mix(in srgb, var(--zen-primary-color, #6366f1) 55%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Global Switch Handle (Thumb) */
+#zentral-settings-modal .zs-switch input:checked + .zs-slider:before {
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6) !important;
+  transform: translateX(16px) !important;
+}
+
+/* Global Settings Icon Badges (Bright, Clear & High-Contrast) */
+#zentral-settings-modal .zs-setting-with-icon {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+
+#zentral-settings-modal .zs-icon-preview {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  border-radius: 8px !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 18%,
+    rgba(255, 255, 255, 0.05)
+  ) !important;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--zen-primary-color, #6366f1) 45%,
+      rgba(255, 255, 255, 0.15)
+    ) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #818cf8) 75%,
+    #ffffff
+  ) !important;
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.35),
+    inset 0 0 8px
+      color-mix(in srgb, var(--zen-primary-color, #6366f1) 14%, transparent) !important;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+}
+
+#zentral-settings-modal .zs-icon-preview svg {
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  display: block !important;
+  pointer-events: none !important;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) !important;
+}
+
+/* Global Range Slider Thumb Accent */
+#zentral-settings-modal .zs-range-slider::-webkit-slider-thumb {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 85%,
+    #ffffff
+  ) !important;
+  box-shadow:
+    0 0 8px
+      color-mix(in srgb, var(--zen-primary-color, #6366f1) 60%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Global Tab Navigation Underline Active Glow */
+#zentral-settings-modal .zs-tab-btn[data-active="true"]::after {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 85%,
+    #ffffff
+  ) !important;
+  box-shadow: 0 0 10px
+    color-mix(in srgb, var(--zen-primary-color, #6366f1) 70%, transparent) !important;
+}
+
+/* Zero-gap slide transition for dependent setting groups */
+#zentral-settings-modal .zs-conditional-group {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  overflow: hidden !important;
+  max-height: 700px !important;
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+  transition:
+    max-height 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.2s ease,
+    transform 0.24s ease,
+    margin 0.24s ease,
+    padding 0.24s ease !important;
+}
+
+#zentral-settings-modal .zs-conditional-group[data-hidden="true"] {
+  max-height: 0 !important;
+  opacity: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  transform: translateY(-6px) !important;
+}
+
+/* --------------------------------------------------------------------------
+ * 1. Dual-View Mode: Solid Surface & Single-Box Page Push
+ * -------------------------------------------------------------------------- */
+
+/* Solid surface when Dual-View is active */
+:root[bgalazka-translucency="true"][bgalazka-push-page="true"][bgalazka-panel-pinned="true"]
+  #zen-app-panel-root
+  #zen-app-panel-slider,
+:root[bgalazka-translucency="true"][bgalazka-push-page="true"][bgalazka-panel-pinned="true"]
+  #zen-app-panel-root:is(:hover, :focus-within)
+  #zen-app-panel-slider,
+:root[bgalazka-translucency="true"][bgalazka-push-page="true"][bgalazka-panel-pinned="true"]
+  #zen-app-panel-root:not(:hover):not(:focus-within)
+  #zen-app-panel-slider {
+  opacity: 1 !important;
+  background-color: var(--tabpanels-background-color, #1e1e24) !important;
+  backdrop-filter: none !important;
+}
+
+/* Scoped strictly to the outer tabbox to eliminate the 2x offset */
+#tabbrowser-tabbox {
+  transition:
+    margin-right 0.22s cubic-bezier(0.25, 1, 0.5, 1),
+    margin-left 0.22s cubic-bezier(0.25, 1, 0.5, 1) !important;
+}
+
+:root[bgalazka-push-page="true"][bgalazka-panel-pinned="true"][bgalazka-panel-side="right"]
+  #tabbrowser-tabbox {
+  margin-right: calc(var(--bgalazka-panel-width, 350px) + 12px) !important;
+  margin-left: 0 !important;
+}
+
+:root[bgalazka-push-page="true"][bgalazka-panel-pinned="true"][bgalazka-panel-side="left"]
+  #tabbrowser-tabbox {
+  margin-left: calc(var(--bgalazka-panel-width, 350px) + 12px) !important;
+  margin-right: 0 !important;
+}
+
+/* --------------------------------------------------------------------------
+ * 2. Hover-Only Corner App Tiles (Zero Window Compositing / Blackout Glitch)
+ * -------------------------------------------------------------------------- */
+:root[bgalazka-hover-corner-tiles="true"]
+  :is(
+    #zen-essentials-container .tabbrowser-tab,
+    .tabbrowser-tab[zen-essential="true"]
+  ):not(:hover)
+  .zen-app-tile:not([data-active="true"]) {
+  display: none !important;
+}
+
+:root[bgalazka-hover-corner-tiles="true"]
+  :is(
+    #zen-essentials-container .tabbrowser-tab,
+    .tabbrowser-tab[zen-essential="true"]
+  ):hover
+  .zen-app-tile,
+:root[bgalazka-hover-corner-tiles="true"] .zen-app-tile[data-active="true"] {
+  display: flex !important;
+}
+
+/* --------------------------------------------------------------------------
+ * 3. Pill Menu Vertical Anchor (Top / Center / Bottom)
+ * -------------------------------------------------------------------------- */
+
+/* Default Center */
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill,
+:root[bgalazka-opposite-docking="true"][bgalazka-pill-position="center"]
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill {
+  top: 50% !important;
+  bottom: auto !important;
+  transform: translate(-100%, -50%) !important;
+}
+
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  #zen-app-panel-pill,
+:root[bgalazka-opposite-docking="true"][bgalazka-pill-position="center"]
+  #zen-app-panel-root[data-panel-side="left"]
+  #zen-app-panel-pill {
+  top: 50% !important;
+  bottom: auto !important;
+  transform: translate(100%, -50%) !important;
+}
+
+/* Top Anchor */
+:root[bgalazka-pill-position="top"] #zen-app-panel-pill {
+  top: 14px !important;
+  bottom: auto !important;
+}
+
+:root[bgalazka-opposite-docking="true"][bgalazka-pill-position="top"]
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill {
+  top: 14px !important;
+  bottom: auto !important;
+  transform: translate(-100%, 0) !important;
+}
+
+:root[bgalazka-opposite-docking="true"][bgalazka-pill-position="top"]
+  #zen-app-panel-root[data-panel-side="left"]
+  #zen-app-panel-pill {
+  top: 14px !important;
+  bottom: auto !important;
+  transform: translate(100%, 0) !important;
+}
+
+/* Bottom Anchor */
+:root[bgalazka-pill-position="bottom"] #zen-app-panel-pill {
+  top: auto !important;
+  bottom: 14px !important;
+}
+
+:root[bgalazka-opposite-docking="true"][bgalazka-pill-position="bottom"]
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill {
+  top: auto !important;
+  bottom: 14px !important;
+  transform: translate(-100%, 0) !important;
+}
+
+:root[bgalazka-opposite-docking="true"][bgalazka-pill-position="bottom"]
+  #zen-app-panel-root[data-panel-side="left"]
+  #zen-app-panel-pill {
+  top: auto !important;
+  bottom: 14px !important;
+  transform: translate(100%, 0) !important;
+}
+
+/* --------------------------------------------------------------------------
+ * 4. Floating App Panel Pill: Button Toggles & Dual-View Styling
+ * -------------------------------------------------------------------------- */
+:root[bgalazka-hide-pill="true"] #zen-app-panel-pill {
+  display: none !important;
+}
+
+/* Dual-View Button Active State — Exact copy of Pinned button theme */
+#zen-app-panel-pill .zen-app-dual-view-btn[data-active="true"] {
+  background-color: color-mix(
+    in srgb,
+    currentColor 20%,
+    transparent
+  ) !important;
+}
+
+#zen-app-panel-pill .zen-app-dual-view-btn[data-active="true"] svg {
+  fill: currentColor !important;
+  stroke: currentColor !important;
+  stroke-width: 0.5 !important;
+}
+
+:root[bgalazka-hide-dual-view="true"]
+  #zen-app-panel-pill
+  .zen-app-dual-view-btn {
+  display: none !important;
+}
+
+:root[bgalazka-hide-pin="true"]
+  #zen-app-panel-pill
+  .zen-app-btn:is([title*="Pin" i], [title*="pin" i], [data-pinned]) {
+  display: none !important;
+}
+
+:root[bgalazka-hide-expand="true"]
+  #zen-app-panel-pill
+  :is(.zen-app-btn[title="Expand panel"], .zen-app-btn[title="Restore panel"]) {
+  display: none !important;
+}
+
+:root[bgalazka-hide-grabber="true"] #zen-app-panel-pill .zen-app-grabber {
+  display: none !important;
+}
+
+:root[bgalazka-hide-refresh="true"] #zen-app-panel-pill .zen-app-refresh-btn {
+  display: none !important;
+}
+
+:root[bgalazka-hide-close="true"] #zen-app-panel-pill .zen-app-close-btn {
+  display: none !important;
+}
+/* --------------------------------------------------------------------------
+ * 5. Corner Tile Badge Toggle
+ * -------------------------------------------------------------------------- */
+:root[bgalazka-hide-corner-badges="true"]
+  :is(.tabbrowser-tab, #zen-essentials-container .tabbrowser-tab)
+  .zen-app-tile
+  .zen-app-badge {
+  display: none !important;
+}
