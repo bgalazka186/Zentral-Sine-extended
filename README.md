@@ -1,4 +1,49 @@
 <p align="center">
+  <b>This is my personal AI slop extended version of Zentral if you dont need any of those tweaks its better that you will use Michele501st/Zentral-Sine </b>
+  <br>
+</p>
+
+<p align="center">
+  <img src="assets/Zentral%20Logo.png" alt="Zentral Logo" width="140" height="140" />
+</p>
+
+---
+
+### Extra Features:
+
+- **Dynamic Translucency:** sometimes a bit of transparency is nice, you can now control how much transparency your panel will have in normal pinned and pinned unfocused state.
+- **Opposite-Side Docking:** i wanted to have buttons for panels on normal sidebar, but in compact mode panel moved a bit too much, i decided having it on opposite side would be nice (extend panel button is not working with it currently, pill menu doesnt hide like it should, its AI slop mod for mod after all, what is important is that it is perfectly usable).
+- **Corner-Docked Tiles:** by default they taking bit space and if you are used to essentials, they not that intuitive (change order of your panels first i recommend making them match your essencials, then enable this option).
+- **Push sites when pinned:** feature that been in Vivaldi for years, similar to split view but a bit worse (much more accessible for panels)
+- **Disable whatever elements you dont want from pill menu:** you dont need reload button? pill menu is to cluttered? just hide it
+
+<p align="center">
+  <img src="assets/example.png" alt="example" width="500" height="600" />
+</p>
+
+---
+
+### Future Roadmap:
+
+- **Whatever i will want for myself:** if you want to add something/ have proposition give Michele501st (they know what they are doing way more then me) details, if the proposition seems more like something for this extension then main mod, i will be glad to see what i can do
+
+### All other info
+
+- if you can not figure out how to install this extended version, this is not for you, its AI slop, you need to know at least how to uninstall it if something goes wrong
+
+- getting it set up for first time may be cluncky, especially for corner docking, best approach i found is restarting browser after turning his option on or off, that is, if something breaks,
+
+---
+
+## ⚖️ Attribution, Upstream Credits & Disclaimer
+
+- **Original Creator & Project:** This project is an independent fork and extension of **[Zentral](https://github.com/zen-browser)** for Zen Browser, originally developed under the **CC BY-NC-SA 4.0** license. All original code, branding, and core architecture belong to the original author.
+- **Modifications:** This repository introduces experimental modifications (the _Bgalazka Extension_ layer) including opposite-side docking overrides, corner-docked essential tab tiles, and custom translucency profiles.
+- **Support the Original Dev:** If you enjoy Zentral, please support the original author via their Ko-fi / upstream channels linked in the settings menu.
+- **Bug Reports:** **Do not open issues on the upstream Zentral repository for problems encountered while using this fork.** Please file all issues, bugs, and feature requests directly in this repository's Issues tab.
+- **License:** Licensed under [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+<p align="center">
   <img src="assets/Zentral%20Logo.png" alt="Zentral Logo" width="140" height="140" />
 </p>
 
@@ -22,6 +67,7 @@
 ## 📖 Overview
 
 **Zentral** unifies your favorite communication tools, web applications, and tabs into a cohesive, fluidly animated sidebar experience.
+
 <p align="center">
   <img src="assets/Zentral.png" alt="Zentral" />
 </p>
@@ -36,6 +82,7 @@ Designed natively for the **Sine Mod Engine**, Zentral features hot-reloading su
 <br>
 
 Zentral significantly expands Zen Browser's native tab group capabilities with styling, smooth interactions, and rich color customization:
+
 <p align="center">
   <img src="assets/Groups.png" alt="Groups" />
 </p>
@@ -70,6 +117,7 @@ Zentral significantly expands Zen Browser's native tab group capabilities with s
 <br>
 
 Keep your essential web apps (Discord, WhatsApp, Reddit, Spotify, Notion, YouTube, etc.) one click away without cluttering your tab strip:
+
 <p align="center">
   <img src="assets/Apps.png" alt="Apps" />
 </p>
@@ -110,18 +158,18 @@ Keep your essential web apps (Discord, WhatsApp, Reddit, Spotify, Notion, YouTub
 
 All preferences are declaratively registered via [`preferences.json`](preferences.json) and customizable live inside **Zen Settings -> Mods -> Zentral**:
 
-| Setting Property | UI Label | Type | Default | Description |
-|---|---|---|---|---|
-| `zen.workspace.apps.sidebar.enabled` | Enable Apps Sidebar Grid & Panels | `checkbox` | `true` | Master switch for the Apps Grid module |
-| `zen.workspace.apps.sidebar.apps_per_row` | Apps Displayed Per Row | `dropdown` | `7` | Number of columns in grid mode (3–10) |
-| `zen.workspace.apps.sidebar.max_rows` | Maximum Grid Rows | `dropdown` | `3` | Maximum visible grid rows before scrolling (1–5) |
-| `zen.workspace.apps.sidebar.animation_type` | Panel Animation Easing Curve | `dropdown` | `spring-gentle` | Panel easing curve (`slide`, `spring-gentle`, `spring-bouncy`, `elastic`) |
-| `zen.workspace.tabgroups.enabled` | Enable Enhanced Tab Groups | `checkbox` | `true` | Master switch for enhanced tab group logic |
-| `zen.workspace.tabgroups.collapse_on_launch` | Collapse Tab Groups on Startup | `checkbox` | `false` | Automatically collapse all groups on launch |
-| `zen.workspace.tabgroups.show_chevron` | Show Open/Close Indicator | `checkbox` | `true` | Display open/close pill indicator |
-| `zen.workspace.tabgroups.indicator_type` | Tab Group Indicator Style | `dropdown` | `circle` | Indicator appearance: `circle` (Dot) or `chevron` (Arrow) |
-| `zen.workspace.tabgroups.thumbnails` | Show Tab Thumbnails on Hover | `checkbox` | `true` | Render live preview thumbnails on tab hover |
-| `zen.workspace.zentral.debug` | Enable Diagnostic Logging | `checkbox` | `false` | Enables real-time console tracing buffer |
+| Setting Property                             | UI Label                          | Type       | Default         | Description                                                               |
+| -------------------------------------------- | --------------------------------- | ---------- | --------------- | ------------------------------------------------------------------------- |
+| `zen.workspace.apps.sidebar.enabled`         | Enable Apps Sidebar Grid & Panels | `checkbox` | `true`          | Master switch for the Apps Grid module                                    |
+| `zen.workspace.apps.sidebar.apps_per_row`    | Apps Displayed Per Row            | `dropdown` | `7`             | Number of columns in grid mode (3–10)                                     |
+| `zen.workspace.apps.sidebar.max_rows`        | Maximum Grid Rows                 | `dropdown` | `3`             | Maximum visible grid rows before scrolling (1–5)                          |
+| `zen.workspace.apps.sidebar.animation_type`  | Panel Animation Easing Curve      | `dropdown` | `spring-gentle` | Panel easing curve (`slide`, `spring-gentle`, `spring-bouncy`, `elastic`) |
+| `zen.workspace.tabgroups.enabled`            | Enable Enhanced Tab Groups        | `checkbox` | `true`          | Master switch for enhanced tab group logic                                |
+| `zen.workspace.tabgroups.collapse_on_launch` | Collapse Tab Groups on Startup    | `checkbox` | `false`         | Automatically collapse all groups on launch                               |
+| `zen.workspace.tabgroups.show_chevron`       | Show Open/Close Indicator         | `checkbox` | `true`          | Display open/close pill indicator                                         |
+| `zen.workspace.tabgroups.indicator_type`     | Tab Group Indicator Style         | `dropdown` | `circle`        | Indicator appearance: `circle` (Dot) or `chevron` (Arrow)                 |
+| `zen.workspace.tabgroups.thumbnails`         | Show Tab Thumbnails on Hover      | `checkbox` | `true`          | Render live preview thumbnails on tab hover                               |
+| `zen.workspace.zentral.debug`                | Enable Diagnostic Logging         | `checkbox` | `false`         | Enables real-time console tracing buffer                                  |
 
 </details>
 
@@ -172,7 +220,7 @@ Zentral includes a telemetry and diagnostics subsystem:
 
 ### Method 2: Manual Profile Installation
 
-1. Locate your Zen Browser profile directory (`about:support` → **Profile Folder** → *Open Folder*).
+1. Locate your Zen Browser profile directory (`about:support` → **Profile Folder** → _Open Folder_).
 2. Inside the profile, create or navigate to `chrome/sine-mods/`.
 3. Clone or extract this repository into a folder named `zentral`:
    ```bash
@@ -184,13 +232,13 @@ Zentral includes a telemetry and diagnostics subsystem:
 
 ## ⌨️ Shortcuts & Hotkeys
 
-| Shortcut | Action | Scope |
-|---|---|---|
-| <kbd>Alt</kbd> + <kbd>L</kbd> | Export Zentral Diagnostic Log & Snapshot | Global Browser Window |
-| <kbd>Click</kbd> on Group Label | Toggle Expand / Collapse Group | Tab Strip / Sidebar |
-| <kbd>Right Click</kbd> on Group Label | Open Zentral Custom Context Menu (Rename, Color Picker, Ungroup) | Tab Strip / Sidebar |
-| <kbd>Right Click</kbd> on App Tile | Configure App Settings, Icon, Mobile Mode & Workspace Visibility | Apps Grid / Vertical Bar |
-| <kbd>Right Click</kbd> on Bookmark Folder | Convert Folder to Tab Group | Zen Sidebar |
+| Shortcut                                  | Action                                                           | Scope                    |
+| ----------------------------------------- | ---------------------------------------------------------------- | ------------------------ |
+| <kbd>Alt</kbd> + <kbd>L</kbd>             | Export Zentral Diagnostic Log & Snapshot                         | Global Browser Window    |
+| <kbd>Click</kbd> on Group Label           | Toggle Expand / Collapse Group                                   | Tab Strip / Sidebar      |
+| <kbd>Right Click</kbd> on Group Label     | Open Zentral Custom Context Menu (Rename, Color Picker, Ungroup) | Tab Strip / Sidebar      |
+| <kbd>Right Click</kbd> on App Tile        | Configure App Settings, Icon, Mobile Mode & Workspace Visibility | Apps Grid / Vertical Bar |
+| <kbd>Right Click</kbd> on Bookmark Folder | Convert Folder to Tab Group                                      | Zen Sidebar              |
 
 ---
 
