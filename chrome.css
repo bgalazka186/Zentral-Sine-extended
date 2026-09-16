@@ -5232,7 +5232,6 @@ panel[id*="tabgroup-editor"] {
   /* Prevent Gecko from mistaking clicks on the tile as tab/window drag operations */
   -moz-window-dragging: no-drag !important;
   -moz-user-drag: none !important;
-  user-drag: none !important;
   user-select: none !important;
 }
 
