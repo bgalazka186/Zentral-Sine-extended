@@ -16,6 +16,7 @@
 - **Corner-Docked Tiles:** by default they taking bit space and if you are used to essentials, they not that intuitive (change order of your panels first i recommend making them match your essencials, then enable this option).
 - **Push sites when pinned:** feature that been in Vivaldi for years, similar to split view but a bit worse (much more accessible for panels)
 - **Disable whatever elements you dont want from pill menu:** you dont need reload button? pill menu is to cluttered? just hide it
+- **Switch UserAgent to Mobile** easy to add feature that is avalible in vivaldi web panels, useless on most sites, it shines on Instagram
 
 <p align="center">
   <img src="assets/example.png" alt="example" width="500" height="600" />
