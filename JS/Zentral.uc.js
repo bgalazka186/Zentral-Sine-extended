@@ -15960,6 +15960,122 @@
     }
   }
 
+  /* ==========================================================================
+   * MOBILE USER AGENT TOGGLE (per-app checkbox, mirrors native "Load at Startup")
+   * -----------------------------------------------------------------------
+   * Feature: a per-app "Mobile User Agent" checkbox living in the same tile
+   * right-click menu as the native "Load at Startup" item, remembered per-app
+   * across restarts exactly the same way.
+   *
+   * WHY THIS IS HOOKED RATHER THAN EDITED IN PLACE (see notes 1 & 5 above):
+   * - setupContextMenu() and getOrCreateAppBrowser() belong to the
+   *   ZentralApps class defined in the base mod's own IIFE, ABOVE the
+   *   Bgalazka marker. We never edit that source directly; we reach the
+   *   singleton instance (window.Zentral.Apps, see note 5) and either wrap
+   *   its methods or attach DOM nodes to elements it already built.
+   * - We deliberately do NOT add a "mobileUA" field to the base mod's own
+   *   app objects / saveApps() whitelist, since that means editing
+   *   ZentralApps.saveApps() itself. Instead the per-app flag lives in its
+   *   own dedicated pref (a JSON array of app ids), entirely inside this
+   *   extension, so the native save/load code never needs to change.
+   * - Gecko does not re-apply a <browser>'s "useragent"/"customuseragent"
+   *   attribute to an already-connected/loaded docShell. So flipping the
+   *   checkbox unloads that app's browser via the singleton's own
+   *   closeApp() (same public method "Unload App" already uses) instead of
+   *   trying to hot-swap the UA live — it reloads with the correct UA next
+   *   time the app is opened or preloaded.
+   * ========================================================================== */
+  const MOBILE_UA_PREF = "zen.workspace.bgalazka.mobile_ua_apps";
+  const MOBILE_UA_STRING =
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36";
+
+  function getMobileUaAppIds() {
+    try {
+      const raw = Services.prefs.getStringPref(MOBILE_UA_PREF, "[]");
+      const arr = JSON.parse(raw);
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch (_) {
+      return new Set();
+    }
+  }
+
+  function saveMobileUaAppIds(set) {
+    try {
+      Services.prefs.setStringPref(
+        MOBILE_UA_PREF,
+        JSON.stringify(Array.from(set)),
+      );
+    } catch (e) {
+      console.warn("[BgalazkaExtension] Failed to save mobile UA list:", e);
+    }
+  }
+
+  function isMobileUaApp(appId) {
+    return !!appId && getMobileUaAppIds().has(appId);
+  }
+
+  function toggleMobileUaApp(appId) {
+    const set = getMobileUaAppIds();
+    const next = !set.has(appId);
+    if (next) set.add(appId);
+    else set.delete(appId);
+    saveMobileUaAppIds(set);
+    return next;
+  }
+
+  // Injects one extra <menuitem> into the native tile context menu, right
+  // after "Load at Startup" — instead of editing ZentralApps.setupContextMenu().
+  function ensureMobileUaMenuItem() {
+    const popup = document.getElementById("zen-apps-sidebar-tile-context");
+    if (!popup) return false;
+    const preloadItem = popup.querySelector("#zen-apps-sidebar-preload-item");
+    if (!preloadItem) return false;
+
+    let item = popup.querySelector("#zen-apps-sidebar-mobile-ua-item");
+    if (!item) {
+      item = document.createXULElement("menuitem");
+      item.id = "zen-apps-sidebar-mobile-ua-item";
+      item.setAttribute("label", "Mobile User Agent");
+      item.setAttribute("type", "checkbox");
+      preloadItem.insertAdjacentElement("afterend", item);
+
+      // Same hide/show + checked-state contract as the native items: driven
+      // entirely by popup.dataset.activeAppId, which ZentralApps already
+      // sets before showing the menu.
+      popup.addEventListener("popupshowing", () => {
+        const appId = popup.dataset.activeAppId || "";
+        item.hidden = !appId;
+        if (!appId) return;
+        if (isMobileUaApp(appId)) item.setAttribute("checked", "true");
+        else item.removeAttribute("checked");
+      });
+
+      item.addEventListener("command", () => {
+        const appId = popup.dataset.activeAppId;
+        if (!appId) return;
+        const enabled = toggleMobileUaApp(appId);
+        if (enabled) item.setAttribute("checked", "true");
+        else item.removeAttribute("checked");
+
+        // Force a clean reload with the new UA (see note above).
+        const apps = window.Zentral?.Apps;
+        if (apps?.closeApp) apps.closeApp(appId);
+      });
+    }
+    return true;
+  }
+
+  if (!ensureMobileUaMenuItem()) {
+    let mobileUaAttempts = 0;
+    const mobileUaMenuTimer = setInterval(() => {
+      mobileUaAttempts++;
+      if (ensureMobileUaMenuItem() || mobileUaAttempts > 40) {
+        clearInterval(mobileUaMenuTimer);
+      }
+    }, 150);
+    registerCleanup(() => clearInterval(mobileUaMenuTimer));
+  }
+
   // Safe method hook on Zentral Apps singleton (eliminates infinite observer loops)
   const hookAppsInstance = () => {
     const apps = window.Zentral?.Apps;
@@ -16002,6 +16118,41 @@
         const res = origOnDrag(...args);
         syncPanelPushState();
         return res;
+      };
+    }
+
+    // Applies the Mobile User Agent flag to freshly-created app <browser>s.
+    // Only isNew results are touched — an already-connected browser keeps
+    // whatever UA it started with (see note above the mobile UA block).
+    const origGetOrCreateBrowser = apps.getOrCreateAppBrowser?.bind(apps);
+    if (origGetOrCreateBrowser) {
+      apps.getOrCreateAppBrowser = function (app) {
+        const result = origGetOrCreateBrowser(app);
+        // BUG FIX: setAttribute("useragent"/"customuseragent", ...) is only
+        // ever read by the <browser> element once, at its connectedCallback
+        // — which already ran inside origGetOrCreateBrowser's own
+        // panel.appendChild(b), i.e. BEFORE this wrapper runs. Setting those
+        // attributes afterward is a silent no-op, which is why toggling the
+        // checkbox never changed anything sites saw. The live override is
+        // browsingContext.customUserAgent — the same dynamic property
+        // Firefox's own Responsive Design Mode uses — which DOES apply to
+        // the upcoming navigation as long as it's set before the caller's
+        // loadURI/fixupAndLoadURIString call that runs right after this
+        // getOrCreateAppBrowser() call returns.
+        if (result?.isNew && result.browser && isMobileUaApp(app?.id)) {
+          try {
+            const bc = result.browser.browsingContext;
+            if (bc) bc.customUserAgent = MOBILE_UA_STRING;
+            else result.browser.customUserAgent = MOBILE_UA_STRING;
+          } catch (e) {
+            console.warn(
+              "[BgalazkaExtension] Failed to apply mobile UA:",
+              app?.id,
+              e,
+            );
+          }
+        }
+        return result;
       };
     }
 

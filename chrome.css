@@ -5667,3 +5667,22 @@ panel[id*="tabgroup-editor"] {
   .zen-app-badge {
   display: none !important;
 }
+
+/* --------------------------------------------------------------------------
+ * 6. Mobile User Agent Toggle — Tile Context Menu Item
+ * -----------------------------------------------------------------------
+ * The #zen-apps-sidebar-mobile-ua-item menuitem is injected by the JS
+ * extension (see the "MOBILE USER AGENT TOGGLE" block below the marker in
+ * Zentral_uc.js) directly next to the native "Load at Startup" item, rather
+ * than by editing ZentralApps.setupContextMenu(). It needs the same
+ * hide-when-no-active-app treatment the base mod gives its own app-specific
+ * items (compare #zen-apps-sidebar-preload-item above the marker) so it
+ * doesn't show when right-clicking empty grid space.
+ * -------------------------------------------------------------------------- */
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-mobile-ua-item[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-mobile-ua-item,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-mobile-ua-item {
+  display: none !important;
+}
