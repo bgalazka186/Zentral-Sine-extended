@@ -248,11 +248,12 @@ Zentral includes a telemetry and diagnostics subsystem:
 
 ```text
 Zentral-Sine/
-├── theme.json            # Sine Mod manifest (ID, metadata, unload capability)
+├── theme.json            # Sine Mod manifest (ID, metadata, unload capability)-Changed to extended version manifest
 ├── preferences.json      # Declarative schema for native Zen settings UI
-├── chrome.css            # Stylesheet overrides (glassmorphism, layout, animations)
+├── chrome.css            # Stylesheet overrides (glassmorphism, layout, animations)-extension CSS is added on bottom of this file
 ├── JS/
-│   ├── Zentral.uc.js     # Master userChromeJS script (Apps, TabGroups, ColorPicker)
+│   ├── Zentral.uc.js     # Master userChromeJS script (Apps, TabGroups, ColorPicker)-extension JS is added on bottom of this file
+├── JS/
 │   └── zentral_logger.uc.js # High-performance diagnostic logging engine
 ├── assets/
 │   ├── Zentral Logo.png  # High-resolution raster logo
