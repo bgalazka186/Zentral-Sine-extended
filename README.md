@@ -12,7 +12,7 @@
 ### Extra Features:
 
 - **Dynamic Translucency:** sometimes a bit of transparency is nice, you can now control how much transparency your panel will have in normal pinned and pinned unfocused state.
-- **Opposite-Side Docking:** i wanted to have buttons for panels on normal sidebar, but in compact mode panel moved a bit too much, i decided having it on opposite side would be nice (extend panel button is not working with it currently, pill menu doesnt hide like it should, its AI slop mod for mod after all, what is important is that it is perfectly usable).
+- **Opposite-Side Docking:** i wanted to have buttons for panels on normal sidebar, but in compact mode panel moved a bit too much, i decided having it on opposite side would be nice .
 - **Corner-Docked Tiles:** by default they taking bit space and if you are used to essentials, they not that intuitive (change order of your panels first i recommend making them match your essencials, then enable this option).
 - **Push sites when pinned:** feature that been in Vivaldi for years, similar to split view but a bit worse (much more accessible for panels)
 - **Disable whatever elements you dont want from pill menu:** you dont need reload button? pill menu is to cluttered? just hide it
@@ -30,9 +30,7 @@
 
 ### All other info
 
-- if you can not figure out how to install this extended version, this is not for you, its AI slop, you need to know at least how to uninstall it if something goes wrong
-
-- getting it set up for first time may be cluncky, especially for corner docking, best approach i found is restarting browser after turning his option on or off, that is, if something breaks,
+- getting it set up for first time may be cluncky, especially for corner docking, if something doesnt look right (for example any web panel is not attatched to essencial tab), restart browser, Bearly anyone but me will use it so setup user expirience is on low priority
 
 ---
 

@@ -14638,6 +14638,12 @@
         if (typeof fallback === "boolean")
           return Services.prefs.getBoolPref(key);
         if (typeof fallback === "number") return Services.prefs.getIntPref(key);
+        // BUG FIX: string-typed prefs (e.g. any future dropdown pref) had no
+        // branch here at all, so they always fell through to `fallback`
+        // below even when a value had actually been saved. See setPref()
+        // for the matching write-side half of this fix.
+        if (typeof fallback === "string")
+          return Services.prefs.getStringPref(key);
       }
     } catch (_) {}
     return fallback;
@@ -14647,6 +14653,11 @@
     try {
       if (typeof value === "boolean") Services.prefs.setBoolPref(key, value);
       if (typeof value === "number") Services.prefs.setIntPref(key, value);
+      // BUG FIX: string prefs previously matched neither `if`, so this was a
+      // silent no-op — the dropdown/UI looked like it saved (it updated the
+      // live DOM attribute on "change") but nothing ever reached
+      // Services.prefs, so the value reset to default on every restart.
+      if (typeof value === "string") Services.prefs.setStringPref(key, value);
     } catch (e) {
       console.warn("[BgalazkaExtension] Failed to save pref:", key, e);
     }
@@ -14671,6 +14682,18 @@
     root.style.setProperty(
       "--bg-blur-intensity",
       getPref(EXT_PREFS.BLUR_INTENSITY, 20) + "px",
+    );
+    // Pill vertical offset, -50 to 50, 0 = centered. NOTE: EXT_PREFS.PILL_POSITION
+    // is only merged in further below (once BGALAZKA_EXT_PREFS exists), so the
+    // very first call to updateCSSVars() at init (via applyAttributes(), before
+    // that merge runs) will harmlessly read `undefined` here and fall back to 0;
+    // the "Initial attribute sync" block near the end of this file calls
+    // updateCSSVars() again once the real pref key exists, which applies the
+    // actual saved value. The CSS side clamps this with clamp() so no matter
+    // what value is stored, the pill can never be pushed fully off-screen.
+    root.style.setProperty(
+      "--bgalazka-pill-offset",
+      getPref(EXT_PREFS.PILL_POSITION, 0) + "%",
     );
   }
 
@@ -14802,6 +14825,125 @@
       requestTileSync(60);
     };
 
+    /* ------------------------------------------------------------------
+     * BUG FIX: "Expand / Restore" panel button did nothing useful (or
+     * shrank the panel to its minimum width) whenever Opposite-Side
+     * Docking was active.
+     *
+     * Root cause: native toggleExpand()'s full-width math (see note 7 for
+     * the same category of bug in positionPanel) measures the gap between
+     * the panel and gBrowser.tabContainer (the sidebar) and assumes the
+     * panel is docked directly adjacent to it:
+     *   targetRight = innerWidth - tcRect.left + gap   (attached-right case)
+     * That's correct for NATIVE docking, where the panel sits right next
+     * to the sidebar. But our positionPanel() override (above) docks the
+     * panel against the OPPOSITE viewport edge instead when opposite
+     * docking is on, entirely ignoring tcRect. So native toggleExpand()
+     * computes a huge bogus targetRight (~window width, since tcRect.left
+     * is near 0 when the sidebar is on the left) and the resulting
+     * fullWidth goes negative, getting clamped down to MIN_WIDTH_PX — the
+     * panel "expands" to its smallest possible size instead of growing.
+     *
+     * Fix: let the native method run first (it still correctly flips
+     * isExpanded and updates the button icon/title via our patched
+     * isPanelAttachedToRight() above), then — only when we just grew the
+     * panel (isExpanded, detected from the button's own title text since
+     * #state is a private class field we cannot read from outside the
+     * class, see note 5) and opposite docking applies — recompute the
+     * correct full width ourselves and overwrite it via updateWidthVar(),
+     * a public method safe to call again. The "restore to previous width"
+     * branch needs no fix: it just replays a previously-saved pixel width
+     * and never depended on docking side.
+     * ------------------------------------------------------------------ */
+    const origToggleExpand = appsInstance.toggleExpand?.bind(appsInstance);
+    appsInstance.toggleExpand = function () {
+      if (origToggleExpand) origToggleExpand();
+      if (
+        !getPref(EXT_PREFS.OPPOSITE_DOCKING, true) ||
+        this.isPlacementVerticalBar?.()
+      )
+        return;
+
+      const pill = document.getElementById("zen-app-panel-pill");
+      const justExpanded = !!pill?.querySelector(
+        '.zen-app-btn[title="Restore panel"]',
+      );
+      if (!justExpanded) return; // this call collapsed the panel, nothing to fix
+
+      const gap = 12; // must match the gap our positionPanel() override uses
+      const sidebarEl =
+        document.getElementById("sidebar-box") ||
+        document.getElementById("sidebar-container") ||
+        document.getElementById("vertical-tabs");
+      const sidebarRect = sidebarEl
+        ? sidebarEl.getBoundingClientRect()
+        : gBrowser?.tabContainer?.getBoundingClientRect();
+      const sidebarWidth =
+        sidebarRect && sidebarRect.width > 0 ? sidebarRect.width : 0;
+
+      // MIN_WIDTH_PX (280) is hardcoded here because Constants is scoped
+      // inside the base mod's own IIFE and unreachable from here (note 5).
+      const correctFullWidth = Math.max(
+        280,
+        window.innerWidth - sidebarWidth - gap * 2,
+      );
+      if (typeof this.updateWidthVar === "function")
+        this.updateWidthVar(correctFullWidth);
+    };
+
+    /* ------------------------------------------------------------------
+     * BUG FIX: right-clicking content inside the Apps floating panel and
+     * clicking a context-menu item (e.g. "Copy") closed the panel and
+     * silently ate the command; the keyboard shortcut (Ctrl+C) kept
+     * working because it never goes through this code path at all.
+     *
+     * Root cause: native handleOutsideClick() is a window-level "mousedown"
+     * listener that closes the panel unless the click's composedPath()
+     * contains #zen-app-panel-root (or a short allow-list of other Zen UI
+     * containers). Firefox renders a <browser>'s native context menu
+     * (#contentAreaContextMenu) as a XUL <menupopup> appended to
+     * #mainPopupSet, a sibling far outside #zen-app-panel-root in the DOM
+     * — so clicking any item in that menu is, from handleOutsideClick's
+     * point of view, indistinguishable from clicking outside the panel.
+     * It closes the panel out from under the still-pending menu command,
+     * which is what breaks "Copy" (and every other context-menu action).
+     *
+     * Fix: we can't just reassign appsInstance.handleOutsideClick and walk
+     * away — setupObservers() (which runs during the base mod's deferred
+     * Init(), i.e. possibly AFTER this patch runs) captures whatever
+     * function value was current at the time it calls addEventListener,
+     * so a later reassignment alone wouldn't reach an already-registered
+     * listener, and doing nothing risks setupObservers() re-adding the
+     * original later even if we did swap it live. So we cover both
+     * timings at once: grab the original bound function reference (the
+     * exact one setupObservers() would use or already used),
+     * unconditionally remove it from window (a harmless no-op if it was
+     * never added yet) and add our wrapper in its place, AND reassign the
+     * instance property — so whichever of "already attached" or "not yet
+     * attached" turns out to be true, only our wrapper ends up listening.
+     * ------------------------------------------------------------------ */
+    const origHandleOutsideClick = appsInstance.handleOutsideClick;
+    let wrappedHandleOutsideClick = null;
+    if (typeof origHandleOutsideClick === "function") {
+      wrappedHandleOutsideClick = function (e) {
+        const path = e.composedPath ? e.composedPath() : [];
+        const insideOpenPopup = path.some(
+          (el) =>
+            el &&
+            el.nodeType === 1 &&
+            (el.tagName === "menupopup" ||
+              el.tagName === "panel" ||
+              el.id === "mainPopupSet" ||
+              el.id === "contentAreaContextMenu"),
+        );
+        if (insideOpenPopup) return;
+        return origHandleOutsideClick(e);
+      };
+      window.removeEventListener("mousedown", origHandleOutsideClick);
+      window.addEventListener("mousedown", wrappedHandleOutsideClick);
+      appsInstance.handleOutsideClick = wrappedHandleOutsideClick;
+    }
+
     registerCleanup(() => {
       if (origIsPanelAttachedToRight)
         appsInstance.isPanelAttachedToRight = origIsPanelAttachedToRight;
@@ -14809,6 +14951,12 @@
       if (origTogglePin) appsInstance.togglePin = origTogglePin;
       if (origOpenPanel) appsInstance.openPanel = origOpenPanel;
       if (origRenderGrid) appsInstance.renderGrid = origRenderGrid;
+      if (origToggleExpand) appsInstance.toggleExpand = origToggleExpand;
+      if (wrappedHandleOutsideClick) {
+        window.removeEventListener("mousedown", wrappedHandleOutsideClick);
+        appsInstance.handleOutsideClick = origHandleOutsideClick;
+        window.addEventListener("mousedown", origHandleOutsideClick);
+      }
       appsInstance._bgalazkaPatched = false;
     });
 
@@ -15161,7 +15309,12 @@
     HOVER_CORNER_TILES: "zen.workspace.bgalazka.hover_corner_tiles",
     HIDE_CORNER_BADGES: "zen.workspace.bgalazka.hide_corner_badges",
     HIDE_PILL: "zen.workspace.bgalazka.hide_pill",
-    PILL_POSITION: "zen.workspace.bgalazka.pill_position", // "top" | "center" | "bottom"
+    // Numeric percent offset from vertical center, -50 (near top) to +50
+    // (near bottom), 0 = centered. Was previously a "top"|"center"|"bottom"
+    // string enum; changed to a continuous slider per user request. The old
+    // string values are harmless if still present on disk (getPref() will
+    // just fail its typeof-number fallback check and fall back to 0).
+    PILL_POSITION: "zen.workspace.bgalazka.pill_position",
     HIDE_DUAL_VIEW: "zen.workspace.bgalazka.hide_dual_view",
     HIDE_PIN: "zen.workspace.bgalazka.hide_pin",
     HIDE_EXPAND: "zen.workspace.bgalazka.hide_expand",
@@ -15516,7 +15669,7 @@
     row.appendChild(labelContainer);
     row.appendChild(sliderContainer);
 
-    return { row, input };
+    return { row, input, badge };
   }
 
   function injectSettingsUI() {
@@ -15704,17 +15857,23 @@
       );
       content.appendChild(tMasterPill.row);
 
-      const pillPosSelect = createSelectRow(
-        "Pill Menu Vertical Anchor",
-        "Choose vertical position of the action pill alongside the panel",
+      // NOTE: this used to be a "top"/"center"/"bottom" dropdown backed by a
+      // string pref. It never actually persisted (see the string-branch fix
+      // in getPref/setPref above) and only offered 3 fixed spots. Replaced
+      // with a continuous -50%..+50% offset from center (0% = centered),
+      // matching createSliderRow's existing number-pref handling, which
+      // already worked correctly. The CSS side (chrome.css) clamps the
+      // computed position so the pill can never be pushed fully off-screen
+      // even at the extreme -50%/+50% ends — see "Pill Menu Vertical Offset"
+      // in chrome.css for the failsafe.
+      const pillPosSlider = createSliderRow(
+        "Pill Menu Vertical Offset",
+        "-50% anchors near the top, +50% near the bottom, 0% is centered",
         BGALAZKA_EXT_PREFS.PILL_POSITION,
-        [
-          { value: "top", label: "Top" },
-          { value: "center", label: "Center (Middle)" },
-          { value: "bottom", label: "Bottom" },
-        ],
-        "center",
-        PREF_ICONS.PILL_POS,
+        -50,
+        50,
+        0,
+        "%",
       );
       const tDualView = createToggleRow(
         "Hide Dual-View Button",
@@ -15766,7 +15925,7 @@
       );
 
       pillSubgroup.append(
-        pillPosSelect.row,
+        pillPosSlider.row,
         tDualView.row,
         tPin.row,
         t5.row,
@@ -15863,10 +16022,14 @@
             pillSubgroup.setAttribute("data-hidden", v ? "true" : "false"),
         },
         {
-          input: pillPosSelect.select,
+          input: pillPosSlider.input,
           pref: BGALAZKA_EXT_PREFS.PILL_POSITION,
-          def: "center",
-          isSelect: true,
+          def: 0,
+          isSelect: true, // reused flag: means "sync via .value", true for <select> and <input type=range> alike
+          onSync: (v) => {
+            pillPosSlider.badge.textContent = v + "%";
+            updateCSSVars();
+          },
         },
         {
           input: tDualView.input,
@@ -15920,7 +16083,7 @@
           input.checked = getPref(pref, def);
         }
         if (typeof onSync === "function") {
-          onSync(input.checked);
+          onSync(isSelect ? input.value : input.checked);
         }
       });
     }
@@ -16184,10 +16347,30 @@
   });
 
   // Initial attribute sync on script startup
-  document.documentElement.setAttribute(
-    "bgalazka-pill-position",
-    getPref(BGALAZKA_EXT_PREFS.PILL_POSITION, "center"),
-  );
+  // NOTE: bgalazka-pill-position used to be set here as a "top"/"center"/
+  // "bottom" attribute for CSS attribute-selectors to key off. Now that pill
+  // vertical position is a numeric CSS var (--bgalazka-pill-offset) instead,
+  // we just re-run updateCSSVars() here — its very first call happened way
+  // up in applyAttributes(), before BGALAZKA_EXT_PREFS existed yet, so
+  // EXT_PREFS.PILL_POSITION was still undefined at that point and it wrote a
+  // temporary "0%" fallback. This call applies the real saved value.
+  updateCSSVars();
+  try {
+    const pillPosObserver = () => updateCSSVars();
+    Services.prefs.addObserver(
+      BGALAZKA_EXT_PREFS.PILL_POSITION,
+      pillPosObserver,
+      false,
+    );
+    registerCleanup(() => {
+      try {
+        Services.prefs.removeObserver(
+          BGALAZKA_EXT_PREFS.PILL_POSITION,
+          pillPosObserver,
+        );
+      } catch (_) {}
+    });
+  } catch (_) {}
   document.documentElement.setAttribute(
     "bgalazka-hide-dual-view",
     getPref(BGALAZKA_EXT_PREFS.HIDE_DUAL_VIEW, false) ? "true" : "false",

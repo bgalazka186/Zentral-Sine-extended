@@ -4851,6 +4851,7 @@ panel[id*="tabgroup-editor"] {
   --bg-opacity-pinned-focus: 85%;
   --bg-opacity-pinned-blur: 45%;
   --bg-blur-intensity: 20px;
+  --bgalazka-pill-offset: 0%;
 }
 
 /* Settings Panel & Restart Browser Button */
@@ -4957,10 +4958,19 @@ panel[id*="tabgroup-editor"] {
   opacity: var(--bg-opacity-pinned-blur, 0.45) !important;
 }
 
-:root[bgalazka-translucency="true"] #zen-app-panel-root #zen-app-panel-pill {
-  opacity: 1 !important;
-  pointer-events: auto !important;
-}
+/* BUG FIX: this rule used to unconditionally force the pill to
+ * opacity:1/pointer-events:auto whenever translucency was on (translucency
+ * defaults to true), which permanently defeated the native pill's
+ * hover-to-reveal behavior (opacity:0 until hovered) -- the pill was
+ * effectively "stuck visible" at all times instead of autohiding, which is
+ * the bug reported as "pill menu is visible all the time". Translucency
+ * should only affect the panel's background transparency, never the pill's
+ * own show/hide behavior, so this override is removed entirely. Autohide
+ * now works via the native mod's own #zen-app-panel-pill opacity rules
+ * again. See section 2 below for the opposite-docking-specific "peek dot"
+ * idle state, which intentionally keeps a tiny sliver of the pill visible
+ * ONLY in opposite-docking mode (by explicit request), instead of this
+ * blanket always-on-everywhere override. */
 
 /* ==========================================================================
    2. OPPOSITE-SIDE DOCKING, PILL MENU & RESIZE STRIP
@@ -4998,10 +5008,36 @@ panel[id*="tabgroup-editor"] {
   #zen-app-panel-pill {
   left: 0px !important;
   right: auto !important;
-  top: 50% !important;
-  transform: translate(-100%, -50%) !important;
+  /* top is set by the unified "Pill Menu Vertical Offset" rule in section 3 */
   pointer-events: auto !important;
   z-index: 999999 !important;
+  /* PEEK-DOT IDLE STATE: instead of native autohide (opacity 0, fully
+   * invisible until the hover-zone strip is hovered), opposite-docking mode
+   * keeps a tiny sliver of the pill always visible so its edge location is
+   * discoverable, and expands to full size on hover/focus. transform-origin
+   * is pinned to the pill's own anchor edge (right, since it translates
+   * -100% off its left:0 anchor) so it shrinks *toward* the screen edge
+   * instead of drifting toward panel/screen center. */
+  transform-origin: right center !important;
+  transform: translate(-100%, -50%) scale(0.22) !important;
+  opacity: 0.55 !important;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease !important;
+}
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  .zen-app-hover-zone:hover
+  ~ #zen-app-panel-pill,
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill:hover,
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  .zen-app-resize-strip:hover
+  ~ #zen-app-panel-pill {
+  transform: translate(-100%, -50%) scale(1) !important;
+  opacity: 1 !important;
 }
 :root[bgalazka-opposite-docking="true"]
   #zen-app-panel-root[data-panel-side="right"]
