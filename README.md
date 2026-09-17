@@ -18,6 +18,9 @@
 - **Disable whatever elements you dont want from pill menu:** you dont need reload button? pill menu is to cluttered? just hide it
 - **Switch UserAgent to Mobile** easy to add feature that is avalible in vivaldi web panels, useless on most sites, it shines on Instagram
 
+### Extra Bugfix
+-**Right click menu closing panel:** this one annoyed me a bit, now i can state that this extension maybe introduces bugs, but it patches some too, 
+
 <p align="center">
   <img src="assets/example.png" alt="example" width="500" height="600" />
 </p>
