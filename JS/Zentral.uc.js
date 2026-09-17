@@ -14663,6 +14663,48 @@
     }
   }
 
+  // The pill sits translate(-100%)/translate(100%) OUTSIDE the panel's own
+  // edge (see chrome.css section 2), so it needs its own clearance beyond
+  // the sidebar's. It's a fixed-width vertical stack of .zen-app-btn (26px)
+  // plus 4px side padding plus a 1px border each side ~= 36px; we hardcode
+  // a slightly generous constant instead of measuring the live DOM element
+  // because during an active resize-drag the pill can be in either its
+  // "peek dot" idle (scaled down ~0.22x) or full-size hover state depending
+  // on exact mouse position, so a live getBoundingClientRect() reading
+  // would be unreliable — see onDrag's patch below.
+  const BGALAZKA_PILL_WIDTH_RESERVE_PX = 44;
+
+  /* ------------------------------------------------------------------
+   * Shared by the toggleExpand and onDrag fixes below (note 7 + this
+   * session's follow-up bug reports): the true maximum width the panel can
+   * grow to in opposite-docking mode without pushing the pill off-screen or
+   * overlapping the sidebar. Native code has no equivalent notion of this
+   * at all (see toggleExpand's own math, and onDrag's flat
+   * `window.innerWidth * Constants.Apps.MAX_WIDTH_RATIO` clamp, neither of
+   * which know the panel is docked away from the sidebar).
+   * ------------------------------------------------------------------ */
+  function computeOppositeDockingSafeMaxWidth() {
+    const gap = 12; // must match the gap our positionPanel() override uses
+    const sidebarEl =
+      document.getElementById("sidebar-box") ||
+      document.getElementById("sidebar-container") ||
+      document.getElementById("vertical-tabs");
+    const sidebarRect = sidebarEl
+      ? sidebarEl.getBoundingClientRect()
+      : gBrowser?.tabContainer?.getBoundingClientRect();
+    const sidebarWidth =
+      sidebarRect && sidebarRect.width > 0 ? sidebarRect.width : 0;
+    // MIN_WIDTH_PX (280) is hardcoded here because Constants is scoped
+    // inside the base mod's own IIFE and unreachable from here (note 5).
+    return Math.max(
+      280,
+      window.innerWidth -
+        sidebarWidth -
+        BGALAZKA_PILL_WIDTH_RESERVE_PX -
+        gap * 2,
+    );
+  }
+
   // NOTE: values are written as plain integers with a unit suffix (e.g. "92%", "20px") so the
   // CSS side can consume them directly via var() without any extra calc()/unit wrangling.
   function updateCSSVars() {
@@ -14694,6 +14736,10 @@
     root.style.setProperty(
       "--bgalazka-pill-offset",
       getPref(EXT_PREFS.PILL_POSITION, 0) + "%",
+    );
+    root.style.setProperty(
+      "--bgalazka-pill-peek-color",
+      getPref(EXT_PREFS.PILL_PEEK_DOT_COLOR, "#4da6ff"),
     );
   }
 
@@ -14817,6 +14863,26 @@
       document
         .getElementById("zen-app-panel-root")
         ?.removeAttribute("data-pinned");
+
+      // Defensive: a width saved while opposite-docking was off (or before
+      // a window/sidebar resize) could already exceed the current safe
+      // bound the moment the panel opens, pushing the pill off-screen
+      // without the user ever touching expand or the resize strip. Clamp
+      // it down here too, same helper as toggleExpand/onDrag above.
+      if (
+        getPref(EXT_PREFS.OPPOSITE_DOCKING, true) &&
+        !this.isPlacementVerticalBar?.()
+      ) {
+        const root = document.getElementById("zen-app-panel-root");
+        const safeMax = computeOppositeDockingSafeMaxWidth();
+        if (
+          root &&
+          root.getBoundingClientRect().width > safeMax &&
+          typeof this.updateWidthVar === "function"
+        ) {
+          this.updateWidthVar(safeMax);
+        }
+      }
     };
 
     const origRenderGrid = appsInstance.renderGrid?.bind(appsInstance);
@@ -14827,13 +14893,14 @@
 
     /* ------------------------------------------------------------------
      * BUG FIX: "Expand / Restore" panel button did nothing useful (or
-     * shrank the panel to its minimum width) whenever Opposite-Side
+     * shrank the panel to its minimum width), and after an initial fix,
+     * pushed the pill off the edge of the screen, whenever Opposite-Side
      * Docking was active.
      *
-     * Root cause: native toggleExpand()'s full-width math (see note 7 for
-     * the same category of bug in positionPanel) measures the gap between
-     * the panel and gBrowser.tabContainer (the sidebar) and assumes the
-     * panel is docked directly adjacent to it:
+     * Root cause (part 1): native toggleExpand()'s full-width math (see
+     * note 7 for the same category of bug in positionPanel) measures the
+     * gap between the panel and gBrowser.tabContainer (the sidebar) and
+     * assumes the panel is docked directly adjacent to it:
      *   targetRight = innerWidth - tcRect.left + gap   (attached-right case)
      * That's correct for NATIVE docking, where the panel sits right next
      * to the sidebar. But our positionPanel() override (above) docks the
@@ -14843,6 +14910,15 @@
      * is near 0 when the sidebar is on the left) and the resulting
      * fullWidth goes negative, getting clamped down to MIN_WIDTH_PX — the
      * panel "expands" to its smallest possible size instead of growing.
+     *
+     * Root cause (part 2, found after the first fix): the pill sits
+     * translate(-100%)/translate(100%) OUTSIDE the panel's own edge (see
+     * chrome.css section 2), i.e. further out past whichever edge faces
+     * the sidebar. A width calculation that only reserves room for the
+     * sidebar itself (and not the pill's own footprint beyond the panel's
+     * edge) can grow the panel wide enough that the pill's reserved space
+     * runs past the screen edge entirely. computeOppositeDockingSafeMaxWidth()
+     * (above) now accounts for both.
      *
      * Fix: let the native method run first (it still correctly flips
      * isExpanded and updates the button icon/title via our patched
@@ -14870,25 +14946,44 @@
       );
       if (!justExpanded) return; // this call collapsed the panel, nothing to fix
 
-      const gap = 12; // must match the gap our positionPanel() override uses
-      const sidebarEl =
-        document.getElementById("sidebar-box") ||
-        document.getElementById("sidebar-container") ||
-        document.getElementById("vertical-tabs");
-      const sidebarRect = sidebarEl
-        ? sidebarEl.getBoundingClientRect()
-        : gBrowser?.tabContainer?.getBoundingClientRect();
-      const sidebarWidth =
-        sidebarRect && sidebarRect.width > 0 ? sidebarRect.width : 0;
-
-      // MIN_WIDTH_PX (280) is hardcoded here because Constants is scoped
-      // inside the base mod's own IIFE and unreachable from here (note 5).
-      const correctFullWidth = Math.max(
-        280,
-        window.innerWidth - sidebarWidth - gap * 2,
-      );
       if (typeof this.updateWidthVar === "function")
-        this.updateWidthVar(correctFullWidth);
+        this.updateWidthVar(computeOppositeDockingSafeMaxWidth());
+    };
+
+    /* ------------------------------------------------------------------
+     * BUG FIX: dragging the panel's resize strip in opposite-docking mode
+     * felt "jumpy"/messy at wide widths. Root cause: native onDrag() clamps
+     * the dragged width against a flat `window.innerWidth *
+     * Constants.Apps.MAX_WIDTH_RATIO` (80% of the full window, see line 86)
+     * with no idea the panel is docked away from the sidebar in this mode —
+     * the exact same blind spot as toggleExpand() above, just for a
+     * continuous drag instead of a one-shot button. That let the user drag
+     * the panel wide enough to overlap the sidebar and push the pill off
+     * the edge of the screen before the (much larger, and therefore
+     * effectively irrelevant) native clamp ever kicked in, which is what
+     * felt like a sudden "jump" once it finally did.
+     *
+     * Fix: same wrap-then-correct approach as toggleExpand — let native
+     * onDrag() run first (it handles the isExpanded/#state bookkeeping we
+     * can't reach), then clamp the width it just set down to the real safe
+     * maximum every single drag frame, so resistance is felt smoothly right
+     * at the true boundary instead of far past it.
+     * ------------------------------------------------------------------ */
+    const origOnDrag = appsInstance.onDrag?.bind(appsInstance);
+    appsInstance.onDrag = function (e) {
+      if (origOnDrag) origOnDrag(e);
+      if (
+        !getPref(EXT_PREFS.OPPOSITE_DOCKING, true) ||
+        this.isPlacementVerticalBar?.()
+      )
+        return;
+
+      const root = document.getElementById("zen-app-panel-root");
+      if (!root) return;
+      const safeMax = computeOppositeDockingSafeMaxWidth();
+      const currentWidth = root.getBoundingClientRect().width;
+      if (currentWidth > safeMax && typeof this.updateWidthVar === "function")
+        this.updateWidthVar(safeMax);
     };
 
     /* ------------------------------------------------------------------
@@ -14952,6 +15047,7 @@
       if (origOpenPanel) appsInstance.openPanel = origOpenPanel;
       if (origRenderGrid) appsInstance.renderGrid = origRenderGrid;
       if (origToggleExpand) appsInstance.toggleExpand = origToggleExpand;
+      if (origOnDrag) appsInstance.onDrag = origOnDrag;
       if (wrappedHandleOutsideClick) {
         window.removeEventListener("mousedown", wrappedHandleOutsideClick);
         appsInstance.handleOutsideClick = origHandleOutsideClick;
@@ -15315,6 +15411,13 @@
     // string values are harmless if still present on disk (getPref() will
     // just fail its typeof-number fallback check and fall back to 0).
     PILL_POSITION: "zen.workspace.bgalazka.pill_position",
+    // Whether the opposite-docking pill stays visible as a tiny "peek dot"
+    // while idle (true), or fully disappears like classic autohide (false).
+    PILL_PEEK_DOT: "zen.workspace.bgalazka.pill_peek_dot",
+    // Background color (hex) used only for the idle peek-dot state, so it
+    // stands out from whatever page content is behind it regardless of the
+    // panel's own theme color.
+    PILL_PEEK_DOT_COLOR: "zen.workspace.bgalazka.pill_peek_dot_color",
     HIDE_DUAL_VIEW: "zen.workspace.bgalazka.hide_dual_view",
     HIDE_PIN: "zen.workspace.bgalazka.hide_pin",
     HIDE_EXPAND: "zen.workspace.bgalazka.hide_expand",
@@ -15517,6 +15620,10 @@
     return { row, input };
   }
 
+  // NOTE: currently unused (the Pill Menu setting that used to call this
+  // became a numeric slider via createSliderRow instead, see
+  // "Pill Menu Vertical Offset" below). Left in place as a reusable
+  // building block for any future dropdown-style setting.
   function createSelectRow(
     labelText,
     sublabelText,
@@ -15670,6 +15777,52 @@
     row.appendChild(sliderContainer);
 
     return { row, input, badge };
+  }
+
+  function createColorRow(labelText, sublabelText, prefKey, defaultVal) {
+    const row = document.createElement("div");
+    row.className = "zs-row";
+
+    const leftBox = document.createElement("div");
+    leftBox.style.display = "flex";
+    leftBox.style.flexDirection = "column";
+
+    const labelContainer = document.createElement("div");
+    labelContainer.className = "zs-label-container";
+    const label = document.createElement("span");
+    label.className = "zs-label";
+    label.textContent = labelText;
+    labelContainer.appendChild(label);
+
+    if (sublabelText) {
+      const sublabel = document.createElement("span");
+      sublabel.className = "zs-sublabel";
+      sublabel.textContent = sublabelText;
+      labelContainer.appendChild(sublabel);
+    }
+    leftBox.appendChild(labelContainer);
+
+    const input = document.createElement("input");
+    input.type = "color";
+    input.style.cssText = `
+      width: 36px;
+      height: 26px;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      background: transparent;
+      cursor: pointer;
+    `;
+    input.value = getPref(prefKey, defaultVal);
+
+    input.addEventListener("input", () => {
+      setPref(prefKey, input.value);
+      updateCSSVars();
+    });
+
+    row.appendChild(leftBox);
+    row.appendChild(input);
+    return { row, input };
   }
 
   function injectSettingsUI() {
@@ -15875,6 +16028,20 @@
         0,
         "%",
       );
+      const tPeekDot = createToggleRow(
+        "Show Pill as Tiny Dot When Idle",
+        "Opposite-docking only: keep a small peek visible instead of fully autohiding",
+        BGALAZKA_EXT_PREFS.PILL_PEEK_DOT,
+        "bgalazka-pill-peek-dot",
+        true,
+        PREF_ICONS.PILL_POS,
+      );
+      const peekColorRow = createColorRow(
+        "Peek Dot Color",
+        "Background color used only for the tiny idle dot",
+        BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_COLOR,
+        "#4da6ff",
+      );
       const tDualView = createToggleRow(
         "Hide Dual-View Button",
         "Remove dual-view toggle from pill menu",
@@ -15926,6 +16093,8 @@
 
       pillSubgroup.append(
         pillPosSlider.row,
+        tPeekDot.row,
+        peekColorRow.row,
         tDualView.row,
         tPin.row,
         t5.row,
@@ -16030,6 +16199,23 @@
             pillPosSlider.badge.textContent = v + "%";
             updateCSSVars();
           },
+        },
+        {
+          input: tPeekDot.input,
+          pref: BGALAZKA_EXT_PREFS.PILL_PEEK_DOT,
+          def: true,
+          onSync: (v) =>
+            document.documentElement.setAttribute(
+              "bgalazka-pill-peek-dot",
+              v ? "true" : "false",
+            ),
+        },
+        {
+          input: peekColorRow.input,
+          pref: BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_COLOR,
+          def: "#4da6ff",
+          isSelect: true, // reused flag: sync via .value, same as color/range inputs
+          onSync: () => updateCSSVars(),
         },
         {
           input: tDualView.input,
@@ -16362,11 +16548,51 @@
       pillPosObserver,
       false,
     );
+    // Same observer handles the peek-dot color pref too, since both just
+    // need updateCSSVars() re-run to pick up the new CSS var value.
+    Services.prefs.addObserver(
+      BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_COLOR,
+      pillPosObserver,
+      false,
+    );
     registerCleanup(() => {
       try {
         Services.prefs.removeObserver(
           BGALAZKA_EXT_PREFS.PILL_POSITION,
           pillPosObserver,
+        );
+        Services.prefs.removeObserver(
+          BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_COLOR,
+          pillPosObserver,
+        );
+      } catch (_) {}
+    });
+  } catch (_) {}
+  // bgalazka-pill-peek-dot: boolean attribute (not a CSS var, since chrome.css
+  // needs to pick a whole different rule set for "off", not just tweak a
+  // value) controlling whether the opposite-docking pill stays visible as a
+  // tiny dot while idle, or fully disappears like classic autohide.
+  document.documentElement.setAttribute(
+    "bgalazka-pill-peek-dot",
+    getPref(BGALAZKA_EXT_PREFS.PILL_PEEK_DOT, true) ? "true" : "false",
+  );
+  try {
+    const pillPeekDotObserver = () => {
+      document.documentElement.setAttribute(
+        "bgalazka-pill-peek-dot",
+        getPref(BGALAZKA_EXT_PREFS.PILL_PEEK_DOT, true) ? "true" : "false",
+      );
+    };
+    Services.prefs.addObserver(
+      BGALAZKA_EXT_PREFS.PILL_PEEK_DOT,
+      pillPeekDotObserver,
+      false,
+    );
+    registerCleanup(() => {
+      try {
+        Services.prefs.removeObserver(
+          BGALAZKA_EXT_PREFS.PILL_PEEK_DOT,
+          pillPeekDotObserver,
         );
       } catch (_) {}
     });
