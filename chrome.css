@@ -4853,6 +4853,7 @@ panel[id*="tabgroup-editor"] {
   --bg-blur-intensity: 20px;
   --bgalazka-pill-offset: 0%;
   --bgalazka-pill-peek-color: #4da6ff;
+  --bgalazka-pill-peek-opacity: 90%;
 }
 
 /* Settings Panel & Restart Browser Button */
@@ -4968,9 +4969,9 @@ panel[id*="tabgroup-editor"] {
  * should only affect the panel's background transparency, never the pill's
  * own show/hide behavior, so this override is removed entirely. Autohide
  * now works via the native mod's own #zen-app-panel-pill opacity rules
- * again. See section 2 below for the opposite-docking-specific "peek dot"
- * idle state, which intentionally keeps a tiny sliver of the pill visible
- * ONLY in opposite-docking mode (by explicit request), instead of this
+ * again. See section 2 below for the "mini pill" idle state (a shrunk,
+ * colored version of the pill kept visible instead of fully invisible),
+ * which is user-toggleable and configurable in settings, instead of this
  * blanket always-on-everywhere override. */
 
 /* ==========================================================================
@@ -5013,22 +5014,23 @@ panel[id*="tabgroup-editor"] {
   pointer-events: auto !important;
   z-index: 999999 !important;
 }
-/* PEEK-DOT ON (default; toggle: "Show Pill as Tiny Dot When Idle"): instead
- * of native autohide (opacity 0, fully invisible until the hover-zone strip
- * is hovered), keep a tiny colored sliver of the pill always visible so its
- * edge location is discoverable, and expand to full size + normal theme
- * color on hover/focus. transform-origin is pinned to the pill's own anchor
- * edge (right, since it translates -100% off its left:0 anchor) so it
- * shrinks *toward* the screen edge instead of drifting toward panel/screen
- * center. The color comes from --bgalazka-pill-peek-color (user-configurable
- * in settings) since the panel's own theme color can blend into page
- * content and become invisible in practice. */
+/* MINI PILL ON (default; toggle: "Show Mini Pill When Idle"): instead of
+ * native autohide (opacity 0, fully invisible until the hover-zone strip is
+ * hovered), keep a small, colored, shrunk-down version of the pill always
+ * visible so its edge location is discoverable, and expand to full size +
+ * normal theme color on hover/focus. transform-origin is pinned to the
+ * pill's own anchor edge (right, since it translates -100% off its left:0
+ * anchor) so it shrinks *toward* the screen edge instead of drifting toward
+ * panel/screen center. Color and opacity come from --bgalazka-pill-peek-color
+ * and --bgalazka-pill-peek-opacity (both user-configurable in settings)
+ * since the panel's own theme color can blend into page content and become
+ * hard to spot in practice. */
 :root[bgalazka-opposite-docking="true"][bgalazka-pill-peek-dot="true"]
   #zen-app-panel-root[data-panel-side="right"]
   #zen-app-panel-pill {
   transform-origin: right center !important;
   transform: translate(-100%, -50%) scale(0.22) !important;
-  opacity: 0.9 !important;
+  opacity: var(--bgalazka-pill-peek-opacity, 90%) !important;
   background: var(--bgalazka-pill-peek-color, #4da6ff) !important;
   transition:
     transform 0.18s ease,
@@ -5056,7 +5058,7 @@ panel[id*="tabgroup-editor"] {
     )
   ) !important;
 }
-/* PEEK-DOT OFF: classic fully-invisible-until-hover, just repositioned for
+/* MINI PILL OFF: classic fully-invisible-until-hover, just repositioned for
  * opposite docking (opacity/pointer-events on hover already come from the
  * base mod's own #zen-app-panel-pill:hover rule, untouched by us). */
 :root[bgalazka-opposite-docking="true"]:not([bgalazka-pill-peek-dot="true"])
@@ -5097,7 +5099,7 @@ panel[id*="tabgroup-editor"] {
   pointer-events: auto !important;
   z-index: 999999 !important;
 }
-/* PEEK-DOT ON, mirrored from the right-docked block above: anchored at
+/* MINI PILL ON, mirrored from the right-docked block above: anchored at
  * right:0, translated +100% of its own width outward, so its
  * transform-origin is pinned to its LEFT edge (the one touching the panel)
  * so it shrinks toward the screen edge, not away from it. */
@@ -5106,7 +5108,7 @@ panel[id*="tabgroup-editor"] {
   #zen-app-panel-pill {
   transform-origin: left center !important;
   transform: translate(100%, -50%) scale(0.22) !important;
-  opacity: 0.9 !important;
+  opacity: var(--bgalazka-pill-peek-opacity, 90%) !important;
   background: var(--bgalazka-pill-peek-color, #4da6ff) !important;
   transition:
     transform 0.18s ease,
@@ -5134,7 +5136,7 @@ panel[id*="tabgroup-editor"] {
     )
   ) !important;
 }
-/* PEEK-DOT OFF: classic fully-invisible-until-hover, repositioned only. */
+/* MINI PILL OFF: classic fully-invisible-until-hover, repositioned only. */
 :root[bgalazka-opposite-docking="true"]:not([bgalazka-pill-peek-dot="true"])
   #zen-app-panel-root[data-panel-side="left"]
   #zen-app-panel-pill {
@@ -5662,7 +5664,7 @@ panel[id*="tabgroup-editor"] {
  * pill's vertical position, regardless of docking mode/side. Only `top`
  * (and `bottom: auto`, to make sure a stray `bottom` from elsewhere can't
  * fight it) is set here -- transform/scale/left/right stay owned by the
- * base mod's rules and the opposite-docking peek-dot rules above. */
+ * base mod's rules and the mini-pill rules above. */
 #zen-app-panel-pill {
   top: clamp(
     14px,
@@ -5683,6 +5685,91 @@ panel[id*="tabgroup-editor"] {
     calc(100% - 14px)
   ) !important;
   bottom: auto !important;
+}
+
+/* --------------------------------------------------------------------------
+ * 3b. Mini Pill (shrunk idle pill) for NORMAL (non-opposite) docking
+ * --------------------------------------------------------------------------
+ * BUG FIX: the mini-pill rules in section 2 only applied when
+ * bgalazka-opposite-docking="true". If a user is on normal docking (or has
+ * turned opposite docking off), NONE of that CSS ever matched, so the mini
+ * pill simply never rendered anywhere -- there was no "off" bug, the ON
+ * rules were just unreachable outside opposite-docking mode. These rules add
+ * the same idle/hover mini-pill behavior for normal docking, using the native
+ * translate(-50%)/translate(50%) "straddle the edge" transform normal mode
+ * already uses (instead of opposite mode's translate(-100%)/translate(100%)
+ * "fully outside" transform), so scaling down still hugs the correct edge.
+ *
+ * Selector specificity here is deliberately LOWER than the opposite-docking
+ * rules above (2 attribute selectors vs. their 3), so when opposite docking
+ * IS active, its own rules still win this cascade and these normal-mode
+ * ones simply don't apply -- both sets of rules can coexist in the
+ * stylesheet without one needing to exclude the other with :not(). */
+:root[bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill {
+  transform-origin: right center !important;
+  transform: translate(-50%, -50%) scale(0.22) !important;
+  opacity: var(--bgalazka-pill-peek-opacity, 90%) !important;
+  background: var(--bgalazka-pill-peek-color, #4da6ff) !important;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease,
+    background-color 0.18s ease !important;
+}
+:root[bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  .zen-app-hover-zone:hover
+  ~ #zen-app-panel-pill,
+:root[bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill:hover,
+:root[bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  .zen-app-resize-strip:hover
+  ~ #zen-app-panel-pill {
+  transform: translate(-50%, -50%) scale(1) !important;
+  opacity: 1 !important;
+  background: var(
+    --zen-colors-tertiary,
+    var(
+      --zen-colors-secondary,
+      var(--zen-primary-color, light-dark(#f4b4b4, #362929))
+    )
+  ) !important;
+}
+:root[bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  #zen-app-panel-pill {
+  transform-origin: left center !important;
+  transform: translate(50%, -50%) scale(0.22) !important;
+  opacity: var(--bgalazka-pill-peek-opacity, 90%) !important;
+  background: var(--bgalazka-pill-peek-color, #4da6ff) !important;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease,
+    background-color 0.18s ease !important;
+}
+:root[bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  .zen-app-hover-zone:hover
+  ~ #zen-app-panel-pill,
+:root[bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  #zen-app-panel-pill:hover,
+:root[bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  .zen-app-resize-strip:hover
+  ~ #zen-app-panel-pill {
+  transform: translate(50%, -50%) scale(1) !important;
+  opacity: 1 !important;
+  background: var(
+    --zen-colors-tertiary,
+    var(
+      --zen-colors-secondary,
+      var(--zen-primary-color, light-dark(#f4b4b4, #362929))
+    )
+  ) !important;
 }
 
 /* --------------------------------------------------------------------------

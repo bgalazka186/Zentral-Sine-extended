@@ -14741,6 +14741,10 @@
       "--bgalazka-pill-peek-color",
       getPref(EXT_PREFS.PILL_PEEK_DOT_COLOR, "#4da6ff"),
     );
+    root.style.setProperty(
+      "--bgalazka-pill-peek-opacity",
+      getPref(EXT_PREFS.PILL_PEEK_DOT_OPACITY, 90) + "%",
+    );
   }
 
   function applyAttributes() {
@@ -15418,6 +15422,9 @@
     // stands out from whatever page content is behind it regardless of the
     // panel's own theme color.
     PILL_PEEK_DOT_COLOR: "zen.workspace.bgalazka.pill_peek_dot_color",
+    // Opacity (0-100) of the shrunk "mini pill" while idle. Stored as a
+    // whole-number percent, same convention as PILL_POSITION.
+    PILL_PEEK_DOT_OPACITY: "zen.workspace.bgalazka.pill_peek_dot_opacity",
     HIDE_DUAL_VIEW: "zen.workspace.bgalazka.hide_dual_view",
     HIDE_PIN: "zen.workspace.bgalazka.hide_pin",
     HIDE_EXPAND: "zen.workspace.bgalazka.hide_expand",
@@ -16029,18 +16036,27 @@
         "%",
       );
       const tPeekDot = createToggleRow(
-        "Show Pill as Tiny Dot When Idle",
-        "Opposite-docking only: keep a small peek visible instead of fully autohiding",
+        "Show Mini Pill When Idle",
+        "Keep a small colored version of the pill visible instead of fully autohiding",
         BGALAZKA_EXT_PREFS.PILL_PEEK_DOT,
         "bgalazka-pill-peek-dot",
         true,
         PREF_ICONS.PILL_POS,
       );
       const peekColorRow = createColorRow(
-        "Peek Dot Color",
-        "Background color used only for the tiny idle dot",
+        "Mini Pill Color",
+        "Background color used only for the shrunk idle pill",
         BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_COLOR,
         "#4da6ff",
+      );
+      const peekOpacitySlider = createSliderRow(
+        "Mini Pill Opacity",
+        "How visible the shrunk idle pill is; 100% is fully opaque",
+        BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_OPACITY,
+        10,
+        100,
+        90,
+        "%",
       );
       const tDualView = createToggleRow(
         "Hide Dual-View Button",
@@ -16095,6 +16111,7 @@
         pillPosSlider.row,
         tPeekDot.row,
         peekColorRow.row,
+        peekOpacitySlider.row,
         tDualView.row,
         tPin.row,
         t5.row,
@@ -16216,6 +16233,16 @@
           def: "#4da6ff",
           isSelect: true, // reused flag: sync via .value, same as color/range inputs
           onSync: () => updateCSSVars(),
+        },
+        {
+          input: peekOpacitySlider.input,
+          pref: BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_OPACITY,
+          def: 90,
+          isSelect: true, // reused flag: sync via .value, same as slider/color inputs
+          onSync: (v) => {
+            peekOpacitySlider.badge.textContent = v + "%";
+            updateCSSVars();
+          },
         },
         {
           input: tDualView.input,
@@ -16548,10 +16575,15 @@
       pillPosObserver,
       false,
     );
-    // Same observer handles the peek-dot color pref too, since both just
-    // need updateCSSVars() re-run to pick up the new CSS var value.
+    // Same observer handles the peek-dot color/opacity prefs too, since all
+    // three just need updateCSSVars() re-run to pick up the new CSS var value.
     Services.prefs.addObserver(
       BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_COLOR,
+      pillPosObserver,
+      false,
+    );
+    Services.prefs.addObserver(
+      BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_OPACITY,
       pillPosObserver,
       false,
     );
@@ -16565,13 +16597,18 @@
           BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_COLOR,
           pillPosObserver,
         );
+        Services.prefs.removeObserver(
+          BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_OPACITY,
+          pillPosObserver,
+        );
       } catch (_) {}
     });
   } catch (_) {}
   // bgalazka-pill-peek-dot: boolean attribute (not a CSS var, since chrome.css
   // needs to pick a whole different rule set for "off", not just tweak a
-  // value) controlling whether the opposite-docking pill stays visible as a
-  // tiny dot while idle, or fully disappears like classic autohide.
+  // value) controlling whether the pill stays visible as a small "mini
+  // pill" (shrunk, colored) while idle, or fully disappears like classic
+  // autohide.
   document.documentElement.setAttribute(
     "bgalazka-pill-peek-dot",
     getPref(BGALAZKA_EXT_PREFS.PILL_PEEK_DOT, true) ? "true" : "false",
