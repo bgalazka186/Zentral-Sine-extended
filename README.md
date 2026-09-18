@@ -37,6 +37,13 @@
 
 - getting it set up for first time may be cluncky, especially for corner docking, if something doesnt look right (for example any web panel is not attatched to essencial tab), restart browser, Bearly anyone but me will use it so setup user expirience is on low priority
 
+- **Other mods i do use and they propably never be an issue with it:**
+  - Arc 2.0
+  - Better CtrlTab
+  - Customize Font Size
+  - Transparent Zen
+  - Zen Folder Tree Connectors
+
 ---
 
 ## ⚖️ Attribution, Upstream Credits & Disclaimer
