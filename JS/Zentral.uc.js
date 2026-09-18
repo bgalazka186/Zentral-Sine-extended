@@ -14583,6 +14583,22 @@
  *     pinned tab (with whatever tile is docked inside it) producing a duplicate icon. Docking must be done by
  *     a STABLE ID persisted on the tab element itself, and only against tabs that are genuine members of
  *     gBrowser.tabs (not split-view clones).
+ * 12. OPEN/CLOSE STUTTER: native openPanel/closePanel flip `zentral-app-panel-open` on documentElement
+ *     synchronously, driving several base-mod sidebar reveal/collapse transitions at the SAME time the panel
+ *     itself slides in/out AND (translucency on) backdrop-filter is active on #zen-app-panel-slider. Three
+ *     expensive compositor ops in the same ~450ms window == the reported "sidebar stutters only while the
+ *     panel is open" (no visible CPU/GPU spike because it's a dropped-frames problem, not a sustained-load
+ *     one). Fix: pulseAnimGuard() below sets `bgalazka-panel-animating` on documentElement for the native
+ *     slide's duration (read from the SAME animation-speed pref the base mod itself uses, so it always
+ *     matches); chrome.css section 1b force backdrop-filter: none while that attribute is present, and
+ *     backdrop-filter was dropped from that section's own CSS `transition` list entirely (animating blur
+ *     radius, as opposed to snapping it, is one of the most expensive things you can animate; the pop is
+ *     invisible since opacity/background-color still ease normally).
+ * 13. PILL CONTRAST: see chrome.css note 13 for the CSS half. The expanded/hovered pill's background changed
+ *     from a theme color (which can blend into the page/theme, "unreadable") to plain black at the SAME
+ *     opacity as the existing "Mini Pill Opacity" slider, plus forced white icon color. No new pref needed —
+ *     it reuses PILL_PEEK_DOT_OPACITY for both purposes on purpose, so this JS file has no changes for it
+ *     beyond the two settings-label tweaks near PILL_PEEK_DOT_COLOR/OPACITY explaining the dual use.
  * ============================================================================================================= */
 
 (function initBgalazkaExtension() {
@@ -14661,6 +14677,37 @@
     } catch (e) {
       console.warn("[BgalazkaExtension] Failed to save pref:", key, e);
     }
+  }
+
+  // PERF FIX (see architecture note 12): toggles `bgalazka-panel-animating`
+  // on documentElement for the duration of the native open/close slide, so
+  // chrome.css section 1b can drop backdrop-filter entirely for that window
+  // instead of animating it alongside the base mod's own sidebar
+  // reveal/collapse transitions and the panel's own slide -- three
+  // expensive compositor operations at once is what stuttered, not any one
+  // of them alone. Reads the SAME pref the native slide animation itself
+  // uses (falls back to the base mod's own 450ms default) so the guard
+  // window always tracks however fast/slow the user has that set to,
+  // without us needing to reach into the (inaccessible, see note 5)
+  // ZentralApps instance state to measure it. Called from BOTH the
+  // openPanel and closePanel hooks below since both trigger a slide.
+  const BGALAZKA_ANIM_ATTR = "bgalazka-panel-animating";
+  function pulseAnimGuard() {
+    const root = document.documentElement;
+    root.setAttribute(BGALAZKA_ANIM_ATTR, "true");
+    clearTimeout(root._bgalazkaAnimTimer);
+    let slideMs = 450;
+    try {
+      slideMs = Services.prefs.getIntPref(
+        "zen.workspace.apps.sidebar.animation_speed",
+        450,
+      );
+    } catch (_) {}
+    // +80ms buffer: native closePanel's own cleanup timer uses slideMs + 20,
+    // so this just needs to outlast that by a comfortable margin.
+    root._bgalazkaAnimTimer = setTimeout(() => {
+      root.removeAttribute(BGALAZKA_ANIM_ATTR);
+    }, slideMs + 80);
   }
 
   // The pill sits translate(-100%)/translate(100%) OUTSIDE the panel's own
@@ -16316,13 +16363,13 @@
       );
       const peekColorRow = createColorRow(
         "Mini Pill Color",
-        "Background color used only for the shrunk idle pill",
+        "Background color used only for the shrunk idle pill (the expanded pill always uses black)",
         BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_COLOR,
         "#4da6ff",
       );
       const peekOpacitySlider = createSliderRow(
         "Mini Pill Opacity",
-        "How visible the shrunk idle pill is; 100% is fully opaque",
+        "How visible the shrunk idle pill is, and how dark the expanded pill's background is; 100% is fully opaque",
         BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_OPACITY,
         10,
         100,
@@ -16845,6 +16892,7 @@
     const origOpen = apps.openPanel?.bind(apps);
     if (origOpen) {
       apps.openPanel = function (...args) {
+        pulseAnimGuard(); // perf: suppress backdrop-filter for this slide (note 12)
         const res = origOpen(...args);
         setTimeout(() => {
           ensurePillDualViewButton();
@@ -16859,6 +16907,7 @@
     const origClose = apps.closePanel?.bind(apps);
     if (origClose) {
       apps.closePanel = function (...args) {
+        pulseAnimGuard(); // perf: suppress backdrop-filter for this slide (note 12)
         const res = origClose(...args);
         setTimeout(syncPanelPushState, 30);
         return res;
