@@ -14683,6 +14683,25 @@
    * `window.innerWidth * Constants.Apps.MAX_WIDTH_RATIO` clamp, neither of
    * which know the panel is docked away from the sidebar).
    * ------------------------------------------------------------------ */
+  // BUG-CLASS DEFENSE: an uncaught exception thrown by any of this file's
+  // synchronous top-level init calls (patchAppsInstance, hookAppsInstance,
+  // ensureWebToolbar, ensureMobileUaMenuItem, ...) aborts the ENTIRE rest of
+  // this IIFE silently — everything textually after the throw simply never
+  // runs, with no error dialog, which is exactly what happened when
+  // ensureWebToolbar() was (mistakenly) called too early and hit a
+  // temporal-dead-zone ReferenceError on PREF_ICONS. Every first synchronous
+  // call to one of these init functions is now wrapped through this helper
+  // so one function's bug can never again cascade into every later feature
+  // silently failing to load.
+  function safeCall(fn, label) {
+    try {
+      return fn();
+    } catch (e) {
+      console.error(`[BgalazkaExtension] ${label} threw:`, e);
+      return false;
+    }
+  }
+
   function computeOppositeDockingSafeMaxWidth() {
     const gap = 12; // must match the gap our positionPanel() override uses
     const sidebarEl =
@@ -15066,11 +15085,12 @@
   // window.Zentral.Apps is assigned synchronously when the base script parses (before
   // Zentral.Init() itself, which may be deferred until browser-delayed-startup-finished),
   // but retry briefly just in case script load order ever changes.
-  if (!patchAppsInstance()) {
+  if (!safeCall(patchAppsInstance, "patchAppsInstance")) {
     let attempts = 0;
     const retryTimer = setInterval(() => {
       attempts++;
-      if (patchAppsInstance() || attempts > 40) clearInterval(retryTimer);
+      if (safeCall(patchAppsInstance, "patchAppsInstance") || attempts > 40)
+        clearInterval(retryTimer);
     }, 150);
     registerCleanup(() => clearInterval(retryTimer));
   }
@@ -15425,6 +15445,12 @@
     // Opacity (0-100) of the shrunk "mini pill" while idle. Stored as a
     // whole-number percent, same convention as PILL_POSITION.
     PILL_PEEK_DOT_OPACITY: "zen.workspace.bgalazka.pill_peek_dot_opacity",
+    // Web Panel Navigation Toolbar: back/forward/reload + URL bar (+ optional
+    // zoom controls) docked at the bottom of the floating app panel.
+    WEB_TOOLBAR_ENABLED: "zen.workspace.bgalazka.web_toolbar_enabled",
+    WEB_TOOLBAR_AUTOHIDE: "zen.workspace.bgalazka.web_toolbar_autohide",
+    WEB_TOOLBAR_URLBAR: "zen.workspace.bgalazka.web_toolbar_urlbar",
+    WEB_TOOLBAR_ZOOM: "zen.workspace.bgalazka.web_toolbar_zoom",
     HIDE_DUAL_VIEW: "zen.workspace.bgalazka.hide_dual_view",
     HIDE_PIN: "zen.workspace.bgalazka.hide_pin",
     HIDE_EXPAND: "zen.workspace.bgalazka.hide_expand",
@@ -15467,6 +15493,12 @@
     PILL_POS: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="14" y2="2"/><line x1="2" y1="8" x2="14" y2="8" stroke-dasharray="2 2"/><line x1="2" y1="14" x2="14" y2="14"/><rect x="6" y="5" width="4" height="6" rx="2" fill="currentColor"/></svg>`,
     PIN: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 11V15M3.5 11.5h9c0 0 0-2-1.5-3l-.5-4c0 0 .5-.5.5-1H5.5c0 .5.5 1 .5 1L5.5 8.5c-1.5 1-2 3-2 3z"/></svg>`,
     EXPAND: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/></svg>`,
+    TOOLBAR: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2" width="13" height="12" rx="2"/><line x1="1.5" y1="10.5" x2="14.5" y2="10.5"/></svg>`,
+    BACK: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>`,
+    FORWARD: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>`,
+    RELOAD: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.8-4.1"/><path d="M13.5 2.5v3.2h-3.2"/></svg>`,
+    ZOOM_OUT: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="8" x2="13" y2="8"/></svg>`,
+    ZOOM_IN: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="8" x2="13" y2="8"/><line x1="8" y1="3" x2="8" y2="13"/></svg>`,
     GRABBER: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><circle cx="5" cy="4" r="1.5"/><circle cx="11" cy="4" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="12" r="1.5"/><circle cx="11" cy="12" r="1.5"/></svg>`,
     REFRESH: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13.8 6.5A5.5 5.5 0 1 0 8 13.5a5.5 5.5 0 0 0 5.2-3.7M14 2v4.5H9.5"/></svg>`,
     CLOSE: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>`,
@@ -15550,6 +15582,245 @@
       isPinned && isOpen ? "true" : "false",
     );
     document.documentElement.setAttribute("bgalazka-panel-side", side);
+  }
+
+  /* ==========================================================================
+   * WEB PANEL NAVIGATION TOOLBAR
+   * Docked at the bottom of the floating app panel: back / forward / reload
+   * (moved here from the pill) + a URL bar, with optional zoom controls.
+   * Master-toggleable, URL-bar-toggleable, zoom-toggleable, and can be set to
+   * only reveal itself on hover instead of permanently reserving space.
+   * ========================================================================== */
+
+  // Multiple <browser> elements can live inside #zen-app-panel-slider (one
+  // per app, per getOrCreateAppBrowser() above), with only the active one
+  // NOT set to style.display = "none" (see openPanel()'s app-switch loop).
+  // There's no dedicated "active" attribute on the browser itself, so this
+  // is the only reliable way to find it from outside the class (activeAppId
+  // is a private field, see note 5).
+  function getActiveAppBrowser() {
+    const panel = document.getElementById("zen-app-panel-slider");
+    if (!panel) return null;
+    const browsers = panel.querySelectorAll("browser");
+    for (const b of browsers) {
+      if (b.style.display !== "none") return b;
+    }
+    return null;
+  }
+
+  function ensureWebToolbar() {
+    const panel = document.getElementById("zen-app-panel-slider");
+    if (!panel) return false;
+    if (document.getElementById("zen-app-panel-toolbar")) return true; // already built
+
+    // Thin invisible strip used only in autohide mode (see chrome.css) to
+    // reveal the toolbar on hover, same sibling-hover trick the pill itself
+    // uses. Must come BEFORE the toolbar in the DOM for the `~` selector.
+    const hoverZone = document.createElement("div");
+    hoverZone.className = "zen-toolbar-hover-zone";
+
+    const toolbar = document.createElement("div");
+    toolbar.id = "zen-app-panel-toolbar";
+
+    const backBtn = document.createElement("button");
+    backBtn.className = "zen-toolbar-btn zen-toolbar-back-btn";
+    backBtn.title = "Back";
+    backBtn.appendChild(parseSVG(PREF_ICONS.BACK));
+    backBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const b = getActiveAppBrowser();
+      if (b && b.canGoBack) b.goBack();
+    });
+
+    const fwdBtn = document.createElement("button");
+    fwdBtn.className = "zen-toolbar-btn zen-toolbar-fwd-btn";
+    fwdBtn.title = "Forward";
+    fwdBtn.appendChild(parseSVG(PREF_ICONS.FORWARD));
+    fwdBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const b = getActiveAppBrowser();
+      if (b && b.canGoForward) b.goForward();
+    });
+
+    // Reload moved here from the pill's own refresh button (still present
+    // natively, but hidden via CSS while the toolbar is enabled — see
+    // chrome.css). Reuses the exact same spinning-icon feedback.
+    const reloadBtn = document.createElement("button");
+    reloadBtn.className = "zen-toolbar-btn zen-toolbar-reload-btn";
+    reloadBtn.title = "Reload";
+    reloadBtn.appendChild(parseSVG(PREF_ICONS.RELOAD));
+    reloadBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const b = getActiveAppBrowser();
+      if (!b) return;
+      reloadBtn.classList.add("zen-toolbar-spinning");
+      setTimeout(() => reloadBtn.classList.remove("zen-toolbar-spinning"), 450);
+      try {
+        b.reload();
+      } catch (_) {}
+    });
+
+    const urlWrap = document.createElement("div");
+    urlWrap.className = "zen-toolbar-urlwrap";
+    const urlInput = document.createElement("input");
+    urlInput.type = "text";
+    urlInput.className = "zen-toolbar-urlbar";
+    urlInput.spellcheck = false;
+    urlInput.setAttribute("autocomplete", "off");
+    urlInput.addEventListener("keydown", (e) => {
+      // Stop keys from leaking to the panel's own shortcuts (Escape closes
+      // the panel elsewhere) while typing a URL.
+      e.stopPropagation();
+      if (e.key === "Enter") {
+        const b = getActiveAppBrowser();
+        const raw = urlInput.value.trim();
+        if (!b || !raw) return;
+        try {
+          const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw);
+          const target = hasScheme ? raw : "https://" + raw;
+          const uri = Services.io.newURI(target);
+          if (typeof b.fixupAndLoadURIString === "function") {
+            b.fixupAndLoadURIString(raw, {
+              triggeringPrincipal:
+                Services.scriptSecurityManager.createContentPrincipal(uri, {}),
+            });
+          }
+        } catch (e2) {
+          console.warn("[BgalazkaExtension] Toolbar navigation failed:", e2);
+        }
+        urlInput.blur();
+      } else if (e.key === "Escape") {
+        updateWebToolbarState(); // revert any unsent edits back to the real URL
+        urlInput.blur();
+      }
+    });
+    urlInput.addEventListener("focus", () => urlInput.select());
+    urlWrap.appendChild(urlInput);
+
+    // Zoom controls (low priority per request, off by default — see
+    // WEB_TOOLBAR_ZOOM). ZoomManager is a standard global in the browser
+    // chrome window; wrapped defensively in case that ever changes.
+    const zoomWrap = document.createElement("div");
+    zoomWrap.className = "zen-toolbar-zoomwrap";
+    const zoomOutBtn = document.createElement("button");
+    zoomOutBtn.className = "zen-toolbar-btn zen-toolbar-zoom-btn";
+    zoomOutBtn.title = "Zoom out";
+    zoomOutBtn.appendChild(parseSVG(PREF_ICONS.ZOOM_OUT));
+    const zoomLabel = document.createElement("span");
+    zoomLabel.className = "zen-toolbar-zoom-label";
+    zoomLabel.title = "Reset zoom";
+    zoomLabel.textContent = "100%";
+    const zoomInBtn = document.createElement("button");
+    zoomInBtn.className = "zen-toolbar-btn zen-toolbar-zoom-btn";
+    zoomInBtn.title = "Zoom in";
+    zoomInBtn.appendChild(parseSVG(PREF_ICONS.ZOOM_IN));
+
+    const stepZoom = (delta) => {
+      const b = getActiveAppBrowser();
+      if (!b) return;
+      try {
+        const cur = ZoomManager.getZoomForBrowser(b);
+        const next = delta === 0 ? 1 : Math.max(0.3, Math.min(3, cur + delta));
+        ZoomManager.setZoomForBrowser(b, next);
+        zoomLabel.textContent = Math.round(next * 100) + "%";
+      } catch (_) {}
+    };
+    zoomOutBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      stepZoom(-0.1);
+    });
+    zoomLabel.addEventListener("click", (e) => {
+      e.stopPropagation();
+      stepZoom(0);
+    });
+    zoomInBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      stepZoom(0.1);
+    });
+    zoomWrap.append(zoomOutBtn, zoomLabel, zoomInBtn);
+
+    toolbar.append(backBtn, fwdBtn, reloadBtn, urlWrap, zoomWrap);
+    panel.append(hoverZone, toolbar);
+    return true;
+  }
+
+  // Refreshes back/forward enabled-state, the URL bar text (unless the user
+  // is actively typing in it), and the zoom label, for whichever app browser
+  // is currently active. Called after switching apps and on a light polling
+  // interval below (SPA/history.pushState navigations don't reliably fire
+  // the 'load'/'pageshow' events this file already listens for elsewhere).
+  function updateWebToolbarState() {
+    const toolbar = document.getElementById("zen-app-panel-toolbar");
+    if (!toolbar) return;
+    const b = getActiveAppBrowser();
+    const backBtn = toolbar.querySelector(".zen-toolbar-back-btn");
+    const fwdBtn = toolbar.querySelector(".zen-toolbar-fwd-btn");
+    const urlInput = toolbar.querySelector(".zen-toolbar-urlbar");
+    const zoomLabel = toolbar.querySelector(".zen-toolbar-zoom-label");
+
+    if (backBtn) backBtn.disabled = !b || !b.canGoBack;
+    if (fwdBtn) fwdBtn.disabled = !b || !b.canGoForward;
+
+    if (urlInput && document.activeElement !== urlInput) {
+      try {
+        urlInput.value = b?.currentURI?.spec || "";
+      } catch (_) {
+        urlInput.value = "";
+      }
+    }
+
+    if (zoomLabel) {
+      try {
+        zoomLabel.textContent = b
+          ? Math.round(ZoomManager.getZoomForBrowser(b) * 100) + "%"
+          : "100%";
+      } catch (_) {
+        zoomLabel.textContent = "100%";
+      }
+    }
+  }
+
+  let webToolbarPollTimer = null;
+  function startWebToolbarPolling() {
+    if (webToolbarPollTimer) return;
+    webToolbarPollTimer = setInterval(() => {
+      const root = document.getElementById("zen-app-panel-root");
+      if (!root?.hasAttribute("open")) return; // cheap no-op while closed
+      if (!getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, true)) return;
+      updateWebToolbarState();
+    }, 400);
+    registerCleanup(() => {
+      if (webToolbarPollTimer) clearInterval(webToolbarPollTimer);
+      webToolbarPollTimer = null;
+    });
+  }
+  startWebToolbarPolling();
+
+  // BUG FIX: this used to be called from inside patchAppsInstance(), which
+  // runs synchronously much earlier in the script — before PREF_ICONS and
+  // BGALAZKA_EXT_PREFS (both `const`, declared further up but still after
+  // that point) had actually been initialized. Reading PREF_ICONS.BACK from
+  // in there threw an uncaught "can't access lexical declaration before
+  // initialization" (TDZ) ReferenceError, which — since nothing caught it —
+  // silently aborted the rest of the top-level script, breaking every
+  // feature wired up further down the file (settings UI, dual-view, the
+  // pill peek-dot, corner tiles) while leaving only what had already run
+  // before the crash (opposite-docking positioning, translucency) working.
+  // Called from here instead, well after both consts exist, with the same
+  // retry-until-ready pattern ensureMobileUaMenuItem() uses below, in case
+  // #zen-app-panel-slider somehow isn't in the DOM yet at this point.
+  if (!safeCall(ensureWebToolbar, "ensureWebToolbar")) {
+    let webToolbarAttempts = 0;
+    const webToolbarTimer = setInterval(() => {
+      webToolbarAttempts++;
+      if (
+        safeCall(ensureWebToolbar, "ensureWebToolbar") ||
+        webToolbarAttempts > 40
+      ) {
+        clearInterval(webToolbarTimer);
+      }
+    }, 150);
+    registerCleanup(() => clearInterval(webToolbarTimer));
   }
 
   function createToggleRow(
@@ -16126,6 +16397,71 @@
       content.appendChild(pillSubgroup);
 
       // ====================================================================
+      // 3b. Web Panel Navigation Toolbar
+      // ====================================================================
+      const toolbarHeader = document.createElement("div");
+      toolbarHeader.className = "zs-section-header";
+      toolbarHeader.style.marginTop = "20px";
+      const toolbarTitle = document.createElement("h3");
+      toolbarTitle.className = "zs-section-title";
+      toolbarTitle.textContent = "Web Panel Navigation Toolbar";
+      toolbarHeader.appendChild(toolbarTitle);
+      content.appendChild(toolbarHeader);
+
+      const webToolbarSubgroup = document.createElement("div");
+      webToolbarSubgroup.className = "zs-conditional-group";
+
+      const tWebToolbar = createToggleRow(
+        "Enable Navigation Toolbar",
+        "Back / forward / reload + URL bar docked at the bottom of the web panel",
+        BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED,
+        "bgalazka-webtoolbar",
+        true,
+        PREF_ICONS.TOOLBAR,
+        (enabled) =>
+          webToolbarSubgroup.setAttribute(
+            "data-hidden",
+            enabled ? "false" : "true",
+          ),
+      );
+      content.appendChild(tWebToolbar.row);
+
+      const tToolbarAutohide = createToggleRow(
+        "Only Show Toolbar on Hover",
+        "Keep the web panel full-height; reveal the toolbar only when hovering the bottom edge",
+        BGALAZKA_EXT_PREFS.WEB_TOOLBAR_AUTOHIDE,
+        "bgalazka-webtoolbar-autohide",
+        false,
+      );
+      const tToolbarUrlbar = createToggleRow(
+        "Show URL Bar",
+        "Display and allow editing the current page's address",
+        BGALAZKA_EXT_PREFS.WEB_TOOLBAR_URLBAR,
+        "bgalazka-webtoolbar-urlbar",
+        true,
+      );
+      const tToolbarZoom = createToggleRow(
+        "Show Zoom Controls",
+        "Add page zoom in/out/reset buttons to the toolbar",
+        BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ZOOM,
+        "bgalazka-webtoolbar-zoom",
+        false,
+      );
+
+      webToolbarSubgroup.append(
+        tToolbarAutohide.row,
+        tToolbarUrlbar.row,
+        tToolbarZoom.row,
+      );
+      webToolbarSubgroup.setAttribute(
+        "data-hidden",
+        getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, true)
+          ? "false"
+          : "true",
+      );
+      content.appendChild(webToolbarSubgroup);
+
+      // ====================================================================
       // 4. Tab Corner App Tiles
       // ====================================================================
       const cornerHeader = document.createElement("div");
@@ -16243,6 +16579,51 @@
             peekOpacitySlider.badge.textContent = v + "%";
             updateCSSVars();
           },
+        },
+        {
+          input: tWebToolbar.input,
+          pref: BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED,
+          def: true,
+          onSync: (v) => {
+            document.documentElement.setAttribute(
+              "bgalazka-webtoolbar",
+              v ? "true" : "false",
+            );
+            webToolbarSubgroup.setAttribute(
+              "data-hidden",
+              v ? "false" : "true",
+            );
+          },
+        },
+        {
+          input: tToolbarAutohide.input,
+          pref: BGALAZKA_EXT_PREFS.WEB_TOOLBAR_AUTOHIDE,
+          def: false,
+          onSync: (v) =>
+            document.documentElement.setAttribute(
+              "bgalazka-webtoolbar-autohide",
+              v ? "true" : "false",
+            ),
+        },
+        {
+          input: tToolbarUrlbar.input,
+          pref: BGALAZKA_EXT_PREFS.WEB_TOOLBAR_URLBAR,
+          def: true,
+          onSync: (v) =>
+            document.documentElement.setAttribute(
+              "bgalazka-webtoolbar-urlbar",
+              v ? "true" : "false",
+            ),
+        },
+        {
+          input: tToolbarZoom.input,
+          pref: BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ZOOM,
+          def: false,
+          onSync: (v) =>
+            document.documentElement.setAttribute(
+              "bgalazka-webtoolbar-zoom",
+              v ? "true" : "false",
+            ),
         },
         {
           input: tDualView.input,
@@ -16441,11 +16822,14 @@
     return true;
   }
 
-  if (!ensureMobileUaMenuItem()) {
+  if (!safeCall(ensureMobileUaMenuItem, "ensureMobileUaMenuItem")) {
     let mobileUaAttempts = 0;
     const mobileUaMenuTimer = setInterval(() => {
       mobileUaAttempts++;
-      if (ensureMobileUaMenuItem() || mobileUaAttempts > 40) {
+      if (
+        safeCall(ensureMobileUaMenuItem, "ensureMobileUaMenuItem") ||
+        mobileUaAttempts > 40
+      ) {
         clearInterval(mobileUaMenuTimer);
       }
     }, 150);
@@ -16465,6 +16849,8 @@
         setTimeout(() => {
           ensurePillDualViewButton();
           syncPanelPushState();
+          ensureWebToolbar();
+          updateWebToolbarState();
         }, 30);
         return res;
       };
@@ -16528,6 +16914,17 @@
             );
           }
         }
+        // Keep the toolbar's URL bar / back-forward buttons in sync with
+        // real navigations on this browser (full loads at least; SPA
+        // history.pushState navigations are covered by the polling
+        // fallback in startWebToolbarPolling() above, since those don't
+        // reliably fire these events).
+        if (result?.isNew && result.browser) {
+          const onNav = () => updateWebToolbarState();
+          result.browser.addEventListener("load", onNav);
+          result.browser.addEventListener("pageshow", onNav);
+          result.browser.addEventListener("DOMTitleChanged", onNav);
+        }
         return result;
       };
     }
@@ -16535,11 +16932,12 @@
     return true;
   };
 
-  if (!hookAppsInstance()) {
+  if (!safeCall(hookAppsInstance, "hookAppsInstance")) {
     let hookAttempts = 0;
     const hookTimer = setInterval(() => {
       hookAttempts++;
-      if (hookAppsInstance() || hookAttempts > 40) clearInterval(hookTimer);
+      if (safeCall(hookAppsInstance, "hookAppsInstance") || hookAttempts > 40)
+        clearInterval(hookTimer);
     }, 150);
     registerCleanup(() => clearInterval(hookTimer));
   }
@@ -16642,6 +17040,46 @@
     "bgalazka-push-page",
     getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false) ? "true" : "false",
   );
+
+  // Web panel navigation toolbar: initial attribute sync + live observers,
+  // same pattern as bgalazka-pill-peek-dot above (createToggleRow's rootAttr
+  // only fires on user interaction with the settings UI, not at startup).
+  {
+    const WEB_TOOLBAR_ATTR_MAP = [
+      [BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, "bgalazka-webtoolbar", true],
+      [
+        BGALAZKA_EXT_PREFS.WEB_TOOLBAR_AUTOHIDE,
+        "bgalazka-webtoolbar-autohide",
+        false,
+      ],
+      [
+        BGALAZKA_EXT_PREFS.WEB_TOOLBAR_URLBAR,
+        "bgalazka-webtoolbar-urlbar",
+        true,
+      ],
+      [BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ZOOM, "bgalazka-webtoolbar-zoom", false],
+    ];
+    WEB_TOOLBAR_ATTR_MAP.forEach(([pref, attr, def]) => {
+      document.documentElement.setAttribute(
+        attr,
+        getPref(pref, def) ? "true" : "false",
+      );
+      try {
+        const observer = () => {
+          document.documentElement.setAttribute(
+            attr,
+            getPref(pref, def) ? "true" : "false",
+          );
+        };
+        Services.prefs.addObserver(pref, observer, false);
+        registerCleanup(() => {
+          try {
+            Services.prefs.removeObserver(pref, observer);
+          } catch (_) {}
+        });
+      } catch (_) {}
+    });
+  }
 
   /* ==========================================================================
    * 5. SETTINGS MODAL DETECTION (NO OBSERVERS — see crash-guard note 4)

@@ -5851,3 +5851,176 @@ panel[id*="tabgroup-editor"] {
   #zen-apps-sidebar-mobile-ua-item {
   display: none !important;
 }
+
+/* --------------------------------------------------------------------------
+ * 7. Web Panel Navigation Toolbar
+ * --------------------------------------------------------------------------
+ * Back / forward / reload + URL bar (+ optional zoom), docked at the bottom
+ * of the floating app panel. DOM is built by ensureWebToolbar() in the JS
+ * file as a real flex child of #zen-app-panel-slider (which is already
+ * display:flex; flex-direction:column — see the base mod's own inline
+ * style), placed AFTER the <browser> elements with `order: 999` so it always
+ * sorts to the bottom regardless of DOM insertion order (browsers get
+ * appended dynamically over time as more apps are opened, but the toolbar
+ * itself is only ever created once).
+ *
+ * SPACE: in default (non-autohide) mode this is a NORMAL flex child with a
+ * fixed height — since the <browser> elements use `flex: 1`, they shrink
+ * automatically to make room; no JS-driven resize math needed. In autohide
+ * mode it switches to `position: absolute` instead (see below), so browsers
+ * get full height back and the toolbar overlays on top, hidden until hover.
+ *
+ * RESPONSIVE WIDTH: buttons use `flex-shrink: 0` (never shrink); only the
+ * URL bar wrapper has `flex: 1 1 40px; min-width: 32px`, so it's always the
+ * first (and only) thing to give up space as the panel narrows — matching
+ * the request that back/forward/reload/zoom stay visible even at the
+ * panel's minimum width. Icons are small (12-14px) by design so the whole
+ * bar comfortably fits the native 280px minimum panel width without needing
+ * to raise it.
+ * -------------------------------------------------------------------------- */
+#zen-app-panel-toolbar {
+  display: none;
+  order: 999;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  box-sizing: border-box;
+  min-width: 0;
+  background: var(--tabpanels-background-color, #1e1e24);
+  border-top: 1px solid
+    color-mix(
+      in srgb,
+      var(--zen-primary-color, currentColor) 20%,
+      rgba(255, 255, 255, 0.12)
+    );
+}
+:root[bgalazka-webtoolbar="true"] #zen-app-panel-toolbar {
+  display: flex;
+}
+/* Reload moved into the toolbar; hide the pill's native duplicate while the
+ * toolbar is handling it (independent of the pill's own separate
+ * "Hide Refresh Button" toggle, which still governs the pill copy when the
+ * toolbar is off). */
+:root[bgalazka-webtoolbar="true"] #zen-app-panel-pill .zen-app-refresh-btn {
+  display: none !important;
+}
+
+.zen-toolbar-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.zen-toolbar-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  opacity: 1;
+}
+.zen-toolbar-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.zen-toolbar-reload-btn.zen-toolbar-spinning svg {
+  animation: bgalazka-toolbar-spin 0.45s linear;
+}
+@keyframes bgalazka-toolbar-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.zen-toolbar-urlwrap {
+  flex: 1 1 40px;
+  min-width: 32px;
+}
+.zen-toolbar-urlbar {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  color: inherit;
+  font-size: 11px;
+  line-height: 20px;
+}
+.zen-toolbar-urlbar:focus {
+  outline: none;
+  border-color: color-mix(
+    in srgb,
+    var(--zen-primary-color, currentColor) 55%,
+    transparent
+  );
+}
+:root:not([bgalazka-webtoolbar-urlbar="true"]) .zen-toolbar-urlwrap {
+  display: none;
+}
+
+.zen-toolbar-zoomwrap {
+  display: none;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+}
+:root[bgalazka-webtoolbar-zoom="true"] .zen-toolbar-zoomwrap {
+  display: flex;
+}
+.zen-toolbar-zoom-label {
+  flex-shrink: 0;
+  min-width: 30px;
+  text-align: center;
+  font-size: 10px;
+  opacity: 0.75;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* AUTOHIDE MODE: toolbar becomes an overlay instead of a permanent flex
+ * child, so the browser gets full panel height back. A thin invisible strip
+ * at the very bottom edge reveals it on hover, mirroring the exact same
+ * sibling-hover trick the pill itself already uses elsewhere in this file. */
+:root[bgalazka-webtoolbar-autohide="true"] #zen-app-panel-toolbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  transform: translateY(100%);
+  opacity: 0;
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease;
+}
+.zen-toolbar-hover-zone {
+  display: none;
+}
+:root[bgalazka-webtoolbar-autohide="true"] .zen-toolbar-hover-zone {
+  display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 10px;
+  z-index: 4;
+}
+:root[bgalazka-webtoolbar-autohide="true"]
+  .zen-toolbar-hover-zone:hover
+  ~ #zen-app-panel-toolbar,
+:root[bgalazka-webtoolbar-autohide="true"] #zen-app-panel-toolbar:hover {
+  transform: translateY(0);
+  opacity: 1;
+}
