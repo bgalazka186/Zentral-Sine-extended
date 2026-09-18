@@ -15498,6 +15498,21 @@
     WEB_TOOLBAR_AUTOHIDE: "zen.workspace.bgalazka.web_toolbar_autohide",
     WEB_TOOLBAR_URLBAR: "zen.workspace.bgalazka.web_toolbar_urlbar",
     WEB_TOOLBAR_ZOOM: "zen.workspace.bgalazka.web_toolbar_zoom",
+    // Which template the URL bar uses when the typed text isn't a URL (see
+    // looksLikeUrl()/buildSearchUrl() below). "ddg"/"startpage" are built-in
+    // templates; "browser" mirrors Firefox's own default search engine
+    // (refreshed lazily, see refreshBrowserSearchTemplate()); "custom" reads
+    // WEB_TOOLBAR_SEARCH_CUSTOM_URL instead.
+    WEB_TOOLBAR_SEARCH_ENGINE:
+      "zen.workspace.bgalazka.web_toolbar_search_engine",
+    // User-supplied template containing a literal "%s" placeholder, e.g.
+    // "https://example.com/search?q=%s". Only read when the mode above is
+    // "custom".
+    WEB_TOOLBAR_SEARCH_CUSTOM_URL:
+      "zen.workspace.bgalazka.web_toolbar_search_custom_url",
+    // Master toggle for the quick-switch button (see ensureWebToolbar()) that
+    // re-runs the same search term on the other engine (DDG <-> Startpage).
+    WEB_TOOLBAR_QUICKSWITCH: "zen.workspace.bgalazka.web_toolbar_quickswitch",
     HIDE_DUAL_VIEW: "zen.workspace.bgalazka.hide_dual_view",
     HIDE_PIN: "zen.workspace.bgalazka.hide_pin",
     HIDE_EXPAND: "zen.workspace.bgalazka.hide_expand",
@@ -15549,6 +15564,9 @@
     GRABBER: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><circle cx="5" cy="4" r="1.5"/><circle cx="11" cy="4" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="12" r="1.5"/><circle cx="11" cy="12" r="1.5"/></svg>`,
     REFRESH: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13.8 6.5A5.5 5.5 0 1 0 8 13.5a5.5 5.5 0 0 0 5.2-3.7M14 2v4.5H9.5"/></svg>`,
     CLOSE: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>`,
+    // Search-engine quick-switch (toolbar button) / dropdown icon: two
+    // opposing arrows, standard "swap" glyph language.
+    SWAP: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.5h10.5M10 3l2.5 2.5L10 8"/><path d="M14 10.5H3.5M6 8l-2.5 2.5L6 13"/></svg>`,
   };
 
   function ensurePillDualViewButton() {
@@ -15655,6 +15673,133 @@
     return null;
   }
 
+  /* --------------------------------------------------------------------
+   * URL BAR: URL-vs-SEARCH DETECTION AND SEARCH ENGINE TEMPLATES
+   * ----------------------------------------------------------------------
+   * The toolbar's URL bar has to decide, on Enter, whether what was typed
+   * is a URL to load directly or a search phrase to hand to a search
+   * engine (this is what a normal browser's urlbar does via its own
+   * "fixup" step). We do this ourselves with looksLikeUrl() below instead
+   * of relying on <browser>.fixupAndLoadURIString()'s own built-in
+   * keyword-search fallback, because that fallback goes through Gecko's
+   * OWN default search engine / keyword.enabled machinery, which we have
+   * no clean way to redirect to a user-chosen engine from here (chrome
+   * <browser> loads don't expose a "use this search engine instead"
+   * option) — building the destination URL ourselves and loading it as a
+   * plain https:// URL sidesteps that entirely.
+   * -------------------------------------------------------------------- */
+  const SEARCH_ENGINE_TEMPLATES = {
+    ddg: "https://duckduckgo.com/?q=%s",
+    startpage: "https://www.startpage.com/sp/search?query=%s",
+  };
+
+  // Patterns used both to recognize an engine's own results pages (for the
+  // quick-switch button) and to pull the search term back out of them.
+  // Matches with or without "www.", http or https.
+  const SEARCH_ENGINE_PATTERNS = {
+    ddg: {
+      test: (u) => /^https?:\/\/(www\.)?duckduckgo\.com\//i.test(u),
+      param: "q",
+    },
+    startpage: {
+      test: (u) =>
+        /^https?:\/\/(www\.)?startpage\.com\/(sp|do)\/(d?search)/i.test(u),
+      param: "query",
+    },
+  };
+
+  function detectSearchEngine(urlStr) {
+    if (!urlStr) return null;
+    for (const key of Object.keys(SEARCH_ENGINE_PATTERNS)) {
+      if (SEARCH_ENGINE_PATTERNS[key].test(urlStr)) return key;
+    }
+    return null;
+  }
+
+  function extractSearchQuery(urlStr, engineKey) {
+    try {
+      const params = new URL(urlStr).searchParams;
+      return params.get(SEARCH_ENGINE_PATTERNS[engineKey].param);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Best-effort mirror of Firefox's OWN default search engine, for the
+  // "Browser Default" option. Services.search is promise-based, and we
+  // don't want the URL bar's Enter handler to await anything (typing +
+  // Enter should feel instant), so this is fetched once up front (and
+  // again if the user switches TO "Browser Default" in settings) and
+  // cached; buildSearchUrl() below just reads the cached value.
+  // The "%s" template is recovered by asking the engine for a submission
+  // URL for a unique marker string, then swapping that marker back out for
+  // "%s" in the resulting URL — the same trick many search-engine-import
+  // tools use, since nsISearchEngine only exposes "give me the URL for
+  // THIS term", not the raw template.
+  let cachedBrowserSearchTemplate = null;
+  function refreshBrowserSearchTemplate() {
+    try {
+      const marker = "bgalazkaquerymarker";
+      Services.search
+        .getDefault()
+        .then((engine) => {
+          try {
+            const submission = engine?.getSubmission?.(marker);
+            const url = submission?.uri?.spec;
+            if (!url) return;
+            const encodedMarker = encodeURIComponent(marker);
+            if (url.includes(encodedMarker)) {
+              cachedBrowserSearchTemplate = url.replace(encodedMarker, "%s");
+            } else if (url.includes(marker)) {
+              cachedBrowserSearchTemplate = url.replace(marker, "%s");
+            }
+          } catch (_) {}
+        })
+        .catch(() => {});
+    } catch (_) {}
+  }
+  refreshBrowserSearchTemplate();
+
+  // Builds the final URL to load for a typed search phrase, honoring
+  // WEB_TOOLBAR_SEARCH_ENGINE. Always falls back to DuckDuckGo so a bad/
+  // empty custom template or a not-yet-loaded browser-default template
+  // never leaves the URL bar doing nothing.
+  function buildSearchUrl(term) {
+    const mode = getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_ENGINE, "ddg");
+    let template;
+    if (mode === "custom") {
+      template =
+        getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_CUSTOM_URL, "") ||
+        SEARCH_ENGINE_TEMPLATES.ddg;
+    } else if (mode === "browser") {
+      template = cachedBrowserSearchTemplate || SEARCH_ENGINE_TEMPLATES.ddg;
+    } else {
+      template = SEARCH_ENGINE_TEMPLATES[mode] || SEARCH_ENGINE_TEMPLATES.ddg;
+    }
+    // Safety net for a malformed custom template pasted without "%s".
+    if (!template.includes("%s")) {
+      template += (template.includes("?") ? "&" : "?") + "q=%s";
+    }
+    return template.replace("%s", encodeURIComponent(term));
+  }
+
+  // Same "has a dot before the first slash" rule real browsers' urlbars use
+  // to decide URL vs. keyword search, plus the obvious explicit-scheme and
+  // localhost/IP cases. A typed phrase with a space is never treated as a
+  // URL even if it happens to contain a dot (e.g. "prices in Warsaw pl.").
+  function looksLikeUrl(raw) {
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) return true; // explicit scheme
+    if (/\s/.test(raw)) return false;
+    if (
+      /^(localhost|(\d{1,3}\.){3}\d{1,3}|\[[0-9a-fA-F:]+\])(:\d+)?(\/.*)?$/.test(
+        raw,
+      )
+    )
+      return true;
+    const hostPart = raw.split("/")[0].split(":")[0];
+    return hostPart.includes(".") && !hostPart.endsWith(".");
+  }
+
   function ensureWebToolbar() {
     const panel = document.getElementById("zen-app-panel-slider");
     if (!panel) return false;
@@ -15676,7 +15821,37 @@
     backBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       const b = getActiveAppBrowser();
-      if (b && b.canGoBack) b.goBack();
+      if (!b) return;
+      if (b.canGoBack) {
+        b.goBack();
+        return;
+      }
+      // FALLBACK: "no history to go back to" but we're not on the web
+      // panel's own default/home URL. This covers the reported "Back
+      // doesn't work after typing a URL" case, where the very first load
+      // of a freshly-created app <browser> (the panel's default site,
+      // loaded by native ZentralApps.openPanel/getOrCreateAppBrowser) is
+      // entry #0 in session history, and canGoBack should normally become
+      // true again after navigating away from it — but session history
+      // readiness right after a remote <browser>'s FIRST load is a known
+      // rough edge in Gecko, so we can't unconditionally trust canGoBack
+      // here. Instead we remember each app's own url as "home" (set on
+      // the browser element itself in the getOrCreateAppBrowser hook
+      // below) and jump straight back to it whenever native back-history
+      // has nothing to offer, so "Back" always has somewhere sensible to
+      // go rather than silently doing nothing.
+      const home = b._bgalazkaHomeUrl;
+      if (home && b.currentURI?.spec !== home) {
+        try {
+          const uri = Services.io.newURI(home);
+          if (typeof b.fixupAndLoadURIString === "function") {
+            b.fixupAndLoadURIString(home, {
+              triggeringPrincipal:
+                Services.scriptSecurityManager.createContentPrincipal(uri, {}),
+            });
+          }
+        } catch (_) {}
+      }
     });
 
     const fwdBtn = document.createElement("button");
@@ -15723,11 +15898,24 @@
         const raw = urlInput.value.trim();
         if (!b || !raw) return;
         try {
+          const isUrl = looksLikeUrl(raw);
           const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw);
-          const target = hasScheme ? raw : "https://" + raw;
+          // Not a URL (e.g. "google" or "weather warsaw") -> run it through
+          // the configured search engine instead (see buildSearchUrl()).
+          const target = isUrl
+            ? hasScheme
+              ? raw
+              : "https://" + raw
+            : buildSearchUrl(raw);
           const uri = Services.io.newURI(target);
           if (typeof b.fixupAndLoadURIString === "function") {
-            b.fixupAndLoadURIString(raw, {
+            // BUG FIX: this used to pass `raw` here instead of `target`.
+            // For a plain typed URL that's mostly harmless (Gecko's own
+            // fixup re-derives the same https:// URL), but for a search
+            // it meant the literal search PHRASE was handed to fixup
+            // instead of the search-engine URL we just built, so typed
+            // terms never actually reached DuckDuckGo/Startpage/etc.
+            b.fixupAndLoadURIString(target, {
               triggeringPrincipal:
                 Services.scriptSecurityManager.createContentPrincipal(uri, {}),
             });
