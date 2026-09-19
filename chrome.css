@@ -4866,6 +4866,16 @@ panel[id*="tabgroup-editor"] {
  *     the user's own chosen --bgalazka-pill-peek-color as before. See section 2/3b's hover blocks (now black+
  *     opacity instead of the theme var) and the new unconditional fallback in section 2 for the
  *     mini-pill-disabled case, which previously had no override at all.
+ * 14. WEB TOOLBAR SEARCH QUICK-SWITCH BUTTON: see Zentral_uc.js note 14 for the JS half (search-engine
+ *     picker, URL-vs-search detection, Back-button home fallback). The quick-switch button reuses the exact
+ *     same `.zen-toolbar-btn` sizing/hover styling as back/forward/reload below -- its visibility (only on a
+ *     recognized DDG/Startpage results page) is toggled from JS via inline style.display rather than a CSS
+ *     attribute selector, since it depends on the CURRENT PAGE'S URL, which has no CSS selector to key off.
+ * 15. TOOLBAR TOP DOCKING (v4): see the "TOOLBAR POSITION: TOP-OF-PANEL" rules near the end of this file.
+ *     Flipping `order` from 999 to a very negative number is enough to move the toolbar from last to first
+ *     child of the #zen-app-panel-slider flex column -- no separate top-docked layout was needed. The
+ *     autohide overlay case additionally needs its own top/bottom + transform-direction flip since that mode
+ *     positions the toolbar with `position: absolute` instead of relying on flex order at all.
  * ============================================================================================================= */
 
 /* CSS Variable Defaults for Settings-Controlled Translucency */
@@ -6085,4 +6095,44 @@ panel[id*="tabgroup-editor"] {
 :root[bgalazka-webtoolbar-autohide="true"] #zen-app-panel-toolbar:hover {
   transform: translateY(0);
   opacity: 1;
+}
+
+/* TOOLBAR POSITION: TOP-OF-PANEL (v4). #zen-app-panel-slider is a flex
+ * column (see rule near the top of this file) with browsers at the
+ * default order (0) and the toolbar pinned to order:999 above, which
+ * visually stacks it LAST -- i.e. at the bottom. Flipping the toolbar to
+ * a very negative order puts it FIRST in the column instead, with no
+ * other layout math needed since the <browser> elements are already
+ * `flex: 1` and simply shrink to make room, same as the bottom case.
+ * The permanent (non-autohide) bar's separator border has to swap from
+ * `border-top` to `border-bottom` too, so it still reads as "below the
+ * toolbar" rather than floating oddly above it. Higher specificity here
+ * (two attributes instead of one) is what makes these win over the base
+ * bottom-docked rules further up without needing !important. */
+:root[bgalazka-webtoolbar-top="true"] #zen-app-panel-toolbar {
+  order: -999;
+  border-top: none;
+  border-bottom: 1px solid
+    color-mix(
+      in srgb,
+      var(--zen-primary-color, currentColor) 20%,
+      rgba(255, 255, 255, 0.12)
+    );
+}
+/* AUTOHIDE + TOP: the overlay has to slide in from the top edge instead of
+ * the bottom, so both the toolbar's own anchoring/transform and its
+ * hover-reveal strip flip from bottom:0 to top:0. translateY(-100%) (up
+ * and off-screen) replaces translateY(100%) (down and off-screen) as the
+ * hidden state; the existing translateY(0) hover-reveal rule above already
+ * works unchanged for either direction. */
+:root[bgalazka-webtoolbar-top="true"][bgalazka-webtoolbar-autohide="true"]
+  #zen-app-panel-toolbar {
+  top: 0;
+  bottom: auto;
+  transform: translateY(-100%);
+}
+:root[bgalazka-webtoolbar-top="true"][bgalazka-webtoolbar-autohide="true"]
+  .zen-toolbar-hover-zone {
+  top: 0;
+  bottom: auto;
 }

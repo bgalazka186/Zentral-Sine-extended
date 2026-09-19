@@ -14599,6 +14599,22 @@
  *     opacity as the existing "Mini Pill Opacity" slider, plus forced white icon color. No new pref needed —
  *     it reuses PILL_PEEK_DOT_OPACITY for both purposes on purpose, so this JS file has no changes for it
  *     beyond the two settings-label tweaks near PILL_PEEK_DOT_COLOR/OPACITY explaining the dual use.
+ * 14. WEB TOOLBAR SEARCH + BACK FALLBACK (v3): the URL bar now runs typed non-URL text through a configurable
+ *     search engine (see SEARCH_ENGINE_TEMPLATES/buildSearchUrl()/looksLikeUrl()) rather than relying on
+ *     <browser>.fixupAndLoadURIString()'s own keyword-search fallback, since that goes through Gecko's OWN
+ *     default engine with no override hook exposed to chrome <browser> loads — we build the destination URL
+ *     ourselves and load it as a plain https:// URL instead. The Back button additionally falls back to each
+ *     app's own remembered "home" URL (stashed on the <browser> element as _bgalazkaHomeUrl at creation, see
+ *     the getOrCreateAppBrowser hook) whenever canGoBack is false, since a freshly-created remote <browser>'s
+ *     very first navigation is not always reliably back-able from JS immediately afterward — this makes Back
+ *     behave predictably regardless of that edge case rather than depending on pinning down its exact cause.
+ *     The quick-switch button (re-runs the same query on the other of DDG/Startpage) only appears when the
+ *     active page matches one of SEARCH_ENGINE_PATTERNS, so it never shows on an unrelated page.
+ * 15. TOOLBAR BUTTON ORDER / TOP DOCKING (v4): button order is just DOM append order in ensureWebToolbar()'s
+ *     `toolbar.append(...)` call -- there's no CSS `order` per-button, so reordering buttons only ever needs
+ *     that one line changed. Top-vs-bottom docking is the opposite: it's CSS-only (see chrome.css note 15),
+ *     driven by the `bgalazka-webtoolbar-top` root attribute; nothing here needs to know which edge the
+ *     toolbar is actually on.
  * ============================================================================================================= */
 
 (function initBgalazkaExtension() {
@@ -15513,6 +15529,8 @@
     // Master toggle for the quick-switch button (see ensureWebToolbar()) that
     // re-runs the same search term on the other engine (DDG <-> Startpage).
     WEB_TOOLBAR_QUICKSWITCH: "zen.workspace.bgalazka.web_toolbar_quickswitch",
+    // Dock the toolbar at the top of the web panel instead of the bottom.
+    WEB_TOOLBAR_TOP: "zen.workspace.bgalazka.web_toolbar_top",
     HIDE_DUAL_VIEW: "zen.workspace.bgalazka.hide_dual_view",
     HIDE_PIN: "zen.workspace.bgalazka.hide_pin",
     HIDE_EXPAND: "zen.workspace.bgalazka.hide_expand",
@@ -15932,6 +15950,40 @@
     urlInput.addEventListener("focus", () => urlInput.select());
     urlWrap.appendChild(urlInput);
 
+    // Search-engine quick-switch: only meaningful (and only shown, see
+    // updateWebToolbarState()) while the active page is itself a
+    // recognized DDG/Startpage results page. Re-runs the same query on
+    // the OTHER of the two, preserving the exact search term.
+    const swapBtn = document.createElement("button");
+    swapBtn.className = "zen-toolbar-btn zen-toolbar-swap-btn";
+    swapBtn.title = "Search on the other engine";
+    swapBtn.style.display = "none"; // shown by updateWebToolbarState() only on recognized search-result pages
+    swapBtn.appendChild(parseSVG(PREF_ICONS.SWAP));
+    swapBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const b = getActiveAppBrowser();
+      if (!b) return;
+      const cur = b.currentURI?.spec || "";
+      const engine = detectSearchEngine(cur);
+      if (!engine) return; // shouldn't happen, button is hidden otherwise
+      const term = extractSearchQuery(cur, engine);
+      if (term == null) return;
+      const otherEngine = engine === "ddg" ? "startpage" : "ddg";
+      const target = SEARCH_ENGINE_TEMPLATES[otherEngine].replace(
+        "%s",
+        encodeURIComponent(term),
+      );
+      try {
+        const uri = Services.io.newURI(target);
+        if (typeof b.fixupAndLoadURIString === "function") {
+          b.fixupAndLoadURIString(target, {
+            triggeringPrincipal:
+              Services.scriptSecurityManager.createContentPrincipal(uri, {}),
+          });
+        }
+      } catch (_) {}
+    });
+
     // Zoom controls (low priority per request, off by default — see
     // WEB_TOOLBAR_ZOOM). ZoomManager is a standard global in the browser
     // chrome window; wrapped defensively in case that ever changes.
@@ -15974,7 +16026,7 @@
     });
     zoomWrap.append(zoomOutBtn, zoomLabel, zoomInBtn);
 
-    toolbar.append(backBtn, fwdBtn, reloadBtn, urlWrap, zoomWrap);
+    toolbar.append(backBtn, reloadBtn, fwdBtn, swapBtn, urlWrap, zoomWrap);
     panel.append(hoverZone, toolbar);
     return true;
   }
@@ -15992,16 +16044,24 @@
     const fwdBtn = toolbar.querySelector(".zen-toolbar-fwd-btn");
     const urlInput = toolbar.querySelector(".zen-toolbar-urlbar");
     const zoomLabel = toolbar.querySelector(".zen-toolbar-zoom-label");
+    const swapBtn = toolbar.querySelector(".zen-toolbar-swap-btn");
 
-    if (backBtn) backBtn.disabled = !b || !b.canGoBack;
+    let curSpec = "";
+    try {
+      curSpec = b?.currentURI?.spec || "";
+    } catch (_) {}
+
+    if (backBtn) {
+      // Enabled either via real back-history, or via the home-URL fallback
+      // in the click handler above (only useful if we're not already home).
+      const canFallbackHome =
+        !!b && !!b._bgalazkaHomeUrl && b._bgalazkaHomeUrl !== curSpec;
+      backBtn.disabled = !b || (!b.canGoBack && !canFallbackHome);
+    }
     if (fwdBtn) fwdBtn.disabled = !b || !b.canGoForward;
 
     if (urlInput && document.activeElement !== urlInput) {
-      try {
-        urlInput.value = b?.currentURI?.spec || "";
-      } catch (_) {
-        urlInput.value = "";
-      }
+      urlInput.value = curSpec;
     }
 
     if (zoomLabel) {
@@ -16012,6 +16072,18 @@
       } catch (_) {
         zoomLabel.textContent = "100%";
       }
+    }
+
+    // Quick-switch button only makes sense (and is only shown) while the
+    // active page is itself a recognized DDG/Startpage results page, and
+    // only if the user hasn't turned the feature off in settings.
+    if (swapBtn) {
+      const quickswitchOn = getPref(
+        BGALAZKA_EXT_PREFS.WEB_TOOLBAR_QUICKSWITCH,
+        true,
+      );
+      const show = quickswitchOn && !!detectSearchEngine(curSpec);
+      swapBtn.style.display = show ? "" : "none";
     }
   }
 
@@ -16133,10 +16205,10 @@
     return { row, input };
   }
 
-  // NOTE: currently unused (the Pill Menu setting that used to call this
-  // became a numeric slider via createSliderRow instead, see
-  // "Pill Menu Vertical Offset" below). Left in place as a reusable
-  // building block for any future dropdown-style setting.
+  // Reusable dropdown-style setting row. rootAttr is OPTIONAL: pass a root
+  // <html> attribute name to mirror the selected value onto documentElement
+  // (for CSS to key off, same convention as createToggleRow's rootAttr), or
+  // omit/null it for a setting that's only ever read from JS via getPref().
   function createSelectRow(
     labelText,
     sublabelText,
@@ -16144,7 +16216,8 @@
     options,
     defaultVal,
     iconSvg,
-    onChange,
+    rootAttr = null,
+    onChange = null,
   ) {
     const row = document.createElement("div");
     row.className = "zs-row";
@@ -16200,16 +16273,92 @@
 
     select.addEventListener("change", () => {
       setPref(prefKey, select.value);
-      document.documentElement.setAttribute(
-        "bgalazka-pill-position",
-        select.value,
-      );
+      // BUG FIX: this used to unconditionally write "bgalazka-pill-position"
+      // here regardless of which setting owned the row (a leftover from
+      // when this function was only ever sketched out for that one use).
+      // Since this function was never actually called anywhere, it was a
+      // latent bug rather than an active one — now that it has real
+      // callers (search engine picker, etc.), only mirror an attribute
+      // when the caller actually asked for one.
+      if (rootAttr) {
+        document.documentElement.setAttribute(rootAttr, select.value);
+      }
       if (typeof onChange === "function") onChange(select.value);
     });
 
     row.appendChild(leftBox);
     row.appendChild(select);
     return { row, select };
+  }
+
+  // Reusable free-text setting row (e.g. pasting a custom search engine
+  // URL). Writes the pref on "change" (blur/Enter) rather than on every
+  // keystroke, both to avoid hammering Services.prefs while typing and so
+  // an in-progress edit isn't half-applied.
+  function createTextRow(
+    labelText,
+    sublabelText,
+    prefKey,
+    placeholder,
+    iconSvg = null,
+    onChange = null,
+  ) {
+    const row = document.createElement("div");
+    row.className = "zs-row";
+    row.style.display = "flex";
+    row.style.flexDirection = "column";
+    row.style.alignItems = "stretch";
+    row.style.textAlign = "left";
+    row.style.padding = "8px 16px";
+    row.style.gap = "8px";
+
+    const labelContainer = document.createElement("div");
+    labelContainer.className = "zs-label-container";
+    labelContainer.style.width = "100%";
+    labelContainer.style.textAlign = "left";
+    labelContainer.style.alignItems = "flex-start";
+    labelContainer.style.display = "flex";
+    labelContainer.style.flexDirection = "column";
+
+    const label = document.createElement("span");
+    label.className = "zs-label";
+    label.style.textAlign = "left";
+    label.textContent = labelText;
+    labelContainer.appendChild(label);
+
+    if (sublabelText) {
+      const sublabel = document.createElement("span");
+      sublabel.className = "zs-sublabel";
+      sublabel.style.textAlign = "left";
+      sublabel.textContent = sublabelText;
+      labelContainer.appendChild(sublabel);
+    }
+
+    if (iconSvg) {
+      const iconWrapper = document.createElement("div");
+      iconWrapper.className = "zs-icon-preview";
+      iconWrapper.appendChild(parseSVG(iconSvg));
+      labelContainer.prepend(iconWrapper);
+    }
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "zs-text-input";
+    input.spellcheck = false;
+    input.setAttribute("autocomplete", "off");
+    if (placeholder) input.placeholder = placeholder;
+    input.style.width = "100%";
+    input.value = getPref(prefKey, "");
+
+    input.addEventListener("change", () => {
+      const val = input.value.trim();
+      setPref(prefKey, val);
+      if (typeof onChange === "function") onChange(val);
+    });
+
+    row.appendChild(labelContainer);
+    row.appendChild(input);
+    return { row, input };
   }
 
   function createSliderRow(
@@ -16663,9 +16812,16 @@
 
       const tToolbarAutohide = createToggleRow(
         "Only Show Toolbar on Hover",
-        "Keep the web panel full-height; reveal the toolbar only when hovering the bottom edge",
+        "Keep the web panel full-height; reveal the toolbar only when hovering its edge",
         BGALAZKA_EXT_PREFS.WEB_TOOLBAR_AUTOHIDE,
         "bgalazka-webtoolbar-autohide",
+        false,
+      );
+      const tToolbarTop = createToggleRow(
+        "Move Toolbar to Top of Panel",
+        "Dock back/forward/reload/URL bar at the top of the web panel instead of the bottom",
+        BGALAZKA_EXT_PREFS.WEB_TOOLBAR_TOP,
+        "bgalazka-webtoolbar-top",
         false,
       );
       const tToolbarUrlbar = createToggleRow(
@@ -16683,10 +16839,67 @@
         false,
       );
 
+      // Custom search URL row lives in its own conditional group, only
+      // shown while "Custom URL" is the selected search engine mode.
+      const customSearchSubgroup = document.createElement("div");
+      customSearchSubgroup.className = "zs-conditional-group";
+      const tSearchCustomUrl = createTextRow(
+        "Custom Search URL",
+        'Must contain a literal "%s" placeholder for the search term, e.g. https://example.com/search?q=%s',
+        BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_CUSTOM_URL,
+        "https://example.com/search?q=%s",
+      );
+      customSearchSubgroup.append(tSearchCustomUrl.row);
+      customSearchSubgroup.setAttribute(
+        "data-hidden",
+        getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_ENGINE, "ddg") ===
+          "custom"
+          ? "false"
+          : "true",
+      );
+
+      const tSearchEngine = createSelectRow(
+        "Search Engine",
+        'Used when the URL bar text isn\'t a URL, e.g. typing "weather" instead of a full address',
+        BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_ENGINE,
+        [
+          { value: "ddg", label: "DuckDuckGo" },
+          { value: "startpage", label: "Startpage" },
+          { value: "browser", label: "Browser Default" },
+          { value: "custom", label: "Custom URL" },
+        ],
+        "ddg",
+        PREF_ICONS.SWAP,
+        null, // no root attribute to mirror; only read via getPref() in buildSearchUrl()
+        (value) => {
+          customSearchSubgroup.setAttribute(
+            "data-hidden",
+            value === "custom" ? "false" : "true",
+          );
+          // Re-fetch Firefox's own default engine right when the user
+          // picks this mode, rather than only at startup, in case they
+          // changed their system default engine since the browser opened.
+          if (value === "browser") refreshBrowserSearchTemplate();
+        },
+      );
+
+      const tQuickswitch = createToggleRow(
+        "Search Engine Quick-Switch Button",
+        "Adds a button to the toolbar (only visible on a DuckDuckGo/Startpage results page) that re-runs the same search on the other engine",
+        BGALAZKA_EXT_PREFS.WEB_TOOLBAR_QUICKSWITCH,
+        null,
+        true,
+        PREF_ICONS.SWAP,
+      );
+
       webToolbarSubgroup.append(
         tToolbarAutohide.row,
+        tToolbarTop.row,
         tToolbarUrlbar.row,
         tToolbarZoom.row,
+        tSearchEngine.row,
+        customSearchSubgroup,
+        tQuickswitch.row,
       );
       webToolbarSubgroup.setAttribute(
         "data-hidden",
@@ -16841,6 +17054,16 @@
             ),
         },
         {
+          input: tToolbarTop.input,
+          pref: BGALAZKA_EXT_PREFS.WEB_TOOLBAR_TOP,
+          def: false,
+          onSync: (v) =>
+            document.documentElement.setAttribute(
+              "bgalazka-webtoolbar-top",
+              v ? "true" : "false",
+            ),
+        },
+        {
           input: tToolbarUrlbar.input,
           pref: BGALAZKA_EXT_PREFS.WEB_TOOLBAR_URLBAR,
           def: true,
@@ -16859,6 +17082,28 @@
               "bgalazka-webtoolbar-zoom",
               v ? "true" : "false",
             ),
+        },
+        {
+          input: tSearchEngine.select,
+          pref: BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_ENGINE,
+          def: "ddg",
+          isSelect: true,
+          onSync: (v) =>
+            customSearchSubgroup.setAttribute(
+              "data-hidden",
+              v === "custom" ? "false" : "true",
+            ),
+        },
+        {
+          input: tSearchCustomUrl.input,
+          pref: BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_CUSTOM_URL,
+          def: "",
+          isSelect: true, // reused flag: means "sync via .value", true for text inputs too
+        },
+        {
+          input: tQuickswitch.input,
+          pref: BGALAZKA_EXT_PREFS.WEB_TOOLBAR_QUICKSWITCH,
+          def: true,
         },
         {
           input: tDualView.input,
@@ -17071,6 +17316,113 @@
     registerCleanup(() => clearInterval(mobileUaMenuTimer));
   }
 
+  /* ==========================================================================
+   * WEB PANEL POPUP CONTAINMENT
+   * -----------------------------------------------------------------------
+   * Pages loaded inside a web panel occasionally try to escape it: a
+   * target="_blank" link, a window.open() call, or (as reported) Startpage's
+   * own result-link handling all ask Gecko to open a brand-new tab/window
+   * rather than navigating the page that asked for it. Our app panel
+   * <browser>s are NOT members of gBrowser.tabs (they live inside
+   * #zen-app-panel-slider instead, see note 5), so such a request has no
+   * "containing" tab to reuse and Gecko's normal fallback is to surface a
+   * real tab in the MAIN window -- reported as "Startpage opens links in a
+   * new tab no matter the setting" (Startpage's own new-window preference
+   * only controls ITS OWN intent, not where Gecko actually lands it).
+   *
+   * FIX: hook nsIBrowserDOMWindow.openURI, the single chokepoint every such
+   * request funnels through before any tab/window is actually created. If
+   * the request's opener traces back to one of our own app <browser>s, load
+   * the target URL into THAT SAME browser and hand its browsingContext back
+   * instead of letting Gecko create anything new -- window.open()'s return
+   * value (and any further script-driven navigation through it) then
+   * transparently targets our panel browser too. This is intentionally
+   * generic/site-agnostic (no Startpage-specific logic), so it also covers
+   * any other site with the same "opens results in a new tab" behavior.
+   * ========================================================================== */
+  function getAllAppBrowsers() {
+    const panel = document.getElementById("zen-app-panel-slider");
+    if (!panel) return [];
+    return Array.from(panel.querySelectorAll("browser"));
+  }
+
+  function hookPopupContainment() {
+    const bdw = window.browserDOMWindow;
+    if (!bdw || bdw._bgalazkaPopupHooked) return !!bdw;
+    const origOpenURI = bdw.openURI?.bind(bdw);
+    if (!origOpenURI) return false;
+    bdw._bgalazkaPopupHooked = true;
+
+    bdw.openURI = function (
+      aURI,
+      aOpener,
+      aWhere,
+      aFlags,
+      aTriggeringPrincipal,
+      aCsp,
+    ) {
+      try {
+        if (aOpener) {
+          const matched = getAllAppBrowsers().find(
+            (b) => b.browsingContext && b.browsingContext === aOpener,
+          );
+          if (matched) {
+            if (aURI) {
+              if (typeof matched.fixupAndLoadURIString === "function") {
+                matched.fixupAndLoadURIString(aURI.spec, {
+                  triggeringPrincipal: aTriggeringPrincipal,
+                });
+              } else if (matched.loadURI) {
+                matched.loadURI(aURI, {
+                  triggeringPrincipal: aTriggeringPrincipal,
+                });
+              }
+            }
+            // aURI can be null (e.g. window.open() called with no URL,
+            // navigated separately right after) -- either way, handing back
+            // our OWN browsingContext instead of creating a new one is what
+            // keeps the whole thing contained to the panel.
+            return matched.browsingContext;
+          }
+        }
+      } catch (e) {
+        console.warn("[BgalazkaExtension] Popup containment failed:", e);
+      }
+      return origOpenURI(
+        aURI,
+        aOpener,
+        aWhere,
+        aFlags,
+        aTriggeringPrincipal,
+        aCsp,
+      );
+    };
+
+    registerCleanup(() => {
+      try {
+        if (window.browserDOMWindow?._bgalazkaPopupHooked) {
+          window.browserDOMWindow.openURI = origOpenURI;
+          delete window.browserDOMWindow._bgalazkaPopupHooked;
+        }
+      } catch (_) {}
+    });
+    return true;
+  }
+
+  if (!safeCall(hookPopupContainment, "hookPopupContainment")) {
+    let popupHookAttempts = 0;
+    const popupHookTimer = setInterval(() => {
+      popupHookAttempts++;
+      if (
+        safeCall(hookPopupContainment, "hookPopupContainment") ||
+        popupHookAttempts > 40
+      ) {
+        clearInterval(popupHookTimer);
+      }
+    }, 150);
+    registerCleanup(() => clearInterval(popupHookTimer));
+  }
+
   // Safe method hook on Zentral Apps singleton (eliminates infinite observer loops)
   const hookAppsInstance = () => {
     const apps = window.Zentral?.Apps;
@@ -17127,6 +17479,14 @@
     if (origGetOrCreateBrowser) {
       apps.getOrCreateAppBrowser = function (app) {
         const result = origGetOrCreateBrowser(app);
+        // Remember this web panel's own default/home URL on the browser
+        // element itself, so the toolbar's Back button (see ensureWebToolbar
+        // above) has somewhere to fall back to once real back-history runs
+        // out. Only set once, at creation, since app.url can't drift for an
+        // already-connected browser instance.
+        if (result?.isNew && result.browser) {
+          result.browser._bgalazkaHomeUrl = app?.url || null;
+        }
         // BUG FIX: setAttribute("useragent"/"customuseragent", ...) is only
         // ever read by the <browser> element once, at its connectedCallback
         // — which already ran inside origGetOrCreateBrowser's own
@@ -17295,6 +17655,7 @@
         true,
       ],
       [BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ZOOM, "bgalazka-webtoolbar-zoom", false],
+      [BGALAZKA_EXT_PREFS.WEB_TOOLBAR_TOP, "bgalazka-webtoolbar-top", false],
     ];
     WEB_TOOLBAR_ATTR_MAP.forEach(([pref, attr, def]) => {
       document.documentElement.setAttribute(
