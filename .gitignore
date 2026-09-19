@@ -12,3 +12,6 @@ Desktop.ini
 # IDE / Editor folders
 .vscode/
 .idea/
+
+# Local notes
+notes.md
