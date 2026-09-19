@@ -35,6 +35,8 @@
 
 ### All other info
 
+- Startpage search by default uses POST method and open results in new window settings, i would suggest to change them to have consistant features and behaviour with DDG
+
 - getting it set up for first time may be cluncky, especially for corner docking, if something doesnt look right (for example any web panel is not attatched to essencial tab), restart browser, Bearly anyone but me will use it so setup user expirience is on low priority
 
 - **Other mods i do use and they propably never be an issue with it:**
