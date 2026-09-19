@@ -4876,6 +4876,26 @@ panel[id*="tabgroup-editor"] {
  *     child of the #zen-app-panel-slider flex column -- no separate top-docked layout was needed. The
  *     autohide overlay case additionally needs its own top/bottom + transform-direction flip since that mode
  *     positions the toolbar with `position: absolute` instead of relying on flex order at all.
+ * 16. ALL-SIDES RESIZE (v5): native Zentral only ever offers ONE resize edge (.zen-app-resize-strip, the
+ *     side facing the browser content, width-only). We add two MORE strips, .zen-app-resize-strip-top and
+ *     .zen-app-resize-strip-bottom, that let the user drag the panel's height too. These are the ONE part of
+ *     this whole extension that needs NO per-side (data-panel-side) or opposite-docking CSS at all: the panel
+ *     always spans the full width of #zen-app-panel-root regardless of which side it's docked on or whether
+ *     dual-view/push is active, so a single unconditional rule set covers every mode. See "ALL-SIDES PANEL
+ *     RESIZE" near the end of this file, and Zentral_uc.js note 16 for the JS half (drag math + persistence).
+ * 17. ALL-SIDES RESIZE: WHY THE INNER (SIDEBAR-FACING) EDGE HAS NO STRIP (v5 follow-up): only 3 of the 4
+ *     edges got a drag surface -- top, bottom, and the existing native outer (content-facing) edge. The 4th,
+ *     the edge touching the sidebar side (e.g. the LEFT edge when data-panel-side="left"), was deliberately
+ *     left alone. Reason: top/bottom are cheap because positionPanel() recomputes them from scratch on EVERY
+ *     call, so layering a saved "extra" on top every time is naturally idempotent (note 16). Width has no such
+ *     from-scratch recomputation -- root.style.width is native persisted STATE (panelWidthPx), only ever
+ *     touched by onDrag/updateWidthVar/toggleExpand/opposite-docking's safe-max clamp/dual-view's push-margin
+ *     sync (note 12). Dragging the inner edge would need to change width AND the anchor (left/right) together
+ *     while keeping the outer edge fixed -- but with no idempotent "natural width" to layer on top of the way
+ *     top/bottom have, we'd have to cache-and-diff against a value five other pieces of native/extension code
+ *     also mutate, which is exactly the class of fragile, easy-to-silently-break interaction note 5's whole
+ *     "reach the singleton, don't reimplement" philosophy exists to avoid. Left unimplemented on purpose; see
+ *     Zentral_uc.js note 17 for the same reasoning from the JS side.
  * ============================================================================================================= */
 
 /* CSS Variable Defaults for Settings-Controlled Translucency */
@@ -5872,6 +5892,12 @@ panel[id*="tabgroup-editor"] {
   display: none !important;
 }
 
+:root[bgalazka-hide-all-sides-resize-btn="true"]
+  #zen-app-panel-pill
+  .zen-app-all-sides-resize-btn {
+  display: none !important;
+}
+
 :root[bgalazka-hide-pin="true"]
   #zen-app-panel-pill
   .zen-app-btn:is([title*="Pin" i], [title*="pin" i], [data-pinned]) {
@@ -6135,4 +6161,93 @@ panel[id*="tabgroup-editor"] {
   .zen-toolbar-hover-zone {
   top: 0;
   bottom: auto;
+}
+
+/* ==========================================================================
+   16. ALL-SIDES PANEL RESIZE (top/bottom edge drag handles)
+   -----------------------------------------------------------------------
+   See Zentral_uc.js note 16 for the JS half (drag math, persistence, pill
+   button, settings toggle). Unlike the native left/right resize strip,
+   top/bottom position never depends on data-panel-side, opposite-docking,
+   or dual-view/push -- the panel is always full-width within its own root,
+   so ONE unconditional rule set below covers normal docking, opposite
+   docking, and dual-view alike. Fully inert (pointer-events: none, opacity:
+   0) unless the master toggle attribute is on, so this costs nothing when
+   the feature is off.
+   ========================================================================== */
+.zen-app-resize-strip-top,
+.zen-app-resize-strip-bottom {
+  position: absolute !important;
+  left: 8px !important;
+  right: 8px !important;
+  height: 10px !important;
+  cursor: ns-resize !important;
+  z-index: 30 !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  background: transparent !important;
+  border-radius: 4px !important;
+  transition:
+    background-color 0.15s ease,
+    opacity 0.15s ease !important;
+}
+.zen-app-resize-strip-top {
+  top: -5px !important;
+}
+.zen-app-resize-strip-bottom {
+  bottom: -5px !important;
+}
+
+/* Master toggle: only becomes interactive when enabled (pill button or
+ * settings row, both write the same "bgalazka-all-sides-resize" attribute -
+ * see note 16). */
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-top,
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-bottom {
+  pointer-events: auto !important;
+}
+
+/* Hover highlight (only reachable at all when the toggle above already
+ * granted pointer-events) + an active-drag highlight keyed off the
+ * "bgalazka-vresize-active" attribute the JS sets for the duration of the
+ * drag, so the strip stays lit even when a fast mouse move momentarily
+ * leaves it (mousemove is tracked on `document`, not the strip itself --
+ * same reason the native left/right strip's own drag doesn't rely on
+ * :hover either). */
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-top:hover,
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-bottom:hover,
+:root[bgalazka-vresize-active="top"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-top,
+:root[bgalazka-vresize-active="bottom"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-bottom {
+  opacity: 1 !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 55%,
+    transparent
+  ) !important;
+}
+
+/* Pill button active state -- exact copy of the Dual-View button's own
+ * active styling (chrome.css section 4) for visual consistency. */
+#zen-app-panel-pill .zen-app-all-sides-resize-btn[data-active="true"] {
+  background-color: color-mix(
+    in srgb,
+    currentColor 20%,
+    transparent
+  ) !important;
+}
+#zen-app-panel-pill .zen-app-all-sides-resize-btn[data-active="true"] svg {
+  fill: currentColor !important;
+  stroke: currentColor !important;
+  stroke-width: 0.5 !important;
 }

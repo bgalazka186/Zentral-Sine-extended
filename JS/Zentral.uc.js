@@ -14615,6 +14615,44 @@
  *     that one line changed. Top-vs-bottom docking is the opposite: it's CSS-only (see chrome.css note 15),
  *     driven by the `bgalazka-webtoolbar-top` root attribute; nothing here needs to know which edge the
  *     toolbar is actually on.
+ * 16. ALL-SIDES RESIZE (v5): native Zentral's #dom.root has `top`/`bottom` set fresh on every positionPanel()
+ *     call (no persisted height field exists anywhere in the base mod, unlike width's panelWidthPx), so we
+ *     can't "hook onDrag" the way note 8 does for width -- there is no vertical equivalent to hook. Instead we
+ *     store our OWN small pixel offset ("extra") on top of whatever positionPanel() just computed naturally,
+ *     and re-apply it with one line inside patchAppsInstance's positionPanel() wrapper (see
+ *     applyVerticalResizeExtras()), placed BEFORE the opposite-docking early-return so it runs unconditionally
+ *     for every docking mode. Because it reads the CURRENT (already-natural) root.style.top/bottom and adds
+ *     the extra once per call, it's naturally idempotent -- calling positionPanel() again never compounds the
+ *     offset. During an active drag we do NOT call positionPanel() every mousemove (expensive, and native
+ *     onDrag doesn't either for width); instead startVerticalResize() snapshots the natural top/bottom once
+ *     (current rendered value minus the currently-saved extra) and the drag applies directly to root.style,
+ *     exactly mirroring how native onDrag/updateWidthVar avoid calling positionPanel() mid-drag. This needs
+ *     ZERO opposite-docking-specific or data-panel-side-specific math anywhere (contrast note 7/8): top and
+ *     bottom are the same edges regardless of which side the panel is docked to, and dual-view/push only ever
+ *     touches width, never height, so no interaction with note 12's push-state sync was needed either.
+ *     IMPORTANT: applyVerticalResizeExtras() must NEVER check EXT_PREFS.ALL_SIDES_RESIZE. That pref only
+ *     gates whether the drag SURFACES are interactive (CSS pointer-events, see chrome.css) and whether
+ *     startVerticalResize() will start a NEW drag -- it must have no say over whether an already-saved size
+ *     keeps being applied, or unchecking the toggle would silently reset the user's chosen height back to
+ *     natural, which is the opposite of what a "turn the drag surfaces off" toggle should do.
+ * 17. ALL-SIDES RESIZE: WHY THE INNER (SIDEBAR-FACING) EDGE HAS NO STRIP (v5 follow-up): only top, bottom,
+ *     and the native outer (content-facing) edge got a drag surface -- not the 4th edge, the one touching the
+ *     sidebar side (e.g. the LEFT edge when data-panel-side="left"). Top/bottom's "layer a saved extra on top
+ *     of the natural value" trick (note 16) only works because positionPanel() recomputes top/bottom from
+ *     scratch on EVERY call, so our extra can never compound. Width has no equivalent from-scratch
+ *     recomputation: root.style.width is native persisted STATE (panelWidthPx), touched ONLY by
+ *     onDrag/updateWidthVar (note 8), toggleExpand, the opposite-docking safe-max clamp (computeOppositeDocking
+ *     SafeMaxWidth), and dual-view's push-margin sync (note 12/syncPanelPushState). Resizing the inner edge
+ *     needs BOTH width AND the anchor (root.style.left or .right, whichever applies) to change together while
+ *     the outer edge stays fixed -- doable in principle (same +extra/-extra algebra as top/bottom), but with
+ *     no idempotent "natural width" to layer onto, we'd have to cache our own last-applied value and diff it
+ *     against root.style.width every call to tell "native changed this since we last touched it" apart from
+ *     "nothing changed, don't re-add the extra" -- and get that cache invalidation right across FIVE different
+ *     native/extension code paths that can each independently rewrite width at any time. That's real risk of
+ *     subtly double-counting or fighting one of those five, for a corner case (see chrome.css note 17) that's
+ *     lower value than top/bottom (which cover an axis -- height -- the base mod has literally zero handling
+ *     for at all). Left unimplemented on purpose rather than risk it; revisit only with a concrete design for
+ *     the cache-diff step above, not just the +extra/-extra math (which was never the hard part here).
  * ============================================================================================================= */
 
 (function initBgalazkaExtension() {
@@ -14873,6 +14911,215 @@
   }
 
   /* ==========================================================================
+   * ALL-SIDES RESIZE: STATE + DRAG MATH (see note 16)
+   * -----------------------------------------------------------------------
+   * These two prefs deliberately live OUTSIDE BGALAZKA_EXT_PREFS (which the
+   * "Apply default or stored attribute states on startup" block at the end
+   * of this file auto-enumerates as BOOLEAN prefs and mirrors onto root
+   * attributes). Pulling numeric pixel offsets into that same object would
+   * make every startup silently hit-and-catch a type-mismatch exception on
+   * these two keys (getBoolPref() on an int-typed pref) and stamp a useless
+   * "bgalazka-panel-top-extra-px" attribute nothing reads. Same pattern as
+   * MOBILE_UA_PREF further below for the same reason.
+   * ========================================================================== */
+  const PANEL_TOP_EXTRA_PREF = "zen.workspace.bgalazka.panel_top_extra_px";
+  const PANEL_BOTTOM_EXTRA_PREF =
+    "zen.workspace.bgalazka.panel_bottom_extra_px";
+  // Whole-panel vertical REPOSITION (not resize): positive = shifted UP from
+  // wherever positionPanel() would naturally place it. Kept as its own pref,
+  // separate from the two resize extras above, so "drag the panel up/down"
+  // (the URL bar grip, see note 18) and "resize its height" (the top/bottom
+  // edge strips, note 16) never fight over the same number -- they're two
+  // independent offsets summed together once in applyVerticalResizeExtras().
+  const PANEL_POSITION_OFFSET_PREF =
+    "zen.workspace.bgalazka.panel_position_offset_px";
+  const V_RESIZE_MIN_HEIGHT = 200; // mirrors Constants.Apps.MIN_WIDTH_PX's spirit (note 5: unreachable directly)
+  let vResizeState = null;
+  let vPosDragState = null;
+
+  function getVerticalExtras() {
+    return {
+      top: getPref(PANEL_TOP_EXTRA_PREF, 0),
+      bottom: getPref(PANEL_BOTTOM_EXTRA_PREF, 0),
+    };
+  }
+
+  function saveVerticalExtras(top, bottom) {
+    setPref(PANEL_TOP_EXTRA_PREF, Math.round(top));
+    setPref(PANEL_BOTTOM_EXTRA_PREF, Math.round(bottom));
+  }
+
+  function getPositionOffset() {
+    return getPref(PANEL_POSITION_OFFSET_PREF, 0);
+  }
+
+  function savePositionOffset(px) {
+    setPref(PANEL_POSITION_OFFSET_PREF, Math.round(px));
+  }
+
+  // Layers the user's saved top/bottom RESIZE extras (note 16) AND the
+  // saved whole-panel POSITION offset (note 18) on top of whatever
+  // positionPanel() just computed naturally, in one shot. Called exactly
+  // once per positionPanel() invocation (see the single call site inside
+  // patchAppsInstance below) so it can never compound across repeated calls
+  // -- each call reads root.style.top/bottom AS LEFT BY THE NATIVE CODE a
+  // moment earlier in the same call, not as left by a previous call of ours.
+  //
+  // IMPORTANT: this does NOT check EXT_PREFS.ALL_SIDES_RESIZE. The toggle
+  // (settings row + pill button) only controls whether the RESIZE drag
+  // surfaces are interactive/visible (that gating lives entirely in
+  // chrome.css, keyed off the same "bgalazka-all-sides-resize" attribute)
+  // -- it must NOT also decide whether an already-dragged size (or the
+  // independent position offset, which isn't gated by this toggle AT ALL --
+  // it has its own surface, the URL bar grip, see note 18) keeps being
+  // applied, or every uncheck would snap the panel back to its natural
+  // size/position, which defeats the point of a size/position the user
+  // deliberately chose. startVerticalResize() below is the ONLY place that
+  // gates on the toggle, since that's what actually needs to be prevented
+  // while the resize surfaces are "off".
+  function applyVerticalResizeExtras(root) {
+    if (!root) return;
+    const { top: resizeTop, bottom: resizeBottom } = getVerticalExtras();
+    const posOffset = getPositionOffset();
+    // Moving the whole panel UP (positive posOffset) means: less top gap,
+    // more bottom gap -- see startPanelPositionDrag()'s comment for the
+    // full derivation of why this keeps height constant while repositioning.
+    const extraTop = resizeTop - posOffset;
+    const extraBottom = resizeBottom + posOffset;
+    if (!extraTop && !extraBottom) return;
+    const naturalTop = parseFloat(root.style.top) || 0;
+    const naturalBottom = parseFloat(root.style.bottom) || 12;
+    root.style.top = Math.max(0, naturalTop + extraTop) + "px";
+    root.style.bottom = Math.max(0, naturalBottom + extraBottom) + "px";
+  }
+
+  // Mousedown handler for both the top and bottom edge strips (see
+  // ensureVerticalResizeHandles() further below). `edge` is "top" or
+  // "bottom". Mirrors native startResize()/onDrag()'s shape (snapshot on
+  // mousedown, live style writes on mousemove, persist on mouseup) but for
+  // the vertical axis, which the base mod has no equivalent of at all.
+  function startVerticalResize(e, edge) {
+    if (e.button !== 0) return;
+    if (!getPref(EXT_PREFS.ALL_SIDES_RESIZE, false)) return;
+    const root = document.getElementById("zen-app-panel-root");
+    if (!root) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const extras = getVerticalExtras();
+    // "Natural" = whatever positionPanel() computed BEFORE our extras were
+    // layered on (current rendered value minus the currently-saved extra),
+    // so the drag composes with live layout (navbar height changes, etc.)
+    // instead of the stale saved extra compounding on itself frame to frame.
+    vResizeState = {
+      edge,
+      startY: e.clientY,
+      naturalTop: (parseFloat(root.style.top) || 0) - extras.top,
+      naturalBottom: (parseFloat(root.style.bottom) || 12) - extras.bottom,
+      startExtraTop: extras.top,
+      startExtraBottom: extras.bottom,
+      liveExtraTop: extras.top,
+      liveExtraBottom: extras.bottom,
+    };
+
+    // Same reason as native startResize(): stop the <browser> underneath
+    // from swallowing mousemove while dragging over it.
+    const slider = document.getElementById("zen-app-panel-slider");
+    if (slider) slider.style.pointerEvents = "none";
+    document.documentElement.setAttribute("bgalazka-vresize-active", edge);
+    document.addEventListener("mousemove", onVerticalResizeDrag);
+    document.addEventListener("mouseup", stopVerticalResizeDrag);
+  }
+
+  function onVerticalResizeDrag(e) {
+    if (!vResizeState) return;
+    const root = document.getElementById("zen-app-panel-root");
+    if (!root) return;
+    const diff = e.clientY - vResizeState.startY;
+
+    // Dragging the TOP edge up (mouse moves up, diff < 0) should grow the
+    // panel upward, i.e. shrink its top offset -- so the extra tracks diff
+    // directly. Dragging the BOTTOM edge down (diff > 0) should grow the
+    // panel downward, i.e. shrink its bottom offset -- so the extra tracks
+    // the diff inverted. Only the dragged edge's extra changes per-drag.
+    let extraTop = vResizeState.startExtraTop;
+    let extraBottom = vResizeState.startExtraBottom;
+    if (vResizeState.edge === "top") {
+      extraTop = vResizeState.startExtraTop + diff;
+    } else {
+      extraBottom = vResizeState.startExtraBottom - diff;
+    }
+
+    let newTop = Math.max(0, vResizeState.naturalTop + extraTop);
+    let newBottom = Math.max(0, vResizeState.naturalBottom + extraBottom);
+
+    // Clamp so the two edges can never cross and eat the panel down to
+    // nothing: if their combined offset would leave less than the minimum
+    // height, pull back only the edge actually being dragged.
+    const maxCombined = window.innerHeight - V_RESIZE_MIN_HEIGHT;
+    if (newTop + newBottom > maxCombined) {
+      if (vResizeState.edge === "top") {
+        newTop = Math.max(0, maxCombined - newBottom);
+      } else {
+        newBottom = Math.max(0, maxCombined - newTop);
+      }
+    }
+
+    root.style.top = newTop + "px";
+    root.style.bottom = newBottom + "px";
+    vResizeState.liveExtraTop = newTop - vResizeState.naturalTop;
+    vResizeState.liveExtraBottom = newBottom - vResizeState.naturalBottom;
+  }
+
+  function stopVerticalResizeDrag() {
+    document.removeEventListener("mousemove", onVerticalResizeDrag);
+    document.removeEventListener("mouseup", stopVerticalResizeDrag);
+    const slider = document.getElementById("zen-app-panel-slider");
+    if (slider) slider.style.pointerEvents = "";
+    document.documentElement.removeAttribute("bgalazka-vresize-active");
+    if (vResizeState) {
+      saveVerticalExtras(
+        vResizeState.liveExtraTop,
+        vResizeState.liveExtraBottom,
+      );
+    }
+    vResizeState = null;
+  }
+  registerCleanup(() => {
+    document.removeEventListener("mousemove", onVerticalResizeDrag);
+    document.removeEventListener("mouseup", stopVerticalResizeDrag);
+  });
+
+  // Creates (once) and appends the two extra edge-drag strips to the panel
+  // root. Purely additive DOM -- native root creation code (note 1) is
+  // never touched; we just append two more children the same way
+  // ensureWebToolbar() appends its toolbar to #zen-app-panel-slider.
+  function ensureVerticalResizeHandles() {
+    const root = document.getElementById("zen-app-panel-root");
+    if (!root) return false;
+
+    if (!root.querySelector(".zen-app-resize-strip-top")) {
+      const topStrip = document.createElement("div");
+      topStrip.className = "zen-app-resize-strip-top";
+      topStrip.title = "Drag to resize (top)";
+      topStrip.addEventListener("mousedown", (e) =>
+        startVerticalResize(e, "top"),
+      );
+      root.appendChild(topStrip);
+    }
+    if (!root.querySelector(".zen-app-resize-strip-bottom")) {
+      const bottomStrip = document.createElement("div");
+      bottomStrip.className = "zen-app-resize-strip-bottom";
+      bottomStrip.title = "Drag to resize (bottom)";
+      bottomStrip.addEventListener("mousedown", (e) =>
+        startVerticalResize(e, "bottom"),
+      );
+      root.appendChild(bottomStrip);
+    }
+    return true;
+  }
+
+  /* ==========================================================================
    * 1. INSTANCE HOOKS: OPPOSITE DOCKING, RESIZE MATH & PIN STATE
    * -----------------------------------------------------------------------
    * CRITICAL FIX (see note 5 above): the previous version guarded this whole
@@ -14905,6 +15152,13 @@
     const origPositionPanel = appsInstance.positionPanel?.bind(appsInstance);
     appsInstance.positionPanel = function () {
       if (origPositionPanel) origPositionPanel();
+
+      // ALL-SIDES RESIZE (note 16): applies unconditionally, BEFORE the
+      // opposite-docking early-return below, since top/bottom offsets are
+      // identical regardless of docking side, vertical-bar placement, or
+      // dual-view/push (all of which only ever touch left/right/width).
+      applyVerticalResizeExtras(document.getElementById("zen-app-panel-root"));
+
       if (
         !getPref(EXT_PREFS.OPPOSITE_DOCKING, true) ||
         this.isPlacementVerticalBar()
@@ -15540,6 +15794,19 @@
     OPACITY_UNPINNED: "zen.workspace.bgalazka.opacity_unpinned",
     OPACITY_PINNED_FOCUS: "zen.workspace.bgalazka.opacity_pinned_focus",
     OPACITY_PINNED_BLUR: "zen.workspace.bgalazka.opacity_pinned_blur",
+    // Master toggle for dragging the panel's TOP/BOTTOM edges to resize its
+    // height (see note 16). Off by default: it's a new interactive drag
+    // surface layered over the top/bottom edges of the floating panel, and
+    // should be an explicit opt-in rather than silently changing existing
+    // hover behavior near those edges.
+    ALL_SIDES_RESIZE: "zen.workspace.bgalazka.all_sides_resize",
+    // "Hide button" toggle for the pill button above, same convention as
+    // HIDE_DUAL_VIEW/HIDE_PIN/HIDE_EXPAND/etc. -- deliberately a SEPARATE
+    // pref from ALL_SIDES_RESIZE itself: this only hides the pill icon,
+    // it does not disable the feature (the settings-panel row still works
+    // when the pill button is hidden, same as every other hide-toggle).
+    HIDE_ALL_SIDES_RESIZE_BTN:
+      "zen.workspace.bgalazka.hide_all_sides_resize_btn",
   };
   if (typeof EXT_PREFS !== "undefined") {
     Object.assign(EXT_PREFS, BGALAZKA_EXT_PREFS);
@@ -15585,6 +15852,11 @@
     // Search-engine quick-switch (toolbar button) / dropdown icon: two
     // opposing arrows, standard "swap" glyph language.
     SWAP: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.5h10.5M10 3l2.5 2.5L10 8"/><path d="M14 10.5H3.5M6 8l-2.5 2.5L6 13"/></svg>`,
+    // All-Sides Resize (pill button + settings row): a centered crosshair
+    // with 4 short arms pointing at all four edges, standard "resize on
+    // every side" glyph language (distinct from GRABBER's 6-dot handle,
+    // which is specifically the native width-only strip's own icon).
+    RESIZE_ALL: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4"/><path d="M8 1.5 6.3 3.2M8 1.5l1.7 1.7M8 14.5l-1.7-1.7M8 14.5l1.7-1.7M1.5 8l1.7-1.7M1.5 8l1.7 1.7M14.5 8l-1.7-1.7M14.5 8l-1.7 1.7"/></svg>`,
   };
 
   function ensurePillDualViewButton() {
@@ -15638,6 +15910,56 @@
 
     const isPushActive = getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false);
     btn.setAttribute("data-active", isPushActive ? "true" : "false");
+  }
+
+  // Pill-menu twin of the "All-Sides Panel Resize" settings toggle (note
+  // 16): both read/write the SAME pref, so flipping either one updates the
+  // other immediately, same convention as the Dual-View button above.
+  function ensurePillAllSidesResizeButton() {
+    const pill = document.getElementById("zen-app-panel-pill");
+    if (!pill) return;
+
+    let btn = document.getElementById("zen-app-all-sides-resize-btn");
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.id = "zen-app-all-sides-resize-btn";
+      btn.className = "zen-app-btn zen-app-all-sides-resize-btn";
+      btn.setAttribute("type", "button");
+      btn.title = "Toggle All-Sides Resize (drag top/bottom edges too)";
+      btn.appendChild(parseSVG(PREF_ICONS.RESIZE_ALL));
+
+      // Sits right after the Dual-View button (or the pin button if
+      // Dual-View isn't in the DOM yet) so the two panel-shape toggles
+      // stay grouped together in the pill.
+      const anchor =
+        document.getElementById("zen-app-dual-view-btn") ||
+        pill.querySelector(".zen-app-btn");
+      if (anchor) pill.insertBefore(btn, anchor.nextSibling);
+      else pill.prepend(btn);
+
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const cur = getPref(EXT_PREFS.ALL_SIDES_RESIZE, false);
+        const next = !cur;
+        setPref(EXT_PREFS.ALL_SIDES_RESIZE, next);
+        document.documentElement.setAttribute(
+          "bgalazka-all-sides-resize",
+          next ? "true" : "false",
+        );
+        btn.setAttribute("data-active", next ? "true" : "false");
+
+        const input = document.querySelector(
+          `input[data-pref="${EXT_PREFS.ALL_SIDES_RESIZE}"]`,
+        );
+        if (input) input.checked = next;
+
+        ensureVerticalResizeHandles();
+      });
+    }
+
+    const isActive = getPref(EXT_PREFS.ALL_SIDES_RESIZE, false);
+    btn.setAttribute("data-active", isActive ? "true" : "false");
   }
 
   function syncPanelPushState() {
@@ -16645,6 +16967,20 @@
       );
       content.appendChild(tPush.row);
 
+      // Mirrors the pill button of the same name (note 16): both read/write
+      // BGALAZKA_EXT_PREFS.ALL_SIDES_RESIZE, so this row's onChange keeps
+      // the pill button's own data-active state in sync when toggled here.
+      const tAllSidesResize = createToggleRow(
+        "All-Sides Panel Resize",
+        "Drag the panel's top and bottom edges to resize its height, not just the side facing the browser",
+        BGALAZKA_EXT_PREFS.ALL_SIDES_RESIZE,
+        "bgalazka-all-sides-resize",
+        false,
+        PREF_ICONS.RESIZE_ALL,
+        () => ensurePillAllSidesResizeButton(),
+      );
+      content.appendChild(tAllSidesResize.row);
+
       // ====================================================================
       // 3. Floating Panel Pill Controls
       // ====================================================================
@@ -16721,6 +17057,14 @@
         false,
         PREF_ICONS.PUSH,
       );
+      const tHideAllSidesResizeBtn = createToggleRow(
+        "Hide All-Sides Resize Button",
+        "Remove all-sides resize toggle from pill menu (the settings row above still works)",
+        BGALAZKA_EXT_PREFS.HIDE_ALL_SIDES_RESIZE_BTN,
+        "bgalazka-hide-all-sides-resize-btn",
+        false,
+        PREF_ICONS.RESIZE_ALL,
+      );
       const tPin = createToggleRow(
         "Hide Pin Button",
         "Remove panel pinning toggle",
@@ -16768,6 +17112,7 @@
         peekColorRow.row,
         peekOpacitySlider.row,
         tDualView.row,
+        tHideAllSidesResizeBtn.row,
         tPin.row,
         t5.row,
         tGrabber.row,
@@ -16985,6 +17330,12 @@
         },
         { input: tPush.input, pref: BGALAZKA_EXT_PREFS.PUSH_PAGE, def: false },
         {
+          input: tAllSidesResize.input,
+          pref: BGALAZKA_EXT_PREFS.ALL_SIDES_RESIZE,
+          def: false,
+          onSync: () => ensurePillAllSidesResizeButton(),
+        },
+        {
           input: tMasterPill.input,
           pref: BGALAZKA_EXT_PREFS.HIDE_PILL,
           def: false,
@@ -17108,6 +17459,11 @@
         {
           input: tDualView.input,
           pref: BGALAZKA_EXT_PREFS.HIDE_DUAL_VIEW,
+          def: false,
+        },
+        {
+          input: tHideAllSidesResizeBtn.input,
+          pref: BGALAZKA_EXT_PREFS.HIDE_ALL_SIDES_RESIZE_BTN,
           def: false,
         },
         { input: tPin.input, pref: BGALAZKA_EXT_PREFS.HIDE_PIN, def: false },
@@ -17436,6 +17792,8 @@
         const res = origOpen(...args);
         setTimeout(() => {
           ensurePillDualViewButton();
+          ensurePillAllSidesResizeButton();
+          ensureVerticalResizeHandles();
           syncPanelPushState();
           ensureWebToolbar();
           updateWebToolbarState();
@@ -17755,6 +18113,29 @@
   // Initialize
   requestTileSync(150);
   setTimeout(() => requestTileSync(150), 1600);
+
+  // ALL-SIDES RESIZE (note 16): the panel root usually already exists by
+  // this point (see patchAppsInstance's own retry comment above), but this
+  // covers the case where our IIFE races ahead of it. Also re-triggered
+  // from the openPanel hook above for the (normal) case where the panel
+  // root doesn't exist until the base mod actually builds it.
+  const initAllSidesResizeUi = () => {
+    const ok = ensureVerticalResizeHandles();
+    ensurePillAllSidesResizeButton();
+    return ok;
+  };
+  if (!safeCall(initAllSidesResizeUi, "initAllSidesResizeUi")) {
+    let vResizeInitAttempts = 0;
+    const vResizeInitTimer = setInterval(() => {
+      vResizeInitAttempts++;
+      if (
+        safeCall(initAllSidesResizeUi, "initAllSidesResizeUi") ||
+        vResizeInitAttempts > 40
+      )
+        clearInterval(vResizeInitTimer);
+    }, 150);
+    registerCleanup(() => clearInterval(vResizeInitTimer));
+  }
 
   /* ==========================================================================
    * 6. CLEANUP / UNLOAD
