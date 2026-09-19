@@ -4896,6 +4896,25 @@ panel[id*="tabgroup-editor"] {
  *     also mutate, which is exactly the class of fragile, easy-to-silently-break interaction note 5's whole
  *     "reach the singleton, don't reimplement" philosophy exists to avoid. Left unimplemented on purpose; see
  *     Zentral_uc.js note 17 for the same reasoning from the JS side.
+ * 18. PANEL POSITION DRAG / URL BAR GRIP (v6): a small grip (.zen-toolbar-urlbar-drag-handle) inside the web
+ *     toolbar's URL bar lets the user drag the WHOLE panel up/down (reposition, not resize). It reuses note
+ *     16's exact "extra layered on top of the natural value, once per positionPanel() call" trick, but the
+ *     reposition math is genuinely simpler than the note-17 inner-edge case would have been: moving the panel
+ *     up only ever needs LESS top gap and MORE bottom gap by the same amount (both are already independent,
+ *     from-scratch-recomputed native values, exactly like the resize extras), so it composes with zero risk of
+ *     the width-state entanglement note 17 describes. See Zentral_uc.js note 18 for the full derivation and
+ *     drag math. `.zen-toolbar-urlwrap` had to gain `display: flex` to lay the grip and the `<input>` out side
+ *     by side -- the pre-existing hide rule for it (right below) had to gain `!important` to match, since our
+ *     new `!important` display declaration would otherwise always beat a plain one regardless of selector
+ *     specificity, silently breaking the "hide URL bar" toggle.
+ * 19. OPPOSITE-DOCKING RESIZE STRIP BLOCKED THE PAGE'S OWN SCROLLBAR (v6 fix): section 2's per-side
+ *     .zen-app-resize-strip overrides widen the native 10px strip to 14px for an easier grab target, but the
+ *     old offset (-8px) straddled the panel edge (8px out, 6px IN), so on data-panel-side="left" that 6px
+ *     inward overlap sat directly on top of the page's own vertical scrollbar (always on the content's right
+ *     edge, which is the INNER edge when docked left) -- pointer-events:auto + z-index:30 meant the strip ate
+ *     every click meant for the scrollbar. Fix: offset changed to -14px (== the strip's width) on BOTH sides
+ *     so the whole grab area sits OUTSIDE the panel (0px overlap) instead of straddling the edge. See the
+ *     inline comments on both data-panel-side blocks in section 2 for the full per-side reasoning.
  * ============================================================================================================= */
 
 /* CSS Variable Defaults for Settings-Controlled Translucency */
@@ -5089,10 +5108,20 @@ panel[id*="tabgroup-editor"] {
   right: 12px !important;
   left: auto !important;
 }
+/* note 19: offset is -14px (== the strip's own width), NOT -8px, so the
+ * whole 14px grab area sits OUTSIDE the panel (spans -14px to 0px). At the
+ * old -8px offset the strip's far edge landed at +6px *inside* the panel,
+ * on top of the browser content there and swallowing clicks meant for
+ * whatever the page renders at that edge. This particular block covers the
+ * panel's INNER edge (facing the sidebar/main browser), which isn't where
+ * a page's own scrollbar sits -- but it's fixed here too for consistency.
+ * See the data-panel-side="left" block below for the edge that actually
+ * caused the reported "can't grab the scrollbar" bug, and note 19 in the
+ * big comment above for the full writeup. */
 :root[bgalazka-opposite-docking="true"]
   #zen-app-panel-root[data-panel-side="right"]
   .zen-app-resize-strip {
-  left: -8px !important;
+  left: -14px !important;
   right: auto !important;
   width: 14px !important;
   cursor: ew-resize !important;
@@ -5175,10 +5204,25 @@ panel[id*="tabgroup-editor"] {
   right: auto !important;
   left: 12px !important;
 }
+/* note 19 (THE ACTUAL SCROLLBAR-BLOCKING FIX): a page's own vertical
+ * scrollbar always renders at the RIGHT edge of its viewport (LTR pages;
+ * this is also true for the vast majority of RTL pages in practice since
+ * Gecko still paints the scrollbar on the physical right unless the page
+ * opts into scrollbar-gutter/direction tricks). When the panel is docked
+ * on the LEFT (this block), the panel's RIGHT edge is its INNER edge --
+ * exactly where this resize strip lives. At the old `right: -8px; width:
+ * 14px`, the strip spanned from -8px to +6px, i.e. 6px of it sat *inside*
+ * the panel on top of the page content, directly over the scrollbar's
+ * usual location -- with pointer-events:auto and z-index:30 (above the
+ * <browser>), so every click there hit the strip instead of the
+ * scrollbar. Fix: `right: -14px` (== the strip's width) pins the whole
+ * grab area OUTSIDE the panel (-14px to 0px), 0px overlap, page content
+ * fully clickable again. Grab-area size is unchanged, it's just moved
+ * outward instead of straddling the edge. */
 :root[bgalazka-opposite-docking="true"]
   #zen-app-panel-root[data-panel-side="left"]
   .zen-app-resize-strip {
-  right: -8px !important;
+  right: -14px !important;
   left: auto !important;
   width: 14px !important;
   cursor: ew-resize !important;
@@ -6042,6 +6086,36 @@ panel[id*="tabgroup-editor"] {
 .zen-toolbar-urlwrap {
   flex: 1 1 40px;
   min-width: 32px;
+  display: flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+}
+.zen-toolbar-urlbar-drag-handle {
+  flex-shrink: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 14px !important;
+  height: 22px !important;
+  cursor: ns-resize !important;
+  opacity: 0.4 !important;
+  color: inherit !important;
+  border-radius: 4px !important;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease !important;
+}
+.zen-toolbar-urlbar-drag-handle svg {
+  pointer-events: none !important;
+}
+.zen-toolbar-urlbar-drag-handle:hover,
+:root[bgalazka-panel-pos-dragging="true"] .zen-toolbar-urlbar-drag-handle {
+  opacity: 1 !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 30%,
+    transparent
+  ) !important;
 }
 .zen-toolbar-urlbar {
   width: 100%;
@@ -6065,7 +6139,7 @@ panel[id*="tabgroup-editor"] {
   );
 }
 :root:not([bgalazka-webtoolbar-urlbar="true"]) .zen-toolbar-urlwrap {
-  display: none;
+  display: none !important;
 }
 
 .zen-toolbar-zoomwrap {

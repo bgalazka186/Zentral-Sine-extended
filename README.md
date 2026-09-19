@@ -18,6 +18,7 @@
 - **Disable whatever elements you dont want from pill menu:** you dont need reload button? pill menu is to cluttered? just hide it
 - **Switch UserAgent to Mobile** easy to add feature that is avalible in vivaldi web panels, useless on most sites, it shines on Instagram
 - **Basic navigation features for panels** back/forward/url bar, things like that
+- **Vertical Resize and change vertical position** making it fully able to change position would require big change in core mod
 
 ### Extra Bugfix:
 

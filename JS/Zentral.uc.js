@@ -14653,6 +14653,47 @@
  *     lower value than top/bottom (which cover an axis -- height -- the base mod has literally zero handling
  *     for at all). Left unimplemented on purpose rather than risk it; revisit only with a concrete design for
  *     the cache-diff step above, not just the +extra/-extra math (which was never the hard part here).
+ * 18. PANEL POSITION DRAG / URL BAR GRIP (v6): a small grip inside the web toolbar's URL bar
+ *     (.zen-toolbar-urlbar-drag-handle) lets the user drag the WHOLE panel up/down -- a REPOSITION, not a
+ *     resize. It reuses the exact same "extra layered on top of the natural value, applied once per
+ *     positionPanel() call" idempotency trick as the top/bottom resize extras (note 16), via its own separate
+ *     pref (PANEL_POSITION_OFFSET_PREF) so the two features can never stomp on each other -- both are summed
+ *     together in ONE place, applyVerticalResizeExtras(), which is also the only place the sign math between
+ *     them has to agree: positive posOffset = "moved up" = LESS top gap AND MORE bottom gap, by the same
+ *     amount, which is exactly why height stays perfectly constant during a pure reposition (top + height +
+ *     bottom must always equal viewport height, and here the two symmetric deltas cancel out algebraically --
+ *     see applyVerticalResizeExtras()'s comment for the one-line proof). This is genuinely simpler than the
+ *     note-17 inner-edge-resize case that was skipped: both quantities being combined (resizeTop/resizeBottom
+ *     and posOffset) are ALREADY independent, from-scratch-recomputed-or-cleanly-layered numbers with no
+ *     hidden native state to fight, unlike width. startPanelPositionDrag()/onPanelPositionDrag() mirror
+ *     startVerticalResize()/onVerticalResizeDrag()'s shape exactly (snapshot-on-mousedown, direct style writes
+ *     on mousemove, persist-on-mouseup) but clamp differently: instead of a MIN_HEIGHT floor, posOffset itself
+ *     is clamped to [-baseBottom, baseTop] so newTop/newBottom are each guaranteed >= 0 by construction, which
+ *     is also what keeps height exactly constant even at the clamped extremes (dragged all the way to one
+ *     edge, the panel just touches that edge rather than distorting). NOT gated by EXT_PREFS.ALL_SIDES_RESIZE
+ *     at all -- it's a fully independent feature/surface from the resize strips, gated only by whether the web
+ *     toolbar's URL bar is itself enabled (the grip is a plain child of .zen-toolbar-urlwrap in
+ *     ensureWebToolbar(), so WEB_TOOLBAR_URLBAR's existing hide rule already covers it for free).
+ * 19. WHY THE TOP/BOTTOM + POSITION DRAGS NEED A LIVE-STATE READ IN applyVerticalResizeExtras() (v6 fix):
+ *     onVerticalResizeDrag()/onPanelPositionDrag() write root.style.top/bottom directly on every mousemove, so
+ *     in isolation they already track the cursor with no delay. The bug was a SECOND, independent writer to the
+ *     same properties firing concurrently: native's startPositionTracking() (unrelated to us, tracks sidebar/
+ *     window layout changes) runs a requestAnimationFrame loop that calls positionPanel() every frame for 200ms
+ *     after ANY mousemove anywhere on the window -- which includes the mousemove events our own drag is
+ *     generating. Every one of those frames re-ran applyVerticalResizeExtras(), which (before this fix) always
+ *     read getVerticalExtras()/getPositionOffset() -- i.e. the PERSISTED prefs, only written by
+ *     saveVerticalExtras()/savePositionOffset() on mouseup. So on literally every animation frame of the drag,
+ *     shortly after our handler wrote the live in-progress position, native's rafLoop reset root.style.top/
+ *     bottom back to natural-plus-OLD-extra, undoing it. Net visible effect: the panel looked frozen for the
+ *     whole drag and only jumped to the new spot once mouseup persisted the value and the next tracked frame
+ *     applied it -- "teleports after you let go" instead of following the cursor. Fix: applyVerticalResizeExtras()
+ *     now checks vResizeState/vPosDragState first and uses their live liveExtraTop/liveExtraBottom/livePosOffset
+ *     fields (already maintained every mousemove by the drag handlers themselves) instead of the saved prefs
+ *     WHILE a drag is active, falling back to the saved prefs only when neither drag is in progress. This is
+ *     still idempotent per note 16 (each positionPanel() call resets top/bottom to natural THEN adds extras
+ *     fresh) and needs no lock/ordering between the two mousemove listeners -- both paths compute the same
+ *     number for the same cursor position, so whichever one runs last in a given frame just re-confirms it
+ *     instead of fighting it.
  * ============================================================================================================= */
 
 (function initBgalazkaExtension() {
@@ -14979,8 +15020,29 @@
   // while the resize surfaces are "off".
   function applyVerticalResizeExtras(root) {
     if (!root) return;
-    const { top: resizeTop, bottom: resizeBottom } = getVerticalExtras();
-    const posOffset = getPositionOffset();
+    // LIVE-DRAG READ (see note 19): while a drag is actually in flight, use
+    // the in-progress values on vResizeState/vPosDragState instead of the
+    // persisted prefs. getVerticalExtras()/getPositionOffset() only reflect
+    // what saveVerticalExtras()/savePositionOffset() last wrote on mouseup,
+    // so reading them here mid-drag would re-apply the STALE pre-drag
+    // number every time this runs -- and this runs a lot more often than
+    // just our own mousemove handler: native startPositionTracking()'s
+    // rafLoop calls positionPanel() (which calls this) every animation
+    // frame for 200ms after ANY mousemove on the window, which very much
+    // includes the mousemove events this exact drag is generating. Each of
+    // those frames would stomp the live style our own onVerticalResizeDrag/
+    // onPanelPositionDrag handler just wrote a moment earlier straight back
+    // to the old saved position -- net effect: the panel looks frozen for
+    // the entire drag and only snaps to the new spot once mouseup finally
+    // persists it and the next tracked frame picks that up. Reading the
+    // live state here instead makes both update paths agree on the same
+    // number every frame, so the panel actually tracks the cursor.
+    const { top: resizeTop, bottom: resizeBottom } = vResizeState
+      ? { top: vResizeState.liveExtraTop, bottom: vResizeState.liveExtraBottom }
+      : getVerticalExtras();
+    const posOffset = vPosDragState
+      ? vPosDragState.livePosOffset
+      : getPositionOffset();
     // Moving the whole panel UP (positive posOffset) means: less top gap,
     // more bottom gap -- see startPanelPositionDrag()'s comment for the
     // full derivation of why this keeps height constant while repositioning.
@@ -15088,6 +15150,87 @@
   registerCleanup(() => {
     document.removeEventListener("mousemove", onVerticalResizeDrag);
     document.removeEventListener("mouseup", stopVerticalResizeDrag);
+  });
+
+  /* ==========================================================================
+   * PANEL POSITION DRAG (URL bar grip) -- see note 18
+   * -----------------------------------------------------------------------
+   * Same "extra offset layered on top of the natural value, applied once
+   * per positionPanel() call" trick as the resize extras above, but for a
+   * REPOSITION instead of a resize: moving the panel up means less top gap
+   * AND more bottom gap, by the same amount, so total height (top + height +
+   * bottom = viewport height) stays exactly constant -- see
+   * applyVerticalResizeExtras() for where the two are actually summed.
+   * NOT gated by EXT_PREFS.ALL_SIDES_RESIZE at all: this is a fully separate
+   * feature/surface (the URL bar grip lives inside the web toolbar, and is
+   * only ever visible when the toolbar + its URL bar are themselves
+   * enabled -- see ensureWebToolbar()), not a 3rd resize edge.
+   * ========================================================================== */
+  function startPanelPositionDrag(e) {
+    if (e.button !== 0) return;
+    const root = document.getElementById("zen-app-panel-root");
+    if (!root) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const { top: resizeTop, bottom: resizeBottom } = getVerticalExtras();
+    const posOffset = getPositionOffset();
+    // "base" = current rendered top/bottom with the RESIZE extras still
+    // baked in, but the POSITION offset backed out -- i.e. where the panel
+    // would sit at this exact size if it hadn't been manually repositioned.
+    // Dragging only ever changes posOffset from here; resizeTop/resizeBottom
+    // (and therefore the panel's height) are left completely alone.
+    vPosDragState = {
+      startY: e.clientY,
+      baseTop: (parseFloat(root.style.top) || 0) + posOffset,
+      baseBottom: (parseFloat(root.style.bottom) || 12) - posOffset,
+      startPosOffset: posOffset,
+      livePosOffset: posOffset,
+    };
+
+    const slider = document.getElementById("zen-app-panel-slider");
+    if (slider) slider.style.pointerEvents = "none";
+    document.documentElement.setAttribute(
+      "bgalazka-panel-pos-dragging",
+      "true",
+    );
+    document.addEventListener("mousemove", onPanelPositionDrag);
+    document.addEventListener("mouseup", stopPanelPositionDrag);
+  }
+
+  function onPanelPositionDrag(e) {
+    if (!vPosDragState) return;
+    const root = document.getElementById("zen-app-panel-root");
+    if (!root) return;
+    const diff = e.clientY - vPosDragState.startY;
+    // Mouse moved up (diff < 0) -> panel should move up -> posOffset grows.
+    let newPosOffset = vPosDragState.startPosOffset - diff;
+    // Clamp so the panel can never be dragged past either edge of the
+    // viewport -- this alone keeps height perfectly constant too, since
+    // newTop/newBottom below are each guaranteed >= 0 by construction.
+    newPosOffset = Math.max(
+      -vPosDragState.baseBottom,
+      Math.min(vPosDragState.baseTop, newPosOffset),
+    );
+    const newTop = vPosDragState.baseTop - newPosOffset;
+    const newBottom = vPosDragState.baseBottom + newPosOffset;
+    root.style.top = newTop + "px";
+    root.style.bottom = newBottom + "px";
+    vPosDragState.livePosOffset = newPosOffset;
+  }
+
+  function stopPanelPositionDrag() {
+    document.removeEventListener("mousemove", onPanelPositionDrag);
+    document.removeEventListener("mouseup", stopPanelPositionDrag);
+    const slider = document.getElementById("zen-app-panel-slider");
+    if (slider) slider.style.pointerEvents = "";
+    document.documentElement.removeAttribute("bgalazka-panel-pos-dragging");
+    if (vPosDragState) savePositionOffset(vPosDragState.livePosOffset);
+    vPosDragState = null;
+  }
+  registerCleanup(() => {
+    document.removeEventListener("mousemove", onPanelPositionDrag);
+    document.removeEventListener("mouseup", stopPanelPositionDrag);
   });
 
   // Creates (once) and appends the two extra edge-drag strips to the panel
@@ -15857,6 +16000,10 @@
     // every side" glyph language (distinct from GRABBER's 6-dot handle,
     // which is specifically the native width-only strip's own icon).
     RESIZE_ALL: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5v4M8 10.5v4M1.5 8h4M10.5 8h4"/><path d="M8 1.5 6.3 3.2M8 1.5l1.7 1.7M8 14.5l-1.7-1.7M8 14.5l1.7-1.7M1.5 8l1.7-1.7M1.5 8l1.7 1.7M14.5 8l-1.7-1.7M14.5 8l-1.7 1.7"/></svg>`,
+    // URL bar drag grip (note 18): the standard 3-bar "drag handle" glyph,
+    // deliberately distinct from RESIZE_ALL above so the two features read
+    // as visually different at a glance (reposition vs. resize).
+    DRAG_HANDLE: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><rect x="2" y="3.2" width="12" height="1.6" rx="0.8"/><rect x="2" y="7.2" width="12" height="1.6" rx="0.8"/><rect x="2" y="11.2" width="12" height="1.6" rx="0.8"/></svg>`,
   };
 
   function ensurePillDualViewButton() {
@@ -16224,6 +16371,21 @@
 
     const urlWrap = document.createElement("div");
     urlWrap.className = "zen-toolbar-urlwrap";
+
+    // Panel position drag grip (note 18): small leading handle inside the
+    // URL bar row, separate element from the <input> itself so it can't
+    // interfere with clicking/selecting/typing the URL. Only ever visible
+    // when the URL bar itself is (see chrome.css -- it's a plain descendant
+    // of .zen-toolbar-urlwrap, which is already hidden via
+    // WEB_TOOLBAR_URLBAR when that toggle is off), so no separate
+    // hide-toggle was needed for it.
+    const urlDragHandle = document.createElement("div");
+    urlDragHandle.className = "zen-toolbar-urlbar-drag-handle";
+    urlDragHandle.title = "Drag to move panel up/down";
+    urlDragHandle.appendChild(parseSVG(PREF_ICONS.DRAG_HANDLE));
+    urlDragHandle.addEventListener("mousedown", startPanelPositionDrag);
+    urlWrap.appendChild(urlDragHandle);
+
     const urlInput = document.createElement("input");
     urlInput.type = "text";
     urlInput.className = "zen-toolbar-urlbar";
