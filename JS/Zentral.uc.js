@@ -14542,6 +14542,17 @@
  * BGALAZKA'S EXTENSION TO THE ZENTRAL MOD (v2)
  * -------------------------------------------------------------------------------------------------------------
  * ARCHITECTURAL NOTES & INSTRUCTIONS FOR FUTURE AI AGENTS:
+ * 0. DEFAULT-OFF CONTRACT (CRITICAL): every behavior/visual feature added by THIS extension MUST default to OFF.
+ *    A fresh install with no `zen.workspace.bgalazka.*` user prefs must behave like the base Zentral mod with
+ *    no Bgalazka extension behavior enabled. Users opt in feature-by-feature (translucency, opposite docking,
+ *    corner/essential docking, toolbar, mini-pill, isolation, resize helpers, hide-* controls, etc.). For every
+ *    NEW boolean feature: use `false` in getPref fallbacks, ATTR_MAP/default maps, createToggleRow defaults,
+ *    startup attribute sync, and observer sync. Parent-disabled subfeatures should ALSO show unchecked by default.
+ *    Non-boolean tuning values may keep neutral defaults, but must have no effect until their owning feature is on.
+ *    EXCEPTION — PANEL BASELINE INSET: the floating panel intentionally keeps a tiny default top/bottom inset
+ *    even when every optional extension toggle is OFF. This is not an opt-in feature; it is the neutral panel
+ *    presentation requested for fresh installs so the panel retains the normal floating-card look instead of
+ *    appearing flush to the viewport edges. Keep this inset small and symmetric; do not turn it into a feature.
  * 1. ONLY modify or append code BELOW this marker when working on Bgalazka's Extension.
  * 2. ALWAYS deliver fully compiled, complete ready-to-paste chunks for both the JS and CSS extension sections.
  * 3. EXPLAIN THE "WHY" IN CODE COMMENTS: Document Gecko/Zen workarounds so future models do not undo working solutions.
@@ -14594,11 +14605,11 @@
  *     backdrop-filter was dropped from that section's own CSS `transition` list entirely (animating blur
  *     radius, as opposed to snapping it, is one of the most expensive things you can animate; the pop is
  *     invisible since opacity/background-color still ease normally).
- * 13. PILL CONTRAST: see chrome.css note 13 for the CSS half. The expanded/hovered pill's background changed
- *     from a theme color (which can blend into the page/theme, "unreadable") to plain black at the SAME
- *     opacity as the existing "Mini Pill Opacity" slider, plus forced white icon color. No new pref needed —
- *     it reuses PILL_PEEK_DOT_OPACITY for both purposes on purpose, so this JS file has no changes for it
- *     beyond the two settings-label tweaks near PILL_PEEK_DOT_COLOR/OPACITY explaining the dual use.
+ * 13. PILL CONTRAST: see chrome.css note 13 for the CSS half. The expanded/hovered pill uses a plain black
+ *     background plus forced white icons for predictable contrast. Its background opacity is deliberately
+ *     independent from the shrunk mini-pill opacity: PILL_PEEK_DOT_OPACITY controls only the idle mini pill,
+ *     while PILL_BACKGROUND_OPACITY controls only the expanded pill's black background. Keep these separate so
+ *     making the idle marker subtle does not also make the opened control surface hard to read.
  * 14. WEB TOOLBAR SEARCH + BACK FALLBACK (v3): the URL bar now runs typed non-URL text through a configurable
  *     search engine (see SEARCH_ENGINE_TEMPLATES/buildSearchUrl()/looksLikeUrl()) rather than relying on
  *     <browser>.fixupAndLoadURIString()'s own keyword-search fallback, since that goes through Gecko's OWN
@@ -14630,45 +14641,16 @@
  *     startVerticalResize() will start a NEW drag -- it must have no say over whether an already-saved size
  *     keeps being applied, or unchecking the toggle would silently reset the user's chosen height back to
  *     natural, which is the opposite of what a "turn the drag surfaces off" toggle should do.
- * 17. ALL-SIDES RESIZE: WHY THE INNER (SIDEBAR-FACING) EDGE HAS NO STRIP (v5 follow-up): only top, bottom,
- *     and the native outer (content-facing) edge got a drag surface -- not the 4th edge, the one touching the
- *     sidebar side (e.g. the LEFT edge when data-panel-side="left"). Top/bottom's "layer a saved extra on top
- *     of the natural value" trick (note 16) only works because positionPanel() recomputes top/bottom from
- *     scratch on EVERY call, so our extra can never compound. Width has no equivalent from-scratch
- *     recomputation: root.style.width is native persisted STATE (panelWidthPx), touched ONLY by
- *     onDrag/updateWidthVar (note 8), toggleExpand, the opposite-docking safe-max clamp (computeOppositeDocking
- *     SafeMaxWidth), and dual-view's push-margin sync (note 12/syncPanelPushState). Resizing the inner edge
- *     needs BOTH width AND the anchor (root.style.left or .right, whichever applies) to change together while
- *     the outer edge stays fixed -- doable in principle (same +extra/-extra algebra as top/bottom), but with
- *     no idempotent "natural width" to layer onto, we'd have to cache our own last-applied value and diff it
- *     against root.style.width every call to tell "native changed this since we last touched it" apart from
- *     "nothing changed, don't re-add the extra" -- and get that cache invalidation right across FIVE different
- *     native/extension code paths that can each independently rewrite width at any time. That's real risk of
- *     subtly double-counting or fighting one of those five, for a corner case (see chrome.css note 17) that's
- *     lower value than top/bottom (which cover an axis -- height -- the base mod has literally zero handling
- *     for at all). Left unimplemented on purpose rather than risk it; revisit only with a concrete design for
- *     the cache-diff step above, not just the +extra/-extra math (which was never the hard part here).
- * 18. PANEL POSITION DRAG / URL BAR GRIP (v6): a small grip inside the web toolbar's URL bar
- *     (.zen-toolbar-urlbar-drag-handle) lets the user drag the WHOLE panel up/down -- a REPOSITION, not a
- *     resize. It reuses the exact same "extra layered on top of the natural value, applied once per
- *     positionPanel() call" idempotency trick as the top/bottom resize extras (note 16), via its own separate
- *     pref (PANEL_POSITION_OFFSET_PREF) so the two features can never stomp on each other -- both are summed
- *     together in ONE place, applyVerticalResizeExtras(), which is also the only place the sign math between
- *     them has to agree: positive posOffset = "moved up" = LESS top gap AND MORE bottom gap, by the same
- *     amount, which is exactly why height stays perfectly constant during a pure reposition (top + height +
- *     bottom must always equal viewport height, and here the two symmetric deltas cancel out algebraically --
- *     see applyVerticalResizeExtras()'s comment for the one-line proof). This is genuinely simpler than the
- *     note-17 inner-edge-resize case that was skipped: both quantities being combined (resizeTop/resizeBottom
- *     and posOffset) are ALREADY independent, from-scratch-recomputed-or-cleanly-layered numbers with no
- *     hidden native state to fight, unlike width. startPanelPositionDrag()/onPanelPositionDrag() mirror
- *     startVerticalResize()/onVerticalResizeDrag()'s shape exactly (snapshot-on-mousedown, direct style writes
- *     on mousemove, persist-on-mouseup) but clamp differently: instead of a MIN_HEIGHT floor, posOffset itself
- *     is clamped to [-baseBottom, baseTop] so newTop/newBottom are each guaranteed >= 0 by construction, which
- *     is also what keeps height exactly constant even at the clamped extremes (dragged all the way to one
- *     edge, the panel just touches that edge rather than distorting). NOT gated by EXT_PREFS.ALL_SIDES_RESIZE
- *     at all -- it's a fully independent feature/surface from the resize strips, gated only by whether the web
- *     toolbar's URL bar is itself enabled (the grip is a plain child of .zen-toolbar-urlwrap in
- *     ensureWebToolbar(), so WEB_TOOLBAR_URLBAR's existing hide rule already covers it for free).
+ * 17. ALL-SIDES WIDTH + CORNERS (v8): the toggle now gates native's outer width edge, the extension's inverse-
+ *     delta inner edge, and four additive corner handles. The extension never rewrites a private width field:
+ *     all new horizontal paths call public updateWidthVar() and saveWidth(), with the same safe maximum used by
+ *     opposite docking. Corner drags simply run the existing vertical and extension horizontal handlers in
+ *     parallel because those handlers own disjoint axes.
+ * 18. PANEL POSITION DRAG / URL BAR GRIP (v8): vertical whole-panel motion remains a separate feature using
+ *     PANEL_POSITION_OFFSET_PREF. Along with resize extras it is now expressed through persistent margins,
+ *     not positionPanel()-time top/bottom writes. PANEL_HORIZONTAL_OFFSET_PREF uses the same margin principle
+ *     for bounded physical left/right motion and is applied only on panel open, explicit setting changes, or a
+ *     real docking-side change -- never from the positioning RAF loop.
  * 19. LIVE DRAG STATE (v6/v8): applyVerticalResizeExtras() prefers the in-progress drag values over the saved
  *     prefs, so the margins track the pointer immediately and are persisted only on mouseup. Native may keep
  *     refreshing top/bottom concurrently, but the two code paths no longer write the same properties and
@@ -14752,28 +14734,12 @@
  *     extension changed them again, creating continuous layout churn; rounding could not fix that property
  *     fight. v8 removes applyVerticalResizeExtras() from positionPanel() completely and expresses the same
  *     geometry through persistent margins (note 16), updated only on real state changes or pointer movement.
- * 25. GRABBER DUAL-AXIS DRAG (v7): the pill's 6-dot "Drag to resize" handle (.zen-app-grabber) is 100% native
- *     (created + wired to native startResize/onDrag/onStopDrag in createDom(), see those methods earlier in
- *     this file) and only ever does horizontal width-resize -- there is no native concept of "drag this handle
- *     vertically" at all. Rather than touching that native wiring (forbidden -- see marker at the top of this
- *     block), ensurePillGrabberVerticalDrag() below adds a SECOND, independent mousedown listener on the same
- *     element that runs alongside the native one and just watches the drag: horizontal movement is left
- *     completely alone (native's own onDrag, already running in parallel from its own listener, keeps resizing
- *     width exactly as before -- "moved sideways it works like it does now" is true by construction, since we
- *     never call preventDefault/stopPropagation on the mousedown and so never stop native's handler from also
- *     firing). Only once vertical movement both exceeds a deadzone AND dominates the horizontal component do we
- *     step in: cleanly end the in-progress native resize by calling the SAME bound appsInstance.onStopDrag
- *     reference native itself would call on mouseup (note 5/8 pattern -- this is calling an existing native
- *     method, not editing one), which tears down native's own listeners/pointer-events/width-save exactly as if
- *     the user had just released the mouse there, then immediately hand off to startPanelPositionDrag() (note
- *     18) using the SAME mousemove event as its synthetic "mousedown" -- that function only reads e.clientY/
- *     e.button off whatever event it's given, so a mousemove works as the handoff event with no changes needed
- *     to it. This deliberately reuses the URL-bar-grip reposition path verbatim rather than reimplementing
- *     vertical dragging a second time, which is also why it automatically respects the SAME persisted
- *     "vertical offset" pref, the same edge clamping, and the same applyVerticalResizeExtras() summing as that
- *     grip already does -- there was nothing panel-position-specific left to write. Idempotency guard
- *     (grabberBtn._bgalazkaVDragHooked) mirrors ensurePillAllSidesResizeButton()/ensurePillDualViewButton()
- *     immediately below it, since this can be called again on every openPanel per the existing hook pattern.
+ * 25. GRABBER DUAL-AXIS DRAG (v8): native owns the 6-dot grabber's horizontal width resize. The extension adds
+ *     a second listener that only activates when vertical movement dominates and exceeds a 40px deadzone. It
+ *     then stops native resize through its public onStopDrag() and writes the existing pill_position setting,
+ *     moving only the pill relative to its panel. The deadzone is subtracted from the first movement so the
+ *     pill does not jump. All-sides resize separately gates the outer/inner/top/bottom/corner edge surfaces;
+ *     it deliberately does not disable this pill grabber.
  * ============================================================================================================= */
 
 (function initBgalazkaExtension() {
@@ -14799,27 +14765,27 @@
     {
       pref: EXT_PREFS.TRANSLUCENCY,
       attr: "bgalazka-translucency",
-      defaultVal: true,
+      defaultVal: false,
     },
     {
       pref: EXT_PREFS.OPPOSITE_DOCKING,
       attr: "bgalazka-opposite-docking",
-      defaultVal: true,
+      defaultVal: false,
     },
     {
       pref: EXT_PREFS.TAB_ISOLATION,
       attr: "bgalazka-tab-isolation",
-      defaultVal: true,
+      defaultVal: false,
     },
     {
       pref: EXT_PREFS.CORNER_TILES,
       attr: "bgalazka-corner-tiles",
-      defaultVal: true,
+      defaultVal: false,
     },
     {
       pref: EXT_PREFS.HIDE_EXPAND,
       attr: "bgalazka-hide-expand",
-      defaultVal: true,
+      defaultVal: false,
     },
   ];
 
@@ -15009,6 +14975,10 @@
       "--bgalazka-pill-peek-opacity",
       getPref(EXT_PREFS.PILL_PEEK_DOT_OPACITY, 90) + "%",
     );
+    root.style.setProperty(
+      "--bgalazka-pill-background-opacity",
+      getPref(EXT_PREFS.PILL_BACKGROUND_OPACITY, 90) + "%",
+    );
   }
 
   function applyAttributes() {
@@ -15077,9 +15047,26 @@
   // independent offsets summed together once in applyVerticalResizeExtras().
   const PANEL_POSITION_OFFSET_PREF =
     "zen.workspace.bgalazka.panel_position_offset_px";
+  // Positive values move the whole panel toward the physical right edge.
+  // Implemented as an anchored-side margin, never as a positionPanel() patch.
+  const PANEL_HORIZONTAL_OFFSET_PREF =
+    "zen.workspace.bgalazka.panel_horizontal_offset_px";
+  // Kept separate from PANEL_POSITION_OFFSET_PREF: this moves only the pill
+  // within its panel, while the latter moves the complete panel in the window.
+  // The settings UI declares the same key later as BGALAZKA_EXT_PREFS.PILL_POSITION.
+  const PILL_POSITION_PREF = "zen.workspace.bgalazka.pill_position";
+  const PILL_POSITION_MIN = -50;
+  const PILL_POSITION_MAX = 50;
   const V_RESIZE_MIN_HEIGHT = 200; // mirrors Constants.Apps.MIN_WIDTH_PX's spirit (note 5: unreachable directly)
+  // Fresh-install baseline: add only a tiny amount to Zentral's own native
+  // top/bottom gap so the floating panel reads as a normal inset card. This
+  // is deliberately NOT a toggle and is the sole exception to the extension's
+  // default-off visual contract above. Saved user resize values still win.
+  const DEFAULT_PANEL_VERTICAL_EXTRA_PX = 4;
   let vResizeState = null;
   let vPosDragState = null;
+  let hPosDragState = null;
+  let pillPosDragState = null;
 
   /* ------------------------------------------------------------------
    * PERF (note 21): getVerticalExtras()/getPositionOffset() used to call
@@ -15117,18 +15104,31 @@
    * import/export-config feature. Observers are cheap: they only fire on
    * an actual pref WRITE, not per frame.
    * ------------------------------------------------------------------ */
-  let cachedTopExtra = getPref(PANEL_TOP_EXTRA_PREF, 0);
-  let cachedBottomExtra = getPref(PANEL_BOTTOM_EXTRA_PREF, 0);
+  let cachedTopExtra = getPref(
+    PANEL_TOP_EXTRA_PREF,
+    DEFAULT_PANEL_VERTICAL_EXTRA_PX,
+  );
+  let cachedBottomExtra = getPref(
+    PANEL_BOTTOM_EXTRA_PREF,
+    DEFAULT_PANEL_VERTICAL_EXTRA_PX,
+  );
   let cachedPosOffset = getPref(PANEL_POSITION_OFFSET_PREF, 0);
+  let cachedHorizontalOffset = getPref(PANEL_HORIZONTAL_OFFSET_PREF, 0);
 
   [
     [PANEL_TOP_EXTRA_PREF, (v) => (cachedTopExtra = v)],
     [PANEL_BOTTOM_EXTRA_PREF, (v) => (cachedBottomExtra = v)],
     [PANEL_POSITION_OFFSET_PREF, (v) => (cachedPosOffset = v)],
+    [PANEL_HORIZONTAL_OFFSET_PREF, (v) => (cachedHorizontalOffset = v)],
   ].forEach(([prefKey, setCache]) => {
     const observer = () => {
-      setCache(getPref(prefKey, 0));
+      const fallback =
+        prefKey === PANEL_TOP_EXTRA_PREF || prefKey === PANEL_BOTTOM_EXTRA_PREF
+          ? DEFAULT_PANEL_VERTICAL_EXTRA_PX
+          : 0;
+      setCache(getPref(prefKey, fallback));
       applyVerticalResizeExtras(document.getElementById("zen-app-panel-root"));
+      applyHorizontalPanelOffset(document.getElementById("zen-app-panel-root"));
     };
     try {
       Services.prefs.addObserver(prefKey, observer, false);
@@ -15159,6 +15159,154 @@
     cachedPosOffset = Math.round(px);
     setPref(PANEL_POSITION_OFFSET_PREF, cachedPosOffset);
   }
+
+  function applyHorizontalPanelOffset(root) {
+    if (!root) return;
+    // The panel may be anchored from either side. A positive physical-right
+    // offset is margin-left on a left-anchored panel, but negative
+    // margin-right on a right-anchored one. This preserves panel width.
+    const anchoredRight =
+      root.getAttribute("data-panel-side") === "right" ||
+      (root.style.right && root.style.right !== "auto");
+    const offset = Math.max(
+      -300,
+      Math.min(300, Math.round(cachedHorizontalOffset)),
+    );
+    const leftMargin = anchoredRight ? "0px" : offset + "px";
+    const rightMargin = anchoredRight ? -offset + "px" : "0px";
+    if (root.style.marginLeft !== leftMargin)
+      root.style.marginLeft = leftMargin;
+    if (root.style.marginRight !== rightMargin)
+      root.style.marginRight = rightMargin;
+  }
+
+  // Whole-panel horizontal REPOSITION using the already-existing
+  // Panel Horizontal Offset preference. This is intentionally separate from
+  // width resizing: dragging the all-sides pill button sideways should move
+  // the complete panel left/right without changing its saved width.
+  function startPanelHorizontalPositionDrag(e, startX = e.clientX) {
+    if (e.button !== 0) return;
+    const root = document.getElementById("zen-app-panel-root");
+    if (!root) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    hPosDragState = {
+      startX,
+      startOffset: cachedHorizontalOffset,
+      liveOffset: cachedHorizontalOffset,
+    };
+
+    const slider = document.getElementById("zen-app-panel-slider");
+    if (slider) slider.style.pointerEvents = "none";
+    document.documentElement.setAttribute(
+      "bgalazka-panel-hpos-dragging",
+      "true",
+    );
+    document.addEventListener("mousemove", onPanelHorizontalPositionDrag);
+    document.addEventListener("mouseup", stopPanelHorizontalPositionDrag);
+    onPanelHorizontalPositionDrag(e);
+  }
+
+  function onPanelHorizontalPositionDrag(e) {
+    if (!hPosDragState) return;
+    const root = document.getElementById("zen-app-panel-root");
+    if (!root) return;
+    const next = Math.max(
+      -300,
+      Math.min(
+        300,
+        hPosDragState.startOffset + (e.clientX - hPosDragState.startX),
+      ),
+    );
+    hPosDragState.liveOffset = next;
+    cachedHorizontalOffset = next;
+    applyHorizontalPanelOffset(root);
+  }
+
+  function stopPanelHorizontalPositionDrag() {
+    document.removeEventListener("mousemove", onPanelHorizontalPositionDrag);
+    document.removeEventListener("mouseup", stopPanelHorizontalPositionDrag);
+    const slider = document.getElementById("zen-app-panel-slider");
+    if (slider) slider.style.pointerEvents = "";
+    document.documentElement.removeAttribute("bgalazka-panel-hpos-dragging");
+    if (hPosDragState) {
+      cachedHorizontalOffset = Math.round(hPosDragState.liveOffset);
+      setPref(PANEL_HORIZONTAL_OFFSET_PREF, cachedHorizontalOffset);
+    }
+    hPosDragState = null;
+  }
+  registerCleanup(() => {
+    document.removeEventListener("mousemove", onPanelHorizontalPositionDrag);
+    document.removeEventListener("mouseup", stopPanelHorizontalPositionDrag);
+  });
+
+  /* ------------------------------------------------------------------
+   * PILL VERTICAL DRAG (extension-only maintenance note): the native
+   * .zen-app-grabber owns horizontal width resizing. Our listener is added
+   * afterward and never interferes until the pointer crosses its deliberately
+   * large vertical deadzone. At that point native resize is stopped cleanly
+   * and we update the EXISTING pill_position pref/CSS variable, not the panel
+   * position pref. This keeps vertical grabber dragging a local pill-layout
+   * operation and leaves panel geometry/positionPanel() untouched.
+   * ------------------------------------------------------------------ */
+  function clampPillPosition(value) {
+    return Math.max(PILL_POSITION_MIN, Math.min(PILL_POSITION_MAX, value));
+  }
+
+  function getPillPosition() {
+    const value = getPref(PILL_POSITION_PREF, 0);
+    return typeof value === "number" && Number.isFinite(value)
+      ? clampPillPosition(value)
+      : 0;
+  }
+
+  function applyPillPosition(value) {
+    document.documentElement.style.setProperty(
+      "--bgalazka-pill-offset",
+      Math.round(clampPillPosition(value)) + "%",
+    );
+  }
+
+  function startPillPositionDrag(e, startY, startPosition) {
+    const panelRoot = document.getElementById("zen-app-panel-root");
+    if (!panelRoot) return;
+    pillPosDragState = {
+      startY,
+      startPosition: clampPillPosition(startPosition),
+      livePosition: clampPillPosition(startPosition),
+    };
+    document.documentElement.setAttribute("bgalazka-pill-pos-dragging", "true");
+    document.addEventListener("mousemove", onPillPositionDrag);
+    document.addEventListener("mouseup", stopPillPositionDrag);
+    onPillPositionDrag(e);
+  }
+
+  function onPillPositionDrag(e) {
+    if (!pillPosDragState) return;
+    const panelRoot = document.getElementById("zen-app-panel-root");
+    const panelHeight = panelRoot?.getBoundingClientRect().height || 0;
+    if (panelHeight <= 0) return;
+    const next = clampPillPosition(
+      pillPosDragState.startPosition +
+        ((e.clientY - pillPosDragState.startY) / panelHeight) * 100,
+    );
+    pillPosDragState.livePosition = next;
+    applyPillPosition(next);
+  }
+
+  function stopPillPositionDrag() {
+    document.removeEventListener("mousemove", onPillPositionDrag);
+    document.removeEventListener("mouseup", stopPillPositionDrag);
+    document.documentElement.removeAttribute("bgalazka-pill-pos-dragging");
+    if (pillPosDragState)
+      setPref(PILL_POSITION_PREF, Math.round(pillPosDragState.livePosition));
+    pillPosDragState = null;
+  }
+  registerCleanup(() => {
+    document.removeEventListener("mousemove", onPillPositionDrag);
+    document.removeEventListener("mouseup", stopPillPositionDrag);
+  });
 
   // Applies the user's saved top/bottom RESIZE extras (note 16) and the
   // whole-panel POSITION offset (note 18) as margins. Native Zentral remains
@@ -15200,6 +15348,8 @@
     if (!root) return;
     root.style.marginTop = "";
     root.style.marginBottom = "";
+    root.style.marginLeft = "";
+    root.style.marginRight = "";
   });
 
   // Mousedown handler for both the top and bottom edge strips (see
@@ -15304,6 +15454,91 @@
     document.removeEventListener("mouseup", stopVerticalResizeDrag);
   });
 
+  /* ------------------------------------------------------------------
+   * HORIZONTAL INNER-EDGE / CORNER RESIZE (extension-only maintenance note):
+   * Zentral exposes only its content-facing outer edge. We do not replace that
+   * native listener. Instead the all-sides toggle enables an additive inner
+   * edge and four corner handles. They use updateWidthVar(), the base mod's
+   * public width writer, while choosing the inverse delta for the inner edge.
+   * Keeping this independent avoids touching private Zentral state.
+   * ------------------------------------------------------------------ */
+  let hResizeState = null;
+
+  function startHorizontalResize(e, edge) {
+    if (e.button !== 0) return;
+    if (!getPref(EXT_PREFS.ALL_SIDES_RESIZE, false)) return;
+    const apps = window.Zentral?.Apps;
+    const root = document.getElementById("zen-app-panel-root");
+    if (!apps || !root || typeof apps.updateWidthVar !== "function") return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Do not use isPanelAttachedToRight() here. Opposite docking deliberately
+    // changes that native answer, while the drag sign must follow the panel's
+    // *actual physical outer edge*. data-panel-side is maintained by both the
+    // base positioner and our docking wrapper specifically for this purpose.
+    const panelSide = root.getAttribute("data-panel-side");
+    const outerOnLeft =
+      panelSide === "right" ||
+      (!panelSide && root.style.left === "auto" && root.style.right !== "auto");
+    const nativeOuterFactor = outerOnLeft ? -1 : 1;
+    const startWidth = root.getBoundingClientRect().width;
+    hResizeState = {
+      apps,
+      edge,
+      startX: e.clientX,
+      startWidth,
+      liveWidth: startWidth,
+      factor: edge === "outer" ? nativeOuterFactor : -nativeOuterFactor,
+    };
+    const slider = document.getElementById("zen-app-panel-slider");
+    if (slider) slider.style.pointerEvents = "none";
+    document.documentElement.setAttribute("bgalazka-hresize-active", edge);
+    document.addEventListener("mousemove", onHorizontalResizeDrag);
+    document.addEventListener("mouseup", stopHorizontalResizeDrag);
+  }
+
+  function onHorizontalResizeDrag(e) {
+    if (!hResizeState) return;
+    const { apps, startX, startWidth, factor } = hResizeState;
+    const normalMax = Math.max(280, Math.round(window.innerWidth * 0.8));
+    const safeMax =
+      getPref(EXT_PREFS.OPPOSITE_DOCKING, false) &&
+      !apps.isPlacementVerticalBar?.()
+        ? computeOppositeDockingSafeMaxWidth()
+        : normalMax;
+    const nextWidth = Math.max(
+      280,
+      Math.min(safeMax, startWidth + (e.clientX - startX) * factor),
+    );
+    hResizeState.liveWidth = nextWidth;
+    apps.updateWidthVar(Math.round(nextWidth));
+  }
+
+  function stopHorizontalResizeDrag() {
+    document.removeEventListener("mousemove", onHorizontalResizeDrag);
+    document.removeEventListener("mouseup", stopHorizontalResizeDrag);
+    const slider = document.getElementById("zen-app-panel-slider");
+    if (slider) slider.style.pointerEvents = "";
+    document.documentElement.removeAttribute("bgalazka-hresize-active");
+    if (hResizeState) {
+      hResizeState.apps.saveWidth?.(Math.round(hResizeState.liveWidth));
+      hResizeState = null;
+    }
+  }
+  registerCleanup(() => {
+    document.removeEventListener("mousemove", onHorizontalResizeDrag);
+    document.removeEventListener("mouseup", stopHorizontalResizeDrag);
+  });
+
+  function startCornerResize(e, verticalEdge, horizontalEdge) {
+    if (!getPref(EXT_PREFS.ALL_SIDES_RESIZE, false)) return;
+    // The two handlers own disjoint axes, so their independent persistence
+    // and cleanup remain safe even though they share this one mouse gesture.
+    startVerticalResize(e, verticalEdge);
+    startHorizontalResize(e, horizontalEdge);
+  }
+
   /* ==========================================================================
    * PANEL POSITION DRAG (URL bar grip) -- see note 18
    * -----------------------------------------------------------------------
@@ -15380,12 +15615,10 @@
   });
 
   /* ==========================================================================
-   * GRABBER DUAL-AXIS DRAG (note 25): sideways keeps doing the native width
-   * resize untouched; past a vertical deadzone it hands off to the SAME
-   * reposition drag the URL bar grip uses (note 18), so the existing
-   * "vertical offset" pref/setting stays the one source of truth for that
-   * axis. See note 25 above for the full "why" -- this only adds a second,
-   * side-by-side listener, it never edits/replaces the native one.
+   * GRABBER DUAL-AXIS DRAG (note 25): sideways remains native width resize.
+   * Past a large vertical deadzone, it adjusts the existing Pill Menu Vertical
+   * Offset setting instead. This is deliberately a pill-only operation, not a
+   * whole-panel reposition; the URL-bar grip remains the panel-position tool.
    * ========================================================================== */
   function ensurePillGrabberVerticalDrag() {
     const grabberBtn = document.querySelector(
@@ -15400,7 +15633,7 @@
     // afterward, the same way other pill buttons' titles get updated live
     // elsewhere in this file (e.g. the autohide button's title toggling).
     grabberBtn.title =
-      "Drag sideways to resize \u2022 drag up/down to move the pill";
+      "Drag sideways to resize \u2022 drag up/down to reposition the pill";
 
     // How far the cursor has to travel vertically, and how much that has to
     // dominate any horizontal travel, before we treat the gesture as "the
@@ -15409,7 +15642,7 @@
     // user-facing toggle -- bump it if reposition triggers too eagerly
     // during an intentionally-diagonal resize drag, or lower it if it feels
     // unresponsive.
-    const VDRAG_DEADZONE_PX = 14;
+    const VDRAG_DEADZONE_PX = 40;
 
     grabberBtn.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
@@ -15441,12 +15674,12 @@
           "ensurePillGrabberVerticalDrag/onStopDrag",
         );
 
-        // Hand off to the URL-bar grip's own reposition drag (note 18),
-        // using this mousemove as the "start" event -- it only reads
-        // e.clientY/e.button, both of which a mousemove event has.
+        // Deadzone compensation prevents a 40px jump when vertical intent
+        // wins and native width-resize is cancelled.
+        const activationY = startY + Math.sign(dy) * VDRAG_DEADZONE_PX;
         safeCall(
-          () => startPanelPositionDrag(moveEvt),
-          "ensurePillGrabberVerticalDrag/startPanelPositionDrag",
+          () => startPillPositionDrag(moveEvt, activationY, getPillPosition()),
+          "ensurePillGrabberVerticalDrag/startPillPositionDrag",
         );
       };
       const trackUp = () => {
@@ -15459,14 +15692,14 @@
     return true;
   }
 
-  // Creates (once) and appends the two extra edge-drag strips to the panel
-  // root. Purely additive DOM -- native root creation code (note 1) is
-  // never touched; we just append two more children the same way
-  // ensureWebToolbar() appends its toolbar to #zen-app-panel-slider.
+  // Creates extension-owned all-sides handles once per panel root. CSS hides
+  // the base outer strip completely: keeping two handlers on one edge was the
+  // source of conflicting opposite-docking drag signs.
   function ensureVerticalResizeHandles() {
     const root = document.getElementById("zen-app-panel-root");
     if (!root) return false;
     applyVerticalResizeExtras(root);
+    applyHorizontalPanelOffset(root);
 
     if (!root.querySelector(".zen-app-resize-strip-top")) {
       const topStrip = document.createElement("div");
@@ -15486,6 +15719,41 @@
       );
       root.appendChild(bottomStrip);
     }
+    if (!root.querySelector(".zen-app-resize-strip-inner")) {
+      const innerStrip = document.createElement("div");
+      innerStrip.className = "zen-app-resize-strip-inner";
+      innerStrip.title = "Drag to resize (inner edge)";
+      innerStrip.addEventListener("mousedown", (e) =>
+        startHorizontalResize(e, "inner"),
+      );
+      root.appendChild(innerStrip);
+    }
+    if (!root.querySelector(".zen-app-resize-strip-outer")) {
+      const outerStrip = document.createElement("div");
+      outerStrip.className = "zen-app-resize-strip-outer";
+      outerStrip.title = "Drag to resize (outer edge)";
+      outerStrip.addEventListener("mousedown", (e) =>
+        startHorizontalResize(e, "outer"),
+      );
+      root.appendChild(outerStrip);
+    }
+
+    [
+      ["top", "outer"],
+      ["top", "inner"],
+      ["bottom", "outer"],
+      ["bottom", "inner"],
+    ].forEach(([verticalEdge, horizontalEdge]) => {
+      const className = `zen-app-resize-corner-${verticalEdge}-${horizontalEdge}`;
+      if (root.querySelector(`.${className}`)) return;
+      const corner = document.createElement("div");
+      corner.className = `zen-app-resize-corner zen-app-resize-corner-${horizontalEdge} ${className}`;
+      corner.title = `Drag to resize (${verticalEdge} ${horizontalEdge} corner)`;
+      corner.addEventListener("mousedown", (e) =>
+        startCornerResize(e, verticalEdge, horizontalEdge),
+      );
+      root.appendChild(corner);
+    });
     return true;
   }
 
@@ -15639,6 +15907,10 @@
         root.style.left = gap + "px";
         root.setAttribute("data-panel-side", "left");
       }
+      // Runs only after a real side change because of the dirty-check above;
+      // never add this call before that return or it would re-enter a hot RAF
+      // path and undermine the panel-jank fix.
+      applyHorizontalPanelOffset(root);
     };
 
     // Mirror data-pinned onto #zen-app-panel-root so the translucency CSS (which
@@ -15663,6 +15935,7 @@
       const openedRoot = document.getElementById("zen-app-panel-root");
       openedRoot?.removeAttribute("data-pinned");
       applyVerticalResizeExtras(openedRoot);
+      applyHorizontalPanelOffset(openedRoot);
 
       // Defensive: a width saved while opposite-docking was off (or before
       // a window/sidebar resize) could already exceed the current safe
@@ -15670,7 +15943,7 @@
       // without the user ever touching expand or the resize strip. Clamp
       // it down here too, same helper as toggleExpand/onDrag above.
       if (
-        getPref(EXT_PREFS.OPPOSITE_DOCKING, true) &&
+        getPref(EXT_PREFS.OPPOSITE_DOCKING, false) &&
         !this.isPlacementVerticalBar?.()
       ) {
         const root = document.getElementById("zen-app-panel-root");
@@ -15735,7 +16008,7 @@
     appsInstance.toggleExpand = function () {
       if (origToggleExpand) origToggleExpand();
       if (
-        !getPref(EXT_PREFS.OPPOSITE_DOCKING, true) ||
+        !getPref(EXT_PREFS.OPPOSITE_DOCKING, false) ||
         this.isPlacementVerticalBar?.()
       )
         return;
@@ -15773,7 +16046,7 @@
     appsInstance.onDrag = function (e) {
       if (origOnDrag) origOnDrag(e);
       if (
-        !getPref(EXT_PREFS.OPPOSITE_DOCKING, true) ||
+        !getPref(EXT_PREFS.OPPOSITE_DOCKING, false) ||
         this.isPlacementVerticalBar?.()
       )
         return;
@@ -16229,6 +16502,10 @@
     // Opacity (0-100) of the shrunk "mini pill" while idle. Stored as a
     // whole-number percent, same convention as PILL_POSITION.
     PILL_PEEK_DOT_OPACITY: "zen.workspace.bgalazka.pill_peek_dot_opacity",
+    // Opacity (0-100) of the EXPANDED pill's black background. Kept
+    // independent from the mini-pill opacity so the idle marker and opened
+    // controls can be tuned separately.
+    PILL_BACKGROUND_OPACITY: "zen.workspace.bgalazka.pill_background_opacity",
     // Web Panel Navigation Toolbar: back/forward/reload + URL bar (+ optional
     // zoom controls) docked at the bottom of the floating app panel.
     WEB_TOOLBAR_ENABLED: "zen.workspace.bgalazka.web_toolbar_enabled",
@@ -16267,6 +16544,9 @@
     // should be an explicit opt-in rather than silently changing existing
     // hover behavior near those edges.
     ALL_SIDES_RESIZE: "zen.workspace.bgalazka.all_sides_resize",
+    // Positive moves the full panel toward the physical right; bounded in
+    // applyHorizontalPanelOffset() so a stale/out-of-range pref is harmless.
+    PANEL_HORIZONTAL_OFFSET: PANEL_HORIZONTAL_OFFSET_PREF,
     // "Hide button" toggle for the pill button above, same convention as
     // HIDE_DUAL_VIEW/HIDE_PIN/HIDE_EXPAND/etc. -- deliberately a SEPARATE
     // pref from ALL_SIDES_RESIZE itself: this only hides the pill icon,
@@ -16396,7 +16676,7 @@
       btn.id = "zen-app-all-sides-resize-btn";
       btn.className = "zen-app-btn zen-app-all-sides-resize-btn";
       btn.setAttribute("type", "button");
-      btn.title = "Toggle All-Sides Resize (drag top/bottom edges too)";
+      btn.title = "Toggle all-sides resize • drag sideways to move panel";
       btn.appendChild(parseSVG(PREF_ICONS.RESIZE_ALL));
 
       // Sits right after the Dual-View button (or the pin button if
@@ -16408,9 +16688,54 @@
       if (anchor) pill.insertBefore(btn, anchor.nextSibling);
       else pill.prepend(btn);
 
+      // A click still toggles this feature. Once enabled, this button becomes
+      // a two-axis router: horizontal intent moves the whole panel using the
+      // existing Panel Horizontal Offset preference; vertical intent reuses
+      // the existing whole-panel vertical position drag. It
+      // waits for a small commitment first so ordinary clicks remain clicks.
+      btn.addEventListener("mousedown", (e) => {
+        if (e.button !== 0 || !getPref(EXT_PREFS.ALL_SIDES_RESIZE, false))
+          return;
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const BUTTON_DRAG_DEADZONE_PX = 8;
+        let routed = false;
+        const onMove = (moveEvt) => {
+          if (routed) return;
+          const dx = moveEvt.clientX - startX;
+          const dy = moveEvt.clientY - startY;
+          if (Math.max(Math.abs(dx), Math.abs(dy)) <= BUTTON_DRAG_DEADZONE_PX)
+            return;
+          routed = true;
+          btn._bgalazkaDragWasRouted = true;
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          if (Math.abs(dy) > Math.abs(dx)) {
+            startPanelPositionDrag(moveEvt);
+          } else {
+            // Preserve the original mousedown X so crossing the deadzone does
+            // not create a visible jump before horizontal movement starts.
+            startPanelHorizontalPositionDrag(moveEvt, startX);
+          }
+        };
+        const onUp = () => {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
+
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         e.preventDefault();
+        // Browsers dispatch click after a drag. Consume that synthetic click
+        // so using the button as a resize/move handle cannot also flip its
+        // own all-sides toggle off at mouseup.
+        if (btn._bgalazkaDragWasRouted) {
+          btn._bgalazkaDragWasRouted = false;
+          return;
+        }
         const cur = getPref(EXT_PREFS.ALL_SIDES_RESIZE, false);
         const next = !cur;
         setPref(EXT_PREFS.ALL_SIDES_RESIZE, next);
@@ -16888,7 +17213,7 @@
     if (swapBtn) {
       const quickswitchOn = getPref(
         BGALAZKA_EXT_PREFS.WEB_TOOLBAR_QUICKSWITCH,
-        true,
+        false,
       );
       const show = quickswitchOn && !!detectSearchEngine(curSpec);
       swapBtn.style.display = show ? "" : "none";
@@ -16901,7 +17226,7 @@
     webToolbarPollTimer = setInterval(() => {
       const root = document.getElementById("zen-app-panel-root");
       if (!root?.hasAttribute("open")) return; // cheap no-op while closed
-      if (!getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, true)) return;
+      if (!getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, false)) return;
       updateWebToolbarState();
     }, 400);
     registerCleanup(() => {
@@ -16943,7 +17268,7 @@
     sublabelText,
     prefKey,
     rootAttr,
-    defaultVal = true,
+    defaultVal = false,
     iconSvg = null,
     onChange = null,
   ) {
@@ -17380,7 +17705,7 @@
         "Frosted glass effect when pinned; automatically becomes solid when Dual-View pushes page",
         BGALAZKA_EXT_PREFS.TRANSLUCENCY,
         "bgalazka-translucency",
-        true,
+        false,
         PREF_ICONS.GLASS,
         (enabled) =>
           slidersGroup.setAttribute("data-hidden", enabled ? "false" : "true"),
@@ -17417,7 +17742,7 @@
       slidersGroup.append(s1.row, s2.row, s3.row);
       slidersGroup.setAttribute(
         "data-hidden",
-        getPref(BGALAZKA_EXT_PREFS.TRANSLUCENCY, true) ? "false" : "true",
+        getPref(BGALAZKA_EXT_PREFS.TRANSLUCENCY, false) ? "false" : "true",
       );
       content.appendChild(slidersGroup);
 
@@ -17438,7 +17763,7 @@
         "Dock floating panels, pill menus, and resize handles opposite to active sidebar",
         BGALAZKA_EXT_PREFS.OPPOSITE_DOCKING,
         "bgalazka-opposite-docking",
-        true,
+        false,
         PREF_ICONS.DOCK,
       );
       content.appendChild(t2.row);
@@ -17458,7 +17783,7 @@
       // the pill button's own data-active state in sync when toggled here.
       const tAllSidesResize = createToggleRow(
         "All-Sides Panel Resize",
-        "Drag the panel's top and bottom edges to resize its height, not just the side facing the browser",
+        "Enable outer, inner, top, bottom, and corner resize handles; drag this pill button sideways to move the whole panel",
         BGALAZKA_EXT_PREFS.ALL_SIDES_RESIZE,
         "bgalazka-all-sides-resize",
         false,
@@ -17466,6 +17791,17 @@
         () => ensurePillAllSidesResizeButton(),
       );
       content.appendChild(tAllSidesResize.row);
+
+      const panelHorizontalOffsetSlider = createSliderRow(
+        "Panel Horizontal Offset",
+        "Move the whole floating panel left/right without changing its width",
+        BGALAZKA_EXT_PREFS.PANEL_HORIZONTAL_OFFSET,
+        -300,
+        300,
+        0,
+        "px",
+      );
+      content.appendChild(panelHorizontalOffsetSlider.row);
 
       // ====================================================================
       // 3. Floating Panel Pill Controls
@@ -17517,7 +17853,7 @@
         "Keep a small colored version of the pill visible instead of fully autohiding",
         BGALAZKA_EXT_PREFS.PILL_PEEK_DOT,
         "bgalazka-pill-peek-dot",
-        true,
+        false,
         PREF_ICONS.PILL_POS,
       );
       const peekColorRow = createColorRow(
@@ -17528,8 +17864,17 @@
       );
       const peekOpacitySlider = createSliderRow(
         "Mini Pill Opacity",
-        "How visible the shrunk idle pill is, and how dark the expanded pill's background is; 100% is fully opaque",
+        "Controls only the shrunk idle mini pill; 100% is fully opaque",
         BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_OPACITY,
+        10,
+        100,
+        90,
+        "%",
+      );
+      const pillBackgroundOpacitySlider = createSliderRow(
+        "Pill Background Opacity",
+        "Controls the expanded pill's black background independently from Mini Pill Opacity; icons remain fully opaque",
+        BGALAZKA_EXT_PREFS.PILL_BACKGROUND_OPACITY,
         10,
         100,
         90,
@@ -17564,7 +17909,7 @@
         "Remove full-width panel expand toggle",
         BGALAZKA_EXT_PREFS.HIDE_EXPAND,
         "bgalazka-hide-expand",
-        true,
+        false,
         PREF_ICONS.EXPAND,
       );
       const tGrabber = createToggleRow(
@@ -17597,6 +17942,7 @@
         tPeekDot.row,
         peekColorRow.row,
         peekOpacitySlider.row,
+        pillBackgroundOpacitySlider.row,
         tDualView.row,
         tHideAllSidesResizeBtn.row,
         tPin.row,
@@ -17631,7 +17977,7 @@
         "Back / forward / reload + URL bar docked at the bottom of the web panel",
         BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED,
         "bgalazka-webtoolbar",
-        true,
+        false,
         PREF_ICONS.TOOLBAR,
         (enabled) =>
           webToolbarSubgroup.setAttribute(
@@ -17660,7 +18006,7 @@
         "Display and allow editing the current page's address",
         BGALAZKA_EXT_PREFS.WEB_TOOLBAR_URLBAR,
         "bgalazka-webtoolbar-urlbar",
-        true,
+        false,
       );
       const tToolbarZoom = createToggleRow(
         "Show Zoom Controls",
@@ -17719,7 +18065,7 @@
         "Adds a button to the toolbar (only visible on a DuckDuckGo/Startpage results page) that re-runs the same search on the other engine",
         BGALAZKA_EXT_PREFS.WEB_TOOLBAR_QUICKSWITCH,
         null,
-        true,
+        false,
         PREF_ICONS.SWAP,
       );
 
@@ -17734,7 +18080,7 @@
       );
       webToolbarSubgroup.setAttribute(
         "data-hidden",
-        getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, true)
+        getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, false)
           ? "false"
           : "true",
       );
@@ -17760,7 +18106,7 @@
         "Anchor mini 22px app tiles flush to bottom-right corner of tabs & essentials",
         BGALAZKA_EXT_PREFS.CORNER_TILES,
         "bgalazka-corner-tiles",
-        true,
+        false,
         PREF_ICONS.CORNER,
         (enabled) =>
           cornerSubgroup.setAttribute(
@@ -17783,7 +18129,7 @@
         "Dim dormant tabs with grayscale while keeping docked corner app tiles fully illuminated",
         BGALAZKA_EXT_PREFS.TAB_ISOLATION,
         "bgalazka-tab-isolation",
-        true,
+        false,
         PREF_ICONS.ISOLATION,
       );
       const tBadges = createToggleRow(
@@ -17797,7 +18143,7 @@
       cornerSubgroup.append(tHoverCorner.row, t3.row, tBadges.row);
       cornerSubgroup.setAttribute(
         "data-hidden",
-        getPref(BGALAZKA_EXT_PREFS.CORNER_TILES, true) ? "false" : "true",
+        getPref(BGALAZKA_EXT_PREFS.CORNER_TILES, false) ? "false" : "true",
       );
       content.appendChild(cornerSubgroup);
 
@@ -17805,14 +18151,14 @@
         {
           input: t1.input,
           pref: BGALAZKA_EXT_PREFS.TRANSLUCENCY,
-          def: true,
+          def: false,
           onSync: (v) =>
             slidersGroup.setAttribute("data-hidden", v ? "false" : "true"),
         },
         {
           input: t2.input,
           pref: BGALAZKA_EXT_PREFS.OPPOSITE_DOCKING,
-          def: true,
+          def: false,
         },
         { input: tPush.input, pref: BGALAZKA_EXT_PREFS.PUSH_PAGE, def: false },
         {
@@ -17820,6 +18166,19 @@
           pref: BGALAZKA_EXT_PREFS.ALL_SIDES_RESIZE,
           def: false,
           onSync: () => ensurePillAllSidesResizeButton(),
+        },
+        {
+          input: panelHorizontalOffsetSlider.input,
+          pref: BGALAZKA_EXT_PREFS.PANEL_HORIZONTAL_OFFSET,
+          def: 0,
+          isSelect: true,
+          onSync: (v) => {
+            panelHorizontalOffsetSlider.badge.textContent = v + "px";
+            cachedHorizontalOffset = v;
+            applyHorizontalPanelOffset(
+              document.getElementById("zen-app-panel-root"),
+            );
+          },
         },
         {
           input: tMasterPill.input,
@@ -17841,7 +18200,7 @@
         {
           input: tPeekDot.input,
           pref: BGALAZKA_EXT_PREFS.PILL_PEEK_DOT,
-          def: true,
+          def: false,
           onSync: (v) =>
             document.documentElement.setAttribute(
               "bgalazka-pill-peek-dot",
@@ -17866,9 +18225,19 @@
           },
         },
         {
+          input: pillBackgroundOpacitySlider.input,
+          pref: BGALAZKA_EXT_PREFS.PILL_BACKGROUND_OPACITY,
+          def: 90,
+          isSelect: true,
+          onSync: (v) => {
+            pillBackgroundOpacitySlider.badge.textContent = v + "%";
+            updateCSSVars();
+          },
+        },
+        {
           input: tWebToolbar.input,
           pref: BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED,
-          def: true,
+          def: false,
           onSync: (v) => {
             document.documentElement.setAttribute(
               "bgalazka-webtoolbar",
@@ -17903,7 +18272,7 @@
         {
           input: tToolbarUrlbar.input,
           pref: BGALAZKA_EXT_PREFS.WEB_TOOLBAR_URLBAR,
-          def: true,
+          def: false,
           onSync: (v) =>
             document.documentElement.setAttribute(
               "bgalazka-webtoolbar-urlbar",
@@ -17940,7 +18309,7 @@
         {
           input: tQuickswitch.input,
           pref: BGALAZKA_EXT_PREFS.WEB_TOOLBAR_QUICKSWITCH,
-          def: true,
+          def: false,
         },
         {
           input: tDualView.input,
@@ -17953,7 +18322,7 @@
           def: false,
         },
         { input: tPin.input, pref: BGALAZKA_EXT_PREFS.HIDE_PIN, def: false },
-        { input: t5.input, pref: BGALAZKA_EXT_PREFS.HIDE_EXPAND, def: true },
+        { input: t5.input, pref: BGALAZKA_EXT_PREFS.HIDE_EXPAND, def: false },
         {
           input: tGrabber.input,
           pref: BGALAZKA_EXT_PREFS.HIDE_GRABBER,
@@ -17972,7 +18341,7 @@
         {
           input: t4.input,
           pref: BGALAZKA_EXT_PREFS.CORNER_TILES,
-          def: true,
+          def: false,
           onSync: (v) =>
             cornerSubgroup.setAttribute("data-hidden", v ? "false" : "true"),
         },
@@ -17981,7 +18350,7 @@
           pref: BGALAZKA_EXT_PREFS.HOVER_CORNER_TILES,
           def: false,
         },
-        { input: t3.input, pref: BGALAZKA_EXT_PREFS.TAB_ISOLATION, def: true },
+        { input: t3.input, pref: BGALAZKA_EXT_PREFS.TAB_ISOLATION, def: false },
         {
           input: tBadges.input,
           pref: BGALAZKA_EXT_PREFS.HIDE_CORNER_BADGES,
@@ -18450,6 +18819,11 @@
       pillPosObserver,
       false,
     );
+    Services.prefs.addObserver(
+      BGALAZKA_EXT_PREFS.PILL_BACKGROUND_OPACITY,
+      pillPosObserver,
+      false,
+    );
     registerCleanup(() => {
       try {
         Services.prefs.removeObserver(
@@ -18464,6 +18838,10 @@
           BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_OPACITY,
           pillPosObserver,
         );
+        Services.prefs.removeObserver(
+          BGALAZKA_EXT_PREFS.PILL_BACKGROUND_OPACITY,
+          pillPosObserver,
+        );
       } catch (_) {}
     });
   } catch (_) {}
@@ -18474,13 +18852,13 @@
   // autohide.
   document.documentElement.setAttribute(
     "bgalazka-pill-peek-dot",
-    getPref(BGALAZKA_EXT_PREFS.PILL_PEEK_DOT, true) ? "true" : "false",
+    getPref(BGALAZKA_EXT_PREFS.PILL_PEEK_DOT, false) ? "true" : "false",
   );
   try {
     const pillPeekDotObserver = () => {
       document.documentElement.setAttribute(
         "bgalazka-pill-peek-dot",
-        getPref(BGALAZKA_EXT_PREFS.PILL_PEEK_DOT, true) ? "true" : "false",
+        getPref(BGALAZKA_EXT_PREFS.PILL_PEEK_DOT, false) ? "true" : "false",
       );
     };
     Services.prefs.addObserver(
@@ -18511,7 +18889,7 @@
   // only fires on user interaction with the settings UI, not at startup).
   {
     const WEB_TOOLBAR_ATTR_MAP = [
-      [BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, "bgalazka-webtoolbar", true],
+      [BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, "bgalazka-webtoolbar", false],
       [
         BGALAZKA_EXT_PREFS.WEB_TOOLBAR_AUTOHIDE,
         "bgalazka-webtoolbar-autohide",
@@ -18520,7 +18898,7 @@
       [
         BGALAZKA_EXT_PREFS.WEB_TOOLBAR_URLBAR,
         "bgalazka-webtoolbar-urlbar",
-        true,
+        false,
       ],
       [BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ZOOM, "bgalazka-webtoolbar-zoom", false],
       [BGALAZKA_EXT_PREFS.WEB_TOOLBAR_TOP, "bgalazka-webtoolbar-top", false],
@@ -18607,14 +18985,9 @@
   Object.keys(BGALAZKA_EXT_PREFS).forEach((key) => {
     const prefName = BGALAZKA_EXT_PREFS[key];
     const rootAttr = "bgalazka-" + key.toLowerCase().replace(/_/g, "-");
-    const val = getPref(
-      prefName,
-      key === "TRANSLUCENCY" ||
-        key === "OPPOSITE_DOCKING" ||
-        key === "TAB_ISOLATION" ||
-        key === "CORNER_TILES" ||
-        key === "HIDE_EXPAND",
-    );
+    // DEFAULT-OFF CONTRACT: unknown/unset extension booleans are always false.
+    // Do not add feature names to a truthy fallback list here.
+    const val = getPref(prefName, false);
     if (typeof val === "boolean") {
       document.documentElement.setAttribute(rootAttr, val ? "true" : "false");
     }

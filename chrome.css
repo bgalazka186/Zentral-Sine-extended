@@ -1837,7 +1837,7 @@ panel[id*="tabgroup-editor"] {
   }
 }
 
-#zentral-settings-modal .zs-dialog {
+#zentral-settings-modal #zs-panel-bgalazka .zs-dialog {
   background: #0d0d12 !important;
   color: #e4e4e7 !important;
   width: 1120px !important;
@@ -1856,7 +1856,7 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Top Header */
-#zentral-settings-modal .zs-header {
+#zentral-settings-modal #zs-panel-bgalazka .zs-header {
   padding: 18px 32px 14px 32px !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
   display: flex !important;
@@ -1867,13 +1867,13 @@ panel[id*="tabgroup-editor"] {
   flex-shrink: 0 !important;
 }
 
-#zentral-settings-modal .zs-title-group {
+#zentral-settings-modal #zs-panel-bgalazka .zs-title-group {
   display: flex !important;
   align-items: center !important;
   gap: 12px !important;
 }
 
-#zentral-settings-modal .zs-title {
+#zentral-settings-modal #zs-panel-bgalazka .zs-title {
   margin: 0 !important;
   font-size: 18px !important;
   font-weight: 600 !important;
@@ -1881,7 +1881,7 @@ panel[id*="tabgroup-editor"] {
   color: #ffffff !important;
 }
 
-#zentral-settings-modal .zs-version-badge {
+#zentral-settings-modal #zs-panel-bgalazka .zs-version-badge {
   font-family:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
   font-size: 11px !important;
@@ -1902,13 +1902,13 @@ panel[id*="tabgroup-editor"] {
   font-weight: 500 !important;
 }
 
-#zentral-settings-modal .zs-header-actions {
+#zentral-settings-modal #zs-panel-bgalazka .zs-header-actions {
   display: flex !important;
   align-items: center !important;
   gap: 20px !important;
 }
 
-#zentral-settings-modal .zs-kofi-btn {
+#zentral-settings-modal #zs-panel-bgalazka .zs-kofi-btn {
   -moz-appearance: none !important;
   appearance: none !important;
   outline: none !important;
@@ -1928,17 +1928,17 @@ panel[id*="tabgroup-editor"] {
   text-decoration: none !important;
 }
 
-#zentral-settings-modal .zs-kofi-btn:hover {
+#zentral-settings-modal #zs-panel-bgalazka .zs-kofi-btn:hover {
   transform: translateY(-1px) scale(1.03) !important;
   filter: brightness(1) drop-shadow(0 3px 8px rgba(19, 195, 117, 0.45)) !important;
 }
 
-#zentral-settings-modal .zs-kofi-btn:active {
+#zentral-settings-modal #zs-panel-bgalazka .zs-kofi-btn:active {
   transform: translateY(0) scale(0.97) !important;
   filter: brightness(0.95) !important;
 }
 
-#zentral-settings-modal .zs-kofi-btn svg {
+#zentral-settings-modal #zs-panel-bgalazka .zs-kofi-btn svg {
   height: 36px !important;
   width: auto !important;
   display: block !important;
@@ -1946,7 +1946,7 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Clean Close Button "X" (no outside box) */
-#zentral-settings-modal .zs-close-btn {
+#zentral-settings-modal #zs-panel-bgalazka .zs-close-btn {
   -moz-appearance: none !important;
   appearance: none !important;
   outline: none !important;
@@ -1965,18 +1965,18 @@ panel[id*="tabgroup-editor"] {
   padding: 0 !important;
 }
 
-#zentral-settings-modal .zs-close-btn * {
+#zentral-settings-modal #zs-panel-bgalazka .zs-close-btn * {
   pointer-events: none !important;
 }
 
-#zentral-settings-modal .zs-close-btn:hover {
+#zentral-settings-modal #zs-panel-bgalazka .zs-close-btn:hover {
   color: #ffffff !important;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
 }
 
-#zentral-settings-modal .zs-close-btn:active {
+#zentral-settings-modal #zs-panel-bgalazka .zs-close-btn:active {
   color: #d4d4d8 !important;
   background: transparent !important;
   border: none !important;
@@ -1985,7 +1985,7 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Tabs Navigation (no outside boxes) */
-#zentral-settings-modal .zs-tab-bar {
+#zentral-settings-modal #zs-panel-bgalazka .zs-tab-bar {
   display: flex !important;
   padding: 0 32px !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
@@ -1994,7 +1994,7 @@ panel[id*="tabgroup-editor"] {
   flex-shrink: 0 !important;
 }
 
-#zentral-settings-modal .zs-tab-btn {
+#zentral-settings-modal #zs-panel-bgalazka .zs-tab-btn {
   -moz-appearance: none !important;
   appearance: none !important;
   outline: none !important;
@@ -2012,7 +2012,7 @@ panel[id*="tabgroup-editor"] {
   user-select: none !important;
 }
 
-#zentral-settings-modal .zs-tab-btn:hover {
+#zentral-settings-modal #zs-panel-bgalazka .zs-tab-btn:hover {
   color: #d4d4d8 !important;
   background: transparent !important;
   border: none !important;
@@ -2020,7 +2020,7 @@ panel[id*="tabgroup-editor"] {
   box-shadow: none !important;
 }
 
-#zentral-settings-modal .zs-tab-btn[data-active="true"] {
+#zentral-settings-modal #zs-panel-bgalazka .zs-tab-btn[data-active="true"] {
   color: #ffffff !important;
   font-weight: 600 !important;
   background: transparent !important;
@@ -2029,7 +2029,9 @@ panel[id*="tabgroup-editor"] {
   box-shadow: none !important;
 }
 
-#zentral-settings-modal .zs-tab-btn[data-active="true"]::after {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-tab-btn[data-active="true"]::after {
   content: "" !important;
   position: absolute !important;
   bottom: -1px !important;
@@ -2040,7 +2042,7 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Modal Body & Tab Panels */
-#zentral-settings-modal .zs-body {
+#zentral-settings-modal #zs-panel-bgalazka .zs-body {
   padding: 22px 32px !important;
   display: flex !important;
   flex-direction: column !important;
@@ -2049,7 +2051,7 @@ panel[id*="tabgroup-editor"] {
   background: #0d0d12 !important;
 }
 
-#zentral-settings-modal .zs-tab-panel {
+#zentral-settings-modal #zs-panel-bgalazka .zs-tab-panel {
   display: none !important;
   flex-direction: column !important;
   width: 100% !important;
@@ -2058,13 +2060,13 @@ panel[id*="tabgroup-editor"] {
   min-height: 0 !important;
 }
 
-#zentral-settings-modal .zs-tab-panel[data-active="true"] {
+#zentral-settings-modal #zs-panel-bgalazka .zs-tab-panel[data-active="true"] {
   display: flex !important;
   animation: zsTabFadeIn 0.18s ease-out !important;
 }
 
 /* 2-Column Side-by-Side Open Layout with Vertical Separator */
-#zentral-settings-modal .zs-columns {
+#zentral-settings-modal #zs-panel-bgalazka .zs-columns {
   display: grid !important;
   grid-template-columns: 1fr 1fr !important;
   gap: 0 !important;
@@ -2076,7 +2078,7 @@ panel[id*="tabgroup-editor"] {
   overflow: hidden !important;
 }
 
-#zentral-settings-modal .zs-col {
+#zentral-settings-modal #zs-panel-bgalazka .zs-col {
   display: flex !important;
   flex-direction: column !important;
   height: 100% !important;
@@ -2097,7 +2099,7 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Section Header with Outside Divider Line */
-#zentral-settings-modal .zs-section-header {
+#zentral-settings-modal #zs-panel-bgalazka .zs-section-header {
   display: flex !important;
   justify-content: space-between !important;
   align-items: center !important;
@@ -2112,7 +2114,7 @@ panel[id*="tabgroup-editor"] {
   z-index: 10 !important;
 }
 
-#zentral-settings-modal .zs-section-title {
+#zentral-settings-modal #zs-panel-bgalazka .zs-section-title {
   font-size: 13px !important;
   text-transform: uppercase !important;
   font-weight: 700 !important;
@@ -2121,14 +2123,14 @@ panel[id*="tabgroup-editor"] {
   margin: 0 !important;
 }
 
-#zentral-settings-modal .zs-header-toggle {
+#zentral-settings-modal #zs-panel-bgalazka .zs-header-toggle {
   display: flex !important;
   align-items: center !important;
   gap: 10px !important;
   pointer-events: auto !important;
 }
 
-#zentral-settings-modal .zs-toggle-status {
+#zentral-settings-modal #zs-panel-bgalazka .zs-toggle-status {
   font-size: 12px !important;
   font-weight: 500 !important;
   color: #a1a1aa !important;
@@ -2136,7 +2138,7 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Section Content Container (Scrollable with un-squeezed elements) */
-#zentral-settings-modal .zs-section-content {
+#zentral-settings-modal #zs-panel-bgalazka .zs-section-content {
   display: flex !important;
   flex-direction: column !important;
   gap: 14px !important;
@@ -2151,39 +2153,51 @@ panel[id*="tabgroup-editor"] {
     filter 0.2s ease !important;
 }
 
-#zentral-settings-modal .zs-section-content > * {
+#zentral-settings-modal #zs-panel-bgalazka .zs-section-content > * {
   flex-shrink: 0 !important;
 }
 
-#zentral-settings-modal .zs-section-content::-webkit-scrollbar,
-#zentral-settings-modal .zs-col::-webkit-scrollbar {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-section-content::-webkit-scrollbar,
+#zentral-settings-modal #zs-panel-bgalazka .zs-col::-webkit-scrollbar {
   width: 5px !important;
 }
 
-#zentral-settings-modal .zs-section-content::-webkit-scrollbar-track,
-#zentral-settings-modal .zs-col::-webkit-scrollbar-track {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-section-content::-webkit-scrollbar-track,
+#zentral-settings-modal #zs-panel-bgalazka .zs-col::-webkit-scrollbar-track {
   background: transparent !important;
 }
 
-#zentral-settings-modal .zs-section-content::-webkit-scrollbar-thumb,
-#zentral-settings-modal .zs-col::-webkit-scrollbar-thumb {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-section-content::-webkit-scrollbar-thumb,
+#zentral-settings-modal #zs-panel-bgalazka .zs-col::-webkit-scrollbar-thumb {
   background: #3f3f46 !important;
   border-radius: 9999px !important;
 }
 
-#zentral-settings-modal .zs-section-content::-webkit-scrollbar-thumb:hover,
-#zentral-settings-modal .zs-col::-webkit-scrollbar-thumb:hover {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-section-content::-webkit-scrollbar-thumb:hover,
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-col::-webkit-scrollbar-thumb:hover {
   background: #52525b !important;
 }
 
-#zentral-settings-modal .zs-section-content[data-disabled="true"] {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-section-content[data-disabled="true"] {
   opacity: 0.35 !important;
   pointer-events: none !important;
   filter: grayscale(0.65) !important;
 }
 
 /* Setting Rows */
-#zentral-settings-modal .zs-row {
+#zentral-settings-modal #zs-panel-bgalazka .zs-row {
   display: flex !important;
   justify-content: space-between !important;
   align-items: center !important;
@@ -2191,20 +2205,20 @@ panel[id*="tabgroup-editor"] {
   min-height: 30px !important;
 }
 
-#zentral-settings-modal .zs-label-container {
+#zentral-settings-modal #zs-panel-bgalazka .zs-label-container {
   display: flex !important;
   flex-direction: column !important;
   flex: 1 1 auto !important;
   min-width: 0 !important;
 }
 
-#zentral-settings-modal .zs-label {
+#zentral-settings-modal #zs-panel-bgalazka .zs-label {
   font-size: 13.5px !important;
   font-weight: 500 !important;
   color: #ffffff !important;
 }
 
-#zentral-settings-modal .zs-sublabel {
+#zentral-settings-modal #zs-panel-bgalazka .zs-sublabel {
   font-size: 11.5px !important;
   color: #a1a1aa !important;
   margin-top: 2px !important;
@@ -2212,19 +2226,19 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Visual Placement Cards (No glow) */
-#zentral-settings-modal .zs-placement-group {
+#zentral-settings-modal #zs-panel-bgalazka .zs-placement-group {
   display: flex !important;
   flex-direction: column !important;
   gap: 8px !important;
 }
 
-#zentral-settings-modal .zs-placement-cards {
+#zentral-settings-modal #zs-panel-bgalazka .zs-placement-cards {
   display: grid !important;
   grid-template-columns: 1fr 1fr !important;
   gap: 12px !important;
 }
 
-#zentral-settings-modal .zs-placement-btn {
+#zentral-settings-modal #zs-panel-bgalazka .zs-placement-btn {
   -moz-appearance: none !important;
   appearance: none !important;
   position: relative !important;
@@ -2248,18 +2262,20 @@ panel[id*="tabgroup-editor"] {
   box-shadow: none !important;
 }
 
-#zentral-settings-modal .zs-placement-btn * {
+#zentral-settings-modal #zs-panel-bgalazka .zs-placement-btn * {
   pointer-events: none !important;
 }
 
-#zentral-settings-modal .zs-placement-btn:hover {
+#zentral-settings-modal #zs-panel-bgalazka .zs-placement-btn:hover {
   border-color: rgba(255, 255, 255, 0.22) !important;
   background: rgba(39, 39, 42, 0.4) !important;
   color: #f4f4f5 !important;
   box-shadow: none !important;
 }
 
-#zentral-settings-modal .zs-placement-btn[data-active="true"] {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-placement-btn[data-active="true"] {
   border-color: var(--zen-primary-color, #6366f1) !important;
   background: color-mix(
     in srgb,
@@ -2274,7 +2290,10 @@ panel[id*="tabgroup-editor"] {
   ) !important;
 }
 
-#zentral-settings-modal .zs-placement-btn .zs-placement-svg-box {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-placement-btn
+  .zs-placement-svg-box {
   width: 128px !important;
   height: 64px !important;
   border-radius: 6px !important;
@@ -2289,7 +2308,7 @@ panel[id*="tabgroup-editor"] {
   box-sizing: border-box !important;
 }
 
-#zentral-settings-modal .zs-placement-sidebar-container {
+#zentral-settings-modal #zs-panel-bgalazka .zs-placement-sidebar-container {
   width: 24px !important;
   height: 100% !important;
   background: rgba(255, 255, 255, 0.04) !important;
@@ -2303,7 +2322,7 @@ panel[id*="tabgroup-editor"] {
   flex-shrink: 0 !important;
 }
 
-#zentral-settings-modal .zs-placement-appbox-indicator {
+#zentral-settings-modal #zs-panel-bgalazka .zs-placement-appbox-indicator {
   width: 100% !important;
   height: 15px !important;
   border-radius: 2px !important;
@@ -2326,14 +2345,17 @@ panel[id*="tabgroup-editor"] {
   border-color: var(--zen-primary-color, #6366f1) !important;
 }
 
-#zentral-settings-modal .zs-placement-sidebar-body {
+#zentral-settings-modal #zs-panel-bgalazka .zs-placement-sidebar-body {
   width: 100% !important;
   flex: 1 1 auto !important;
   background: rgba(255, 255, 255, 0.03) !important;
   border-radius: 2px !important;
 }
 
-#zentral-settings-modal .zs-placement-btn .zs-placement-bar-indicator {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-placement-btn
+  .zs-placement-bar-indicator {
   background: rgba(255, 255, 255, 0.12) !important;
   border: 1px solid rgba(255, 255, 255, 0.15) !important;
   border-radius: 3px !important;
@@ -2353,14 +2375,17 @@ panel[id*="tabgroup-editor"] {
   border-color: var(--zen-primary-color, #6366f1) !important;
 }
 
-#zentral-settings-modal .zs-placement-btn .zs-placement-content-preview {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-placement-btn
+  .zs-placement-content-preview {
   flex: 1 1 auto !important;
   height: 100% !important;
   background: rgba(255, 255, 255, 0.04) !important;
   border-radius: 3px !important;
 }
 
-#zentral-settings-modal .zs-placement-label {
+#zentral-settings-modal #zs-panel-bgalazka .zs-placement-label {
   font-size: 13px !important;
   font-weight: 500 !important;
   transition:
@@ -2380,7 +2405,7 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Horizontal Capsule Stepper (- [value] +) */
-#zentral-settings-modal .zs-h-stepper {
+#zentral-settings-modal #zs-panel-bgalazka .zs-h-stepper {
   display: inline-flex !important;
   align-items: center !important;
   gap: 2px !important;
@@ -2393,7 +2418,7 @@ panel[id*="tabgroup-editor"] {
   flex-shrink: 0 !important;
 }
 
-#zentral-settings-modal .zs-h-btn {
+#zentral-settings-modal #zs-panel-bgalazka .zs-h-btn {
   -moz-appearance: none !important;
   appearance: none !important;
   outline: none !important;
@@ -2416,17 +2441,17 @@ panel[id*="tabgroup-editor"] {
   padding: 0 !important;
 }
 
-#zentral-settings-modal .zs-h-btn:hover {
+#zentral-settings-modal #zs-panel-bgalazka .zs-h-btn:hover {
   background: #27272a !important;
   color: #ffffff !important;
 }
 
-#zentral-settings-modal .zs-h-btn:active {
+#zentral-settings-modal #zs-panel-bgalazka .zs-h-btn:active {
   background: var(--zen-primary-color, #6366f1) !important;
   color: #ffffff !important;
 }
 
-#zentral-settings-modal .zs-h-val {
+#zentral-settings-modal #zs-panel-bgalazka .zs-h-val {
   width: 32px !important;
   background: transparent !important;
   border: none !important;
@@ -2441,20 +2466,22 @@ panel[id*="tabgroup-editor"] {
   padding: 0 !important;
 }
 
-#zentral-settings-modal .zs-h-val::-webkit-outer-spin-button,
-#zentral-settings-modal .zs-h-val::-webkit-inner-spin-button {
+#zentral-settings-modal #zs-panel-bgalazka .zs-h-val::-webkit-outer-spin-button,
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-h-val::-webkit-inner-spin-button {
   -webkit-appearance: none !important;
   margin: 0 !important;
 }
 
 /* Insta-Peek Shortcut Recorder Button */
-#zentral-settings-modal .zs-shortcut-recorder {
+#zentral-settings-modal #zs-panel-bgalazka .zs-shortcut-recorder {
   display: inline-flex !important;
   align-items: center !important;
   position: relative !important;
 }
 
-#zentral-settings-modal .zs-shortcut-btn {
+#zentral-settings-modal #zs-panel-bgalazka .zs-shortcut-btn {
   -moz-appearance: none !important;
   appearance: none !important;
   outline: none !important;
@@ -2488,12 +2515,14 @@ panel[id*="tabgroup-editor"] {
   user-select: none !important;
 }
 
-#zentral-settings-modal .zs-shortcut-btn:hover {
+#zentral-settings-modal #zs-panel-bgalazka .zs-shortcut-btn:hover {
   background: #27272a !important;
   border-color: rgba(255, 255, 255, 0.22) !important;
 }
 
-#zentral-settings-modal .zs-shortcut-btn[data-recording="true"] {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-shortcut-btn[data-recording="true"] {
   background: color-mix(
     in srgb,
     var(--zen-primary-color, #6366f1) 22%,
@@ -2506,20 +2535,20 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Stacked Sliders with Monospace Badge */
-#zentral-settings-modal .zs-stacked-slider {
+#zentral-settings-modal #zs-panel-bgalazka .zs-stacked-slider {
   display: flex !important;
   flex-direction: column !important;
   gap: 8px !important;
   width: 100% !important;
 }
 
-#zentral-settings-modal .zs-stacked-slider-header {
+#zentral-settings-modal #zs-panel-bgalazka .zs-stacked-slider-header {
   display: flex !important;
   justify-content: space-between !important;
   align-items: flex-end !important;
 }
 
-#zentral-settings-modal .zs-mono-badge {
+#zentral-settings-modal #zs-panel-bgalazka .zs-mono-badge {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
   font-size: 11px !important;
   background: #27272a !important;
@@ -2530,7 +2559,7 @@ panel[id*="tabgroup-editor"] {
   letter-spacing: 0.02em !important;
 }
 
-#zentral-settings-modal .zs-range-slider {
+#zentral-settings-modal #zs-panel-bgalazka .zs-range-slider {
   width: 100% !important;
   height: 5px !important;
   border-radius: 9999px !important;
@@ -2542,7 +2571,9 @@ panel[id*="tabgroup-editor"] {
   transition: background-color 0.15s ease !important;
 }
 
-#zentral-settings-modal .zs-range-slider::-webkit-slider-thumb {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-range-slider::-webkit-slider-thumb {
   -webkit-appearance: none !important;
   width: 15px !important;
   height: 15px !important;
@@ -2553,12 +2584,14 @@ panel[id*="tabgroup-editor"] {
   transition: transform 0.12s ease !important;
 }
 
-#zentral-settings-modal .zs-range-slider::-webkit-slider-thumb:hover {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-range-slider::-webkit-slider-thumb:hover {
   transform: scale(1.15) !important;
 }
 
 /* 10x6 Selection Matrix (Full width, square ratio, squircle corners, equal gaps) */
-#zentral-settings-modal .zs-matrix-wrapper {
+#zentral-settings-modal #zs-panel-bgalazka .zs-matrix-wrapper {
   display: flex !important;
   flex-direction: column !important;
   gap: 8px !important;
@@ -2581,7 +2614,9 @@ panel[id*="tabgroup-editor"] {
     transform 0.32s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
-#zentral-settings-modal .zs-matrix-wrapper[data-hidden="true"] {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-matrix-wrapper[data-hidden="true"] {
   max-height: 0 !important;
   opacity: 0 !important;
   padding-top: 0 !important;
@@ -2593,20 +2628,20 @@ panel[id*="tabgroup-editor"] {
   pointer-events: none !important;
 }
 
-#zentral-settings-modal .zs-matrix-header {
+#zentral-settings-modal #zs-panel-bgalazka .zs-matrix-header {
   display: flex !important;
   justify-content: space-between !important;
   align-items: center !important;
   gap: 12px !important;
 }
 
-#zentral-settings-modal .zs-matrix-title {
+#zentral-settings-modal #zs-panel-bgalazka .zs-matrix-title {
   font-size: 13px !important;
   font-weight: 600 !important;
   color: #ffffff !important;
 }
 
-#zentral-settings-modal .zs-matrix-readout {
+#zentral-settings-modal #zs-panel-bgalazka .zs-matrix-readout {
   font-size: 12px !important;
   font-weight: 500 !important;
   color: var(--zen-primary-color, #6366f1) !important;
@@ -2616,7 +2651,7 @@ panel[id*="tabgroup-editor"] {
   flex-shrink: 0 !important;
 }
 
-#zentral-settings-modal .zs-matrix-badge {
+#zentral-settings-modal #zs-panel-bgalazka .zs-matrix-badge {
   background: #18181b !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   color: color-mix(
@@ -2631,7 +2666,7 @@ panel[id*="tabgroup-editor"] {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
 }
 
-#zentral-settings-modal .zs-matrix-grid {
+#zentral-settings-modal #zs-panel-bgalazka .zs-matrix-grid {
   display: grid !important;
   grid-template-columns: repeat(10, 1fr) !important;
   grid-template-rows: repeat(6, 1fr) !important;
@@ -2644,7 +2679,7 @@ panel[id*="tabgroup-editor"] {
   padding: 4px 0 2px 0 !important;
 }
 
-#zentral-settings-modal .zs-matrix-cell {
+#zentral-settings-modal #zs-panel-bgalazka .zs-matrix-cell {
   aspect-ratio: 1 / 1 !important;
   width: 100% !important;
   height: auto !important;
@@ -2661,8 +2696,8 @@ panel[id*="tabgroup-editor"] {
   box-sizing: border-box !important;
 }
 
-#zentral-settings-modal .zs-matrix-cell:hover,
-#zentral-settings-modal .zs-matrix-cell[data-hover="true"] {
+#zentral-settings-modal #zs-panel-bgalazka .zs-matrix-cell:hover,
+#zentral-settings-modal #zs-panel-bgalazka .zs-matrix-cell[data-hover="true"] {
   background: color-mix(
     in srgb,
     var(--zen-primary-color, #6366f1) 45%,
@@ -2672,7 +2707,9 @@ panel[id*="tabgroup-editor"] {
   box-shadow: none !important;
 }
 
-#zentral-settings-modal .zs-matrix-cell[data-selected="true"] {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-matrix-cell[data-selected="true"] {
   background: var(--zen-primary-color, #6366f1) !important;
   border-color: color-mix(
     in srgb,
@@ -2682,7 +2719,9 @@ panel[id*="tabgroup-editor"] {
   box-shadow: none !important;
 }
 
-#zentral-settings-modal .zs-matrix-cell[data-selected="true"]:hover,
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-matrix-cell[data-selected="true"]:hover,
 #zentral-settings-modal
   .zs-matrix-cell[data-selected="true"][data-hover="true"] {
   background: color-mix(
@@ -2697,7 +2736,7 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Animation Preview Sandbox */
-#zentral-settings-modal .zs-anim-preview-group {
+#zentral-settings-modal #zs-panel-bgalazka .zs-anim-preview-group {
   display: flex !important;
   flex-direction: column !important;
   gap: 6px !important;
@@ -2707,7 +2746,7 @@ panel[id*="tabgroup-editor"] {
   padding: 8px 12px !important;
 }
 
-#zentral-settings-modal .zs-anim-preview-box {
+#zentral-settings-modal #zs-panel-bgalazka .zs-anim-preview-box {
   position: relative !important;
   height: 56px !important;
   background: #131316 !important;
@@ -2720,7 +2759,7 @@ panel[id*="tabgroup-editor"] {
   user-select: none !important;
 }
 
-#zentral-settings-modal .zs-anim-preview-sidebar {
+#zentral-settings-modal #zs-panel-bgalazka .zs-anim-preview-sidebar {
   width: 28px !important;
   height: 100% !important;
   background: rgba(255, 255, 255, 0.035) !important;
@@ -2734,14 +2773,14 @@ panel[id*="tabgroup-editor"] {
   z-index: 2 !important;
 }
 
-#zentral-settings-modal .zs-anim-preview-dot {
+#zentral-settings-modal #zs-panel-bgalazka .zs-anim-preview-dot {
   width: 12px !important;
   height: 12px !important;
   border-radius: 3.5px !important;
   background: rgba(255, 255, 255, 0.15) !important;
 }
 
-#zentral-settings-modal .zs-anim-preview-panel {
+#zentral-settings-modal #zs-panel-bgalazka .zs-anim-preview-panel {
   position: absolute !important;
   left: 29px !important;
   top: 5px !important;
@@ -2774,7 +2813,10 @@ panel[id*="tabgroup-editor"] {
       var(--zs-preview-anim-curve, cubic-bezier(0.25, 1, 0.5, 1)) !important;
 }
 
-#zentral-settings-modal .zs-anim-preview-box:hover .zs-anim-preview-panel,
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-anim-preview-box:hover
+  .zs-anim-preview-panel,
 #zentral-settings-modal
   .zs-anim-preview-box[data-preview-active="true"]
   .zs-anim-preview-panel {
@@ -2783,21 +2825,21 @@ panel[id*="tabgroup-editor"] {
   transform: translateX(0) scale(1) !important;
 }
 
-#zentral-settings-modal .zs-anim-preview-pill {
+#zentral-settings-modal #zs-panel-bgalazka .zs-anim-preview-pill {
   height: 5px !important;
   width: 44px !important;
   border-radius: 3px !important;
   background: var(--zen-primary-color, #6366f1) !important;
 }
 
-#zentral-settings-modal .zs-anim-preview-line {
+#zentral-settings-modal #zs-panel-bgalazka .zs-anim-preview-line {
   height: 3.5px !important;
   border-radius: 2px !important;
   background: rgba(255, 255, 255, 0.2) !important;
   margin-top: 1px !important;
 }
 
-#zentral-settings-modal .zs-anim-preview-hint {
+#zentral-settings-modal #zs-panel-bgalazka .zs-anim-preview-hint {
   position: absolute !important;
   right: 12px !important;
   font-size: 11px !important;
@@ -2806,7 +2848,10 @@ panel[id*="tabgroup-editor"] {
   transition: opacity 0.15s ease !important;
 }
 
-#zentral-settings-modal .zs-anim-preview-box:hover .zs-anim-preview-hint,
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-anim-preview-box:hover
+  .zs-anim-preview-hint,
 #zentral-settings-modal
   .zs-anim-preview-box[data-preview-active="true"]
   .zs-anim-preview-hint {
@@ -2839,12 +2884,12 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Custom Sleek Dropdown (Completely Glitch-Free) */
-#zentral-settings-modal .zs-custom-select {
+#zentral-settings-modal #zs-panel-bgalazka .zs-custom-select {
   position: relative !important;
   user-select: none !important;
 }
 
-#zentral-settings-modal .zs-custom-select-trigger {
+#zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-trigger {
   -moz-appearance: none !important;
   appearance: none !important;
   outline: none !important;
@@ -2872,7 +2917,7 @@ panel[id*="tabgroup-editor"] {
   white-space: nowrap !important;
 }
 
-#zentral-settings-modal .zs-custom-select-label {
+#zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-label {
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
@@ -2885,11 +2930,11 @@ panel[id*="tabgroup-editor"] {
   gap: 7px !important;
 }
 
-#zentral-settings-modal .zs-custom-select-trigger * {
+#zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-trigger * {
   pointer-events: none !important;
 }
 
-#zentral-settings-modal .zs-custom-select-trigger:hover {
+#zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-trigger:hover {
   background-color: #27272a !important;
   border-color: rgba(255, 255, 255, 0.22) !important;
 }
@@ -2900,7 +2945,7 @@ panel[id*="tabgroup-editor"] {
   border-color: var(--zen-primary-color, #6366f1) !important;
 }
 
-#zentral-settings-modal .zs-custom-select-arrow {
+#zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-arrow {
   width: 14px !important;
   height: 14px !important;
   min-width: 14px !important;
@@ -2919,7 +2964,7 @@ panel[id*="tabgroup-editor"] {
   transform: rotate(180deg) !important;
 }
 
-#zentral-settings-modal .zs-custom-select-menu {
+#zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-menu {
   position: absolute !important;
   top: calc(100% + 4px) !important;
   right: 0 !important;
@@ -2943,7 +2988,7 @@ panel[id*="tabgroup-editor"] {
   display: flex !important;
 }
 
-#zentral-settings-modal .zs-custom-select-option {
+#zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-option {
   padding: 6px 10px !important;
   font-size: 12.5px !important;
   font-weight: 500 !important;
@@ -2959,12 +3004,14 @@ panel[id*="tabgroup-editor"] {
   gap: 7px !important;
 }
 
-#zentral-settings-modal .zs-custom-select-option:hover {
+#zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-option:hover {
   background: #27272a !important;
   color: #ffffff !important;
 }
 
-#zentral-settings-modal .zs-custom-select-option[data-selected="true"] {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-custom-select-option[data-selected="true"] {
   background: color-mix(
     in srgb,
     var(--zen-primary-color, #6366f1) 18%,
@@ -2978,7 +3025,7 @@ panel[id*="tabgroup-editor"] {
   font-weight: 600 !important;
 }
 
-#zentral-settings-modal .zs-cat-icon {
+#zentral-settings-modal #zs-panel-bgalazka .zs-cat-icon {
   width: 14px !important;
   height: 14px !important;
   min-width: 14px !important;
@@ -2988,7 +3035,10 @@ panel[id*="tabgroup-editor"] {
   display: block !important;
 }
 
-#zentral-settings-modal .zs-custom-select-option:hover .zs-cat-icon,
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-custom-select-option:hover
+  .zs-cat-icon,
 #zentral-settings-modal
   .zs-custom-select-option[data-selected="true"]
   .zs-cat-icon {
@@ -3031,7 +3081,7 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Apple/Zen Toggle Switch */
-#zentral-settings-modal .zs-switch {
+#zentral-settings-modal #zs-panel-bgalazka .zs-switch {
   position: relative !important;
   display: inline-block !important;
   width: 36px !important;
@@ -3040,14 +3090,14 @@ panel[id*="tabgroup-editor"] {
   pointer-events: auto !important;
 }
 
-#zentral-settings-modal .zs-switch input {
+#zentral-settings-modal #zs-panel-bgalazka .zs-switch input {
   opacity: 0 !important;
   width: 0 !important;
   height: 0 !important;
   pointer-events: auto !important;
 }
 
-#zentral-settings-modal .zs-slider {
+#zentral-settings-modal #zs-panel-bgalazka .zs-slider {
   position: absolute !important;
   cursor: pointer !important;
   inset: 0 !important;
@@ -3056,7 +3106,7 @@ panel[id*="tabgroup-editor"] {
   border-radius: 9999px !important;
 }
 
-#zentral-settings-modal .zs-slider:before {
+#zentral-settings-modal #zs-panel-bgalazka .zs-slider:before {
   position: absolute !important;
   content: "" !important;
   height: 16px !important;
@@ -3069,20 +3119,32 @@ panel[id*="tabgroup-editor"] {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
 }
 
-#zentral-settings-modal .zs-switch input:checked + .zs-slider {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-switch
+  input:checked
+  + .zs-slider {
   background-color: var(--zen-primary-color, #6366f1) !important;
 }
 
-#zentral-settings-modal .zs-switch input:checked + .zs-slider:before {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-switch
+  input:checked
+  + .zs-slider:before {
   transform: translateX(16px) !important;
 }
 
-#zentral-settings-modal .zs-switch input:disabled + .zs-slider {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-switch
+  input:disabled
+  + .zs-slider {
   opacity: 0.55 !important;
   cursor: not-allowed !important;
 }
 
-#zentral-settings-modal .zs-modules-subgroup {
+#zentral-settings-modal #zs-panel-bgalazka .zs-modules-subgroup {
   display: flex !important;
   flex-direction: column !important;
   gap: 10px !important;
@@ -3098,16 +3160,18 @@ panel[id*="tabgroup-editor"] {
     border-color 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
 }
 
-#zentral-settings-modal .zs-modules-subgroup[data-hidden="true"] {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-modules-subgroup[data-hidden="true"] {
   display: none !important;
 }
 
-#zentral-settings-modal .zs-section-disabled {
+#zentral-settings-modal #zs-panel-bgalazka .zs-section-disabled {
   opacity: 0.45 !important;
   pointer-events: none !important;
 }
 
-#zentral-settings-modal .zs-text-input {
+#zentral-settings-modal #zs-panel-bgalazka .zs-text-input {
   -moz-appearance: none !important;
   appearance: none !important;
   outline: none !important;
@@ -3129,7 +3193,7 @@ panel[id*="tabgroup-editor"] {
     background 0.18s ease !important;
 }
 
-#zentral-settings-modal .zs-textarea-input {
+#zentral-settings-modal #zs-panel-bgalazka .zs-textarea-input {
   -moz-appearance: none !important;
   appearance: none !important;
   outline: none !important;
@@ -3150,21 +3214,21 @@ panel[id*="tabgroup-editor"] {
   min-height: 76px !important;
 }
 
-#zentral-settings-modal .zs-text-input:focus,
-#zentral-settings-modal .zs-textarea-input:focus {
+#zentral-settings-modal #zs-panel-bgalazka .zs-text-input:focus,
+#zentral-settings-modal #zs-panel-bgalazka .zs-textarea-input:focus {
   background: #18181b !important;
   border-color: var(--zen-primary-color, #6366f1) !important;
   box-shadow: 0 0 0 2px
     color-mix(in srgb, var(--zen-primary-color, #6366f1) 25%, transparent) !important;
 }
 
-#zentral-settings-modal .zs-text-input::placeholder,
-#zentral-settings-modal .zs-textarea-input::placeholder {
+#zentral-settings-modal #zs-panel-bgalazka .zs-text-input::placeholder,
+#zentral-settings-modal #zs-panel-bgalazka .zs-textarea-input::placeholder {
   color: rgba(255, 255, 255, 0.35) !important;
 }
 
 /* Reset and Action Buttons */
-#zentral-settings-modal .zs-reset-btn {
+#zentral-settings-modal #zs-panel-bgalazka .zs-reset-btn {
   -moz-appearance: none !important;
   appearance: none !important;
   outline: none !important;
@@ -3184,18 +3248,18 @@ panel[id*="tabgroup-editor"] {
   margin-top: auto !important;
 }
 
-#zentral-settings-modal .zs-reset-btn:hover {
+#zentral-settings-modal #zs-panel-bgalazka .zs-reset-btn:hover {
   background: #27272a !important;
   color: #ffffff !important;
   border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
-#zentral-settings-modal .zs-reset-btn:active {
+#zentral-settings-modal #zs-panel-bgalazka .zs-reset-btn:active {
   transform: scale(0.98) !important;
 }
 
 /* Footer Action Bar */
-#zentral-settings-modal .zs-footer {
+#zentral-settings-modal #zs-panel-bgalazka .zs-footer {
   padding: 16px 32px !important;
   border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
   display: flex !important;
@@ -3205,7 +3269,7 @@ panel[id*="tabgroup-editor"] {
   flex-shrink: 0 !important;
 }
 
-#zentral-settings-modal .zs-btn-cancel {
+#zentral-settings-modal #zs-panel-bgalazka .zs-btn-cancel {
   -moz-appearance: none !important;
   appearance: none !important;
   outline: none !important;
@@ -3222,16 +3286,16 @@ panel[id*="tabgroup-editor"] {
     color 0.15s ease !important;
 }
 
-#zentral-settings-modal .zs-btn-cancel:hover {
+#zentral-settings-modal #zs-panel-bgalazka .zs-btn-cancel:hover {
   background: #27272a !important;
   color: #ffffff !important;
 }
 
-#zentral-settings-modal .zs-btn-cancel:active {
+#zentral-settings-modal #zs-panel-bgalazka .zs-btn-cancel:active {
   transform: scale(0.98) !important;
 }
 
-#zentral-settings-modal .zs-btn-save {
+#zentral-settings-modal #zs-panel-bgalazka .zs-btn-save {
   -moz-appearance: none !important;
   appearance: none !important;
   outline: none !important;
@@ -3249,13 +3313,13 @@ panel[id*="tabgroup-editor"] {
     transform 0.15s ease !important;
 }
 
-#zentral-settings-modal .zs-btn-save:hover {
+#zentral-settings-modal #zs-panel-bgalazka .zs-btn-save:hover {
   filter: brightness(1.1) !important;
   transform: translateY(-1px) !important;
   box-shadow: none !important;
 }
 
-#zentral-settings-modal .zs-btn-save:active {
+#zentral-settings-modal #zs-panel-bgalazka .zs-btn-save:active {
   transform: scale(0.98) !important;
 }
 
@@ -4802,6 +4866,10 @@ panel[id*="tabgroup-editor"] {
  * BGALAZKA'S EXTENSION TO THE ZENTRAL MOD (v2)
  * -------------------------------------------------------------------------------------------------------------
  * ARCHITECTURAL NOTES & INSTRUCTIONS FOR FUTURE AI AGENTS:
+ * 0. DEFAULT-OFF CONTRACT (CRITICAL): extension CSS must be visually inert on a fresh install. Any selector that
+ *    changes normal browser/Zentral UI must be gated by an explicit `bgalazka-*="true"` opt-in attribute. Keep
+ *    extension-settings styling scoped to #zs-panel-bgalazka so installing the extension does not restyle base
+ *    Zentral settings. New feature CSS must follow the same opt-in rule.
  * 1. ONLY modify or append code BELOW this marker when working on Bgalazka's Extension.
  * 2. ALWAYS deliver fully compiled, complete ready-to-paste chunks for both the JS and CSS extension sections.
  * 3. EXPLAIN THE "WHY" IN CODE COMMENTS: Document Gecko/Zen workarounds so future models do not undo working solutions.
@@ -4859,13 +4927,11 @@ panel[id*="tabgroup-editor"] {
  *     you can ask the compositor to do, and dropping it from the transition doesn't create any visible pop
  *     since opacity/background-color still transition smoothly over it.
  * 13. PILL CONTRAST: the native pill's background (`var(--zen-colors-tertiary, ...)`) is a THEME color that can
- *     land close to the page's own colors behind it, making the pill's icons hard to read -- reported as "pill
- *     menu transparent/unreadable". Rather than adding a whole separate on/off toggle, this reuses the existing
- *     "mini pill" idle-opacity slider (--bgalazka-pill-peek-opacity) as the alpha for a plain BLACK background
- *     on the expanded/hovered pill (readable regardless of theme), while the shrunk idle mini-pill keeps using
- *     the user's own chosen --bgalazka-pill-peek-color as before. See section 2/3b's hover blocks (now black+
- *     opacity instead of the theme var) and the new unconditional fallback in section 2 for the
- *     mini-pill-disabled case, which previously had no override at all.
+ *     land close to the page's own colors behind it, making the pill's icons hard to read. Expanded/hovered
+ *     pills therefore use a plain BLACK background with forced white icons. Its alpha is controlled by the
+ *     dedicated --bgalazka-pill-background-opacity variable, while --bgalazka-pill-peek-opacity controls ONLY
+ *     the shrunk idle mini pill. The two settings are intentionally independent so a subtle idle marker does
+ *     not make the opened pill controls equally transparent.
  * 14. WEB TOOLBAR SEARCH QUICK-SWITCH BUTTON: see Zentral_uc.js note 14 for the JS half (search-engine
  *     picker, URL-vs-search detection, Back-button home fallback). The quick-switch button reuses the exact
  *     same `.zen-toolbar-btn` sizing/hover styling as back/forward/reload below -- its visibility (only on a
@@ -4959,18 +5025,17 @@ panel[id*="tabgroup-editor"] {
   --bgalazka-pill-offset: 0%;
   --bgalazka-pill-peek-color: #4da6ff;
   --bgalazka-pill-peek-opacity: 90%;
+  --bgalazka-pill-background-opacity: 90%;
 }
 
-/* PILL CONTRAST FALLBACK (note 13): low-specificity default so the pill is
- * still readable (black @ the peek-opacity slider's alpha, white icons)
- * even with "Show Mini Pill When Idle" turned OFF, which previously had no
- * background override at all and fell through to the theme-color native
- * default. The higher-specificity peek-dot idle/hover rules further below
- * (sections 2 and 3b) still win over this whenever they apply. */
-#zen-app-panel-pill {
+/* PILL CONTRAST (note 13): opt-in only. The extension must not recolor the
+ * native/base Zentral pill on a fresh install, so this black/white treatment
+ * is gated by "Show Mini Pill When Idle". Higher-specificity idle/hover rules
+ * further below still win while that feature is enabled. */
+:root[bgalazka-pill-peek-dot="true"] #zen-app-panel-pill {
   background: color-mix(
     in srgb,
-    black var(--bgalazka-pill-peek-opacity, 90%),
+    black var(--bgalazka-pill-background-opacity, 90%),
     transparent
   ) !important;
   color: #ffffff !important;
@@ -4985,7 +5050,7 @@ panel[id*="tabgroup-editor"] {
   scrollbar-color: #3f3f46 transparent !important;
 }
 
-#zentral-settings-modal .zs-restart-btn {
+#zentral-settings-modal #zs-panel-bgalazka .zs-restart-btn {
   appearance: none !important;
   outline: none !important;
   background: rgba(255, 255, 255, 0.08) !important;
@@ -5008,7 +5073,7 @@ panel[id*="tabgroup-editor"] {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
 }
 
-#zentral-settings-modal .zs-restart-btn:hover {
+#zentral-settings-modal #zs-panel-bgalazka .zs-restart-btn:hover {
   background: color-mix(
     in srgb,
     var(--zen-primary-color, #6366f1) 25%,
@@ -5019,11 +5084,11 @@ panel[id*="tabgroup-editor"] {
   transform: translateY(-1px) !important;
 }
 
-#zentral-settings-modal .zs-restart-btn:active {
+#zentral-settings-modal #zs-panel-bgalazka .zs-restart-btn:active {
   transform: scale(0.97) !important;
 }
 
-#zentral-settings-modal .zs-restart-btn svg {
+#zentral-settings-modal #zs-panel-bgalazka .zs-restart-btn svg {
   color: inherit !important;
   flex-shrink: 0 !important;
 }
@@ -5172,7 +5237,7 @@ panel[id*="tabgroup-editor"] {
  * normal theme color on hover/focus. transform-origin is pinned to the
  * pill's own anchor edge (right, since it translates -100% off its left:0
  * anchor) so it shrinks *toward* the screen edge instead of drifting toward
- * panel/screen center. Color and opacity come from --bgalazka-pill-peek-color
+ * panel/screen center. Idle color and opacity come from --bgalazka-pill-peek-color
  * and --bgalazka-pill-peek-opacity (both user-configurable in settings)
  * since the panel's own theme color can blend into page content and become
  * hard to spot in practice. */
@@ -5205,7 +5270,7 @@ panel[id*="tabgroup-editor"] {
    * readable icons regardless of theme/page colors behind the pill. */
   background: color-mix(
     in srgb,
-    black var(--bgalazka-pill-peek-opacity, 90%),
+    black var(--bgalazka-pill-background-opacity, 90%),
     transparent
   ) !important;
   color: #ffffff !important;
@@ -5294,7 +5359,7 @@ panel[id*="tabgroup-editor"] {
   opacity: 1 !important;
   background: color-mix(
     in srgb,
-    black var(--bgalazka-pill-peek-opacity, 90%),
+    black var(--bgalazka-pill-background-opacity, 90%),
     transparent
   ) !important;
   color: #ffffff !important;
@@ -5350,7 +5415,8 @@ panel[id*="tabgroup-editor"] {
  * Because container filters flatten all children into a single bitmap group, a child cannot escape
  * grayscale via `filter: none`. We must reset the parent tab itself to `filter: none`.
  */
-:is(#zen-essentials-container, #zen-essentials, #tabbrowser-tabs, :root)
+:root[bgalazka-tab-isolation="true"]
+  :is(#zen-essentials-container, #zen-essentials, #tabbrowser-tabs, :root)
   :is(
     .tabbrowser-tab:has(.zen-app-tile),
     .tabbrowser-tab[zen-essential="true"]:has(.zen-app-tile),
@@ -5363,7 +5429,8 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Re-apply dormancy grayscale strictly to the tab's internal icon and label, leaving the docked tile colored */
-:is(#zen-essentials-container, #zen-essentials, #tabbrowser-tabs, :root)
+:root[bgalazka-tab-isolation="true"]
+  :is(#zen-essentials-container, #zen-essentials, #tabbrowser-tabs, :root)
   :is(
     .tabbrowser-tab[pending]:has(.zen-app-tile),
     .tabbrowser-tab[pending="true"]:has(.zen-app-tile),
@@ -5377,7 +5444,8 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Selected / active tab state */
-:is(#zen-essentials-container, #zen-essentials, #tabbrowser-tabs, :root)
+:root[bgalazka-tab-isolation="true"]
+  :is(#zen-essentials-container, #zen-essentials, #tabbrowser-tabs, :root)
   :is(
     .tabbrowser-tab[selected="true"]:has(.zen-app-tile),
     .tabbrowser-tab[zen-essential="true"][selected="true"]:has(.zen-app-tile)
@@ -5388,7 +5456,8 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Corner tile self-isolation */
-:is(
+:root[bgalazka-tab-isolation="true"]
+  :is(
     .tabbrowser-tab,
     #zen-essentials-container .tabbrowser-tab,
     [zen-essential="true"]
@@ -5638,11 +5707,15 @@ panel[id*="tabgroup-editor"] {
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
- * Global Zentral Settings Modal: High-Visibility Controls & Colors
+ * Extension Settings Panel: High-Visibility Controls & Colors
  * -------------------------------------------------------------------------- */
 
-/* Global Toggled Switch Track — High-Visibility Accent with Soft Outer Glow */
-#zentral-settings-modal .zs-switch input:checked + .zs-slider {
+/* Extension-panel toggled switch track — scoped so base Zentral settings stay untouched. */
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-switch
+  input:checked
+  + .zs-slider {
   background-color: color-mix(
     in srgb,
     var(--zen-primary-color, #6366f1) 90%,
@@ -5654,15 +5727,19 @@ panel[id*="tabgroup-editor"] {
     0 1px 3px rgba(0, 0, 0, 0.4) !important;
 }
 
-/* Global Switch Handle (Thumb) */
-#zentral-settings-modal .zs-switch input:checked + .zs-slider:before {
+/* Extension-panel switch handle (thumb). */
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-switch
+  input:checked
+  + .zs-slider:before {
   background-color: #ffffff !important;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6) !important;
   transform: translateX(16px) !important;
 }
 
-/* Global Settings Icon Badges (Bright, Clear & High-Contrast) */
-#zentral-settings-modal .zs-setting-with-icon {
+/* Extension-panel icon badges (bright, clear & high-contrast). */
+#zentral-settings-modal #zs-panel-bgalazka .zs-setting-with-icon {
   display: flex !important;
   align-items: center !important;
   gap: 12px !important;
@@ -5670,7 +5747,7 @@ panel[id*="tabgroup-editor"] {
   min-width: 0 !important;
 }
 
-#zentral-settings-modal .zs-icon-preview {
+#zentral-settings-modal #zs-panel-bgalazka .zs-icon-preview {
   width: 28px !important;
   height: 28px !important;
   min-width: 28px !important;
@@ -5703,7 +5780,7 @@ panel[id*="tabgroup-editor"] {
   box-sizing: border-box !important;
 }
 
-#zentral-settings-modal .zs-icon-preview svg {
+#zentral-settings-modal #zs-panel-bgalazka .zs-icon-preview svg {
   width: 16px !important;
   height: 16px !important;
   min-width: 16px !important;
@@ -5714,7 +5791,9 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Global Range Slider Thumb Accent */
-#zentral-settings-modal .zs-range-slider::-webkit-slider-thumb {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-range-slider::-webkit-slider-thumb {
   background: color-mix(
     in srgb,
     var(--zen-primary-color, #6366f1) 85%,
@@ -5727,7 +5806,9 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Global Tab Navigation Underline Active Glow */
-#zentral-settings-modal .zs-tab-btn[data-active="true"]::after {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-tab-btn[data-active="true"]::after {
   background: color-mix(
     in srgb,
     var(--zen-primary-color, #6366f1) 85%,
@@ -5738,7 +5819,7 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Zero-gap slide transition for dependent setting groups */
-#zentral-settings-modal .zs-conditional-group {
+#zentral-settings-modal #zs-panel-bgalazka .zs-conditional-group {
   display: flex !important;
   flex-direction: column !important;
   gap: 12px !important;
@@ -5754,7 +5835,9 @@ panel[id*="tabgroup-editor"] {
     padding 0.24s ease !important;
 }
 
-#zentral-settings-modal .zs-conditional-group[data-hidden="true"] {
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-conditional-group[data-hidden="true"] {
   max-height: 0 !important;
   opacity: 0 !important;
   margin-top: 0 !important;
@@ -5942,7 +6025,7 @@ panel[id*="tabgroup-editor"] {
   opacity: 1 !important;
   background: color-mix(
     in srgb,
-    black var(--bgalazka-pill-peek-opacity, 90%),
+    black var(--bgalazka-pill-background-opacity, 90%),
     transparent
   ) !important;
   color: #ffffff !important;
@@ -5974,7 +6057,7 @@ panel[id*="tabgroup-editor"] {
   opacity: 1 !important;
   background: color-mix(
     in srgb,
-    black var(--bgalazka-pill-peek-opacity, 90%),
+    black var(--bgalazka-pill-background-opacity, 90%),
     transparent
   ) !important;
   color: #ffffff !important;
@@ -6385,6 +6468,128 @@ panel[id*="tabgroup-editor"] {
 :root[bgalazka-vresize-active="bottom"]
   #zen-app-panel-root
   .zen-app-resize-strip-bottom {
+  opacity: 1 !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 55%,
+    transparent
+  ) !important;
+}
+
+/* --------------------------------------------------------------------------
+ * ALL-SIDES WIDTH + CORNER HANDLES (extension-only maintenance note)
+ * --------------------------------------------------------------------------
+ * The native .zen-app-resize-strip is disabled here. The extension owns both
+ * outer and inner width edges plus four corners, so opposite-docking sign
+ * math has one source of truth instead of two competing drag handlers.
+ * Every edge/corner surface shares ALL_SIDES_RESIZE: off means no accidental
+ * edge resize; the pill's normal "Drag to resize" control is intentionally
+ * NOT gated here and remains available for its native horizontal behavior.
+ * The selectors use data-panel-side when our docking hook has set it, then
+ * keep Zen's native side attribute as a safe fallback during early startup.
+ * -------------------------------------------------------------------------- */
+#zen-app-panel-root .zen-app-resize-strip {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+.zen-app-resize-strip-outer,
+.zen-app-resize-strip-inner,
+.zen-app-resize-corner {
+  position: absolute !important;
+  z-index: 31 !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  background: transparent !important;
+}
+.zen-app-resize-strip-outer,
+.zen-app-resize-strip-inner {
+  top: 8px !important;
+  bottom: 8px !important;
+  width: 12px !important;
+  cursor: ew-resize !important;
+}
+.zen-app-resize-corner {
+  width: 16px !important;
+  height: 16px !important;
+  cursor: nwse-resize !important;
+}
+.zen-app-resize-corner-top-outer,
+.zen-app-resize-corner-top-inner {
+  top: -8px !important;
+}
+.zen-app-resize-corner-bottom-outer,
+.zen-app-resize-corner-bottom-inner {
+  bottom: -8px !important;
+}
+
+/* Native fallback: sidebar on the right means the outer/content edge is left. */
+:root[zen-right-side="true"] #zen-app-panel-root .zen-app-resize-strip-inner,
+:root[zen-right-side="true"] #zen-app-panel-root .zen-app-resize-corner-inner,
+:root:not([zen-right-side="true"])
+  #zen-app-panel-root
+  .zen-app-resize-strip-outer,
+:root:not([zen-right-side="true"])
+  #zen-app-panel-root
+  :is(.zen-app-resize-corner-top-outer, .zen-app-resize-corner-bottom-outer) {
+  right: -6px !important;
+  left: auto !important;
+}
+:root[zen-right-side="true"]
+  #zen-app-panel-root
+  :is(.zen-app-resize-corner-top-outer, .zen-app-resize-corner-bottom-outer),
+:root:not([zen-right-side="true"])
+  #zen-app-panel-root
+  .zen-app-resize-strip-inner,
+:root:not([zen-right-side="true"])
+  #zen-app-panel-root
+  .zen-app-resize-corner-inner,
+:root[zen-right-side="true"] #zen-app-panel-root .zen-app-resize-strip-outer {
+  left: -6px !important;
+  right: auto !important;
+}
+
+/* Precise extension-docking override. */
+#zen-app-panel-root[data-panel-side="right"] .zen-app-resize-strip-inner,
+#zen-app-panel-root[data-panel-side="right"] .zen-app-resize-corner-inner,
+#zen-app-panel-root[data-panel-side="left"] .zen-app-resize-corner-outer,
+#zen-app-panel-root[data-panel-side="left"] .zen-app-resize-strip-outer {
+  right: -6px !important;
+  left: auto !important;
+}
+#zen-app-panel-root[data-panel-side="right"] .zen-app-resize-corner-outer,
+#zen-app-panel-root[data-panel-side="left"] .zen-app-resize-strip-inner,
+#zen-app-panel-root[data-panel-side="left"] .zen-app-resize-corner-inner,
+#zen-app-panel-root[data-panel-side="right"] .zen-app-resize-strip-outer {
+  left: -6px !important;
+  right: auto !important;
+}
+
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-outer,
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-inner,
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-corner {
+  pointer-events: auto !important;
+}
+
+/* Only light up the currently targeted surface; transparent idle handles do
+ * not add visual noise or animation work while the panel is merely open. */
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-outer:hover,
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-inner:hover,
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-corner:hover,
+:root[bgalazka-hresize-active] #zen-app-panel-root .zen-app-resize-strip-outer,
+:root[bgalazka-hresize-active] #zen-app-panel-root .zen-app-resize-strip-inner {
   opacity: 1 !important;
   background: color-mix(
     in srgb,
