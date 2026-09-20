@@ -4936,6 +4936,14 @@ panel[id*="tabgroup-editor"] {
  *     origin approach outright, so normal-mode's mini pill grows outward the same way opposite-mode's already
  *     did, never covering the page. See section 3b's own header comment for the full before/after and the
  *     transform math shared with section 2.
+ * 21. FPS-drop investigation, false lead then real fix: see Zentral_uc.js notes 20-22 for the full story. Note
+ *     20 (reported as normal Zen chrome animations, e.g. the sidebar's reveal-on-hover slide, dropping to 1-3
+ *     FPS whenever the web panel is open) originally widened WHEN this file's section 1b
+ *     `[bgalazka-panel-animating="true"]` override fires, on the theory that backdrop-filter resampling was the
+ *     cost -- confirmed wrong once translucency-off didn't fix it, and reverted; section 1b itself needed no
+ *     change and still only fires for the panel's own open/close slide, per note 12. The actual cause (notes
+ *     21-22 in the JS file) was native Services.prefs reads in a base-mod animation-frame loop -- nothing in
+ *     this CSS file was involved.
  * ============================================================================================================= */
 
 /* CSS Variable Defaults for Settings-Controlled Translucency */

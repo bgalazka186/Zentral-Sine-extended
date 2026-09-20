@@ -14693,7 +14693,57 @@
  *     still idempotent per note 16 (each positionPanel() call resets top/bottom to natural THEN adds extras
  *     fresh) and needs no lock/ordering between the two mousemove listeners -- both paths compute the same
  *     number for the same cursor position, so whichever one runs last in a given frame just re-confirms it
- *     instead of fighting it.
+ * *     instead of fighting it.
+ * 20. UNGUARDED BACKDROP-FILTER WHILE THE PANEL SITS OPEN (generalizes note 12) -- REVERTED, see note 22:
+ *     this note originally added a global transitionrun/animationstart listener to pulse
+ *     `bgalazka-panel-animating` (note 12's guard) for ANY nearby animation while the panel was open, not just
+ *     its own open/close slide, on the theory that note 12's own diagnosis ("backdrop-filter is costly to keep
+ *     re-sampling every frame while nearby elements are ALSO animating") applied to the base mod's sidebar
+ *     reveal-on-hover slide too. User confirmed disabling TRANSLUCENCY entirely (so backdrop-filter is never
+ *     even active) did NOT fix the reported FPS drop, which rules this whole code path out -- and a follow-up
+ *     Firefox Profiler capture (note 22) found the real cost was Services.prefs reads, not backdrop-filter, and
+ *     showed this listener firing on every transitionrun/animationstart while the panel was open added its own
+ *     small extra overhead on top of an already-overloaded loop for zero benefit. Reverted back to the original
+ *     note-12-only pulseAnimGuard(). Left this note in (rather than deleting it) so a future AI doesn't
+ *     rediscover the same plausible-sounding-but-wrong theory from the chrome.css note-12 comment and re-add it.
+ * 21. Services.prefs IN THE PER-FRAME HOT PATH: the base mod's own startPositionTracking()/reposition()/rafLoop
+ *     (a few hundred lines above initBgalazkaExtension in this same file) calls positionPanel() -- OUR patched
+ *     positionPanel() -- on every throttled mousemove AND on every transitionstart/transitionrun/transitionend
+ *     ANYWHERE in the entire window, for as long as the panel is open, re-arming a requestAnimationFrame loop
+ *     for another 200ms each time. On a profile with a lot of ambient chrome UI churn (more tabs/pins/
+ *     workspaces = more small hover/indicator transitions happening at any moment), that loop can be re-armed
+ *     continuously and never go idle while the panel stays open, so positionPanel() -- and everything it calls
+ *     -- can run on EVERY animation frame indefinitely, not just briefly. getVerticalExtras()/getPositionOffset()
+ *     (note 16) and the two isPanelAttachedToRight()/positionPanel() OPPOSITE_DOCKING checks were each calling
+ *     Services.prefs synchronously from inside that loop -- real per-frame XPCOM overhead, and completely
+ *     unconditional (present no matter which extension toggle is on/off, which is why bisection-by-toggle
+ *     testing never found it). Fix: both hot spots now read a plain in-memory cache kept in sync by a
+ *     Services.prefs.addObserver (fires only on an actual pref write, never per frame) instead of hitting
+ *     Services.prefs synchronously every frame. See the comment above getVerticalExtras() and above
+ *     isOppositeDockingCached() for specifics. CONFIRMED BY PROFILING (note 22): a capture with this fix
+ *     already installed showed "zen.workspace.bgalazka.opposite_docking" down to a single read for the entire
+ *     capture, and the two panel_*_extra_px/position_offset_px prefs didn't register at all -- so this part of
+ *     the fix worked exactly as intended. It just wasn't the dominant cost; see note 22.
+ * 22. THE DOMINANT COST, FOUND VIA PROFILING: with note 21 already installed, a Firefox Profiler capture
+ *     (closed -> open+janky -> closed, same profile) showed 2452 total "Preference Read" events in the ~10s
+ *     capture, and 1911 of them (78%) were "zen.workspace.apps.sidebar.placement" -- read by the NATIVE
+ *     isPlacementVerticalBar() (see its own definition earlier in this file), which hits Services.prefs fresh
+ *     on every single call with no caching of its own, and gets called directly by the base mod's own
+ *     reposition()/triggerBurst() (note 21) one or more times per animation frame for as long as the panel
+ *     stays open. Everything note 21 fixed shows up as single-digit read counts in the same capture by
+ *     comparison -- real, but minor next to this. This is the actual explanation for the whole thread of
+ *     reports: a native method with an uncached per-call pref read, invoked by native code at up to 60fps+
+ *     for as long as our panel is open, is unconditional (no extension toggle touches it, matching "no matter
+ *     the settings"), scales with how much ambient CSS transition activity keeps the native loop alive (more
+ *     tabs/pins/workspaces = busier profile = the loop rarely goes idle), and is native code this file must
+ *     not edit directly per the "only touch EXTENSION parts" rule. Fix: rather than editing the native method
+ *     (isPlacementVerticalBar() at line ~963, untouched), we monkey-patch it the same way positionPanel() and
+ *     isPanelAttachedToRight() already are -- appsInstance.isPlacementVerticalBar = () => cachedIsVerticalBar,
+ *     with the cache kept live by a Services.prefs.addObserver. Because native methods call it as
+ *     `this.isPlacementVerticalBar()`, overriding the property on the shared instance makes EVERY caller --
+ *     reposition()/triggerBurst() included -- use the cache, not just our own two call sites. This is override-
+ *     by-replacement of a live property on an object instance, not an edit to any line of the original
+ *     implementation, which is still sitting untouched earlier in this file.
  * ============================================================================================================= */
 
 (function initBgalazkaExtension() {
@@ -15001,24 +15051,80 @@
   let vResizeState = null;
   let vPosDragState = null;
 
+  /* ------------------------------------------------------------------
+   * PERF (note 21): getVerticalExtras()/getPositionOffset() used to call
+   * getPref() -> Services.prefs.prefHasUserValue()+getIntPref() fresh on
+   * every call. That looked harmless in isolation, but applyVerticalResizeExtras()
+   * (which calls both) runs from inside our positionPanel() override, and
+   * positionPanel() is called by the BASE MOD's own reposition()/rafLoop
+   * (startPositionTracking(), a few hundred lines up in this same file) --
+   * which fires on EVERY mousemove (throttled to ~60/s) AND on EVERY
+   * transitionstart/transitionrun/transitionend ANYWHERE in the entire
+   * browser window, for as long as the panel is open, re-arming its own
+   * requestAnimationFrame loop for another 200ms each time one of those
+   * fires. On a profile with a lot of ambient chrome UI (many tabs/pins/
+   * workspaces = many small hover/indicator transitions happening at any
+   * given moment), that loop can be re-armed continuously and effectively
+   * never go idle while the panel stays open -- meaning positionPanel(),
+   * and therefore these two getPref() calls, can run on every single
+   * animation frame indefinitely, not just briefly after a drag. Two
+   * Services.prefs XPCOM round-trips per frame, sustained at 60fps, is
+   * real, measurable overhead -- and it is COMPLETELY UNCONDITIONAL: it
+   * runs regardless of OPPOSITE_DOCKING, ALL_SIDES_RESIZE, TRANSLUCENCY,
+   * or any other toggle (this is why disabling those individually didn't
+   * help -- they were never in this path to begin with). This is also a
+   * plausible reason a fresh profile never shows it: few ambient
+   * transitions means the rafLoop naturally dies out after ~200ms of
+   * quiet, so the overhead is a brief burst instead of continuous.
+   *
+   * Fix: read/write an in-memory cache instead of hitting Services.prefs
+   * from the hot path. The cache is kept in sync two ways: (1) synchronously
+   * on our own writes (saveVerticalExtras/savePositionOffset update the
+   * cache immediately, not just the pref, so there's no round-trip lag
+   * between "user let go of the drag" and "cache reflects it"), and (2)
+   * via Services.prefs.addObserver, for the (rare) case these get changed
+   * from outside this session, e.g. about:config or a future
+   * import/export-config feature. Observers are cheap: they only fire on
+   * an actual pref WRITE, not per frame.
+   * ------------------------------------------------------------------ */
+  let cachedTopExtra = getPref(PANEL_TOP_EXTRA_PREF, 0);
+  let cachedBottomExtra = getPref(PANEL_BOTTOM_EXTRA_PREF, 0);
+  let cachedPosOffset = getPref(PANEL_POSITION_OFFSET_PREF, 0);
+
+  [
+    [PANEL_TOP_EXTRA_PREF, (v) => (cachedTopExtra = v)],
+    [PANEL_BOTTOM_EXTRA_PREF, (v) => (cachedBottomExtra = v)],
+    [PANEL_POSITION_OFFSET_PREF, (v) => (cachedPosOffset = v)],
+  ].forEach(([prefKey, setCache]) => {
+    const observer = () => setCache(getPref(prefKey, 0));
+    try {
+      Services.prefs.addObserver(prefKey, observer, false);
+      registerCleanup(() => {
+        try {
+          Services.prefs.removeObserver(prefKey, observer);
+        } catch (_) {}
+      });
+    } catch (_) {}
+  });
+
   function getVerticalExtras() {
-    return {
-      top: getPref(PANEL_TOP_EXTRA_PREF, 0),
-      bottom: getPref(PANEL_BOTTOM_EXTRA_PREF, 0),
-    };
+    return { top: cachedTopExtra, bottom: cachedBottomExtra };
   }
 
   function saveVerticalExtras(top, bottom) {
-    setPref(PANEL_TOP_EXTRA_PREF, Math.round(top));
-    setPref(PANEL_BOTTOM_EXTRA_PREF, Math.round(bottom));
+    cachedTopExtra = Math.round(top);
+    cachedBottomExtra = Math.round(bottom);
+    setPref(PANEL_TOP_EXTRA_PREF, cachedTopExtra);
+    setPref(PANEL_BOTTOM_EXTRA_PREF, cachedBottomExtra);
   }
 
   function getPositionOffset() {
-    return getPref(PANEL_POSITION_OFFSET_PREF, 0);
+    return cachedPosOffset;
   }
 
   function savePositionOffset(px) {
-    setPref(PANEL_POSITION_OFFSET_PREF, Math.round(px));
+    cachedPosOffset = Math.round(px);
+    setPref(PANEL_POSITION_OFFSET_PREF, cachedPosOffset);
   }
 
   // Layers the user's saved top/bottom RESIZE extras (note 16) AND the
@@ -15302,13 +15408,83 @@
     if (appsInstance._bgalazkaPatched) return true;
     appsInstance._bgalazkaPatched = true;
 
+    // PERF (note 22, found via a Firefox Profiler capture): isPlacementVerticalBar()
+    // is NATIVE (see its own definition earlier in this file) and reads
+    // "zen.workspace.apps.sidebar.placement" via Services.prefs fresh on
+    // EVERY call, with no caching of its own. A profile taken with the panel
+    // closed, then open (animation janky), then closed again, on the same
+    // profile, showed 1911 "Preference Read" events for exactly this one
+    // pref inside the ~4.5s "panel open" window -- ~78% of every pref read
+    // captured, and by far the dominant cost (note 21's fixes, by contrast,
+    // show up as single-digit read counts each in the same capture -- real,
+    // but minor next to this). The volume comes from the base mod's OWN
+    // reposition()/triggerBurst() (see startPositionTracking(), a few
+    // hundred lines above initBgalazkaExtension in this file) calling it
+    // directly, one or more times per animation frame, for as long as the
+    // panel stays open -- entirely inside the base mod's own code, which
+    // this file does not otherwise touch, and which is presumably also why
+    // a fresh profile (little ambient UI churn keeping that loop alive) and
+    // vanilla mod (no extension patch adding its own extra calls into the
+    // same loop, see below) never surfaced it.
+    //
+    // We can't edit that native call site, so instead we monkey-patch
+    // isPlacementVerticalBar() ITSELF -- same override-by-replacement
+    // technique already used just below for isPanelAttachedToRight and
+    // positionPanel, and nothing here edits a standard-mod line; the
+    // original implementation is still sitting untouched earlier in this
+    // file, it's just no longer the one that runs once this extension
+    // loads. Because every native method calls it as `this.isPlacementVerticalBar()`,
+    // overriding the property on this one shared instance makes ALL
+    // callers -- reposition()/triggerBurst() included, not just our own
+    // two call sites below -- read the cached value instead of hitting
+    // Services.prefs. The cache is kept correct via a
+    // Services.prefs.addObserver on the same pref (fires only on an actual
+    // write, never per frame).
+    let cachedIsVerticalBar =
+      getPref("zen.workspace.apps.sidebar.placement", "sidebar") ===
+      "vertical-bar";
+    {
+      const placementObserver = () => {
+        cachedIsVerticalBar =
+          getPref("zen.workspace.apps.sidebar.placement", "sidebar") ===
+          "vertical-bar";
+      };
+      try {
+        Services.prefs.addObserver(
+          "zen.workspace.apps.sidebar.placement",
+          placementObserver,
+          false,
+        );
+        registerCleanup(() => {
+          try {
+            Services.prefs.removeObserver(
+              "zen.workspace.apps.sidebar.placement",
+              placementObserver,
+            );
+          } catch (_) {}
+        });
+      } catch (_) {}
+    }
+    appsInstance.isPlacementVerticalBar = () => cachedIsVerticalBar;
+
+    // PERF (note 21): both isPanelAttachedToRight() and positionPanel() are
+    // in the same per-animation-frame hot path described in the note-21
+    // comment above getVerticalExtras() -- called by the base mod's own
+    // reposition()/rafLoop on every transitionstart/run/end anywhere in the
+    // window and every throttled mousemove, for as long as the panel stays
+    // open. EXT_PREFS.OPPOSITE_DOCKING is already mirrored onto
+    // documentElement's "bgalazka-opposite-docking" attribute by the
+    // ATTR_MAP block above (kept live via a Services.prefs observer), so
+    // reading that attribute here is a plain DOM read instead of a second
+    // Services.prefs round-trip on every single frame.
+    const isOppositeDockingCached = () =>
+      document.documentElement.getAttribute("bgalazka-opposite-docking") !==
+      "false";
+
     const origIsPanelAttachedToRight =
       appsInstance.isPanelAttachedToRight?.bind(appsInstance);
     appsInstance.isPanelAttachedToRight = function () {
-      if (
-        getPref(EXT_PREFS.OPPOSITE_DOCKING, true) &&
-        !this.isPlacementVerticalBar()
-      ) {
+      if (isOppositeDockingCached() && !this.isPlacementVerticalBar()) {
         return !this.isSidebarRight();
       }
       return origIsPanelAttachedToRight ? origIsPanelAttachedToRight() : false;
@@ -15319,23 +15495,49 @@
     appsInstance.positionPanel = function () {
       if (origPositionPanel) origPositionPanel();
 
+      const root = document.getElementById("zen-app-panel-root");
+
       // ALL-SIDES RESIZE (note 16): applies unconditionally, BEFORE the
       // opposite-docking early-return below, since top/bottom offsets are
       // identical regardless of docking side, vertical-bar placement, or
       // dual-view/push (all of which only ever touch left/right/width).
-      applyVerticalResizeExtras(document.getElementById("zen-app-panel-root"));
+      applyVerticalResizeExtras(root);
 
-      if (
-        !getPref(EXT_PREFS.OPPOSITE_DOCKING, true) ||
-        this.isPlacementVerticalBar()
-      )
+      if (!isOppositeDockingCached() || this.isPlacementVerticalBar()) {
+        // Not our branch right now (opposite-docking off, or vertical-bar
+        // mode) -- native's own positioning, or none of ours, owns
+        // root.style.left/right for as long as this stays true. Clear the
+        // dirty-check cache below so that if/when this branch becomes
+        // active again, the next write isn't skipped just because "side"
+        // happens to match whatever we last set before something else had
+        // control of the style in the meantime.
+        if (root) root._bgalazkaLastSide = undefined;
         return;
-
-      const root = document.getElementById("zen-app-panel-root");
+      }
       if (!root) return;
 
       const gap = 12;
       const dockOnRight = !this.isSidebarRight();
+      const side = dockOnRight ? "right" : "left";
+      // PERF (note 23, the actual fix confirmed by profiling -- see the
+      // header comment block above for the full writeup): this used to
+      // write style.left/right + setAttribute("data-panel-side", ...)
+      // UNCONDITIONALLY on every call, and this function is called by the
+      // same native per-frame loop notes 21-22 describe -- so it was doing
+      // 3 DOM writes on every single animation frame for as long as the
+      // panel stayed open, even though dockOnRight only actually changes if
+      // the user flips their sidebar side mid-session (rare). setAttribute
+      // in particular can't be short-circuited by Gecko the way an
+      // unchanged inline style value sometimes can -- chrome.css has over a
+      // dozen selectors keyed on [data-panel-side="..."] (the pill, hover
+      // zone, resize strip, dual-view rules), so every redundant write was
+      // forcing Gecko to re-evaluate all of them against the DOM. Caching
+      // the last-applied side on the root element itself and skipping the
+      // writes entirely when nothing changed turns this from "3 DOM writes
+      // every frame, forever" into "3 DOM writes once, then a single cheap
+      // property comparison per frame after that."
+      if (root._bgalazkaLastSide === side) return;
+      root._bgalazkaLastSide = side;
       if (dockOnRight) {
         root.style.left = "auto";
         root.style.right = gap + "px";
