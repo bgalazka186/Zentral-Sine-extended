@@ -14615,18 +14615,13 @@
  *     that one line changed. Top-vs-bottom docking is the opposite: it's CSS-only (see chrome.css note 15),
  *     driven by the `bgalazka-webtoolbar-top` root attribute; nothing here needs to know which edge the
  *     toolbar is actually on.
- * 16. ALL-SIDES RESIZE (v5): native Zentral's #dom.root has `top`/`bottom` set fresh on every positionPanel()
- *     call (no persisted height field exists anywhere in the base mod, unlike width's panelWidthPx), so we
- *     can't "hook onDrag" the way note 8 does for width -- there is no vertical equivalent to hook. Instead we
- *     store our OWN small pixel offset ("extra") on top of whatever positionPanel() just computed naturally,
- *     and re-apply it with one line inside patchAppsInstance's positionPanel() wrapper (see
- *     applyVerticalResizeExtras()), placed BEFORE the opposite-docking early-return so it runs unconditionally
- *     for every docking mode. Because it reads the CURRENT (already-natural) root.style.top/bottom and adds
- *     the extra once per call, it's naturally idempotent -- calling positionPanel() again never compounds the
- *     offset. During an active drag we do NOT call positionPanel() every mousemove (expensive, and native
- *     onDrag doesn't either for width); instead startVerticalResize() snapshots the natural top/bottom once
- *     (current rendered value minus the currently-saved extra) and the drag applies directly to root.style,
- *     exactly mirroring how native onDrag/updateWidthVar avoid calling positionPanel() mid-drag. This needs
+ * 16. ALL-SIDES RESIZE (v5/v8): native Zentral owns `top`/`bottom` and refreshes them from positionPanel().
+ *     Our persisted resize and position offsets are represented by margin-top/margin-bottom instead. For an
+ *     absolutely/fixed positioned box constrained by top+bottom, those margins move its rendered edges and
+ *     alter its height exactly like adjusted top/bottom, but native never resets them. They are written only
+ *     when a pref changes, the root appears, or the user actually drags -- never from positionPanel()'s RAF
+ *     loop. During a drag startVerticalResize() snapshots native top/bottom and updates only the two margins.
+ *     This needs
  *     ZERO opposite-docking-specific or data-panel-side-specific math anywhere (contrast note 7/8): top and
  *     bottom are the same edges regardless of which side the panel is docked to, and dual-view/push only ever
  *     touches width, never height, so no interaction with note 12's push-state sync was needed either.
@@ -14674,26 +14669,10 @@
  *     at all -- it's a fully independent feature/surface from the resize strips, gated only by whether the web
  *     toolbar's URL bar is itself enabled (the grip is a plain child of .zen-toolbar-urlwrap in
  *     ensureWebToolbar(), so WEB_TOOLBAR_URLBAR's existing hide rule already covers it for free).
- * 19. WHY THE TOP/BOTTOM + POSITION DRAGS NEED A LIVE-STATE READ IN applyVerticalResizeExtras() (v6 fix):
- *     onVerticalResizeDrag()/onPanelPositionDrag() write root.style.top/bottom directly on every mousemove, so
- *     in isolation they already track the cursor with no delay. The bug was a SECOND, independent writer to the
- *     same properties firing concurrently: native's startPositionTracking() (unrelated to us, tracks sidebar/
- *     window layout changes) runs a requestAnimationFrame loop that calls positionPanel() every frame for 200ms
- *     after ANY mousemove anywhere on the window -- which includes the mousemove events our own drag is
- *     generating. Every one of those frames re-ran applyVerticalResizeExtras(), which (before this fix) always
- *     read getVerticalExtras()/getPositionOffset() -- i.e. the PERSISTED prefs, only written by
- *     saveVerticalExtras()/savePositionOffset() on mouseup. So on literally every animation frame of the drag,
- *     shortly after our handler wrote the live in-progress position, native's rafLoop reset root.style.top/
- *     bottom back to natural-plus-OLD-extra, undoing it. Net visible effect: the panel looked frozen for the
- *     whole drag and only jumped to the new spot once mouseup persisted the value and the next tracked frame
- *     applied it -- "teleports after you let go" instead of following the cursor. Fix: applyVerticalResizeExtras()
- *     now checks vResizeState/vPosDragState first and uses their live liveExtraTop/liveExtraBottom/livePosOffset
- *     fields (already maintained every mousemove by the drag handlers themselves) instead of the saved prefs
- *     WHILE a drag is active, falling back to the saved prefs only when neither drag is in progress. This is
- *     still idempotent per note 16 (each positionPanel() call resets top/bottom to natural THEN adds extras
- *     fresh) and needs no lock/ordering between the two mousemove listeners -- both paths compute the same
- *     number for the same cursor position, so whichever one runs last in a given frame just re-confirms it
- * *     instead of fighting it.
+ * 19. LIVE DRAG STATE (v6/v8): applyVerticalResizeExtras() prefers the in-progress drag values over the saved
+ *     prefs, so the margins track the pointer immediately and are persisted only on mouseup. Native may keep
+ *     refreshing top/bottom concurrently, but the two code paths no longer write the same properties and
+ *     therefore cannot undo or retrigger each other.
  * 20. UNGUARDED BACKDROP-FILTER WHILE THE PANEL SITS OPEN (generalizes note 12) -- REVERTED, see note 22:
  *     this note originally added a global transitionrun/animationstart listener to pulse
  *     `bgalazka-panel-animating` (note 12's guard) for ANY nearby animation while the panel was open, not just
@@ -14766,27 +14745,13 @@
  *     branch isn't the one driving positioning (opposite-docking off, or vertical-bar mode) so a later
  *     re-entry can't skip a write it actually needs. See the comment inside the positionPanel wrapper for the
  *     invalidation reasoning.
- * 24. THE DOMINANT TRIGGER, FOUND BY DIRECT USER REPRO: user isolated it further -- toggling
- *     panel_top_extra_px/panel_bottom_extra_px/panel_position_offset_px (note 16) to ANY non-zero value
- *     reliably reproduced the lag on the affected profile, and reverting to unset/zero reliably fixed it, while
- *     the exact same non-zero values on a fresh profile caused no lag at all. applyVerticalResizeExtras()
- *     (called from the same per-frame hot path as note 23) reads naturalTop/naturalBottom back from
- *     root.style.top/bottom and writes naturalTop+extraTop/naturalBottom+extraBottom with whatever
- *     floating-point precision the math produced -- but only past the `if (!extraTop && !extraBottom) return`
- *     early return two lines up, which is exactly why zero/unset extras never triggered this at all. On a
- *     profile with a more complex chrome layout, that native "natural" readback can differ by a fractional
- *     pixel from one call to the next even when nothing meaningfully changed (ordinary layout rounding noise,
- *     more likely with more going on in the toolbar/sidebar), and top/bottom are layout-affecting properties --
- *     a genuinely different value on every single animation frame forces a real layout+paint pass each time,
- *     which is both expensive on its own and, if top/bottom are ever added to this element's `transition:` list,
- *     exactly the kind of repeated real (not spurious) value change that would keep restarting a CSS transition
- *     every frame -- either way, continuously feeding the same native-loop-stays-alive mechanism notes 20-23
- *     describe. Fix: round to whole pixels before writing. Consecutive frames of sub-pixel noise now collapse
- *     to the identical string, which Gecko's normal identical-value fast path can skip -- same protection notes
- *     23 added for data-panel-side, but here via rounding rather than caching-and-skipping, since (per note 16)
- *     something between native and this function relies on re-deriving "natural" fresh on every call to stay
- *     idempotent, and skipping the write outright could not be verified safe against that without native
- *     source access this file isn't meant to touch.
+ * 24. THE DOMINANT TRIGGER, CONFIRMED BY DIRECT USER REPRO: any non-zero vertical resize/position pref made
+ *     the affected profile janky, and commenting out applyVerticalResizeExtras() restored smooth animation.
+ *     The old implementation let native positionPanel() write natural top/bottom, then immediately overwrote
+ *     both with adjusted values on every RAF iteration. The next iteration restored the natural values and the
+ *     extension changed them again, creating continuous layout churn; rounding could not fix that property
+ *     fight. v8 removes applyVerticalResizeExtras() from positionPanel() completely and expresses the same
+ *     geometry through persistent margins (note 16), updated only on real state changes or pointer movement.
  * 25. GRABBER DUAL-AXIS DRAG (v7): the pill's 6-dot "Drag to resize" handle (.zen-app-grabber) is 100% native
  *     (created + wired to native startResize/onDrag/onStopDrag in createDom(), see those methods earlier in
  *     this file) and only ever does horizontal width-resize -- there is no native concept of "drag this handle
@@ -15161,7 +15126,10 @@
     [PANEL_BOTTOM_EXTRA_PREF, (v) => (cachedBottomExtra = v)],
     [PANEL_POSITION_OFFSET_PREF, (v) => (cachedPosOffset = v)],
   ].forEach(([prefKey, setCache]) => {
-    const observer = () => setCache(getPref(prefKey, 0));
+    const observer = () => {
+      setCache(getPref(prefKey, 0));
+      applyVerticalResizeExtras(document.getElementById("zen-app-panel-root"));
+    };
     try {
       Services.prefs.addObserver(prefKey, observer, false);
       registerCleanup(() => {
@@ -15192,13 +15160,12 @@
     setPref(PANEL_POSITION_OFFSET_PREF, cachedPosOffset);
   }
 
-  // Layers the user's saved top/bottom RESIZE extras (note 16) AND the
-  // saved whole-panel POSITION offset (note 18) on top of whatever
-  // positionPanel() just computed naturally, in one shot. Called exactly
-  // once per positionPanel() invocation (see the single call site inside
-  // patchAppsInstance below) so it can never compound across repeated calls
-  // -- each call reads root.style.top/bottom AS LEFT BY THE NATIVE CODE a
-  // moment earlier in the same call, not as left by a previous call of ours.
+  // Applies the user's saved top/bottom RESIZE extras (note 16) and the
+  // whole-panel POSITION offset (note 18) as margins. Native Zentral remains
+  // the sole owner of top/bottom, so its hot positionPanel()/RAF path can run
+  // without this extension changing layout-affecting coordinates every frame.
+  // Margins survive native top/bottom refreshes and only need updating when a
+  // pref changes, a drag moves, or a newly-created panel root appears.
   //
   // IMPORTANT: this does NOT check EXT_PREFS.ALL_SIDES_RESIZE. The toggle
   // (settings row + pill button) only controls whether the RESIZE drag
@@ -15214,68 +15181,26 @@
   // while the resize surfaces are "off".
   function applyVerticalResizeExtras(root) {
     if (!root) return;
-    // LIVE-DRAG READ (see note 19): while a drag is actually in flight, use
-    // the in-progress values on vResizeState/vPosDragState instead of the
-    // persisted prefs. getVerticalExtras()/getPositionOffset() only reflect
-    // what saveVerticalExtras()/savePositionOffset() last wrote on mouseup,
-    // so reading them here mid-drag would re-apply the STALE pre-drag
-    // number every time this runs -- and this runs a lot more often than
-    // just our own mousemove handler: native startPositionTracking()'s
-    // rafLoop calls positionPanel() (which calls this) every animation
-    // frame for 200ms after ANY mousemove on the window, which very much
-    // includes the mousemove events this exact drag is generating. Each of
-    // those frames would stomp the live style our own onVerticalResizeDrag/
-    // onPanelPositionDrag handler just wrote a moment earlier straight back
-    // to the old saved position -- net effect: the panel looks frozen for
-    // the entire drag and only snaps to the new spot once mouseup finally
-    // persists it and the next tracked frame picks that up. Reading the
-    // live state here instead makes both update paths agree on the same
-    // number every frame, so the panel actually tracks the cursor.
     const { top: resizeTop, bottom: resizeBottom } = vResizeState
       ? { top: vResizeState.liveExtraTop, bottom: vResizeState.liveExtraBottom }
       : getVerticalExtras();
     const posOffset = vPosDragState
       ? vPosDragState.livePosOffset
       : getPositionOffset();
-    // Moving the whole panel UP (positive posOffset) means: less top gap,
-    // more bottom gap -- see startPanelPositionDrag()'s comment for the
-    // full derivation of why this keeps height constant while repositioning.
-    const extraTop = resizeTop - posOffset;
-    const extraBottom = resizeBottom + posOffset;
-    if (!extraTop && !extraBottom) return;
-    const naturalTop = parseFloat(root.style.top) || 0;
-    const naturalBottom = parseFloat(root.style.bottom) || 12;
-    // PERF (note 24, found from a direct user repro -- see the header
-    // comment block for the full writeup): this used to write
-    // `(naturalTop + extraTop) + "px"` with whatever sub-pixel precision
-    // floating-point math produced, EVERY call, and this function runs from
-    // the same per-animation-frame hot path notes 21-23 describe. On a
-    // profile with a more complex chrome layout, naturalTop/naturalBottom
-    // (native's own layout output, read back from root.style.top/bottom)
-    // can come out a fractional pixel different from one call to the next
-    // even when nothing meaningfully changed -- pure layout rounding noise.
-    // Only once EITHER extra was non-zero did that noise actually reach a
-    // DOM write here (the early return two lines up skips this file
-    // entirely at defaults), which lines up exactly with the user's own
-    // report: lag appears the moment either extra pref is set to ANY
-    // non-zero value, on the affected profile specifically, and is absent
-    // both at the zero/unset default AND on a fresh profile with the exact
-    // same non-zero values. top/bottom are layout-affecting properties, so
-    // a genuinely different value on every single frame forces a real
-    // layout+paint pass each time, no `transition:` even required for that
-    // part of the cost -- rounding to whole pixels before writing means
-    // consecutive frames of sub-pixel noise collapse to the SAME string,
-    // which lets Gecko's normal identical-value fast path skip the work,
-    // same as it already does for any style property that isn't actually
-    // changing. This intentionally does NOT skip the write itself (unlike
-    // note 23's dirty-check) -- whatever resets/composes "natural" between
-    // calls to keep this idempotent (note 16) keeps doing exactly that;
-    // only the precision of what we hand back to the DOM changes.
-    const newTop = Math.max(0, Math.round(naturalTop + extraTop));
-    const newBottom = Math.max(0, Math.round(naturalBottom + extraBottom));
-    root.style.top = newTop + "px";
-    root.style.bottom = newBottom + "px";
+    // Positive posOffset moves the complete panel upward: the top margin
+    // decreases while the bottom margin increases by the same amount.
+    const marginTop = Math.round(resizeTop - posOffset) + "px";
+    const marginBottom = Math.round(resizeBottom + posOffset) + "px";
+    if (root.style.marginTop !== marginTop) root.style.marginTop = marginTop;
+    if (root.style.marginBottom !== marginBottom)
+      root.style.marginBottom = marginBottom;
   }
+  registerCleanup(() => {
+    const root = document.getElementById("zen-app-panel-root");
+    if (!root) return;
+    root.style.marginTop = "";
+    root.style.marginBottom = "";
+  });
 
   // Mousedown handler for both the top and bottom edge strips (see
   // ensureVerticalResizeHandles() further below). `edge` is "top" or
@@ -15291,15 +15216,13 @@
     e.stopPropagation();
 
     const extras = getVerticalExtras();
-    // "Natural" = whatever positionPanel() computed BEFORE our extras were
-    // layered on (current rendered value minus the currently-saved extra),
-    // so the drag composes with live layout (navbar height changes, etc.)
-    // instead of the stale saved extra compounding on itself frame to frame.
+    const posOffset = getPositionOffset();
     vResizeState = {
       edge,
       startY: e.clientY,
-      naturalTop: (parseFloat(root.style.top) || 0) - extras.top,
-      naturalBottom: (parseFloat(root.style.bottom) || 12) - extras.bottom,
+      naturalTop: parseFloat(root.style.top) || 0,
+      naturalBottom: parseFloat(root.style.bottom) || 12,
+      posOffset,
       startExtraTop: extras.top,
       startExtraBottom: extras.bottom,
       liveExtraTop: extras.top,
@@ -15334,8 +15257,14 @@
       extraBottom = vResizeState.startExtraBottom - diff;
     }
 
-    let newTop = Math.max(0, vResizeState.naturalTop + extraTop);
-    let newBottom = Math.max(0, vResizeState.naturalBottom + extraBottom);
+    let newTop = Math.max(
+      0,
+      vResizeState.naturalTop + extraTop - vResizeState.posOffset,
+    );
+    let newBottom = Math.max(
+      0,
+      vResizeState.naturalBottom + extraBottom + vResizeState.posOffset,
+    );
 
     // Clamp so the two edges can never cross and eat the panel down to
     // nothing: if their combined offset would leave less than the minimum
@@ -15349,10 +15278,11 @@
       }
     }
 
-    root.style.top = newTop + "px";
-    root.style.bottom = newBottom + "px";
-    vResizeState.liveExtraTop = newTop - vResizeState.naturalTop;
-    vResizeState.liveExtraBottom = newBottom - vResizeState.naturalBottom;
+    vResizeState.liveExtraTop =
+      newTop - vResizeState.naturalTop + vResizeState.posOffset;
+    vResizeState.liveExtraBottom =
+      newBottom - vResizeState.naturalBottom - vResizeState.posOffset;
+    applyVerticalResizeExtras(root);
   }
 
   function stopVerticalResizeDrag() {
@@ -15397,15 +15327,12 @@
 
     const { top: resizeTop, bottom: resizeBottom } = getVerticalExtras();
     const posOffset = getPositionOffset();
-    // "base" = current rendered top/bottom with the RESIZE extras still
-    // baked in, but the POSITION offset backed out -- i.e. where the panel
-    // would sit at this exact size if it hadn't been manually repositioned.
-    // Dragging only ever changes posOffset from here; resizeTop/resizeBottom
-    // (and therefore the panel's height) are left completely alone.
+    // Base gaps include the resize margins but not the position offset.
+    // Native top/bottom stay untouched throughout the drag.
     vPosDragState = {
       startY: e.clientY,
-      baseTop: (parseFloat(root.style.top) || 0) + posOffset,
-      baseBottom: (parseFloat(root.style.bottom) || 12) - posOffset,
+      baseTop: (parseFloat(root.style.top) || 0) + resizeTop,
+      baseBottom: (parseFloat(root.style.bottom) || 12) + resizeBottom,
       startPosOffset: posOffset,
       livePosOffset: posOffset,
     };
@@ -15434,11 +15361,8 @@
       -vPosDragState.baseBottom,
       Math.min(vPosDragState.baseTop, newPosOffset),
     );
-    const newTop = vPosDragState.baseTop - newPosOffset;
-    const newBottom = vPosDragState.baseBottom + newPosOffset;
-    root.style.top = newTop + "px";
-    root.style.bottom = newBottom + "px";
     vPosDragState.livePosOffset = newPosOffset;
+    applyVerticalResizeExtras(root);
   }
 
   function stopPanelPositionDrag() {
@@ -15542,6 +15466,7 @@
   function ensureVerticalResizeHandles() {
     const root = document.getElementById("zen-app-panel-root");
     if (!root) return false;
+    applyVerticalResizeExtras(root);
 
     if (!root.querySelector(".zen-app-resize-strip-top")) {
       const topStrip = document.createElement("div");
@@ -15670,12 +15595,6 @@
 
       const root = document.getElementById("zen-app-panel-root");
 
-      // ALL-SIDES RESIZE (note 16): applies unconditionally, BEFORE the
-      // opposite-docking early-return below, since top/bottom offsets are
-      // identical regardless of docking side, vertical-bar placement, or
-      // dual-view/push (all of which only ever touch left/right/width).
-      applyVerticalResizeExtras(root);
-
       if (!isOppositeDockingCached() || this.isPlacementVerticalBar()) {
         // Not our branch right now (opposite-docking off, or vertical-bar
         // mode) -- native's own positioning, or none of ours, owns
@@ -15741,9 +15660,9 @@
     const origOpenPanel = appsInstance.openPanel?.bind(appsInstance);
     appsInstance.openPanel = function (app) {
       if (origOpenPanel) origOpenPanel(app);
-      document
-        .getElementById("zen-app-panel-root")
-        ?.removeAttribute("data-pinned");
+      const openedRoot = document.getElementById("zen-app-panel-root");
+      openedRoot?.removeAttribute("data-pinned");
+      applyVerticalResizeExtras(openedRoot);
 
       // Defensive: a width saved while opposite-docking was off (or before
       // a window/sidebar resize) could already exceed the current safe
