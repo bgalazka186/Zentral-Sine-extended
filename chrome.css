@@ -4921,22 +4921,21 @@ panel[id*="tabgroup-editor"] {
  *     consistency: offset changed to exactly -(element's own width) so each sits ENTIRELY outside the panel
  *     (0px inward overlap) instead of straddling the edge -- same interactive-area size as before, just moved
  *     outward. See the inline comments on all four affected rules in section 2 for the per-element math.
- * 20. NORMAL-MODE MINI PILL DRIFTED TOWARD THE PANEL INTERIOR (v6 fix): section 3b's idle-state rules set
- *     `transform-origin: right/left center` on top of `transform: translate(-50%/50%, -50%) scale(0.22)`,
- *     copied from section 2's opposite-docking mini-pill rules where that origin choice is correct (it suits
- *     translate(100%)'s "fully outside" layout). Normal mode's translate(-50%/50%) is a different, "straddle
- *     the edge" layout, and straddle layouts need transform-origin left at its CSS default (the box's own
- *     center) to stay correctly centered on the panel edge at any scale -- translate()'s percentage resolves
- *     against the box's original, UNscaled size, so a center origin keeps that resolved offset landing the
- *     scaled box's center back on the same edge point regardless of scale factor; an edge origin does not
- *     have this property and instead drags the shrunk box toward whichever side wasn't chosen as the pivot.
- *     Concretely this pulled the idle (scale 0.22) mini pill ~15px into the panel's interior (visibly "too far
- *     right" on the data-panel-side="right" side, whose pill sits on the panel's LEFT/inner edge, so drifting
- *     into the panel means drifting right) while leaving the hover (scale 1) state untouched -- translate()'s
- *     fixed pixel offset makes the result origin-independent whenever scale is exactly 1, which is also why
- *     this bug only ever showed up in the idle resting position, never on hover. Fix: removed the
- *     transform-origin override from both section-3b idle rules, letting it fall back to the default; idle
- *     and hover now agree and hovering is a pure scale with no positional jump either.
+ * 20. NORMAL-MODE MINI PILL COVERED PAGE CONTENT WHEN IT GREW (v6.1 fix, superseding an earlier v6 attempt):
+ *     section 3b originally reused native's own translate(-50%/50%) "straddle the edge" transform for the
+ *     mini-pill/peek-dot feature, just scaled down when idle. A first pass fixed a resulting ~15px horizontal
+ *     drift (caused by an incorrectly edge-anchored transform-origin fighting that straddle transform) by
+ *     restoring the default center origin -- which fixed the drift, but exposed the real, underlying design
+ *     problem: a straddle transform inherently sits HALF the pill on top of the panel/page even at rest, and
+ *     growing it from a centered pivot expands that overlap equally in both directions, so part of the page
+ *     became genuinely unreachable under the expanded pill. Opposite-docking's mini-pill (section 2) never had
+ *     this problem, because it was built on translate(-100%/100%) "fully outside" instead, whose panel-touching
+ *     edge stays pinned flush against the panel boundary at any scale (via an edge-based transform-origin,
+ *     which is the *correct* choice for THAT transform -- it was only ever wrong when paired with the -50%
+ *     straddle transform this replaces). Fix: section 3b now copies section 2's translate(-100%/100%) + edge-
+ *     origin approach outright, so normal-mode's mini pill grows outward the same way opposite-mode's already
+ *     did, never covering the page. See section 3b's own header comment for the full before/after and the
+ *     transform math shared with section 2.
  * ============================================================================================================= */
 
 /* CSS Variable Defaults for Settings-Controlled Translucency */
