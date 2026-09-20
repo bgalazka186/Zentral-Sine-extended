@@ -14577,8 +14577,8 @@
  *    pushing the panel completely off the screen! We hook positionPanel() and isPanelAttachedToRight() on the
  *    Apps INSTANCE (see note 5) to force root.style.right/left = "12px" directly.
  * 8. RESIZE INVERSION: Zentral's onDrag() internally checks this.isPanelAttachedToRight() ? (startW - diff) : (startW + diff).
- *    Hooking isPanelAttachedToRight() to return true when docked opposite makes native Zentral invert resize
- *    math automatically — no need to touch onDrag/startResize ourselves.
+ *    Opposite-Side Docking changes the panel's physical resize edge after native layout, so the extension's
+ *    onDrag wrapper temporarily flips that answer only for the duration of the native resize calculation.
  * 9. PANEL OPACITY: Web pages inside <browser> render opaque backgrounds. Applying only background-color to
  *    the slider is invisible behind the page canvas. Real transparency requires setting CSS `opacity` on
  *    #zen-app-panel-slider itself.
@@ -15162,6 +15162,21 @@
 
   function applyHorizontalPanelOffset(root) {
     if (!root) return;
+
+    // Dual-View owns the panel/page split edge. A saved physical left/right
+    // offset would move only the panel while the webpage push still uses the
+    // panel width, temporarily desynchronizing the two surfaces. Suppress the
+    // visual offset while Dual-View is active, but keep cachedHorizontalOffset
+    // and its pref untouched so the exact user position returns when
+    // Dual-View is disabled.
+    const dualViewActive =
+      document.documentElement.getAttribute("bgalazka-push-page") === "true";
+    if (dualViewActive) {
+      if (root.style.marginLeft !== "0px") root.style.marginLeft = "0px";
+      if (root.style.marginRight !== "0px") root.style.marginRight = "0px";
+      return;
+    }
+
     // The panel may be anchored from either side. A positive physical-right
     // offset is margin-left on a left-anchored panel, but negative
     // margin-right on a right-anchored one. This preserves panel width.
@@ -15329,6 +15344,20 @@
   // while the resize surfaces are "off".
   function applyVerticalResizeExtras(root) {
     if (!root) return;
+
+    // Dual-View already reserves a dedicated webpage column for the panel,
+    // so the user's extra top/bottom margins and vertical position offset no
+    // longer protect page content from being covered. Temporarily flatten
+    // both margins while Dual-View is active, but leave every cached/saved
+    // value untouched so the exact vertical size/position returns afterward.
+    const dualViewActive =
+      document.documentElement.getAttribute("bgalazka-push-page") === "true";
+    if (dualViewActive) {
+      if (root.style.marginTop !== "0px") root.style.marginTop = "0px";
+      if (root.style.marginBottom !== "0px") root.style.marginBottom = "0px";
+      return;
+    }
+
     const { top: resizeTop, bottom: resizeBottom } = vResizeState
       ? { top: vResizeState.liveExtraTop, bottom: vResizeState.liveExtraBottom }
       : getVerticalExtras();
@@ -16044,12 +16073,31 @@
      * ------------------------------------------------------------------ */
     const origOnDrag = appsInstance.onDrag?.bind(appsInstance);
     appsInstance.onDrag = function (e) {
-      if (origOnDrag) origOnDrag(e);
-      if (
-        !getPref(EXT_PREFS.OPPOSITE_DOCKING, false) ||
-        this.isPlacementVerticalBar?.()
-      )
-        return;
+      const oppositeResize =
+        getPref(EXT_PREFS.OPPOSITE_DOCKING, false) &&
+        !this.isPlacementVerticalBar?.();
+
+      if (origOnDrag) {
+        if (oppositeResize) {
+          // Native Zentral chooses its horizontal resize sign through
+          // isPanelAttachedToRight(): right => startW - diff, left =>
+          // startW + diff. Opposite-Side Docking relocates the panel after
+          // native layout, so that native sign is backwards for the physical
+          // resize edge. Flip ONLY the answer seen during onDrag(); positioning
+          // continues to use the real opposite-docking side everywhere else.
+          const sideFn = this.isPanelAttachedToRight;
+          this.isPanelAttachedToRight = () => !sideFn.call(this);
+          try {
+            origOnDrag(e);
+          } finally {
+            this.isPanelAttachedToRight = sideFn;
+          }
+        } else {
+          origOnDrag(e);
+        }
+      }
+
+      if (!oppositeResize) return;
 
       const root = document.getElementById("zen-app-panel-root");
       if (!root) return;
@@ -16094,6 +16142,16 @@
     let wrappedHandleOutsideClick = null;
     if (typeof origHandleOutsideClick === "function") {
       wrappedHandleOutsideClick = function (e) {
+        // Dual-View is an effective temporary pin. Native handleOutsideClick()
+        // can only see its private real-pin flag, so bypass it while an open
+        // Dual-View panel is active. When Dual-View turns off, native behavior
+        // immediately resumes and uses the user's untouched real pin state.
+        const dualViewKeepsPanelOpen =
+          document.documentElement.getAttribute("bgalazka-push-page") ===
+            "true" &&
+          document.getElementById("zen-app-panel-root")?.hasAttribute("open");
+        if (dualViewKeepsPanelOpen) return;
+
         const path = e.composedPath ? e.composedPath() : [];
         const insideOpenPopup = path.some(
           (el) =>
@@ -16641,14 +16699,10 @@
           next ? "true" : "false",
         );
 
-        // Automatically pin the panel when activating dual-view so the push engages instantly
-        if (next) {
-          const root = document.getElementById("zen-app-panel-root");
-          const pinBtn = root?.querySelector(".zen-app-btn");
-          if (pinBtn && pinBtn.getAttribute("data-pinned") !== "true") {
-            window.Zentral?.Apps?.togglePin?.();
-          }
-        }
+        // Dual-View is an EFFECTIVE temporary pin, not a mutation of the
+        // user's real pin state. Do not call togglePin() here. This keeps
+        // Dual-View independent from whether the Pin button is visible and
+        // preserves the user's manual pin choice when Dual-View is disabled.
 
         const input = document.querySelector(
           `input[data-pref="${BGALAZKA_EXT_PREFS.PUSH_PAGE}"]`,
@@ -16766,6 +16820,19 @@
 
     const isPinned = pinBtn?.getAttribute("data-pinned") === "true";
     const isOpen = root?.hasAttribute("open") && !root?.hasAttribute("closing");
+    const dualViewActive =
+      document.documentElement.getAttribute("bgalazka-push-page") === "true";
+    // Dual-View behaves like a temporary/effective pin without changing the
+    // native pin state. This makes it work even when the Pin icon is hidden
+    // and guarantees that disabling Dual-View restores the user's prior pin
+    // choice instead of leaving behind an auto-pin side effect.
+    const effectivePinned = isOpen && (isPinned || dualViewActive);
+
+    // Re-evaluate all user panel offsets whenever Dual-View changes. Both
+    // helpers suppress their axis-specific margins only while Dual-View is on
+    // and automatically restore the saved values when it turns off.
+    applyVerticalResizeExtras(root);
+    applyHorizontalPanelOffset(root);
     const side =
       root?.getAttribute("data-panel-side") ||
       (window.Zentral?.Apps?.isPanelAttachedToRight?.() ? "right" : "left");
@@ -16780,7 +16847,7 @@
     );
     document.documentElement.setAttribute(
       "bgalazka-panel-pinned",
-      isPinned && isOpen ? "true" : "false",
+      effectivePinned ? "true" : "false",
     );
     document.documentElement.setAttribute("bgalazka-panel-side", side);
   }
@@ -17769,8 +17836,8 @@
       content.appendChild(t2.row);
 
       const tPush = createToggleRow(
-        "Push Webpage on Pin (Dual-View Mode)",
-        "Contract active webpage aside when panel is pinned; forces 100% solid opacity on panel",
+        "Dual-View Mode",
+        "Keep the panel open and contract the active webpage beside it; does not change your manual Pin state",
         BGALAZKA_EXT_PREFS.PUSH_PAGE,
         "bgalazka-push-page",
         false,
