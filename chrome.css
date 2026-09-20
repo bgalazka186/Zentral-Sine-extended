@@ -4921,6 +4921,22 @@ panel[id*="tabgroup-editor"] {
  *     consistency: offset changed to exactly -(element's own width) so each sits ENTIRELY outside the panel
  *     (0px inward overlap) instead of straddling the edge -- same interactive-area size as before, just moved
  *     outward. See the inline comments on all four affected rules in section 2 for the per-element math.
+ * 20. NORMAL-MODE MINI PILL DRIFTED TOWARD THE PANEL INTERIOR (v6 fix): section 3b's idle-state rules set
+ *     `transform-origin: right/left center` on top of `transform: translate(-50%/50%, -50%) scale(0.22)`,
+ *     copied from section 2's opposite-docking mini-pill rules where that origin choice is correct (it suits
+ *     translate(100%)'s "fully outside" layout). Normal mode's translate(-50%/50%) is a different, "straddle
+ *     the edge" layout, and straddle layouts need transform-origin left at its CSS default (the box's own
+ *     center) to stay correctly centered on the panel edge at any scale -- translate()'s percentage resolves
+ *     against the box's original, UNscaled size, so a center origin keeps that resolved offset landing the
+ *     scaled box's center back on the same edge point regardless of scale factor; an edge origin does not
+ *     have this property and instead drags the shrunk box toward whichever side wasn't chosen as the pivot.
+ *     Concretely this pulled the idle (scale 0.22) mini pill ~15px into the panel's interior (visibly "too far
+ *     right" on the data-panel-side="right" side, whose pill sits on the panel's LEFT/inner edge, so drifting
+ *     into the panel means drifting right) while leaving the hover (scale 1) state untouched -- translate()'s
+ *     fixed pixel offset makes the result origin-independent whenever scale is exactly 1, which is also why
+ *     this bug only ever showed up in the idle resting position, never on hover. Fix: removed the
+ *     transform-origin override from both section-3b idle rules, letting it fall back to the default; idle
+ *     and hover now agree and hovering is a pure scale with no positional jump either.
  * ============================================================================================================= */
 
 /* CSS Variable Defaults for Settings-Controlled Translucency */
@@ -5853,10 +5869,35 @@ panel[id*="tabgroup-editor"] {
  * turned opposite docking off), NONE of that CSS ever matched, so the mini
  * pill simply never rendered anywhere -- there was no "off" bug, the ON
  * rules were just unreachable outside opposite-docking mode. These rules add
- * the same idle/hover mini-pill behavior for normal docking, using the native
- * translate(-50%)/translate(50%) "straddle the edge" transform normal mode
- * already uses (instead of opposite mode's translate(-100%)/translate(100%)
- * "fully outside" transform), so scaling down still hugs the correct edge.
+ * the same mini-pill behavior for normal docking.
+ *
+ * note 20 (design correction, v6.1): this used to reuse native's own
+ * translate(-50%)/translate(50%) "straddle the edge" transform (half the
+ * pill sits on top of the panel/page content, even at rest, and MORE of it
+ * does as it grows, since growing from a straddled center expands equally
+ * in both directions). That's how the plain native pill has always looked,
+ * but it's a bad fit for the mini-pill/peek-dot feature specifically: the
+ * whole point of a small idle indicator is to stay out of the way, and
+ * growing it by expanding onto the page is the opposite of that -- as
+ * reported, part of the page becomes genuinely unreachable under the
+ * pill while it's expanded. Opposite-docking's mini-pill (section 2)
+ * never had this problem because it was built on translate(-100%)/(100%)
+ * "fully outside" instead -- the pill's panel-touching edge stays pinned
+ * flush against the panel boundary at every scale (see that section's own
+ * notes for the transform math) and it only ever grows OUTWARD, away from
+ * the page, never over it. These rules now copy that exact approach for
+ * normal docking too, so behavior matches between the two docking modes:
+ * `translate(-100%/100%, -50%)` instead of `translate(-50%/50%, -50%)`,
+ * paired with an edge-based transform-origin (the pill's own inner edge --
+ * "right center" for data-panel-side="right", "left center" for "left" --
+ * which is what makes that edge stay flush at the panel boundary
+ * regardless of scale; see section 2's notes for why an edge origin is
+ * *correct* for a translate(100%) layout even though it was *wrong* for
+ * the old translate(50%) one this replaces). The values below are
+ * otherwise identical to section 2's, since the pill's own left:0/right:0
+ * anchor point (set by native, per data-panel-side) is the same in both
+ * docking modes -- only the panel ROOT's on-screen position differs
+ * between them, which doesn't affect the pill's position relative to it.
  *
  * Selector specificity here is deliberately LOWER than the opposite-docking
  * rules above (2 attribute selectors vs. their 3), so when opposite docking
@@ -5867,7 +5908,7 @@ panel[id*="tabgroup-editor"] {
   #zen-app-panel-root[data-panel-side="right"]
   #zen-app-panel-pill {
   transform-origin: right center !important;
-  transform: translate(-50%, -50%) scale(0.22) !important;
+  transform: translate(-100%, -50%) scale(0.22) !important;
   opacity: var(--bgalazka-pill-peek-opacity, 90%) !important;
   background: var(--bgalazka-pill-peek-color, #4da6ff) !important;
   transition:
@@ -5886,7 +5927,7 @@ panel[id*="tabgroup-editor"] {
   #zen-app-panel-root[data-panel-side="right"]
   .zen-app-resize-strip:hover
   ~ #zen-app-panel-pill {
-  transform: translate(-50%, -50%) scale(1) !important;
+  transform: translate(-100%, -50%) scale(1) !important;
   opacity: 1 !important;
   background: color-mix(
     in srgb,
@@ -5899,7 +5940,7 @@ panel[id*="tabgroup-editor"] {
   #zen-app-panel-root[data-panel-side="left"]
   #zen-app-panel-pill {
   transform-origin: left center !important;
-  transform: translate(50%, -50%) scale(0.22) !important;
+  transform: translate(100%, -50%) scale(0.22) !important;
   opacity: var(--bgalazka-pill-peek-opacity, 90%) !important;
   background: var(--bgalazka-pill-peek-color, #4da6ff) !important;
   transition:
@@ -5918,7 +5959,7 @@ panel[id*="tabgroup-editor"] {
   #zen-app-panel-root[data-panel-side="left"]
   .zen-app-resize-strip:hover
   ~ #zen-app-panel-pill {
-  transform: translate(50%, -50%) scale(1) !important;
+  transform: translate(100%, -50%) scale(1) !important;
   opacity: 1 !important;
   background: color-mix(
     in srgb,

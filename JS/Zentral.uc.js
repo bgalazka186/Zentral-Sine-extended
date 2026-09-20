@@ -14894,10 +14894,33 @@
     // updateCSSVars() again once the real pref key exists, which applies the
     // actual saved value. The CSS side clamps this with clamp() so no matter
     // what value is stored, the pill can never be pushed fully off-screen.
-    root.style.setProperty(
-      "--bgalazka-pill-offset",
-      getPref(EXT_PREFS.PILL_POSITION, 0) + "%",
-    );
+    //
+    // BUG FIX (this pill was landing in the wrong spot in NORMAL, non-opposite
+    // docking -- nothing to do with opposite-docking mode): this pref used to
+    // be a "top"/"center"/"bottom" STRING enum (see the BGALAZKA_EXT_PREFS.
+    // PILL_POSITION comment). getPref() trusts Firefox's own stored pref TYPE
+    // (Services.prefs.getPrefType()), not a runtime typeof-number check, so a
+    // leftover string value from that old dropdown (e.g. "center") comes back
+    // AS A STRING here, not 0 -- the old inline comment claiming getPref()
+    // "will just fail its typeof-number fallback check" was describing
+    // behavior that doesn't actually exist in getPref()'s current
+    // implementation. Left unguarded, `"center" + "%"` produces the CSS
+    // custom-property value `center%`, which is invalid inside the
+    // chrome.css `calc(50% + var(--bgalazka-pill-offset, 0%))` expression --
+    // an invalid var() substitution doesn't fall back to the var()'s own
+    // `0%` default, it makes the whole `top` DECLARATION invalid at
+    // computed-value time, so `top` silently reverts to its initial value
+    // (`auto`) instead of the intended centered position. Coerced to a
+    // clamped finite number here so a bad/legacy value can never reach the
+    // CSS layer; see the one-time migration further below (near "Initial
+    // attribute sync") that also clears the stale string off disk so the
+    // settings-panel slider stops silently disagreeing with it too.
+    const rawPillOffset = getPref(EXT_PREFS.PILL_POSITION, 0);
+    const pillOffset =
+      typeof rawPillOffset === "number" && Number.isFinite(rawPillOffset)
+        ? Math.max(-50, Math.min(50, rawPillOffset))
+        : 0;
+    root.style.setProperty("--bgalazka-pill-offset", pillOffset + "%");
     root.style.setProperty(
       "--bgalazka-pill-peek-color",
       getPref(EXT_PREFS.PILL_PEEK_DOT_COLOR, "#4da6ff"),
@@ -15891,9 +15914,16 @@
     HIDE_PILL: "zen.workspace.bgalazka.hide_pill",
     // Numeric percent offset from vertical center, -50 (near top) to +50
     // (near bottom), 0 = centered. Was previously a "top"|"center"|"bottom"
-    // string enum; changed to a continuous slider per user request. The old
-    // string values are harmless if still present on disk (getPref() will
-    // just fail its typeof-number fallback check and fall back to 0).
+    // string enum; changed to a continuous slider per user request. A
+    // leftover string value from that old enum, if still on disk, is NOT
+    // harmless on its own (getPref() returns it as-is, matching whatever
+    // type Firefox's prefs system has it stored as -- see getPref() above --
+    // it does not detect or coerce type mismatches against a caller's
+    // expectations). Both call sites that read this pref now defend against
+    // that themselves (updateCSSVars() coerces to a clamped number; see its
+    // comment), and the one-time migration near "Initial attribute sync"
+    // clears a leftover string off disk entirely so this pref can't keep
+    // producing surprises at any future read site.
     PILL_POSITION: "zen.workspace.bgalazka.pill_position",
     // Whether the opposite-docking pill stays visible as a tiny "peek dot"
     // while idle (true), or fully disappears like classic autohide (false).
@@ -18082,6 +18112,29 @@
   // up in applyAttributes(), before BGALAZKA_EXT_PREFS existed yet, so
   // EXT_PREFS.PILL_POSITION was still undefined at that point and it wrote a
   // temporary "0%" fallback. This call applies the real saved value.
+  //
+  // ONE-TIME MIGRATION (pairs with the updateCSSVars() fix above): if this
+  // pref still holds a string from the pre-slider "top"/"center"/"bottom"
+  // enum, clear it so it goes back to reading as the numeric default (0)
+  // everywhere, including the settings-panel slider itself. Without this,
+  // updateCSSVars()'s coercion keeps the CSS side safe, but the settings
+  // slider (`input.value = getPref(prefKey, defaultVal)` in
+  // createSliderRow()) would keep silently discarding the same bad string,
+  // showing its own built-in range-input midpoint instead — meaning the UI
+  // would look fine (slider sitting at 0%) while never actually being able
+  // to fix the real problem until the user nudges it, since nudging is the
+  // only thing that writes a fresh, valid integer over the old string. Only
+  // ever clears, never writes a value itself, so it can't fight the user's
+  // real saved offset if one legitimately exists as a proper number/int.
+  try {
+    if (
+      Services.prefs.prefHasUserValue(BGALAZKA_EXT_PREFS.PILL_POSITION) &&
+      Services.prefs.getPrefType(BGALAZKA_EXT_PREFS.PILL_POSITION) ===
+        Services.prefs.PREF_STRING
+    ) {
+      Services.prefs.clearUserPref(BGALAZKA_EXT_PREFS.PILL_POSITION);
+    }
+  } catch (_) {}
   updateCSSVars();
   try {
     const pillPosObserver = () => updateCSSVars();
