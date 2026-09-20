@@ -4907,14 +4907,20 @@ panel[id*="tabgroup-editor"] {
  *     by side -- the pre-existing hide rule for it (right below) had to gain `!important` to match, since our
  *     new `!important` display declaration would otherwise always beat a plain one regardless of selector
  *     specificity, silently breaking the "hide URL bar" toggle.
- * 19. OPPOSITE-DOCKING RESIZE STRIP BLOCKED THE PAGE'S OWN SCROLLBAR (v6 fix): section 2's per-side
- *     .zen-app-resize-strip overrides widen the native 10px strip to 14px for an easier grab target, but the
- *     old offset (-8px) straddled the panel edge (8px out, 6px IN), so on data-panel-side="left" that 6px
- *     inward overlap sat directly on top of the page's own vertical scrollbar (always on the content's right
- *     edge, which is the INNER edge when docked left) -- pointer-events:auto + z-index:30 meant the strip ate
- *     every click meant for the scrollbar. Fix: offset changed to -14px (== the strip's width) on BOTH sides
- *     so the whole grab area sits OUTSIDE the panel (0px overlap) instead of straddling the edge. See the
- *     inline comments on both data-panel-side blocks in section 2 for the full per-side reasoning.
+ * 19. OPPOSITE-DOCKING STRIP/HOVER-ZONE ATE CLICKS MEANT FOR THE PAGE'S OWN SCROLLBAR (v6 fix): section 2's
+ *     per-side .zen-app-resize-strip AND .zen-app-hover-zone overrides only ever changed which edge they sit
+ *     on (left/right), never their offset-vs-width relationship, so both kept the native "straddle the edge"
+ *     geometry (part outside the panel, part inside, on top of page content). For data-panel-side="left" that
+ *     inward part lands on the panel's right/inner edge -- which is also where a page's own vertical
+ *     scrollbar ALWAYS renders (LTR or RTL, Gecko paints it on the physical right) -- and both elements have
+ *     pointer-events:auto while the panel is open, so they intercepted scrollbar clicks/drags before the
+ *     <browser> ever saw them. The hover-zone was the bigger offender (44px wide native, ~20px of it inward at
+ *     the old -24px offset, and it also drives the pill's :hover reveal -- hence hovering near that edge would
+ *     visibly "activate" the pill even when nothing was deliberately being hovered) but the resize-strip
+ *     contributed too (~6px inward at the old -8px offset). Fix, applied to BOTH elements on BOTH sides for
+ *     consistency: offset changed to exactly -(element's own width) so each sits ENTIRELY outside the panel
+ *     (0px inward overlap) instead of straddling the edge -- same interactive-area size as before, just moved
+ *     outward. See the inline comments on all four affected rules in section 2 for the per-element math.
  * ============================================================================================================= */
 
 /* CSS Variable Defaults for Settings-Controlled Translucency */
@@ -5108,16 +5114,11 @@ panel[id*="tabgroup-editor"] {
   right: 12px !important;
   left: auto !important;
 }
-/* note 19: offset is -14px (== the strip's own width), NOT -8px, so the
- * whole 14px grab area sits OUTSIDE the panel (spans -14px to 0px). At the
- * old -8px offset the strip's far edge landed at +6px *inside* the panel,
- * on top of the browser content there and swallowing clicks meant for
- * whatever the page renders at that edge. This particular block covers the
- * panel's INNER edge (facing the sidebar/main browser), which isn't where
- * a page's own scrollbar sits -- but it's fixed here too for consistency.
- * See the data-panel-side="left" block below for the edge that actually
- * caused the reported "can't grab the scrollbar" bug, and note 19 in the
- * big comment above for the full writeup. */
+/* note 19 (see the big writeup above, and the data-panel-side="left" hover-
+ * zone rule further down for the part that actually caused the reported
+ * bug): offset == width (-14px for a 14px strip) so the whole grab area
+ * sits OUTSIDE the panel instead of the old -8px, which let 6px of it
+ * bleed onto the page content at this edge. */
 :root[bgalazka-opposite-docking="true"]
   #zen-app-panel-root[data-panel-side="right"]
   .zen-app-resize-strip {
@@ -5190,10 +5191,17 @@ panel[id*="tabgroup-editor"] {
   #zen-app-panel-pill {
   transform: translate(-100%, -50%) !important;
 }
+/* note 19: -44px, not -24px -- the native .zen-app-hover-zone is 44px wide
+ * (set in Zentral_uc.js, untouched by us), so -24px still let 20px of it
+ * sit INSIDE the panel. offset == native width (-44px) pushes the whole
+ * 44px reveal zone outside with 0px inward overlap, same size as before,
+ * just fully external instead of straddling the edge. See the
+ * data-panel-side="left" copy of this rule for why the inward half is the
+ * one that actually breaks things (it's the "you hovered over me" bug). */
 :root[bgalazka-opposite-docking="true"]
   #zen-app-panel-root[data-panel-side="right"]
   .zen-app-hover-zone {
-  left: -24px !important;
+  left: -44px !important;
   right: auto !important;
   pointer-events: auto !important;
 }
@@ -5204,21 +5212,11 @@ panel[id*="tabgroup-editor"] {
   right: auto !important;
   left: 12px !important;
 }
-/* note 19 (THE ACTUAL SCROLLBAR-BLOCKING FIX): a page's own vertical
- * scrollbar always renders at the RIGHT edge of its viewport (LTR pages;
- * this is also true for the vast majority of RTL pages in practice since
- * Gecko still paints the scrollbar on the physical right unless the page
- * opts into scrollbar-gutter/direction tricks). When the panel is docked
- * on the LEFT (this block), the panel's RIGHT edge is its INNER edge --
- * exactly where this resize strip lives. At the old `right: -8px; width:
- * 14px`, the strip spanned from -8px to +6px, i.e. 6px of it sat *inside*
- * the panel on top of the page content, directly over the scrollbar's
- * usual location -- with pointer-events:auto and z-index:30 (above the
- * <browser>), so every click there hit the strip instead of the
- * scrollbar. Fix: `right: -14px` (== the strip's width) pins the whole
- * grab area OUTSIDE the panel (-14px to 0px), 0px overlap, page content
- * fully clickable again. Grab-area size is unchanged, it's just moved
- * outward instead of straddling the edge. */
+/* note 19: mirror of the data-panel-side="right" resize-strip fix above --
+ * offset == width (-14px) so this sits fully outside the panel too. On its
+ * own this wasn't enough to fix the scrollbar bug (see the hover-zone rule
+ * below, which was the bigger culprit on this side); fixing both is what
+ * actually resolves it. */
 :root[bgalazka-opposite-docking="true"]
   #zen-app-panel-root[data-panel-side="left"]
   .zen-app-resize-strip {
@@ -5280,10 +5278,32 @@ panel[id*="tabgroup-editor"] {
   #zen-app-panel-pill {
   transform: translate(100%, -50%) !important;
 }
+/* note 19 (THE ACTUAL FIX for "can't grab the scrollbar" / "hovering over
+ * the edge lights up the pill even though I'm not touching the strip"):
+ * .zen-app-hover-zone is native, 44px wide (Zentral_uc.js), invisible, and
+ * the native rule `#zen-app-panel-root[open] .zen-app-hover-zone {
+ * pointer-events: auto }` makes it fully interactive -- and :hover-active
+ * -- for as long as the panel is open, i.e. exactly while you're trying to
+ * use the page inside it. At the old `right: -24px` (width still the
+ * native 44px), this zone spanned -24px to +20px: a full 20px of *invisible,
+ * hoverable, pointer-events:auto* real estate sitting on top of the page
+ * content at this edge. A left-docked panel's own scrollbar lives on
+ * exactly this edge (pages always put their vertical scrollbar on their
+ * right, and this is the panel's right/inner edge), so that 20px band
+ * intercepted the scrollbar entirely: hovering it triggered the pill's
+ * `:hover` reveal (the "you hovered over me" effect), and it ate clicks
+ * before they ever reached the <browser> underneath -- much bigger and
+ * more disruptive than the resize-strip's old 6px overlap fixed above,
+ * which is why fixing only the strip wasn't enough on its own.
+ * Fix: `right: -44px` (== the zone's own native width) pins the whole 44px
+ * hover-reveal area OUTSIDE the panel (-44px to 0px), 0px overlap, so it
+ * can still do its job (revealing the pill on autohide) without ever
+ * covering page content or its scrollbar. Zone size is unchanged, just
+ * moved outward instead of straddling the edge. */
 :root[bgalazka-opposite-docking="true"]
   #zen-app-panel-root[data-panel-side="left"]
   .zen-app-hover-zone {
-  right: -24px !important;
+  right: -44px !important;
   left: auto !important;
   pointer-events: auto !important;
 }
