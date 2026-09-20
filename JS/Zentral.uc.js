@@ -14744,6 +14744,71 @@
  *     reposition()/triggerBurst() included -- use the cache, not just our own two call sites. This is override-
  *     by-replacement of a live property on an object instance, not an edit to any line of the original
  *     implementation, which is still sitting untouched earlier in this file.
+ *     UPDATE: user confirmed this alone did NOT fix the reported jank. A follow-up analysis of the SAME
+ *     profile (self-time by category, not just marker counts -- see note 23) showed the main thread was ~99.8%
+ *     Idle the whole time; the ~1911 pref reads this note fixes were real but too cheap individually to be the
+ *     visible bottleneck. Left in place -- it's still a correct, worthwhile reduction in per-frame native
+ *     overhead -- but note 23 is what actually explained the visible FPS drop, and note 24 is what a direct
+ *     user repro then pinned down as the dominant trigger.
+ * 23. UNCONDITIONAL data-panel-side WRITE, FOUND BY RE-ANALYZING THE SAME PROFILE: with note 22 confirmed
+ *     insufficient, self-time-by-category analysis of the main thread showed it was ~99.8% Idle overall, but
+ *     eventDelay spiked to 400ms+ in a sawtooth pattern during exactly the reported-janky window, and marker
+ *     analysis of that window found 52 overlapping "CSS transition" markers totalling 8123ms of duration in a
+ *     ~4.4s span -- many with `oncompositor: false` (properties that force a real main-thread layout+paint
+ *     pass, not a cheap GPU-only composite), on both native chrome elements (navigator-toolbox, titlebar,
+ *     urlbar, tabs -- retriggered continuously by ordinary hover during the test) and our own
+ *     #zen-apps-sidebar-grid. The positionPanel() wrapper (notes 7/21/22) was writing
+ *     style.left/right + setAttribute("data-panel-side", ...) UNCONDITIONALLY on every call from that same
+ *     per-frame native loop -- chrome.css has over a dozen selectors keyed on [data-panel-side="..."], so every
+ *     redundant write forced Gecko to re-evaluate all of them, even though the value (which side the panel
+ *     docks to) essentially never changes within a session. Fix: cache the last-applied side on the root
+ *     element and skip the writes entirely once nothing has changed, invalidating the cache whenever this
+ *     branch isn't the one driving positioning (opposite-docking off, or vertical-bar mode) so a later
+ *     re-entry can't skip a write it actually needs. See the comment inside the positionPanel wrapper for the
+ *     invalidation reasoning.
+ * 24. THE DOMINANT TRIGGER, FOUND BY DIRECT USER REPRO: user isolated it further -- toggling
+ *     panel_top_extra_px/panel_bottom_extra_px/panel_position_offset_px (note 16) to ANY non-zero value
+ *     reliably reproduced the lag on the affected profile, and reverting to unset/zero reliably fixed it, while
+ *     the exact same non-zero values on a fresh profile caused no lag at all. applyVerticalResizeExtras()
+ *     (called from the same per-frame hot path as note 23) reads naturalTop/naturalBottom back from
+ *     root.style.top/bottom and writes naturalTop+extraTop/naturalBottom+extraBottom with whatever
+ *     floating-point precision the math produced -- but only past the `if (!extraTop && !extraBottom) return`
+ *     early return two lines up, which is exactly why zero/unset extras never triggered this at all. On a
+ *     profile with a more complex chrome layout, that native "natural" readback can differ by a fractional
+ *     pixel from one call to the next even when nothing meaningfully changed (ordinary layout rounding noise,
+ *     more likely with more going on in the toolbar/sidebar), and top/bottom are layout-affecting properties --
+ *     a genuinely different value on every single animation frame forces a real layout+paint pass each time,
+ *     which is both expensive on its own and, if top/bottom are ever added to this element's `transition:` list,
+ *     exactly the kind of repeated real (not spurious) value change that would keep restarting a CSS transition
+ *     every frame -- either way, continuously feeding the same native-loop-stays-alive mechanism notes 20-23
+ *     describe. Fix: round to whole pixels before writing. Consecutive frames of sub-pixel noise now collapse
+ *     to the identical string, which Gecko's normal identical-value fast path can skip -- same protection notes
+ *     23 added for data-panel-side, but here via rounding rather than caching-and-skipping, since (per note 16)
+ *     something between native and this function relies on re-deriving "natural" fresh on every call to stay
+ *     idempotent, and skipping the write outright could not be verified safe against that without native
+ *     source access this file isn't meant to touch.
+ * 25. GRABBER DUAL-AXIS DRAG (v7): the pill's 6-dot "Drag to resize" handle (.zen-app-grabber) is 100% native
+ *     (created + wired to native startResize/onDrag/onStopDrag in createDom(), see those methods earlier in
+ *     this file) and only ever does horizontal width-resize -- there is no native concept of "drag this handle
+ *     vertically" at all. Rather than touching that native wiring (forbidden -- see marker at the top of this
+ *     block), ensurePillGrabberVerticalDrag() below adds a SECOND, independent mousedown listener on the same
+ *     element that runs alongside the native one and just watches the drag: horizontal movement is left
+ *     completely alone (native's own onDrag, already running in parallel from its own listener, keeps resizing
+ *     width exactly as before -- "moved sideways it works like it does now" is true by construction, since we
+ *     never call preventDefault/stopPropagation on the mousedown and so never stop native's handler from also
+ *     firing). Only once vertical movement both exceeds a deadzone AND dominates the horizontal component do we
+ *     step in: cleanly end the in-progress native resize by calling the SAME bound appsInstance.onStopDrag
+ *     reference native itself would call on mouseup (note 5/8 pattern -- this is calling an existing native
+ *     method, not editing one), which tears down native's own listeners/pointer-events/width-save exactly as if
+ *     the user had just released the mouse there, then immediately hand off to startPanelPositionDrag() (note
+ *     18) using the SAME mousemove event as its synthetic "mousedown" -- that function only reads e.clientY/
+ *     e.button off whatever event it's given, so a mousemove works as the handoff event with no changes needed
+ *     to it. This deliberately reuses the URL-bar-grip reposition path verbatim rather than reimplementing
+ *     vertical dragging a second time, which is also why it automatically respects the SAME persisted
+ *     "vertical offset" pref, the same edge clamping, and the same applyVerticalResizeExtras() summing as that
+ *     grip already does -- there was nothing panel-position-specific left to write. Idempotency guard
+ *     (grabberBtn._bgalazkaVDragHooked) mirrors ensurePillAllSidesResizeButton()/ensurePillDualViewButton()
+ *     immediately below it, since this can be called again on every openPanel per the existing hook pattern.
  * ============================================================================================================= */
 
 (function initBgalazkaExtension() {
@@ -15180,8 +15245,36 @@
     if (!extraTop && !extraBottom) return;
     const naturalTop = parseFloat(root.style.top) || 0;
     const naturalBottom = parseFloat(root.style.bottom) || 12;
-    root.style.top = Math.max(0, naturalTop + extraTop) + "px";
-    root.style.bottom = Math.max(0, naturalBottom + extraBottom) + "px";
+    // PERF (note 24, found from a direct user repro -- see the header
+    // comment block for the full writeup): this used to write
+    // `(naturalTop + extraTop) + "px"` with whatever sub-pixel precision
+    // floating-point math produced, EVERY call, and this function runs from
+    // the same per-animation-frame hot path notes 21-23 describe. On a
+    // profile with a more complex chrome layout, naturalTop/naturalBottom
+    // (native's own layout output, read back from root.style.top/bottom)
+    // can come out a fractional pixel different from one call to the next
+    // even when nothing meaningfully changed -- pure layout rounding noise.
+    // Only once EITHER extra was non-zero did that noise actually reach a
+    // DOM write here (the early return two lines up skips this file
+    // entirely at defaults), which lines up exactly with the user's own
+    // report: lag appears the moment either extra pref is set to ANY
+    // non-zero value, on the affected profile specifically, and is absent
+    // both at the zero/unset default AND on a fresh profile with the exact
+    // same non-zero values. top/bottom are layout-affecting properties, so
+    // a genuinely different value on every single frame forces a real
+    // layout+paint pass each time, no `transition:` even required for that
+    // part of the cost -- rounding to whole pixels before writing means
+    // consecutive frames of sub-pixel noise collapse to the SAME string,
+    // which lets Gecko's normal identical-value fast path skip the work,
+    // same as it already does for any style property that isn't actually
+    // changing. This intentionally does NOT skip the write itself (unlike
+    // note 23's dirty-check) -- whatever resets/composes "natural" between
+    // calls to keep this idempotent (note 16) keeps doing exactly that;
+    // only the precision of what we hand back to the DOM changes.
+    const newTop = Math.max(0, Math.round(naturalTop + extraTop));
+    const newBottom = Math.max(0, Math.round(naturalBottom + extraBottom));
+    root.style.top = newTop + "px";
+    root.style.bottom = newBottom + "px";
   }
 
   // Mousedown handler for both the top and bottom edge strips (see
@@ -15361,6 +15454,86 @@
     document.removeEventListener("mousemove", onPanelPositionDrag);
     document.removeEventListener("mouseup", stopPanelPositionDrag);
   });
+
+  /* ==========================================================================
+   * GRABBER DUAL-AXIS DRAG (note 25): sideways keeps doing the native width
+   * resize untouched; past a vertical deadzone it hands off to the SAME
+   * reposition drag the URL bar grip uses (note 18), so the existing
+   * "vertical offset" pref/setting stays the one source of truth for that
+   * axis. See note 25 above for the full "why" -- this only adds a second,
+   * side-by-side listener, it never edits/replaces the native one.
+   * ========================================================================== */
+  function ensurePillGrabberVerticalDrag() {
+    const grabberBtn = document.querySelector(
+      "#zen-app-panel-pill .zen-app-grabber",
+    );
+    if (!grabberBtn || grabberBtn._bgalazkaVDragHooked) return false;
+    grabberBtn._bgalazkaVDragHooked = true;
+
+    // Tooltip only -- purely descriptive, doesn't touch native's own
+    // grabberBtn.title assignment (that line is standard-mod code and is
+    // left completely alone); this just overwrites the DOM property
+    // afterward, the same way other pill buttons' titles get updated live
+    // elsewhere in this file (e.g. the autohide button's title toggling).
+    grabberBtn.title =
+      "Drag sideways to resize \u2022 drag up/down to move the pill";
+
+    // How far the cursor has to travel vertically, and how much that has to
+    // dominate any horizontal travel, before we treat the gesture as "the
+    // user wants to move the pill" instead of "still resizing". Kept as a
+    // local constant (not a pref) since it's a feel-tuning number, not a
+    // user-facing toggle -- bump it if reposition triggers too eagerly
+    // during an intentionally-diagonal resize drag, or lower it if it feels
+    // unresponsive.
+    const VDRAG_DEADZONE_PX = 14;
+
+    grabberBtn.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      const appsInstance = window.Zentral?.Apps;
+      if (!appsInstance) return;
+
+      const startX = e.clientX;
+      const startY = e.clientY;
+      let switchedToVertical = false;
+
+      const trackMove = (moveEvt) => {
+        if (switchedToVertical) return;
+        const dx = moveEvt.clientX - startX;
+        const dy = moveEvt.clientY - startY;
+        if (Math.abs(dy) <= VDRAG_DEADZONE_PX || Math.abs(dy) <= Math.abs(dx))
+          return;
+
+        switchedToVertical = true;
+        document.removeEventListener("mousemove", trackMove);
+        document.removeEventListener("mouseup", trackUp);
+
+        // Bail out of native's in-progress width resize exactly the way its
+        // own mouseup would (note 8/25): same bound reference, so panel
+        // pointer-events and the width pref end up saved at whatever width
+        // the drag had reached the instant we intercepted it -- identical
+        // to the user just stopping a normal horizontal drag right here.
+        safeCall(
+          () => appsInstance.onStopDrag(),
+          "ensurePillGrabberVerticalDrag/onStopDrag",
+        );
+
+        // Hand off to the URL-bar grip's own reposition drag (note 18),
+        // using this mousemove as the "start" event -- it only reads
+        // e.clientY/e.button, both of which a mousemove event has.
+        safeCall(
+          () => startPanelPositionDrag(moveEvt),
+          "ensurePillGrabberVerticalDrag/startPanelPositionDrag",
+        );
+      };
+      const trackUp = () => {
+        document.removeEventListener("mousemove", trackMove);
+        document.removeEventListener("mouseup", trackUp);
+      };
+      document.addEventListener("mousemove", trackMove);
+      document.addEventListener("mouseup", trackUp);
+    });
+    return true;
+  }
 
   // Creates (once) and appends the two extra edge-drag strips to the panel
   // root. Purely additive DOM -- native root creation code (note 1) is
@@ -18188,6 +18361,7 @@
           ensurePillDualViewButton();
           ensurePillAllSidesResizeButton();
           ensureVerticalResizeHandles();
+          ensurePillGrabberVerticalDrag();
           syncPanelPushState();
           ensureWebToolbar();
           updateWebToolbarState();
@@ -18539,6 +18713,10 @@
   const initAllSidesResizeUi = () => {
     const ok = ensureVerticalResizeHandles();
     ensurePillAllSidesResizeButton();
+    // Not actually an all-sides-resize feature (note 25, not 16) -- just
+    // reusing this same "root/pill exists yet?" retry loop instead of
+    // spinning up a near-identical second setInterval for it.
+    ensurePillGrabberVerticalDrag();
     return ok;
   };
   if (!safeCall(initAllSidesResizeUi, "initAllSidesResizeUi")) {

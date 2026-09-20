@@ -4944,6 +4944,10 @@ panel[id*="tabgroup-editor"] {
  *     change and still only fires for the panel's own open/close slide, per note 12. The actual cause (notes
  *     21-22 in the JS file) was native Services.prefs reads in a base-mod animation-frame loop -- nothing in
  *     this CSS file was involved.
+ * 22. GRABBER DUAL-AXIS DRAG: see Zentral_uc.js note 25 for the JS half (deadzone + handoff to the existing
+ *     "vertical offset" reposition drag). The CSS half is just the cursor hint below, in section 4's pill-button
+ *     rules -- `cursor: move` replaces native's `ew-resize` so the handle no longer visually promises
+ *     horizontal-only, now that it does both.
  * ============================================================================================================= */
 
 /* CSS Variable Defaults for Settings-Controlled Translucency */
@@ -6024,6 +6028,16 @@ panel[id*="tabgroup-editor"] {
 
 :root[bgalazka-hide-grabber="true"] #zen-app-panel-pill .zen-app-grabber {
   display: none !important;
+}
+
+/* GRABBER DUAL-AXIS DRAG (note 22): native sets cursor:ew-resize on this
+ * element with no !important (see the JS-injected base stylesheet); the ID
+ * selector here already outweighs that on specificity alone, !important is
+ * just for consistency with the rest of this file. "move" reads as
+ * "drag me around" rather than "drag me sideways only", which now matches
+ * what Zentral_uc.js note 25 actually lets the handle do. */
+#zen-app-panel-pill .zen-app-grabber {
+  cursor: move !important;
 }
 
 :root[bgalazka-hide-refresh="true"] #zen-app-panel-pill .zen-app-refresh-btn {
