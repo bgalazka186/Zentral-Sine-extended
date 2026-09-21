@@ -4962,14 +4962,11 @@ panel[id*="tabgroup-editor"] {
  *     also mutate, which is exactly the class of fragile, easy-to-silently-break interaction note 5's whole
  *     "reach the singleton, don't reimplement" philosophy exists to avoid. Left unimplemented on purpose; see
  *     Zentral_uc.js note 17 for the same reasoning from the JS side.
- * 18. PANEL POSITION DRAG / URL BAR GRIP (v6): a small grip (.zen-toolbar-urlbar-drag-handle) inside the web
- *     toolbar's URL bar lets the user drag the WHOLE panel up/down (reposition, not resize). It reuses note
- *     16's exact "extra layered on top of the natural value, once per positionPanel() call" trick, but the
- *     reposition math is genuinely simpler than the note-17 inner-edge case would have been: moving the panel
- *     up only ever needs LESS top gap and MORE bottom gap by the same amount (both are already independent,
- *     from-scratch-recomputed native values, exactly like the resize extras), so it composes with zero risk of
- *     the width-state entanglement note 17 describes. See Zentral_uc.js note 18 for the full derivation and
- *     drag math. `.zen-toolbar-urlwrap` had to gain `display: flex` to lay the grip and the `<input>` out side
+ * 18. PANEL POSITION DRAG / URL BAR GRIP (v6+): a small grip (.zen-toolbar-urlbar-drag-handle) inside the web
+ *     toolbar's URL bar lets the user drag the WHOLE panel in 2D (reposition, not resize). Vertical movement
+ *     uses the persisted top/bottom position offset and horizontal movement uses the persisted physical panel
+ *     offset, so both axes restore exactly after temporary Dual-View / Edge-Attached suppression. See
+ *     Zentral_uc.js note 18 for the drag math. `.zen-toolbar-urlwrap` had to gain `display: flex` to lay the grip and the `<input>` out side
  *     by side -- the pre-existing hide rule for it (right below) had to gain `!important` to match, since our
  *     new `!important` display declaration would otherwise always beat a plain one regardless of selector
  *     specificity, silently breaking the "hide URL bar" toggle.
@@ -6255,6 +6252,22 @@ panel[id*="tabgroup-editor"] {
   align-items: center !important;
   gap: 3px !important;
 }
+
+/* Edge-Attached Panels: preserve native side selection but remove the final
+ * viewport-edge gap. The JS suppresses saved user margins/position offsets
+ * while this mode is active; CSS owns only the physical edge attachment so
+ * native positionPanel() does not have to fight an inline 0px write each RAF. */
+:root[bgalazka-edge-attached-panels="true"]
+  #zen-app-panel-root[data-panel-side="right"] {
+  right: 0 !important;
+  left: auto !important;
+}
+:root[bgalazka-edge-attached-panels="true"]
+  #zen-app-panel-root[data-panel-side="left"] {
+  left: 0 !important;
+  right: auto !important;
+}
+
 .zen-toolbar-urlbar-drag-handle {
   flex-shrink: 0 !important;
   display: flex !important;
@@ -6262,7 +6275,7 @@ panel[id*="tabgroup-editor"] {
   justify-content: center !important;
   width: 14px !important;
   height: 22px !important;
-  cursor: ns-resize !important;
+  cursor: move !important;
   opacity: 0.4 !important;
   color: inherit !important;
   border-radius: 4px !important;

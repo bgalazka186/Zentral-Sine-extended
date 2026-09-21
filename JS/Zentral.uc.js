@@ -14577,8 +14577,9 @@
  *    pushing the panel completely off the screen! We hook positionPanel() and isPanelAttachedToRight() on the
  *    Apps INSTANCE (see note 5) to force root.style.right/left = "12px" directly.
  * 8. RESIZE INVERSION: Zentral's onDrag() internally checks this.isPanelAttachedToRight() ? (startW - diff) : (startW + diff).
- *    Opposite-Side Docking changes the panel's physical resize edge after native layout, so the extension's
- *    onDrag wrapper temporarily flips that answer only for the duration of the native resize calculation.
+ *    Hooking isPanelAttachedToRight() to return the opposite attachment side in Opposite-Side mode makes both
+ *    native resize and extension-owned horizontal handles share one corrected direction source. Do NOT invert
+ *    onDrag() again or the native grabber gets double-flipped.
  * 9. PANEL OPACITY: Web pages inside <browser> render opaque backgrounds. Applying only background-color to
  *    the slider is invisible behind the page canvas. Real transparency requires setting CSS `opacity` on
  *    #zen-app-panel-slider itself.
@@ -14752,6 +14753,7 @@
   const EXT_PREFS = {
     TRANSLUCENCY: "zen.workspace.bgalazka.translucency",
     OPPOSITE_DOCKING: "zen.workspace.bgalazka.opposite_docking",
+    EDGE_ATTACHED_PANELS: "zen.workspace.bgalazka.edge_attached_panels",
     TAB_ISOLATION: "zen.workspace.bgalazka.tab_isolation",
     CORNER_TILES: "zen.workspace.bgalazka.corner_tiles",
     HIDE_EXPAND: "zen.workspace.bgalazka.hide_expand",
@@ -14770,6 +14772,11 @@
     {
       pref: EXT_PREFS.OPPOSITE_DOCKING,
       attr: "bgalazka-opposite-docking",
+      defaultVal: false,
+    },
+    {
+      pref: EXT_PREFS.EDGE_ATTACHED_PANELS,
+      attr: "bgalazka-edge-attached-panels",
       defaultVal: false,
     },
     {
@@ -15160,32 +15167,87 @@
     setPref(PANEL_POSITION_OFFSET_PREF, cachedPosOffset);
   }
 
+  function getHorizontalAnchorSide(root) {
+    if (!root) return "left";
+    const side = root.getAttribute("data-panel-side");
+    if (side === "left" || side === "right") return side;
+    return root.style.left === "auto" && root.style.right !== "auto"
+      ? "right"
+      : "left";
+  }
+
+  function getAppliedHorizontalOffset(root) {
+    if (!root) return 0;
+    if (Number.isFinite(root._bgalazkaAppliedHorizontalOffset))
+      return root._bgalazkaAppliedHorizontalOffset;
+    const anchoredRight = getHorizontalAnchorSide(root) === "right";
+    const margin = parseFloat(
+      anchoredRight ? root.style.marginRight : root.style.marginLeft,
+    );
+    const physicalOffset = Number.isFinite(margin) ? margin : 0;
+    return anchoredRight ? -physicalOffset : physicalOffset;
+  }
+
+  function getHorizontalOffsetBounds(root) {
+    if (!root) return { min: 0, max: 0 };
+    const rect = root.getBoundingClientRect();
+    const appliedOffset = getAppliedHorizontalOffset(root);
+    // Convert the CURRENT on-screen rectangle back into the offset range that
+    // keeps both panel edges inside the viewport. Unlike the old +/-300px
+    // clamp, this automatically expands on large windows and contracts near
+    // either edge, so the only real limit is "the panel must remain visible".
+    return {
+      min: appliedOffset - rect.left,
+      max: appliedOffset + (window.innerWidth - rect.right),
+    };
+  }
+
+  function clampHorizontalOffsetToViewport(root, desiredOffset) {
+    const desired = Number.isFinite(desiredOffset) ? desiredOffset : 0;
+    const { min, max } = getHorizontalOffsetBounds(root);
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min > max)
+      return Math.round(desired);
+    return Math.max(min, Math.min(max, desired));
+  }
+
   function applyHorizontalPanelOffset(root) {
     if (!root) return;
 
-    // Dual-View owns the panel/page split edge. A saved physical left/right
-    // offset would move only the panel while the webpage push still uses the
-    // panel width, temporarily desynchronizing the two surfaces. Suppress the
-    // visual offset while Dual-View is active, but keep cachedHorizontalOffset
-    // and its pref untouched so the exact user position returns when
-    // Dual-View is disabled.
+    // Dual-View owns the panel/page split edge, while Edge-Attached Panels
+    // intentionally pins normal panels to their current viewport edge. In
+    // either mode suppress the saved physical X offset without mutating it,
+    // so disabling the mode restores the exact user position.
     const dualViewActive =
       document.documentElement.getAttribute("bgalazka-push-page") === "true";
-    if (dualViewActive) {
+    const edgeAttachedPanels =
+      document.documentElement.getAttribute("bgalazka-edge-attached-panels") ===
+      "true";
+    const anchorSide = getHorizontalAnchorSide(root);
+    if (dualViewActive || edgeAttachedPanels) {
       if (root.style.marginLeft !== "0px") root.style.marginLeft = "0px";
       if (root.style.marginRight !== "0px") root.style.marginRight = "0px";
+      root._bgalazkaAppliedHorizontalOffset = 0;
+      root._bgalazkaHorizontalAnchorSide = anchorSide;
       return;
     }
 
-    // The panel may be anchored from either side. A positive physical-right
-    // offset is margin-left on a left-anchored panel, but negative
-    // margin-right on a right-anchored one. This preserves panel width.
-    const anchoredRight =
-      root.getAttribute("data-panel-side") === "right" ||
-      (root.style.right && root.style.right !== "auto");
-    const offset = Math.max(
-      -300,
-      Math.min(300, Math.round(cachedHorizontalOffset)),
+    // If docking moved the panel to the other side, discard only the OLD
+    // side's live margin before measuring bounds. The saved logical offset is
+    // preserved and reapplied against the new anchor immediately below.
+    if (
+      root._bgalazkaHorizontalAnchorSide &&
+      root._bgalazkaHorizontalAnchorSide !== anchorSide
+    ) {
+      root.style.marginLeft = "0px";
+      root.style.marginRight = "0px";
+      root._bgalazkaAppliedHorizontalOffset = 0;
+    }
+    root._bgalazkaHorizontalAnchorSide = anchorSide;
+
+    const anchoredRight = anchorSide === "right";
+    const offset = clampHorizontalOffsetToViewport(
+      root,
+      Math.round(cachedHorizontalOffset),
     );
     const leftMargin = anchoredRight ? "0px" : offset + "px";
     const rightMargin = anchoredRight ? -offset + "px" : "0px";
@@ -15193,6 +15255,7 @@
       root.style.marginLeft = leftMargin;
     if (root.style.marginRight !== rightMargin)
       root.style.marginRight = rightMargin;
+    root._bgalazkaAppliedHorizontalOffset = offset;
   }
 
   // Whole-panel horizontal REPOSITION using the already-existing
@@ -15206,10 +15269,17 @@
     e.preventDefault();
     e.stopPropagation();
 
+    // Normalize any stale saved value first, then derive the REAL drag limits
+    // from the panel's current viewport rectangle. No arbitrary +/-300px cap.
+    applyHorizontalPanelOffset(root);
+    const startOffset = getAppliedHorizontalOffset(root);
+    const { min, max } = getHorizontalOffsetBounds(root);
     hPosDragState = {
       startX,
-      startOffset: cachedHorizontalOffset,
-      liveOffset: cachedHorizontalOffset,
+      startOffset,
+      liveOffset: startOffset,
+      minOffset: min,
+      maxOffset: max,
     };
 
     const slider = document.getElementById("zen-app-panel-slider");
@@ -15228,9 +15298,9 @@
     const root = document.getElementById("zen-app-panel-root");
     if (!root) return;
     const next = Math.max(
-      -300,
+      hPosDragState.minOffset,
       Math.min(
-        300,
+        hPosDragState.maxOffset,
         hPosDragState.startOffset + (e.clientX - hPosDragState.startX),
       ),
     );
@@ -15345,14 +15415,16 @@
   function applyVerticalResizeExtras(root) {
     if (!root) return;
 
-    // Dual-View already reserves a dedicated webpage column for the panel,
-    // so the user's extra top/bottom margins and vertical position offset no
-    // longer protect page content from being covered. Temporarily flatten
-    // both margins while Dual-View is active, but leave every cached/saved
-    // value untouched so the exact vertical size/position returns afterward.
+    // Dual-View and Edge-Attached Panels both intentionally ignore the user's
+    // extra top/bottom margins and vertical position offset. Temporarily flatten
+    // both margins in either mode, but leave every cached/saved value untouched
+    // so the exact vertical size/position returns afterward.
     const dualViewActive =
       document.documentElement.getAttribute("bgalazka-push-page") === "true";
-    if (dualViewActive) {
+    const edgeAttachedPanels =
+      document.documentElement.getAttribute("bgalazka-edge-attached-panels") ===
+      "true";
+    if (dualViewActive || edgeAttachedPanels) {
       if (root.style.marginTop !== "0px") root.style.marginTop = "0px";
       if (root.style.marginBottom !== "0px") root.style.marginBottom = "0px";
       return;
@@ -15502,23 +15574,30 @@
     e.preventDefault();
     e.stopPropagation();
 
-    // Do not use isPanelAttachedToRight() here. Opposite docking deliberately
-    // changes that native answer, while the drag sign must follow the panel's
-    // *actual physical outer edge*. data-panel-side is maintained by both the
-    // base positioner and our docking wrapper specifically for this purpose.
-    const panelSide = root.getAttribute("data-panel-side");
-    const outerOnLeft =
-      panelSide === "right" ||
-      (!panelSide && root.style.left === "auto" && root.style.right !== "auto");
-    const nativeOuterFactor = outerOnLeft ? -1 : 1;
-    const startWidth = root.getBoundingClientRect().width;
+    applyHorizontalPanelOffset(root);
+    const rootRect = root.getBoundingClientRect();
+    const handleRect = e.currentTarget?.getBoundingClientRect?.();
+    const handleCenterX = handleRect
+      ? handleRect.left + handleRect.width / 2
+      : e.clientX;
+    const physicalEdge =
+      handleCenterX < rootRect.left + rootRect.width / 2 ? "left" : "right";
+    const anchorSide = getHorizontalAnchorSide(root);
+    const startOffset = getAppliedHorizontalOffset(root);
+
     hResizeState = {
       apps,
       edge,
+      physicalEdge,
+      anchorSide,
       startX: e.clientX,
-      startWidth,
-      liveWidth: startWidth,
-      factor: edge === "outer" ? nativeOuterFactor : -nativeOuterFactor,
+      startWidth: rootRect.width,
+      startLeft: rootRect.left,
+      startRight: rootRect.right,
+      startOffset,
+      liveWidth: rootRect.width,
+      liveOffset: startOffset,
+      adjustsOffset: physicalEdge === anchorSide,
     };
     const slider = document.getElementById("zen-app-panel-slider");
     if (slider) slider.style.pointerEvents = "none";
@@ -15529,19 +15608,56 @@
 
   function onHorizontalResizeDrag(e) {
     if (!hResizeState) return;
-    const { apps, startX, startWidth, factor } = hResizeState;
+    const root = document.getElementById("zen-app-panel-root");
+    if (!root) return;
+    const {
+      apps,
+      physicalEdge,
+      anchorSide,
+      startX,
+      startWidth,
+      startLeft,
+      startRight,
+      startOffset,
+    } = hResizeState;
     const normalMax = Math.max(280, Math.round(window.innerWidth * 0.8));
     const safeMax =
       getPref(EXT_PREFS.OPPOSITE_DOCKING, false) &&
       !apps.isPlacementVerticalBar?.()
         ? computeOppositeDockingSafeMaxWidth()
         : normalMax;
-    const nextWidth = Math.max(
-      280,
-      Math.min(safeMax, startWidth + (e.clientX - startX) * factor),
-    );
+
+    const viewportRoom =
+      physicalEdge === "left" ? startRight : window.innerWidth - startLeft;
+    const maxWidth = Math.max(280, Math.min(safeMax, viewportRoom));
+    const dx = e.clientX - startX;
+    const unclampedWidth =
+      physicalEdge === "left" ? startWidth - dx : startWidth + dx;
+    const nextWidth = Math.max(280, Math.min(maxWidth, unclampedWidth));
+
+    // Reconstruct the ACTUAL dragged edge after width clamping. This avoids a
+    // position jump when the min/max width boundary is reached.
+    const nextDraggedEdge =
+      physicalEdge === "left" ? startRight - nextWidth : startLeft + nextWidth;
+    const startDraggedEdge = physicalEdge === "left" ? startLeft : startRight;
+    const edgeDelta = nextDraggedEdge - startDraggedEdge;
+    let nextOffset = startOffset;
+
+    // Width alone moves only the non-anchored edge. When the user grabs the
+    // anchored edge, translate the panel by exactly the dragged-edge delta so
+    // that edge follows the cursor and the opposite edge remains stationary.
+    if (physicalEdge === anchorSide) nextOffset = startOffset + edgeDelta;
+
     hResizeState.liveWidth = nextWidth;
+    hResizeState.liveOffset = nextOffset;
     apps.updateWidthVar(Math.round(nextWidth));
+
+    if (hResizeState.adjustsOffset) {
+      // Apply EVERY frame, including the frame that returns exactly to the
+      // starting offset, so a round-trip drag cannot leave stale translation.
+      cachedHorizontalOffset = nextOffset;
+      applyHorizontalPanelOffset(root);
+    }
   }
 
   function stopHorizontalResizeDrag() {
@@ -15552,6 +15668,10 @@
     document.documentElement.removeAttribute("bgalazka-hresize-active");
     if (hResizeState) {
       hResizeState.apps.saveWidth?.(Math.round(hResizeState.liveWidth));
+      if (hResizeState.adjustsOffset) {
+        cachedHorizontalOffset = Math.round(hResizeState.liveOffset);
+        setPref(PANEL_HORIZONTAL_OFFSET_PREF, cachedHorizontalOffset);
+      }
       hResizeState = null;
     }
   }
@@ -15562,20 +15682,22 @@
 
   function startCornerResize(e, verticalEdge, horizontalEdge) {
     if (!getPref(EXT_PREFS.ALL_SIDES_RESIZE, false)) return;
-    // The two handlers own disjoint axes, so their independent persistence
-    // and cleanup remain safe even though they share this one mouse gesture.
+    // Corners intentionally start BOTH axis engines from the same mousedown.
+    // There is no dominant-axis decision: every mousemove can change width
+    // and height at the same time.
     startVerticalResize(e, verticalEdge);
     startHorizontalResize(e, horizontalEdge);
   }
 
   /* ==========================================================================
-   * PANEL POSITION DRAG (URL bar grip) -- see note 18
+   * PANEL 2D POSITION DRAG (URL bar grip) -- see note 18
    * -----------------------------------------------------------------------
    * Same "extra offset layered on top of the natural value, applied once
    * per positionPanel() call" trick as the resize extras above, but for a
-   * REPOSITION instead of a resize: moving the panel up means less top gap
-   * AND more bottom gap, by the same amount, so total height (top + height +
-   * bottom = viewport height) stays exactly constant -- see
+   * REPOSITION instead of a resize: vertical movement changes the paired
+   * top/bottom position offset while horizontal movement updates the existing
+   * physical panel offset, so one small URL-bar grip moves the panel in 2D.
+   * Vertical height stays constant -- see
    * applyVerticalResizeExtras() for where the two are actually summed.
    * NOT gated by EXT_PREFS.ALL_SIDES_RESIZE at all: this is a fully separate
    * feature/surface (the URL bar grip lives inside the web toolbar, and is
@@ -15591,14 +15713,24 @@
 
     const { top: resizeTop, bottom: resizeBottom } = getVerticalExtras();
     const posOffset = getPositionOffset();
+    // Normalize stale X state before taking a drag snapshot, then calculate
+    // the only legal horizontal range from the actual viewport borders.
+    applyHorizontalPanelOffset(root);
+    const startHorizontalOffset = getAppliedHorizontalOffset(root);
+    const horizontalBounds = getHorizontalOffsetBounds(root);
     // Base gaps include the resize margins but not the position offset.
     // Native top/bottom stay untouched throughout the drag.
     vPosDragState = {
+      startX: e.clientX,
       startY: e.clientY,
       baseTop: (parseFloat(root.style.top) || 0) + resizeTop,
       baseBottom: (parseFloat(root.style.bottom) || 12) + resizeBottom,
       startPosOffset: posOffset,
       livePosOffset: posOffset,
+      startHorizontalOffset,
+      liveHorizontalOffset: startHorizontalOffset,
+      minHorizontalOffset: horizontalBounds.min,
+      maxHorizontalOffset: horizontalBounds.max,
     };
 
     const slider = document.getElementById("zen-app-panel-slider");
@@ -15615,9 +15747,10 @@
     if (!vPosDragState) return;
     const root = document.getElementById("zen-app-panel-root");
     if (!root) return;
-    const diff = e.clientY - vPosDragState.startY;
-    // Mouse moved up (diff < 0) -> panel should move up -> posOffset grows.
-    let newPosOffset = vPosDragState.startPosOffset - diff;
+    const diffY = e.clientY - vPosDragState.startY;
+    const diffX = e.clientX - vPosDragState.startX;
+    // Mouse moved up (diffY < 0) -> panel should move up -> posOffset grows.
+    let newPosOffset = vPosDragState.startPosOffset - diffY;
     // Clamp so the panel can never be dragged past either edge of the
     // viewport -- this alone keeps height perfectly constant too, since
     // newTop/newBottom below are each guaranteed >= 0 by construction.
@@ -15626,7 +15759,22 @@
       Math.min(vPosDragState.baseTop, newPosOffset),
     );
     vPosDragState.livePosOffset = newPosOffset;
+
+    // The URL-bar grip is a true 2D move surface. Horizontal movement shares
+    // the same viewport-derived bounds as every other whole-panel move path:
+    // no arbitrary pixel cap, only keep both panel edges inside the window.
+    const newHorizontalOffset = Math.max(
+      vPosDragState.minHorizontalOffset,
+      Math.min(
+        vPosDragState.maxHorizontalOffset,
+        vPosDragState.startHorizontalOffset + diffX,
+      ),
+    );
+    vPosDragState.liveHorizontalOffset = newHorizontalOffset;
+    cachedHorizontalOffset = newHorizontalOffset;
+
     applyVerticalResizeExtras(root);
+    applyHorizontalPanelOffset(root);
   }
 
   function stopPanelPositionDrag() {
@@ -15635,7 +15783,11 @@
     const slider = document.getElementById("zen-app-panel-slider");
     if (slider) slider.style.pointerEvents = "";
     document.documentElement.removeAttribute("bgalazka-panel-pos-dragging");
-    if (vPosDragState) savePositionOffset(vPosDragState.livePosOffset);
+    if (vPosDragState) {
+      savePositionOffset(vPosDragState.livePosOffset);
+      cachedHorizontalOffset = Math.round(vPosDragState.liveHorizontalOffset);
+      setPref(PANEL_HORIZONTAL_OFFSET_PREF, cachedHorizontalOffset);
+    }
     vPosDragState = null;
   }
   registerCleanup(() => {
@@ -15656,55 +15808,32 @@
     if (!grabberBtn || grabberBtn._bgalazkaVDragHooked) return false;
     grabberBtn._bgalazkaVDragHooked = true;
 
-    // Tooltip only -- purely descriptive, doesn't touch native's own
-    // grabberBtn.title assignment (that line is standard-mod code and is
-    // left completely alone); this just overwrites the DOM property
-    // afterward, the same way other pill buttons' titles get updated live
-    // elsewhere in this file (e.g. the autohide button's title toggling).
     grabberBtn.title =
-      "Drag sideways to resize \u2022 drag up/down to reposition the pill";
+      "Drag sideways to resize • drag up/down to reposition the pill • diagonal does both";
 
-    // How far the cursor has to travel vertically, and how much that has to
-    // dominate any horizontal travel, before we treat the gesture as "the
-    // user wants to move the pill" instead of "still resizing". Kept as a
-    // local constant (not a pref) since it's a feel-tuning number, not a
-    // user-facing toggle -- bump it if reposition triggers too eagerly
-    // during an intentionally-diagonal resize drag, or lower it if it feels
-    // unresponsive.
-    const VDRAG_DEADZONE_PX = 40;
+    // Small jitter guard only. This is NOT an axis selector: native horizontal
+    // resize keeps running before and after vertical pill movement activates.
+    const VDRAG_DEADZONE_PX = 8;
 
     grabberBtn.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
-      const appsInstance = window.Zentral?.Apps;
-      if (!appsInstance) return;
+      if (!window.Zentral?.Apps) return;
 
-      const startX = e.clientX;
       const startY = e.clientY;
-      let switchedToVertical = false;
+      let verticalStarted = false;
 
       const trackMove = (moveEvt) => {
-        if (switchedToVertical) return;
-        const dx = moveEvt.clientX - startX;
+        if (verticalStarted) return;
         const dy = moveEvt.clientY - startY;
-        if (Math.abs(dy) <= VDRAG_DEADZONE_PX || Math.abs(dy) <= Math.abs(dx))
-          return;
+        if (Math.abs(dy) <= VDRAG_DEADZONE_PX) return;
 
-        switchedToVertical = true;
+        verticalStarted = true;
         document.removeEventListener("mousemove", trackMove);
         document.removeEventListener("mouseup", trackUp);
 
-        // Bail out of native's in-progress width resize exactly the way its
-        // own mouseup would (note 8/25): same bound reference, so panel
-        // pointer-events and the width pref end up saved at whatever width
-        // the drag had reached the instant we intercepted it -- identical
-        // to the user just stopping a normal horizontal drag right here.
-        safeCall(
-          () => appsInstance.onStopDrag(),
-          "ensurePillGrabberVerticalDrag/onStopDrag",
-        );
-
-        // Deadzone compensation prevents a 40px jump when vertical intent
-        // wins and native width-resize is cancelled.
+        // Preserve the small deadzone without cancelling native X resize.
+        // From this point both document mousemove listeners run concurrently:
+        // Zentral's native onDrag() changes width while our listener changes Y.
         const activationY = startY + Math.sign(dy) * VDRAG_DEADZONE_PX;
         safeCall(
           () => startPillPositionDrag(moveEvt, activationY, getPillPosition()),
@@ -16073,31 +16202,16 @@
      * ------------------------------------------------------------------ */
     const origOnDrag = appsInstance.onDrag?.bind(appsInstance);
     appsInstance.onDrag = function (e) {
-      const oppositeResize =
-        getPref(EXT_PREFS.OPPOSITE_DOCKING, false) &&
-        !this.isPlacementVerticalBar?.();
-
-      if (origOnDrag) {
-        if (oppositeResize) {
-          // Native Zentral chooses its horizontal resize sign through
-          // isPanelAttachedToRight(): right => startW - diff, left =>
-          // startW + diff. Opposite-Side Docking relocates the panel after
-          // native layout, so that native sign is backwards for the physical
-          // resize edge. Flip ONLY the answer seen during onDrag(); positioning
-          // continues to use the real opposite-docking side everywhere else.
-          const sideFn = this.isPanelAttachedToRight;
-          this.isPanelAttachedToRight = () => !sideFn.call(this);
-          try {
-            origOnDrag(e);
-          } finally {
-            this.isPanelAttachedToRight = sideFn;
-          }
-        } else {
-          origOnDrag(e);
-        }
-      }
-
-      if (!oppositeResize) return;
+      // Native onDrag() must see the already-patched
+      // isPanelAttachedToRight() unchanged. That patch is the original
+      // Opposite-Side resize-direction fix and is also used by the pill
+      // grabber. Flipping it again here double-inverts the native drag.
+      if (origOnDrag) origOnDrag(e);
+      if (
+        !getPref(EXT_PREFS.OPPOSITE_DOCKING, false) ||
+        this.isPlacementVerticalBar?.()
+      )
+        return;
 
       const root = document.getElementById("zen-app-panel-root");
       if (!root) return;
@@ -16531,6 +16645,7 @@
   const BGALAZKA_EXT_PREFS = {
     TRANSLUCENCY: "zen.workspace.bgalazka.translucency",
     OPPOSITE_DOCKING: "zen.workspace.bgalazka.opposite_docking",
+    EDGE_ATTACHED_PANELS: "zen.workspace.bgalazka.edge_attached_panels",
     PUSH_PAGE: "zen.workspace.bgalazka.push_page",
     TAB_ISOLATION: "zen.workspace.bgalazka.tab_isolation",
     CORNER_TILES: "zen.workspace.bgalazka.corner_tiles",
@@ -16730,7 +16845,7 @@
       btn.id = "zen-app-all-sides-resize-btn";
       btn.className = "zen-app-btn zen-app-all-sides-resize-btn";
       btn.setAttribute("type", "button");
-      btn.title = "Toggle all-sides resize • drag sideways to move panel";
+      btn.title = "Toggle all-sides resize • drag to move panel freely";
       btn.appendChild(parseSVG(PREF_ICONS.RESIZE_ALL));
 
       // Sits right after the Dual-View button (or the pin button if
@@ -16742,35 +16857,32 @@
       if (anchor) pill.insertBefore(btn, anchor.nextSibling);
       else pill.prepend(btn);
 
-      // A click still toggles this feature. Once enabled, this button becomes
-      // a two-axis router: horizontal intent moves the whole panel using the
-      // existing Panel Horizontal Offset preference; vertical intent reuses
-      // the existing whole-panel vertical position drag. It
-      // waits for a small commitment first so ordinary clicks remain clicks.
+      // A click still toggles this feature. Once enabled, dragging the button
+      // moves the WHOLE panel freely in X and Y at the same time. The small
+      // deadzone exists only to distinguish click from drag; it never chooses
+      // or locks an axis.
       btn.addEventListener("mousedown", (e) => {
         if (e.button !== 0 || !getPref(EXT_PREFS.ALL_SIDES_RESIZE, false))
           return;
         const startX = e.clientX;
         const startY = e.clientY;
         const BUTTON_DRAG_DEADZONE_PX = 8;
-        let routed = false;
+        let dragStarted = false;
         const onMove = (moveEvt) => {
-          if (routed) return;
+          if (dragStarted) return;
           const dx = moveEvt.clientX - startX;
           const dy = moveEvt.clientY - startY;
           if (Math.max(Math.abs(dx), Math.abs(dy)) <= BUTTON_DRAG_DEADZONE_PX)
             return;
-          routed = true;
+          dragStarted = true;
           btn._bgalazkaDragWasRouted = true;
           document.removeEventListener("mousemove", onMove);
           document.removeEventListener("mouseup", onUp);
-          if (Math.abs(dy) > Math.abs(dx)) {
-            startPanelPositionDrag(moveEvt);
-          } else {
-            // Preserve the original mousedown X so crossing the deadzone does
-            // not create a visible jump before horizontal movement starts.
-            startPanelHorizontalPositionDrag(moveEvt, startX);
-          }
+
+          // Preserve the ORIGINAL mousedown coordinates for both axes so the
+          // panel catches up smoothly after crossing the click-vs-drag guard.
+          startPanelHorizontalPositionDrag(moveEvt, startX);
+          startPanelPositionDrag(moveEvt, startY);
         };
         const onUp = () => {
           document.removeEventListener("mousemove", onMove);
@@ -17097,7 +17209,7 @@
     // hide-toggle was needed for it.
     const urlDragHandle = document.createElement("div");
     urlDragHandle.className = "zen-toolbar-urlbar-drag-handle";
-    urlDragHandle.title = "Drag to move panel up/down";
+    urlDragHandle.title = "Drag to move panel";
     urlDragHandle.appendChild(parseSVG(PREF_ICONS.DRAG_HANDLE));
     urlDragHandle.addEventListener("mousedown", startPanelPositionDrag);
     urlWrap.appendChild(urlDragHandle);
@@ -17835,6 +17947,21 @@
       );
       content.appendChild(t2.row);
 
+      const tEdgeAttached = createToggleRow(
+        "Edge-Attached Panels",
+        "Dock every floating panel flush to its current screen edge and temporarily ignore saved panel margins/position offsets; does not pin or push the webpage",
+        BGALAZKA_EXT_PREFS.EDGE_ATTACHED_PANELS,
+        "bgalazka-edge-attached-panels",
+        false,
+        PREF_ICONS.DOCK,
+        () => {
+          const root = document.getElementById("zen-app-panel-root");
+          applyVerticalResizeExtras(root);
+          applyHorizontalPanelOffset(root);
+        },
+      );
+      content.appendChild(tEdgeAttached.row);
+
       const tPush = createToggleRow(
         "Dual-View Mode",
         "Keep the panel open and contract the active webpage beside it; does not change your manual Pin state",
@@ -17850,7 +17977,7 @@
       // the pill button's own data-active state in sync when toggled here.
       const tAllSidesResize = createToggleRow(
         "All-Sides Panel Resize",
-        "Enable outer, inner, top, bottom, and corner resize handles; drag this pill button sideways to move the whole panel",
+        "Enable outer, inner, top, bottom, and corner resize handles; drag this pill button freely to move the whole panel in 2D",
         BGALAZKA_EXT_PREFS.ALL_SIDES_RESIZE,
         "bgalazka-all-sides-resize",
         false,
@@ -17859,12 +17986,21 @@
       );
       content.appendChild(tAllSidesResize.row);
 
+      const panelHorizontalOffsetBounds = (() => {
+        const root = document.getElementById("zen-app-panel-root");
+        if (!root) {
+          const fallback = Math.max(1, window.innerWidth);
+          return { min: -fallback, max: fallback };
+        }
+        applyHorizontalPanelOffset(root);
+        return getHorizontalOffsetBounds(root);
+      })();
       const panelHorizontalOffsetSlider = createSliderRow(
         "Panel Horizontal Offset",
-        "Move the whole floating panel left/right without changing its width",
+        "Move the whole floating panel left/right without changing its width; limits are the actual window borders",
         BGALAZKA_EXT_PREFS.PANEL_HORIZONTAL_OFFSET,
-        -300,
-        300,
+        Math.floor(panelHorizontalOffsetBounds.min),
+        Math.ceil(panelHorizontalOffsetBounds.max),
         0,
         "px",
       );
@@ -18227,6 +18363,16 @@
           pref: BGALAZKA_EXT_PREFS.OPPOSITE_DOCKING,
           def: false,
         },
+        {
+          input: tEdgeAttached.input,
+          pref: BGALAZKA_EXT_PREFS.EDGE_ATTACHED_PANELS,
+          def: false,
+          onSync: () => {
+            const root = document.getElementById("zen-app-panel-root");
+            applyVerticalResizeExtras(root);
+            applyHorizontalPanelOffset(root);
+          },
+        },
         { input: tPush.input, pref: BGALAZKA_EXT_PREFS.PUSH_PAGE, def: false },
         {
           input: tAllSidesResize.input,
@@ -18240,11 +18386,19 @@
           def: 0,
           isSelect: true,
           onSync: (v) => {
-            panelHorizontalOffsetSlider.badge.textContent = v + "px";
+            const root = document.getElementById("zen-app-panel-root");
             cachedHorizontalOffset = v;
-            applyHorizontalPanelOffset(
-              document.getElementById("zen-app-panel-root"),
-            );
+            if (root) {
+              applyHorizontalPanelOffset(root);
+              const applied = Math.round(getAppliedHorizontalOffset(root));
+              const { min, max } = getHorizontalOffsetBounds(root);
+              panelHorizontalOffsetSlider.input.min = Math.floor(min);
+              panelHorizontalOffsetSlider.input.max = Math.ceil(max);
+              panelHorizontalOffsetSlider.input.value = applied;
+              panelHorizontalOffsetSlider.badge.textContent = applied + "px";
+            } else {
+              panelHorizontalOffsetSlider.badge.textContent = v + "px";
+            }
           },
         },
         {
