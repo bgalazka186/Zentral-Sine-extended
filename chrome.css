@@ -5740,6 +5740,13 @@ panel[id*="tabgroup-editor"] {
  * Extension Settings Panel: High-Visibility Controls & Colors
  * -------------------------------------------------------------------------- */
 
+/* The cap-like toggle removes only the standalone app grid and its footer;
+ * tab-attached panel launchers are mounted inside tab icons elsewhere. */
+:root[bgalazka-hide-unattached-app-controls="true"]
+  :is(#zen-apps-sidebar-grid, #zentral-apps-vertical-bar-footer) {
+  display: none !important;
+}
+
 /* Extension-panel toggled switch track — scoped so base Zentral settings stay untouched. */
 #zentral-settings-modal
   #zs-panel-bgalazka

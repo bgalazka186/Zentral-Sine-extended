@@ -14744,12 +14744,10 @@
  *     extension changed them again, creating continuous layout churn; rounding could not fix that property
  *     fight. v8 removes applyVerticalResizeExtras() from positionPanel() completely and expresses the same
  *     geometry through persistent margins (note 16), updated only on real state changes or pointer movement.
- * 25. GRABBER DUAL-AXIS DRAG (v8): native owns the 6-dot grabber's horizontal width resize. The extension adds
- *     a second listener that only activates when vertical movement dominates and exceeds a 40px deadzone. It
- *     then stops native resize through its public onStopDrag() and writes the existing pill_position setting,
- *     moving only the pill relative to its panel. The deadzone is subtracted from the first movement so the
- *     pill does not jump. All-sides resize separately gates the outer/inner/top/bottom/corner edge surfaces;
- *     it deliberately does not disable this pill grabber.
+ * 25. GRABBER DUAL-AXIS DRAG: the 6-dot grabber starts horizontal width resizing immediately. Its separate
+ *     vertical pill-position listener waits for a 28px Y deadzone, then subtracts that distance once and tracks
+ *     every further Y movement at sub-percent precision until mouseup. X continues independently during diagonals.
+ *     All-sides resize only gates the extra panel-edge handles, not this pill grabber.
  * 27. FIREFOX ADD-ON TAB-ID BRIDGE (v9): Zentral normally creates app panels as standalone chrome <browser>
  *     elements, so Firefox WebExtensions cannot resolve them to a native tab and sender.tab/tab APIs see no real
  *     tab identity. The opt-in bridge below creates a REAL background Firefox tab first, then temporarily intercepts
@@ -14826,6 +14824,8 @@
     ADDON_TAB_ID_BRIDGE: "zen.workspace.bgalazka.addon_tab_id_bridge",
     SMART_SLEEP: "zen.workspace.bgalazka.smart_sleep",
     AUDIO_INDICATOR: "zen.workspace.bgalazka.audio_indicator",
+    HIDE_UNATTACHED_APP_CONTROLS:
+      "zen.workspace.bgalazka.hide_unattached_app_controls",
 
     // Extension keyboard shortcuts. The master switch defaults OFF to obey
     // the extension's default-off contract; string defaults below are inert
@@ -14884,6 +14884,11 @@
     {
       pref: EXT_PREFS.HIDE_EXPAND,
       attr: "bgalazka-hide-expand",
+      defaultVal: false,
+    },
+    {
+      pref: EXT_PREFS.HIDE_UNATTACHED_APP_CONTROLS,
+      attr: "bgalazka-hide-unattached-app-controls",
       defaultVal: false,
     },
     {
@@ -15430,10 +15435,10 @@
 
   /* ------------------------------------------------------------------
    * PILL VERTICAL DRAG (extension-only maintenance note): the native
-   * .zen-app-grabber owns horizontal width resizing. Our listener is added
-   * afterward and never interferes until the pointer crosses its deliberately
-   * large vertical deadzone. At that point native resize is stopped cleanly
-   * and we update the EXISTING pill_position pref/CSS variable, not the panel
+   * .zen-app-grabber resizes width through the extension's horizontal path.
+   * The Y listener stays dormant until the pointer crosses its deliberately
+   * large vertical deadzone; X keeps resizing throughout. We update the
+   * EXISTING pill_position pref/CSS variable, not the panel
    * position pref. This keeps vertical grabber dragging a local pill-layout
    * operation and leaves panel geometry/positionPanel() untouched.
    * ------------------------------------------------------------------ */
@@ -15451,7 +15456,9 @@
   function applyPillPosition(value) {
     document.documentElement.style.setProperty(
       "--bgalazka-pill-offset",
-      Math.round(clampPillPosition(value)) + "%",
+      // Keep fractional percentages during the gesture: rounding to a whole
+      // percent moves a tall panel's pill in visible multi-pixel steps.
+      clampPillPosition(value) + "%",
     );
   }
 
@@ -15902,7 +15909,7 @@
   });
 
   /* ==========================================================================
-   * GRABBER DUAL-AXIS DRAG (note 25): sideways remains native width resize.
+   * GRABBER DUAL-AXIS DRAG (note 25): sideways uses the existing width path.
    * Past a large vertical deadzone, it adjusts the existing Pill Menu Vertical
    * Offset setting instead. This is deliberately a pill-only operation, not a
    * whole-panel reposition; the URL-bar grip remains the panel-position tool.
@@ -15917,9 +15924,10 @@
     grabberBtn.title =
       "Drag sideways to resize • drag up/down to reposition the pill • diagonal does both";
 
-    // Small jitter guard only. This is NOT an axis selector: native horizontal
-    // resize keeps running before and after vertical pill movement activates.
-    const VDRAG_DEADZONE_PX = 8;
+    // A deliberate Y gesture must clear this threshold once. After it
+    // activates there is no further threshold or axis lock; diagonal drags
+    // continue resizing X while positioning the pill smoothly along Y.
+    const VDRAG_DEADZONE_PX = 28;
 
     grabberBtn.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
@@ -16227,31 +16235,56 @@
 
     const origRenderGrid = appsInstance.renderGrid?.bind(appsInstance);
     appsInstance.renderGrid = function () {
-      // Rescued essential panels may exceed the normal add limit. Allow the
-      // renderer to show them without raising the user's configured limit.
+      // Zero is below the native Apps Number Cap UI's minimum of one. Feed
+      // it only to this synchronous renderer, never save it as a native pref:
+      // slice(0, 0) creates no standalone tiles and the Add button is skipped.
+      // The existing essential-panel rescue still applies when this is off.
+      const hideUnattached = getPref(
+        EXT_PREFS.HIDE_UNATTACHED_APP_CONTROLS,
+        false,
+      );
       const core = window.Zentral?.Core;
       const get = core?.getPref;
       let saved = [];
-      try {
-        saved = JSON.parse(getPref("zen.workspace.apps.sidebar.apps", "[]"));
-      } catch (_) {}
+      if (!hideUnattached) {
+        try {
+          saved = JSON.parse(getPref("zen.workspace.apps.sidebar.apps", "[]"));
+        } catch (_) {}
+      }
       const rescued =
         Array.isArray(saved) &&
         saved.some((app) => app.id?.startsWith("bgalazka-essential-"));
       try {
-        if (rescued && typeof get === "function")
+        if ((hideUnattached || rescued) && typeof get === "function")
           core.getPref = function (key, ...args) {
-            const value = get.call(this, key, ...args);
-            return key === "zen.workspace.apps.sidebar.max_apps"
-              ? Math.max(Number(value) || 0, saved.length)
-              : value;
+            if (key !== "zen.workspace.apps.sidebar.max_apps")
+              return get.call(this, key, ...args);
+            if (hideUnattached) return 0;
+            return Math.max(
+              Number(get.call(this, key, ...args)) || 0,
+              saved.length,
+            );
           };
         if (origRenderGrid) origRenderGrid();
       } finally {
-        if (rescued && get) core.getPref = get;
+        if ((hideUnattached || rescued) && get) core.getPref = get;
       }
       requestTileSync(60);
     };
+
+    // Changes from Settings or about:config refresh the grid once; the pref
+    // observer runs on writes, not during rendering or animation frames.
+    const unattachedControlsObserver = () => appsInstance.renderGrid();
+    Services.prefs.addObserver(
+      EXT_PREFS.HIDE_UNATTACHED_APP_CONTROLS,
+      unattachedControlsObserver,
+    );
+    registerCleanup(() =>
+      Services.prefs.removeObserver(
+        EXT_PREFS.HIDE_UNATTACHED_APP_CONTROLS,
+        unattachedControlsObserver,
+      ),
+    );
 
     /* ------------------------------------------------------------------
      * BUG FIX: "Expand / Restore" panel button did nothing useful (or
@@ -17063,6 +17096,8 @@
     HOVER_CORNER_TILES: "zen.workspace.bgalazka.hover_corner_tiles",
     HIDE_CORNER_BADGES: "zen.workspace.bgalazka.hide_corner_badges",
     HIDE_PILL: "zen.workspace.bgalazka.hide_pill",
+    HIDE_UNATTACHED_APP_CONTROLS:
+      "zen.workspace.bgalazka.hide_unattached_app_controls",
     // Numeric percent offset from vertical center, -50 (near top) to +50
     // (near bottom), 0 = centered. Was previously a "top"|"center"|"bottom"
     // string enum; changed to a continuous slider per user request. A
@@ -17719,38 +17754,36 @@
     }
   }
 
-  // Detect a useful search term on any HTTP(S) GET URL. Prefer well-known
-  // search parameter names; if none is present, accept a single non-empty GET
-  // parameter. The single-parameter fallback avoids guessing on pages whose
-  // multiple parameters are mostly filters/tracking data.
+  // A GET parameter alone is not evidence of search: article/product pages
+  // often carry ?q=, ?s= or tracking parameters. Accept an enabled custom
+  // template, a recognized built-in results URL, or an obvious search route
+  // with a known query key (e.g. Google/Bing /search?q=...).
   function extractGetSearchQuery(urlStr) {
     try {
       const url = new URL(urlStr);
       if (!/^https?:$/.test(url.protocol)) return null;
 
-      // Custom engines may use a nonstandard query key, a path placeholder,
-      // or fixed filters. Recover their term before the generic GET heuristic.
       for (const target of getQuickSwitchTargets()) {
         if (!target.key.startsWith("custom-")) continue;
         const term = extractCustomSearchQuery(target.template, urlStr);
-        if (term !== null) return term;
+        if (term?.trim()) return term;
       }
 
       const knownEngine = detectSearchEngine(urlStr);
       if (knownEngine) {
         const term = extractSearchQuery(urlStr, knownEngine);
-        if (term != null && term.trim()) return term;
+        return term?.trim() ? term : null;
       }
 
+      const isResultsRoute =
+        /(?:^|\/)(?:search|results|find)(?:\/|$)/i.test(url.pathname) ||
+        /^search[.-]/i.test(url.hostname);
+      if (!isResultsRoute) return null;
       for (const param of QUICK_SWITCH_COMMON_GET_PARAMS) {
         const value = url.searchParams.get(param);
-        if (value != null && value.trim()) return value;
+        if (value?.trim()) return value;
       }
-
-      const nonEmpty = Array.from(url.searchParams.entries()).filter(
-        ([, value]) => value.trim(),
-      );
-      return nonEmpty.length === 1 ? nonEmpty[0][1] : null;
+      return null;
     } catch (_) {
       return null;
     }
@@ -17858,6 +17891,9 @@
   function getNextQuickSwitchTarget(urlStr, targets = getQuickSwitchTargets()) {
     if (!targets.length) return null;
     const currentIndex = targets.findIndex((target) => target.matches(urlStr));
+    // A single selected destination already hosting this search is not a
+    // switch. Keep the icon hidden instead of reloading the same results.
+    if (targets.length === 1 && currentIndex === 0) return null;
     return targets[(currentIndex + 1) % targets.length];
   }
 
@@ -18209,8 +18245,9 @@
       }
     }
 
-    // Show quick-switch on any HTTP(S) page where we can reliably recover a
-    // GET search term, as long as at least one destination is configured.
+    // Show only on a recognized search-results GET URL with a useful next
+    // destination. A random page with ?q= or one arbitrary parameter is not
+    // enough evidence to offer "search again elsewhere".
     if (swapBtn) {
       const quickswitchOn = getPref(
         BGALAZKA_EXT_PREFS.WEB_TOOLBAR_QUICKSWITCH,
@@ -18220,8 +18257,8 @@
       const nextTarget = getNextQuickSwitchTarget(curSpec, targets);
       const show =
         quickswitchOn &&
-        targets.length > 0 &&
-        extractGetSearchQuery(curSpec) != null;
+        nextTarget !== null &&
+        extractGetSearchQuery(curSpec) !== null;
       const display = show ? "" : "none";
       if (swapBtn.style.display !== display) swapBtn.style.display = display;
       const title = nextTarget
@@ -19880,6 +19917,16 @@
       );
       content.appendChild(cornerSubgroup);
 
+      const tHideUnattached = createToggleRow(
+        "Hide Unattached App Controls",
+        "Hide standalone app buttons, Add App, and the three-dot utility controls; tab-attached panel launchers remain available",
+        BGALAZKA_EXT_PREFS.HIDE_UNATTACHED_APP_CONTROLS,
+        "bgalazka-hide-unattached-app-controls",
+        false,
+        PREF_ICONS.CORNER,
+      );
+      content.appendChild(tHideUnattached.row);
+
       panel._toggles.push(
         ...[s1, s2, s3].map(({ input, badge }, index) => ({
           input,
@@ -20182,6 +20229,11 @@
         {
           input: tHoverCorner.input,
           pref: BGALAZKA_EXT_PREFS.HOVER_CORNER_TILES,
+          def: false,
+        },
+        {
+          input: tHideUnattached.input,
+          pref: BGALAZKA_EXT_PREFS.HIDE_UNATTACHED_APP_CONTROLS,
           def: false,
         },
         { input: t3.input, pref: BGALAZKA_EXT_PREFS.TAB_ISOLATION, def: false },

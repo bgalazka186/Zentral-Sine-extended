@@ -14,6 +14,7 @@
 - **Dynamic Translucency:** sometimes a bit of transparency is nice, you can now control how much transparency your panel will have in normal pinned and pinned unfocused state.
 - **Opposite-Side Docking:** i wanted to have buttons for panels on normal sidebar, but in compact mode panel moved a bit too much, i decided having it on opposite side would be nice .
 - **Corner-Docked Tiles:** by default they taking bit space and if you are used to essentials, they not that intuitive (change order of your panels first i recommend making them match your essencials, then enable this option).
+  **^Also now open any tab as panel clicking on favicon^** toggleable in settings, i guess it will be uncompatyble with that one mod that moves unload button there for normal tabs (just use middle mouse button to unload)
 - **Push sites when pinned:** feature that been in Vivaldi for years, similar to split view but a bit worse (much more accessible for panels)
 - **Disable whatever elements you dont want from pill menu:** you dont need reload button? pill menu is to cluttered? just hide it
 - **Switch UserAgent to Mobile** easy to add feature that is avalible in vivaldi web panels, useless on most sites, it shines on Instagram
