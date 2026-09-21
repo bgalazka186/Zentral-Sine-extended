@@ -14763,6 +14763,43 @@
 
   const cleanupFns = [];
   const registerCleanup = (fn) => cleanupFns.push(fn);
+  let extensionDisposed = false;
+  // Scope every extension timer to this instance. Delayed UI work must not
+  // resurrect controls or operate on a new mod instance after hot unload.
+  const pendingTimeouts = new Set();
+  const pendingIntervals = new Set();
+  const setTimeout = (callback, delay, ...args) => {
+    if (extensionDisposed) return null;
+    const id = window.setTimeout(() => {
+      pendingTimeouts.delete(id);
+      if (!extensionDisposed) callback(...args);
+    }, delay);
+    pendingTimeouts.add(id);
+    return id;
+  };
+  const clearTimeout = (id) => {
+    pendingTimeouts.delete(id);
+    window.clearTimeout(id);
+  };
+  const setInterval = (callback, delay) => {
+    if (extensionDisposed) return null;
+    const id = window.setInterval(() => {
+      if (!extensionDisposed) callback();
+    }, delay);
+    pendingIntervals.add(id);
+    return id;
+  };
+  const clearInterval = (id) => {
+    pendingIntervals.delete(id);
+    window.clearInterval(id);
+  };
+  registerCleanup(() => {
+    pendingTimeouts.forEach((id) => window.clearTimeout(id));
+    pendingIntervals.forEach((id) => window.clearInterval(id));
+    pendingTimeouts.clear();
+    pendingIntervals.clear();
+    window.removeEventListener("unload", performBgalazkaUnload);
+  });
 
   const EXT_PREFS = {
     TRANSLUCENCY: "zen.workspace.bgalazka.translucency",
@@ -16042,6 +16079,7 @@
         });
       } catch (_) {}
     }
+    const origIsPlacementVerticalBar = appsInstance.isPlacementVerticalBar;
     appsInstance.isPlacementVerticalBar = () => cachedIsVerticalBar;
 
     // PERF (note 21): both isPanelAttachedToRight() and positionPanel() are
@@ -16055,8 +16093,8 @@
     // reading that attribute here is a plain DOM read instead of a second
     // Services.prefs round-trip on every single frame.
     const isOppositeDockingCached = () =>
-      document.documentElement.getAttribute("bgalazka-opposite-docking") !==
-      "false";
+      document.documentElement.getAttribute("bgalazka-opposite-docking") ===
+      "true";
 
     const origIsPanelAttachedToRight =
       appsInstance.isPanelAttachedToRight?.bind(appsInstance);
@@ -16070,58 +16108,59 @@
     // Fix the off-screen ~1920px calculation bug when docked opposite (note 7).
     const origPositionPanel = appsInstance.positionPanel?.bind(appsInstance);
     appsInstance.positionPanel = function () {
-      if (origPositionPanel) origPositionPanel();
-
       const root = document.getElementById("zen-app-panel-root");
-
       if (!isOppositeDockingCached() || this.isPlacementVerticalBar()) {
-        // Not our branch right now (opposite-docking off, or vertical-bar
-        // mode) -- native's own positioning, or none of ours, owns
-        // root.style.left/right for as long as this stays true. Clear the
-        // dirty-check cache below so that if/when this branch becomes
-        // active again, the next write isn't skipped just because "side"
-        // happens to match whatever we last set before something else had
-        // control of the style in the meantime.
+        if (origPositionPanel) origPositionPanel();
         if (root) root._bgalazkaLastSide = undefined;
         return;
       }
       if (!root) return;
 
+      // Native positioning assumes sidebar-adjacent docking and overwrites
+      // left/right on EVERY call. Running it before a cached correction lets
+      // the second call send an opposite-docked panel off screen. Own only
+      // this opt-in branch, retaining native's toolbar-clearance calculation
+      // and writing geometry only when it changes (no native/extension fight).
       const gap = 12;
+      let top = gap;
+      const content =
+        document.getElementById("tabbrowser-tabbox") ||
+        document.getElementById("tabbrowser-tabpanels") ||
+        window.gBrowser?.selectedBrowser ||
+        document.getElementById("appcontent");
+      const contentTop = content?.getBoundingClientRect().top;
+      if (contentTop > 0 && contentTop < 200)
+        top = Math.max(top, Math.round(contentTop));
+      const navbar = document.getElementById("zen-appcontent-navbar-wrapper");
+      if (navbar) {
+        const style = window.getComputedStyle(navbar);
+        if (
+          style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          parseFloat(style.opacity || "1") > 0.1
+        ) {
+          const rect = navbar.getBoundingClientRect();
+          if (rect.height > 0 && rect.bottom > 0 && rect.bottom < 200)
+            top = Math.max(top, Math.round(rect.bottom));
+        }
+      }
       const dockOnRight = !this.isSidebarRight();
       const side = dockOnRight ? "right" : "left";
-      // PERF (note 23, the actual fix confirmed by profiling -- see the
-      // header comment block above for the full writeup): this used to
-      // write style.left/right + setAttribute("data-panel-side", ...)
-      // UNCONDITIONALLY on every call, and this function is called by the
-      // same native per-frame loop notes 21-22 describe -- so it was doing
-      // 3 DOM writes on every single animation frame for as long as the
-      // panel stayed open, even though dockOnRight only actually changes if
-      // the user flips their sidebar side mid-session (rare). setAttribute
-      // in particular can't be short-circuited by Gecko the way an
-      // unchanged inline style value sometimes can -- chrome.css has over a
-      // dozen selectors keyed on [data-panel-side="..."] (the pill, hover
-      // zone, resize strip, dual-view rules), so every redundant write was
-      // forcing Gecko to re-evaluate all of them against the DOM. Caching
-      // the last-applied side on the root element itself and skipping the
-      // writes entirely when nothing changed turns this from "3 DOM writes
-      // every frame, forever" into "3 DOM writes once, then a single cheap
-      // property comparison per frame after that."
-      if (root._bgalazkaLastSide === side) return;
+      const sideChanged = root._bgalazkaLastSide !== side;
       root._bgalazkaLastSide = side;
-      if (dockOnRight) {
-        root.style.left = "auto";
-        root.style.right = gap + "px";
-        root.setAttribute("data-panel-side", "right");
-      } else {
-        root.style.right = "auto";
-        root.style.left = gap + "px";
-        root.setAttribute("data-panel-side", "left");
+      const geometry = {
+        top: top + "px",
+        bottom: gap + "px",
+        transform: "translateX(0)",
+        left: dockOnRight ? "auto" : gap + "px",
+        right: dockOnRight ? gap + "px" : "auto",
+      };
+      for (const [key, value] of Object.entries(geometry)) {
+        if (root.style[key] !== value) root.style[key] = value;
       }
-      // Runs only after a real side change because of the dirty-check above;
-      // never add this call before that return or it would re-enter a hot RAF
-      // path and undermine the panel-jank fix.
-      applyHorizontalPanelOffset(root);
+      if (root.getAttribute("data-panel-side") !== side)
+        root.setAttribute("data-panel-side", side);
+      if (sideChanged) applyHorizontalPanelOffset(root);
     };
 
     // Mirror data-pinned onto #zen-app-panel-root so the translucency CSS (which
@@ -16338,6 +16377,7 @@
     }
 
     registerCleanup(() => {
+      appsInstance.isPlacementVerticalBar = origIsPlacementVerticalBar;
       if (origIsPanelAttachedToRight)
         appsInstance.isPanelAttachedToRight = origIsPanelAttachedToRight;
       if (origPositionPanel) appsInstance.positionPanel = origPositionPanel;
@@ -16349,7 +16389,9 @@
       if (wrappedHandleOutsideClick) {
         window.removeEventListener("mousedown", wrappedHandleOutsideClick);
         appsInstance.handleOutsideClick = origHandleOutsideClick;
-        window.addEventListener("mousedown", origHandleOutsideClick);
+        // Base Destroy may have run first; never reattach a dead instance.
+        if (window.Zentral?.Apps === appsInstance)
+          window.addEventListener("mousedown", origHandleOutsideClick);
       }
       appsInstance._bgalazkaPatched = false;
     });
@@ -16383,9 +16425,9 @@
    * tab cannot select itself. The tile's own click handler is intentionally
    * left untouched so it can still open the web panel.
    *
-   * click/auxclick are isolated directly on the tile during capture. This
-   * prevents the event from reaching the parent tab while still allowing
-   * the tile's own target-phase listeners to execute.
+   * click/auxclick are isolated when they bubble through the tile. This
+   * allows clicks on its icon descendants to reach the tile's own listener
+   * before stopping propagation to the containing tab.
    *
    * No MutationObserver is used on the tabstrip or documentElement.
    * ========================================================================== */
@@ -16437,8 +16479,11 @@
       e.stopPropagation();
     };
 
-    tile.addEventListener("click", clickIsolationHandler, true);
-    tile.addEventListener("auxclick", auxClickIsolationHandler, true);
+    // A capture stop on the tile swallows clicks on its icon descendants.
+    // Bubble isolation preserves the native handler; window down/MMB guards
+    // already protect the containing tab before it can act on those presses.
+    tile.addEventListener("click", clickIsolationHandler);
+    tile.addEventListener("auxclick", auxClickIsolationHandler);
 
     isolatedTiles.set(tile, {
       click: clickIsolationHandler,
@@ -16446,7 +16491,17 @@
     });
   };
 
+  const pruneIsolationTiles = () => {
+    // Grid renders replace tiles; release detached nodes and their closures.
+    isolatedTiles.forEach((handlers, tile) => {
+      if (tile.isConnected) return;
+      tile.removeEventListener("click", handlers.click);
+      tile.removeEventListener("auxclick", handlers.auxclick);
+      isolatedTiles.delete(tile);
+    });
+  };
   const scanIsolationTiles = (root = document) => {
+    pruneIsolationTiles();
     if (root instanceof Element) isolateTile(root);
     root.querySelectorAll?.(".zen-app-tile[data-app-id]").forEach(isolateTile);
   };
@@ -16467,6 +16522,9 @@
           .forEach(isolateTile);
       });
     });
+    // Added subtrees were scanned above. Badge/content mutations do not
+    // require another query across the entire browser document.
+    pruneIsolationTiles();
   });
 
   const appsGrid = document.getElementById("zen-apps-sidebar-grid");
@@ -16485,8 +16543,8 @@
     );
 
     isolatedTiles.forEach((handlers, tile) => {
-      tile.removeEventListener("click", handlers.click, true);
-      tile.removeEventListener("auxclick", handlers.auxclick, true);
+      tile.removeEventListener("click", handlers.click);
+      tile.removeEventListener("auxclick", handlers.auxclick);
     });
 
     isolatedTiles.clear();
@@ -16568,6 +16626,7 @@
     isSyncingTiles = true;
 
     try {
+      scanIsolationTiles();
       const isEnabled =
         document.documentElement.getAttribute("bgalazka-corner-tiles") ===
         "true";
@@ -16641,9 +16700,25 @@
       // persisted attribute on the TAB, so adding/removing/reordering other tabs
       // never reshuffles an existing assignment (unlike array-index matching).
       const tabsByAssignedId = new Map();
+      let storedIds = null;
+      try {
+        const stored = JSON.parse(
+          getPref("zen.workspace.apps.sidebar.apps", "[]"),
+        );
+        if (Array.isArray(stored))
+          storedIds = new Set(stored.map((app) => app.id));
+      } catch (_) {}
       targetTabs.forEach((tab) => {
         const assigned = tab.getAttribute("data-bgalazka-assigned-app");
-        if (assigned) tabsByAssignedId.set(assigned, tab);
+        if (!assigned) return;
+        // Use all saved apps, including other workspaces. Deleted apps and
+        // split-view clones must not reserve an essential-tab slot forever.
+        if (
+          (storedIds && !storedIds.has(assigned)) ||
+          tabsByAssignedId.has(assigned)
+        ) {
+          tab.removeAttribute("data-bgalazka-assigned-app");
+        } else tabsByAssignedId.set(assigned, tab);
       });
 
       remainingTiles.forEach((tile) => {
@@ -16750,8 +16825,9 @@
     // "custom".
     WEB_TOOLBAR_SEARCH_CUSTOM_URL:
       "zen.workspace.bgalazka.web_toolbar_search_custom_url",
-    // Master toggle for the quick-switch button (see ensureWebToolbar()) that
-    // re-runs the same search term on the other engine (DDG <-> Startpage).
+    // Master toggle for the quick-switch button (see ensureWebToolbar()).
+    // Its selectable built-in/custom target list is stored under the
+    // QUICK_SWITCH_* pref prefixes declared beside the search templates.
     WEB_TOOLBAR_QUICKSWITCH: "zen.workspace.bgalazka.web_toolbar_quickswitch",
     // Dock the toolbar at the top of the web panel instead of the bottom.
     WEB_TOOLBAR_TOP: "zen.workspace.bgalazka.web_toolbar_top",
@@ -17159,15 +17235,15 @@
       parseInt(root?.style?.width, 10) ||
       350;
 
-    document.documentElement.style.setProperty(
-      "--bgalazka-panel-width",
-      `${Math.round(width)}px`,
-    );
-    document.documentElement.setAttribute(
-      "bgalazka-panel-pinned",
-      effectivePinned ? "true" : "false",
-    );
-    document.documentElement.setAttribute("bgalazka-panel-side", side);
+    const docRoot = document.documentElement;
+    const widthValue = `${Math.round(width)}px`;
+    if (docRoot.style.getPropertyValue("--bgalazka-panel-width") !== widthValue)
+      docRoot.style.setProperty("--bgalazka-panel-width", widthValue);
+    const pinnedValue = effectivePinned ? "true" : "false";
+    if (docRoot.getAttribute("bgalazka-panel-pinned") !== pinnedValue)
+      docRoot.setAttribute("bgalazka-panel-pinned", pinnedValue);
+    if (docRoot.getAttribute("bgalazka-panel-side") !== side)
+      docRoot.setAttribute("bgalazka-panel-side", side);
   }
 
   /* ==========================================================================
@@ -17209,25 +17285,139 @@
    * option) — building the destination URL ourselves and loading it as a
    * plain https:// URL sidesteps that entirely.
    * -------------------------------------------------------------------- */
-  const SEARCH_ENGINE_TEMPLATES = {
-    ddg: "https://duckduckgo.com/?q=%s",
-    startpage: "https://www.startpage.com/sp/search?query=%s",
-  };
-
-  // Patterns used both to recognize an engine's own results pages (for the
-  // quick-switch button) and to pull the search term back out of them.
-  // Matches with or without "www.", http or https.
-  const SEARCH_ENGINE_PATTERNS = {
-    ddg: {
-      test: (u) => /^https?:\/\/(www\.)?duckduckgo\.com\//i.test(u),
+  // Built-in quick-switch destinations. These are ready to use: users select
+  // them in Extension Settings and never need to look up a GET URL manually.
+  // Google and Bing are intentionally not part of this list.
+  const QUICK_SWITCH_BUILTIN_TARGETS = [
+    {
+      key: "ddg",
+      label: "DuckDuckGo",
+      template: "https://duckduckgo.com/?q=%s",
       param: "q",
+      test: (u) => /^https?:\/\/(www\.)?duckduckgo\.com\//i.test(u),
     },
-    startpage: {
+    {
+      key: "startpage",
+      label: "Startpage",
+      template: "https://www.startpage.com/sp/search?query=%s",
+      param: "query",
       test: (u) =>
         /^https?:\/\/(www\.)?startpage\.com\/(sp|do)\/(d?search)/i.test(u),
-      param: "query",
     },
+    {
+      key: "brave",
+      label: "Brave Search",
+      template: "https://search.brave.com/search?q=%s",
+      param: "q",
+      test: (u) => /^https?:\/\/search\.brave\.com\/search/i.test(u),
+    },
+    {
+      key: "yahoo",
+      label: "Yahoo Search",
+      template: "https://search.yahoo.com/search?p=%s",
+      param: "p",
+      test: (u) => /^https?:\/\/search\.yahoo\.com\/search/i.test(u),
+    },
+    {
+      key: "ecosia",
+      label: "Ecosia",
+      template: "https://www.ecosia.org/search?q=%s",
+      param: "q",
+      test: (u) => /^https?:\/\/(www\.)?ecosia\.org\/search/i.test(u),
+    },
+    {
+      key: "qwant",
+      label: "Qwant",
+      template: "https://www.qwant.com/?q=%s",
+      param: "q",
+      test: (u) => /^https?:\/\/(www\.)?qwant\.com\//i.test(u),
+    },
+    {
+      key: "youtube",
+      label: "YouTube",
+      template: "https://www.youtube.com/results?search_query=%s",
+      param: "search_query",
+      test: (u) => /^https?:\/\/(www\.|m\.)?youtube\.com\/results/i.test(u),
+    },
+    {
+      key: "wikipedia",
+      label: "Wikipedia",
+      template: "https://en.wikipedia.org/w/index.php?search=%s",
+      param: "search",
+      test: (u) =>
+        /^https?:\/\/[a-z0-9-]+\.wikipedia\.org\/w\/index\.php/i.test(u),
+    },
+    {
+      key: "reddit",
+      label: "Reddit",
+      template: "https://www.reddit.com/search/?q=%s",
+      param: "q",
+      test: (u) => /^https?:\/\/(www\.)?reddit\.com\/search\/?/i.test(u),
+    },
+    {
+      key: "github",
+      label: "GitHub",
+      template: "https://github.com/search?q=%s",
+      param: "q",
+      test: (u) => /^https?:\/\/github\.com\/search/i.test(u),
+    },
+  ];
+
+  const QUICK_SWITCH_TARGET_PREF_PREFIX =
+    "zen.workspace.bgalazka.web_toolbar_quickswitch_target.";
+  const QUICK_SWITCH_CUSTOM_PREFS = Array.from(
+    { length: 5 },
+    (_, index) =>
+      `zen.workspace.bgalazka.web_toolbar_quickswitch_custom_${index + 1}`,
+  );
+  // One legacy primary-custom slot plus five additional slots. Keeping the
+  // existing pref names preserves current users' engines while presenting all
+  // six as one coherent list in Settings.
+  const SEARCH_CUSTOM_ENGINE_PREFS = [
+    BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_CUSTOM_URL,
+    ...QUICK_SWITCH_CUSTOM_PREFS,
+  ];
+  let cachedQuickSwitchTargets = null;
+  const searchTargetsObserver = () => {
+    cachedQuickSwitchTargets = null;
   };
+  Services.prefs.addObserver(
+    "zen.workspace.bgalazka.web_toolbar_",
+    searchTargetsObserver,
+  );
+  registerCleanup(() =>
+    Services.prefs.removeObserver(
+      "zen.workspace.bgalazka.web_toolbar_",
+      searchTargetsObserver,
+    ),
+  );
+  const QUICK_SWITCH_COMMON_GET_PARAMS = [
+    "q",
+    "query",
+    "p",
+    "search_query",
+    "search",
+    "keyword",
+    "keywords",
+    "term",
+    "text",
+    "wd",
+    "k",
+    "s",
+  ];
+
+  const SEARCH_ENGINE_TEMPLATES = Object.fromEntries(
+    QUICK_SWITCH_BUILTIN_TARGETS.map(({ key, template }) => [key, template]),
+  );
+
+  // Patterns used to recognize built-in result pages and recover the search
+  // term. Generic GET pages are handled separately below.
+  const SEARCH_ENGINE_PATTERNS = Object.fromEntries(
+    QUICK_SWITCH_BUILTIN_TARGETS.map(({ key, test, param }) => [
+      key,
+      { test, param },
+    ]),
+  );
 
   function detectSearchEngine(urlStr) {
     if (!urlStr) return null;
@@ -17244,6 +17434,148 @@
     } catch (_) {
       return null;
     }
+  }
+
+  // Detect a useful search term on any HTTP(S) GET URL. Prefer well-known
+  // search parameter names; if none is present, accept a single non-empty GET
+  // parameter. The single-parameter fallback avoids guessing on pages whose
+  // multiple parameters are mostly filters/tracking data.
+  function extractGetSearchQuery(urlStr) {
+    try {
+      const url = new URL(urlStr);
+      if (!/^https?:$/.test(url.protocol)) return null;
+
+      // Custom engines may use a nonstandard query key, a path placeholder,
+      // or fixed filters. Recover their term before the generic GET heuristic.
+      for (const target of getQuickSwitchTargets()) {
+        if (!target.key.startsWith("custom-")) continue;
+        const term = extractCustomSearchQuery(target.template, urlStr);
+        if (term !== null) return term;
+      }
+
+      const knownEngine = detectSearchEngine(urlStr);
+      if (knownEngine) {
+        const term = extractSearchQuery(urlStr, knownEngine);
+        if (term != null && term.trim()) return term;
+      }
+
+      for (const param of QUICK_SWITCH_COMMON_GET_PARAMS) {
+        const value = url.searchParams.get(param);
+        if (value != null && value.trim()) return value;
+      }
+
+      const nonEmpty = Array.from(url.searchParams.entries()).filter(
+        ([, value]) => value.trim(),
+      );
+      return nonEmpty.length === 1 ? nonEmpty[0][1] : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function isValidQuickSwitchTemplate(template) {
+    if (typeof template !== "string" || !template.includes("%s")) return false;
+    try {
+      const probe = new URL(template.replaceAll("%s", "bgalazkaprobe"));
+      return (
+        /^https?:$/.test(probe.protocol) &&
+        !probe.username &&
+        !probe.password &&
+        !probe.host.includes("bgalazkaprobe")
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function customTemplateMatchesUrl(template, urlStr) {
+    return extractCustomSearchQuery(template, urlStr) !== null;
+  }
+
+  function extractCustomSearchQuery(template, urlStr) {
+    if (!isValidQuickSwitchTemplate(template)) return null;
+    try {
+      const marker = "bgalazkaprobe";
+      const templateUrl = new URL(template.replaceAll("%s", marker));
+      const currentUrl = new URL(urlStr);
+      if (templateUrl.origin !== currentUrl.origin) return null;
+      let term = null;
+      const matchPart = (pattern, value, encoded = false) => {
+        if (value == null) return false;
+        if (!pattern.includes(marker)) return pattern === value;
+        const escaped = pattern
+          .split(marker)
+          .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+        const match = value.match(
+          new RegExp("^" + escaped.join("(.*?)") + "$"),
+        );
+        if (!match) return false;
+        return match.slice(1).every((part) => {
+          const query = encoded ? decodeURIComponent(part) : part;
+          if (!query.trim() || (term !== null && term !== query)) return false;
+          term = query;
+          return true;
+        });
+      };
+      if (
+        !matchPart(
+          templateUrl.pathname.replace(/\/$/, ""),
+          currentUrl.pathname.replace(/\/$/, ""),
+          true,
+        )
+      )
+        return null;
+      for (const [name, value] of templateUrl.searchParams.entries()) {
+        if (!matchPart(value, currentUrl.searchParams.get(name))) return null;
+      }
+      if (
+        templateUrl.hash &&
+        !matchPart(templateUrl.hash, currentUrl.hash, true)
+      )
+        return null;
+      return term;
+    } catch (_) {}
+    return null;
+  }
+
+  function getQuickSwitchTargets() {
+    if (cachedQuickSwitchTargets) return cachedQuickSwitchTargets;
+    const builtIns = QUICK_SWITCH_BUILTIN_TARGETS.filter((target, index) =>
+      getPref(
+        QUICK_SWITCH_TARGET_PREF_PREFIX + target.key,
+        index < 2, // retain the old DDG <-> Startpage behavior by default
+      ),
+    ).map((target) => ({
+      ...target,
+      matches: (urlStr) => target.test(urlStr),
+    }));
+
+    const custom = SEARCH_CUSTOM_ENGINE_PREFS.map((pref, index) => ({
+      key: `custom-${index + 1}`,
+      label: `Custom Engine ${index + 1}`,
+      template: String(getPref(pref, "") || "").trim(),
+    }))
+      .filter(({ template }) => isValidQuickSwitchTemplate(template))
+      .map((target) => ({
+        ...target,
+        matches: (urlStr) => customTemplateMatchesUrl(target.template, urlStr),
+      }));
+
+    const seen = new Set();
+    cachedQuickSwitchTargets = [...builtIns, ...custom].filter(
+      ({ template }) => {
+        if (seen.has(template)) return false;
+        seen.add(template);
+        return true;
+      },
+    );
+    return cachedQuickSwitchTargets;
+  }
+
+  function getNextQuickSwitchTarget(urlStr, targets = getQuickSwitchTargets()) {
+    if (!targets.length) return null;
+    const currentIndex = targets.findIndex((target) => target.matches(urlStr));
+    return targets[(currentIndex + 1) % targets.length];
   }
 
   // Best-effort mirror of Firefox's OWN default search engine, for the
@@ -17288,20 +17620,24 @@
   function buildSearchUrl(term) {
     const mode = getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_ENGINE, "ddg");
     let template;
-    if (mode === "custom") {
-      template =
-        getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_CUSTOM_URL, "") ||
-        SEARCH_ENGINE_TEMPLATES.ddg;
+    if (mode === "custom" || /^custom-\d+$/.test(mode)) {
+      // "custom" is the legacy value for slot 1. New selections use
+      // custom-2..custom-6, allowing more than one user-created engine.
+      const slot =
+        mode === "custom" ? 0 : Math.max(0, parseInt(mode.slice(7), 10) - 1);
+      const pref = SEARCH_CUSTOM_ENGINE_PREFS[slot];
+      template = (pref && getPref(pref, "")) || SEARCH_ENGINE_TEMPLATES.ddg;
     } else if (mode === "browser") {
       template = cachedBrowserSearchTemplate || SEARCH_ENGINE_TEMPLATES.ddg;
     } else {
       template = SEARCH_ENGINE_TEMPLATES[mode] || SEARCH_ENGINE_TEMPLATES.ddg;
     }
-    // Safety net for a malformed custom template pasted without "%s".
-    if (!template.includes("%s")) {
-      template += (template.includes("?") ? "&" : "?") + "q=%s";
-    }
-    return template.replace("%s", encodeURIComponent(term));
+    // Old preferences can contain invalid templates even after UI validation
+    // is added. Never navigate a typed search to javascript:/data: or invent
+    // a query parameter that the user's engine does not support.
+    if (!isValidQuickSwitchTemplate(template))
+      template = SEARCH_ENGINE_TEMPLATES.ddg;
+    return template.replaceAll("%s", encodeURIComponent(term));
   }
 
   // Same "has a dot before the first slash" rule real browsers' urlbars use
@@ -17461,33 +17797,31 @@
         }
         urlInput.blur();
       } else if (e.key === "Escape") {
-        updateWebToolbarState(); // revert any unsent edits back to the real URL
         urlInput.blur();
+        updateWebToolbarState(); // update after blur, otherwise the focus guard skips it
       }
     });
     urlInput.addEventListener("focus", () => urlInput.select());
     urlWrap.appendChild(urlInput);
 
-    // Search-engine quick-switch: only meaningful (and only shown, see
-    // updateWebToolbarState()) while the active page is itself a
-    // recognized DDG/Startpage results page. Re-runs the same query on
-    // the OTHER of the two, preserving the exact search term.
+    // Search-engine quick-switch. When the current HTTP(S) page exposes a
+    // recognizable GET search term, each click advances to the next enabled
+    // built-in/custom target while preserving that exact term.
     const swapBtn = document.createElement("button");
     swapBtn.className = "zen-toolbar-btn zen-toolbar-swap-btn";
-    swapBtn.title = "Search on the other engine";
-    swapBtn.style.display = "none"; // shown by updateWebToolbarState() only on recognized search-result pages
+    swapBtn.title = "Search with next selected service";
+    swapBtn.style.display = "none"; // shown by updateWebToolbarState() only when a GET search term is detected
     swapBtn.appendChild(parseSVG(PREF_ICONS.SWAP));
     swapBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       const b = getActiveAppBrowser();
       if (!b) return;
       const cur = b.currentURI?.spec || "";
-      const engine = detectSearchEngine(cur);
-      if (!engine) return; // shouldn't happen, button is hidden otherwise
-      const term = extractSearchQuery(cur, engine);
+      const term = extractGetSearchQuery(cur);
       if (term == null) return;
-      const otherEngine = engine === "ddg" ? "startpage" : "ddg";
-      const target = SEARCH_ENGINE_TEMPLATES[otherEngine].replace(
+      const nextTarget = getNextQuickSwitchTarget(cur);
+      if (!nextTarget) return;
+      const target = nextTarget.template.replaceAll(
         "%s",
         encodeURIComponent(term),
       );
@@ -17546,6 +17880,7 @@
 
     toolbar.append(backBtn, reloadBtn, fwdBtn, swapBtn, urlWrap, zoomWrap);
     panel.append(hoverZone, toolbar);
+    startWebToolbarPolling();
     return true;
   }
 
@@ -17555,6 +17890,13 @@
   // interval below (SPA/history.pushState navigations don't reliably fire
   // the 'load'/'pageshow' events this file already listens for elsewhere).
   function updateWebToolbarState() {
+    const root = document.getElementById("zen-app-panel-root");
+    if (
+      !root?.hasAttribute("open") ||
+      root.hasAttribute("closing") ||
+      document.documentElement.getAttribute("bgalazka-webtoolbar") !== "true"
+    )
+      return;
     const toolbar = document.getElementById("zen-app-panel-toolbar");
     if (!toolbar) return;
     const b = getActiveAppBrowser();
@@ -17574,51 +17916,87 @@
       // in the click handler above (only useful if we're not already home).
       const canFallbackHome =
         !!b && !!b._bgalazkaHomeUrl && b._bgalazkaHomeUrl !== curSpec;
-      backBtn.disabled = !b || (!b.canGoBack && !canFallbackHome);
+      const disabled = !b || (!b.canGoBack && !canFallbackHome);
+      if (backBtn.disabled !== disabled) backBtn.disabled = disabled;
     }
-    if (fwdBtn) fwdBtn.disabled = !b || !b.canGoForward;
+    if (fwdBtn && fwdBtn.disabled !== (!b || !b.canGoForward))
+      fwdBtn.disabled = !b || !b.canGoForward;
 
     if (urlInput && document.activeElement !== urlInput) {
-      urlInput.value = curSpec;
+      if (urlInput.value !== curSpec) urlInput.value = curSpec;
     }
 
     if (zoomLabel) {
       try {
-        zoomLabel.textContent = b
+        const label = b
           ? Math.round(ZoomManager.getZoomForBrowser(b) * 100) + "%"
           : "100%";
+        if (zoomLabel.textContent !== label) zoomLabel.textContent = label;
       } catch (_) {
-        zoomLabel.textContent = "100%";
+        if (zoomLabel.textContent !== "100%") zoomLabel.textContent = "100%";
       }
     }
 
-    // Quick-switch button only makes sense (and is only shown) while the
-    // active page is itself a recognized DDG/Startpage results page, and
-    // only if the user hasn't turned the feature off in settings.
+    // Show quick-switch on any HTTP(S) page where we can reliably recover a
+    // GET search term, as long as at least one destination is configured.
     if (swapBtn) {
       const quickswitchOn = getPref(
         BGALAZKA_EXT_PREFS.WEB_TOOLBAR_QUICKSWITCH,
         false,
       );
-      const show = quickswitchOn && !!detectSearchEngine(curSpec);
-      swapBtn.style.display = show ? "" : "none";
+      const targets = quickswitchOn ? getQuickSwitchTargets() : [];
+      const nextTarget = getNextQuickSwitchTarget(curSpec, targets);
+      const show =
+        quickswitchOn &&
+        targets.length > 0 &&
+        extractGetSearchQuery(curSpec) != null;
+      const display = show ? "" : "none";
+      if (swapBtn.style.display !== display) swapBtn.style.display = display;
+      const title = nextTarget
+        ? `Search with ${nextTarget.label}`
+        : "Search with next selected service";
+      if (swapBtn.title !== title) swapBtn.title = title;
     }
   }
 
   let webToolbarPollTimer = null;
+  let webToolbarObservedRoot = null;
+  let webToolbarVisibilityObserver = null;
   function startWebToolbarPolling() {
-    if (webToolbarPollTimer) return;
-    webToolbarPollTimer = setInterval(() => {
-      const root = document.getElementById("zen-app-panel-root");
-      if (!root?.hasAttribute("open")) return; // cheap no-op while closed
-      if (!getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, false)) return;
-      updateWebToolbarState();
-    }, 400);
-    registerCleanup(() => {
-      if (webToolbarPollTimer) clearInterval(webToolbarPollTimer);
+    if (extensionDisposed) return;
+    const root = document.getElementById("zen-app-panel-root");
+    if (root !== webToolbarObservedRoot) {
+      webToolbarVisibilityObserver?.disconnect();
+      webToolbarObservedRoot = root;
+      if (root) {
+        webToolbarVisibilityObserver = new MutationObserver(
+          startWebToolbarPolling,
+        );
+        // Attributes on the panel ONLY: never observe tabstrip descendants.
+        webToolbarVisibilityObserver.observe(root, {
+          attributes: true,
+          attributeFilter: ["open", "closing"],
+        });
+      }
+    }
+    const active =
+      root?.hasAttribute("open") &&
+      !root.hasAttribute("closing") &&
+      getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, false);
+    if (!active) {
+      clearInterval(webToolbarPollTimer);
       webToolbarPollTimer = null;
-    });
+      return;
+    }
+    if (webToolbarPollTimer) return;
+    updateWebToolbarState();
+    webToolbarPollTimer = setInterval(updateWebToolbarState, 400);
   }
+  registerCleanup(() => {
+    clearInterval(webToolbarPollTimer);
+    webToolbarPollTimer = null;
+    webToolbarVisibilityObserver?.disconnect();
+  });
   startWebToolbarPolling();
 
   // BUG FIX: this used to be called from inside patchAppsInstance(), which
@@ -17842,7 +18220,7 @@
           BGALAZKA_EXT_PREFS.PUSH_PAGE,
           "bgalazka-push-page",
         );
-        updatePanelPushState();
+        syncPanelPushState();
         ensurePillDualViewButton();
         return true;
       case "TOGGLE_RESIZE":
@@ -18203,14 +18581,47 @@
     input.style.width = "100%";
     input.value = getPref(prefKey, "");
 
-    input.addEventListener("change", () => {
+    const commitTextValue = () => {
       const val = input.value.trim();
-      setPref(prefKey, val);
+      if (
+        SEARCH_CUSTOM_ENGINE_PREFS.includes(prefKey) &&
+        val &&
+        !isValidQuickSwitchTemplate(val)
+      ) {
+        const message =
+          'Use an HTTP(S) URL with "%s" for the search term. The previous URL is still saved.';
+        input.setCustomValidity(message);
+        input.setAttribute("aria-invalid", "true");
+        error.textContent = message;
+        error.hidden = false;
+        return false;
+      }
+      input.value = val;
+      input.setCustomValidity("");
+      input.removeAttribute("aria-invalid");
+      error.hidden = true;
+      if (getPref(prefKey, "") !== val) setPref(prefKey, val);
       if (typeof onChange === "function") onChange(val);
+      return true;
+    };
+    const error = document.createElement("span");
+    error.className = "zs-field-error";
+    error.id = "zs-error-" + prefKey.replace(/[^a-z0-9_-]/gi, "-");
+    error.setAttribute("role", "status");
+    error.hidden = true;
+    input.setAttribute("aria-label", labelText);
+    input.setAttribute("aria-describedby", error.id);
+    input.addEventListener("change", commitTextValue);
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.isComposing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (commitTextValue()) input.blur();
     });
 
     row.appendChild(labelContainer);
     row.appendChild(input);
+    row.appendChild(error);
     return { row, input };
   }
 
@@ -18364,7 +18775,7 @@
 
       const title = document.createElement("h3");
       title.className = "zs-section-title";
-      title.textContent = "Extension Core";
+      title.textContent = "Panel & Apps";
 
       const badge = document.createElement("span");
       badge.className = "zs-version-badge";
@@ -18789,43 +19200,41 @@
         false,
       );
 
-      // Custom search URL row lives in its own conditional group, only
-      // shown while "Custom URL" is the selected search engine mode.
+      // Custom engines are always visible in their dedicated category. This
+      // makes creating a second engine discoverable instead of hiding the
+      // fields behind the selected default and the quick-switch toggle.
       const customSearchSubgroup = document.createElement("div");
-      customSearchSubgroup.className = "zs-conditional-group";
+      customSearchSubgroup.className = "zs-search-engine-list zs-settings-card";
       const tSearchCustomUrl = createTextRow(
-        "Custom Search URL",
+        "Custom Engine 1",
         'Must contain a literal "%s" placeholder for the search term, e.g. https://example.com/search?q=%s',
         BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_CUSTOM_URL,
         "https://example.com/search?q=%s",
+        null,
+        () => syncCustomSearchOptions(),
       );
       customSearchSubgroup.append(tSearchCustomUrl.row);
-      customSearchSubgroup.setAttribute(
-        "data-hidden",
-        getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_ENGINE, "ddg") ===
-          "custom"
-          ? "false"
-          : "true",
-      );
 
       const tSearchEngine = createSelectRow(
-        "Search Engine",
+        "Default Search Engine",
         'Used when the URL bar text isn\'t a URL, e.g. typing "weather" instead of a full address',
         BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_ENGINE,
         [
-          { value: "ddg", label: "DuckDuckGo" },
-          { value: "startpage", label: "Startpage" },
+          ...QUICK_SWITCH_BUILTIN_TARGETS.map(({ key, label }) => ({
+            value: key,
+            label,
+          })),
           { value: "browser", label: "Browser Default" },
-          { value: "custom", label: "Custom URL" },
+          { value: "custom", label: "Custom Engine 1" },
+          ...QUICK_SWITCH_CUSTOM_PREFS.map((_, index) => ({
+            value: `custom-${index + 2}`,
+            label: `Custom Engine ${index + 2}`,
+          })),
         ],
         "ddg",
         PREF_ICONS.SWAP,
         null, // no root attribute to mirror; only read via getPref() in buildSearchUrl()
         (value) => {
-          customSearchSubgroup.setAttribute(
-            "data-hidden",
-            value === "custom" ? "false" : "true",
-          );
           // Re-fetch Firefox's own default engine right when the user
           // picks this mode, rather than only at startup, in case they
           // changed their system default engine since the browser opened.
@@ -18833,13 +19242,78 @@
         },
       );
 
+      const quickSwitchTargetsSubgroup = document.createElement("div");
+      quickSwitchTargetsSubgroup.className = "zs-conditional-group";
+
+      const quickSwitchTargetsHeader = document.createElement("div");
+      quickSwitchTargetsHeader.className = "zs-section-header";
+      const quickSwitchTargetsTitle = document.createElement("h3");
+      quickSwitchTargetsTitle.className = "zs-section-title";
+      quickSwitchTargetsTitle.textContent = "Quick-Switch Destinations";
+      quickSwitchTargetsHeader.appendChild(quickSwitchTargetsTitle);
+
+      const quickSwitchTargetRows = QUICK_SWITCH_BUILTIN_TARGETS.map(
+        (target, index) =>
+          createToggleRow(
+            target.label,
+            "Include in the Quick-Switch cycle",
+            QUICK_SWITCH_TARGET_PREF_PREFIX + target.key,
+            null,
+            index < 2,
+            null,
+          ),
+      );
+      const quickSwitchCustomRows = QUICK_SWITCH_CUSTOM_PREFS.map(
+        (pref, index) =>
+          createTextRow(
+            `Custom Engine ${index + 2}`,
+            'Optional HTTP(S) GET template containing "%s", e.g. https://example.com/search?q=%s',
+            pref,
+            "https://example.com/search?q=%s",
+            null,
+            () => syncCustomSearchOptions(),
+          ),
+      );
+      const syncCustomSearchOptions = () => {
+        SEARCH_CUSTOM_ENGINE_PREFS.forEach((pref, index) => {
+          const value = index === 0 ? "custom" : `custom-${index + 1}`;
+          const option = Array.from(tSearchEngine.select.options).find(
+            (o) => o.value === value,
+          );
+          if (!option) return;
+          option.disabled = !isValidQuickSwitchTemplate(getPref(pref, ""));
+          option.textContent =
+            `Custom Engine ${index + 1}` +
+            (option.disabled ? " (add a valid URL)" : "");
+        });
+      };
+      syncCustomSearchOptions();
+      quickSwitchTargetsSubgroup.append(
+        quickSwitchTargetsHeader,
+        ...quickSwitchTargetRows.map(({ row }) => row),
+      );
+      customSearchSubgroup.append(
+        ...quickSwitchCustomRows.map(({ row }) => row),
+      );
+
       const tQuickswitch = createToggleRow(
         "Search Engine Quick-Switch Button",
-        "Adds a button to the toolbar (only visible on a DuckDuckGo/Startpage results page) that re-runs the same search on the other engine",
+        "Shows on HTTP(S) pages with a detectable GET search term and cycles through the selected destinations",
         BGALAZKA_EXT_PREFS.WEB_TOOLBAR_QUICKSWITCH,
         null,
         false,
         PREF_ICONS.SWAP,
+        (enabled) =>
+          quickSwitchTargetsSubgroup.setAttribute(
+            "data-hidden",
+            enabled ? "false" : "true",
+          ),
+      );
+      quickSwitchTargetsSubgroup.setAttribute(
+        "data-hidden",
+        getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_QUICKSWITCH, false)
+          ? "false"
+          : "true",
       );
 
       webToolbarSubgroup.append(
@@ -18847,9 +19321,6 @@
         tToolbarTop.row,
         tToolbarUrlbar.row,
         tToolbarZoom.row,
-        tSearchEngine.row,
-        customSearchSubgroup,
-        tQuickswitch.row,
       );
       webToolbarSubgroup.setAttribute(
         "data-hidden",
@@ -19101,6 +19572,19 @@
       content.appendChild(cornerSubgroup);
 
       panel._toggles.push(
+        ...[s1, s2, s3].map(({ input, badge }, index) => ({
+          input,
+          pref: [
+            BGALAZKA_EXT_PREFS.OPACITY_UNPINNED,
+            BGALAZKA_EXT_PREFS.OPACITY_PINNED_FOCUS,
+            BGALAZKA_EXT_PREFS.OPACITY_PINNED_BLUR,
+          ][index],
+          def: [92, 85, 45][index],
+          isSelect: true,
+          onSync: (v) => {
+            badge.textContent = v + "%";
+          },
+        })),
         {
           input: t1.input,
           pref: BGALAZKA_EXT_PREFS.TRANSLUCENCY,
@@ -19270,11 +19754,10 @@
           pref: BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_ENGINE,
           def: "ddg",
           isSelect: true,
-          onSync: (v) =>
-            customSearchSubgroup.setAttribute(
-              "data-hidden",
-              v === "custom" ? "false" : "true",
-            ),
+          onSync: (v) => {
+            syncCustomSearchOptions();
+            if (v === "browser") refreshBrowserSearchTemplate();
+          },
         },
         {
           input: tSearchCustomUrl.input,
@@ -19286,7 +19769,25 @@
           input: tQuickswitch.input,
           pref: BGALAZKA_EXT_PREFS.WEB_TOOLBAR_QUICKSWITCH,
           def: false,
+          onSync: (v) =>
+            quickSwitchTargetsSubgroup.setAttribute(
+              "data-hidden",
+              v ? "false" : "true",
+            ),
         },
+        ...quickSwitchTargetRows.map(({ input }, index) => ({
+          input,
+          pref:
+            QUICK_SWITCH_TARGET_PREF_PREFIX +
+            QUICK_SWITCH_BUILTIN_TARGETS[index].key,
+          def: index < 2,
+        })),
+        ...quickSwitchCustomRows.map(({ input }, index) => ({
+          input,
+          pref: QUICK_SWITCH_CUSTOM_PREFS[index],
+          def: "",
+          isSelect: true,
+        })),
         {
           input: tDualView.input,
           pref: BGALAZKA_EXT_PREFS.HIDE_DUAL_VIEW,
@@ -19402,8 +19903,74 @@
         keybindSubgroup,
       );
 
+      const toolbarCategory = makeExtensionSettingsPanel(
+        "zs-panel-extension-toolbar",
+        "extension-toolbar",
+      );
+      toolbarHeader.style.marginTop = "8px";
+      toolbarCategory.subContent.append(
+        toolbarHeader,
+        tWebToolbar.row,
+        webToolbarSubgroup,
+      );
+
+      const searchCategory = makeExtensionSettingsPanel(
+        "zs-panel-extension-search",
+        "extension-search",
+      );
+      const searchHeader = document.createElement("div");
+      searchHeader.className = "zs-section-header";
+      const searchTitle = document.createElement("h3");
+      searchTitle.className = "zs-section-title";
+      searchTitle.textContent = "Search Engines";
+      searchHeader.appendChild(searchTitle);
+
+      const customEnginesHeader = document.createElement("div");
+      customEnginesHeader.className = "zs-section-header zs-subsection-header";
+      const customEnginesTitle = document.createElement("h3");
+      customEnginesTitle.className = "zs-section-title";
+      customEnginesTitle.textContent = "Custom Engines";
+      customEnginesHeader.appendChild(customEnginesTitle);
+
+      searchCategory.subContent.append(
+        searchHeader,
+        tSearchEngine.row,
+        customEnginesHeader,
+        customSearchSubgroup,
+        tQuickswitch.row,
+        quickSwitchTargetsSubgroup,
+      );
+
+      // Keep every pill-related control together: appearance first, then the
+      // visibility list. Moving existing nodes preserves all listeners.
+      hidePillTitle.textContent = "Pill Controls";
+      hideCategory.subContent.prepend(
+        pillHeader,
+        tMasterPill.row,
+        pillSubgroup,
+      );
+
       panel.appendChild(content);
-      body.append(panel, hideCategory.subPanel, keybindCategory.subPanel);
+      body.append(
+        panel,
+        toolbarCategory.subPanel,
+        searchCategory.subPanel,
+        hideCategory.subPanel,
+        keybindCategory.subPanel,
+      );
+      registerCleanup(() => {
+        const wasActive = Boolean(
+          modal.querySelector(
+            '#zs-panel-bgalazka[data-active="true"], .zs-extension-subpanel[data-active="true"]',
+          ),
+        );
+        modal
+          .querySelectorAll(
+            '#zs-panel-bgalazka, .zs-extension-subpanel, #zs-tab-btn-bgalazka, [id^="zs-tab-btn-extension-"]',
+          )
+          .forEach((node) => node.remove());
+        if (wasActive) modal.querySelector(".zs-tab-btn")?.click();
+      });
     } else if (Array.isArray(panel._toggles)) {
       panel._toggles.forEach(({ input, pref, def, onSync, isSelect }) => {
         if (isSelect) {
@@ -19422,19 +19989,31 @@
         buttonId: "zs-tab-btn-bgalazka",
         panelId: "zs-panel-bgalazka",
         dataTab: "bgalazka",
-        label: "Extension Core",
+        label: "Panel & Apps",
+      },
+      {
+        buttonId: "zs-tab-btn-extension-toolbar",
+        panelId: "zs-panel-extension-toolbar",
+        dataTab: "extension-toolbar",
+        label: "Toolbar",
+      },
+      {
+        buttonId: "zs-tab-btn-extension-search",
+        panelId: "zs-panel-extension-search",
+        dataTab: "extension-search",
+        label: "Search Engines",
       },
       {
         buttonId: "zs-tab-btn-extension-keybinds",
         panelId: "zs-panel-extension-keybinds",
         dataTab: "extension-keybinds",
-        label: "Extension Keybinds",
+        label: "Keyboard Shortcuts",
       },
       {
         buttonId: "zs-tab-btn-extension-hide-pill",
         panelId: "zs-panel-extension-hide-pill",
         dataTab: "extension-hide-pill",
-        label: "Extension — Hide Pill Controls",
+        label: "Pill Controls",
       },
     ];
 
@@ -19472,7 +20051,7 @@
     });
 
     // Native Zentral tab buttons do not know about extension-injected panels,
-    // so explicitly deactivate all three extension categories when a native
+    // so explicitly deactivate extension categories when a native
     // category is chosen. One capture listener is enough for the whole bar.
     if (!tabBar.dataset.bgalazkaCategoryGuard) {
       tabBar.dataset.bgalazkaCategoryGuard = "true";
@@ -19485,9 +20064,10 @@
         });
       };
       tabBar.addEventListener("click", categoryGuard, true);
-      registerCleanup(() =>
-        tabBar.removeEventListener("click", categoryGuard, true),
-      );
+      registerCleanup(() => {
+        tabBar.removeEventListener("click", categoryGuard, true);
+        delete tabBar.dataset.bgalazkaCategoryGuard;
+      });
     }
   }
 
@@ -21022,6 +21602,27 @@
     const apps = window.Zentral?.Apps;
     if (!apps || apps._bgalazkaHooked) return !!apps;
     apps._bgalazkaHooked = true;
+    const hookNames = [
+      "openPanel",
+      "closePanel",
+      "getOrCreateAppBrowser",
+      "closeApp",
+      "removeApp",
+    ];
+    const originalMethods = new Map(
+      hookNames.map((name) => [name, apps[name]]),
+    );
+    const navigationListeners = new Map();
+    const pruneNavigationListeners = (appId = null) => {
+      navigationListeners.forEach((onNav, browser) => {
+        if (browser.isConnected && (!appId || browser._bgalazkaAppId !== appId))
+          return;
+        ["load", "pageshow", "DOMTitleChanged"].forEach((type) =>
+          browser.removeEventListener(type, onNav),
+        );
+        navigationListeners.delete(browser);
+      });
+    };
 
     const origOpen = apps.openPanel?.bind(apps);
     if (origOpen) {
@@ -21132,6 +21733,7 @@
           result.browser.addEventListener("load", onNav);
           result.browser.addEventListener("pageshow", onNav);
           result.browser.addEventListener("DOMTitleChanged", onNav);
+          navigationListeners.set(result.browser, onNav);
         }
         return result;
       };
@@ -21145,6 +21747,7 @@
     const origCloseApp = apps.closeApp?.bind(apps);
     if (origCloseApp) {
       apps.closeApp = function (appId, ...args) {
+        pruneNavigationListeners(appId);
         removeAddonHostRecord(appId);
         const res = origCloseApp(appId, ...args);
         if (!addonHostByAppId.size) setTimeout(removeEmptyAddonHostFolder, 0);
@@ -21155,6 +21758,7 @@
     const origRemoveApp = apps.removeApp?.bind(apps);
     if (origRemoveApp) {
       apps.removeApp = function (appId, ...args) {
+        pruneNavigationListeners(appId);
         removeAddonHostRecord(appId);
         const res = origRemoveApp(appId, ...args);
         if (!addonHostByAppId.size) setTimeout(removeEmptyAddonHostFolder, 0);
@@ -21162,6 +21766,18 @@
       };
     }
 
+    registerCleanup(() => {
+      navigationListeners.forEach((onNav, browser) => {
+        ["load", "pageshow", "DOMTitleChanged"].forEach((type) =>
+          browser.removeEventListener(type, onNav),
+        );
+      });
+      navigationListeners.clear();
+      originalMethods.forEach((method, name) => {
+        apps[name] = method;
+      });
+      delete apps._bgalazkaHooked;
+    });
     return true;
   };
 
@@ -21182,19 +21798,30 @@
     setTimeout(unloadPanelBrowsersForAddonBridge, 0);
   }
 
-  // Window listeners for panel state changes
-  window.addEventListener(
-    "click",
-    () => setTimeout(syncPanelPushState, 40),
-    true,
-  );
-  window.addEventListener(
-    "mouseup",
-    () => setTimeout(syncPanelPushState, 40),
-    true,
-  );
-  window.addEventListener("resize", () => setTimeout(syncPanelPushState, 40), {
-    passive: true,
+  // A click normally emits mouseup too. Coalesce the pair and skip geometry
+  // work entirely when an unrelated click occurs with no visible app panel.
+  let panelPushSyncTimer = null;
+  const requestPanelPushSync = () => {
+    const root = document.getElementById("zen-app-panel-root");
+    if (
+      !root?.hasAttribute("open") &&
+      document.documentElement.getAttribute("bgalazka-panel-pinned") !== "true"
+    )
+      return;
+    if (panelPushSyncTimer) return;
+    panelPushSyncTimer = setTimeout(() => {
+      panelPushSyncTimer = null;
+      syncPanelPushState();
+    }, 40);
+  };
+  window.addEventListener("click", requestPanelPushSync, true);
+  window.addEventListener("mouseup", requestPanelPushSync, true);
+  window.addEventListener("resize", requestPanelPushSync, { passive: true });
+  registerCleanup(() => {
+    clearTimeout(panelPushSyncTimer);
+    window.removeEventListener("click", requestPanelPushSync, true);
+    window.removeEventListener("mouseup", requestPanelPushSync, true);
+    window.removeEventListener("resize", requestPanelPushSync);
   });
 
   // Initial attribute sync on script startup
@@ -21343,6 +21970,10 @@
             attr,
             getPref(pref, def) ? "true" : "false",
           );
+          if (pref === BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED) {
+            ensureWebToolbar();
+            startWebToolbarPolling();
+          }
         };
         Services.prefs.addObserver(pref, observer, false);
         registerCleanup(() => {
@@ -21360,6 +21991,45 @@
    * Direct hook into ZentralSettings.open avoids subtree MutationObserver
    * violations over tabstrip ancestors during session initialization.
    * ========================================================================== */
+  // Native updateAllSubGroupsBadges queried the groups once, then scanned that
+  // entire array for EVERY group (quadratic). Bucket direct children once and
+  // reuse the native single-group renderer so text, split-view exclusions and
+  // dirty checking stay identical. No tabstrip observer or base edit needed.
+  const tabGroups = window.Zentral?.TabGroups;
+  if (
+    tabGroups?.updateAllSubGroupsBadges &&
+    tabGroups.updateGroupSubGroupsBadge
+  ) {
+    const originalUpdateAll = tabGroups.updateAllSubGroupsBadges;
+    let updatingBadges = false;
+    tabGroups.updateAllSubGroupsBadges = function () {
+      if (updatingBadges || extensionDisposed) return;
+      updatingBadges = true;
+      try {
+        const groups = Array.from(
+          document.querySelectorAll(
+            "tab-group:not([split-view-group]):not([zen-split-view]):not([is-zen-split])",
+          ),
+        ).filter((group) => !group.classList?.contains("zen-split-view"));
+        const children = new Map();
+        groups.forEach((group) => {
+          const parent = group.parentElement?.closest("tab-group");
+          if (!parent) return;
+          if (!children.has(parent)) children.set(parent, []);
+          children.get(parent).push(group);
+        });
+        groups.forEach((group) =>
+          this.updateGroupSubGroupsBadge(group, children.get(group) || []),
+        );
+      } finally {
+        updatingBadges = false;
+      }
+    };
+    registerCleanup(() => {
+      tabGroups.updateAllSubGroupsBadges = originalUpdateAll;
+    });
+  }
+
   const patchSettingsInstance = () => {
     const settingsInstance = window.Zentral?.Settings;
     if (!settingsInstance) return false;
@@ -21457,12 +22127,18 @@
    * 6. CLEANUP / UNLOAD
    * ========================================================================== */
   const performBgalazkaUnload = () => {
-    cleanupFns.forEach((fn) => {
-      try {
-        fn();
-      } catch (_) {}
-    });
-    cleanupFns.length = 0;
+    if (extensionDisposed) return;
+    extensionDisposed = true;
+    // Later wrappers wrap earlier wrappers. Unwind in reverse order so a
+    // restored outer wrapper cannot leave a stale inner extension installed.
+    cleanupFns
+      .splice(0)
+      .reverse()
+      .forEach((fn) => {
+        try {
+          fn();
+        } catch (_) {}
+      });
     window.BgalazkaExtensionInitialized = false;
   };
   if (typeof window.addUnloadListener === "function") {

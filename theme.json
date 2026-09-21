@@ -16,7 +16,7 @@
     }
   },
   "author": "bgalazka186",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "preferences": "preferences.json",
   "tags": ["apps", "tabs", "sidebar", "groups"],
   "fork": ["zen"],
