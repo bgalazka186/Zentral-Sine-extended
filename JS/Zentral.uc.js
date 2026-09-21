@@ -4784,7 +4784,15 @@
       const app = this.#state.apps.find(
         (a) => a.id === this.#state.activeAppId,
       );
-      this._startW = app?.width || this.loadWidth();
+      // Always begin from the width that is actually on screen. Extension-owned
+      // panel identities (for example Essential/tab launchers) are intentionally
+      // not members of #state.apps, so falling back to loadWidth() here makes
+      // the first mousemove jump to the global/default width before resizing.
+      const renderedWidth = this.#dom.root?.getBoundingClientRect?.().width;
+      this._startW =
+        Number.isFinite(renderedWidth) && renderedWidth > 0
+          ? renderedWidth
+          : app?.width || this.loadWidth();
       if (this.#dom.panel) this.#dom.panel.style.pointerEvents = "none";
       document.addEventListener("mousemove", this.onDrag);
       document.addEventListener("mouseup", this.onStopDrag);
@@ -14590,11 +14598,10 @@
  *     these anymore — our old duplicate implementations were overwriting the native, more-accurate state and
  *     silently blocking the native middle-click handler from ever running (capture-phase
  *     stopImmediatePropagation upstream prevents the tile's own listeners from firing at all).
- * 11. CORNER-TILE DOCKING STABILITY: assigning tiles to essential tabs by array INDEX reshuffles every
- *     existing assignment whenever a tab is added/removed/reordered, and Zen's split-view feature can clone a
- *     pinned tab (with whatever tile is docked inside it) producing a duplicate icon. Docking must be done by
- *     a STABLE ID persisted on the tab element itself, and only against tabs that are genuine members of
- *     gBrowser.tabs (not split-view clones).
+ * 11. ESSENTIAL DUPLICATES: each genuine pinned/essential tab owns a separate app identity for this window.
+ *     Its launcher opens the existing Zentral panel engine, sharing the toolbar, pill, resize, pin, keyboard
+ *     and popup-containment behavior. Normal app tiles stay in their own list. Reordering never reassigns
+ *     records; closing/unpinning preserves a loaded duplicate as a normal app. Multiple simultaneous panels are deferred.
  * 12. OPEN/CLOSE STUTTER: native openPanel/closePanel flip `zentral-app-panel-open` on documentElement
  *     synchronously, driving several base-mod sidebar reveal/collapse transitions at the SAME time the panel
  *     itself slides in/out AND (translucency on) backdrop-filter is active on #zen-app-panel-slider. Three
@@ -14611,15 +14618,14 @@
  *     independent from the shrunk mini-pill opacity: PILL_PEEK_DOT_OPACITY controls only the idle mini pill,
  *     while PILL_BACKGROUND_OPACITY controls only the expanded pill's black background. Keep these separate so
  *     making the idle marker subtle does not also make the opened control surface hard to read.
- * 14. WEB TOOLBAR SEARCH + BACK FALLBACK (v3): the URL bar now runs typed non-URL text through a configurable
+ * 14. WEB TOOLBAR SEARCH + NATIVE HISTORY: the URL bar now runs typed non-URL text through a configurable
  *     search engine (see SEARCH_ENGINE_TEMPLATES/buildSearchUrl()/looksLikeUrl()) rather than relying on
  *     <browser>.fixupAndLoadURIString()'s own keyword-search fallback, since that goes through Gecko's OWN
  *     default engine with no override hook exposed to chrome <browser> loads — we build the destination URL
- *     ourselves and load it as a plain https:// URL instead. The Back button additionally falls back to each
- *     app's own remembered "home" URL (stashed on the <browser> element as _bgalazkaHomeUrl at creation, see
- *     the getOrCreateAppBrowser hook) whenever canGoBack is false, since a freshly-created remote <browser>'s
- *     very first navigation is not always reliably back-able from JS immediately afterward — this makes Back
- *     behave predictably regardless of that edge case rather than depending on pinning down its exact cause.
+ *     ourselves and load it as a plain https:// URL instead. Back/Forward now use Gecko session history only,
+ *     with user-interaction filtering. No synthetic URL trail or home fallback is used: either can turn a
+ *     redirect, replacement navigation or POST entry into an incorrect extra visit. Top-level progress
+ *     notifications and toolbar polling refresh the URL and native navigation capability flags.
  *     The quick-switch button (re-runs the same query on the other of DDG/Startpage) only appears when the
  *     active page matches one of SEARCH_ENGINE_PATTERNS, so it never shows on an unrelated page.
  * 15. TOOLBAR BUTTON ORDER / TOP DOCKING (v4): button order is just DOM append order in ensureWebToolbar()'s
@@ -14807,6 +14813,7 @@
     EDGE_ATTACHED_PANELS: "zen.workspace.bgalazka.edge_attached_panels",
     TAB_ISOLATION: "zen.workspace.bgalazka.tab_isolation",
     CORNER_TILES: "zen.workspace.bgalazka.corner_tiles",
+    ALL_TAB_PANELS: "zen.workspace.bgalazka.all_tab_panels",
     HIDE_EXPAND: "zen.workspace.bgalazka.hide_expand",
     OPACITY_UNPINNED: "zen.workspace.bgalazka.opacity_unpinned",
     OPACITY_PINNED_FOCUS: "zen.workspace.bgalazka.opacity_pinned_focus",
@@ -14814,6 +14821,8 @@
     BLUR_INTENSITY: "zen.workspace.bgalazka.blur_intensity",
     PANEL_INPUT_SHIELD: "zen.workspace.bgalazka.panel_input_shield",
     ADDON_TAB_ID_BRIDGE: "zen.workspace.bgalazka.addon_tab_id_bridge",
+    SMART_SLEEP: "zen.workspace.bgalazka.smart_sleep",
+    AUDIO_INDICATOR: "zen.workspace.bgalazka.audio_indicator",
 
     // Extension keyboard shortcuts. The master switch defaults OFF to obey
     // the extension's default-off contract; string defaults below are inert
@@ -16210,7 +16219,29 @@
 
     const origRenderGrid = appsInstance.renderGrid?.bind(appsInstance);
     appsInstance.renderGrid = function () {
-      if (origRenderGrid) origRenderGrid();
+      // Rescued essential panels may exceed the normal add limit. Allow the
+      // renderer to show them without raising the user's configured limit.
+      const core = window.Zentral?.Core;
+      const get = core?.getPref;
+      let saved = [];
+      try {
+        saved = JSON.parse(getPref("zen.workspace.apps.sidebar.apps", "[]"));
+      } catch (_) {}
+      const rescued =
+        Array.isArray(saved) &&
+        saved.some((app) => app.id?.startsWith("bgalazka-essential-"));
+      try {
+        if (rescued && typeof get === "function")
+          core.getPref = function (key, ...args) {
+            const value = get.call(this, key, ...args);
+            return key === "zen.workspace.apps.sidebar.max_apps"
+              ? Math.max(Number(value) || 0, saved.length)
+              : value;
+          };
+        if (origRenderGrid) origRenderGrid();
+      } finally {
+        if (rescued && get) core.getPref = get;
+      }
       requestTileSync(60);
     };
 
@@ -16433,6 +16464,51 @@
    * ========================================================================== */
   const isolatedTiles = new Map();
 
+  // Capture only the small audio badge. Run before the essential tab/MMB
+  // guards so muting cannot select, open, drag or unload the containing tab.
+  const tileAudioEvents = [
+    "pointerdown",
+    "pointerup",
+    "mousedown",
+    "mouseup",
+    "click",
+    "auxclick",
+    "dblclick",
+    "dragstart",
+    "keydown",
+    "keyup",
+  ];
+  const onTileAudioInput = (event) => {
+    // These are global capture listeners, so avoid DOM walks for every browser
+    // click/key event while the optional audio UI is disabled.
+    if (!getPref(EXT_PREFS.AUDIO_INDICATOR, false)) return;
+    const badge = event.target.closest?.(".bgalazka-tile-audio");
+    const tile = badge?.closest?.(".zen-app-tile[data-app-id]");
+    if (!tile) return;
+    const keyboard = event.type === "keydown" || event.type === "keyup";
+    if (keyboard && event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    if (
+      (event.type === "click" && event.button === 0) ||
+      (event.type === "keydown" && !event.repeat)
+    ) {
+      const browser = getAllAppBrowsers().find(
+        (b) => b._bgalazkaAppId === tile.dataset.appId,
+      );
+      togglePanelAudio(browser);
+    }
+  };
+  tileAudioEvents.forEach((type) =>
+    window.addEventListener(type, onTileAudioInput, true),
+  );
+  registerCleanup(() =>
+    tileAudioEvents.forEach((type) =>
+      window.removeEventListener(type, onTileAudioInput, true),
+    ),
+  );
+
   const getTileFromEvent = (e) => {
     const target = e.target;
     if (!(target instanceof Element)) return null;
@@ -16456,12 +16532,13 @@
      * button activation; the native middle-click unload is handled by the
      * later auxclick listener on the tile.
      */
-    if (e.button === 0 || e.button === 1) {
+    if (e.button === 0 || e.button === 1 || e.button === 2) {
       e.preventDefault();
       e.stopPropagation();
     }
   };
 
+  window.addEventListener("pointerdown", tileMouseDownIsolationHandler, true);
   window.addEventListener("mousedown", tileMouseDownIsolationHandler, true);
 
   const isolateTile = (tile) => {
@@ -16536,6 +16613,11 @@
   }
 
   registerCleanup(() => {
+    window.removeEventListener(
+      "pointerdown",
+      tileMouseDownIsolationHandler,
+      true,
+    );
     window.removeEventListener(
       "mousedown",
       tileMouseDownIsolationHandler,
@@ -16621,143 +16703,326 @@
     });
   });
 
+  // Essential duplicates have their own app identity/browser, but all panel
+  // UI and behavior comes from Zentral's existing panel engine. Never move a
+  // normal grid tile or create a second panel implementation.
+  const essentialPanels = new Map();
+  const essentialTabRecords = new WeakMap();
+  let nextEssentialId = 0;
+  const essentialIdPrefix = `bgalazka-essential-${Date.now()}-`;
+
+  const essentialSettingsCache = new WeakMap();
+  function essentialSessionStore() {
+    if (window.SessionStore) return window.SessionStore;
+    for (const uri of [
+      "resource:///modules/sessionstore/SessionStore.sys.mjs",
+      "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
+    ]) {
+      try {
+        return ChromeUtils.importESModule(uri).SessionStore;
+      } catch (_) {}
+    }
+    return null;
+  }
+  function readEssentialSettings(tab) {
+    if (essentialSettingsCache.has(tab)) return essentialSettingsCache.get(tab);
+    try {
+      const raw = essentialSessionStore()?.getCustomTabValue(
+        tab,
+        "bgalazka-panel-settings",
+      );
+      const value = raw ? JSON.parse(raw) : {};
+      return value && typeof value === "object" && !Array.isArray(value)
+        ? value
+        : {};
+    } catch (_) {
+      return {};
+    }
+  }
+  function saveEssentialSettings(record) {
+    const value = {
+      preload: !!record.app.preload,
+      mobileUa: !!record.mobileUa,
+      userContextId: record.userContextId,
+      width: record.app.width,
+    };
+    essentialSettingsCache.set(record.tab, value);
+    try {
+      essentialSessionStore()?.setCustomTabValue(
+        record.tab,
+        "bgalazka-panel-settings",
+        JSON.stringify(value),
+      );
+    } catch (error) {
+      console.warn(
+        "[BgalazkaExtension] Could not persist essential panel settings",
+        error,
+      );
+    }
+  }
+  function loadEssentialInBackground(record) {
+    const apps = window.Zentral?.Apps;
+    if (!apps?.getOrCreateAppBrowser) return false;
+    const { browser, isNew } = apps.getOrCreateAppBrowser(record.app) || {};
+    if (!browser) return false;
+    if (isNew) {
+      browser.style.display = "none";
+      const uri = Services.io.newURI(record.app.url);
+      browser.fixupAndLoadURIString(record.app.url, {
+        triggeringPrincipal:
+          Services.scriptSecurityManager.createContentPrincipal(uri, {
+            userContextId: record.userContextId,
+          }),
+      });
+      record.loadedSource = record.app.url;
+    }
+    return true;
+  }
+  function promoteEssentialPanel(record) {
+    const browser = getAllAppBrowsers().find(
+      (b) => b._bgalazkaAppId === record.app.id,
+    );
+    if (!browser) return false;
+    const apps = window.Zentral?.Apps;
+    // Keep the same app id: Zentral's private browser map, active panel,
+    // browsing history, mute, pin and in-page form state all stay intact.
+    apps.saveApps();
+    const saved = JSON.parse(getPref("zen.workspace.apps.sidebar.apps", "[]"));
+    if (!Array.isArray(saved)) throw new Error("Invalid normal panel list");
+    const app = {
+      ...record.app,
+      url: browser.currentURI?.spec || record.app.url,
+      workspaceId: "all",
+    };
+    if (!saved.some((item) => item.id === app.id)) saved.push(app);
+    const assignments = getPanelContainerAssignments();
+    if (record.userContextId > 0) assignments[app.id] = record.userContextId;
+    savePanelContainerAssignments(assignments);
+    const mobileIds = getMobileUaAppIds();
+    if (record.mobileUa) mobileIds.add(app.id);
+    else mobileIds.delete(app.id);
+    saveMobileUaAppIds(mobileIds);
+    // Do not use the best-effort preference helper here: a failed save must
+    // throw so sync retains the live browser and retries instead of losing it.
+    Services.prefs.setStringPref(
+      "zen.workspace.apps.sidebar.apps",
+      JSON.stringify(saved),
+    );
+    apps.loadApps();
+    apps.renderGrid();
+    return true;
+  }
+
+  function getEssentialSource(tab) {
+    const url = tab.linkedBrowser?.currentURI?.spec;
+    return url && /^(https?|about):/i.test(url) && url !== "about:blank"
+      ? url
+      : null;
+  }
+
+  function openEssentialPanel(record) {
+    const apps = window.Zentral?.Apps;
+    if (!apps?.openPanel || !record.tab.isConnected) return;
+    const root = document.getElementById("zen-app-panel-root");
+    if (
+      root?.hasAttribute("open") &&
+      !root.hasAttribute("closing") &&
+      getActiveAppBrowser()?._bgalazkaAppId === record.app.id
+    ) {
+      apps.closePanel();
+      return;
+    }
+    const source = getEssentialSource(record.tab);
+    const existing = getAllAppBrowsers().find(
+      (b) => b._bgalazkaAppId === record.app.id,
+    );
+    if (!existing && source) record.app.url = source;
+    if (!record.app.url) return;
+    apps.openPanel(record.app);
+    if (!existing) record.loadedSource = record.app.url;
+    syncCornerTiles();
+  }
+
+  function isEssentialPanelTab(tab) {
+    // Pinned is not synonymous with Essential. Zen marks essentials explicitly.
+    return (
+      tab.hasAttribute("zen-essential") &&
+      tab.getAttribute("zen-essential") !== "false"
+    );
+  }
+  function releaseTabPanelLauncher(record) {
+    record.tile?.remove();
+    record.iconHost?.classList.remove("bgalazka-panel-icon-host");
+    record.tab.removeAttribute("bgalazka-tab-panel-launcher");
+  }
+
   function syncCornerTiles() {
     if (isSyncingTiles) return;
     isSyncingTiles = true;
-
     try {
-      scanIsolationTiles();
-      const isEnabled =
-        document.documentElement.getAttribute("bgalazka-corner-tiles") ===
-        "true";
-      const grid = document.getElementById("zen-apps-sidebar-grid");
-      if (!grid) return;
-      const scrollBox = grid.querySelector(".zen-apps-scroll-box") || grid;
-
-      if (!isEnabled) {
-        document
-          .querySelectorAll(".zen-app-tile[data-app-id]")
-          .forEach((tile) => {
-            if (tile.parentElement !== scrollBox) scrollBox.appendChild(tile);
-          });
-        return;
+      const enabled = getPref(EXT_PREFS.CORNER_TILES, false);
+      const allTabPanels = getPref(EXT_PREFS.ALL_TAB_PANELS, false);
+      const liveTabs = [...(window.gBrowser?.tabs || [])];
+      const liveTabSet = new Set(liveTabs);
+      const targets = new Set(
+        enabled
+          ? liveTabs.filter(
+              (tab) =>
+                tab.isConnected &&
+                !tab.closing &&
+                !tab.hasAttribute("bgalazka-addon-host") &&
+                !tab.hasAttribute("bgalazka-addon-host-fallback") &&
+                !tab.closest(
+                  "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
+                ) &&
+                (isEssentialPanelTab(tab) || allTabPanels),
+            )
+          : [],
+      );
+      for (const [id, record] of essentialPanels) {
+        if (targets.has(record.tab)) continue;
+        const removed =
+          record.tab.closing ||
+          !liveTabSet.has(record.tab) ||
+          (record.wasEssential && !isEssentialPanelTab(record.tab));
+        try {
+          if (!removed || !promoteEssentialPanel(record))
+            window.Zentral?.Apps?.closeApp?.(id);
+        } catch (error) {
+          // Never destroy a live page when saving its new normal-panel entry fails.
+          console.error(
+            "[BgalazkaExtension] Could not preserve removed essential panel",
+            error,
+          );
+          continue;
+        }
+        releaseTabPanelLauncher(record);
+        essentialTabRecords.delete(record.tab);
+        essentialPanels.delete(id);
       }
-
-      // Only trust tabs that are genuine members of gBrowser.tabs. Zen's split-view
-      // feature can create a visual CLONE of a pinned tab (with whatever tile is
-      // docked inside cloned right along with it) for the split preview; a clone is
-      // not a real tab and docking into it produces a duplicate icon.
-      const liveTabs =
-        typeof gBrowser !== "undefined" && gBrowser?.tabs
-          ? new Set(gBrowser.tabs)
+      const browsers = new Map(
+        getAllAppBrowsers().map((b) => [b._bgalazkaAppId, b]),
+      );
+      const root = document.getElementById("zen-app-panel-root");
+      const active =
+        root?.hasAttribute("open") && !root.hasAttribute("closing")
+          ? getActiveAppBrowser()?._bgalazkaAppId
           : null;
-      const targetTabsRaw = Array.from(
-        document.querySelectorAll(
-          "#zen-essentials-container .tabbrowser-tab, " +
-            "#zen-pinned-tab-container .tabbrowser-tab, " +
-            "#zen-essentials .tabbrowser-tab, " +
-            "#tabbrowser-tabs[has-pinned-tabs] .tabbrowser-tab[pinned='true'], " +
-            ".tabbrowser-tab[pinned='true']",
-        ),
-      );
-      const targetTabs = liveTabs
-        ? targetTabsRaw.filter((t) => liveTabs.has(t))
-        : targetTabsRaw;
-
-      // Strip any tile sitting inside a non-live (cloned) tab outright.
-      targetTabsRaw.forEach((tab) => {
-        if (!targetTabs.includes(tab)) {
-          tab
-            .querySelectorAll(".zen-app-tile[data-app-id]")
-            .forEach((t) => t.remove());
+      for (const tab of targets) {
+        let record = essentialTabRecords.get(tab);
+        if (!record) {
+          const source = getEssentialSource(tab);
+          if (!source) continue; // restored/discarded tabs may not have a URI yet
+          const settings = readEssentialSettings(tab);
+          const app = {
+            preload: settings.preload === true,
+            width:
+              Number.isFinite(settings.width) && settings.width > 0
+                ? settings.width
+                : undefined,
+            id: essentialIdPrefix + ++nextEssentialId,
+            url: source,
+            title: tab.label || source,
+            workspaceId: "all",
+          };
+          record = {
+            tab,
+            app,
+            tile: null,
+            loadedSource: null,
+            preloadAttempted: false,
+            mobileUa: settings.mobileUa === true,
+            userContextId:
+              Number.isInteger(settings.userContextId) &&
+              settings.userContextId >= 0
+                ? settings.userContextId
+                : Number(
+                    tab.getAttribute("usercontextid") ||
+                      tab.linkedBrowser?.getAttribute("usercontextid"),
+                  ) || 0,
+          };
+          essentialTabRecords.set(tab, record);
+          essentialPanels.set(app.id, record);
         }
-      });
-
-      const allTiles = Array.from(
-        document.querySelectorAll(".zen-app-tile[data-app-id]"),
-      );
-
-      // Global de-dupe: an app-id may only have ONE tile, anywhere in the document.
-      const seenIds = new Set();
-      allTiles.forEach((tile) => {
-        const id = tile.getAttribute("data-app-id");
-        if (!id) return;
-        if (seenIds.has(id)) tile.remove();
-        else seenIds.add(id);
-      });
-
-      const remainingTiles = Array.from(
-        document.querySelectorAll(".zen-app-tile[data-app-id]"),
-      );
-      if (!targetTabs.length) {
-        remainingTiles.forEach((tile) => {
-          if (tile.parentElement !== scrollBox) scrollBox.appendChild(tile);
-        });
-        return;
+        if (record.app.preload && !record.preloadAttempted) {
+          try {
+            record.preloadAttempted = loadEssentialInBackground(record);
+          } catch (error) {
+            record.preloadAttempted = true;
+            console.warn("[BgalazkaExtension] Essential preload failed", error);
+          }
+        }
+        const essential = isEssentialPanelTab(tab);
+        record.wasEssential = essential;
+        const iconHost = !essential
+          ? tab.querySelector(".tab-icon-stack")
+          : null;
+        if (record.iconHost !== iconHost) {
+          record.iconHost?.classList.remove("bgalazka-panel-icon-host");
+          record.iconHost = iconHost;
+        }
+        iconHost?.classList.add("bgalazka-panel-icon-host");
+        if (!essential) tab.setAttribute("bgalazka-tab-panel-launcher", "true");
+        else tab.removeAttribute("bgalazka-tab-panel-launcher");
+        const host = iconHost || tab.querySelector(".tab-stack") || tab;
+        if (!record.tile?.isConnected || record.tile.parentNode !== host) {
+          record.tile?.remove();
+          const tile = document.createElement("button");
+          tile.type = "button";
+          tile.className = "zen-app-tile bgalazka-essential-tile";
+          tile.dataset.appId = record.app.id;
+          tile.appendChild(document.createElement("img"));
+          tile.addEventListener("click", (event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            event.stopPropagation();
+            openEssentialPanel(record);
+          });
+          tile.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const popup = document.getElementById(
+              "zen-apps-sidebar-tile-context",
+            );
+            if (popup) {
+              popup.dataset.activeAppId = record.app.id;
+              popup.openPopupAtScreen(event.screenX, event.screenY, true);
+            }
+          });
+          host.appendChild(tile);
+          record.tile = tile;
+          isolateTile(tile);
+        }
+        record.app.title = tab.label || record.app.url;
+        record.app.icon =
+          gBrowser?.getIcon?.(tab) ||
+          tab.getAttribute("image") ||
+          `page-icon:${record.app.url}`;
+        const tile = record.tile;
+        tile.classList.toggle("bgalazka-tab-icon-panel", !essential);
+        const icon = tile.querySelector("img");
+        if (icon.getAttribute("src") !== record.app.icon)
+          icon.setAttribute("src", record.app.icon);
+        const title = `Open ${record.app.title} in a panel`;
+        if (tile.title !== title) {
+          tile.title = title;
+          tile.setAttribute("aria-label", title);
+        }
+        tile.dataset.active = active === record.app.id ? "true" : "false";
+        tile.dataset.loaded = browsers.has(record.app.id) ? "true" : "false";
       }
-
-      // Stable ID-based assignment: each app-id is bound to a tab ONCE via a
-      // persisted attribute on the TAB, so adding/removing/reordering other tabs
-      // never reshuffles an existing assignment (unlike array-index matching).
-      const tabsByAssignedId = new Map();
-      let storedIds = null;
-      try {
-        const stored = JSON.parse(
-          getPref("zen.workspace.apps.sidebar.apps", "[]"),
-        );
-        if (Array.isArray(stored))
-          storedIds = new Set(stored.map((app) => app.id));
-      } catch (_) {}
-      targetTabs.forEach((tab) => {
-        const assigned = tab.getAttribute("data-bgalazka-assigned-app");
-        if (!assigned) return;
-        // Use all saved apps, including other workspaces. Deleted apps and
-        // split-view clones must not reserve an essential-tab slot forever.
-        if (
-          (storedIds && !storedIds.has(assigned)) ||
-          tabsByAssignedId.has(assigned)
-        ) {
-          tab.removeAttribute("data-bgalazka-assigned-app");
-        } else tabsByAssignedId.set(assigned, tab);
-      });
-
-      remainingTiles.forEach((tile) => {
-        const id = tile.getAttribute("data-app-id");
-        if (!id) return;
-
-        const currentParentTab = tile.closest(".tabbrowser-tab");
-        if (
-          currentParentTab &&
-          targetTabs.includes(currentParentTab) &&
-          currentParentTab.getAttribute("data-bgalazka-assigned-app") === id
-        ) {
-          return; // already correctly docked
-        }
-
-        const home = tabsByAssignedId.get(id);
-        if (home) {
-          const container = home.querySelector(".tab-stack") || home;
-          if (tile.parentElement !== container) container.appendChild(tile);
-          return;
-        }
-
-        // First time we've ever seen this app-id: claim the first free tab and
-        // remember it permanently.
-        const freeTab = targetTabs.find(
-          (t) => !t.getAttribute("data-bgalazka-assigned-app"),
-        );
-        if (freeTab) {
-          freeTab.setAttribute("data-bgalazka-assigned-app", id);
-          const container = freeTab.querySelector(".tab-stack") || freeTab;
-          container.appendChild(tile);
-        } else if (tile.parentElement !== scrollBox) {
-          scrollBox.appendChild(tile); // no free essential tab slot; leave it in the grid
-        }
-      });
+      pruneIsolationTiles();
     } finally {
       isSyncingTiles = false;
     }
   }
+  registerCleanup(() => {
+    for (const [id, record] of essentialPanels) {
+      window.Zentral?.Apps?.closeApp?.(id);
+      releaseTabPanelLauncher(record);
+    }
+    essentialPanels.clear();
+  });
 
   let syncTimer = null;
   function requestTileSync(delay = 120) {
@@ -16777,6 +17042,7 @@
     PUSH_PAGE: "zen.workspace.bgalazka.push_page",
     TAB_ISOLATION: "zen.workspace.bgalazka.tab_isolation",
     CORNER_TILES: "zen.workspace.bgalazka.corner_tiles",
+    ALL_TAB_PANELS: "zen.workspace.bgalazka.all_tab_panels",
     HOVER_CORNER_TILES: "zen.workspace.bgalazka.hover_corner_tiles",
     HIDE_CORNER_BADGES: "zen.workspace.bgalazka.hide_corner_badges",
     HIDE_PILL: "zen.workspace.bgalazka.hide_pill",
@@ -16866,6 +17132,8 @@
     // tab's linkedBrowser as the Zentral panel browser so the panel owns a
     // genuine tabId. See architecture note 27 and the bridge implementation.
     ADDON_TAB_ID_BRIDGE: "zen.workspace.bgalazka.addon_tab_id_bridge",
+    SMART_SLEEP: "zen.workspace.bgalazka.smart_sleep",
+    AUDIO_INDICATOR: "zen.workspace.bgalazka.audio_indicator",
     // Keep the settings-side preference table complete. The previous build
     // omitted these keys here even though EXT_PREFS defined them earlier,
     // which made the master keybind toggle write to an undefined pref and
@@ -16955,17 +17223,15 @@
           typeof browser.canGoBack === "boolean"
             ? browser.canGoBack
             : browser.webNavigation?.canGoBack;
-        if (canGoBack === false) return;
-        if (typeof browser.goBack === "function") browser.goBack();
-        else browser.webNavigation?.goBack?.();
+        if (canGoBack === false && !canPanelNavigate(browser, -1)) return;
+        navigatePanelHistory(browser, -1);
       } else if (button === 4) {
         const canGoForward =
           typeof browser.canGoForward === "boolean"
             ? browser.canGoForward
             : browser.webNavigation?.canGoForward;
-        if (canGoForward === false) return;
-        if (typeof browser.goForward === "function") browser.goForward();
-        else browser.webNavigation?.goForward?.();
+        if (canGoForward === false && !canPanelNavigate(browser, 1)) return;
+        navigatePanelHistory(browser, 1);
       }
     } catch (e) {
       console.warn(
@@ -17657,6 +17923,34 @@
     return hostPart.includes(".") && !hostPart.endsWith(".");
   }
 
+  // The browser owns session history, including redirects, replaceState,
+  // pushState, POST entries and bfcache. Observing a URL is not a new visit.
+  // In particular, never replay observed URLs with loadURI as a Back fallback.
+  function canPanelNavigate(browser, direction) {
+    if (!browser) return false;
+    try {
+      const key = direction < 0 ? "canGoBack" : "canGoForward";
+      return !!(browser.webNavigation?.[key] ?? browser[key]);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function navigatePanelHistory(browser, direction) {
+    if (!canPanelNavigate(browser, direction)) return;
+    const method = direction < 0 ? "goBack" : "goForward";
+    try {
+      // Gecko skips entries without user interaction, including redirect hops.
+      if (typeof browser[method] === "function") browser[method](true);
+      else browser.webNavigation?.[method]?.(true);
+    } catch (error) {
+      console.warn(
+        "[BgalazkaExtension] Panel history navigation failed",
+        error,
+      );
+    }
+  }
+
   function ensureWebToolbar() {
     const panel = document.getElementById("zen-app-panel-slider");
     if (!panel) return false;
@@ -17677,38 +17971,7 @@
     backBtn.appendChild(parseSVG(PREF_ICONS.BACK));
     backBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const b = getActiveAppBrowser();
-      if (!b) return;
-      if (b.canGoBack) {
-        b.goBack();
-        return;
-      }
-      // FALLBACK: "no history to go back to" but we're not on the web
-      // panel's own default/home URL. This covers the reported "Back
-      // doesn't work after typing a URL" case, where the very first load
-      // of a freshly-created app <browser> (the panel's default site,
-      // loaded by native ZentralApps.openPanel/getOrCreateAppBrowser) is
-      // entry #0 in session history, and canGoBack should normally become
-      // true again after navigating away from it — but session history
-      // readiness right after a remote <browser>'s FIRST load is a known
-      // rough edge in Gecko, so we can't unconditionally trust canGoBack
-      // here. Instead we remember each app's own url as "home" (set on
-      // the browser element itself in the getOrCreateAppBrowser hook
-      // below) and jump straight back to it whenever native back-history
-      // has nothing to offer, so "Back" always has somewhere sensible to
-      // go rather than silently doing nothing.
-      const home = b._bgalazkaHomeUrl;
-      if (home && b.currentURI?.spec !== home) {
-        try {
-          const uri = Services.io.newURI(home);
-          if (typeof b.fixupAndLoadURIString === "function") {
-            b.fixupAndLoadURIString(home, {
-              triggeringPrincipal:
-                Services.scriptSecurityManager.createContentPrincipal(uri, {}),
-            });
-          }
-        } catch (_) {}
-      }
+      navigatePanelHistory(getActiveAppBrowser(), -1);
     });
 
     const fwdBtn = document.createElement("button");
@@ -17718,7 +17981,7 @@
     fwdBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       const b = getActiveAppBrowser();
-      if (b && b.canGoForward) b.goForward();
+      navigatePanelHistory(b, 1);
     });
 
     // Reload moved here from the pill's own refresh button (still present
@@ -17911,16 +18174,8 @@
       curSpec = b?.currentURI?.spec || "";
     } catch (_) {}
 
-    if (backBtn) {
-      // Enabled either via real back-history, or via the home-URL fallback
-      // in the click handler above (only useful if we're not already home).
-      const canFallbackHome =
-        !!b && !!b._bgalazkaHomeUrl && b._bgalazkaHomeUrl !== curSpec;
-      const disabled = !b || (!b.canGoBack && !canFallbackHome);
-      if (backBtn.disabled !== disabled) backBtn.disabled = disabled;
-    }
-    if (fwdBtn && fwdBtn.disabled !== (!b || !b.canGoForward))
-      fwdBtn.disabled = !b || !b.canGoForward;
+    if (backBtn) backBtn.disabled = !canPanelNavigate(b, -1);
+    if (fwdBtn) fwdBtn.disabled = !canPanelNavigate(b, 1);
 
     if (urlInput && document.activeElement !== urlInput) {
       if (urlInput.value !== curSpec) urlInput.value = curSpec;
@@ -18175,7 +18430,7 @@
       case "BACK":
         if (!browser) return false;
         try {
-          if (browser.canGoBack) browser.goBack();
+          navigatePanelHistory(browser, -1);
           return true;
         } catch (_) {
           return false;
@@ -18183,7 +18438,7 @@
       case "FORWARD":
         if (!browser) return false;
         try {
-          if (browser.canGoForward) browser.goForward();
+          navigatePanelHistory(browser, 1);
           return true;
         } catch (_) {
           return false;
@@ -19353,6 +19608,30 @@
       );
       content.appendChild(tAddonTabIdBridge.row);
 
+      const audioIndicator = createToggleRow(
+        "Panel Audio Indicator and Quick Mute",
+        "Show audio on panel launcher buttons and quick mute in the URL bar; silent panels have no audio control",
+        BGALAZKA_EXT_PREFS.AUDIO_INDICATOR,
+        null,
+        false,
+        PREF_ICONS.SOUND || PREF_ICONS.ISOLATION,
+        () => {
+          ensureNativeAudioButton();
+          refreshPanelAudio();
+        },
+      );
+      content.appendChild(audioIndicator.row);
+      const smartSleep = createToggleRow(
+        "Smart Sleep (DocShell throttling)",
+        "Throttle hidden panel pages while keeping their browsing contexts and history; audible pages stay active",
+        BGALAZKA_EXT_PREFS.SMART_SLEEP,
+        null,
+        false,
+        PREF_ICONS.ISOLATION,
+        (enabled) =>
+          enabled ? refreshPanelActivity(true) : wakeAllPanelBrowsers(),
+      );
+      content.appendChild(smartSleep.row);
       // ====================================================================
       // 6. Extension Keybinds
       // ====================================================================
@@ -19526,8 +19805,8 @@
       cornerSubgroup.className = "zs-conditional-group";
 
       const t4 = createToggleRow(
-        "Enclosed Corner-Docked App Tiles",
-        "Anchor mini 22px app tiles flush to bottom-right corner of tabs & essentials",
+        "Panels on Essentials",
+        "Give each tab marked Essential its own independent panel launcher",
         BGALAZKA_EXT_PREFS.CORNER_TILES,
         "bgalazka-corner-tiles",
         false,
@@ -19540,6 +19819,15 @@
       );
       content.appendChild(t4.row);
 
+      const tAllTabs = createToggleRow(
+        "Panel Launchers on All Tabs",
+        "Also show panel launchers over the favicon of non-essential tabs; their panel copies stay independent",
+        BGALAZKA_EXT_PREFS.ALL_TAB_PANELS,
+        "bgalazka-all-tab-panels",
+        false,
+        PREF_ICONS.CORNER,
+        () => requestTileSync(0),
+      );
       const tHoverCorner = createToggleRow(
         "Hover-Only Corner App Tiles(experimental)",
         "Keep corner app tiles hidden until cursor hovers over the essential tab",
@@ -19564,7 +19852,12 @@
         false,
         PREF_ICONS.BADGE,
       );
-      cornerSubgroup.append(tHoverCorner.row, t3.row, tBadges.row);
+      cornerSubgroup.append(
+        tAllTabs.row,
+        tHoverCorner.row,
+        t3.row,
+        tBadges.row,
+      );
       cornerSubgroup.setAttribute(
         "data-hidden",
         getPref(BGALAZKA_EXT_PREFS.CORNER_TILES, false) ? "false" : "true",
@@ -19816,6 +20109,16 @@
           def: false,
         },
         {
+          input: audioIndicator.input,
+          pref: BGALAZKA_EXT_PREFS.AUDIO_INDICATOR,
+          def: false,
+        },
+        {
+          input: smartSleep.input,
+          pref: BGALAZKA_EXT_PREFS.SMART_SLEEP,
+          def: false,
+        },
+        {
           input: tAddonTabIdBridge.input,
           pref: BGALAZKA_EXT_PREFS.ADDON_TAB_ID_BRIDGE,
           def: false,
@@ -19853,6 +20156,12 @@
           def: false,
           onSync: (v) =>
             cornerSubgroup.setAttribute("data-hidden", v ? "false" : "true"),
+        },
+        {
+          input: tAllTabs.input,
+          pref: BGALAZKA_EXT_PREFS.ALL_TAB_PANELS,
+          def: false,
+          onSync: () => requestTileSync(0),
         },
         {
           input: tHoverCorner.input,
@@ -20234,11 +20543,19 @@
 
   function getPanelUserContextId(appId) {
     if (!appId) return 0;
+    const essential = essentialPanels.get(appId);
+    if (essential) return essential.userContextId;
     return normalizeUserContextId(getPanelContainerAssignments()[appId]);
   }
 
   function setPanelUserContextId(appId, userContextId) {
     if (!appId) return;
+    const essential = essentialPanels.get(appId);
+    if (essential) {
+      essential.userContextId = normalizeUserContextId(userContextId);
+      saveEssentialSettings(essential);
+      return;
+    }
     const assignments = getPanelContainerAssignments();
     const normalized = normalizeUserContextId(userContextId);
     if (normalized > 0) assignments[appId] = normalized;
@@ -20248,6 +20565,7 @@
 
   function getStoredZentralApp(appId) {
     if (!appId) return null;
+    if (essentialPanels.has(appId)) return essentialPanels.get(appId).app;
     try {
       const raw = Services.prefs.getStringPref(BASE_ZENTRAL_APPS_PREF, "[]");
       const apps = JSON.parse(raw);
@@ -21072,7 +21390,8 @@
         // very page the user is looking at because its owning tab is hidden in
         // our collapsed host folder.
         record.browser.docShellIsActive =
-          !!activeBrowser && record.browser === activeBrowser;
+          (!!activeBrowser && record.browser === activeBrowser) ||
+          panelIsAudible(record.browser);
       } catch (_) {}
     }
   }
@@ -21416,10 +21735,18 @@
   }
 
   function isMobileUaApp(appId) {
+    if (essentialPanels.has(appId))
+      return !!essentialPanels.get(appId).mobileUa;
     return !!appId && getMobileUaAppIds().has(appId);
   }
 
   function toggleMobileUaApp(appId) {
+    const essential = essentialPanels.get(appId);
+    if (essential) {
+      essential.mobileUa = !essential.mobileUa;
+      saveEssentialSettings(essential);
+      return essential.mobileUa;
+    }
     const set = getMobileUaAppIds();
     const next = !set.has(appId);
     if (next) set.add(appId);
@@ -21597,6 +21924,309 @@
     registerCleanup(() => clearInterval(popupHookTimer));
   }
 
+  // Audio state belongs to the panel browser, never the underlying essential.
+  // Controller events work across remote content; polling also covers older
+  // Gecko builds and a controller being replaced by a process switch.
+  const panelMediaListeners = new Map();
+  const panelAudioSeen = new WeakSet();
+  const mediaEvents = [
+    "audiblechange",
+    "playbackstatechange",
+    "activated",
+    "deactivated",
+  ];
+  const AUDIO_ICON =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/></svg>';
+  const MUTED_ICON =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4zM16 9l5 6M21 9l-5 6"/></svg>';
+  const lastDocshellActivity = new Map();
+
+  function panelAudioState(browser) {
+    if (!browser) return { playing: false, muted: false, visible: false };
+    try {
+      const controller = browser.browsingContext?.mediaController;
+      const tab = window.gBrowser?.getTabForBrowser?.(browser);
+      const playing = !!(
+        controller?.isAudible ||
+        browser._bgalazkaAudioPlaying ||
+        tab?.hasAttribute("soundplaying")
+      );
+      const muted = !!(
+        browser.audioMuted ||
+        controller?.isMuted ||
+        tab?.hasAttribute("muted")
+      );
+      if (playing) panelAudioSeen.add(browser);
+      // Keep Unmute reachable after muting; never show on a silent fresh page.
+      return {
+        playing,
+        muted,
+        visible: playing || (muted && panelAudioSeen.has(browser)),
+      };
+    } catch (_) {
+      return { playing: false, muted: false, visible: false };
+    }
+  }
+
+  function panelIsAudible(browser) {
+    return panelAudioState(browser).playing;
+  }
+
+  function setPanelActive(browser, active, force = false) {
+    if (!browser?.isConnected) return;
+    const desired = active || panelIsAudible(browser);
+    // docShellIsActive has historically been a write-oriented remote-browser
+    // control and can desynchronise across process switches. Our own cache is
+    // the authoritative throttle state; reading the property every poll made
+    // us resend the same activation message continuously.
+    if (!force && lastDocshellActivity.get(browser) === desired) return;
+    try {
+      browser.docShellIsActive = desired;
+      lastDocshellActivity.set(browser, desired);
+    } catch (_) {
+      lastDocshellActivity.delete(browser);
+    }
+  }
+  function wakeAllPanelBrowsers() {
+    for (const browser of getAllAppBrowsers()) {
+      // Host-tab activation remains owned by the existing add-on bridge.
+      if (browser._bgalazkaAddonHostBrowser || !browser.isConnected) continue;
+      setPanelActive(browser, true, true);
+    }
+    // Smart Sleep is no longer managing these browsers. Clearing the cache
+    // prevents disabled sleep from generating background activation traffic.
+    lastDocshellActivity.clear();
+  }
+  function refreshPanelActivity(forceActive = false) {
+    const smartSleep = getPref(BGALAZKA_EXT_PREFS.SMART_SLEEP, false);
+    const root = document.getElementById("zen-app-panel-root");
+    const panelOpen =
+      !!root?.hasAttribute("open") && !root.hasAttribute("closing");
+    const activeBrowser = panelOpen ? getActiveAppBrowser() : null;
+
+    if (!smartSleep) {
+      // Toggling Smart Sleep off must immediately undo every inactive docshell.
+      if (lastDocshellActivity.size) wakeAllPanelBrowsers();
+      else if (forceActive && activeBrowser) {
+        // Also recover an active panel whose remote docshell state drifted or
+        // survived from a previous script instance without a cache entry.
+        setPanelActive(activeBrowser, true, true);
+        lastDocshellActivity.delete(activeBrowser);
+      }
+      return;
+    }
+
+    for (const browser of getAllAppBrowsers()) {
+      // Host-tab activation remains owned by the existing add-on bridge.
+      if (browser._bgalazkaAddonHostBrowser) continue;
+      setPanelActive(
+        browser,
+        browser === activeBrowser,
+        forceActive && browser === activeBrowser,
+      );
+    }
+    for (const browser of lastDocshellActivity.keys())
+      if (!browser.isConnected) lastDocshellActivity.delete(browser);
+  }
+  function onAudioStarted(event) {
+    event.currentTarget._bgalazkaAudioPlaying = true;
+    refreshPanelAudio();
+  }
+  function onAudioStopped(event) {
+    event.currentTarget._bgalazkaAudioPlaying = false;
+    refreshPanelAudio();
+  }
+  function trackPanelMedia(browser) {
+    const controller = browser.browsingContext?.mediaController;
+    const previous = panelMediaListeners.get(browser);
+    if (previous === controller) return;
+    if (previous)
+      mediaEvents.forEach((type) =>
+        previous.removeEventListener(type, refreshPanelAudio),
+      );
+    panelMediaListeners.delete(browser);
+    if (controller) {
+      mediaEvents.forEach((type) =>
+        controller.addEventListener(type, refreshPanelAudio),
+      );
+      panelMediaListeners.set(browser, controller);
+    }
+  }
+  function updateAudioButton(button, browser) {
+    const state = panelAudioState(browser);
+    button.hidden =
+      !getPref(BGALAZKA_EXT_PREFS.AUDIO_INDICATOR, false) || !state.visible;
+    const muted = state.muted ? "true" : "false";
+    if (button.dataset.muted !== muted) {
+      button.dataset.muted = muted;
+      button.replaceChildren(parseSVG(state.muted ? MUTED_ICON : AUDIO_ICON));
+    }
+    button.title = state.muted ? "Unmute panel" : "Mute panel";
+    button.setAttribute("aria-label", button.title);
+    button.setAttribute("aria-pressed", muted);
+  }
+  function togglePanelAudio(browser) {
+    if (!browser) return;
+    try {
+      const muted = panelAudioState(browser).muted;
+      const tab = window.gBrowser?.getTabForBrowser?.(browser);
+      const method = muted ? "unmute" : "mute";
+      // Use native browser/tab APIs when present (Zen versions differ).
+      if (typeof tab?.toggleMuteAudio === "function") tab.toggleMuteAudio();
+      else if (typeof browser[method] === "function") browser[method]();
+      else browser.browsingContext?.mediaController?.[method]?.();
+      refreshPanelAudio();
+    } catch (error) {
+      console.warn("[BgalazkaExtension] Panel mute failed", error);
+    }
+  }
+  function ensureNativeAudioButton() {
+    const wrap = document.querySelector(
+      "#zen-app-panel-toolbar .zen-toolbar-urlwrap",
+    );
+    if (!wrap || wrap.querySelector(".bgalazka-audio-button")) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "zen-toolbar-btn bgalazka-audio-button";
+    button.hidden = true;
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      togglePanelAudio(getActiveAppBrowser());
+    });
+    wrap.appendChild(button);
+  }
+  function refreshPanelAudio() {
+    const browsers = getAllAppBrowsers();
+    for (const [browser, controller] of panelMediaListeners) {
+      if (browser.isConnected) continue;
+      mediaEvents.forEach((type) =>
+        controller.removeEventListener(type, refreshPanelAudio),
+      );
+      panelMediaListeners.delete(browser);
+    }
+    for (const browser of browsers) trackPanelMedia(browser);
+    ensureNativeAudioButton();
+    const button = document.querySelector(
+      "#zen-app-panel-toolbar .bgalazka-audio-button",
+    );
+    if (button) updateAudioButton(button, getActiveAppBrowser());
+    const byId = new Map(
+      browsers.map((browser) => [browser._bgalazkaAppId, browser]),
+    );
+    const enabled = getPref(BGALAZKA_EXT_PREFS.AUDIO_INDICATOR, false);
+    document.querySelectorAll(".zen-app-tile[data-app-id]").forEach((tile) => {
+      const state = panelAudioState(byId.get(tile.dataset.appId));
+      let indicator = tile.querySelector(".bgalazka-tile-audio");
+      if (!enabled || !state.visible) {
+        indicator?.remove();
+        return;
+      }
+      if (!indicator) {
+        // The tile is already a button: use an indicator span, not nested buttons.
+        indicator = document.createElement("span");
+        indicator.className = "bgalazka-tile-audio";
+        indicator.setAttribute("role", "button");
+        indicator.setAttribute("tabindex", "0");
+        tile.appendChild(indicator);
+      }
+      const muted = state.muted ? "true" : "false";
+      indicator.title = state.muted ? "Unmute panel" : "Mute panel";
+      indicator.setAttribute("aria-label", indicator.title);
+      indicator.setAttribute("aria-pressed", muted);
+      if (indicator.dataset.muted !== muted) {
+        indicator.dataset.muted = muted;
+        indicator.replaceChildren(
+          parseSVG(state.muted ? MUTED_ICON : AUDIO_ICON),
+        );
+      }
+    });
+    refreshPanelActivity();
+  }
+  const essentialPopupHandler = (event) => {
+    const popup = event.target;
+    if (popup.id !== "zen-apps-sidebar-tile-context") return;
+    const record = essentialPanels.get(popup.dataset.activeAppId);
+    if (!record) return; // native handler already restored the normal app menu
+    ensurePanelPrivacyMenuItems();
+    ensureMobileUaMenuItem();
+    const preload = popup.querySelector("#zen-apps-sidebar-preload-item");
+    if (preload) {
+      preload.hidden = false;
+      preload.removeAttribute("hidden");
+      if (record.app.preload) preload.setAttribute("checked", "true");
+      else preload.removeAttribute("checked");
+    }
+    for (const id of [
+      "zen-apps-sidebar-pin-to-menu",
+      "zen-apps-sidebar-remove-item",
+      "zen-apps-sidebar-sec2-sep",
+      "zen-apps-sidebar-sec3-sep",
+    ])
+      popup.querySelector(`#${id}`)?.setAttribute("hidden", "true");
+  };
+  const essentialContextMenu = (event) => {
+    const tile = event.target.closest?.(".bgalazka-essential-tile");
+    if (!tile || !essentialPanels.has(tile.dataset.appId)) return;
+    const popup = document.getElementById("zen-apps-sidebar-tile-context");
+    if (!popup) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    popup.dataset.activeAppId = tile.dataset.appId;
+    popup.openPopupAtScreen(event.screenX, event.screenY, true);
+  };
+  const essentialPreloadCommand = (event) => {
+    if (event.target.id !== "zen-apps-sidebar-preload-item") return;
+    const popup = document.getElementById("zen-apps-sidebar-tile-context");
+    const record = essentialPanels.get(popup?.dataset.activeAppId);
+    if (!record) return;
+    event.stopImmediatePropagation();
+    record.app.preload = !record.app.preload;
+    saveEssentialSettings(record);
+    if (record.app.preload) event.target.setAttribute("checked", "true");
+    else event.target.removeAttribute("checked");
+  };
+  window.addEventListener("popupshowing", essentialPopupHandler);
+  window.addEventListener("command", essentialPreloadCommand, true);
+  window.addEventListener("contextmenu", essentialContextMenu, true);
+  registerCleanup(() => {
+    window.removeEventListener("popupshowing", essentialPopupHandler);
+    window.removeEventListener("command", essentialPreloadCommand, true);
+    window.removeEventListener("contextmenu", essentialContextMenu, true);
+  });
+  // Slow fallback only. Normal updates are event-driven; the old 500 ms loop
+  // rescanned every tab, panel browser and launcher twice per second even when
+  // the corresponding features were disabled.
+  const panelStatusTimer = setInterval(() => {
+    if (getPref(EXT_PREFS.CORNER_TILES, false)) syncCornerTiles();
+    if (getPref(BGALAZKA_EXT_PREFS.AUDIO_INDICATOR, false)) refreshPanelAudio();
+    else if (
+      getPref(BGALAZKA_EXT_PREFS.SMART_SLEEP, false) ||
+      lastDocshellActivity.size
+    )
+      refreshPanelActivity();
+  }, 2000);
+  registerCleanup(() => {
+    clearInterval(panelStatusTimer);
+    for (const controller of panelMediaListeners.values())
+      mediaEvents.forEach((type) =>
+        controller.removeEventListener(type, refreshPanelAudio),
+      );
+    panelMediaListeners.clear();
+    for (const browser of lastDocshellActivity.keys()) {
+      if (browser.isConnected) {
+        try {
+          browser.docShellIsActive = true;
+        } catch (_) {}
+      }
+    }
+    lastDocshellActivity.clear();
+    document
+      .querySelectorAll(".bgalazka-audio-button, .bgalazka-tile-audio")
+      .forEach((el) => el.remove());
+  });
+
   // Safe method hook on Zentral Apps singleton (eliminates infinite observer loops)
   const hookAppsInstance = () => {
     const apps = window.Zentral?.Apps;
@@ -21608,18 +22238,28 @@
       "getOrCreateAppBrowser",
       "closeApp",
       "removeApp",
+      "togglePin",
+      "onDrag",
+      "refreshApp",
+      "saveWidth",
+      "startResize",
     ];
     const originalMethods = new Map(
       hookNames.map((name) => [name, apps[name]]),
     );
     const navigationListeners = new Map();
     const pruneNavigationListeners = (appId = null) => {
-      navigationListeners.forEach((onNav, browser) => {
+      navigationListeners.forEach(({ onNav, progressListener }, browser) => {
         if (browser.isConnected && (!appId || browser._bgalazkaAppId !== appId))
           return;
         ["load", "pageshow", "DOMTitleChanged"].forEach((type) =>
           browser.removeEventListener(type, onNav),
         );
+        try {
+          browser.webProgress?.removeProgressListener(progressListener);
+        } catch (_) {}
+        browser.removeEventListener("DOMAudioPlaybackStarted", onAudioStarted);
+        browser.removeEventListener("DOMAudioPlaybackStopped", onAudioStopped);
         navigationListeners.delete(browser);
       });
     };
@@ -21627,8 +22267,32 @@
     const origOpen = apps.openPanel?.bind(apps);
     if (origOpen) {
       apps.openPanel = function (...args) {
+        // Native openPanel clears its private pin flag on every switch. Keep
+        // a deliberate pin when selecting another normal app from the grid.
+        const wasPinned =
+          document.querySelector(
+            "#zen-app-panel-pill .zen-app-btn[data-pinned='true']",
+          ) !== null &&
+          document.getElementById("zen-app-panel-root")?.hasAttribute("open") &&
+          !document
+            .getElementById("zen-app-panel-root")
+            ?.hasAttribute("closing");
         pulseAnimGuard(); // perf: suppress backdrop-filter for this slide (note 12)
         const res = origOpen(...args);
+        if (
+          wasPinned &&
+          document.querySelector(
+            "#zen-app-panel-pill .zen-app-btn[data-pinned='false']",
+          )
+        )
+          this.togglePin?.();
+        refreshPanelAudio();
+        // Reassert activity after a hidden remote browser becomes visible. A
+        // second activation on the next frame avoids the blank/grey wake race
+        // seen when a process switch and docshell wake happen together.
+        refreshPanelActivity(true);
+        if (getPref(BGALAZKA_EXT_PREFS.SMART_SLEEP, false))
+          requestAnimationFrame(() => refreshPanelActivity(true));
         syncAddonHostBrowserActivity();
         setTimeout(() => {
           ensurePillDualViewButton();
@@ -21637,6 +22301,7 @@
           ensurePillGrabberVerticalDrag();
           syncPanelPushState();
           ensureWebToolbar();
+          refreshPanelAudio();
           updateWebToolbarState();
         }, 30);
         return res;
@@ -21649,6 +22314,7 @@
         pulseAnimGuard(); // perf: suppress backdrop-filter for this slide (note 12)
         const res = origClose(...args);
         syncAddonHostBrowserActivity();
+        refreshPanelActivity();
         setTimeout(syncPanelPushState, 30);
         return res;
       };
@@ -21684,13 +22350,9 @@
           app,
           userContextId,
         );
-        // Remember this web panel's own default/home URL on the browser
-        // element itself, so the toolbar's Back button (see ensureWebToolbar
-        // above) has somewhere to fall back to once real back-history runs
-        // out. Only set once, at creation, since app.url can't drift for an
-        // already-connected browser instance.
-        if (result?.isNew && result.browser) {
-          result.browser._bgalazkaHomeUrl = app?.url || null;
+        // Tag the browser once so launchers, audio, and essential duplicates
+        // all resolve the same native panel instance.
+        if (result?.browser) {
           result.browser._bgalazkaAppId = app?.id || null;
           applyPanelContainerLoadContext(result.browser, userContextId);
         }
@@ -21728,12 +22390,48 @@
         // history.pushState navigations are covered by the polling
         // fallback in startWebToolbarPolling() above, since those don't
         // reliably fire these events).
-        if (result?.isNew && result.browser) {
-          const onNav = () => updateWebToolbarState();
+        if (result?.browser && !navigationListeners.has(result.browser)) {
+          const onNav = () => {
+            updateWebToolbarState();
+          };
           result.browser.addEventListener("load", onNav);
           result.browser.addEventListener("pageshow", onNav);
           result.browser.addEventListener("DOMTitleChanged", onNav);
-          navigationListeners.set(result.browser, onNav);
+          result.browser.addEventListener(
+            "DOMAudioPlaybackStarted",
+            onAudioStarted,
+          );
+          result.browser.addEventListener(
+            "DOMAudioPlaybackStopped",
+            onAudioStopped,
+          );
+          const progressListener = {
+            onLocationChange(progress) {
+              if (progress && !progress.isTopLevel) return;
+              // A top-level navigation may swap content processes. Forget the
+              // cached docshell state so Smart Sleep is re-applied to the new
+              // remote side instead of assuming the previous process state.
+              lastDocshellActivity.delete(result.browser);
+              refreshPanelActivity();
+              updateWebToolbarState();
+            },
+            onStateChange(progress) {
+              if (progress && !progress.isTopLevel) return;
+              updateWebToolbarState();
+            },
+            QueryInterface: ChromeUtils.generateQI([
+              "nsIWebProgressListener",
+              "nsISupportsWeakReference",
+            ]),
+          };
+          try {
+            result.browser.webProgress?.addProgressListener(
+              progressListener,
+              Ci.nsIWebProgress.NOTIFY_LOCATION |
+                Ci.nsIWebProgress.NOTIFY_STATE_NETWORK,
+            );
+          } catch (_) {}
+          navigationListeners.set(result.browser, { onNav, progressListener });
         }
         return result;
       };
@@ -21744,6 +22442,33 @@
     // host tab, THEN let base closeApp/removeApp clear its private browser Map.
     // Calling base first would detach the browser before gBrowser can cleanly
     // destroy its owning tab.
+    const origRefreshApp = apps.refreshApp?.bind(apps);
+    if (origRefreshApp)
+      apps.refreshApp = function (id, ...args) {
+        if (!essentialPanels.has(id)) return origRefreshApp(id, ...args);
+        const browser = getAllAppBrowsers().find(
+          (browser) => browser._bgalazkaAppId === id,
+        );
+        if (browser) browser.reload();
+        else loadEssentialInBackground(essentialPanels.get(id));
+      };
+    const origSaveWidth = apps.saveWidth?.bind(apps);
+    if (origSaveWidth)
+      apps.saveWidth = function (width) {
+        const record = essentialPanels.get(
+          getActiveAppBrowser()?._bgalazkaAppId,
+        );
+        if (record) {
+          record.app.width = width;
+          saveEssentialSettings(record);
+        } else return origSaveWidth(width);
+      };
+    // startResize itself is bound in ZentralApps' constructor and that bound
+    // function is already installed on the grabber/strip before this extension
+    // hook runs. Replacing apps.startResize here therefore cannot affect mouse
+    // resizing. The actual fix lives in the base startResize() implementation
+    // above, which now snapshots the rendered root width for every panel type.
+
     const origCloseApp = apps.closeApp?.bind(apps);
     if (origCloseApp) {
       apps.closeApp = function (appId, ...args) {
@@ -21767,7 +22492,12 @@
     }
 
     registerCleanup(() => {
-      navigationListeners.forEach((onNav, browser) => {
+      navigationListeners.forEach(({ onNav, progressListener }, browser) => {
+        try {
+          browser.webProgress?.removeProgressListener(progressListener);
+        } catch (_) {}
+        browser.removeEventListener("DOMAudioPlaybackStarted", onAudioStarted);
+        browser.removeEventListener("DOMAudioPlaybackStopped", onAudioStopped);
         ["load", "pageshow", "DOMTitleChanged"].forEach((type) =>
           browser.removeEventListener(type, onNav),
         );
@@ -22059,16 +22789,23 @@
     registerCleanup(() => clearInterval(retryTimer));
   }
 
-  // Safe window event hooks that fire strictly AFTER tab operations finish
-  const tabPinnedHandler = () => requestTileSync(300);
-  const tabUnpinnedHandler = () => requestTileSync(300);
+  // Safe window event hooks that fire strictly AFTER tab operations finish.
+  // TabAttrModified can fire in bursts (title, icon, audio, busy state, etc.),
+  // so give it a small debounce instead of rescanning every tab immediately.
+  const tabPinnedHandler = () => requestTileSync(30);
+  const tabUnpinnedHandler = () => requestTileSync(30);
+  const tabAttrModifiedHandler = () => requestTileSync(120);
   const workspaceSwitchedHandler = () => requestTileSync(300);
   window.addEventListener("TabPinned", tabPinnedHandler);
+  window.addEventListener("TabClose", tabUnpinnedHandler);
+  window.addEventListener("TabAttrModified", tabAttrModifiedHandler);
   window.addEventListener("TabUnpinned", tabUnpinnedHandler);
   window.addEventListener("zen-workspace-switched", workspaceSwitchedHandler);
   window.addEventListener("zen-workspace-changed", workspaceSwitchedHandler);
   registerCleanup(() => {
     window.removeEventListener("TabPinned", tabPinnedHandler);
+    window.removeEventListener("TabClose", tabUnpinnedHandler);
+    window.removeEventListener("TabAttrModified", tabAttrModifiedHandler);
     window.removeEventListener("TabUnpinned", tabUnpinnedHandler);
     window.removeEventListener(
       "zen-workspace-switched",

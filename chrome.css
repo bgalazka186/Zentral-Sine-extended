@@ -5728,7 +5728,7 @@ panel[id*="tabgroup-editor"] {
 
 :root[bgalazka-corner-tiles="true"]
   #zen-apps-sidebar-grid:not(.zen-apps-horizontal)
-  :is(.zen-apps-autohide-dots, #zentral-apps-utility-section) {
+  .zen-apps-autohide-dots {
   display: none !important;
 }
 
@@ -7251,4 +7251,191 @@ panel[id*="tabgroup-editor"] {
   opacity: 0.001 !important;
   pointer-events: none !important;
   overflow: clip !important;
+}
+
+/* Audio shares the existing URL toolbar styling; no extra pill control. */
+#zen-app-panel-toolbar .bgalazka-audio-button[hidden] {
+  display: none !important;
+}
+#zen-app-panel-toolbar .bgalazka-audio-button {
+  flex: 0 0 auto;
+  color: var(--zen-primary-color, currentColor);
+}
+#zen-app-panel-toolbar .bgalazka-audio-button[data-muted="true"] {
+  color: inherit;
+}
+.zen-app-tile[data-app-id] {
+  position: relative;
+}
+.zen-app-tile .bgalazka-tile-audio {
+  position: absolute !important;
+  bottom: 1px !important;
+  left: 1px !important;
+  width: 14px !important;
+  height: 14px !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 1px !important;
+  border-radius: 4px;
+  background: var(--tabpanels-background-color, #18181f);
+  color: var(--zen-primary-color, #9dafff);
+  box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 25%, transparent);
+  pointer-events: none !important;
+  z-index: 2;
+}
+.zen-app-tile .bgalazka-tile-audio[data-muted="true"] {
+  color: currentColor;
+}
+.zen-app-tile .bgalazka-tile-audio svg {
+  width: 12px !important;
+  height: 12px !important;
+  min-width: 12px !important;
+  min-height: 12px !important;
+  max-width: 12px !important;
+  max-height: 12px !important;
+}
+:root[bgalazka-corner-tiles="true"]
+  .bgalazka-essential-tile
+  .bgalazka-tile-audio {
+  left: -4px !important;
+  bottom: -1px !important;
+  width: 12px !important;
+  height: 12px !important;
+}
+
+/* Base tile hover/autohide rules also style every descendant SVG. Keep the
+ * playback badge readable without scaling it like the main favicon. */
+:root
+  #zen-apps-sidebar-grid
+  .zen-app-tile[data-app-id]
+  .bgalazka-tile-audio
+  > svg,
+:root[bgalazka-corner-tiles="true"]
+  .tabbrowser-tab
+  .zen-app-tile
+  .bgalazka-tile-audio
+  > svg {
+  width: 12px !important;
+  height: 12px !important;
+  min-width: 12px !important;
+  min-height: 12px !important;
+  max-width: 12px !important;
+  max-height: 12px !important;
+  opacity: 1 !important;
+  filter: none !important;
+  transform: none !important;
+}
+
+/* A bounded hit target: only the badge mutes, the rest of the tile opens the
+ * panel. Override the corner tile's blanket descendant pointer-events rule. */
+:root .zen-app-tile[data-app-id] .bgalazka-tile-audio,
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile
+  .bgalazka-tile-audio {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  color: white !important;
+  background: #242428 !important;
+  box-sizing: border-box !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  right: auto !important;
+  top: auto !important;
+  padding: 1px !important;
+}
+:root .zen-app-tile[data-app-id] .bgalazka-tile-audio > svg,
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile
+  .bgalazka-tile-audio
+  > svg,
+#zen-app-panel-toolbar .bgalazka-audio-button > svg {
+  color: white !important;
+  stroke: white !important;
+  fill: none !important;
+  pointer-events: none !important;
+}
+.bgalazka-tile-audio:focus-visible {
+  outline: 2px solid white !important;
+  outline-offset: 1px !important;
+}
+
+/* Essential badge: a slight leftward overhang, still only a 12px hit target. */
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile.bgalazka-essential-tile:not(.bgalazka-tab-icon-panel)
+  .bgalazka-tile-audio {
+  left: -3px !important;
+}
+
+/* Optional ordinary-tab launchers replace only the favicon visually. Native
+ * tab labels, close buttons, and sound controls keep their own hit targets. */
+.tabbrowser-tab[bgalazka-tab-panel-launcher="true"] .tab-icon-image {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+.bgalazka-panel-icon-host {
+  position: relative !important;
+}
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile.bgalazka-tab-icon-panel {
+  left: 8px !important;
+  right: auto !important;
+  top: 50% !important;
+  bottom: auto !important;
+  transform: translateY(-50%) !important;
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  min-height: 18px !important;
+  max-width: 18px !important;
+  max-height: 18px !important;
+  border: none !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  z-index: 1 !important;
+}
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .bgalazka-panel-icon-host
+  > .zen-app-tile.bgalazka-tab-icon-panel {
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+}
+
+/* Compact-folder styling used to apply only while the bridge was enabled.
+ * Disabling it exposed the folder during async deletion, or after restoring
+ * a stale folder at startup. Hide only our reserved folder when disabled. */
+:root:not([bgalazka-addon-tab-id-bridge="true"])
+  :is(
+    #bgalazka-zentral-addon-hosts,
+    zen-folder[bgalazka-addon-host-folder="true"]
+  ) {
+  display: none !important;
 }
