@@ -7488,3 +7488,87 @@ panel[id*="tabgroup-editor"] {
   ) {
   display: none !important;
 }
+
+/* Hold modes are enabled only by the extension's transient root attributes. */
+:root[bgalazka-triple-view="true"]
+  #zen-app-panel-slider
+  browser[data-bgalazka-triple-slot="top"],
+:root[bgalazka-triple-view="true"]
+  #zen-app-panel-slider
+  browser[data-bgalazka-triple-slot="bottom"] {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  height: 50% !important;
+  max-height: 50% !important;
+  width: 100% !important;
+}
+:root[bgalazka-triple-view="true"]
+  #zen-app-panel-slider
+  browser[data-bgalazka-triple-slot="bottom"] {
+  border-top: 2px solid var(--zen-primary-color, #777) !important;
+  box-sizing: border-box !important;
+}
+:root[bgalazka-triple-view="true"] #zen-app-panel-toolbar {
+  flex-shrink: 0 !important;
+}
+:root[bgalazka-triple-view="true"]
+  #zen-app-panel-pill
+  .zen-app-dual-view-btn[data-hold-active="true"],
+:root[bgalazka-super-pin="true"]
+  #zen-app-panel-pill
+  .zen-app-btn[data-hold-active="true"] {
+  outline: 2px solid var(--zen-primary-color, currentColor) !important;
+  outline-offset: -2px !important;
+}
+:root[bgalazka-super-pin="true"] #bgalazka-super-panel {
+  position: fixed !important;
+  z-index: 2147483601 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  min-width: 250px !important;
+  min-height: 160px !important;
+  border: 2px solid var(--zen-primary-color, #777) !important;
+  border-radius: var(--zen-border-radius, 8px) !important;
+  background: var(--tabpanels-background-color, #1e1e24) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55) !important;
+  resize: both !important;
+  pointer-events: auto !important;
+}
+:root[bgalazka-super-pin="true"] #bgalazka-super-panel .bgalazka-super-bar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 4px 8px !important;
+  min-height: 28px !important;
+  cursor: move !important;
+  user-select: none !important;
+  background: var(--zen-colors-tertiary, #303038) !important;
+  color: var(--zen-colors-text, white) !important;
+}
+:root[bgalazka-super-pin="true"]
+  #bgalazka-super-panel
+  .bgalazka-super-bar
+  span {
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+}
+:root[bgalazka-super-pin="true"]
+  #bgalazka-super-panel
+  .bgalazka-super-bar
+  button {
+  flex-shrink: 0 !important;
+  background: transparent !important;
+  color: inherit !important;
+  border: 0 !important;
+  font-size: 20px !important;
+  cursor: pointer !important;
+}
+:root[bgalazka-super-pin="true"] #bgalazka-super-panel browser {
+  display: block !important;
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  height: auto !important;
+}

@@ -17257,12 +17257,14 @@
     const panel = document.getElementById("zen-app-panel-slider");
     if (!panel) return null;
     return (
-      Array.from(panel.querySelectorAll("browser")).find((browser) => {
-        if (!browser.isConnected) return false;
-        if (browser.hidden || browser.getAttribute("hidden") === "true")
-          return false;
-        return browser.style?.display !== "none";
-      }) || null
+      Array.from(panel.querySelectorAll("browser"))
+        .reverse()
+        .find((browser) => {
+          if (!browser.isConnected) return false;
+          if (browser.hidden || browser.getAttribute("hidden") === "true")
+            return false;
+          return browser.style?.display !== "none";
+        }) || null
     );
   }
 
@@ -17582,7 +17584,7 @@
     const panel = document.getElementById("zen-app-panel-slider");
     if (!panel) return null;
     const browsers = panel.querySelectorAll("browser");
-    for (const b of browsers) {
+    for (const b of Array.from(browsers).reverse()) {
       if (b.style.display !== "none") return b;
     }
     return null;
@@ -21904,7 +21906,9 @@
   function getAllAppBrowsers() {
     const panel = document.getElementById("zen-app-panel-slider");
     if (!panel) return [];
-    return Array.from(panel.querySelectorAll("browser"));
+    return Array.from(panel.querySelectorAll("browser")).concat(
+      Array.from(document.querySelectorAll("#bgalazka-super-panel browser")),
+    );
   }
 
   function hookPopupContainment() {
@@ -22819,6 +22823,400 @@
     }, 150);
     registerCleanup(() => clearInterval(vResizeInitTimer));
   }
+
+  /* ========================================================================
+   * HOLD MODES: triple view and super pin (extension only)
+   *
+   * Native Zentral owns one activeAppId. Its openPanel() hides every other
+   * browser, so the two opt-in layouts preserve the first browser around
+   * that method rather than touching its private state or cloning a browser.
+   * ======================================================================== */
+  (() => {
+    const apps = window.Zentral?.Apps;
+    if (!apps) return;
+    const ui = document.documentElement;
+    const state = {
+      mode: null,
+      first: null,
+      bottom: null,
+      second: null,
+      shell: null,
+    };
+    const slider = () => document.getElementById("zen-app-panel-slider");
+    const root = () => document.getElementById("zen-app-panel-root");
+    const isOpen = () =>
+      root()?.hasAttribute("open") && !root()?.hasAttribute("closing");
+    const active = () =>
+      Array.from(slider()?.querySelectorAll("browser") || [])
+        .reverse()
+        .find((b) => b.style.display !== "none" && !b.hasAttribute("hidden"));
+    const markTiles = () => {
+      document
+        .querySelectorAll(".zen-app-tile[data-app-id]")
+        .forEach((tile) => {
+          if (state.mode && tile.dataset.appId === state.first?._bgalazkaAppId)
+            tile.dataset.active = "true";
+          if (
+            state.mode === "super" &&
+            tile.dataset.appId === state.second?._bgalazkaAppId
+          )
+            tile.dataset.active = "true";
+        });
+    };
+    const origOpen = apps.openPanel;
+    const origClose = apps.closePanel;
+    const origCloseApp = apps.closeApp;
+    const origTogglePin = apps.togglePin;
+    const origRender = apps.renderGrid;
+
+    function discardSecond() {
+      // Keep the original browser node connected and cached in Zentral's
+      // private map, including its history, origin attributes and tab bridge.
+      if (state.second?.isConnected && slider()) {
+        slider().appendChild(state.second);
+        state.second.style.display = "none";
+      }
+      if (state.second?._bgalazkaAppId) {
+        document
+          .querySelectorAll(".zen-app-tile[data-app-id]")
+          .forEach((tile) => {
+            if (tile.dataset.appId === state.second._bgalazkaAppId)
+              tile.dataset.active = "false";
+          });
+      }
+      state.second = null;
+      state.shell?.remove();
+      state.shell = null;
+    }
+    function leaveMode() {
+      discardSecond();
+      slider()
+        ?.querySelectorAll("browser[data-bgalazka-triple-slot]")
+        .forEach((b) => b.removeAttribute("data-bgalazka-triple-slot"));
+      if (state.first?.isConnected && state.mode === "triple") {
+        state.first.style.display = state.bottom?.isConnected ? "none" : "";
+      }
+      if (state.first?._bgalazkaAppId && state.bottom?.isConnected) {
+        document
+          .querySelectorAll(".zen-app-tile[data-app-id]")
+          .forEach((tile) => {
+            if (tile.dataset.appId === state.first._bgalazkaAppId)
+              tile.dataset.active = "false";
+          });
+      }
+      state.first = null;
+      state.bottom = null;
+      state.mode = null;
+      ui.removeAttribute("bgalazka-triple-view");
+      ui.removeAttribute("bgalazka-super-pin");
+      document
+        .getElementById("zen-app-dual-view-btn")
+        ?.removeAttribute("data-hold-active");
+      document
+        .querySelector("#zen-app-panel-pill .zen-app-btn[data-pinned]")
+        ?.removeAttribute("data-hold-active");
+    }
+    function makeShell(browser, app) {
+      const box = document.createElement("div");
+      box.id = "bgalazka-super-panel";
+      const bar = document.createElement("div");
+      bar.className = "bgalazka-super-bar";
+      const label = document.createElement("span");
+      label.textContent = app.name || app.title || app.url || "Panel";
+      const close = document.createElement("button");
+      close.type = "button";
+      close.textContent = "×";
+      close.title = "Close second panel";
+      close.addEventListener("click", () => {
+        discardSecond();
+        markTiles();
+      });
+      bar.append(label, close);
+      box.append(bar, browser);
+      (document.body || document.documentElement).appendChild(box);
+      browser.style.display = "";
+      const firstRect = root().getBoundingClientRect();
+      const width = Math.min(
+        Math.max(firstRect.width, 250),
+        window.innerWidth - 24,
+      );
+      const height = Math.min(
+        Math.max(firstRect.height, 240),
+        window.innerHeight - 24,
+      );
+      box.style.width = `${width}px`;
+      box.style.height = `${height}px`;
+      box.style.left = `${Math.max(
+        12,
+        Math.min(
+          window.innerWidth - width - 12,
+          firstRect.left +
+            (firstRect.left < window.innerWidth / 2
+              ? firstRect.width + 16
+              : -width - 16),
+        ),
+      )}px`;
+      box.style.top = `${Math.max(12, Math.min(window.innerHeight - height - 12, firstRect.top))}px`;
+      let drag = null;
+      bar.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0 || e.target === close) return;
+        e.preventDefault();
+        drag = {
+          x: e.clientX,
+          y: e.clientY,
+          left: box.offsetLeft,
+          top: box.offsetTop,
+        };
+        bar.setPointerCapture(e.pointerId);
+      });
+      bar.addEventListener("pointermove", (e) => {
+        if (!drag) return;
+        box.style.left = `${Math.max(
+          0,
+          Math.min(
+            window.innerWidth - box.offsetWidth,
+            drag.left + e.clientX - drag.x,
+          ),
+        )}px`;
+        box.style.top = `${Math.max(
+          0,
+          Math.min(
+            window.innerHeight - box.offsetHeight,
+            drag.top + e.clientY - drag.y,
+          ),
+        )}px`;
+      });
+      bar.addEventListener("pointerup", () => {
+        drag = null;
+      });
+      bar.addEventListener("lostpointercapture", () => {
+        drag = null;
+      });
+      state.shell = box;
+    }
+    function openSecond(app) {
+      if (!app?.id || !isOpen() || !state.first?.isConnected) return false;
+      if (app.id === state.first._bgalazkaAppId) return true;
+      if (app.id === state.second?._bgalazkaAppId) return true;
+      // Create through the already wrapped Zentral factory: its container,
+      // mobile UA, add-on host and badge hooks all apply to this browser.
+      const { browser, isNew } = apps.getOrCreateAppBrowser(app) || {};
+      if (!browser) return false;
+      discardSecond();
+      if (isNew) {
+        try {
+          const uri = Services.io.newURI(app.url);
+          const options = {
+            triggeringPrincipal:
+              Services.scriptSecurityManager.createContentPrincipal(uri, {
+                userContextId:
+                  Number(browser.getAttribute("usercontextid")) || 0,
+              }),
+          };
+          if (typeof browser.fixupAndLoadURIString === "function")
+            browser.fixupAndLoadURIString(app.url, options);
+          else browser.loadURI(uri, options);
+        } catch (error) {
+          console.warn(
+            "[BgalazkaExtension] Second panel navigation failed:",
+            error,
+          );
+        }
+      }
+      makeShell(browser, app);
+      state.second = browser;
+      markTiles();
+      return true;
+    }
+
+    apps.openPanel = function (app) {
+      if (
+        state.mode === "super" &&
+        state.first?.isConnected &&
+        isOpen() &&
+        app?.id !== state.first._bgalazkaAppId
+      ) {
+        if (openSecond(app)) return;
+      }
+      const keep =
+        state.mode === "triple" &&
+        state.first?.isConnected &&
+        isOpen() &&
+        ui.getAttribute("bgalazka-push-page") === "true" &&
+        app?.id !== state.first._bgalazkaAppId;
+      if (state.mode && !keep && state.mode !== "super") leaveMode();
+      const result = origOpen.call(this, app);
+      if (keep) {
+        const bottom = active();
+        if (bottom && bottom !== state.first) {
+          slider().insertBefore(state.first, bottom);
+          state.first.style.display = "";
+          state.first.setAttribute("data-bgalazka-triple-slot", "top");
+          slider()
+            .querySelectorAll('browser[data-bgalazka-triple-slot="bottom"]')
+            .forEach((b) => b.removeAttribute("data-bgalazka-triple-slot"));
+          bottom.setAttribute("data-bgalazka-triple-slot", "bottom");
+          state.bottom = bottom;
+          markTiles();
+        }
+      }
+      return result;
+    };
+    apps.closePanel = function (...args) {
+      leaveMode();
+      return origClose.apply(this, args);
+    };
+    apps.closeApp = function (id, ...args) {
+      if (state.first?._bgalazkaAppId === id) leaveMode();
+      else if (state.second?._bgalazkaAppId === id) discardSecond();
+      return origCloseApp.call(this, id, ...args);
+    };
+    apps.togglePin = function (...args) {
+      const result = origTogglePin.apply(this, args);
+      if (
+        state.mode === "super" &&
+        document.querySelector(
+          '#zen-app-panel-pill .zen-app-btn[data-pinned="false"]',
+        )
+      )
+        leaveMode();
+      return result;
+    };
+    apps.renderGrid = function (...args) {
+      const result = origRender.apply(this, args);
+      markTiles();
+      return result;
+    };
+
+    const HOLD_MS = 550;
+    let pending = null;
+    let suppress = null;
+    const targetButton = (node) =>
+      node?.closest?.(
+        "#zen-app-dual-view-btn, #zen-app-panel-pill .zen-app-btn[data-pinned]",
+      );
+    const onDown = (e) => {
+      if (e.button !== 0 || !isOpen()) return;
+      const btn = targetButton(e.target);
+      if (!btn) return;
+      if (suppress && suppress !== btn) suppress = null;
+      const kind = btn.id === "zen-app-dual-view-btn" ? "triple" : "super";
+      pending = {
+        btn,
+        x: e.clientX,
+        y: e.clientY,
+        timer: setTimeout(() => {
+          pending = null;
+          const first = active();
+          if (!first || !isOpen()) return;
+          suppress = btn;
+          if (state.mode === kind) {
+            leaveMode();
+            return;
+          }
+          leaveMode();
+          state.first = first;
+          state.mode = kind;
+          if (kind === "triple") {
+            if (ui.getAttribute("bgalazka-push-page") !== "true") {
+              setPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, true);
+              ui.setAttribute("bgalazka-push-page", "true");
+              syncPanelPushState();
+            }
+            btn.setAttribute("data-active", "true");
+            const setting = document.querySelector(
+              `input[data-pref="${BGALAZKA_EXT_PREFS.PUSH_PAGE}"]`,
+            );
+            if (setting) setting.checked = true;
+            ui.setAttribute("bgalazka-triple-view", "true");
+          } else {
+            // Super pin retains native pin semantics, so outside clicks and a
+            // later ordinary pin click still follow the existing pin control.
+            if (ui.getAttribute("bgalazka-push-page") === "true") {
+              setPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false);
+              ui.setAttribute("bgalazka-push-page", "false");
+              syncPanelPushState();
+              const dual = document.getElementById("zen-app-dual-view-btn");
+              dual?.setAttribute("data-active", "false");
+              const setting = document.querySelector(
+                `input[data-pref="${BGALAZKA_EXT_PREFS.PUSH_PAGE}"]`,
+              );
+              if (setting) setting.checked = false;
+            }
+            if (btn.getAttribute("data-pinned") !== "true") apps.togglePin();
+            ui.setAttribute("bgalazka-super-pin", "true");
+          }
+          btn.setAttribute("data-hold-active", "true");
+          markTiles();
+        }, HOLD_MS),
+      };
+    };
+    const cancelPending = () => {
+      if (pending) clearTimeout(pending.timer);
+      pending = null;
+    };
+    const onMove = (e) => {
+      if (
+        pending &&
+        Math.hypot(e.clientX - pending.x, e.clientY - pending.y) > 8
+      )
+        cancelPending();
+    };
+    const onClick = (e) => {
+      const btn = targetButton(e.target);
+      if (!btn) return;
+      if (suppress === btn) {
+        suppress = null;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
+      if (btn.id === "zen-app-dual-view-btn" && state.mode === "triple")
+        leaveMode();
+    };
+    const onSecondClick = (e) => {
+      if (e.button !== 0 || state.mode !== "super") return;
+      const tile = e.target.closest?.(".zen-app-tile[data-app-id]");
+      if (tile?.dataset.appId === state.second?._bgalazkaAppId) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        discardSecond();
+        tile.dataset.active = "false";
+      }
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("pointermove", onMove, true);
+    window.addEventListener("pointerup", cancelPending, true);
+    window.addEventListener("pointercancel", cancelPending, true);
+    window.addEventListener("blur", cancelPending);
+    window.addEventListener("click", onClick, true);
+    window.addEventListener("mouseup", onSecondClick, true);
+    const pushObserver = () => {
+      if (
+        state.mode === "triple" &&
+        !getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false)
+      )
+        leaveMode();
+    };
+    Services.prefs.addObserver(BGALAZKA_EXT_PREFS.PUSH_PAGE, pushObserver);
+    registerCleanup(() => {
+      cancelPending();
+      leaveMode();
+      window.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("pointermove", onMove, true);
+      window.removeEventListener("pointerup", cancelPending, true);
+      window.removeEventListener("pointercancel", cancelPending, true);
+      window.removeEventListener("blur", cancelPending);
+      window.removeEventListener("click", onClick, true);
+      window.removeEventListener("mouseup", onSecondClick, true);
+      Services.prefs.removeObserver(BGALAZKA_EXT_PREFS.PUSH_PAGE, pushObserver);
+      apps.openPanel = origOpen;
+      apps.closePanel = origClose;
+      apps.closeApp = origCloseApp;
+      apps.togglePin = origTogglePin;
+      apps.renderGrid = origRender;
+    });
+  })();
 
   /* ==========================================================================
    * 6. CLEANUP / UNLOAD
