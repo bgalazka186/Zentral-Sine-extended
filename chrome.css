@@ -7384,8 +7384,10 @@ panel[id*="tabgroup-editor"] {
 
 /* Optional ordinary-tab launchers replace only the favicon visually. Native
  * tab labels, close buttons, and sound controls keep their own hit targets. */
-.tabbrowser-tab[bgalazka-tab-panel-launcher="true"] .tab-icon-image {
-  opacity: 0 !important;
+.tabbrowser-tab[bgalazka-tab-panel-launcher="true"]
+  .bgalazka-panel-icon-host
+  .tab-icon-image {
+  visibility: hidden !important;
   pointer-events: none !important;
 }
 .bgalazka-panel-icon-host {
@@ -7426,7 +7428,47 @@ panel[id*="tabgroup-editor"] {
   .bgalazka-panel-icon-host
   > .zen-app-tile.bgalazka-tab-icon-panel {
   left: 50% !important;
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  max-width: 16px !important;
+  max-height: 16px !important;
   transform: translate(-50%, -50%) !important;
+}
+
+/* The tab and its web panel have independent load states. */
+:root[bgalazka-corner-tiles="true"]
+  .tabbrowser-tab
+  .zen-app-tile.bgalazka-essential-tile:is(
+    [data-tab-loaded="true"],
+    [data-loaded="true"]
+  ):not([data-active="true"]) {
+  filter: none !important;
+  opacity: 1 !important;
+}
+/* A dormant tab must not gray out its loaded panel button via the icon stack. */
+:root[bgalazka-tab-isolation="true"]
+  .tabbrowser-tab
+  .tab-icon-stack.bgalazka-panel-icon-host:has(> .bgalazka-tab-icon-panel) {
+  filter: none !important;
+  opacity: 1 !important;
+}
+:root[bgalazka-corner-tiles="true"]
+  .tabbrowser-tab
+  .zen-app-tile.bgalazka-essential-tile[data-loaded="true"] {
+  outline: 1px solid var(--zen-primary-color, #83a5ff) !important;
+  outline-offset: -1px !important;
+}
+:root[bgalazka-corner-tiles="true"]
+  .tabbrowser-tab
+  .zen-app-tile.bgalazka-essential-tile[data-loaded="true"][data-tab-loaded="true"] {
+  outline-width: 2px !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #83a5ff) 16%,
+    var(--tabpanels-background-color, #18181f)
+  ) !important;
 }
 
 /* Compact-folder styling used to apply only while the bridge was enabled.

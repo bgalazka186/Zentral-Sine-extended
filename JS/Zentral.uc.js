@@ -852,7 +852,12 @@
      * Uses staggered delays to prevent startup performance hits.
      */
     async preloadAppsSequence() {
-      const preloadedApps = this.#state.apps.filter((a) => a.preload === true);
+      const preloadedApps = Core.getPref(
+        "zen.workspace.bgalazka.smart_sleep",
+        false,
+      )
+        ? []
+        : this.#state.apps.filter((a) => a.preload === true);
       for (const app of preloadedApps) {
         const { browser, isNew } = this.getOrCreateAppBrowser(app);
         if (isNew) {
@@ -2824,7 +2829,7 @@
         grabberBtn.className = "zen-app-grabber";
         grabberBtn.title = "Drag to resize";
         grabberBtn.appendChild(this.#createSVG(SVG_STRINGS.GRABBER));
-        grabberBtn.addEventListener("mousedown", this.startResize);
+        // The extension owns this grabber drag, using its direct edge resize path.
 
         const refreshBtn = document.createElement("button");
         refreshBtn.className = "zen-app-btn zen-app-refresh-btn";
@@ -4784,30 +4789,28 @@
       const app = this.#state.apps.find(
         (a) => a.id === this.#state.activeAppId,
       );
-      // Always begin from the width that is actually on screen. Extension-owned
-      // panel identities (for example Essential/tab launchers) are intentionally
-      // not members of #state.apps, so falling back to loadWidth() here makes
-      // the first mousemove jump to the global/default width before resizing.
-      const renderedWidth = this.#dom.root?.getBoundingClientRect?.().width;
       this._startW =
-        Number.isFinite(renderedWidth) && renderedWidth > 0
-          ? renderedWidth
-          : app?.width || this.loadWidth();
+        this.#dom.root?.getBoundingClientRect().width ||
+        app?.width ||
+        this.loadWidth();
       if (this.#dom.panel) this.#dom.panel.style.pointerEvents = "none";
       document.addEventListener("mousemove", this.onDrag);
       document.addEventListener("mouseup", this.onStopDrag);
     }
 
-    onDrag(e) {
-      if (this.#state.isExpanded) {
-        this.#state.isExpanded = false;
-        if (this.#dom.expandBtn) {
-          this.#dom.expandBtn.title = "Expand panel";
-          this.#dom.expandBtn.replaceChildren(
-            this.#createSVG(SVG_STRINGS.EXPAND),
-          );
-        }
+    prepareResize() {
+      if (!this.#state.isExpanded) return;
+      this.#state.isExpanded = false;
+      if (this.#dom.expandBtn) {
+        this.#dom.expandBtn.title = "Expand panel";
+        this.#dom.expandBtn.replaceChildren(
+          this.#createSVG(SVG_STRINGS.EXPAND),
+        );
       }
+    }
+
+    onDrag(e) {
+      this.prepareResize();
       const diff = e.clientX - this._startX;
       let newW = this.isPanelAttachedToRight()
         ? this._startW - diff
@@ -15666,7 +15669,7 @@
 
   function startHorizontalResize(e, edge) {
     if (e.button !== 0) return;
-    if (!getPref(EXT_PREFS.ALL_SIDES_RESIZE, false)) return;
+    if (edge !== "pill" && !getPref(EXT_PREFS.ALL_SIDES_RESIZE, false)) return;
     const apps = window.Zentral?.Apps;
     const root = document.getElementById("zen-app-panel-root");
     if (!apps || !root || typeof apps.updateWidthVar !== "function") return;
@@ -15697,7 +15700,20 @@
       liveWidth: rootRect.width,
       liveOffset: startOffset,
       adjustsOffset: physicalEdge === anchorSide,
+      maxWidth: Math.max(
+        280,
+        Math.min(
+          getPref(EXT_PREFS.OPPOSITE_DOCKING, false) &&
+            !apps.isPlacementVerticalBar?.()
+            ? computeOppositeDockingSafeMaxWidth()
+            : Math.max(280, Math.round(window.innerWidth * 0.8)),
+          physicalEdge === "left"
+            ? rootRect.right
+            : window.innerWidth - rootRect.left,
+        ),
+      ),
     };
+    apps.prepareResize?.();
     const slider = document.getElementById("zen-app-panel-slider");
     if (slider) slider.style.pointerEvents = "none";
     document.documentElement.setAttribute("bgalazka-hresize-active", edge);
@@ -15719,16 +15735,7 @@
       startRight,
       startOffset,
     } = hResizeState;
-    const normalMax = Math.max(280, Math.round(window.innerWidth * 0.8));
-    const safeMax =
-      getPref(EXT_PREFS.OPPOSITE_DOCKING, false) &&
-      !apps.isPlacementVerticalBar?.()
-        ? computeOppositeDockingSafeMaxWidth()
-        : normalMax;
-
-    const viewportRoom =
-      physicalEdge === "left" ? startRight : window.innerWidth - startLeft;
-    const maxWidth = Math.max(280, Math.min(safeMax, viewportRoom));
+    const maxWidth = hResizeState.maxWidth;
     const dx = e.clientX - startX;
     const unclampedWidth =
       physicalEdge === "left" ? startWidth - dx : startWidth + dx;
@@ -15917,6 +15924,7 @@
     grabberBtn.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
       if (!window.Zentral?.Apps) return;
+      startHorizontalResize(e, "pill");
 
       const startY = e.clientY;
       let verticalStarted = false;
@@ -16339,7 +16347,11 @@
       const root = document.getElementById("zen-app-panel-root");
       if (!root) return;
       const safeMax = computeOppositeDockingSafeMaxWidth();
-      const currentWidth = root.getBoundingClientRect().width;
+      const currentWidth =
+        this._startW +
+        (this.isPanelAttachedToRight()
+          ? this._startX - e.clientX
+          : e.clientX - this._startX);
       if (currentWidth > safeMax && typeof this.updateWidthVar === "function")
         this.updateWidthVar(safeMax);
     };
@@ -16479,12 +16491,9 @@
     "keyup",
   ];
   const onTileAudioInput = (event) => {
-    // These are global capture listeners, so avoid DOM walks for every browser
-    // click/key event while the optional audio UI is disabled.
-    if (!getPref(EXT_PREFS.AUDIO_INDICATOR, false)) return;
     const badge = event.target.closest?.(".bgalazka-tile-audio");
     const tile = badge?.closest?.(".zen-app-tile[data-app-id]");
-    if (!tile) return;
+    if (!tile || !getPref(EXT_PREFS.AUDIO_INDICATOR, false)) return;
     const keyboard = event.type === "keydown" || event.type === "keyup";
     if (keyboard && event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
@@ -16861,12 +16870,9 @@
     isSyncingTiles = true;
     try {
       const enabled = getPref(EXT_PREFS.CORNER_TILES, false);
-      const allTabPanels = getPref(EXT_PREFS.ALL_TAB_PANELS, false);
-      const liveTabs = [...(window.gBrowser?.tabs || [])];
-      const liveTabSet = new Set(liveTabs);
       const targets = new Set(
         enabled
-          ? liveTabs.filter(
+          ? [...(window.gBrowser?.tabs || [])].filter(
               (tab) =>
                 tab.isConnected &&
                 !tab.closing &&
@@ -16875,7 +16881,8 @@
                 !tab.closest(
                   "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
                 ) &&
-                (isEssentialPanelTab(tab) || allTabPanels),
+                (isEssentialPanelTab(tab) ||
+                  getPref(EXT_PREFS.ALL_TAB_PANELS, false)),
             )
           : [],
       );
@@ -16883,7 +16890,7 @@
         if (targets.has(record.tab)) continue;
         const removed =
           record.tab.closing ||
-          !liveTabSet.has(record.tab) ||
+          !(window.gBrowser?.tabs || []).includes(record.tab) ||
           (record.wasEssential && !isEssentialPanelTab(record.tab));
         try {
           if (!removed || !promoteEssentialPanel(record))
@@ -16944,7 +16951,11 @@
           essentialTabRecords.set(tab, record);
           essentialPanels.set(app.id, record);
         }
-        if (record.app.preload && !record.preloadAttempted) {
+        if (
+          record.app.preload &&
+          !getPref(EXT_PREFS.SMART_SLEEP, false) &&
+          !record.preloadAttempted
+        ) {
           try {
             record.preloadAttempted = loadEssentialInBackground(record);
           } catch (error) {
@@ -17010,6 +17021,12 @@
         }
         tile.dataset.active = active === record.app.id ? "true" : "false";
         tile.dataset.loaded = browsers.has(record.app.id) ? "true" : "false";
+        tile.dataset.tabLoaded =
+          !tab.hasAttribute("pending") &&
+          !tab.hasAttribute("zen-dormant") &&
+          !!tab.linkedBrowser?.isConnected
+            ? "true"
+            : "false";
       }
       pruneIsolationTiles();
     } finally {
@@ -19622,14 +19639,13 @@
       );
       content.appendChild(audioIndicator.row);
       const smartSleep = createToggleRow(
-        "Smart Sleep (DocShell throttling)",
-        "Throttle hidden panel pages while keeping their browsing contexts and history; audible pages stay active",
+        "Smart Sleep (defer preloads)",
+        "Defer configured background panel preloads at startup; opened panels keep running",
         BGALAZKA_EXT_PREFS.SMART_SLEEP,
         null,
         false,
         PREF_ICONS.ISOLATION,
-        (enabled) =>
-          enabled ? refreshPanelActivity(true) : wakeAllPanelBrowsers(),
+        () => requestTileSync(0),
       );
       content.appendChild(smartSleep.row);
       // ====================================================================
@@ -21378,20 +21394,12 @@
   }
 
   function syncAddonHostBrowserActivity() {
-    const root = document.getElementById("zen-app-panel-root");
-    const panelOpen = !!root?.hasAttribute("open");
-    const activeBrowser = panelOpen ? getActiveAppBrowser() : null;
     for (const record of addonHostByAppId.values()) {
       if (!record?.adoptedByZentral || !record.browser) continue;
       try {
-        // A real background tab normally has an inactive docshell. Once its
-        // linkedBrowser is serving as the visible Zentral panel, explicitly
-        // activate only that browser; otherwise Gecko may throttle/suspend the
-        // very page the user is looking at because its owning tab is hidden in
-        // our collapsed host folder.
-        record.browser.docShellIsActive =
-          (!!activeBrowser && record.browser === activeBrowser) ||
-          panelIsAudible(record.browser);
+        // Keep adopted browsers active. Inactive remote docshells can
+        // return as gray panels after a visibility transition.
+        record.browser.docShellIsActive = true;
       } catch (_) {}
     }
   }
@@ -21939,7 +21947,6 @@
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/></svg>';
   const MUTED_ICON =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4zM16 9l5 6M21 9l-5 6"/></svg>';
-  const lastDocshellActivity = new Map();
 
   function panelAudioState(browser) {
     if (!browser) return { playing: false, muted: false, visible: false };
@@ -21968,66 +21975,6 @@
     }
   }
 
-  function panelIsAudible(browser) {
-    return panelAudioState(browser).playing;
-  }
-
-  function setPanelActive(browser, active, force = false) {
-    if (!browser?.isConnected) return;
-    const desired = active || panelIsAudible(browser);
-    // docShellIsActive has historically been a write-oriented remote-browser
-    // control and can desynchronise across process switches. Our own cache is
-    // the authoritative throttle state; reading the property every poll made
-    // us resend the same activation message continuously.
-    if (!force && lastDocshellActivity.get(browser) === desired) return;
-    try {
-      browser.docShellIsActive = desired;
-      lastDocshellActivity.set(browser, desired);
-    } catch (_) {
-      lastDocshellActivity.delete(browser);
-    }
-  }
-  function wakeAllPanelBrowsers() {
-    for (const browser of getAllAppBrowsers()) {
-      // Host-tab activation remains owned by the existing add-on bridge.
-      if (browser._bgalazkaAddonHostBrowser || !browser.isConnected) continue;
-      setPanelActive(browser, true, true);
-    }
-    // Smart Sleep is no longer managing these browsers. Clearing the cache
-    // prevents disabled sleep from generating background activation traffic.
-    lastDocshellActivity.clear();
-  }
-  function refreshPanelActivity(forceActive = false) {
-    const smartSleep = getPref(BGALAZKA_EXT_PREFS.SMART_SLEEP, false);
-    const root = document.getElementById("zen-app-panel-root");
-    const panelOpen =
-      !!root?.hasAttribute("open") && !root.hasAttribute("closing");
-    const activeBrowser = panelOpen ? getActiveAppBrowser() : null;
-
-    if (!smartSleep) {
-      // Toggling Smart Sleep off must immediately undo every inactive docshell.
-      if (lastDocshellActivity.size) wakeAllPanelBrowsers();
-      else if (forceActive && activeBrowser) {
-        // Also recover an active panel whose remote docshell state drifted or
-        // survived from a previous script instance without a cache entry.
-        setPanelActive(activeBrowser, true, true);
-        lastDocshellActivity.delete(activeBrowser);
-      }
-      return;
-    }
-
-    for (const browser of getAllAppBrowsers()) {
-      // Host-tab activation remains owned by the existing add-on bridge.
-      if (browser._bgalazkaAddonHostBrowser) continue;
-      setPanelActive(
-        browser,
-        browser === activeBrowser,
-        forceActive && browser === activeBrowser,
-      );
-    }
-    for (const browser of lastDocshellActivity.keys())
-      if (!browser.isConnected) lastDocshellActivity.delete(browser);
-  }
   function onAudioStarted(event) {
     event.currentTarget._bgalazkaAudioPlaying = true;
     refreshPanelAudio();
@@ -22141,7 +22088,6 @@
         );
       }
     });
-    refreshPanelActivity();
   }
   const essentialPopupHandler = (event) => {
     const popup = event.target;
@@ -22195,17 +22141,9 @@
     window.removeEventListener("command", essentialPreloadCommand, true);
     window.removeEventListener("contextmenu", essentialContextMenu, true);
   });
-  // Slow fallback only. Normal updates are event-driven; the old 500 ms loop
-  // rescanned every tab, panel browser and launcher twice per second even when
-  // the corresponding features were disabled.
   const panelStatusTimer = setInterval(() => {
     if (getPref(EXT_PREFS.CORNER_TILES, false)) syncCornerTiles();
     if (getPref(BGALAZKA_EXT_PREFS.AUDIO_INDICATOR, false)) refreshPanelAudio();
-    else if (
-      getPref(BGALAZKA_EXT_PREFS.SMART_SLEEP, false) ||
-      lastDocshellActivity.size
-    )
-      refreshPanelActivity();
   }, 2000);
   registerCleanup(() => {
     clearInterval(panelStatusTimer);
@@ -22214,14 +22152,6 @@
         controller.removeEventListener(type, refreshPanelAudio),
       );
     panelMediaListeners.clear();
-    for (const browser of lastDocshellActivity.keys()) {
-      if (browser.isConnected) {
-        try {
-          browser.docShellIsActive = true;
-        } catch (_) {}
-      }
-    }
-    lastDocshellActivity.clear();
     document
       .querySelectorAll(".bgalazka-audio-button, .bgalazka-tile-audio")
       .forEach((el) => el.remove());
@@ -22242,7 +22172,6 @@
       "onDrag",
       "refreshApp",
       "saveWidth",
-      "startResize",
     ];
     const originalMethods = new Map(
       hookNames.map((name) => [name, apps[name]]),
@@ -22287,12 +22216,6 @@
         )
           this.togglePin?.();
         refreshPanelAudio();
-        // Reassert activity after a hidden remote browser becomes visible. A
-        // second activation on the next frame avoids the blank/grey wake race
-        // seen when a process switch and docshell wake happen together.
-        refreshPanelActivity(true);
-        if (getPref(BGALAZKA_EXT_PREFS.SMART_SLEEP, false))
-          requestAnimationFrame(() => refreshPanelActivity(true));
         syncAddonHostBrowserActivity();
         setTimeout(() => {
           ensurePillDualViewButton();
@@ -22314,7 +22237,6 @@
         pulseAnimGuard(); // perf: suppress backdrop-filter for this slide (note 12)
         const res = origClose(...args);
         syncAddonHostBrowserActivity();
-        refreshPanelActivity();
         setTimeout(syncPanelPushState, 30);
         return res;
       };
@@ -22408,11 +22330,6 @@
           const progressListener = {
             onLocationChange(progress) {
               if (progress && !progress.isTopLevel) return;
-              // A top-level navigation may swap content processes. Forget the
-              // cached docshell state so Smart Sleep is re-applied to the new
-              // remote side instead of assuming the previous process state.
-              lastDocshellActivity.delete(result.browser);
-              refreshPanelActivity();
               updateWebToolbarState();
             },
             onStateChange(progress) {
@@ -22463,12 +22380,6 @@
           saveEssentialSettings(record);
         } else return origSaveWidth(width);
       };
-    // startResize itself is bound in ZentralApps' constructor and that bound
-    // function is already installed on the grabber/strip before this extension
-    // hook runs. Replacing apps.startResize here therefore cannot affect mouse
-    // resizing. The actual fix lives in the base startResize() implementation
-    // above, which now snapshots the rendered root width for every panel type.
-
     const origCloseApp = apps.closeApp?.bind(apps);
     if (origCloseApp) {
       apps.closeApp = function (appId, ...args) {
@@ -22789,23 +22700,20 @@
     registerCleanup(() => clearInterval(retryTimer));
   }
 
-  // Safe window event hooks that fire strictly AFTER tab operations finish.
-  // TabAttrModified can fire in bursts (title, icon, audio, busy state, etc.),
-  // so give it a small debounce instead of rescanning every tab immediately.
-  const tabPinnedHandler = () => requestTileSync(30);
-  const tabUnpinnedHandler = () => requestTileSync(30);
-  const tabAttrModifiedHandler = () => requestTileSync(120);
+  // Safe window event hooks that fire strictly AFTER tab operations finish
+  const tabPinnedHandler = () => requestTileSync(80);
+  const tabUnpinnedHandler = () => requestTileSync(0);
   const workspaceSwitchedHandler = () => requestTileSync(300);
   window.addEventListener("TabPinned", tabPinnedHandler);
   window.addEventListener("TabClose", tabUnpinnedHandler);
-  window.addEventListener("TabAttrModified", tabAttrModifiedHandler);
+  window.addEventListener("TabAttrModified", tabPinnedHandler);
   window.addEventListener("TabUnpinned", tabUnpinnedHandler);
   window.addEventListener("zen-workspace-switched", workspaceSwitchedHandler);
   window.addEventListener("zen-workspace-changed", workspaceSwitchedHandler);
   registerCleanup(() => {
     window.removeEventListener("TabPinned", tabPinnedHandler);
     window.removeEventListener("TabClose", tabUnpinnedHandler);
-    window.removeEventListener("TabAttrModified", tabAttrModifiedHandler);
+    window.removeEventListener("TabAttrModified", tabPinnedHandler);
     window.removeEventListener("TabUnpinned", tabUnpinnedHandler);
     window.removeEventListener(
       "zen-workspace-switched",
