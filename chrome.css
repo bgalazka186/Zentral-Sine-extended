@@ -5025,6 +5025,34 @@ panel[id*="tabgroup-editor"] {
   --bgalazka-pill-background-opacity: 90%;
 }
 
+/* ==========================================================================
+   PANEL INPUT SHIELD (JS note 26)
+   --------------------------------------------------------------------------
+   Base Zentral leaves #zen-app-panel-root and #zen-app-panel-clip transparent
+   to hit testing (pointer-events:none) and relies on the slider to opt back in.
+   This setting makes every existing panel layer an explicit hit-test target,
+   preventing pointer presses from falling through a focused/translucent panel
+   without adding an overlay that would block the web page inside the panel.
+   Insta Peek stays intentionally non-interactive. Default OFF.
+   ========================================================================== */
+:root[bgalazka-panel-input-shield="true"]
+  #zen-app-panel-root[open]:not([data-insta-peek="true"]) {
+  pointer-events: auto !important;
+}
+
+:root[bgalazka-panel-input-shield="true"]
+  #zen-app-panel-root[open]:not([data-insta-peek="true"])
+  #zen-app-panel-clip,
+:root[bgalazka-panel-input-shield="true"]
+  #zen-app-panel-root[open]:not([data-insta-peek="true"])
+  #zen-app-panel-slider,
+:root[bgalazka-panel-input-shield="true"]
+  #zen-app-panel-root[open]:not([data-insta-peek="true"])
+  #zen-app-panel-slider
+  > browser {
+  pointer-events: auto !important;
+}
+
 /* PILL CONTRAST (note 13): opt-in only. The extension must not recolor the
  * native/base Zentral pill on a fresh install, so this black/white treatment
  * is gated by "Show Mini Pill When Idle". Higher-specificity idle/hover rules
@@ -6624,4 +6652,291 @@ panel[id*="tabgroup-editor"] {
   fill: currentColor !important;
   stroke: currentColor !important;
   stroke-width: 0.5 !important;
+}
+
+/* ============================================================================
+ * EXTENSION SETTINGS: KEYBINDS + HIDE-PILL SECTION
+ * --------------------------------------------------------------------------
+ * Settings-only styling. Scoped to #zs-panel-bgalazka so it cannot affect
+ * native Zentral settings or browser chrome when the extension tab is closed.
+ * ========================================================================== */
+#zs-panel-bgalazka .zs-keybinds-group,
+#zs-panel-bgalazka .zs-hide-pill-controls-group {
+  border: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+  border-radius: 12px;
+  overflow: hidden;
+  background: color-mix(in srgb, currentColor 2%, transparent);
+}
+
+#zs-panel-bgalazka .zs-keybind-row {
+  gap: 16px;
+}
+
+#zs-panel-bgalazka .zs-keybind-input {
+  width: 168px;
+  min-width: 148px;
+  max-width: 42%;
+  height: 32px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  color: inherit;
+  font:
+    600 11.5px/1 ui-monospace,
+    "SFMono-Regular",
+    Consolas,
+    monospace;
+  text-align: center;
+  cursor: pointer;
+  outline: none;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+#zs-panel-bgalazka .zs-keybind-input:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+#zs-panel-bgalazka .zs-keybind-input:focus,
+#zs-panel-bgalazka .zs-keybind-input[data-recording="true"] {
+  border-color: color-mix(in srgb, currentColor 42%, transparent);
+  background: color-mix(in srgb, currentColor 13%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 8%, transparent);
+}
+
+#zs-panel-bgalazka .zs-keybind-input:focus::placeholder {
+  color: transparent;
+}
+
+/* ============================================================================
+ * EXTENSION SETTINGS CATEGORIES: CORE / KEYBINDS / HIDE PILL CONTROLS
+ * --------------------------------------------------------------------------
+ * The keybind and pill-visibility controls now live in sibling Settings tabs,
+ * so they can no longer rely on selectors scoped only to #zs-panel-bgalazka.
+ * Keep this entirely below the extension marker; native Zentral settings are
+ * untouched.
+ * ========================================================================== */
+#zentral-settings-modal
+  :is(
+    #zs-panel-bgalazka,
+    #zs-panel-extension-keybinds,
+    #zs-panel-extension-hide-pill
+  ) {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-right: 8px !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #3f3f46 transparent !important;
+}
+
+#zentral-settings-modal
+  :is(#zs-panel-extension-keybinds, #zs-panel-extension-hide-pill)
+  .zs-section-content {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  padding: 14px 18px 22px !important;
+  box-sizing: border-box !important;
+}
+
+#zentral-settings-modal
+  :is(#zs-panel-extension-keybinds, #zs-panel-extension-hide-pill)
+  .zs-section-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  min-height: 36px !important;
+  margin-bottom: 2px !important;
+}
+
+#zentral-settings-modal
+  :is(#zs-panel-extension-keybinds, #zs-panel-extension-hide-pill)
+  .zs-section-title {
+  margin: 0 !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  color: inherit !important;
+}
+
+#zentral-settings-modal
+  :is(#zs-panel-extension-keybinds, #zs-panel-extension-hide-pill)
+  .zs-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+  min-height: 42px !important;
+  box-sizing: border-box !important;
+}
+
+#zentral-settings-modal
+  :is(#zs-panel-extension-keybinds, #zs-panel-extension-hide-pill)
+  .zs-label-container {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 3px !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+}
+
+#zentral-settings-modal
+  :is(#zs-panel-extension-keybinds, #zs-panel-extension-hide-pill)
+  .zs-label {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+#zentral-settings-modal
+  :is(#zs-panel-extension-keybinds, #zs-panel-extension-hide-pill)
+  .zs-sublabel {
+  font-size: 11.5px !important;
+  opacity: 0.68 !important;
+  line-height: 1.35 !important;
+}
+
+#zentral-settings-modal
+  :is(#zs-panel-extension-keybinds, #zs-panel-extension-hide-pill)
+  .zs-setting-with-icon {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+
+#zentral-settings-modal
+  :is(#zs-panel-extension-keybinds, #zs-panel-extension-hide-pill)
+  .zs-icon-preview {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  border-radius: 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 18%,
+    rgba(255, 255, 255, 0.05)
+  ) !important;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--zen-primary-color, #6366f1) 45%,
+      rgba(255, 255, 255, 0.15)
+    ) !important;
+  flex-shrink: 0 !important;
+}
+
+#zentral-settings-modal
+  :is(#zs-panel-extension-keybinds, #zs-panel-extension-hide-pill)
+  .zs-icon-preview
+  svg {
+  width: 16px !important;
+  height: 16px !important;
+  pointer-events: none !important;
+}
+
+#zentral-settings-modal
+  :is(#zs-panel-extension-keybinds, #zs-panel-extension-hide-pill)
+  .zs-switch
+  input:checked
+  + .zs-slider {
+  background-color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 90%,
+    #ffffff
+  ) !important;
+}
+
+#zentral-settings-modal
+  :is(#zs-panel-extension-keybinds, #zs-panel-extension-hide-pill)
+  .zs-switch
+  input:checked
+  + .zs-slider:before {
+  background-color: #ffffff !important;
+  transform: translateX(16px) !important;
+}
+
+#zentral-settings-modal #zs-panel-extension-keybinds .zs-conditional-group {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  overflow: hidden !important;
+  max-height: 1600px !important;
+  opacity: 1 !important;
+  transition:
+    max-height 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.2s ease !important;
+}
+
+#zentral-settings-modal
+  #zs-panel-extension-keybinds
+  .zs-conditional-group[data-hidden="true"] {
+  max-height: 0 !important;
+  opacity: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+#zs-panel-extension-keybinds .zs-keybinds-group,
+#zs-panel-extension-hide-pill .zs-hide-pill-controls-group {
+  border: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+  border-radius: 12px;
+  overflow: hidden;
+  background: color-mix(in srgb, currentColor 2%, transparent);
+  padding: 0 12px;
+}
+
+#zs-panel-extension-keybinds .zs-keybind-row {
+  gap: 16px;
+}
+
+#zs-panel-extension-keybinds .zs-keybind-input {
+  width: 168px;
+  min-width: 148px;
+  max-width: 42%;
+  height: 32px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  color: inherit;
+  font:
+    600 11.5px/1 ui-monospace,
+    "SFMono-Regular",
+    Consolas,
+    monospace;
+  text-align: center;
+  cursor: pointer;
+  outline: none;
+}
+
+#zs-panel-extension-keybinds .zs-keybind-input:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+#zs-panel-extension-keybinds .zs-keybind-input:focus,
+#zs-panel-extension-keybinds .zs-keybind-input[data-recording="true"] {
+  border-color: color-mix(in srgb, currentColor 42%, transparent);
+  background: color-mix(in srgb, currentColor 13%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 8%, transparent);
+}
+
+/* Sibling extension Settings panels need their own visibility rule because
+ * they are injected beside the native panels rather than nested in Core. */
+#zentral-settings-modal .zs-extension-subpanel {
+  display: none !important;
+}
+
+#zentral-settings-modal .zs-extension-subpanel[data-active="true"] {
+  display: block !important;
 }

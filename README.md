@@ -19,6 +19,8 @@
 - **Switch UserAgent to Mobile** easy to add feature that is avalible in vivaldi web panels, useless on most sites, it shines on Instagram
 - **Basic navigation features for panels** back/forward/url bar, things like that
 - **Vertical Resize and change vertical position** making it fully able to change position would require big change in core mod
+- **Drag panel and resize in 2D** 3D when??
+- **Button pesses should now not propagate thru focused panel** important if you want to close it with ESC button
 
 ### Extra Bugfix:
 

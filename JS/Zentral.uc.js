@@ -14744,6 +14744,9 @@
  * ============================================================================================================= */
 
 (function initBgalazkaExtension() {
+  /* NOTE 26 - PANEL INPUT SHIELD: opt-in `panel_input_shield` keeps the open
+   * panel as a pointer hit-test barrier and scopes mouse Back/Forward buttons
+   * to the visible app browser. Base Zentral remains untouched/default-off. */
   if (window.BgalazkaExtensionInitialized) return;
   window.BgalazkaExtensionInitialized = true;
 
@@ -14761,6 +14764,34 @@
     OPACITY_PINNED_FOCUS: "zen.workspace.bgalazka.opacity_pinned_focus",
     OPACITY_PINNED_BLUR: "zen.workspace.bgalazka.opacity_pinned_blur",
     BLUR_INTENSITY: "zen.workspace.bgalazka.blur_intensity",
+    PANEL_INPUT_SHIELD: "zen.workspace.bgalazka.panel_input_shield",
+
+    // Extension keyboard shortcuts. The master switch defaults OFF to obey
+    // the extension's default-off contract; string defaults below are inert
+    // until the user enables keybinds. Each binding is independently editable.
+    KEYBINDS_ENABLED: "zen.workspace.bgalazka.keybinds_enabled",
+    KEYBIND_CLOSE_PANEL: "zen.workspace.bgalazka.keybind.close_panel",
+    KEYBIND_BACK: "zen.workspace.bgalazka.keybind.back",
+    KEYBIND_FORWARD: "zen.workspace.bgalazka.keybind.forward",
+    KEYBIND_RELOAD: "zen.workspace.bgalazka.keybind.reload",
+    KEYBIND_FOCUS_URL: "zen.workspace.bgalazka.keybind.focus_url",
+    KEYBIND_TOGGLE_PIN: "zen.workspace.bgalazka.keybind.toggle_pin",
+    KEYBIND_TOGGLE_EXPAND: "zen.workspace.bgalazka.keybind.toggle_expand",
+    KEYBIND_TOGGLE_DUAL_VIEW: "zen.workspace.bgalazka.keybind.toggle_dual_view",
+    KEYBIND_TOGGLE_RESIZE: "zen.workspace.bgalazka.keybind.toggle_resize",
+    KEYBIND_TOGGLE_TOOLBAR: "zen.workspace.bgalazka.keybind.toggle_toolbar",
+    KEYBIND_TOGGLE_TRANSLUCENCY:
+      "zen.workspace.bgalazka.keybind.toggle_translucency",
+    KEYBIND_TOGGLE_OPPOSITE_DOCKING:
+      "zen.workspace.bgalazka.keybind.toggle_opposite_docking",
+    KEYBIND_TOGGLE_EDGE_ATTACHED:
+      "zen.workspace.bgalazka.keybind.toggle_edge_attached",
+    KEYBIND_TOGGLE_INPUT_SHIELD:
+      "zen.workspace.bgalazka.keybind.toggle_input_shield",
+    KEYBIND_ZOOM_IN: "zen.workspace.bgalazka.keybind.zoom_in",
+    KEYBIND_ZOOM_OUT: "zen.workspace.bgalazka.keybind.zoom_out",
+    KEYBIND_ZOOM_RESET: "zen.workspace.bgalazka.keybind.zoom_reset",
+    KEYBIND_OPEN_SETTINGS: "zen.workspace.bgalazka.keybind.open_settings",
   };
 
   const ATTR_MAP = [
@@ -14792,6 +14823,11 @@
     {
       pref: EXT_PREFS.HIDE_EXPAND,
       attr: "bgalazka-hide-expand",
+      defaultVal: false,
+    },
+    {
+      pref: EXT_PREFS.PANEL_INPUT_SHIELD,
+      attr: "bgalazka-panel-input-shield",
       defaultVal: false,
     },
   ];
@@ -16727,10 +16763,159 @@
     // when the pill button is hidden, same as every other hide-toggle).
     HIDE_ALL_SIDES_RESIZE_BTN:
       "zen.workspace.bgalazka.hide_all_sides_resize_btn",
+    // Opt-in input barrier for open app panels. CSS makes the panel root/clip
+    // explicit pointer hit-test targets so transparent/focused panels cannot
+    // leak ordinary clicks to the page behind them. The JS half below also
+    // traps mouse Back/Forward buttons (3/4) over the panel and routes them
+    // to the visible app browser instead of the main selected browser.
+    PANEL_INPUT_SHIELD: "zen.workspace.bgalazka.panel_input_shield",
+    // Keep the settings-side preference table complete. The previous build
+    // omitted these keys here even though EXT_PREFS defined them earlier,
+    // which made the master keybind toggle write to an undefined pref and
+    // appear to reset as soon as Settings resynchronized.
+    KEYBINDS_ENABLED: "zen.workspace.bgalazka.keybinds_enabled",
+    KEYBIND_CLOSE_PANEL: "zen.workspace.bgalazka.keybind.close_panel",
+    KEYBIND_BACK: "zen.workspace.bgalazka.keybind.back",
+    KEYBIND_FORWARD: "zen.workspace.bgalazka.keybind.forward",
+    KEYBIND_RELOAD: "zen.workspace.bgalazka.keybind.reload",
+    KEYBIND_FOCUS_URL: "zen.workspace.bgalazka.keybind.focus_url",
+    KEYBIND_TOGGLE_PIN: "zen.workspace.bgalazka.keybind.toggle_pin",
+    KEYBIND_TOGGLE_EXPAND: "zen.workspace.bgalazka.keybind.toggle_expand",
+    KEYBIND_TOGGLE_DUAL_VIEW: "zen.workspace.bgalazka.keybind.toggle_dual_view",
+    KEYBIND_TOGGLE_RESIZE: "zen.workspace.bgalazka.keybind.toggle_resize",
+    KEYBIND_TOGGLE_TOOLBAR: "zen.workspace.bgalazka.keybind.toggle_toolbar",
+    KEYBIND_TOGGLE_TRANSLUCENCY:
+      "zen.workspace.bgalazka.keybind.toggle_translucency",
+    KEYBIND_TOGGLE_OPPOSITE_DOCKING:
+      "zen.workspace.bgalazka.keybind.toggle_opposite_docking",
+    KEYBIND_TOGGLE_EDGE_ATTACHED:
+      "zen.workspace.bgalazka.keybind.toggle_edge_attached",
+    KEYBIND_TOGGLE_INPUT_SHIELD:
+      "zen.workspace.bgalazka.keybind.toggle_input_shield",
+    KEYBIND_ZOOM_IN: "zen.workspace.bgalazka.keybind.zoom_in",
+    KEYBIND_ZOOM_OUT: "zen.workspace.bgalazka.keybind.zoom_out",
+    KEYBIND_ZOOM_RESET: "zen.workspace.bgalazka.keybind.zoom_reset",
+    KEYBIND_OPEN_SETTINGS: "zen.workspace.bgalazka.keybind.open_settings",
   };
   if (typeof EXT_PREFS !== "undefined") {
     Object.assign(EXT_PREFS, BGALAZKA_EXT_PREFS);
   }
+
+  // Keybinds intentionally depend on the panel input shield. Without it,
+  // browser-level shortcuts/buttons can still escape the focused app panel
+  // and act on the main tab behind it. This is one-way: enabling keybinds
+  // turns the shield on, but disabling keybinds never turns the shield off.
+  function ensureInputShieldForKeybinds() {
+    if (!getPref(BGALAZKA_EXT_PREFS.KEYBINDS_ENABLED, false)) return;
+    if (!getPref(BGALAZKA_EXT_PREFS.PANEL_INPUT_SHIELD, false)) {
+      setPref(BGALAZKA_EXT_PREFS.PANEL_INPUT_SHIELD, true);
+    }
+    document.documentElement.setAttribute(
+      "bgalazka-panel-input-shield",
+      "true",
+    );
+  }
+  ensureInputShieldForKeybinds();
+
+  /* ==========================================================================
+   * PANEL INPUT SHIELD
+   * -----------------------------------------------------------------------
+   * CSS is the ordinary click-through barrier. Gecko's extra mouse buttons
+   * (button 3/4 = Back/Forward) are different: they are chrome-level browser
+   * navigation inputs, and an app <browser> is not gBrowser.selectedBrowser.
+   * Without interception, pressing them over the focused app panel can act on
+   * the main tab behind it. This opt-in handler consumes only buttons 3/4 and
+   * routes one navigation action to the currently visible app browser.
+   * LMB/MMB/RMB and normal page controls remain untouched.
+   * ========================================================================== */
+  const PANEL_INPUT_SHIELD_EVENTS = [
+    "pointerdown",
+    "pointerup",
+    "mousedown",
+    "mouseup",
+    "auxclick",
+  ];
+
+  function getVisiblePanelBrowser() {
+    const panel = document.getElementById("zen-app-panel-slider");
+    if (!panel) return null;
+    return (
+      Array.from(panel.querySelectorAll("browser")).find((browser) => {
+        if (!browser.isConnected) return false;
+        if (browser.hidden || browser.getAttribute("hidden") === "true")
+          return false;
+        return browser.style?.display !== "none";
+      }) || null
+    );
+  }
+
+  function navigateVisiblePanelBrowser(button) {
+    const browser = getVisiblePanelBrowser();
+    if (!browser) return;
+    try {
+      if (button === 3) {
+        const canGoBack =
+          typeof browser.canGoBack === "boolean"
+            ? browser.canGoBack
+            : browser.webNavigation?.canGoBack;
+        if (canGoBack === false) return;
+        if (typeof browser.goBack === "function") browser.goBack();
+        else browser.webNavigation?.goBack?.();
+      } else if (button === 4) {
+        const canGoForward =
+          typeof browser.canGoForward === "boolean"
+            ? browser.canGoForward
+            : browser.webNavigation?.canGoForward;
+        if (canGoForward === false) return;
+        if (typeof browser.goForward === "function") browser.goForward();
+        else browser.webNavigation?.goForward?.();
+      }
+    } catch (e) {
+      console.warn(
+        "[BgalazkaExtension] Panel input shield navigation failed:",
+        e,
+      );
+    }
+  }
+
+  let panelInputShieldLastNav = { button: -1, time: 0 };
+  const panelInputShieldHandler = (e) => {
+    if (!getPref(BGALAZKA_EXT_PREFS.PANEL_INPUT_SHIELD, false)) return;
+    if (e.button !== 3 && e.button !== 4) return;
+
+    const root = document.getElementById("zen-app-panel-root");
+    if (!root?.hasAttribute("open") || root.dataset.instaPeek === "true")
+      return;
+
+    const path = e.composedPath ? e.composedPath() : [];
+    if (!path.includes(root)) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    // pointerup + mouseup + auxclick can describe the same physical press.
+    // Navigate on mouseup only, with a tiny de-duplication guard.
+    if (e.type === "mouseup") {
+      const now = Date.now();
+      if (
+        panelInputShieldLastNav.button !== e.button ||
+        now - panelInputShieldLastNav.time > 220
+      ) {
+        panelInputShieldLastNav = { button: e.button, time: now };
+        navigateVisiblePanelBrowser(e.button);
+      }
+    }
+  };
+
+  PANEL_INPUT_SHIELD_EVENTS.forEach((type) =>
+    window.addEventListener(type, panelInputShieldHandler, true),
+  );
+  registerCleanup(() => {
+    PANEL_INPUT_SHIELD_EVENTS.forEach((type) =>
+      window.removeEventListener(type, panelInputShieldHandler, true),
+    );
+  });
 
   function parseSVG(markup) {
     try {
@@ -17442,6 +17627,341 @@
     registerCleanup(() => clearInterval(webToolbarTimer));
   }
 
+  /* ==========================================================================
+   * EXTENSION KEYBINDS
+   * -----------------------------------------------------------------------
+   * These shortcuts are deliberately opt-in. They are only considered while
+   * the floating app panel is open AND the keyboard event belongs to that
+   * panel/browser, so enabling them does not turn Zentral into a browser-wide
+   * hotkey layer. Settings/text fields keep their normal typing behavior.
+   *
+   * Bindings are stored as readable canonical strings (e.g. "Escape",
+   * "Ctrl+Shift+P", "Alt+ArrowLeft"). The recorder below uses the exact same
+   * normalizer as the runtime matcher, so what Settings shows is what matches.
+   * ========================================================================== */
+  const EXT_KEYBIND_DEFAULTS = Object.freeze({
+    CLOSE_PANEL: "Escape",
+    BACK: "Alt+ArrowLeft",
+    FORWARD: "Alt+ArrowRight",
+    RELOAD: "Ctrl+R",
+    FOCUS_URL: "Ctrl+L",
+    TOGGLE_PIN: "Ctrl+Shift+P",
+    TOGGLE_EXPAND: "Ctrl+Shift+E",
+    TOGGLE_DUAL_VIEW: "Ctrl+Shift+D",
+    TOGGLE_RESIZE: "Ctrl+Shift+R",
+    TOGGLE_TOOLBAR: "Ctrl+Shift+T",
+    TOGGLE_TRANSLUCENCY: "",
+    TOGGLE_OPPOSITE_DOCKING: "",
+    TOGGLE_EDGE_ATTACHED: "",
+    TOGGLE_INPUT_SHIELD: "",
+    ZOOM_IN: "Ctrl+Shift+Plus",
+    ZOOM_OUT: "Ctrl+Minus",
+    ZOOM_RESET: "Ctrl+0",
+    OPEN_SETTINGS: "Ctrl+Shift+Comma",
+  });
+
+  const EXT_KEYBIND_ACTIONS = Object.freeze([
+    { key: "CLOSE_PANEL", pref: BGALAZKA_EXT_PREFS.KEYBIND_CLOSE_PANEL },
+    { key: "BACK", pref: BGALAZKA_EXT_PREFS.KEYBIND_BACK },
+    { key: "FORWARD", pref: BGALAZKA_EXT_PREFS.KEYBIND_FORWARD },
+    { key: "RELOAD", pref: BGALAZKA_EXT_PREFS.KEYBIND_RELOAD },
+    { key: "FOCUS_URL", pref: BGALAZKA_EXT_PREFS.KEYBIND_FOCUS_URL },
+    { key: "TOGGLE_PIN", pref: BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_PIN },
+    { key: "TOGGLE_EXPAND", pref: BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_EXPAND },
+    {
+      key: "TOGGLE_DUAL_VIEW",
+      pref: BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_DUAL_VIEW,
+    },
+    { key: "TOGGLE_RESIZE", pref: BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_RESIZE },
+    { key: "TOGGLE_TOOLBAR", pref: BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_TOOLBAR },
+    {
+      key: "TOGGLE_TRANSLUCENCY",
+      pref: BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_TRANSLUCENCY,
+    },
+    {
+      key: "TOGGLE_OPPOSITE_DOCKING",
+      pref: BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_OPPOSITE_DOCKING,
+    },
+    {
+      key: "TOGGLE_EDGE_ATTACHED",
+      pref: BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_EDGE_ATTACHED,
+    },
+    {
+      key: "TOGGLE_INPUT_SHIELD",
+      pref: BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_INPUT_SHIELD,
+    },
+    { key: "ZOOM_IN", pref: BGALAZKA_EXT_PREFS.KEYBIND_ZOOM_IN },
+    { key: "ZOOM_OUT", pref: BGALAZKA_EXT_PREFS.KEYBIND_ZOOM_OUT },
+    { key: "ZOOM_RESET", pref: BGALAZKA_EXT_PREFS.KEYBIND_ZOOM_RESET },
+    { key: "OPEN_SETTINGS", pref: BGALAZKA_EXT_PREFS.KEYBIND_OPEN_SETTINGS },
+  ]);
+
+  function normalizeKeybindKey(key) {
+    if (!key) return "";
+    if (key === " ") return "Space";
+    if (key === "+") return "Plus";
+    if (key === "-") return "Minus";
+    if (key === "," || key === "<") return "Comma";
+    if (key === "." || key === ">") return "Period";
+    if (key === "Esc") return "Escape";
+    if (key === "Left") return "ArrowLeft";
+    if (key === "Right") return "ArrowRight";
+    if (key === "Up") return "ArrowUp";
+    if (key === "Down") return "ArrowDown";
+    if (key.length === 1 && /[a-z]/i.test(key)) return key.toUpperCase();
+    return key;
+  }
+
+  function keybindFromEvent(e) {
+    const raw = normalizeKeybindKey(e.key);
+    if (!raw || ["Control", "Shift", "Alt", "Meta"].includes(raw)) return "";
+    const parts = [];
+    if (e.ctrlKey) parts.push("Ctrl");
+    if (e.altKey) parts.push("Alt");
+    if (e.shiftKey) parts.push("Shift");
+    if (e.metaKey) parts.push("Meta");
+    parts.push(raw);
+    return parts.join("+");
+  }
+
+  function isEditableKeybindTarget(target) {
+    if (!(target instanceof Element)) return false;
+    return Boolean(
+      target.closest(
+        'input, textarea, select, [contenteditable="true"], [contenteditable=""]',
+      ),
+    );
+  }
+
+  function panelOwnsKeyboardEvent(e) {
+    const root = document.getElementById("zen-app-panel-root");
+    if (!root?.hasAttribute("open") || root.dataset.instaPeek === "true")
+      return false;
+    const path = e.composedPath?.() || [];
+    if (path.includes(root)) return true;
+    const active = document.activeElement;
+    return Boolean(active && (active === root || root.contains(active)));
+  }
+
+  function toggleExtensionBooleanPref(pref, rootAttr = null) {
+    const next = !getPref(pref, false);
+    setPref(pref, next);
+    if (rootAttr) {
+      document.documentElement.setAttribute(rootAttr, next ? "true" : "false");
+    }
+    return next;
+  }
+
+  function stepActivePanelZoom(delta) {
+    const browser = getActiveAppBrowser?.() || getVisiblePanelBrowser();
+    if (!browser) return false;
+    try {
+      const cur = ZoomManager.getZoomForBrowser(browser);
+      const next = delta === 0 ? 1 : Math.max(0.3, Math.min(3, cur + delta));
+      ZoomManager.setZoomForBrowser(browser, next);
+      updateWebToolbarState?.();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function runExtensionKeybindAction(actionKey) {
+    const apps = window.Zentral?.Apps;
+    const browser = getActiveAppBrowser?.() || getVisiblePanelBrowser();
+    switch (actionKey) {
+      case "CLOSE_PANEL":
+        apps?.closePanel?.();
+        return true;
+      case "BACK":
+        if (!browser) return false;
+        try {
+          if (browser.canGoBack) browser.goBack();
+          return true;
+        } catch (_) {
+          return false;
+        }
+      case "FORWARD":
+        if (!browser) return false;
+        try {
+          if (browser.canGoForward) browser.goForward();
+          return true;
+        } catch (_) {
+          return false;
+        }
+      case "RELOAD":
+        try {
+          browser?.reload?.();
+          return Boolean(browser);
+        } catch (_) {
+          return false;
+        }
+      case "FOCUS_URL": {
+        if (!getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, false))
+          return false;
+        if (!getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_URLBAR, false))
+          return false;
+        ensureWebToolbar();
+        const input = document.querySelector(
+          "#zen-app-panel-toolbar .zen-toolbar-urlbar",
+        );
+        if (!input) return false;
+        input.focus();
+        input.select?.();
+        return true;
+      }
+      case "TOGGLE_PIN":
+        apps?.togglePin?.();
+        return Boolean(apps?.togglePin);
+      case "TOGGLE_EXPAND":
+        apps?.toggleExpand?.();
+        return Boolean(apps?.toggleExpand);
+      case "TOGGLE_DUAL_VIEW":
+        toggleExtensionBooleanPref(
+          BGALAZKA_EXT_PREFS.PUSH_PAGE,
+          "bgalazka-push-page",
+        );
+        updatePanelPushState();
+        ensurePillDualViewButton();
+        return true;
+      case "TOGGLE_RESIZE":
+        toggleExtensionBooleanPref(
+          BGALAZKA_EXT_PREFS.ALL_SIDES_RESIZE,
+          "bgalazka-all-sides-resize",
+        );
+        ensurePillAllSidesResizeButton();
+        return true;
+      case "TOGGLE_TOOLBAR": {
+        const enabled = toggleExtensionBooleanPref(
+          BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED,
+          "bgalazka-webtoolbar",
+        );
+        if (enabled) ensureWebToolbar();
+        updateWebToolbarState();
+        return true;
+      }
+      case "TOGGLE_TRANSLUCENCY":
+        toggleExtensionBooleanPref(
+          BGALAZKA_EXT_PREFS.TRANSLUCENCY,
+          "bgalazka-translucency",
+        );
+        updateCSSVars();
+        return true;
+      case "TOGGLE_OPPOSITE_DOCKING":
+        toggleExtensionBooleanPref(
+          BGALAZKA_EXT_PREFS.OPPOSITE_DOCKING,
+          "bgalazka-opposite-docking",
+        );
+        apps?.positionPanel?.();
+        return true;
+      case "TOGGLE_EDGE_ATTACHED":
+        toggleExtensionBooleanPref(
+          BGALAZKA_EXT_PREFS.EDGE_ATTACHED_PANELS,
+          "bgalazka-edge-attached-panels",
+        );
+        applyVerticalResizeExtras(
+          document.getElementById("zen-app-panel-root"),
+        );
+        applyHorizontalPanelOffset(
+          document.getElementById("zen-app-panel-root"),
+        );
+        return true;
+      case "TOGGLE_INPUT_SHIELD":
+        toggleExtensionBooleanPref(
+          BGALAZKA_EXT_PREFS.PANEL_INPUT_SHIELD,
+          "bgalazka-panel-input-shield",
+        );
+        return true;
+      case "ZOOM_IN":
+        return stepActivePanelZoom(0.1);
+      case "ZOOM_OUT":
+        return stepActivePanelZoom(-0.1);
+      case "ZOOM_RESET":
+        return stepActivePanelZoom(0);
+      case "OPEN_SETTINGS":
+        window.Zentral?.Settings?.open?.();
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  const extensionKeybindHandler = (e) => {
+    if (e.defaultPrevented || e.repeat) return;
+    if (!getPref(BGALAZKA_EXT_PREFS.KEYBINDS_ENABLED, false)) return;
+    if (!panelOwnsKeyboardEvent(e)) return;
+    if (isEditableKeybindTarget(e.target)) return;
+
+    const pressed = keybindFromEvent(e);
+    if (!pressed) return;
+    const match = EXT_KEYBIND_ACTIONS.find(({ key, pref }) => {
+      const configured = String(getPref(pref, EXT_KEYBIND_DEFAULTS[key]) || "");
+      return configured && configured === pressed;
+    });
+    if (!match) return;
+
+    // Consume the key before Firefox/Zen can also apply its browser-wide
+    // shortcut to the selected main tab behind the focused app panel.
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    runExtensionKeybindAction(match.key);
+  };
+  window.addEventListener("keydown", extensionKeybindHandler, true);
+  registerCleanup(() =>
+    window.removeEventListener("keydown", extensionKeybindHandler, true),
+  );
+
+  function createKeybindRow(labelText, sublabelText, prefKey, defaultVal) {
+    const row = document.createElement("div");
+    row.className = "zs-row zs-keybind-row";
+
+    const labelContainer = document.createElement("div");
+    labelContainer.className = "zs-label-container";
+    const label = document.createElement("span");
+    label.className = "zs-label";
+    label.textContent = labelText;
+    const sublabel = document.createElement("span");
+    sublabel.className = "zs-sublabel";
+    sublabel.textContent = sublabelText;
+    labelContainer.append(label, sublabel);
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "zs-keybind-input";
+    input.readOnly = true;
+    input.spellcheck = false;
+    input.value = getPref(prefKey, defaultVal) || "";
+    input.placeholder = "Unassigned";
+    input.title = "Click, then press a shortcut. Backspace/Delete clears it.";
+
+    input.addEventListener("focus", () => {
+      input.dataset.recording = "true";
+      input.select();
+    });
+    input.addEventListener("blur", () =>
+      input.removeAttribute("data-recording"),
+    );
+    input.addEventListener("keydown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      if (e.key === "Backspace" || e.key === "Delete") {
+        input.value = "";
+        setPref(prefKey, "");
+        return;
+      }
+      const value = keybindFromEvent(e);
+      if (!value) return;
+      input.value = value;
+      setPref(prefKey, value);
+      input.blur();
+    });
+
+    row.append(labelContainer, input);
+    return { row, input };
+  }
+
   function createToggleRow(
     labelText,
     sublabelText,
@@ -17823,7 +18343,7 @@
 
       const title = document.createElement("h3");
       title.className = "zs-section-title";
-      title.textContent = "Bgalazka's extension";
+      title.textContent = "Extension Core";
 
       const badge = document.createElement("span");
       badge.className = "zs-version-badge";
@@ -17924,6 +18444,16 @@
         getPref(BGALAZKA_EXT_PREFS.TRANSLUCENCY, false) ? "false" : "true",
       );
       content.appendChild(slidersGroup);
+
+      const tPanelInputShield = createToggleRow(
+        "Prevent Panel Input Pass-Through",
+        "Keep clicks inside an open panel and route mouse Back/Forward buttons to the focused panel instead of the webpage behind it",
+        BGALAZKA_EXT_PREFS.PANEL_INPUT_SHIELD,
+        "bgalazka-panel-input-shield",
+        false,
+        PREF_ICONS.ISOLATION,
+      );
+      content.appendChild(tPanelInputShield.row);
 
       // ====================================================================
       // 2. Workspace Layout & Dual-View
@@ -18146,13 +18676,6 @@
         peekColorRow.row,
         peekOpacitySlider.row,
         pillBackgroundOpacitySlider.row,
-        tDualView.row,
-        tHideAllSidesResizeBtn.row,
-        tPin.row,
-        t5.row,
-        tGrabber.row,
-        tRefresh.row,
-        tClose.row,
       );
       pillSubgroup.setAttribute(
         "data-hidden",
@@ -18161,7 +18684,33 @@
       content.appendChild(pillSubgroup);
 
       // ====================================================================
-      // 3b. Web Panel Navigation Toolbar
+      // 3b. Extension — Hide Pill Controls
+      // ====================================================================
+      const hidePillHeader = document.createElement("div");
+      hidePillHeader.className = "zs-section-header";
+      hidePillHeader.style.marginTop = "20px";
+      const hidePillTitle = document.createElement("h3");
+      hidePillTitle.className = "zs-section-title";
+      hidePillTitle.textContent = "Extension — Hide Pill Controls";
+      hidePillHeader.appendChild(hidePillTitle);
+      content.appendChild(hidePillHeader);
+
+      const hidePillGroup = document.createElement("div");
+      hidePillGroup.className =
+        "zs-conditional-group zs-hide-pill-controls-group";
+      hidePillGroup.append(
+        tDualView.row,
+        tHideAllSidesResizeBtn.row,
+        tPin.row,
+        t5.row,
+        tGrabber.row,
+        tRefresh.row,
+        tClose.row,
+      );
+      content.appendChild(hidePillGroup);
+
+      // ====================================================================
+      // 4. Web Panel Navigation Toolbar
       // ====================================================================
       const toolbarHeader = document.createElement("div");
       toolbarHeader.className = "zs-section-header";
@@ -18290,7 +18839,164 @@
       content.appendChild(webToolbarSubgroup);
 
       // ====================================================================
-      // 4. Tab Corner App Tiles
+      // 5. Extension Keybinds
+      // ====================================================================
+      const keybindHeader = document.createElement("div");
+      keybindHeader.className = "zs-section-header";
+      keybindHeader.style.marginTop = "20px";
+      const keybindTitle = document.createElement("h3");
+      keybindTitle.className = "zs-section-title";
+      keybindTitle.textContent = "Extension Keybinds";
+      keybindHeader.appendChild(keybindTitle);
+      content.appendChild(keybindHeader);
+
+      const keybindSubgroup = document.createElement("div");
+      keybindSubgroup.className = "zs-conditional-group zs-keybinds-group";
+      const tKeybindsEnabled = createToggleRow(
+        "Enable Extension Keybinds",
+        "Shortcuts only apply while the floating app panel is open and focused; click any binding below and press a new combination",
+        BGALAZKA_EXT_PREFS.KEYBINDS_ENABLED,
+        null,
+        false,
+        PREF_ICONS.TOOLBAR,
+        (enabled) => {
+          keybindSubgroup.setAttribute(
+            "data-hidden",
+            enabled ? "false" : "true",
+          );
+          if (enabled) {
+            setPref(BGALAZKA_EXT_PREFS.PANEL_INPUT_SHIELD, true);
+            document.documentElement.setAttribute(
+              "bgalazka-panel-input-shield",
+              "true",
+            );
+            tPanelInputShield.input.checked = true;
+          }
+        },
+      );
+      content.appendChild(tKeybindsEnabled.row);
+
+      const keybindRows = [
+        [
+          "Close Panel",
+          "Close the focused app panel",
+          BGALAZKA_EXT_PREFS.KEYBIND_CLOSE_PANEL,
+          EXT_KEYBIND_DEFAULTS.CLOSE_PANEL,
+        ],
+        [
+          "Back",
+          "Navigate the focused panel back",
+          BGALAZKA_EXT_PREFS.KEYBIND_BACK,
+          EXT_KEYBIND_DEFAULTS.BACK,
+        ],
+        [
+          "Forward",
+          "Navigate the focused panel forward",
+          BGALAZKA_EXT_PREFS.KEYBIND_FORWARD,
+          EXT_KEYBIND_DEFAULTS.FORWARD,
+        ],
+        [
+          "Reload",
+          "Reload the focused app page",
+          BGALAZKA_EXT_PREFS.KEYBIND_RELOAD,
+          EXT_KEYBIND_DEFAULTS.RELOAD,
+        ],
+        [
+          "Focus Panel URL Bar",
+          "Focus/select the extension URL bar when that toolbar and URL bar are enabled",
+          BGALAZKA_EXT_PREFS.KEYBIND_FOCUS_URL,
+          EXT_KEYBIND_DEFAULTS.FOCUS_URL,
+        ],
+        [
+          "Toggle Pin",
+          "Pin or unpin the focused panel",
+          BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_PIN,
+          EXT_KEYBIND_DEFAULTS.TOGGLE_PIN,
+        ],
+        [
+          "Expand / Restore",
+          "Toggle full-width panel expansion",
+          BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_EXPAND,
+          EXT_KEYBIND_DEFAULTS.TOGGLE_EXPAND,
+        ],
+        [
+          "Toggle Dual-View",
+          "Turn Dual-View page push on/off",
+          BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_DUAL_VIEW,
+          EXT_KEYBIND_DEFAULTS.TOGGLE_DUAL_VIEW,
+        ],
+        [
+          "Toggle All-Sides Resize",
+          "Enable/disable extension resize handles",
+          BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_RESIZE,
+          EXT_KEYBIND_DEFAULTS.TOGGLE_RESIZE,
+        ],
+        [
+          "Toggle Navigation Toolbar",
+          "Show/hide the extension web navigation toolbar",
+          BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_TOOLBAR,
+          EXT_KEYBIND_DEFAULTS.TOGGLE_TOOLBAR,
+        ],
+        [
+          "Toggle Panel Translucency",
+          "Enable/disable extension panel translucency",
+          BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_TRANSLUCENCY,
+          EXT_KEYBIND_DEFAULTS.TOGGLE_TRANSLUCENCY,
+        ],
+        [
+          "Toggle Opposite-Side Docking",
+          "Switch extension opposite-side docking on/off",
+          BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_OPPOSITE_DOCKING,
+          EXT_KEYBIND_DEFAULTS.TOGGLE_OPPOSITE_DOCKING,
+        ],
+        [
+          "Toggle Edge-Attached Panels",
+          "Attach/detach the panel from its current window edge",
+          BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_EDGE_ATTACHED,
+          EXT_KEYBIND_DEFAULTS.TOGGLE_EDGE_ATTACHED,
+        ],
+        [
+          "Toggle Input Pass-Through Shield",
+          "Enable/disable the extension panel input barrier",
+          BGALAZKA_EXT_PREFS.KEYBIND_TOGGLE_INPUT_SHIELD,
+          EXT_KEYBIND_DEFAULTS.TOGGLE_INPUT_SHIELD,
+        ],
+        [
+          "Zoom In",
+          "Increase zoom of the focused app page",
+          BGALAZKA_EXT_PREFS.KEYBIND_ZOOM_IN,
+          EXT_KEYBIND_DEFAULTS.ZOOM_IN,
+        ],
+        [
+          "Zoom Out",
+          "Decrease zoom of the focused app page",
+          BGALAZKA_EXT_PREFS.KEYBIND_ZOOM_OUT,
+          EXT_KEYBIND_DEFAULTS.ZOOM_OUT,
+        ],
+        [
+          "Reset Zoom",
+          "Reset focused app page zoom to 100%",
+          BGALAZKA_EXT_PREFS.KEYBIND_ZOOM_RESET,
+          EXT_KEYBIND_DEFAULTS.ZOOM_RESET,
+        ],
+        [
+          "Open Zentral Settings",
+          "Open Zentral Settings from the focused app panel",
+          BGALAZKA_EXT_PREFS.KEYBIND_OPEN_SETTINGS,
+          EXT_KEYBIND_DEFAULTS.OPEN_SETTINGS,
+        ],
+      ].map(([label, description, pref, def]) =>
+        createKeybindRow(label, description, pref, def),
+      );
+      keybindRows.forEach(({ row }) => keybindSubgroup.appendChild(row));
+      keybindSubgroup.setAttribute(
+        "data-hidden",
+        getPref(BGALAZKA_EXT_PREFS.KEYBINDS_ENABLED, false) ? "false" : "true",
+      );
+      content.appendChild(keybindSubgroup);
+
+      // ====================================================================
+      // 6. Tab Corner App Tiles
       // ====================================================================
       const cornerHeader = document.createElement("div");
       cornerHeader.className = "zs-section-header";
@@ -18357,6 +19063,11 @@
           def: false,
           onSync: (v) =>
             slidersGroup.setAttribute("data-hidden", v ? "false" : "true"),
+        },
+        {
+          input: tPanelInputShield.input,
+          pref: BGALAZKA_EXT_PREFS.PANEL_INPUT_SHIELD,
+          def: false,
         },
         {
           input: t2.input,
@@ -18560,6 +19271,28 @@
           def: false,
         },
         {
+          input: tKeybindsEnabled.input,
+          pref: BGALAZKA_EXT_PREFS.KEYBINDS_ENABLED,
+          def: false,
+          onSync: (v) => {
+            keybindSubgroup.setAttribute("data-hidden", v ? "false" : "true");
+            if (v) {
+              setPref(BGALAZKA_EXT_PREFS.PANEL_INPUT_SHIELD, true);
+              document.documentElement.setAttribute(
+                "bgalazka-panel-input-shield",
+                "true",
+              );
+              tPanelInputShield.input.checked = true;
+            }
+          },
+        },
+        ...keybindRows.map(({ input }, index) => ({
+          input,
+          pref: EXT_KEYBIND_ACTIONS[index].pref,
+          def: EXT_KEYBIND_DEFAULTS[EXT_KEYBIND_ACTIONS[index].key],
+          isSelect: true,
+        })),
+        {
           input: t4.input,
           pref: BGALAZKA_EXT_PREFS.CORNER_TILES,
           def: false,
@@ -18579,8 +19312,44 @@
         },
       );
 
+      // ------------------------------------------------------------------
+      // SETTINGS CATEGORY SPLIT
+      // ------------------------------------------------------------------
+      // These are real sibling Settings categories/tabs, not headings inside
+      // Extension Core. We build them from the same controls so persistence
+      // and live synchronization remain centralized in panel._toggles.
+      const makeExtensionSettingsPanel = (id, dataPanel) => {
+        const subPanel = document.createElement("div");
+        subPanel.id = id;
+        subPanel.className = "zs-tab-panel zs-extension-subpanel";
+        subPanel.setAttribute("data-panel", dataPanel);
+        const subContent = document.createElement("div");
+        subContent.className = "zs-section-content";
+        subContent.style.paddingTop = "14px";
+        subPanel.appendChild(subContent);
+        return { subPanel, subContent };
+      };
+
+      const hideCategory = makeExtensionSettingsPanel(
+        "zs-panel-extension-hide-pill",
+        "extension-hide-pill",
+      );
+      hidePillHeader.style.marginTop = "8px";
+      hideCategory.subContent.append(hidePillHeader, hidePillGroup);
+
+      const keybindCategory = makeExtensionSettingsPanel(
+        "zs-panel-extension-keybinds",
+        "extension-keybinds",
+      );
+      keybindHeader.style.marginTop = "8px";
+      keybindCategory.subContent.append(
+        keybindHeader,
+        tKeybindsEnabled.row,
+        keybindSubgroup,
+      );
+
       panel.appendChild(content);
-      body.appendChild(panel);
+      body.append(panel, hideCategory.subPanel, keybindCategory.subPanel);
     } else if (Array.isArray(panel._toggles)) {
       panel._toggles.forEach(({ input, pref, def, onSync, isSelect }) => {
         if (isSelect) {
@@ -18594,37 +19363,76 @@
       });
     }
 
-    if (!tabBtn) {
-      tabBtn = document.createElement("button");
-      tabBtn.id = "zs-tab-btn-bgalazka";
-      tabBtn.className = "zs-tab-btn";
-      tabBtn.setAttribute("data-tab", "bgalazka");
-      tabBtn.textContent = "Bgalazka's extension";
-      tabBar.appendChild(tabBtn);
+    const extensionCategories = [
+      {
+        buttonId: "zs-tab-btn-bgalazka",
+        panelId: "zs-panel-bgalazka",
+        dataTab: "bgalazka",
+        label: "Extension Core",
+      },
+      {
+        buttonId: "zs-tab-btn-extension-keybinds",
+        panelId: "zs-panel-extension-keybinds",
+        dataTab: "extension-keybinds",
+        label: "Extension Keybinds",
+      },
+      {
+        buttonId: "zs-tab-btn-extension-hide-pill",
+        panelId: "zs-panel-extension-hide-pill",
+        dataTab: "extension-hide-pill",
+        label: "Extension — Hide Pill Controls",
+      },
+    ];
 
-      tabBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        modal
-          .querySelectorAll(".zs-tab-bar .zs-tab-btn")
-          .forEach((b) => b.removeAttribute("data-active"));
-        modal
-          .querySelectorAll(".zs-body .zs-tab-panel")
-          .forEach((p) => p.removeAttribute("data-active"));
-        tabBtn.setAttribute("data-active", "true");
-        panel.setAttribute("data-active", "true");
-      });
+    const extensionButtonIds = new Set(
+      extensionCategories.map(({ buttonId }) => buttonId),
+    );
 
-      const tabBarClickHandler = (e) => {
+    extensionCategories.forEach(({ buttonId, panelId, dataTab, label }) => {
+      const targetPanel = modal.querySelector(`#${panelId}`);
+      if (!targetPanel) return;
+      let button = modal.querySelector(`#${buttonId}`);
+      if (!button) {
+        button = document.createElement("button");
+        button.id = buttonId;
+        button.className = "zs-tab-btn";
+        button.setAttribute("data-tab", dataTab);
+        tabBar.appendChild(button);
+      }
+      button.textContent = label;
+      if (!button.dataset.bgalazkaBound) {
+        button.dataset.bgalazkaBound = "true";
+        button.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          modal
+            .querySelectorAll(".zs-tab-bar .zs-tab-btn")
+            .forEach((b) => b.removeAttribute("data-active"));
+          modal
+            .querySelectorAll(".zs-body .zs-tab-panel")
+            .forEach((p) => p.removeAttribute("data-active"));
+          button.setAttribute("data-active", "true");
+          targetPanel.setAttribute("data-active", "true");
+        });
+      }
+    });
+
+    // Native Zentral tab buttons do not know about extension-injected panels,
+    // so explicitly deactivate all three extension categories when a native
+    // category is chosen. One capture listener is enough for the whole bar.
+    if (!tabBar.dataset.bgalazkaCategoryGuard) {
+      tabBar.dataset.bgalazkaCategoryGuard = "true";
+      const categoryGuard = (e) => {
         const clicked = e.target.closest(".zs-tab-btn");
-        if (clicked && clicked !== tabBtn) {
-          tabBtn.removeAttribute("data-active");
-          panel.removeAttribute("data-active");
-        }
+        if (!clicked || extensionButtonIds.has(clicked.id)) return;
+        extensionCategories.forEach(({ buttonId, panelId }) => {
+          modal.querySelector(`#${buttonId}`)?.removeAttribute("data-active");
+          modal.querySelector(`#${panelId}`)?.removeAttribute("data-active");
+        });
       };
-      tabBar.addEventListener("click", tabBarClickHandler, true);
+      tabBar.addEventListener("click", categoryGuard, true);
       registerCleanup(() =>
-        tabBar.removeEventListener("click", tabBarClickHandler, true),
+        tabBar.removeEventListener("click", categoryGuard, true),
       );
     }
   }
