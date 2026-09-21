@@ -14741,6 +14741,17 @@
  *     moving only the pill relative to its panel. The deadzone is subtracted from the first movement so the
  *     pill does not jump. All-sides resize separately gates the outer/inner/top/bottom/corner edge surfaces;
  *     it deliberately does not disable this pill grabber.
+ * 27. FIREFOX ADD-ON TAB-ID BRIDGE (v9): Zentral normally creates app panels as standalone chrome <browser>
+ *     elements, so Firefox WebExtensions cannot resolve them to a native tab and sender.tab/tab APIs see no real
+ *     tab identity. The opt-in bridge below creates a REAL background Firefox tab first, then temporarily intercepts
+ *     document.createXULElement("browser") only for the synchronous base getOrCreateAppBrowser() call and hands
+ *     Zentral that tab's own linkedBrowser. The base private appBrowsers Map therefore stores the genuine tab browser
+ *     without any edit above this marker. Zen still gets the visible/pinned tab it expects, while the page shown inside
+ *     Zentral is the exact same browsing context that owns the Firefox tabId -- not a dummy/shadow duplicate. Backing
+ *     tabs are pinned into one collapsed `Zentral Add-on Hosts` Zen folder and compacted by extension CSS. NEVER replace
+ *     this with a fake tabId map: WebExtension APIs resolve operations back through nativeTab.linkedBrowser, so a dummy
+ *     tab would target the wrong document. The bridge is DEFAULT OFF and intentionally unloads existing panel browsers
+ *     when toggled so every recreated panel has one coherent browser/tab identity from birth.
  * ============================================================================================================= */
 
 (function initBgalazkaExtension() {
@@ -14765,6 +14776,7 @@
     OPACITY_PINNED_BLUR: "zen.workspace.bgalazka.opacity_pinned_blur",
     BLUR_INTENSITY: "zen.workspace.bgalazka.blur_intensity",
     PANEL_INPUT_SHIELD: "zen.workspace.bgalazka.panel_input_shield",
+    ADDON_TAB_ID_BRIDGE: "zen.workspace.bgalazka.addon_tab_id_bridge",
 
     // Extension keyboard shortcuts. The master switch defaults OFF to obey
     // the extension's default-off contract; string defaults below are inert
@@ -14828,6 +14840,11 @@
     {
       pref: EXT_PREFS.PANEL_INPUT_SHIELD,
       attr: "bgalazka-panel-input-shield",
+      defaultVal: false,
+    },
+    {
+      pref: EXT_PREFS.ADDON_TAB_ID_BRIDGE,
+      attr: "bgalazka-addon-tab-id-bridge",
       defaultVal: false,
     },
   ];
@@ -16769,6 +16786,10 @@
     // traps mouse Back/Forward buttons (3/4) over the panel and routes them
     // to the visible app browser instead of the main selected browser.
     PANEL_INPUT_SHIELD: "zen.workspace.bgalazka.panel_input_shield",
+    // Opt-in Firefox WebExtension compatibility: use a real pinned Firefox
+    // tab's linkedBrowser as the Zentral panel browser so the panel owns a
+    // genuine tabId. See architecture note 27 and the bridge implementation.
+    ADDON_TAB_ID_BRIDGE: "zen.workspace.bgalazka.addon_tab_id_bridge",
     // Keep the settings-side preference table complete. The previous build
     // omitted these keys here even though EXT_PREFS defined them earlier,
     // which made the master keybind toggle write to an undefined pref and
@@ -18839,7 +18860,30 @@
       content.appendChild(webToolbarSubgroup);
 
       // ====================================================================
-      // 5. Extension Keybinds
+      // 5. Firefox Add-on Compatibility
+      // ====================================================================
+      const addonCompatHeader = document.createElement("div");
+      addonCompatHeader.className = "zs-section-header";
+      addonCompatHeader.style.marginTop = "20px";
+      const addonCompatTitle = document.createElement("h3");
+      addonCompatTitle.className = "zs-section-title";
+      addonCompatTitle.textContent = "Firefox Add-on Compatibility";
+      addonCompatHeader.appendChild(addonCompatTitle);
+      content.appendChild(addonCompatHeader);
+
+      const tAddonTabIdBridge = createToggleRow(
+        "Real Tab IDs for Web Panels",
+        "Back each loaded Zentral app with a real pinned Firefox tab so WebExtensions/add-ons receive a genuine tabId. Host tabs are kept inside a collapsed, ultra-compact ‘Zentral Add-on Hosts’ Zen folder. Toggling this unloads currently loaded web panels so they can be recreated safely.",
+        BGALAZKA_EXT_PREFS.ADDON_TAB_ID_BRIDGE,
+        "bgalazka-addon-tab-id-bridge",
+        false,
+        PREF_ICONS.PIN,
+        (enabled) => setAddonTabIdBridgeEnabled(enabled),
+      );
+      content.appendChild(tAddonTabIdBridge.row);
+
+      // ====================================================================
+      // 6. Extension Keybinds
       // ====================================================================
       const keybindHeader = document.createElement("div");
       keybindHeader.className = "zs-section-header";
@@ -18996,7 +19040,7 @@
       content.appendChild(keybindSubgroup);
 
       // ====================================================================
-      // 6. Tab Corner App Tiles
+      // 7. Tab Corner App Tiles
       // ====================================================================
       const cornerHeader = document.createElement("div");
       cornerHeader.className = "zs-section-header";
@@ -19269,6 +19313,16 @@
           input: tClose.input,
           pref: BGALAZKA_EXT_PREFS.HIDE_CLOSE,
           def: false,
+        },
+        {
+          input: tAddonTabIdBridge.input,
+          pref: BGALAZKA_EXT_PREFS.ADDON_TAB_ID_BRIDGE,
+          def: false,
+          onSync: (v) =>
+            document.documentElement.setAttribute(
+              "bgalazka-addon-tab-id-bridge",
+              v ? "true" : "false",
+            ),
         },
         {
           input: tKeybindsEnabled.input,
@@ -20156,6 +20210,450 @@
     registerCleanup(() => clearInterval(panelPrivacyMenuTimer));
   }
 
+  /* ==========================================================================
+   * FIREFOX ADD-ON TAB-ID BRIDGE (architecture note 27)
+   * --------------------------------------------------------------------------
+   * A standalone chrome <browser> is not a gBrowser tab. Firefox WebExtension
+   * tab tracking therefore cannot give it the normal tab identity expected by
+   * add-ons that use sender.tab.id / browser.tabs.*.
+   *
+   * The important part is that we do NOT create a dummy tab beside the panel.
+   * We create the real tab first, then lend its actual linkedBrowser to the
+   * base Zentral getOrCreateAppBrowser() factory. Because the interception is
+   * synchronous and scoped to one exact createXULElement("browser") call, the
+   * base implementation's PRIVATE appBrowsers Map ends up containing the real
+   * tab browser naturally. No Zentral core/private-field edit is required.
+   * ========================================================================== */
+  const ADDON_HOST_FOLDER_ID = "bgalazka-zentral-addon-hosts";
+  const ADDON_HOST_FOLDER_LABEL = "Zentral Add-on Hosts";
+  const addonHostByAppId = new Map();
+  const addonHostByTab = new WeakMap();
+  let addonHostFolder = null;
+  let lastNonAddonHostTab = window.gBrowser?.selectedTab || null;
+  let addonBridgeResetting = false;
+
+  function isAddonTabIdBridgeEnabled() {
+    return getPref(BGALAZKA_EXT_PREFS.ADDON_TAB_ID_BRIDGE, false);
+  }
+
+  function getAddonHostAppLabel(app) {
+    return String(
+      app?.name || app?.title || app?.label || app?.url || app?.id || "App",
+    ).slice(0, 80);
+  }
+
+  function findAddonHostFolder() {
+    if (addonHostFolder?.isConnected && addonHostFolder?.isZenFolder) {
+      return addonHostFolder;
+    }
+    const existing = document.getElementById(ADDON_HOST_FOLDER_ID);
+    if (existing?.isZenFolder) {
+      addonHostFolder = existing;
+      existing.setAttribute("bgalazka-addon-host-folder", "true");
+      return existing;
+    }
+    addonHostFolder = null;
+    return null;
+  }
+
+  function keepAddonHostFolderCollapsed(folder) {
+    if (!folder) return;
+    folder.setAttribute("bgalazka-addon-host-folder", "true");
+    // Zen deliberately applies the initial collapsed state on a zero-delay
+    // timer. Mirror that timing so our compact folder never flashes expanded.
+    setTimeout(() => {
+      try {
+        if (!folder.isConnected) return;
+        folder.collapsed = true;
+        folder.removeAttribute("has-active");
+        window.gZenFolders?.relayoutCollapsedFolder?.(folder);
+      } catch (_) {}
+    }, 0);
+  }
+
+  function putAddonHostTabInFolder(tab) {
+    if (!tab || !window.gBrowser) return null;
+    let folder = findAddonHostFolder();
+
+    try {
+      if (folder) {
+        if (!tab.pinned) gBrowser.pinTab(tab);
+        if (tab.group !== folder) folder.addTabs([tab]);
+        tab.removeAttribute("bgalazka-addon-host-fallback");
+        keepAddonHostFolderCollapsed(folder);
+        return folder;
+      }
+
+      if (window.gZenFolders?.createFolder) {
+        const workspaceId =
+          tab.getAttribute?.("zen-workspace-id") ||
+          window.gZenWorkspaces?.activeWorkspace ||
+          undefined;
+        folder = window.gZenFolders.createFolder([tab], {
+          id: ADDON_HOST_FOLDER_ID,
+          label: ADDON_HOST_FOLDER_LABEL,
+          renameFolder: false,
+          collapsed: true,
+          workspaceId,
+        });
+        addonHostFolder = folder;
+        tab.removeAttribute("bgalazka-addon-host-fallback");
+        keepAddonHostFolderCollapsed(folder);
+        return folder;
+      }
+    } catch (e) {
+      console.warn(
+        "[BgalazkaExtension] Could not place add-on host tab in Zen folder; falling back to a pinned tab:",
+        e,
+      );
+    }
+
+    // Compatibility fallback for Zen builds where the internal folder API is
+    // unavailable/changed. A normal pinned tab still provides the real tabId;
+    // CSS compacts the marked tab as much as possible.
+    try {
+      if (!tab.pinned) gBrowser.pinTab(tab);
+      tab.setAttribute("bgalazka-addon-host-fallback", "true");
+    } catch (_) {}
+    return null;
+  }
+
+  function createAddonHostRecord(app, userContextId) {
+    if (!window.gBrowser?.addTab) return null;
+    const appId = app?.id;
+    if (!appId) return null;
+
+    const existing = addonHostByAppId.get(appId);
+    if (existing?.tab?.isConnected && existing?.browser) return existing;
+
+    const id = normalizeUserContextId(userContextId);
+    const options = {
+      skipAnimation: true,
+      triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+    };
+    if (id) options.userContextId = id;
+
+    let tab = null;
+    try {
+      tab = gBrowser.addTab("about:blank", options);
+      if (!tab?.linkedBrowser)
+        throw new Error("gBrowser.addTab returned no linkedBrowser");
+
+      tab.setAttribute("bgalazka-addon-host", "true");
+      tab.setAttribute("data-bgalazka-app-id", String(appId));
+      tab.setAttribute("label", `Zentral Host · ${getAddonHostAppLabel(app)}`);
+      tab._bgalazkaAddonAppId = appId;
+
+      const browser = tab.linkedBrowser;
+      browser._bgalazkaAddonHostBrowser = true;
+      browser._bgalazkaAddonHostTab = tab;
+      browser._bgalazkaAppId = appId;
+
+      // Remember where Firefox originally mounted this linkedBrowser. Zentral
+      // will reparent the SAME element into its floating panel. Before a host
+      // tab is removed we put it back so gBrowser.removeTab() sees the normal
+      // tabbrowser DOM shape and can tear it down safely.
+      const originalParent = browser.parentNode;
+      const originalNextSibling = browser.nextSibling;
+      const record = {
+        appId,
+        app,
+        tab,
+        browser,
+        originalParent,
+        originalNextSibling,
+        adoptedByZentral: false,
+      };
+      addonHostByAppId.set(appId, record);
+      addonHostByTab.set(tab, record);
+
+      putAddonHostTabInFolder(tab);
+      return record;
+    } catch (e) {
+      console.error("[BgalazkaExtension] Failed to create add-on host tab:", e);
+      try {
+        if (tab?.isConnected) {
+          gBrowser.removeTab(tab, {
+            animate: false,
+            skipPermitUnload: true,
+            skipSessionStore: true,
+          });
+        }
+      } catch (_) {}
+      return null;
+    }
+  }
+
+  function restoreAddonHostBrowserToTab(record) {
+    const browser = record?.browser;
+    const parent = record?.originalParent;
+    if (!browser || !parent?.isConnected || browser.parentNode === parent)
+      return;
+    try {
+      const before =
+        record.originalNextSibling?.parentNode === parent
+          ? record.originalNextSibling
+          : null;
+      parent.insertBefore(browser, before);
+    } catch (e) {
+      try {
+        parent.appendChild(browser);
+      } catch (_) {}
+    }
+  }
+
+  function removeAddonHostRecord(appId, { removeTab = true } = {}) {
+    const record = addonHostByAppId.get(appId);
+    if (!record) return null;
+
+    // Remove our lookup FIRST. Our own removeTab() emits TabClose; doing this
+    // first distinguishes that expected event from a user manually closing a
+    // host tab, which is handled by addonHostTabCloseHandler below.
+    addonHostByAppId.delete(appId);
+    if (record.browser) {
+      record.browser._bgalazkaAddonHostBrowser = false;
+      record.browser._bgalazkaAddonHostTab = null;
+    }
+
+    if (removeTab && record.tab?.isConnected) {
+      restoreAddonHostBrowserToTab(record);
+      try {
+        gBrowser.removeTab(record.tab, {
+          animate: false,
+          skipPermitUnload: true,
+          skipSessionStore: true,
+        });
+      } catch (e) {
+        console.warn(
+          "[BgalazkaExtension] Failed to remove add-on host tab:",
+          e,
+        );
+      }
+    }
+    return record;
+  }
+
+  function removeEmptyAddonHostFolder() {
+    const folder = findAddonHostFolder();
+    if (!folder || addonHostByAppId.size) return;
+    addonHostFolder = null;
+    try {
+      // Zen's folder owns an internal about:blank placeholder. delete() is the
+      // correct API because it cleans that placeholder and folder state too.
+      const maybePromise = folder.delete?.();
+      maybePromise?.catch?.(() => {});
+    } catch (_) {}
+  }
+
+  function unloadPanelBrowsersForAddonBridge() {
+    const apps = window.Zentral?.Apps;
+    if (!apps || addonBridgeResetting) return;
+    addonBridgeResetting = true;
+    try {
+      // Toggling cannot safely retrofit an already-created standalone
+      // <browser> into a real tab. Unload each loaded app so its next open goes
+      // through the real-tab factory from the beginning.
+      const ids = new Set();
+      for (const browser of getAllAppBrowsers()) {
+        if (browser?._bgalazkaAppId) ids.add(browser._bgalazkaAppId);
+      }
+      for (const appId of addonHostByAppId.keys()) ids.add(appId);
+
+      try {
+        apps.closePanel?.();
+      } catch (_) {}
+      for (const appId of ids) {
+        try {
+          apps.closeApp?.(appId);
+        } catch (e) {
+          console.warn(
+            "[BgalazkaExtension] Failed to unload panel while changing add-on bridge mode:",
+            appId,
+            e,
+          );
+        }
+      }
+    } finally {
+      addonBridgeResetting = false;
+      if (!isAddonTabIdBridgeEnabled()) removeEmptyAddonHostFolder();
+    }
+  }
+
+  function syncAddonHostBrowserActivity() {
+    const root = document.getElementById("zen-app-panel-root");
+    const panelOpen = !!root?.hasAttribute("open");
+    const activeBrowser = panelOpen ? getActiveAppBrowser() : null;
+    for (const record of addonHostByAppId.values()) {
+      if (!record?.adoptedByZentral || !record.browser) continue;
+      try {
+        // A real background tab normally has an inactive docshell. Once its
+        // linkedBrowser is serving as the visible Zentral panel, explicitly
+        // activate only that browser; otherwise Gecko may throttle/suspend the
+        // very page the user is looking at because its owning tab is hidden in
+        // our collapsed host folder.
+        record.browser.docShellIsActive =
+          !!activeBrowser && record.browser === activeBrowser;
+      } catch (_) {}
+    }
+  }
+
+  function setAddonTabIdBridgeEnabled(enabled) {
+    document.documentElement.setAttribute(
+      "bgalazka-addon-tab-id-bridge",
+      enabled ? "true" : "false",
+    );
+    unloadPanelBrowsersForAddonBridge();
+  }
+
+  function callGetOrCreateWithAddonHostBrowser(
+    origGetOrCreateBrowser,
+    app,
+    userContextId,
+  ) {
+    if (!isAddonTabIdBridgeEnabled()) {
+      return callGetOrCreateWithPanelUserContext(
+        origGetOrCreateBrowser,
+        app,
+        userContextId,
+      );
+    }
+
+    // If this app already has a bridge record, the base private Map should
+    // return that same connected browser without creating anything new.
+    const existing = addonHostByAppId.get(app?.id);
+    if (existing?.browser?.isConnected && existing.adoptedByZentral) {
+      return callGetOrCreateWithPanelUserContext(
+        origGetOrCreateBrowser,
+        app,
+        userContextId,
+      );
+    }
+
+    const record = createAddonHostRecord(app, userContextId);
+    if (!record) {
+      // Fail open: Zentral still works even if Zen's tab/folder internals have
+      // changed. Only add-on tab-ID compatibility is lost for this instance.
+      return callGetOrCreateWithPanelUserContext(
+        origGetOrCreateBrowser,
+        app,
+        userContextId,
+      );
+    }
+
+    const nativeCreateXULElement = document.createXULElement;
+    let intercepted = false;
+    try {
+      document.createXULElement = function (name, options) {
+        if (!intercepted && String(name).toLowerCase() === "browser") {
+          intercepted = true;
+          return record.browser;
+        }
+        return nativeCreateXULElement.call(this, name, options);
+      };
+      if (document.createXULElement === nativeCreateXULElement) {
+        throw new Error(
+          "document.createXULElement could not be temporarily wrapped",
+        );
+      }
+
+      const result = callGetOrCreateWithPanelUserContext(
+        origGetOrCreateBrowser,
+        app,
+        userContextId,
+      );
+
+      if (!intercepted || !result?.isNew || result.browser !== record.browser) {
+        // A pre-existing standalone panel browser beat us to the base Map.
+        // Remove the unused host and keep the working base result rather than
+        // trying to mutate private state after the fact.
+        removeAddonHostRecord(record.appId);
+        removeEmptyAddonHostFolder();
+        return result;
+      }
+
+      record.adoptedByZentral = true;
+      result.browser.setAttribute("bgalazka-addon-host-browser", "true");
+      return result;
+    } catch (e) {
+      removeAddonHostRecord(record.appId);
+      removeEmptyAddonHostFolder();
+      console.error(
+        "[BgalazkaExtension] Real-tab browser adoption failed; using normal Zentral browser:",
+        e,
+      );
+      return callGetOrCreateWithPanelUserContext(
+        origGetOrCreateBrowser,
+        app,
+        userContextId,
+      );
+    } finally {
+      try {
+        document.createXULElement = nativeCreateXULElement;
+      } catch (_) {}
+    }
+  }
+
+  // Host tabs should behave as implementation details, not destinations. A
+  // click/keyboard selection routes back to the previous real tab and opens
+  // the corresponding Zentral panel instead. No MutationObserver is used --
+  // see the tab crash guard at the top of this extension.
+  const addonHostTabSelectHandler = (event) => {
+    const tab = event.target;
+    const record = addonHostByTab.get(tab);
+    if (!record) {
+      if (tab && !tab.hasAttribute?.("bgalazka-addon-host")) {
+        lastNonAddonHostTab = tab;
+      }
+      return;
+    }
+    if (!isAddonTabIdBridgeEnabled()) return;
+    setTimeout(() => {
+      try {
+        if (lastNonAddonHostTab?.isConnected && lastNonAddonHostTab !== tab) {
+          gBrowser.selectedTab = lastNonAddonHostTab;
+        }
+        if (record.app) window.Zentral?.Apps?.openPanel?.(record.app);
+      } catch (_) {}
+      keepAddonHostFolderCollapsed(record.tab?.group);
+    }, 0);
+  };
+
+  const addonHostTabCloseHandler = (event) => {
+    const tab = event.target;
+    const record = addonHostByTab.get(tab);
+    if (!record || addonHostByAppId.get(record.appId) !== record) return;
+
+    // This path means the user/Zen closed the backing tab directly. Let the
+    // tab close finish first, then ask Zentral to unload the matching private
+    // Map entry/browser. Our own programmatic teardown removes the Map record
+    // before removeTab(), so it never enters this branch.
+    restoreAddonHostBrowserToTab(record);
+    addonHostByAppId.delete(record.appId);
+    setTimeout(() => {
+      try {
+        window.Zentral?.Apps?.closeApp?.(record.appId);
+      } catch (_) {}
+      removeEmptyAddonHostFolder();
+    }, 0);
+  };
+
+  window.addEventListener("TabSelect", addonHostTabSelectHandler);
+  window.addEventListener("TabClose", addonHostTabCloseHandler);
+  registerCleanup(() => {
+    window.removeEventListener("TabSelect", addonHostTabSelectHandler);
+    window.removeEventListener("TabClose", addonHostTabCloseHandler);
+    const apps = window.Zentral?.Apps;
+    const ids = [...addonHostByAppId.keys()];
+    for (const appId of ids) {
+      try {
+        apps?.closeApp?.(appId);
+      } catch (_) {
+        removeAddonHostRecord(appId);
+      }
+    }
+    removeEmptyAddonHostFolder();
+  });
+
   function callGetOrCreateWithPanelUserContext(
     origGetOrCreateBrowser,
     app,
@@ -20180,9 +20678,10 @@
           if (
             String(name).toLowerCase() === "usercontextid" &&
             this?.localName === "browser" &&
-            !this.isConnected &&
-            this.getAttribute?.("type") === "content" &&
-            this.getAttribute?.("messagemanagergroup") === "browsers"
+            (this._bgalazkaAddonHostBrowser ||
+              (!this.isConnected &&
+                this.getAttribute?.("type") === "content" &&
+                this.getAttribute?.("messagemanagergroup") === "browsers"))
           ) {
             nextValue = String(id);
           }
@@ -20529,6 +21028,7 @@
       apps.openPanel = function (...args) {
         pulseAnimGuard(); // perf: suppress backdrop-filter for this slide (note 12)
         const res = origOpen(...args);
+        syncAddonHostBrowserActivity();
         setTimeout(() => {
           ensurePillDualViewButton();
           ensurePillAllSidesResizeButton();
@@ -20547,6 +21047,7 @@
       apps.closePanel = function (...args) {
         pulseAnimGuard(); // perf: suppress backdrop-filter for this slide (note 12)
         const res = origClose(...args);
+        syncAddonHostBrowserActivity();
         setTimeout(syncPanelPushState, 30);
         return res;
       };
@@ -20577,7 +21078,7 @@
     if (origGetOrCreateBrowser) {
       apps.getOrCreateAppBrowser = function (app) {
         const userContextId = getPanelUserContextId(app?.id);
-        const result = callGetOrCreateWithPanelUserContext(
+        const result = callGetOrCreateWithAddonHostBrowser(
           origGetOrCreateBrowser,
           app,
           userContextId,
@@ -20591,6 +21092,11 @@
           result.browser._bgalazkaHomeUrl = app?.url || null;
           result.browser._bgalazkaAppId = app?.id || null;
           applyPanelContainerLoadContext(result.browser, userContextId);
+        }
+        if (result?.browser?._bgalazkaAddonHostBrowser) {
+          try {
+            result.browser.docShellIsActive = true;
+          } catch (_) {}
         }
         // BUG FIX: setAttribute("useragent"/"customuseragent", ...) is only
         // ever read by the <browser> element once, at its connectedCallback
@@ -20631,6 +21137,31 @@
       };
     }
 
+    // Teardown order matters for real-tab-backed panel browsers: first move
+    // the linkedBrowser back to its normal tabbrowser stack and remove the
+    // host tab, THEN let base closeApp/removeApp clear its private browser Map.
+    // Calling base first would detach the browser before gBrowser can cleanly
+    // destroy its owning tab.
+    const origCloseApp = apps.closeApp?.bind(apps);
+    if (origCloseApp) {
+      apps.closeApp = function (appId, ...args) {
+        removeAddonHostRecord(appId);
+        const res = origCloseApp(appId, ...args);
+        if (!addonHostByAppId.size) setTimeout(removeEmptyAddonHostFolder, 0);
+        return res;
+      };
+    }
+
+    const origRemoveApp = apps.removeApp?.bind(apps);
+    if (origRemoveApp) {
+      apps.removeApp = function (appId, ...args) {
+        removeAddonHostRecord(appId);
+        const res = origRemoveApp(appId, ...args);
+        if (!addonHostByAppId.size) setTimeout(removeEmptyAddonHostFolder, 0);
+        return res;
+      };
+    }
+
     return true;
   };
 
@@ -20642,6 +21173,13 @@
         clearInterval(hookTimer);
     }, 150);
     registerCleanup(() => clearInterval(hookTimer));
+  }
+
+  // Hot-reload/startup normalization: if the opt-in bridge was already on
+  // and a standalone panel browser predates this extension instance, unload it
+  // once so the next open is born as a real-tab-backed browser.
+  if (isAddonTabIdBridgeEnabled()) {
+    setTimeout(unloadPanelBrowsersForAddonBridge, 0);
   }
 
   // Window listeners for panel state changes

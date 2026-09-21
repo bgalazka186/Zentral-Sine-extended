@@ -5011,6 +5011,11 @@ panel[id*="tabgroup-editor"] {
  *     "vertical offset" reposition drag). The CSS half is just the cursor hint below, in section 4's pill-button
  *     rules -- `cursor: move` replaces native's `ew-resize` so the handle no longer visually promises
  *     horizontal-only, now that it does both.
+ * 23. FIREFOX ADD-ON TAB-ID HOSTS (JS note 27): when the opt-in bridge is enabled, each loaded Zentral app is
+ *     backed by a genuine pinned Firefox tab and all hosts are corralled into one collapsed Zen folder. The rules
+ *     near the end of this extension section make ONLY that marked folder/tabs ultra-compact. Do not use display:none
+ *     or the native `hidden` attribute on the backing tabs: the entire point is to leave them as real, present Zen/
+ *     Firefox tabs while making their implementation-detail UI almost disappear. Default OFF via root attribute.
  * ============================================================================================================= */
 
 /* CSS Variable Defaults for Settings-Controlled Translucency */
@@ -6993,4 +6998,145 @@ panel[id*="tabgroup-editor"] {
 
 #zentral-settings-modal .zs-extension-subpanel[data-active="true"] {
   display: block !important;
+}
+
+/* ==========================================================================
+   FIREFOX ADD-ON TAB-ID HOST FOLDER (JS note 27 / CSS note 23)
+   --------------------------------------------------------------------------
+   STEALTH MODE: the backing tabs must remain genuine Zen/Firefox tabs for
+   WebExtension tabId compatibility, but their dedicated folder should be as
+   close to visually nonexistent as possible. We intentionally avoid
+   `display:none`, the `[hidden]` attribute, or removing the host tabs from the
+   tab tree. Instead the marked host folder is reduced to a 1px inert trace.
+   Everything remains gated by the default-OFF bridge attribute.
+   ========================================================================== */
+:root[bgalazka-addon-tab-id-bridge="true"]
+  zen-folder[bgalazka-addon-host-folder="true"] {
+  --bgalazka-addon-host-folder-size: 1px;
+  min-height: 1px !important;
+  height: 1px !important;
+  max-height: 1px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  opacity: 0.001 !important;
+  overflow: clip !important;
+  pointer-events: none !important;
+  contain: layout paint !important;
+  transition: none !important;
+}
+
+/* No hover/debug reveal: the compatibility folder is intentionally invisible. */
+:root[bgalazka-addon-tab-id-bridge="true"]
+  zen-folder[bgalazka-addon-host-folder="true"]:hover {
+  opacity: 0.001 !important;
+}
+
+:root[bgalazka-addon-tab-id-bridge="true"]
+  zen-folder[bgalazka-addon-host-folder="true"]
+  > .tab-group-label-container {
+  min-height: 1px !important;
+  height: 1px !important;
+  max-height: 1px !important;
+  width: 1px !important;
+  min-width: 1px !important;
+  max-width: 1px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Collapse every visible folder decoration without removing the DOM nodes. */
+:root[bgalazka-addon-tab-id-bridge="true"]
+  zen-folder[bgalazka-addon-host-folder="true"]
+  > .tab-group-label-container
+  :is(
+    .tab-group-label,
+    .tab-label,
+    .tab-group-label-text,
+    .tab-group-overflow-count,
+    .tab-group-icon,
+    .tab-group-icon-container,
+    .zen-folder-icon
+  ) {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  opacity: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Defensive suppression of pseudo-elements/themes that paint folder chrome. */
+:root[bgalazka-addon-tab-id-bridge="true"]
+  zen-folder[bgalazka-addon-host-folder="true"]::before,
+:root[bgalazka-addon-tab-id-bridge="true"]
+  zen-folder[bgalazka-addon-host-folder="true"]::after,
+:root[bgalazka-addon-tab-id-bridge="true"]
+  zen-folder[bgalazka-addon-host-folder="true"]
+  > .tab-group-label-container::before,
+:root[bgalazka-addon-tab-id-bridge="true"]
+  zen-folder[bgalazka-addon-host-folder="true"]
+  > .tab-group-label-container::after {
+  content: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* When Zen's folder API is unavailable we fall back to individually pinned
+ * host tabs. Keep each native tab present, but reduce it to a 1px inert trace. */
+:root[bgalazka-addon-tab-id-bridge="true"]
+  #tabbrowser-tabs
+  tab[bgalazka-addon-host-fallback="true"] {
+  min-height: 1px !important;
+  height: 1px !important;
+  max-height: 1px !important;
+  min-width: 1px !important;
+  width: 1px !important;
+  max-width: 1px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  opacity: 0.001 !important;
+  pointer-events: none !important;
+  overflow: clip !important;
+}
+
+/* Host tabs inside the collapsed folder stay native and measurable, but never
+ * contribute more than a single pixel to the strip. */
+:root[bgalazka-addon-tab-id-bridge="true"]
+  zen-folder[bgalazka-addon-host-folder="true"]
+  tab[bgalazka-addon-host="true"] {
+  min-height: 1px !important;
+  height: 1px !important;
+  max-height: 1px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  opacity: 0.001 !important;
+  pointer-events: none !important;
+  overflow: clip !important;
 }

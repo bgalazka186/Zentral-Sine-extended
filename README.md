@@ -22,6 +22,7 @@
 - **Drag panel and resize in 2D** 3D when??
 - **Keybinds adn disableing key press propagation** important if you want to close it with ESC button
 - **Firefox Containers and Clear Cache & Cookies of panels** i dont use it, heard people like it
+- **Better Addon support** thing is afaik browser really wants to show tabs with ID on tabbar and core mod wasnt bulid with that in mind
 
 ### Extra Bugfix:
 
