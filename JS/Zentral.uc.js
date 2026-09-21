@@ -19438,6 +19438,855 @@
   }
 
   /* ==========================================================================
+   * FIREFOX CONTAINERS + PER-PANEL CACHE/COOKIE CLEARING
+   * -----------------------------------------------------------------------
+   * Adds two app-specific controls beside the native "Load at Startup" row:
+   *   1) Container: <name>  -> choose a Firefox Contextual Identity per app.
+   *   2) Clear Panel Cache & Cookies -> clear this app site's cookies/caches
+   *      only for the selected userContextId.
+   *
+   * WHY THIS LIVES ENTIRELY IN THE EXTENSION (see architecture notes 1 & 5):
+   * - Container assignments are stored in their own JSON pref, so we do not
+   *   add fields to Zentral's native app object or edit saveApps()/loadApps().
+   * - Firefox containers are backed by ContextualIdentityService. Its public
+   *   identities expose the numeric userContextId that Gecko stores in Origin
+   *   Attributes and uses to isolate cookie jars and other site state.
+   * - Zentral's native getOrCreateAppBrowser() hard-codes usercontextid="0"
+   *   BEFORE appending the <browser>. For a remote <browser>, the identity must
+   *   be present before connection/frame-loader creation. Because the base code
+   *   above this marker is intentionally immutable, the getOrCreate wrapper
+   *   below temporarily intercepts ONLY the synchronous setAttribute call made
+   *   while that one app browser is being constructed, then immediately restores
+   *   Element.prototype. Nothing remains globally patched after the call.
+   * - The same wrapper also stamps userContextId into subsequent load options
+   *   and content principals. Firefox's own URI-loading helper does the same
+   *   principal OriginAttributes adjustment for container-tab navigations.
+   * - ClearDataService.deleteDataFromSite() is used instead of globally clearing
+   *   a whole container. The OriginAttributes pattern { userContextId } keeps
+   *   the operation scoped to this app's selected container, while the site key
+   *   keeps it scoped to this app's configured site. A panel is unloaded first
+   *   so a live page cannot immediately repopulate cookies while clearing.
+   * ========================================================================== */
+  const PANEL_CONTAINERS_PREF =
+    "zen.workspace.bgalazka.panel_container_assignments";
+  const BASE_ZENTRAL_APPS_PREF = "zen.workspace.apps.sidebar.apps";
+  const FIREFOX_CONTAINERS_ENABLED_PREF = "privacy.userContext.enabled";
+
+  let ContextualIdentityService = null;
+  let panelContainerIdentityCache = [];
+  let panelContainerIdentityRefreshPromise = null;
+
+  // Zen currently ships Gecko's ContextualIdentityService, but userChrome
+  // scripts can run early enough that a direct eager import/clone path is not
+  // always dependable. Resolve it lazily and keep profile-file enumeration as
+  // an independent fallback. This also avoids making the menu depend on
+  // getUserContextLabel(), which can throw when a stale l10n id is present.
+  function resolveContextualIdentityService() {
+    if (ContextualIdentityService) return ContextualIdentityService;
+
+    try {
+      const mod = ChromeUtils.importESModule(
+        "resource://gre/modules/ContextualIdentityService.sys.mjs",
+      );
+      ContextualIdentityService = mod?.ContextualIdentityService || null;
+    } catch (e) {
+      console.warn(
+        "[BgalazkaExtension] Direct ContextualIdentityService import failed:",
+        e,
+      );
+    }
+
+    // A lazy ES-module getter uses the same Gecko module but is a useful
+    // second path in Zen/userChrome environments where the eager import above
+    // was attempted before the module was ready.
+    if (!ContextualIdentityService) {
+      try {
+        const lazy = {};
+        ChromeUtils.defineESModuleGetters(lazy, {
+          ContextualIdentityService:
+            "resource://gre/modules/ContextualIdentityService.sys.mjs",
+        });
+        ContextualIdentityService = lazy.ContextualIdentityService || null;
+      } catch (e) {
+        console.warn(
+          "[BgalazkaExtension] Lazy ContextualIdentityService import failed:",
+          e,
+        );
+      }
+    }
+
+    return ContextualIdentityService;
+  }
+
+  // Try once at extension startup, but all callers resolve lazily again.
+  resolveContextualIdentityService();
+
+  function normalizeUserContextId(value) {
+    const id = Number(value);
+    return Number.isInteger(id) && id > 0 ? id : 0;
+  }
+
+  function normalizeContainerIdentity(identity) {
+    const userContextId = normalizeUserContextId(identity?.userContextId);
+    if (!userContextId) return null;
+    return {
+      userContextId,
+      public: identity?.public !== false,
+      name: typeof identity?.name === "string" ? identity.name.trim() : "",
+      l10nId:
+        typeof identity?.l10nId === "string"
+          ? identity.l10nId
+          : typeof identity?.l10nID === "string"
+            ? identity.l10nID
+            : "",
+      icon: typeof identity?.icon === "string" ? identity.icon : "",
+      color: typeof identity?.color === "string" ? identity.color : "",
+    };
+  }
+
+  function mergeContainerIdentities(...lists) {
+    const byId = new Map();
+    for (const list of lists) {
+      for (const raw of list || []) {
+        const identity = normalizeContainerIdentity(raw);
+        if (!identity || identity.public === false) continue;
+        const old = byId.get(identity.userContextId);
+        // Prefer whichever source has more useful human-readable metadata.
+        if (
+          !old ||
+          (!old.name && identity.name) ||
+          (!old.l10nId && identity.l10nId)
+        ) {
+          byId.set(identity.userContextId, { ...old, ...identity });
+        }
+      }
+    }
+    return Array.from(byId.values()).sort(
+      (a, b) => a.userContextId - b.userContextId,
+    );
+  }
+
+  function getPanelContainerAssignments() {
+    try {
+      const raw = Services.prefs.getStringPref(PANEL_CONTAINERS_PREF, "{}");
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return {};
+      }
+      const clean = {};
+      for (const [appId, rawId] of Object.entries(parsed)) {
+        const userContextId = normalizeUserContextId(rawId);
+        if (appId && userContextId > 0) clean[appId] = userContextId;
+      }
+      return clean;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function savePanelContainerAssignments(assignments) {
+    try {
+      Services.prefs.setStringPref(
+        PANEL_CONTAINERS_PREF,
+        JSON.stringify(assignments || {}),
+      );
+    } catch (e) {
+      console.warn(
+        "[BgalazkaExtension] Failed to save panel container assignments:",
+        e,
+      );
+    }
+  }
+
+  function getPanelUserContextId(appId) {
+    if (!appId) return 0;
+    return normalizeUserContextId(getPanelContainerAssignments()[appId]);
+  }
+
+  function setPanelUserContextId(appId, userContextId) {
+    if (!appId) return;
+    const assignments = getPanelContainerAssignments();
+    const normalized = normalizeUserContextId(userContextId);
+    if (normalized > 0) assignments[appId] = normalized;
+    else delete assignments[appId];
+    savePanelContainerAssignments(assignments);
+  }
+
+  function getStoredZentralApp(appId) {
+    if (!appId) return null;
+    try {
+      const raw = Services.prefs.getStringPref(BASE_ZENTRAL_APPS_PREF, "[]");
+      const apps = JSON.parse(raw);
+      if (!Array.isArray(apps)) return null;
+      return apps.find((app) => app?.id === appId) || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function areFirefoxContainersEnabled() {
+    try {
+      return Services.prefs.getBoolPref(FIREFOX_CONTAINERS_ENABLED_PREF, false);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function readContainerIdentitiesFromService() {
+    const service = resolveContextualIdentityService();
+    if (!service) return [];
+
+    // First use the supported service API. In current Firefox/Zen this calls
+    // ensureDataReady() internally and returns all public identities.
+    try {
+      const identities = service.getPublicIdentities?.();
+      const normalized = mergeContainerIdentities(identities);
+      if (normalized.length) return normalized;
+    } catch (e) {
+      console.warn(
+        "[BgalazkaExtension] ContextualIdentityService public enumeration failed; using Zen-safe fallback:",
+        e,
+      );
+    }
+
+    // Zen-safe fallback: force the service's synchronous profile load, then
+    // read the already-parsed identity records. This avoids Cu.cloneInto()
+    // and localization paths entirely while still using Gecko's own data.
+    try {
+      service.ensureDataReady?.();
+      if (Array.isArray(service._identities)) {
+        return mergeContainerIdentities(
+          service._identities.filter((identity) => identity?.public === true),
+        );
+      }
+    } catch (e) {
+      console.warn(
+        "[BgalazkaExtension] ContextualIdentityService internal enumeration failed:",
+        e,
+      );
+    }
+
+    return [];
+  }
+
+  async function readContainerIdentitiesFromProfile() {
+    try {
+      if (typeof IOUtils === "undefined") return [];
+      const file = Services.dirsvc.get("ProfD", Ci.nsIFile).clone();
+      file.append("containers.json");
+      if (!file.exists()) return [];
+
+      const bytes = await IOUtils.read(file.path);
+      const data = JSON.parse(new TextDecoder().decode(bytes));
+      if (!Array.isArray(data?.identities)) return [];
+      return mergeContainerIdentities(
+        data.identities.filter((identity) => identity?.public === true),
+      );
+    } catch (e) {
+      console.warn(
+        "[BgalazkaExtension] Failed to read Zen/Firefox containers.json:",
+        e,
+      );
+      return [];
+    }
+  }
+
+  function getObservedZenContainerIds() {
+    // Last-resort discovery for a partially broken containers.json/service:
+    // Zen stores the effective context directly on tabs. Include IDs already
+    // in use so a working Zen container never disappears from the menu just
+    // because ContextualIdentityService's metadata layer is unhealthy.
+    const ids = new Set();
+    try {
+      for (const tab of window.gBrowser?.tabs || []) {
+        const id = normalizeUserContextId(tab?.getAttribute?.("usercontextid"));
+        if (id) ids.add(id);
+      }
+    } catch (_) {}
+    return Array.from(ids, (userContextId) => ({
+      userContextId,
+      public: true,
+      name: "",
+      l10nId: "",
+      icon: "",
+      color: "",
+    }));
+  }
+
+  function getFirefoxContainerState() {
+    const serviceIdentities = readContainerIdentitiesFromService();
+    panelContainerIdentityCache = mergeContainerIdentities(
+      panelContainerIdentityCache,
+      serviceIdentities,
+      getObservedZenContainerIds(),
+    );
+    return {
+      enabled: areFirefoxContainersEnabled(),
+      // Profile-file fallback means an import failure is not fatal in Zen.
+      available:
+        !!resolveContextualIdentityService() || typeof IOUtils !== "undefined",
+      identities: panelContainerIdentityCache,
+    };
+  }
+
+  async function refreshFirefoxContainerState() {
+    if (!panelContainerIdentityRefreshPromise) {
+      panelContainerIdentityRefreshPromise = (async () => {
+        const serviceIdentities = readContainerIdentitiesFromService();
+        const profileIdentities = await readContainerIdentitiesFromProfile();
+        panelContainerIdentityCache = mergeContainerIdentities(
+          panelContainerIdentityCache,
+          serviceIdentities,
+          profileIdentities,
+          getObservedZenContainerIds(),
+        );
+        return panelContainerIdentityCache;
+      })().finally(() => {
+        panelContainerIdentityRefreshPromise = null;
+      });
+    }
+
+    await panelContainerIdentityRefreshPromise;
+    return getFirefoxContainerState();
+  }
+
+  // Warm the cache as soon as the extension starts so Zen users normally see
+  // their containers immediately on the very first context-menu open.
+  refreshFirefoxContainerState().catch((e) =>
+    console.warn(
+      "[BgalazkaExtension] Initial Firefox/Zen container discovery failed:",
+      e,
+    ),
+  );
+
+  const BUILTIN_CONTAINER_LABELS = Object.freeze({
+    "user-context-personal": "Personal",
+    "user-context-personal2": "Personal",
+    "userContextPersonal.label": "Personal",
+    "user-context-work": "Work",
+    "user-context-work2": "Work",
+    "userContextWork.label": "Work",
+    "user-context-banking": "Banking",
+    "user-context-banking2": "Banking",
+    "userContextBanking.label": "Banking",
+    "user-context-shopping": "Shopping",
+    "user-context-shopping2": "Shopping",
+    "userContextShopping.label": "Shopping",
+  });
+
+  function getFirefoxContainerLabel(identity) {
+    const userContextId = normalizeUserContextId(identity?.userContextId);
+    if (!userContextId) return "Default";
+
+    if (typeof identity?.name === "string" && identity.name.trim()) {
+      return identity.name.trim();
+    }
+
+    const l10nId =
+      typeof identity?.l10nId === "string"
+        ? identity.l10nId
+        : typeof identity?.l10nID === "string"
+          ? identity.l10nID
+          : "";
+    if (BUILTIN_CONTAINER_LABELS[l10nId]) {
+      return BUILTIN_CONTAINER_LABELS[l10nId];
+    }
+
+    // Use Gecko localization only as a best-effort enhancement. Zen builds
+    // affected by stale contextual-identity Fluent IDs can throw here, so a
+    // label failure must never hide an otherwise valid container.
+    try {
+      const service = resolveContextualIdentityService();
+      const localized = service?.getUserContextLabel?.(userContextId);
+      if (typeof localized === "string" && localized.trim()) {
+        return localized.trim();
+      }
+    } catch (_) {}
+
+    return `Container ${userContextId}`;
+  }
+
+  function getFirefoxContainerById(userContextId, identities = null) {
+    const id = normalizeUserContextId(userContextId);
+    if (!id) return null;
+    const list = identities || getFirefoxContainerState().identities;
+    return (
+      list.find(
+        (identity) => normalizeUserContextId(identity?.userContextId) === id,
+      ) || null
+    );
+  }
+
+  function getPanelContainerMenuLabel(appId, identities = null) {
+    const id = getPanelUserContextId(appId);
+    if (!id) return "Container: Default";
+    const identity = getFirefoxContainerById(id, identities);
+    return identity
+      ? `Container: ${getFirefoxContainerLabel(identity)}`
+      : `Container: Unavailable (#${id})`;
+  }
+
+  function getContainerIconUrl(identity) {
+    const icon = typeof identity?.icon === "string" ? identity.icon.trim() : "";
+    return icon ? `resource://usercontext-content/${icon}.svg` : "";
+  }
+
+  async function clearPanelCacheAndCookies(appId) {
+    const app = getStoredZentralApp(appId);
+    if (!app?.url) {
+      throw new Error("Unable to resolve this panel's configured URL.");
+    }
+
+    const uri = Services.io.newURI(app.url);
+    const schemelessSite = Services.eTLD.getSchemelessSite(uri);
+    if (!schemelessSite) {
+      throw new Error("This panel URL does not have clearable site data.");
+    }
+
+    const userContextId = getPanelUserContextId(appId);
+    const flags =
+      Ci.nsIClearDataService.CLEAR_COOKIES |
+      Ci.nsIClearDataService.CLEAR_ALL_CACHES;
+
+    // Stop the live page before clearing so it cannot race the operation and
+    // immediately recreate cookies/cache entries while the callback is pending.
+    try {
+      window.Zentral?.Apps?.closeApp?.(appId);
+    } catch (_) {}
+
+    await new Promise((resolve, reject) => {
+      Services.clearData.deleteDataFromSite(
+        schemelessSite,
+        { userContextId },
+        true,
+        flags,
+        {
+          onDataDeleted(failedFlags) {
+            if (failedFlags) {
+              reject(
+                new Error(
+                  `Firefox failed to clear data flags 0x${Number(
+                    failedFlags,
+                  ).toString(16)}.`,
+                ),
+              );
+            } else {
+              resolve();
+            }
+          },
+        },
+      );
+    });
+  }
+
+  async function rebuildPanelContainerSubmenu(
+    popup,
+    containerMenu,
+    containerPopup,
+  ) {
+    const appId = popup.dataset.activeAppId || "";
+    if (!appId) return;
+
+    const selectedId = getPanelUserContextId(appId);
+
+    const renderState = (state) => {
+      // The user may have opened the context menu for another app while the
+      // async containers.json fallback was running. Never paint stale data.
+      if ((popup.dataset.activeAppId || "") !== appId) return;
+
+      containerMenu.setAttribute(
+        "label",
+        getPanelContainerMenuLabel(appId, state.identities),
+      );
+      containerPopup.replaceChildren();
+
+      const appendChoice = (label, userContextId, identity = null) => {
+        const item = document.createXULElement("menuitem");
+        item.classList.add("bgalazka-container-choice");
+        item.setAttribute("label", label);
+        item.setAttribute("type", "checkbox");
+        item.dataset.userContextId = String(userContextId);
+        if (selectedId === userContextId) item.setAttribute("checked", "true");
+
+        const iconUrl = getContainerIconUrl(identity);
+        if (iconUrl) {
+          item.classList.add("menuitem-iconic");
+          item.setAttribute("image", iconUrl);
+        }
+        if (identity?.color) {
+          item.dataset.identityColor = String(identity.color);
+        }
+
+        // If Firefox/Zen has globally disabled contextual identities, leave
+        // Default usable but don't pretend a non-default container can work.
+        if (userContextId > 0 && !state.enabled) {
+          item.setAttribute("disabled", "true");
+          item.disabled = true;
+        }
+
+        item.addEventListener("command", () => {
+          if (item.disabled) return;
+          const nextId = normalizeUserContextId(userContextId);
+          if (getPanelUserContextId(appId) === nextId) return;
+          setPanelUserContextId(appId, nextId);
+          containerMenu.setAttribute(
+            "label",
+            nextId
+              ? `Container: ${getFirefoxContainerLabel(identity)}`
+              : "Container: Default",
+          );
+
+          // Container identity is part of the remote browser's OriginAttributes
+          // and cannot be safely hot-swapped. Recreate on next open/preload.
+          try {
+            window.Zentral?.Apps?.closeApp?.(appId);
+          } catch (_) {}
+        });
+        containerPopup.appendChild(item);
+      };
+
+      appendChoice("Default (no container)", 0, null);
+
+      if (state.identities.length) {
+        containerPopup.appendChild(document.createXULElement("menuseparator"));
+        for (const identity of state.identities) {
+          appendChoice(
+            getFirefoxContainerLabel(identity),
+            normalizeUserContextId(identity.userContextId),
+            identity,
+          );
+        }
+      }
+
+      if (!state.enabled) {
+        containerPopup.appendChild(document.createXULElement("menuseparator"));
+        const status = document.createXULElement("menuitem");
+        status.classList.add("bgalazka-container-status");
+        status.setAttribute(
+          "label",
+          "Container Tabs are disabled in browser settings",
+        );
+        status.setAttribute("disabled", "true");
+        containerPopup.appendChild(status);
+      } else if (!state.identities.length) {
+        const status = document.createXULElement("menuitem");
+        status.classList.add("bgalazka-container-status");
+        status.setAttribute(
+          "label",
+          state.available
+            ? "No Firefox/Zen containers found"
+            : "Container service is unavailable",
+        );
+        status.setAttribute("disabled", "true");
+        containerPopup.appendChild(status);
+      }
+
+      // Preserve an assignment even if its container was deleted. Showing it
+      // explicitly prevents an accidental silent privacy downgrade to Default.
+      if (
+        selectedId > 0 &&
+        !getFirefoxContainerById(selectedId, state.identities)
+      ) {
+        const stale = document.createXULElement("menuitem");
+        stale.classList.add("bgalazka-container-status");
+        stale.setAttribute("label", `Unavailable container (#${selectedId})`);
+        stale.setAttribute("type", "checkbox");
+        stale.setAttribute("checked", "true");
+        stale.setAttribute("disabled", "true");
+        containerPopup.appendChild(stale);
+      }
+    };
+
+    // Paint immediately from Gecko's service/cache. If that path is empty,
+    // show a transient loading row instead of incorrectly claiming that Zen
+    // has no containers while containers.json is still being read.
+    const initialState = getFirefoxContainerState();
+    if (initialState.identities.length || !initialState.available) {
+      renderState(initialState);
+    } else {
+      containerMenu.setAttribute(
+        "label",
+        getPanelContainerMenuLabel(appId, initialState.identities),
+      );
+      containerPopup.replaceChildren();
+      const loading = document.createXULElement("menuitem");
+      loading.classList.add("bgalazka-container-status");
+      loading.setAttribute("label", "Loading Firefox/Zen containers…");
+      loading.setAttribute("disabled", "true");
+      containerPopup.appendChild(loading);
+    }
+
+    // Merge in Zen's profile containers.json asynchronously. This fixes Zen
+    // builds where the service's public clone/localization path is broken.
+    try {
+      const refreshed = await refreshFirefoxContainerState();
+      renderState(refreshed);
+    } catch (e) {
+      console.warn(
+        "[BgalazkaExtension] Failed to refresh Firefox/Zen containers:",
+        e,
+      );
+    }
+  }
+
+  function ensurePanelPrivacyMenuItems() {
+    const popup = document.getElementById("zen-apps-sidebar-tile-context");
+    if (!popup) return false;
+    const preloadItem = popup.querySelector("#zen-apps-sidebar-preload-item");
+    if (!preloadItem) return false;
+
+    let containerMenu = popup.querySelector("#zen-apps-sidebar-container-menu");
+    let containerPopup = popup.querySelector(
+      "#zen-apps-sidebar-container-popup",
+    );
+    let clearItem = popup.querySelector(
+      "#zen-apps-sidebar-clear-panel-data-item",
+    );
+
+    if (!containerMenu) {
+      containerMenu = document.createXULElement("menu");
+      containerMenu.id = "zen-apps-sidebar-container-menu";
+      containerMenu.setAttribute("label", "Container: Default");
+      containerMenu.setAttribute(
+        "tooltiptext",
+        "Choose the Firefox Container used by this app panel",
+      );
+
+      containerPopup = document.createXULElement("menupopup");
+      containerPopup.id = "zen-apps-sidebar-container-popup";
+      containerMenu.appendChild(containerPopup);
+      preloadItem.insertAdjacentElement("afterend", containerMenu);
+    }
+
+    if (!clearItem) {
+      clearItem = document.createXULElement("menuitem");
+      clearItem.id = "zen-apps-sidebar-clear-panel-data-item";
+      clearItem.setAttribute("label", "Clear Panel Cache & Cookies");
+      clearItem.setAttribute(
+        "tooltiptext",
+        "Clear cookies and caches for this app's site in its selected Firefox Container",
+      );
+      containerMenu.insertAdjacentElement("afterend", clearItem);
+    }
+
+    if (!popup._bgalazkaPanelPrivacyMenuHooked) {
+      popup._bgalazkaPanelPrivacyMenuHooked = true;
+
+      const onPopupShowing = (event) => {
+        // popupshowing bubbles from the Container submenu too. Rebuilding the
+        // submenu while it is itself opening can make XUL close/reopen it, so
+        // only handle the top-level app context popup here.
+        if (event.target !== popup) return;
+        const appId = popup.dataset.activeAppId || "";
+        const menu = popup.querySelector("#zen-apps-sidebar-container-menu");
+        const sub = popup.querySelector("#zen-apps-sidebar-container-popup");
+        const clear = popup.querySelector(
+          "#zen-apps-sidebar-clear-panel-data-item",
+        );
+        if (!menu || !sub || !clear) return;
+
+        menu.hidden = !appId;
+        clear.hidden = !appId;
+        clear.removeAttribute("disabled");
+        clear.disabled = false;
+        clear.setAttribute("label", "Clear Panel Cache & Cookies");
+        if (!appId) return;
+
+        rebuildPanelContainerSubmenu(popup, menu, sub);
+        if (!getStoredZentralApp(appId)?.url) {
+          clear.setAttribute("disabled", "true");
+          clear.disabled = true;
+        }
+      };
+
+      const onClearCommand = async (event) => {
+        const target = event.target;
+        if (target?.id !== "zen-apps-sidebar-clear-panel-data-item") return;
+        const appId = popup.dataset.activeAppId || "";
+        if (!appId || target.disabled) return;
+
+        target.disabled = true;
+        target.setAttribute("disabled", "true");
+        target.setAttribute("label", "Clearing Cache & Cookies…");
+        try {
+          await clearPanelCacheAndCookies(appId);
+          target.setAttribute("label", "Cache & Cookies Cleared");
+        } catch (e) {
+          console.error(
+            "[BgalazkaExtension] Failed to clear panel cache/cookies:",
+            appId,
+            e,
+          );
+          target.setAttribute("label", "Clear Failed — See Browser Console");
+        } finally {
+          target.disabled = false;
+          target.removeAttribute("disabled");
+        }
+      };
+
+      popup.addEventListener("popupshowing", onPopupShowing);
+      popup.addEventListener("command", onClearCommand);
+      registerCleanup(() => {
+        try {
+          popup.removeEventListener("popupshowing", onPopupShowing);
+          popup.removeEventListener("command", onClearCommand);
+          delete popup._bgalazkaPanelPrivacyMenuHooked;
+          popup.querySelector("#zen-apps-sidebar-container-menu")?.remove();
+          popup
+            .querySelector("#zen-apps-sidebar-clear-panel-data-item")
+            ?.remove();
+        } catch (_) {}
+      });
+    }
+
+    return true;
+  }
+
+  if (!safeCall(ensurePanelPrivacyMenuItems, "ensurePanelPrivacyMenuItems")) {
+    let panelPrivacyMenuAttempts = 0;
+    const panelPrivacyMenuTimer = setInterval(() => {
+      panelPrivacyMenuAttempts++;
+      if (
+        safeCall(ensurePanelPrivacyMenuItems, "ensurePanelPrivacyMenuItems") ||
+        panelPrivacyMenuAttempts > 40
+      ) {
+        clearInterval(panelPrivacyMenuTimer);
+      }
+    }, 150);
+    registerCleanup(() => clearInterval(panelPrivacyMenuTimer));
+  }
+
+  function callGetOrCreateWithPanelUserContext(
+    origGetOrCreateBrowser,
+    app,
+    userContextId,
+  ) {
+    const id = normalizeUserContextId(userContextId);
+    if (!id) return origGetOrCreateBrowser(app);
+
+    // The base function writes usercontextid="0" before appendChild(). Patch
+    // Element.prototype only for the synchronous duration of that one call and
+    // only for the exact unattached content <browser> shape Zentral creates.
+    // This gets the desired id onto the element before connectedCallback/frame
+    // loader creation without editing a single line of the base implementation.
+    const proto = window.Element?.prototype;
+    const nativeSetAttribute = proto?.setAttribute;
+    let patched = false;
+
+    if (proto && typeof nativeSetAttribute === "function") {
+      try {
+        proto.setAttribute = function (name, value) {
+          let nextValue = value;
+          if (
+            String(name).toLowerCase() === "usercontextid" &&
+            this?.localName === "browser" &&
+            !this.isConnected &&
+            this.getAttribute?.("type") === "content" &&
+            this.getAttribute?.("messagemanagergroup") === "browsers"
+          ) {
+            nextValue = String(id);
+          }
+          return nativeSetAttribute.call(this, name, nextValue);
+        };
+        patched = proto.setAttribute !== nativeSetAttribute;
+      } catch (e) {
+        console.warn(
+          "[BgalazkaExtension] Could not pre-apply panel userContextId:",
+          e,
+        );
+      }
+    }
+
+    try {
+      return origGetOrCreateBrowser(app);
+    } finally {
+      if (patched) {
+        try {
+          proto.setAttribute = nativeSetAttribute;
+        } catch (_) {}
+      }
+    }
+  }
+
+  function applyPanelContainerLoadContext(browser, userContextId) {
+    const id = normalizeUserContextId(userContextId);
+    if (!browser || !id) return;
+
+    browser._bgalazkaUserContextId = id;
+    try {
+      // Normally already correct from callGetOrCreateWithPanelUserContext().
+      // Keep this as a defensive postcondition for browser builds where the
+      // temporary prototype interception is unavailable.
+      if (
+        normalizeUserContextId(browser.getAttribute("usercontextid")) !== id
+      ) {
+        browser.setAttribute("usercontextid", String(id));
+      }
+    } catch (_) {}
+
+    if (browser._bgalazkaContainerLoadHooked) return;
+    browser._bgalazkaContainerLoadHooked = true;
+
+    const applyLoadOptions = (target, options) => {
+      const next = { ...(options || {}), userContextId: id };
+      try {
+        const principal = next.triggeringPrincipal;
+        if (principal?.isContentPrincipal) {
+          const attrs = {
+            ...(principal.originAttributes || {}),
+            userContextId: id,
+          };
+          next.triggeringPrincipal =
+            Services.scriptSecurityManager.principalWithOA(principal, attrs);
+        } else if (!principal) {
+          const uri =
+            typeof target === "string" ? Services.io.newURI(target) : target;
+          if (uri) {
+            next.triggeringPrincipal =
+              Services.scriptSecurityManager.createContentPrincipal(uri, {
+                userContextId: id,
+              });
+          }
+        }
+      } catch (e) {
+        console.warn(
+          "[BgalazkaExtension] Failed to apply container OriginAttributes to load:",
+          e,
+        );
+      }
+      return next;
+    };
+
+    const nativeFixupAndLoad = browser.fixupAndLoadURIString?.bind(browser);
+    if (nativeFixupAndLoad) {
+      try {
+        browser.fixupAndLoadURIString = function (url, options = {}) {
+          return nativeFixupAndLoad(url, applyLoadOptions(url, options));
+        };
+      } catch (e) {
+        console.warn(
+          "[BgalazkaExtension] Could not wrap fixupAndLoadURIString for container loads:",
+          e,
+        );
+      }
+    }
+
+    const nativeLoadURI = browser.loadURI?.bind(browser);
+    if (nativeLoadURI) {
+      try {
+        browser.loadURI = function (uri, options = {}) {
+          return nativeLoadURI(uri, applyLoadOptions(uri, options));
+        };
+      } catch (e) {
+        console.warn(
+          "[BgalazkaExtension] Could not wrap loadURI for container loads:",
+          e,
+        );
+      }
+    }
+  }
+
+  /* ==========================================================================
    * MOBILE USER AGENT TOGGLE (per-app checkbox, mirrors native "Load at Startup")
    * -----------------------------------------------------------------------
    * Feature: a per-app "Mobile User Agent" checkbox living in the same tile
@@ -19514,7 +20363,13 @@
       item.id = "zen-apps-sidebar-mobile-ua-item";
       item.setAttribute("label", "Mobile User Agent");
       item.setAttribute("type", "checkbox");
-      preloadItem.insertAdjacentElement("afterend", item);
+      // Keep the privacy controls directly after the native preload row:
+      // Load at Startup -> Container -> Clear Cache & Cookies -> Mobile UA.
+      const insertionAnchor =
+        popup.querySelector("#zen-apps-sidebar-clear-panel-data-item") ||
+        popup.querySelector("#zen-apps-sidebar-container-menu") ||
+        preloadItem;
+      insertionAnchor.insertAdjacentElement("afterend", item);
 
       // Same hide/show + checked-state contract as the native items: driven
       // entirely by popup.dataset.activeAppId, which ZentralApps already
@@ -19721,7 +20576,12 @@
     const origGetOrCreateBrowser = apps.getOrCreateAppBrowser?.bind(apps);
     if (origGetOrCreateBrowser) {
       apps.getOrCreateAppBrowser = function (app) {
-        const result = origGetOrCreateBrowser(app);
+        const userContextId = getPanelUserContextId(app?.id);
+        const result = callGetOrCreateWithPanelUserContext(
+          origGetOrCreateBrowser,
+          app,
+          userContextId,
+        );
         // Remember this web panel's own default/home URL on the browser
         // element itself, so the toolbar's Back button (see ensureWebToolbar
         // above) has somewhere to fall back to once real back-history runs
@@ -19729,6 +20589,8 @@
         // already-connected browser instance.
         if (result?.isNew && result.browser) {
           result.browser._bgalazkaHomeUrl = app?.url || null;
+          result.browser._bgalazkaAppId = app?.id || null;
+          applyPanelContainerLoadContext(result.browser, userContextId);
         }
         // BUG FIX: setAttribute("useragent"/"customuseragent", ...) is only
         // ever read by the <browser> element once, at its connectedCallback

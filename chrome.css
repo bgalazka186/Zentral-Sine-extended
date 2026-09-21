@@ -6166,7 +6166,61 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* --------------------------------------------------------------------------
- * 6. Mobile User Agent Toggle — Tile Context Menu Item
+ * 6. Firefox Container + Per-Panel Data Controls — Tile Context Menu
+ * -----------------------------------------------------------------------
+ * JS injects these beside the native "Load at Startup" row. These selectors
+ * only target extension-created nodes, so base Zentral/Firefox chrome remains
+ * untouched when the nodes do not exist. The explicit no-active-app hiding
+ * mirrors the native menu's own app-specific item behavior above the marker.
+ * -------------------------------------------------------------------------- */
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-container-menu[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-container-menu,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-container-menu,
+#zen-apps-sidebar-tile-context
+  #zen-apps-sidebar-clear-panel-data-item[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-clear-panel-data-item,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-clear-panel-data-item {
+  display: none !important;
+}
+
+/* Container choices use Firefox's own container SVGs where available. Keep
+ * sizing modest so the submenu stays visually aligned with native XUL rows. */
+#zen-apps-sidebar-container-popup
+  .bgalazka-container-choice.menuitem-iconic
+  .menu-iconic-icon {
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+}
+
+#zen-apps-sidebar-container-popup .bgalazka-container-choice[checked="true"] {
+  font-weight: 600 !important;
+}
+
+#zen-apps-sidebar-container-popup .bgalazka-container-status {
+  opacity: 0.68 !important;
+  font-style: italic !important;
+}
+
+/* Clearing cookies is destructive but not equivalent to removing the app;
+ * use a restrained warning tint rather than the strong red Remove App style. */
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-clear-panel-data-item {
+  color: color-mix(in srgb, currentColor 78%, #ff9f43 22%) !important;
+}
+
+#zen-apps-sidebar-tile-context
+  #zen-apps-sidebar-clear-panel-data-item:is(:hover, [_moz-menuactive="true"]) {
+  background-color: color-mix(in srgb, #ff9f43 14%, transparent) !important;
+  border-radius: var(--arrowpanel-menuitem-border-radius, 4px) !important;
+}
+
+/* --------------------------------------------------------------------------
+ * 7. Mobile User Agent Toggle — Tile Context Menu Item
  * -----------------------------------------------------------------------
  * The #zen-apps-sidebar-mobile-ua-item menuitem is injected by the JS
  * extension (see the "MOBILE USER AGENT TOGGLE" block below the marker in
@@ -6185,7 +6239,7 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* --------------------------------------------------------------------------
- * 7. Web Panel Navigation Toolbar
+ * 8. Web Panel Navigation Toolbar
  * --------------------------------------------------------------------------
  * Back / forward / reload + URL bar (+ optional zoom), docked at the bottom
  * of the floating app panel. DOM is built by ensureWebToolbar() in the JS

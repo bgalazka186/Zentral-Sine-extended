@@ -21,6 +21,7 @@
 - **Vertical Resize and change vertical position** making it fully able to change position would require big change in core mod
 - **Drag panel and resize in 2D** 3D when??
 - **Keybinds adn disableing key press propagation** important if you want to close it with ESC button
+- **Firefox Containers and Clear Cache & Cookies of panels** i dont use it, heard people like it
 
 ### Extra Bugfix:
 
