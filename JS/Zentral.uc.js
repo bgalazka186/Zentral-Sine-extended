@@ -861,6 +861,8 @@
       for (const app of preloadedApps) {
         const { browser, isNew } = this.getOrCreateAppBrowser(app);
         if (isNew) {
+          // Preloading must never make an unselected browser look active.
+          browser.style.display = "none";
           try {
             const uri = Services.io.newURI(app.url);
             if (typeof browser.fixupAndLoadURIString === "function") {
@@ -15927,12 +15929,80 @@
     // A deliberate Y gesture must clear this threshold once. After it
     // activates there is no further threshold or axis lock; diagonal drags
     // continue resizing X while positioning the pill smoothly along Y.
-    const VDRAG_DEADZONE_PX = 28;
+    const VDRAG_DEADZONE_PX = 110;
 
     grabberBtn.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
       if (!window.Zentral?.Apps) return;
       startHorizontalResize(e, "pill");
+      // A fixed glass pane keeps mousemove/mouseup on chrome while crossing
+      // remote content, and prevents releasing over another pill button.
+      const shield = document.createElement("div");
+      shield.className = "bgalazka-pill-drag-shield";
+      document.documentElement.setAttribute(
+        "bgalazka-pill-drag-feedback",
+        "true",
+      );
+      // Inline important wins over the native and hover styles for the short
+      // gesture, without changing the user's saved mini-pill preferences.
+      const pill = document.getElementById("zen-app-panel-pill");
+      const props = [
+        "opacity",
+        "background",
+        "transform",
+        "transform-origin",
+        "pointer-events",
+      ];
+      const previous = props.map((prop) => [
+        prop,
+        pill?.style.getPropertyValue(prop) || "",
+        pill?.style.getPropertyPriority(prop) || "",
+      ]);
+      const side = document
+        .getElementById("zen-app-panel-root")
+        ?.getAttribute("data-panel-side");
+      const fromRight = side === "right";
+      pill?.style.setProperty("opacity", ".8", "important");
+      pill?.style.setProperty("background", "#dc143c", "important");
+      pill?.style.setProperty(
+        "transform",
+        `translate(${fromRight ? "-100%" : "100%"}, -50%) scale(.32)`,
+        "important",
+      );
+      pill?.style.setProperty(
+        "transform-origin",
+        fromRight ? "right center" : "left center",
+        "important",
+      );
+      pill?.style.setProperty("pointer-events", "none", "important");
+      document.documentElement.appendChild(shield);
+      let moved = false;
+      const cleanupShield = () => {
+        shield.remove();
+        document.documentElement.removeAttribute("bgalazka-pill-drag-feedback");
+        for (const [prop, value, priority] of previous) {
+          if (value) pill?.style.setProperty(prop, value, priority);
+          else pill?.style.removeProperty(prop);
+        }
+        window.removeEventListener("mouseup", cleanupShield, true);
+        window.removeEventListener("blur", cleanupShield);
+        if (moved) {
+          const blockClick = (event) => {
+            if (event.target.closest?.("#zen-app-panel-pill")) {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+            }
+            window.removeEventListener("click", blockClick, true);
+          };
+          window.addEventListener("click", blockClick, true);
+          setTimeout(
+            () => window.removeEventListener("click", blockClick, true),
+            300,
+          );
+        }
+      };
+      window.addEventListener("mouseup", cleanupShield, true);
+      window.addEventListener("blur", cleanupShield);
 
       const startY = e.clientY;
       let verticalStarted = false;
@@ -15940,6 +16010,8 @@
       const trackMove = (moveEvt) => {
         if (verticalStarted) return;
         const dy = moveEvt.clientY - startY;
+        if (Math.abs(dy) > 4 || Math.abs(moveEvt.clientX - e.clientX) > 4)
+          moved = true;
         if (Math.abs(dy) <= VDRAG_DEADZONE_PX) return;
 
         verticalStarted = true;
@@ -15949,7 +16021,7 @@
         // Preserve the small deadzone without cancelling native X resize.
         // From this point both document mousemove listeners run concurrently:
         // Zentral's native onDrag() changes width while our listener changes Y.
-        const activationY = startY + Math.sign(dy) * VDRAG_DEADZONE_PX;
+        const activationY = moveEvt.clientY;
         safeCall(
           () => startPillPositionDrag(moveEvt, activationY, getPillPosition()),
           "ensurePillGrabberVerticalDrag/startPillPositionDrag",
@@ -16773,7 +16845,19 @@
         tab,
         "bgalazka-panel-settings",
       );
-      const value = raw ? JSON.parse(raw) : {};
+      const restored =
+        raw ||
+        (() => {
+          try {
+            const state = JSON.parse(
+              essentialSessionStore()?.getTabState(tab) || "{}",
+            );
+            return state.extData?.["bgalazka-panel-settings"] || "";
+          } catch (_) {
+            return "";
+          }
+        })();
+      const value = restored ? JSON.parse(restored) : {};
       return value && typeof value === "object" && !Array.isArray(value)
         ? value
         : {};
@@ -16807,7 +16891,7 @@
     if (!apps?.getOrCreateAppBrowser) return false;
     const { browser, isNew } = apps.getOrCreateAppBrowser(record.app) || {};
     if (!browser) return false;
-    if (isNew) {
+    if (isNew || browser.currentURI?.spec === "about:blank") {
       browser.style.display = "none";
       const uri = Services.io.newURI(record.app.url);
       browser.fixupAndLoadURIString(record.app.url, {
@@ -16817,6 +16901,31 @@
           }),
       });
       record.loadedSource = record.app.url;
+      setTimeout(() => {
+        if (
+          !record.tab.isConnected ||
+          !browser.isConnected ||
+          browser.currentURI?.spec !== "about:blank" ||
+          browser.webProgress?.isLoadingDocument
+        )
+          return;
+        try {
+          browser.fixupAndLoadURIString(record.app.url, {
+            triggeringPrincipal:
+              Services.scriptSecurityManager.createContentPrincipal(
+                Services.io.newURI(record.app.url),
+                {
+                  userContextId: record.userContextId,
+                },
+              ),
+          });
+        } catch (error) {
+          console.warn(
+            "[BgalazkaExtension] Essential preload retry failed",
+            error,
+          );
+        }
+      }, 3000);
     }
     return true;
   }
@@ -16862,6 +16971,22 @@
       : null;
   }
 
+  function getRestoredEssentialSource(tab) {
+    const live = getEssentialSource(tab);
+    if (live) return live;
+    try {
+      const state = JSON.parse(
+        essentialSessionStore()?.getTabState(tab) || "{}",
+      );
+      const entry = state.entries?.[Math.max(0, (state.index || 1) - 1)];
+      const url = entry?.url;
+      return url && /^(https?|about):/i.test(url) && url !== "about:blank"
+        ? url
+        : null;
+    } catch (_) {
+      return null;
+    }
+  }
   function openEssentialPanel(record) {
     const apps = window.Zentral?.Apps;
     if (!apps?.openPanel || !record.tab.isConnected) return;
@@ -16951,8 +17076,8 @@
       for (const tab of targets) {
         let record = essentialTabRecords.get(tab);
         if (!record) {
-          const source = getEssentialSource(tab);
-          if (!source) continue; // restored/discarded tabs may not have a URI yet
+          const source = getRestoredEssentialSource(tab);
+          if (!source) continue; // wait until SessionStore has supplied its URL
           const settings = readEssentialSettings(tab);
           const app = {
             preload: settings.preload === true,
@@ -16984,15 +17109,11 @@
           essentialTabRecords.set(tab, record);
           essentialPanels.set(app.id, record);
         }
-        if (
-          record.app.preload &&
-          !getPref(EXT_PREFS.SMART_SLEEP, false) &&
-          !record.preloadAttempted
-        ) {
+        if (record.app.preload && !record.preloadAttempted) {
           try {
             record.preloadAttempted = loadEssentialInBackground(record);
           } catch (error) {
-            record.preloadAttempted = true;
+            // Keep it eligible for the next sync after startup settles.
             console.warn("[BgalazkaExtension] Essential preload failed", error);
           }
         }
@@ -17583,6 +17704,14 @@
   function getActiveAppBrowser() {
     const panel = document.getElementById("zen-app-panel-slider");
     if (!panel) return null;
+    // In Triple-View the secondary browser is nested in its own shell.
+    // Keep the original toolbar and pill bound to Zentral's first browser.
+    if (document.documentElement.hasAttribute("bgalazka-triple-view")) {
+      const primary = panel.querySelector(
+        'browser[data-bgalazka-triple-slot="top"]',
+      );
+      if (primary?.isConnected) return primary;
+    }
     const browsers = panel.querySelectorAll("browser");
     for (const b of Array.from(browsers).reverse()) {
       if (b.style.display !== "none") return b;
@@ -22185,7 +22314,9 @@
     if (!record) return;
     event.stopImmediatePropagation();
     record.app.preload = !record.app.preload;
+    record.preloadAttempted = false;
     saveEssentialSettings(record);
+    if (record.app.preload) requestTileSync(0);
     if (record.app.preload) event.target.setAttribute("checked", "true");
     else event.target.removeAttribute("checked");
   };
@@ -22487,6 +22618,44 @@
     }, 150);
     registerCleanup(() => clearInterval(hookTimer));
   }
+
+  // SessionStore may restore last session's host tabs and Zen folder before
+  // this script starts. They do not belong to this window's live bridge.
+  function pruneRestoredAddonHosts() {
+    const folder =
+      findAddonHostFolder() ||
+      [...document.querySelectorAll("zen-folder")].find(
+        (node) => node.getAttribute("label") === ADDON_HOST_FOLDER_LABEL,
+      );
+    if (folder) {
+      addonHostFolder = folder;
+      keepAddonHostFolderCollapsed(folder);
+    }
+    for (const tab of [...(window.gBrowser?.tabs || [])]) {
+      if (addonHostByTab.get(tab)) continue;
+      if (
+        tab.hasAttribute("bgalazka-addon-host") ||
+        tab.hasAttribute("bgalazka-addon-host-fallback") ||
+        (folder && tab.group === folder)
+      ) {
+        try {
+          gBrowser.removeTab(tab, {
+            animate: false,
+            skipPermitUnload: true,
+            skipSessionStore: true,
+          });
+        } catch (error) {
+          console.warn("[BgalazkaExtension] Stale host cleanup failed", error);
+        }
+      }
+    }
+    if (!addonHostByAppId.size) removeEmptyAddonHostFolder();
+  }
+  // Session restoration can inject the folder after the first UI sync.
+  const restoredHostTimers = [0, 1000, 4000].map((delay) =>
+    setTimeout(pruneRestoredAddonHosts, delay),
+  );
+  registerCleanup(() => restoredHostTimers.forEach(clearTimeout));
 
   // Hot-reload/startup normalization: if the opt-in bridge was already on
   // and a standalone panel browser predates this extension instance, unload it
@@ -22824,13 +22993,7 @@
     registerCleanup(() => clearInterval(vResizeInitTimer));
   }
 
-  /* ========================================================================
-   * HOLD MODES: triple view and super pin (extension only)
-   *
-   * Native Zentral owns one activeAppId. Its openPanel() hides every other
-   * browser, so the two opt-in layouts preserve the first browser around
-   * that method rather than touching its private state or cloning a browser.
-   * ======================================================================== */
+  /* Secondary views keep the native first panel and its toolbar intact. */
   (() => {
     const apps = window.Zentral?.Apps;
     if (!apps) return;
@@ -22838,75 +23001,140 @@
     const state = {
       mode: null,
       first: null,
-      bottom: null,
       second: null,
       shell: null,
+      divider: null,
+      previousPush: null,
+      previousPin: null,
+      poll: null,
+      loadTimers: [],
+      resizeCleanup: null,
+      geometryObserver: null,
+      share: 0.5,
+      dividerHandle: null,
+      handleFrame: null,
     };
     const slider = () => document.getElementById("zen-app-panel-slider");
     const root = () => document.getElementById("zen-app-panel-root");
     const isOpen = () =>
       root()?.hasAttribute("open") && !root()?.hasAttribute("closing");
-    const active = () =>
-      Array.from(slider()?.querySelectorAll("browser") || [])
-        .reverse()
-        .find((b) => b.style.display !== "none" && !b.hasAttribute("hidden"));
-    const markTiles = () => {
+    const active = () => {
+      const browsers = [...(slider()?.querySelectorAll("browser") || [])];
+      const activeIds = [
+        ...document.querySelectorAll(
+          ".zen-app-tile[data-app-id][data-active='true']",
+        ),
+      ].map((tile) => tile.dataset.appId);
+      const selected = browsers.find(
+        (browser) =>
+          activeIds.includes(browser._bgalazkaAppId) &&
+          browser.style.display !== "none" &&
+          !browser.hasAttribute("hidden"),
+      );
+      return (
+        selected ||
+        browsers
+          .reverse()
+          .find(
+            (browser) =>
+              browser.style.display !== "none" &&
+              !browser.hasAttribute("hidden"),
+          )
+      );
+    };
+    const origOpen = apps.openPanel;
+    const origClose = apps.closePanel;
+    const origCloseApp = apps.closeApp;
+    const origRender = apps.renderGrid;
+    const markTiles = () =>
       document
         .querySelectorAll(".zen-app-tile[data-app-id]")
         .forEach((tile) => {
           if (state.mode && tile.dataset.appId === state.first?._bgalazkaAppId)
             tile.dataset.active = "true";
           if (
-            state.mode === "super" &&
-            tile.dataset.appId === state.second?._bgalazkaAppId
+            state.second &&
+            tile.dataset.appId === state.second._bgalazkaAppId
           )
             tile.dataset.active = "true";
         });
-    };
-    const origOpen = apps.openPanel;
-    const origClose = apps.closePanel;
-    const origCloseApp = apps.closeApp;
-    const origTogglePin = apps.togglePin;
-    const origRender = apps.renderGrid;
-
+    function fitSecondaryBrowsers() {
+      // Keep the live XUL <browser> elements under layout control. Writing
+      // width/height attributes or absolute inline sizes can recreate or
+      // freeze their remote viewports when a second panel appears.
+      if (
+        state.mode !== "triple" ||
+        !state.second?.isConnected ||
+        !state.divider?.isConnected
+      )
+        return;
+      const panel = slider();
+      const rect = panel?.getBoundingClientRect();
+      if (!rect) return;
+      const toolbar = document.getElementById("zen-app-panel-toolbar");
+      const usable =
+        rect.height -
+        (toolbar?.offsetHeight || 0) -
+        state.shell.offsetHeight -
+        state.divider.offsetHeight -
+        panel.clientTop * 2;
+      if (usable <= 0) return;
+      const min = Math.min(160, usable * 0.25);
+      const top = Math.max(min, Math.min(usable - min, usable * state.share));
+      panel.style.setProperty("--bgalazka-top-share", `${top}px`);
+      if (state.handleFrame) cancelAnimationFrame(state.handleFrame);
+      state.handleFrame = requestAnimationFrame(() => {
+        state.handleFrame = null;
+        if (!state.dividerHandle?.isConnected || !state.divider?.isConnected)
+          return;
+        const line = state.divider.getBoundingClientRect();
+        state.dividerHandle.style.left = `${line.left}px`;
+        state.dividerHandle.style.top = `${line.top - 3}px`;
+        state.dividerHandle.style.width = `${line.width}px`;
+        state.dividerHandle.style.height = `${line.height + 6}px`;
+      });
+    }
     function discardSecond() {
-      // Keep the original browser node connected and cached in Zentral's
-      // private map, including its history, origin attributes and tab bridge.
-      if (state.second?.isConnected && slider()) {
-        slider().appendChild(state.second);
-        state.second.style.display = "none";
+      state.geometryObserver?.disconnect();
+      state.geometryObserver = null;
+      if (state.handleFrame) cancelAnimationFrame(state.handleFrame);
+      state.handleFrame = null;
+      state.dividerHandle?.remove();
+      state.dividerHandle = null;
+      state.loadTimers.forEach(clearTimeout);
+      state.loadTimers.length = 0;
+      state.resizeCleanup?.();
+      state.resizeCleanup = null;
+      clearInterval(state.poll);
+      state.poll = null;
+      const second = state.second;
+      if (second?.isConnected && slider()) {
+        if (second.parentNode !== slider()) slider().appendChild(second);
+        second.style.display = "none";
       }
-      if (state.second?._bgalazkaAppId) {
+      if (second?._bgalazkaAppId)
         document
           .querySelectorAll(".zen-app-tile[data-app-id]")
           .forEach((tile) => {
-            if (tile.dataset.appId === state.second._bgalazkaAppId)
+            if (tile.dataset.appId === second._bgalazkaAppId)
               tile.dataset.active = "false";
           });
-      }
       state.second = null;
+      state.divider?.remove();
+      state.divider = null;
+      ui.removeAttribute("bgalazka-triple-populated");
       state.shell?.remove();
       state.shell = null;
+      slider()?.style.removeProperty("--bgalazka-top-share");
+      state.first?.removeAttribute("data-bgalazka-triple-slot");
+      second?.removeAttribute("data-bgalazka-triple-slot");
     }
     function leaveMode() {
+      if (!state.mode) return;
+      const mode = state.mode;
       discardSecond();
-      slider()
-        ?.querySelectorAll("browser[data-bgalazka-triple-slot]")
-        .forEach((b) => b.removeAttribute("data-bgalazka-triple-slot"));
-      if (state.first?.isConnected && state.mode === "triple") {
-        state.first.style.display = state.bottom?.isConnected ? "none" : "";
-      }
-      if (state.first?._bgalazkaAppId && state.bottom?.isConnected) {
-        document
-          .querySelectorAll(".zen-app-tile[data-app-id]")
-          .forEach((tile) => {
-            if (tile.dataset.appId === state.first._bgalazkaAppId)
-              tile.dataset.active = "false";
-          });
-      }
-      state.first = null;
-      state.bottom = null;
       state.mode = null;
+      state.first = null;
       ui.removeAttribute("bgalazka-triple-view");
       ui.removeAttribute("bgalazka-super-pin");
       document
@@ -22915,152 +23143,367 @@
       document
         .querySelector("#zen-app-panel-pill .zen-app-btn[data-pinned]")
         ?.removeAttribute("data-hold-active");
+      if (
+        mode === "triple" &&
+        state.previousPush !== null &&
+        getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false) !== state.previousPush
+      ) {
+        setPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, state.previousPush);
+        ui.setAttribute("bgalazka-push-page", String(state.previousPush));
+        syncPanelPushState();
+        document
+          .getElementById("zen-app-dual-view-btn")
+          ?.setAttribute("data-active", String(state.previousPush));
+      }
+      state.previousPush = null;
+      if (mode === "super" && state.previousPin === false && isOpen()) {
+        const pin = document.querySelector(
+          "#zen-app-panel-pill .zen-app-btn[data-pinned]",
+        );
+        if (pin?.getAttribute("data-pinned") === "true") apps.togglePin();
+      }
+      state.previousPin = null;
+    }
+    function navigate(browser, value) {
+      try {
+        const target = looksLikeUrl(value)
+          ? /^[a-z][a-z0-9+.-]*:\/\//i.test(value)
+            ? value
+            : "https://" + value
+          : buildSearchUrl(value);
+        const uri = Services.io.newURI(target);
+        const options = {
+          triggeringPrincipal:
+            Services.scriptSecurityManager.createContentPrincipal(uri, {
+              userContextId: Number(browser.getAttribute("usercontextid")) || 0,
+            }),
+        };
+        if (typeof browser.fixupAndLoadURIString === "function")
+          browser.fixupAndLoadURIString(target, options);
+        else browser.loadURI(uri, options);
+      } catch (error) {
+        console.warn("[BgalazkaExtension] Secondary navigation failed", error);
+      }
     }
     function makeShell(browser, app) {
-      const box = document.createElement("div");
+      // SuperPin needs a native XUL container for its remote browser to
+      // receive resize and input events. Triple-View only uses the bar.
+      const box =
+        state.mode === "super"
+          ? document.createXULElement("vbox")
+          : document.createElement("div");
       box.id = "bgalazka-super-panel";
       const bar = document.createElement("div");
       bar.className = "bgalazka-super-bar";
-      const label = document.createElement("span");
-      label.textContent = app.name || app.title || app.url || "Panel";
-      const close = document.createElement("button");
-      close.type = "button";
-      close.textContent = "×";
-      close.title = "Close second panel";
-      close.addEventListener("click", () => {
-        discardSecond();
-        markTiles();
+      const button = (label, title, action) => {
+        const el = document.createElement("button");
+        el.type = "button";
+        el.textContent = label;
+        el.title = title;
+        el.addEventListener("click", (event) => {
+          event.stopPropagation();
+          action();
+        });
+        bar.appendChild(el);
+        return el;
+      };
+      const iconButton = (icon, title, action) => {
+        const el = button("", title, action);
+        el.appendChild(parseSVG(icon));
+        return el;
+      };
+      iconButton(PREF_ICONS.BACK, "Back", () =>
+        navigatePanelHistory(browser, -1),
+      );
+      iconButton(PREF_ICONS.FORWARD, "Forward", () =>
+        navigatePanelHistory(browser, 1),
+      );
+      iconButton(PREF_ICONS.RELOAD, "Reload", () => browser.reload());
+      const grip = document.createElement("div");
+      grip.className = "bgalazka-second-grip";
+      grip.title = "Drag to move second panel";
+      grip.appendChild(parseSVG(PREF_ICONS.DRAG_HANDLE));
+      const url = document.createElement("input");
+      url.type = "text";
+      url.className = "bgalazka-second-url";
+      url.placeholder = app.url || "URL or search";
+      url.spellcheck = false;
+      url.addEventListener("keydown", (event) => {
+        event.stopPropagation();
+        if (event.key === "Enter" && url.value.trim()) {
+          navigate(browser, url.value.trim());
+          url.blur();
+        } else if (event.key === "Escape") url.blur();
       });
-      bar.append(label, close);
-      box.append(bar, browser);
-      (document.body || document.documentElement).appendChild(box);
+      iconButton(PREF_ICONS.ZOOM_OUT, "Zoom out", () => zoom(-0.1));
+      const zoomText = button("100%", "Reset zoom", () => zoom(0));
+      zoomText.classList.add("bgalazka-second-zoom-label");
+      iconButton(PREF_ICONS.ZOOM_IN, "Zoom in", () => zoom(0.1));
+      bar.append(grip, url);
+      button("×", "Close second panel", discardSecond).classList.add(
+        "bgalazka-second-close",
+      );
+      function zoom(step) {
+        try {
+          const current = ZoomManager.getZoomForBrowser(browser);
+          const next = step ? Math.max(0.3, Math.min(3, current + step)) : 1;
+          ZoomManager.setZoomForBrowser(browser, next);
+          zoomText.textContent = Math.round(next * 100) + "%";
+        } catch (_) {}
+      }
+      box.appendChild(bar);
+      if (state.mode === "super") box.appendChild(browser);
       browser.style.display = "";
-      const firstRect = root().getBoundingClientRect();
-      const width = Math.min(
-        Math.max(firstRect.width, 250),
-        window.innerWidth - 24,
-      );
-      const height = Math.min(
-        Math.max(firstRect.height, 240),
-        window.innerHeight - 24,
-      );
-      box.style.width = `${width}px`;
-      box.style.height = `${height}px`;
-      box.style.left = `${Math.max(
-        12,
-        Math.min(
-          window.innerWidth - width - 12,
-          firstRect.left +
-            (firstRect.left < window.innerWidth / 2
-              ? firstRect.width + 16
-              : -width - 16),
-        ),
-      )}px`;
-      box.style.top = `${Math.max(12, Math.min(window.innerHeight - height - 12, firstRect.top))}px`;
-      let drag = null;
-      bar.addEventListener("pointerdown", (e) => {
-        if (e.button !== 0 || e.target === close) return;
-        e.preventDefault();
-        drag = {
-          x: e.clientX,
-          y: e.clientY,
-          left: box.offsetLeft,
-          top: box.offsetTop,
+      if (state.mode === "triple") {
+        const divider = document.createElement("div");
+        divider.className = "bgalazka-triple-divider";
+        divider.title = "Drag to balance panel heights";
+        divider.setAttribute("role", "separator");
+        divider.setAttribute("aria-orientation", "horizontal");
+        // CSS order places the bars around the divider. Neither loaded XUL
+        // browser is moved; moving a live browser can restart its document.
+        slider().append(divider, box);
+        state.first.setAttribute("data-bgalazka-triple-slot", "top");
+        browser.setAttribute("data-bgalazka-triple-slot", "bottom");
+        ui.setAttribute("bgalazka-triple-populated", "true");
+        const balance = (clientY) => {
+          const panel = slider();
+          const rect = panel.getBoundingClientRect();
+          const toolbarHeight =
+            document.getElementById("zen-app-panel-toolbar")?.offsetHeight || 0;
+          const usable =
+            rect.height -
+            toolbarHeight -
+            bar.offsetHeight -
+            divider.offsetHeight;
+          if (usable <= 0) return;
+          const min = Math.min(160, usable * 0.25);
+          const pixels = Math.max(
+            min,
+            Math.min(
+              usable - min,
+              clientY - rect.top - toolbarHeight - panel.clientTop,
+            ),
+          );
+          state.share = pixels / usable;
+          fitSecondaryBrowsers();
         };
-        bar.setPointerCapture(e.pointerId);
-      });
-      bar.addEventListener("pointermove", (e) => {
-        if (!drag) return;
+        state.divider = divider;
+        const handle = document.createElement("div");
+        handle.className = "bgalazka-triple-drag-handle";
+        handle.title = divider.title;
+        (document.body || document.documentElement).appendChild(handle);
+        state.dividerHandle = handle;
+        state.geometryObserver = new ResizeObserver(fitSecondaryBrowsers);
+        state.geometryObserver.observe(slider());
+        state.geometryObserver.observe(bar);
+        const toolbar = document.getElementById("zen-app-panel-toolbar");
+        if (toolbar) state.geometryObserver.observe(toolbar);
+        requestAnimationFrame(fitSecondaryBrowsers);
+        let shield = null;
+        let grabOffset = 0;
+        const endResize = () => {
+          document.removeEventListener("mousemove", moveResize, true);
+          document.removeEventListener("mouseup", endResize, true);
+          window.removeEventListener("blur", endResize);
+          shield?.remove();
+          shield = null;
+        };
+        const moveResize = (event) => {
+          if (shield) balance(event.clientY - grabOffset);
+        };
+        const startResize = (event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          event.stopPropagation();
+          endResize();
+          grabOffset = event.clientY - divider.getBoundingClientRect().top;
+          shield = document.createElement("div");
+          shield.className = "bgalazka-triple-drag-shield";
+          document.documentElement.appendChild(shield);
+          document.addEventListener("mousemove", moveResize, true);
+          document.addEventListener("mouseup", endResize, true);
+          window.addEventListener("blur", endResize);
+        };
+        handle.addEventListener("mousedown", startResize);
+        divider.addEventListener("mousedown", startResize);
+        state.resizeCleanup = endResize;
+      } else {
+        (document.body || document.documentElement).appendChild(box);
+        const first = root().getBoundingClientRect();
+        const width = Math.min(
+          Math.max(270, Math.round(first.width * 0.75)),
+          window.innerWidth - 24,
+        );
+        const height = Math.min(
+          Math.max(220, Math.round(first.height * 0.68)),
+          window.innerHeight - 24,
+        );
+        box.style.width = `${width}px`;
+        box.style.height = `${height}px`;
         box.style.left = `${Math.max(
-          0,
+          12,
           Math.min(
-            window.innerWidth - box.offsetWidth,
-            drag.left + e.clientX - drag.x,
+            window.innerWidth - width - 12,
+            first.left < window.innerWidth / 2
+              ? first.right + 12
+              : first.left - width - 12,
           ),
         )}px`;
-        box.style.top = `${Math.max(
-          0,
-          Math.min(
-            window.innerHeight - box.offsetHeight,
-            drag.top + e.clientY - drag.y,
-          ),
-        )}px`;
-      });
-      bar.addEventListener("pointerup", () => {
-        drag = null;
-      });
-      bar.addEventListener("lostpointercapture", () => {
-        drag = null;
-      });
+        box.style.top = `${Math.max(12, Math.min(window.innerHeight - height - 12, first.top))}px`;
+        // Eight edge/corner surfaces resize the secondary independently.
+        for (const edge of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) {
+          const handle = document.createElement("div");
+          handle.className = `bgalazka-second-resize bgalazka-resize-${edge}`;
+          handle.title = "Drag to resize second panel";
+          box.appendChild(handle);
+          let start = null;
+          handle.addEventListener("pointerdown", (event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const rect = box.getBoundingClientRect();
+            start = {
+              id: event.pointerId,
+              x: event.clientX,
+              y: event.clientY,
+              left: rect.left,
+              top: rect.top,
+              width: rect.width,
+              height: rect.height,
+            };
+            handle.setPointerCapture(event.pointerId);
+          });
+          handle.addEventListener("pointermove", (event) => {
+            if (!start || event.pointerId !== start.id) return;
+            let left = start.left,
+              top = start.top;
+            let width = start.width,
+              height = start.height;
+            const dx = event.clientX - start.x,
+              dy = event.clientY - start.y;
+            if (edge.includes("e")) width += dx;
+            if (edge.includes("w")) {
+              left += dx;
+              width -= dx;
+            }
+            if (edge.includes("s")) height += dy;
+            if (edge.includes("n")) {
+              top += dy;
+              height -= dy;
+            }
+            width = Math.max(
+              250,
+              Math.min(width, window.innerWidth - Math.max(0, left)),
+            );
+            height = Math.max(
+              180,
+              Math.min(height, window.innerHeight - Math.max(0, top)),
+            );
+            if (edge.includes("w")) left = start.left + start.width - width;
+            if (edge.includes("n")) top = start.top + start.height - height;
+            box.style.left = `${Math.max(0, left)}px`;
+            box.style.top = `${Math.max(0, top)}px`;
+            box.style.width = `${width}px`;
+            box.style.height = `${height}px`;
+          });
+          const doneResize = () => {
+            start = null;
+          };
+          handle.addEventListener("pointerup", doneResize);
+          handle.addEventListener("pointercancel", doneResize);
+          handle.addEventListener("lostpointercapture", doneResize);
+        }
+        let drag = null;
+        grip.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          const rect = box.getBoundingClientRect();
+          drag = {
+            id: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+            left: rect.left,
+            top: rect.top,
+          };
+          grip.setPointerCapture(event.pointerId);
+        });
+        grip.addEventListener("pointermove", (event) => {
+          if (!drag || event.pointerId !== drag.id) return;
+          box.style.left = `${Math.max(
+            0,
+            Math.min(
+              window.innerWidth - box.getBoundingClientRect().width,
+              drag.left + event.clientX - drag.x,
+            ),
+          )}px`;
+          box.style.top = `${Math.max(
+            0,
+            Math.min(
+              window.innerHeight - box.getBoundingClientRect().height,
+              drag.top + event.clientY - drag.y,
+            ),
+          )}px`;
+        });
+        const done = () => {
+          drag = null;
+        };
+        grip.addEventListener("pointerup", done);
+        grip.addEventListener("pointercancel", done);
+        grip.addEventListener("lostpointercapture", done);
+      }
       state.shell = box;
+      state.poll = setInterval(() => {
+        if (state.second !== browser || !box.isConnected) return;
+        if (document.activeElement !== url)
+          url.value =
+            browser.currentURI?.spec === "about:blank"
+              ? app.url
+              : browser.currentURI?.spec || app.url || "";
+        try {
+          zoomText.textContent = `${Math.round(ZoomManager.getZoomForBrowser(browser) * 100)}%`;
+        } catch (_) {}
+      }, 500);
     }
     function openSecond(app) {
       if (!app?.id || !isOpen() || !state.first?.isConnected) return false;
       if (app.id === state.first._bgalazkaAppId) return true;
       if (app.id === state.second?._bgalazkaAppId) return true;
-      // Create through the already wrapped Zentral factory: its container,
-      // mobile UA, add-on host and badge hooks all apply to this browser.
       const { browser, isNew } = apps.getOrCreateAppBrowser(app) || {};
       if (!browser) return false;
       discardSecond();
-      if (isNew) {
-        try {
-          const uri = Services.io.newURI(app.url);
-          const options = {
-            triggeringPrincipal:
-              Services.scriptSecurityManager.createContentPrincipal(uri, {
-                userContextId:
-                  Number(browser.getAttribute("usercontextid")) || 0,
-              }),
-          };
-          if (typeof browser.fixupAndLoadURIString === "function")
-            browser.fixupAndLoadURIString(app.url, options);
-          else browser.loadURI(uri, options);
-        } catch (error) {
-          console.warn(
-            "[BgalazkaExtension] Second panel navigation failed:",
-            error,
-          );
-        }
-      }
-      makeShell(browser, app);
       state.second = browser;
+      makeShell(browser, app); // attach before navigating a remote browser
+      try {
+        browser.docShellIsActive = true;
+      } catch (_) {}
+      if (isNew || browser.currentURI?.spec === "about:blank")
+        navigate(browser, app.url);
+      state.loadTimers.push(
+        setTimeout(() => {
+          if (
+            state.second === browser &&
+            browser.isConnected &&
+            browser.currentURI?.spec === "about:blank" &&
+            !browser.webProgress?.isLoadingDocument
+          )
+            navigate(browser, app.url);
+        }, 2500),
+      );
       markTiles();
       return true;
     }
-
     apps.openPanel = function (app) {
       if (
-        state.mode === "super" &&
+        state.mode &&
         state.first?.isConnected &&
         isOpen() &&
         app?.id !== state.first._bgalazkaAppId
       ) {
         if (openSecond(app)) return;
       }
-      const keep =
-        state.mode === "triple" &&
-        state.first?.isConnected &&
-        isOpen() &&
-        ui.getAttribute("bgalazka-push-page") === "true" &&
-        app?.id !== state.first._bgalazkaAppId;
-      if (state.mode && !keep && state.mode !== "super") leaveMode();
-      const result = origOpen.call(this, app);
-      if (keep) {
-        const bottom = active();
-        if (bottom && bottom !== state.first) {
-          slider().insertBefore(state.first, bottom);
-          state.first.style.display = "";
-          state.first.setAttribute("data-bgalazka-triple-slot", "top");
-          slider()
-            .querySelectorAll('browser[data-bgalazka-triple-slot="bottom"]')
-            .forEach((b) => b.removeAttribute("data-bgalazka-triple-slot"));
-          bottom.setAttribute("data-bgalazka-triple-slot", "bottom");
-          state.bottom = bottom;
-          markTiles();
-        }
-      }
-      return result;
+      if (state.mode) leaveMode();
+      return origOpen.call(this, app);
     };
     apps.closePanel = function (...args) {
       leaveMode();
@@ -23071,23 +23514,11 @@
       else if (state.second?._bgalazkaAppId === id) discardSecond();
       return origCloseApp.call(this, id, ...args);
     };
-    apps.togglePin = function (...args) {
-      const result = origTogglePin.apply(this, args);
-      if (
-        state.mode === "super" &&
-        document.querySelector(
-          '#zen-app-panel-pill .zen-app-btn[data-pinned="false"]',
-        )
-      )
-        leaveMode();
-      return result;
-    };
     apps.renderGrid = function (...args) {
       const result = origRender.apply(this, args);
       markTiles();
       return result;
     };
-
     const HOLD_MS = 550;
     let pending = null;
     let suppress = null;
@@ -23095,16 +23526,15 @@
       node?.closest?.(
         "#zen-app-dual-view-btn, #zen-app-panel-pill .zen-app-btn[data-pinned]",
       );
-    const onDown = (e) => {
-      if (e.button !== 0 || !isOpen()) return;
-      const btn = targetButton(e.target);
+    const onDown = (event) => {
+      if (event.button !== 0 || !isOpen()) return;
+      const btn = targetButton(event.target);
       if (!btn) return;
-      if (suppress && suppress !== btn) suppress = null;
       const kind = btn.id === "zen-app-dual-view-btn" ? "triple" : "super";
       pending = {
         btn,
-        x: e.clientX,
-        y: e.clientY,
+        x: event.clientX,
+        y: event.clientY,
         timer: setTimeout(() => {
           pending = null;
           const first = active();
@@ -23118,32 +23548,17 @@
           state.first = first;
           state.mode = kind;
           if (kind === "triple") {
-            if (ui.getAttribute("bgalazka-push-page") !== "true") {
+            state.previousPush = getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false);
+            if (!state.previousPush) {
               setPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, true);
               ui.setAttribute("bgalazka-push-page", "true");
               syncPanelPushState();
             }
             btn.setAttribute("data-active", "true");
-            const setting = document.querySelector(
-              `input[data-pref="${BGALAZKA_EXT_PREFS.PUSH_PAGE}"]`,
-            );
-            if (setting) setting.checked = true;
             ui.setAttribute("bgalazka-triple-view", "true");
           } else {
-            // Super pin retains native pin semantics, so outside clicks and a
-            // later ordinary pin click still follow the existing pin control.
-            if (ui.getAttribute("bgalazka-push-page") === "true") {
-              setPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false);
-              ui.setAttribute("bgalazka-push-page", "false");
-              syncPanelPushState();
-              const dual = document.getElementById("zen-app-dual-view-btn");
-              dual?.setAttribute("data-active", "false");
-              const setting = document.querySelector(
-                `input[data-pref="${BGALAZKA_EXT_PREFS.PUSH_PAGE}"]`,
-              );
-              if (setting) setting.checked = false;
-            }
-            if (btn.getAttribute("data-pinned") !== "true") apps.togglePin();
+            state.previousPin = btn.getAttribute("data-pinned") === "true";
+            if (!state.previousPin) apps.togglePin();
             ui.setAttribute("bgalazka-super-pin", "true");
           }
           btn.setAttribute("data-hold-active", "true");
@@ -23155,33 +23570,29 @@
       if (pending) clearTimeout(pending.timer);
       pending = null;
     };
-    const onMove = (e) => {
+    const onMove = (event) => {
       if (
         pending &&
-        Math.hypot(e.clientX - pending.x, e.clientY - pending.y) > 8
+        Math.hypot(event.clientX - pending.x, event.clientY - pending.y) > 8
       )
         cancelPending();
     };
-    const onClick = (e) => {
-      const btn = targetButton(e.target);
+    const onClick = (event) => {
+      const btn = targetButton(event.target);
       if (!btn) return;
       if (suppress === btn) {
         suppress = null;
-        e.preventDefault();
-        e.stopImmediatePropagation();
+        event.preventDefault();
+        event.stopImmediatePropagation();
         return;
       }
-      if (btn.id === "zen-app-dual-view-btn" && state.mode === "triple")
+      if (
+        (btn.id === "zen-app-dual-view-btn" && state.mode === "triple") ||
+        (btn.id !== "zen-app-dual-view-btn" && state.mode === "super")
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
         leaveMode();
-    };
-    const onSecondClick = (e) => {
-      if (e.button !== 0 || state.mode !== "super") return;
-      const tile = e.target.closest?.(".zen-app-tile[data-app-id]");
-      if (tile?.dataset.appId === state.second?._bgalazkaAppId) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        discardSecond();
-        tile.dataset.active = "false";
       }
     };
     window.addEventListener("pointerdown", onDown, true);
@@ -23190,15 +23601,6 @@
     window.addEventListener("pointercancel", cancelPending, true);
     window.addEventListener("blur", cancelPending);
     window.addEventListener("click", onClick, true);
-    window.addEventListener("mouseup", onSecondClick, true);
-    const pushObserver = () => {
-      if (
-        state.mode === "triple" &&
-        !getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false)
-      )
-        leaveMode();
-    };
-    Services.prefs.addObserver(BGALAZKA_EXT_PREFS.PUSH_PAGE, pushObserver);
     registerCleanup(() => {
       cancelPending();
       leaveMode();
@@ -23208,12 +23610,9 @@
       window.removeEventListener("pointercancel", cancelPending, true);
       window.removeEventListener("blur", cancelPending);
       window.removeEventListener("click", onClick, true);
-      window.removeEventListener("mouseup", onSecondClick, true);
-      Services.prefs.removeObserver(BGALAZKA_EXT_PREFS.PUSH_PAGE, pushObserver);
       apps.openPanel = origOpen;
       apps.closePanel = origClose;
       apps.closeApp = origCloseApp;
-      apps.togglePin = origTogglePin;
       apps.renderGrid = origRender;
     });
   })();

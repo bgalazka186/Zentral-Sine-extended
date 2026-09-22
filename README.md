@@ -24,6 +24,7 @@
 - **Keybinds adn disableing key press propagation** important if you want to close it with ESC button
 - **Firefox Containers and Clear Cache & Cookies of panels** i dont use it, heard people like it
 - **Better Addon support** still not all addons will work.
+- **Triple view and SuperPin** hold pin or dual view button in pill menu and then click other panel
 
 ### Extra Bugfix:
 

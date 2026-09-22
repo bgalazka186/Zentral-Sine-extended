@@ -7489,27 +7489,200 @@ panel[id*="tabgroup-editor"] {
   display: none !important;
 }
 
-/* Hold modes are enabled only by the extension's transient root attributes. */
-:root[bgalazka-triple-view="true"]
-  #zen-app-panel-slider
-  browser[data-bgalazka-triple-slot="top"],
-:root[bgalazka-triple-view="true"]
-  #zen-app-panel-slider
-  browser[data-bgalazka-triple-slot="bottom"] {
-  flex: 1 1 0 !important;
-  min-height: 0 !important;
-  height: 50% !important;
-  max-height: 50% !important;
-  width: 100% !important;
+/* Keep the XUL browsers as flex children so their remote viewports receive
+ * the size changes. The two toolbars sit on either side of the divider. */
+:root[bgalazka-triple-view="true"][bgalazka-triple-populated="true"]
+  #zen-app-panel-slider {
+  display: flex !important;
+  flex-direction: column !important;
 }
-:root[bgalazka-triple-view="true"]
+:root[bgalazka-triple-view="true"][bgalazka-triple-populated="true"]
   #zen-app-panel-slider
-  browser[data-bgalazka-triple-slot="bottom"] {
-  border-top: 2px solid var(--zen-primary-color, #777) !important;
+  > browser[data-bgalazka-triple-slot="top"],
+:root[bgalazka-triple-view="true"][bgalazka-triple-populated="true"]
+  #zen-app-panel-slider
+  > browser[data-bgalazka-triple-slot="bottom"] {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 100% !important;
   box-sizing: border-box !important;
 }
-:root[bgalazka-triple-view="true"] #zen-app-panel-toolbar {
-  flex-shrink: 0 !important;
+:root[bgalazka-triple-view="true"][bgalazka-triple-populated="true"]
+  #zen-app-panel-slider
+  > browser[data-bgalazka-triple-slot="top"] {
+  order: -2 !important;
+  flex: 0 0 var(--bgalazka-top-share, 50%) !important;
+  height: var(--bgalazka-top-share, 50%) !important;
+  max-height: var(--bgalazka-top-share, 50%) !important;
+}
+:root[bgalazka-triple-view="true"][bgalazka-triple-populated="true"]
+  #zen-app-panel-toolbar {
+  order: -1 !important;
+  flex: 0 0 auto !important;
+  position: relative !important;
+  top: auto !important;
+  bottom: auto !important;
+  transform: none !important;
+  opacity: 1 !important;
+}
+:root[bgalazka-triple-view="true"][bgalazka-triple-populated="true"][bgalazka-webtoolbar="true"]
+  #zen-app-panel-toolbar {
+  display: flex !important;
+}
+:root[bgalazka-triple-view="true"][bgalazka-triple-populated="true"]
+  .bgalazka-triple-divider {
+  order: 0 !important;
+  flex: 0 0 14px !important;
+  width: 100% !important;
+  height: 14px !important;
+  cursor: row-resize !important;
+  background: var(--zen-primary-color, #777) !important;
+  border-top: 4px solid transparent !important;
+  border-bottom: 4px solid transparent !important;
+  background-clip: content-box !important;
+  box-sizing: border-box !important;
+}
+.bgalazka-triple-drag-handle {
+  position: fixed !important;
+  z-index: 2147483603 !important;
+  cursor: row-resize !important;
+  pointer-events: auto !important;
+  touch-action: none !important;
+  -moz-window-dragging: no-drag !important;
+  background: transparent !important;
+}
+:root[bgalazka-triple-view="true"][bgalazka-triple-populated="true"]
+  #bgalazka-super-panel {
+  order: 1 !important;
+  flex: 0 0 32px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  overflow: hidden !important;
+}
+:root[bgalazka-triple-view="true"][bgalazka-triple-populated="true"]
+  #zen-app-panel-slider
+  > browser[data-bgalazka-triple-slot="bottom"] {
+  order: 2 !important;
+  flex: 1 1 0 !important;
+  height: 0 !important;
+}
+:root[bgalazka-super-pin="true"] #bgalazka-super-panel {
+  display: -moz-box !important;
+  -moz-box-orient: vertical !important;
+  position: fixed !important;
+  z-index: 2147483601 !important;
+  min-width: 250px !important;
+  min-height: 180px !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  border: 1px solid var(--zen-primary-color, #777) !important;
+  border-radius: var(--zen-border-radius, 8px) !important;
+  overflow: hidden !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55) !important;
+}
+#bgalazka-super-panel {
+  display: flex !important;
+  flex-direction: column !important;
+  background: var(--tabpanels-background-color, #1e1e24) !important;
+  pointer-events: auto !important;
+}
+#bgalazka-super-panel .bgalazka-super-bar {
+  display: flex !important;
+  align-items: center !important;
+  flex: 0 0 32px !important;
+  gap: 2px !important;
+  padding: 2px 4px !important;
+  background: var(--tabpanels-background-color, #1e1e24) !important;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent) !important;
+  color: inherit !important;
+  min-width: 0 !important;
+}
+#bgalazka-super-panel .bgalazka-super-bar button {
+  flex: 0 0 auto !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: inherit !important;
+  width: 22px !important;
+  height: 22px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font: inherit !important;
+  padding: 0 !important;
+  opacity: 0.85 !important;
+  border-radius: 5px !important;
+  cursor: pointer !important;
+}
+#bgalazka-super-panel .bgalazka-super-bar button svg {
+  width: 13px !important;
+  height: 13px !important;
+}
+#bgalazka-super-panel .bgalazka-super-bar button:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+}
+#bgalazka-super-panel .bgalazka-second-grip {
+  cursor: move !important;
+  user-select: none !important;
+  touch-action: none !important;
+  width: 14px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  opacity: 0.55 !important;
+  padding: 0 2px !important;
+}
+#bgalazka-super-panel .bgalazka-second-grip svg {
+  width: 12px !important;
+  height: 12px !important;
+}
+#bgalazka-super-panel .bgalazka-second-zoom-label {
+  min-width: 30px !important;
+  width: 30px !important;
+  font-size: 10px !important;
+}
+:root[bgalazka-triple-view="true"] .bgalazka-second-grip {
+  cursor: default !important;
+}
+#bgalazka-super-panel .bgalazka-second-url {
+  flex: 1 1 0 !important;
+  min-width: 40px !important;
+  height: 22px !important;
+  box-sizing: border-box !important;
+  padding: 0 6px !important;
+  font-size: 11px !important;
+  background: color-mix(in srgb, currentColor 6%, transparent) !important;
+  color: inherit !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: 4px !important;
+}
+#bgalazka-super-panel browser {
+  display: block !important;
+  flex: 1 1 0 !important;
+  -moz-box-flex: 1 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  width: 100% !important;
+  height: 0 !important;
+  box-sizing: border-box !important;
+  pointer-events: auto !important;
+}
+:root[bgalazka-translucency="true"][bgalazka-super-pin="true"]
+  #bgalazka-super-panel {
+  backdrop-filter: blur(var(--bg-blur-intensity, 20px)) !important;
+  transition:
+    opacity 0.22s ease,
+    background-color 0.22s ease !important;
+}
+:root[bgalazka-translucency="true"][bgalazka-super-pin="true"]
+  #bgalazka-super-panel:is(:hover, :focus-within) {
+  opacity: var(--bg-opacity-pinned-focus, 0.85) !important;
+}
+:root[bgalazka-translucency="true"][bgalazka-super-pin="true"]
+  #bgalazka-super-panel:not(:hover):not(:focus-within) {
+  opacity: var(--bg-opacity-pinned-blur, 0.45) !important;
 }
 :root[bgalazka-triple-view="true"]
   #zen-app-panel-pill
@@ -7517,58 +7690,84 @@ panel[id*="tabgroup-editor"] {
 :root[bgalazka-super-pin="true"]
   #zen-app-panel-pill
   .zen-app-btn[data-hold-active="true"] {
-  outline: 2px solid var(--zen-primary-color, currentColor) !important;
+  outline: 2px solid #8f1621 !important;
   outline-offset: -2px !important;
 }
-:root[bgalazka-super-pin="true"] #bgalazka-super-panel {
+.bgalazka-pill-drag-shield {
   position: fixed !important;
-  z-index: 2147483601 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow: hidden !important;
-  min-width: 250px !important;
-  min-height: 160px !important;
-  border: 2px solid var(--zen-primary-color, #777) !important;
-  border-radius: var(--zen-border-radius, 8px) !important;
-  background: var(--tabpanels-background-color, #1e1e24) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55) !important;
-  resize: both !important;
-  pointer-events: auto !important;
-}
-:root[bgalazka-super-pin="true"] #bgalazka-super-panel .bgalazka-super-bar {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  padding: 4px 8px !important;
-  min-height: 28px !important;
-  cursor: move !important;
-  user-select: none !important;
-  background: var(--zen-colors-tertiary, #303038) !important;
-  color: var(--zen-colors-text, white) !important;
-}
-:root[bgalazka-super-pin="true"]
-  #bgalazka-super-panel
-  .bgalazka-super-bar
-  span {
-  overflow: hidden !important;
-  white-space: nowrap !important;
-  text-overflow: ellipsis !important;
-}
-:root[bgalazka-super-pin="true"]
-  #bgalazka-super-panel
-  .bgalazka-super-bar
-  button {
-  flex-shrink: 0 !important;
+  inset: 0 !important;
+  z-index: 2147483640 !important;
+  cursor: grabbing !important;
   background: transparent !important;
-  color: inherit !important;
-  border: 0 !important;
-  font-size: 20px !important;
-  cursor: pointer !important;
 }
-:root[bgalazka-super-pin="true"] #bgalazka-super-panel browser {
-  display: block !important;
-  flex: 1 1 0 !important;
-  min-height: 0 !important;
-  width: 100% !important;
-  height: auto !important;
+/* Host tabs are implementation details; never expose their saved folder. */
+#bgalazka-zentral-addon-hosts,
+[bgalazka-addon-host-folder="true"] {
+  display: none !important;
+}
+:root[bgalazka-super-pin="true"] .bgalazka-second-resize {
+  position: absolute !important;
+  z-index: 3 !important;
+  touch-action: none !important;
+}
+.bgalazka-resize-n,
+.bgalazka-resize-s {
+  left: 12px;
+  right: 12px;
+  height: 8px;
+  cursor: ns-resize;
+}
+.bgalazka-resize-n {
+  top: 0;
+}
+.bgalazka-resize-s {
+  bottom: 0;
+}
+.bgalazka-resize-e,
+.bgalazka-resize-w {
+  top: 12px;
+  bottom: 12px;
+  width: 8px;
+  cursor: ew-resize;
+}
+.bgalazka-resize-e {
+  right: 0;
+}
+.bgalazka-resize-w {
+  left: 0;
+}
+.bgalazka-resize-ne,
+.bgalazka-resize-nw,
+.bgalazka-resize-se,
+.bgalazka-resize-sw {
+  width: 14px;
+  height: 14px;
+}
+.bgalazka-resize-ne {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+.bgalazka-resize-nw {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+.bgalazka-resize-se {
+  bottom: 0;
+  right: 0;
+  cursor: nwse-resize;
+}
+.bgalazka-resize-sw {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.bgalazka-triple-drag-shield {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483640 !important;
+  cursor: row-resize !important;
+  background: transparent !important;
 }
