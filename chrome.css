@@ -7775,3 +7775,118 @@ panel[id*="tabgroup-editor"] {
   -moz-window-dragging: no-drag !important;
   background: transparent !important;
 }
+
+/* Independent sidebar video preview. The card is a real flex child adjacent
+   to Zen's playback controls, so it reserves room rather than covering tabs. */
+#zentral-video-preview {
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex: 0 0 auto !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-height: min(33vh, 220px) !important;
+  padding: 4px !important;
+  overflow: hidden !important;
+  border-radius: 12px !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-colors-tertiary, #222) 85%,
+    black
+  ) !important;
+  color: var(--zen-colors-text, #fff) !important;
+}
+#zentral-video-preview[hidden] {
+  display: none !important;
+}
+#zentral-video-preview .zentral-video-preview-picture {
+  position: relative !important;
+  display: flex !important;
+  min-height: 60px !important;
+  flex: 1 1 140px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  border-radius: 8px !important;
+  background: #000 !important;
+}
+#zentral-video-preview .zentral-video-preview-player {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  border: 0 !important;
+}
+#zentral-video-preview canvas {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+}
+#zentral-video-preview .zentral-video-preview-bar {
+  display: flex !important;
+  flex: 0 0 27px !important;
+  align-items: center !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+}
+#zentral-video-preview .zentral-video-preview-caption {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+  font-size: 11px !important;
+}
+#zentral-video-preview button {
+  flex: 0 0 25px !important;
+  height: 23px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: color-mix(in srgb, currentColor 14%, transparent) !important;
+  color: inherit !important;
+  cursor: pointer !important;
+}
+#zentral-video-preview button[hidden] {
+  display: none !important;
+}
+/* The native scrollbox keeps its own scroll and shrinks when the preview grows. */
+:where(#vertical-tabs, #zen-sidebar)
+  :has(> #zentral-video-preview)
+  :is(#tabbrowser-tabs, .zen-workspace-tabs-section) {
+  min-height: 0 !important;
+}
+
+#zentral-video-preview .zentral-video-preview-picture[hidden],
+#zentral-video-preview .zentral-video-preview-seek[hidden] {
+  display: none !important;
+}
+#zentral-video-preview .zentral-video-preview-seek {
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  height: 12px !important;
+  margin: 3px 0 0 !important;
+  accent-color: var(--zen-primary-color, #9a86e8) !important;
+}
+#zentral-video-preview .zentral-video-preview-sources {
+  display: block !important;
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  max-height: 66px !important;
+  margin-bottom: 4px !important;
+  border: 0 !important;
+  border-radius: 7px !important;
+  background: color-mix(in srgb, currentColor 10%, transparent) !important;
+  color: inherit !important;
+  font: inherit !important;
+  font-size: 10px !important;
+}
+#zentral-video-preview .zentral-video-preview-sources[hidden] {
+  display: none !important;
+}
+#zentral-video-preview .zentral-video-preview-bar[hidden] {
+  display: none !important;
+}

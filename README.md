@@ -25,6 +25,7 @@
 - **Firefox Containers and Clear Cache & Cookies of panels** i dont use it, heard people like it
 - **Better Addon support** still not all addons will work.
 - **Triple view and SuperPin** hold pin or dual view button in pill menu and then click other panel
+- **Video mini in sidebar** only Month ago Zenslop mod worked and i found it pretty nice, implermented WIP
 
 ### Extra Bugfix:
 
