@@ -7790,7 +7790,7 @@ panel[id*="tabgroup-editor"] {
   align-self: stretch !important;
   padding: 4px !important;
   overflow: hidden !important;
-  border-radius: 12px !important;
+  border-radius: var(--zvp-radius, 8px) !important;
   background: color-mix(
     in srgb,
     var(--zen-colors-tertiary, #222) 85%,
@@ -7808,14 +7808,14 @@ panel[id*="tabgroup-editor"] {
   max-width: 100% !important;
   min-width: 0 !important;
   min-height: 0 !important;
-  height: auto !important;
+  height: var(--zvp-height, auto) !important;
   aspect-ratio: var(--zvp-ratio, 16 / 9) !important;
   flex: 0 0 auto !important;
   align-self: center !important;
   align-items: center !important;
   justify-content: center !important;
   overflow: hidden !important;
-  border-radius: 8px !important;
+  border-radius: var(--zvp-radius, 8px) !important;
   background: #000 !important;
 }
 #zentral-video-preview .zentral-video-preview-player {
@@ -7836,7 +7836,7 @@ panel[id*="tabgroup-editor"] {
   display: block !important;
   width: 100% !important;
   height: 100% !important;
-  object-fit: contain !important;
+  object-fit: var(--zvp-object-fit, cover) !important;
 }
 #zentral-video-preview .zentral-video-preview-bar {
   display: flex !important;
@@ -7922,4 +7922,52 @@ panel[id*="tabgroup-editor"] {
 }
 #zentral-video-preview .zentral-video-preview-resize:hover {
   background: color-mix(in srgb, currentColor 25%, transparent) !important;
+}
+
+/* Source buttons stay inside the sidebar; native popup menus close Zen's
+   compact hover strip before their option receives a click. */
+#zentral-video-preview .zentral-video-preview-sources {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  max-height: min(112px, 16vh) !important;
+  scrollbar-width: thin !important;
+}
+#zentral-video-preview .zentral-video-preview-source {
+  display: block !important;
+  width: 100% !important;
+  height: 23px !important;
+  margin: 0 !important;
+  padding: 2px 6px !important;
+  text-align: start !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+  border-radius: 4px !important;
+}
+#zentral-video-preview .zentral-video-preview-source[aria-selected="true"] {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #9a86e8) 45%,
+    transparent
+  ) !important;
+}
+#zentral-video-preview .zentral-video-preview-capabilities {
+  display: block !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+  font-size: 9px !important;
+  opacity: 0.7 !important;
+}
+#zentral-video-preview .zentral-video-preview-capabilities:empty {
+  display: none !important;
+}
+
+/* During live-mode verification, keep the last successful canvas picture
+   above the new browser until actual content is confirmed. */
+#zentral-video-preview canvas {
+  z-index: 2 !important;
+}
+#zentral-video-preview .zentral-video-preview-player {
+  z-index: 1 !important;
 }
