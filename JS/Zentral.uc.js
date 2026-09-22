@@ -23082,6 +23082,7 @@
       const min = Math.min(160, usable * 0.25);
       const top = Math.max(min, Math.min(usable - min, usable * state.share));
       panel.style.setProperty("--bgalazka-top-share", `${top}px`);
+      panel.style.setProperty("--bgalazka-bottom-share", `${usable - top}px`);
       if (state.handleFrame) cancelAnimationFrame(state.handleFrame);
       state.handleFrame = requestAnimationFrame(() => {
         state.handleFrame = null;
@@ -23126,6 +23127,7 @@
       state.shell?.remove();
       state.shell = null;
       slider()?.style.removeProperty("--bgalazka-top-share");
+      slider()?.style.removeProperty("--bgalazka-bottom-share");
       state.first?.removeAttribute("data-bgalazka-triple-slot");
       second?.removeAttribute("data-bgalazka-triple-slot");
     }
@@ -23302,15 +23304,26 @@
         requestAnimationFrame(fitSecondaryBrowsers);
         let shield = null;
         let grabOffset = 0;
-        const endResize = () => {
-          document.removeEventListener("mousemove", moveResize, true);
-          document.removeEventListener("mouseup", endResize, true);
+        let pointerId = null;
+        let captureTarget = null;
+        const endResize = (event) => {
+          if (event?.pointerId != null && event.pointerId !== pointerId) return;
+          document.removeEventListener("pointermove", moveResize, true);
+          document.removeEventListener("pointerup", endResize, true);
+          document.removeEventListener("pointercancel", endResize, true);
           window.removeEventListener("blur", endResize);
+          const target = captureTarget;
+          const id = pointerId;
+          captureTarget = null;
+          pointerId = null;
+          if (target && id != null && target.hasPointerCapture?.(id))
+            target.releasePointerCapture(id);
           shield?.remove();
           shield = null;
         };
         const moveResize = (event) => {
-          if (shield) balance(event.clientY - grabOffset);
+          if (shield && event.pointerId === pointerId)
+            balance(event.clientY - grabOffset);
         };
         const startResize = (event) => {
           if (event.button !== 0) return;
@@ -23318,15 +23331,23 @@
           event.stopPropagation();
           endResize();
           grabOffset = event.clientY - divider.getBoundingClientRect().top;
+          pointerId = event.pointerId;
+          captureTarget = event.currentTarget;
           shield = document.createElement("div");
           shield.className = "bgalazka-triple-drag-shield";
-          document.documentElement.appendChild(shield);
-          document.addEventListener("mousemove", moveResize, true);
-          document.addEventListener("mouseup", endResize, true);
+          (document.body || document.documentElement).appendChild(shield);
+          // Keep pointer events routed to the handle even when the cursor
+          // crosses into the lower remote browser viewport.
+          try {
+            captureTarget.setPointerCapture(pointerId);
+          } catch (_) {}
+          document.addEventListener("pointermove", moveResize, true);
+          document.addEventListener("pointerup", endResize, true);
+          document.addEventListener("pointercancel", endResize, true);
           window.addEventListener("blur", endResize);
         };
-        handle.addEventListener("mousedown", startResize);
-        divider.addEventListener("mousedown", startResize);
+        handle.addEventListener("pointerdown", startResize);
+        divider.addEventListener("pointerdown", startResize);
         state.resizeCleanup = endResize;
       } else {
         (document.body || document.documentElement).appendChild(box);

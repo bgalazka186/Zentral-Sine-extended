@@ -7566,8 +7566,9 @@ panel[id*="tabgroup-editor"] {
   #zen-app-panel-slider
   > browser[data-bgalazka-triple-slot="bottom"] {
   order: 2 !important;
-  flex: 1 1 0 !important;
-  height: 0 !important;
+  flex: 0 0 var(--bgalazka-bottom-share, 50%) !important;
+  height: var(--bgalazka-bottom-share, 50%) !important;
+  max-height: var(--bgalazka-bottom-share, 50%) !important;
 }
 :root[bgalazka-super-pin="true"] #bgalazka-super-panel {
   display: -moz-box !important;
@@ -7769,5 +7770,8 @@ panel[id*="tabgroup-editor"] {
   inset: 0 !important;
   z-index: 2147483640 !important;
   cursor: row-resize !important;
+  pointer-events: auto !important;
+  touch-action: none !important;
+  -moz-window-dragging: no-drag !important;
   background: transparent !important;
 }
