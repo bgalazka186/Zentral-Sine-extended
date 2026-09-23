@@ -7140,9 +7140,12 @@ panel[id*="tabgroup-editor"] {
    close to visually nonexistent as possible. We intentionally avoid
    `display:none`, the `[hidden]` attribute, or removing the host tabs from the
    tab tree. Instead the marked host folder is reduced to a 1px inert trace.
+   The Show Web Panel Tab ID Folder setting restores the native folder view.
    Everything remains gated by the default-OFF bridge attribute.
    ========================================================================== */
-:root[bgalazka-addon-tab-id-bridge="true"]
+:root[bgalazka-addon-tab-id-bridge="true"]:not(
+    [bgalazka-show-addon-host-folder="true"]
+  )
   zen-folder[bgalazka-addon-host-folder="true"] {
   --bgalazka-addon-host-folder-size: 1px;
   min-height: 1px !important;
@@ -7160,13 +7163,42 @@ panel[id*="tabgroup-editor"] {
   transition: none !important;
 }
 
-/* No hover/debug reveal: the compatibility folder is intentionally invisible. */
-:root[bgalazka-addon-tab-id-bridge="true"]
+/* Restore the native folder's space in the sidebar for inspection. */
+:root[bgalazka-show-addon-host-folder="true"]
+  :is(
+    #bgalazka-zentral-addon-hosts,
+    zen-folder[bgalazka-addon-host-folder="true"]
+  ) {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  min-height: var(--tab-min-height, 32px) !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  pointer-events: auto !important;
+}
+
+/* Host tabs may be pinned individually if Zen's folder API is unavailable. */
+:root[bgalazka-show-addon-host-folder="true"]
+  #tabbrowser-tabs
+  tab[bgalazka-addon-host-fallback="true"] {
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* Keep the folder invisible on hover while the inspection setting is off. */
+:root[bgalazka-addon-tab-id-bridge="true"]:not(
+    [bgalazka-show-addon-host-folder="true"]
+  )
   zen-folder[bgalazka-addon-host-folder="true"]:hover {
   opacity: 0.001 !important;
 }
 
-:root[bgalazka-addon-tab-id-bridge="true"]
+:root[bgalazka-addon-tab-id-bridge="true"]:not(
+    [bgalazka-show-addon-host-folder="true"]
+  )
   zen-folder[bgalazka-addon-host-folder="true"]
   > .tab-group-label-container {
   min-height: 1px !important;
@@ -7186,7 +7218,9 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Collapse every visible folder decoration without removing the DOM nodes. */
-:root[bgalazka-addon-tab-id-bridge="true"]
+:root[bgalazka-addon-tab-id-bridge="true"]:not(
+    [bgalazka-show-addon-host-folder="true"]
+  )
   zen-folder[bgalazka-addon-host-folder="true"]
   > .tab-group-label-container
   :is(
@@ -7215,14 +7249,22 @@ panel[id*="tabgroup-editor"] {
 }
 
 /* Defensive suppression of pseudo-elements/themes that paint folder chrome. */
-:root[bgalazka-addon-tab-id-bridge="true"]
+:root[bgalazka-addon-tab-id-bridge="true"]:not(
+    [bgalazka-show-addon-host-folder="true"]
+  )
   zen-folder[bgalazka-addon-host-folder="true"]::before,
-:root[bgalazka-addon-tab-id-bridge="true"]
+:root[bgalazka-addon-tab-id-bridge="true"]:not(
+    [bgalazka-show-addon-host-folder="true"]
+  )
   zen-folder[bgalazka-addon-host-folder="true"]::after,
-:root[bgalazka-addon-tab-id-bridge="true"]
+:root[bgalazka-addon-tab-id-bridge="true"]:not(
+    [bgalazka-show-addon-host-folder="true"]
+  )
   zen-folder[bgalazka-addon-host-folder="true"]
   > .tab-group-label-container::before,
-:root[bgalazka-addon-tab-id-bridge="true"]
+:root[bgalazka-addon-tab-id-bridge="true"]:not(
+    [bgalazka-show-addon-host-folder="true"]
+  )
   zen-folder[bgalazka-addon-host-folder="true"]
   > .tab-group-label-container::after {
   content: none !important;
@@ -7236,7 +7278,9 @@ panel[id*="tabgroup-editor"] {
 
 /* When Zen's folder API is unavailable we fall back to individually pinned
  * host tabs. Keep each native tab present, but reduce it to a 1px inert trace. */
-:root[bgalazka-addon-tab-id-bridge="true"]
+:root[bgalazka-addon-tab-id-bridge="true"]:not(
+    [bgalazka-show-addon-host-folder="true"]
+  )
   #tabbrowser-tabs
   tab[bgalazka-addon-host-fallback="true"] {
   min-height: 1px !important;
@@ -7257,7 +7301,9 @@ panel[id*="tabgroup-editor"] {
 
 /* Host tabs inside the collapsed folder stay native and measurable, but never
  * contribute more than a single pixel to the strip. */
-:root[bgalazka-addon-tab-id-bridge="true"]
+:root[bgalazka-addon-tab-id-bridge="true"]:not(
+    [bgalazka-show-addon-host-folder="true"]
+  )
   zen-folder[bgalazka-addon-host-folder="true"]
   tab[bgalazka-addon-host="true"] {
   min-height: 1px !important;
@@ -7493,8 +7539,10 @@ panel[id*="tabgroup-editor"] {
 
 /* Compact-folder styling used to apply only while the bridge was enabled.
  * Disabling it exposed the folder during async deletion, or after restoring
- * a stale folder at startup. Hide only our reserved folder when disabled. */
-:root:not([bgalazka-addon-tab-id-bridge="true"])
+ * a stale folder at startup. Keep it visible when inspection is enabled. */
+:root:not([bgalazka-addon-tab-id-bridge="true"]):not(
+    [bgalazka-show-addon-host-folder="true"]
+  )
   :is(
     #bgalazka-zentral-addon-hosts,
     zen-folder[bgalazka-addon-host-folder="true"]
@@ -7714,9 +7762,9 @@ panel[id*="tabgroup-editor"] {
   cursor: grabbing !important;
   background: transparent !important;
 }
-/* Host tabs are implementation details; never expose their saved folder. */
-#bgalazka-zentral-addon-hosts,
-[bgalazka-addon-host-folder="true"] {
+/* Keep host folders hidden unless the inspection setting is enabled. */
+:root:not([bgalazka-show-addon-host-folder="true"])
+  :is(#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder="true"]) {
   display: none !important;
 }
 :root[bgalazka-super-pin="true"] .bgalazka-second-resize {

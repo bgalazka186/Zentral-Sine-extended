@@ -14881,6 +14881,7 @@
     BLUR_INTENSITY: "zen.workspace.bgalazka.blur_intensity",
     PANEL_INPUT_SHIELD: "zen.workspace.bgalazka.panel_input_shield",
     ADDON_TAB_ID_BRIDGE: "zen.workspace.bgalazka.addon_tab_id_bridge",
+    SHOW_ADDON_HOST_FOLDER: "zen.workspace.bgalazka.show_addon_host_folder",
     SMART_SLEEP: "zen.workspace.bgalazka.smart_sleep",
     AUDIO_INDICATOR: "zen.workspace.bgalazka.audio_indicator",
     HIDE_UNATTACHED_APP_CONTROLS:
@@ -14958,6 +14959,11 @@
     {
       pref: EXT_PREFS.ADDON_TAB_ID_BRIDGE,
       attr: "bgalazka-addon-tab-id-bridge",
+      defaultVal: false,
+    },
+    {
+      pref: EXT_PREFS.SHOW_ADDON_HOST_FOLDER,
+      attr: "bgalazka-show-addon-host-folder",
       defaultVal: false,
     },
   ];
@@ -17484,6 +17490,7 @@
     // tab's linkedBrowser as the Zentral panel browser so the panel owns a
     // genuine tabId. See architecture note 27 and the bridge implementation.
     ADDON_TAB_ID_BRIDGE: "zen.workspace.bgalazka.addon_tab_id_bridge",
+    SHOW_ADDON_HOST_FOLDER: "zen.workspace.bgalazka.show_addon_host_folder",
     SMART_SLEEP: "zen.workspace.bgalazka.smart_sleep",
     AUDIO_INDICATOR: "zen.workspace.bgalazka.audio_indicator",
     // Keep the settings-side preference table complete. The previous build
@@ -19984,6 +19991,26 @@
         (enabled) => setAddonTabIdBridgeEnabled(enabled),
       );
       content.appendChild(tAddonTabIdBridge.row);
+      const tShowAddonHostFolder = createToggleRow(
+        "Show Web Panel Tab ID Folder",
+        "Reveal the Zentral Add-on Hosts folder and its tabs in the sidebar so you can check whether panel host tabs are cleaned up. Requires Real Tab IDs for Web Panels to create host tabs.",
+        BGALAZKA_EXT_PREFS.SHOW_ADDON_HOST_FOLDER,
+        "bgalazka-show-addon-host-folder",
+        false,
+        PREF_ICONS.PIN,
+        () => {
+          keepAddonHostFolderCollapsed(findAddonHostFolder());
+          updateAddonHostInspection();
+        },
+      );
+      content.appendChild(tShowAddonHostFolder.row);
+      const addonHostInspection = document.createElement("div");
+      addonHostInspection.id = "zs-addon-host-inspection";
+      addonHostInspection.className = "zs-sublabel";
+      addonHostInspection.style.cssText =
+        "padding:4px 12px 12px;white-space:normal";
+      content.appendChild(addonHostInspection);
+      updateAddonHostInspection();
 
       const audioIndicator = createToggleRow(
         "Panel Audio Indicator and Quick Mute",
@@ -20519,6 +20546,16 @@
             ),
         },
         {
+          input: tShowAddonHostFolder.input,
+          pref: BGALAZKA_EXT_PREFS.SHOW_ADDON_HOST_FOLDER,
+          def: false,
+          onSync: (v) =>
+            document.documentElement.setAttribute(
+              "bgalazka-show-addon-host-folder",
+              v ? "true" : "false",
+            ),
+        },
+        {
           input: tKeybindsEnabled.input,
           pref: BGALAZKA_EXT_PREFS.KEYBINDS_ENABLED,
           def: false,
@@ -20581,6 +20618,7 @@
         BGALAZKA_EXT_PREFS.WEB_TOOLBAR_TOP,
         BGALAZKA_EXT_PREFS.WEB_TOOLBAR_AUTOHIDE,
         BGALAZKA_EXT_PREFS.ADDON_TAB_ID_BRIDGE,
+        BGALAZKA_EXT_PREFS.SHOW_ADDON_HOST_FOLDER,
       ]);
       const applyPreset = (recommended) => {
         const message = recommended
@@ -21653,6 +21691,40 @@
     return getPref(BGALAZKA_EXT_PREFS.ADDON_TAB_ID_BRIDGE, false);
   }
 
+  function isAddonHostFolderVisible() {
+    return getPref(BGALAZKA_EXT_PREFS.SHOW_ADDON_HOST_FOLDER, false);
+  }
+
+  function updateAddonHostInspection() {
+    const status = document.getElementById("zs-addon-host-inspection");
+    if (!status) return;
+    status.hidden = !isAddonHostFolderVisible();
+    if (status.hidden) return;
+    if (!isAddonTabIdBridgeEnabled()) {
+      status.textContent =
+        "Real Tab IDs is off. Enable it and open a web panel to create a host tab.";
+      return;
+    }
+    const folder = findAddonHostFolder();
+    const hosts = [...addonHostByAppId.values()].filter(
+      (record) => record.tab?.isConnected,
+    );
+    const fallback = document.querySelectorAll(
+      'tab[bgalazka-addon-host-fallback="true"]',
+    ).length;
+    const names = hosts
+      .map((record) => getAddonHostAppLabel(record.app))
+      .join(", ");
+    const folderVisible =
+      folder &&
+      getComputedStyle(folder).display !== "none" &&
+      folder.getBoundingClientRect().height > 0;
+    status.textContent =
+      !hosts.length && !folder && !fallback
+        ? "No host tabs yet. Open a web panel to create one."
+        : `${folder ? (folderVisible ? "Folder visible" : "Folder exists but is hidden by the sidebar layout") : fallback ? "Pinned tab fallback (no Zen folder)" : "Folder missing"} · ${hosts.length} active host tab${hosts.length === 1 ? "" : "s"}${names ? `: ${names}` : ""}`;
+  }
+
   function getAddonHostAppLabel(app) {
     return String(
       app?.name || app?.title || app?.label || app?.url || app?.id || "App",
@@ -21660,11 +21732,20 @@
   }
 
   function findAddonHostFolder() {
-    if (addonHostFolder?.isConnected && addonHostFolder?.isZenFolder) {
+    if (
+      addonHostFolder?.isConnected &&
+      (addonHostFolder.isZenFolder ||
+        addonHostFolder.localName === "zen-folder")
+    ) {
       return addonHostFolder;
     }
-    const existing = document.getElementById(ADDON_HOST_FOLDER_ID);
-    if (existing?.isZenFolder) {
+    const existing =
+      document.getElementById(ADDON_HOST_FOLDER_ID) ||
+      document.querySelector('zen-folder[bgalazka-addon-host-folder="true"]');
+    if (
+      existing &&
+      (existing.isZenFolder || existing.localName === "zen-folder")
+    ) {
       addonHostFolder = existing;
       existing.setAttribute("bgalazka-addon-host-folder", "true");
       return existing;
@@ -21676,14 +21757,16 @@
   function keepAddonHostFolderCollapsed(folder) {
     if (!folder) return;
     folder.setAttribute("bgalazka-addon-host-folder", "true");
-    // Zen deliberately applies the initial collapsed state on a zero-delay
-    // timer. Mirror that timing so our compact folder never flashes expanded.
+    // Zen applies the initial collapsed state on a zero-delay timer. Reveal
+    // the folder's tab list when inspection is enabled, including at startup.
     setTimeout(() => {
       try {
         if (!folder.isConnected) return;
-        folder.collapsed = true;
-        folder.removeAttribute("has-active");
-        window.gZenFolders?.relayoutCollapsedFolder?.(folder);
+        folder.collapsed = !isAddonHostFolderVisible();
+        if (folder.collapsed) {
+          folder.removeAttribute("has-active");
+          window.gZenFolders?.relayoutCollapsedFolder?.(folder);
+        }
       } catch (_) {}
     }, 0);
   }
@@ -23067,6 +23150,8 @@
   if (isAddonTabIdBridgeEnabled()) {
     setTimeout(unloadPanelBrowsersForAddonBridge, 0);
   }
+  const addonHostInspectionTimer = setInterval(updateAddonHostInspection, 1000);
+  registerCleanup(() => clearInterval(addonHostInspectionTimer));
 
   // A click normally emits mouseup too. Coalesce the pair and skip geometry
   // work entirely when an unrelated click occurs with no visible app panel.
