@@ -15224,6 +15224,9 @@
   // Implemented as an anchored-side margin, never as a positionPanel() patch.
   const PANEL_HORIZONTAL_OFFSET_PREF =
     "zen.workspace.bgalazka.panel_horizontal_offset_px";
+  // An unset offset pulls the panel across Zentral's native 12px side gap.
+  // The saved pref remains a physical X offset; mirror only its default.
+  const DEFAULT_PANEL_EDGE_OFFSET_PX = -12;
   // Kept separate from PANEL_POSITION_OFFSET_PREF: this moves only the pill
   // within its panel, while the latter moves the complete panel in the window.
   // The settings UI declares the same key later as BGALAZKA_EXT_PREFS.PILL_POSITION.
@@ -15287,6 +15290,9 @@
   );
   let cachedPosOffset = getPref(PANEL_POSITION_OFFSET_PREF, 0);
   let cachedHorizontalOffset = getPref(PANEL_HORIZONTAL_OFFSET_PREF, 0);
+  let hasSavedHorizontalOffset = Services.prefs.prefHasUserValue(
+    PANEL_HORIZONTAL_OFFSET_PREF,
+  );
 
   [
     [PANEL_TOP_EXTRA_PREF, (v) => (cachedTopExtra = v)],
@@ -15295,6 +15301,10 @@
     [PANEL_HORIZONTAL_OFFSET_PREF, (v) => (cachedHorizontalOffset = v)],
   ].forEach(([prefKey, setCache]) => {
     const observer = () => {
+      if (prefKey === PANEL_HORIZONTAL_OFFSET_PREF)
+        hasSavedHorizontalOffset = Services.prefs.prefHasUserValue(
+          PANEL_HORIZONTAL_OFFSET_PREF,
+        );
       const fallback =
         prefKey === PANEL_TOP_EXTRA_PREF || prefKey === PANEL_BOTTOM_EXTRA_PREF
           ? DEFAULT_PANEL_VERTICAL_EXTRA_PX
@@ -15340,6 +15350,15 @@
     return root.style.left === "auto" && root.style.right !== "auto"
       ? "right"
       : "left";
+  }
+
+  function getHorizontalOffsetPreference(root) {
+    if (hResizeState?.adjustsOffset || hPosDragState || vPosDragState)
+      return cachedHorizontalOffset;
+    if (hasSavedHorizontalOffset) return cachedHorizontalOffset;
+    return getHorizontalAnchorSide(root) === "right"
+      ? -DEFAULT_PANEL_EDGE_OFFSET_PX
+      : DEFAULT_PANEL_EDGE_OFFSET_PX;
   }
 
   function getAppliedHorizontalOffset(root) {
@@ -15413,7 +15432,7 @@
     const anchoredRight = anchorSide === "right";
     const offset = clampHorizontalOffsetToViewport(
       root,
-      Math.round(cachedHorizontalOffset),
+      Math.round(getHorizontalOffsetPreference(root)),
     );
     const leftMargin = anchoredRight ? "0px" : offset + "px";
     const rightMargin = anchoredRight ? -offset + "px" : "0px";
@@ -15732,6 +15751,18 @@
    * Keeping this independent avoids touching private Zentral state.
    * ------------------------------------------------------------------ */
   let hResizeState = null;
+  let hResizeFrame = 0;
+
+  function flushHorizontalResize() {
+    hResizeFrame = 0;
+    if (!hResizeState) return;
+    const { apps, liveWidth, liveOffset, adjustsOffset } = hResizeState;
+    apps.updateWidthVar(Math.round(liveWidth));
+    if (adjustsOffset) {
+      cachedHorizontalOffset = liveOffset;
+      applyHorizontalPanelOffset(document.getElementById("zen-app-panel-root"));
+    }
+  }
 
   function startHorizontalResize(e, edge) {
     if (e.button !== 0) return;
@@ -15822,14 +15853,10 @@
 
     hResizeState.liveWidth = nextWidth;
     hResizeState.liveOffset = nextOffset;
-    apps.updateWidthVar(Math.round(nextWidth));
-
-    if (hResizeState.adjustsOffset) {
-      // Apply EVERY frame, including the frame that returns exactly to the
-      // starting offset, so a round-trip drag cannot leave stale translation.
-      cachedHorizontalOffset = nextOffset;
-      applyHorizontalPanelOffset(root);
-    }
+    // Pointer events may arrive faster than paints on a cold remote browser.
+    // Write width and the anchored-side margin together once per frame.
+    if (!hResizeFrame)
+      hResizeFrame = requestAnimationFrame(flushHorizontalResize);
   }
 
   function stopHorizontalResizeDrag() {
@@ -15839,6 +15866,8 @@
     if (slider) slider.style.pointerEvents = "";
     document.documentElement.removeAttribute("bgalazka-hresize-active");
     if (hResizeState) {
+      if (hResizeFrame) cancelAnimationFrame(hResizeFrame);
+      flushHorizontalResize(); // commit the final pointer even before a paint
       hResizeState.apps.saveWidth?.(Math.round(hResizeState.liveWidth));
       if (hResizeState.adjustsOffset) {
         cachedHorizontalOffset = Math.round(hResizeState.liveOffset);
@@ -15848,6 +15877,7 @@
     }
   }
   registerCleanup(() => {
+    if (hResizeFrame) cancelAnimationFrame(hResizeFrame);
     document.removeEventListener("mousemove", onHorizontalResizeDrag);
     document.removeEventListener("mouseup", stopHorizontalResizeDrag);
   });
@@ -17816,7 +17846,9 @@
     // helpers suppress their axis-specific margins only while Dual-View is on
     // and automatically restore the saved values when it turns off.
     applyVerticalResizeExtras(root);
-    applyHorizontalPanelOffset(root);
+    // The drag handler owns the margin until mouseup. Reapplying the saved
+    // value from a native resize callback can alternate two X positions.
+    if (!hResizeState) applyHorizontalPanelOffset(root);
     const side =
       root?.getAttribute("data-panel-side") ||
       (window.Zentral?.Apps?.isPanelAttachedToRight?.() ? "right" : "left");
@@ -19368,7 +19400,7 @@
 
       const badge = document.createElement("span");
       badge.className = "zs-version-badge";
-      badge.textContent = "Active Mod";
+      badge.textContent = "Bgalazka extension";
 
       titleGroup.appendChild(title);
       titleGroup.appendChild(badge);
@@ -19459,7 +19491,16 @@
         45,
         "%",
       );
-      slidersGroup.append(s1.row, s2.row, s3.row);
+      const blurSlider = createSliderRow(
+        "Panel Blur Strength",
+        "Blur behind translucent pinned panels; 0px disables background blur",
+        EXT_PREFS.BLUR_INTENSITY,
+        0,
+        40,
+        20,
+        "px",
+      );
+      slidersGroup.append(s1.row, s2.row, s3.row, blurSlider.row);
       slidersGroup.setAttribute(
         "data-hidden",
         getPref(BGALAZKA_EXT_PREFS.TRANSLUCENCY, false) ? "false" : "true",
@@ -19539,7 +19580,7 @@
 
       const panelHorizontalOffsetBounds = (() => {
         const root = document.getElementById("zen-app-panel-root");
-        if (!root) {
+        if (!root?.hasAttribute("open")) {
           const fallback = Math.max(1, window.innerWidth);
           return { min: -fallback, max: fallback };
         }
@@ -19552,7 +19593,9 @@
         BGALAZKA_EXT_PREFS.PANEL_HORIZONTAL_OFFSET,
         Math.floor(panelHorizontalOffsetBounds.min),
         Math.ceil(panelHorizontalOffsetBounds.max),
-        0,
+        getHorizontalOffsetPreference(
+          document.getElementById("zen-app-panel-root"),
+        ),
         "px",
       );
       content.appendChild(panelHorizontalOffsetSlider.row);
@@ -20208,17 +20251,19 @@
       content.appendChild(tHideUnattached.row);
 
       panel._toggles.push(
-        ...[s1, s2, s3].map(({ input, badge }, index) => ({
+        ...[s1, s2, s3, blurSlider].map(({ input, badge }, index) => ({
           input,
           pref: [
             BGALAZKA_EXT_PREFS.OPACITY_UNPINNED,
             BGALAZKA_EXT_PREFS.OPACITY_PINNED_FOCUS,
             BGALAZKA_EXT_PREFS.OPACITY_PINNED_BLUR,
+            EXT_PREFS.BLUR_INTENSITY,
           ][index],
-          def: [92, 85, 45][index],
+          def: [92, 85, 45, 20][index],
           isSelect: true,
           onSync: (v) => {
-            badge.textContent = v + "%";
+            badge.textContent = v + (index === 3 ? "px" : "%");
+            if (index === 3) updateCSSVars();
           },
         })),
         {
@@ -20258,7 +20303,9 @@
         {
           input: panelHorizontalOffsetSlider.input,
           pref: BGALAZKA_EXT_PREFS.PANEL_HORIZONTAL_OFFSET,
-          def: 0,
+          def: getHorizontalOffsetPreference(
+            document.getElementById("zen-app-panel-root"),
+          ),
           isSelect: true,
           onSync: (v) => {
             const root = document.getElementById("zen-app-panel-root");
@@ -20524,6 +20571,59 @@
         },
       );
 
+      // Bulk actions change only boolean feature controls. Slider values,
+      // search URLs, shortcut assignments, and saved panel geometry survive.
+      // Clicking each control runs its existing live-update handler.
+      const presetActions = document.createElement("div");
+      presetActions.className = "zs-extension-presets";
+      const recommendedExceptions = new Set([
+        BGALAZKA_EXT_PREFS.EDGE_ATTACHED_PANELS,
+        BGALAZKA_EXT_PREFS.WEB_TOOLBAR_TOP,
+        BGALAZKA_EXT_PREFS.WEB_TOOLBAR_AUTOHIDE,
+        BGALAZKA_EXT_PREFS.ADDON_TAB_ID_BRIDGE,
+      ]);
+      const applyPreset = (recommended) => {
+        const message = recommended
+          ? "Apply recommended extension switches? This will replace your current on/off choices. Custom values and shortcuts will be kept."
+          : "Turn off every extension switch? This will replace your current on/off choices. Custom values and shortcuts will be kept.";
+        if (!window.confirm(message)) return;
+        for (const { input, pref, isSelect } of panel._toggles) {
+          if (isSelect || input.type !== "checkbox") continue;
+          const experimental = /experimental/i.test(
+            input.closest(".zs-row")?.textContent || "",
+          );
+          const wanted =
+            recommended &&
+            !pref.startsWith("zen.workspace.bgalazka.hide_") &&
+            !recommendedExceptions.has(pref) &&
+            !experimental;
+          if (input.checked !== wanted) input.click();
+        }
+        // The video category is built by a separate extension module and
+        // keeps its own pref namespace, so include its visible switches too.
+        for (const input of modal.querySelectorAll(
+          '#zs-panel-video-cloning input[type="checkbox"]',
+        )) {
+          const isHideOption = /hide/i.test(
+            input.closest(".zs-row")?.textContent || "",
+          );
+          const wanted = recommended && !isHideOption;
+          if (input.checked !== wanted) input.click();
+        }
+      };
+      for (const [label, recommended] of [
+        ["Recommended settings", true],
+        ["Turn everything off", false],
+      ]) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "zs-extension-preset-btn";
+        button.textContent = label;
+        button.addEventListener("click", () => applyPreset(recommended));
+        presetActions.appendChild(button);
+      }
+      content.prepend(presetActions);
+
       // ------------------------------------------------------------------
       // SETTINGS CATEGORY SPLIT
       // ------------------------------------------------------------------
@@ -20541,6 +20641,18 @@
         subPanel.appendChild(subContent);
         return { subPanel, subContent };
       };
+
+      const tabsCategory = makeExtensionSettingsPanel(
+        "zs-panel-extension-tabs",
+        "extension-tabs",
+      );
+      cornerHeader.style.marginTop = "8px";
+      tabsCategory.subContent.append(
+        cornerHeader,
+        t4.row,
+        cornerSubgroup,
+        tHideUnattached.row,
+      );
 
       const hideCategory = makeExtensionSettingsPanel(
         "zs-panel-extension-hide-pill",
@@ -20610,9 +20722,10 @@
       panel.appendChild(content);
       body.append(
         panel,
+        tabsCategory.subPanel,
+        hideCategory.subPanel,
         toolbarCategory.subPanel,
         searchCategory.subPanel,
-        hideCategory.subPanel,
         keybindCategory.subPanel,
       );
       registerCleanup(() => {
@@ -20646,7 +20759,19 @@
         buttonId: "zs-tab-btn-bgalazka",
         panelId: "zs-panel-bgalazka",
         dataTab: "bgalazka",
-        label: "Panel & Apps",
+        label: "Panels",
+      },
+      {
+        buttonId: "zs-tab-btn-extension-tabs",
+        panelId: "zs-panel-extension-tabs",
+        dataTab: "extension-tabs",
+        label: "Tabs",
+      },
+      {
+        buttonId: "zs-tab-btn-extension-hide-pill",
+        panelId: "zs-panel-extension-hide-pill",
+        dataTab: "extension-hide-pill",
+        label: "Pill",
       },
       {
         buttonId: "zs-tab-btn-extension-toolbar",
@@ -20658,21 +20783,51 @@
         buttonId: "zs-tab-btn-extension-search",
         panelId: "zs-panel-extension-search",
         dataTab: "extension-search",
-        label: "Search Engines",
+        label: "Search",
       },
       {
         buttonId: "zs-tab-btn-extension-keybinds",
         panelId: "zs-panel-extension-keybinds",
         dataTab: "extension-keybinds",
-        label: "Keyboard Shortcuts",
-      },
-      {
-        buttonId: "zs-tab-btn-extension-hide-pill",
-        panelId: "zs-panel-extension-hide-pill",
-        dataTab: "extension-hide-pill",
-        label: "Pill Controls",
+        label: "Shortcuts",
       },
     ];
+
+    // Label the base categories without changing the original code.
+    const baseSettings = modal.querySelector(
+      '.zs-tab-btn[data-tab="settings"]',
+    );
+    const baseDiagnostics = modal.querySelector(
+      '.zs-tab-btn[data-tab="diagnostics"]',
+    );
+    if (baseSettings) baseSettings.textContent = "Settings";
+    if (baseDiagnostics) baseDiagnostics.textContent = "Diagnostics";
+    const diagnosticPanel = modal.querySelector("#zs-panel-diagnostics");
+    if (
+      diagnosticPanel &&
+      !diagnosticPanel.querySelector("#zs-base-diagnostic-note")
+    ) {
+      const note = document.createElement("p");
+      note.id = "zs-base-diagnostic-note";
+      note.className = "zs-ownership-note";
+      note.textContent =
+        "Diagnostics and issue reports here are for the original Zentral base mod only. For problems caused by Bgalazka's extension, please do not contact the original creator.";
+      diagnosticPanel.prepend(note);
+    }
+    const donation = modal.querySelector("#zs-kofi-btn");
+    if (donation) {
+      const message =
+        "Donation for the original Zentral base mod only; it does not support Bgalazka's extension.";
+      donation.title = message;
+      donation.setAttribute("aria-label", message);
+      if (!modal.querySelector("#zs-base-donation-note")) {
+        const note = document.createElement("span");
+        note.id = "zs-base-donation-note";
+        note.className = "zs-donation-note";
+        note.textContent = "Base mod donation only · original creator";
+        donation.insertAdjacentElement("afterend", note);
+      }
+    }
 
     const extensionButtonIds = new Set(
       extensionCategories.map(({ buttonId }) => buttonId),
@@ -20706,6 +20861,22 @@
         });
       }
     });
+
+    // One heading per category group frees space for actual setting names.
+    // Keep the headings outside .zs-tab-btn so native click handling ignores
+    // them, and put the extension heading before its first real tab.
+    const firstExtension = modal.querySelector("#zs-tab-btn-bgalazka");
+    for (const [id, label, before] of [
+      ["zs-base-category-label", "Base", baseSettings],
+      ["zs-extension-category-label", "Extension", firstExtension],
+    ]) {
+      if (!before || modal.querySelector("#" + id)) continue;
+      const heading = document.createElement("span");
+      heading.id = id;
+      heading.className = "zs-category-heading";
+      heading.textContent = label;
+      tabBar.insertBefore(heading, before);
+    }
 
     // Native Zentral tab buttons do not know about extension-injected panels,
     // so explicitly deactivate extension categories when a native
@@ -21774,9 +21945,14 @@
         const essential = essentialPanels.get(browser._bgalazkaAppId);
         const backgroundPreload =
           essential?.app.preload && essential.tab.isConnected;
-        browser.docShellIsActive =
+        const shouldBeActive =
           !!backgroundPreload ||
           (panelOpen && browser.style.display !== "none");
+        // Gecko may reset this flag during navigation/process swaps. Only
+        // write on a real state change: repeatedly assigning true while a
+        // remote browser is loading can keep its tab in a busy/gray cycle.
+        if (browser.docShellIsActive !== shouldBeActive)
+          browser.docShellIsActive = shouldBeActive;
       } catch (_) {}
     }
   }
@@ -22182,7 +22358,9 @@
 
         // Force a clean reload with the new UA (see note above).
         const apps = window.Zentral?.Apps;
-        if (apps?.closeApp) apps.closeApp(appId);
+        // Let the XUL command/popup finish before destroying its live remote
+        // browser. The next open creates a fresh context with the new UA.
+        if (apps?.closeApp) setTimeout(() => apps.closeApp(appId), 0);
       });
     }
     return true;
@@ -22723,6 +22901,10 @@
         // reliably fire these events).
         if (result?.browser && !navigationListeners.has(result.browser)) {
           const onNav = () => {
+            // A process swap can revoke activation after openPanel's first
+            // retries. Reassert promptly on navigation instead of waiting
+            // for the periodic status check.
+            syncAppPanelBrowserActivity();
             updateWebToolbarState();
           };
           result.browser.addEventListener("load", onNav);
@@ -23910,13 +24092,23 @@
   const FRAMING_PREF = "zen.workspace.zentral.video_preview.framing";
   const HIDE_DUPLICATES_PREF =
     "zen.workspace.zentral.video_preview.hide_muted_duplicates";
+  const REQUIRE_AUDIO_PREF =
+    "zen.workspace.zentral.video_preview.require_audio";
   const AUTO_SHOW_PREF = "zen.workspace.zentral.video_preview.auto_show_video";
-  const BUILD = "video-only-2026-09-22-7";
+  const CAPTURE_WIDTH_PREF =
+    "zen.workspace.zentral.video_preview.capture_width_px";
+  // Only frame capture and page snapshots use this cap. Keep the established
+  // 480 px default; live cloning and streams use their own rendering paths.
+  function captureWidth() {
+    const value = Services.prefs.getIntPref(CAPTURE_WIDTH_PREF, 480);
+    return [320, 480, 640].includes(value) ? value : 480;
+  }
+  const BUILD = "video-only-2026-09-22-8";
   const FRAME_SOURCE =
-    '// Loaded into each browser\'s content process through its frame message manager.\n// The channel is replaced at startup so separate browser windows stay isolated.\n(function () {\n  // Shared by actor and frame-script transports; no parent-side privileges.\nclass ZentralVideoRenderer {\n  constructor(doc) { this.doc = doc; this.serial = 0; }\n  async start({ videoRef, mode, fit = "contain" }) {\n    if (this.doc?.documentURI !== "about:blank") throw new Error("Invalid preview document");\n    this.stop();\n    const serial = this.serial;\n    const { ContentDOMReference } = ChromeUtils.importESModule(\n      "resource://gre/modules/ContentDOMReference.sys.mjs");\n    const media = await ContentDOMReference.resolve(videoRef);\n    if (serial !== this.serial) throw new Error("Preview cancelled");\n    if (!media?.isConnected || media.localName !== "video")\n      throw new Error("Video reference unavailable in preview process");\n    this.source = media;\n    const doc = this.doc, win = doc.defaultView;\n    if (!doc.body) doc.documentElement.appendChild(doc.createElement("body"));\n    doc.body.style.cssText = "margin:0;overflow:hidden;background:#000";\n    const target = doc.createElement("video");\n    target.muted = true;\n    target.autoplay = true;\n    target.style.cssText = "display:block;width:100vw;height:100vh;object-fit:" +\n      (fit === "cover" ? "cover" : "contain") + ";background:#000";\n    doc.body.appendChild(target);\n    this.video = target;\n    this.mode = mode;\n    try {\n      if (mode === "native") {\n        if (media.isCloningElementVisually) throw new Error("Source already has a visual clone");\n        if (typeof media.cloneElementVisually !== "function") throw new Error("Native cloning unavailable");\n        await media.cloneElementVisually(target);\n      } else if (mode === "stream") {\n        const capture = media.captureStream || media.mozCaptureStream;\n        if (typeof capture !== "function") throw new Error("Stream capture unavailable");\n        this.stream = capture.call(media);\n        const tracks = this.stream.getVideoTracks();\n        if (!tracks.length) throw new Error("Stream contains no video track");\n        target.srcObject = new win.MediaStream(tracks);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else if (mode === "canvas-stream") {\n        const surface = doc.createElement("canvas");\n        surface.width = Math.min(640, media.videoWidth);\n        surface.height = Math.max(1, Math.round(surface.width * media.videoHeight / media.videoWidth));\n        const ctx = surface.getContext("2d", { alpha: false });\n        ctx.drawImage(media, 0, 0, surface.width, surface.height);\n        this.stream = surface.captureStream(30);\n        target.srcObject = this.stream;\n        // Keep all copies inside the source process. No per-frame JPEG or IPC.\n        // Use the visible preview window clock: source rVFC may stop in a hidden tab.\n        let lastTime = NaN;\n        this.timer = win.setInterval(() => {\n          if (!media.isConnected || media.ended) { this.failure = "Source ended or detached"; return; }\n          if (media.currentTime === lastTime || media.readyState < 2) return;\n          try {\n            ctx.drawImage(media, 0, 0, surface.width, surface.height);\n            lastTime = media.currentTime;\n          } catch (error) { this.failure = String(error); }\n        }, 1000 / 30);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else throw new Error("Unknown preview mode");\n      if (serial !== this.serial) throw new Error("Preview cancelled");\n      return { ok: true, mode };\n    } catch (error) {\n      if (serial === this.serial) this.stop();\n      throw error;\n    }\n  }\n  firstFrame(target) {\n    if (target.readyState >= 2 && target.videoWidth > 0) return Promise.resolve();\n    return new Promise((resolve, reject) => {\n      const win = this.doc.defaultView;\n      const done = error => {\n        win.clearTimeout(timer);\n        target.removeEventListener("loadeddata", loaded);\n        this.cancelWait = null;\n        error ? reject(error) : resolve();\n      };\n      const loaded = () => done();\n      const timer = win.setTimeout(() => done(new Error("Stream produced no decoded frame")), 1800);\n      this.cancelWait = () => done(new Error("Preview cancelled"));\n      target.addEventListener("loadeddata", loaded, { once: true });\n    });\n  }\n  health() {\n    const tracks = this.stream?.getVideoTracks() || [];\n    return { ok: !!this.video?.isConnected && !!this.source?.isConnected && !this.failure &&\n      !this.source.ended && ((this.mode === "native" && this.source.isCloningElementVisually) ||\n        (this.video.readyState >= 2 && tracks.some(track => track.readyState !== "ended" && !track.muted))),\n      error: this.failure || "Preview disconnected or stream unavailable",\n      paused: this.source?.paused, time: this.source?.currentTime,\n      frames: this.video?.getVideoPlaybackQuality?.().totalVideoFrames || 0 };\n  }\n  stop() {\n    ++this.serial;\n    this.cancelWait?.();\n    if (this.timer != null) this.doc.defaultView.clearInterval(this.timer);\n    this.timer = null;\n    this.video?.remove();\n    this.video = null;\n    for (const track of this.stream?.getTracks() || []) track.stop();\n    this.stream = null;\n    this.source = null;\n    this.failure = null;\n  }\n}\n\n  let renderer = null;\n  let stopped = false;\n  const CHANNEL = "__CHANNEL__";\n  const ids = new WeakMap();\n  const elements = new Map();\n  let nextId = 0;\n  const frameId = () => content.browsingContext?.id || 0;\n\n  function list() {\n    const doc = content.document;\n    if (!doc) return [];\n    const found = [];\n    const live = new Set();\n    for (const media of doc.querySelectorAll("video")) {\n      if (media.localName !== "video" || media.ended || media.readyState < 1) continue;\n      const box = media.getBoundingClientRect();\n      const x = Math.max(0, box.left);\n      const y = Math.max(0, box.top);\n      const width = Math.min(content.innerWidth, box.right) - x;\n      const height = Math.min(content.innerHeight, box.bottom) - y;\n      if (media.videoWidth < 240 || media.videoHeight < 135 ||\n          (Number.isFinite(media.duration) && media.duration > 0 && media.duration < 8)) continue;\n      let id = ids.get(media);\n      if (!id) { id = ++nextId; ids.set(media, id); }\n      elements.set(id, media);\n      live.add(id);\n      const label = media.getAttribute("aria-label") || media.getAttribute("title") ||\n        media.closest("[aria-label]")?.getAttribute("aria-label") ||\n        doc.title || "Video";\n      let videoRef = null;\n      try {\n        const { ContentDOMReference } = ChromeUtils.importESModule(\n          "resource://gre/modules/ContentDOMReference.sys.mjs");\n        videoRef = ContentDOMReference.get(media);\n      } catch (_) {}\n      found.push({ id, videoRef, documentId: content.windowGlobalChild?.innerWindowId || 0,\n        frameId: frameId(), label: String(label).slice(0, 100),\n        kind: "video",\n        canClone: typeof media.cloneElementVisually === "function",\n        canStream: typeof (media.captureStream || media.mozCaptureStream) === "function",\n        canCanvasStream: typeof doc.createElement("canvas").captureStream === "function",\n        rect: width > 0 && height > 0 ? { x, y, width, height } : null,\n        score: (media.paused ? 0 : 10000000) + Math.max(0, width) * Math.max(0, height),\n        paused: media.paused, muted: media.muted,\n        currentTime: media.currentTime,\n        duration: Number.isFinite(media.duration) ? media.duration : 0,\n        width: media.videoWidth || 0, height: media.videoHeight || 0 });\n    }\n    for (const id of elements.keys()) if (!live.has(id)) elements.delete(id);\n    return found;\n  }\n\n  function captureFrame({ id }) {\n    const media = elements.get(id);\n    if (!media?.isConnected || media.localName !== "video" || media.readyState < 2)\n      throw new Error("No decoded video frame available");\n    const canvas = content.document.createElement("canvas");\n    canvas.width = Math.min(480, media.videoWidth);\n    canvas.height = Math.max(1, Math.round(canvas.width * media.videoHeight / media.videoWidth));\n    canvas.getContext("2d", { alpha: false }).drawImage(media, 0, 0, canvas.width, canvas.height);\n    return { url: canvas.toDataURL("image/jpeg", 0.75), width: canvas.width, height: canvas.height };\n  }\n\n  function controlMedia({ id, action, value }) {\n    const media = elements.get(id);\n    if (!media?.isConnected) return null;\n    switch (action) {\n      case "toggle":\n        if (media.paused) media.play().catch(() => {});\n        else media.pause();\n        break;\n      case "mute": media.muted = !media.muted; break;\n      case "seek":\n        if (Number.isFinite(value) && Number.isFinite(media.duration))\n          media.currentTime = Math.max(0, Math.min(media.duration, value));\n        break;\n    }\n    return { paused: media.paused, muted: media.muted,\n      currentTime: media.currentTime,\n      duration: Number.isFinite(media.duration) ? media.duration : 0 };\n  }\n\n  async function onRequest(message) {\n    const { requestId, kind, frameId: requestedFrame, ...args } = message.data;\n    if (stopped || (kind !== "List" && requestedFrame !== frameId())) return;\n    try {\n      let result;\n      if (kind === "List") result = list();\n      else if (kind === "Preview") {\n        renderer ??= new ZentralVideoRenderer(content.document);\n        result = await renderer.start(args);\n      } else if (kind === "Health") result = renderer?.health() || { ok: false };\n      else if (kind === "StopPreview") { renderer?.stop(); result = true; }\n      else if (kind === "ActorCheck") {\n        ChromeUtils.importESModule(args.moduleURI);\n        result = true;\n      } else result = kind === "Capture" ? captureFrame(args) : controlMedia(args);\n      if (!stopped) sendAsyncMessage(CHANNEL + ":reply", { requestId, result });\n    } catch (error) {\n      if (!stopped) sendAsyncMessage(CHANNEL + ":reply", { requestId, error: String(error), result: [] });\n    }\n  }\n  function onShutdown() {\n    stopped = true;\n    renderer?.stop();\n    removeMessageListener(CHANNEL + ":request", onRequest);\n    removeMessageListener(CHANNEL + ":shutdown", onShutdown);\n    elements.clear();\n  }\n  addEventListener("unload", () => renderer?.stop());\n  addMessageListener(CHANNEL + ":request", onRequest);\n  addMessageListener(CHANNEL + ":shutdown", onShutdown);\n})();\n';
+    '// Loaded into each browser\'s content process through its frame message manager.\n// The channel is replaced at startup so separate browser windows stay isolated.\n(function () {\n  // Shared by actor and frame-script transports; no parent-side privileges.\nclass ZentralVideoRenderer {\n  constructor(doc) { this.doc = doc; this.serial = 0; }\n  async start({ videoRef, mode, fit = "contain" }) {\n    if (this.doc?.documentURI !== "about:blank") throw new Error("Invalid preview document");\n    this.stop();\n    const serial = this.serial;\n    const { ContentDOMReference } = ChromeUtils.importESModule(\n      "resource://gre/modules/ContentDOMReference.sys.mjs");\n    const media = await ContentDOMReference.resolve(videoRef);\n    if (serial !== this.serial) throw new Error("Preview cancelled");\n    if (!media?.isConnected || media.localName !== "video")\n      throw new Error("Video reference unavailable in preview process");\n    this.source = media;\n    const doc = this.doc, win = doc.defaultView;\n    if (!doc.body) doc.documentElement.appendChild(doc.createElement("body"));\n    doc.body.style.cssText = "margin:0;overflow:hidden;background:#000";\n    const target = doc.createElement("video");\n    target.muted = true;\n    target.autoplay = true;\n    target.style.cssText = "display:block;width:100vw;height:100vh;object-fit:" +\n      (fit === "cover" ? "cover" : "contain") + ";background:#000";\n    doc.body.appendChild(target);\n    this.video = target;\n    this.mode = mode;\n    try {\n      if (mode === "native") {\n        if (media.isCloningElementVisually) throw new Error("Source already has a visual clone");\n        if (typeof media.cloneElementVisually !== "function") throw new Error("Native cloning unavailable");\n        await media.cloneElementVisually(target);\n      } else if (mode === "stream") {\n        const capture = media.captureStream || media.mozCaptureStream;\n        if (typeof capture !== "function") throw new Error("Stream capture unavailable");\n        this.stream = capture.call(media);\n        const tracks = this.stream.getVideoTracks();\n        if (!tracks.length) throw new Error("Stream contains no video track");\n        target.srcObject = new win.MediaStream(tracks);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else if (mode === "canvas-stream") {\n        const surface = doc.createElement("canvas");\n        surface.width = Math.min(640, media.videoWidth);\n        surface.height = Math.max(1, Math.round(surface.width * media.videoHeight / media.videoWidth));\n        const ctx = surface.getContext("2d", { alpha: false });\n        ctx.drawImage(media, 0, 0, surface.width, surface.height);\n        this.stream = surface.captureStream(30);\n        target.srcObject = this.stream;\n        // Keep all copies inside the source process. No per-frame JPEG or IPC.\n        // Use the visible preview window clock: source rVFC may stop in a hidden tab.\n        let lastTime = NaN;\n        this.timer = win.setInterval(() => {\n          if (!media.isConnected || media.ended) { this.failure = "Source ended or detached"; return; }\n          if (media.currentTime === lastTime || media.readyState < 2) return;\n          try {\n            ctx.drawImage(media, 0, 0, surface.width, surface.height);\n            lastTime = media.currentTime;\n          } catch (error) { this.failure = String(error); }\n        }, 1000 / 30);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else throw new Error("Unknown preview mode");\n      if (serial !== this.serial) throw new Error("Preview cancelled");\n      return { ok: true, mode };\n    } catch (error) {\n      if (serial === this.serial) this.stop();\n      throw error;\n    }\n  }\n  firstFrame(target) {\n    if (target.readyState >= 2 && target.videoWidth > 0) return Promise.resolve();\n    return new Promise((resolve, reject) => {\n      const win = this.doc.defaultView;\n      const done = error => {\n        win.clearTimeout(timer);\n        target.removeEventListener("loadeddata", loaded);\n        this.cancelWait = null;\n        error ? reject(error) : resolve();\n      };\n      const loaded = () => done();\n      const timer = win.setTimeout(() => done(new Error("Stream produced no decoded frame")), 1800);\n      this.cancelWait = () => done(new Error("Preview cancelled"));\n      target.addEventListener("loadeddata", loaded, { once: true });\n    });\n  }\n  health() {\n    const tracks = this.stream?.getVideoTracks() || [];\n    return { ok: !!this.video?.isConnected && !!this.source?.isConnected && !this.failure &&\n      !this.source.ended && ((this.mode === "native" && this.source.isCloningElementVisually) ||\n        (this.video.readyState >= 2 && tracks.some(track => track.readyState !== "ended" && !track.muted))),\n      error: this.failure || "Preview disconnected or stream unavailable",\n      paused: this.source?.paused, time: this.source?.currentTime,\n      frames: this.video?.getVideoPlaybackQuality?.().totalVideoFrames || 0 };\n  }\n  stop() {\n    ++this.serial;\n    this.cancelWait?.();\n    if (this.timer != null) this.doc.defaultView.clearInterval(this.timer);\n    this.timer = null;\n    this.video?.remove();\n    this.video = null;\n    for (const track of this.stream?.getTracks() || []) track.stop();\n    this.stream = null;\n    this.source = null;\n    this.failure = null;\n  }\n}\n\n  let renderer = null;\n  let stopped = false;\n  const CHANNEL = "__CHANNEL__";\n  const ids = new WeakMap();\n  const elements = new Map();\n  let nextId = 0;\n  const frameId = () => content.browsingContext?.id || 0;\n\n  function hasVideoAudioTrack(media) {\n  // Track presence is independent of the viewer\'s mute and volume choices.\n  try {\n    if (media.srcObject?.getAudioTracks) return media.srcObject.getAudioTracks().length > 0;\n    if (media.audioTracks) return media.audioTracks.length > 0;\n    const capture = media.captureStream || media.mozCaptureStream;\n    if (typeof capture !== "function") return false;\n    const stream = capture.call(media);\n    const hasAudio = stream.getAudioTracks().length > 0;\n    for (const track of stream.getTracks()) track.stop();\n    return hasAudio;\n  } catch (_) { return false; }\n}\n\n  function list({ requireAudio = false } = {}) {\n    const doc = content.document;\n    if (!doc) return [];\n    const found = [];\n    const live = new Set();\n    for (const media of doc.querySelectorAll("video")) {\n      if (media.localName !== "video" || media.ended || media.readyState < 1) continue;\n      const box = media.getBoundingClientRect();\n      const x = Math.max(0, box.left);\n      const y = Math.max(0, box.top);\n      const width = Math.min(content.innerWidth, box.right) - x;\n      const height = Math.min(content.innerHeight, box.bottom) - y;\n      if (media.videoWidth < 240 || media.videoHeight < 135 ||\n          (Number.isFinite(media.duration) && media.duration > 0 && media.duration < 8) ||\n          (requireAudio && !hasVideoAudioTrack(media))) continue;\n      let id = ids.get(media);\n      if (!id) { id = ++nextId; ids.set(media, id); }\n      elements.set(id, media);\n      live.add(id);\n      const label = media.getAttribute("aria-label") || media.getAttribute("title") ||\n        media.closest("[aria-label]")?.getAttribute("aria-label") ||\n        doc.title || "Video";\n      let videoRef = null;\n      try {\n        const { ContentDOMReference } = ChromeUtils.importESModule(\n          "resource://gre/modules/ContentDOMReference.sys.mjs");\n        videoRef = ContentDOMReference.get(media);\n      } catch (_) {}\n      found.push({ id, videoRef, documentId: content.windowGlobalChild?.innerWindowId || 0,\n        frameId: frameId(), label: String(label).slice(0, 100),\n        kind: "video",\n        canClone: typeof media.cloneElementVisually === "function",\n        canStream: typeof (media.captureStream || media.mozCaptureStream) === "function",\n        canCanvasStream: typeof doc.createElement("canvas").captureStream === "function",\n        rect: width > 0 && height > 0 ? { x, y, width, height } : null,\n        score: (media.paused ? 0 : 10000000) + Math.max(0, width) * Math.max(0, height),\n        paused: media.paused, muted: media.muted,\n        currentTime: media.currentTime,\n        duration: Number.isFinite(media.duration) ? media.duration : 0,\n        width: media.videoWidth || 0, height: media.videoHeight || 0 });\n    }\n    for (const id of elements.keys()) if (!live.has(id)) elements.delete(id);\n    return found;\n  }\n\n  function captureFrame({ id, captureWidth = 480 }) {\n    const media = elements.get(id);\n    if (!media?.isConnected || media.localName !== "video" || media.readyState < 2)\n      throw new Error("No decoded video frame available");\n    const canvas = content.document.createElement("canvas");\n    canvas.width = Math.min([320, 480, 640].includes(captureWidth) ? captureWidth : 480, media.videoWidth);\n    canvas.height = Math.max(1, Math.round(canvas.width * media.videoHeight / media.videoWidth));\n    canvas.getContext("2d", { alpha: false }).drawImage(media, 0, 0, canvas.width, canvas.height);\n    return { url: canvas.toDataURL("image/jpeg", 0.75), width: canvas.width, height: canvas.height };\n  }\n\n  function controlMedia({ id, action, value }) {\n    const media = elements.get(id);\n    if (!media?.isConnected) return null;\n    switch (action) {\n      case "toggle":\n        if (media.paused) media.play().catch(() => {});\n        else media.pause();\n        break;\n      case "mute": media.muted = !media.muted; break;\n      case "seek":\n        if (Number.isFinite(value) && Number.isFinite(media.duration))\n          media.currentTime = Math.max(0, Math.min(media.duration, value));\n        break;\n    }\n    return { paused: media.paused, muted: media.muted,\n      currentTime: media.currentTime,\n      duration: Number.isFinite(media.duration) ? media.duration : 0 };\n  }\n\n  async function onRequest(message) {\n    const { requestId, kind, frameId: requestedFrame, ...args } = message.data;\n    if (stopped || (kind !== "List" && requestedFrame !== frameId())) return;\n    try {\n      let result;\n      if (kind === "List") result = list(args);\n      else if (kind === "Preview") {\n        renderer ??= new ZentralVideoRenderer(content.document);\n        result = await renderer.start(args);\n      } else if (kind === "Health") result = renderer?.health() || { ok: false };\n      else if (kind === "StopPreview") { renderer?.stop(); result = true; }\n      else if (kind === "ActorCheck") {\n        ChromeUtils.importESModule(args.moduleURI);\n        result = true;\n      } else result = kind === "Capture" ? captureFrame(args) : controlMedia(args);\n      if (!stopped) sendAsyncMessage(CHANNEL + ":reply", { requestId, result });\n    } catch (error) {\n      if (!stopped) sendAsyncMessage(CHANNEL + ":reply", { requestId, error: String(error), result: [] });\n    }\n  }\n  function onShutdown() {\n    stopped = true;\n    renderer?.stop();\n    removeMessageListener(CHANNEL + ":request", onRequest);\n    removeMessageListener(CHANNEL + ":shutdown", onShutdown);\n    elements.clear();\n  }\n  addEventListener("unload", () => renderer?.stop());\n  addMessageListener(CHANNEL + ":request", onRequest);\n  addMessageListener(CHANNEL + ":shutdown", onShutdown);\n})();\n';
   const ACTOR_SOURCE =
-    '// Shared by actor and frame-script transports; no parent-side privileges.\nclass ZentralVideoRenderer {\n  constructor(doc) { this.doc = doc; this.serial = 0; }\n  async start({ videoRef, mode, fit = "contain" }) {\n    if (this.doc?.documentURI !== "about:blank") throw new Error("Invalid preview document");\n    this.stop();\n    const serial = this.serial;\n    const { ContentDOMReference } = ChromeUtils.importESModule(\n      "resource://gre/modules/ContentDOMReference.sys.mjs");\n    const media = await ContentDOMReference.resolve(videoRef);\n    if (serial !== this.serial) throw new Error("Preview cancelled");\n    if (!media?.isConnected || media.localName !== "video")\n      throw new Error("Video reference unavailable in preview process");\n    this.source = media;\n    const doc = this.doc, win = doc.defaultView;\n    if (!doc.body) doc.documentElement.appendChild(doc.createElement("body"));\n    doc.body.style.cssText = "margin:0;overflow:hidden;background:#000";\n    const target = doc.createElement("video");\n    target.muted = true;\n    target.autoplay = true;\n    target.style.cssText = "display:block;width:100vw;height:100vh;object-fit:" +\n      (fit === "cover" ? "cover" : "contain") + ";background:#000";\n    doc.body.appendChild(target);\n    this.video = target;\n    this.mode = mode;\n    try {\n      if (mode === "native") {\n        if (media.isCloningElementVisually) throw new Error("Source already has a visual clone");\n        if (typeof media.cloneElementVisually !== "function") throw new Error("Native cloning unavailable");\n        await media.cloneElementVisually(target);\n      } else if (mode === "stream") {\n        const capture = media.captureStream || media.mozCaptureStream;\n        if (typeof capture !== "function") throw new Error("Stream capture unavailable");\n        this.stream = capture.call(media);\n        const tracks = this.stream.getVideoTracks();\n        if (!tracks.length) throw new Error("Stream contains no video track");\n        target.srcObject = new win.MediaStream(tracks);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else if (mode === "canvas-stream") {\n        const surface = doc.createElement("canvas");\n        surface.width = Math.min(640, media.videoWidth);\n        surface.height = Math.max(1, Math.round(surface.width * media.videoHeight / media.videoWidth));\n        const ctx = surface.getContext("2d", { alpha: false });\n        ctx.drawImage(media, 0, 0, surface.width, surface.height);\n        this.stream = surface.captureStream(30);\n        target.srcObject = this.stream;\n        // Keep all copies inside the source process. No per-frame JPEG or IPC.\n        // Use the visible preview window clock: source rVFC may stop in a hidden tab.\n        let lastTime = NaN;\n        this.timer = win.setInterval(() => {\n          if (!media.isConnected || media.ended) { this.failure = "Source ended or detached"; return; }\n          if (media.currentTime === lastTime || media.readyState < 2) return;\n          try {\n            ctx.drawImage(media, 0, 0, surface.width, surface.height);\n            lastTime = media.currentTime;\n          } catch (error) { this.failure = String(error); }\n        }, 1000 / 30);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else throw new Error("Unknown preview mode");\n      if (serial !== this.serial) throw new Error("Preview cancelled");\n      return { ok: true, mode };\n    } catch (error) {\n      if (serial === this.serial) this.stop();\n      throw error;\n    }\n  }\n  firstFrame(target) {\n    if (target.readyState >= 2 && target.videoWidth > 0) return Promise.resolve();\n    return new Promise((resolve, reject) => {\n      const win = this.doc.defaultView;\n      const done = error => {\n        win.clearTimeout(timer);\n        target.removeEventListener("loadeddata", loaded);\n        this.cancelWait = null;\n        error ? reject(error) : resolve();\n      };\n      const loaded = () => done();\n      const timer = win.setTimeout(() => done(new Error("Stream produced no decoded frame")), 1800);\n      this.cancelWait = () => done(new Error("Preview cancelled"));\n      target.addEventListener("loadeddata", loaded, { once: true });\n    });\n  }\n  health() {\n    const tracks = this.stream?.getVideoTracks() || [];\n    return { ok: !!this.video?.isConnected && !!this.source?.isConnected && !this.failure &&\n      !this.source.ended && ((this.mode === "native" && this.source.isCloningElementVisually) ||\n        (this.video.readyState >= 2 && tracks.some(track => track.readyState !== "ended" && !track.muted))),\n      error: this.failure || "Preview disconnected or stream unavailable",\n      paused: this.source?.paused, time: this.source?.currentTime,\n      frames: this.video?.getVideoPlaybackQuality?.().totalVideoFrames || 0 };\n  }\n  stop() {\n    ++this.serial;\n    this.cancelWait?.();\n    if (this.timer != null) this.doc.defaultView.clearInterval(this.timer);\n    this.timer = null;\n    this.video?.remove();\n    this.video = null;\n    for (const track of this.stream?.getTracks() || []) track.stop();\n    this.stream = null;\n    this.source = null;\n    this.failure = null;\n  }\n}\n\n// Content-process source discovery for Zentral\'s sidebar video preview.\n// It never changes playback unless the user presses a preview control.\nexport class ZentralVideoBridgeChild extends JSWindowActorChild {\n  receiveMessage(message) {\n    if (message.name === "List") return this.list(message.data);\n    if (message.name === "Control") return this.control(message.data);\n    if (message.name === "Capture") return this.capture(message.data);\n    if (message.name === "Health") return this.renderer?.health() || { ok: false };\n    if (message.name === "Preview") return this.preview(message.data);\n    if (message.name === "StopPreview") { this.stopPreview(); return true; }\n    return null;\n  }\n\n  list() {\n    const doc = this.document;\n    const win = this.contentWindow;\n    if (!doc || !win) return [];\n    this.ids ??= new WeakMap();\n    this.elements ??= new Map();\n    this.nextId ??= 1;\n    const found = [];\n    const live = new Set();\n\n    for (const media of doc.querySelectorAll("video")) {\n      if (media.localName !== "video" || media.ended || media.readyState < 1) continue;\n      const box = media.getBoundingClientRect();\n      const x = Math.max(0, box.left);\n      const y = Math.max(0, box.top);\n      const width = Math.min(win.innerWidth, box.right) - x;\n      const height = Math.min(win.innerHeight, box.bottom) - y;\n      // Require decoded video frames; skip tiny decorative clips.\n      if (media.videoWidth < 240 || media.videoHeight < 135 ||\n          (Number.isFinite(media.duration) && media.duration > 0 && media.duration < 8)) continue;\n\n      let id = this.ids.get(media);\n      if (!id) { id = this.nextId++; this.ids.set(media, id); }\n      this.elements.set(id, media);\n      live.add(id);\n      const label = media.getAttribute("aria-label") || media.getAttribute("title") ||\n        media.closest("[aria-label]")?.getAttribute("aria-label") ||\n        doc.title || "Video";\n      let videoRef = null;\n      try {\n        const { ContentDOMReference } = ChromeUtils.importESModule(\n          "resource://gre/modules/ContentDOMReference.sys.mjs");\n        videoRef = ContentDOMReference.get(media);\n      } catch (_) { /* Snapshot / canvas capture can still work. */ }\n      found.push({ id, videoRef, documentId: this.manager?.innerWindowId || 0,\n        label: String(label).slice(0, 100),\n        kind: "video",\n        canClone: typeof media.cloneElementVisually === "function",\n        canStream: typeof (media.captureStream || media.mozCaptureStream) === "function",\n        canCanvasStream: typeof doc.createElement("canvas").captureStream === "function",\n        rect: width > 0 && height > 0 ? { x, y, width, height } : null,\n        score: (media.paused ? 0 : 10000000) + Math.max(0, width) * Math.max(0, height),\n        paused: media.paused, muted: media.muted,\n        currentTime: media.currentTime,\n        duration: Number.isFinite(media.duration) ? media.duration : 0,\n        width: media.videoWidth || 0, height: media.videoHeight || 0 });\n    }\n    for (const id of this.elements.keys()) if (!live.has(id)) this.elements.delete(id);\n    return found;\n  }\n\n  capture({ id } = {}) {\n    const media = this.elements?.get(id);\n    if (!media?.isConnected || media.localName !== "video" || media.readyState < 2)\n      throw new Error("No decoded video frame available");\n    const canvas = this.document.createElement("canvas");\n    canvas.width = Math.min(480, media.videoWidth);\n    canvas.height = Math.max(1, Math.round(canvas.width * media.videoHeight / media.videoWidth));\n    canvas.getContext("2d", { alpha: false }).drawImage(media, 0, 0, canvas.width, canvas.height);\n    return { url: canvas.toDataURL("image/jpeg", 0.75), width: canvas.width, height: canvas.height };\n  }\n\n  async preview(data) {\n    this.renderer ??= new ZentralVideoRenderer(this.document);\n    return this.renderer.start(data);\n  }\n\n  stopPreview() { this.renderer?.stop(); }\n\n  didDestroy() {\n    this.stopPreview();\n    this.elements?.clear();\n  }\n\n  control({ id, action, value } = {}) {\n    const media = this.elements?.get(id);\n    if (!media?.isConnected) return null;\n    switch (action) {\n      case "toggle":\n        if (media.paused) media.play().catch(() => {});\n        else media.pause();\n        break;\n      case "mute": media.muted = !media.muted; break;\n      case "seek":\n        if (Number.isFinite(value) && Number.isFinite(media.duration))\n          media.currentTime = Math.max(0, Math.min(media.duration, value));\n        break;\n    }\n    return { paused: media.paused, muted: media.muted,\n      currentTime: media.currentTime,\n      duration: Number.isFinite(media.duration) ? media.duration : 0 };\n  }\n}\n';
-  const ACTOR_HASH = "0e35bbf6aa2b";
+    '// Shared by actor and frame-script transports; no parent-side privileges.\nclass ZentralVideoRenderer {\n  constructor(doc) { this.doc = doc; this.serial = 0; }\n  async start({ videoRef, mode, fit = "contain" }) {\n    if (this.doc?.documentURI !== "about:blank") throw new Error("Invalid preview document");\n    this.stop();\n    const serial = this.serial;\n    const { ContentDOMReference } = ChromeUtils.importESModule(\n      "resource://gre/modules/ContentDOMReference.sys.mjs");\n    const media = await ContentDOMReference.resolve(videoRef);\n    if (serial !== this.serial) throw new Error("Preview cancelled");\n    if (!media?.isConnected || media.localName !== "video")\n      throw new Error("Video reference unavailable in preview process");\n    this.source = media;\n    const doc = this.doc, win = doc.defaultView;\n    if (!doc.body) doc.documentElement.appendChild(doc.createElement("body"));\n    doc.body.style.cssText = "margin:0;overflow:hidden;background:#000";\n    const target = doc.createElement("video");\n    target.muted = true;\n    target.autoplay = true;\n    target.style.cssText = "display:block;width:100vw;height:100vh;object-fit:" +\n      (fit === "cover" ? "cover" : "contain") + ";background:#000";\n    doc.body.appendChild(target);\n    this.video = target;\n    this.mode = mode;\n    try {\n      if (mode === "native") {\n        if (media.isCloningElementVisually) throw new Error("Source already has a visual clone");\n        if (typeof media.cloneElementVisually !== "function") throw new Error("Native cloning unavailable");\n        await media.cloneElementVisually(target);\n      } else if (mode === "stream") {\n        const capture = media.captureStream || media.mozCaptureStream;\n        if (typeof capture !== "function") throw new Error("Stream capture unavailable");\n        this.stream = capture.call(media);\n        const tracks = this.stream.getVideoTracks();\n        if (!tracks.length) throw new Error("Stream contains no video track");\n        target.srcObject = new win.MediaStream(tracks);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else if (mode === "canvas-stream") {\n        const surface = doc.createElement("canvas");\n        surface.width = Math.min(640, media.videoWidth);\n        surface.height = Math.max(1, Math.round(surface.width * media.videoHeight / media.videoWidth));\n        const ctx = surface.getContext("2d", { alpha: false });\n        ctx.drawImage(media, 0, 0, surface.width, surface.height);\n        this.stream = surface.captureStream(30);\n        target.srcObject = this.stream;\n        // Keep all copies inside the source process. No per-frame JPEG or IPC.\n        // Use the visible preview window clock: source rVFC may stop in a hidden tab.\n        let lastTime = NaN;\n        this.timer = win.setInterval(() => {\n          if (!media.isConnected || media.ended) { this.failure = "Source ended or detached"; return; }\n          if (media.currentTime === lastTime || media.readyState < 2) return;\n          try {\n            ctx.drawImage(media, 0, 0, surface.width, surface.height);\n            lastTime = media.currentTime;\n          } catch (error) { this.failure = String(error); }\n        }, 1000 / 30);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else throw new Error("Unknown preview mode");\n      if (serial !== this.serial) throw new Error("Preview cancelled");\n      return { ok: true, mode };\n    } catch (error) {\n      if (serial === this.serial) this.stop();\n      throw error;\n    }\n  }\n  firstFrame(target) {\n    if (target.readyState >= 2 && target.videoWidth > 0) return Promise.resolve();\n    return new Promise((resolve, reject) => {\n      const win = this.doc.defaultView;\n      const done = error => {\n        win.clearTimeout(timer);\n        target.removeEventListener("loadeddata", loaded);\n        this.cancelWait = null;\n        error ? reject(error) : resolve();\n      };\n      const loaded = () => done();\n      const timer = win.setTimeout(() => done(new Error("Stream produced no decoded frame")), 1800);\n      this.cancelWait = () => done(new Error("Preview cancelled"));\n      target.addEventListener("loadeddata", loaded, { once: true });\n    });\n  }\n  health() {\n    const tracks = this.stream?.getVideoTracks() || [];\n    return { ok: !!this.video?.isConnected && !!this.source?.isConnected && !this.failure &&\n      !this.source.ended && ((this.mode === "native" && this.source.isCloningElementVisually) ||\n        (this.video.readyState >= 2 && tracks.some(track => track.readyState !== "ended" && !track.muted))),\n      error: this.failure || "Preview disconnected or stream unavailable",\n      paused: this.source?.paused, time: this.source?.currentTime,\n      frames: this.video?.getVideoPlaybackQuality?.().totalVideoFrames || 0 };\n  }\n  stop() {\n    ++this.serial;\n    this.cancelWait?.();\n    if (this.timer != null) this.doc.defaultView.clearInterval(this.timer);\n    this.timer = null;\n    this.video?.remove();\n    this.video = null;\n    for (const track of this.stream?.getTracks() || []) track.stop();\n    this.stream = null;\n    this.source = null;\n    this.failure = null;\n  }\n}\n\nfunction hasVideoAudioTrack(media) {\n  // Track presence is independent of the viewer\'s mute and volume choices.\n  try {\n    if (media.srcObject?.getAudioTracks) return media.srcObject.getAudioTracks().length > 0;\n    if (media.audioTracks) return media.audioTracks.length > 0;\n    const capture = media.captureStream || media.mozCaptureStream;\n    if (typeof capture !== "function") return false;\n    const stream = capture.call(media);\n    const hasAudio = stream.getAudioTracks().length > 0;\n    for (const track of stream.getTracks()) track.stop();\n    return hasAudio;\n  } catch (_) { return false; }\n}\n\n// Content-process source discovery for Zentral\'s sidebar video preview.\n// It never changes playback unless the user presses a preview control.\nexport class ZentralVideoBridgeChild extends JSWindowActorChild {\n  receiveMessage(message) {\n    if (message.name === "List") return this.list(message.data);\n    if (message.name === "Control") return this.control(message.data);\n    if (message.name === "Capture") return this.capture(message.data);\n    if (message.name === "Health") return this.renderer?.health() || { ok: false };\n    if (message.name === "Preview") return this.preview(message.data);\n    if (message.name === "StopPreview") { this.stopPreview(); return true; }\n    return null;\n  }\n\n  list({ requireAudio = false } = {}) {\n    const doc = this.document;\n    const win = this.contentWindow;\n    if (!doc || !win) return [];\n    this.ids ??= new WeakMap();\n    this.elements ??= new Map();\n    this.nextId ??= 1;\n    const found = [];\n    const live = new Set();\n\n    for (const media of doc.querySelectorAll("video")) {\n      if (media.localName !== "video" || media.ended || media.readyState < 1) continue;\n      const box = media.getBoundingClientRect();\n      const x = Math.max(0, box.left);\n      const y = Math.max(0, box.top);\n      const width = Math.min(win.innerWidth, box.right) - x;\n      const height = Math.min(win.innerHeight, box.bottom) - y;\n      // Require decoded video frames; skip tiny decorative clips.\n      if (media.videoWidth < 240 || media.videoHeight < 135 ||\n          (Number.isFinite(media.duration) && media.duration > 0 && media.duration < 8) ||\n          (requireAudio && !hasVideoAudioTrack(media))) continue;\n\n      let id = this.ids.get(media);\n      if (!id) { id = this.nextId++; this.ids.set(media, id); }\n      this.elements.set(id, media);\n      live.add(id);\n      const label = media.getAttribute("aria-label") || media.getAttribute("title") ||\n        media.closest("[aria-label]")?.getAttribute("aria-label") ||\n        doc.title || "Video";\n      let videoRef = null;\n      try {\n        const { ContentDOMReference } = ChromeUtils.importESModule(\n          "resource://gre/modules/ContentDOMReference.sys.mjs");\n        videoRef = ContentDOMReference.get(media);\n      } catch (_) { /* Snapshot / canvas capture can still work. */ }\n      found.push({ id, videoRef, documentId: this.manager?.innerWindowId || 0,\n        label: String(label).slice(0, 100),\n        kind: "video",\n        canClone: typeof media.cloneElementVisually === "function",\n        canStream: typeof (media.captureStream || media.mozCaptureStream) === "function",\n        canCanvasStream: typeof doc.createElement("canvas").captureStream === "function",\n        rect: width > 0 && height > 0 ? { x, y, width, height } : null,\n        score: (media.paused ? 0 : 10000000) + Math.max(0, width) * Math.max(0, height),\n        paused: media.paused, muted: media.muted,\n        currentTime: media.currentTime,\n        duration: Number.isFinite(media.duration) ? media.duration : 0,\n        width: media.videoWidth || 0, height: media.videoHeight || 0 });\n    }\n    for (const id of this.elements.keys()) if (!live.has(id)) this.elements.delete(id);\n    return found;\n  }\n\n  capture({ id, captureWidth = 480 } = {}) {\n    const media = this.elements?.get(id);\n    if (!media?.isConnected || media.localName !== "video" || media.readyState < 2)\n      throw new Error("No decoded video frame available");\n    const canvas = this.document.createElement("canvas");\n    canvas.width = Math.min([320, 480, 640].includes(captureWidth) ? captureWidth : 480, media.videoWidth);\n    canvas.height = Math.max(1, Math.round(canvas.width * media.videoHeight / media.videoWidth));\n    canvas.getContext("2d", { alpha: false }).drawImage(media, 0, 0, canvas.width, canvas.height);\n    return { url: canvas.toDataURL("image/jpeg", 0.75), width: canvas.width, height: canvas.height };\n  }\n\n  async preview(data) {\n    this.renderer ??= new ZentralVideoRenderer(this.document);\n    return this.renderer.start(data);\n  }\n\n  stopPreview() { this.renderer?.stop(); }\n\n  didDestroy() {\n    this.stopPreview();\n    this.elements?.clear();\n  }\n\n  control({ id, action, value } = {}) {\n    const media = this.elements?.get(id);\n    if (!media?.isConnected) return null;\n    switch (action) {\n      case "toggle":\n        if (media.paused) media.play().catch(() => {});\n        else media.pause();\n        break;\n      case "mute": media.muted = !media.muted; break;\n      case "seek":\n        if (Number.isFinite(value) && Number.isFinite(media.duration))\n          media.currentTime = Math.max(0, Math.min(media.duration, value));\n        break;\n    }\n    return { paused: media.paused, muted: media.muted,\n      currentTime: media.currentTime,\n      duration: Number.isFinite(media.duration) ? media.duration : 0 };\n  }\n}\n';
+  const ACTOR_HASH = "2dd78a968cc1";
   const ACTOR = "ZentralVideoBridge";
   const CHANNEL = "ZentralVideoPreview:" + Math.random().toString(36).slice(2);
   const FRAME_URI =
@@ -24061,6 +24253,9 @@
     } catch (_) {
       return true;
     }
+  }
+  function requireAudio() {
+    return Services.prefs.getBoolPref(REQUIRE_AUDIO_PREF, true);
   }
   function autoShowVideo() {
     try {
@@ -24257,7 +24452,7 @@
       header.className = "zs-section-header";
       const title = document.createElement("h3");
       title.className = "zs-section-title";
-      title.textContent = "Video Cloning";
+      title.textContent = "Sidebar Video Preview · Bgalazka extension";
       header.appendChild(title);
       const content = document.createElement("div");
       content.className = "zs-section-content";
@@ -24272,7 +24467,7 @@
       category.type = "button";
       category.className = "zs-tab-btn";
       category.dataset.tab = "video-cloning";
-      category.textContent = "Video Cloning";
+      category.textContent = "Video";
       tabBar.appendChild(category);
       category.addEventListener("click", () => {
         modal
@@ -24299,6 +24494,9 @@
       };
       tabBar.addEventListener("click", settingsCategoryGuard, true);
     }
+    // The preview uses an older Zentral-pref namespace but is extension-owned.
+    // Keep it after the other extension categories when Settings reopens.
+    tabBar.appendChild(category);
     const content = panel.querySelector(".zs-section-content");
     let input = modal.querySelector("#zs-video-preview-enabled");
     if (!input) {
@@ -24342,7 +24540,9 @@
             ? "zs-video-preview-hide-muted-duplicates"
             : preference === FIT_WIDTH_PREF
               ? "zs-video-preview-fit-width"
-              : "zs-video-preview-auto-show";
+              : preference === REQUIRE_AUDIO_PREF
+                ? "zs-video-preview-require-audio"
+                : "zs-video-preview-auto-show";
         checkbox.checked = Services.prefs.getBoolPref(preference, initial);
         checkbox.addEventListener("change", () => {
           Services.prefs.setBoolPref(preference, checkbox.checked);
@@ -24354,6 +24554,14 @@
       addToggle(
         "Hide muted copies when an unmuted video matches",
         HIDE_DUPLICATES_PREF,
+        true,
+        () => {
+          if (enabled()) scan(true);
+        },
+      );
+      addToggle(
+        "Do not display videos without an audio track",
+        REQUIRE_AUDIO_PREF,
         true,
         () => {
           if (enabled()) scan(true);
@@ -24456,6 +24664,28 @@
         },
       );
       radius.value.textContent = radiusPx + " px";
+      const detailLabel = document.createElement("label");
+      detailLabel.textContent = "Capture detail (frames and snapshots only) ";
+      const detail = document.createElement("select");
+      detail.id = "zs-video-preview-capture-width";
+      for (const [value, label] of [
+        [320, "Lower load · 320 px"],
+        [480, "Balanced · 480 px (default)"],
+        [640, "Sharper · 640 px"],
+      ]) {
+        const option = document.createElement("option");
+        option.value = String(value);
+        option.textContent = label;
+        detail.appendChild(option);
+      }
+      detail.value = String(captureWidth());
+      detail.addEventListener("change", () => {
+        Services.prefs.setIntPref(CAPTURE_WIDTH_PREF, Number(detail.value));
+        cropCache = null;
+        if (enabled()) paint();
+      });
+      detailLabel.appendChild(detail);
+      content.appendChild(detailLabel);
       const frameLabel = document.createElement("label");
       frameLabel.textContent = "Video framing ";
       const frameSelect = document.createElement("select");
@@ -24583,12 +24813,18 @@
     if (radiusInput) radiusInput.value = String(radiusPx);
     const radiusLabel = modal.querySelector("#zs-video-preview-radius-value");
     if (radiusLabel) radiusLabel.textContent = radiusPx + " px";
+    const detailSelect = modal.querySelector("#zs-video-preview-capture-width");
+    if (detailSelect) detailSelect.value = String(captureWidth());
     const frameSelect = modal.querySelector("#zs-video-preview-framing");
     if (frameSelect) frameSelect.value = framingChoice();
     const hideCheckbox = modal.querySelector(
       "#zs-video-preview-hide-muted-duplicates",
     );
     if (hideCheckbox) hideCheckbox.checked = hideMutedDuplicates();
+    const audioCheckbox = modal.querySelector(
+      "#zs-video-preview-require-audio",
+    );
+    if (audioCheckbox) audioCheckbox.checked = requireAudio();
     const autoCheckbox = modal.querySelector("#zs-video-preview-auto-show");
     if (autoCheckbox) autoCheckbox.checked = autoShowVideo();
     const status = modal.querySelector("#zs-video-preview-status");
@@ -25183,6 +25419,23 @@
     return result;
   }
 
+  function hasVideoAudioTrack(media) {
+    // Track presence is independent of the viewer\'s mute and volume choices.
+    try {
+      if (media.srcObject?.getAudioTracks)
+        return media.srcObject.getAudioTracks().length > 0;
+      if (media.audioTracks) return media.audioTracks.length > 0;
+      const capture = media.captureStream || media.mozCaptureStream;
+      if (typeof capture !== "function") return false;
+      const stream = capture.call(media);
+      const hasAudio = stream.getAudioTracks().length > 0;
+      for (const track of stream.getTracks()) track.stop();
+      return hasAudio;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function inspectDirect(item) {
     const { browser, tab, panel } = item;
     const doc = browser.contentDocument;
@@ -25206,7 +25459,8 @@
         media.videoHeight < 135 ||
         (Number.isFinite(media.duration) &&
           media.duration > 0 &&
-          media.duration < 8)
+          media.duration < 8) ||
+        (requireAudio() && !hasVideoAudioTrack(media))
       )
         continue;
       let id = directIds.get(media);
@@ -25273,7 +25527,9 @@
           )
             return [];
           const candidates = await limited(
-            global.getActor(ACTOR).sendQuery("List", {}),
+            global
+              .getActor(ACTOR)
+              .sendQuery("List", { requireAudio: requireAudio() }),
             2500,
             "actor reply",
           );
@@ -25295,7 +25551,9 @@
 
   async function inspectFrame(item) {
     try {
-      const candidates = await query(item.browser, "List");
+      const candidates = await query(item.browser, "List", {
+        requireAudio: requireAudio(),
+      });
       const frames = contexts(item.browser.browsingContext);
       return (candidates || []).flatMap((data) => {
         const context =
@@ -25666,7 +25924,11 @@
   }
 
   async function captureVideo(source) {
-    const payload = { id: source.data.id, frameId: source.data.frameId };
+    const payload = {
+      id: source.data.id,
+      frameId: source.data.frameId,
+      captureWidth: captureWidth(),
+    };
     let frame;
     if (source.method === "frame")
       frame = await query(source.browser, "Capture", payload);
@@ -25681,7 +25943,7 @@
     else {
       const media = source.element;
       const surface = media.ownerDocument.createElement("canvas");
-      surface.width = Math.min(480, media.videoWidth);
+      surface.width = Math.min(payload.captureWidth, media.videoWidth);
       surface.height = Math.max(
         1,
         Math.round((surface.width * media.videoHeight) / media.videoWidth),
@@ -25716,7 +25978,7 @@
     return limited(
       source.context.currentWindowGlobal.drawSnapshot(
         new DOMRect(x, y, width, height),
-        Math.min(1, 480 / width),
+        Math.min(1, captureWidth() / width),
         "rgb(0, 0, 0)",
       ),
       1000,

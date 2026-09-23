@@ -6791,6 +6791,7 @@ panel[id*="tabgroup-editor"] {
     #zs-panel-bgalazka,
     #zs-panel-extension-toolbar,
     #zs-panel-extension-search,
+    #zs-panel-extension-tabs,
     #zs-panel-extension-keybinds,
     #zs-panel-extension-hide-pill
   ) {
@@ -6805,6 +6806,7 @@ panel[id*="tabgroup-editor"] {
   :is(
     #zs-panel-extension-toolbar,
     #zs-panel-extension-search,
+    #zs-panel-extension-tabs,
     #zs-panel-extension-keybinds,
     #zs-panel-extension-hide-pill
   )
@@ -6820,6 +6822,7 @@ panel[id*="tabgroup-editor"] {
   :is(
     #zs-panel-extension-toolbar,
     #zs-panel-extension-search,
+    #zs-panel-extension-tabs,
     #zs-panel-extension-keybinds,
     #zs-panel-extension-hide-pill
   )
@@ -6836,6 +6839,7 @@ panel[id*="tabgroup-editor"] {
   :is(
     #zs-panel-extension-toolbar,
     #zs-panel-extension-search,
+    #zs-panel-extension-tabs,
     #zs-panel-extension-keybinds,
     #zs-panel-extension-hide-pill
   )
@@ -6850,6 +6854,7 @@ panel[id*="tabgroup-editor"] {
   :is(
     #zs-panel-extension-toolbar,
     #zs-panel-extension-search,
+    #zs-panel-extension-tabs,
     #zs-panel-extension-keybinds,
     #zs-panel-extension-hide-pill
   )
@@ -6866,6 +6871,7 @@ panel[id*="tabgroup-editor"] {
   :is(
     #zs-panel-extension-toolbar,
     #zs-panel-extension-search,
+    #zs-panel-extension-tabs,
     #zs-panel-extension-keybinds,
     #zs-panel-extension-hide-pill
   )
@@ -6881,6 +6887,7 @@ panel[id*="tabgroup-editor"] {
   :is(
     #zs-panel-extension-toolbar,
     #zs-panel-extension-search,
+    #zs-panel-extension-tabs,
     #zs-panel-extension-keybinds,
     #zs-panel-extension-hide-pill
   )
@@ -6893,6 +6900,7 @@ panel[id*="tabgroup-editor"] {
   :is(
     #zs-panel-extension-toolbar,
     #zs-panel-extension-search,
+    #zs-panel-extension-tabs,
     #zs-panel-extension-keybinds,
     #zs-panel-extension-hide-pill
   )
@@ -6906,6 +6914,7 @@ panel[id*="tabgroup-editor"] {
   :is(
     #zs-panel-extension-toolbar,
     #zs-panel-extension-search,
+    #zs-panel-extension-tabs,
     #zs-panel-extension-keybinds,
     #zs-panel-extension-hide-pill
   )
@@ -6921,6 +6930,7 @@ panel[id*="tabgroup-editor"] {
   :is(
     #zs-panel-extension-toolbar,
     #zs-panel-extension-search,
+    #zs-panel-extension-tabs,
     #zs-panel-extension-keybinds,
     #zs-panel-extension-hide-pill
   )
@@ -6950,6 +6960,7 @@ panel[id*="tabgroup-editor"] {
   :is(
     #zs-panel-extension-toolbar,
     #zs-panel-extension-search,
+    #zs-panel-extension-tabs,
     #zs-panel-extension-keybinds,
     #zs-panel-extension-hide-pill
   )
@@ -6964,6 +6975,7 @@ panel[id*="tabgroup-editor"] {
   :is(
     #zs-panel-extension-toolbar,
     #zs-panel-extension-search,
+    #zs-panel-extension-tabs,
     #zs-panel-extension-keybinds,
     #zs-panel-extension-hide-pill
   )
@@ -6981,6 +6993,7 @@ panel[id*="tabgroup-editor"] {
   :is(
     #zs-panel-extension-toolbar,
     #zs-panel-extension-search,
+    #zs-panel-extension-tabs,
     #zs-panel-extension-keybinds,
     #zs-panel-extension-hide-pill
   )
@@ -7970,4 +7983,111 @@ panel[id*="tabgroup-editor"] {
 }
 #zentral-video-preview .zentral-video-preview-player {
   z-index: 1 !important;
+}
+
+/* Scope extension settings to a stable dark surface. Zen can change its
+ * workspace colors while this dialog is open; fixed text and surface colors
+ * prevent a light theme from producing white text on white backgrounds. */
+#zentral-settings-modal .zs-tab-bar {
+  flex-wrap: wrap !important;
+  overflow-x: hidden !important;
+  column-gap: 9px !important;
+  row-gap: 0 !important;
+}
+
+/* The remote page is resized on the same frame as the panel width. Avoid
+ * replaying an open/close transform transition while a width drag is active. */
+:root[bgalazka-hresize-active] #zen-app-panel-root #zen-app-panel-slider {
+  transition: none !important;
+}
+#zentral-settings-modal .zs-tab-bar .zs-tab-btn {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+}
+#zentral-settings-modal .zs-tab-bar .zs-category-heading {
+  flex: 0 0 100%;
+  padding: 7px 4px 0;
+  color: #a5b4fc;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+#zentral-settings-modal .zs-extension-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 0 12px;
+}
+#zentral-settings-modal .zs-extension-preset-btn {
+  appearance: none;
+  border: 1px solid #626a8b;
+  border-radius: 8px;
+  background: #282d42;
+  color: #f4f4f5;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+#zentral-settings-modal .zs-extension-preset-btn:hover {
+  background: #39415d;
+}
+#zentral-settings-modal
+  :is(.zs-extension-subpanel, #zs-panel-bgalazka, #zs-panel-video-cloning) {
+  color: #e4e4e7 !important;
+  background: #0d0d12 !important;
+  color-scheme: dark !important;
+}
+#zentral-settings-modal
+  :is(.zs-extension-subpanel, #zs-panel-bgalazka, #zs-panel-video-cloning)
+  :is(input, select) {
+  color-scheme: dark !important;
+}
+#zentral-settings-modal .zs-ownership-note {
+  color: #e4e4e7 !important;
+  background: #222536 !important;
+  border: 1px solid #535c84 !important;
+  border-radius: 8px;
+  padding: 10px 12px;
+  line-height: 1.4;
+  margin: 4px 0 8px;
+}
+#zentral-settings-modal .zs-donation-note {
+  color: #e4e4e7 !important;
+  font-size: 11px;
+  max-width: 145px;
+  line-height: 1.25;
+}
+#zentral-settings-modal #zs-panel-video-cloning .zs-section-content {
+  overflow-y: auto !important;
+}
+#zentral-settings-modal
+  #zs-panel-video-cloning
+  :is(select, input:not([type="checkbox"]):not([type="range"])) {
+  background: #262a38 !important;
+  color: #f4f4f5 !important;
+  border: 1px solid #727993 !important;
+}
+/* The preview card inherits active-space colors by default. Pin its text and
+ * background together so they keep contrast as the user switches spaces. */
+#zentral-video-preview {
+  background: #171923 !important;
+  color: #f4f4f5 !important;
+  color-scheme: dark !important;
+}
+#zentral-video-preview
+  :is(.zentral-video-preview-sources, .zentral-video-preview-source) {
+  background: #282c3a !important;
+  color: #f4f4f5 !important;
+}
+/* Optional extension-owned toolbars otherwise inherit a space-dependent
+ * surface and can retain the text color from the previous space. */
+:root[bgalazka-webtoolbar="true"] #zen-app-panel-toolbar,
+#bgalazka-super-panel .bgalazka-super-bar {
+  background: #171923 !important;
+  color: #f4f4f5 !important;
+  color-scheme: dark !important;
+}
+#zen-app-panel-toolbar .zen-toolbar-urlbar {
+  background: #282c3a !important;
+  color: #f4f4f5 !important;
 }
