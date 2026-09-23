@@ -6,9 +6,12 @@
 /* ============================================================================ */
 /* #region Original Mod */
 /* Remove focus frame/outline on click */
-tab-group.zentral-standard :is(*, *:focus, *:focus-visible, *:-moz-focusring) {
+tab-group.zentral-standard :focus:not(:focus-visible) {
   outline: none !important;
-  box-shadow: none !important;
+}
+tab-group.zentral-standard :focus-visible {
+  outline: 2px solid var(--zen-primary-color, #83a5ff) !important;
+  outline-offset: 2px !important;
 }
 
 tab-group.zentral-standard {
@@ -374,7 +377,7 @@ tab-group.zentral-standard > .tab-group-label-container .tab-group-label {
 }
 
 /* Reveal ONLY when the parent group is collapsed and has sub-groups */
-tab-group:is([collapsed="true"], [collapsed])[data-has-subgroups]
+tab-group[collapsed="true"][data-has-subgroups]
   > .tab-group-label-container
   .zentral-subgroups-badge {
   display: inline-flex !important;
@@ -5436,136 +5439,16 @@ panel[id*="tabgroup-editor"] {
   min-width: 14px !important;
 }
 
-/* ==========================================================================
-   3. ISOLATE TABS & INDEPENDENT TILE STATES (COLOR SEPARATION)
-   ========================================================================== */
-/*
- * High-specificity reset:
- * Zen Browser applies `filter: grayscale(...)` directly to `#zen-essentials-container .tabbrowser-tab`.
- * Because container filters flatten all children into a single bitmap group, a child cannot escape
- * grayscale via `filter: none`. We must reset the parent tab itself to `filter: none`.
- */
-:root[bgalazka-tab-isolation="true"]
-  :is(#zen-essentials-container, #zen-essentials, #tabbrowser-tabs, :root)
-  :is(
-    .tabbrowser-tab:has(.zen-app-tile),
-    .tabbrowser-tab[zen-essential="true"]:has(.zen-app-tile),
-    .tabbrowser-tab[pending]:has(.zen-app-tile),
-    .tabbrowser-tab[pending="true"]:has(.zen-app-tile),
-    .tabbrowser-tab[zen-dormant="true"]:has(.zen-app-tile)
-  ) {
-  filter: none !important;
-  opacity: 1 !important;
-}
-
-/* Re-apply dormancy grayscale strictly to the tab's internal icon and label, leaving the docked tile colored */
-:root[bgalazka-tab-isolation="true"]
-  :is(#zen-essentials-container, #zen-essentials, #tabbrowser-tabs, :root)
-  :is(
-    .tabbrowser-tab[pending]:has(.zen-app-tile),
-    .tabbrowser-tab[pending="true"]:has(.zen-app-tile),
-    .tabbrowser-tab[zen-dormant="true"]:has(.zen-app-tile),
-    .tabbrowser-tab[zen-essential="true"][pending]:has(.zen-app-tile),
-    .tabbrowser-tab[zen-essential="true"][zen-dormant="true"]:has(.zen-app-tile)
+/* Other mods may dim an unloaded tab at the tab level. Leave the tab and
+ * its icon stack alone; a parent grayscale also affects our child launcher.
+ * Reset only the loaded favicon image when the panel or tab is loaded. */
+:root
+  .tabbrowser-tab
+  .zen-app-tile.bgalazka-essential-tile:is(
+    [data-tab-loaded="true"],
+    [data-loaded="true"]
   )
-  :is(.tab-stack > :not(.zen-app-tile), .tab-icon-image, .tab-label-container) {
-  filter: grayscale(100%) !important;
-  opacity: 0.45 !important;
-}
-
-/* Selected / active tab state */
-:root[bgalazka-tab-isolation="true"]
-  :is(#zen-essentials-container, #zen-essentials, #tabbrowser-tabs, :root)
-  :is(
-    .tabbrowser-tab[selected="true"]:has(.zen-app-tile),
-    .tabbrowser-tab[zen-essential="true"][selected="true"]:has(.zen-app-tile)
-  )
-  :is(.tab-stack, .tab-icon-image) {
-  filter: none !important;
-  opacity: 1 !important;
-}
-
-/* Corner tile self-isolation */
-:root[bgalazka-tab-isolation="true"]
-  :is(
-    .tabbrowser-tab,
-    #zen-essentials-container .tabbrowser-tab,
-    [zen-essential="true"]
-  )
-  .zen-app-tile {
-  filter: none !important;
-  opacity: 1 !important;
-}
-
-/* Unloaded / dormant app panel tile: subtle desaturation */
-:root[bgalazka-tab-isolation="true"]
-  :is(
-    .tabbrowser-tab,
-    #zen-essentials-container .tabbrowser-tab,
-    [zen-essential="true"]
-  )
-  .zen-app-tile[data-unloaded="true"]:not([data-active="true"]),
-:root[bgalazka-tab-isolation="true"]
-  :is(
-    .tabbrowser-tab,
-    #zen-essentials-container .tabbrowser-tab,
-    [zen-essential="true"]
-  )
-  .zen-app-tile[data-loaded="false"]:not([data-active="true"]),
-:root[bgalazka-tab-isolation="true"]
-  :is(
-    .tabbrowser-tab,
-    #zen-essentials-container .tabbrowser-tab,
-    [zen-essential="true"]
-  )
-  .zen-app-tile:not([data-loaded="true"]):not([data-active="true"]) {
-  filter: grayscale(100%) !important;
-  opacity: 0.35 !important;
-  transition:
-    opacity 0.2s ease,
-    filter 0.2s ease !important;
-}
-
-:root[bgalazka-tab-isolation="true"]
-  :is(
-    .tabbrowser-tab,
-    #zen-essentials-container .tabbrowser-tab,
-    [zen-essential="true"]
-  )
-  .zen-app-tile[data-unloaded="true"]:not([data-active="true"]):hover,
-:root[bgalazka-tab-isolation="true"]
-  :is(
-    .tabbrowser-tab,
-    #zen-essentials-container .tabbrowser-tab,
-    [zen-essential="true"]
-  )
-  .zen-app-tile[data-loaded="false"]:not([data-active="true"]):hover,
-:root[bgalazka-tab-isolation="true"]
-  :is(
-    .tabbrowser-tab,
-    #zen-essentials-container .tabbrowser-tab,
-    [zen-essential="true"]
-  )
-  .zen-app-tile:not([data-loaded="true"]):not([data-active="true"]):hover {
-  opacity: 0.85 !important;
-  filter: grayscale(20%) !important;
-}
-
-/* Loaded or active app panel tile: full color */
-:root[bgalazka-tab-isolation="true"]
-  :is(
-    .tabbrowser-tab,
-    #zen-essentials-container .tabbrowser-tab,
-    [zen-essential="true"]
-  )
-  .zen-app-tile[data-loaded="true"],
-:root[bgalazka-tab-isolation="true"]
-  :is(
-    .tabbrowser-tab,
-    #zen-essentials-container .tabbrowser-tab,
-    [zen-essential="true"]
-  )
-  .zen-app-tile[data-active="true"] {
+  img {
   filter: none !important;
   opacity: 1 !important;
 }
@@ -5924,27 +5807,8 @@ panel[id*="tabgroup-editor"] {
   margin-right: 0 !important;
 }
 
-/* --------------------------------------------------------------------------
- * 2. Hover-Only Corner App Tiles (Zero Window Compositing / Blackout Glitch)
- * -------------------------------------------------------------------------- */
-:root[bgalazka-hover-corner-tiles="true"]
-  :is(
-    #zen-essentials-container .tabbrowser-tab,
-    .tabbrowser-tab[zen-essential="true"]
-  ):not(:hover)
-  .zen-app-tile:not([data-active="true"]) {
-  display: none !important;
-}
-
-:root[bgalazka-hover-corner-tiles="true"]
-  :is(
-    #zen-essentials-container .tabbrowser-tab,
-    .tabbrowser-tab[zen-essential="true"]
-  ):hover
-  .zen-app-tile,
-:root[bgalazka-hover-corner-tiles="true"] .zen-app-tile[data-active="true"] {
-  display: flex !important;
-}
+/* Hover-only styling for Essential and ordinary tabs is defined together at
+ * the end of this sheet, after the ordinary favicon launcher layout. */
 
 /* --------------------------------------------------------------------------
  * 3. Pill Menu Vertical Offset (numeric, -50% to +50%, 0% = centered)
@@ -7503,38 +7367,9 @@ panel[id*="tabgroup-editor"] {
   transform: translate(-50%, -50%) !important;
 }
 
-/* The tab and its web panel have independent load states. */
-:root[bgalazka-corner-tiles="true"]
-  .tabbrowser-tab
-  .zen-app-tile.bgalazka-essential-tile:is(
-    [data-tab-loaded="true"],
-    [data-loaded="true"]
-  ):not([data-active="true"]) {
-  filter: none !important;
-  opacity: 1 !important;
-}
-/* A dormant tab must not gray out its loaded panel button via the icon stack. */
-:root[bgalazka-tab-isolation="true"]
-  .tabbrowser-tab
-  .tab-icon-stack.bgalazka-panel-icon-host:has(> .bgalazka-tab-icon-panel) {
-  filter: none !important;
-  opacity: 1 !important;
-}
-:root[bgalazka-corner-tiles="true"]
-  .tabbrowser-tab
-  .zen-app-tile.bgalazka-essential-tile[data-loaded="true"] {
-  outline: 1px solid var(--zen-primary-color, #83a5ff) !important;
-  outline-offset: -1px !important;
-}
-:root[bgalazka-corner-tiles="true"]
-  .tabbrowser-tab
-  .zen-app-tile.bgalazka-essential-tile[data-loaded="true"][data-tab-loaded="true"] {
-  outline-width: 2px !important;
-  background: color-mix(
-    in srgb,
-    var(--zen-primary-color, #83a5ff) 16%,
-    var(--tabpanels-background-color, #18181f)
-  ) !important;
+:root .tabbrowser-tab .zen-app-tile.bgalazka-essential-tile:focus-visible {
+  outline: 2px solid var(--zen-primary-color, #83a5ff) !important;
+  outline-offset: 2px !important;
 }
 
 /* Compact-folder styling used to apply only while the bridge was enabled.
@@ -8142,4 +7977,243 @@ panel[id*="tabgroup-editor"] {
 #zen-app-panel-toolbar .zen-toolbar-urlbar {
   background: #282c3a !important;
   color: #f4f4f5 !important;
+}
+
+/* Honor reduced motion in Zentral chrome. */
+@media (prefers-reduced-motion: reduce) {
+  :root
+    :is(
+      [id^="zentral-"],
+      [class^="zentral-"],
+      [class*=" zentral-"],
+      .zen-app-tile
+    ) {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Opposite-side Hover-to-Show. The six-pixel reveal strip occupies space
+ * reserved outside the web viewport; it never overlays page content. */
+#bgalazka-panel-reveal-edge[hidden],
+#zen-app-hover-reveal-btn[hidden] {
+  display: none !important;
+}
+:root[bgalazka-hover-panel-hidden][bgalazka-opposite-docking="true"]
+  #tabbrowser-tabbox {
+  margin-right: 6px !important;
+  margin-left: 0 !important;
+}
+:root[bgalazka-hover-panel-hidden][bgalazka-opposite-docking="true"][bgalazka-panel-side="left"]
+  #tabbrowser-tabbox {
+  margin-left: 6px !important;
+  margin-right: 0 !important;
+}
+#bgalazka-panel-reveal-edge {
+  position: fixed !important;
+  right: 0;
+  width: 6px;
+  z-index: 2147483640 !important;
+  pointer-events: auto;
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #83a5ff) 48%,
+    transparent
+  );
+  cursor: pointer;
+}
+:root[bgalazka-panel-side="left"] #bgalazka-panel-reveal-edge {
+  left: 0;
+  right: auto;
+}
+:root[bgalazka-hover-panel-hidden][bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[open][data-panel-side="right"] {
+  transform: translateX(
+    calc(100% + var(--bgalazka-hover-outset, 80px))
+  ) !important;
+  pointer-events: none !important;
+  transition: transform 0.2s ease !important;
+}
+:root[bgalazka-hover-panel-hidden][bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[open][data-panel-side="left"] {
+  transform: translateX(
+    calc(-100% - var(--bgalazka-hover-outset, 80px))
+  ) !important;
+  pointer-events: none !important;
+  transition: transform 0.2s ease !important;
+}
+:root[bgalazka-hover-panel-enabled] #zen-app-panel-root[open] {
+  transition: transform 0.2s ease;
+}
+#zen-app-panel-pill .zen-app-hover-reveal-btn[data-active="true"] {
+  background-color: color-mix(
+    in srgb,
+    currentColor 20%,
+    transparent
+  ) !important;
+  color: var(--zen-primary-color, #83a5ff) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[bgalazka-hover-panel-enabled] #zen-app-panel-root[open] {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* The two tab-attached controls have independent visual effects. */
+:root[bgalazka-corner-tiles="true"]
+  .tabbrowser-tab[bgalazka-tab-panel-launcher="true"]
+  .bgalazka-panel-icon-host {
+  min-width: 28px !important;
+  width: 28px !important;
+  overflow: visible !important;
+}
+:root[bgalazka-corner-tiles="true"]
+  .tabbrowser-tab[bgalazka-tab-panel-launcher="true"]
+  .bgalazka-panel-icon-host
+  .tab-icon-image {
+  margin-inline: auto !important;
+}
+:root
+  .tabbrowser-tab
+  .zen-app-tile.bgalazka-essential-tile[data-tab-loaded="false"][data-loaded="false"]
+  img,
+:root
+  .tabbrowser-tab[bgalazka-tab-panel-launcher="true"]:has(
+    .bgalazka-tab-icon-panel[data-tab-loaded="false"][data-loaded="false"]
+  )
+  .bgalazka-panel-icon-host
+  .tab-icon-image:where(:not([hidden])) {
+  filter: grayscale(1) !important;
+  opacity: 0.48 !important;
+}
+/* The Essential corner button represents its panel, independently of the
+ * Essential tab's color and whether the ordinary tab page is still loaded. */
+:root[bgalazka-corner-tiles="true"]
+  .tabbrowser-tab
+  > .zen-app-tile.bgalazka-essential-tile:not(
+    .bgalazka-tab-icon-panel
+  )[data-loaded="false"]
+  img {
+  filter: grayscale(1) !important;
+  opacity: 0.52 !important;
+}
+/* Arc grays the entire pending tab, including descendants. With both Arc
+ * prefs enabled, gray the native tab children while leaving a loaded panel
+ * button in color. The Arc opacity on the tab remains in effect. */
+:root[bgalazka-corner-tiles="true"][bgalazka-arc-fade-unloaded="true"][bgalazka-arc-gray-unloaded="true"]
+  .tabbrowser-tab[pending="true"]:has(
+    > .bgalazka-essential-tile[data-loaded="true"]
+  ) {
+  filter: none !important;
+}
+:root[bgalazka-corner-tiles="true"][bgalazka-arc-fade-unloaded="true"][bgalazka-arc-gray-unloaded="true"]
+  .tabbrowser-tab[pending="true"]:has(
+    > .bgalazka-essential-tile[data-loaded="true"]
+  )
+  > :not(.bgalazka-essential-tile) {
+  filter: grayscale(1) !important;
+}
+:root
+  .tabbrowser-tab[bgalazka-tab-panel-launcher="true"]:has(
+    .bgalazka-tab-icon-panel:is([data-tab-loaded="true"], [data-loaded="true"])
+  )
+  .bgalazka-panel-icon-host
+  .tab-icon-image {
+  filter: none !important;
+  opacity: 1 !important;
+}
+/* Match the ID specificity of the base corner-tile display rule above.
+ * Its :is() includes #zen-essentials-container, even for ordinary tabs. */
+:root[bgalazka-hover-corner-tiles="true"][bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  ):not(:hover):not(:focus-visible):not(:has(:focus-visible))
+  .zen-app-tile.bgalazka-essential-tile {
+  display: none !important;
+}
+:root[bgalazka-hover-corner-tiles="true"]
+  .tabbrowser-tab[bgalazka-tab-panel-launcher="true"]:not(:hover):not(
+    :focus-visible
+  ):not(:has(:focus-visible))
+  .bgalazka-panel-icon-host
+  .tab-icon-image {
+  visibility: visible !important;
+  pointer-events: none !important;
+}
+:root[bgalazka-hover-corner-tiles="true"][bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  ):is(:hover, :focus-visible, :has(:focus-visible))
+  .zen-app-tile.bgalazka-essential-tile {
+  display: flex !important;
+}
+/* A normal tab's launcher deliberately uses its existing favicon. The ring
+ * reveals when that same image has become the panel button. */
+:root[bgalazka-hover-corner-tiles="true"][bgalazka-corner-tiles="true"]
+  .tabbrowser-tab[bgalazka-tab-panel-launcher="true"]:is(
+    :hover,
+    :focus-visible,
+    :has(:focus-visible)
+  )
+  .bgalazka-tab-icon-panel {
+  box-shadow: 0 0 0 2px #70afff !important;
+  border-radius: 4px !important;
+}
+
+/* Only ordinary tabs show a panel status mark. The upper right dot means
+ * its panel browser exists; the native tab text already indicates tab sleep.
+ * Audio controls take priority over the panel launcher and its status dot. */
+:root[bgalazka-tab-isolation="true"]
+  .tabbrowser-tab
+  .bgalazka-tab-icon-panel[data-loaded="true"]::after {
+  content: "";
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #70afff;
+  box-shadow: 0 0 0 1.5px #111927;
+  pointer-events: none;
+  z-index: 3;
+}
+:root
+  .tabbrowser-tab:is([soundplaying], [muted], [activemedia-blocked])
+  .bgalazka-panel-icon-host
+  .zen-app-tile.bgalazka-tab-icon-panel {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+:root
+  .tabbrowser-tab:is([soundplaying], [muted], [activemedia-blocked])
+  .bgalazka-panel-icon-host
+  .tab-icon-image {
+  visibility: visible !important;
+  pointer-events: none !important;
+}
+
+/* The black pill background needs a light active glyph and a visible border. */
+#zen-app-panel-pill .zen-app-hover-reveal-btn[data-active="true"] {
+  color: #f5f8ff !important;
+  background: #345b9b !important;
+  outline: 1px solid #a9cbff !important;
+  outline-offset: -1px !important;
+  opacity: 1 !important;
+}
+#zen-app-panel-pill .zen-app-hover-reveal-btn[data-active="true"] svg {
+  fill: none !important;
+  stroke: #fff !important;
+  stroke-width: 2.2 !important;
+  opacity: 1 !important;
+}
+:root[bgalazka-hide-hover-reveal-btn="true"]
+  #zen-app-panel-pill
+  .zen-app-hover-reveal-btn {
+  display: none !important;
 }

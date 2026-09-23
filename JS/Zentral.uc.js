@@ -347,6 +347,7 @@
           Services.prefs.setStringPref(key, value);
         else if (typeof value === "boolean")
           Services.prefs.setBoolPref(key, value);
+        else return;
         this.emit(`config:${key}`, value);
       } catch (e) {
         console.warn("[ZentralCore] Config failed to save pref", key, e);
@@ -436,6 +437,9 @@
     #workspaceSwitchListener = null;
     /** @private Toolbar background observer */
     #toolbarBgObserver = null;
+    #toolbarBgListeners = [];
+    #tabContextMenu = null;
+    #tabContextPopupHandler = null;
 
     /**
      * Module tear down for Sine hot unloading
@@ -465,6 +469,23 @@
           clearTimeout(this.#state.autohideCollapseTimer);
           this.#state.autohideCollapseTimer = null;
         }
+        if (this.#state.utilityCollapseTimer) {
+          clearTimeout(this.#state.utilityCollapseTimer);
+          this.#state.utilityCollapseTimer = null;
+        }
+        if (this._preloadTimer) {
+          clearTimeout(this._preloadTimer);
+          this._preloadTimer = null;
+        }
+        if (this._openPanelRAF) {
+          cancelAnimationFrame(this._openPanelRAF);
+          this._openPanelRAF = null;
+        }
+        if (this._renderGridRAF) {
+          cancelAnimationFrame(this._renderGridRAF);
+          this._renderGridRAF = null;
+        }
+        this._destroyed = true;
         this.stopPositionTracking();
 
         // 2. Disconnect observers
@@ -536,6 +557,16 @@
           } catch (_) {}
           this.#toolbarBgObserver = null;
         }
+        for (const [el, type, listener] of this.#toolbarBgListeners)
+          el.removeEventListener(type, listener);
+        this.#toolbarBgListeners = [];
+        if (this.#tabContextMenu && this.#tabContextPopupHandler)
+          this.#tabContextMenu.removeEventListener(
+            "popupshowing",
+            this.#tabContextPopupHandler,
+          );
+        this.#tabContextMenu = null;
+        this.#tabContextPopupHandler = null;
         document.removeEventListener("mousemove", this.onDrag);
         document.removeEventListener("mouseup", this.onStopDrag);
         if (this._autohideMouseMoveHandler) {
@@ -732,6 +763,7 @@
         Core.log("ZentralApps", "Apps Grid feature is disabled.");
         return;
       }
+      this._destroyed = false;
       this.injectStyles();
       this.createContainers();
       this.applyHideUtilitySectionPref();
@@ -750,27 +782,60 @@
       Core.emit("appsInitComplete", this);
 
       // Preload apps sequentially after browser startup
-      setTimeout(() => this.preloadAppsSequence(), 2000);
+      this._preloadTimer = setTimeout(() => {
+        this._preloadTimer = null;
+        if (!this._destroyed) this.preloadAppsSequence();
+      }, 2000);
     }
 
     /**
      * Loads configured web app objects from user preferences.
      */
     loadApps() {
+      this.#state.apps = [];
       try {
         const str = Core.getPref(Constants.Apps.PREF_APPS);
         const parsed = JSON.parse(str);
         if (Array.isArray(parsed)) {
+          const seen = new Set();
           this.#state.apps = parsed
-            .filter(
-              (a) => a && typeof a.id === "string" && typeof a.url === "string",
-            )
-            .map((a) => {
-              if (!a.workspaceId || a.workspaceId === "current") {
-                a.workspaceId = "all";
+            .filter((a) => {
+              if (
+                !a ||
+                typeof a.id !== "string" ||
+                !/^[a-zA-Z0-9_-]{1,100}$/.test(a.id) ||
+                seen.has(a.id) ||
+                typeof a.url !== "string"
+              )
+                return false;
+              try {
+                if (
+                  !/^(https?|moz-extension|about):$/.test(
+                    new URL(a.url).protocol,
+                  )
+                )
+                  return false;
+              } catch (_) {
+                return false;
               }
-              return a;
-            });
+              seen.add(a.id);
+              return true;
+            })
+            .map((a) => ({
+              ...a,
+              title:
+                typeof a.title === "string" ? a.title.slice(0, 200) : "App",
+              icon: typeof a.icon === "string" ? a.icon : "",
+              width:
+                Number.isFinite(a.width) && a.width > 0 ? a.width : undefined,
+              preload: a.preload === true,
+              workspaceId:
+                typeof a.workspaceId === "string" &&
+                a.workspaceId !== "current" &&
+                a.workspaceId
+                  ? a.workspaceId
+                  : "all",
+            }));
         }
       } catch (e) {
         console.warn("[ZentralApps] Failed to load apps pref:", e);
@@ -810,8 +875,16 @@
         const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
         if (Array.isArray(parsed) && parsed.length > 0) {
           const slots = new Array(slotCount).fill(null);
+          const used = new Set();
           parsed.forEach((k, idx) => {
-            if (idx < slotCount && k) slots[idx] = k;
+            if (
+              idx < slotCount &&
+              ["settings", "autohide"].includes(k) &&
+              !used.has(k)
+            ) {
+              slots[idx] = k;
+              used.add(k);
+            }
           });
           const required = ["settings", "autohide"];
           required.forEach((reqKey) => {
@@ -859,6 +932,12 @@
         ? []
         : this.#state.apps.filter((a) => a.preload === true);
       for (const app of preloadedApps) {
+        if (
+          this._destroyed ||
+          Core.getPref("zen.workspace.bgalazka.smart_sleep", false)
+        )
+          break;
+        if (!this.#state.apps.includes(app) || !app.preload) continue;
         const { browser, isNew } = this.getOrCreateAppBrowser(app);
         if (isNew) {
           // Preloading must never make an unselected browser look active.
@@ -889,7 +968,11 @@
         // Stagger preloads by 1.5 seconds to minimize main thread blocking
         await new Promise((r) => setTimeout(r, 1500));
       }
-      if (this.#state.appBrowsers && this.#state.appBrowsers.size > 0) {
+      if (
+        !this._destroyed &&
+        this.#state.appBrowsers &&
+        this.#state.appBrowsers.size > 0
+      ) {
         this.ensureBadgeSyncLoop();
       }
     }
@@ -3345,14 +3428,30 @@
         const shouldFlip = !sidebarRight && !isCollapsed;
         this.#dom.grid.style.direction = shouldFlip ? "rtl" : "ltr";
       }
-      const cols =
-        parseInt(Core.getPref(Constants.Apps.PREF_APPS_PER_ROW, 7), 10) || 7;
-      const maxRows =
-        parseInt(Core.getPref(Constants.Apps.PREF_MAX_ROWS, 3), 10) || 3;
+      const cols = Math.max(
+        1,
+        Math.min(
+          12,
+          parseInt(Core.getPref(Constants.Apps.PREF_APPS_PER_ROW, 7), 10) || 7,
+        ),
+      );
+      const maxRows = Math.max(
+        1,
+        Math.min(
+          10,
+          parseInt(Core.getPref(Constants.Apps.PREF_MAX_ROWS, 3), 10) || 3,
+        ),
+      );
       this.#dom.grid.style.setProperty("--zentral-grid-cols", cols);
       this.#dom.grid.style.setProperty("--zentral-max-rows", maxRows);
 
-      const maxApps = Core.getPref(Constants.Apps.PREF_MAX_APPS);
+      const maxApps = Math.max(
+        0,
+        Math.min(
+          200,
+          parseInt(Core.getPref(Constants.Apps.PREF_MAX_APPS, 21), 10) || 0,
+        ),
+      );
       const activeWorkspaceId = window.gZenWorkspaces?.activeWorkspace;
       const visibleApps = this.#state.apps.filter((app) => {
         if (!app.workspaceId || app.workspaceId === "all") return true;
@@ -3364,7 +3463,10 @@
 
       const hideUtility =
         Core.getPref(Constants.Apps.PREF_HIDE_UTILITY_SECTION, false) === true;
-      const appCount = activeApps.length + 1;
+      const canAdd =
+        Core.getPref(Constants.Apps.PREF_ENABLED) &&
+        this.#state.apps.length < maxApps;
+      const appCount = activeApps.length + (canAdd ? 1 : 0);
       const actualRows = Math.min(Math.ceil(appCount / cols), maxRows);
       const expandedGridHeight = (hideUtility ? 0 : 44) + actualRows * 42 + 4;
       this.#dom.grid.style.setProperty(
@@ -3509,7 +3611,10 @@
             const toIdx = this.#state.apps.findIndex((a) => a.id === app.id);
             if (fromIdx > -1 && toIdx > -1) {
               const [movedApp] = this.#state.apps.splice(fromIdx, 1);
-              this.#state.apps.splice(toIdx, 0, movedApp);
+              const destination = this.#state.apps.findIndex(
+                (a) => a.id === app.id,
+              );
+              this.#state.apps.splice(destination, 0, movedApp);
               this.saveApps();
               this.renderGrid();
             }
@@ -3521,10 +3626,7 @@
 
       targetContainer.appendChild(fragment);
 
-      if (
-        Core.getPref(Constants.Apps.PREF_ENABLED) &&
-        activeApps.length < maxApps
-      ) {
+      if (canAdd) {
         const addBtn = document.createElement("button");
         addBtn.className = "zen-app-tile zen-app-add-btn";
         addBtn.title = "Add App";
@@ -3597,7 +3699,10 @@
         }
       }
 
-      requestAnimationFrame(() => {
+      if (this._renderGridRAF) cancelAnimationFrame(this._renderGridRAF);
+      this._renderGridRAF = requestAnimationFrame(() => {
+        this._renderGridRAF = null;
+        if (this._destroyed || !this.#dom.grid?.isConnected) return;
         this.updateScrollMask();
         if (isVerticalBar) {
           this.updateVerticalBarAddBtnPlacement();
@@ -3614,9 +3719,28 @@
     }
 
     addApp(url, title, icon) {
-      if (this.#state.apps.length >= Core.getPref(Constants.Apps.PREF_MAX_APPS))
+      const limit = Math.max(
+        0,
+        Math.min(
+          200,
+          parseInt(Core.getPref(Constants.Apps.PREF_MAX_APPS, 21), 10) || 0,
+        ),
+      );
+      if (this.#state.apps.length >= limit || typeof url !== "string") return;
+      try {
+        if (
+          !/^(https?|moz-extension|about):$/.test(new URL(url).protocol) ||
+          url === "about:blank"
+        )
+          return;
+      } catch (_) {
         return;
-      const id = "app_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+      }
+      const id =
+        "app_" +
+        Date.now() +
+        "_" +
+        Services.uuid.generateUUID().toString().replace(/[{}-]/g, "");
       const crispIcon = url.startsWith("http")
         ? `page-icon:${url}`
         : icon || `page-icon:${url}`;
@@ -3698,8 +3822,16 @@
             tile.dataset.appId === app.id ? "true" : "false"),
       );
 
-      const targetWidth = app.width || this.loadWidth();
-      this.updateWidthVar(Math.max(Constants.Apps.MIN_WIDTH_PX, targetWidth));
+      const targetWidth =
+        Number.isFinite(app.width) && app.width > 0
+          ? app.width
+          : this.loadWidth();
+      this.updateWidthVar(
+        Math.max(
+          Constants.Apps.MIN_WIDTH_PX,
+          Math.min(window.innerWidth * 0.8, targetWidth),
+        ),
+      );
       this.positionPanel();
       this.updateVerticalBarBounds();
       this.startPositionTracking();
@@ -3745,7 +3877,10 @@
       }
       this.#dom.panel.getBoundingClientRect(); // Reflow
 
-      requestAnimationFrame(() => {
+      if (this._openPanelRAF) cancelAnimationFrame(this._openPanelRAF);
+      this._openPanelRAF = requestAnimationFrame(() => {
+        this._openPanelRAF = null;
+        if (this._destroyed || !this.#dom.panel) return;
         const slideMs = Core.getPref(Constants.Apps.PREF_ANIMATION_SPEED);
         const animType = Core.getPref(Constants.Apps.PREF_ANIMATION_TYPE);
         const bezier = this.#getEasingBezier(animType);
@@ -3930,9 +4065,9 @@
       if (!this.#state.appBrowsers || this.#state.appBrowsers.size === 0) {
         this.stopBadgeSyncLoop();
       }
-      const tiles = document.querySelectorAll(
-        `.zen-app-tile[data-app-id="${appId}"]`,
-      );
+      const tiles = Array.from(
+        document.querySelectorAll(".zen-app-tile[data-app-id]"),
+      ).filter((tile) => tile.dataset.appId === appId);
       tiles.forEach((tile) => {
         tile.dataset.loaded = "false";
         tile.querySelector(".zen-app-badge")?.remove();
@@ -3990,8 +4125,8 @@
       const trimmed = title.trim();
 
       const numMatch =
-        trimmed.match(/\((\d+)\+?\)/) ||
-        trimmed.match(/\[(\d+)\+?\]/) ||
+        trimmed.match(/^\((\d{1,3})\+?\)\s/) ||
+        trimmed.match(/^\[(\d{1,3})\+?\]\s/) ||
         trimmed.match(/\b(\d+)\s+unread\b/i) ||
         trimmed.match(/\b(?:messages?|notif(?:ication)?s?)\s*[:(]?\s*(\d+)/i) ||
         trimmed.match(/(?:^|\s)[\u2022\u25cf\u25cb]\s*(\d+)/);
@@ -4004,7 +4139,7 @@
       }
 
       const dotPattern =
-        /^[\u2022\u25cf\u25cb\u25a0\u25aa\u2219\u2731-\u2736\u2605\u2606\u2b24\u2023\u25b6\u25c0]\s|\s[\u2022\u25cf\u25cb\u25a0\u25aa\u2219\u2731-\u2736\u2605\u2606\u2b24\u2023\u25b6\u25c0]$|^\*\s|\s\*$/;
+        /^[\u2022\u25cf\u25cb\u25a0\u25aa\u2219\u2b24]\s|\s[\u2022\u25cf\u25cb\u25a0\u25aa\u2219\u2b24]$/;
       if (dotPattern.test(trimmed)) {
         return { hasNotification: true, notifCount: null };
       }
@@ -4096,8 +4231,6 @@
       let b = this.#state.appBrowsers.get(app.id);
       if (b && b.isConnected) return { browser: b, isNew: false };
 
-      const ua =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0";
       b = document.createXULElement("browser");
       b.setAttribute("type", "content");
       b.setAttribute("remote", "true");
@@ -4105,8 +4238,6 @@
       b.setAttribute("nodefaultsrc", "true");
       b.setAttribute("messagemanagergroup", "browsers");
       b.setAttribute("usercontextid", "0");
-      b.setAttribute("customuseragent", ua);
-      b.setAttribute("useragent", ua);
       b.setAttribute("context", "contentAreaContextMenu");
       b.setAttribute("flex", "1");
       b.style.cssText =
@@ -4142,9 +4273,9 @@
 
       this.#dom.panel.appendChild(b);
       this.#state.appBrowsers.set(app.id, b);
-      const matchingTiles = document.querySelectorAll(
-        `.zen-app-tile[data-app-id="${app.id}"]`,
-      );
+      const matchingTiles = Array.from(
+        document.querySelectorAll(".zen-app-tile[data-app-id]"),
+      ).filter((tile) => tile.dataset.appId === app.id);
       matchingTiles.forEach((t) => (t.dataset.loaded = "true"));
       this.ensureBadgeSyncLoop();
       return { browser: b, isNew: true };
@@ -5476,11 +5607,13 @@
           menu.appendChild(menuItem);
         }
         if (menuItem) {
-          menu.addEventListener("popupshowing", () => {
+          this.#tabContextMenu = menu;
+          this.#tabContextPopupHandler = () => {
             menuItem.disabled =
               this.#state.apps.length >=
               Core.getPref(Constants.Apps.PREF_MAX_APPS);
-          });
+          };
+          menu.addEventListener("popupshowing", this.#tabContextPopupHandler);
           menuItem.addEventListener(
             "command",
             this.handleTabContextMenuCommand,
@@ -5592,15 +5725,16 @@
             attributeFilter: ["style", "class"],
             childList: true,
           });
-          el.addEventListener(
-            "transitionend",
-            () => this._debouncedSyncTheme(),
-            { passive: true },
-          );
-          el.addEventListener(
-            "animationend",
-            () => this._debouncedSyncTheme(),
-            { passive: true },
+          const onThemeAnimation = () => this._debouncedSyncTheme();
+          el.addEventListener("transitionend", onThemeAnimation, {
+            passive: true,
+          });
+          el.addEventListener("animationend", onThemeAnimation, {
+            passive: true,
+          });
+          this.#toolbarBgListeners.push(
+            [el, "transitionend", onThemeAnimation],
+            [el, "animationend", onThemeAnimation],
           );
         });
       }
@@ -5659,7 +5793,7 @@
           try {
             Services.prefs.removeObserver(
               "zen.view.sidebar-expanded",
-              layoutObserver,
+              this.#layoutObserver,
             );
           } catch (_) {}
           this.stopPositionTracking();
@@ -5704,6 +5838,10 @@
     #workspaceSwitchListener = null;
     /** @private TabOpen event listener for smart grouping */
     #tabOpenListener = null;
+    #groupColorEventListener = null;
+    #folderMenuTimer = null;
+    #folderMenuHandler = null;
+    #colorPickerDragCleanup = null;
     /** @private Original gBrowser.addTab reference */
     #origAddTab = null;
     /** @private Latch indicating sub-group badge updating in progress */
@@ -5808,6 +5946,8 @@
       try {
         Core.log("ZentralTabGroups", "Destroying TabGroups module...");
 
+        this.#colorPickerDragCleanup?.();
+        this.#colorPickerDragCleanup = null;
         // 1. Clear timers
         if (this.#restoreSettleTimer) {
           clearTimeout(this.#restoreSettleTimer);
@@ -5931,15 +6071,56 @@
           this.#groupRightClickBlocker = null;
         }
         if (this._tabContextSubmenuListener) {
-          try {
-            window.removeEventListener(
-              "popupshowing",
-              this._tabContextSubmenuListener,
-              true,
-            );
-          } catch (_) {}
+          window.removeEventListener(
+            "popupshowing",
+            this._tabContextSubmenuListener,
+            true,
+          );
+          window.removeEventListener(
+            "popupshown",
+            this._tabContextSubmenuListener,
+            true,
+          );
           this._tabContextSubmenuListener = null;
         }
+        const nativeTabMenu = document.getElementById("tabContextMenu");
+        if (nativeTabMenu) delete nativeTabMenu._zentralEnhanced;
+        document.removeEventListener(
+          "TabGroupCreate",
+          this.onTabGroupCreate,
+          true,
+        );
+        document.removeEventListener(
+          "tabgroupcreated",
+          this.onTabGroupCreate,
+          true,
+        );
+        if (this.#groupColorEventListener) {
+          document.removeEventListener(
+            "TabGroupCreateByUser",
+            this.#groupColorEventListener,
+            true,
+          );
+          document.removeEventListener(
+            "TabGroupUpdate",
+            this.#groupColorEventListener,
+            true,
+          );
+          this.#groupColorEventListener = null;
+        }
+        if (this.#folderMenuTimer) {
+          clearTimeout(this.#folderMenuTimer);
+          this.#folderMenuTimer = null;
+        }
+        const folderMenu = document.getElementById("zenFolderActions");
+        if (folderMenu && this.#folderMenuHandler) {
+          folderMenu.removeEventListener("command", this.#folderMenuHandler);
+          this.#folderMenuHandler = null;
+        }
+        document
+          .getElementById("zentral-tabgroup-convert-folder-to-group")
+          ?.remove();
+        document.getElementById("zentral-tabgroup-folder-separator")?.remove();
         if (this.#dragGuardCleanup) {
           try {
             this.#dragGuardCleanup();
@@ -6872,28 +7053,21 @@
       this.hookAddTab();
       document.addEventListener("TabGroupCreate", this.onTabGroupCreate, true);
       document.addEventListener("tabgroupcreated", this.onTabGroupCreate, true);
+      this.#groupColorEventListener = (e) => {
+        const group =
+          e.target?.closest?.("tab-group:not([split-view-group])") ||
+          (e.target?.tagName === "TAB-GROUP" ? e.target : null);
+        if (group && !this.#isRestoring)
+          this.checkAndApplyFirstTimeGroupColor(group);
+      };
       document.addEventListener(
         "TabGroupCreateByUser",
-        (e) => {
-          const group = e.target?.closest
-            ? e.target.closest("tab-group:not([split-view-group])") ||
-              (e.target.tagName === "TAB-GROUP" ? e.target : null)
-            : null;
-          if (group && !this.#isRestoring)
-            this.checkAndApplyFirstTimeGroupColor(group);
-        },
+        this.#groupColorEventListener,
         true,
       );
       document.addEventListener(
         "TabGroupUpdate",
-        (e) => {
-          const group = e.target?.closest
-            ? e.target.closest("tab-group:not([split-view-group])") ||
-              (e.target.tagName === "TAB-GROUP" ? e.target : null)
-            : null;
-          if (group && !this.#isRestoring)
-            this.checkAndApplyFirstTimeGroupColor(group);
-        },
+        this.#groupColorEventListener,
         true,
       );
 
@@ -7050,7 +7224,7 @@
               "zen.view.use-single-toolbar",
               updateSidebarAttr,
             );
-            rootAttrObs.disconnect();
+            this.#rootAttrObs?.disconnect();
           } catch (_) {}
         },
         { once: true },
@@ -9125,7 +9299,7 @@
         e.preventDefault();
       });
 
-      window.addEventListener("mousemove", (e) => {
+      const onColorPickerMove = (e) => {
         if (!isDragging) return;
         const deltaX = e.screenX - startX;
         const deltaY = e.screenY - startY;
@@ -9137,14 +9311,21 @@
         const currentY =
           parseInt(panel.getAttribute("top")) || panel.screenY || 0;
         panel.moveTo(currentX + deltaX, currentY + deltaY);
-      });
+      };
 
-      window.addEventListener("mouseup", (e) => {
+      const onColorPickerUp = (e) => {
         if (isDragging && e.button === 0) {
           isDragging = false;
           handle.classList.remove("dragging");
         }
-      });
+      };
+      this.#colorPickerDragCleanup?.();
+      window.addEventListener("mousemove", onColorPickerMove);
+      window.addEventListener("mouseup", onColorPickerUp);
+      this.#colorPickerDragCleanup = () => {
+        window.removeEventListener("mousemove", onColorPickerMove);
+        window.removeEventListener("mouseup", onColorPickerUp);
+      };
 
       panel
         .querySelector("#zentral-tg-input-hex")
@@ -9175,7 +9356,8 @@
      * Attaches custom context menu actions to native Zen folder menus.
      */
     addFolderContextMenuItems() {
-      setTimeout(() => {
+      this.#folderMenuTimer = setTimeout(() => {
+        this.#folderMenuTimer = null;
         const folderMenu = document.getElementById("zenFolderActions");
         if (
           !folderMenu ||
@@ -9196,15 +9378,13 @@
             folderMenu.appendChild(frag);
           }
 
-          folderMenu.addEventListener("command", (event) => {
-            if (
-              event.target.id === "zentral-tabgroup-convert-folder-to-group"
-            ) {
-              const triggerNode = folderMenu.triggerNode;
-              const folder = triggerNode?.closest("zen-folder");
-              if (folder) this.convertFolderToGroup(folder);
-            }
-          });
+          this.#folderMenuHandler = (event) => {
+            if (event.target.id !== "zentral-tabgroup-convert-folder-to-group")
+              return;
+            const folder = folderMenu.triggerNode?.closest("zen-folder");
+            if (folder) this.convertFolderToGroup(folder);
+          };
+          folderMenu.addEventListener("command", this.#folderMenuHandler);
         }
       }, 1500);
     }
@@ -11260,7 +11440,7 @@
       const animType =
         Core.getPref(Constants.Apps.PREF_ANIMATION_TYPE, "slide") || "slide";
       const animSpeed =
-        Core.getPref(Constants.Apps.PREF_ANIMATION_SPEED, 450) || 450;
+        Core.getPref(Constants.Apps.PREF_ANIMATION_SPEED, 450) ?? 450;
       const maxApps = Core.getPref(Constants.Apps.PREF_MAX_APPS, 21) || 21;
 
       const animDropdown = this.modal.querySelector("#zs-anim-type-dropdown");
@@ -11344,7 +11524,7 @@
       }
 
       const opacity =
-        Core.getPref(Constants.TabGroups.PREF_LABEL_OPACITY, 85) || 85;
+        Core.getPref(Constants.TabGroups.PREF_LABEL_OPACITY, 85) ?? 85;
       if (get("zs-tg-opacity")) {
         get("zs-tg-opacity").value = opacity;
         if (get("zs-tg-opacity-badge"))
@@ -11559,7 +11739,12 @@
       if (get("zs-tg-opacity")) {
         Core.setPref(
           Constants.TabGroups.PREF_LABEL_OPACITY,
-          parseInt(get("zs-tg-opacity").value) || 85,
+          Number.isFinite(parseInt(get("zs-tg-opacity").value, 10))
+            ? Math.max(
+                0,
+                Math.min(100, parseInt(get("zs-tg-opacity").value, 10)),
+              )
+            : 85,
         );
       }
 
@@ -14268,9 +14453,14 @@
           };
 
           // 2. Attempt background submission to Cloudflare Worker endpoint if configured
-          let endpoint = Core.getPref(
+          const endpointPref = Core.getPref(
             Constants.Diagnostics.PREF_REPORT_ENDPOINT,
-          )?.trim();
+          );
+          let endpoint = null;
+          try {
+            const candidate = new URL(endpointPref);
+            if (candidate.protocol === "https:") endpoint = candidate.href;
+          } catch (_) {}
           let submitted = false;
 
           if (endpoint) {
@@ -14287,13 +14477,30 @@
                 }),
               });
 
-              const result = await resp.json();
-              if (resp.ok && result.success) {
+              const result = resp.status === 204 ? {} : await resp.json();
+              if (resp.ok && result?.success) {
                 submitted = true;
                 if (statusEl) {
                   statusEl.style.display = "inline";
                   statusEl.style.color = "#10b981";
-                  statusEl.innerHTML = `<a href="${result.issueUrl}" target="_blank" style="color: #10b981; text-decoration: underline;">✓ Issue #${result.issueNumber} created!</a>`;
+                  statusEl.replaceChildren();
+                  const issueUrl = new URL(String(result.issueUrl || ""));
+                  if (
+                    issueUrl.protocol === "https:" &&
+                    issueUrl.hostname === "github.com"
+                  ) {
+                    const link = document.createElement("a");
+                    link.href = issueUrl.href;
+                    link.target = "_blank";
+                    link.rel = "noopener noreferrer";
+                    link.style.cssText =
+                      "color: #10b981; text-decoration: underline";
+                    link.textContent = `✓ Issue #${String(result.issueNumber).slice(0, 30)} created!`;
+                    statusEl.appendChild(link);
+                  } else {
+                    statusEl.textContent =
+                      "Issue created; open GitHub to view it.";
+                  }
                 }
                 titleInput.value = "";
                 descInput.value = "";
@@ -14320,9 +14527,9 @@
                   "@mozilla.org/widget/clipboardhelper;1"
                 ]?.getService(Ci.nsIClipboardHelper);
                 if (clipboardHelper) {
-                  clipboardHelper.copyString(logContent);
+                  clipboardHelper.copyString(sendLogContent);
                 } else if (navigator.clipboard?.writeText) {
-                  navigator.clipboard.writeText(logContent);
+                  navigator.clipboard.writeText(sendLogContent);
                 }
               } catch (_) {}
             }
@@ -14934,11 +15141,21 @@
     {
       pref: EXT_PREFS.TAB_ISOLATION,
       attr: "bgalazka-tab-isolation",
-      defaultVal: false,
+      defaultVal: true,
     },
     {
       pref: EXT_PREFS.CORNER_TILES,
       attr: "bgalazka-corner-tiles",
+      defaultVal: false,
+    },
+    {
+      pref: "zen.workspace.bgalazka.hover_corner_tiles",
+      attr: "bgalazka-hover-corner-tiles",
+      defaultVal: false,
+    },
+    {
+      pref: "zen.workspace.bgalazka.hide_hover_reveal_btn",
+      attr: "bgalazka-hide-hover-reveal-btn",
       defaultVal: false,
     },
     {
@@ -15170,6 +15387,28 @@
     updateCSSVars();
   }
   applyAttributes();
+
+  // Mirror Arc's effective prefs, including built-in default values. The
+  // extension's getPref() intentionally reads only user-set preferences, so
+  // use Firefox's direct boolean getter for compatibility with Arc's media
+  // queries without putting vendor-specific @media syntax in chrome.css.
+  for (const [pref, attr] of [
+    ["browser.tabs.fadeOutUnloadedTabs", "bgalazka-arc-fade-unloaded"],
+    ["arc-grayscale-unloaded-tabs", "bgalazka-arc-gray-unloaded"],
+  ]) {
+    const sync = () => {
+      document.documentElement.setAttribute(
+        attr,
+        Services.prefs.getBoolPref(pref, false) ? "true" : "false",
+      );
+    };
+    sync();
+    Services.prefs.addObserver(pref, sync);
+    registerCleanup(() => {
+      Services.prefs.removeObserver(pref, sync);
+      document.documentElement.removeAttribute(attr);
+    });
+  }
 
   ATTR_MAP.forEach(({ pref, attr, defaultVal }) => {
     const observer = () => {
@@ -15656,6 +15895,7 @@
     if (!getPref(EXT_PREFS.ALL_SIDES_RESIZE, false)) return;
     const root = document.getElementById("zen-app-panel-root");
     if (!root) return;
+    extendHoverResizeHold();
     e.preventDefault();
     e.stopPropagation();
 
@@ -15684,6 +15924,7 @@
 
   function onVerticalResizeDrag(e) {
     if (!vResizeState) return;
+    extendHoverResizeHold();
     const root = document.getElementById("zen-app-panel-root");
     if (!root) return;
     const diff = e.clientY - vResizeState.startY;
@@ -15776,6 +16017,7 @@
     const apps = window.Zentral?.Apps;
     const root = document.getElementById("zen-app-panel-root");
     if (!apps || !root || typeof apps.updateWidthVar !== "function") return;
+    extendHoverResizeHold();
     e.preventDefault();
     e.stopPropagation();
 
@@ -15826,6 +16068,7 @@
 
   function onHorizontalResizeDrag(e) {
     if (!hResizeState) return;
+    extendHoverResizeHold();
     const root = document.getElementById("zen-app-panel-root");
     if (!root) return;
     const {
@@ -16530,7 +16773,14 @@
      * at the true boundary instead of far past it.
      * ------------------------------------------------------------------ */
     const origOnDrag = appsInstance.onDrag?.bind(appsInstance);
+    const origStartResize = appsInstance.startResize?.bind(appsInstance);
+    if (origStartResize)
+      appsInstance.startResize = function (e) {
+        if (e?.button === 0) extendHoverResizeHold();
+        return origStartResize(e);
+      };
     appsInstance.onDrag = function (e) {
+      extendHoverResizeHold();
       // Native onDrag() must see the already-patched
       // isPanelAttachedToRight() unchanged. That patch is the original
       // Opposite-Side resize-direction fix and is also used by the pill
@@ -16627,6 +16877,7 @@
       if (origRenderGrid) appsInstance.renderGrid = origRenderGrid;
       if (origToggleExpand) appsInstance.toggleExpand = origToggleExpand;
       if (origOnDrag) appsInstance.onDrag = origOnDrag;
+      if (origStartResize) appsInstance.startResize = origStartResize;
       if (wrappedHandleOutsideClick) {
         window.removeEventListener("mousedown", wrappedHandleOutsideClick);
         appsInstance.handleOutsideClick = origHandleOutsideClick;
@@ -17358,7 +17609,10 @@
         iconHost?.classList.add("bgalazka-panel-icon-host");
         if (!essential) tab.setAttribute("bgalazka-tab-panel-launcher", "true");
         else tab.removeAttribute("bgalazka-tab-panel-launcher");
-        const host = iconHost || tab.querySelector(".tab-stack") || tab;
+        // Essential themes can tint the tab stack. Keep its panel button on
+        // the tab itself so only the tab's own filter (such as Arc unload
+        // grayscale) reaches it, not a stack-specific color treatment.
+        const host = iconHost || tab;
         if (!record.tile?.isConnected || record.tile.parentNode !== host) {
           record.tile?.remove();
           const tile = document.createElement("button");
@@ -17397,7 +17651,16 @@
         const icon = tile.querySelector("img");
         if (icon.getAttribute("src") !== record.app.icon)
           icon.setAttribute("src", record.app.icon);
-        const title = `Open ${record.app.title} in a panel`;
+        const tabLoaded =
+          !tab.hasAttribute("pending") &&
+          (!tab.hasAttribute("zen-dormant") ||
+            tab.getAttribute("zen-dormant") === "false") &&
+          !tab.hasAttribute("discarded") &&
+          !!tab.linkedBrowser?.isConnected &&
+          !!tab.linkedBrowser?.browsingContext;
+        const panelBrowser = browsers.get(record.app.id);
+        const panelLoaded = !!panelBrowser?.isConnected;
+        const title = `${record.app.title} — tab ${tabLoaded ? "loaded" : "unloaded"}; panel ${panelLoaded ? "loaded" : "unloaded"}. Click to toggle panel; middle-click to unload panel.`;
         if (tile.title !== title) {
           tile.title = title;
           tile.setAttribute("aria-label", title);
@@ -17409,8 +17672,7 @@
             ?.hasAttribute("data-bgalazka-triple-slot")
             ? "true"
             : "false";
-        tile.dataset.loaded = browsers.has(record.app.id) ? "true" : "false";
-        const panelBrowser = browsers.get(record.app.id);
+        tile.dataset.loaded = panelLoaded ? "true" : "false";
         if (record.app.preload && panelBrowser?.isConnected) {
           // Preload may start before its remote browsingContext exists. The
           // existing two-second tile sync also reasserts activation if Gecko
@@ -17420,12 +17682,7 @@
           } catch (_) {}
         }
         syncEssentialBadge(record, panelBrowser);
-        tile.dataset.tabLoaded =
-          !tab.hasAttribute("pending") &&
-          !tab.hasAttribute("zen-dormant") &&
-          !!tab.linkedBrowser?.isConnected
-            ? "true"
-            : "false";
+        tile.dataset.tabLoaded = tabLoaded ? "true" : "false";
       }
       pruneIsolationTiles();
     } finally {
@@ -17454,6 +17711,8 @@
   const BGALAZKA_EXT_PREFS = {
     TRANSLUCENCY: "zen.workspace.bgalazka.translucency",
     OPPOSITE_DOCKING: "zen.workspace.bgalazka.opposite_docking",
+    HOVER_REVEAL_PANEL: "zen.workspace.bgalazka.hover_reveal_panel",
+    HIDE_HOVER_REVEAL_BTN: "zen.workspace.bgalazka.hide_hover_reveal_btn",
     EDGE_ATTACHED_PANELS: "zen.workspace.bgalazka.edge_attached_panels",
     PUSH_PAGE: "zen.workspace.bgalazka.push_page",
     TAB_ISOLATION: "zen.workspace.bgalazka.tab_isolation",
@@ -17752,6 +18011,399 @@
     DRAG_HANDLE: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="10" height="10" fill="currentColor"><rect x="2" y="3.2" width="12" height="1.6" rx="0.8"/><rect x="2" y="7.2" width="12" height="1.6" rx="0.8"/><rect x="2" y="11.2" width="12" height="1.6" rx="0.8"/></svg>`,
   };
 
+  // A hidden panel retains its browser and active app. The reveal strip is
+  // separate from the translated panel root, so it remains reachable at the
+  // outer edge without sitting over webpage content.
+  let hoverBoundRoot = null;
+  let hoverHideTimer = null;
+  let hoverRevealFrame = null;
+  let hoverResizing = false;
+  let hoverHoldUntil = 0;
+  let hoverTypingUntil = 0;
+  const hoverOpenPopups = new Set();
+  let hoverContextPending = false;
+  let hoverContextTimer = null;
+  const hoverRevealId = "bgalazka-panel-reveal-edge";
+
+  function hoverPanelAvailable() {
+    return (
+      getPref(BGALAZKA_EXT_PREFS.OPPOSITE_DOCKING, false) === true &&
+      !window.Zentral?.Apps?.isPlacementVerticalBar?.()
+    );
+  }
+  function updateRevealEdgeGeometry() {
+    const edge = document.getElementById(hoverRevealId);
+    const box = document.getElementById("tabbrowser-tabbox");
+    if (!edge || !box) return;
+    const rect = box.getBoundingClientRect();
+    edge.style.top = `${Math.max(0, rect.top)}px`;
+    edge.style.height = `${Math.max(0, Math.min(window.innerHeight, rect.bottom) - Math.max(0, rect.top))}px`;
+  }
+  function clearHoverHide() {
+    if (hoverHideTimer) clearTimeout(hoverHideTimer);
+    hoverHideTimer = null;
+  }
+  function extendHoverResizeHold() {
+    if (!getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)) return;
+    hoverResizing = true;
+    hoverHoldUntil = Date.now() + 3200;
+    clearHoverHide();
+    setHoverPanelHidden(false);
+  }
+  function hoverMenuVisible() {
+    for (const popup of hoverOpenPopups) {
+      if (!popup.isConnected || popup.state === "closed")
+        hoverOpenPopups.delete(popup);
+    }
+    if (hoverOpenPopups.size || hoverContextPending) return true;
+    return ["contentAreaContextMenu", "zen-apps-sidebar-tile-context"].some(
+      (id) => {
+        const popup = document.getElementById(id);
+        return popup?.state === "open" || popup?.state === "showing";
+      },
+    );
+  }
+  function hoverPanelHasFocus() {
+    const root = document.getElementById("zen-app-panel-root");
+    return !!(
+      root?.hasAttribute("open") &&
+      document.activeElement &&
+      root.contains(document.activeElement)
+    );
+  }
+  function setHoverPanelHidden(hidden) {
+    const root = document.getElementById("zen-app-panel-root");
+    const enabled =
+      hoverPanelAvailable() &&
+      getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) === true &&
+      root?.hasAttribute("open") &&
+      !root.hasAttribute("closing");
+    const shouldHide = !!(enabled && hidden);
+    if (
+      shouldHide &&
+      !document.documentElement.hasAttribute("bgalazka-hover-panel-hidden")
+    ) {
+      const side = root.getAttribute("data-panel-side") || "right";
+      const rect = root.getBoundingClientRect();
+      const inset =
+        side === "left" ? rect.left : window.innerWidth - rect.right;
+      root.style.setProperty(
+        "--bgalazka-hover-outset",
+        `${Math.max(80, inset + 80)}px`,
+      );
+      document.documentElement.setAttribute("bgalazka-panel-side", side);
+    }
+    document.documentElement.toggleAttribute(
+      "bgalazka-hover-panel-hidden",
+      shouldHide,
+    );
+    const edge = document.getElementById(hoverRevealId);
+    if (edge) {
+      edge.hidden = !shouldHide;
+      edge.setAttribute("aria-hidden", "true");
+    }
+    if (shouldHide) {
+      if (hoverRevealFrame) cancelAnimationFrame(hoverRevealFrame);
+      hoverRevealFrame = requestAnimationFrame(() => {
+        hoverRevealFrame = null;
+        updateRevealEdgeGeometry();
+      });
+    }
+  }
+  function syncHoverPanelAvailability() {
+    const available = hoverPanelAvailable();
+    const btn = document.getElementById("zen-app-hover-reveal-btn");
+    if (btn) {
+      btn.hidden =
+        !available || getPref(BGALAZKA_EXT_PREFS.HIDE_HOVER_REVEAL_BTN, false);
+      btn.disabled = !available;
+      btn.setAttribute(
+        "data-active",
+        available && getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)
+          ? "true"
+          : "false",
+      );
+      btn.setAttribute("aria-pressed", btn.dataset.active);
+    }
+    document.documentElement.toggleAttribute(
+      "bgalazka-hover-panel-enabled",
+      available &&
+        getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) === true,
+    );
+    if (!available || !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)) {
+      clearHoverHide();
+      setHoverPanelHidden(false);
+    }
+  }
+  const onHoverRootEnter = () => clearHoverHide();
+  const onHoverRootLeave = () => {
+    clearHoverHide();
+    if (
+      !hoverPanelAvailable() ||
+      !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) ||
+      hoverResizing ||
+      hoverMenuVisible()
+    )
+      return;
+    hoverHideTimer = setTimeout(
+      () => {
+        hoverHideTimer = null;
+        const root = document.getElementById("zen-app-panel-root");
+        const edge = document.getElementById(hoverRevealId);
+        if (
+          root?.matches(":hover") ||
+          edge?.matches(":hover") ||
+          hoverResizing ||
+          hoverMenuVisible()
+        )
+          return;
+        if (Date.now() < Math.max(hoverHoldUntil, hoverTypingUntil)) {
+          onHoverRootLeave();
+          return;
+        }
+        setHoverPanelHidden(true);
+      },
+      Math.max(400, hoverHoldUntil - Date.now(), hoverTypingUntil - Date.now()),
+    );
+  };
+  function ensurePillHoverRevealButton() {
+    const pill = document.getElementById("zen-app-panel-pill");
+    const root = document.getElementById("zen-app-panel-root");
+    if (!pill || !root) return;
+    if (hoverBoundRoot !== root) {
+      hoverBoundRoot?.removeEventListener("pointerenter", onHoverRootEnter);
+      hoverBoundRoot?.removeEventListener("pointerleave", onHoverRootLeave);
+      hoverBoundRoot = root;
+      root.addEventListener("pointerenter", onHoverRootEnter);
+      root.addEventListener("pointerleave", onHoverRootLeave);
+    }
+    let edge = document.getElementById(hoverRevealId);
+    if (!edge) {
+      edge = document.createElement("div");
+      edge.id = hoverRevealId;
+      edge.hidden = true;
+      edge.title = "Hover to reveal panels";
+      edge.addEventListener("pointerenter", () => {
+        clearHoverHide();
+        setHoverPanelHidden(false);
+      });
+      edge.addEventListener("pointerleave", onHoverRootLeave);
+      document.documentElement.appendChild(edge);
+    }
+    let btn = document.getElementById("zen-app-hover-reveal-btn");
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.id = "zen-app-hover-reveal-btn";
+      btn.type = "button";
+      btn.className = "zen-app-btn zen-app-hover-reveal-btn";
+      btn.title = "Show panel on hover at the opposite edge";
+      btn.setAttribute("aria-label", btn.title);
+      btn.setAttribute("aria-pressed", "false");
+      btn.appendChild(parseSVG(PREF_ICONS.HOVER_EYE));
+      const anchor =
+        document.getElementById("zen-app-dual-view-btn") || pill.firstChild;
+      if (anchor?.parentNode === pill)
+        pill.insertBefore(btn, anchor.nextSibling);
+      else pill.appendChild(btn);
+      btn.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!hoverPanelAvailable()) return;
+        const next = !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false);
+        setPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, next);
+        // Enabling leaves the currently visible panel alone; the next
+        // pointer exit toward the webpage decides when to hide it.
+        syncHoverPanelAvailability();
+      });
+    }
+    syncHoverPanelAvailability();
+    btn.setAttribute("aria-pressed", btn.dataset.active);
+  }
+  const onResizeStartForHover = (event) => {
+    if (
+      event.button !== 0 ||
+      !event.target.closest?.(
+        "#zen-app-panel-root .zen-app-resize-strip, #zen-app-panel-root [class*='zen-app-resize-'], #zen-app-panel-root .zen-app-grabber, #zen-app-panel-root .zen-app-all-sides-resize-btn",
+      )
+    )
+      return;
+    extendHoverResizeHold();
+  };
+  const onResizeEndForHover = () => {
+    if (!hoverResizing) return;
+    hoverResizing = false;
+    hoverHoldUntil = Date.now() + 3200;
+    const root = document.getElementById("zen-app-panel-root");
+    if (!root?.matches(":hover")) onHoverRootLeave();
+  };
+  document.addEventListener("mousedown", onResizeStartForHover, true);
+  window.addEventListener("mouseup", onResizeEndForHover, true);
+  window.addEventListener("blur", onResizeEndForHover);
+  const onWebPagePointer = (event) => {
+    if (event.target.closest?.("#tabbrowser-tabbox")) onHoverRootLeave();
+  };
+  const onHoverPanelFocusOut = () => {
+    hoverTypingUntil = 0;
+    setTimeout(() => {
+      const root = document.getElementById("zen-app-panel-root");
+      if (!root?.matches(":hover") && !hoverPanelHasFocus()) onHoverRootLeave();
+    }, 0);
+  };
+  const onHoverPanelKeyDown = () => {
+    if (hoverPanelHasFocus()) {
+      hoverTypingUntil = Date.now() + 3000;
+      clearHoverHide();
+      setHoverPanelHidden(false);
+    }
+  };
+  const onHoverPanelFocusIn = () => {
+    if (hoverPanelHasFocus()) {
+      hoverTypingUntil = Date.now() + 1500;
+      clearHoverHide();
+      setHoverPanelHidden(false);
+    }
+  };
+  // A second click on the active launcher makes the panel permanently visible
+  // and turns off hover mode. Capture before both native and Essential click
+  // handlers, which otherwise close the panel or let a pending hide win.
+  let hoverLauncherHandled = null;
+  const activeHoverLauncher = (event) => {
+    const tile = event.target.closest?.(".zen-app-tile[data-app-id]");
+    const root = document.getElementById("zen-app-panel-root");
+    if (
+      !tile ||
+      !root?.hasAttribute("open") ||
+      root.hasAttribute("closing") ||
+      getActiveAppBrowser()?._bgalazkaAppId !== tile.dataset.appId
+    )
+      return null;
+    return tile;
+  };
+  const onActiveLauncherMouseDown = (event) => {
+    if (
+      event.button !== 0 ||
+      !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)
+    )
+      return;
+    if (event.target.closest?.(".bgalazka-tile-audio")) return;
+    const tile = activeHoverLauncher(event);
+    if (!tile) return;
+    hoverLauncherHandled = tile;
+    setTimeout(() => {
+      if (hoverLauncherHandled === tile) hoverLauncherHandled = null;
+    }, 1000);
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    setPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false);
+    clearHoverHide();
+    syncHoverPanelAvailability();
+    setHoverPanelHidden(false);
+  };
+  const onActiveLauncherClick = (event) => {
+    if (event.button !== 0) return;
+    if (event.target.closest?.(".bgalazka-tile-audio")) return;
+    const tile = event.target.closest?.(".zen-app-tile[data-app-id]");
+    if (tile && tile === hoverLauncherHandled) {
+      hoverLauncherHandled = null;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+    // Keyboard activation has no preceding mousedown.
+    if (
+      !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) ||
+      !activeHoverLauncher(event)
+    )
+      return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    setPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false);
+    syncHoverPanelAvailability();
+    setHoverPanelHidden(false);
+  };
+  const onHoverPopupShowing = (event) => {
+    if (
+      !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) ||
+      !document.getElementById("zen-app-panel-root")?.hasAttribute("open") ||
+      document.documentElement.hasAttribute("bgalazka-hover-panel-hidden") ||
+      !["menupopup", "panel"].includes(event.target?.localName)
+    )
+      return;
+    hoverOpenPopups.add(event.target);
+    hoverContextPending = false;
+    if (hoverContextTimer) clearTimeout(hoverContextTimer);
+    hoverContextTimer = null;
+    clearHoverHide();
+    setHoverPanelHidden(false);
+  };
+  const onHoverPopupHidden = (event) => {
+    if (!hoverOpenPopups.delete(event.target) || hoverOpenPopups.size) return;
+    onHoverRootLeave();
+  };
+  const onHoverContextMenu = (event) => {
+    if (
+      !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) ||
+      !event
+        .composedPath?.()
+        .includes(document.getElementById("zen-app-panel-root"))
+    )
+      return;
+    hoverContextPending = true;
+    clearHoverHide();
+    if (hoverContextTimer) clearTimeout(hoverContextTimer);
+    hoverContextTimer = setTimeout(() => {
+      hoverContextTimer = null;
+      hoverContextPending = false;
+      onHoverRootLeave();
+    }, 1100);
+  };
+  document.addEventListener("click", onActiveLauncherClick, true);
+  document.addEventListener("mousedown", onActiveLauncherMouseDown, true);
+  window.addEventListener("popupshowing", onHoverPopupShowing, true);
+  window.addEventListener("popuphidden", onHoverPopupHidden, true);
+  window.addEventListener("contextmenu", onHoverContextMenu, true);
+  document.addEventListener("pointerover", onWebPagePointer, true);
+  window.addEventListener("focusout", onHoverPanelFocusOut, true);
+  window.addEventListener("focusin", onHoverPanelFocusIn, true);
+  window.addEventListener("keydown", onHoverPanelKeyDown, true);
+  window.addEventListener("resize", updateRevealEdgeGeometry);
+  const onHoverPrefChange = () => syncHoverPanelAvailability();
+  for (const pref of [
+    BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL,
+    BGALAZKA_EXT_PREFS.HIDE_HOVER_REVEAL_BTN,
+    BGALAZKA_EXT_PREFS.OPPOSITE_DOCKING,
+  ]) {
+    Services.prefs.addObserver(pref, onHoverPrefChange);
+    registerCleanup(() =>
+      Services.prefs.removeObserver(pref, onHoverPrefChange),
+    );
+  }
+  registerCleanup(() => {
+    document.removeEventListener("pointerover", onWebPagePointer, true);
+    window.removeEventListener("focusout", onHoverPanelFocusOut, true);
+    window.removeEventListener("focusin", onHoverPanelFocusIn, true);
+    window.removeEventListener("keydown", onHoverPanelKeyDown, true);
+    document.removeEventListener("click", onActiveLauncherClick, true);
+    document.removeEventListener("mousedown", onActiveLauncherMouseDown, true);
+    window.removeEventListener("popupshowing", onHoverPopupShowing, true);
+    window.removeEventListener("popuphidden", onHoverPopupHidden, true);
+    window.removeEventListener("contextmenu", onHoverContextMenu, true);
+    if (hoverContextTimer) clearTimeout(hoverContextTimer);
+    hoverOpenPopups.clear();
+    document.removeEventListener("mousedown", onResizeStartForHover, true);
+    window.removeEventListener("mouseup", onResizeEndForHover, true);
+    window.removeEventListener("blur", onResizeEndForHover);
+    clearHoverHide();
+    if (hoverRevealFrame) cancelAnimationFrame(hoverRevealFrame);
+    window.removeEventListener("resize", updateRevealEdgeGeometry);
+    hoverBoundRoot?.removeEventListener("pointerenter", onHoverRootEnter);
+    hoverBoundRoot?.removeEventListener("pointerleave", onHoverRootLeave);
+    document.getElementById(hoverRevealId)?.remove();
+    document.getElementById("zen-app-hover-reveal-btn")?.remove();
+    document.documentElement.removeAttribute("bgalazka-hover-panel-enabled");
+    document.documentElement.removeAttribute("bgalazka-hover-panel-hidden");
+  });
+
   function ensurePillDualViewButton() {
     const pill = document.getElementById("zen-app-panel-pill");
     if (!pill) return;
@@ -17895,6 +18547,7 @@
 
   function syncPanelPushState() {
     ensurePillDualViewButton();
+    ensurePillHoverRevealButton();
     const root = document.getElementById("zen-app-panel-root");
     const pill = document.getElementById("zen-app-panel-pill");
     const pinBtn = pill?.querySelector(".zen-app-btn[data-pinned]");
@@ -18939,6 +19592,7 @@
           BGALAZKA_EXT_PREFS.OPPOSITE_DOCKING,
           "bgalazka-opposite-docking",
         );
+        syncHoverPanelAvailability();
         apps?.positionPanel?.();
         return true;
       case "TOGGLE_EDGE_ATTACHED":
@@ -19603,8 +20257,22 @@
         "bgalazka-opposite-docking",
         false,
         PREF_ICONS.DOCK,
+        (enabled) => {
+          syncHoverPanelAvailability();
+        },
       );
       content.appendChild(t2.row);
+
+      const tHoverReveal = createToggleRow(
+        "Show Opposite-Side Panels on Hover",
+        "Requires Opposite-Side Docking. Leave a panel to hide it, then hover the outer edge to reveal it",
+        BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL,
+        null,
+        false,
+        PREF_ICONS.HOVER_EYE,
+        () => syncHoverPanelAvailability(),
+      );
+      content.appendChild(tHoverReveal.row);
 
       const tEdgeAttached = createToggleRow(
         "Edge-Attached Panels",
@@ -19752,6 +20420,30 @@
         false,
         PREF_ICONS.PUSH,
       );
+      const tHideHoverRevealBtn = createToggleRow(
+        "Hide Show-on-Hover Pill Button",
+        "Remove the eye button from the panel pill; use the setting above to enable hover reveal",
+        BGALAZKA_EXT_PREFS.HIDE_HOVER_REVEAL_BTN,
+        "bgalazka-hide-hover-reveal-btn",
+        false,
+        PREF_ICONS.HOVER_EYE,
+        () => syncHideHoverControls(),
+      );
+      const tHideHoverRevealBtnPillCategory = createToggleRow(
+        "Hide Show-on-Hover Pill Button",
+        "Remove the eye button from the panel pill",
+        BGALAZKA_EXT_PREFS.HIDE_HOVER_REVEAL_BTN,
+        "bgalazka-hide-hover-reveal-btn",
+        false,
+        PREF_ICONS.HOVER_EYE,
+        () => syncHideHoverControls(),
+      );
+      const syncHideHoverControls = () => {
+        const hidden = getPref(BGALAZKA_EXT_PREFS.HIDE_HOVER_REVEAL_BTN, false);
+        tHideHoverRevealBtn.input.checked = hidden;
+        tHideHoverRevealBtnPillCategory.input.checked = hidden;
+        syncHoverPanelAvailability();
+      };
       const tHideAllSidesResizeBtn = createToggleRow(
         "Hide All-Sides Resize Button",
         "Remove all-sides resize toggle from pill menu (the settings row above still works)",
@@ -19831,6 +20523,7 @@
         "zs-conditional-group zs-hide-pill-controls-group";
       hidePillGroup.append(
         tDualView.row,
+        tHideHoverRevealBtnPillCategory.row,
         tHideAllSidesResizeBtn.row,
         tPin.row,
         t5.row,
@@ -19839,6 +20532,7 @@
         tClose.row,
       );
       content.appendChild(hidePillGroup);
+      tHoverReveal.row.after(tHideHoverRevealBtn.row);
 
       // ====================================================================
       // 4. Web Panel Navigation Toolbar
@@ -20292,19 +20986,19 @@
         () => requestTileSync(0),
       );
       const tHoverCorner = createToggleRow(
-        "Hover-Only Corner App Tiles(experimental)",
-        "Keep corner app tiles hidden until cursor hovers over the essential tab",
+        "Show Tab Panel Launchers on Hover",
+        "Hide panel buttons until tab hover; normal tabs keep their favicon and gain a blue launcher outline on hover",
         BGALAZKA_EXT_PREFS.HOVER_CORNER_TILES,
         "bgalazka-hover-corner-tiles",
         false,
         PREF_ICONS.HOVER_EYE,
       );
       const t3 = createToggleRow(
-        "Unloaded Tab & App Appearance",
-        "Dim dormant tabs with grayscale while keeping docked corner app tiles fully illuminated",
+        "Show Loaded Panel Dot on Tabs",
+        "Show a dot on ordinary tabs with loaded panels. Essential panel buttons gray out when their panels unload",
         BGALAZKA_EXT_PREFS.TAB_ISOLATION,
         "bgalazka-tab-isolation",
-        false,
+        true,
         PREF_ICONS.ISOLATION,
       );
       const tBadges = createToggleRow(
@@ -20369,6 +21063,13 @@
           input: t2.input,
           pref: BGALAZKA_EXT_PREFS.OPPOSITE_DOCKING,
           def: false,
+          onSync: () => syncHoverPanelAvailability(),
+        },
+        {
+          input: tHoverReveal.input,
+          pref: BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL,
+          def: false,
+          onSync: () => syncHoverPanelAvailability(),
         },
         {
           input: tEdgeAttached.input,
@@ -20564,6 +21265,17 @@
           def: false,
         },
         {
+          input: tHideHoverRevealBtn.input,
+          pref: BGALAZKA_EXT_PREFS.HIDE_HOVER_REVEAL_BTN,
+          def: false,
+          onSync: () => syncHoverPanelAvailability(),
+        },
+        {
+          input: tHideHoverRevealBtnPillCategory.input,
+          pref: BGALAZKA_EXT_PREFS.HIDE_HOVER_REVEAL_BTN,
+          def: false,
+        },
+        {
           input: tHideAllSidesResizeBtn.input,
           pref: BGALAZKA_EXT_PREFS.HIDE_ALL_SIDES_RESIZE_BTN,
           def: false,
@@ -20660,7 +21372,7 @@
           pref: BGALAZKA_EXT_PREFS.HIDE_UNATTACHED_APP_CONTROLS,
           def: false,
         },
-        { input: t3.input, pref: BGALAZKA_EXT_PREFS.TAB_ISOLATION, def: false },
+        { input: t3.input, pref: BGALAZKA_EXT_PREFS.TAB_ISOLATION, def: true },
         {
           input: tBadges.input,
           pref: BGALAZKA_EXT_PREFS.HIDE_CORNER_BADGES,
@@ -23077,6 +23789,9 @@
             ?.hasAttribute("closing");
         pulseAnimGuard(); // perf: suppress backdrop-filter for this slide (note 12)
         const res = origOpen(...args);
+        ensurePillHoverRevealButton();
+        clearHoverHide();
+        setHoverPanelHidden(false);
         if (
           wasPinned &&
           document.querySelector(
@@ -23099,6 +23814,7 @@
         }
         setTimeout(() => {
           ensurePillDualViewButton();
+          ensurePillHoverRevealButton();
           ensurePillAllSidesResizeButton();
           ensureVerticalResizeHandles();
           ensurePillGrabberVerticalDrag();
@@ -23116,6 +23832,8 @@
       apps.closePanel = function (...args) {
         pulseAnimGuard(); // perf: suppress backdrop-filter for this slide (note 12)
         const res = origClose(...args);
+        clearHoverHide();
+        setHoverPanelHidden(false);
         syncAddonHostBrowserActivity();
         syncAppPanelBrowserActivity();
         setTimeout(syncPanelPushState, 30);
@@ -24613,15 +25331,25 @@
   // Only frame capture and page snapshots use this cap. Keep the established
   // 480 px default; live cloning and streams use their own rendering paths.
   function captureWidth() {
-    const value = Services.prefs.getIntPref(CAPTURE_WIDTH_PREF, 480);
-    return [320, 480, 640].includes(value) ? value : 480;
+    try {
+      const value = Services.prefs.getIntPref(CAPTURE_WIDTH_PREF, 480);
+      return [320, 480, 640].includes(value) ? value : 480;
+    } catch (_) {
+      return 480;
+    }
   }
   const BUILD = "video-only-2026-09-22-8";
   const FRAME_SOURCE =
     '// Loaded into each browser\'s content process through its frame message manager.\n// The channel is replaced at startup so separate browser windows stay isolated.\n(function () {\n  // Shared by actor and frame-script transports; no parent-side privileges.\nclass ZentralVideoRenderer {\n  constructor(doc) { this.doc = doc; this.serial = 0; }\n  async start({ videoRef, mode, fit = "contain" }) {\n    if (this.doc?.documentURI !== "about:blank") throw new Error("Invalid preview document");\n    this.stop();\n    const serial = this.serial;\n    const { ContentDOMReference } = ChromeUtils.importESModule(\n      "resource://gre/modules/ContentDOMReference.sys.mjs");\n    const media = await ContentDOMReference.resolve(videoRef);\n    if (serial !== this.serial) throw new Error("Preview cancelled");\n    if (!media?.isConnected || media.localName !== "video")\n      throw new Error("Video reference unavailable in preview process");\n    this.source = media;\n    const doc = this.doc, win = doc.defaultView;\n    if (!doc.body) doc.documentElement.appendChild(doc.createElement("body"));\n    doc.body.style.cssText = "margin:0;overflow:hidden;background:#000";\n    const target = doc.createElement("video");\n    target.muted = true;\n    target.autoplay = true;\n    target.style.cssText = "display:block;width:100vw;height:100vh;object-fit:" +\n      (fit === "cover" ? "cover" : "contain") + ";background:#000";\n    doc.body.appendChild(target);\n    this.video = target;\n    this.mode = mode;\n    try {\n      if (mode === "native") {\n        if (media.isCloningElementVisually) throw new Error("Source already has a visual clone");\n        if (typeof media.cloneElementVisually !== "function") throw new Error("Native cloning unavailable");\n        await media.cloneElementVisually(target);\n      } else if (mode === "stream") {\n        const capture = media.captureStream || media.mozCaptureStream;\n        if (typeof capture !== "function") throw new Error("Stream capture unavailable");\n        this.stream = capture.call(media);\n        const tracks = this.stream.getVideoTracks();\n        if (!tracks.length) throw new Error("Stream contains no video track");\n        target.srcObject = new win.MediaStream(tracks);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else if (mode === "canvas-stream") {\n        const surface = doc.createElement("canvas");\n        surface.width = Math.min(640, media.videoWidth);\n        surface.height = Math.max(1, Math.round(surface.width * media.videoHeight / media.videoWidth));\n        const ctx = surface.getContext("2d", { alpha: false });\n        ctx.drawImage(media, 0, 0, surface.width, surface.height);\n        this.stream = surface.captureStream(30);\n        target.srcObject = this.stream;\n        // Keep all copies inside the source process. No per-frame JPEG or IPC.\n        // Use the visible preview window clock: source rVFC may stop in a hidden tab.\n        let lastTime = NaN;\n        this.timer = win.setInterval(() => {\n          if (!media.isConnected || media.ended) { this.failure = "Source ended or detached"; return; }\n          if (media.currentTime === lastTime || media.readyState < 2) return;\n          try {\n            ctx.drawImage(media, 0, 0, surface.width, surface.height);\n            lastTime = media.currentTime;\n          } catch (error) { this.failure = String(error); }\n        }, 1000 / 30);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else throw new Error("Unknown preview mode");\n      if (serial !== this.serial) throw new Error("Preview cancelled");\n      return { ok: true, mode };\n    } catch (error) {\n      if (serial === this.serial) this.stop();\n      throw error;\n    }\n  }\n  firstFrame(target) {\n    if (target.readyState >= 2 && target.videoWidth > 0) return Promise.resolve();\n    return new Promise((resolve, reject) => {\n      const win = this.doc.defaultView;\n      const done = error => {\n        win.clearTimeout(timer);\n        target.removeEventListener("loadeddata", loaded);\n        this.cancelWait = null;\n        error ? reject(error) : resolve();\n      };\n      const loaded = () => done();\n      const timer = win.setTimeout(() => done(new Error("Stream produced no decoded frame")), 1800);\n      this.cancelWait = () => done(new Error("Preview cancelled"));\n      target.addEventListener("loadeddata", loaded, { once: true });\n    });\n  }\n  health() {\n    const tracks = this.stream?.getVideoTracks() || [];\n    return { ok: !!this.video?.isConnected && !!this.source?.isConnected && !this.failure &&\n      !this.source.ended && ((this.mode === "native" && this.source.isCloningElementVisually) ||\n        (this.video.readyState >= 2 && tracks.some(track => track.readyState !== "ended" && !track.muted))),\n      error: this.failure || "Preview disconnected or stream unavailable",\n      paused: this.source?.paused, time: this.source?.currentTime,\n      frames: this.video?.getVideoPlaybackQuality?.().totalVideoFrames || 0 };\n  }\n  stop() {\n    ++this.serial;\n    this.cancelWait?.();\n    if (this.timer != null) this.doc.defaultView.clearInterval(this.timer);\n    this.timer = null;\n    this.video?.remove();\n    this.video = null;\n    for (const track of this.stream?.getTracks() || []) track.stop();\n    this.stream = null;\n    this.source = null;\n    this.failure = null;\n  }\n}\n\n  let renderer = null;\n  let stopped = false;\n  const CHANNEL = "__CHANNEL__";\n  const ids = new WeakMap();\n  const elements = new Map();\n  let nextId = 0;\n  const frameId = () => content.browsingContext?.id || 0;\n\n  function hasVideoAudioTrack(media) {\n  // Track presence is independent of the viewer\'s mute and volume choices.\n  try {\n    if (media.srcObject?.getAudioTracks) return media.srcObject.getAudioTracks().length > 0;\n    if (media.audioTracks) return media.audioTracks.length > 0;\n    const capture = media.captureStream || media.mozCaptureStream;\n    if (typeof capture !== "function") return false;\n    const stream = capture.call(media);\n    const hasAudio = stream.getAudioTracks().length > 0;\n    for (const track of stream.getTracks()) track.stop();\n    return hasAudio;\n  } catch (_) { return false; }\n}\n\n  function list({ requireAudio = false } = {}) {\n    const doc = content.document;\n    if (!doc) return [];\n    const found = [];\n    const live = new Set();\n    for (const media of doc.querySelectorAll("video")) {\n      if (media.localName !== "video" || media.ended || media.readyState < 1) continue;\n      const box = media.getBoundingClientRect();\n      const x = Math.max(0, box.left);\n      const y = Math.max(0, box.top);\n      const width = Math.min(content.innerWidth, box.right) - x;\n      const height = Math.min(content.innerHeight, box.bottom) - y;\n      if (media.videoWidth < 240 || media.videoHeight < 135 ||\n          (Number.isFinite(media.duration) && media.duration > 0 && media.duration < 8) ||\n          (requireAudio && !hasVideoAudioTrack(media))) continue;\n      let id = ids.get(media);\n      if (!id) { id = ++nextId; ids.set(media, id); }\n      elements.set(id, media);\n      live.add(id);\n      const label = media.getAttribute("aria-label") || media.getAttribute("title") ||\n        media.closest("[aria-label]")?.getAttribute("aria-label") ||\n        doc.title || "Video";\n      let videoRef = null;\n      try {\n        const { ContentDOMReference } = ChromeUtils.importESModule(\n          "resource://gre/modules/ContentDOMReference.sys.mjs");\n        videoRef = ContentDOMReference.get(media);\n      } catch (_) {}\n      found.push({ id, videoRef, documentId: content.windowGlobalChild?.innerWindowId || 0,\n        frameId: frameId(), label: String(label).slice(0, 100),\n        kind: "video",\n        canClone: typeof media.cloneElementVisually === "function",\n        canStream: typeof (media.captureStream || media.mozCaptureStream) === "function",\n        canCanvasStream: typeof doc.createElement("canvas").captureStream === "function",\n        rect: width > 0 && height > 0 ? { x, y, width, height } : null,\n        score: (media.paused ? 0 : 10000000) + Math.max(0, width) * Math.max(0, height),\n        paused: media.paused, muted: media.muted,\n        currentTime: media.currentTime,\n        duration: Number.isFinite(media.duration) ? media.duration : 0,\n        width: media.videoWidth || 0, height: media.videoHeight || 0 });\n    }\n    for (const id of elements.keys()) if (!live.has(id)) elements.delete(id);\n    return found;\n  }\n\n  function captureFrame({ id, captureWidth = 480 }) {\n    const media = elements.get(id);\n    if (!media?.isConnected || media.localName !== "video" || media.readyState < 2)\n      throw new Error("No decoded video frame available");\n    const canvas = content.document.createElement("canvas");\n    canvas.width = Math.min([320, 480, 640].includes(captureWidth) ? captureWidth : 480, media.videoWidth);\n    canvas.height = Math.max(1, Math.round(canvas.width * media.videoHeight / media.videoWidth));\n    canvas.getContext("2d", { alpha: false }).drawImage(media, 0, 0, canvas.width, canvas.height);\n    return { url: canvas.toDataURL("image/jpeg", 0.75), width: canvas.width, height: canvas.height };\n  }\n\n  function controlMedia({ id, action, value }) {\n    const media = elements.get(id);\n    if (!media?.isConnected) return null;\n    switch (action) {\n      case "toggle":\n        if (media.paused) media.play().catch(() => {});\n        else media.pause();\n        break;\n      case "mute": media.muted = !media.muted; break;\n      case "seek":\n        if (Number.isFinite(value) && Number.isFinite(media.duration))\n          media.currentTime = Math.max(0, Math.min(media.duration, value));\n        break;\n    }\n    return { paused: media.paused, muted: media.muted,\n      currentTime: media.currentTime,\n      duration: Number.isFinite(media.duration) ? media.duration : 0 };\n  }\n\n  async function onRequest(message) {\n    const { requestId, kind, frameId: requestedFrame, ...args } = message.data;\n    if (stopped || (kind !== "List" && requestedFrame !== frameId())) return;\n    try {\n      let result;\n      if (kind === "List") result = list(args);\n      else if (kind === "Preview") {\n        renderer ??= new ZentralVideoRenderer(content.document);\n        result = await renderer.start(args);\n      } else if (kind === "Health") result = renderer?.health() || { ok: false };\n      else if (kind === "StopPreview") { renderer?.stop(); result = true; }\n      else if (kind === "ActorCheck") {\n        ChromeUtils.importESModule(args.moduleURI);\n        result = true;\n      } else result = kind === "Capture" ? captureFrame(args) : controlMedia(args);\n      if (!stopped) sendAsyncMessage(CHANNEL + ":reply", { requestId, result });\n    } catch (error) {\n      if (!stopped) sendAsyncMessage(CHANNEL + ":reply", { requestId, error: String(error), result: [] });\n    }\n  }\n  function onShutdown() {\n    stopped = true;\n    renderer?.stop();\n    removeMessageListener(CHANNEL + ":request", onRequest);\n    removeMessageListener(CHANNEL + ":shutdown", onShutdown);\n    elements.clear();\n  }\n  addEventListener("unload", () => renderer?.stop());\n  addMessageListener(CHANNEL + ":request", onRequest);\n  addMessageListener(CHANNEL + ":shutdown", onShutdown);\n})();\n';
   const ACTOR_SOURCE =
     '// Shared by actor and frame-script transports; no parent-side privileges.\nclass ZentralVideoRenderer {\n  constructor(doc) { this.doc = doc; this.serial = 0; }\n  async start({ videoRef, mode, fit = "contain" }) {\n    if (this.doc?.documentURI !== "about:blank") throw new Error("Invalid preview document");\n    this.stop();\n    const serial = this.serial;\n    const { ContentDOMReference } = ChromeUtils.importESModule(\n      "resource://gre/modules/ContentDOMReference.sys.mjs");\n    const media = await ContentDOMReference.resolve(videoRef);\n    if (serial !== this.serial) throw new Error("Preview cancelled");\n    if (!media?.isConnected || media.localName !== "video")\n      throw new Error("Video reference unavailable in preview process");\n    this.source = media;\n    const doc = this.doc, win = doc.defaultView;\n    if (!doc.body) doc.documentElement.appendChild(doc.createElement("body"));\n    doc.body.style.cssText = "margin:0;overflow:hidden;background:#000";\n    const target = doc.createElement("video");\n    target.muted = true;\n    target.autoplay = true;\n    target.style.cssText = "display:block;width:100vw;height:100vh;object-fit:" +\n      (fit === "cover" ? "cover" : "contain") + ";background:#000";\n    doc.body.appendChild(target);\n    this.video = target;\n    this.mode = mode;\n    try {\n      if (mode === "native") {\n        if (media.isCloningElementVisually) throw new Error("Source already has a visual clone");\n        if (typeof media.cloneElementVisually !== "function") throw new Error("Native cloning unavailable");\n        await media.cloneElementVisually(target);\n      } else if (mode === "stream") {\n        const capture = media.captureStream || media.mozCaptureStream;\n        if (typeof capture !== "function") throw new Error("Stream capture unavailable");\n        this.stream = capture.call(media);\n        const tracks = this.stream.getVideoTracks();\n        if (!tracks.length) throw new Error("Stream contains no video track");\n        target.srcObject = new win.MediaStream(tracks);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else if (mode === "canvas-stream") {\n        const surface = doc.createElement("canvas");\n        surface.width = Math.min(640, media.videoWidth);\n        surface.height = Math.max(1, Math.round(surface.width * media.videoHeight / media.videoWidth));\n        const ctx = surface.getContext("2d", { alpha: false });\n        ctx.drawImage(media, 0, 0, surface.width, surface.height);\n        this.stream = surface.captureStream(30);\n        target.srcObject = this.stream;\n        // Keep all copies inside the source process. No per-frame JPEG or IPC.\n        // Use the visible preview window clock: source rVFC may stop in a hidden tab.\n        let lastTime = NaN;\n        this.timer = win.setInterval(() => {\n          if (!media.isConnected || media.ended) { this.failure = "Source ended or detached"; return; }\n          if (media.currentTime === lastTime || media.readyState < 2) return;\n          try {\n            ctx.drawImage(media, 0, 0, surface.width, surface.height);\n            lastTime = media.currentTime;\n          } catch (error) { this.failure = String(error); }\n        }, 1000 / 30);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else throw new Error("Unknown preview mode");\n      if (serial !== this.serial) throw new Error("Preview cancelled");\n      return { ok: true, mode };\n    } catch (error) {\n      if (serial === this.serial) this.stop();\n      throw error;\n    }\n  }\n  firstFrame(target) {\n    if (target.readyState >= 2 && target.videoWidth > 0) return Promise.resolve();\n    return new Promise((resolve, reject) => {\n      const win = this.doc.defaultView;\n      const done = error => {\n        win.clearTimeout(timer);\n        target.removeEventListener("loadeddata", loaded);\n        this.cancelWait = null;\n        error ? reject(error) : resolve();\n      };\n      const loaded = () => done();\n      const timer = win.setTimeout(() => done(new Error("Stream produced no decoded frame")), 1800);\n      this.cancelWait = () => done(new Error("Preview cancelled"));\n      target.addEventListener("loadeddata", loaded, { once: true });\n    });\n  }\n  health() {\n    const tracks = this.stream?.getVideoTracks() || [];\n    return { ok: !!this.video?.isConnected && !!this.source?.isConnected && !this.failure &&\n      !this.source.ended && ((this.mode === "native" && this.source.isCloningElementVisually) ||\n        (this.video.readyState >= 2 && tracks.some(track => track.readyState !== "ended" && !track.muted))),\n      error: this.failure || "Preview disconnected or stream unavailable",\n      paused: this.source?.paused, time: this.source?.currentTime,\n      frames: this.video?.getVideoPlaybackQuality?.().totalVideoFrames || 0 };\n  }\n  stop() {\n    ++this.serial;\n    this.cancelWait?.();\n    if (this.timer != null) this.doc.defaultView.clearInterval(this.timer);\n    this.timer = null;\n    this.video?.remove();\n    this.video = null;\n    for (const track of this.stream?.getTracks() || []) track.stop();\n    this.stream = null;\n    this.source = null;\n    this.failure = null;\n  }\n}\n\nfunction hasVideoAudioTrack(media) {\n  // Track presence is independent of the viewer\'s mute and volume choices.\n  try {\n    if (media.srcObject?.getAudioTracks) return media.srcObject.getAudioTracks().length > 0;\n    if (media.audioTracks) return media.audioTracks.length > 0;\n    const capture = media.captureStream || media.mozCaptureStream;\n    if (typeof capture !== "function") return false;\n    const stream = capture.call(media);\n    const hasAudio = stream.getAudioTracks().length > 0;\n    for (const track of stream.getTracks()) track.stop();\n    return hasAudio;\n  } catch (_) { return false; }\n}\n\n// Content-process source discovery for Zentral\'s sidebar video preview.\n// It never changes playback unless the user presses a preview control.\nexport class ZentralVideoBridgeChild extends JSWindowActorChild {\n  receiveMessage(message) {\n    if (message.name === "List") return this.list(message.data);\n    if (message.name === "Control") return this.control(message.data);\n    if (message.name === "Capture") return this.capture(message.data);\n    if (message.name === "Health") return this.renderer?.health() || { ok: false };\n    if (message.name === "Preview") return this.preview(message.data);\n    if (message.name === "StopPreview") { this.stopPreview(); return true; }\n    return null;\n  }\n\n  list({ requireAudio = false } = {}) {\n    const doc = this.document;\n    const win = this.contentWindow;\n    if (!doc || !win) return [];\n    this.ids ??= new WeakMap();\n    this.elements ??= new Map();\n    this.nextId ??= 1;\n    const found = [];\n    const live = new Set();\n\n    for (const media of doc.querySelectorAll("video")) {\n      if (media.localName !== "video" || media.ended || media.readyState < 1) continue;\n      const box = media.getBoundingClientRect();\n      const x = Math.max(0, box.left);\n      const y = Math.max(0, box.top);\n      const width = Math.min(win.innerWidth, box.right) - x;\n      const height = Math.min(win.innerHeight, box.bottom) - y;\n      // Require decoded video frames; skip tiny decorative clips.\n      if (media.videoWidth < 240 || media.videoHeight < 135 ||\n          (Number.isFinite(media.duration) && media.duration > 0 && media.duration < 8) ||\n          (requireAudio && !hasVideoAudioTrack(media))) continue;\n\n      let id = this.ids.get(media);\n      if (!id) { id = this.nextId++; this.ids.set(media, id); }\n      this.elements.set(id, media);\n      live.add(id);\n      const label = media.getAttribute("aria-label") || media.getAttribute("title") ||\n        media.closest("[aria-label]")?.getAttribute("aria-label") ||\n        doc.title || "Video";\n      let videoRef = null;\n      try {\n        const { ContentDOMReference } = ChromeUtils.importESModule(\n          "resource://gre/modules/ContentDOMReference.sys.mjs");\n        videoRef = ContentDOMReference.get(media);\n      } catch (_) { /* Snapshot / canvas capture can still work. */ }\n      found.push({ id, videoRef, documentId: this.manager?.innerWindowId || 0,\n        label: String(label).slice(0, 100),\n        kind: "video",\n        canClone: typeof media.cloneElementVisually === "function",\n        canStream: typeof (media.captureStream || media.mozCaptureStream) === "function",\n        canCanvasStream: typeof doc.createElement("canvas").captureStream === "function",\n        rect: width > 0 && height > 0 ? { x, y, width, height } : null,\n        score: (media.paused ? 0 : 10000000) + Math.max(0, width) * Math.max(0, height),\n        paused: media.paused, muted: media.muted,\n        currentTime: media.currentTime,\n        duration: Number.isFinite(media.duration) ? media.duration : 0,\n        width: media.videoWidth || 0, height: media.videoHeight || 0 });\n    }\n    for (const id of this.elements.keys()) if (!live.has(id)) this.elements.delete(id);\n    return found;\n  }\n\n  capture({ id, captureWidth = 480 } = {}) {\n    const media = this.elements?.get(id);\n    if (!media?.isConnected || media.localName !== "video" || media.readyState < 2)\n      throw new Error("No decoded video frame available");\n    const canvas = this.document.createElement("canvas");\n    canvas.width = Math.min([320, 480, 640].includes(captureWidth) ? captureWidth : 480, media.videoWidth);\n    canvas.height = Math.max(1, Math.round(canvas.width * media.videoHeight / media.videoWidth));\n    canvas.getContext("2d", { alpha: false }).drawImage(media, 0, 0, canvas.width, canvas.height);\n    return { url: canvas.toDataURL("image/jpeg", 0.75), width: canvas.width, height: canvas.height };\n  }\n\n  async preview(data) {\n    this.renderer ??= new ZentralVideoRenderer(this.document);\n    return this.renderer.start(data);\n  }\n\n  stopPreview() { this.renderer?.stop(); }\n\n  didDestroy() {\n    this.stopPreview();\n    this.elements?.clear();\n  }\n\n  control({ id, action, value } = {}) {\n    const media = this.elements?.get(id);\n    if (!media?.isConnected) return null;\n    switch (action) {\n      case "toggle":\n        if (media.paused) media.play().catch(() => {});\n        else media.pause();\n        break;\n      case "mute": media.muted = !media.muted; break;\n      case "seek":\n        if (Number.isFinite(value) && Number.isFinite(media.duration))\n          media.currentTime = Math.max(0, Math.min(media.duration, value));\n        break;\n    }\n    return { paused: media.paused, muted: media.muted,\n      currentTime: media.currentTime,\n      duration: Number.isFinite(media.duration) ? media.duration : 0 };\n  }\n}\n';
-  const ACTOR_HASH = "2dd78a968cc1";
+  // Derive the module name from its source so edited actor code gets a new URI.
+  let actorFingerprint = 2166136261;
+  for (let i = 0; i < ACTOR_SOURCE.length; i++) {
+    actorFingerprint ^= ACTOR_SOURCE.charCodeAt(i);
+    actorFingerprint = Math.imul(actorFingerprint, 16777619);
+  }
+  const ACTOR_HASH = `${(actorFingerprint >>> 0).toString(16)}-${ACTOR_SOURCE.length}`;
   const ACTOR = "ZentralVideoBridge";
   const CHANNEL = "ZentralVideoPreview:" + Math.random().toString(36).slice(2);
   const FRAME_URI =
@@ -24768,7 +25496,11 @@
     }
   }
   function requireAudio() {
-    return Services.prefs.getBoolPref(REQUIRE_AUDIO_PREF, true);
+    try {
+      return Services.prefs.getBoolPref(REQUIRE_AUDIO_PREF, true);
+    } catch (_) {
+      return true;
+    }
   }
   function autoShowVideo() {
     try {
@@ -24800,7 +25532,8 @@
     try {
       const file = Services.dirsvc.get("UChrm", Ci.nsIFile);
       file.append("zentral-video-bridge-" + ACTOR_HASH + ".sys.mjs");
-      if (!file.exists() || file.fileSize !== ACTOR_SOURCE.length) {
+      // Rewrite the generated actor to heal same-length corruption as well.
+      {
         const stream = Cc[
           "@mozilla.org/network/file-output-stream;1"
         ].createInstance(Ci.nsIFileOutputStream);
