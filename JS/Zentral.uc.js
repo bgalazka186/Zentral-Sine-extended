@@ -431,6 +431,8 @@
     #layoutObserver = null;
     /** @private ResizeObserver on sidebar */
     #resizeObs = null;
+    /** @private ResizeObserver on the Apps grid */
+    #gridResizeObs = null;
     /** @private TabSelect event listener */
     #tabSelectListener = null;
     /** @private Workspace switch event listener */
@@ -506,6 +508,12 @@
             this.#resizeObs.disconnect();
           } catch (_) {}
           this.#resizeObs = null;
+        }
+        if (this.#gridResizeObs) {
+          try {
+            this.#gridResizeObs.disconnect();
+          } catch (_) {}
+          this.#gridResizeObs = null;
         }
         if (this.#layoutObserver) {
           try {
@@ -657,6 +665,7 @@
           refreshBtn: null,
         };
         this._stylesInjected = false;
+        document.documentElement.removeAttribute("zentral-app-panel-open");
         delete window.ZenApps;
       } catch (e) {
         console.error("[Zentral] Apps destroy error:", e);
@@ -827,7 +836,12 @@
                 typeof a.title === "string" ? a.title.slice(0, 200) : "App",
               icon: typeof a.icon === "string" ? a.icon : "",
               width:
-                Number.isFinite(a.width) && a.width > 0 ? a.width : undefined,
+                Number.isFinite(a.width) && a.width > 0
+                  ? Math.max(
+                      Constants.Apps.MIN_WIDTH_PX,
+                      Math.min(10000, a.width),
+                    )
+                  : undefined,
               preload: a.preload === true,
               workspaceId:
                 typeof a.workspaceId === "string" &&
@@ -1852,7 +1866,6 @@
           border-radius: var(--zen-border-radius, 8px) !important;
           box-shadow: var(--zen-big-shadow, rgba(0, 0, 0, 0.24) 0px 3px 8px 0px) !important;
           border: 1px solid color-mix(in srgb, var(--zen-primary-color, rgb(112, 122, 194)) 25%, transparent) !important;
-          backdrop-filter: blur(24px) saturate(130%) !important;
           transition: transform 0.25s cubic-bezier(0.075, 0.82, 0.165, 1), opacity 0.15s ease, visibility 0.25s ease, top 0.18s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.25s ease, border-color 0.25s ease !important;
           will-change: transform, opacity;
           overflow: visible !important;
@@ -2555,7 +2568,8 @@
         });
         if (typeof ResizeObserver !== "undefined" && this.#dom.grid) {
           try {
-            new ResizeObserver(refreshGridRect).observe(this.#dom.grid);
+            this.#gridResizeObs = new ResizeObserver(refreshGridRect);
+            this.#gridResizeObs.observe(this.#dom.grid);
           } catch (_) {}
         }
 
@@ -2761,10 +2775,14 @@
           (e) => {
             if (this.isPlacementVerticalBar()) {
               const scroller = this.#dom.scrollBox || this.#dom.grid;
-              if (scroller) scroller.scrollTop += e.deltaY;
+              if (scroller && e.deltaY) {
+                e.preventDefault();
+                e.stopPropagation();
+                scroller.scrollTop += e.deltaY;
+              }
             }
           },
-          { passive: true },
+          { passive: false },
         );
         this.#dom.verticalBar = vb;
 
@@ -3687,7 +3705,7 @@
       if (this.#dom.scrollBox) {
         if (
           this.#dom.grid.classList.contains("zen-apps-horizontal") &&
-          this.#state.apps.length >= 8
+          activeApps.length >= 8
         ) {
           this.#dom.scrollBox.style.setProperty(
             "min-width",
@@ -3776,10 +3794,10 @@
     }
 
     isPanelOpen() {
+      // activeAppId selects the app; root[open] stays until the close animation
+      // ends. The documentElement attribute follows activeAppId for CSS.
       return !!(
         this.#state.activeAppId !== null ||
-        document.documentElement.getAttribute("zentral-app-panel-open") ===
-          "true" ||
         this.#dom.root?.hasAttribute("open") ||
         document.getElementById("zen-app-panel-root")?.hasAttribute("open")
       );
@@ -3898,8 +3916,14 @@
 
     closePanel() {
       Core.log("ZentralApps", "closePanel called");
+      if (this.#dom.root?.hasAttribute("closing")) return;
       if (!this.#state.activeAppId && !this.#dom.root?.hasAttribute("open"))
         return;
+
+      if (this._openPanelRAF) {
+        cancelAnimationFrame(this._openPanelRAF);
+        this._openPanelRAF = null;
+      }
 
       if (this.#state.closeTimerId) {
         clearTimeout(this.#state.closeTimerId);
@@ -4074,7 +4098,7 @@
       });
       const app = this.#state.apps.find((a) => a.id === appId);
       if (app) {
-        app.badgeCount = 0;
+        app.notificationCount = 0;
         app.hasNotification = false;
       }
     }
@@ -5107,8 +5131,7 @@
             );
             if (pinPopup) {
               pinPopup.replaceChildren();
-              const currentWsId =
-                window.gZenWorkspaces?.activeWorkspace || "default";
+              const currentWsId = window.gZenWorkspaces?.activeWorkspace;
 
               const allSpacesItem = document.createXULElement
                 ? document.createXULElement("menuitem")
@@ -5130,11 +5153,14 @@
                 : document.createElement("menuitem");
               thisSpaceItem.setAttribute("label", "this Space");
               thisSpaceItem.setAttribute("type", "checkbox");
+              if (!currentWsId) thisSpaceItem.setAttribute("disabled", "true");
               if (app.workspaceId === currentWsId) {
                 thisSpaceItem.setAttribute("checked", "true");
               }
               thisSpaceItem.addEventListener("command", () => {
-                app.workspaceId = currentWsId;
+                const activeWsId = window.gZenWorkspaces?.activeWorkspace;
+                if (!activeWsId) return;
+                app.workspaceId = activeWsId;
                 this.saveApps();
                 this.renderGrid();
               });
@@ -7366,8 +7392,6 @@
           font-size: 13px !important;
           line-height: 1.4 !important;
           max-height: 320px !important;
-          backdrop-filter: blur(20px) saturate(140%) !important;
-          -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
         }
         .zentral-tooltip-row {
           position: relative !important;
@@ -7515,7 +7539,6 @@
           border: 1px solid color-mix(in srgb, currentColor 14%, rgba(255, 255, 255, 0.12)) !important;
           border-radius: 18px !important;
           box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75) !important;
-          backdrop-filter: blur(20px) !important;
           width: 184px !important;
           box-sizing: border-box !important;
           margin: 0 !important;
@@ -11125,6 +11148,7 @@
     constructor() {
       /** @type {Element|null} Reference to modal dialog overlay container */
       this.modal = null;
+      this._stopShortcutRecordings = new Set();
     }
 
     /**
@@ -11138,6 +11162,8 @@
     destroy() {
       try {
         Core.log("ZentralSettings", "Destroying Settings module...");
+        for (const stop of this._stopShortcutRecordings) stop();
+        this._stopShortcutRecordings.clear();
         if (this.modal) {
           if (this.close) this.close();
           if (this.modal.parentNode) this.modal.remove();
@@ -11157,7 +11183,6 @@
         if (stylesEl) stylesEl.remove();
         this._stylesInjected = false;
         delete window.ZentralSettingsInstance;
-        document.documentElement.removeAttribute("zentral-app-panel-open");
       } catch (e) {
         console.error("[Zentral] Settings destroy error:", e);
       }
@@ -11262,6 +11287,7 @@
      * Closes the settings modal dialog.
      */
     close() {
+      for (const stop of this._stopShortcutRecordings) stop();
       if (this.modal) {
         this.modal.setAttribute("data-open", "false");
         this.modal.style.setProperty("display", "none", "important");
@@ -11819,8 +11845,6 @@
           right: 0;
           height: 100vh;
           background: rgba(0, 0, 0, 0.75);
-          backdrop-filter: blur(20px) saturate(140%);
-          -webkit-backdrop-filter: blur(20px) saturate(140%);
           z-index: 2147483647;
           display: none;
           align-items: center;
@@ -13247,7 +13271,9 @@
         isRecording = false;
         window.removeEventListener("keydown", onKeyDown, true);
         btn.removeAttribute("data-recording");
+        label.textContent = input.value;
       };
+      this._stopShortcutRecordings.add(stopRecording);
 
       const syncUI = (val) => {
         stopRecording();
@@ -14691,14 +14717,17 @@
   };
 
   const performUnload = () => {
+    window.removeEventListener("unload", performUnload);
     try {
-      if (window.Zentral && window.Zentral.Destroy) {
-        window.Zentral.Destroy();
+      if (window.Zentral === zentralInstance) {
+        zentralInstance.Destroy();
       }
     } catch (e) {
       console.error("[Zentral] Error during unload destroy:", e);
     }
   };
+
+  const zentralInstance = window.Zentral;
 
   // Sine Mod engine dynamically unloads scripts
   if (typeof window.addUnloadListener === "function") {
@@ -14814,17 +14843,6 @@
  *     Its launcher opens the existing Zentral panel engine, sharing the toolbar, pill, resize, pin, keyboard
  *     and popup-containment behavior. Normal app tiles stay in their own list. Reordering never reassigns
  *     records; closing/unpinning preserves a loaded duplicate as a normal app. Multiple simultaneous panels are deferred.
- * 12. OPEN/CLOSE STUTTER: native openPanel/closePanel flip `zentral-app-panel-open` on documentElement
- *     synchronously, driving several base-mod sidebar reveal/collapse transitions at the SAME time the panel
- *     itself slides in/out AND (translucency on) backdrop-filter is active on #zen-app-panel-slider. Three
- *     expensive compositor ops in the same ~450ms window == the reported "sidebar stutters only while the
- *     panel is open" (no visible CPU/GPU spike because it's a dropped-frames problem, not a sustained-load
- *     one). Fix: pulseAnimGuard() below sets `bgalazka-panel-animating` on documentElement for the native
- *     slide's duration (read from the SAME animation-speed pref the base mod itself uses, so it always
- *     matches); chrome.css section 1b force backdrop-filter: none while that attribute is present, and
- *     backdrop-filter was dropped from that section's own CSS `transition` list entirely (animating blur
- *     radius, as opposed to snapping it, is one of the most expensive things you can animate; the pop is
- *     invisible since opacity/background-color still ease normally).
  * 13. PILL CONTRAST: see chrome.css note 13 for the CSS half. The expanded/hovered pill uses a plain black
  *     background plus forced white icons for predictable contrast. Its background opacity is deliberately
  *     independent from the shrunk mini-pill opacity: PILL_PEEK_DOT_OPACITY controls only the idle mini pill,
@@ -14874,18 +14892,6 @@
  *     prefs, so the margins track the pointer immediately and are persisted only on mouseup. Native may keep
  *     refreshing top/bottom concurrently, but the two code paths no longer write the same properties and
  *     therefore cannot undo or retrigger each other.
- * 20. UNGUARDED BACKDROP-FILTER WHILE THE PANEL SITS OPEN (generalizes note 12) -- REVERTED, see note 22:
- *     this note originally added a global transitionrun/animationstart listener to pulse
- *     `bgalazka-panel-animating` (note 12's guard) for ANY nearby animation while the panel was open, not just
- *     its own open/close slide, on the theory that note 12's own diagnosis ("backdrop-filter is costly to keep
- *     re-sampling every frame while nearby elements are ALSO animating") applied to the base mod's sidebar
- *     reveal-on-hover slide too. User confirmed disabling TRANSLUCENCY entirely (so backdrop-filter is never
- *     even active) did NOT fix the reported FPS drop, which rules this whole code path out -- and a follow-up
- *     Firefox Profiler capture (note 22) found the real cost was Services.prefs reads, not backdrop-filter, and
- *     showed this listener firing on every transitionrun/animationstart while the panel was open added its own
- *     small extra overhead on top of an already-overloaded loop for zero benefit. Reverted back to the original
- *     note-12-only pulseAnimGuard(). Left this note in (rather than deleting it) so a future AI doesn't
- *     rediscover the same plausible-sounding-but-wrong theory from the chrome.css note-12 comment and re-add it.
  * 21. Services.prefs IN THE PER-FRAME HOT PATH: the base mod's own startPositionTracking()/reposition()/rafLoop
  *     (a few hundred lines above initBgalazkaExtension in this same file) calls positionPanel() -- OUR patched
  *     positionPanel() -- on every throttled mousemove AND on every transitionstart/transitionrun/transitionend
@@ -15085,7 +15091,6 @@
     OPACITY_UNPINNED: "zen.workspace.bgalazka.opacity_unpinned",
     OPACITY_PINNED_FOCUS: "zen.workspace.bgalazka.opacity_pinned_focus",
     OPACITY_PINNED_BLUR: "zen.workspace.bgalazka.opacity_pinned_blur",
-    BLUR_INTENSITY: "zen.workspace.bgalazka.blur_intensity",
     PANEL_INPUT_SHIELD: "zen.workspace.bgalazka.panel_input_shield",
     ADDON_TAB_ID_BRIDGE: "zen.workspace.bgalazka.addon_tab_id_bridge",
     SHOW_ADDON_HOST_FOLDER: "zen.workspace.bgalazka.show_addon_host_folder",
@@ -15216,37 +15221,6 @@
     }
   }
 
-  // PERF FIX (see architecture note 12): toggles `bgalazka-panel-animating`
-  // on documentElement for the duration of the native open/close slide, so
-  // chrome.css section 1b can drop backdrop-filter entirely for that window
-  // instead of animating it alongside the base mod's own sidebar
-  // reveal/collapse transitions and the panel's own slide -- three
-  // expensive compositor operations at once is what stuttered, not any one
-  // of them alone. Reads the SAME pref the native slide animation itself
-  // uses (falls back to the base mod's own 450ms default) so the guard
-  // window always tracks however fast/slow the user has that set to,
-  // without us needing to reach into the (inaccessible, see note 5)
-  // ZentralApps instance state to measure it. Called from BOTH the
-  // openPanel and closePanel hooks below since both trigger a slide.
-  const BGALAZKA_ANIM_ATTR = "bgalazka-panel-animating";
-  function pulseAnimGuard() {
-    const root = document.documentElement;
-    root.setAttribute(BGALAZKA_ANIM_ATTR, "true");
-    clearTimeout(root._bgalazkaAnimTimer);
-    let slideMs = 450;
-    try {
-      slideMs = Services.prefs.getIntPref(
-        "zen.workspace.apps.sidebar.animation_speed",
-        450,
-      );
-    } catch (_) {}
-    // +80ms buffer: native closePanel's own cleanup timer uses slideMs + 20,
-    // so this just needs to outlast that by a comfortable margin.
-    root._bgalazkaAnimTimer = setTimeout(() => {
-      root.removeAttribute(BGALAZKA_ANIM_ATTR);
-    }, slideMs + 80);
-  }
-
   // The pill sits translate(-100%)/translate(100%) OUTSIDE the panel's own
   // edge (see chrome.css section 2), so it needs its own clearance beyond
   // the sidebar's. It's a fixed-width vertical stack of .zen-app-btn (26px)
@@ -15308,7 +15282,7 @@
     );
   }
 
-  // NOTE: values are written as plain integers with a unit suffix (e.g. "92%", "20px") so the
+  // NOTE: values are written as plain integers with a unit suffix (e.g. "92%") so the
   // CSS side can consume them directly via var() without any extra calc()/unit wrangling.
   function updateCSSVars() {
     const root = document.documentElement;
@@ -15323,10 +15297,6 @@
     root.style.setProperty(
       "--bg-opacity-pinned-blur",
       getPref(EXT_PREFS.OPACITY_PINNED_BLUR, 45) + "%",
-    );
-    root.style.setProperty(
-      "--bg-blur-intensity",
-      getPref(EXT_PREFS.BLUR_INTENSITY, 20) + "px",
     );
     // Pill vertical offset, -50 to 50, 0 = centered. NOTE: EXT_PREFS.PILL_POSITION
     // is only merged in further below (once BGALAZKA_EXT_PREFS exists), so the
@@ -20212,16 +20182,7 @@
         45,
         "%",
       );
-      const blurSlider = createSliderRow(
-        "Panel Blur Strength",
-        "Blur behind translucent pinned panels; 0px disables background blur",
-        EXT_PREFS.BLUR_INTENSITY,
-        0,
-        40,
-        20,
-        "px",
-      );
-      slidersGroup.append(s1.row, s2.row, s3.row, blurSlider.row);
+      slidersGroup.append(s1.row, s2.row, s3.row);
       slidersGroup.setAttribute(
         "data-hidden",
         getPref(BGALAZKA_EXT_PREFS.TRANSLUCENCY, false) ? "false" : "true",
@@ -21032,19 +20993,17 @@
       content.appendChild(tHideUnattached.row);
 
       panel._toggles.push(
-        ...[s1, s2, s3, blurSlider].map(({ input, badge }, index) => ({
+        ...[s1, s2, s3].map(({ input, badge }, index) => ({
           input,
           pref: [
             BGALAZKA_EXT_PREFS.OPACITY_UNPINNED,
             BGALAZKA_EXT_PREFS.OPACITY_PINNED_FOCUS,
             BGALAZKA_EXT_PREFS.OPACITY_PINNED_BLUR,
-            EXT_PREFS.BLUR_INTENSITY,
           ][index],
-          def: [92, 85, 45, 20][index],
+          def: [92, 85, 45][index],
           isSelect: true,
           onSync: (v) => {
-            badge.textContent = v + (index === 3 ? "px" : "%");
-            if (index === 3) updateCSSVars();
+            badge.textContent = v + "%";
           },
         })),
         {
@@ -23787,7 +23746,6 @@
           !document
             .getElementById("zen-app-panel-root")
             ?.hasAttribute("closing");
-        pulseAnimGuard(); // perf: suppress backdrop-filter for this slide (note 12)
         const res = origOpen(...args);
         ensurePillHoverRevealButton();
         clearHoverHide();
@@ -23830,7 +23788,6 @@
     const origClose = apps.closePanel?.bind(apps);
     if (origClose) {
       apps.closePanel = function (...args) {
-        pulseAnimGuard(); // perf: suppress backdrop-filter for this slide (note 12)
         const res = origClose(...args);
         clearHoverHide();
         setHoverPanelHidden(false);

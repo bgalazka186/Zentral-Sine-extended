@@ -148,7 +148,6 @@ tab-group.zentral-standard
       calc(var(--zentral-tabgroup-label-opacity, 0.85) * 100%),
     transparent
   ) !important;
-  backdrop-filter: blur(16px) saturate(140%) !important;
   z-index: 3 !important;
   position: relative !important;
   box-sizing: border-box !important;
@@ -206,7 +205,6 @@ panel#zentral-group-color-picker,
   border: 1px solid rgba(255, 255, 255, 0.14) !important;
   border-radius: 18px !important;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75) !important;
-  backdrop-filter: blur(20px) !important;
   width: 184px !important;
   box-sizing: border-box !important;
   margin: 0 !important;
@@ -353,7 +351,6 @@ tab-group.zentral-standard > .tab-group-label-container .tab-group-label {
   line-height: 1.2 !important;
   border-radius: 10px !important;
   background: color-mix(in srgb, currentColor 18%, transparent) !important;
-  backdrop-filter: blur(8px) !important;
   color: var(--zentral-tabgroup-contrast-color, #ffffff) !important;
   letter-spacing: 0.02em !important;
   white-space: nowrap !important;
@@ -1785,7 +1782,6 @@ panel[id*="tabgroup-editor"] {
   right: 0 !important;
   height: 100vh !important;
   background: rgba(0, 0, 0, 0.75) !important;
-  backdrop-filter: blur(20px) saturate(140%) !important;
   z-index: 2147483647 !important;
   display: none !important;
   align-items: center !important;
@@ -4914,21 +4910,6 @@ panel[id*="tabgroup-editor"] {
  *     pinned tab (with whatever tile is docked inside it) producing a duplicate icon. Docking must be done by
  *     a STABLE ID persisted on the tab element itself, and only against tabs that are genuine members of
  *     gBrowser.tabs (not split-view clones).
- * 12. OPEN/CLOSE STUTTER: the native open/close call flips `zentral-app-panel-open` on documentElement
- *     synchronously (see base mod's openPanel/closePanel), which drives several sidebar reveal/collapse CSS
- *     transitions in the base mod at the SAME time the panel itself slides in/out AND (when translucency is on)
- *     backdrop-filter is active/animating on #zen-app-panel-slider. Three expensive compositor operations
- *     firing in the same ~450ms window is what caused the reported "sidebar animation stutters, only while the
- *     panel is open" -- backdrop-filter is costly to keep re-sampling every frame while nearby elements are
- *     also animating, but it doesn't show up as a sustained CPU/GPU load spike, just dropped frames. Fix: the
- *     JS sets a transient `bgalazka-panel-animating` attribute on documentElement for the duration of the
- *     native slide (see pulseAnimGuard() in the JS file), and the three PINNED PANEL TRANSLUCENCY rules below
- *     get mirrored, higher-specificity overrides (section 1b) that force backdrop-filter: none only for that
- *     window, removing it from the animation entirely instead of trying to animate two expensive things at
- *     once. backdrop-filter was also removed from that section's own `transition` list for the same reason:
- *     animating the blur radius itself (as opposed to snapping it) is one of the single most expensive things
- *     you can ask the compositor to do, and dropping it from the transition doesn't create any visible pop
- *     since opacity/background-color still transition smoothly over it.
  * 13. PILL CONTRAST: the native pill's background (`var(--zen-colors-tertiary, ...)`) is a THEME color that can
  *     land close to the page's own colors behind it, making the pill's icons hard to read. Expanded/hovered
  *     pills therefore use a plain BLACK background with forced white icons. Its alpha is controlled by the
@@ -5002,14 +4983,6 @@ panel[id*="tabgroup-editor"] {
  *     origin approach outright, so normal-mode's mini pill grows outward the same way opposite-mode's already
  *     did, never covering the page. See section 3b's own header comment for the full before/after and the
  *     transform math shared with section 2.
- * 21. FPS-drop investigation, false lead then real fix: see Zentral_uc.js notes 20-22 for the full story. Note
- *     20 (reported as normal Zen chrome animations, e.g. the sidebar's reveal-on-hover slide, dropping to 1-3
- *     FPS whenever the web panel is open) originally widened WHEN this file's section 1b
- *     `[bgalazka-panel-animating="true"]` override fires, on the theory that backdrop-filter resampling was the
- *     cost -- confirmed wrong once translucency-off didn't fix it, and reverted; section 1b itself needed no
- *     change and still only fires for the panel's own open/close slide, per note 12. The actual cause (notes
- *     21-22 in the JS file) was native Services.prefs reads in a base-mod animation-frame loop -- nothing in
- *     this CSS file was involved.
  * 22. GRABBER DUAL-AXIS DRAG: see Zentral_uc.js note 25 for the JS half (deadzone + handoff to the existing
  *     "vertical offset" reposition drag). The CSS half is just the cursor hint below, in section 4's pill-button
  *     rules -- `cursor: move` replaces native's `ew-resize` so the handle no longer visually promises
@@ -5026,7 +4999,6 @@ panel[id*="tabgroup-editor"] {
   --bg-opacity-unpinned: 92%;
   --bg-opacity-pinned-focus: 85%;
   --bg-opacity-pinned-blur: 45%;
-  --bg-blur-intensity: 20px;
   --bgalazka-pill-offset: 0%;
   --bgalazka-pill-peek-color: #4da6ff;
   --bgalazka-pill-peek-opacity: 90%;
@@ -5130,10 +5102,6 @@ panel[id*="tabgroup-editor"] {
    1. PINNED PANEL TRANSLUCENCY (LIVE SETTINGS LINKED)
    ========================================================================== */
 :root[bgalazka-translucency="true"] #zen-app-panel-root #zen-app-panel-slider {
-  /* backdrop-filter intentionally NOT animated (see note 12): snapping the
-   * blur radius instead of transitioning it removes the single most
-   * expensive part of this rule from every open/close/hover, with no
-   * visible pop since opacity + background-color still ease smoothly. */
   transition:
     opacity 0.22s ease,
     background-color 0.22s ease !important;
@@ -5148,7 +5116,6 @@ panel[id*="tabgroup-editor"] {
     var(--tabpanels-background-color, #1e1e24) var(--bg-opacity-unpinned, 92%),
     transparent
   ) !important;
-  backdrop-filter: blur(var(--bg-blur-intensity, 20px)) saturate(140%) !important;
   opacity: var(--bg-opacity-unpinned, 0.92) !important;
 }
 
@@ -5162,7 +5129,6 @@ panel[id*="tabgroup-editor"] {
       var(--bg-opacity-pinned-focus, 85%),
     transparent
   ) !important;
-  backdrop-filter: blur(var(--bg-blur-intensity, 20px)) saturate(130%) !important;
   opacity: var(--bg-opacity-pinned-focus, 0.85) !important;
 }
 
@@ -5176,32 +5142,7 @@ panel[id*="tabgroup-editor"] {
       var(--bg-opacity-pinned-blur, 45%),
     transparent
   ) !important;
-  backdrop-filter: blur(calc(var(--bg-blur-intensity, 20px) * 0.6))
-    saturate(120%) !important;
   opacity: var(--bg-opacity-pinned-blur, 0.45) !important;
-}
-
-/* --------------------------------------------------------------------------
- * 1b. PERF GUARD: kill backdrop-filter during the open/close slide (note 12)
- * --------------------------------------------------------------------------
- * Each selector below is its matching rule above PLUS one extra attribute
- * ([bgalazka-panel-animating]), so specificity is always exactly one notch
- * higher than whichever of the three states above is currently active --
- * this wins the cascade without needing a specificity-hack and without
- * touching the rules above. The attribute itself is set/cleared by the JS
- * (pulseAnimGuard(), called from the openPanel/closePanel hooks) for the
- * duration of the native slide animation only. */
-:root[bgalazka-translucency="true"][bgalazka-panel-animating="true"]
-  #zen-app-panel-root:not([data-pinned="true"])
-  #zen-app-panel-slider,
-:root[bgalazka-translucency="true"][bgalazka-panel-animating="true"]
-  #zen-app-panel-root[data-pinned="true"]:is(:hover, :focus-within)
-  #zen-app-panel-slider,
-:root[bgalazka-translucency="true"][bgalazka-panel-animating="true"]
-  #zen-app-panel-root[data-pinned="true"]:not(:hover):not(:focus-within)
-  #zen-app-panel-slider {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
 }
 
 /* BUG FIX: this rule used to unconditionally force the pill to
@@ -7572,7 +7513,6 @@ panel[id*="tabgroup-editor"] {
 }
 :root[bgalazka-translucency="true"][bgalazka-super-pin="true"]
   #bgalazka-super-panel {
-  backdrop-filter: blur(var(--bg-blur-intensity, 20px)) !important;
   transition:
     opacity 0.22s ease,
     background-color 0.22s ease !important;
