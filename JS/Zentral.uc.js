@@ -21911,6 +21911,9 @@
     // host tab, which is handled by addonHostTabCloseHandler below.
     addonHostByAppId.delete(appId);
     if (record.browser) {
+      // Return the linkedBrowser to normal tab-switcher ownership before
+      // restoring/removing its backing tab.
+      record.browser.zenModeActive = false;
       record.browser._bgalazkaAddonHostBrowser = false;
       record.browser._bgalazkaAddonHostTab = null;
     }
@@ -21981,11 +21984,14 @@
 
   function syncAddonHostBrowserActivity() {
     for (const record of addonHostByAppId.values()) {
-      if (!record?.adoptedByZentral || !record.browser) continue;
+      if (!record?.adoptedByZentral || !record.browser?.isConnected) continue;
       try {
-        // Keep adopted browsers active. Inactive remote docshells can
-        // return as gray panels after a visibility transition.
-        record.browser.docShellIsActive = true;
+        // Zen's tab switcher can deactivate a real tab-backed browser when
+        // another tab is selected. Split view uses zenModeActive to prevent
+        // that; an adopted panel browser needs the same protection.
+        record.browser.zenModeActive = true;
+        if (record.browser.docShellIsActive !== true)
+          record.browser.docShellIsActive = true;
       } catch (_) {}
     }
   }
@@ -22028,7 +22034,14 @@
         const essential = essentialPanels.get(browser._bgalazkaAppId);
         const backgroundPreload =
           essential?.app.preload && essential.tab.isConnected;
+        const hostRecord = addonHostByAppId.get(browser._bgalazkaAppId);
+        const adoptedHost =
+          hostRecord?.adoptedByZentral && hostRecord.browser === browser;
+        // A real-tab-backed browser must stay active while it is adopted.
+        // syncAddonHostBrowserActivity() keeps it active on close, so setting
+        // it false here immediately afterward caused an activation fight.
         const shouldBeActive =
+          !!adoptedHost ||
           !!backgroundPreload ||
           (panelOpen && browser.style.display !== "none");
         // Gecko may reset this flag during navigation/process swaps. Only
@@ -22115,6 +22128,9 @@
       }
 
       record.adoptedByZentral = true;
+      // Keep the host's tab identity without letting Zen deactivate its
+      // reparented browser when the ordinary selected tab changes.
+      result.browser.zenModeActive = true;
       result.browser.setAttribute("bgalazka-addon-host-browser", "true");
       return result;
     } catch (e) {
@@ -22278,6 +22294,7 @@
     // before removeTab(), so it never enters this branch.
     restoreAddonHostBrowserToTab(record);
     addonHostByAppId.delete(record.appId);
+    record.browser.zenModeActive = false;
     setTimeout(() => {
       try {
         window.Zentral?.Apps?.closeApp?.(record.appId);
@@ -23084,7 +23101,8 @@
         }
         if (result?.browser?._bgalazkaAddonHostBrowser) {
           try {
-            result.browser.docShellIsActive = true;
+            if (result.browser.docShellIsActive !== true)
+              result.browser.docShellIsActive = true;
           } catch (_) {}
         }
         // BUG FIX: setAttribute("useragent"/"customuseragent", ...) is only
