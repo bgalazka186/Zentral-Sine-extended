@@ -7705,6 +7705,10 @@ panel[id*="tabgroup-editor"] {
   width: 30px !important;
   font-size: 10px !important;
 }
+:root[bgalazka-triple-view="true"] #bgalazka-super-panel .bgalazka-second-swap {
+  font-size: 17px !important;
+  line-height: 1 !important;
+}
 :root[bgalazka-triple-view="true"] .bgalazka-second-grip {
   cursor: default !important;
 }

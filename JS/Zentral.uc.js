@@ -16915,6 +16915,45 @@
   // normal grid tile or create a second panel implementation.
   const essentialPanels = new Map();
   const essentialTabRecords = new WeakMap();
+  // Pair identities belong to the extension, not to the lifetime of a browser.
+  const linkedTriplePref = "zen.workspace.bgalazka.linked_triple_pairs";
+  let linkedTriplePairs = [];
+  try {
+    const saved = JSON.parse(getPref(linkedTriplePref, "[]"));
+    if (Array.isArray(saved))
+      linkedTriplePairs = saved.filter(
+        (pair) =>
+          pair &&
+          typeof pair.top === "string" &&
+          typeof pair.bottom === "string" &&
+          pair.top !== pair.bottom &&
+          pair.apps &&
+          pair.apps[pair.top] &&
+          pair.apps[pair.bottom],
+      );
+  } catch (_) {}
+  const linkedPairFor = (id) =>
+    linkedTriplePairs.find((pair) => pair.top === id || pair.bottom === id);
+  function saveLinkedTriplePairs() {
+    Services.prefs.setStringPref(
+      linkedTriplePref,
+      JSON.stringify(linkedTriplePairs),
+    );
+  }
+  function unlinkTriplePair(id) {
+    const pair = linkedPairFor(id);
+    if (!pair) return;
+    linkedTriplePairs = linkedTriplePairs.filter((item) => item !== pair);
+    saveLinkedTriplePairs();
+  }
+  function normalPanelIdExists(id) {
+    try {
+      const apps = JSON.parse(getPref("zen.workspace.apps.sidebar.apps", "[]"));
+      return Array.isArray(apps) && apps.some((app) => app.id === id);
+    } catch (_) {
+      return false;
+    }
+  }
 
   // Essentials are separate app objects. Zentral's normal badge updater looks
   // for a grid button, so title changes in a preloaded panel never reach the
@@ -17037,6 +17076,7 @@
   }
   function saveEssentialSettings(record) {
     const value = {
+      panelId: record.app.id,
       preload: !!record.app.preload,
       mobileUa: !!record.mobileUa,
       userContextId: record.userContextId,
@@ -17108,7 +17148,9 @@
     const browser = getAllAppBrowsers().find(
       (b) => b._bgalazkaAppId === record.app.id,
     );
-    if (!browser) return false;
+    // A linked launcher must survive its tab even if Smart Sleep never
+    // instantiated its browser. Promotion itself does not trigger a load.
+    if (!browser && !linkedPairFor(record.app.id)) return false;
     const apps = window.Zentral?.Apps;
     // Keep the same app id: Zentral's private browser map, active panel,
     // browsing history, mute, pin and in-page form state all stay intact.
@@ -17117,7 +17159,10 @@
     if (!Array.isArray(saved)) throw new Error("Invalid normal panel list");
     const app = {
       ...record.app,
-      url: browser.currentURI?.spec || record.app.url,
+      url:
+        browser?.currentURI?.spec !== "about:blank"
+          ? browser?.currentURI?.spec || record.app.url
+          : record.app.url,
       workspaceId: "all",
     };
     if (!saved.some((item) => item.id === app.id)) saved.push(app);
@@ -17254,13 +17299,21 @@
           const source = getRestoredEssentialSource(tab);
           if (!source) continue; // wait until SessionStore has supplied its URL
           const settings = readEssentialSettings(tab);
+          const savedId = settings.panelId;
+          const stableId =
+            typeof savedId === "string" &&
+            /^bgalazka-essential-[\w-]+$/.test(savedId) &&
+            !essentialPanels.has(savedId) &&
+            !normalPanelIdExists(savedId)
+              ? savedId
+              : essentialIdPrefix + ++nextEssentialId;
           const app = {
             preload: settings.preload === true,
             width:
               Number.isFinite(settings.width) && settings.width > 0
                 ? settings.width
                 : undefined,
-            id: essentialIdPrefix + ++nextEssentialId,
+            id: stableId,
             url: source,
             title: tab.label || source,
             workspaceId: "all",
@@ -17283,6 +17336,7 @@
           };
           essentialTabRecords.set(tab, record);
           essentialPanels.set(app.id, record);
+          if (settings.panelId !== stableId) saveEssentialSettings(record);
         }
         if (record.app.preload && !record.preloadAttempted) {
           try {
@@ -17348,7 +17402,13 @@
           tile.title = title;
           tile.setAttribute("aria-label", title);
         }
-        tile.dataset.active = active === record.app.id ? "true" : "false";
+        tile.dataset.active =
+          active === record.app.id ||
+          !!browsers
+            .get(record.app.id)
+            ?.hasAttribute("data-bgalazka-triple-slot")
+            ? "true"
+            : "false";
         tile.dataset.loaded = browsers.has(record.app.id) ? "true" : "false";
         const panelBrowser = browsers.get(record.app.id);
         if (record.app.preload && panelBrowser?.isConnected) {
@@ -23654,6 +23714,8 @@
       share: 0.5,
       dividerHandle: null,
       handleFrame: null,
+      pair: null,
+      secondURL: null,
     };
     const slider = () => document.getElementById("zen-app-panel-slider");
     const root = () => document.getElementById("zen-app-panel-root");
@@ -23686,7 +23748,113 @@
     const origOpen = apps.openPanel;
     const origClose = apps.closePanel;
     const origCloseApp = apps.closeApp;
+    const origRemoveApp = apps.removeApp;
     const origRender = apps.renderGrid;
+    function savedNormalApps() {
+      try {
+        const list = JSON.parse(
+          getPref("zen.workspace.apps.sidebar.apps", "[]"),
+        );
+        return Array.isArray(list) ? list : [];
+      } catch (_) {
+        return [];
+      }
+    }
+    function resolvePairApp(pair, id) {
+      const tabRecord = essentialPanels.get(id);
+      if (tabRecord?.tab.isConnected) return tabRecord.app;
+      const normal = savedNormalApps().find((app) => app.id === id);
+      if (normal) return normal;
+      // A tab may have closed while this window was shut down. Create its
+      // dedicated launcher from the saved metadata without creating a browser.
+      const snapshot = pair.apps[id];
+      if (!id.startsWith("bgalazka-essential-") || !snapshot?.url) return null;
+      const app = { ...snapshot, id, workspaceId: "all" };
+      Services.prefs.setStringPref(
+        "zen.workspace.apps.sidebar.apps",
+        JSON.stringify([...savedNormalApps(), app]),
+      );
+      apps.loadApps();
+      apps.renderGrid();
+      return app;
+    }
+    function rememberPair() {
+      const pair = state.pair;
+      if (!pair) return;
+      pair.share = Math.max(0.05, Math.min(0.95, state.share));
+      for (const browser of [state.first, state.second]) {
+        const id = browser?._bgalazkaAppId;
+        if (!id || !pair.apps[id]) continue;
+        const url = browser.currentURI?.spec;
+        if (url && url !== "about:blank" && /^(https?|about):/i.test(url))
+          pair.apps[id].url = url;
+      }
+      saveLinkedTriplePairs();
+    }
+    function linkCurrentPair(firstApp, secondApp) {
+      const top = firstApp?.id;
+      const bottom = secondApp?.id;
+      if (!top || !bottom || top === bottom) return;
+      const same = linkedPairFor(top);
+      if (same && same === linkedPairFor(bottom)) {
+        state.pair = same;
+        return;
+      }
+      unlinkTriplePair(top);
+      unlinkTriplePair(bottom);
+      const pair = {
+        top,
+        bottom,
+        share: state.share,
+        apps: {
+          [top]: { ...firstApp, id: top },
+          [bottom]: { ...secondApp, id: bottom },
+        },
+      };
+      linkedTriplePairs.push(pair);
+      state.pair = pair;
+      saveLinkedTriplePairs();
+    }
+    function enterTriple(first) {
+      state.first = first;
+      state.mode = "triple";
+      state.previousPush = getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false);
+      if (!state.previousPush) {
+        setPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, true);
+        ui.setAttribute("bgalazka-push-page", "true");
+        syncPanelPushState();
+      }
+      const btn = document.getElementById("zen-app-dual-view-btn");
+      btn?.setAttribute("data-active", "true");
+      btn?.setAttribute("data-hold-active", "true");
+      ui.setAttribute("bgalazka-triple-view", "true");
+    }
+    function showPair(pair) {
+      const top = resolvePairApp(pair, pair.top);
+      const bottom = resolvePairApp(pair, pair.bottom);
+      if (!top || !bottom) return false;
+      if (state.mode) leaveMode();
+      origOpen.call(apps, top);
+      const first = active();
+      if (!first) return false;
+      state.share = Number.isFinite(pair.share) ? pair.share : 0.5;
+      enterTriple(first);
+      repairSuperPinReturn(first);
+      if (!openSecond(bottom, false)) {
+        leaveMode();
+        return false;
+      }
+      state.pair = pair;
+      return true;
+    }
+    function swapPair() {
+      const pair = state.pair;
+      if (!pair || state.mode !== "triple" || !state.second) return;
+      rememberPair();
+      [pair.top, pair.bottom] = [pair.bottom, pair.top];
+      saveLinkedTriplePairs();
+      showPair(pair);
+    }
     const markTiles = () =>
       document
         .querySelectorAll(".zen-app-tile[data-app-id]")
@@ -23750,6 +23918,15 @@
       clearInterval(state.poll);
       state.poll = null;
       const second = state.second;
+      if (state.mode === "super" && second) {
+        // Reparenting a live remote browser can reset its document without
+        // removing the element from Zentral's private app-browser Map.
+        const liveURL = second.currentURI?.spec;
+        const lastURL =
+          liveURL && liveURL !== "about:blank" ? liveURL : state.secondURL;
+        if (lastURL && lastURL !== "about:blank")
+          second._bgalazkaSuperPinReturnURL = lastURL;
+      }
       if (second?.isConnected && slider()) {
         if (second.parentNode !== slider()) slider().appendChild(second);
         second.style.display = "none";
@@ -23762,6 +23939,7 @@
               tile.dataset.active = "false";
           });
       state.second = null;
+      state.secondURL = null;
       state.divider?.remove();
       state.divider = null;
       ui.removeAttribute("bgalazka-triple-populated");
@@ -23775,9 +23953,11 @@
     function leaveMode() {
       if (!state.mode) return;
       const mode = state.mode;
+      if (mode === "triple") rememberPair();
       discardSecond();
       state.mode = null;
       state.first = null;
+      state.pair = null;
       ui.removeAttribute("bgalazka-triple-view");
       ui.removeAttribute("bgalazka-super-pin");
       document
@@ -23807,6 +23987,13 @@
       }
       state.previousPin = null;
     }
+    function leaveAndUnlinkTriple() {
+      if (state.mode === "triple" && state.pair) {
+        unlinkTriplePair(state.pair.top);
+        state.pair = null;
+      }
+      leaveMode();
+    }
     function navigate(browser, value) {
       try {
         const target = looksLikeUrl(value)
@@ -23828,6 +24015,31 @@
         console.warn("[BgalazkaExtension] Secondary navigation failed", error);
       }
     }
+    function repairSuperPinReturn(browser) {
+      const url = browser?._bgalazkaSuperPinReturnURL;
+      if (!url) return;
+      // The reset can happen a paint or two after reparenting. Check only
+      // while this panel is visible; leave the marker for a later open if it
+      // was hidden before the remote frame finished reconnecting.
+      for (const delay of [0, 80, 300, 1000, 2500]) {
+        setTimeout(() => {
+          if (
+            !browser.isConnected ||
+            browser._bgalazkaSuperPinReturnURL !== url
+          )
+            return;
+          if (!isOpen() || browser.style.display === "none") return;
+          const current = browser.currentURI?.spec;
+          if (
+            current === "about:blank" &&
+            !browser.webProgress?.isLoadingDocument
+          )
+            navigate(browser, url);
+          if (delay === 2500 && browser.currentURI?.spec !== "about:blank")
+            delete browser._bgalazkaSuperPinReturnURL;
+        }, delay);
+      }
+    }
     function makeShell(browser, app) {
       // SuperPin needs a native XUL container for its remote browser to
       // receive resize and input events. Triple-View only uses the bar.
@@ -23843,6 +24055,7 @@
         el.type = "button";
         el.textContent = label;
         el.title = title;
+        el.setAttribute("aria-label", title);
         el.addEventListener("click", (event) => {
           event.stopPropagation();
           action();
@@ -23883,9 +24096,18 @@
       zoomText.classList.add("bgalazka-second-zoom-label");
       iconButton(PREF_ICONS.ZOOM_IN, "Zoom in", () => zoom(0.1));
       bar.append(grip, url);
-      button("×", "Close second panel", discardSecond).classList.add(
-        "bgalazka-second-close",
-      );
+      if (state.mode === "triple")
+        button("⇅", "Swap top and bottom panels", swapPair).classList.add(
+          "bgalazka-second-swap",
+        );
+      button(
+        "×",
+        state.mode === "triple" ? "Unlink panels" : "Close second panel",
+        () => {
+          if (state.mode === "triple") leaveAndUnlinkTriple();
+          else discardSecond();
+        },
+      ).classList.add("bgalazka-second-close");
       function zoom(step) {
         try {
           const current = ZoomManager.getZoomForBrowser(browser);
@@ -23961,6 +24183,7 @@
             target.releasePointerCapture(id);
           shield?.remove();
           shield = null;
+          if (state.pair && state.second) rememberPair();
         };
         const moveResize = (event) => {
           if (shield && event.pointerId === pointerId)
@@ -24117,6 +24340,8 @@
       state.shell = box;
       state.poll = setInterval(() => {
         if (state.second !== browser || !box.isConnected) return;
+        const liveURL = browser.currentURI?.spec;
+        if (liveURL && liveURL !== "about:blank") state.secondURL = liveURL;
         if (document.activeElement !== url)
           url.value =
             browser.currentURI?.spec === "about:blank"
@@ -24127,7 +24352,7 @@
         } catch (_) {}
       }, 500);
     }
-    function openSecond(app) {
+    function openSecond(app, createLink = true) {
       if (!app?.id || !isOpen() || !state.first?.isConnected) return false;
       if (app.id === state.first._bgalazkaAppId) return true;
       if (app.id === state.second?._bgalazkaAppId) return true;
@@ -24135,12 +24360,18 @@
       if (!browser) return false;
       discardSecond();
       state.second = browser;
+      state.secondURL = app.url;
       makeShell(browser, app); // attach before navigating a remote browser
       try {
         browser.docShellIsActive = true;
       } catch (_) {}
-      if (isNew || browser.currentURI?.spec === "about:blank")
-        navigate(browser, app.url);
+      if (
+        isNew ||
+        (browser.currentURI?.spec === "about:blank" &&
+          !browser.webProgress?.isLoadingDocument)
+      )
+        navigate(browser, browser._bgalazkaSuperPinReturnURL || app.url);
+      repairSuperPinReturn(browser);
       state.loadTimers.push(
         setTimeout(() => {
           if (
@@ -24149,13 +24380,47 @@
             browser.currentURI?.spec === "about:blank" &&
             !browser.webProgress?.isLoadingDocument
           )
-            navigate(browser, app.url);
+            navigate(browser, browser._bgalazkaSuperPinReturnURL || app.url);
         }, 2500),
       );
+      // Remote content may reset activity while its process starts. The
+      // existing guarded sync only writes when Gecko actually changed it.
+      requestAnimationFrame(syncAppPanelBrowserActivity);
+      for (const delay of [50, 250, 1000]) {
+        state.loadTimers.push(setTimeout(syncAppPanelBrowserActivity, delay));
+      }
+      if (state.mode === "triple" && createLink) {
+        const firstId = state.first?._bgalazkaAppId;
+        const firstApp =
+          essentialPanels.get(firstId)?.app ||
+          savedNormalApps().find((item) => item.id === firstId);
+        linkCurrentPair(firstApp, app);
+      }
       markTiles();
       return true;
     }
     apps.openPanel = function (app) {
+      const pair = app?.id && linkedPairFor(app.id);
+      if (pair) {
+        if (
+          state.mode === "triple" &&
+          state.pair === pair &&
+          state.second?.isConnected &&
+          isOpen()
+        ) {
+          // The primary tile's native toggle closes directly; the secondary
+          // tile arrives here instead, so give both icons the same behavior.
+          this.closePanel();
+          return;
+        }
+        if (showPair(pair)) return;
+      }
+      if (
+        state.pair &&
+        app?.id !== state.first?._bgalazkaAppId &&
+        app?.id !== state.second?._bgalazkaAppId
+      )
+        leaveMode();
       if (
         state.mode &&
         state.first?.isConnected &&
@@ -24165,7 +24430,13 @@
         if (openSecond(app)) return;
       }
       if (state.mode) leaveMode();
-      return origOpen.call(this, app);
+      const result = origOpen.call(this, app);
+      repairSuperPinReturn(
+        [...(slider()?.querySelectorAll("browser") || [])].find(
+          (browser) => browser._bgalazkaAppId === app?.id,
+        ),
+      );
+      return result;
     };
     apps.closePanel = function (...args) {
       leaveMode();
@@ -24175,6 +24446,14 @@
       if (state.first?._bgalazkaAppId === id) leaveMode();
       else if (state.second?._bgalazkaAppId === id) discardSecond();
       return origCloseApp.call(this, id, ...args);
+    };
+    apps.removeApp = function (id, ...args) {
+      unlinkTriplePair(id);
+      if (state.pair && (state.pair.top === id || state.pair.bottom === id)) {
+        state.pair = null;
+        leaveMode();
+      }
+      return origRemoveApp.call(this, id, ...args);
     };
     apps.renderGrid = function (...args) {
       const result = origRender.apply(this, args);
@@ -24203,21 +24482,16 @@
           if (!first || !isOpen()) return;
           suppress = btn;
           if (state.mode === kind) {
-            leaveMode();
+            if (kind === "triple") leaveAndUnlinkTriple();
+            else leaveMode();
             return;
           }
           leaveMode();
+          if (kind === "triple") state.share = 0.5;
           state.first = first;
           state.mode = kind;
           if (kind === "triple") {
-            state.previousPush = getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false);
-            if (!state.previousPush) {
-              setPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, true);
-              ui.setAttribute("bgalazka-push-page", "true");
-              syncPanelPushState();
-            }
-            btn.setAttribute("data-active", "true");
-            ui.setAttribute("bgalazka-triple-view", "true");
+            enterTriple(first);
           } else {
             state.previousPin = btn.getAttribute("data-pinned") === "true";
             if (!state.previousPin) apps.togglePin();
@@ -24254,7 +24528,8 @@
       ) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        leaveMode();
+        if (btn.id === "zen-app-dual-view-btn") leaveAndUnlinkTriple();
+        else leaveMode();
       }
     };
     window.addEventListener("pointerdown", onDown, true);
@@ -24275,6 +24550,7 @@
       apps.openPanel = origOpen;
       apps.closePanel = origClose;
       apps.closeApp = origCloseApp;
+      apps.removeApp = origRemoveApp;
       apps.renderGrid = origRender;
     });
   })();
