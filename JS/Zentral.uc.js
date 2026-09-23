@@ -22136,25 +22136,108 @@
     }
   }
 
-  // Host tabs should behave as implementation details, not destinations. A
-  // click/keyboard selection routes back to the previous real tab and opens
-  // the corresponding Zentral panel instead. No MutationObserver is used --
-  // see the tab crash guard at the top of this extension.
+  // The host's linkedBrowser belongs to a real tab, but that tab is never a
+  // valid destination for the selected browser. In particular, when the last
+  // selected tab closes with no ordinary tab left, Zen can still count hidden
+  // hosts as tabs and select one instead of its native empty-tab placeholder.
+  function isUsableNormalTab(tab) {
+    return !!(
+      tab?.isConnected &&
+      !tab.closing &&
+      !tab.hidden &&
+      !tab.hasAttribute("bgalazka-addon-host") &&
+      !tab.hasAttribute("bgalazka-addon-host-fallback") &&
+      !tab.closest(
+        "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
+      )
+    );
+  }
+
+  function isOrdinaryTab(tab) {
+    // Zen's pinned tabs, Essentials, and empty-tab placeholder are all real
+    // tabs, but none counts as an ordinary successor when the last one closes.
+    // A discarded ordinary tab still counts: selecting it restores its page.
+    return !!(
+      isUsableNormalTab(tab) &&
+      !tab.pinned &&
+      !tab.hasAttribute("zen-essential") &&
+      !tab.hasAttribute("zen-empty-tab")
+    );
+  }
+
+  function findVisibleOrdinaryTab(except) {
+    return [...(gBrowser.visibleTabs || gBrowser.tabs)].find(
+      (tab) => tab !== except && isOrdinaryTab(tab),
+    );
+  }
+
+  function createNormalTabForAddonHost() {
+    try {
+      // Use Zen's own empty-tab selection so URL-bar-only new tabs keep their
+      // native invisible placeholder. Its tab is a safe selected browser even
+      // while the panel's real host tabs remain open in the background.
+      if (typeof window.gZenWorkspaces?.selectEmptyTab === "function") {
+        try {
+          window.gZenWorkspaces.selectEmptyTab("about:blank");
+          const tab = gBrowser.selectedTab;
+          if (isUsableNormalTab(tab)) {
+            lastNonAddonHostTab = tab;
+            return tab;
+          }
+        } catch (error) {
+          console.warn(
+            "[BgalazkaExtension] Zen empty-tab selection failed:",
+            error,
+          );
+        }
+      }
+      // Older Zen builds may lack selectEmptyTab. Keep a real blank tab in
+      // that case rather than allow the adopted panel browser to be selected.
+      const tab = gBrowser.addTab("about:blank", {
+        inBackground: true,
+        skipAnimation: true,
+        triggeringPrincipal:
+          Services.scriptSecurityManager.getSystemPrincipal(),
+      });
+      if (tab) {
+        lastNonAddonHostTab = tab;
+        gBrowser.selectedTab = tab;
+      }
+      return tab;
+    } catch (error) {
+      console.warn(
+        "[BgalazkaExtension] Could not select an empty tab after the last ordinary tab closed:",
+        error,
+      );
+      return null;
+    }
+  }
+
+  // A click/keyboard selection of a host returns to a normal tab and opens
+  // the corresponding panel. The saved tab can have closed in the meantime.
+  // No MutationObserver is used -- see the tab crash guard above.
   const addonHostTabSelectHandler = (event) => {
     const tab = event.target;
     const record = addonHostByTab.get(tab);
     if (!record) {
-      if (tab && !tab.hasAttribute?.("bgalazka-addon-host")) {
-        lastNonAddonHostTab = tab;
-      }
+      if (isUsableNormalTab(tab)) lastNonAddonHostTab = tab;
       return;
     }
     if (!isAddonTabIdBridgeEnabled()) return;
     setTimeout(() => {
       try {
-        if (lastNonAddonHostTab?.isConnected && lastNonAddonHostTab !== tab) {
-          gBrowser.selectedTab = lastNonAddonHostTab;
-        }
+        if (gBrowser.selectedTab !== tab || !record.tab?.isConnected) return;
+        // A pinned/Essential tab can remain connected after Ctrl+W because
+        // Zen unloads it instead of sending TabClose. Returning to it can
+        // reactivate the just-discarded browser and leave the host selected.
+        const normalTab =
+          isOrdinaryTab(lastNonAddonHostTab) ||
+          (isUsableNormalTab(lastNonAddonHostTab) &&
+            lastNonAddonHostTab.hasAttribute("zen-empty-tab"))
+            ? lastNonAddonHostTab
+            : findVisibleOrdinaryTab(tab) || createNormalTabForAddonHost();
+        if (!normalTab) return;
+        gBrowser.selectedTab = normalTab;
         if (record.app) window.Zentral?.Apps?.openPanel?.(record.app);
       } catch (_) {}
       keepAddonHostFolderCollapsed(record.tab?.group);
@@ -22164,7 +22247,30 @@
   const addonHostTabCloseHandler = (event) => {
     const tab = event.target;
     const record = addonHostByTab.get(tab);
-    if (!record || addonHostByAppId.get(record.appId) !== record) return;
+    if (!record) {
+      const wasActiveNonHostTab =
+        gBrowser.selectedTab === tab || lastNonAddonHostTab === tab;
+      if (lastNonAddonHostTab === tab) lastNonAddonHostTab = null;
+      if (
+        isAddonTabIdBridgeEnabled() &&
+        addonHostByAppId.size &&
+        wasActiveNonHostTab &&
+        !tab.hasAttribute("bgalazka-addon-host") &&
+        !tab.hasAttribute("bgalazka-addon-host-fallback") &&
+        !tab.closest(
+          "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
+        ) &&
+        !tab.hasAttribute("zen-empty-tab") &&
+        !findVisibleOrdinaryTab(tab)
+      ) {
+        // TabClose fires while the closing tab is still in the tab strip.
+        // The closing tab can be ordinary, pinned, or Essential. Supply Zen's
+        // empty-tab successor now, before native close logic can pick a host.
+        createNormalTabForAddonHost();
+      }
+      return;
+    }
+    if (addonHostByAppId.get(record.appId) !== record) return;
 
     // This path means the user/Zen closed the backing tab directly. Let the
     // tab close finish first, then ask Zentral to unload the matching private
@@ -22180,11 +22286,39 @@
     }, 0);
   };
 
+  const addonHostTabDiscardedHandler = (event) => {
+    const tab = event.target;
+    if (
+      !isAddonTabIdBridgeEnabled() ||
+      !addonHostByAppId.size ||
+      (!tab.pinned && !tab.hasAttribute?.("zen-essential")) ||
+      (gBrowser.selectedTab !== tab && lastNonAddonHostTab !== tab)
+    )
+      return;
+    // Zen's close shortcut may discard a pinned tab or Essential without a
+    // TabClose event. Wait until Zen finishes its own selection, then replace
+    // a stranded unloaded tab/host with the native empty tab if needed.
+    if (lastNonAddonHostTab === tab) lastNonAddonHostTab = null;
+    setTimeout(() => {
+      const selected = gBrowser.selectedTab;
+      if (
+        !findVisibleOrdinaryTab(tab) &&
+        (selected === tab || selected?.hasAttribute?.("bgalazka-addon-host"))
+      )
+        createNormalTabForAddonHost();
+    }, 0);
+  };
+
   window.addEventListener("TabSelect", addonHostTabSelectHandler);
   window.addEventListener("TabClose", addonHostTabCloseHandler);
+  window.addEventListener("TabBrowserDiscarded", addonHostTabDiscardedHandler);
   registerCleanup(() => {
     window.removeEventListener("TabSelect", addonHostTabSelectHandler);
     window.removeEventListener("TabClose", addonHostTabCloseHandler);
+    window.removeEventListener(
+      "TabBrowserDiscarded",
+      addonHostTabDiscardedHandler,
+    );
     const apps = window.Zentral?.Apps;
     const ids = [...addonHostByAppId.keys()];
     for (const appId of ids) {
