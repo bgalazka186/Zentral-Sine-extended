@@ -25310,6 +25310,32 @@
   const AUTO_SHOW_PREF = "zen.workspace.zentral.video_preview.auto_show_video";
   const CAPTURE_WIDTH_PREF =
     "zen.workspace.zentral.video_preview.capture_width_px";
+  // Store tenths of an fps as an integer so the slowest choice is exactly 0.1 fps.
+  const CAPTURE_RATE_PREF =
+    "zen.workspace.zentral.video_preview.capture_rate_tenths";
+  const CAPTURE_RATES = [1, 2, 5, 10, 20, 50, 100, 150, 240, 300, 600];
+  function captureRateTenths() {
+    try {
+      const value = Services.prefs.getIntPref(CAPTURE_RATE_PREF, 100);
+      return CAPTURE_RATES.includes(value) ? value : 100;
+    } catch (_) {
+      return 100;
+    }
+  }
+  function captureIntervalMs() {
+    return Math.ceil(10000 / captureRateTenths());
+  }
+  function captureRateDescription(tenths) {
+    return (
+      `Up to ${tenths / 10} still captures per second` +
+      (tenths === 1 ? " (one every 10 seconds)" : "") +
+      ", " +
+      `${Number((tenths / 100).toFixed(2))}× the capture requests of the default 10 fps. ` +
+      "Higher rates can use more CPU; actual cost depends on the video, " +
+      "capture detail and your system. Native and stream methods follow the " +
+      "source video and are not capped by this setting."
+    );
+  }
   // Only frame capture and page snapshots use this cap. Keep the established
   // 480 px default; live cloning and streams use their own rendering paths.
   function captureWidth() {
@@ -25368,7 +25394,7 @@
   let previewAutoSelected = false;
   const unavailableBySource = new Map();
   const POLL_MS = 5000;
-  const FRAME_MS = 100;
+  const FRAME_MS = 100; // Probe for sources and check live preview health.
   const LIVE_MODES = [
     "frame-native",
     "native",
@@ -25422,6 +25448,9 @@
   let controlBar = null;
   let scanTimer = null;
   let frameTimer = null;
+  let paintTimerMs = 0;
+  let nextStillCapture = 0;
+  let lastPaintStatusAt = 0;
   let mountTimer = null;
   let scanGeneration = 0;
   let settingsInstance = null;
@@ -25947,6 +25976,35 @@
       });
       detailLabel.appendChild(detail);
       content.appendChild(detailLabel);
+      const rateLabel = document.createElement("label");
+      rateLabel.textContent = "Video Frames / Page Snapshots capture rate ";
+      const rate = document.createElement("input");
+      rate.type = "range";
+      rate.id = "zs-video-preview-capture-rate";
+      rate.min = "0";
+      rate.max = String(CAPTURE_RATES.length - 1);
+      rate.step = "1";
+      rate.value = String(CAPTURE_RATES.indexOf(captureRateTenths()));
+      const rateValue = document.createElement("span");
+      rateValue.id = "zs-video-preview-capture-rate-value";
+      rateValue.textContent = captureRateTenths() / 10 + " fps";
+      rate.addEventListener("input", () => {
+        const tenths = CAPTURE_RATES[Number(rate.value)];
+        rateValue.textContent = tenths / 10 + " fps";
+        rateCost.textContent = captureRateDescription(tenths);
+      });
+      rate.addEventListener("change", () =>
+        Services.prefs.setIntPref(
+          CAPTURE_RATE_PREF,
+          CAPTURE_RATES[Number(rate.value)],
+        ),
+      );
+      rateLabel.append(rate, rateValue);
+      content.appendChild(rateLabel);
+      const rateCost = document.createElement("span");
+      rateCost.id = "zs-video-preview-capture-rate-cost";
+      rateCost.className = "zs-sublabel";
+      content.appendChild(rateCost);
       const frameLabel = document.createElement("label");
       frameLabel.textContent = "Video framing ";
       const frameSelect = document.createElement("select");
@@ -26083,6 +26141,16 @@
     if (radiusLabel) radiusLabel.textContent = radiusPx + " px";
     const detailSelect = modal.querySelector("#zs-video-preview-capture-width");
     if (detailSelect) detailSelect.value = String(captureWidth());
+    const rateSelect = modal.querySelector("#zs-video-preview-capture-rate");
+    if (rateSelect)
+      rateSelect.value = String(CAPTURE_RATES.indexOf(captureRateTenths()));
+    const rateValue = modal.querySelector(
+      "#zs-video-preview-capture-rate-value",
+    );
+    if (rateValue) rateValue.textContent = captureRateTenths() / 10 + " fps";
+    const rateCost = modal.querySelector("#zs-video-preview-capture-rate-cost");
+    if (rateCost)
+      rateCost.textContent = captureRateDescription(captureRateTenths());
     const frameSelect = modal.querySelector("#zs-video-preview-framing");
     if (frameSelect) frameSelect.value = framingChoice();
     const hideCheckbox = modal.querySelector(
@@ -26122,6 +26190,7 @@
         `\nAuto-show: ${autoShowVideo() ? "on (no live PiP)" : "off"}; hide muted copies: ${hideMutedDuplicates() ? "on" : "off"}` +
         `\nLive source confirmed hidden: ${current ? sourceCertainlyHidden(current) : "no source"}` +
         `\nDiscovery calls: ${metrics.discoveryCalls}; last scan: ${Math.round(metrics.lastScanMs)} ms elapsed` +
+        `\nStill captures target: ${captureRateTenths() / 10} fps` +
         `\nCaptured frames: ${metrics.frames}; mean capture: ${Math.round(metrics.captureMs / Math.max(1, metrics.frames))} ms elapsed` +
         "\n\nRecent browser probes (candidate counts):\n" +
         [...browserReports.values()]
@@ -27089,9 +27158,11 @@
   }
 
   function resetRendering() {
+    nextStillCapture = 0;
     ++previewGeneration;
     disposePlayer();
     previewMode = null;
+    updatePaintTimer();
     noPictureChecks = 0;
     failedRenderers.clear();
     nextRenderProbe = nextHealthCheck = 0;
@@ -27370,16 +27441,13 @@
   }
 
   async function paint() {
-    if (
-      disposed ||
-      !enabled() ||
-      renderBusy ||
-      current?.data.kind !== "video" ||
-      !box?.isConnected ||
-      box.hidden
-    )
+    if (disposed || !enabled() || renderBusy) return;
+    if (current?.data.kind !== "video" || !box?.isConnected || box.hidden) {
+      updatePaintTimer(false);
       return;
+    }
     if (!previewVisible()) {
+      updatePaintTimer(false);
       lastHealth = null;
       try {
         if (previewBrowser) previewBrowser.docShellIsActive = false;
@@ -27466,6 +27534,8 @@
         }
       }
       if (!previewMode && Date.now() < nextRenderProbe) return;
+      if (WORKING_MODES.includes(previewMode) && Date.now() < nextStillCapture)
+        return;
       const modes = previewMode
         ? [previewMode]
         : choice === "auto"
@@ -27522,6 +27592,7 @@
             }
             metrics.frames++;
             metrics.captureMs += Date.now() - started;
+            nextStillCapture = Date.now() + captureIntervalMs();
           }
           if (generation !== previewGeneration) return;
           previewMode = mode;
@@ -27557,8 +27628,24 @@
       nextRenderProbe = Date.now() + POLL_MS;
     } finally {
       renderBusy = false;
-      refreshMethodStatus();
+      updatePaintTimer();
+      if (Date.now() - lastPaintStatusAt >= 500) {
+        lastPaintStatusAt = Date.now();
+        refreshMethodStatus();
+      }
     }
+  }
+
+  function updatePaintTimer(active = true) {
+    if (!frameTimer) return;
+    const interval =
+      active && WORKING_MODES.includes(previewMode)
+        ? captureIntervalMs()
+        : FRAME_MS;
+    if (paintTimerMs === interval) return;
+    clearInterval(frameTimer);
+    paintTimerMs = interval;
+    frameTimer = setInterval(paint, interval);
   }
 
   function stop() {
@@ -27568,6 +27655,7 @@
     clearInterval(frameTimer);
     clearInterval(mountTimer);
     scanTimer = frameTimer = mountTimer = null;
+    paintTimerMs = 0;
     sources = [];
     current = null;
     previewAutoSelected = false;
@@ -27607,6 +27695,7 @@
     if (!experimentalBridgeDisabled()) ensureActor();
     mount();
     scanTimer = setInterval(scan, POLL_MS);
+    paintTimerMs = FRAME_MS;
     frameTimer = setInterval(paint, FRAME_MS);
     mountTimer = setInterval(mount, 3000);
     scan();
@@ -27634,6 +27723,12 @@
     resetRendering();
     if (enabled()) paint();
   };
+  const onCaptureRatePref = () => {
+    nextStillCapture = 0;
+    updatePaintTimer();
+    injectSetting();
+    if (enabled() && WORKING_MODES.includes(previewMode)) paint();
+  };
   const onDiscoveryPref = () => {
     discoveryLocks.clear();
     discoveryWinner = null;
@@ -27645,6 +27740,7 @@
     if (enabled()) scan(true);
   };
   Services.prefs.addObserver(EXPERIMENTAL_DISABLED_PREF, onExperimentalPref);
+  Services.prefs.addObserver(CAPTURE_RATE_PREF, onCaptureRatePref);
   Services.prefs.addObserver(RENDER_PREF, onRenderPref);
   Services.prefs.addObserver(DISCOVERY_PREF, onDiscoveryPref);
   Services.prefs.addObserver(PREF, onPref);
@@ -27659,6 +27755,7 @@
       EXPERIMENTAL_DISABLED_PREF,
       onExperimentalPref,
     );
+    Services.prefs.removeObserver(CAPTURE_RATE_PREF, onCaptureRatePref);
     Services.prefs.removeObserver(RENDER_PREF, onRenderPref);
     Services.prefs.removeObserver(DISCOVERY_PREF, onDiscoveryPref);
     for (const type of ["TabOpen", "TabClose", "TabSelect", "TabAttrModified"])
@@ -27689,6 +27786,7 @@
       enabled: enabled(),
       experimentalBridgeDisabled: experimentalBridgeDisabled(),
       renderer: previewMode,
+      captureRateFps: captureRateTenths() / 10,
       autoSelected: previewAutoSelected,
       hideMutedDuplicates: hideMutedDuplicates(),
       performance: { ...metrics },
