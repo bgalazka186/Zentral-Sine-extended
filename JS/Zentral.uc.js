@@ -433,6 +433,8 @@
     #resizeObs = null;
     /** @private ResizeObserver on the Apps grid */
     #gridResizeObs = null;
+    /** @private Keeps the pill hover target as tall as the pill. */
+    #pillHoverZoneResizeObs = null;
     /** @private TabSelect event listener */
     #tabSelectListener = null;
     /** @private Workspace switch event listener */
@@ -491,6 +493,8 @@
         this.stopPositionTracking();
 
         // 2. Disconnect observers
+        this.#pillHoverZoneResizeObs?.disconnect();
+        this.#pillHoverZoneResizeObs = null;
         if (this.#sideObserver) {
           try {
             this.#sideObserver.disconnect();
@@ -2967,6 +2971,25 @@
 
         root.append(clip, hoverZone, pill, strip);
         document.documentElement.appendChild(root);
+        // Update only when the pill's buttons/layout change. Its position is
+        // handled by CSS, so moving the panel never measures layout in a loop.
+        let hoverHeight = -1;
+        const syncHoverHeight = (entries) => {
+          const box = entries?.[0]?.borderBoxSize;
+          const blockSize = Array.isArray(box)
+            ? box[0]?.blockSize
+            : box?.blockSize;
+          const height = Math.ceil(blockSize ?? pill.offsetHeight);
+          if (height === hoverHeight) return;
+          hoverHeight = height;
+          hoverZone.style.setProperty(
+            "--zentral-pill-hover-height",
+            height + "px",
+          );
+        };
+        syncHoverHeight();
+        this.#pillHoverZoneResizeObs = new ResizeObserver(syncHoverHeight);
+        this.#pillHoverZoneResizeObs.observe(pill);
 
         this.#dom.root = root;
         this.#dom.clip = clip;
@@ -25271,6 +25294,8 @@
     console.warn("[ZentralVideoPreview] Could not stop previous build", error);
   }
   const PREF = "zen.workspace.zentral.video_preview.enabled";
+  const EXPERIMENTAL_DISABLED_PREF =
+    "zen.workspace.zentral.video_preview.disable_experimental_bridge";
   const RENDER_PREF = "zen.workspace.zentral.video_preview.renderer";
   const DISCOVERY_PREF = "zen.workspace.zentral.video_preview.discovery";
   const WIDTH_PREF = "zen.workspace.zentral.video_preview.width_percent";
@@ -25295,18 +25320,11 @@
       return 480;
     }
   }
-  const BUILD = "video-only-2026-09-22-8";
+  const BUILD = "video-only-2026-09-24-1";
   const FRAME_SOURCE =
     '// Loaded into each browser\'s content process through its frame message manager.\n// The channel is replaced at startup so separate browser windows stay isolated.\n(function () {\n  // Shared by actor and frame-script transports; no parent-side privileges.\nclass ZentralVideoRenderer {\n  constructor(doc) { this.doc = doc; this.serial = 0; }\n  async start({ videoRef, mode, fit = "contain" }) {\n    if (this.doc?.documentURI !== "about:blank") throw new Error("Invalid preview document");\n    this.stop();\n    const serial = this.serial;\n    const { ContentDOMReference } = ChromeUtils.importESModule(\n      "resource://gre/modules/ContentDOMReference.sys.mjs");\n    const media = await ContentDOMReference.resolve(videoRef);\n    if (serial !== this.serial) throw new Error("Preview cancelled");\n    if (!media?.isConnected || media.localName !== "video")\n      throw new Error("Video reference unavailable in preview process");\n    this.source = media;\n    const doc = this.doc, win = doc.defaultView;\n    if (!doc.body) doc.documentElement.appendChild(doc.createElement("body"));\n    doc.body.style.cssText = "margin:0;overflow:hidden;background:#000";\n    const target = doc.createElement("video");\n    target.muted = true;\n    target.autoplay = true;\n    target.style.cssText = "display:block;width:100vw;height:100vh;object-fit:" +\n      (fit === "cover" ? "cover" : "contain") + ";background:#000";\n    doc.body.appendChild(target);\n    this.video = target;\n    this.mode = mode;\n    try {\n      if (mode === "native") {\n        if (media.isCloningElementVisually) throw new Error("Source already has a visual clone");\n        if (typeof media.cloneElementVisually !== "function") throw new Error("Native cloning unavailable");\n        await media.cloneElementVisually(target);\n      } else if (mode === "stream") {\n        const capture = media.captureStream || media.mozCaptureStream;\n        if (typeof capture !== "function") throw new Error("Stream capture unavailable");\n        this.stream = capture.call(media);\n        const tracks = this.stream.getVideoTracks();\n        if (!tracks.length) throw new Error("Stream contains no video track");\n        target.srcObject = new win.MediaStream(tracks);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else if (mode === "canvas-stream") {\n        const surface = doc.createElement("canvas");\n        surface.width = Math.min(640, media.videoWidth);\n        surface.height = Math.max(1, Math.round(surface.width * media.videoHeight / media.videoWidth));\n        const ctx = surface.getContext("2d", { alpha: false });\n        ctx.drawImage(media, 0, 0, surface.width, surface.height);\n        this.stream = surface.captureStream(30);\n        target.srcObject = this.stream;\n        // Keep all copies inside the source process. No per-frame JPEG or IPC.\n        // Use the visible preview window clock: source rVFC may stop in a hidden tab.\n        let lastTime = NaN;\n        this.timer = win.setInterval(() => {\n          if (!media.isConnected || media.ended) { this.failure = "Source ended or detached"; return; }\n          if (media.currentTime === lastTime || media.readyState < 2) return;\n          try {\n            ctx.drawImage(media, 0, 0, surface.width, surface.height);\n            lastTime = media.currentTime;\n          } catch (error) { this.failure = String(error); }\n        }, 1000 / 30);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else throw new Error("Unknown preview mode");\n      if (serial !== this.serial) throw new Error("Preview cancelled");\n      return { ok: true, mode };\n    } catch (error) {\n      if (serial === this.serial) this.stop();\n      throw error;\n    }\n  }\n  firstFrame(target) {\n    if (target.readyState >= 2 && target.videoWidth > 0) return Promise.resolve();\n    return new Promise((resolve, reject) => {\n      const win = this.doc.defaultView;\n      const done = error => {\n        win.clearTimeout(timer);\n        target.removeEventListener("loadeddata", loaded);\n        this.cancelWait = null;\n        error ? reject(error) : resolve();\n      };\n      const loaded = () => done();\n      const timer = win.setTimeout(() => done(new Error("Stream produced no decoded frame")), 1800);\n      this.cancelWait = () => done(new Error("Preview cancelled"));\n      target.addEventListener("loadeddata", loaded, { once: true });\n    });\n  }\n  health() {\n    const tracks = this.stream?.getVideoTracks() || [];\n    return { ok: !!this.video?.isConnected && !!this.source?.isConnected && !this.failure &&\n      !this.source.ended && ((this.mode === "native" && this.source.isCloningElementVisually) ||\n        (this.video.readyState >= 2 && tracks.some(track => track.readyState !== "ended" && !track.muted))),\n      error: this.failure || "Preview disconnected or stream unavailable",\n      paused: this.source?.paused, time: this.source?.currentTime,\n      frames: this.video?.getVideoPlaybackQuality?.().totalVideoFrames || 0 };\n  }\n  stop() {\n    ++this.serial;\n    this.cancelWait?.();\n    if (this.timer != null) this.doc.defaultView.clearInterval(this.timer);\n    this.timer = null;\n    this.video?.remove();\n    this.video = null;\n    for (const track of this.stream?.getTracks() || []) track.stop();\n    this.stream = null;\n    this.source = null;\n    this.failure = null;\n  }\n}\n\n  let renderer = null;\n  let stopped = false;\n  const CHANNEL = "__CHANNEL__";\n  const ids = new WeakMap();\n  const elements = new Map();\n  let nextId = 0;\n  const frameId = () => content.browsingContext?.id || 0;\n\n  function hasVideoAudioTrack(media) {\n  // Track presence is independent of the viewer\'s mute and volume choices.\n  try {\n    if (media.srcObject?.getAudioTracks) return media.srcObject.getAudioTracks().length > 0;\n    if (media.audioTracks) return media.audioTracks.length > 0;\n    const capture = media.captureStream || media.mozCaptureStream;\n    if (typeof capture !== "function") return false;\n    const stream = capture.call(media);\n    const hasAudio = stream.getAudioTracks().length > 0;\n    for (const track of stream.getTracks()) track.stop();\n    return hasAudio;\n  } catch (_) { return false; }\n}\n\n  function list({ requireAudio = false } = {}) {\n    const doc = content.document;\n    if (!doc) return [];\n    const found = [];\n    const live = new Set();\n    for (const media of doc.querySelectorAll("video")) {\n      if (media.localName !== "video" || media.ended || media.readyState < 1) continue;\n      const box = media.getBoundingClientRect();\n      const x = Math.max(0, box.left);\n      const y = Math.max(0, box.top);\n      const width = Math.min(content.innerWidth, box.right) - x;\n      const height = Math.min(content.innerHeight, box.bottom) - y;\n      if (media.videoWidth < 240 || media.videoHeight < 135 ||\n          (Number.isFinite(media.duration) && media.duration > 0 && media.duration < 8) ||\n          (requireAudio && !hasVideoAudioTrack(media))) continue;\n      let id = ids.get(media);\n      if (!id) { id = ++nextId; ids.set(media, id); }\n      elements.set(id, media);\n      live.add(id);\n      const label = media.getAttribute("aria-label") || media.getAttribute("title") ||\n        media.closest("[aria-label]")?.getAttribute("aria-label") ||\n        doc.title || "Video";\n      let videoRef = null;\n      try {\n        const { ContentDOMReference } = ChromeUtils.importESModule(\n          "resource://gre/modules/ContentDOMReference.sys.mjs");\n        videoRef = ContentDOMReference.get(media);\n      } catch (_) {}\n      found.push({ id, videoRef, documentId: content.windowGlobalChild?.innerWindowId || 0,\n        frameId: frameId(), label: String(label).slice(0, 100),\n        kind: "video",\n        canClone: typeof media.cloneElementVisually === "function",\n        canStream: typeof (media.captureStream || media.mozCaptureStream) === "function",\n        canCanvasStream: typeof doc.createElement("canvas").captureStream === "function",\n        rect: width > 0 && height > 0 ? { x, y, width, height } : null,\n        score: (media.paused ? 0 : 10000000) + Math.max(0, width) * Math.max(0, height),\n        paused: media.paused, muted: media.muted,\n        currentTime: media.currentTime,\n        duration: Number.isFinite(media.duration) ? media.duration : 0,\n        width: media.videoWidth || 0, height: media.videoHeight || 0 });\n    }\n    for (const id of elements.keys()) if (!live.has(id)) elements.delete(id);\n    return found;\n  }\n\n  function captureFrame({ id, captureWidth = 480 }) {\n    const media = elements.get(id);\n    if (!media?.isConnected || media.localName !== "video" || media.readyState < 2)\n      throw new Error("No decoded video frame available");\n    const canvas = content.document.createElement("canvas");\n    canvas.width = Math.min([320, 480, 640].includes(captureWidth) ? captureWidth : 480, media.videoWidth);\n    canvas.height = Math.max(1, Math.round(canvas.width * media.videoHeight / media.videoWidth));\n    canvas.getContext("2d", { alpha: false }).drawImage(media, 0, 0, canvas.width, canvas.height);\n    return { url: canvas.toDataURL("image/jpeg", 0.75), width: canvas.width, height: canvas.height };\n  }\n\n  function controlMedia({ id, action, value }) {\n    const media = elements.get(id);\n    if (!media?.isConnected) return null;\n    switch (action) {\n      case "toggle":\n        if (media.paused) media.play().catch(() => {});\n        else media.pause();\n        break;\n      case "mute": media.muted = !media.muted; break;\n      case "seek":\n        if (Number.isFinite(value) && Number.isFinite(media.duration))\n          media.currentTime = Math.max(0, Math.min(media.duration, value));\n        break;\n    }\n    return { paused: media.paused, muted: media.muted,\n      currentTime: media.currentTime,\n      duration: Number.isFinite(media.duration) ? media.duration : 0 };\n  }\n\n  async function onRequest(message) {\n    const { requestId, kind, frameId: requestedFrame, ...args } = message.data;\n    if (stopped || (kind !== "List" && requestedFrame !== frameId())) return;\n    try {\n      let result;\n      if (kind === "List") result = list(args);\n      else if (kind === "Preview") {\n        renderer ??= new ZentralVideoRenderer(content.document);\n        result = await renderer.start(args);\n      } else if (kind === "Health") result = renderer?.health() || { ok: false };\n      else if (kind === "StopPreview") { renderer?.stop(); result = true; }\n      else if (kind === "ActorCheck") {\n        ChromeUtils.importESModule(args.moduleURI);\n        result = true;\n      } else result = kind === "Capture" ? captureFrame(args) : controlMedia(args);\n      if (!stopped) sendAsyncMessage(CHANNEL + ":reply", { requestId, result });\n    } catch (error) {\n      if (!stopped) sendAsyncMessage(CHANNEL + ":reply", { requestId, error: String(error), result: [] });\n    }\n  }\n  function onShutdown() {\n    stopped = true;\n    renderer?.stop();\n    removeMessageListener(CHANNEL + ":request", onRequest);\n    removeMessageListener(CHANNEL + ":shutdown", onShutdown);\n    elements.clear();\n  }\n  addEventListener("unload", () => renderer?.stop());\n  addMessageListener(CHANNEL + ":request", onRequest);\n  addMessageListener(CHANNEL + ":shutdown", onShutdown);\n})();\n';
   const ACTOR_SOURCE =
     '// Shared by actor and frame-script transports; no parent-side privileges.\nclass ZentralVideoRenderer {\n  constructor(doc) { this.doc = doc; this.serial = 0; }\n  async start({ videoRef, mode, fit = "contain" }) {\n    if (this.doc?.documentURI !== "about:blank") throw new Error("Invalid preview document");\n    this.stop();\n    const serial = this.serial;\n    const { ContentDOMReference } = ChromeUtils.importESModule(\n      "resource://gre/modules/ContentDOMReference.sys.mjs");\n    const media = await ContentDOMReference.resolve(videoRef);\n    if (serial !== this.serial) throw new Error("Preview cancelled");\n    if (!media?.isConnected || media.localName !== "video")\n      throw new Error("Video reference unavailable in preview process");\n    this.source = media;\n    const doc = this.doc, win = doc.defaultView;\n    if (!doc.body) doc.documentElement.appendChild(doc.createElement("body"));\n    doc.body.style.cssText = "margin:0;overflow:hidden;background:#000";\n    const target = doc.createElement("video");\n    target.muted = true;\n    target.autoplay = true;\n    target.style.cssText = "display:block;width:100vw;height:100vh;object-fit:" +\n      (fit === "cover" ? "cover" : "contain") + ";background:#000";\n    doc.body.appendChild(target);\n    this.video = target;\n    this.mode = mode;\n    try {\n      if (mode === "native") {\n        if (media.isCloningElementVisually) throw new Error("Source already has a visual clone");\n        if (typeof media.cloneElementVisually !== "function") throw new Error("Native cloning unavailable");\n        await media.cloneElementVisually(target);\n      } else if (mode === "stream") {\n        const capture = media.captureStream || media.mozCaptureStream;\n        if (typeof capture !== "function") throw new Error("Stream capture unavailable");\n        this.stream = capture.call(media);\n        const tracks = this.stream.getVideoTracks();\n        if (!tracks.length) throw new Error("Stream contains no video track");\n        target.srcObject = new win.MediaStream(tracks);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else if (mode === "canvas-stream") {\n        const surface = doc.createElement("canvas");\n        surface.width = Math.min(640, media.videoWidth);\n        surface.height = Math.max(1, Math.round(surface.width * media.videoHeight / media.videoWidth));\n        const ctx = surface.getContext("2d", { alpha: false });\n        ctx.drawImage(media, 0, 0, surface.width, surface.height);\n        this.stream = surface.captureStream(30);\n        target.srcObject = this.stream;\n        // Keep all copies inside the source process. No per-frame JPEG or IPC.\n        // Use the visible preview window clock: source rVFC may stop in a hidden tab.\n        let lastTime = NaN;\n        this.timer = win.setInterval(() => {\n          if (!media.isConnected || media.ended) { this.failure = "Source ended or detached"; return; }\n          if (media.currentTime === lastTime || media.readyState < 2) return;\n          try {\n            ctx.drawImage(media, 0, 0, surface.width, surface.height);\n            lastTime = media.currentTime;\n          } catch (error) { this.failure = String(error); }\n        }, 1000 / 30);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else throw new Error("Unknown preview mode");\n      if (serial !== this.serial) throw new Error("Preview cancelled");\n      return { ok: true, mode };\n    } catch (error) {\n      if (serial === this.serial) this.stop();\n      throw error;\n    }\n  }\n  firstFrame(target) {\n    if (target.readyState >= 2 && target.videoWidth > 0) return Promise.resolve();\n    return new Promise((resolve, reject) => {\n      const win = this.doc.defaultView;\n      const done = error => {\n        win.clearTimeout(timer);\n        target.removeEventListener("loadeddata", loaded);\n        this.cancelWait = null;\n        error ? reject(error) : resolve();\n      };\n      const loaded = () => done();\n      const timer = win.setTimeout(() => done(new Error("Stream produced no decoded frame")), 1800);\n      this.cancelWait = () => done(new Error("Preview cancelled"));\n      target.addEventListener("loadeddata", loaded, { once: true });\n    });\n  }\n  health() {\n    const tracks = this.stream?.getVideoTracks() || [];\n    return { ok: !!this.video?.isConnected && !!this.source?.isConnected && !this.failure &&\n      !this.source.ended && ((this.mode === "native" && this.source.isCloningElementVisually) ||\n        (this.video.readyState >= 2 && tracks.some(track => track.readyState !== "ended" && !track.muted))),\n      error: this.failure || "Preview disconnected or stream unavailable",\n      paused: this.source?.paused, time: this.source?.currentTime,\n      frames: this.video?.getVideoPlaybackQuality?.().totalVideoFrames || 0 };\n  }\n  stop() {\n    ++this.serial;\n    this.cancelWait?.();\n    if (this.timer != null) this.doc.defaultView.clearInterval(this.timer);\n    this.timer = null;\n    this.video?.remove();\n    this.video = null;\n    for (const track of this.stream?.getTracks() || []) track.stop();\n    this.stream = null;\n    this.source = null;\n    this.failure = null;\n  }\n}\n\nfunction hasVideoAudioTrack(media) {\n  // Track presence is independent of the viewer\'s mute and volume choices.\n  try {\n    if (media.srcObject?.getAudioTracks) return media.srcObject.getAudioTracks().length > 0;\n    if (media.audioTracks) return media.audioTracks.length > 0;\n    const capture = media.captureStream || media.mozCaptureStream;\n    if (typeof capture !== "function") return false;\n    const stream = capture.call(media);\n    const hasAudio = stream.getAudioTracks().length > 0;\n    for (const track of stream.getTracks()) track.stop();\n    return hasAudio;\n  } catch (_) { return false; }\n}\n\n// Content-process source discovery for Zentral\'s sidebar video preview.\n// It never changes playback unless the user presses a preview control.\nexport class ZentralVideoBridgeChild extends JSWindowActorChild {\n  receiveMessage(message) {\n    if (message.name === "List") return this.list(message.data);\n    if (message.name === "Control") return this.control(message.data);\n    if (message.name === "Capture") return this.capture(message.data);\n    if (message.name === "Health") return this.renderer?.health() || { ok: false };\n    if (message.name === "Preview") return this.preview(message.data);\n    if (message.name === "StopPreview") { this.stopPreview(); return true; }\n    return null;\n  }\n\n  list({ requireAudio = false } = {}) {\n    const doc = this.document;\n    const win = this.contentWindow;\n    if (!doc || !win) return [];\n    this.ids ??= new WeakMap();\n    this.elements ??= new Map();\n    this.nextId ??= 1;\n    const found = [];\n    const live = new Set();\n\n    for (const media of doc.querySelectorAll("video")) {\n      if (media.localName !== "video" || media.ended || media.readyState < 1) continue;\n      const box = media.getBoundingClientRect();\n      const x = Math.max(0, box.left);\n      const y = Math.max(0, box.top);\n      const width = Math.min(win.innerWidth, box.right) - x;\n      const height = Math.min(win.innerHeight, box.bottom) - y;\n      // Require decoded video frames; skip tiny decorative clips.\n      if (media.videoWidth < 240 || media.videoHeight < 135 ||\n          (Number.isFinite(media.duration) && media.duration > 0 && media.duration < 8) ||\n          (requireAudio && !hasVideoAudioTrack(media))) continue;\n\n      let id = this.ids.get(media);\n      if (!id) { id = this.nextId++; this.ids.set(media, id); }\n      this.elements.set(id, media);\n      live.add(id);\n      const label = media.getAttribute("aria-label") || media.getAttribute("title") ||\n        media.closest("[aria-label]")?.getAttribute("aria-label") ||\n        doc.title || "Video";\n      let videoRef = null;\n      try {\n        const { ContentDOMReference } = ChromeUtils.importESModule(\n          "resource://gre/modules/ContentDOMReference.sys.mjs");\n        videoRef = ContentDOMReference.get(media);\n      } catch (_) { /* Snapshot / canvas capture can still work. */ }\n      found.push({ id, videoRef, documentId: this.manager?.innerWindowId || 0,\n        label: String(label).slice(0, 100),\n        kind: "video",\n        canClone: typeof media.cloneElementVisually === "function",\n        canStream: typeof (media.captureStream || media.mozCaptureStream) === "function",\n        canCanvasStream: typeof doc.createElement("canvas").captureStream === "function",\n        rect: width > 0 && height > 0 ? { x, y, width, height } : null,\n        score: (media.paused ? 0 : 10000000) + Math.max(0, width) * Math.max(0, height),\n        paused: media.paused, muted: media.muted,\n        currentTime: media.currentTime,\n        duration: Number.isFinite(media.duration) ? media.duration : 0,\n        width: media.videoWidth || 0, height: media.videoHeight || 0 });\n    }\n    for (const id of this.elements.keys()) if (!live.has(id)) this.elements.delete(id);\n    return found;\n  }\n\n  capture({ id, captureWidth = 480 } = {}) {\n    const media = this.elements?.get(id);\n    if (!media?.isConnected || media.localName !== "video" || media.readyState < 2)\n      throw new Error("No decoded video frame available");\n    const canvas = this.document.createElement("canvas");\n    canvas.width = Math.min([320, 480, 640].includes(captureWidth) ? captureWidth : 480, media.videoWidth);\n    canvas.height = Math.max(1, Math.round(canvas.width * media.videoHeight / media.videoWidth));\n    canvas.getContext("2d", { alpha: false }).drawImage(media, 0, 0, canvas.width, canvas.height);\n    return { url: canvas.toDataURL("image/jpeg", 0.75), width: canvas.width, height: canvas.height };\n  }\n\n  async preview(data) {\n    this.renderer ??= new ZentralVideoRenderer(this.document);\n    return this.renderer.start(data);\n  }\n\n  stopPreview() { this.renderer?.stop(); }\n\n  didDestroy() {\n    this.stopPreview();\n    this.elements?.clear();\n  }\n\n  control({ id, action, value } = {}) {\n    const media = this.elements?.get(id);\n    if (!media?.isConnected) return null;\n    switch (action) {\n      case "toggle":\n        if (media.paused) media.play().catch(() => {});\n        else media.pause();\n        break;\n      case "mute": media.muted = !media.muted; break;\n      case "seek":\n        if (Number.isFinite(value) && Number.isFinite(media.duration))\n          media.currentTime = Math.max(0, Math.min(media.duration, value));\n        break;\n    }\n    return { paused: media.paused, muted: media.muted,\n      currentTime: media.currentTime,\n      duration: Number.isFinite(media.duration) ? media.duration : 0 };\n  }\n}\n';
-  // Derive the module name from its source so edited actor code gets a new URI.
-  let actorFingerprint = 2166136261;
-  for (let i = 0; i < ACTOR_SOURCE.length; i++) {
-    actorFingerprint ^= ACTOR_SOURCE.charCodeAt(i);
-    actorFingerprint = Math.imul(actorFingerprint, 16777619);
-  }
-  const ACTOR_HASH = `${(actorFingerprint >>> 0).toString(16)}-${ACTOR_SOURCE.length}`;
   const ACTOR = "ZentralVideoBridge";
   const CHANNEL = "ZentralVideoPreview:" + Math.random().toString(36).slice(2);
   const FRAME_URI =
@@ -25330,7 +25348,7 @@
   let actorAttempted = false;
   const methodState = {
     frame: "waiting",
-    actor: "waiting",
+    actor: experimentalBridgeDisabled() ? "disabled in settings" : "waiting",
     direct: "waiting",
     "frame-native": "choose a video",
     "frame-stream": "choose a video",
@@ -25359,6 +25377,7 @@
     "canvas-stream",
   ];
   const RENDER_MODES = [...LIVE_MODES, "canvas", "snapshot"];
+  const WORKING_MODES = ["canvas", "snapshot"];
   let renderBusy = false;
   let nextRenderProbe = 0;
   let nextHealthCheck = 0;
@@ -25483,13 +25502,23 @@
     }
   }
 
+  function experimentalBridgeDisabled() {
+    try {
+      return Services.prefs.getBoolPref(EXPERIMENTAL_DISABLED_PREF, true);
+    } catch (_) {
+      return true;
+    }
+  }
+
   function ensureActor() {
+    if (experimentalBridgeDisabled()) return false;
     if (actorAttempted) return actorReady;
     actorAttempted = true;
     try {
       const file = Services.dirsvc.get("UChrm", Ci.nsIFile);
-      file.append("zentral-video-bridge-" + ACTOR_HASH + ".sys.mjs");
-      // Rewrite the generated actor to heal same-length corruption as well.
+      file.append("zentral-video-bridge.sys.mjs");
+      // Fixed helper URI: updates to the experimental actor require a browser restart.
+      // Rewrite the opt-in helper to heal same-length corruption as well.
       {
         const stream = Cc[
           "@mozilla.org/network/file-output-stream;1"
@@ -25509,11 +25538,10 @@
           .getProtocolHandler("resource")
           .QueryInterface(Ci.nsIResProtocolHandler);
         handler.setSubstitution(
-          "zentral-video-" + ACTOR_HASH,
+          "zentral-video-bridge",
           Services.io.newFileURI(file.parent),
         );
-        actorModuleURI =
-          "resource://zentral-video-" + ACTOR_HASH + "/" + file.leafName;
+        actorModuleURI = "resource://zentral-video-bridge/" + file.leafName;
       } catch (_) {}
       try {
         // Gecko 154+ requires an explicit opt-in for ordinary web processes.
@@ -25754,6 +25782,36 @@
         row.append(text, checkbox);
         content.appendChild(row);
       };
+      const experimentalRow = document.createElement("label");
+      experimentalRow.className = "zs-row";
+      experimentalRow.style.cssText =
+        "display:flex;align-items:center;justify-content:space-between;gap:12px";
+      const experimentalText = document.createElement("span");
+      experimentalText.className = "zs-label-container";
+      const experimentalTitle = document.createElement("span");
+      experimentalTitle.className = "zs-label";
+      experimentalTitle.textContent = "Disable Experimental Video Bridge";
+      const experimentalHelp = document.createElement("span");
+      experimentalHelp.className = "zs-sublabel";
+      experimentalHelp.textContent =
+        "On by default: Automatic tries Video Frames first, then Page Snapshots. " +
+        "No bridge module is created or loaded. Turn off to test native/stream " +
+        "capture and actor discovery; this creates or updates " +
+        "zentral-video-bridge.sys.mjs in chrome. Bridge updates may require a browser restart. " +
+        "Existing older bridge files are never deleted automatically.";
+      experimentalText.append(experimentalTitle, experimentalHelp);
+      const experimentalCheckbox = document.createElement("input");
+      experimentalCheckbox.type = "checkbox";
+      experimentalCheckbox.id = "zs-video-preview-disable-experimental";
+      experimentalCheckbox.checked = experimentalBridgeDisabled();
+      experimentalCheckbox.addEventListener("change", () =>
+        Services.prefs.setBoolPref(
+          EXPERIMENTAL_DISABLED_PREF,
+          experimentalCheckbox.checked,
+        ),
+      );
+      experimentalRow.append(experimentalText, experimentalCheckbox);
+      content.appendChild(experimentalRow);
       addToggle(
         "Hide muted copies when an unmuted video matches",
         HIDE_DUPLICATES_PREF,
@@ -25965,7 +26023,9 @@
       ]) {
         const option = document.createElement("option");
         option.value = value;
-        option.textContent = label;
+        option.textContent = LIVE_MODES.includes(value)
+          ? label + " (experimental)"
+          : label;
         renderer.appendChild(option);
       }
       renderer.value = rendererChoice();
@@ -26003,6 +26063,11 @@
       content.appendChild(help);
     }
     input.checked = enabled();
+    const experimentalCheck = modal.querySelector(
+      "#zs-video-preview-disable-experimental",
+    );
+    if (experimentalCheck)
+      experimentalCheck.checked = experimentalBridgeDisabled();
     const widthCheck = modal.querySelector("#zs-video-preview-width");
     if (widthCheck) widthCheck.disabled = fillWidth();
     const fillCheck = modal.querySelector("#zs-video-preview-fit-width");
@@ -26051,6 +26116,7 @@
         Object.entries(methodState)
           .map(([name, result]) => `${name}: ${result}`)
           .join("\n") +
+        `\nExperimental bridge: ${experimentalBridgeDisabled() ? "disabled" : "enabled (restart after bridge updates)"}` +
         `\nDiscovery: ${discoveryChoice()} (using ${discoveryWinner || "probing"}; 5 s checks)` +
         `\nActive renderer: ${previewMode || "searching"} (setting: ${rendererChoice()})` +
         `\nAuto-show: ${autoShowVideo() ? "on (no live PiP)" : "off"}; hide muted copies: ${hideMutedDuplicates() ? "on" : "off"}` +
@@ -26070,7 +26136,10 @@
   function rendererChoice() {
     try {
       const value = Services.prefs.getStringPref(RENDER_PREF, "auto");
-      return RENDER_MODES.includes(value) ? value : "auto";
+      return RENDER_MODES.includes(value) &&
+        (!experimentalBridgeDisabled() || !LIVE_MODES.includes(value))
+        ? value
+        : "auto";
     } catch (_) {
       return "auto";
     }
@@ -26079,7 +26148,10 @@
   function discoveryChoice() {
     try {
       const value = Services.prefs.getStringPref(DISCOVERY_PREF, "auto");
-      return ["frame", "actor", "direct"].includes(value) ? value : "auto";
+      return ["frame", "actor", "direct"].includes(value) &&
+        (value !== "actor" || !experimentalBridgeDisabled())
+        ? value
+        : "auto";
     } catch (_) {
       return "auto";
     }
@@ -26361,6 +26433,8 @@
   }
 
   function unavailableReason(mode, source = current) {
+    if (experimentalBridgeDisabled() && LIVE_MODES.includes(mode))
+      return "Experimental Video Bridge disabled in settings";
     if (!source || source.data.kind !== "video") return "Choose a video source";
     const failures = unavailableBySource.get(sourceKey(source));
     if (failures?.has(mode)) {
@@ -26418,6 +26492,21 @@
       }
       picker.value = rendererChoice();
       picker.title = unavailableReason(rendererChoice()) || "Preview renderer";
+    }
+    const discoveryPicker = document.getElementById(
+      "zs-video-preview-discovery",
+    );
+    if (discoveryPicker) {
+      const actorOption = [...discoveryPicker.options].find(
+        (option) => option.value === "actor",
+      );
+      if (actorOption) {
+        actorOption.disabled = experimentalBridgeDisabled();
+        actorOption.title = experimentalBridgeDisabled()
+          ? "Experimental Video Bridge disabled in settings"
+          : "Actor discovery (experimental)";
+      }
+      discoveryPicker.value = discoveryChoice();
     }
     const availability = document.getElementById(
       "zs-video-preview-availability",
@@ -26717,7 +26806,7 @@
   }
 
   async function inspectActor(item) {
-    if (!ensureActor()) return [];
+    if (experimentalBridgeDisabled() || !ensureActor()) return [];
     const groups = await Promise.all(
       contexts(item.browser.browsingContext).map(async (context) => {
         try {
@@ -26779,6 +26868,8 @@
       choice === "auto"
         ? discoveryWinner || discoveryLocks.get(item.browser)
         : choice;
+    const permittedLock =
+      experimentalBridgeDisabled() && locked === "actor" ? null : locked;
     const run = async (method) => {
       metrics.discoveryCalls++;
       try {
@@ -26796,16 +26887,18 @@
       }
     };
     let groups = {};
-    if (locked) groups[locked] = await run(locked);
+    if (permittedLock) groups[permittedLock] = await run(permittedLock);
     if (
       choice === "auto" &&
       !discoveryWinner &&
-      (!locked || !groups[locked].length)
+      (!permittedLock || !groups[permittedLock].length)
     ) {
       discoveryLocks.delete(item.browser);
-      const methods = ["frame", "actor", "direct"].filter(
-        (method) => method !== locked,
-      );
+      const methods = (
+        experimentalBridgeDisabled()
+          ? ["frame", "direct"]
+          : ["frame", "actor", "direct"]
+      ).filter((method) => method !== permittedLock);
       await Promise.all(
         methods.map(async (method) => {
           groups[method] = await run(method);
@@ -26815,9 +26908,12 @@
     if (disposed || !enabled() || generation !== scanGeneration) return [];
     const winner =
       choice === "auto"
-        ? [locked, "frame", "actor", "direct"].find(
-            (method) => groups[method]?.length,
-          )
+        ? [
+            permittedLock,
+            "frame",
+            ...(experimentalBridgeDisabled() ? [] : ["actor"]),
+            "direct",
+          ].find((method) => groups[method]?.length)
         : choice;
     if (winner && groups[winner]?.length)
       discoveryLocks.set(item.browser, winner);
@@ -27005,7 +27101,7 @@
 
   async function playerQuery(browser, mode, kind, data = {}) {
     if (mode === "native" || mode === "stream") {
-      if (!ensureActor()) throw new Error("Actor unavailable");
+      if (!ensureActor()) throw new Error("Experimental actor unavailable");
       return limited(
         browser.browsingContext.currentWindowGlobal
           .getActor(ACTOR)
@@ -27373,7 +27469,10 @@
       const modes = previewMode
         ? [previewMode]
         : choice === "auto"
-          ? RENDER_MODES.filter(
+          ? (experimentalBridgeDisabled()
+              ? WORKING_MODES
+              : RENDER_MODES
+            ).filter(
               (mode) =>
                 (!previewAutoSelected || !LIVE_MODES.includes(mode)) &&
                 !unavailableReason(mode, source) &&
@@ -27449,7 +27548,11 @@
           bitmap?.close?.();
         }
       }
-      if (RENDER_MODES.every((mode) => failedRenderers.has(mode)))
+      if (
+        (experimentalBridgeDisabled() ? WORKING_MODES : RENDER_MODES).every(
+          (mode) => failedRenderers.has(mode),
+        )
+      )
         failedRenderers.clear();
       nextRenderProbe = Date.now() + POLL_MS;
     } finally {
@@ -27484,7 +27587,9 @@
           const other = windows.getNext();
           if (
             other !== window &&
-            other.ZentralVideoPreview?.diagnostics()?.running
+            other.ZentralVideoPreview?.diagnostics()?.running &&
+            other.ZentralVideoPreview?.diagnostics()
+              ?.experimentalBridgeDisabled !== true
           )
             otherRunning = true;
         }
@@ -27499,7 +27604,7 @@
     if (disposed || !enabled() || scanTimer) return;
     diagnostics.lastError = "";
     diagnostics.phase = "scanning";
-    ensureActor();
+    if (!experimentalBridgeDisabled()) ensureActor();
     mount();
     scanTimer = setInterval(scan, POLL_MS);
     frameTimer = setInterval(paint, FRAME_MS);
@@ -27509,6 +27614,14 @@
   const onPref = () => {
     if (enabled()) start();
     else stop();
+    injectSetting();
+  };
+  const onExperimentalPref = () => {
+    stop();
+    methodState.actor = experimentalBridgeDisabled()
+      ? "disabled in settings"
+      : "waiting";
+    if (enabled()) start();
     injectSetting();
   };
   const onTab = () => {
@@ -27531,6 +27644,7 @@
     refreshCard();
     if (enabled()) scan(true);
   };
+  Services.prefs.addObserver(EXPERIMENTAL_DISABLED_PREF, onExperimentalPref);
   Services.prefs.addObserver(RENDER_PREF, onRenderPref);
   Services.prefs.addObserver(DISCOVERY_PREF, onDiscoveryPref);
   Services.prefs.addObserver(PREF, onPref);
@@ -27541,6 +27655,10 @@
     disposed = true;
     stop();
     Services.prefs.removeObserver(PREF, onPref);
+    Services.prefs.removeObserver(
+      EXPERIMENTAL_DISABLED_PREF,
+      onExperimentalPref,
+    );
     Services.prefs.removeObserver(RENDER_PREF, onRenderPref);
     Services.prefs.removeObserver(DISCOVERY_PREF, onDiscoveryPref);
     for (const type of ["TabOpen", "TabClose", "TabSelect", "TabAttrModified"])
@@ -27569,6 +27687,7 @@
       build: BUILD,
       methods: { ...methodState },
       enabled: enabled(),
+      experimentalBridgeDisabled: experimentalBridgeDisabled(),
       renderer: previewMode,
       autoSelected: previewAutoSelected,
       hideMutedDuplicates: hideMutedDuplicates(),

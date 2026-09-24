@@ -5751,6 +5751,20 @@ panel[id*="tabgroup-editor"] {
 /* Hover-only styling for Essential and ordinary tabs is defined together at
  * the end of this sheet, after the ordinary favicon launcher layout. */
 
+/* Keep the invisible pill reveal target beside the pill, not along the
+ * entire panel edge. Its height follows the actual pill via ResizeObserver;
+ * the same vertical offset and clamp as the pill keep both aligned. */
+#zen-app-panel-root .zen-app-hover-zone {
+  top: clamp(
+    14px,
+    calc(50% + var(--bgalazka-pill-offset, 0%)),
+    calc(100% - 14px)
+  ) !important;
+  bottom: auto !important;
+  height: var(--zentral-pill-hover-height, 0px) !important;
+  transform: translateY(-50%);
+}
+
 /* --------------------------------------------------------------------------
  * 3. Pill Menu Vertical Offset (numeric, -50% to +50%, 0% = centered)
  * --------------------------------------------------------------------------
