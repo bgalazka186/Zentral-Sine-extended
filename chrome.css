@@ -4991,7 +4991,7 @@ panel[id*="tabgroup-editor"] {
  *     backed by a genuine pinned Firefox tab and all hosts are corralled into one collapsed Zen folder. The rules
  *     near the end of this extension section make ONLY that marked folder/tabs ultra-compact. Do not use display:none
  *     or the native `hidden` attribute on the backing tabs: the entire point is to leave them as real, present Zen/
- *     Firefox tabs while making their implementation-detail UI almost disappear. Default OFF via root attribute.
+ *     Firefox tabs while making their implementation-detail UI almost disappear. The root attribute follows its preference.
  * ============================================================================================================= */
 
 /* CSS Variable Defaults for Settings-Controlled Translucency */
@@ -5013,7 +5013,7 @@ panel[id*="tabgroup-editor"] {
    This setting makes every existing panel layer an explicit hit-test target,
    preventing pointer presses from falling through a focused/translucent panel
    without adding an overlay that would block the web page inside the panel.
-   Insta Peek stays intentionally non-interactive. Default OFF.
+   Insta Peek stays intentionally non-interactive. The root attribute follows its preference.
    ========================================================================== */
 :root[bgalazka-panel-input-shield="true"]
   #zen-app-panel-root[open]:not([data-insta-peek="true"]) {
@@ -8170,4 +8170,633 @@ panel[id*="tabgroup-editor"] {
   #zen-app-panel-pill
   .zen-app-hover-reveal-btn {
   display: none !important;
+}
+
+/* Look: Custom only; Classic retains the previous styling. */
+:root[bgalazka-look="atelier"] {
+  --zl-canvas: var(--bgalazka-look-canvas, #17191b);
+  --zl-surface: var(--bgalazka-look-surface, #202224);
+  --zl-raised: var(--bgalazka-look-raised, #2b2e31);
+  --zl-accent: var(--bgalazka-look-accent, #a5bec0);
+  --zl-text: var(--bgalazka-look-text, #dce0e1);
+  --zl-muted: var(--bgalazka-look-muted, #a4aaad);
+  --zl-surface-opacity: var(--bgalazka-look-surface-opacity, 100%);
+  --zl-raised-opacity: var(--bgalazka-look-raised-opacity, 100%);
+  --zl-toolbar-opacity: var(--bgalazka-look-toolbar-opacity, 100%);
+  --zl-address-opacity: var(--bgalazka-look-address-opacity, 100%);
+  --zl-button-opacity: var(--bgalazka-look-button-opacity, 100%);
+  --zl-tile-opacity: var(--bgalazka-look-tile-opacity, 100%);
+  --zl-video-opacity: var(--bgalazka-look-video-opacity, 100%);
+  --zl-video-control-opacity: var(--bgalazka-look-video-control-opacity, 100%);
+  --zl-popup-opacity: var(--bgalazka-look-popup-opacity, 100%);
+  --zl-radius: var(--bgalazka-look-radius, 0px);
+  --zl-depth: var(--bgalazka-look-depth, 0%);
+  --zl-panel-border: var(--bgalazka-look-panel-border, 1px);
+  --zl-toolbar-surface: var(--bgalazka-look-toolbar-surface, #202224);
+  --zl-toolbar-url: var(--bgalazka-look-toolbar-url, #292c2e);
+  --zl-toolbar-border: var(--bgalazka-look-toolbar-border, 1px);
+  --zl-button-surface: var(--bgalazka-look-button-surface, #34373a);
+  --zl-button-text: var(--bgalazka-look-button-text, #d4d8d9);
+  --zl-button-border-color: var(--bgalazka-look-button-border-color, #292929);
+  --zl-button-border: var(--bgalazka-look-button-border, 0px);
+  --zl-control-size: var(--bgalazka-look-control-size, 22px);
+  --zl-row-padding: var(--bgalazka-look-row-padding, 4px);
+  --zl-row-rule: var(--bgalazka-look-row-rule, 0px);
+  --zl-video-canvas: var(--bgalazka-look-video-canvas, #0a0a0a);
+  --zl-video-control: var(--bgalazka-look-video-control, #000000);
+  --zl-video-text: var(--bgalazka-look-video-text, #d8d8d8);
+  --zl-video-muted: var(--bgalazka-look-video-muted, #838383);
+  --zl-video-selected: var(--bgalazka-look-video-selected, #7d0000);
+  --zl-video-border: var(--bgalazka-look-video-border, 0px);
+  --zl-video-padding: var(--bgalazka-look-video-padding, 0px);
+  --zl-video-row-height: var(--bgalazka-look-video-row-height, 22px);
+  --zl-video-radius: var(--bgalazka-look-video-radius, 0px);
+  --zl-gap: 8px;
+  --zl-button-fill: transparent;
+  --zl-panel-button-fill: transparent;
+  --zl-button-edge: var(--zl-button-border);
+}
+:root[bgalazka-look="atelier"][bgalazka-look-spacing="compact"] {
+  --zl-gap: 4px;
+}
+:root[bgalazka-look="atelier"][bgalazka-look-spacing="airy"] {
+  --zl-gap: 13px;
+}
+:root[bgalazka-look="atelier"][bgalazka-look-buttons="plain"] {
+  --zl-button-edge: 0px;
+}
+:root[bgalazka-look="atelier"][bgalazka-look-buttons="filled"] {
+  --zl-button-fill: var(--zl-button-surface);
+  --zl-panel-button-fill: color-mix(
+    in srgb,
+    var(--zl-button-surface) var(--zl-button-opacity),
+    transparent
+  );
+}
+:root[bgalazka-look="atelier"] #zen-app-panel-root #zen-app-panel-clip,
+:root[bgalazka-look="atelier"] #zen-app-panel-root #zen-app-panel-slider {
+  border-radius: var(--zl-radius) !important;
+}
+/* Clear chrome-host backdrops as well as the visible panel surface. Web pages
+   inside a browser still paint their own backgrounds. */
+:root[bgalazka-look="atelier"] #zen-app-panel-root,
+:root[bgalazka-look="atelier"] #zen-app-panel-root #zen-app-panel-clip,
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-root
+  #zen-app-panel-slider
+  > browser,
+:root[bgalazka-look="atelier"] #bgalazka-super-panel > browser {
+  background-color: transparent !important;
+}
+:root[bgalazka-look="atelier"] #zen-app-panel-root #zen-app-panel-slider,
+:root[bgalazka-look="atelier"] #bgalazka-super-panel {
+  background: color-mix(
+    in srgb,
+    var(--zl-surface) var(--zl-surface-opacity),
+    transparent
+  ) !important;
+  color: var(--zl-text) !important;
+  border: var(--zl-panel-border) solid var(--zl-button-border-color) !important;
+  border-radius: var(--zl-radius) !important;
+  box-shadow: 0 12px 32px color-mix(in srgb, black var(--zl-depth), transparent) !important;
+}
+/* Tab group popup opacity is independent of the web panel frame. */
+:root[bgalazka-look="atelier"] .zentral-tg-cp-box {
+  background: color-mix(
+    in srgb,
+    var(--zl-surface) var(--zl-popup-opacity),
+    transparent
+  ) !important;
+  color: var(--zl-text) !important;
+  border: var(--zl-panel-border) solid var(--zl-button-border-color) !important;
+  border-radius: var(--zl-radius) !important;
+  box-shadow: 0 12px 32px color-mix(in srgb, black var(--zl-depth), transparent) !important;
+}
+:root[bgalazka-look="atelier"] #zen-app-panel-toolbar,
+:root[bgalazka-look="atelier"] #bgalazka-super-panel .bgalazka-super-bar {
+  background: color-mix(
+    in srgb,
+    var(--zl-toolbar-surface) var(--zl-toolbar-opacity),
+    transparent
+  ) !important;
+  color: var(--zl-button-text) !important;
+  border: var(--zl-toolbar-border) solid var(--zl-button-border-color) !important;
+  border-style: solid none none !important;
+}
+:root[bgalazka-look="atelier"] #bgalazka-super-panel .bgalazka-super-bar {
+  border-style: none none solid !important;
+}
+:root[bgalazka-look="atelier"] #zen-app-panel-toolbar .zen-toolbar-urlbar,
+:root[bgalazka-look="atelier"] #bgalazka-super-panel .bgalazka-second-url {
+  background: color-mix(
+    in srgb,
+    var(--zl-toolbar-url) var(--zl-address-opacity),
+    transparent
+  ) !important;
+  color: var(--zl-button-text) !important;
+  border: var(--zl-toolbar-border) solid var(--zl-button-border-color) !important;
+  border-radius: var(--zl-radius) !important;
+}
+:root[bgalazka-look="atelier"] #zen-app-panel-toolbar .zen-toolbar-btn,
+:root[bgalazka-look="atelier"] #bgalazka-super-panel .bgalazka-super-bar button,
+:root[bgalazka-look="atelier"] #zen-app-panel-toolbar .zen-toolbar-zoom-label,
+:root[bgalazka-look="atelier"]
+  #bgalazka-super-panel
+  .bgalazka-second-zoom-label {
+  box-sizing: border-box !important;
+  height: var(--zl-control-size) !important;
+  min-height: var(--zl-control-size) !important;
+  color: var(--zl-button-text) !important;
+  background: var(--zl-panel-button-fill) !important;
+  border: var(--zl-button-edge) solid var(--zl-button-border-color) !important;
+  border-radius: var(--zl-radius) !important;
+  box-shadow: none !important;
+  outline: none !important;
+  appearance: none !important;
+}
+:root[bgalazka-look="atelier"] #zen-app-panel-toolbar .zen-toolbar-btn,
+:root[bgalazka-look="atelier"]
+  #bgalazka-super-panel
+  .bgalazka-super-bar
+  button {
+  width: var(--zl-control-size) !important;
+  min-width: var(--zl-control-size) !important;
+}
+:root[bgalazka-look="atelier"] #zen-app-panel-toolbar .zen-toolbar-zoom-label,
+:root[bgalazka-look="atelier"]
+  #bgalazka-super-panel
+  .bgalazka-second-zoom-label {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 30px !important;
+  width: auto !important;
+  padding-inline: 3px !important;
+}
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-toolbar
+  .zen-toolbar-btn:hover:not(:disabled),
+:root[bgalazka-look="atelier"]
+  #bgalazka-super-panel
+  .bgalazka-super-bar
+  button:hover {
+  background: color-mix(
+    in srgb,
+    var(--zl-raised) var(--zl-raised-opacity),
+    transparent
+  ) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zen-apps-sidebar-grid
+  .zen-app-tile:not(.zen-app-add-btn) {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: var(--zl-radius) !important;
+  box-shadow: none !important;
+}
+:root[bgalazka-look="atelier"][bgalazka-look-tiles="soft"]
+  #zen-apps-sidebar-grid
+  .zen-app-tile:not(.zen-app-add-btn) {
+  background: color-mix(
+    in srgb,
+    var(--zl-raised) var(--zl-tile-opacity),
+    transparent
+  ) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zen-apps-sidebar-grid
+  .zen-app-tile:not(.zen-app-add-btn):hover,
+:root[bgalazka-look="atelier"]
+  #zen-apps-sidebar-grid
+  .zen-app-tile[data-active="true"] {
+  background: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--zl-accent) 20%, var(--zl-surface))
+      var(--zl-tile-opacity),
+    transparent
+  ) !important;
+}
+/* The fixed-height settings dialog must give its Look page its own scrollport. */
+#zentral-settings-modal #zs-panel-extension-look {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-width: thin !important;
+}
+#zentral-settings-modal #zs-panel-extension-look .zs-look-content {
+  display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: max-content !important;
+  overflow: visible !important;
+  padding-bottom: 70px !important;
+}
+:root[bgalazka-look="atelier"] #zentral-settings-modal .zs-dialog {
+  border: var(--zl-panel-border) solid var(--zl-button-border-color) !important;
+  border-radius: var(--zl-radius) !important;
+  box-shadow: 0 16px 42px color-mix(in srgb, black var(--zl-depth), transparent) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal
+  :is(.zs-extension-subpanel, #zs-panel-bgalazka, #zs-panel-video-cloning) {
+  background: var(--zl-canvas) !important;
+  color: var(--zl-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal
+  :is(.zs-extension-subpanel, #zs-panel-bgalazka, #zs-panel-video-cloning)
+  .zs-row {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: var(--zl-row-rule) solid var(--zl-button-border-color) !important;
+  border-radius: 0 !important;
+  padding: var(--zl-row-padding) 12px !important;
+  margin-bottom: var(--zl-gap) !important;
+}
+:root[bgalazka-look="atelier"][bgalazka-look-rows="cards"]
+  #zentral-settings-modal
+  :is(.zs-extension-subpanel, #zs-panel-bgalazka, #zs-panel-video-cloning)
+  .zs-row {
+  background: var(--zl-surface) !important;
+  border: var(--zl-row-rule) solid var(--zl-button-border-color) !important;
+  border-radius: var(--zl-radius) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal
+  :is(.zs-extension-subpanel, #zs-panel-bgalazka, #zs-panel-video-cloning)
+  .zs-label {
+  color: var(--zl-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal
+  :is(.zs-extension-subpanel, #zs-panel-bgalazka, #zs-panel-video-cloning)
+  .zs-sublabel {
+  color: var(--zl-muted) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal
+  :is(.zs-extension-subpanel, #zs-panel-bgalazka, #zs-panel-video-cloning)
+  :is(.zs-select-input, .zs-text-input, .zs-keybind-input) {
+  background: var(--zl-raised) !important;
+  color: var(--zl-text) !important;
+  border: var(--zl-button-edge) solid var(--zl-button-border-color) !important;
+  border-radius: var(--zl-radius) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal
+  :is(.zs-extension-preset-btn, .zs-reset-btn, .zs-look-action) {
+  background: var(--zl-button-fill) !important;
+  color: var(--zl-button-text) !important;
+  border: var(--zl-button-edge) solid var(--zl-button-border-color) !important;
+  border-radius: var(--zl-radius) !important;
+  padding: 7px 11px !important;
+  cursor: pointer !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal
+  :is(.zs-extension-preset-btn, .zs-reset-btn, .zs-look-action):hover {
+  background: var(--zl-raised) !important;
+}
+:root[bgalazka-look="atelier"] #zentral-settings-modal .zs-ownership-note {
+  background: var(--zl-surface) !important;
+  color: var(--zl-muted) !important;
+  border: var(--zl-row-rule) solid var(--zl-button-border-color) !important;
+  border-radius: var(--zl-radius) !important;
+}
+#zentral-settings-modal #zs-panel-extension-look .zs-look-intro {
+  padding: 14px 12px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--zl-text, #dce0e1);
+}
+#zentral-settings-modal #zs-panel-extension-look .zs-look-eyebrow,
+#zentral-settings-modal #zs-panel-extension-look .zs-look-heading {
+  color: var(--zl-accent, #a5bec0);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+#zentral-settings-modal #zs-panel-extension-look .zs-look-intro h3 {
+  margin: 6px 0 4px;
+  font-size: 18px;
+  font-weight: 600;
+}
+#zentral-settings-modal #zs-panel-extension-look .zs-look-intro p,
+#zentral-settings-modal #zs-panel-extension-look .zs-look-note {
+  color: var(--zl-muted, #a4aaad);
+  font-size: 12px;
+  line-height: 1.5;
+}
+#zentral-settings-modal #zs-panel-extension-look .zs-look-heading {
+  margin: 24px 12px 8px;
+}
+#zentral-settings-modal #zs-panel-extension-look .zs-look-group {
+  display: grid;
+  gap: var(--zl-gap, 8px);
+}
+#zentral-settings-modal #zs-panel-extension-look .zs-look-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 20px 12px;
+}
+#zentral-settings-modal #zs-panel-extension-look .zs-look-themes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--zl-gap, 8px);
+  margin: 8px 12px 16px;
+}
+#zentral-settings-modal #zs-panel-extension-look .zs-look-theme {
+  appearance: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--zl-text, #dce0e1);
+  background: var(--zl-button-fill, #2b2e31);
+  border: var(--zl-button-edge, 0px) solid
+    var(--zl-button-border-color, #667073);
+  border-radius: var(--zl-radius, 0px);
+  padding: 7px 10px;
+}
+#zentral-settings-modal #zs-panel-extension-look .zs-look-theme::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--zs-theme-swatch);
+}
+#zentral-settings-modal #zs-panel-extension-look .zs-look-theme:hover {
+  background: var(--zl-raised, #2b2e31);
+}
+#zentral-settings-modal #zs-panel-extension-look .zs-look-theme:focus-visible {
+  outline: 2px solid var(--zl-accent, #a5bec0);
+  outline-offset: 2px;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal
+  #zs-panel-extension-look
+  input[type="color"] {
+  border: var(--zl-button-edge, 0px) solid
+    var(--zl-button-border-color, #667073) !important;
+  border-radius: var(--zl-radius, 0px) !important;
+}
+:root[bgalazka-look="atelier"] #zentral-settings-modal .zs-range-slider {
+  accent-color: var(--zl-accent) !important;
+}
+/* Sidebar video: no boxed source selection; subtle source marker or fill. */
+:root[bgalazka-look="atelier"] #zentral-video-preview {
+  padding: var(--zl-video-padding) !important;
+  gap: var(--zl-gap) !important;
+  background: color-mix(
+    in srgb,
+    var(--zl-video-canvas) var(--zl-video-opacity),
+    transparent
+  ) !important;
+  color: var(--zl-video-text) !important;
+  border: var(--zl-video-border) solid var(--zl-button-border-color) !important;
+  border-radius: var(--zl-video-radius) !important;
+  box-shadow: none !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview
+  .zentral-video-preview-picture {
+  border: var(--zl-video-border) solid var(--zl-button-border-color) !important;
+  border-radius: var(--zl-video-radius) !important;
+  box-shadow: none !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview
+  .zentral-video-preview-sources {
+  padding: 0 !important;
+  margin: 0 !important;
+  background: transparent !important;
+  color: var(--zl-video-muted) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview
+  .zentral-video-preview-source {
+  box-sizing: border-box !important;
+  height: var(--zl-video-row-height) !important;
+  padding: 3px 7px !important;
+  margin: 0 !important;
+  background: transparent !important;
+  color: var(--zl-video-muted) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  appearance: none !important;
+  text-align: start !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview
+  .zentral-video-preview-source[aria-selected="true"] {
+  color: var(--zl-video-text) !important;
+  background: transparent !important;
+  box-shadow: inset 2px 0 var(--zl-video-selected) !important;
+}
+:root[bgalazka-look="atelier"][bgalazka-look-video-selection="filled"]
+  #zentral-video-preview
+  .zentral-video-preview-source[aria-selected="true"] {
+  background: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--zl-video-selected) 24%, var(--zl-video-canvas))
+      var(--zl-video-control-opacity),
+    transparent
+  ) !important;
+  box-shadow: none !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview
+  .zentral-video-preview-bar {
+  gap: var(--zl-gap) !important;
+  min-height: var(--zl-control-size) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview
+  .zentral-video-preview-caption,
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview
+  .zentral-video-preview-capabilities {
+  color: var(--zl-video-muted) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview
+  button:not(.zentral-video-preview-source) {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 var(--zl-control-size) !important;
+  box-sizing: border-box !important;
+  width: var(--zl-control-size) !important;
+  min-width: var(--zl-control-size) !important;
+  height: var(--zl-control-size) !important;
+  padding: 0 !important;
+  background: var(--zl-panel-button-fill) !important;
+  color: var(--zl-button-text) !important;
+  border: var(--zl-button-edge) solid var(--zl-button-border-color) !important;
+  border-radius: var(--zl-radius) !important;
+  font: inherit !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  opacity: 0.85 !important;
+  appearance: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  text-shadow: none !important;
+}
+:root[bgalazka-look="atelier"][bgalazka-look-buttons="filled"]
+  #zentral-video-preview
+  button:not(.zentral-video-preview-source) {
+  background: color-mix(
+    in srgb,
+    var(--zl-video-control) var(--zl-video-control-opacity),
+    transparent
+  ) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview
+  button:not(.zentral-video-preview-source):hover:not(:disabled) {
+  background: color-mix(
+    in srgb,
+    var(--zl-raised) var(--zl-raised-opacity),
+    transparent
+  ) !important;
+  opacity: 1 !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview
+  .zentral-video-preview-seek {
+  accent-color: var(--zl-video-selected) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview
+  :is(button, .zentral-video-preview-source):focus-visible,
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-toolbar
+  :is(button, .zen-toolbar-zoom-label):focus-visible,
+:root[bgalazka-look="atelier"]
+  #bgalazka-super-panel
+  .bgalazka-super-bar
+  button:focus-visible,
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal
+  .zs-look-action:focus-visible {
+  outline: 2px solid var(--zl-accent) !important;
+  outline-offset: 1px !important;
+}
+/* The secondary reset is a button; give it the same text-only footprint as
+   the primary toolbar's reset label, independent of the compact icon size. */
+#bgalazka-super-panel .bgalazka-super-bar button.bgalazka-second-zoom-label {
+  flex: 0 0 34px !important;
+  width: 34px !important;
+  min-width: 34px !important;
+  padding: 0 3px !important;
+  font-size: 10px !important;
+  font-weight: normal !important;
+  line-height: 1 !important;
+  opacity: 0.75 !important;
+  appearance: none !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+#bgalazka-super-panel
+  .bgalazka-super-bar
+  button.bgalazka-second-zoom-label:hover {
+  background: transparent !important;
+}
+:root[bgalazka-look="atelier"]
+  #bgalazka-super-panel
+  .bgalazka-super-bar
+  button.bgalazka-second-zoom-label {
+  flex: 0 0 max(34px, var(--zl-control-size)) !important;
+  width: max(34px, var(--zl-control-size)) !important;
+  min-width: max(34px, var(--zl-control-size)) !important;
+  height: var(--zl-control-size) !important;
+  color: var(--zl-button-text) !important;
+  background: var(--zl-panel-button-fill) !important;
+  border: var(--zl-button-edge) solid var(--zl-button-border-color) !important;
+  border-radius: var(--zl-radius) !important;
+}
+:root[bgalazka-look="atelier"]
+  #bgalazka-super-panel
+  .bgalazka-super-bar
+  button.bgalazka-second-zoom-label:hover {
+  background: var(--zl-panel-button-fill) !important;
+}
+/* Ordinary floating panels keep the existing pinned opacity behavior.
+   Split views use the full-opacity rules below instead. */
+:root[bgalazka-look="atelier"][bgalazka-translucency="true"]:not(
+    [bgalazka-push-page="true"][bgalazka-panel-pinned="true"]
+  )
+  #zen-app-panel-root:not([data-pinned="true"])
+  #zen-app-panel-slider {
+  background-color: color-mix(
+    in srgb,
+    var(--zl-surface)
+      min(var(--zl-surface-opacity), var(--bg-opacity-unpinned, 92%)),
+    transparent
+  ) !important;
+}
+:root[bgalazka-look="atelier"][bgalazka-translucency="true"]:not(
+    [bgalazka-push-page="true"][bgalazka-panel-pinned="true"]
+  )
+  #zen-app-panel-root[data-pinned="true"]:is(:hover, :focus-within)
+  #zen-app-panel-slider {
+  background-color: color-mix(
+    in srgb,
+    var(--zl-surface)
+      min(var(--zl-surface-opacity), var(--bg-opacity-pinned-focus, 85%)),
+    transparent
+  ) !important;
+}
+:root[bgalazka-look="atelier"][bgalazka-translucency="true"]:not(
+    [bgalazka-push-page="true"][bgalazka-panel-pinned="true"]
+  )
+  #zen-app-panel-root[data-pinned="true"]:not(:hover):not(:focus-within)
+  #zen-app-panel-slider {
+  background-color: color-mix(
+    in srgb,
+    var(--zl-surface)
+      min(var(--zl-surface-opacity), var(--bg-opacity-pinned-blur, 45%)),
+    transparent
+  ) !important;
+}
+/* Split views keep their content and controls at full opacity. Their panel
+   backgrounds can still be transparent through the Look surface slider. */
+:root[bgalazka-triple-view="true"][bgalazka-translucency="true"]
+  #zen-app-panel-root[open]:is(:hover, :focus-within)
+  #zen-app-panel-slider,
+:root[bgalazka-triple-view="true"][bgalazka-translucency="true"]
+  #zen-app-panel-root[open]:not(:hover):not(:focus-within)
+  #zen-app-panel-slider,
+:root[bgalazka-triple-view="true"][bgalazka-translucency="true"]
+  #bgalazka-super-panel:is(
+    :hover,
+    :focus-within,
+    :not(:hover):not(:focus-within)
+  ) {
+  opacity: 1 !important;
+}
+:root[bgalazka-look="atelier"][bgalazka-translucency="true"]:is(
+    [bgalazka-triple-view="true"],
+    [bgalazka-push-page="true"][bgalazka-panel-pinned="true"]
+  )
+  #zen-app-panel-root[open]
+  #zen-app-panel-slider {
+  opacity: 1 !important;
+  background-color: color-mix(
+    in srgb,
+    var(--zl-surface) var(--zl-surface-opacity),
+    transparent
+  ) !important;
 }

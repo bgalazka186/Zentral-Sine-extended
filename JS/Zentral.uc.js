@@ -244,23 +244,23 @@
       this.defaultPrefs = {
         [Constants.Apps.PREF_APPS]: "[]",
         [Constants.Apps.PREF_WIDTH]: 350,
-        [Constants.Apps.PREF_ANIMATION_SPEED]: Constants.Apps.DEFAULT_SLIDE_MS,
-        [Constants.Apps.PREF_ANIMATION_TYPE]: "slide",
+        [Constants.Apps.PREF_ANIMATION_SPEED]: 0,
+        [Constants.Apps.PREF_ANIMATION_TYPE]: "none",
         [Constants.Apps.PREF_ENABLED]: true,
-        [Constants.Apps.PREF_MAX_APPS]: Constants.Apps.DEFAULT_MAX_APPS,
-        [Constants.Apps.PREF_APPS_PER_ROW]: Constants.Apps.DEFAULT_APPS_PER_ROW,
-        [Constants.Apps.PREF_MAX_ROWS]: Constants.Apps.DEFAULT_MAX_ROWS,
+        [Constants.Apps.PREF_MAX_APPS]: -1,
+        [Constants.Apps.PREF_APPS_PER_ROW]: 1,
+        [Constants.Apps.PREF_MAX_ROWS]: 1,
         [Constants.Apps.PREF_AUTOHIDE]: false,
         [Constants.Apps.PREF_INSTA_PEEK_SHORTCUT]: "Alt+Q",
         [Constants.Apps.PREF_PLACEMENT]: "sidebar",
         [Constants.Apps.PREF_UTILITY_ORDER]:
           '["autohide",null,null,"settings"]',
-        [Constants.Apps.PREF_HIDE_UTILITY_SECTION]: false,
+        [Constants.Apps.PREF_HIDE_UTILITY_SECTION]: true,
         [Constants.TabGroups.PREF_COLORS]: "{}",
         [Constants.TabGroups.PREF_STATE]: "{}",
-        [Constants.TabGroups.PREF_ENABLED]: true,
+        [Constants.TabGroups.PREF_ENABLED]: false,
         [Constants.TabGroups.PREF_COLLAPSE_ON_LAUNCH]: false,
-        [Constants.TabGroups.PREF_THUMBNAILS]: true,
+        [Constants.TabGroups.PREF_THUMBNAILS]: false,
         [Constants.TabGroups.PREF_SHOW_CHEVRON]: true,
         [Constants.TabGroups.PREF_INDICATOR_TYPE]: "circle",
         [Constants.TabGroups.PREF_LABEL_OPACITY]: 85,
@@ -14841,6 +14841,8 @@
  *    false, silently skipping any code guarded by it — this is what happened in the previous version and is
  *    why the opposite-docking/pin-state hooks never actually ran. Always reach the class via the singleton
  *    instance instead: `window.Zentral.Apps`, `window.Zentral.TabGroups`, `window.Zentral.Settings`.
+ *    `Constants` is private to the base IIFE too. Never use bare `Constants` in this extension;
+ *    use local pref keys or `window.Zentral.Core.defaultPrefs` for the base key inventory.
  * 6. TAB CLICK PASS-THROUGH: Any click on a tile inside a tab bubbles to the tab unless mousedown, mouseup,
  *    click, and auxclick are stopped in the CAPTURE phase (e.stopPropagation()). This prevents essential tabs
  *    from switching on LMB.
@@ -14995,7 +14997,7 @@
  *     Zentral is the exact same browsing context that owns the Firefox tabId -- not a dummy/shadow duplicate. Backing
  *     tabs are pinned into one collapsed `Zentral Add-on Hosts` Zen folder and compacted by extension CSS. NEVER replace
  *     this with a fake tabId map: WebExtension APIs resolve operations back through nativeTab.linkedBrowser, so a dummy
- *     tab would target the wrong document. The bridge is DEFAULT OFF and intentionally unloads existing panel browsers
+ *     tab would target the wrong document. The bridge follows PROFILE_DEFAULTS and intentionally unloads existing panel browsers
  *     when toggled so every recreated panel has one coherent browser/tab identity from birth.
  * 28. THE GRAY-PANEL / "GHOST INTERACTION" BUG (docShellIsActive) -- read this before touching panel
  *     visibility, preload, or the video-sidebar preview module:
@@ -15057,9 +15059,9 @@
  * ============================================================================================================= */
 
 (function initBgalazkaExtension() {
-  /* NOTE 26 - PANEL INPUT SHIELD: opt-in `panel_input_shield` keeps the open
+  /* NOTE 26 - PANEL INPUT SHIELD: configurable `panel_input_shield` keeps the open
    * panel as a pointer hit-test barrier and scopes mouse Back/Forward buttons
-   * to the visible app browser. Base Zentral remains untouched/default-off. */
+   * to the visible app browser. Its initial value follows PROFILE_DEFAULTS. */
   if (window.BgalazkaExtensionInitialized) return;
   window.BgalazkaExtensionInitialized = true;
 
@@ -15213,7 +15215,37 @@
     },
   ];
 
+  // Reusable defaults from the owner's exported profile. Keep per-app data,
+  // linked pairs, shortcuts, private URLs, panel coordinates and viewport
+  // dimensions out of this table. Existing saved preferences always win.
+  const PROFILE_DEFAULTS = Object.freeze({
+    [EXT_PREFS.TRANSLUCENCY]: true,
+    [EXT_PREFS.OPPOSITE_DOCKING]: true,
+    [EXT_PREFS.TAB_ISOLATION]: true,
+    [EXT_PREFS.CORNER_TILES]: true,
+    [EXT_PREFS.ALL_TAB_PANELS]: true,
+    [EXT_PREFS.PANEL_INPUT_SHIELD]: true,
+    [EXT_PREFS.ADDON_TAB_ID_BRIDGE]: true,
+    [EXT_PREFS.SMART_SLEEP]: true,
+    [EXT_PREFS.AUDIO_INDICATOR]: true,
+    "zen.workspace.bgalazka.push_page": true,
+    "zen.workspace.bgalazka.pill_peek_dot": true,
+    "zen.workspace.bgalazka.pill_peek_dot_color": "#5e0002",
+    "zen.workspace.bgalazka.pill_peek_dot_opacity": 31,
+    "zen.workspace.bgalazka.pill_background_opacity": 48,
+    "zen.workspace.bgalazka.blur_intensity": 0,
+    "zen.workspace.bgalazka.web_toolbar_enabled": true,
+    "zen.workspace.bgalazka.web_toolbar_urlbar": true,
+    "zen.workspace.bgalazka.web_toolbar_zoom": true,
+    "zen.workspace.bgalazka.web_toolbar_quickswitch": true,
+    "zen.workspace.bgalazka.web_toolbar_quickswitch_target.ddg": true,
+    "zen.workspace.bgalazka.web_toolbar_quickswitch_target.startpage": true,
+    "zen.workspace.bgalazka.web_toolbar_quickswitch_target.youtube": true,
+  });
+
   function getPref(key, fallback) {
+    if (Object.prototype.hasOwnProperty.call(PROFILE_DEFAULTS, key))
+      fallback = PROFILE_DEFAULTS[key];
     try {
       if (Services.prefs.prefHasUserValue(key)) {
         if (typeof fallback === "boolean")
@@ -15636,10 +15668,9 @@
   function applyHorizontalPanelOffset(root) {
     if (!root) return;
 
-    // Dual-View owns the panel/page split edge, while Edge-Attached Panels
-    // intentionally pins normal panels to their current viewport edge. In
-    // either mode suppress the saved physical X offset without mutating it,
-    // so disabling the mode restores the exact user position.
+    // Dual/Triple View closes the built-in 12px side gap while retaining a
+    // 12px gutter to the pushed page. Do not overwrite the user's saved X
+    // offset; it returns when the view closes.
     const dualViewActive =
       document.documentElement.getAttribute("bgalazka-push-page") === "true";
     const edgeAttachedPanels =
@@ -15647,9 +15678,18 @@
       "true";
     const anchorSide = getHorizontalAnchorSide(root);
     if (dualViewActive || edgeAttachedPanels) {
-      if (root.style.marginLeft !== "0px") root.style.marginLeft = "0px";
-      if (root.style.marginRight !== "0px") root.style.marginRight = "0px";
-      root._bgalazkaAppliedHorizontalOffset = 0;
+      const edgeMargin = dualViewActive ? "-12px" : "0px";
+      const leftMargin = anchorSide === "left" ? edgeMargin : "0px";
+      const rightMargin = anchorSide === "right" ? edgeMargin : "0px";
+      if (root.style.marginLeft !== leftMargin)
+        root.style.marginLeft = leftMargin;
+      if (root.style.marginRight !== rightMargin)
+        root.style.marginRight = rightMargin;
+      root._bgalazkaAppliedHorizontalOffset = dualViewActive
+        ? anchorSide === "right"
+          ? 12
+          : -12
+        : 0;
       root._bgalazkaHorizontalAnchorSide = anchorSide;
       return;
     }
@@ -15840,18 +15880,46 @@
   function applyVerticalResizeExtras(root) {
     if (!root) return;
 
-    // Dual-View and Edge-Attached Panels both intentionally ignore the user's
-    // extra top/bottom margins and vertical position offset. Temporarily flatten
-    // both margins in either mode, but leave every cached/saved value untouched
-    // so the exact vertical size/position returns afterward.
+    // Dual/Triple View fills the content's usable height, respecting the
+    // browser toolbar above it. Saved resize/position offsets return later.
     const dualViewActive =
       document.documentElement.getAttribute("bgalazka-push-page") === "true";
     const edgeAttachedPanels =
       document.documentElement.getAttribute("bgalazka-edge-attached-panels") ===
       "true";
     if (dualViewActive || edgeAttachedPanels) {
-      if (root.style.marginTop !== "0px") root.style.marginTop = "0px";
-      if (root.style.marginBottom !== "0px") root.style.marginBottom = "0px";
+      let topMargin = "0px";
+      let bottomMargin = "0px";
+      if (dualViewActive) {
+        const content = document.getElementById("tabbrowser-tabbox");
+        const rect = content?.getBoundingClientRect();
+        const nativeTop = parseFloat(root.style.top) || 12;
+        const nativeBottom = parseFloat(root.style.bottom) || 12;
+        let desiredTop =
+          rect?.height > 0 ? Math.max(0, Math.round(rect.top)) : 0;
+        const navbar = document.getElementById("zen-appcontent-navbar-wrapper");
+        if (navbar) {
+          const style = window.getComputedStyle(navbar);
+          if (
+            style.display !== "none" &&
+            style.visibility !== "hidden" &&
+            parseFloat(style.opacity || "1") > 0.1
+          )
+            desiredTop = Math.max(
+              desiredTop,
+              Math.round(navbar.getBoundingClientRect().bottom),
+            );
+        }
+        const desiredBottom =
+          rect?.height > 0
+            ? Math.max(0, Math.round(window.innerHeight - rect.bottom))
+            : 0;
+        topMargin = Math.min(0, desiredTop - nativeTop) + "px";
+        bottomMargin = desiredBottom - nativeBottom + "px";
+      }
+      if (root.style.marginTop !== topMargin) root.style.marginTop = topMargin;
+      if (root.style.marginBottom !== bottomMargin)
+        root.style.marginBottom = bottomMargin;
       return;
     }
 
@@ -16536,7 +16604,16 @@
     appsInstance.positionPanel = function () {
       const root = document.getElementById("zen-app-panel-root");
       if (!isOppositeDockingCached() || this.isPlacementVerticalBar()) {
+        const oldTop = root?.style.top;
+        const oldBottom = root?.style.bottom;
         if (origPositionPanel) origPositionPanel();
+        if (
+          root &&
+          document.documentElement.getAttribute("bgalazka-push-page") ===
+            "true" &&
+          (root.style.top !== oldTop || root.style.bottom !== oldBottom)
+        )
+          applyVerticalResizeExtras(root);
         if (root) root._bgalazkaLastSide = undefined;
         return;
       }
@@ -16581,9 +16658,17 @@
         left: dockOnRight ? "auto" : gap + "px",
         right: dockOnRight ? gap + "px" : "auto",
       };
+      const verticalChanged =
+        root.style.top !== geometry.top ||
+        root.style.bottom !== geometry.bottom;
       for (const [key, value] of Object.entries(geometry)) {
         if (root.style[key] !== value) root.style[key] = value;
       }
+      if (
+        verticalChanged &&
+        document.documentElement.getAttribute("bgalazka-push-page") === "true"
+      )
+        applyVerticalResizeExtras(root);
       if (root.getAttribute("data-panel-side") !== side)
         root.setAttribute("data-panel-side", side);
       if (sideChanged) applyHorizontalPanelOffset(root);
@@ -19177,8 +19262,7 @@
       } catch (_) {}
     });
 
-    // Zoom controls (low priority per request, off by default — see
-    // WEB_TOOLBAR_ZOOM). ZoomManager is a standard global in the browser
+    // Zoom controls follow WEB_TOOLBAR_ZOOM. ZoomManager is a standard global in the browser
     // chrome window; wrapped defensively in case that ever changes.
     const zoomWrap = document.createElement("div");
     zoomWrap.className = "zen-toolbar-zoomwrap";
@@ -19968,6 +20052,8 @@
     max,
     defaultVal,
     suffix,
+    toPreference = (value) => value,
+    fromPreference = (value) => value,
   ) {
     const row = document.createElement("div");
     row.className = "zs-row";
@@ -20019,12 +20105,12 @@
     input.style.width = "100%";
     input.min = min;
     input.max = max;
-    input.value = getPref(prefKey, defaultVal);
+    input.value = fromPreference(getPref(prefKey, defaultVal));
     badge.textContent = input.value + suffix;
 
     input.addEventListener("input", () => {
       badge.textContent = input.value + suffix;
-      setPref(prefKey, parseInt(input.value, 10));
+      setPref(prefKey, toPreference(parseInt(input.value, 10)));
       if (typeof updateCSSVars === "function") {
         updateCSSVars();
       }
@@ -20084,6 +20170,693 @@
     row.appendChild(leftBox);
     row.appendChild(input);
     return { row, input };
+  }
+
+  // The base mod's `Constants` lives inside another IIFE and is not visible
+  // here. Keep these exact visual keys local; discover the other base keys
+  // from Zentral.Core.defaultPrefs when building a full backup.
+  const LOOK_GROUP_PREFS = Object.freeze({
+    SHOW_CHEVRON: "zen.workspace.tabgroups.show_chevron",
+    INDICATOR_TYPE: "zen.workspace.tabgroups.indicator_type",
+    LABEL_OPACITY: "zen.workspace.tabgroups.label_opacity",
+  });
+
+  // Appearance belongs to its own preference namespace, so a Look-only file
+  // cannot accidentally change panel placement, shortcuts, or browsing data.
+  const LOOK_PREFS = Object.freeze({
+    STYLE: "zen.workspace.bgalazka.look.style",
+    CANVAS: "zen.workspace.bgalazka.look.canvas",
+    SURFACE: "zen.workspace.bgalazka.look.surface",
+    RAISED: "zen.workspace.bgalazka.look.raised",
+    ACCENT: "zen.workspace.bgalazka.look.accent",
+    TEXT: "zen.workspace.bgalazka.look.text",
+    MUTED: "zen.workspace.bgalazka.look.muted",
+    SURFACE_OPACITY: "zen.workspace.bgalazka.look.surface_opacity",
+    RAISED_OPACITY: "zen.workspace.bgalazka.look.raised_opacity",
+    TOOLBAR_OPACITY: "zen.workspace.bgalazka.look.toolbar_opacity",
+    ADDRESS_OPACITY: "zen.workspace.bgalazka.look.address_opacity",
+    BUTTON_OPACITY: "zen.workspace.bgalazka.look.button_opacity",
+    TILE_OPACITY: "zen.workspace.bgalazka.look.tile_opacity",
+    VIDEO_OPACITY: "zen.workspace.bgalazka.look.video_opacity",
+    VIDEO_CONTROL_OPACITY: "zen.workspace.bgalazka.look.video_control_opacity",
+    POPUP_OPACITY: "zen.workspace.bgalazka.look.popup_opacity",
+    RADIUS: "zen.workspace.bgalazka.look.radius",
+    DEPTH: "zen.workspace.bgalazka.look.depth",
+    SPACING: "zen.workspace.bgalazka.look.spacing",
+    VIDEO_RADIUS: "zen.workspace.zentral.video_preview.radius_px",
+    PANEL_BORDER: "zen.workspace.bgalazka.look.panel_border",
+    TOOLBAR_SURFACE: "zen.workspace.bgalazka.look.toolbar_surface",
+    TOOLBAR_URL: "zen.workspace.bgalazka.look.toolbar_url",
+    TOOLBAR_BORDER: "zen.workspace.bgalazka.look.toolbar_border",
+    BUTTON_STYLE: "zen.workspace.bgalazka.look.button_style",
+    BUTTON_SURFACE: "zen.workspace.bgalazka.look.button_surface",
+    BUTTON_TEXT: "zen.workspace.bgalazka.look.button_text",
+    BUTTON_BORDER_COLOR: "zen.workspace.bgalazka.look.button_border_color",
+    BUTTON_BORDER: "zen.workspace.bgalazka.look.button_border",
+    CONTROL_SIZE: "zen.workspace.bgalazka.look.control_size",
+    TILE_STYLE: "zen.workspace.bgalazka.look.tile_style",
+    ROW_STYLE: "zen.workspace.bgalazka.look.row_style",
+    ROW_PADDING: "zen.workspace.bgalazka.look.row_padding",
+    ROW_RULE: "zen.workspace.bgalazka.look.row_rule",
+    VIDEO_CANVAS: "zen.workspace.bgalazka.look.video_canvas",
+    VIDEO_CONTROL: "zen.workspace.bgalazka.look.video_control",
+    VIDEO_TEXT: "zen.workspace.bgalazka.look.video_text",
+    VIDEO_MUTED: "zen.workspace.bgalazka.look.video_muted",
+    VIDEO_SELECTED: "zen.workspace.bgalazka.look.video_selected",
+    VIDEO_BORDER: "zen.workspace.bgalazka.look.video_border",
+    VIDEO_PADDING: "zen.workspace.bgalazka.look.video_padding",
+    VIDEO_ROW_HEIGHT: "zen.workspace.bgalazka.look.video_row_height",
+    VIDEO_SOURCE_STYLE: "zen.workspace.bgalazka.look.video_source_style",
+  });
+  const LOOK_DEFAULTS = Object.freeze({
+    [LOOK_PREFS.STYLE]: "atelier",
+    [LOOK_PREFS.CANVAS]: "#17191b",
+    [LOOK_PREFS.SURFACE]: "#202224",
+    [LOOK_PREFS.RAISED]: "#2b2e31",
+    [LOOK_PREFS.ACCENT]: "#a5bec0",
+    [LOOK_PREFS.TEXT]: "#dce0e1",
+    [LOOK_PREFS.MUTED]: "#a4aaad",
+    [LOOK_PREFS.SURFACE_OPACITY]: 100,
+    [LOOK_PREFS.RAISED_OPACITY]: 100,
+    [LOOK_PREFS.TOOLBAR_OPACITY]: 100,
+    [LOOK_PREFS.ADDRESS_OPACITY]: 100,
+    [LOOK_PREFS.BUTTON_OPACITY]: 100,
+    [LOOK_PREFS.TILE_OPACITY]: 100,
+    [LOOK_PREFS.VIDEO_OPACITY]: 100,
+    [LOOK_PREFS.VIDEO_CONTROL_OPACITY]: 100,
+    [LOOK_PREFS.POPUP_OPACITY]: 100,
+    [LOOK_PREFS.RADIUS]: 0,
+    [LOOK_PREFS.DEPTH]: 0,
+    [LOOK_PREFS.SPACING]: "comfortable",
+    [LOOK_PREFS.VIDEO_RADIUS]: 0,
+    [LOOK_PREFS.PANEL_BORDER]: 1,
+    [LOOK_PREFS.TOOLBAR_SURFACE]: "#202224",
+    [LOOK_PREFS.TOOLBAR_URL]: "#292c2e",
+    [LOOK_PREFS.TOOLBAR_BORDER]: 1,
+    [LOOK_PREFS.BUTTON_STYLE]: "outline",
+    [LOOK_PREFS.BUTTON_SURFACE]: "#34373a",
+    [LOOK_PREFS.BUTTON_TEXT]: "#d4d8d9",
+    [LOOK_PREFS.BUTTON_BORDER_COLOR]: "#292929",
+    [LOOK_PREFS.BUTTON_BORDER]: 0,
+    [LOOK_PREFS.CONTROL_SIZE]: 22,
+    [LOOK_PREFS.TILE_STYLE]: "bare",
+    [LOOK_PREFS.ROW_STYLE]: "lines",
+    [LOOK_PREFS.ROW_PADDING]: 4,
+    [LOOK_PREFS.ROW_RULE]: 0,
+    [LOOK_PREFS.VIDEO_CANVAS]: "#0a0a0a",
+    [LOOK_PREFS.VIDEO_CONTROL]: "#000000",
+    [LOOK_PREFS.VIDEO_TEXT]: "#d8d8d8",
+    [LOOK_PREFS.VIDEO_MUTED]: "#838383",
+    [LOOK_PREFS.VIDEO_SELECTED]: "#7d0000",
+    [LOOK_PREFS.VIDEO_BORDER]: 0,
+    [LOOK_PREFS.VIDEO_PADDING]: 0,
+    [LOOK_PREFS.VIDEO_ROW_HEIGHT]: 22,
+    [LOOK_PREFS.VIDEO_SOURCE_STYLE]: "line",
+    [LOOK_GROUP_PREFS.SHOW_CHEVRON]: true,
+    [LOOK_GROUP_PREFS.INDICATOR_TYPE]: "circle",
+    [BGALAZKA_EXT_PREFS.TRANSLUCENCY]: true,
+    [BGALAZKA_EXT_PREFS.OPACITY_UNPINNED]: 92,
+    [BGALAZKA_EXT_PREFS.OPACITY_PINNED_FOCUS]: 85,
+    [BGALAZKA_EXT_PREFS.OPACITY_PINNED_BLUR]: 45,
+    [BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_COLOR]: "#5e0002",
+    [BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_OPACITY]: 31,
+    [BGALAZKA_EXT_PREFS.PILL_BACKGROUND_OPACITY]: 48,
+    [LOOK_GROUP_PREFS.LABEL_OPACITY]: 85,
+  });
+  // Presets only write values that also have individual controls below.
+  const LOOK_THEMES = Object.freeze([
+    { name: "Ink", swatch: "#a5bec0", values: {} },
+    {
+      name: "Copper",
+      swatch: "#d99a6a",
+      values: {
+        [LOOK_PREFS.CANVAS]: "#1d1917",
+        [LOOK_PREFS.SURFACE]: "#29211d",
+        [LOOK_PREFS.RAISED]: "#3b2d25",
+        [LOOK_PREFS.ACCENT]: "#d99a6a",
+        [LOOK_PREFS.TEXT]: "#f4e9dc",
+        [LOOK_PREFS.MUTED]: "#c4a998",
+        [LOOK_PREFS.TOOLBAR_SURFACE]: "#29211d",
+        [LOOK_PREFS.TOOLBAR_URL]: "#372b25",
+        [LOOK_PREFS.BUTTON_SURFACE]: "#483326",
+        [LOOK_PREFS.BUTTON_TEXT]: "#f4e9dc",
+        [LOOK_PREFS.BUTTON_BORDER_COLOR]: "#a86e48",
+        [LOOK_PREFS.BUTTON_STYLE]: "outline",
+        [LOOK_PREFS.BUTTON_BORDER]: 1,
+        [LOOK_PREFS.ROW_STYLE]: "cards",
+        [LOOK_PREFS.ROW_RULE]: 1,
+        [LOOK_PREFS.RADIUS]: 2,
+        [LOOK_PREFS.VIDEO_CANVAS]: "#211c19",
+        [LOOK_PREFS.VIDEO_CONTROL]: "#483326",
+        [LOOK_PREFS.VIDEO_TEXT]: "#f4e9dc",
+        [LOOK_PREFS.VIDEO_MUTED]: "#c4a998",
+        [LOOK_PREFS.VIDEO_SELECTED]: "#d99a6a",
+      },
+    },
+    {
+      name: "Moss",
+      swatch: "#9ab89a",
+      values: {
+        [LOOK_PREFS.CANVAS]: "#161c18",
+        [LOOK_PREFS.SURFACE]: "#1f2921",
+        [LOOK_PREFS.RAISED]: "#2b382d",
+        [LOOK_PREFS.ACCENT]: "#9ab89a",
+        [LOOK_PREFS.TEXT]: "#e1ebe1",
+        [LOOK_PREFS.MUTED]: "#a1b2a3",
+        [LOOK_PREFS.TOOLBAR_SURFACE]: "#1f2921",
+        [LOOK_PREFS.TOOLBAR_URL]: "#29372c",
+        [LOOK_PREFS.BUTTON_SURFACE]: "#344739",
+        [LOOK_PREFS.BUTTON_TEXT]: "#e1ebe1",
+        [LOOK_PREFS.BUTTON_BORDER_COLOR]: "#648069",
+        [LOOK_PREFS.BUTTON_STYLE]: "filled",
+        [LOOK_PREFS.BUTTON_BORDER]: 0,
+        [LOOK_PREFS.TILE_STYLE]: "soft",
+        [LOOK_PREFS.VIDEO_CANVAS]: "#1b241d",
+        [LOOK_PREFS.VIDEO_CONTROL]: "#344739",
+        [LOOK_PREFS.VIDEO_TEXT]: "#e1ebe1",
+        [LOOK_PREFS.VIDEO_MUTED]: "#a1b2a3",
+        [LOOK_PREFS.VIDEO_SELECTED]: "#9ab89a",
+        [LOOK_PREFS.VIDEO_SOURCE_STYLE]: "filled",
+      },
+    },
+    {
+      name: "Cobalt",
+      swatch: "#90baf2",
+      values: {
+        [LOOK_PREFS.CANVAS]: "#121b2a",
+        [LOOK_PREFS.SURFACE]: "#1b2940",
+        [LOOK_PREFS.RAISED]: "#293b59",
+        [LOOK_PREFS.ACCENT]: "#90baf2",
+        [LOOK_PREFS.TEXT]: "#e7effb",
+        [LOOK_PREFS.MUTED]: "#a8bad1",
+        [LOOK_PREFS.TOOLBAR_SURFACE]: "#1b2940",
+        [LOOK_PREFS.TOOLBAR_URL]: "#253650",
+        [LOOK_PREFS.BUTTON_SURFACE]: "#304a70",
+        [LOOK_PREFS.BUTTON_TEXT]: "#e7effb",
+        [LOOK_PREFS.BUTTON_BORDER_COLOR]: "#729cd0",
+        [LOOK_PREFS.BUTTON_STYLE]: "outline",
+        [LOOK_PREFS.BUTTON_BORDER]: 1,
+        [LOOK_PREFS.RADIUS]: 6,
+        [LOOK_PREFS.ROW_STYLE]: "cards",
+        [LOOK_PREFS.TILE_STYLE]: "soft",
+        [LOOK_PREFS.VIDEO_CANVAS]: "#172236",
+        [LOOK_PREFS.VIDEO_CONTROL]: "#304a70",
+        [LOOK_PREFS.VIDEO_TEXT]: "#e7effb",
+        [LOOK_PREFS.VIDEO_MUTED]: "#a8bad1",
+        [LOOK_PREFS.VIDEO_SELECTED]: "#90baf2",
+      },
+    },
+    {
+      name: "Transparent",
+      swatch: "#ffffff",
+      values: {
+        [LOOK_PREFS.CANVAS]: "#000000",
+        [LOOK_PREFS.SURFACE]: "#000000",
+        [LOOK_PREFS.RAISED]: "#000000",
+        [LOOK_PREFS.ACCENT]: "#ffffff",
+        [LOOK_PREFS.TEXT]: "#ffffff",
+        [LOOK_PREFS.MUTED]: "#d0d0d0",
+        [LOOK_PREFS.TOOLBAR_SURFACE]: "#000000",
+        [LOOK_PREFS.TOOLBAR_URL]: "#000000",
+        [LOOK_PREFS.BUTTON_SURFACE]: "#000000",
+        [LOOK_PREFS.BUTTON_TEXT]: "#ffffff",
+        [LOOK_PREFS.BUTTON_BORDER_COLOR]: "#ffffff",
+        [LOOK_PREFS.VIDEO_CANVAS]: "#000000",
+        [LOOK_PREFS.VIDEO_CONTROL]: "#000000",
+        [LOOK_PREFS.VIDEO_TEXT]: "#ffffff",
+        [LOOK_PREFS.VIDEO_MUTED]: "#d0d0d0",
+        [LOOK_PREFS.VIDEO_SELECTED]: "#ffffff",
+        [LOOK_PREFS.SURFACE_OPACITY]: 20,
+        [LOOK_PREFS.RAISED_OPACITY]: 25,
+        [LOOK_PREFS.TOOLBAR_OPACITY]: 28,
+        [LOOK_PREFS.ADDRESS_OPACITY]: 18,
+        [LOOK_PREFS.BUTTON_OPACITY]: 22,
+        [LOOK_PREFS.TILE_OPACITY]: 18,
+        [LOOK_PREFS.VIDEO_OPACITY]: 25,
+        [LOOK_PREFS.VIDEO_CONTROL_OPACITY]: 22,
+        [LOOK_PREFS.POPUP_OPACITY]: 35,
+        [LOOK_PREFS.RADIUS]: 0,
+        [LOOK_PREFS.VIDEO_RADIUS]: 0,
+        [LOOK_PREFS.DEPTH]: 0,
+        [LOOK_PREFS.PANEL_BORDER]: 0,
+        [LOOK_PREFS.TOOLBAR_BORDER]: 0,
+        [LOOK_PREFS.BUTTON_BORDER]: 0,
+        [LOOK_PREFS.VIDEO_BORDER]: 0,
+        [LOOK_PREFS.ROW_RULE]: 0,
+        [LOOK_PREFS.BUTTON_STYLE]: "filled",
+        [LOOK_PREFS.TILE_STYLE]: "soft",
+        [LOOK_PREFS.VIDEO_SOURCE_STYLE]: "line",
+        [BGALAZKA_EXT_PREFS.PILL_BACKGROUND_OPACITY]: 55,
+      },
+    },
+    {
+      name: "Orchid",
+      swatch: "#c9a4dc",
+      values: {
+        [LOOK_PREFS.CANVAS]: "#201923",
+        [LOOK_PREFS.SURFACE]: "#2d2231",
+        [LOOK_PREFS.RAISED]: "#423149",
+        [LOOK_PREFS.ACCENT]: "#c9a4dc",
+        [LOOK_PREFS.TEXT]: "#f1e9f3",
+        [LOOK_PREFS.MUTED]: "#bfadbf",
+        [LOOK_PREFS.TOOLBAR_SURFACE]: "#2d2231",
+        [LOOK_PREFS.TOOLBAR_URL]: "#3b2c41",
+        [LOOK_PREFS.BUTTON_SURFACE]: "#503a58",
+        [LOOK_PREFS.BUTTON_TEXT]: "#f1e9f3",
+        [LOOK_PREFS.BUTTON_BORDER_COLOR]: "#9875a6",
+        [LOOK_PREFS.BUTTON_STYLE]: "filled",
+        [LOOK_PREFS.BUTTON_BORDER]: 1,
+        [LOOK_PREFS.RADIUS]: 10,
+        [LOOK_PREFS.ROW_STYLE]: "cards",
+        [LOOK_PREFS.SPACING]: "airy",
+        [LOOK_PREFS.VIDEO_CANVAS]: "#281e2b",
+        [LOOK_PREFS.VIDEO_CONTROL]: "#503a58",
+        [LOOK_PREFS.VIDEO_TEXT]: "#f1e9f3",
+        [LOOK_PREFS.VIDEO_MUTED]: "#bfadbf",
+        [LOOK_PREFS.VIDEO_SELECTED]: "#c9a4dc",
+        [LOOK_PREFS.VIDEO_SOURCE_STYLE]: "filled",
+      },
+    },
+  ]);
+  const LOOK_KEYS = new Set(Object.keys(LOOK_DEFAULTS));
+  const LOOK_TRANSPARENCY_KEYS = new Set([
+    LOOK_PREFS.SURFACE_OPACITY,
+    LOOK_PREFS.RAISED_OPACITY,
+    LOOK_PREFS.TOOLBAR_OPACITY,
+    LOOK_PREFS.ADDRESS_OPACITY,
+    LOOK_PREFS.BUTTON_OPACITY,
+    LOOK_PREFS.TILE_OPACITY,
+    LOOK_PREFS.VIDEO_OPACITY,
+    LOOK_PREFS.VIDEO_CONTROL_OPACITY,
+    LOOK_PREFS.POPUP_OPACITY,
+  ]);
+  // One schema drives import validation, live CSS variables and visible
+  // controls. New Look values belong here and in the Look panel below.
+  const LOOK_COLORS = [
+    "CANVAS",
+    "SURFACE",
+    "RAISED",
+    "ACCENT",
+    "TEXT",
+    "MUTED",
+    "TOOLBAR_SURFACE",
+    "TOOLBAR_URL",
+    "BUTTON_SURFACE",
+    "BUTTON_TEXT",
+    "BUTTON_BORDER_COLOR",
+    "VIDEO_CANVAS",
+    "VIDEO_CONTROL",
+    "VIDEO_TEXT",
+    "VIDEO_MUTED",
+    "VIDEO_SELECTED",
+  ];
+  const LOOK_ENUMS = Object.freeze({
+    [LOOK_PREFS.STYLE]: ["atelier", "classic"],
+    [LOOK_PREFS.SPACING]: ["compact", "comfortable", "airy"],
+    [LOOK_PREFS.BUTTON_STYLE]: ["plain", "filled", "outline"],
+    [LOOK_PREFS.TILE_STYLE]: ["bare", "soft"],
+    [LOOK_PREFS.ROW_STYLE]: ["lines", "cards"],
+    [LOOK_PREFS.VIDEO_SOURCE_STYLE]: ["line", "filled"],
+    [LOOK_GROUP_PREFS.INDICATOR_TYPE]: ["circle", "chevron"],
+  });
+  const LOOK_BOUNDS = Object.freeze({
+    ...Object.fromEntries(
+      [
+        LOOK_PREFS.SURFACE_OPACITY,
+        LOOK_PREFS.RAISED_OPACITY,
+        LOOK_PREFS.TOOLBAR_OPACITY,
+        LOOK_PREFS.ADDRESS_OPACITY,
+        LOOK_PREFS.BUTTON_OPACITY,
+        LOOK_PREFS.TILE_OPACITY,
+        LOOK_PREFS.VIDEO_OPACITY,
+        LOOK_PREFS.VIDEO_CONTROL_OPACITY,
+        LOOK_PREFS.POPUP_OPACITY,
+      ].map((key) => [key, [0, 100]]),
+    ),
+    [LOOK_PREFS.RADIUS]: [0, 26],
+    [LOOK_PREFS.DEPTH]: [0, 100],
+    [LOOK_PREFS.VIDEO_RADIUS]: [0, 24],
+    [LOOK_PREFS.PANEL_BORDER]: [0, 3],
+    [LOOK_PREFS.TOOLBAR_BORDER]: [0, 3],
+    [LOOK_PREFS.BUTTON_BORDER]: [0, 3],
+    [LOOK_PREFS.CONTROL_SIZE]: [18, 32],
+    [LOOK_PREFS.ROW_PADDING]: [4, 20],
+    [LOOK_PREFS.ROW_RULE]: [0, 2],
+    [LOOK_PREFS.VIDEO_BORDER]: [0, 3],
+    [LOOK_PREFS.VIDEO_PADDING]: [0, 16],
+    [LOOK_PREFS.VIDEO_ROW_HEIGHT]: [22, 36],
+    [LOOK_GROUP_PREFS.LABEL_OPACITY]: [0, 100],
+    [BGALAZKA_EXT_PREFS.OPACITY_UNPINNED]: [10, 100],
+    [BGALAZKA_EXT_PREFS.OPACITY_PINNED_FOCUS]: [10, 100],
+    [BGALAZKA_EXT_PREFS.OPACITY_PINNED_BLUR]: [10, 100],
+    [BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_OPACITY]: [10, 100],
+    [BGALAZKA_EXT_PREFS.PILL_BACKGROUND_OPACITY]: [10, 100],
+  });
+  const applyLook = () => {
+    const root = document.documentElement;
+    for (const [key, attribute] of [
+      ["STYLE", "bgalazka-look"],
+      ["SPACING", "bgalazka-look-spacing"],
+      ["BUTTON_STYLE", "bgalazka-look-buttons"],
+      ["TILE_STYLE", "bgalazka-look-tiles"],
+      ["ROW_STYLE", "bgalazka-look-rows"],
+      ["VIDEO_SOURCE_STYLE", "bgalazka-look-video-selection"],
+    ]) {
+      const pref = LOOK_PREFS[key];
+      const value = getPref(pref, LOOK_DEFAULTS[pref]);
+      root.setAttribute(
+        attribute,
+        LOOK_ENUMS[pref].includes(value) ? value : LOOK_DEFAULTS[pref],
+      );
+    }
+    for (const key of LOOK_COLORS) {
+      const pref = LOOK_PREFS[key];
+      const value = getPref(pref, LOOK_DEFAULTS[pref]);
+      root.style.setProperty(
+        "--bgalazka-look-" + key.toLowerCase().replaceAll("_", "-"),
+        /^#[0-9a-fA-F]{6}$/.test(value) ? value : LOOK_DEFAULTS[pref],
+      );
+    }
+    for (const key of [
+      "RADIUS",
+      "DEPTH",
+      "VIDEO_RADIUS",
+      "PANEL_BORDER",
+      "TOOLBAR_BORDER",
+      "BUTTON_BORDER",
+      "CONTROL_SIZE",
+      "ROW_PADDING",
+      "ROW_RULE",
+      "VIDEO_BORDER",
+      "VIDEO_PADDING",
+      "VIDEO_ROW_HEIGHT",
+      "SURFACE_OPACITY",
+      "RAISED_OPACITY",
+      "TOOLBAR_OPACITY",
+      "ADDRESS_OPACITY",
+      "BUTTON_OPACITY",
+      "TILE_OPACITY",
+      "VIDEO_OPACITY",
+      "VIDEO_CONTROL_OPACITY",
+      "POPUP_OPACITY",
+    ]) {
+      const pref = LOOK_PREFS[key];
+      const value = getPref(pref, LOOK_DEFAULTS[pref]);
+      const [min, max] = LOOK_BOUNDS[pref];
+      const clamped =
+        typeof value === "number" && Number.isFinite(value)
+          ? Math.max(min, Math.min(max, value))
+          : LOOK_DEFAULTS[pref];
+      root.style.setProperty(
+        "--bgalazka-look-" + key.toLowerCase().replaceAll("_", "-"),
+        key === "DEPTH" || key.endsWith("_OPACITY")
+          ? clamped + "%"
+          : clamped + "px",
+      );
+    }
+  };
+  // A visual preference error must not halt panel hooks or Settings loading.
+  // Keep this optional startup path isolated from the rest of the extension.
+  try {
+    applyLook();
+    Services.prefs.addObserver("zen.workspace.bgalazka.look.", applyLook);
+    registerCleanup(() =>
+      Services.prefs.removeObserver("zen.workspace.bgalazka.look.", applyLook),
+    );
+    Services.prefs.addObserver(LOOK_PREFS.VIDEO_RADIUS, applyLook);
+    registerCleanup(() =>
+      Services.prefs.removeObserver(LOOK_PREFS.VIDEO_RADIUS, applyLook),
+    );
+  } catch (error) {
+    console.error("[BgalazkaExtension] Look initialization failed:", error);
+  }
+
+  function syncAppearanceAfterImport() {
+    applyLook();
+    updateCSSVars();
+    applyAttributes();
+    window.Zentral?.TabGroups?.applyLabelOpacityPref?.();
+    window.Zentral?.TabGroups?.applyChevronPref?.();
+    window.Zentral?.TabGroups?.applyIndicatorTypePref?.();
+    window.Zentral?.Settings?.populate?.();
+    const videoRadius = document.getElementById("zs-video-preview-radius");
+    if (videoRadius) {
+      videoRadius.value = getPref(LOOK_PREFS.VIDEO_RADIUS, 0);
+      videoRadius.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    const panel = document.getElementById("zs-panel-bgalazka");
+    panel?._toggles?.forEach(({ input, pref, def, onSync, isSelect }) => {
+      const value = getPref(pref, def);
+      if (isSelect) input.value = value;
+      else input.checked = value;
+      onSync?.(value);
+    });
+    document.getElementById("zs-panel-extension-look")?._syncLook?.();
+  }
+
+  // Export only owned preference keys; reject arbitrary keys and malformed
+  // data before applying anything. Import merges selected keys into this profile.
+  // Core owns the base default table. Reading it through the exposed
+  // instance avoids reaching across IIFE scope and tracks future base keys.
+  const baseBackupKeys = () =>
+    new Set(Object.keys(window.Zentral?.Core?.defaultPrefs || {}));
+  const reusableBaseDefaults = new Set([
+    "zen.workspace.apps.sidebar.animation_speed",
+    "zen.workspace.apps.sidebar.animation_type",
+    "zen.workspace.apps.sidebar.apps_per_row",
+    "zen.workspace.apps.sidebar.max_apps",
+    "zen.workspace.apps.sidebar.max_rows",
+    "zen.workspace.apps.sidebar.hide_utility_section",
+    "zen.workspace.tabgroups.enabled",
+    "zen.workspace.tabgroups.thumbnails",
+  ]);
+  const fullBackupKeys = () =>
+    new Set([
+      ...baseBackupKeys(),
+      ...Object.keys(PROFILE_DEFAULTS),
+      ...Services.prefs.getChildList("zen.workspace.bgalazka."),
+      ...Services.prefs.getChildList("zen.workspace.zentral.video_preview."),
+      ...LOOK_KEYS,
+    ]);
+  const ownedBackupKey = (key) =>
+    LOOK_KEYS.has(key) ||
+    baseBackupKeys().has(key) ||
+    key.startsWith("zen.workspace.bgalazka.") ||
+    key.startsWith("zen.workspace.zentral.video_preview.");
+  async function chooseBackupFile(mode, title, defaultName) {
+    const picker = Cc["@mozilla.org/filepicker;1"].createInstance(
+      Ci.nsIFilePicker,
+    );
+    picker.init(window.browsingContext || window, title, mode);
+    picker.appendFilter("JSON files", "*.json");
+    if (defaultName) picker.defaultString = defaultName;
+    const result = await new Promise((resolve) => {
+      let settled = false;
+      const done = (value) => {
+        if (!settled) {
+          settled = true;
+          resolve(value);
+        }
+      };
+      try {
+        const maybe = picker.open({ done });
+        if (maybe?.then) maybe.then(done, () => done(null));
+      } catch (_) {
+        try {
+          const maybe = picker.open(done);
+          if (maybe?.then) maybe.then(done, () => done(null));
+        } catch (_) {
+          done(null);
+        }
+      }
+    });
+    return result === Ci.nsIFilePicker.returnOK ||
+      result === Ci.nsIFilePicker.returnReplace
+      ? picker.file?.path
+      : null;
+  }
+  async function exportBackup(scope) {
+    const prefs = {};
+    for (const key of scope === "look" ? LOOK_KEYS : fullBackupKeys()) {
+      const baseline =
+        LOOK_DEFAULTS[key] ??
+        PROFILE_DEFAULTS[key] ??
+        (reusableBaseDefaults.has(key)
+          ? window.Zentral?.Core?.defaultPrefs?.[key]
+          : undefined);
+      if (
+        scope === "full" &&
+        !Services.prefs.prefHasUserValue(key) &&
+        baseline === undefined
+      )
+        continue;
+      const type = Services.prefs.getPrefType(key);
+      const fallback = baseline;
+      try {
+        prefs[key] =
+          !Services.prefs.prefHasUserValue(key) && fallback !== undefined
+            ? fallback
+            : type === Services.prefs.PREF_BOOL
+              ? Services.prefs.getBoolPref(key)
+              : type === Services.prefs.PREF_INT
+                ? Services.prefs.getIntPref(key)
+                : type === Services.prefs.PREF_STRING
+                  ? Services.prefs.getStringPref(key)
+                  : fallback;
+      } catch (_) {
+        if (fallback !== undefined) prefs[key] = fallback;
+      }
+    }
+    const path = await chooseBackupFile(
+      Ci.nsIFilePicker.modeSave,
+      "Export Zentral " + scope + " settings",
+      "zentral-" +
+        scope +
+        "-" +
+        new Date().toISOString().slice(0, 10) +
+        ".json",
+    );
+    if (!path) return false;
+    await IOUtils.writeUTF8(
+      path,
+      JSON.stringify(
+        { format: "zentral-settings", version: 1, scope, prefs },
+        null,
+        2,
+      ),
+    );
+    return true;
+  }
+  async function importBackup(scope) {
+    const path = await chooseBackupFile(
+      Ci.nsIFilePicker.modeOpen,
+      "Import Zentral " + scope + " settings",
+    );
+    if (!path) return false;
+    if ((await IOUtils.stat(path)).size > 16 * 1024 * 1024)
+      throw new Error("Settings file is too large");
+    const data = JSON.parse(await IOUtils.readUTF8(path));
+    if (
+      data?.format !== "zentral-settings" ||
+      data.version !== 1 ||
+      !["look", "full"].includes(data.scope) ||
+      !data.prefs ||
+      Array.isArray(data.prefs) ||
+      typeof data.prefs !== "object"
+    )
+      throw new Error("Not a supported Zentral settings file");
+    if (scope === "full" && data.scope !== "full")
+      throw new Error("Choose a full settings export here");
+    const entries = Object.entries(data.prefs);
+    if (entries.length > 1500 || !entries.length)
+      throw new Error("Invalid settings count");
+    const changes = entries.filter(
+      ([key]) => scope === "full" || LOOK_KEYS.has(key),
+    );
+    if (scope === "look" && !changes.length)
+      throw new Error("No Look options in this file");
+    for (const [key, value] of entries) {
+      if (
+        !ownedBackupKey(key) ||
+        (data.scope === "look" && !LOOK_KEYS.has(key)) ||
+        !["string", "boolean", "number"].includes(typeof value) ||
+        (typeof value === "number" && !Number.isSafeInteger(value)) ||
+        (typeof value === "string" && value.length > 8 * 1024 * 1024)
+      )
+        throw new Error("Invalid preference in settings file: " + key);
+      if (LOOK_KEYS.has(key)) {
+        const expected = LOOK_DEFAULTS[key];
+        if (
+          typeof value !== typeof expected ||
+          ([
+            ...LOOK_COLORS.map((name) => LOOK_PREFS[name]),
+            BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_COLOR,
+          ].includes(key) &&
+            !/^#[0-9a-fA-F]{6}$/.test(value)) ||
+          (LOOK_ENUMS[key] && !LOOK_ENUMS[key].includes(value)) ||
+          (LOOK_BOUNDS[key] &&
+            (value < LOOK_BOUNDS[key][0] || value > LOOK_BOUNDS[key][1]))
+        )
+          throw new Error("Invalid Look value: " + key);
+      }
+    }
+    // Store original types as well: a malformed or interrupted write can be
+    // rolled back without discarding an existing preference.
+    const previous = new Map(
+      changes.map(([key]) => {
+        const hadUserValue = Services.prefs.prefHasUserValue(key);
+        const type = Services.prefs.getPrefType(key);
+        const value = hadUserValue
+          ? type === Services.prefs.PREF_BOOL
+            ? Services.prefs.getBoolPref(key)
+            : type === Services.prefs.PREF_INT
+              ? Services.prefs.getIntPref(key)
+              : type === Services.prefs.PREF_STRING
+                ? Services.prefs.getStringPref(key)
+                : undefined
+          : undefined;
+        return [key, { hadUserValue, value }];
+      }),
+    );
+    try {
+      for (const [key, value] of changes) {
+        if (
+          previous.get(key).hadUserValue &&
+          typeof previous.get(key).value !== typeof value
+        )
+          Services.prefs.clearUserPref(key);
+        if (typeof value === "boolean") Services.prefs.setBoolPref(key, value);
+        else if (typeof value === "number")
+          Services.prefs.setIntPref(key, value);
+        else Services.prefs.setStringPref(key, value);
+      }
+    } catch (error) {
+      for (const [key, { hadUserValue, value }] of previous) {
+        try {
+          if (Services.prefs.prefHasUserValue(key))
+            Services.prefs.clearUserPref(key);
+          if (hadUserValue) setPref(key, value);
+        } catch (_) {}
+      }
+      throw error;
+    }
+    syncAppearanceAfterImport();
+    return true;
+  }
+  function addLookBackupControls(container) {
+    const heading = document.createElement("h4");
+    heading.className = "zs-look-heading";
+    heading.textContent = "Import & export";
+    const note = document.createElement("p");
+    note.className = "zs-look-note";
+    note.textContent =
+      "Look files contain appearance only. Full files contain Zentral settings and panel preferences; imported values merge with your current profile. Restart Zen for changes outside Look to take full effect.";
+    const actions = document.createElement("div");
+    actions.className = "zs-look-actions";
+    for (const [label, action, scope] of [
+      ["Export Look", exportBackup, "look"],
+      ["Import Look", importBackup, "look"],
+      ["Export all settings", exportBackup, "full"],
+      ["Import all settings", importBackup, "full"],
+    ]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "zs-look-action";
+      button.textContent = label;
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          if (await action(scope)) window.alert(label + " complete.");
+        } catch (error) {
+          console.error("[Zentral] Settings transfer failed:", error);
+          window.alert(label + " failed: " + error.message);
+        } finally {
+          button.disabled = false;
+        }
+      });
+      actions.append(button);
+    }
+    container.append(heading, note, actions);
   }
 
   function injectSettingsUI() {
@@ -20160,7 +20933,7 @@
       aesTitle.className = "zs-section-title";
       aesTitle.textContent = "Panel Appearance & Translucency";
       aestheticHeader.appendChild(aesTitle);
-      content.appendChild(aestheticHeader);
+      // The appearance heading moves to the Look category below.
 
       const slidersGroup = document.createElement("div");
       slidersGroup.className = "zs-conditional-group";
@@ -21511,9 +22284,490 @@
         pillSubgroup,
       );
 
+      // Move the existing appearance controls, retaining their original event
+      // handlers. The group-opacity control is owned by the base settings UI.
+      const lookCategory = makeExtensionSettingsPanel(
+        "zs-panel-extension-look",
+        "extension-look",
+      );
+      lookCategory.subContent.classList.add("zs-look-content");
+      const lookIntro = document.createElement("div");
+      lookIntro.className = "zs-look-intro";
+      lookIntro.innerHTML = `<span class="zs-look-eyebrow">LOOK</span>
+        <h3>Appearance</h3>
+        <p>Every visual choice below saves as you change it. Classic restores the previous style.</p>`;
+      lookCategory.subContent.append(lookIntro);
+      const addLookHeading = (label) => {
+        const heading = document.createElement("h4");
+        heading.className = "zs-look-heading";
+        heading.textContent = label;
+        lookCategory.subContent.appendChild(heading);
+      };
+      const lookControls = [];
+      const ensureCustomLook = (key) => {
+        if (
+          key !== LOOK_PREFS.STYLE &&
+          getPref(LOOK_PREFS.STYLE, "atelier") === "classic"
+        ) {
+          setPref(LOOK_PREFS.STYLE, "atelier");
+          lookCategory.subPanel._syncLook?.();
+        }
+        applyLook();
+      };
+      const addLookSelect = (label, description, key, options) => {
+        const control = createSelectRow(
+          label,
+          description,
+          key,
+          options,
+          LOOK_DEFAULTS[key],
+          null,
+          null,
+          () => ensureCustomLook(key),
+        );
+        control.select.removeAttribute("style");
+        lookCategory.subContent.append(control.row);
+        lookControls.push({ input: control.select, key });
+      };
+      const addLookColor = (label, description, key) => {
+        const control = createColorRow(
+          label,
+          description,
+          key,
+          LOOK_DEFAULTS[key],
+        );
+        control.input.addEventListener("input", () => ensureCustomLook(key));
+        lookCategory.subContent.append(control.row);
+        lookControls.push({ input: control.input, key });
+      };
+      const addLookSlider = (label, description, key, min, max, suffix) => {
+        const inverted = LOOK_TRANSPARENCY_KEYS.has(key);
+        const invert = (value) => 100 - value;
+        const control = createSliderRow(
+          label,
+          description,
+          key,
+          min,
+          max,
+          LOOK_DEFAULTS[key],
+          suffix,
+          inverted ? invert : undefined,
+          inverted ? invert : undefined,
+        );
+        control.input.addEventListener("input", () => ensureCustomLook(key));
+        lookCategory.subContent.append(control.row);
+        lookControls.push({
+          input: control.input,
+          badge: control.badge,
+          suffix,
+          key,
+          inverted,
+        });
+      };
+      const syncLookControls = () => {
+        for (const { input, badge, suffix, key, inverted } of lookControls) {
+          const value = getPref(key, LOOK_DEFAULTS[key]);
+          input.value = inverted ? 100 - value : value;
+          if (badge) badge.textContent = input.value + suffix;
+        }
+      };
+      lookCategory.subPanel._syncLook = syncLookControls;
+      addLookHeading("Style");
+      addLookSelect(
+        "Interface style",
+        "Switch to the original styling any time",
+        LOOK_PREFS.STYLE,
+        [
+          { value: "atelier", label: "Custom" },
+          { value: "classic", label: "Classic" },
+        ],
+      );
+      const themeChoices = document.createElement("div");
+      themeChoices.className = "zs-look-themes";
+      for (const theme of LOOK_THEMES) {
+        const choice = document.createElement("button");
+        choice.type = "button";
+        choice.className = "zs-look-theme";
+        choice.style.setProperty("--zs-theme-swatch", theme.swatch);
+        choice.textContent = theme.name;
+        choice.title =
+          "Apply " + theme.name + "; every value stays editable below";
+        choice.addEventListener("click", () => {
+          for (const [key, value] of Object.entries(LOOK_DEFAULTS)) {
+            if (
+              key.startsWith("zen.workspace.bgalazka.look.") ||
+              key === LOOK_PREFS.VIDEO_RADIUS
+            )
+              setPref(key, theme.values[key] ?? value);
+            else if (Object.hasOwn(theme.values, key))
+              setPref(key, theme.values[key]);
+          }
+          syncAppearanceAfterImport();
+        });
+        themeChoices.append(choice);
+      }
+      lookCategory.subContent.append(themeChoices);
+      addLookHeading("Palette");
+      addLookColor("Canvas", "Backdrop behind the controls", LOOK_PREFS.CANVAS);
+      addLookColor(
+        "Surface",
+        "Main cards and floating panels",
+        LOOK_PREFS.SURFACE,
+      );
+      addLookColor(
+        "Raised surface",
+        "Controls, hover states and nested cards",
+        LOOK_PREFS.RAISED,
+      );
+      addLookColor(
+        "Accent",
+        "Active indicators and highlights",
+        LOOK_PREFS.ACCENT,
+      );
+      addLookColor("Text", "Main labels", LOOK_PREFS.TEXT);
+      addLookColor(
+        "Secondary text",
+        "Descriptions and captions",
+        LOOK_PREFS.MUTED,
+      );
+      addLookHeading("Transparency");
+      const transparencyHelp = document.createElement("p");
+      transparencyHelp.className = "zs-look-note";
+      transparencyHelp.textContent =
+        "0% is solid; 100% clears panel backgrounds. Dual and Triple View keep content fully visible.";
+      lookCategory.subContent.append(transparencyHelp);
+      addLookSlider(
+        "Panel background",
+        "Both panel frames; whole-panel opacity still applies on top",
+        LOOK_PREFS.SURFACE_OPACITY,
+        0,
+        100,
+        "%",
+      );
+      addLookSlider(
+        "Raised surfaces",
+        "Hovered toolbar buttons",
+        LOOK_PREFS.RAISED_OPACITY,
+        0,
+        100,
+        "%",
+      );
+      addLookSlider(
+        "Panel toolbars",
+        "Top and secondary toolbar backgrounds",
+        LOOK_PREFS.TOOLBAR_OPACITY,
+        0,
+        100,
+        "%",
+      );
+      addLookSlider(
+        "Address fields",
+        "Both panel address field backgrounds",
+        LOOK_PREFS.ADDRESS_OPACITY,
+        0,
+        100,
+        "%",
+      );
+      addLookSlider(
+        "Button fills",
+        "Filled navigation and zoom buttons",
+        LOOK_PREFS.BUTTON_OPACITY,
+        0,
+        100,
+        "%",
+      );
+      addLookSlider(
+        "App tiles",
+        "Soft tile and hovered tile backgrounds",
+        LOOK_PREFS.TILE_OPACITY,
+        0,
+        100,
+        "%",
+      );
+      addLookSlider(
+        "Video backdrop",
+        "Video preview frame, without fading the picture",
+        LOOK_PREFS.VIDEO_OPACITY,
+        0,
+        100,
+        "%",
+      );
+      addLookSlider(
+        "Video controls",
+        "Filled video buttons and selected source highlight",
+        LOOK_PREFS.VIDEO_CONTROL_OPACITY,
+        0,
+        100,
+        "%",
+      );
+      addLookSlider(
+        "Group popup",
+        "Tab group control popup background",
+        LOOK_PREFS.POPUP_OPACITY,
+        0,
+        100,
+        "%",
+      );
+      addLookHeading("Shape & depth");
+      addLookSlider(
+        "Corner radius",
+        "0 px keeps windows and controls square",
+        LOOK_PREFS.RADIUS,
+        0,
+        26,
+        " px",
+      );
+      addLookSlider(
+        "Panel border",
+        "0 px removes the floating window outline",
+        LOOK_PREFS.PANEL_BORDER,
+        0,
+        3,
+        " px",
+      );
+      addLookSlider(
+        "Shadow depth",
+        "0 removes the floating window shadow",
+        LOOK_PREFS.DEPTH,
+        0,
+        100,
+        "%",
+      );
+      addLookSelect(
+        "Spacing",
+        "Space between settings and controls",
+        LOOK_PREFS.SPACING,
+        [
+          { value: "compact", label: "Compact" },
+          { value: "comfortable", label: "Comfortable" },
+          { value: "airy", label: "Airy" },
+        ],
+      );
+      addLookHeading("Buttons & settings");
+      addLookSelect(
+        "Button style",
+        "Applies to toolbars, video and settings actions",
+        LOOK_PREFS.BUTTON_STYLE,
+        [
+          { value: "plain", label: "Flat" },
+          { value: "filled", label: "Filled" },
+          { value: "outline", label: "Outline" },
+        ],
+      );
+      addLookColor(
+        "Button fill",
+        "Fill for the Filled style",
+        LOOK_PREFS.BUTTON_SURFACE,
+      );
+      addLookColor("Button text", "Icons and labels", LOOK_PREFS.BUTTON_TEXT);
+      addLookColor(
+        "Button outline",
+        "Outline style and focus edge",
+        LOOK_PREFS.BUTTON_BORDER_COLOR,
+      );
+      addLookSlider(
+        "Button border width",
+        "0 px removes outlines, including Filled buttons",
+        LOOK_PREFS.BUTTON_BORDER,
+        0,
+        3,
+        " px",
+      );
+      addLookSlider(
+        "Control size",
+        "Toolbar and video action buttons",
+        LOOK_PREFS.CONTROL_SIZE,
+        18,
+        32,
+        " px",
+      );
+      addLookSelect(
+        "App tiles",
+        "Bare or softly filled launchers",
+        LOOK_PREFS.TILE_STYLE,
+        [
+          { value: "bare", label: "Bare" },
+          { value: "soft", label: "Soft fill" },
+        ],
+      );
+      addLookSelect(
+        "Setting rows",
+        "Simple lines or individual cards",
+        LOOK_PREFS.ROW_STYLE,
+        [
+          { value: "lines", label: "Lines" },
+          { value: "cards", label: "Cards" },
+        ],
+      );
+      addLookSlider(
+        "Row padding",
+        "Vertical space inside a setting",
+        LOOK_PREFS.ROW_PADDING,
+        4,
+        20,
+        " px",
+      );
+      addLookSlider(
+        "Row divider",
+        "0 removes row lines and card outlines",
+        LOOK_PREFS.ROW_RULE,
+        0,
+        2,
+        " px",
+      );
+      addLookHeading("Panel toolbar");
+      addLookColor(
+        "Toolbar surface",
+        "Behind navigation and zoom controls",
+        LOOK_PREFS.TOOLBAR_SURFACE,
+      );
+      addLookColor(
+        "Address field",
+        "Background of the second address bar",
+        LOOK_PREFS.TOOLBAR_URL,
+      );
+      addLookSlider(
+        "Toolbar divider",
+        "0 removes the line above the bar",
+        LOOK_PREFS.TOOLBAR_BORDER,
+        0,
+        3,
+        " px",
+      );
+      addLookHeading("Sidebar video");
+      addLookColor(
+        "Video surface",
+        "Backdrop around the picture",
+        LOOK_PREFS.VIDEO_CANVAS,
+      );
+      addLookColor(
+        "Video control fill",
+        "Fill used by the Filled button style",
+        LOOK_PREFS.VIDEO_CONTROL,
+      );
+      addLookColor(
+        "Video text",
+        "Source and action labels",
+        LOOK_PREFS.VIDEO_TEXT,
+      );
+      addLookColor(
+        "Video muted text",
+        "Caption and source details",
+        LOOK_PREFS.VIDEO_MUTED,
+      );
+      addLookColor(
+        "Selected source",
+        "Small selection marker or filled highlight",
+        LOOK_PREFS.VIDEO_SELECTED,
+      );
+      addLookSlider(
+        "Video border",
+        "0 removes the card and picture outline",
+        LOOK_PREFS.VIDEO_BORDER,
+        0,
+        3,
+        " px",
+      );
+      addLookSlider(
+        "Video padding",
+        "Space around the media and controls",
+        LOOK_PREFS.VIDEO_PADDING,
+        0,
+        16,
+        " px",
+      );
+      addLookSlider(
+        "Source row height",
+        "Height of each source in the list",
+        LOOK_PREFS.VIDEO_ROW_HEIGHT,
+        22,
+        36,
+        " px",
+      );
+      addLookSelect(
+        "Source selection",
+        "Line or filled highlight, without a box border",
+        LOOK_PREFS.VIDEO_SOURCE_STYLE,
+        [
+          { value: "line", label: "Line" },
+          { value: "filled", label: "Filled" },
+        ],
+      );
+      addLookSlider(
+        "Video corners",
+        "0 px keeps the sidebar video square",
+        LOOK_PREFS.VIDEO_RADIUS,
+        0,
+        24,
+        " px",
+      );
+      const videoLookInput = lookControls.at(-1).input;
+      videoLookInput.addEventListener("input", () => {
+        const original = document.getElementById("zs-video-preview-radius");
+        if (!original) return;
+        original.value = videoLookInput.value;
+        original.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      addLookHeading("Existing appearance");
+      lookCategory.subContent.append(aestheticHeader, t1.row, slidersGroup);
+      const pillLookGroup = document.createElement("div");
+      pillLookGroup.className = "zs-look-group";
+      pillLookGroup.append(
+        peekColorRow.row,
+        peekOpacitySlider.row,
+        pillBackgroundOpacitySlider.row,
+      );
+      lookCategory.subContent.append(pillLookGroup);
+      const groupOpacity = modal
+        .querySelector("#zs-tg-opacity")
+        ?.closest(".zs-stacked-slider");
+      if (groupOpacity) lookCategory.subContent.append(groupOpacity);
+      const groupIndicator = modal.querySelector("#zs-tg-indicator-type-row");
+      const groupToggle = modal
+        .querySelector("#zs-tg-chevron")
+        ?.closest(".zs-row");
+      if (groupToggle) lookCategory.subContent.append(groupToggle);
+      if (groupIndicator) lookCategory.subContent.append(groupIndicator);
+      // Base settings normally persist these on Save. In Look they save as
+      // soon as they change, just like the other live appearance controls.
+      const groupOpacityInput = modal.querySelector("#zs-tg-opacity");
+      groupOpacityInput?.addEventListener("input", () =>
+        setPref(
+          LOOK_GROUP_PREFS.LABEL_OPACITY,
+          Number(groupOpacityInput.value),
+        ),
+      );
+      const indicatorToggle = modal.querySelector("#zs-tg-chevron");
+      indicatorToggle?.addEventListener("change", () => {
+        setPref(LOOK_GROUP_PREFS.SHOW_CHEVRON, indicatorToggle.checked);
+        window.Zentral?.TabGroups?.applyChevronPref?.();
+      });
+      groupIndicator
+        ?.querySelectorAll(".zs-custom-select-option")
+        .forEach((option) =>
+          option.addEventListener("click", () => {
+            setPref(LOOK_GROUP_PREFS.INDICATOR_TYPE, option.dataset.value);
+            window.Zentral?.TabGroups?.applyIndicatorTypePref?.();
+          }),
+        );
+      const resetLook = document.createElement("button");
+      resetLook.type = "button";
+      resetLook.className = "zs-look-action";
+      resetLook.textContent = "Reset Look defaults";
+      resetLook.addEventListener("click", () => {
+        if (!window.confirm("Reset all Look options to their defaults?"))
+          return;
+        for (const [key, value] of Object.entries(LOOK_DEFAULTS))
+          setPref(key, value);
+        syncAppearanceAfterImport();
+      });
+      lookCategory.subContent.append(resetLook);
+      addLookBackupControls(lookCategory.subContent);
+
       panel.appendChild(content);
       body.append(
         panel,
+        lookCategory.subPanel,
         tabsCategory.subPanel,
         hideCategory.subPanel,
         toolbarCategory.subPanel,
@@ -21546,12 +22800,20 @@
       });
     }
 
+    modal.querySelector("#zs-panel-extension-look")?._syncLook?.();
+    applyLook();
     const extensionCategories = [
       {
         buttonId: "zs-tab-btn-bgalazka",
         panelId: "zs-panel-bgalazka",
         dataTab: "bgalazka",
         label: "Panels",
+      },
+      {
+        buttonId: "zs-tab-btn-extension-look",
+        panelId: "zs-panel-extension-look",
+        dataTab: "extension-look",
+        label: "Look",
       },
       {
         buttonId: "zs-tab-btn-extension-tabs",
@@ -24302,9 +25564,16 @@
     settingsInstance._bgalazkaPatched = true;
 
     const origOpen = settingsInstance.open?.bind(settingsInstance);
-    settingsInstance.open = function () {
-      if (origOpen) origOpen();
-      injectSettingsUI();
+    settingsInstance.open = function (...args) {
+      const result = origOpen?.(...args);
+      // Optional extension settings must never make the base modal unusable.
+      // A single failed row should be reported without aborting other hooks.
+      try {
+        injectSettingsUI();
+      } catch (error) {
+        console.error("[BgalazkaExtension] Extension settings failed:", error);
+      }
+      return result;
     };
 
     registerCleanup(() => {
@@ -24769,10 +26038,10 @@
       iconButton(PREF_ICONS.BACK, "Back", () =>
         navigatePanelHistory(browser, -1),
       );
+      iconButton(PREF_ICONS.RELOAD, "Reload", () => browser.reload());
       iconButton(PREF_ICONS.FORWARD, "Forward", () =>
         navigatePanelHistory(browser, 1),
       );
-      iconButton(PREF_ICONS.RELOAD, "Reload", () => browser.reload());
       const grip = document.createElement("div");
       grip.className = "bgalazka-second-grip";
       grip.title = "Drag to move second panel";
@@ -24789,11 +26058,11 @@
           url.blur();
         } else if (event.key === "Escape") url.blur();
       });
+      bar.append(grip, url);
       iconButton(PREF_ICONS.ZOOM_OUT, "Zoom out", () => zoom(-0.1));
       const zoomText = button("100%", "Reset zoom", () => zoom(0));
       zoomText.classList.add("bgalazka-second-zoom-label");
       iconButton(PREF_ICONS.ZOOM_IN, "Zoom in", () => zoom(0.1));
-      bar.append(grip, url);
       if (state.mode === "triple")
         button("⇅", "Swap top and bottom panels", swapPair).classList.add(
           "bgalazka-second-swap",
@@ -25348,7 +26617,7 @@
       return 480;
     }
   }
-  const BUILD = "video-only-2026-09-24-2";
+  const BUILD = "video-resume-2026-09-24-3";
   const FRAME_SOURCE =
     '// Loaded into each browser\'s content process through its frame message manager.\n// The channel is replaced at startup so separate browser windows stay isolated.\n(function () {\n  // Shared by actor and frame-script transports; no parent-side privileges.\nclass ZentralVideoRenderer {\n  constructor(doc) { this.doc = doc; this.serial = 0; }\n  async start({ videoRef, mode, fit = "contain" }) {\n    if (this.doc?.documentURI !== "about:blank") throw new Error("Invalid preview document");\n    this.stop();\n    const serial = this.serial;\n    const { ContentDOMReference } = ChromeUtils.importESModule(\n      "resource://gre/modules/ContentDOMReference.sys.mjs");\n    const media = await ContentDOMReference.resolve(videoRef);\n    if (serial !== this.serial) throw new Error("Preview cancelled");\n    if (!media?.isConnected || media.localName !== "video")\n      throw new Error("Video reference unavailable in preview process");\n    this.source = media;\n    const doc = this.doc, win = doc.defaultView;\n    if (!doc.body) doc.documentElement.appendChild(doc.createElement("body"));\n    doc.body.style.cssText = "margin:0;overflow:hidden;background:#000";\n    const target = doc.createElement("video");\n    target.muted = true;\n    target.autoplay = true;\n    target.style.cssText = "display:block;width:100vw;height:100vh;object-fit:" +\n      (fit === "cover" ? "cover" : "contain") + ";background:#000";\n    doc.body.appendChild(target);\n    this.video = target;\n    this.mode = mode;\n    try {\n      if (mode === "native") {\n        if (media.isCloningElementVisually) throw new Error("Source already has a visual clone");\n        if (typeof media.cloneElementVisually !== "function") throw new Error("Native cloning unavailable");\n        await media.cloneElementVisually(target);\n      } else if (mode === "stream") {\n        const capture = media.captureStream || media.mozCaptureStream;\n        if (typeof capture !== "function") throw new Error("Stream capture unavailable");\n        this.stream = capture.call(media);\n        const tracks = this.stream.getVideoTracks();\n        if (!tracks.length) throw new Error("Stream contains no video track");\n        target.srcObject = new win.MediaStream(tracks);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else if (mode === "canvas-stream") {\n        const surface = doc.createElement("canvas");\n        surface.width = Math.min(640, media.videoWidth);\n        surface.height = Math.max(1, Math.round(surface.width * media.videoHeight / media.videoWidth));\n        const ctx = surface.getContext("2d", { alpha: false });\n        ctx.drawImage(media, 0, 0, surface.width, surface.height);\n        this.stream = surface.captureStream(30);\n        target.srcObject = this.stream;\n        // Keep all copies inside the source process. No per-frame JPEG or IPC.\n        // Use the visible preview window clock: source rVFC may stop in a hidden tab.\n        let lastTime = NaN;\n        this.timer = win.setInterval(() => {\n          if (!media.isConnected || media.ended) { this.failure = "Source ended or detached"; return; }\n          if (media.currentTime === lastTime || media.readyState < 2) return;\n          try {\n            ctx.drawImage(media, 0, 0, surface.width, surface.height);\n            lastTime = media.currentTime;\n          } catch (error) { this.failure = String(error); }\n        }, 1000 / 30);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else throw new Error("Unknown preview mode");\n      if (serial !== this.serial) throw new Error("Preview cancelled");\n      return { ok: true, mode };\n    } catch (error) {\n      if (serial === this.serial) this.stop();\n      throw error;\n    }\n  }\n  firstFrame(target) {\n    if (target.readyState >= 2 && target.videoWidth > 0) return Promise.resolve();\n    return new Promise((resolve, reject) => {\n      const win = this.doc.defaultView;\n      const done = error => {\n        win.clearTimeout(timer);\n        target.removeEventListener("loadeddata", loaded);\n        this.cancelWait = null;\n        error ? reject(error) : resolve();\n      };\n      const loaded = () => done();\n      const timer = win.setTimeout(() => done(new Error("Stream produced no decoded frame")), 1800);\n      this.cancelWait = () => done(new Error("Preview cancelled"));\n      target.addEventListener("loadeddata", loaded, { once: true });\n    });\n  }\n  health() {\n    const tracks = this.stream?.getVideoTracks() || [];\n    return { ok: !!this.video?.isConnected && !!this.source?.isConnected && !this.failure &&\n      !this.source.ended && ((this.mode === "native" && this.source.isCloningElementVisually) ||\n        (this.video.readyState >= 2 && tracks.some(track => track.readyState !== "ended" && !track.muted))),\n      error: this.failure || "Preview disconnected or stream unavailable",\n      paused: this.source?.paused, time: this.source?.currentTime,\n      frames: this.video?.getVideoPlaybackQuality?.().totalVideoFrames || 0 };\n  }\n  stop() {\n    ++this.serial;\n    this.cancelWait?.();\n    if (this.timer != null) this.doc.defaultView.clearInterval(this.timer);\n    this.timer = null;\n    this.video?.remove();\n    this.video = null;\n    for (const track of this.stream?.getTracks() || []) track.stop();\n    this.stream = null;\n    this.source = null;\n    this.failure = null;\n  }\n}\n\n  let renderer = null;\n  let stopped = false;\n  const CHANNEL = "__CHANNEL__";\n  const ids = new WeakMap();\n  const elements = new Map();\n  let nextId = 0;\n  const frameId = () => content.browsingContext?.id || 0;\n\n  function hasVideoAudioTrack(media) {\n  // Track presence is independent of the viewer\'s mute and volume choices.\n  try {\n    if (media.srcObject?.getAudioTracks) return media.srcObject.getAudioTracks().length > 0;\n    if (media.audioTracks) return media.audioTracks.length > 0;\n    const capture = media.captureStream || media.mozCaptureStream;\n    if (typeof capture !== "function") return false;\n    const stream = capture.call(media);\n    const hasAudio = stream.getAudioTracks().length > 0;\n    for (const track of stream.getTracks()) track.stop();\n    return hasAudio;\n  } catch (_) { return false; }\n}\n\n  function list({ requireAudio = false } = {}) {\n    const doc = content.document;\n    if (!doc) return [];\n    const found = [];\n    const live = new Set();\n    for (const media of doc.querySelectorAll("video")) {\n      if (media.localName !== "video" || media.ended || media.readyState < 1) continue;\n      const box = media.getBoundingClientRect();\n      const x = Math.max(0, box.left);\n      const y = Math.max(0, box.top);\n      const width = Math.min(content.innerWidth, box.right) - x;\n      const height = Math.min(content.innerHeight, box.bottom) - y;\n      if (media.videoWidth < 240 || media.videoHeight < 135 ||\n          (Number.isFinite(media.duration) && media.duration > 0 && media.duration < 8) ||\n          (requireAudio && !hasVideoAudioTrack(media))) continue;\n      let id = ids.get(media);\n      if (!id) { id = ++nextId; ids.set(media, id); }\n      elements.set(id, media);\n      live.add(id);\n      const label = media.getAttribute("aria-label") || media.getAttribute("title") ||\n        media.closest("[aria-label]")?.getAttribute("aria-label") ||\n        doc.title || "Video";\n      let videoRef = null;\n      try {\n        const { ContentDOMReference } = ChromeUtils.importESModule(\n          "resource://gre/modules/ContentDOMReference.sys.mjs");\n        videoRef = ContentDOMReference.get(media);\n      } catch (_) {}\n      found.push({ id, videoRef, documentId: content.windowGlobalChild?.innerWindowId || 0,\n        frameId: frameId(), label: String(label).slice(0, 100),\n        kind: "video",\n        canClone: typeof media.cloneElementVisually === "function",\n        canStream: typeof (media.captureStream || media.mozCaptureStream) === "function",\n        canCanvasStream: typeof doc.createElement("canvas").captureStream === "function",\n        rect: width > 0 && height > 0 ? { x, y, width, height } : null,\n        score: (media.paused ? 0 : 10000000) + Math.max(0, width) * Math.max(0, height),\n        paused: media.paused, muted: media.muted,\n        currentTime: media.currentTime,\n        duration: Number.isFinite(media.duration) ? media.duration : 0,\n        width: media.videoWidth || 0, height: media.videoHeight || 0 });\n    }\n    for (const id of elements.keys()) if (!live.has(id)) elements.delete(id);\n    return found;\n  }\n\n  function captureFrame({ id, captureWidth = 480 }) {\n    const media = elements.get(id);\n    if (!media?.isConnected || media.localName !== "video" || media.readyState < 2)\n      throw new Error("No decoded video frame available");\n    const canvas = content.document.createElement("canvas");\n    canvas.width = Math.min([320, 480, 640].includes(captureWidth) ? captureWidth : 480, media.videoWidth);\n    canvas.height = Math.max(1, Math.round(canvas.width * media.videoHeight / media.videoWidth));\n    canvas.getContext("2d", { alpha: false }).drawImage(media, 0, 0, canvas.width, canvas.height);\n    return { url: canvas.toDataURL("image/jpeg", 0.75), width: canvas.width, height: canvas.height };\n  }\n\n  function controlMedia({ id, action, value }) {\n    const media = elements.get(id);\n    if (!media?.isConnected) return null;\n    switch (action) {\n      case "toggle":\n        if (media.paused) media.play().catch(() => {});\n        else media.pause();\n        break;\n      case "mute": media.muted = !media.muted; break;\n      case "seek":\n        if (Number.isFinite(value) && Number.isFinite(media.duration))\n          media.currentTime = Math.max(0, Math.min(media.duration, value));\n        break;\n    }\n    return { paused: media.paused, muted: media.muted,\n      currentTime: media.currentTime,\n      duration: Number.isFinite(media.duration) ? media.duration : 0 };\n  }\n\n  async function onRequest(message) {\n    const { requestId, kind, frameId: requestedFrame, ...args } = message.data;\n    if (stopped || (kind !== "List" && requestedFrame !== frameId())) return;\n    try {\n      let result;\n      if (kind === "List") result = list(args);\n      else if (kind === "Preview") {\n        renderer ??= new ZentralVideoRenderer(content.document);\n        result = await renderer.start(args);\n      } else if (kind === "Health") result = renderer?.health() || { ok: false };\n      else if (kind === "StopPreview") { renderer?.stop(); result = true; }\n      else if (kind === "ActorCheck") {\n        ChromeUtils.importESModule(args.moduleURI);\n        result = true;\n      } else result = kind === "Capture" ? captureFrame(args) : controlMedia(args);\n      if (!stopped) sendAsyncMessage(CHANNEL + ":reply", { requestId, result });\n    } catch (error) {\n      if (!stopped) sendAsyncMessage(CHANNEL + ":reply", { requestId, error: String(error), result: [] });\n    }\n  }\n  function onShutdown() {\n    stopped = true;\n    renderer?.stop();\n    removeMessageListener(CHANNEL + ":request", onRequest);\n    removeMessageListener(CHANNEL + ":shutdown", onShutdown);\n    elements.clear();\n  }\n  addEventListener("unload", () => renderer?.stop());\n  addMessageListener(CHANNEL + ":request", onRequest);\n  addMessageListener(CHANNEL + ":shutdown", onShutdown);\n})();\n';
   const ACTOR_SOURCE =
@@ -25412,7 +26681,7 @@
   let lastHealth = null;
   let lastScan = 0;
   let heightPx = 0,
-    radiusPx = 8;
+    radiusPx = 0;
   let cropCache = null;
   try {
     heightPx = Math.max(
@@ -25423,7 +26692,7 @@
   try {
     radiusPx = Math.max(
       0,
-      Math.min(24, Services.prefs.getIntPref(RADIUS_PREF, 8)),
+      Math.min(24, Services.prefs.getIntPref(RADIUS_PREF, 0)),
     );
   } catch (_) {}
   let widthPercent = 100;
@@ -25456,6 +26725,10 @@
   let mountTimer = null;
   let compactCheckTimer = null;
   let compactPaused = false;
+  let compactResumeSource = null;
+  let compactHovering = false;
+  let compactHiddenSince = 0;
+  let compactMountTimer = null;
   let scanGeneration = 0;
   let settingsInstance = null;
   let originalSettingsOpen = null;
@@ -25866,8 +27139,8 @@
       pauseHelp.className = "zs-sublabel";
       pauseHelp.textContent =
         "On by default. Stops video scanning and all preview capture methods " +
-        "while the compact tabbar is hidden; resumes with a fresh scan when " +
-        "it appears. Source video playback is unaffected.";
+        "while the compact tabbar is hidden; remembers the selected source " +
+        "and checks it first when the tabbar returns. Source playback is unaffected.";
       pauseText.append(pauseTitle, pauseHelp);
       const pauseCheck = document.createElement("input");
       pauseCheck.type = "checkbox";
@@ -26246,25 +27519,25 @@
 
   function rendererChoice() {
     try {
-      const value = Services.prefs.getStringPref(RENDER_PREF, "auto");
+      const value = Services.prefs.getStringPref(RENDER_PREF, "canvas");
       return RENDER_MODES.includes(value) &&
         (!experimentalBridgeDisabled() || !LIVE_MODES.includes(value))
         ? value
         : "auto";
     } catch (_) {
-      return "auto";
+      return "canvas";
     }
   }
 
   function discoveryChoice() {
     try {
-      const value = Services.prefs.getStringPref(DISCOVERY_PREF, "auto");
+      const value = Services.prefs.getStringPref(DISCOVERY_PREF, "frame");
       return ["frame", "actor", "direct"].includes(value) &&
         (value !== "actor" || !experimentalBridgeDisabled())
         ? value
         : "auto";
     } catch (_) {
-      return "auto";
+      return "frame";
     }
   }
 
@@ -26444,6 +27717,28 @@
       a.data.frameId === b.data.frameId &&
       a.data.documentId === b.data.documentId &&
       a.data.id === b.data.id
+    );
+  }
+
+  function rememberedSource(candidates, remembered) {
+    if (!remembered) return null;
+    const fromBrowser = candidates.filter(
+      (item) =>
+        item.browser === remembered.browser && item.data.kind === "video",
+    );
+    return (
+      fromBrowser.find(
+        (item) =>
+          item.method === remembered.method &&
+          item.data.frameId === remembered.frameId &&
+          item.data.documentId === remembered.documentId &&
+          item.data.id === remembered.id,
+      ) ||
+      (remembered.documentId &&
+      fromBrowser.length === 1 &&
+      fromBrowser[0].data.documentId === remembered.documentId
+        ? fromBrowser[0]
+        : null)
     );
   }
 
@@ -26784,6 +28079,7 @@
   function select(source, force = false, automatic = false) {
     if (!source?.browser?.isConnected) return;
     const changed = !sameSource(current, source) || force;
+    if (changed && !automatic) compactResumeSource = null;
     if (changed) previewAutoSelected = automatic;
     if (changed && canvas) {
       cropCache = null;
@@ -26977,7 +28273,7 @@
     const choice = discoveryChoice();
     const locked =
       choice === "auto"
-        ? discoveryWinner || discoveryLocks.get(item.browser)
+        ? discoveryLocks.get(item.browser) || discoveryWinner
         : choice;
     const permittedLock =
       experimentalBridgeDisabled() && locked === "actor" ? null : locked;
@@ -27001,7 +28297,7 @@
     if (permittedLock) groups[permittedLock] = await run(permittedLock);
     if (
       choice === "auto" &&
-      !discoveryWinner &&
+      (!discoveryWinner || item.browser === compactResumeSource?.browser) &&
       (!permittedLock || !groups[permittedLock].length)
     ) {
       discoveryLocks.delete(item.browser);
@@ -27044,7 +28340,7 @@
     );
   }
 
-  async function scan(all = false) {
+  async function scan(all = false, resumeOnly = false) {
     if (disposed || !enabled() || compactPaused || scanning) return;
     scanning = true;
     const scanStarted = Date.now();
@@ -27092,21 +28388,27 @@
       // Check the current video each pass; rotate through the other tabs in
       // bounded batches so hundreds of open tabs never stall the chrome UI.
       const batch = [];
-      const active = items.find((item) => item.browser === current?.browser);
+      const active =
+        items.find(
+          (item) =>
+            item.browser === (compactResumeSource?.browser || current?.browser),
+        ) || (resumeOnly ? items.find((item) => item.tab?.soundPlaying) : null);
       if (active) batch.push(active);
-      const focused = items.find((item) => item.tab === gBrowser.selectedTab);
-      if (focused && !batch.includes(focused)) batch.push(focused);
-      for (const panelItem of items.filter((item) => item.panel).slice(0, 4))
-        if (!batch.includes(panelItem)) batch.push(panelItem);
-      for (
-        let i = 0;
-        i < Math.min(all ? items.length : 12, items.length);
-        i++
-      ) {
-        const item = items[(scanCursor + i) % items.length];
-        if (!batch.includes(item)) batch.push(item);
+      if (!resumeOnly || !active) {
+        const focused = items.find((item) => item.tab === gBrowser.selectedTab);
+        if (focused && !batch.includes(focused)) batch.push(focused);
+        for (const panelItem of items.filter((item) => item.panel).slice(0, 4))
+          if (!batch.includes(panelItem)) batch.push(panelItem);
+        for (
+          let i = 0;
+          i < Math.min(all ? items.length : 12, items.length);
+          i++
+        ) {
+          const item = items[(scanCursor + i) % items.length];
+          if (!batch.includes(item)) batch.push(item);
+        }
+        scanCursor = (scanCursor + (all ? items.length : 12)) % items.length;
       }
-      scanCursor = (scanCursor + (all ? items.length : 12)) % items.length;
       const found = (await Promise.all(batch.map(inspectBrowser))).flat();
       if (disposed || generation !== scanGeneration) return;
       diagnostics.found = found.length;
@@ -27129,6 +28431,18 @@
       if (discoveryChoice() === "auto")
         discoveryWinner =
           sources.find((item) => item.data.kind === "video")?.method || null;
+      const remembered = compactResumeSource;
+      if (remembered) {
+        const restored = rememberedSource(sources, remembered);
+        if (restored) {
+          compactResumeSource = null;
+          select(restored, false, remembered.autoSelected);
+        } else if (
+          !remembered.browser.isConnected ||
+          Date.now() - remembered.at > 15000
+        )
+          compactResumeSource = null;
+      }
       const stillPlaying = sources.find((item) => sameSource(item, current));
       if (stillPlaying) select(stillPlaying);
       else {
@@ -27370,7 +28684,7 @@
     if (
       typeof frame?.url !== "string" ||
       !frame.url.startsWith("data:image/jpeg;base64,") ||
-      frame.url.length > 2 * 1024 * 1024
+      frame.url.length > 16 * 1024 * 1024
     )
       throw new Error("Invalid video frame response");
     return limited(
@@ -27701,6 +29015,9 @@
     const tabs =
       document.getElementById("tabbrowser-tabs") || gBrowser.tabContainer;
     if (!tabs?.isConnected) return false; // Do not pause on an unknown layout.
+    // A pointer entering the actual tabs is stronger evidence than a rectangle
+    // or opacity sampled midway through the compact reveal animation.
+    if (compactHovering) return false;
     const rect = tabs.getBoundingClientRect();
     if (
       rect.width < 2 ||
@@ -27730,7 +29047,19 @@
   function pauseCompactPreview() {
     if (compactPaused) return;
     compactPaused = true;
+    if (current?.browser?.isConnected)
+      compactResumeSource = {
+        browser: current.browser,
+        method: current.method,
+        frameId: current.data.frameId,
+        documentId: current.data.documentId,
+        id: current.data.id,
+        autoSelected: previewAutoSelected,
+        at: Date.now(),
+      };
     ++scanGeneration; // Ignore replies from a scan started before hiding.
+    clearTimeout(compactMountTimer);
+    compactMountTimer = null;
     clearInterval(scanTimer);
     clearInterval(frameTimer);
     clearInterval(mountTimer);
@@ -27744,6 +29073,11 @@
     previewAutoSelected = false;
     browserReports.clear();
     discoveryLocks.clear();
+    if (compactResumeSource?.browser?.isConnected)
+      discoveryLocks.set(
+        compactResumeSource.browser,
+        compactResumeSource.method,
+      );
     discoveryWinner = null;
     unavailableBySource.clear();
     if (box) box.hidden = true;
@@ -27757,16 +29091,24 @@
       enabled() &&
       pauseWhenCompactHidden() &&
       document.documentElement.getAttribute("zen-compact-mode") === "true";
-    if (watching && compactTabbarHidden()) pauseCompactPreview();
-    else if (compactPaused && enabled()) {
+    const hidden = watching && compactTabbarHidden();
+    if (hidden) {
+      if (!compactHiddenSince) compactHiddenSince = Date.now();
+      // Ignore single-frame layout/opacity changes during the reveal animation.
+      if (Date.now() - compactHiddenSince >= 350) pauseCompactPreview();
+    } else {
+      compactHiddenSince = 0;
+    }
+    if (!hidden && compactPaused && enabled()) {
       compactPaused = false;
-      start(); // Recheck all sources; the old frame references may have expired.
+      if (compactResumeSource) compactResumeSource.at = Date.now();
+      start(true); // Verify the remembered or audible source first.
       refreshSettingList();
     }
     // Catch CSS-only hover reveals that do not change observed attributes.
     clearTimeout(compactCheckTimer);
     compactCheckTimer = watching
-      ? setTimeout(syncCompactVisibility, compactPaused ? 250 : 2000)
+      ? setTimeout(syncCompactVisibility, compactPaused || hidden ? 100 : 500)
       : null;
   }
 
@@ -27776,10 +29118,14 @@
     clearInterval(scanTimer);
     clearInterval(frameTimer);
     clearInterval(mountTimer);
+    clearTimeout(compactMountTimer);
+    compactMountTimer = null;
     scanTimer = frameTimer = mountTimer = null;
     paintTimerMs = 0;
     sources = [];
     current = null;
+    compactResumeSource = null;
+    compactHiddenSince = 0;
     previewAutoSelected = false;
     compactPaused = false;
     scanning = false;
@@ -27812,7 +29158,7 @@
     }
     actorReady = actorAttempted = false;
   }
-  function start() {
+  function start(resuming = false) {
     if (disposed || !enabled() || scanTimer) return;
     if (compactTabbarHidden()) {
       pauseCompactPreview();
@@ -27827,7 +29173,22 @@
     paintTimerMs = FRAME_MS;
     frameTimer = setInterval(paint, FRAME_MS);
     mountTimer = setInterval(mount, 3000);
-    scan();
+    // A compact reveal can finish after the first mount attempt.
+    compactMountTimer = setTimeout(() => {
+      compactMountTimer = null;
+      if (disposed || compactPaused || !enabled()) return;
+      mount();
+      if (current && box?.isConnected && box.hidden)
+        select(current, true, previewAutoSelected);
+    }, 200);
+    if (resuming || compactResumeSource?.browser?.isConnected) {
+      scan(false, true).then(() => {
+        if (!disposed && enabled() && !compactPaused) scan();
+      });
+    } else {
+      compactResumeSource = null;
+      scan();
+    }
   }
   const onPref = () => {
     if (enabled()) start();
@@ -27891,9 +29252,15 @@
     ],
   });
   const compactTabs = gBrowser.tabContainer;
-  const onCompactEnter = () => syncCompactVisibility();
+  const onCompactEnter = () => {
+    compactHovering = true;
+    compactHiddenSince = 0;
+    clearTimeout(compactLeaveTimer);
+    syncCompactVisibility();
+  };
   let compactLeaveTimer = null;
   const onCompactLeave = () => {
+    compactHovering = false;
     clearTimeout(compactLeaveTimer);
     compactLeaveTimer = setTimeout(syncCompactVisibility, 250);
   };
@@ -27949,6 +29316,7 @@
       captureRateFps: captureRateTenths() / 10,
       pauseWhenCompactHidden: pauseWhenCompactHidden(),
       compactPaused,
+      resumePending: !!compactResumeSource,
       autoSelected: previewAutoSelected,
       hideMutedDuplicates: hideMutedDuplicates(),
       performance: { ...metrics },

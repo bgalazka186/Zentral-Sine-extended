@@ -386,6 +386,18 @@
     "property": "zen.workspace.bgalazka.opposite_docking",
     "label": "Opposite-Side Docking",
     "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.bgalazka.hover_reveal_panel",
+    "label": "Hide Opposite-Side Panel Until Hover (retains its open app)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.bgalazka.hide_hover_reveal_btn",
+    "label": "Hide Hover-Reveal Button in the Pill Menu",
+    "type": "checkbox",
     "defaultValue": false
   },
   {
@@ -398,7 +410,7 @@
     "property": "zen.workspace.bgalazka.push_page",
     "label": "Dual-View Mode",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.all_sides_resize",
@@ -410,7 +422,7 @@
     "property": "zen.workspace.bgalazka.panel_input_shield",
     "label": "Prevent Panel Input Pass-Through",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.panel_horizontal_offset_px",
@@ -581,13 +593,13 @@
   },
   {
     "property": "zen.workspace.bgalazka.translucency",
-    "label": "Pinned Panel Translucency",
+    "label": "Enable Whole-Panel Translucency in Single-Panel View",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.opacity_unpinned",
-    "label": "Unpinned Opacity (%)",
+    "label": "Whole-Panel Opacity: Unpinned (%)",
     "type": "dropdown",
     "defaultValue": 92,
     "options": [
@@ -631,7 +643,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.opacity_pinned_focus",
-    "label": "Pinned Focus Opacity (%)",
+    "label": "Whole-Panel Opacity: Pinned and Focused (%)",
     "type": "dropdown",
     "defaultValue": 85,
     "options": [
@@ -675,7 +687,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.opacity_pinned_blur",
-    "label": "Pinned Idle Opacity (%)",
+    "label": "Whole-Panel Opacity: Pinned and Unfocused (%)",
     "type": "dropdown",
     "defaultValue": 45,
     "options": [
@@ -721,7 +733,7 @@
     "property": "zen.workspace.bgalazka.blur_intensity",
     "label": "Panel Background Blur (px)",
     "type": "dropdown",
-    "defaultValue": 20,
+    "defaultValue": 0,
     "options": [
       {
         "label": "0",
@@ -754,20 +766,4942 @@
     ]
   },
   {
+    "type": "text",
+    "label": "The whole-panel opacity settings above apply to a single panel. In dual or triple view, the pinned/unpinned opacity filter is ignored so the Look surface opacity settings can make the tab background completely clear.",
+    "size": "12px"
+  },
+  {
+    "type": "text",
+    "label": "**Bgalazka Extension · Look**",
+    "size": "18px"
+  },
+  {
+    "type": "text",
+    "label": "These controls change appearance only. The original interface remains available under Interface Style. Changes made here also appear in about:config; use six-digit hex colors.",
+    "size": "12px"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.style",
+    "label": "Interface Style — Atelier or original Classic",
+    "type": "dropdown",
+    "defaultValue": "atelier",
+    "options": [
+      {
+        "label": "Atelier — customizable interface",
+        "value": "atelier"
+      },
+      {
+        "label": "Classic — original interface",
+        "value": "classic"
+      }
+    ]
+  },
+  {
+    "type": "text",
+    "label": "**Palette**",
+    "size": "15px"
+  },
+  {
+    "type": "text",
+    "label": "Canvas is the outer panel; Surface is the main panel; Raised colors inset cards. Accent highlights active controls. Text and Muted control foreground contrast.",
+    "size": "12px"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.canvas",
+    "label": "Outer panel canvas (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#17191b",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.surface",
+    "label": "Panel surface (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#202224",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.raised",
+    "label": "Raised cards and boxes (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#2b2e31",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.accent",
+    "label": "Active accent (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#a5bec0",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.text",
+    "label": "Primary text (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#dce0e1",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.muted",
+    "label": "Secondary text (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#a4aaad",
+    "border": "value"
+  },
+  {
+    "type": "text",
+    "label": "**Surface Opacity**",
+    "size": "15px"
+  },
+  {
+    "type": "text",
+    "label": "100% means solid and 0% means fully clear. These are the actual about:config opacity values. The separate panel translucency controls below also affect the entire panel; dual and triple view ignore the pinned/unpinned panel opacity filter.",
+    "size": "12px"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.surface_opacity",
+    "label": "Main panel surface opacity (%)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      },
+      {
+        "label": "37",
+        "value": 37
+      },
+      {
+        "label": "38",
+        "value": 38
+      },
+      {
+        "label": "39",
+        "value": 39
+      },
+      {
+        "label": "40",
+        "value": 40
+      },
+      {
+        "label": "41",
+        "value": 41
+      },
+      {
+        "label": "42",
+        "value": 42
+      },
+      {
+        "label": "43",
+        "value": 43
+      },
+      {
+        "label": "44",
+        "value": 44
+      },
+      {
+        "label": "45",
+        "value": 45
+      },
+      {
+        "label": "46",
+        "value": 46
+      },
+      {
+        "label": "47",
+        "value": 47
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "49",
+        "value": 49
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "51",
+        "value": 51
+      },
+      {
+        "label": "52",
+        "value": 52
+      },
+      {
+        "label": "53",
+        "value": 53
+      },
+      {
+        "label": "54",
+        "value": 54
+      },
+      {
+        "label": "55",
+        "value": 55
+      },
+      {
+        "label": "56",
+        "value": 56
+      },
+      {
+        "label": "57",
+        "value": 57
+      },
+      {
+        "label": "58",
+        "value": 58
+      },
+      {
+        "label": "59",
+        "value": 59
+      },
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "61",
+        "value": 61
+      },
+      {
+        "label": "62",
+        "value": 62
+      },
+      {
+        "label": "63",
+        "value": 63
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "65",
+        "value": 65
+      },
+      {
+        "label": "66",
+        "value": 66
+      },
+      {
+        "label": "67",
+        "value": 67
+      },
+      {
+        "label": "68",
+        "value": 68
+      },
+      {
+        "label": "69",
+        "value": 69
+      },
+      {
+        "label": "70",
+        "value": 70
+      },
+      {
+        "label": "71",
+        "value": 71
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "73",
+        "value": 73
+      },
+      {
+        "label": "74",
+        "value": 74
+      },
+      {
+        "label": "75",
+        "value": 75
+      },
+      {
+        "label": "76",
+        "value": 76
+      },
+      {
+        "label": "77",
+        "value": 77
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "79",
+        "value": 79
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "81",
+        "value": 81
+      },
+      {
+        "label": "82",
+        "value": 82
+      },
+      {
+        "label": "83",
+        "value": 83
+      },
+      {
+        "label": "84",
+        "value": 84
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "86",
+        "value": 86
+      },
+      {
+        "label": "87",
+        "value": 87
+      },
+      {
+        "label": "88",
+        "value": 88
+      },
+      {
+        "label": "89",
+        "value": 89
+      },
+      {
+        "label": "90",
+        "value": 90
+      },
+      {
+        "label": "91",
+        "value": 91
+      },
+      {
+        "label": "92",
+        "value": 92
+      },
+      {
+        "label": "93",
+        "value": 93
+      },
+      {
+        "label": "94",
+        "value": 94
+      },
+      {
+        "label": "95",
+        "value": 95
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "97",
+        "value": 97
+      },
+      {
+        "label": "98",
+        "value": 98
+      },
+      {
+        "label": "99",
+        "value": 99
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.raised_opacity",
+    "label": "Raised card opacity (%)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      },
+      {
+        "label": "37",
+        "value": 37
+      },
+      {
+        "label": "38",
+        "value": 38
+      },
+      {
+        "label": "39",
+        "value": 39
+      },
+      {
+        "label": "40",
+        "value": 40
+      },
+      {
+        "label": "41",
+        "value": 41
+      },
+      {
+        "label": "42",
+        "value": 42
+      },
+      {
+        "label": "43",
+        "value": 43
+      },
+      {
+        "label": "44",
+        "value": 44
+      },
+      {
+        "label": "45",
+        "value": 45
+      },
+      {
+        "label": "46",
+        "value": 46
+      },
+      {
+        "label": "47",
+        "value": 47
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "49",
+        "value": 49
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "51",
+        "value": 51
+      },
+      {
+        "label": "52",
+        "value": 52
+      },
+      {
+        "label": "53",
+        "value": 53
+      },
+      {
+        "label": "54",
+        "value": 54
+      },
+      {
+        "label": "55",
+        "value": 55
+      },
+      {
+        "label": "56",
+        "value": 56
+      },
+      {
+        "label": "57",
+        "value": 57
+      },
+      {
+        "label": "58",
+        "value": 58
+      },
+      {
+        "label": "59",
+        "value": 59
+      },
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "61",
+        "value": 61
+      },
+      {
+        "label": "62",
+        "value": 62
+      },
+      {
+        "label": "63",
+        "value": 63
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "65",
+        "value": 65
+      },
+      {
+        "label": "66",
+        "value": 66
+      },
+      {
+        "label": "67",
+        "value": 67
+      },
+      {
+        "label": "68",
+        "value": 68
+      },
+      {
+        "label": "69",
+        "value": 69
+      },
+      {
+        "label": "70",
+        "value": 70
+      },
+      {
+        "label": "71",
+        "value": 71
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "73",
+        "value": 73
+      },
+      {
+        "label": "74",
+        "value": 74
+      },
+      {
+        "label": "75",
+        "value": 75
+      },
+      {
+        "label": "76",
+        "value": 76
+      },
+      {
+        "label": "77",
+        "value": 77
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "79",
+        "value": 79
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "81",
+        "value": 81
+      },
+      {
+        "label": "82",
+        "value": 82
+      },
+      {
+        "label": "83",
+        "value": 83
+      },
+      {
+        "label": "84",
+        "value": 84
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "86",
+        "value": 86
+      },
+      {
+        "label": "87",
+        "value": 87
+      },
+      {
+        "label": "88",
+        "value": 88
+      },
+      {
+        "label": "89",
+        "value": 89
+      },
+      {
+        "label": "90",
+        "value": 90
+      },
+      {
+        "label": "91",
+        "value": 91
+      },
+      {
+        "label": "92",
+        "value": 92
+      },
+      {
+        "label": "93",
+        "value": 93
+      },
+      {
+        "label": "94",
+        "value": 94
+      },
+      {
+        "label": "95",
+        "value": 95
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "97",
+        "value": 97
+      },
+      {
+        "label": "98",
+        "value": 98
+      },
+      {
+        "label": "99",
+        "value": 99
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.toolbar_opacity",
+    "label": "Navigation toolbar opacity (%)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      },
+      {
+        "label": "37",
+        "value": 37
+      },
+      {
+        "label": "38",
+        "value": 38
+      },
+      {
+        "label": "39",
+        "value": 39
+      },
+      {
+        "label": "40",
+        "value": 40
+      },
+      {
+        "label": "41",
+        "value": 41
+      },
+      {
+        "label": "42",
+        "value": 42
+      },
+      {
+        "label": "43",
+        "value": 43
+      },
+      {
+        "label": "44",
+        "value": 44
+      },
+      {
+        "label": "45",
+        "value": 45
+      },
+      {
+        "label": "46",
+        "value": 46
+      },
+      {
+        "label": "47",
+        "value": 47
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "49",
+        "value": 49
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "51",
+        "value": 51
+      },
+      {
+        "label": "52",
+        "value": 52
+      },
+      {
+        "label": "53",
+        "value": 53
+      },
+      {
+        "label": "54",
+        "value": 54
+      },
+      {
+        "label": "55",
+        "value": 55
+      },
+      {
+        "label": "56",
+        "value": 56
+      },
+      {
+        "label": "57",
+        "value": 57
+      },
+      {
+        "label": "58",
+        "value": 58
+      },
+      {
+        "label": "59",
+        "value": 59
+      },
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "61",
+        "value": 61
+      },
+      {
+        "label": "62",
+        "value": 62
+      },
+      {
+        "label": "63",
+        "value": 63
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "65",
+        "value": 65
+      },
+      {
+        "label": "66",
+        "value": 66
+      },
+      {
+        "label": "67",
+        "value": 67
+      },
+      {
+        "label": "68",
+        "value": 68
+      },
+      {
+        "label": "69",
+        "value": 69
+      },
+      {
+        "label": "70",
+        "value": 70
+      },
+      {
+        "label": "71",
+        "value": 71
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "73",
+        "value": 73
+      },
+      {
+        "label": "74",
+        "value": 74
+      },
+      {
+        "label": "75",
+        "value": 75
+      },
+      {
+        "label": "76",
+        "value": 76
+      },
+      {
+        "label": "77",
+        "value": 77
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "79",
+        "value": 79
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "81",
+        "value": 81
+      },
+      {
+        "label": "82",
+        "value": 82
+      },
+      {
+        "label": "83",
+        "value": 83
+      },
+      {
+        "label": "84",
+        "value": 84
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "86",
+        "value": 86
+      },
+      {
+        "label": "87",
+        "value": 87
+      },
+      {
+        "label": "88",
+        "value": 88
+      },
+      {
+        "label": "89",
+        "value": 89
+      },
+      {
+        "label": "90",
+        "value": 90
+      },
+      {
+        "label": "91",
+        "value": 91
+      },
+      {
+        "label": "92",
+        "value": 92
+      },
+      {
+        "label": "93",
+        "value": 93
+      },
+      {
+        "label": "94",
+        "value": 94
+      },
+      {
+        "label": "95",
+        "value": 95
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "97",
+        "value": 97
+      },
+      {
+        "label": "98",
+        "value": 98
+      },
+      {
+        "label": "99",
+        "value": 99
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.address_opacity",
+    "label": "Secondary address field opacity (%)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      },
+      {
+        "label": "37",
+        "value": 37
+      },
+      {
+        "label": "38",
+        "value": 38
+      },
+      {
+        "label": "39",
+        "value": 39
+      },
+      {
+        "label": "40",
+        "value": 40
+      },
+      {
+        "label": "41",
+        "value": 41
+      },
+      {
+        "label": "42",
+        "value": 42
+      },
+      {
+        "label": "43",
+        "value": 43
+      },
+      {
+        "label": "44",
+        "value": 44
+      },
+      {
+        "label": "45",
+        "value": 45
+      },
+      {
+        "label": "46",
+        "value": 46
+      },
+      {
+        "label": "47",
+        "value": 47
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "49",
+        "value": 49
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "51",
+        "value": 51
+      },
+      {
+        "label": "52",
+        "value": 52
+      },
+      {
+        "label": "53",
+        "value": 53
+      },
+      {
+        "label": "54",
+        "value": 54
+      },
+      {
+        "label": "55",
+        "value": 55
+      },
+      {
+        "label": "56",
+        "value": 56
+      },
+      {
+        "label": "57",
+        "value": 57
+      },
+      {
+        "label": "58",
+        "value": 58
+      },
+      {
+        "label": "59",
+        "value": 59
+      },
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "61",
+        "value": 61
+      },
+      {
+        "label": "62",
+        "value": 62
+      },
+      {
+        "label": "63",
+        "value": 63
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "65",
+        "value": 65
+      },
+      {
+        "label": "66",
+        "value": 66
+      },
+      {
+        "label": "67",
+        "value": 67
+      },
+      {
+        "label": "68",
+        "value": 68
+      },
+      {
+        "label": "69",
+        "value": 69
+      },
+      {
+        "label": "70",
+        "value": 70
+      },
+      {
+        "label": "71",
+        "value": 71
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "73",
+        "value": 73
+      },
+      {
+        "label": "74",
+        "value": 74
+      },
+      {
+        "label": "75",
+        "value": 75
+      },
+      {
+        "label": "76",
+        "value": 76
+      },
+      {
+        "label": "77",
+        "value": 77
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "79",
+        "value": 79
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "81",
+        "value": 81
+      },
+      {
+        "label": "82",
+        "value": 82
+      },
+      {
+        "label": "83",
+        "value": 83
+      },
+      {
+        "label": "84",
+        "value": 84
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "86",
+        "value": 86
+      },
+      {
+        "label": "87",
+        "value": 87
+      },
+      {
+        "label": "88",
+        "value": 88
+      },
+      {
+        "label": "89",
+        "value": 89
+      },
+      {
+        "label": "90",
+        "value": 90
+      },
+      {
+        "label": "91",
+        "value": 91
+      },
+      {
+        "label": "92",
+        "value": 92
+      },
+      {
+        "label": "93",
+        "value": 93
+      },
+      {
+        "label": "94",
+        "value": 94
+      },
+      {
+        "label": "95",
+        "value": 95
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "97",
+        "value": 97
+      },
+      {
+        "label": "98",
+        "value": 98
+      },
+      {
+        "label": "99",
+        "value": 99
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.button_opacity",
+    "label": "Panel button background opacity (%)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      },
+      {
+        "label": "37",
+        "value": 37
+      },
+      {
+        "label": "38",
+        "value": 38
+      },
+      {
+        "label": "39",
+        "value": 39
+      },
+      {
+        "label": "40",
+        "value": 40
+      },
+      {
+        "label": "41",
+        "value": 41
+      },
+      {
+        "label": "42",
+        "value": 42
+      },
+      {
+        "label": "43",
+        "value": 43
+      },
+      {
+        "label": "44",
+        "value": 44
+      },
+      {
+        "label": "45",
+        "value": 45
+      },
+      {
+        "label": "46",
+        "value": 46
+      },
+      {
+        "label": "47",
+        "value": 47
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "49",
+        "value": 49
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "51",
+        "value": 51
+      },
+      {
+        "label": "52",
+        "value": 52
+      },
+      {
+        "label": "53",
+        "value": 53
+      },
+      {
+        "label": "54",
+        "value": 54
+      },
+      {
+        "label": "55",
+        "value": 55
+      },
+      {
+        "label": "56",
+        "value": 56
+      },
+      {
+        "label": "57",
+        "value": 57
+      },
+      {
+        "label": "58",
+        "value": 58
+      },
+      {
+        "label": "59",
+        "value": 59
+      },
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "61",
+        "value": 61
+      },
+      {
+        "label": "62",
+        "value": 62
+      },
+      {
+        "label": "63",
+        "value": 63
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "65",
+        "value": 65
+      },
+      {
+        "label": "66",
+        "value": 66
+      },
+      {
+        "label": "67",
+        "value": 67
+      },
+      {
+        "label": "68",
+        "value": 68
+      },
+      {
+        "label": "69",
+        "value": 69
+      },
+      {
+        "label": "70",
+        "value": 70
+      },
+      {
+        "label": "71",
+        "value": 71
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "73",
+        "value": 73
+      },
+      {
+        "label": "74",
+        "value": 74
+      },
+      {
+        "label": "75",
+        "value": 75
+      },
+      {
+        "label": "76",
+        "value": 76
+      },
+      {
+        "label": "77",
+        "value": 77
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "79",
+        "value": 79
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "81",
+        "value": 81
+      },
+      {
+        "label": "82",
+        "value": 82
+      },
+      {
+        "label": "83",
+        "value": 83
+      },
+      {
+        "label": "84",
+        "value": 84
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "86",
+        "value": 86
+      },
+      {
+        "label": "87",
+        "value": 87
+      },
+      {
+        "label": "88",
+        "value": 88
+      },
+      {
+        "label": "89",
+        "value": 89
+      },
+      {
+        "label": "90",
+        "value": 90
+      },
+      {
+        "label": "91",
+        "value": 91
+      },
+      {
+        "label": "92",
+        "value": 92
+      },
+      {
+        "label": "93",
+        "value": 93
+      },
+      {
+        "label": "94",
+        "value": 94
+      },
+      {
+        "label": "95",
+        "value": 95
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "97",
+        "value": 97
+      },
+      {
+        "label": "98",
+        "value": 98
+      },
+      {
+        "label": "99",
+        "value": 99
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.tile_opacity",
+    "label": "App tile background opacity (%)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      },
+      {
+        "label": "37",
+        "value": 37
+      },
+      {
+        "label": "38",
+        "value": 38
+      },
+      {
+        "label": "39",
+        "value": 39
+      },
+      {
+        "label": "40",
+        "value": 40
+      },
+      {
+        "label": "41",
+        "value": 41
+      },
+      {
+        "label": "42",
+        "value": 42
+      },
+      {
+        "label": "43",
+        "value": 43
+      },
+      {
+        "label": "44",
+        "value": 44
+      },
+      {
+        "label": "45",
+        "value": 45
+      },
+      {
+        "label": "46",
+        "value": 46
+      },
+      {
+        "label": "47",
+        "value": 47
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "49",
+        "value": 49
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "51",
+        "value": 51
+      },
+      {
+        "label": "52",
+        "value": 52
+      },
+      {
+        "label": "53",
+        "value": 53
+      },
+      {
+        "label": "54",
+        "value": 54
+      },
+      {
+        "label": "55",
+        "value": 55
+      },
+      {
+        "label": "56",
+        "value": 56
+      },
+      {
+        "label": "57",
+        "value": 57
+      },
+      {
+        "label": "58",
+        "value": 58
+      },
+      {
+        "label": "59",
+        "value": 59
+      },
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "61",
+        "value": 61
+      },
+      {
+        "label": "62",
+        "value": 62
+      },
+      {
+        "label": "63",
+        "value": 63
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "65",
+        "value": 65
+      },
+      {
+        "label": "66",
+        "value": 66
+      },
+      {
+        "label": "67",
+        "value": 67
+      },
+      {
+        "label": "68",
+        "value": 68
+      },
+      {
+        "label": "69",
+        "value": 69
+      },
+      {
+        "label": "70",
+        "value": 70
+      },
+      {
+        "label": "71",
+        "value": 71
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "73",
+        "value": 73
+      },
+      {
+        "label": "74",
+        "value": 74
+      },
+      {
+        "label": "75",
+        "value": 75
+      },
+      {
+        "label": "76",
+        "value": 76
+      },
+      {
+        "label": "77",
+        "value": 77
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "79",
+        "value": 79
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "81",
+        "value": 81
+      },
+      {
+        "label": "82",
+        "value": 82
+      },
+      {
+        "label": "83",
+        "value": 83
+      },
+      {
+        "label": "84",
+        "value": 84
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "86",
+        "value": 86
+      },
+      {
+        "label": "87",
+        "value": 87
+      },
+      {
+        "label": "88",
+        "value": 88
+      },
+      {
+        "label": "89",
+        "value": 89
+      },
+      {
+        "label": "90",
+        "value": 90
+      },
+      {
+        "label": "91",
+        "value": 91
+      },
+      {
+        "label": "92",
+        "value": 92
+      },
+      {
+        "label": "93",
+        "value": 93
+      },
+      {
+        "label": "94",
+        "value": 94
+      },
+      {
+        "label": "95",
+        "value": 95
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "97",
+        "value": 97
+      },
+      {
+        "label": "98",
+        "value": 98
+      },
+      {
+        "label": "99",
+        "value": 99
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_opacity",
+    "label": "Video preview canvas opacity (%)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      },
+      {
+        "label": "37",
+        "value": 37
+      },
+      {
+        "label": "38",
+        "value": 38
+      },
+      {
+        "label": "39",
+        "value": 39
+      },
+      {
+        "label": "40",
+        "value": 40
+      },
+      {
+        "label": "41",
+        "value": 41
+      },
+      {
+        "label": "42",
+        "value": 42
+      },
+      {
+        "label": "43",
+        "value": 43
+      },
+      {
+        "label": "44",
+        "value": 44
+      },
+      {
+        "label": "45",
+        "value": 45
+      },
+      {
+        "label": "46",
+        "value": 46
+      },
+      {
+        "label": "47",
+        "value": 47
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "49",
+        "value": 49
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "51",
+        "value": 51
+      },
+      {
+        "label": "52",
+        "value": 52
+      },
+      {
+        "label": "53",
+        "value": 53
+      },
+      {
+        "label": "54",
+        "value": 54
+      },
+      {
+        "label": "55",
+        "value": 55
+      },
+      {
+        "label": "56",
+        "value": 56
+      },
+      {
+        "label": "57",
+        "value": 57
+      },
+      {
+        "label": "58",
+        "value": 58
+      },
+      {
+        "label": "59",
+        "value": 59
+      },
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "61",
+        "value": 61
+      },
+      {
+        "label": "62",
+        "value": 62
+      },
+      {
+        "label": "63",
+        "value": 63
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "65",
+        "value": 65
+      },
+      {
+        "label": "66",
+        "value": 66
+      },
+      {
+        "label": "67",
+        "value": 67
+      },
+      {
+        "label": "68",
+        "value": 68
+      },
+      {
+        "label": "69",
+        "value": 69
+      },
+      {
+        "label": "70",
+        "value": 70
+      },
+      {
+        "label": "71",
+        "value": 71
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "73",
+        "value": 73
+      },
+      {
+        "label": "74",
+        "value": 74
+      },
+      {
+        "label": "75",
+        "value": 75
+      },
+      {
+        "label": "76",
+        "value": 76
+      },
+      {
+        "label": "77",
+        "value": 77
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "79",
+        "value": 79
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "81",
+        "value": 81
+      },
+      {
+        "label": "82",
+        "value": 82
+      },
+      {
+        "label": "83",
+        "value": 83
+      },
+      {
+        "label": "84",
+        "value": 84
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "86",
+        "value": 86
+      },
+      {
+        "label": "87",
+        "value": 87
+      },
+      {
+        "label": "88",
+        "value": 88
+      },
+      {
+        "label": "89",
+        "value": 89
+      },
+      {
+        "label": "90",
+        "value": 90
+      },
+      {
+        "label": "91",
+        "value": 91
+      },
+      {
+        "label": "92",
+        "value": 92
+      },
+      {
+        "label": "93",
+        "value": 93
+      },
+      {
+        "label": "94",
+        "value": 94
+      },
+      {
+        "label": "95",
+        "value": 95
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "97",
+        "value": 97
+      },
+      {
+        "label": "98",
+        "value": 98
+      },
+      {
+        "label": "99",
+        "value": 99
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_control_opacity",
+    "label": "Video control strip opacity (%)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      },
+      {
+        "label": "37",
+        "value": 37
+      },
+      {
+        "label": "38",
+        "value": 38
+      },
+      {
+        "label": "39",
+        "value": 39
+      },
+      {
+        "label": "40",
+        "value": 40
+      },
+      {
+        "label": "41",
+        "value": 41
+      },
+      {
+        "label": "42",
+        "value": 42
+      },
+      {
+        "label": "43",
+        "value": 43
+      },
+      {
+        "label": "44",
+        "value": 44
+      },
+      {
+        "label": "45",
+        "value": 45
+      },
+      {
+        "label": "46",
+        "value": 46
+      },
+      {
+        "label": "47",
+        "value": 47
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "49",
+        "value": 49
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "51",
+        "value": 51
+      },
+      {
+        "label": "52",
+        "value": 52
+      },
+      {
+        "label": "53",
+        "value": 53
+      },
+      {
+        "label": "54",
+        "value": 54
+      },
+      {
+        "label": "55",
+        "value": 55
+      },
+      {
+        "label": "56",
+        "value": 56
+      },
+      {
+        "label": "57",
+        "value": 57
+      },
+      {
+        "label": "58",
+        "value": 58
+      },
+      {
+        "label": "59",
+        "value": 59
+      },
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "61",
+        "value": 61
+      },
+      {
+        "label": "62",
+        "value": 62
+      },
+      {
+        "label": "63",
+        "value": 63
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "65",
+        "value": 65
+      },
+      {
+        "label": "66",
+        "value": 66
+      },
+      {
+        "label": "67",
+        "value": 67
+      },
+      {
+        "label": "68",
+        "value": 68
+      },
+      {
+        "label": "69",
+        "value": 69
+      },
+      {
+        "label": "70",
+        "value": 70
+      },
+      {
+        "label": "71",
+        "value": 71
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "73",
+        "value": 73
+      },
+      {
+        "label": "74",
+        "value": 74
+      },
+      {
+        "label": "75",
+        "value": 75
+      },
+      {
+        "label": "76",
+        "value": 76
+      },
+      {
+        "label": "77",
+        "value": 77
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "79",
+        "value": 79
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "81",
+        "value": 81
+      },
+      {
+        "label": "82",
+        "value": 82
+      },
+      {
+        "label": "83",
+        "value": 83
+      },
+      {
+        "label": "84",
+        "value": 84
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "86",
+        "value": 86
+      },
+      {
+        "label": "87",
+        "value": 87
+      },
+      {
+        "label": "88",
+        "value": 88
+      },
+      {
+        "label": "89",
+        "value": 89
+      },
+      {
+        "label": "90",
+        "value": 90
+      },
+      {
+        "label": "91",
+        "value": 91
+      },
+      {
+        "label": "92",
+        "value": 92
+      },
+      {
+        "label": "93",
+        "value": 93
+      },
+      {
+        "label": "94",
+        "value": 94
+      },
+      {
+        "label": "95",
+        "value": 95
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "97",
+        "value": 97
+      },
+      {
+        "label": "98",
+        "value": 98
+      },
+      {
+        "label": "99",
+        "value": 99
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.popup_opacity",
+    "label": "Panel popup opacity (%)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      },
+      {
+        "label": "37",
+        "value": 37
+      },
+      {
+        "label": "38",
+        "value": 38
+      },
+      {
+        "label": "39",
+        "value": 39
+      },
+      {
+        "label": "40",
+        "value": 40
+      },
+      {
+        "label": "41",
+        "value": 41
+      },
+      {
+        "label": "42",
+        "value": 42
+      },
+      {
+        "label": "43",
+        "value": 43
+      },
+      {
+        "label": "44",
+        "value": 44
+      },
+      {
+        "label": "45",
+        "value": 45
+      },
+      {
+        "label": "46",
+        "value": 46
+      },
+      {
+        "label": "47",
+        "value": 47
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "49",
+        "value": 49
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "51",
+        "value": 51
+      },
+      {
+        "label": "52",
+        "value": 52
+      },
+      {
+        "label": "53",
+        "value": 53
+      },
+      {
+        "label": "54",
+        "value": 54
+      },
+      {
+        "label": "55",
+        "value": 55
+      },
+      {
+        "label": "56",
+        "value": 56
+      },
+      {
+        "label": "57",
+        "value": 57
+      },
+      {
+        "label": "58",
+        "value": 58
+      },
+      {
+        "label": "59",
+        "value": 59
+      },
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "61",
+        "value": 61
+      },
+      {
+        "label": "62",
+        "value": 62
+      },
+      {
+        "label": "63",
+        "value": 63
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "65",
+        "value": 65
+      },
+      {
+        "label": "66",
+        "value": 66
+      },
+      {
+        "label": "67",
+        "value": 67
+      },
+      {
+        "label": "68",
+        "value": 68
+      },
+      {
+        "label": "69",
+        "value": 69
+      },
+      {
+        "label": "70",
+        "value": 70
+      },
+      {
+        "label": "71",
+        "value": 71
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "73",
+        "value": 73
+      },
+      {
+        "label": "74",
+        "value": 74
+      },
+      {
+        "label": "75",
+        "value": 75
+      },
+      {
+        "label": "76",
+        "value": 76
+      },
+      {
+        "label": "77",
+        "value": 77
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "79",
+        "value": 79
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "81",
+        "value": 81
+      },
+      {
+        "label": "82",
+        "value": 82
+      },
+      {
+        "label": "83",
+        "value": 83
+      },
+      {
+        "label": "84",
+        "value": 84
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "86",
+        "value": 86
+      },
+      {
+        "label": "87",
+        "value": 87
+      },
+      {
+        "label": "88",
+        "value": 88
+      },
+      {
+        "label": "89",
+        "value": 89
+      },
+      {
+        "label": "90",
+        "value": 90
+      },
+      {
+        "label": "91",
+        "value": 91
+      },
+      {
+        "label": "92",
+        "value": 92
+      },
+      {
+        "label": "93",
+        "value": 93
+      },
+      {
+        "label": "94",
+        "value": 94
+      },
+      {
+        "label": "95",
+        "value": 95
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "97",
+        "value": 97
+      },
+      {
+        "label": "98",
+        "value": 98
+      },
+      {
+        "label": "99",
+        "value": 99
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "type": "text",
+    "label": "**Shape and Spacing**",
+    "size": "15px"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.radius",
+    "label": "Panel and control corner radius (px; 0 = square)",
+    "type": "dropdown",
+    "defaultValue": 0,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.depth",
+    "label": "Surface shadow depth (%; 0 = flat)",
+    "type": "dropdown",
+    "defaultValue": 0,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      },
+      {
+        "label": "37",
+        "value": 37
+      },
+      {
+        "label": "38",
+        "value": 38
+      },
+      {
+        "label": "39",
+        "value": 39
+      },
+      {
+        "label": "40",
+        "value": 40
+      },
+      {
+        "label": "41",
+        "value": 41
+      },
+      {
+        "label": "42",
+        "value": 42
+      },
+      {
+        "label": "43",
+        "value": 43
+      },
+      {
+        "label": "44",
+        "value": 44
+      },
+      {
+        "label": "45",
+        "value": 45
+      },
+      {
+        "label": "46",
+        "value": 46
+      },
+      {
+        "label": "47",
+        "value": 47
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "49",
+        "value": 49
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "51",
+        "value": 51
+      },
+      {
+        "label": "52",
+        "value": 52
+      },
+      {
+        "label": "53",
+        "value": 53
+      },
+      {
+        "label": "54",
+        "value": 54
+      },
+      {
+        "label": "55",
+        "value": 55
+      },
+      {
+        "label": "56",
+        "value": 56
+      },
+      {
+        "label": "57",
+        "value": 57
+      },
+      {
+        "label": "58",
+        "value": 58
+      },
+      {
+        "label": "59",
+        "value": 59
+      },
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "61",
+        "value": 61
+      },
+      {
+        "label": "62",
+        "value": 62
+      },
+      {
+        "label": "63",
+        "value": 63
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "65",
+        "value": 65
+      },
+      {
+        "label": "66",
+        "value": 66
+      },
+      {
+        "label": "67",
+        "value": 67
+      },
+      {
+        "label": "68",
+        "value": 68
+      },
+      {
+        "label": "69",
+        "value": 69
+      },
+      {
+        "label": "70",
+        "value": 70
+      },
+      {
+        "label": "71",
+        "value": 71
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "73",
+        "value": 73
+      },
+      {
+        "label": "74",
+        "value": 74
+      },
+      {
+        "label": "75",
+        "value": 75
+      },
+      {
+        "label": "76",
+        "value": 76
+      },
+      {
+        "label": "77",
+        "value": 77
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "79",
+        "value": 79
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "81",
+        "value": 81
+      },
+      {
+        "label": "82",
+        "value": 82
+      },
+      {
+        "label": "83",
+        "value": 83
+      },
+      {
+        "label": "84",
+        "value": 84
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "86",
+        "value": 86
+      },
+      {
+        "label": "87",
+        "value": 87
+      },
+      {
+        "label": "88",
+        "value": 88
+      },
+      {
+        "label": "89",
+        "value": 89
+      },
+      {
+        "label": "90",
+        "value": 90
+      },
+      {
+        "label": "91",
+        "value": 91
+      },
+      {
+        "label": "92",
+        "value": 92
+      },
+      {
+        "label": "93",
+        "value": 93
+      },
+      {
+        "label": "94",
+        "value": 94
+      },
+      {
+        "label": "95",
+        "value": 95
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "97",
+        "value": 97
+      },
+      {
+        "label": "98",
+        "value": 98
+      },
+      {
+        "label": "99",
+        "value": 99
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.spacing",
+    "label": "Control spacing",
+    "type": "dropdown",
+    "defaultValue": "comfortable",
+    "options": [
+      {
+        "label": "Compact",
+        "value": "compact"
+      },
+      {
+        "label": "Comfortable",
+        "value": "comfortable"
+      },
+      {
+        "label": "Airy",
+        "value": "airy"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.panel_border",
+    "label": "Outer panel border width (px; 0 = none)",
+    "type": "dropdown",
+    "defaultValue": 1,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      }
+    ]
+  },
+  {
+    "type": "text",
+    "label": "**Navigation Toolbar**",
+    "size": "15px"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.toolbar_surface",
+    "label": "Toolbar background (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#202224",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.toolbar_url",
+    "label": "URL field background (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#292c2e",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.toolbar_border",
+    "label": "Toolbar border width (px; 0 = none)",
+    "type": "dropdown",
+    "defaultValue": 1,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      }
+    ]
+  },
+  {
+    "type": "text",
+    "label": "**Buttons and Tiles**",
+    "size": "15px"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.button_style",
+    "label": "Button style",
+    "type": "dropdown",
+    "defaultValue": "outline",
+    "options": [
+      {
+        "label": "Plain icons",
+        "value": "plain"
+      },
+      {
+        "label": "Filled",
+        "value": "filled"
+      },
+      {
+        "label": "Outline",
+        "value": "outline"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.button_surface",
+    "label": "Button background (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#34373a",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.button_text",
+    "label": "Button icons and labels (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#d4d8d9",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.button_border_color",
+    "label": "Button outline color (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#292929",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.button_border",
+    "label": "Button border width (px; 0 = no border)",
+    "type": "dropdown",
+    "defaultValue": 0,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.control_size",
+    "label": "Button size (px)",
+    "type": "dropdown",
+    "defaultValue": 22,
+    "options": [
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.tile_style",
+    "label": "App tile style",
+    "type": "dropdown",
+    "defaultValue": "bare",
+    "options": [
+      {
+        "label": "Bare",
+        "value": "bare"
+      },
+      {
+        "label": "Soft surface",
+        "value": "soft"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.row_style",
+    "label": "Selection row style",
+    "type": "dropdown",
+    "defaultValue": "lines",
+    "options": [
+      {
+        "label": "Lines",
+        "value": "lines"
+      },
+      {
+        "label": "Cards",
+        "value": "cards"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.row_padding",
+    "label": "Selection row padding (px)",
+    "type": "dropdown",
+    "defaultValue": 4,
+    "options": [
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.row_rule",
+    "label": "Selection row separator width (px)",
+    "type": "dropdown",
+    "defaultValue": 0,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      }
+    ]
+  },
+  {
+    "type": "text",
+    "label": "**Sidebar Video Look**",
+    "size": "15px"
+  },
+  {
+    "type": "text",
+    "label": "Video colors and borders affect only Zentral’s sidebar video preview. Its preview size, discovery, and capture behavior are in Video Preview below.",
+    "size": "12px"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_canvas",
+    "label": "Video canvas background (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#0a0a0a",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_control",
+    "label": "Video controls background (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#000000",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_text",
+    "label": "Video primary text and icons (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#d8d8d8",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_muted",
+    "label": "Video secondary text (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#838383",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_selected",
+    "label": "Selected video source highlight (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#7d0000",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_border",
+    "label": "Video control border width (px; 0 = none)",
+    "type": "dropdown",
+    "defaultValue": 0,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_padding",
+    "label": "Video control padding (px)",
+    "type": "dropdown",
+    "defaultValue": 0,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_row_height",
+    "label": "Video source row height (px)",
+    "type": "dropdown",
+    "defaultValue": 22,
+    "options": [
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_source_style",
+    "label": "Video source selection style",
+    "type": "dropdown",
+    "defaultValue": "line",
+    "options": [
+      {
+        "label": "Underline",
+        "value": "line"
+      },
+      {
+        "label": "Filled highlight",
+        "value": "filled"
+      }
+    ]
+  },
+  {
     "property": "zen.workspace.bgalazka.audio_indicator",
     "label": "Panel Audio Indicator and Mute",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.smart_sleep",
     "label": "Defer Panel Preloads",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.addon_tab_id_bridge",
     "label": "Real Tab IDs for Web Panels",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.bgalazka.show_addon_host_folder",
+    "label": "Show Web Panel Tab ID Folder in Sidebar (requires Real Tab IDs)",
     "type": "checkbox",
     "defaultValue": false
   },
@@ -814,19 +5748,19 @@
     "property": "zen.workspace.bgalazka.pill_peek_dot",
     "label": "Show Mini Pill When Idle",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.pill_peek_dot_color",
     "label": "Mini Pill Color",
     "type": "string",
-    "defaultValue": "#4da6ff"
+    "defaultValue": "#5e0002"
   },
   {
     "property": "zen.workspace.bgalazka.pill_peek_dot_opacity",
     "label": "Mini Pill Opacity (%)",
     "type": "dropdown",
-    "defaultValue": 90,
+    "defaultValue": 31,
     "options": [
       {
         "label": "10",
@@ -835,6 +5769,10 @@
       {
         "label": "30",
         "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
       },
       {
         "label": "50",
@@ -858,7 +5796,7 @@
     "property": "zen.workspace.bgalazka.pill_background_opacity",
     "label": "Pill Background Opacity (%)",
     "type": "dropdown",
-    "defaultValue": 90,
+    "defaultValue": 48,
     "options": [
       {
         "label": "10",
@@ -867,6 +5805,10 @@
       {
         "label": "30",
         "value": 30
+      },
+      {
+        "label": "48",
+        "value": 48
       },
       {
         "label": "50",
@@ -937,7 +5879,7 @@
     "property": "zen.workspace.bgalazka.web_toolbar_enabled",
     "label": "Enable Panel Navigation Toolbar",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.web_toolbar_autohide",
@@ -955,13 +5897,13 @@
     "property": "zen.workspace.bgalazka.web_toolbar_urlbar",
     "label": "Show Panel URL Bar",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.web_toolbar_zoom",
     "label": "Show Panel Zoom Controls",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "type": "text",
@@ -1084,7 +6026,7 @@
     "property": "zen.workspace.bgalazka.web_toolbar_quickswitch",
     "label": "Search Engine Quick-Switch",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.web_toolbar_quickswitch_target.ddg",
@@ -1126,7 +6068,7 @@
     "property": "zen.workspace.bgalazka.web_toolbar_quickswitch_target.youtube",
     "label": "Quick-Switch Target: Youtube",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.web_toolbar_quickswitch_target.wikipedia",
@@ -1155,13 +6097,13 @@
     "property": "zen.workspace.bgalazka.corner_tiles",
     "label": "Panels on Essential Tabs",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.all_tab_panels",
     "label": "Panel Launchers on All Tabs",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.hover_corner_tiles",
@@ -1173,7 +6115,7 @@
     "property": "zen.workspace.bgalazka.tab_isolation",
     "label": "Dim Unloaded Tabs",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.hide_corner_badges",
@@ -1329,6 +6271,18 @@
     "defaultValue": true
   },
   {
+    "property": "zen.workspace.zentral.video_preview.require_audio",
+    "label": "Only Offer Videos With Audio Tracks (mute state does not matter)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.pause_when_compact_hidden",
+    "label": "Pause Preview Capture While Compact Sidebar Is Hidden",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "property": "zen.workspace.zentral.video_preview.hide_muted_duplicates",
     "label": "Hide Duplicate Muted Videos",
     "type": "checkbox",
@@ -1412,7 +6366,7 @@
     "property": "zen.workspace.zentral.video_preview.radius_px",
     "label": "Preview Corner Radius (px)",
     "type": "dropdown",
-    "defaultValue": 8,
+    "defaultValue": 0,
     "options": [
       {
         "label": "0",
@@ -1457,6 +6411,58 @@
       {
         "label": "640",
         "value": 640
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.capture_rate_tenths",
+    "label": "Still-Frame Capture Rate (higher rates use more CPU)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "0.1 frames/s",
+        "value": 1
+      },
+      {
+        "label": "0.2 frames/s",
+        "value": 2
+      },
+      {
+        "label": "0.5 frames/s",
+        "value": 5
+      },
+      {
+        "label": "1 frames/s",
+        "value": 10
+      },
+      {
+        "label": "2 frames/s",
+        "value": 20
+      },
+      {
+        "label": "5 frames/s",
+        "value": 50
+      },
+      {
+        "label": "10 frames/s — default",
+        "value": 100
+      },
+      {
+        "label": "15 frames/s",
+        "value": 150
+      },
+      {
+        "label": "24 frames/s",
+        "value": 240
+      },
+      {
+        "label": "30 frames/s",
+        "value": 300
+      },
+      {
+        "label": "60 frames/s",
+        "value": 600
       }
     ]
   },
@@ -1543,5 +6549,11 @@
         "value": "direct"
       }
     ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.disable_experimental_bridge",
+    "label": "Disable Experimental Actor Bridge (use compatible methods)",
+    "type": "checkbox",
+    "defaultValue": true
   }
 ]
