@@ -15172,6 +15172,13 @@
     HIDE_UNATTACHED_APP_CONTROLS:
       "zen.workspace.bgalazka.hide_unattached_app_controls",
 
+    RSS_HIDE_EMPTY: "zen.workspace.bgalazka.rss.hide_empty",
+    RSS_COMPACT_HEADERS: "zen.workspace.bgalazka.rss.compact_headers",
+    TABBAR_COMPACT: "zen.workspace.bgalazka.look.compact_tabbar",
+    TABBAR_ROW_HEIGHT: "zen.workspace.bgalazka.look.tabbar_row_height",
+    TABBAR_ROW_GAP: "zen.workspace.bgalazka.look.tabbar_row_gap",
+    TABBAR_ICON_GAP: "zen.workspace.bgalazka.look.tabbar_icon_gap",
+
     // Extension keyboard shortcuts. The master switch defaults OFF to obey
     // the extension's default-off contract; string defaults below are inert
     // until the user enables keybinds. Each binding is independently editable.
@@ -15259,6 +15266,11 @@
     {
       pref: EXT_PREFS.SHOW_ADDON_HOST_FOLDER,
       attr: "bgalazka-show-addon-host-folder",
+      defaultVal: false,
+    },
+    {
+      pref: EXT_PREFS.TABBAR_COMPACT,
+      attr: "bgalazka-tabbar-compact",
       defaultVal: false,
     },
   ];
@@ -20394,6 +20406,10 @@
     VIDEO_PADDING: "zen.workspace.bgalazka.look.video_padding",
     VIDEO_ROW_HEIGHT: "zen.workspace.bgalazka.look.video_row_height",
     VIDEO_SOURCE_STYLE: "zen.workspace.bgalazka.look.video_source_style",
+    TABBAR_COMPACT: EXT_PREFS.TABBAR_COMPACT,
+    TABBAR_ROW_HEIGHT: EXT_PREFS.TABBAR_ROW_HEIGHT,
+    TABBAR_ROW_GAP: EXT_PREFS.TABBAR_ROW_GAP,
+    TABBAR_ICON_GAP: EXT_PREFS.TABBAR_ICON_GAP,
   });
   const LOOK_DEFAULTS = Object.freeze({
     [LOOK_PREFS.STYLE]: "atelier",
@@ -20415,6 +20431,10 @@
     [LOOK_PREFS.RADIUS]: 0,
     [LOOK_PREFS.DEPTH]: 0,
     [LOOK_PREFS.SPACING]: "comfortable",
+    [LOOK_PREFS.TABBAR_COMPACT]: false,
+    [LOOK_PREFS.TABBAR_ROW_HEIGHT]: 20,
+    [LOOK_PREFS.TABBAR_ROW_GAP]: 0,
+    [LOOK_PREFS.TABBAR_ICON_GAP]: 4,
     [LOOK_PREFS.VIDEO_RADIUS]: 0,
     [LOOK_PREFS.PANEL_BORDER]: 1,
     [LOOK_PREFS.TOOLBAR_SURFACE]: "#202224",
@@ -20672,6 +20692,9 @@
     [LOOK_PREFS.VIDEO_BORDER]: [0, 3],
     [LOOK_PREFS.VIDEO_PADDING]: [0, 16],
     [LOOK_PREFS.VIDEO_ROW_HEIGHT]: [22, 36],
+    [LOOK_PREFS.TABBAR_ROW_HEIGHT]: [18, 36],
+    [LOOK_PREFS.TABBAR_ROW_GAP]: [0, 8],
+    [LOOK_PREFS.TABBAR_ICON_GAP]: [0, 12],
     [LOOK_GROUP_PREFS.LABEL_OPACITY]: [0, 100],
     [BGALAZKA_EXT_PREFS.OPACITY_UNPINNED]: [10, 100],
     [BGALAZKA_EXT_PREFS.OPACITY_PINNED_FOCUS]: [10, 100],
@@ -20717,6 +20740,9 @@
       "VIDEO_BORDER",
       "VIDEO_PADDING",
       "VIDEO_ROW_HEIGHT",
+      "TABBAR_ROW_HEIGHT",
+      "TABBAR_ROW_GAP",
+      "TABBAR_ICON_GAP",
       "SURFACE_OPACITY",
       "RAISED_OPACITY",
       "TOOLBAR_OPACITY",
@@ -21025,6 +21051,133 @@
     }
     container.append(heading, note, actions);
   }
+
+  /* RSS sidebar display only. Zen owns fetching, tab creation, dismissal and
+   * session state. This never moves or closes its tabs or folders. An empty
+   * live folder can still contain Zen's restoration placeholder; only tabs
+   * explicitly marked as placeholders may be ignored. No tabstrip subtree observer: that
+   * pattern can crash Gecko during pinning (architecture note 4). */
+  const rssMarkedFolders = new Set();
+  let rssScanTimer = null;
+  const rssEnabled = () =>
+    getPref(EXT_PREFS.RSS_HIDE_EMPTY, false) ||
+    getPref(EXT_PREFS.RSS_COMPACT_HEADERS, false);
+  function clearRssMarks() {
+    for (const folder of rssMarkedFolders) {
+      folder.removeAttribute("bgalazka-rss-live-folder");
+      folder.removeAttribute("bgalazka-rss-empty");
+    }
+    rssMarkedFolders.clear();
+  }
+  function isNativeLiveFolder(folder) {
+    // Zen versions expose the live-folder flag either as a DOM property or
+    // an attribute. Fail closed if neither is present: ordinary folders must
+    // never be hidden simply because they are empty.
+    return (
+      folder.isLiveFolder === true ||
+      (folder.hasAttribute("is-live-folder") &&
+        folder.getAttribute("is-live-folder") !== "false") ||
+      folder.getAttribute("isLiveFolder") === "true" ||
+      (folder.hasAttribute("zen-live-folder") &&
+        folder.getAttribute("zen-live-folder") !== "false") ||
+      (folder.hasAttribute("data-is-live-folder") &&
+        folder.getAttribute("data-is-live-folder") !== "false")
+    );
+  }
+  function scanRssFolders() {
+    if (!rssEnabled()) return;
+    const live = new Set();
+    for (const folder of document.querySelectorAll(
+      "#tabbrowser-tabs zen-folder",
+    )) {
+      if (!isNativeLiveFolder(folder)) continue;
+      live.add(folder);
+      if (!folder.hasAttribute("bgalazka-rss-live-folder"))
+        folder.setAttribute("bgalazka-rss-live-folder", "true");
+      // Track before inspecting children, so failure cleanup also clears the
+      // current folder's marker instead of leaving a partially hidden row.
+      rssMarkedFolders.add(folder);
+      // A manually placed tab or nested folder is content too. Zen's
+      // restoration placeholder is not an article and must not keep an
+      // otherwise empty live folder visible.
+      const hasContent =
+        Boolean(
+          folder.querySelector("tab[selected], .tabbrowser-tab[selected]"),
+        ) ||
+        [...folder.querySelectorAll("tab, .tabbrowser-tab, zen-folder")].some(
+          (child) => {
+            if (child.localName === "zen-folder") return true;
+            if (child.hasAttribute("zen-live-folder-item-id")) return true;
+            if (
+              child.hasAttribute("zen-empty-tab") ||
+              child.hasAttribute("zen-folder-empty-tab")
+            )
+              return false;
+            // A real tab may also be about:blank. Treat every unmarked tab as
+            // content; an unknown Zen placeholder leaves its folder visible.
+            return true;
+          },
+        );
+      if (folder.hasAttribute("bgalazka-rss-empty") === hasContent)
+        folder.toggleAttribute("bgalazka-rss-empty", !hasContent);
+    }
+    for (const folder of rssMarkedFolders) {
+      if (live.has(folder)) continue;
+      folder.removeAttribute("bgalazka-rss-live-folder");
+      folder.removeAttribute("bgalazka-rss-empty");
+      rssMarkedFolders.delete(folder);
+    }
+  }
+  function safeScanRssFolders() {
+    try {
+      scanRssFolders();
+    } catch (error) {
+      console.warn("[BgalazkaExtension] RSS display scan failed:", error);
+      clearRssMarks();
+    }
+  }
+  function syncRssFolderDisplay() {
+    const enabled = rssEnabled();
+    document.documentElement.toggleAttribute(
+      "bgalazka-rss-hide-empty",
+      getPref(EXT_PREFS.RSS_HIDE_EMPTY, false),
+    );
+    document.documentElement.toggleAttribute(
+      "bgalazka-rss-compact-headers",
+      getPref(EXT_PREFS.RSS_COMPACT_HEADERS, false),
+    );
+    if (!enabled) {
+      if (rssScanTimer !== null) clearInterval(rssScanTimer);
+      rssScanTimer = null;
+      clearRssMarks();
+      return;
+    }
+    safeScanRssFolders();
+    if (rssScanTimer === null)
+      rssScanTimer = setInterval(safeScanRssFolders, 2000);
+  }
+  for (const pref of [
+    EXT_PREFS.RSS_HIDE_EMPTY,
+    EXT_PREFS.RSS_COMPACT_HEADERS,
+  ]) {
+    try {
+      Services.prefs.addObserver(pref, syncRssFolderDisplay);
+      registerCleanup(() => {
+        try {
+          Services.prefs.removeObserver(pref, syncRssFolderDisplay);
+        } catch (_) {}
+      });
+    } catch (error) {
+      console.warn("[BgalazkaExtension] RSS pref observer unavailable:", error);
+    }
+  }
+  registerCleanup(() => {
+    if (rssScanTimer !== null) clearInterval(rssScanTimer);
+    clearRssMarks();
+    document.documentElement.removeAttribute("bgalazka-rss-hide-empty");
+    document.documentElement.removeAttribute("bgalazka-rss-compact-headers");
+  });
+  syncRssFolderDisplay();
 
   function injectSettingsUI() {
     const modal = document.getElementById("zentral-settings-modal");
@@ -22328,6 +22481,9 @@
         BGALAZKA_EXT_PREFS.WEB_TOOLBAR_AUTOHIDE,
         BGALAZKA_EXT_PREFS.ADDON_TAB_ID_BRIDGE,
         BGALAZKA_EXT_PREFS.SHOW_ADDON_HOST_FOLDER,
+        EXT_PREFS.TABBAR_COMPACT,
+        EXT_PREFS.RSS_HIDE_EMPTY,
+        EXT_PREFS.RSS_COMPACT_HEADERS,
       ]);
       const applyPreset = (recommended) => {
         const message = recommended
@@ -22457,6 +22613,57 @@
         quickSwitchTargetsSubgroup,
       );
 
+      const rssCategory = makeExtensionSettingsPanel(
+        "zs-panel-extension-rss",
+        "extension-rss",
+      );
+      const rssHeader = document.createElement("div");
+      rssHeader.className = "zs-section-header";
+      const rssTitle = document.createElement("h3");
+      rssTitle.className = "zs-section-title";
+      rssTitle.textContent = "RSS live folders";
+      rssHeader.appendChild(rssTitle);
+      const rssNote = document.createElement("p");
+      rssNote.className = "zs-sublabel";
+      rssNote.textContent =
+        "Keep your native feeds and their individual output folders. These switches only change how live folders appear in the sidebar.";
+      const rssHideEmpty = createToggleRow(
+        "Hide empty live folders",
+        "Free sidebar space when a live folder has no articles. Folders return when Zen adds items; other live-folder providers are included.",
+        EXT_PREFS.RSS_HIDE_EMPTY,
+        null,
+        false,
+        null,
+        syncRssFolderDisplay,
+      );
+      const rssCompact = createToggleRow(
+        "Compact live-folder headers",
+        "Reduce the height and spacing of live-folder rows, including folders that have articles.",
+        EXT_PREFS.RSS_COMPACT_HEADERS,
+        null,
+        false,
+        null,
+        syncRssFolderDisplay,
+      );
+      rssCategory.subContent.append(
+        rssHeader,
+        rssNote,
+        rssHideEmpty.row,
+        rssCompact.row,
+      );
+      panel._toggles.push(
+        {
+          input: rssHideEmpty.input,
+          pref: EXT_PREFS.RSS_HIDE_EMPTY,
+          def: false,
+        },
+        {
+          input: rssCompact.input,
+          pref: EXT_PREFS.RSS_COMPACT_HEADERS,
+          def: false,
+        },
+      );
+
       // Keep every pill-related control together: appearance first, then the
       // visibility list. Moving existing nodes preserves all listeners.
       hidePillTitle.textContent = "Pill Controls";
@@ -22536,7 +22743,14 @@
           inverted ? invert : undefined,
           inverted ? invert : undefined,
         );
-        control.input.addEventListener("input", () => ensureCustomLook(key));
+        // Density controls apply in Classic as well; changing them must not
+        // switch the user's other Look choices to Custom.
+        if (
+          key !== LOOK_PREFS.TABBAR_ROW_HEIGHT &&
+          key !== LOOK_PREFS.TABBAR_ROW_GAP &&
+          key !== LOOK_PREFS.TABBAR_ICON_GAP
+        )
+          control.input.addEventListener("input", () => ensureCustomLook(key));
         lookCategory.subContent.append(control.row);
         lookControls.push({
           input: control.input,
@@ -22576,6 +22790,15 @@
           "Apply " + theme.name + "; every value stays editable below";
         choice.addEventListener("click", () => {
           for (const [key, value] of Object.entries(LOOK_DEFAULTS)) {
+            // Theme swatches change colors and shapes, not the user's chosen
+            // sidebar density. Reset Look defaults still turns it off.
+            if (
+              key === LOOK_PREFS.TABBAR_COMPACT ||
+              key === LOOK_PREFS.TABBAR_ROW_HEIGHT ||
+              key === LOOK_PREFS.TABBAR_ROW_GAP ||
+              key === LOOK_PREFS.TABBAR_ICON_GAP
+            )
+              continue;
             if (
               key.startsWith("zen.workspace.bgalazka.look.") ||
               key === LOOK_PREFS.VIDEO_RADIUS
@@ -22689,6 +22912,44 @@
         0,
         100,
         "%",
+      );
+      addLookHeading("Tab bar");
+      const compactTabbar = createToggleRow(
+        "Compact tabs and folders",
+        "Tighter tab and folder rows with room for favicons and readable titles. Text size stays controlled by your other mod.",
+        LOOK_PREFS.TABBAR_COMPACT,
+        "bgalazka-tabbar-compact",
+        false,
+      );
+      lookCategory.subContent.append(compactTabbar.row);
+      panel._toggles.push({
+        input: compactTabbar.input,
+        pref: LOOK_PREFS.TABBAR_COMPACT,
+        def: false,
+      });
+      addLookSlider(
+        "Tab and folder height",
+        "Minimum row height; titles grow if your font needs more room",
+        LOOK_PREFS.TABBAR_ROW_HEIGHT,
+        18,
+        36,
+        " px",
+      );
+      addLookSlider(
+        "Space between rows",
+        "0 px puts adjacent favicons as close as the row height allows",
+        LOOK_PREFS.TABBAR_ROW_GAP,
+        0,
+        8,
+        " px",
+      );
+      addLookSlider(
+        "Icon to title gap",
+        "Space after each favicon, without changing icon or text size",
+        LOOK_PREFS.TABBAR_ICON_GAP,
+        0,
+        12,
+        " px",
       );
       addLookHeading("Shape & depth");
       addLookSlider(
@@ -22954,6 +23215,7 @@
         hideCategory.subPanel,
         toolbarCategory.subPanel,
         searchCategory.subPanel,
+        rssCategory.subPanel,
         keybindCategory.subPanel,
       );
       registerCleanup(() => {
@@ -23020,6 +23282,12 @@
         panelId: "zs-panel-extension-search",
         dataTab: "extension-search",
         label: "Search",
+      },
+      {
+        buttonId: "zs-tab-btn-extension-rss",
+        panelId: "zs-panel-extension-rss",
+        dataTab: "extension-rss",
+        label: "RSS",
       },
       {
         buttonId: "zs-tab-btn-extension-keybinds",

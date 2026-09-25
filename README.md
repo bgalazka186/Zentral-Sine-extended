@@ -26,13 +26,20 @@
 - **Better Addon support** still not all addons will work.
 - **Triple view and SuperPin** hold pin or dual view button in pill menu and then click other panel
 - **Video mini in sidebar** only Month ago Zenslop mod worked and i found it pretty nice, a lot of credit to them
+- **Few CSS tweaks to sidebar** super compact tabs and folders
 
 ### Extra Bugfix:
 
 -**Right click menu closing panel:** this one annoyed me a bit, now i can state that this extension maybe introduces bugs, but it patches some too,
 
+### Example setup [v2.0.9]
+
 <p align="center">
-  <img src="assets/example.png" alt="example" width="500" height="600" />
+  <img src="assets/panelsinterface.png" alt="example" />
+</p>
+
+<p align="center">
+  <img src="assets\compacttabsandvideointerface.png" alt="example" />
 </p>
 
 ---

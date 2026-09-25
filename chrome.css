@@ -8831,3 +8831,347 @@ panel[id*="tabgroup-editor"] {
     transparent
   ) !important;
 }
+
+/* RSS controls: the root attributes are set only by default-off switches.
+ * Styling is limited to Zen's own live folders marked by the extension JS;
+ * no tab or folder is moved, removed, or changed in Zen's session data. */
+:root[bgalazka-rss-hide-empty]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-rss-live-folder="true"][bgalazka-rss-empty] {
+  display: none !important;
+}
+
+:root[bgalazka-rss-compact-headers]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-rss-live-folder="true"]
+  > .tab-group-label-container {
+  min-height: 24px !important;
+  height: 24px !important;
+  padding-block: 0 !important;
+  margin-block: 0 !important;
+}
+
+#zentral-settings-modal #zs-panel-extension-rss {
+  overflow-y: auto !important;
+  scrollbar-width: thin !important;
+}
+#zentral-settings-modal #zs-panel-extension-rss .zs-section-content {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  padding: 14px 18px 22px !important;
+}
+#zentral-settings-modal #zs-panel-extension-rss .zs-section-header {
+  display: flex !important;
+  align-items: center !important;
+  min-height: 36px !important;
+}
+#zentral-settings-modal #zs-panel-extension-rss .zs-section-title {
+  margin: 0 !important;
+  font-size: 15px !important;
+  color: inherit !important;
+}
+#zentral-settings-modal #zs-panel-extension-rss .zs-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+  min-height: 42px !important;
+}
+#zentral-settings-modal #zs-panel-extension-rss .zs-label-container {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 3px !important;
+  flex: 1 1 auto !important;
+}
+#zentral-settings-modal #zs-panel-extension-rss .zs-label {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+#zentral-settings-modal #zs-panel-extension-rss .zs-sublabel {
+  font-size: 11.5px !important;
+  opacity: 0.68 !important;
+  line-height: 1.35 !important;
+}
+
+/* Optional density for ordinary tab rows and folder headers. Let the row grow
+ * with the label's own font metrics: another mod may own font-size/line-height.
+ * Do not resize icon-only Essentials or the extension's 1px add-on host tabs.
+ * The variables come from bounded Look sliders and are inert with this off. */
+:root[bgalazka-tabbar-compact="true"]
+  :is(tab, .tabbrowser-tab):not([zen-essential]):not([bgalazka-addon-host]):not(
+    [bgalazka-addon-host-fallback]
+  ):not([hidden]):not([aria-hidden="true"]):not(.zen-essentials-container *) {
+  /* Ordinary workspace tabs may live outside the #tabbrowser-tabs subtree.
+   * Keep the size variable local to each visible row, not on the tabstrip. */
+  --tab-min-height: var(--bgalazka-look-tabbar-row-height, 20px);
+  min-height: var(--bgalazka-look-tabbar-row-height, 20px) !important;
+  height: auto !important;
+  max-height: none !important;
+  margin-block: var(--bgalazka-look-tabbar-row-gap, 0px) !important;
+}
+:root[bgalazka-tabbar-compact="true"]
+  :is(tab, .tabbrowser-tab):not([zen-essential]):not([bgalazka-addon-host]):not(
+    [bgalazka-addon-host-fallback]
+  ):not([hidden]):not([aria-hidden="true"]):not(.zen-essentials-container *)
+  .tab-content {
+  min-height: var(--bgalazka-look-tabbar-row-height, 20px) !important;
+  height: auto !important;
+  max-height: none !important;
+  padding-block: 0 !important;
+  padding-inline: 6px !important;
+  align-items: center !important;
+  box-sizing: border-box !important;
+}
+/* Native Zen sizes ordinary rows through this inner stack. Changing only
+ * the tab and .tab-content leaves that stack at its usual 36px minimum. */
+:root[bgalazka-tabbar-compact="true"]
+  .tabbrowser-tab:not([pinned]):not([zen-essential]):not([hidden]):not(
+    [aria-hidden="true"]
+  ):not([bgalazka-addon-host]):not([bgalazka-addon-host-fallback]):not(
+    .zen-essentials-container *
+  )
+  > .tab-stack {
+  min-height: var(--bgalazka-look-tabbar-row-height, 20px) !important;
+  height: auto !important;
+  max-height: none !important;
+}
+:root[bgalazka-tabbar-compact="true"]
+  .tabbrowser-tab:not([pinned]):not([zen-essential]):not([hidden]):not(
+    [aria-hidden="true"]
+  ):not([bgalazka-addon-host]):not([bgalazka-addon-host-fallback]):not(
+    .zen-essentials-container *
+  )
+  > .tab-stack
+  > .tab-background {
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  margin-block: 0 !important;
+  align-self: stretch !important;
+}
+/* Reserve a distinct icon slot. The panel launcher owns its wider icon host. */
+:root[bgalazka-tabbar-compact="true"]
+  :is(tab, .tabbrowser-tab):not([pinned]):not([zen-essential]):not(
+    .zen-essentials-container *
+  )
+  .tab-icon-stack:not(.bgalazka-panel-icon-host) {
+  flex: 0 0 16px !important;
+  min-width: 16px !important;
+  margin-inline-end: var(--bgalazka-look-tabbar-icon-gap, 4px) !important;
+}
+:root[bgalazka-tabbar-compact="true"]
+  :is(tab, .tabbrowser-tab):not([pinned]):not([zen-essential]):not(
+    .zen-essentials-container *
+  )
+  .tab-icon-stack:not(.bgalazka-panel-icon-host)
+  .tab-icon-image {
+  max-width: 16px !important;
+  max-height: 16px !important;
+  object-fit: contain !important;
+}
+:root[bgalazka-tabbar-compact="true"]
+  :is(tab, .tabbrowser-tab):not([pinned]):not([zen-essential]):not(
+    .zen-essentials-container *
+  )
+  .tab-label-container {
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
+}
+:root[bgalazka-tabbar-compact="true"]
+  :is(tab, .tabbrowser-tab):not([pinned]):not([zen-essential]):not(
+    .zen-essentials-container *
+  )
+  .tab-label {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+/* Base Zentral fixes group cards at var(--tab-min-height). Override the card
+ * and its inner wrapper together so the title never spills onto the next row. */
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  :is(zen-folder:not([bgalazka-addon-host-folder="true"]), tab-group)
+  > .tab-group-label-container,
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  tab-group.zentral-standard
+  > .tab-group-label-container
+  .zentral-tab-title-wrapper {
+  min-height: var(--bgalazka-look-tabbar-row-height, 20px) !important;
+  height: auto !important;
+  max-height: none !important;
+  padding-block: 0 !important;
+  margin-block: var(--bgalazka-look-tabbar-row-gap, 0px) !important;
+  box-sizing: border-box !important;
+  align-items: center !important;
+}
+/* Zentral gives the outer group its own 2px margin, independently of its
+ * header; include that spacing in the user's row-gap setting too. */
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  :is(
+    tab-group.zentral-standard,
+    zen-folder:not([bgalazka-addon-host-folder="true"])
+  ) {
+  margin-block: var(--bgalazka-look-tabbar-row-gap, 0px) !important;
+}
+/* Collapsed children must beat the density rule's min-height and max-height.
+ * Otherwise hidden tabs still occupy their full rows, leaving an empty group
+ * outline above the selected tab. Keep that selected tab visible. */
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  :is(tab-group, zen-folder)[collapsed]
+  .tab-group-container
+  :is(tab, .tabbrowser-tab):not([selected]):not([pinned]:not([pending])) {
+  min-height: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  :is(tab-group, zen-folder)[collapsed]
+  .tab-group-container
+  :is(tab, .tabbrowser-tab):not([selected]):not([pinned]:not([pending]))
+  .tab-content {
+  min-height: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  padding-block: 0 !important;
+  overflow: hidden !important;
+}
+/* A nested folder is itself a flex row in its parent's tab container. Zen
+ * hides its contents when the parent collapses, but the folder's own header
+ * keeps a minimum height unless the entire child folder is collapsed too.
+ * Target only descendants of a collapsed parent; an expanded parent's child
+ * folder stays visible even when that child has its own collapsed state. */
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  :is(tab-group, zen-folder)[collapsed]
+  .tab-group-container
+  :is(tab-group, zen-folder):not([bgalazka-addon-host-folder="true"]):not(
+    :has(
+      .tabbrowser-tab[pinned]:is([selected], :not([pending])):not(
+          [aria-hidden="true"]
+        )
+    )
+  ) {
+  min-height: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  flex: 0 0 0px !important;
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+/* Keep the collapsed container's box as short as its surviving selected tab.
+ * Without this, a nested folder's own container can retain empty flex space. */
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  :is(
+    tab-group.zentral-standard,
+    zen-folder:not([bgalazka-addon-host-folder="true"])
+  )[collapsed]
+  > .tab-group-container {
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  flex: 0 0 auto !important;
+  row-gap: 0 !important;
+  padding-block: 0 !important;
+}
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  :is(zen-folder:not([bgalazka-addon-host-folder="true"]), tab-group)
+  > .tab-group-label-container
+  :is(.tab-group-label, .tab-label, .tab-group-label-text) {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+/* The separate RSS switch fixes its header at 24px. If both density switches
+ * are on, keep that 24px minimum but allow enlarged titles to grow. */
+:root[bgalazka-tabbar-compact="true"][bgalazka-rss-compact-headers]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-rss-live-folder="true"]
+  > .tab-group-label-container {
+  min-height: var(--bgalazka-look-tabbar-row-height, 20px) !important;
+  height: auto !important;
+  max-height: none !important;
+  padding-block: 0 !important;
+  margin-block: var(--bgalazka-look-tabbar-row-gap, 0px) !important;
+}
+
+/* Clicking Zen's space indicator collapses pinned items by writing a zero
+ * inline height and aria-hidden to unloaded tabs. The compact row rules must
+ * honor that native state, including pinned tabs inside nested folders. */
+:root[bgalazka-tabbar-compact="true"]
+  :is(
+    #tabbrowser-tabs .zen-workspace-pinned-tabs-section,
+    .zen-workspace-pinned-tabs-section
+  )
+  .tabbrowser-tab[pinned]:is([aria-hidden="true"], [style*="height: 0px"]) {
+  min-height: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  flex: 0 0 0px !important;
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+/* Zen also zeroes folder headers when the space indicator is collapsed. Our
+ * ordinary folder-header minimum would revive an invisible blank row. Keep
+ * a folder's body available when it still contains a visible loaded site. */
+:root[bgalazka-tabbar-compact="true"]
+  :is(
+    #tabbrowser-tabs .zen-workspace-pinned-tabs-section,
+    .zen-workspace-pinned-tabs-section
+  )
+  :is(zen-folder, tab-group)
+  > .tab-group-label-container[style*="height: 0"] {
+  min-height: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+/* An empty folder (or one holding only unloaded, hidden tabs) should not
+ * retain its own box after Zen has hidden its header. Loaded visible tabs in
+ * the same folder remain laid out and clickable. */
+:root[bgalazka-tabbar-compact="true"]
+  :is(
+    #tabbrowser-tabs .zen-workspace-pinned-tabs-section,
+    .zen-workspace-pinned-tabs-section
+  )
+  :is(zen-folder, tab-group):not([bgalazka-addon-host-folder="true"]):has(
+    > .tab-group-label-container[style*="height: 0"]
+  ):not(
+    :has(
+      .tabbrowser-tab[pinned]:is([selected], :not([pending])):not(
+          [aria-hidden="true"]
+        ):not([style*="height: 0"])
+    )
+  ) {
+  min-height: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  flex: 0 0 0px !important;
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
