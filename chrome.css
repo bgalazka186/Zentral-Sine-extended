@@ -7954,7 +7954,10 @@ panel[id*="tabgroup-editor"] {
 #zen-app-hover-reveal-btn[hidden] {
   display: none !important;
 }
-:root[bgalazka-hover-panel-hidden][bgalazka-opposite-docking="true"]
+/* Match the three root attributes of the push-page rule above. On the
+ * right-hand panel (left tabbar), the former two-attribute selector lost
+ * the cascade and left the full panel-width margin behind after autohide. */
+:root[bgalazka-hover-panel-hidden][bgalazka-opposite-docking="true"][bgalazka-panel-side="right"]
   #tabbrowser-tabbox {
   margin-right: 6px !important;
   margin-left: 0 !important;
