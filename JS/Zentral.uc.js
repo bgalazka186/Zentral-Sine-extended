@@ -4349,7 +4349,10 @@
       const rafLoop = () => {
         if (!this._isTrackingPosition) return;
         reposition();
-        if (Date.now() - lastActivityTime < 200) {
+        if (
+          this._activePositionTransitions?.size ||
+          Date.now() - lastActivityTime < 200
+        ) {
           rafId = requestAnimationFrame(rafLoop);
         } else {
           rafId = null;
@@ -4379,23 +4382,21 @@
         passive: true,
       });
 
-      this._globalTransitionHandler = () => {
-        reposition();
-        triggerBurst();
+      // Track transitions only on positioning anchors or their ancestors.
+      // Animated tab icons and other descendants cannot move the panel.
+      const transitionTargets = new Set();
+      const observeAnchor = (el) => {
+        if (!el) return;
+        this._sidebarResizeObserver.observe(el);
+        for (
+          let node = el;
+          node && node !== document;
+          node = node.parentElement
+        ) {
+          transitionTargets.add(node);
+        }
       };
-      window.addEventListener(
-        "transitionstart",
-        this._globalTransitionHandler,
-        { passive: true },
-      );
-      window.addEventListener("transitionrun", this._globalTransitionHandler, {
-        passive: true,
-      });
-      window.addEventListener("transitionend", this._globalTransitionHandler, {
-        passive: true,
-      });
-
-      this._sidebarResizeObserver = new ResizeObserver((entries) => {
+      this._sidebarResizeObserver = new ResizeObserver(() => {
         reposition();
       });
       const idsToObserve = [
@@ -4410,14 +4411,58 @@
         "zen-window-controls",
         "titlebar-buttonbox-container",
         "zen-appcontent-wrapper",
+        "tabbrowser-tabbox",
+        "tabbrowser-tabpanels",
+        "appcontent",
       ];
       idsToObserve.forEach((id) => {
         const el =
           document.getElementById(id) || document.querySelector("." + id);
-        if (el) this._sidebarResizeObserver.observe(el);
+        observeAnchor(el);
       });
-      if (gBrowser?.tabContainer) {
-        this._sidebarResizeObserver.observe(gBrowser.tabContainer);
+      observeAnchor(gBrowser?.tabContainer);
+
+      // Follow a relevant transition for its full duration and settle on
+      // transitionend or transitioncancel, even if it lasts over 200 ms.
+      const activeTransitions = new Map();
+      this._globalTransitionHandler = (event) => {
+        const target = event.target;
+        if (!transitionTargets.has(target)) return;
+        const property = event.propertyName;
+        // Color and hover effects on an anchor cannot change its geometry.
+        if (
+          !/^(?:-moz-)?(?:transform|translate|scale|width|height|min-width|min-height|max-width|max-height|inset(?:-.+)?|top|right|bottom|left|margin(?:-.+)?|padding(?:-.+)?|flex-basis|grid-template-(?:columns|rows))$/.test(
+            property,
+          ) &&
+          !(
+            property === "opacity" &&
+            target.id === "zen-appcontent-navbar-wrapper"
+          )
+        )
+          return;
+        if (event.type === "transitionstart") {
+          let properties = activeTransitions.get(target);
+          if (!properties) {
+            properties = new Set();
+            activeTransitions.set(target, properties);
+          }
+          properties.add(property);
+        } else {
+          const properties = activeTransitions.get(target);
+          properties?.delete(property);
+          if (properties && !properties.size) activeTransitions.delete(target);
+        }
+        triggerBurst();
+      };
+      this._activePositionTransitions = activeTransitions;
+      for (const type of [
+        "transitionstart",
+        "transitionend",
+        "transitioncancel",
+      ]) {
+        window.addEventListener(type, this._globalTransitionHandler, {
+          passive: true,
+        });
       }
 
       this._docAttrObserver = new MutationObserver((mutations) => {
@@ -4459,7 +4504,7 @@
           this._globalTransitionHandler,
         );
         window.removeEventListener(
-          "transitionrun",
+          "transitioncancel",
           this._globalTransitionHandler,
         );
         window.removeEventListener(
@@ -4468,6 +4513,8 @@
         );
         this._globalTransitionHandler = null;
       }
+      this._activePositionTransitions?.clear();
+      this._activePositionTransitions = null;
       if (this._mouseMoveHandler) {
         window.removeEventListener("mousemove", this._mouseMoveHandler);
         this._mouseMoveHandler = null;
@@ -15119,6 +15166,7 @@
     PANEL_INPUT_SHIELD: "zen.workspace.bgalazka.panel_input_shield",
     ADDON_TAB_ID_BRIDGE: "zen.workspace.bgalazka.addon_tab_id_bridge",
     SHOW_ADDON_HOST_FOLDER: "zen.workspace.bgalazka.show_addon_host_folder",
+    ZEN_INTERNET_PANEL_CSS: "zen.workspace.bgalazka.zen_internet_panel_css",
     SMART_SLEEP: "zen.workspace.bgalazka.smart_sleep",
     AUDIO_INDICATOR: "zen.workspace.bgalazka.audio_indicator",
     HIDE_UNATTACHED_APP_CONTROLS:
@@ -15645,15 +15693,17 @@
 
   function getHorizontalOffsetBounds(root) {
     if (!root) return { min: 0, max: 0 };
-    const rect = root.getBoundingClientRect();
+    // The root is fixed-position. Its offset geometry includes saved
+    // margins but ignores the translateX animation used by hover reveal and
+    // panel opening. Measuring getBoundingClientRect() during that animation
+    // clamps the saved position against an off-screen rectangle, so clicking
+    // the eye can make the panel jump until the next positioning event.
+    const left = root.offsetLeft;
+    const right = left + root.offsetWidth;
     const appliedOffset = getAppliedHorizontalOffset(root);
-    // Convert the CURRENT on-screen rectangle back into the offset range that
-    // keeps both panel edges inside the viewport. Unlike the old +/-300px
-    // clamp, this automatically expands on large windows and contracts near
-    // either edge, so the only real limit is "the panel must remain visible".
     return {
-      min: appliedOffset - rect.left,
-      max: appliedOffset + (window.innerWidth - rect.right),
+      min: appliedOffset - left,
+      max: appliedOffset + (window.innerWidth - right),
     };
   }
 
@@ -16917,15 +16967,15 @@
     let wrappedHandleOutsideClick = null;
     if (typeof origHandleOutsideClick === "function") {
       wrappedHandleOutsideClick = function (e) {
-        // Dual-View is an effective temporary pin. Native handleOutsideClick()
-        // can only see its private real-pin flag, so bypass it while an open
-        // Dual-View panel is active. When Dual-View turns off, native behavior
-        // immediately resumes and uses the user's untouched real pin state.
-        const dualViewKeepsPanelOpen =
-          document.documentElement.getAttribute("bgalazka-push-page") ===
-            "true" &&
+        // A split view stays open while the user interacts with the webpage.
+        // Triple View must still do this when its page-push option is off.
+        const splitViewKeepsPanelOpen =
+          (document.documentElement.getAttribute("bgalazka-push-page") ===
+            "true" ||
+            document.documentElement.getAttribute("bgalazka-triple-view") ===
+              "true") &&
           document.getElementById("zen-app-panel-root")?.hasAttribute("open");
-        if (dualViewKeepsPanelOpen) return;
+        if (splitViewKeepsPanelOpen) return;
 
         const path = e.composedPath ? e.composedPath() : [];
         const insideOpenPopup = path.some(
@@ -17793,6 +17843,7 @@
     HIDE_HOVER_REVEAL_BTN: "zen.workspace.bgalazka.hide_hover_reveal_btn",
     EDGE_ATTACHED_PANELS: "zen.workspace.bgalazka.edge_attached_panels",
     PUSH_PAGE: "zen.workspace.bgalazka.push_page",
+    TRIPLE_PUSH_PAGE: "zen.workspace.bgalazka.triple_push_page",
     TAB_ISOLATION: "zen.workspace.bgalazka.tab_isolation",
     CORNER_TILES: "zen.workspace.bgalazka.corner_tiles",
     ALL_TAB_PANELS: "zen.workspace.bgalazka.all_tab_panels",
@@ -17888,6 +17939,7 @@
     // genuine tabId. See architecture note 27 and the bridge implementation.
     ADDON_TAB_ID_BRIDGE: "zen.workspace.bgalazka.addon_tab_id_bridge",
     SHOW_ADDON_HOST_FOLDER: "zen.workspace.bgalazka.show_addon_host_folder",
+    ZEN_INTERNET_PANEL_CSS: "zen.workspace.bgalazka.zen_internet_panel_css",
     SMART_SLEEP: "zen.workspace.bgalazka.smart_sleep",
     AUDIO_INDICATOR: "zen.workspace.bgalazka.audio_indicator",
     // Keep the settings-side preference table complete. The previous build
@@ -18192,9 +18244,24 @@
     const available = hoverPanelAvailable();
     const btn = document.getElementById("zen-app-hover-reveal-btn");
     if (btn) {
+      const triple =
+        document.documentElement.getAttribute("bgalazka-triple-view") ===
+        "true";
+      const pushing = getPref(BGALAZKA_EXT_PREFS.TRIPLE_PUSH_PAGE, true);
       btn.hidden =
-        !available || getPref(BGALAZKA_EXT_PREFS.HIDE_HOVER_REVEAL_BTN, false);
-      btn.disabled = !available;
+        (!available && !triple) ||
+        getPref(BGALAZKA_EXT_PREFS.HIDE_HOVER_REVEAL_BTN, false);
+      btn.disabled = !available && !triple;
+      btn.title = triple
+        ? available
+          ? `Click: toggle autohide. Hold: ${pushing ? "stop" : "resume"} pushing the webpage in Triple View.`
+          : `Hover requires Opposite-Side Docking. Hold: ${pushing ? "stop" : "resume"} pushing the webpage in Triple View.`
+        : "Show panel on hover at the opposite edge";
+      btn.setAttribute("aria-label", btn.title);
+      btn.setAttribute(
+        "data-hold-active",
+        triple && !pushing ? "true" : "false",
+      );
       btn.setAttribute(
         "data-active",
         available && getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)
@@ -18278,6 +18345,54 @@
       btn.setAttribute("aria-label", btn.title);
       btn.setAttribute("aria-pressed", "false");
       btn.appendChild(parseSVG(PREF_ICONS.HOVER_EYE));
+      let holdTimer = null;
+      let held = false;
+      let startX = 0;
+      let startY = 0;
+      const cancelHold = () => {
+        if (holdTimer) clearTimeout(holdTimer);
+        holdTimer = null;
+      };
+      btn.addEventListener("pointerdown", (event) => {
+        held = false;
+        if (
+          event.button !== 0 ||
+          document.documentElement.getAttribute("bgalazka-triple-view") !==
+            "true"
+        )
+          return;
+        startX = event.clientX;
+        startY = event.clientY;
+        cancelHold();
+        holdTimer = setTimeout(() => {
+          holdTimer = null;
+          if (
+            document.documentElement.getAttribute("bgalazka-triple-view") !==
+            "true"
+          )
+            return;
+          held = true;
+          togglePanelPushPreference();
+        }, 550);
+      });
+      btn.addEventListener("pointermove", (event) => {
+        if (Math.hypot(event.clientX - startX, event.clientY - startY) > 8)
+          cancelHold();
+      });
+      btn.addEventListener("pointerup", cancelHold);
+      btn.addEventListener("pointercancel", cancelHold);
+      btn.addEventListener("pointerleave", cancelHold);
+      btn.addEventListener(
+        "click",
+        (event) => {
+          if (!held) return;
+          held = false;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        },
+        true,
+      );
+      registerCleanup(cancelHold);
       const anchor =
         document.getElementById("zen-app-dual-view-btn") || pill.firstChild;
       if (anchor?.parentNode === pill)
@@ -18445,7 +18560,10 @@
   window.addEventListener("focusin", onHoverPanelFocusIn, true);
   window.addEventListener("keydown", onHoverPanelKeyDown, true);
   window.addEventListener("resize", updateRevealEdgeGeometry);
-  const onHoverPrefChange = () => syncHoverPanelAvailability();
+  const onHoverPrefChange = () => {
+    syncHoverPanelAvailability();
+    schedulePanelModeGeometrySync();
+  };
   for (const pref of [
     BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL,
     BGALAZKA_EXT_PREFS.HIDE_HOVER_REVEAL_BTN,
@@ -18505,25 +18623,9 @@
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         e.preventDefault();
-        const cur = getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false);
-        const next = !cur;
-        setPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, next);
-        document.documentElement.setAttribute(
-          "bgalazka-push-page",
-          next ? "true" : "false",
-        );
-
-        // Dual-View is an EFFECTIVE temporary pin, not a mutation of the
-        // user's real pin state. Do not call togglePin() here. This keeps
-        // Dual-View independent from whether the Pin button is visible and
-        // preserves the user's manual pin choice when Dual-View is disabled.
-
-        const input = document.querySelector(
-          `input[data-pref="${BGALAZKA_EXT_PREFS.PUSH_PAGE}"]`,
-        );
-        if (input) input.checked = next;
-
-        syncPanelPushState();
+        // In Triple View the push button controls Triple View's own push
+        // choice. In ordinary/dual view it controls the saved dual preference.
+        togglePanelPushPreference();
       });
     }
 
@@ -18623,6 +18725,55 @@
     btn.setAttribute("data-active", isActive ? "true" : "false");
   }
 
+  // Keep the eye (hover), push button (page layout), and Triple View's
+  // separate push preference independent. Refresh geometry after CSS settles
+  // so the panel cannot stay at a stale position until the next mouse event.
+  let modeGeometryFrame = null;
+  let modeGeometryTimer = null;
+  let lastSyncedTripleMode = null;
+  function reconcilePanelModeGeometry() {
+    const root = document.getElementById("zen-app-panel-root");
+    if (!root?.hasAttribute("open") || root.hasAttribute("closing")) return;
+    window.Zentral?.Apps?.positionPanel?.();
+    applyVerticalResizeExtras(root);
+    if (!hResizeState && !hPosDragState && !vPosDragState)
+      applyHorizontalPanelOffset(root);
+    updateRevealEdgeGeometry();
+  }
+  function schedulePanelModeGeometrySync() {
+    if (modeGeometryFrame) cancelAnimationFrame(modeGeometryFrame);
+    modeGeometryFrame = requestAnimationFrame(() => {
+      modeGeometryFrame = null;
+      reconcilePanelModeGeometry();
+    });
+    // The tabbox margin and hover transform each transition for ~0.2s.
+    if (modeGeometryTimer) clearTimeout(modeGeometryTimer);
+    modeGeometryTimer = setTimeout(() => {
+      modeGeometryTimer = null;
+      reconcilePanelModeGeometry();
+    }, 260);
+  }
+  registerCleanup(() => {
+    if (modeGeometryFrame) cancelAnimationFrame(modeGeometryFrame);
+    if (modeGeometryTimer) clearTimeout(modeGeometryTimer);
+  });
+
+  function togglePanelPushPreference() {
+    const triple =
+      document.documentElement.getAttribute("bgalazka-triple-view") === "true";
+    const pref = triple
+      ? BGALAZKA_EXT_PREFS.TRIPLE_PUSH_PAGE
+      : BGALAZKA_EXT_PREFS.PUSH_PAGE;
+    setPref(pref, !getPref(pref, triple));
+    if (!triple) {
+      const input = document.querySelector(
+        `input[data-pref="${BGALAZKA_EXT_PREFS.PUSH_PAGE}"]`,
+      );
+      if (input) input.checked = getPref(pref, false);
+    }
+    syncPanelPushState();
+  }
+
   function syncPanelPushState() {
     ensurePillDualViewButton();
     ensurePillHoverRevealButton();
@@ -18632,13 +18783,33 @@
 
     const isPinned = pinBtn?.getAttribute("data-pinned") === "true";
     const isOpen = root?.hasAttribute("open") && !root?.hasAttribute("closing");
-    const dualViewActive =
-      document.documentElement.getAttribute("bgalazka-push-page") === "true";
-    // Dual-View behaves like a temporary/effective pin without changing the
-    // native pin state. This makes it work even when the Pin icon is hidden
-    // and guarantees that disabling Dual-View restores the user's prior pin
-    // choice instead of leaving behind an auto-pin side effect.
-    const effectivePinned = isOpen && (isPinned || dualViewActive);
+    const triple =
+      document.documentElement.getAttribute("bgalazka-triple-view") === "true";
+    const dualViewActive = triple
+      ? getPref(BGALAZKA_EXT_PREFS.TRIPLE_PUSH_PAGE, true)
+      : getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false);
+    const pushChanged =
+      document.documentElement.getAttribute("bgalazka-push-page") !==
+      String(dualViewActive);
+    const tripleChanged = lastSyncedTripleMode !== triple;
+    lastSyncedTripleMode = triple;
+    document.documentElement.setAttribute(
+      "bgalazka-push-page",
+      String(dualViewActive),
+    );
+    const pushBtn = document.getElementById("zen-app-dual-view-btn");
+    if (pushBtn) {
+      pushBtn.setAttribute("data-active", String(dualViewActive));
+      pushBtn.title = triple
+        ? "Toggle webpage push in Triple View"
+        : "Toggle Dual-View (Push Webpage)";
+      pushBtn.setAttribute("aria-label", pushBtn.title);
+      pushBtn.setAttribute("aria-pressed", String(dualViewActive));
+    }
+    syncHoverPanelAvailability();
+    // Dual and Triple View act as an effective pin without changing the
+    // native Pin button. Triple View remains open even when page push is off.
+    const effectivePinned = isOpen && (isPinned || dualViewActive || triple);
 
     // Re-evaluate all user panel offsets whenever Dual-View changes. Both
     // helpers suppress their axis-specific margins only while Dual-View is on
@@ -18664,6 +18835,7 @@
       docRoot.setAttribute("bgalazka-panel-pinned", pinnedValue);
     if (docRoot.getAttribute("bgalazka-panel-side") !== side)
       docRoot.setAttribute("bgalazka-panel-side", side);
+    if (pushChanged || tripleChanged) schedulePanelModeGeometrySync();
   }
 
   /* ==========================================================================
@@ -19634,12 +19806,7 @@
         apps?.toggleExpand?.();
         return Boolean(apps?.toggleExpand);
       case "TOGGLE_DUAL_VIEW":
-        toggleExtensionBooleanPref(
-          BGALAZKA_EXT_PREFS.PUSH_PAGE,
-          "bgalazka-push-page",
-        );
-        syncPanelPushState();
-        ensurePillDualViewButton();
+        togglePanelPushPreference();
         return true;
       case "TOGGLE_RESIZE":
         toggleExtensionBooleanPref(
@@ -21048,7 +21215,7 @@
 
       const tPush = createToggleRow(
         "Dual-View Mode",
-        "Keep the panel open and contract the active webpage beside it; does not change your manual Pin state",
+        "Keep the panel open and contract the active webpage beside it; does not change your manual Pin state. Triple View has its own push choice on the pill button.",
         BGALAZKA_EXT_PREFS.PUSH_PAGE,
         "bgalazka-push-page",
         false,
@@ -21502,6 +21669,16 @@
         (enabled) => setAddonTabIdBridgeEnabled(enabled),
       );
       content.appendChild(tAddonTabIdBridge.row);
+      const tZenInternetCss = createToggleRow(
+        "Use Zen Internet CSS in Web Panels (experimental)",
+        "Read Zen Internet's locally stored styles and its global, per-site, skip-list, and feature settings. Apply them only inside Zentral web panels. Zentral makes no network requests for styles and never selects tabs or changes Zen Internet's storage. Real Tab IDs are optional.",
+        BGALAZKA_EXT_PREFS.ZEN_INTERNET_PANEL_CSS,
+        "bgalazka-zen-internet-panel-css",
+        false,
+        PREF_ICONS.REFRESH,
+        (enabled) => setZenInternetPanelCssEnabled(enabled),
+      );
+      content.appendChild(tZenInternetCss.row);
       const tShowAddonHostFolder = createToggleRow(
         "Show Web Panel Tab ID Folder",
         "Reveal the Zentral Add-on Hosts folder and its tabs in the sidebar so you can check whether panel host tabs are cleaned up. Requires Real Tab IDs for Web Panels to create host tabs.",
@@ -22071,6 +22248,11 @@
               "bgalazka-addon-tab-id-bridge",
               v ? "true" : "false",
             ),
+        },
+        {
+          input: tZenInternetCss.input,
+          pref: BGALAZKA_EXT_PREFS.ZEN_INTERNET_PANEL_CSS,
+          def: false,
         },
         {
           input: tShowAddonHostFolder.input,
@@ -24664,6 +24846,376 @@
     return list;
   }
 
+  // Zen Internet 3.2.0 stores its downloaded styles and all feature switches
+  // in storage.local. Read its own data and render only into Zentral browsers.
+  // This bridge never changes the add-on, native tabs, or their selected state.
+  // Compatibility reference: Zen Internet and its my-internet styles are MIT
+  // licensed by Transparent Zen; no upstream CSS is packaged with this mod.
+  const ZEN_CSS_EXTENSION_ID = "{91aa3897-2634-4a8a-9092-279db23a7689}";
+  const ZEN_CSS_CHANNEL =
+    "ZentralZenCSS:" + Math.random().toString(36).slice(2);
+  const ZEN_CSS_STYLE_ID = "zentral-zen-internet-styles";
+  const ZEN_CSS_FRAME_SOURCE = `(() => {
+    if (this.__zentralZenCSSListener) return;
+    this.__zentralZenCSSListener = (message) => {
+      try {
+        const { css, url } = message.data || {};
+        const doc = content.document;
+        if (!doc || doc.URL.split("#")[0] !== url.split("#")[0]) return;
+        let style = doc.getElementById("${ZEN_CSS_STYLE_ID}");
+        if (!style && css) {
+          style = doc.createElement("style");
+          style.id = "${ZEN_CSS_STYLE_ID}";
+          (doc.head || doc.documentElement).appendChild(style);
+        }
+        if (style) {
+          // Prefer Zen Internet's own content script if it succeeds.
+          const native = doc.getElementById("zeninternet-styles");
+          style.textContent = native?.textContent?.trim() ? "" : css || "";
+        }
+        this.__zentralZenCSSObserver?.disconnect();
+        if (style?.textContent && doc.head) {
+          this.__zentralZenCSSObserver = new doc.defaultView.MutationObserver(() => {
+            if (doc.getElementById("zeninternet-styles")?.textContent?.trim()) {
+              style.textContent = "";
+              this.__zentralZenCSSObserver?.disconnect();
+            }
+          });
+          this.__zentralZenCSSObserver.observe(doc.head, {
+            childList: true, subtree: true, characterData: true,
+          });
+        }
+      } catch (_) {}
+    };
+    addMessageListener("${ZEN_CSS_CHANNEL}", this.__zentralZenCSSListener);
+  })();`;
+  const ZEN_CSS_FRAME_URI =
+    "data:application/javascript;charset=utf-8," +
+    encodeURIComponent(ZEN_CSS_FRAME_SOURCE);
+  const zenCssBrowsers = new WeakMap();
+  const zenCssUpdateVersions = new WeakMap();
+  let zenCssSource = null;
+  let zenCssSourcePromise = null;
+  let zenCssStorage = null;
+  let zenCssExtension = null;
+  let zenCssBackend = null;
+  let zenCssChangeTimer = null;
+  const ZEN_CSS_KEYS = [
+    "styles",
+    "transparentZenSettings",
+    "skipThemingList",
+    "skipForceThemingList",
+    "fallbackBackgroundList",
+    "stylesMapping",
+    "userStylesMapping",
+  ];
+
+  function zenCssEnabled() {
+    return getPref(BGALAZKA_EXT_PREFS.ZEN_INTERNET_PANEL_CSS, false);
+  }
+
+  function zenCssStorageChanged(changes) {
+    if (
+      !Object.keys(changes || {}).some(
+        (key) =>
+          ZEN_CSS_KEYS.includes(key) ||
+          key.startsWith("transparentZenSettings."),
+      )
+    )
+      return;
+    zenCssSource = null;
+    if (zenCssChangeTimer) clearTimeout(zenCssChangeTimer);
+    zenCssChangeTimer = setTimeout(() => {
+      zenCssChangeTimer = null;
+      refreshZenInternetPanelCss();
+    }, 150);
+  }
+
+  async function getZenCssStorage() {
+    if (!zenCssEnabled()) return null;
+    const { ExtensionParent } = ChromeUtils.importESModule(
+      "resource://gre/modules/ExtensionParent.sys.mjs",
+    );
+    const extension =
+      ExtensionParent.GlobalManager.getExtension(ZEN_CSS_EXTENSION_ID);
+    if (!extension?.policy?.active || !extension.hasPermission("storage"))
+      return null;
+    if (zenCssStorage && zenCssExtension === extension) return zenCssStorage;
+    if (zenCssBackend) {
+      zenCssBackend.removeOnChangedListener(
+        ZEN_CSS_EXTENSION_ID,
+        zenCssStorageChanged,
+      );
+      zenCssBackend = null;
+    }
+    const { ExtensionStorageIDB } = ChromeUtils.importESModule(
+      "resource://gre/modules/ExtensionStorageIDB.sys.mjs",
+    );
+    const selected = await ExtensionStorageIDB.selectBackend({ extension });
+    if (!zenCssEnabled()) return null;
+    let storage;
+    if (selected.backendEnabled) {
+      const db = await ExtensionStorageIDB.open(
+        ExtensionStorageIDB.getStoragePrincipal(extension),
+        extension.hasPermission("unlimitedStorage"),
+      );
+      if (!zenCssEnabled()) return null;
+      storage = { get: (keys) => db.get(keys) };
+      zenCssBackend = ExtensionStorageIDB;
+    } else {
+      const { ExtensionStorage } = ChromeUtils.importESModule(
+        "resource://gre/modules/ExtensionStorage.sys.mjs",
+      );
+      storage = {
+        get: (keys) => ExtensionStorage.get(ZEN_CSS_EXTENSION_ID, keys),
+      };
+      zenCssBackend = ExtensionStorage;
+    }
+    zenCssBackend.addOnChangedListener(
+      ZEN_CSS_EXTENSION_ID,
+      zenCssStorageChanged,
+    );
+    zenCssExtension = extension;
+    zenCssStorage = storage;
+    zenCssSource = null;
+    return storage;
+  }
+
+  async function readZenCssSource() {
+    if (zenCssSource && Date.now() - zenCssSource.readAt < 30000)
+      return zenCssSource;
+    if (zenCssSourcePromise) return zenCssSourcePromise;
+    zenCssSourcePromise = (async () => {
+      const storage = await getZenCssStorage();
+      if (!storage) return null;
+      const values = await storage.get(ZEN_CSS_KEYS);
+      zenCssSource = { ...values, readAt: Date.now() };
+      return zenCssSource;
+    })();
+    try {
+      return await zenCssSourcePromise;
+    } finally {
+      zenCssSourcePromise = null;
+    }
+  }
+
+  function matchZenCssFeatures(host, source) {
+    const website = source?.styles?.website;
+    if (!website || typeof website !== "object") return null;
+    let bestKey = null;
+    let bestLength = -1;
+    for (const key of Object.keys(website)) {
+      const site = key.replace(/\.css$/, "");
+      const base = site.replace(/^www\./, "");
+      let length = -1;
+      if (host === base) length = 100000 + base.length;
+      else if (site.startsWith("+")) {
+        const domain = site.slice(1);
+        if (host === domain || host.endsWith(`.${domain}`))
+          length = domain.length;
+      } else if (site.startsWith("-")) {
+        const domain = site.slice(1).split(".").slice(0, -1).join(".");
+        if (domain && host.split(".").slice(0, -1).join(".") === domain)
+          length = domain.length;
+      } else if (host.endsWith(`.${base}`)) length = base.length;
+      if (length > bestLength) {
+        bestLength = length;
+        bestKey = key;
+      }
+    }
+    if (bestKey) return website[bestKey];
+    const mapping = { ...(source.stylesMapping?.mapping || {}) };
+    for (const [key, targets] of Object.entries(
+      source.userStylesMapping?.mapping || {},
+    ))
+      mapping[key] = [
+        ...(Array.isArray(mapping[key]) ? mapping[key] : []),
+        ...(Array.isArray(targets) ? targets : []),
+      ];
+    for (const [key, targets] of Object.entries(mapping)) {
+      if (Array.isArray(targets) && targets.includes(host))
+        return website[key] || website[`${key}.css`] || null;
+    }
+    return null;
+  }
+
+  async function buildZenCss(host, source) {
+    const settings = source?.transparentZenSettings || {};
+    if (settings.enableStyling === false) return "";
+    const fallback = (source.fallbackBackgroundList || []).includes(host);
+    let features = matchZenCssFeatures(host, source);
+    const hasStyle = !!features;
+    const skipped = (source.skipThemingList || []).includes(host);
+    if (hasStyle && !fallback && !!settings.whitelistStyleMode !== skipped)
+      features = null;
+    if (!hasStyle && !fallback && settings.forceStyling) {
+      const forceListed = (source.skipForceThemingList || []).includes(host);
+      if (!!settings.whitelistMode === forceListed)
+        features = source.styles?.website?.["example.com.css"] || null;
+    }
+    if (!features && !fallback) return "";
+    const storage = await getZenCssStorage();
+    const siteKey = `transparentZenSettings.${host}`;
+    const siteSettings = (await storage?.get(siteKey))?.[siteKey] || {};
+    let css = "";
+    for (const [feature, value] of Object.entries(features || {})) {
+      if (typeof value !== "string" || siteSettings[feature] === false)
+        continue;
+      // A locally stored CSS rule can still request remote images or fonts.
+      // Keep this bridge fully offline by omitting resource-bearing features.
+      if (/@import\b|url\s*\(|(?:-webkit-)?image-set\s*\(/i.test(value))
+        continue;
+      const name = feature.toLowerCase();
+      if (
+        name.includes("transparency") &&
+        (settings.disableTransparency || fallback)
+      )
+        continue;
+      if (name.includes("hover") && settings.disableHover) continue;
+      if (name.includes("footer") && settings.disableFooter) continue;
+      if (
+        (name.includes("darkreader") ||
+          value.toLowerCase().includes("darkreader")) &&
+        settings.disableDarkReader
+      )
+        continue;
+      if (
+        host === "youtube.com" &&
+        name.includes("transparent overlay chat") &&
+        siteSettings.movableLiveChat !== false
+      )
+        continue;
+      css += value + "\n";
+    }
+    if (fallback) css += "html{background-color:light-dark(#fff,#111);}";
+    return css;
+  }
+
+  function sendZenCss(browser, css, url) {
+    if (!browser?.isConnected || !/^https?:/i.test(url)) return;
+    try {
+      const manager = browser.messageManager;
+      if (!manager?.loadFrameScript || !manager?.sendAsyncMessage) return;
+      const record = zenCssBrowsers.get(browser);
+      if (!record || record.manager !== manager) {
+        manager.loadFrameScript(ZEN_CSS_FRAME_URI, true);
+        zenCssBrowsers.set(browser, { manager, sequence: 0 });
+      }
+      const sequence = ++zenCssBrowsers.get(browser).sequence;
+      manager.sendAsyncMessage(ZEN_CSS_CHANNEL, { css, url });
+      setTimeout(() => {
+        if (
+          browser.isConnected &&
+          browser.messageManager === manager &&
+          zenCssBrowsers.get(browser)?.sequence === sequence
+        )
+          manager.sendAsyncMessage(ZEN_CSS_CHANNEL, { css, url });
+      }, 180);
+    } catch (error) {
+      console.warn(
+        "[BgalazkaExtension] Zen Internet panel CSS injection failed:",
+        error,
+      );
+    }
+  }
+
+  async function updateZenCssBrowser(browser) {
+    if (!browser?.isConnected || !browser._bgalazkaAppId) return;
+    const url = browser.currentURI?.spec || "";
+    if (!/^https?:/i.test(url)) return;
+    const version = (zenCssUpdateVersions.get(browser) || 0) + 1;
+    zenCssUpdateVersions.set(browser, version);
+    if (!zenCssEnabled()) {
+      if (zenCssBrowsers.has(browser)) sendZenCss(browser, "", url);
+      return;
+    }
+    try {
+      const source = await readZenCssSource();
+      const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+      const css = source ? await buildZenCss(host, source) : "";
+      if (
+        browser.currentURI?.spec === url &&
+        zenCssUpdateVersions.get(browser) === version &&
+        zenCssEnabled()
+      )
+        sendZenCss(browser, css, url);
+    } catch (error) {
+      console.warn("[BgalazkaExtension] Zen Internet CSS read failed:", error);
+    }
+  }
+
+  function attachZenInternetPanelBrowser(browser) {
+    if (!browser || browser._bgalazkaZenCssOnLoad) return;
+    const onLoad = () => updateZenCssBrowser(browser);
+    browser._bgalazkaZenCssOnLoad = onLoad;
+    browser.addEventListener("pageshow", onLoad);
+    browser.addEventListener("load", onLoad);
+    updateZenCssBrowser(browser);
+  }
+
+  function refreshZenInternetPanelCss() {
+    for (const browser of getAllAppBrowsers()) {
+      if (!zenCssEnabled() && !zenCssBrowsers.has(browser)) continue;
+      if (zenCssEnabled()) attachZenInternetPanelBrowser(browser);
+      updateZenCssBrowser(browser);
+    }
+  }
+
+  function setZenInternetPanelCssEnabled(enabled) {
+    if (enabled) zenCssSource = null;
+    refreshZenInternetPanelCss();
+    if (!enabled) {
+      for (const browser of getAllAppBrowsers()) {
+        const onLoad = browser._bgalazkaZenCssOnLoad;
+        if (!onLoad) continue;
+        browser.removeEventListener("pageshow", onLoad);
+        browser.removeEventListener("load", onLoad);
+        delete browser._bgalazkaZenCssOnLoad;
+      }
+      if (zenCssChangeTimer) {
+        clearTimeout(zenCssChangeTimer);
+        zenCssChangeTimer = null;
+      }
+      if (zenCssBackend) {
+        zenCssBackend.removeOnChangedListener(
+          ZEN_CSS_EXTENSION_ID,
+          zenCssStorageChanged,
+        );
+        zenCssBackend = null;
+      }
+      zenCssStorage = null;
+      zenCssExtension = null;
+      zenCssSource = null;
+    }
+  }
+
+  const zenCssRefreshTimer = setInterval(() => {
+    if (zenCssEnabled()) refreshZenInternetPanelCss();
+  }, 30000);
+  registerCleanup(() => {
+    clearInterval(zenCssRefreshTimer);
+    if (zenCssChangeTimer) clearTimeout(zenCssChangeTimer);
+    for (const browser of getAllAppBrowsers()) {
+      const record = zenCssBrowsers.get(browser);
+      if (record) sendZenCss(browser, "", browser.currentURI?.spec || "");
+      if (browser._bgalazkaZenCssOnLoad) {
+        browser.removeEventListener("pageshow", browser._bgalazkaZenCssOnLoad);
+        browser.removeEventListener("load", browser._bgalazkaZenCssOnLoad);
+        delete browser._bgalazkaZenCssOnLoad;
+      }
+      if (!record) continue;
+      try {
+        record.manager.removeDelayedFrameScript(ZEN_CSS_FRAME_URI);
+      } catch (_) {}
+    }
+    if (zenCssBackend)
+      zenCssBackend.removeOnChangedListener(
+        ZEN_CSS_EXTENSION_ID,
+        zenCssStorageChanged,
+      );
+  });
+  if (zenCssEnabled()) setTimeout(refreshZenInternetPanelCss, 500);
+
   function hookPopupContainment() {
     const bdw = window.browserDOMWindow;
     if (!bdw || bdw._bgalazkaPopupHooked) return !!bdw;
@@ -25119,6 +25671,11 @@
           result.browser._bgalazkaAppId = app?.id || null;
           applyPanelContainerLoadContext(result.browser, userContextId);
         }
+        if (
+          result?.browser &&
+          getPref(BGALAZKA_EXT_PREFS.ZEN_INTERNET_PANEL_CSS, false)
+        )
+          attachZenInternetPanelBrowser(result.browser);
         if (result?.browser?._bgalazkaAddonHostBrowser) {
           try {
             if (result.browser.docShellIsActive !== true)
@@ -25620,6 +26177,8 @@
 
   // Apply default or stored attribute states on startup
   Object.keys(BGALAZKA_EXT_PREFS).forEach((key) => {
+    // Triple push defaults on and is read only while Triple View is active.
+    if (key === "TRIPLE_PUSH_PAGE") return;
     const prefName = BGALAZKA_EXT_PREFS[key];
     const rootAttr = "bgalazka-" + key.toLowerCase().replace(/_/g, "-");
     // DEFAULT-OFF CONTRACT: unknown/unset extension booleans are always false.
@@ -25672,7 +26231,6 @@
       second: null,
       shell: null,
       divider: null,
-      previousPush: null,
       previousPin: null,
       poll: null,
       loadTimers: [],
@@ -25785,16 +26343,10 @@
     function enterTriple(first) {
       state.first = first;
       state.mode = "triple";
-      state.previousPush = getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false);
-      if (!state.previousPush) {
-        setPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, true);
-        ui.setAttribute("bgalazka-push-page", "true");
-        syncPanelPushState();
-      }
       const btn = document.getElementById("zen-app-dual-view-btn");
-      btn?.setAttribute("data-active", "true");
       btn?.setAttribute("data-hold-active", "true");
       ui.setAttribute("bgalazka-triple-view", "true");
+      syncPanelPushState();
     }
     function showPair(pair) {
       const top = resolvePairApp(pair, pair.top);
@@ -25933,19 +26485,7 @@
       document
         .querySelector("#zen-app-panel-pill .zen-app-btn[data-pinned]")
         ?.removeAttribute("data-hold-active");
-      if (
-        mode === "triple" &&
-        state.previousPush !== null &&
-        getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false) !== state.previousPush
-      ) {
-        setPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, state.previousPush);
-        ui.setAttribute("bgalazka-push-page", String(state.previousPush));
-        syncPanelPushState();
-        document
-          .getElementById("zen-app-dual-view-btn")
-          ?.setAttribute("data-active", String(state.previousPush));
-      }
-      state.previousPush = null;
+      if (mode === "triple") syncPanelPushState();
       if (mode === "super" && state.previousPin === false && isOpen()) {
         const pin = document.querySelector(
           "#zen-app-panel-pill .zen-app-btn[data-pinned]",

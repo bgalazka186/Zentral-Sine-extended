@@ -8052,20 +8052,45 @@ panel[id*="tabgroup-editor"] {
   filter: grayscale(1) !important;
   opacity: 0.52 !important;
 }
-/* Arc grays the entire pending tab, including descendants. With both Arc
- * prefs enabled, gray the native tab children while leaving a loaded panel
- * button in color. The Arc opacity on the tab remains in effect. */
-:root[bgalazka-corner-tiles="true"][bgalazka-arc-fade-unloaded="true"][bgalazka-arc-gray-unloaded="true"]
+/* A pending tab can contain an already loaded panel. Arc filters the whole
+ * tab; resetting only the image cannot undo an ancestor's grayscale. Give
+ * the pending tab its normal color, then gray the native tab UI separately.
+ * These rules depend only on Zentral's panel state, including without Arc. */
+:root
   .tabbrowser-tab[pending="true"]:has(
-    > .bgalazka-essential-tile[data-loaded="true"]
+    .zen-app-tile.bgalazka-essential-tile[data-loaded="true"]
   ) {
   filter: none !important;
 }
-:root[bgalazka-corner-tiles="true"][bgalazka-arc-fade-unloaded="true"][bgalazka-arc-gray-unloaded="true"]
+/* Essential panel buttons sit directly under the tab. */
+:root
   .tabbrowser-tab[pending="true"]:has(
-    > .bgalazka-essential-tile[data-loaded="true"]
+    > .zen-app-tile.bgalazka-essential-tile[data-loaded="true"]
   )
-  > :not(.bgalazka-essential-tile) {
+  > :not(.zen-app-tile.bgalazka-essential-tile) {
+  filter: grayscale(1) !important;
+}
+/* Ordinary tab buttons sit inside the icon stack. Do not filter that stack
+ * or its ancestors: a parent filter would gray the loaded panel again. */
+:root
+  .tabbrowser-tab[pending="true"]:has(
+    .bgalazka-panel-icon-host > .bgalazka-tab-icon-panel[data-loaded="true"]
+  )
+  > :not(:has(.bgalazka-tab-icon-panel[data-loaded="true"])) {
+  filter: grayscale(1) !important;
+}
+:root
+  .tabbrowser-tab[pending="true"]:has(
+    .bgalazka-panel-icon-host > .bgalazka-tab-icon-panel[data-loaded="true"]
+  )
+  .tab-content
+  > :not(:has(.bgalazka-tab-icon-panel[data-loaded="true"])):not(
+    .bgalazka-panel-icon-host
+  ),
+:root
+  .tabbrowser-tab[pending="true"]
+  .bgalazka-panel-icon-host:has(> .bgalazka-tab-icon-panel[data-loaded="true"])
+  > :not(.bgalazka-tab-icon-panel) {
   filter: grayscale(1) !important;
 }
 :root
@@ -8165,6 +8190,12 @@ panel[id*="tabgroup-editor"] {
   stroke: #fff !important;
   stroke-width: 2.2 !important;
   opacity: 1 !important;
+}
+/* Triple View without webpage push is marked independently of hover mode.
+ * The blue fill belongs only to data-active (autohide). */
+#zen-app-panel-pill .zen-app-hover-reveal-btn[data-hold-active="true"] {
+  outline: 2px solid #dc3545 !important;
+  outline-offset: -2px !important;
 }
 :root[bgalazka-hide-hover-reveal-btn="true"]
   #zen-app-panel-pill
