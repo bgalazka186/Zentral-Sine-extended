@@ -24859,32 +24859,73 @@
     if (this.__zentralZenCSSListener) return;
     this.__zentralZenCSSListener = (message) => {
       try {
-        const { css, url } = message.data || {};
+        const { css, url, sequence } = message.data || {};
         const doc = content.document;
         if (!doc || doc.URL.split("#")[0] !== url.split("#")[0]) return;
-        let style = doc.getElementById("${ZEN_CSS_STYLE_ID}");
-        if (!style && css) {
-          style = doc.createElement("style");
-          style.id = "${ZEN_CSS_STYLE_ID}";
-          (doc.head || doc.documentElement).appendChild(style);
-        }
-        if (style) {
-          // Prefer Zen Internet's own content script if it succeeds.
-          const native = doc.getElementById("zeninternet-styles");
-          style.textContent = native?.textContent?.trim() ? "" : css || "";
-        }
-        this.__zentralZenCSSObserver?.disconnect();
-        if (style?.textContent && doc.head) {
-          this.__zentralZenCSSObserver = new doc.defaultView.MutationObserver(() => {
-            if (doc.getElementById("zeninternet-styles")?.textContent?.trim()) {
-              style.textContent = "";
-              this.__zentralZenCSSObserver?.disconnect();
+        let state = this.__zentralZenCSSState;
+        if (!state || state.doc !== doc) {
+          state?.headObserver?.disconnect();
+          state?.nativeObserver?.disconnect();
+          state = { doc, css: "", native: null, style: null, head: null };
+          this.__zentralZenCSSState = state;
+          const updateNative = () => {
+            const native = doc.getElementById("zeninternet-styles");
+            if (native === state.native) return false;
+            state.nativeObserver?.disconnect();
+            state.native = native;
+            if (native) {
+              state.nativeObserver = new doc.defaultView.MutationObserver(sync);
+              state.nativeObserver.observe(native, {
+                childList: true, subtree: true, characterData: true,
+              });
             }
-          });
-          this.__zentralZenCSSObserver.observe(doc.head, {
-            childList: true, subtree: true, characterData: true,
-          });
+            return true;
+          };
+          const watchHead = () => {
+            const head = doc.head || doc.documentElement;
+            if (head === state.head) return;
+            state.headObserver?.disconnect();
+            state.head = head;
+            if (!head) return;
+            state.headObserver = new doc.defaultView.MutationObserver((mutations) => {
+              if (watchHead() || updateNative() ||
+                  (state.css && state.style && !state.style.isConnected)) sync();
+              if (!state.style?.textContent) return;
+              // A site's new stylesheet can override our earlier rules.
+              // Ignore Zen Internet's own element so its observer and ours
+              // never fight over which stylesheet is last.
+              const addedCss = mutations.some(({ addedNodes }) =>
+                Array.from(addedNodes).some((node) => node !== state.style &&
+                  node !== state.native && node.nodeType === 1 &&
+                  (node.localName === "style" ||
+                   (node.localName === "link" && /stylesheet/i.test(node.rel)))));
+              if (addedCss && state.head.lastChild !== state.style)
+                state.head.appendChild(state.style);
+            });
+            state.headObserver.observe(head, { childList: true });
+          };
+          const sync = () => {
+            updateNative();
+            let style = state.style || doc.getElementById("${ZEN_CSS_STYLE_ID}");
+            if (!style && state.css) {
+              style = doc.createElement("style");
+              style.id = "${ZEN_CSS_STYLE_ID}";
+            }
+            state.style = style;
+            if (!style) return;
+            const nativeCss = state.native?.textContent || "";
+            const desired = state.css && !nativeCss.includes(state.css.trim())
+              ? state.css : "";
+            if (style.textContent !== desired) style.textContent = desired;
+            if (desired && style.parentNode !== state.head)
+              state.head?.appendChild(style);
+          };
+          state.sync = sync;
+          watchHead();
         }
+        state.css = typeof css === "string" ? css : "";
+        state.sync();
+        sendAsyncMessage("${ZEN_CSS_CHANNEL}:ack", { url, sequence });
       } catch (_) {}
     };
     addMessageListener("${ZEN_CSS_CHANNEL}", this.__zentralZenCSSListener);
@@ -24894,6 +24935,7 @@
     encodeURIComponent(ZEN_CSS_FRAME_SOURCE);
   const zenCssBrowsers = new WeakMap();
   const zenCssUpdateVersions = new WeakMap();
+  const zenCssFirstLoads = new WeakMap();
   let zenCssSource = null;
   let zenCssSourcePromise = null;
   let zenCssStorage = null;
@@ -24982,7 +25024,11 @@
   }
 
   async function readZenCssSource() {
-    if (zenCssSource && Date.now() - zenCssSource.readAt < 30000)
+    if (
+      zenCssSource &&
+      Date.now() - zenCssSource.readAt <
+        (zenCssSource.styles?.website ? 30000 : 1000)
+    )
       return zenCssSource;
     if (zenCssSourcePromise) return zenCssSourcePromise;
     zenCssSourcePromise = (async () => {
@@ -25096,21 +25142,74 @@
     try {
       const manager = browser.messageManager;
       if (!manager?.loadFrameScript || !manager?.sendAsyncMessage) return;
-      const record = zenCssBrowsers.get(browser);
-      if (!record || record.manager !== manager) {
-        manager.loadFrameScript(ZEN_CSS_FRAME_URI, true);
-        zenCssBrowsers.set(browser, { manager, sequence: 0 });
+      let record = zenCssBrowsers.get(browser);
+      if (record && record.manager !== manager) {
+        clearTimeout(record.retryTimer);
+        try {
+          record.manager.removeMessageListener(
+            `${ZEN_CSS_CHANNEL}:ack`,
+            record.onAck,
+          );
+        } catch (_) {}
+        try {
+          record.manager.removeDelayedFrameScript(ZEN_CSS_FRAME_URI);
+        } catch (_) {}
+        record = null;
       }
-      const sequence = ++zenCssBrowsers.get(browser).sequence;
-      manager.sendAsyncMessage(ZEN_CSS_CHANNEL, { css, url });
-      setTimeout(() => {
+      if (!record) {
+        manager.loadFrameScript(ZEN_CSS_FRAME_URI, true);
+        record = {
+          manager,
+          sequence: 0,
+          retryTimer: null,
+          acknowledged: false,
+        };
+        record.onAck = (message) => {
+          if (
+            zenCssBrowsers.get(browser) !== record ||
+            message.data?.sequence !== record.sequence ||
+            message.data?.url !== record.url
+          )
+            return;
+          record.acknowledged = true;
+          clearTimeout(record.retryTimer);
+          record.retryTimer = null;
+        };
+        manager.addMessageListener(`${ZEN_CSS_CHANNEL}:ack`, record.onAck);
+        zenCssBrowsers.set(browser, record);
+      }
+      clearTimeout(record.retryTimer);
+      const sequence = ++record.sequence;
+      record.url = url;
+      record.acknowledged = false;
+      const delays = [120, 300, 650, 1200, 2000];
+      const deliver = (attempt) => {
         if (
-          browser.isConnected &&
-          browser.messageManager === manager &&
-          zenCssBrowsers.get(browser)?.sequence === sequence
+          !browser.isConnected ||
+          zenCssBrowsers.get(browser) !== record ||
+          record.sequence !== sequence ||
+          record.acknowledged
         )
-          manager.sendAsyncMessage(ZEN_CSS_CHANNEL, { css, url });
-      }, 180);
+          return;
+        if (browser.messageManager !== manager) {
+          updateZenCssBrowser(browser);
+          return;
+        }
+        try {
+          manager.sendAsyncMessage(ZEN_CSS_CHANNEL, { css, url, sequence });
+        } catch (error) {
+          console.warn(
+            "[BgalazkaExtension] Zen Internet CSS delivery failed:",
+            error,
+          );
+        }
+        if (attempt < delays.length)
+          record.retryTimer = setTimeout(
+            () => deliver(attempt + 1),
+            delays[attempt],
+          );
+      };
+      deliver(0);
     } catch (error) {
       console.warn(
         "[BgalazkaExtension] Zen Internet panel CSS injection failed:",
@@ -25120,7 +25219,9 @@
   }
 
   async function updateZenCssBrowser(browser) {
-    if (!browser?.isConnected || !browser._bgalazkaAppId) return;
+    // The panel containers already identify our browsers. A browser created
+    // before the app hook was installed may not have our optional app ID.
+    if (!browser?.isConnected) return;
     const url = browser.currentURI?.spec || "";
     if (!/^https?:/i.test(url)) return;
     const version = (zenCssUpdateVersions.get(browser) || 0) + 1;
@@ -25144,19 +25245,58 @@
     }
   }
 
+  function cancelZenCssFirstLoad(browser) {
+    const pending = zenCssFirstLoads.get(browser);
+    if (!pending) return;
+    for (const timer of pending.timers) clearTimeout(timer);
+    zenCssFirstLoads.delete(browser);
+  }
+
+  function scheduleZenCssFirstLoad(browser) {
+    if (!zenCssEnabled() || !browser?.isConnected) return;
+    const url = browser.currentURI?.spec || "";
+    if (!/^https?:/i.test(url)) return;
+    if (zenCssFirstLoads.get(browser)?.url === url) return;
+    cancelZenCssFirstLoad(browser);
+    const pending = { url, timers: [] };
+    zenCssFirstLoads.set(browser, pending);
+    updateZenCssBrowser(browser);
+    // One later read covers initially empty local storage. The content
+    // observer handles subsequent stylesheet additions without more reads.
+    for (const delay of [600, 1800]) {
+      pending.timers.push(
+        setTimeout(() => {
+          if (
+            zenCssFirstLoads.get(browser) !== pending ||
+            !zenCssEnabled() ||
+            browser.currentURI?.spec !== url
+          )
+            return;
+          updateZenCssBrowser(browser);
+        }, delay),
+      );
+    }
+  }
+
   function attachZenInternetPanelBrowser(browser) {
     if (!browser || browser._bgalazkaZenCssOnLoad) return;
-    const onLoad = () => updateZenCssBrowser(browser);
+    const onLoad = () => {
+      cancelZenCssFirstLoad(browser);
+      scheduleZenCssFirstLoad(browser);
+    };
     browser._bgalazkaZenCssOnLoad = onLoad;
     browser.addEventListener("pageshow", onLoad);
     browser.addEventListener("load", onLoad);
-    updateZenCssBrowser(browser);
+    scheduleZenCssFirstLoad(browser);
   }
 
   function refreshZenInternetPanelCss() {
     for (const browser of getAllAppBrowsers()) {
       if (!zenCssEnabled() && !zenCssBrowsers.has(browser)) continue;
-      if (zenCssEnabled()) attachZenInternetPanelBrowser(browser);
+      if (zenCssEnabled() && !browser._bgalazkaZenCssOnLoad) {
+        attachZenInternetPanelBrowser(browser);
+        continue;
+      }
       updateZenCssBrowser(browser);
     }
   }
@@ -25166,6 +25306,7 @@
     refreshZenInternetPanelCss();
     if (!enabled) {
       for (const browser of getAllAppBrowsers()) {
+        cancelZenCssFirstLoad(browser);
         const onLoad = browser._bgalazkaZenCssOnLoad;
         if (!onLoad) continue;
         browser.removeEventListener("pageshow", onLoad);
@@ -25196,17 +25337,27 @@
     clearInterval(zenCssRefreshTimer);
     if (zenCssChangeTimer) clearTimeout(zenCssChangeTimer);
     for (const browser of getAllAppBrowsers()) {
-      const record = zenCssBrowsers.get(browser);
-      if (record) sendZenCss(browser, "", browser.currentURI?.spec || "");
+      cancelZenCssFirstLoad(browser);
+      if (zenCssBrowsers.has(browser))
+        sendZenCss(browser, "", browser.currentURI?.spec || "");
       if (browser._bgalazkaZenCssOnLoad) {
         browser.removeEventListener("pageshow", browser._bgalazkaZenCssOnLoad);
         browser.removeEventListener("load", browser._bgalazkaZenCssOnLoad);
         delete browser._bgalazkaZenCssOnLoad;
       }
+      const record = zenCssBrowsers.get(browser);
       if (!record) continue;
+      clearTimeout(record.retryTimer);
+      try {
+        record.manager.removeMessageListener(
+          `${ZEN_CSS_CHANNEL}:ack`,
+          record.onAck,
+        );
+      } catch (_) {}
       try {
         record.manager.removeDelayedFrameScript(ZEN_CSS_FRAME_URI);
       } catch (_) {}
+      zenCssBrowsers.delete(browser);
     }
     if (zenCssBackend)
       zenCssBackend.removeOnChangedListener(
@@ -25584,6 +25735,13 @@
             .getElementById("zen-app-panel-root")
             ?.hasAttribute("closing");
         const res = origOpen(...args);
+        if (zenCssEnabled()) {
+          const openedBrowser = getActiveAppBrowser();
+          if (openedBrowser) {
+            attachZenInternetPanelBrowser(openedBrowser);
+            updateZenCssBrowser(openedBrowser);
+          }
+        }
         ensurePillHoverRevealButton();
         clearHoverHide();
         setHoverPanelHidden(false);
@@ -25733,10 +25891,19 @@
           const progressListener = {
             onLocationChange(progress) {
               if (progress && !progress.isTopLevel) return;
+              scheduleZenCssFirstLoad(result.browser);
               updateWebToolbarState();
             },
-            onStateChange(progress) {
+            onStateChange(progress, request, stateFlags) {
               if (progress && !progress.isTopLevel) return;
+              if (
+                zenCssEnabled() &&
+                stateFlags & Ci.nsIWebProgressListener.STATE_STOP &&
+                stateFlags & Ci.nsIWebProgressListener.STATE_IS_NETWORK
+              ) {
+                cancelZenCssFirstLoad(result.browser);
+                scheduleZenCssFirstLoad(result.browser);
+              }
               updateWebToolbarState();
             },
             QueryInterface: ChromeUtils.generateQI([
@@ -26347,6 +26514,12 @@
       btn?.setAttribute("data-hold-active", "true");
       ui.setAttribute("bgalazka-triple-view", "true");
       syncPanelPushState();
+      refreshViewZenCss(first);
+    }
+    function refreshViewZenCss(browser) {
+      if (!zenCssEnabled() || !browser?.isConnected) return;
+      attachZenInternetPanelBrowser(browser);
+      updateZenCssBrowser(browser);
     }
     function showPair(pair) {
       const top = resolvePairApp(pair, pair.top);
@@ -26869,6 +27042,20 @@
       state.second = browser;
       state.secondURL = app.url;
       makeShell(browser, app); // attach before navigating a remote browser
+      refreshViewZenCss(state.first);
+      refreshViewZenCss(browser);
+      // Superpin reparents the remote browser; the document can restart
+      // after the move without delivering another load event to the wrapper.
+      for (const delay of [400, 1600]) {
+        state.loadTimers.push(
+          setTimeout(() => {
+            if (state.mode && state.first?.isConnected)
+              refreshViewZenCss(state.first);
+            if (state.second === browser && browser.isConnected)
+              refreshViewZenCss(browser);
+          }, delay),
+        );
+      }
       try {
         browser.docShellIsActive = true;
       } catch (_) {}
@@ -27003,6 +27190,7 @@
             state.previousPin = btn.getAttribute("data-pinned") === "true";
             if (!state.previousPin) apps.togglePin();
             ui.setAttribute("bgalazka-super-pin", "true");
+            refreshViewZenCss(first);
           }
           btn.setAttribute("data-hold-active", "true");
           markTiles();
