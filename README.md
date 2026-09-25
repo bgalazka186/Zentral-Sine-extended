@@ -23,7 +23,7 @@
 - **Drag panel and resize in 2D** 3D when??
 - **Keybinds adn disableing key press propagation** important if you want to close it with ESC button
 - **Firefox Containers and Clear Cache & Cookies of panels** i dont use it, heard people like it
-- **Better Addon support** still not all addons will work.
+- **Better Addon support** including Workaround for Zen internet addon, still  not everything might work
 - **Triple view and SuperPin** hold pin or dual view button in pill menu and then click other panel
 - **Video mini in sidebar** only Month ago Zenslop mod worked and i found it pretty nice, a lot of credit to them
 - **Few CSS tweaks to sidebar** super compact tabs and folders
