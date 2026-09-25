@@ -15183,6 +15183,7 @@
     // the extension's default-off contract; string defaults below are inert
     // until the user enables keybinds. Each binding is independently editable.
     KEYBINDS_ENABLED: "zen.workspace.bgalazka.keybinds_enabled",
+    MMB_UNLOAD_NORMAL_TABS: "zen.workspace.bgalazka.mmb_unload_normal_tabs",
     KEYBIND_CLOSE_PANEL: "zen.workspace.bgalazka.keybind.close_panel",
     KEYBIND_BACK: "zen.workspace.bgalazka.keybind.back",
     KEYBIND_FORWARD: "zen.workspace.bgalazka.keybind.forward",
@@ -17959,6 +17960,7 @@
     // which made the master keybind toggle write to an undefined pref and
     // appear to reset as soon as Settings resynchronized.
     KEYBINDS_ENABLED: "zen.workspace.bgalazka.keybinds_enabled",
+    MMB_UNLOAD_NORMAL_TABS: "zen.workspace.bgalazka.mmb_unload_normal_tabs",
     KEYBIND_CLOSE_PANEL: "zen.workspace.bgalazka.keybind.close_panel",
     KEYBIND_BACK: "zen.workspace.bgalazka.keybind.back",
     KEYBIND_FORWARD: "zen.workspace.bgalazka.keybind.forward",
@@ -18001,6 +18003,171 @@
     );
   }
   ensureInputShieldForKeybinds();
+
+  /* ==========================================================================
+   * NORMAL TAB MIDDLE-CLICK UNLOAD
+   * -----------------------------------------------------------------------
+   * Optional replacement for Zen/Firefox's native MMB-close behavior on
+   * ordinary, loaded tabs. Already-unloaded tabs are deliberately NOT
+   * intercepted, so their native MMB action still closes them. Corner app
+   * tiles are excluded because they have their own MMB unload behavior.
+   * ========================================================================== */
+  const normalTabMmbEvents = [
+    "pointerdown",
+    "mousedown",
+    "pointerup",
+    "mouseup",
+    "click",
+    "auxclick",
+  ];
+  let normalTabMmbGesture = null;
+  let normalTabMmbFallbackTimer = null;
+
+  function getNormalTabFromMiddleClickEvent(event) {
+    const target = event?.target;
+    if (!target?.closest) return null;
+    if (target.closest(".zen-app-tile")) return null;
+    const tab = target.closest(".tabbrowser-tab");
+    if (
+      !tab?.isConnected ||
+      tab.closing ||
+      tab.hidden ||
+      tab.pinned ||
+      tab.hasAttribute("zen-essential") ||
+      tab.hasAttribute("zen-empty-tab") ||
+      tab.hasAttribute("bgalazka-addon-host") ||
+      tab.hasAttribute("bgalazka-addon-host-fallback") ||
+      tab.closest(
+        "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
+      )
+    ) {
+      return null;
+    }
+    return tab;
+  }
+
+  function isNormalTabAlreadyUnloaded(tab) {
+    return !!(
+      !tab?.linkedPanel ||
+      tab.hasAttribute("pending") ||
+      tab.hasAttribute("discarded") ||
+      (tab.hasAttribute("zen-dormant") &&
+        tab.getAttribute("zen-dormant") !== "false")
+    );
+  }
+
+  async function unloadNormalTabFromMiddleClick(tab) {
+    if (!tab?.isConnected || tab.closing || isNormalTabAlreadyUnloaded(tab)) {
+      return;
+    }
+
+    try {
+      // Firefox/Zen's explicit unload path handles a selected tab by choosing
+      // another tab first, runs beforeunload checks, and marks the result as
+      // explicitly discarded.
+      if (typeof gBrowser.explicitUnloadTabs === "function") {
+        await gBrowser.explicitUnloadTabs([tab]);
+        return;
+      }
+
+      // Compatibility fallback for builds that predate explicitUnloadTabs().
+      // discardBrowser() cannot discard the selected tab, so move selection
+      // first when necessary.
+      if (gBrowser.selectedTab === tab) {
+        const replacement = Array.from(gBrowser.tabs || []).find(
+          (candidate) =>
+            candidate !== tab &&
+            candidate?.isConnected &&
+            !candidate.closing &&
+            !candidate.hidden &&
+            !!candidate.linkedPanel,
+        );
+        if (replacement) {
+          gBrowser.selectedTab = replacement;
+        } else if (typeof gBrowser.addTrustedTab === "function") {
+          gBrowser.selectedTab = gBrowser.addTrustedTab("about:newtab", {
+            skipAnimation: true,
+          });
+        }
+      }
+
+      if (gBrowser.selectedTab === tab) return;
+      if (typeof gBrowser.prepareDiscardBrowser === "function") {
+        await gBrowser.prepareDiscardBrowser(tab);
+      }
+      gBrowser.discardBrowser?.(tab, true);
+    } catch (_) {}
+  }
+
+  function clearNormalTabMmbGesture(tab = null) {
+    if (tab && normalTabMmbGesture?.tab !== tab) return;
+    if (normalTabMmbFallbackTimer) {
+      window.clearTimeout(normalTabMmbFallbackTimer);
+      normalTabMmbFallbackTimer = null;
+    }
+    normalTabMmbGesture = null;
+  }
+
+  function onNormalTabMMBCapture(event) {
+    if (event.button !== 1) return;
+    if (!getPref(EXT_PREFS.MMB_UNLOAD_NORMAL_TABS, false)) {
+      clearNormalTabMmbGesture();
+      return;
+    }
+
+    const tab = getNormalTabFromMiddleClickEvent(event);
+    if (!tab) return;
+
+    // A fresh MMB gesture only gets captured for a loaded normal tab. If the
+    // tab is already unloaded, do nothing here and let Zen's native MMB close
+    // behavior run exactly as before.
+    if (normalTabMmbGesture?.tab !== tab) {
+      if (isNormalTabAlreadyUnloaded(tab)) return;
+      if (tab.linkedBrowser && tab.linkedBrowser.isRemoteBrowser === false) {
+        return;
+      }
+      clearNormalTabMmbGesture();
+      normalTabMmbGesture = { tab, unloadTriggered: false };
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
+    const gesture = normalTabMmbGesture;
+    if (!gesture || gesture.tab !== tab) return;
+
+    if (event.type === "auxclick") {
+      if (!gesture.unloadTriggered) {
+        gesture.unloadTriggered = true;
+        void unloadNormalTabFromMiddleClick(tab);
+      }
+      clearNormalTabMmbGesture(tab);
+      return;
+    }
+
+    if (event.type === "mouseup" && !gesture.unloadTriggered) {
+      // Some Zen builds perform their MMB tab action on mouseup. Keep the
+      // gesture captured through the following auxclick so a tab that becomes
+      // unloaded here cannot immediately receive the native close action.
+      gesture.unloadTriggered = true;
+      void unloadNormalTabFromMiddleClick(tab);
+      normalTabMmbFallbackTimer = window.setTimeout(
+        () => clearNormalTabMmbGesture(tab),
+        500,
+      );
+    }
+  }
+
+  normalTabMmbEvents.forEach((type) =>
+    window.addEventListener(type, onNormalTabMMBCapture, true),
+  );
+  registerCleanup(() => {
+    normalTabMmbEvents.forEach((type) =>
+      window.removeEventListener(type, onNormalTabMMBCapture, true),
+    );
+    clearNormalTabMmbGesture();
+  });
 
   /* ==========================================================================
    * PANEL INPUT SHIELD
@@ -21890,6 +22057,17 @@
 
       const keybindSubgroup = document.createElement("div");
       keybindSubgroup.className = "zs-conditional-group zs-keybinds-group";
+
+      const tMmbUnloadNormalTabs = createToggleRow(
+        "Middle-Click Unloads Normal Tabs",
+        "Middle-click a loaded normal tab to unload it instead of closing it; middle-click an already unloaded normal tab to close it",
+        BGALAZKA_EXT_PREFS.MMB_UNLOAD_NORMAL_TABS,
+        null,
+        false,
+        PREF_ICONS.TOOLBAR,
+      );
+      content.appendChild(tMmbUnloadNormalTabs.row);
+
       const tKeybindsEnabled = createToggleRow(
         "Enable Extension Keybinds",
         "Shortcuts only apply while the floating app panel is open and focused; click any binding below and press a new combination",
@@ -22418,6 +22596,11 @@
             ),
         },
         {
+          input: tMmbUnloadNormalTabs.input,
+          pref: BGALAZKA_EXT_PREFS.MMB_UNLOAD_NORMAL_TABS,
+          def: false,
+        },
+        {
           input: tKeybindsEnabled.input,
           pref: BGALAZKA_EXT_PREFS.KEYBINDS_ENABLED,
           def: false,
@@ -22571,6 +22754,7 @@
       keybindHeader.style.marginTop = "8px";
       keybindCategory.subContent.append(
         keybindHeader,
+        tMmbUnloadNormalTabs.row,
         tKeybindsEnabled.row,
         keybindSubgroup,
       );
