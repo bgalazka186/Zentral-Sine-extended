@@ -1,11 +1,21 @@
+(function(){
 "use strict";
-// Browser collection and Zen Internet panel style bridge.
-(function () {
-  const sources = (window.ZentralFeatureSources ||= Object.create(null));
-  sources.panelStyleBridge = function initPanelStyleBridge({
-    BGALAZKA_EXT_PREFS, getPref, registerCleanup, setTimeout, clearTimeout,
-  }) {
-  function getAllAppBrowsers() {
+const Services=globalThis.Services||ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
+const ZentralRuntime=window.ZentralRuntime;
+// Feature: panel-styles. Imports and exposed are listed in ARCHITECTURE.md.
+// Preparation publishes functions; activation preserves the baseline initialization order.
+ZentralRuntime.registerPart("panel-styles", function* (ctx) {
+Object.defineProperties(ctx,{"attachZenInternetPanelBrowser": {configurable:true,get:()=>attachZenInternetPanelBrowser},
+"cancelZenCssFirstLoad": {configurable:true,get:()=>cancelZenCssFirstLoad},
+"getAllAppBrowsers": {configurable:true,get:()=>getAllAppBrowsers},
+"repairVisiblePanelPresentation": {configurable:true,get:()=>repairVisiblePanelPresentation},
+"repairZenInternetPanelCss": {configurable:true,get:()=>repairZenInternetPanelCss},
+"scheduleZenCssFirstLoad": {configurable:true,get:()=>scheduleZenCssFirstLoad},
+"setZenInternetPanelCssEnabled": {configurable:true,get:()=>setZenInternetPanelCssEnabled},
+"updateZenCssBrowser": {configurable:true,get:()=>updateZenCssBrowser},
+"zenCssEnabled": {configurable:true,get:()=>zenCssEnabled}});
+yield;
+function getAllAppBrowsers() {
     const panel = document.getElementById("zen-app-panel-slider");
     const list = panel ? Array.from(panel.querySelectorAll("browser")) : [];
     // Cheap existence check first: Triple/Super-View is rare, so skip the
@@ -239,7 +249,7 @@
   ];
 
   function zenCssEnabled() {
-    return getPref(BGALAZKA_EXT_PREFS.ZEN_INTERNET_PANEL_CSS, false);
+    return ctx.getPref(ctx.BGALAZKA_EXT_PREFS.ZEN_INTERNET_PANEL_CSS, false);
   }
 
   function zenCssStorageChanged(changes) {
@@ -252,8 +262,8 @@
     )
       return;
     zenCssSource = null;
-    if (zenCssChangeTimer) clearTimeout(zenCssChangeTimer);
-    zenCssChangeTimer = setTimeout(() => {
+    if (zenCssChangeTimer) ctx.clearTimeout(zenCssChangeTimer);
+    zenCssChangeTimer = ctx.setTimeout(() => {
       zenCssChangeTimer = null;
       refreshZenInternetPanelCss();
     }, 150);
@@ -441,7 +451,7 @@
   function disposeZenCssRecord(browser, { clearContent = false } = {}) {
     const record = zenCssBrowsers.get(browser);
     if (!record) return;
-    clearTimeout(record.retryTimer);
+    ctx.clearTimeout(record.retryTimer);
     if (clearContent) {
       try {
         record.manager.sendAsyncMessage(`${ZEN_CSS_CHANNEL}:probe`, {
@@ -526,7 +536,7 @@
       record.ackWindowId = ackWindowId;
       record.applied = true;
       record.acknowledged = true;
-      clearTimeout(record.retryTimer);
+      ctx.clearTimeout(record.retryTimer);
       record.retryTimer = null;
     };
 
@@ -565,7 +575,7 @@
     record.ackWindowId = 0;
     record.applied = false;
     record.expectedCssLength = String(css || "").trim().length;
-    clearTimeout(record.retryTimer);
+    ctx.clearTimeout(record.retryTimer);
 
     const payload = { css, url, sequence, reset, windowId };
     const deliver = (attempt = 0) => {
@@ -587,7 +597,7 @@
       // immediately after a verified ACK.
       const delays = [250, 900];
       if (attempt < delays.length)
-        record.retryTimer = setTimeout(
+        record.retryTimer = ctx.setTimeout(
           () => deliver(attempt + 1),
           delays[attempt],
         );
@@ -660,7 +670,7 @@
     // loadFrameScript announces on install. Probe once after it has had a
     // chance to register, covering content-process scheduling differences.
     if (!reset) sendProbe();
-    else setTimeout(sendProbe, 40);
+    else ctx.setTimeout(sendProbe, 40);
   }
 
   function repairZenInternetPanelCss(
@@ -682,7 +692,7 @@
       (browser) => browser?.isConnected && browser.style.display !== "none",
     );
     if (!visible.length) return;
-    syncAppPanelBrowserActivity(visible);
+    ctx.syncAppPanelBrowserActivity(visible);
     if (forceZenCss) {
       // Treat the button as an explicit FrameLoader/remoteness recovery, not
       // merely a CSS resend. Reinstall every visible browser's bridge on the
@@ -693,12 +703,12 @@
         requestZenCssDocument(browser, { reset: true });
       }
     }
-    requestAnimationFrame(() => syncAppPanelBrowserActivity(visible));
-    setTimeout(() => {
+    requestAnimationFrame(() => ctx.syncAppPanelBrowserActivity(visible));
+    ctx.setTimeout(() => {
       const stillVisible = visible.filter(
         (browser) => browser?.isConnected && browser.style.display !== "none",
       );
-      syncAppPanelBrowserActivity(stillVisible);
+      ctx.syncAppPanelBrowserActivity(stillVisible);
       if (forceZenCss) {
         // If a remoteness swap landed just after the click, the event handler
         // above normally reinstalls the bridge. This one verification pass
@@ -716,7 +726,7 @@
   function cancelZenCssFirstLoad(browser) {
     const pending = zenCssFirstLoads.get(browser);
     if (!pending) return;
-    for (const timer of pending.timers || []) clearTimeout(timer);
+    for (const timer of pending.timers || []) ctx.clearTimeout(timer);
     zenCssFirstLoads.delete(browser);
   }
 
@@ -812,7 +822,7 @@
       detachZenInternetPanelBrowser(browser);
     }
     if (zenCssChangeTimer) {
-      clearTimeout(zenCssChangeTimer);
+      ctx.clearTimeout(zenCssChangeTimer);
       zenCssChangeTimer = null;
     }
     if (zenCssBackend) {
@@ -827,8 +837,8 @@
     zenCssSource = null;
   }
 
-  registerCleanup(() => {
-    if (zenCssChangeTimer) clearTimeout(zenCssChangeTimer);
+  ctx.registerCleanup(() => {
+    if (zenCssChangeTimer) ctx.clearTimeout(zenCssChangeTimer);
     for (const browser of getAllAppBrowsers()) {
       cancelZenCssFirstLoad(browser);
       detachZenInternetPanelBrowser(browser, { clearContent: true });
@@ -839,12 +849,7 @@
         zenCssStorageChanged,
       );
   });
-  if (zenCssEnabled()) setTimeout(refreshZenInternetPanelCss, 500);
+  if (zenCssEnabled()) ctx.setTimeout(refreshZenInternetPanelCss, 500);
+});
 
-    return { getAllAppBrowsers, zenCssEnabled,
-      attachZenInternetPanelBrowser, updateZenCssBrowser,
-      repairVisiblePanelPresentation, repairZenInternetPanelCss,
-      setZenInternetPanelCssEnabled, scheduleZenCssFirstLoad,
-      cancelZenCssFirstLoad };
-  };
 })();

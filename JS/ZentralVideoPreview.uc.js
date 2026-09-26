@@ -1,10 +1,16 @@
+(function(){
 "use strict";
+const Services=globalThis.Services||ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
+const ZentralRuntime=window.ZentralRuntime;
 
-/* ============================================================================
- * ZENTRAL VIDEO PREVIEW (independent feature; safe to disable or remove)
- * Set zen.workspace.zentral.video_preview.enabled = false to disable it.
- * Sine loads this file alone. The content frame script is embedded below.
- * ============================================================================ */
+function standaloneReady(start){
+ let started=false;
+ const run=()=>{if(started||!window.gBrowser)return;started=true;try{Services.obs.removeObserver(observer,"browser-delayed-startup-finished");}catch(_){}start();};
+ const observer={observe(subject,topic){if(subject===window&&topic==="browser-delayed-startup-finished")run();}};
+ if(window.gBrowser&&(!window.gBrowserInit||window.gBrowserInit.delayedStartupFinished))run();
+ else {Services.obs.addObserver(observer,"browser-delayed-startup-finished");window.addEventListener("unload",()=>{try{Services.obs.removeObserver(observer,"browser-delayed-startup-finished");}catch(_){}},{once:true});if(window.gBrowserInit?.delayedStartupFinished)run();}
+}
+(function(){const start=()=>{
 (function initZentralVideoPreview() {
   if (typeof gBrowser === "undefined") return;
   // Sine can execute an updated .uc.js while an older instance still runs.
@@ -2826,5 +2832,9 @@
       Services.obs.removeObserver(ready, topic);
       start();
     }, "browser-delayed-startup-finished");
-  else start();
+  else standaloneReady(start);
+})();
+return ()=>window.ZentralVideoPreview?.destroy?.();
+};if(window.ZentralRuntime)ZentralRuntime.register({id:"video",init:start});else standaloneReady(start);})();
+
 })();

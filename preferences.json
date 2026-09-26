@@ -6791,5 +6791,177 @@
     "label": "Disable Experimental Actor Bridge (use compatible methods)",
     "type": "checkbox",
     "defaultValue": true
+  },
+  {
+    "type": "text",
+    "label": "**Framework file loading · restart required**",
+    "size": "18px"
+  },
+  {
+    "type": "text",
+    "label": "All files default to enabled. Sine loads only the core; the core loads these modules. Settings and recovery are built in.",
+    "size": "12px"
+  },
+  {
+    "property": "zen.workspace.zentral.modules.logger.enabled",
+    "label": "Load Diagnostic logger",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.apps.enabled",
+    "label": "Load Apps and base panel engine",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.tab-groups.enabled",
+    "label": "Load Tab groups",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.geometry.enabled",
+    "label": "Load Panel geometry",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.corner-panels.enabled",
+    "label": "Load Corner panels and tile interaction",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.panel-toolbar.enabled",
+    "label": "Load Panel URL bar, search and navigation",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.browser-integrations.enabled",
+    "label": "Load Containers and add-on browser hosts",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.panel-styles.enabled",
+    "label": "Load Panel browser collection and Zen Internet styles",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.secondary-views.enabled",
+    "label": "Load Triple View and Super Pin",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.rss.enabled",
+    "label": "Load RSS folder display",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.tab-unload.enabled",
+    "label": "Load Middle-click tab unloading",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.panels.enabled",
+    "label": "Load Panel extension coordinator",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.video.enabled",
+    "label": "Load Sidebar video preview",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.css.Base.enabled",
+    "label": "Load CSS/ZentralBase.css",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.css.Panels.enabled",
+    "label": "Load CSS/ZentralPanels.css",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.css.CornerPanels.enabled",
+    "label": "Load CSS/ZentralCornerPanels.css",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.css.Controls.enabled",
+    "label": "Load CSS/ZentralControls.css",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.css.PanelToolbar.enabled",
+    "label": "Load CSS/ZentralPanelToolbar.css",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.css.PanelGeometry.enabled",
+    "label": "Load CSS/ZentralPanelGeometry.css",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.css.Settings.enabled",
+    "label": "Load CSS/ZentralSettings.css",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.css.BrowserIntegrations.enabled",
+    "label": "Load CSS/ZentralBrowserIntegrations.css",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.css.VideoPreview.enabled",
+    "label": "Load CSS/ZentralVideoPreview.css",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.css.Appearance.enabled",
+    "label": "Load CSS/ZentralAppearance.css",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.css.RssDisplay.enabled",
+    "label": "Load CSS/ZentralRssDisplay.css",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.css.TabDensity.enabled",
+    "label": "Load CSS/ZentralTabDensity.css",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.css.PanelBackground.enabled",
+    "label": "Load CSS/ZentralPanelBackground.css",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.addons",
+    "label": "Local add-on manifest (JSON; restart required)",
+    "type": "string",
+    "defaultValue": "[]"
   }
 ]

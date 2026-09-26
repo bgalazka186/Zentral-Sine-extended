@@ -1,282 +1,44 @@
+(function(){
 "use strict";
+const Services=globalThis.Services||ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
+const ZentralRuntime=window.ZentralRuntime;
+// Panel integration owns the ordered interaction points between panel features.
+ZentralRuntime.register({id:"panels",init(){
+ const ctx = {};
+ ZentralRuntime.panelContext = ctx;
+ Object.defineProperties(ctx,{"BGALAZKA_EXT_PREFS": {configurable:true,get:()=>BGALAZKA_EXT_PREFS},
+"EXT_KEYBIND_ACTIONS": {configurable:true,get:()=>EXT_KEYBIND_ACTIONS},
+"EXT_KEYBIND_DEFAULTS": {configurable:true,get:()=>EXT_KEYBIND_DEFAULTS},
+"EXT_PREFS": {configurable:true,get:()=>EXT_PREFS},
+"PREF_ICONS": {configurable:true,get:()=>PREF_ICONS},
+"PROFILE_DEFAULTS": {configurable:true,get:()=>PROFILE_DEFAULTS},
+"applyAttributes": {configurable:true,get:()=>applyAttributes},
+"cleanupFns": {configurable:true,get:()=>cleanupFns},
+"clearInterval": {configurable:true,get:()=>clearInterval},
+"clearTimeout": {configurable:true,get:()=>clearTimeout},
+"computeOppositeDockingSafeMaxWidth": {configurable:true,get:()=>computeOppositeDockingSafeMaxWidth},
+"ensureNativeAudioButton": {configurable:true,get:()=>ensureNativeAudioButton},
+"ensurePillAllSidesResizeButton": {configurable:true,get:()=>ensurePillAllSidesResizeButton},
+"extendHoverResizeHold": {configurable:true,get:()=>extendHoverResizeHold},
+"extensionDisposed": {configurable:true,get:()=>extensionDisposed,set:value=>{extensionDisposed=value}},
+"getPref": {configurable:true,get:()=>getPref},
+"keybindFromEvent": {configurable:true,get:()=>keybindFromEvent},
+"parseSVG": {configurable:true,get:()=>parseSVG},
+"performBgalazkaUnload": {configurable:true,get:()=>performBgalazkaUnload},
+"refreshPanelAudio": {configurable:true,get:()=>refreshPanelAudio},
+"registerCleanup": {configurable:true,get:()=>registerCleanup},
+"restartBrowser": {configurable:true,get:()=>restartBrowser},
+"safeCall": {configurable:true,get:()=>safeCall},
+"setInterval": {configurable:true,get:()=>setInterval},
+"setPref": {configurable:true,get:()=>setPref},
+"setTimeout": {configurable:true,get:()=>setTimeout},
+"syncHoverPanelAvailability": {configurable:true,get:()=>syncHoverPanelAvailability},
+"syncPanelFallbackPolling": {configurable:true,get:()=>syncPanelFallbackPolling},
+"syncPanelPushState": {configurable:true,get:()=>syncPanelPushState},
+"togglePanelAudio": {configurable:true,get:()=>togglePanelAudio},
+"updateCSSVars": {configurable:true,get:()=>updateCSSVars}});
+ ZentralRuntime.prepareParts(ctx);
 
-/* =============================================================================================================
- * BGALAZKA'S EXTENSION TO THE ZENTRAL MOD (v2)
- * -------------------------------------------------------------------------------------------------------------
- * ARCHITECTURAL NOTES & INSTRUCTIONS FOR FUTURE AI AGENTS:
- * 0. DEFAULT-OFF CONTRACT (CRITICAL): every behavior/visual feature added by THIS extension MUST default to OFF.
- *    A fresh install with no `zen.workspace.bgalazka.*` user prefs must behave like the base Zentral mod with
- *    no Bgalazka extension behavior enabled. Users opt in feature-by-feature (translucency, opposite docking,
- *    corner/essential docking, toolbar, mini-pill, isolation, resize helpers, hide-* controls, etc.). For every
- *    NEW boolean feature: use `false` in getPref fallbacks, ATTR_MAP/default maps, createToggleRow defaults,
- *    startup attribute sync, and observer sync. Parent-disabled subfeatures should ALSO show unchecked by default.
- *    Non-boolean tuning values may keep neutral defaults, but must have no effect until their owning feature is on.
- *    EXCEPTION — PANEL BASELINE INSET: the floating panel intentionally keeps a tiny default top/bottom inset
- *    even when every optional extension toggle is OFF. This is not an opt-in feature; it is the neutral panel
- *    presentation requested for fresh installs so the panel retains the normal floating-card look instead of
- *    appearing flush to the viewport edges. Keep this inset small and symmetric; do not turn it into a feature.
- * 1. ONLY modify or append code BELOW this marker when working on Bgalazka's Extension.
- * 2. ALWAYS deliver fully compiled, complete ready-to-paste chunks for both the JS and CSS extension sections.
- * 3. EXPLAIN THE "WHY" IN CODE COMMENTS: Document Gecko/Zen workarounds so future models do not undo working solutions.
- * 4. TAB CRASH GUARD: NEVER attach a MutationObserver with { childList: true, subtree: true } to the tabstrip,
- *    the settings modal's ancestor tree, or documentElement. Modifying/observing tab children during
- *    gBrowser.pinTab() triggers a fatal C++ assertion crash in Gecko's frame constructor. This includes
- *    observers that merely WATCH an ancestor of the tabstrip with subtree:true, even if they don't mutate
- *    anything themselves — the previous version of this file did exactly that to detect the settings modal
- *    opening (observing documentElement), which is the same forbidden pattern and the most likely cause of
- *    "crashes when pinning". Detect UI state changes via method hooks instead (see section 5).
- * 5. SCOPE BUG (CRITICAL): `ZentralApps`, `ZentralTabGroups`, and `ZentralSettings` are `class` declarations
- *    scoped INSIDE the base mod's own top-level IIFE. They are NOT global identifiers. Referencing the bare
- *    class name from this separately-appended IIFE (`typeof ZentralApps !== "undefined"`) always evaluates to
- *    false, silently skipping any code guarded by it — this is what happened in the previous version and is
- *    why the opposite-docking/pin-state hooks never actually ran. Always reach the class via the singleton
- *    instance instead: `window.Zentral.Apps`, `window.Zentral.TabGroups`, `window.Zentral.Settings`.
- *    `Constants` is private to the base IIFE too. Never use bare `Constants` in this extension;
- *    use local pref keys or `window.Zentral.Core.defaultPrefs` for the base key inventory.
- * 6. TAB CLICK PASS-THROUGH: Any click on a tile inside a tab bubbles to the tab unless mousedown, mouseup,
- *    click, and auxclick are stopped in the CAPTURE phase (e.stopPropagation()). This prevents essential tabs
- *    from switching on LMB.
- * 7. OPPOSITE-SIDE DOCKING MATH: Native Zentral's positionPanel() calculates targetRight as
- *    (window.innerWidth - sidebarRect.left). If the sidebar is on the left, targetRight evaluates to ~1920px,
- *    pushing the panel completely off the screen! We hook positionPanel() and isPanelAttachedToRight() on the
- *    Apps INSTANCE (see note 5) to force root.style.right/left = "12px" directly.
- * 8. RESIZE INVERSION: Zentral's onDrag() internally checks this.isPanelAttachedToRight() ? (startW - diff) : (startW + diff).
- *    Hooking isPanelAttachedToRight() to return the opposite attachment side in Opposite-Side mode makes both
- *    native resize and extension-owned horizontal handles share one corrected direction source. Do NOT invert
- *    onDrag() again or the native grabber gets double-flipped.
- * 9. PANEL OPACITY: Web pages inside <browser> render opaque backgrounds. Applying only background-color to
- *    the slider is invisible behind the page canvas. Real transparency requires setting CSS `opacity` on
- *    #zen-app-panel-slider itself.
- * 10. NATIVE FEATURE PARITY (v1.0.2): the base mod now natively sets data-loaded="true"/"false" on tiles
- *     (in renderGrid/getOrCreateAppBrowser/closeApp, searched via a document-wide querySelectorAll so it stays
- *     correct even after we move a tile into an essential tab's corner) and natively handles middle-click
- *     unload on the tile itself (mousedown+auxclick, stopPropagation). We must NOT reimplement either of
- *     these anymore — our old duplicate implementations were overwriting the native, more-accurate state and
- *     silently blocking the native middle-click handler from ever running (capture-phase
- *     stopImmediatePropagation upstream prevents the tile's own listeners from firing at all).
- * 11. ESSENTIAL DUPLICATES: each genuine pinned/essential tab owns a separate app identity for this window.
- *     Its launcher opens the existing Zentral panel engine, sharing the toolbar, pill, resize, pin, keyboard
- *     and popup-containment behavior. Normal app tiles stay in their own list. Reordering never reassigns
- *     records; closing/unpinning preserves a loaded duplicate as a normal app. Multiple simultaneous panels are deferred.
- * 13. PILL CONTRAST: see chrome.css note 13 for the CSS half. The expanded/hovered pill uses a plain black
- *     background plus forced white icons for predictable contrast. Its background opacity is deliberately
- *     independent from the shrunk mini-pill opacity: PILL_PEEK_DOT_OPACITY controls only the idle mini pill,
- *     while PILL_BACKGROUND_OPACITY controls only the expanded pill's black background. Keep these separate so
- *     making the idle marker subtle does not also make the opened control surface hard to read.
- * 14. WEB TOOLBAR SEARCH + NATIVE HISTORY: the URL bar now runs typed non-URL text through a configurable
- *     search engine (see SEARCH_ENGINE_TEMPLATES/buildSearchUrl()/looksLikeUrl()) rather than relying on
- *     <browser>.fixupAndLoadURIString()'s own keyword-search fallback, since that goes through Gecko's OWN
- *     default engine with no override hook exposed to chrome <browser> loads — we build the destination URL
- *     ourselves and load it as a plain https:// URL instead. Back/Forward now use Gecko session history only,
- *     with user-interaction filtering. No synthetic URL trail or home fallback is used: either can turn a
- *     redirect, replacement navigation or POST entry into an incorrect extra visit. Top-level progress
- *     notifications and toolbar polling refresh the URL and native navigation capability flags.
- *     The quick-switch button (re-runs the same query on the other of DDG/Startpage) only appears when the
- *     active page matches one of SEARCH_ENGINE_PATTERNS, so it never shows on an unrelated page.
- * 15. TOOLBAR BUTTON ORDER / TOP DOCKING (v4): button order is just DOM append order in ensureWebToolbar()'s
- *     `toolbar.append(...)` call -- there's no CSS `order` per-button, so reordering buttons only ever needs
- *     that one line changed. Top-vs-bottom docking is the opposite: it's CSS-only (see chrome.css note 15),
- *     driven by the `bgalazka-webtoolbar-top` root attribute; nothing here needs to know which edge the
- *     toolbar is actually on.
- * 16. ALL-SIDES RESIZE (v5/v8): native Zentral owns `top`/`bottom` and refreshes them from positionPanel().
- *     Our persisted resize and position offsets are represented by margin-top/margin-bottom instead. For an
- *     absolutely/fixed positioned box constrained by top+bottom, those margins move its rendered edges and
- *     alter its height exactly like adjusted top/bottom, but native never resets them. They are written only
- *     when a pref changes, the root appears, or the user actually drags -- never from positionPanel()'s RAF
- *     loop. During a drag startVerticalResize() snapshots native top/bottom and updates only the two margins.
- *     This needs
- *     ZERO opposite-docking-specific or data-panel-side-specific math anywhere (contrast note 7/8): top and
- *     bottom are the same edges regardless of which side the panel is docked to, and dual-view/push only ever
- *     touches width, never height, so no interaction with note 12's push-state sync was needed either.
- *     IMPORTANT: applyVerticalResizeExtras() must NEVER check EXT_PREFS.ALL_SIDES_RESIZE. That pref only
- *     gates whether the drag SURFACES are interactive (CSS pointer-events, see chrome.css) and whether
- *     startVerticalResize() will start a NEW drag -- it must have no say over whether an already-saved size
- *     keeps being applied, or unchecking the toggle would silently reset the user's chosen height back to
- *     natural, which is the opposite of what a "turn the drag surfaces off" toggle should do.
- * 17. ALL-SIDES WIDTH + CORNERS (v8): the toggle now gates native's outer width edge, the extension's inverse-
- *     delta inner edge, and four additive corner handles. The extension never rewrites a private width field:
- *     all new horizontal paths call public updateWidthVar() and saveWidth(), with the same safe maximum used by
- *     opposite docking. Corner drags simply run the existing vertical and extension horizontal handlers in
- *     parallel because those handlers own disjoint axes.
- * 18. PANEL POSITION DRAG / URL BAR GRIP (v8): vertical whole-panel motion remains a separate feature using
- *     PANEL_POSITION_OFFSET_PREF. Along with resize extras it is now expressed through persistent margins,
- *     not positionPanel()-time top/bottom writes. PANEL_HORIZONTAL_OFFSET_PREF uses the same margin principle
- *     for bounded physical left/right motion and is applied only on panel open, explicit setting changes, or a
- *     real docking-side change -- never from the positioning RAF loop.
- * 19. LIVE DRAG STATE (v6/v8): applyVerticalResizeExtras() prefers the in-progress drag values over the saved
- *     prefs, so the margins track the pointer immediately and are persisted only on mouseup. Native may keep
- *     refreshing top/bottom concurrently, but the two code paths no longer write the same properties and
- *     therefore cannot undo or retrigger each other.
- * 21. Services.prefs IN THE PER-FRAME HOT PATH: the base mod's own startPositionTracking()/reposition()/rafLoop
- *     (a few hundred lines above initBgalazkaExtension in this same file) calls positionPanel() -- OUR patched
- *     positionPanel() -- on every throttled mousemove AND on every transitionstart/transitionrun/transitionend
- *     ANYWHERE in the entire window, for as long as the panel is open, re-arming a requestAnimationFrame loop
- *     for another 200ms each time. On a profile with a lot of ambient chrome UI churn (more tabs/pins/
- *     workspaces = more small hover/indicator transitions happening at any moment), that loop can be re-armed
- *     continuously and never go idle while the panel stays open, so positionPanel() -- and everything it calls
- *     -- can run on EVERY animation frame indefinitely, not just briefly. getVerticalExtras()/getPositionOffset()
- *     (note 16) and the two isPanelAttachedToRight()/positionPanel() OPPOSITE_DOCKING checks were each calling
- *     Services.prefs synchronously from inside that loop -- real per-frame XPCOM overhead, and completely
- *     unconditional (present no matter which extension toggle is on/off, which is why bisection-by-toggle
- *     testing never found it). Fix: both hot spots now read a plain in-memory cache kept in sync by a
- *     Services.prefs.addObserver (fires only on an actual pref write, never per frame) instead of hitting
- *     Services.prefs synchronously every frame. See the comment above getVerticalExtras() and above
- *     isOppositeDockingCached() for specifics. CONFIRMED BY PROFILING (note 22): a capture with this fix
- *     already installed showed "zen.workspace.bgalazka.opposite_docking" down to a single read for the entire
- *     capture, and the two panel_*_extra_px/position_offset_px prefs didn't register at all -- so this part of
- *     the fix worked exactly as intended. It just wasn't the dominant cost; see note 22.
- * 22. THE DOMINANT COST, FOUND VIA PROFILING: with note 21 already installed, a Firefox Profiler capture
- *     (closed -> open+janky -> closed, same profile) showed 2452 total "Preference Read" events in the ~10s
- *     capture, and 1911 of them (78%) were "zen.workspace.apps.sidebar.placement" -- read by the NATIVE
- *     isPlacementVerticalBar() (see its own definition earlier in this file), which hits Services.prefs fresh
- *     on every single call with no caching of its own, and gets called directly by the base mod's own
- *     reposition()/triggerBurst() (note 21) one or more times per animation frame for as long as the panel
- *     stays open. Everything note 21 fixed shows up as single-digit read counts in the same capture by
- *     comparison -- real, but minor next to this. This is the actual explanation for the whole thread of
- *     reports: a native method with an uncached per-call pref read, invoked by native code at up to 60fps+
- *     for as long as our panel is open, is unconditional (no extension toggle touches it, matching "no matter
- *     the settings"), scales with how much ambient CSS transition activity keeps the native loop alive (more
- *     tabs/pins/workspaces = busier profile = the loop rarely goes idle), and is native code this file must
- *     not edit directly per the "only touch EXTENSION parts" rule. Fix: rather than editing the native method
- *     (isPlacementVerticalBar() at line ~963, untouched), we monkey-patch it the same way positionPanel() and
- *     isPanelAttachedToRight() already are -- appsInstance.isPlacementVerticalBar = () => cachedIsVerticalBar,
- *     with the cache kept live by a Services.prefs.addObserver. Because native methods call it as
- *     `this.isPlacementVerticalBar()`, overriding the property on the shared instance makes EVERY caller --
- *     reposition()/triggerBurst() included -- use the cache, not just our own two call sites. This is override-
- *     by-replacement of a live property on an object instance, not an edit to any line of the original
- *     implementation, which is still sitting untouched earlier in this file.
- *     UPDATE: user confirmed this alone did NOT fix the reported jank. A follow-up analysis of the SAME
- *     profile (self-time by category, not just marker counts -- see note 23) showed the main thread was ~99.8%
- *     Idle the whole time; the ~1911 pref reads this note fixes were real but too cheap individually to be the
- *     visible bottleneck. Left in place -- it's still a correct, worthwhile reduction in per-frame native
- *     overhead -- but note 23 is what actually explained the visible FPS drop, and note 24 is what a direct
- *     user repro then pinned down as the dominant trigger.
- * 23. UNCONDITIONAL data-panel-side WRITE, FOUND BY RE-ANALYZING THE SAME PROFILE: with note 22 confirmed
- *     insufficient, self-time-by-category analysis of the main thread showed it was ~99.8% Idle overall, but
- *     eventDelay spiked to 400ms+ in a sawtooth pattern during exactly the reported-janky window, and marker
- *     analysis of that window found 52 overlapping "CSS transition" markers totalling 8123ms of duration in a
- *     ~4.4s span -- many with `oncompositor: false` (properties that force a real main-thread layout+paint
- *     pass, not a cheap GPU-only composite), on both native chrome elements (navigator-toolbox, titlebar,
- *     urlbar, tabs -- retriggered continuously by ordinary hover during the test) and our own
- *     #zen-apps-sidebar-grid. The positionPanel() wrapper (notes 7/21/22) was writing
- *     style.left/right + setAttribute("data-panel-side", ...) UNCONDITIONALLY on every call from that same
- *     per-frame native loop -- chrome.css has over a dozen selectors keyed on [data-panel-side="..."], so every
- *     redundant write forced Gecko to re-evaluate all of them, even though the value (which side the panel
- *     docks to) essentially never changes within a session. Fix: cache the last-applied side on the root
- *     element and skip the writes entirely once nothing has changed, invalidating the cache whenever this
- *     branch isn't the one driving positioning (opposite-docking off, or vertical-bar mode) so a later
- *     re-entry can't skip a write it actually needs. See the comment inside the positionPanel wrapper for the
- *     invalidation reasoning.
- * 24. THE DOMINANT TRIGGER, CONFIRMED BY DIRECT USER REPRO: any non-zero vertical resize/position pref made
- *     the affected profile janky, and commenting out applyVerticalResizeExtras() restored smooth animation.
- *     The old implementation let native positionPanel() write natural top/bottom, then immediately overwrote
- *     both with adjusted values on every RAF iteration. The next iteration restored the natural values and the
- *     extension changed them again, creating continuous layout churn; rounding could not fix that property
- *     fight. v8 removes applyVerticalResizeExtras() from positionPanel() completely and expresses the same
- *     geometry through persistent margins (note 16), updated only on real state changes or pointer movement.
- * 25. GRABBER DUAL-AXIS DRAG: the 6-dot grabber starts horizontal width resizing immediately. Its separate
- *     vertical pill-position listener waits for a 28px Y deadzone, then subtracts that distance once and tracks
- *     every further Y movement at sub-percent precision until mouseup. X continues independently during diagonals.
- *     All-sides resize only gates the extra panel-edge handles, not this pill grabber.
- * 27. FIREFOX ADD-ON TAB-ID BRIDGE (v9): Zentral normally creates app panels as standalone chrome <browser>
- *     elements, so Firefox WebExtensions cannot resolve them to a native tab and sender.tab/tab APIs see no real
- *     tab identity. The opt-in bridge below creates a REAL background Firefox tab first, then temporarily intercepts
- *     document.createXULElement("browser") only for the synchronous base getOrCreateAppBrowser() call and hands
- *     Zentral that tab's own linkedBrowser. The base private appBrowsers Map therefore stores the genuine tab browser
- *     without any edit above this marker. Zen still gets the visible/pinned tab it expects, while the page shown inside
- *     Zentral is the exact same browsing context that owns the Firefox tabId -- not a dummy/shadow duplicate. Backing
- *     tabs are pinned into one collapsed `Zentral Add-on Hosts` Zen folder and compacted by extension CSS. NEVER replace
- *     this with a fake tabId map: WebExtension APIs resolve operations back through nativeTab.linkedBrowser, so a dummy
- *     tab would target the wrong document. The bridge follows PROFILE_DEFAULTS and intentionally unloads existing panel browsers
- *     when toggled so every recreated panel has one coherent browser/tab identity from birth.
- * 28. THE GRAY-PANEL / "GHOST INTERACTION" BUG (docShellIsActive) -- read this before touching panel
- *     visibility, preload, or the video-sidebar preview module:
- *     SYMPTOM (as reported by the user, verbatim pattern): an app panel (or the video-sidebar preview) loads
- *     and plays normally for a fraction of a second, then visibly grays out / goes blank, WHILE pause/play,
- *     seeking, link navigation and audio all keep working -- i.e. the page is alive and interactive, it just
- *     isn't being painted. This is the single most important diagnostic signature: if playback/interaction
- *     still works on a gray/blank surface, this is a *compositor* problem, not a load/network/crash problem.
- *     Do not chase load failures, CSP, or network errors for this symptom -- there aren't any.
- *     WHY TOGGLE-INDEPENDENT: the user tried disabling every relevant pref (including smart_sleep, which
- *     sounds related but only ever gated *whether* a browser got preloaded -- see preloadAppsSequence() in the
- *     base mod). None of that mattered because the bug isn't in any toggled feature; it's structural.
- *     ROOT CAUSE: every standalone `<browser remote="true">` this extension (or the base mod) creates outside
- *     gBrowser's tab strip -- normal app-panel browsers from getOrCreateAppBrowser(), Triple/Super-View's
- *     second browser, and the video-sidebar's own preview browser in startLivePreview() below -- has no
- *     automatic docShellIsActive management. Firefox only drives that flag for real selected tabs. Gecko still
- *     paints the very first frame after such a browser is shown, then treats its docShell as inactive and stops
- *     compositing it. The content process (and therefore audio, and anything reading decoded frames directly
- *     such as the video-preview's canvas capture path, which bypasses the compositor entirely) is completely
- *     unaffected, which is exactly why those things kept working while the picture didn't.
- *     ONE NARROW PRIOR FIX EXISTED: syncAddonHostBrowserActivity() (bridge feature, note 27) already set
- *     docShellIsActive = true, but only for adopted addon-host browsers -- never for ordinary panel browsers or
- *     the video preview, which is why disabling every other toggle didn't help; this bug was simply never
- *     patched for the common case.
- *     THE FIX, IN THREE PARTS -- do not remove any part without understanding why it exists:
- *       a) syncAppPanelBrowserActivity() (defined near syncAddonHostBrowserActivity) mirrors docShellIsActive
- *          to the SAME display:none/"" flag core already uses to mark which panel browser is on-screen
- *          (getAllAppBrowsers() covers the normal grid, the addon-host bridge, and Triple/Super-View in one
- *          pass). Wired into the openPanel/closePanel hooks.
- *       b) RETRY STAGGERING ON OPEN: a single activation call at open time can still lose the race against a
- *          cold content-process spawn (new site, new container, first launch this session) -- the
- *          browsingContext may not exist yet on the same tick the <browser> is appended, so the call silently
- *          no-ops. This is what caused the "grays out, only recovers after manually closing and reopening the
- *          panel" reports even after part (a) was in place. Fixed by firing the activation again on
- *          requestAnimationFrame (lands before the next paint -- faster than any setTimeout) plus a staggered
- *          setTimeout fallback (30/150/500/1500ms) for slower spawns. If gray flashes on open are still
- *          reported after this, the next step is NOT to add more retries blindly -- log
- *          browser.browsingContext to find the actual real-world spawn latency and size the stagger to it.
- *       c) OPTIONAL CONTINUOUS SELF-HEAL: Gecko can revoke docShellIsActive again later on its own even after
- *          a successful activation. Normal open/navigation retries remain event-driven; the Settings toggle
- *          "Periodic Fallback Polling" can additionally run a 2s safety pass for docshell/CSS/UI state on
- *          Zen builds that still show random stale/gray panels. It is OFF by default to avoid needless wakeups.
- *     VIDEO-SIDEBAR PREVIEW MIRRORS THE SAME BUG: startLivePreview()'s preview <browser> and paint()'s
- *     LIVE_MODES health-check branch got the identical three-part treatment (activate on create, activate once
- *     browsingContext exists, re-activate every health-check tick) for the same underlying reason. If a
- *     similar "loads, plays briefly, freezes to a still frame, then goes blank, audio/capture still work"
- *     report ever comes in for a DIFFERENT feature, look for a standalone createXULElement("browser") in that
- *     feature first -- this exact bug is very likely recurring in a fourth place.
- * 29. PERF: getAllAppBrowsers() is used by panel lifecycle work and optional recovery. The periodic recovery
- *     pass is disabled by default; when enabled it still reuses one browser collection for docshell/CSS checks.
- *     The helper used to run an unconditional document-wide
- *     `document.querySelectorAll("#bgalazka-super-panel browser")` on every call even though that panel only
- *     exists while Triple/Super-View is in use (rare). It now checks `document.getElementById("bgalazka-super-panel")`
- *     first and only runs the scoped query when that container actually exists. Keep this shape if you add more
- *     browser sources to this function -- gate each with a cheap existence check before scanning for it.
- * ============================================================================================================= */
-
-(function initBgalazkaExtension() {
-  // Sine can run this file before Zen has finished restoring its sidebar and
-  // tabs. Build tiles and apply layout attributes only after that UI exists.
-  if (
-    typeof gBrowserInit !== "undefined" &&
-    !gBrowserInit.delayedStartupFinished
-  ) {
-    if (window.BgalazkaExtensionStartupPending) return;
-    window.BgalazkaExtensionStartupPending = true;
-    const ready = (subject, topic) => {
-      if (subject !== window) return;
-      cancelReady();
-      initBgalazkaExtension();
-    };
-    const cancelReady = () => {
-      if (!window.BgalazkaExtensionStartupPending) return;
-      window.BgalazkaExtensionStartupPending = false;
-      Services.obs.removeObserver(ready, "browser-delayed-startup-finished");
-      window.removeEventListener("unload", cancelReady);
-    };
-    Services.obs.addObserver(ready, "browser-delayed-startup-finished");
-    window.addEventListener("unload", cancelReady, { once: true });
-    if (typeof window.addUnloadListener === "function")
-      window.addUnloadListener(cancelReady);
-    else if (typeof UC_API !== "undefined" && UC_API.addUnloadListener)
-      UC_API.addUnloadListener(cancelReady);
-    // A synchronous startup completion around observer registration must not
-    // leave this instance waiting for an event that has already fired.
-    if (gBrowserInit.delayedStartupFinished)
-      ready(window, "browser-delayed-startup-finished");
-    return;
-  }
   /* NOTE 26 - PANEL INPUT SHIELD: configurable `panel_input_shield` keeps the open
    * panel as a pointer hit-test barrier and scopes mouse Back/Forward buttons
    * to the visible app browser. Its initial value follows PROFILE_DEFAULTS. */
@@ -706,23 +468,21 @@
     }
   }
 
-  const panelGeometrySource = window.ZentralFeatureSources?.panelGeometry;
-  if (typeof panelGeometrySource !== "function")
-    throw new Error("ZentralPanelGeometry.uc.js did not register its feature");
-  const { PANEL_HORIZONTAL_OFFSET_PREF, PANEL_POSITION_OFFSET_PREF,
-    getVerticalExtras, getPositionOffset, getHorizontalOffsetPreference,
-    getAppliedHorizontalOffset, getHorizontalOffsetBounds,
-    applyHorizontalPanelOffset, applyVerticalResizeExtras,
-    ensurePillGrabberVerticalDrag, ensureVerticalResizeHandles,
-    startPanelPositionDrag, startPanelHorizontalPositionDrag,
-    startVerticalResize, setCachedHorizontalOffset,
-    isGeometryDragActive, isHorizontalResizeActive,
-  } = panelGeometrySource({
-    EXT_PREFS, getPref, setPref, registerCleanup, setTimeout,
-    safeCall, computeOppositeDockingSafeMaxWidth,
-    extendHoverResizeHold,
-  });
-  (window.ZentralFeatureStatus ||= Object.create(null)).panelGeometry = true;
+  /* ==========================================================================
+   * ALL-SIDES RESIZE: STATE + DRAG MATH (see note 16)
+   * -----------------------------------------------------------------------
+   * These two prefs deliberately live OUTSIDE BGALAZKA_EXT_PREFS (which the
+   * "Apply default or stored attribute states on startup" block at the end
+   * of this file auto-enumerates as BOOLEAN prefs and mirrors onto root
+   * attributes). Pulling numeric pixel offsets into that same object would
+   * make every startup silently hit-and-catch a type-mismatch exception on
+   * these two keys (getBoolPref() on an int-typed pref) and stamp a useless
+   * "bgalazka-panel-top-extra-px" attribute nothing reads. Same pattern as
+   * MOBILE_UA_PREF further below for the same reason.
+   * ========================================================================== */
+  
+  window.ZentralRuntime.runPart("geometry");
+
 
   /* ==========================================================================
    * 1. INSTANCE HOOKS: OPPOSITE DOCKING, RESIZE MATH & PIN STATE
@@ -838,7 +598,7 @@
             "true" &&
           (root.style.top !== oldTop || root.style.bottom !== oldBottom)
         )
-          applyVerticalResizeExtras(root);
+          ctx.applyVerticalResizeExtras(root);
         if (root) root._bgalazkaLastSide = undefined;
         return;
       }
@@ -893,10 +653,10 @@
         verticalChanged &&
         document.documentElement.getAttribute("bgalazka-push-page") === "true"
       )
-        applyVerticalResizeExtras(root);
+        ctx.applyVerticalResizeExtras(root);
       if (root.getAttribute("data-panel-side") !== side)
         root.setAttribute("data-panel-side", side);
-      if (sideChanged) applyHorizontalPanelOffset(root);
+      if (sideChanged) ctx.applyHorizontalPanelOffset(root);
     };
 
     // Mirror data-pinned onto #zen-app-panel-root so the translucency CSS (which
@@ -920,8 +680,8 @@
       if (origOpenPanel) origOpenPanel(app);
       const openedRoot = document.getElementById("zen-app-panel-root");
       openedRoot?.removeAttribute("data-pinned");
-      applyVerticalResizeExtras(openedRoot);
-      applyHorizontalPanelOffset(openedRoot);
+      ctx.applyVerticalResizeExtras(openedRoot);
+      ctx.applyHorizontalPanelOffset(openedRoot);
 
       // Defensive: a width saved while opposite-docking was off (or before
       // a window/sidebar resize) could already exceed the current safe
@@ -980,7 +740,7 @@
       } finally {
         if ((hideUnattached || rescued) && get) core.getPref = get;
       }
-      requestTileSync(60);
+      ctx.requestTileSync(60);
     };
 
     // Changes from Settings or about:config refresh the grid once; the pref
@@ -1206,38 +966,29 @@
     }, 150);
     registerCleanup(() => clearInterval(retryTimer));
   }
-  const tileIsolationSource = window.ZentralFeatureSources?.tileIsolation;
-  let isolateTile = () => {};
-  let pruneIsolationTiles = () => {};
-  try {
-    if (typeof tileIsolationSource === "function") {
-      ({ isolateTile, pruneIsolationTiles } = tileIsolationSource({
-        getPref, EXT_PREFS,
-        getAllAppBrowsers: (...args) => getAllAppBrowsers(...args),
-        togglePanelAudio,
-        registerCleanup,
-      }));
-      (window.ZentralFeatureStatus ||= Object.create(null)).tileIsolation = true;
-    } else {
-      console.warn("[BgalazkaExtension] Tile isolation source missing; corner tile click guard unavailable");
-    }
-  } catch (error) {
-    console.error("[BgalazkaExtension] Tile isolation initialization failed:", error);
-  }
-  const cornerPanelsSource = window.ZentralFeatureSources?.cornerPanels;
-  if (typeof cornerPanelsSource !== "function")
-    throw new Error("ZentralCornerPanels.uc.js did not register its feature");
-  const { essentialPanels, linkedPairFor, getLinkedTriplePairs,
-    saveLinkedTriplePairs, unlinkTriplePair, requestTileSync,
-    syncCornerTiles, saveEssentialSettings, loadEssentialInBackground,
-  } = cornerPanelsSource({
-    EXT_PREFS, getPref, registerCleanup, setTimeout, clearTimeout,
-    isolateTile, pruneIsolationTiles, getAllAppBrowsers: (...args) => getAllAppBrowsers(...args),
-    getMobileUaAppIds, saveMobileUaAppIds,
-    getPanelContainerAssignments: (...args) => getPanelContainerAssignments(...args),
-    savePanelContainerAssignments: (...args) => savePanelContainerAssignments(...args),
-  });
-  (window.ZentralFeatureStatus ||= Object.create(null)).cornerPanels = true;
+  /* ==========================================================================
+   * 2. TAB CLICK ISOLATION (note 6)
+   * -----------------------------------------------------------------------
+   * Middle-click unload and loaded/unloaded tile state are NOT handled here
+   * anymore (note 10) — the base mod now does both natively and correctly.
+   * We only need to stop mouse interaction on a docked tile from activating,
+   * closing, or otherwise operating on the essential tab underneath it.
+   *
+   * IMPORTANT: LMB activation happens from the mouse-button sequence before
+   * the tile's click handler runs. Therefore mousedown must be intercepted
+   * during the window capture phase and default-prevented so the essential
+   * tab cannot select itself. The tile's own click handler is intentionally
+   * left untouched so it can still open the web panel.
+   *
+   * click/auxclick are isolated when they bubble through the tile. This
+   * allows clicks on its icon descendants to reach the tile's own listener
+   * before stopping propagation to the containing tab.
+   *
+   * No MutationObserver is used on the tabstrip or documentElement.
+   * ========================================================================== */
+  
+  window.ZentralRuntime.runPart("corner-panels");
+
   /* ==========================================================================
    * 4. SETTINGS UI INJECTION (DOM-SAFE XHTML BUILDER)
    * ========================================================================== */
@@ -1325,7 +1076,7 @@
     ALL_SIDES_RESIZE: "zen.workspace.bgalazka.all_sides_resize",
     // Positive moves the full panel toward the physical right; bounded in
     // applyHorizontalPanelOffset() so a stale/out-of-range pref is harmless.
-    PANEL_HORIZONTAL_OFFSET: PANEL_HORIZONTAL_OFFSET_PREF,
+    PANEL_HORIZONTAL_OFFSET: ctx.PANEL_HORIZONTAL_OFFSET_PREF,
     // "Hide button" toggle for the pill button above, same convention as
     // HIDE_DUAL_VIEW/HIDE_PIN/HIDE_EXPAND/etc. -- deliberately a SEPARATE
     // pref from ALL_SIDES_RESIZE itself: this only hides the pill icon,
@@ -1407,230 +1158,7 @@
    * intercepted, so their native MMB action still closes them. Corner app
    * tiles are excluded because they have their own MMB unload behavior.
    * ========================================================================== */
-  const normalTabMmbEvents = [
-    "pointerdown",
-    "mousedown",
-    "pointerup",
-    "mouseup",
-    "click",
-    "auxclick",
-  ];
-  let normalTabMmbGesture = null;
-  let normalTabMmbFallbackTimer = null;
-
-  function getNormalTabFromMiddleClickEvent(event) {
-    const target = event?.target;
-    if (!target?.closest) return null;
-    if (target.closest(".zen-app-tile")) return null;
-    const tab = target.closest(".tabbrowser-tab");
-    if (
-      !tab?.isConnected ||
-      tab.closing ||
-      tab.hidden ||
-      tab.pinned ||
-      tab.hasAttribute("zen-essential") ||
-      tab.hasAttribute("zen-empty-tab") ||
-      tab.hasAttribute("bgalazka-addon-host") ||
-      tab.hasAttribute("bgalazka-addon-host-fallback") ||
-      tab.closest(
-        "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
-      )
-    ) {
-      return null;
-    }
-    return tab;
-  }
-
-  function isNormalTabAlreadyUnloaded(tab) {
-    return !!(
-      !tab?.linkedPanel ||
-      tab.hasAttribute("pending") ||
-      tab.hasAttribute("discarded") ||
-      (tab.hasAttribute("zen-dormant") &&
-        tab.getAttribute("zen-dormant") !== "false")
-    );
-  }
-
-  function ensureSafeSuccessorBeforeNormalTabUnload(tab) {
-    if (gBrowser.selectedTab !== tab) return true;
-
-    try {
-      // Mirror Zen's pinned/Essential unload path whenever real-tab-backed
-      // Zentral web-panel hosts exist: blur away from the selected tab BEFORE
-      // explicitUnloadTabs() is allowed to run. Native Zen does the same with
-      // _findTabToBlurTo() for selected pinned/Essential tabs.
-      //
-      // The important Zentral-specific addition is that a panel host is never
-      // a valid blur target. If Zen's native successor finder returns one, or
-      // cannot find a usable successor, fall back to Zen's own invisible
-      // zen-empty-tab via selectEmptyTab(). This prevents a reparented panel
-      // browser from ever becoming the selected tab during the discard race.
-      if (!isAddonTabIdBridgeEnabled() || addonHostByAppId.size === 0) {
-        return true;
-      }
-
-      let successor = null;
-      if (typeof gBrowser._findTabToBlurTo === "function") {
-        try {
-          successor = gBrowser._findTabToBlurTo(tab, [tab]);
-        } catch (_) {}
-      }
-
-      if (
-        successor &&
-        successor !== tab &&
-        isUsableNormalTab(successor) &&
-        !isAddonHostTab(successor)
-      ) {
-        gBrowser.selectedTab = successor;
-        if (
-          gBrowser.selectedTab === successor &&
-          !isAddonHostTab(gBrowser.selectedTab)
-        ) {
-          setLastNonAddonHostTab(successor);
-          return true;
-        }
-      }
-
-      const safeTab = createNormalTabForAddonHost();
-      return !!(
-        safeTab?.isConnected &&
-        gBrowser.selectedTab === safeTab &&
-        gBrowser.selectedTab !== tab &&
-        !isAddonHostTab(gBrowser.selectedTab)
-      );
-    } catch (error) {
-      console.warn(
-        "[BgalazkaExtension] Could not prepare a safe successor before unloading a selected normal tab:",
-        error,
-      );
-      // With panel hosts present, abort rather than let native successor
-      // selection choose a reparented host browser.
-      return false;
-    }
-  }
-
-  async function unloadNormalTabFromMiddleClick(tab) {
-    if (!tab?.isConnected || tab.closing || isNormalTabAlreadyUnloaded(tab)) {
-      return;
-    }
-
-    try {
-      if (!ensureSafeSuccessorBeforeNormalTabUnload(tab)) return;
-
-      // Match Zen's Essential behavior: selected tabs have already been moved
-      // to a verified non-host successor above, so explicitUnloadTabs() never
-      // has to choose between ordinary tabs and Zentral's hidden host tabs.
-      if (typeof gBrowser.explicitUnloadTabs === "function") {
-        await gBrowser.explicitUnloadTabs([tab]);
-        if (isAddonTabIdBridgeEnabled() && addonHostByAppId.size > 0) {
-          repairAddonHostSelectionAfterTransition(tab);
-        }
-        return;
-      }
-
-      // Compatibility fallback for builds that predate explicitUnloadTabs().
-      // discardBrowser() cannot discard the selected tab, so move selection
-      // first when necessary.
-      if (gBrowser.selectedTab === tab) {
-        const replacement = Array.from(gBrowser.tabs || []).find(
-          (candidate) =>
-            candidate !== tab &&
-            candidate?.isConnected &&
-            !candidate.closing &&
-            !candidate.hidden &&
-            !isAddonHostTab(candidate) &&
-            !!candidate.linkedPanel,
-        );
-        if (replacement) {
-          gBrowser.selectedTab = replacement;
-        } else if (typeof gBrowser.addTrustedTab === "function") {
-          gBrowser.selectedTab = gBrowser.addTrustedTab("about:newtab", {
-            skipAnimation: true,
-          });
-        }
-      }
-
-      if (gBrowser.selectedTab === tab) return;
-      if (typeof gBrowser.prepareDiscardBrowser === "function") {
-        await gBrowser.prepareDiscardBrowser(tab);
-      }
-      gBrowser.discardBrowser?.(tab, true);
-      if (isAddonTabIdBridgeEnabled() && addonHostByAppId.size > 0) {
-        repairAddonHostSelectionAfterTransition(tab);
-      }
-    } catch (_) {}
-  }
-
-  function clearNormalTabMmbGesture(tab = null) {
-    if (tab && normalTabMmbGesture?.tab !== tab) return;
-    if (normalTabMmbFallbackTimer) {
-      window.clearTimeout(normalTabMmbFallbackTimer);
-      normalTabMmbFallbackTimer = null;
-    }
-    normalTabMmbGesture = null;
-  }
-
-  function onNormalTabMMBCapture(event) {
-    if (event.button !== 1) return;
-    if (!getPref(EXT_PREFS.MMB_UNLOAD_NORMAL_TABS, false)) {
-      clearNormalTabMmbGesture();
-      return;
-    }
-
-    const tab = getNormalTabFromMiddleClickEvent(event);
-    if (!tab) return;
-
-    // A fresh MMB gesture only gets captured for a loaded normal tab. If the
-    // tab is already unloaded, do nothing here and let Zen's native MMB close
-    // behavior run exactly as before.
-    if (normalTabMmbGesture?.tab !== tab) {
-      if (isNormalTabAlreadyUnloaded(tab)) return;
-      if (tab.linkedBrowser && tab.linkedBrowser.isRemoteBrowser === false) {
-        return;
-      }
-      clearNormalTabMmbGesture();
-      normalTabMmbGesture = { tab, unloadTriggered: false };
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-
-    const gesture = normalTabMmbGesture;
-    if (!gesture || gesture.tab !== tab) return;
-
-    if (event.type === "auxclick") {
-      if (!gesture.unloadTriggered) {
-        gesture.unloadTriggered = true;
-        void unloadNormalTabFromMiddleClick(tab);
-      }
-      clearNormalTabMmbGesture(tab);
-      return;
-    }
-
-    if (event.type === "mouseup" && !gesture.unloadTriggered) {
-      // Some Zen builds perform their MMB tab action on mouseup. Keep the
-      // gesture captured through the following auxclick so a tab that becomes
-      // unloaded here cannot immediately receive the native close action.
-      gesture.unloadTriggered = true;
-      void unloadNormalTabFromMiddleClick(tab);
-      normalTabMmbFallbackTimer = window.setTimeout(
-        () => clearNormalTabMmbGesture(tab),
-        500,
-      );
-    }
-  }
-
-  normalTabMmbEvents.forEach((type) =>
-    window.addEventListener(type, onNormalTabMMBCapture, true),
-  );
-  registerCleanup(() => {
-    normalTabMmbEvents.forEach((type) =>
-      window.removeEventListener(type, onNormalTabMMBCapture, true),
-    );
-    clearNormalTabMmbGesture();
-  });
+  
 
   /* ==========================================================================
    * PANEL INPUT SHIELD
@@ -1675,15 +1203,15 @@
           typeof browser.canGoBack === "boolean"
             ? browser.canGoBack
             : browser.webNavigation?.canGoBack;
-        if (canGoBack === false && !canPanelNavigate(browser, -1)) return;
-        navigatePanelHistory(browser, -1);
+        if (canGoBack === false && !ctx.canPanelNavigate(browser, -1)) return;
+        ctx.navigatePanelHistory(browser, -1);
       } else if (button === 4) {
         const canGoForward =
           typeof browser.canGoForward === "boolean"
             ? browser.canGoForward
             : browser.webNavigation?.canGoForward;
-        if (canGoForward === false && !canPanelNavigate(browser, 1)) return;
-        navigatePanelHistory(browser, 1);
+        if (canGoForward === false && !ctx.canPanelNavigate(browser, 1)) return;
+        ctx.navigatePanelHistory(browser, 1);
       }
     } catch (e) {
       console.warn(
@@ -2111,7 +1639,7 @@
       !tile ||
       !root?.hasAttribute("open") ||
       root.hasAttribute("closing") ||
-      getActiveAppBrowser()?._bgalazkaAppId !== tile.dataset.appId
+      ctx.getActiveAppBrowser()?._bgalazkaAppId !== tile.dataset.appId
     )
       return null;
     return tile;
@@ -2326,8 +1854,8 @@
 
           // Preserve the ORIGINAL mousedown coordinates for both axes so the
           // panel catches up smoothly after crossing the click-vs-drag guard.
-          startPanelHorizontalPositionDrag(moveEvt, startX);
-          startPanelPositionDrag(moveEvt, startY);
+          ctx.startPanelHorizontalPositionDrag(moveEvt, startX);
+          ctx.startPanelPositionDrag(moveEvt, startY);
         };
         const onUp = () => {
           document.removeEventListener("mousemove", onMove);
@@ -2361,7 +1889,7 @@
         );
         if (input) input.checked = next;
 
-        ensureVerticalResizeHandles();
+        ctx.ensureVerticalResizeHandles();
       });
     }
 
@@ -2379,9 +1907,9 @@
     const root = document.getElementById("zen-app-panel-root");
     if (!root?.hasAttribute("open") || root.hasAttribute("closing")) return;
     window.Zentral?.Apps?.positionPanel?.();
-    applyVerticalResizeExtras(root);
-    if (!isGeometryDragActive())
-      applyHorizontalPanelOffset(root);
+    ctx.applyVerticalResizeExtras(root);
+    if (!ctx.hResizeState && !ctx.hPosDragState && !ctx.vPosDragState)
+      ctx.applyHorizontalPanelOffset(root);
     updateRevealEdgeGeometry();
   }
   function schedulePanelModeGeometrySync() {
@@ -2458,10 +1986,10 @@
     // Re-evaluate all user panel offsets whenever Dual-View changes. Both
     // helpers suppress their axis-specific margins only while Dual-View is on
     // and automatically restore the saved values when it turns off.
-    applyVerticalResizeExtras(root);
+    ctx.applyVerticalResizeExtras(root);
     // The drag handler owns the margin until mouseup. Reapplying the saved
     // value from a native resize callback can alternate two X positions.
-    if (!isHorizontalResizeActive()) applyHorizontalPanelOffset(root);
+    if (!ctx.hResizeState) ctx.applyHorizontalPanelOffset(root);
     const side =
       root?.getAttribute("data-panel-side") ||
       (window.Zentral?.Apps?.isPanelAttachedToRight?.() ? "right" : "left");
@@ -2482,27 +2010,23 @@
     if (pushChanged || tripleChanged) schedulePanelModeGeometrySync();
   }
 
-  let syncSecondaryFallbackPolling = () => {};
-  const webToolbarSource = window.ZentralFeatureSources?.webToolbar;
-  if (typeof webToolbarSource !== "function")
-    throw new Error("ZentralWebToolbar.uc.js did not register its feature");
-  const {
-    getActiveAppBrowser, QUICK_SWITCH_BUILTIN_TARGETS,
-    QUICK_SWITCH_CUSTOM_PREFS, QUICK_SWITCH_TARGET_PREF_PREFIX,
-    SEARCH_CUSTOM_ENGINE_PREFS, isValidQuickSwitchTemplate,
-    refreshBrowserSearchTemplate, buildSearchUrl, looksLikeUrl,
-    canPanelNavigate, navigatePanelHistory, setForcePanelBlack,
-    applyForcePanelBlackVisual,
-    ensureWebToolbar, updateWebToolbarState,
-    periodicFallbackPollingEnabled, startWebToolbarPolling,
-  } = webToolbarSource({
-    BGALAZKA_EXT_PREFS, PREF_ICONS, getPref, setPref, parseSVG,
-    registerCleanup, safeCall, setTimeout, clearTimeout, setInterval,
-    clearInterval, startPanelPositionDrag,
-    repairVisiblePanelPresentation: (...args) => repairVisiblePanelPresentation(...args), zenCssEnabled: (...args) => zenCssEnabled(...args),
-    isDisposed: () => extensionDisposed,
-  });
-  (window.ZentralFeatureStatus ||= Object.create(null)).webToolbar = true;
+  /* ==========================================================================
+   * WEB PANEL NAVIGATION TOOLBAR
+   * Docked at the bottom of the floating app panel: back / forward / reload
+   * (moved here from the pill) + a URL bar, with optional zoom controls.
+   * Master-toggleable, URL-bar-toggleable, zoom-toggleable, and can be set to
+   * only reveal itself on hover instead of permanently reserving space.
+   * ========================================================================== */
+
+  // Multiple <browser> elements can live inside #zen-app-panel-slider (one
+  // per app, per getOrCreateAppBrowser() above), with only the active one
+  // NOT set to style.display = "none" (see openPanel()'s app-switch loop).
+  // There's no dedicated "active" attribute on the browser itself, so this
+  // is the only reliable way to find it from outside the class (activeAppId
+  // is a private field, see note 5).
+  
+  window.ZentralRuntime.runPart("panel-toolbar");
+
 
   /* ==========================================================================
    * EXTENSION KEYBINDS
@@ -2630,13 +2154,13 @@
   }
 
   function stepActivePanelZoom(delta) {
-    const browser = getActiveAppBrowser?.() || getVisiblePanelBrowser();
+    const browser = ctx.getActiveAppBrowser?.() || getVisiblePanelBrowser();
     if (!browser) return false;
     try {
       const cur = ZoomManager.getZoomForBrowser(browser);
       const next = delta === 0 ? 1 : Math.max(0.3, Math.min(3, cur + delta));
       ZoomManager.setZoomForBrowser(browser, next);
-      updateWebToolbarState?.();
+      ctx.updateWebToolbarState?.();
       return true;
     } catch (_) {
       return false;
@@ -2645,7 +2169,7 @@
 
   function runExtensionKeybindAction(actionKey) {
     const apps = window.Zentral?.Apps;
-    const browser = getActiveAppBrowser?.() || getVisiblePanelBrowser();
+    const browser = ctx.getActiveAppBrowser?.() || getVisiblePanelBrowser();
     switch (actionKey) {
       case "CLOSE_PANEL":
         apps?.closePanel?.();
@@ -2653,7 +2177,7 @@
       case "BACK":
         if (!browser) return false;
         try {
-          navigatePanelHistory(browser, -1);
+          ctx.navigatePanelHistory(browser, -1);
           return true;
         } catch (_) {
           return false;
@@ -2661,7 +2185,7 @@
       case "FORWARD":
         if (!browser) return false;
         try {
-          navigatePanelHistory(browser, 1);
+          ctx.navigatePanelHistory(browser, 1);
           return true;
         } catch (_) {
           return false;
@@ -2678,7 +2202,7 @@
           return false;
         if (!getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_URLBAR, false))
           return false;
-        ensureWebToolbar();
+        ctx.ensureWebToolbar();
         const input = document.querySelector(
           "#zen-app-panel-toolbar .zen-toolbar-urlbar",
         );
@@ -2708,8 +2232,8 @@
           BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED,
           "bgalazka-webtoolbar",
         );
-        if (enabled) ensureWebToolbar();
-        updateWebToolbarState();
+        if (enabled) ctx.ensureWebToolbar();
+        ctx.updateWebToolbarState();
         return true;
       }
       case "TOGGLE_TRANSLUCENCY":
@@ -2732,10 +2256,10 @@
           BGALAZKA_EXT_PREFS.EDGE_ATTACHED_PANELS,
           "bgalazka-edge-attached-panels",
         );
-        applyVerticalResizeExtras(
+        ctx.applyVerticalResizeExtras(
           document.getElementById("zen-app-panel-root"),
         );
-        applyHorizontalPanelOffset(
+        ctx.applyHorizontalPanelOffset(
           document.getElementById("zen-app-panel-root"),
         );
         return true;
@@ -2785,197 +2309,43 @@
     window.removeEventListener("keydown", extensionKeybindHandler, true),
   );
 
-  const extensionSettingsSource = window.ZentralFeatureSources?.extensionSettings;
-  if (typeof extensionSettingsSource !== "function")
-    throw new Error("ZentralExtensionSettings.uc.js did not register its feature");
-  const { createToggleRow, createSliderRow, injectSettingsUI } =
-    extensionSettingsSource({
-      EXT_PREFS, BGALAZKA_EXT_PREFS, EXT_KEYBIND_ACTIONS,
-      EXT_KEYBIND_DEFAULTS, PREF_ICONS, PROFILE_DEFAULTS,
-      getPref, setPref, parseSVG, registerCleanup, setInterval,
-      clearInterval, restartBrowser, applyAttributes,
-      applyHorizontalPanelOffset, applyVerticalResizeExtras,
-      getAppliedHorizontalOffset, getHorizontalOffsetBounds,
-      getHorizontalOffsetPreference,
-      setCachedHorizontalOffset,
-      keybindFromEvent, ensureNativeAudioButton, ensurePillAllSidesResizeButton,
-      findAddonHostFolder: (...args) => findAddonHostFolder(...args), keepAddonHostFolderCollapsed: (...args) => keepAddonHostFolderCollapsed(...args),
-      refreshPanelAudio, setAddonTabIdBridgeEnabled: (...args) => setAddonTabIdBridgeEnabled(...args),
-      setZenInternetPanelCssEnabled: (...args) => setZenInternetPanelCssEnabled(...args), syncHoverPanelAvailability,
-      syncPanelFallbackPolling, syncPanelPushState,
-      syncSecondaryFallbackPolling: (...args) => syncSecondaryFallbackPolling(...args),
-      updateAddonHostInspection: (...args) => updateAddonHostInspection(...args), updateCSSVars,
-      QUICK_SWITCH_BUILTIN_TARGETS, QUICK_SWITCH_CUSTOM_PREFS,
-      QUICK_SWITCH_TARGET_PREF_PREFIX, SEARCH_CUSTOM_ENGINE_PREFS,
-      isValidQuickSwitchTemplate, refreshBrowserSearchTemplate,
-      startWebToolbarPolling, ensureWebToolbar, updateWebToolbarState,
-      getActiveAppBrowser, requestTileSync,
-      setForcePanelBlack, applyForcePanelBlackVisual,
-      zenCssEnabled: (...args) => zenCssEnabled(...args), getFirefoxContainerState: (...args) => getFirefoxContainerState(...args),
-      getPanelContainerMenuLabel: (...args) => getPanelContainerMenuLabel(...args), getPanelUserContextId: (...args) => getPanelUserContextId(...args),
-      setPanelUserContextId: (...args) => setPanelUserContextId(...args), getContainerIconUrl: (...args) => getContainerIconUrl(...args),
-      ensurePanelPrivacyMenuItems: (...args) => ensurePanelPrivacyMenuItems(...args), getAllAppBrowsers: (...args) => getAllAppBrowsers(...args),
-    });
-  (window.ZentralFeatureStatus ||= Object.create(null)).extensionSettings = true;
+  
+  window.ZentralRuntime.runPart("extension-settings");
 
-  const browserIntegrationSource = window.ZentralFeatureSources?.browserIntegrations;
-  if (typeof browserIntegrationSource !== "function")
-    throw new Error("ZentralBrowserIntegrations.uc.js did not register its feature");
-  const { addonHostByAppId, addonHostByTab, ADDON_HOST_FOLDER_LABEL,
-    setAddonHostFolder, setLastNonAddonHostTab,
-    getPanelContainerAssignments, savePanelContainerAssignments,
-    getPanelUserContextId, setPanelUserContextId,
-    getFirefoxContainerState, getPanelContainerMenuLabel,
-    getContainerIconUrl, ensurePanelPrivacyMenuItems,
-    findAddonHostFolder, keepAddonHostFolderCollapsed,
-    updateAddonHostInspection, isAddonTabIdBridgeEnabled,
-    setAddonTabIdBridgeEnabled, removeAddonHostRecord,
-    removeEmptyAddonHostFolder, unloadPanelBrowsersForAddonBridge,
-    syncAddonHostBrowserActivity, syncAppPanelBrowserActivity,
-    callGetOrCreateWithAddonHostBrowser, applyPanelContainerLoadContext,
-    isAddonHostTab, isUsableNormalTab,
-    createNormalTabForAddonHost, repairAddonHostSelectionAfterTransition,
-  } = browserIntegrationSource({
-    BGALAZKA_EXT_PREFS, getPref, registerCleanup, safeCall,
-    setInterval, clearInterval, setTimeout, getAllAppBrowsers: (...args) => getAllAppBrowsers(...args),
-    essentialPanels,
-  });
-  (window.ZentralFeatureStatus ||= Object.create(null)).browserIntegrations = true;
 
   /* ==========================================================================
-   * MOBILE USER AGENT TOGGLE (per-app checkbox, mirrors native "Load at Startup")
+   * FIREFOX CONTAINERS + PER-PANEL CACHE/COOKIE CLEARING
    * -----------------------------------------------------------------------
-   * Feature: a per-app "Mobile User Agent" checkbox living in the same tile
-   * right-click menu as the native "Load at Startup" item, remembered per-app
-   * across restarts exactly the same way.
+   * Adds two app-specific controls beside the native "Load at Startup" row:
+   *   1) Container: <name>  -> choose a Firefox Contextual Identity per app.
+   *   2) Clear Panel Cache & Cookies -> clear this app site's cookies/caches
+   *      only for the selected userContextId.
    *
-   * WHY THIS IS HOOKED RATHER THAN EDITED IN PLACE (see notes 1 & 5 above):
-   * - setupContextMenu() and getOrCreateAppBrowser() belong to the
-   *   ZentralApps class defined in the base mod's own IIFE, ABOVE the
-   *   Bgalazka marker. We never edit that source directly; we reach the
-   *   singleton instance (window.Zentral.Apps, see note 5) and either wrap
-   *   its methods or attach DOM nodes to elements it already built.
-   * - We deliberately do NOT add a "mobileUA" field to the base mod's own
-   *   app objects / saveApps() whitelist, since that means editing
-   *   ZentralApps.saveApps() itself. Instead the per-app flag lives in its
-   *   own dedicated pref (a JSON array of app ids), entirely inside this
-   *   extension, so the native save/load code never needs to change.
-   * - Gecko does not re-apply a <browser>'s "useragent"/"customuseragent"
-   *   attribute to an already-connected/loaded docShell. So flipping the
-   *   checkbox unloads that app's browser via the singleton's own
-   *   closeApp() (same public method "Unload App" already uses) instead of
-   *   trying to hot-swap the UA live — it reloads with the correct UA next
-   *   time the app is opened or preloaded.
+   * WHY THIS LIVES ENTIRELY IN THE EXTENSION (see architecture notes 1 & 5):
+   * - Container assignments are stored in their own JSON pref, so we do not
+   *   add fields to Zentral's native app object or edit saveApps()/loadApps().
+   * - Firefox containers are backed by ContextualIdentityService. Its public
+   *   identities expose the numeric userContextId that Gecko stores in Origin
+   *   Attributes and uses to isolate cookie jars and other site state.
+   * - Zentral's native getOrCreateAppBrowser() hard-codes usercontextid="0"
+   *   BEFORE appending the <browser>. For a remote <browser>, the identity must
+   *   be present before connection/frame-loader creation. Because the base code
+   *   above this marker is intentionally immutable, the getOrCreate wrapper
+   *   below temporarily intercepts ONLY the synchronous setAttribute call made
+   *   while that one app browser is being constructed, then immediately restores
+   *   Element.prototype. Nothing remains globally patched after the call.
+   * - The same wrapper also stamps userContextId into subsequent load options
+   *   and content principals. Firefox's own URI-loading helper does the same
+   *   principal OriginAttributes adjustment for container-tab navigations.
+   * - ClearDataService.deleteDataFromSite() is used instead of globally clearing
+   *   a whole container. The OriginAttributes pattern { userContextId } keeps
+   *   the operation scoped to this app's selected container, while the site key
+   *   keeps it scoped to this app's configured site. A panel is unloaded first
+   *   so a live page cannot immediately repopulate cookies while clearing.
    * ========================================================================== */
-  const MOBILE_UA_PREF = "zen.workspace.bgalazka.mobile_ua_apps";
-  const MOBILE_UA_STRING =
-    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36";
+  
+  window.ZentralRuntime.runPart("browser-integrations");
 
-  function getMobileUaAppIds() {
-    try {
-      const raw = Services.prefs.getStringPref(MOBILE_UA_PREF, "[]");
-      const arr = JSON.parse(raw);
-      return new Set(Array.isArray(arr) ? arr : []);
-    } catch (_) {
-      return new Set();
-    }
-  }
-
-  function saveMobileUaAppIds(set) {
-    try {
-      Services.prefs.setStringPref(
-        MOBILE_UA_PREF,
-        JSON.stringify(Array.from(set)),
-      );
-    } catch (e) {
-      console.warn("[BgalazkaExtension] Failed to save mobile UA list:", e);
-    }
-  }
-
-  function isMobileUaApp(appId) {
-    if (essentialPanels.has(appId))
-      return !!essentialPanels.get(appId).mobileUa;
-    return !!appId && getMobileUaAppIds().has(appId);
-  }
-
-  function toggleMobileUaApp(appId) {
-    const essential = essentialPanels.get(appId);
-    if (essential) {
-      essential.mobileUa = !essential.mobileUa;
-      saveEssentialSettings(essential);
-      return essential.mobileUa;
-    }
-    const set = getMobileUaAppIds();
-    const next = !set.has(appId);
-    if (next) set.add(appId);
-    else set.delete(appId);
-    saveMobileUaAppIds(set);
-    return next;
-  }
-
-  // Injects one extra <menuitem> into the native tile context menu, right
-  // after "Load at Startup" — instead of editing ZentralApps.setupContextMenu().
-  function ensureMobileUaMenuItem() {
-    const popup = document.getElementById("zen-apps-sidebar-tile-context");
-    if (!popup) return false;
-    const preloadItem = popup.querySelector("#zen-apps-sidebar-preload-item");
-    if (!preloadItem) return false;
-
-    let item = popup.querySelector("#zen-apps-sidebar-mobile-ua-item");
-    if (!item) {
-      item = document.createXULElement("menuitem");
-      item.id = "zen-apps-sidebar-mobile-ua-item";
-      item.setAttribute("label", "Mobile User Agent");
-      item.setAttribute("type", "checkbox");
-      // Keep the privacy controls directly after the native preload row:
-      // Load at Startup -> Container -> Clear Cache & Cookies -> Mobile UA.
-      const insertionAnchor =
-        popup.querySelector("#zen-apps-sidebar-clear-panel-data-item") ||
-        popup.querySelector("#zen-apps-sidebar-container-menu") ||
-        preloadItem;
-      insertionAnchor.insertAdjacentElement("afterend", item);
-
-      // Same hide/show + checked-state contract as the native items: driven
-      // entirely by popup.dataset.activeAppId, which ZentralApps already
-      // sets before showing the menu.
-      popup.addEventListener("popupshowing", () => {
-        const appId = popup.dataset.activeAppId || "";
-        item.hidden = !appId;
-        if (!appId) return;
-        if (isMobileUaApp(appId)) item.setAttribute("checked", "true");
-        else item.removeAttribute("checked");
-      });
-
-      item.addEventListener("command", () => {
-        const appId = popup.dataset.activeAppId;
-        if (!appId) return;
-        const enabled = toggleMobileUaApp(appId);
-        if (enabled) item.setAttribute("checked", "true");
-        else item.removeAttribute("checked");
-
-        // Force a clean reload with the new UA (see note above).
-        const apps = window.Zentral?.Apps;
-        // Let the XUL command/popup finish before destroying its live remote
-        // browser. The next open creates a fresh context with the new UA.
-        if (apps?.closeApp) setTimeout(() => apps.closeApp(appId), 0);
-      });
-    }
-    return true;
-  }
-
-  if (!safeCall(ensureMobileUaMenuItem, "ensureMobileUaMenuItem")) {
-    let mobileUaAttempts = 0;
-    const mobileUaMenuTimer = setInterval(() => {
-      mobileUaAttempts++;
-      if (
-        safeCall(ensureMobileUaMenuItem, "ensureMobileUaMenuItem") ||
-        mobileUaAttempts > 40
-      ) {
-        clearInterval(mobileUaMenuTimer);
-      }
-    }, 150);
-    registerCleanup(() => clearInterval(mobileUaMenuTimer));
-  }
 
   /* ==========================================================================
    * WEB PANEL POPUP CONTAINMENT
@@ -3001,20 +2371,10 @@
    * generic/site-agnostic (no Startpage-specific logic), so it also covers
    * any other site with the same "opens results in a new tab" behavior.
    * ========================================================================== */
-  const panelStyleSource = window.ZentralFeatureSources?.panelStyleBridge;
-  if (typeof panelStyleSource !== "function")
-    throw new Error("ZentralPanelStyleBridge.uc.js did not register its feature");
-  const { getAllAppBrowsers, zenCssEnabled,
-    attachZenInternetPanelBrowser, updateZenCssBrowser,
-    repairVisiblePanelPresentation, repairZenInternetPanelCss,
-    setZenInternetPanelCssEnabled, scheduleZenCssFirstLoad,
-    cancelZenCssFirstLoad } = panelStyleSource({
-      BGALAZKA_EXT_PREFS, getPref, registerCleanup, setTimeout, clearTimeout,
-    });
-  (window.ZentralFeatureStatus ||= Object.create(null)).panelStyleBridge = true;
+  
+  window.ZentralRuntime.runPart("panel-styles");
 
-  // browserDOMWindow is a WrappedNative on some Zen/Gecko builds. Do not add
-  // sentinel properties to it: XPConnect rejects writes to WrappedNatives.
+
   const popupHookedWindows = new WeakSet();
   let popupHookUnsupported = false;
 
@@ -3035,7 +2395,7 @@
     ) {
       try {
         if (aOpener) {
-          const matched = getAllAppBrowsers().find(
+          const matched = ctx.getAllAppBrowsers().find(
             (b) => b.browsingContext && b.browsingContext === aOpener,
           );
           if (matched) {
@@ -3216,12 +2576,12 @@
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      togglePanelAudio(getActiveAppBrowser());
+      togglePanelAudio(ctx.getActiveAppBrowser());
     });
     wrap.appendChild(button);
   }
   function refreshPanelAudio() {
-    const browsers = getAllAppBrowsers();
+    const browsers = ctx.getAllAppBrowsers();
     for (const [browser, controller] of panelMediaListeners) {
       if (browser.isConnected) continue;
       mediaEvents.forEach((type) =>
@@ -3234,7 +2594,7 @@
     const button = document.querySelector(
       "#zen-app-panel-toolbar .bgalazka-audio-button",
     );
-    if (button) updateAudioButton(button, getActiveAppBrowser());
+    if (button) updateAudioButton(button, ctx.getActiveAppBrowser());
     const byId = new Map(
       browsers.map((browser) => [browser._bgalazkaAppId, browser]),
     );
@@ -3269,10 +2629,10 @@
   const essentialPopupHandler = (event) => {
     const popup = event.target;
     if (popup.id !== "zen-apps-sidebar-tile-context") return;
-    const record = essentialPanels.get(popup.dataset.activeAppId);
+    const record = ctx.essentialPanels.get(popup.dataset.activeAppId);
     if (!record) return; // native handler already restored the normal app menu
-    ensurePanelPrivacyMenuItems();
-    ensureMobileUaMenuItem();
+    ctx.ensurePanelPrivacyMenuItems();
+    ctx.ensureMobileUaMenuItem();
     const preload = popup.querySelector("#zen-apps-sidebar-preload-item");
     if (preload) {
       preload.hidden = false;
@@ -3290,7 +2650,7 @@
   };
   const essentialContextMenu = (event) => {
     const tile = event.target.closest?.(".bgalazka-essential-tile");
-    if (!tile || !essentialPanels.has(tile.dataset.appId)) return;
+    if (!tile || !ctx.essentialPanels.has(tile.dataset.appId)) return;
     const popup = document.getElementById("zen-apps-sidebar-tile-context");
     if (!popup) return;
     event.preventDefault();
@@ -3302,13 +2662,13 @@
   const essentialPreloadCommand = (event) => {
     if (event.target.id !== "zen-apps-sidebar-preload-item") return;
     const popup = document.getElementById("zen-apps-sidebar-tile-context");
-    const record = essentialPanels.get(popup?.dataset.activeAppId);
+    const record = ctx.essentialPanels.get(popup?.dataset.activeAppId);
     if (!record) return;
     event.stopImmediatePropagation();
     record.app.preload = !record.app.preload;
     record.preloadAttempted = false;
-    saveEssentialSettings(record);
-    if (record.app.preload) requestTileSync(0);
+    ctx.saveEssentialSettings(record);
+    if (record.app.preload) ctx.requestTileSync(0);
     if (record.app.preload) event.target.setAttribute("checked", "true");
     else event.target.removeAttribute("checked");
   };
@@ -3323,8 +2683,8 @@
   let panelStatusTimer = null;
   function runPanelFallbackMaintenance() {
     if (document.getElementById("zs-addon-host-inspection"))
-      updateAddonHostInspection();
-    if (getPref(EXT_PREFS.CORNER_TILES, false)) syncCornerTiles();
+      ctx.updateAddonHostInspection();
+    if (getPref(EXT_PREFS.CORNER_TILES, false)) ctx.syncCornerTiles();
     if (getPref(BGALAZKA_EXT_PREFS.AUDIO_INDICATOR, false)) refreshPanelAudio();
 
     // This entire maintenance pass is optional now. The normal path is
@@ -3333,9 +2693,9 @@
     if (
       document.documentElement.getAttribute("zentral-app-panel-open") === "true"
     ) {
-      const panelBrowsers = getAllAppBrowsers();
-      syncAppPanelBrowserActivity(panelBrowsers);
-      if (zenCssEnabled()) repairZenInternetPanelCss(panelBrowsers, false);
+      const panelBrowsers = ctx.getAllAppBrowsers();
+      ctx.syncAppPanelBrowserActivity(panelBrowsers);
+      if (ctx.zenCssEnabled()) ctx.repairZenInternetPanelCss(panelBrowsers, false);
     }
   }
   function syncPanelFallbackPolling() {
@@ -3343,7 +2703,7 @@
       clearInterval(panelStatusTimer);
       panelStatusTimer = null;
     }
-    if (!periodicFallbackPollingEnabled() || extensionDisposed) return;
+    if (!ctx.periodicFallbackPollingEnabled() || extensionDisposed) return;
     runPanelFallbackMaintenance();
     panelStatusTimer = setInterval(runPanelFallbackMaintenance, 2000);
   }
@@ -3411,11 +2771,11 @@
             .getElementById("zen-app-panel-root")
             ?.hasAttribute("closing");
         const res = origOpen(...args);
-        if (zenCssEnabled()) {
-          const openedBrowser = getActiveAppBrowser();
+        if (ctx.zenCssEnabled()) {
+          const openedBrowser = ctx.getActiveAppBrowser();
           if (openedBrowser) {
-            attachZenInternetPanelBrowser(openedBrowser);
-            updateZenCssBrowser(openedBrowser);
+            ctx.attachZenInternetPanelBrowser(openedBrowser);
+            ctx.updateZenCssBrowser(openedBrowser);
           }
         }
         ensurePillHoverRevealButton();
@@ -3429,28 +2789,28 @@
         )
           this.togglePin?.();
         refreshPanelAudio();
-        syncAddonHostBrowserActivity();
-        syncAppPanelBrowserActivity();
+        ctx.syncAddonHostBrowserActivity();
+        ctx.syncAppPanelBrowserActivity();
         // A single deferred re-assertion can still lose the race against a
         // cold content-process spawn (new site/container/first launch),
         // which is exactly what left panels gray until manually closed and
         // reopened. requestAnimationFrame lands before the next paint,
         // which is tighter than any setTimeout; stagger a few more after it
         // as a fallback for slower spawns.
-        requestAnimationFrame(syncAppPanelBrowserActivity);
+        requestAnimationFrame(ctx.syncAppPanelBrowserActivity);
         for (const delay of [30, 150, 500, 1500]) {
-          setTimeout(syncAppPanelBrowserActivity, delay);
+          setTimeout(ctx.syncAppPanelBrowserActivity, delay);
         }
         setTimeout(() => {
           ensurePillDualViewButton();
           ensurePillHoverRevealButton();
           ensurePillAllSidesResizeButton();
-          ensureVerticalResizeHandles();
-          ensurePillGrabberVerticalDrag();
+          ctx.ensureVerticalResizeHandles();
+          ctx.ensurePillGrabberVerticalDrag();
           syncPanelPushState();
-          ensureWebToolbar();
+          ctx.ensureWebToolbar();
           refreshPanelAudio();
-          updateWebToolbarState();
+          ctx.updateWebToolbarState();
         }, 30);
         return res;
       };
@@ -3462,8 +2822,8 @@
         const res = origClose(...args);
         clearHoverHide();
         setHoverPanelHidden(false);
-        syncAddonHostBrowserActivity();
-        syncAppPanelBrowserActivity();
+        ctx.syncAddonHostBrowserActivity();
+        ctx.syncAppPanelBrowserActivity();
         setTimeout(syncPanelPushState, 30);
         return res;
       };
@@ -3493,8 +2853,8 @@
     const origGetOrCreateBrowser = apps.getOrCreateAppBrowser?.bind(apps);
     if (origGetOrCreateBrowser) {
       apps.getOrCreateAppBrowser = function (app) {
-        const userContextId = getPanelUserContextId(app?.id);
-        const result = callGetOrCreateWithAddonHostBrowser(
+        const userContextId = ctx.getPanelUserContextId(app?.id);
+        const result = ctx.callGetOrCreateWithAddonHostBrowser(
           origGetOrCreateBrowser,
           app,
           userContextId,
@@ -3503,13 +2863,13 @@
         // all resolve the same native panel instance.
         if (result?.browser) {
           result.browser._bgalazkaAppId = app?.id || null;
-          applyPanelContainerLoadContext(result.browser, userContextId);
+          ctx.applyPanelContainerLoadContext(result.browser, userContextId);
         }
         if (
           result?.browser &&
           getPref(BGALAZKA_EXT_PREFS.ZEN_INTERNET_PANEL_CSS, false)
         )
-          attachZenInternetPanelBrowser(result.browser);
+          ctx.attachZenInternetPanelBrowser(result.browser);
         if (result?.browser?._bgalazkaAddonHostBrowser) {
           try {
             if (result.browser.docShellIsActive !== true)
@@ -3527,11 +2887,11 @@
         // the upcoming navigation as long as it's set before the caller's
         // loadURI/fixupAndLoadURIString call that runs right after this
         // getOrCreateAppBrowser() call returns.
-        if (result?.isNew && result.browser && isMobileUaApp(app?.id)) {
+        if (result?.isNew && result.browser && ctx.isMobileUaApp(app?.id)) {
           try {
             const bc = result.browser.browsingContext;
-            if (bc) bc.customUserAgent = MOBILE_UA_STRING;
-            else result.browser.customUserAgent = MOBILE_UA_STRING;
+            if (bc) bc.customUserAgent = ctx.MOBILE_UA_STRING;
+            else result.browser.customUserAgent = ctx.MOBILE_UA_STRING;
           } catch (e) {
             console.warn(
               "[BgalazkaExtension] Failed to apply mobile UA:",
@@ -3550,8 +2910,8 @@
             // A process swap can revoke activation after openPanel's first
             // retries. Reassert promptly on navigation instead of waiting
             // for the periodic status check.
-            syncAppPanelBrowserActivity();
-            updateWebToolbarState();
+            ctx.syncAppPanelBrowserActivity();
+            ctx.updateWebToolbarState();
           };
           result.browser.addEventListener("load", onNav);
           result.browser.addEventListener("pageshow", onNav);
@@ -3567,20 +2927,20 @@
           const progressListener = {
             onLocationChange(progress) {
               if (progress && !progress.isTopLevel) return;
-              scheduleZenCssFirstLoad(result.browser);
-              updateWebToolbarState();
+              ctx.scheduleZenCssFirstLoad(result.browser);
+              ctx.updateWebToolbarState();
             },
             onStateChange(progress, request, stateFlags) {
               if (progress && !progress.isTopLevel) return;
               if (
-                zenCssEnabled() &&
+                ctx.zenCssEnabled() &&
                 stateFlags & Ci.nsIWebProgressListener.STATE_STOP &&
                 stateFlags & Ci.nsIWebProgressListener.STATE_IS_NETWORK
               ) {
-                cancelZenCssFirstLoad(result.browser);
-                scheduleZenCssFirstLoad(result.browser);
+                ctx.cancelZenCssFirstLoad(result.browser);
+                ctx.scheduleZenCssFirstLoad(result.browser);
               }
-              updateWebToolbarState();
+              ctx.updateWebToolbarState();
             },
             QueryInterface: ChromeUtils.generateQI([
               "nsIWebProgressListener",
@@ -3608,31 +2968,31 @@
     const origRefreshApp = apps.refreshApp?.bind(apps);
     if (origRefreshApp)
       apps.refreshApp = function (id, ...args) {
-        if (!essentialPanels.has(id)) return origRefreshApp(id, ...args);
-        const browser = getAllAppBrowsers().find(
+        if (!ctx.essentialPanels.has(id)) return origRefreshApp(id, ...args);
+        const browser = ctx.getAllAppBrowsers().find(
           (browser) => browser._bgalazkaAppId === id,
         );
         if (browser) browser.reload();
-        else loadEssentialInBackground(essentialPanels.get(id));
+        else ctx.loadEssentialInBackground(ctx.essentialPanels.get(id));
       };
     const origSaveWidth = apps.saveWidth?.bind(apps);
     if (origSaveWidth)
       apps.saveWidth = function (width) {
-        const record = essentialPanels.get(
-          getActiveAppBrowser()?._bgalazkaAppId,
+        const record = ctx.essentialPanels.get(
+          ctx.getActiveAppBrowser()?._bgalazkaAppId,
         );
         if (record) {
           record.app.width = width;
-          saveEssentialSettings(record);
+          ctx.saveEssentialSettings(record);
         } else return origSaveWidth(width);
       };
     const origCloseApp = apps.closeApp?.bind(apps);
     if (origCloseApp) {
       apps.closeApp = function (appId, ...args) {
         pruneNavigationListeners(appId);
-        removeAddonHostRecord(appId);
+        ctx.removeAddonHostRecord(appId);
         const res = origCloseApp(appId, ...args);
-        if (!addonHostByAppId.size) setTimeout(removeEmptyAddonHostFolder, 0);
+        if (!ctx.addonHostByAppId.size) setTimeout(ctx.removeEmptyAddonHostFolder, 0);
         return res;
       };
     }
@@ -3641,9 +3001,9 @@
     if (origRemoveApp) {
       apps.removeApp = function (appId, ...args) {
         pruneNavigationListeners(appId);
-        removeAddonHostRecord(appId);
+        ctx.removeAddonHostRecord(appId);
         const res = origRemoveApp(appId, ...args);
-        if (!addonHostByAppId.size) setTimeout(removeEmptyAddonHostFolder, 0);
+        if (!ctx.addonHostByAppId.size) setTimeout(ctx.removeEmptyAddonHostFolder, 0);
         return res;
       };
     }
@@ -3682,16 +3042,16 @@
   // this script starts. They do not belong to this window's live bridge.
   function pruneRestoredAddonHosts() {
     const folder =
-      findAddonHostFolder() ||
+      ctx.findAddonHostFolder() ||
       [...document.querySelectorAll("zen-folder")].find(
-        (node) => node.getAttribute("label") === ADDON_HOST_FOLDER_LABEL,
+        (node) => node.getAttribute("label") === ctx.ADDON_HOST_FOLDER_LABEL,
       );
     if (folder) {
-      setAddonHostFolder(folder);
-      keepAddonHostFolderCollapsed(folder);
+      ctx.addonHostFolder = folder;
+      ctx.keepAddonHostFolderCollapsed(folder);
     }
     for (const tab of [...(window.gBrowser?.tabs || [])]) {
-      if (addonHostByTab.get(tab)) continue;
+      if (ctx.addonHostByTab.get(tab)) continue;
       if (
         tab.hasAttribute("bgalazka-addon-host") ||
         tab.hasAttribute("bgalazka-addon-host-fallback") ||
@@ -3708,7 +3068,7 @@
         }
       }
     }
-    if (!addonHostByAppId.size) removeEmptyAddonHostFolder();
+    if (!ctx.addonHostByAppId.size) ctx.removeEmptyAddonHostFolder();
   }
   // Session restoration can inject the folder after the first UI sync.
   const restoredHostTimers = [0, 1000, 4000].map((delay) =>
@@ -3719,8 +3079,8 @@
   // Hot-reload/startup normalization: if the opt-in bridge was already on
   // and a standalone panel browser predates this extension instance, unload it
   // once so the next open is born as a real-tab-backed browser.
-  if (isAddonTabIdBridgeEnabled()) {
-    setTimeout(unloadPanelBrowsersForAddonBridge, 0);
+  if (ctx.isAddonTabIdBridgeEnabled()) {
+    setTimeout(ctx.unloadPanelBrowsersForAddonBridge, 0);
   }
   // Add-on-host diagnostics used to have their own permanent 1s timer even
   // while Settings was closed. The existing 2s maintenance tick now refreshes
@@ -3887,15 +3247,16 @@
       [BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ZOOM, "bgalazka-webtoolbar-zoom", false],
       [BGALAZKA_EXT_PREFS.WEB_TOOLBAR_TOP, "bgalazka-webtoolbar-top", false],
     ];
-    applyForcePanelBlackVisual(
-      getPref(BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, false), null, false);
+    ctx.forcePanelBlackState = getPref(BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, false);
+    ctx.applyForcePanelBlackVisual(ctx.forcePanelBlackState, null, false);
     try {
       const blackObserver = () => {
         const forced = getPref(BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, false);
+        ctx.forcePanelBlackState = forced;
         const button = document.querySelector(
           "#zen-app-panel-toolbar .bgalazka-panel-black-btn",
         );
-        applyForcePanelBlackVisual(forced, button, false);
+        ctx.applyForcePanelBlackVisual(forced, button, false);
       };
       Services.prefs.addObserver(
         BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK,
@@ -3924,8 +3285,8 @@
             getPref(pref, def) ? "true" : "false",
           );
           if (pref === BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED) {
-            ensureWebToolbar();
-            startWebToolbarPolling();
+            ctx.ensureWebToolbar();
+            ctx.startWebToolbarPolling();
           }
         };
         Services.prefs.addObserver(pref, observer, false);
@@ -3995,7 +3356,7 @@
       // Optional extension settings must never make the base modal unusable.
       // A single failed row should be reported without aborting other hooks.
       try {
-        injectSettingsUI();
+        ctx.injectSettingsUI();
       } catch (error) {
         console.error("[BgalazkaExtension] Extension settings failed:", error);
       }
@@ -4020,9 +3381,9 @@
   }
 
   // Safe window event hooks that fire strictly AFTER tab operations finish
-  const tabPinnedHandler = () => requestTileSync(80);
-  const tabUnpinnedHandler = () => requestTileSync(0);
-  const workspaceSwitchedHandler = () => requestTileSync(300);
+  const tabPinnedHandler = () => ctx.requestTileSync(80);
+  const tabUnpinnedHandler = () => ctx.requestTileSync(0);
+  const workspaceSwitchedHandler = () => ctx.requestTileSync(300);
   window.addEventListener("TabPinned", tabPinnedHandler);
   window.addEventListener("TabClose", tabUnpinnedHandler);
   window.addEventListener("TabAttrModified", tabPinnedHandler);
@@ -4059,8 +3420,8 @@
   });
 
   // Initialize
-  requestTileSync(150);
-  setTimeout(() => requestTileSync(150), 1600);
+  ctx.requestTileSync(150);
+  setTimeout(() => ctx.requestTileSync(150), 1600);
 
   // ALL-SIDES RESIZE (note 16): the panel root usually already exists by
   // this point (see patchAppsInstance's own retry comment above), but this
@@ -4068,12 +3429,12 @@
   // from the openPanel hook above for the (normal) case where the panel
   // root doesn't exist until the base mod actually builds it.
   const initAllSidesResizeUi = () => {
-    const ok = ensureVerticalResizeHandles();
+    const ok = ctx.ensureVerticalResizeHandles();
     ensurePillAllSidesResizeButton();
     // Not actually an all-sides-resize feature (note 25, not 16) -- just
     // reusing this same "root/pill exists yet?" retry loop instead of
     // spinning up a near-identical second setInterval for it.
-    ensurePillGrabberVerticalDrag();
+    ctx.ensurePillGrabberVerticalDrag();
     return ok;
   };
   if (!safeCall(initAllSidesResizeUi, "initAllSidesResizeUi")) {
@@ -4089,28 +3450,10 @@
     registerCleanup(() => clearInterval(vResizeInitTimer));
   }
 
-  const secondaryViewsSource = window.ZentralFeatureSources?.secondaryViews;
-  try {
-    if (typeof secondaryViewsSource === "function") {
-      secondaryViewsSource({
-        getPref, getLinkedTriplePairs, linkedPairFor,
-        essentialPanels, saveLinkedTriplePairs, unlinkTriplePair,
-        registerCleanup, setTimeout, clearTimeout, setInterval, clearInterval,
-        setSecondaryFallbackPolling: (callback) => {
-          syncSecondaryFallbackPolling = callback;
-        },
-        attachZenInternetPanelBrowser, updateZenCssBrowser, zenCssEnabled,
-        syncPanelPushState, updateWebToolbarState, syncAppPanelBrowserActivity,
-        periodicFallbackPollingEnabled, buildSearchUrl, looksLikeUrl,
-        navigatePanelHistory, parseSVG, PREF_ICONS,
-      });
-      (window.ZentralFeatureStatus ||= Object.create(null)).secondaryViews = true;
-    } else {
-      console.warn("[BgalazkaExtension] Secondary views source missing; triple view and super pin unavailable");
-    }
-  } catch (error) {
-    console.error("[BgalazkaExtension] Secondary views initialization failed:", error);
-  }
+  /* Secondary views keep the native first panel and its toolbar intact. */
+  
+  window.ZentralRuntime.runPart("secondary-views");
+
 
   /* ==========================================================================
    * 6. CLEANUP / UNLOAD
@@ -4118,17 +3461,6 @@
   const performBgalazkaUnload = () => {
     if (extensionDisposed) return;
     extensionDisposed = true;
-    if (window.ZentralFeatureStatus) {
-      window.ZentralFeatureStatus.panelGeometry = false;
-      window.ZentralFeatureStatus.tileIsolation = false;
-      window.ZentralFeatureStatus.cornerPanels = false;
-      window.ZentralFeatureStatus.rss = false;
-      window.ZentralFeatureStatus.secondaryViews = false;
-      window.ZentralFeatureStatus.webToolbar = false;
-      window.ZentralFeatureStatus.extensionSettings = false;
-      window.ZentralFeatureStatus.browserIntegrations = false;
-      window.ZentralFeatureStatus.panelStyleBridge = false;
-    }
     // Later wrappers wrap earlier wrappers. Unwind in reverse order so a
     // restored outer wrapper cannot leave a stale inner extension installed.
     cleanupFns
@@ -4147,4 +3479,8 @@
     UC_API.addUnloadListener(performBgalazkaUnload);
   }
   window.addEventListener("unload", performBgalazkaUnload, { once: true });
+
+return ()=>performBgalazkaUnload();
+}});
+
 })();

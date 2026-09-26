@@ -1,12 +1,187 @@
+(function(){
 "use strict";
-// Corner-docked apps and essential-tab panel identities are one feature.
-(function () {
-  const sources = (window.ZentralFeatureSources ||= Object.create(null));
-  sources.cornerPanels = function initCornerPanels({ EXT_PREFS, getPref,
-    registerCleanup, setTimeout, clearTimeout, isolateTile,
-    pruneIsolationTiles, getAllAppBrowsers, getMobileUaAppIds,
-    saveMobileUaAppIds, getPanelContainerAssignments,
-    savePanelContainerAssignments }) {
+const Services=globalThis.Services||ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
+const ZentralRuntime=window.ZentralRuntime;
+// Feature: corner-panels. Imports and exposed are listed in ARCHITECTURE.md.
+// Preparation publishes functions; activation preserves the baseline initialization order.
+ZentralRuntime.registerPart("corner-panels", function* (ctx) {
+Object.defineProperties(ctx,{"essentialPanels": {configurable:true,get:()=>essentialPanels},
+"linkedPairFor": {configurable:true,get:()=>linkedPairFor},
+"linkedTriplePairs": {configurable:true,get:()=>linkedTriplePairs,set:value=>{linkedTriplePairs=value}},
+"loadEssentialInBackground": {configurable:true,get:()=>loadEssentialInBackground},
+"requestTileSync": {configurable:true,get:()=>requestTileSync},
+"saveEssentialSettings": {configurable:true,get:()=>saveEssentialSettings},
+"saveLinkedTriplePairs": {configurable:true,get:()=>saveLinkedTriplePairs},
+"syncCornerTiles": {configurable:true,get:()=>syncCornerTiles},
+"unlinkTriplePair": {configurable:true,get:()=>unlinkTriplePair}});
+yield;
+const isolatedTiles = new Map();
+
+  // Capture only the small audio badge. Run before the essential tab/MMB
+  // guards so muting cannot select, open, drag or unload the containing tab.
+  const tileAudioEvents = [
+    "pointerdown",
+    "pointerup",
+    "mousedown",
+    "mouseup",
+    "click",
+    "auxclick",
+    "dblclick",
+    "dragstart",
+    "keydown",
+    "keyup",
+  ];
+  const onTileAudioInput = (event) => {
+    const badge = event.target.closest?.(".bgalazka-tile-audio");
+    const tile = badge?.closest?.(".zen-app-tile[data-app-id]");
+    if (!tile || !ctx.getPref(ctx.EXT_PREFS.AUDIO_INDICATOR, false)) return;
+    const keyboard = event.type === "keydown" || event.type === "keyup";
+    if (keyboard && event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    if (
+      (event.type === "click" && event.button === 0) ||
+      (event.type === "keydown" && !event.repeat)
+    ) {
+      const browser = ctx.getAllAppBrowsers().find(
+        (b) => b._bgalazkaAppId === tile.dataset.appId,
+      );
+      ctx.togglePanelAudio(browser);
+    }
+  };
+  tileAudioEvents.forEach((type) =>
+    window.addEventListener(type, onTileAudioInput, true),
+  );
+  ctx.registerCleanup(() =>
+    tileAudioEvents.forEach((type) =>
+      window.removeEventListener(type, onTileAudioInput, true),
+    ),
+  );
+
+  const getTileFromEvent = (e) => {
+    const target = e.target;
+    if (!(target instanceof Element)) return null;
+
+    const tile = target.closest(".zen-app-tile[data-app-id]");
+    if (!tile || !tile.closest(".tabbrowser-tab")) return null;
+
+    return tile;
+  };
+
+  const tileMouseDownIsolationHandler = (e) => {
+    const tile = getTileFromEvent(e);
+    if (!tile) return;
+
+    /*
+     * Essential/pinned tabs can react to mousedown before the tile's
+     * click handler opens the panel. Prevent the browser's tab-selection
+     * default action and stop the event before it reaches the tab.
+     *
+     * The tile's own mousedown handler is not required for normal corner
+     * button activation; the native middle-click unload is handled by the
+     * later auxclick listener on the tile.
+     */
+    if (e.button === 0 || e.button === 1 || e.button === 2) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
+  window.addEventListener("pointerdown", tileMouseDownIsolationHandler, true);
+  window.addEventListener("mousedown", tileMouseDownIsolationHandler, true);
+
+  const isolateTile = (tile) => {
+    if (!(tile instanceof Element)) return;
+    if (!tile.matches(".zen-app-tile[data-app-id]")) return;
+    if (isolatedTiles.has(tile)) return;
+
+    const clickIsolationHandler = (e) => {
+      if (!tile.closest(".tabbrowser-tab")) return;
+      e.stopPropagation();
+    };
+
+    const auxClickIsolationHandler = (e) => {
+      if (!tile.closest(".tabbrowser-tab")) return;
+      e.stopPropagation();
+    };
+
+    // A capture stop on the tile swallows clicks on its icon descendants.
+    // Bubble isolation preserves the native handler; window down/MMB guards
+    // already protect the containing tab before it can act on those presses.
+    tile.addEventListener("click", clickIsolationHandler);
+    tile.addEventListener("auxclick", auxClickIsolationHandler);
+
+    isolatedTiles.set(tile, {
+      click: clickIsolationHandler,
+      auxclick: auxClickIsolationHandler,
+    });
+  };
+
+  const pruneIsolationTiles = () => {
+    // Grid renders replace tiles; release detached nodes and their closures.
+    isolatedTiles.forEach((handlers, tile) => {
+      if (tile.isConnected) return;
+      tile.removeEventListener("click", handlers.click);
+      tile.removeEventListener("auxclick", handlers.auxclick);
+      isolatedTiles.delete(tile);
+    });
+  };
+  const scanIsolationTiles = (root = document) => {
+    pruneIsolationTiles();
+    if (root instanceof Element) isolateTile(root);
+    root.querySelectorAll?.(".zen-app-tile[data-app-id]").forEach(isolateTile);
+  };
+
+  scanIsolationTiles();
+
+  const tileIsolationObserver = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach((node) => {
+        if (!(node instanceof Element)) return;
+
+        if (node.matches(".zen-app-tile[data-app-id]")) {
+          isolateTile(node);
+        }
+
+        node
+          .querySelectorAll?.(".zen-app-tile[data-app-id]")
+          .forEach(isolateTile);
+      });
+    });
+    // Added subtrees were scanned above. Badge/content mutations do not
+    // require another query across the entire browser document.
+    pruneIsolationTiles();
+  });
+
+  const appsGrid = document.getElementById("zen-apps-sidebar-grid");
+  if (appsGrid) {
+    tileIsolationObserver.observe(appsGrid, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  ctx.registerCleanup(() => {
+    window.removeEventListener(
+      "pointerdown",
+      tileMouseDownIsolationHandler,
+      true,
+    );
+    window.removeEventListener(
+      "mousedown",
+      tileMouseDownIsolationHandler,
+      true,
+    );
+
+    isolatedTiles.forEach((handlers, tile) => {
+      tile.removeEventListener("click", handlers.click);
+      tile.removeEventListener("auxclick", handlers.auxclick);
+    });
+
+    isolatedTiles.clear();
+    tileIsolationObserver.disconnect();
+  });
   /* ==========================================================================
    * 3. CORNER TILES DOM SYNCHRONIZATION (SAFE & CRASH-PROOF, STABLE DOCKING)
    * ========================================================================== */
@@ -72,7 +247,7 @@
     window.addEventListener(type, onWindowMMBCapture, { capture: true });
   });
 
-  registerCleanup(() => {
+  ctx.registerCleanup(() => {
     mmbEvents.forEach((type) => {
       window.removeEventListener(type, onWindowMMBCapture, { capture: true });
     });
@@ -83,40 +258,26 @@
   // normal grid tile or create a second panel implementation.
   const essentialPanels = new Map();
   const essentialTabRecords = new WeakMap();
-  // Session restoration can expose dozens of saved Essentials at once.
-  // Never create all of their remote browsers in one synchronous tile pass.
-  let nextPreloadAt = 0;
-  const pendingPreloadTimers = new Set();
-  function scheduleEssentialPreload(record) {
-    // Reserve this record before queueing: tab-attribute events during session
-    // restore may request another tile sync before its timer has fired.
-    record.preloadAttempted = true;
-    const now = Date.now();
-    const delay = Math.max(0, nextPreloadAt - now);
-    nextPreloadAt = now + delay + 1500;
-    const timer = setTimeout(() => {
-      pendingPreloadTimers.delete(timer);
-      if (!record.tab.isConnected || !record.app.preload ||
-          essentialPanels.get(record.app.id) !== record) return;
-      try {
-        loadEssentialInBackground(record);
-      } catch (error) {
-        // A failed startup load stays failed until a deliberate user retry.
-        // Retrying on every tab change can create an unbounded browser loop.
-        console.warn("[BgalazkaExtension] Essential preload failed", error);
-      }
-    }, delay);
-    pendingPreloadTimers.add(timer);
+  let nextPreloadAt=0;
+  const pendingPreloads=new Set();
+  function scheduleEssentialPreload(record){
+    record.preloadAttempted=true;
+    const now=Date.now(), delay=Math.max(0,nextPreloadAt-now);
+    nextPreloadAt=now+delay+1500;
+    const timer=ctx.setTimeout(()=>{
+      pendingPreloads.delete(timer);
+      if(!record.tab.isConnected || !record.app.preload || essentialPanels.get(record.app.id)!==record)return;
+      try{loadEssentialInBackground(record);}catch(error){console.warn("[Zentral] Essential preload failed",error);}
+    },delay);
+    pendingPreloads.add(timer);
   }
-  registerCleanup(() => {
-    for (const timer of pendingPreloadTimers) clearTimeout(timer);
-    pendingPreloadTimers.clear();
-  });
+  ctx.registerCleanup(()=>{for(const timer of pendingPreloads)ctx.clearTimeout(timer);pendingPreloads.clear();});
+
   // Pair identities belong to the extension, not to the lifetime of a browser.
   const linkedTriplePref = "zen.workspace.bgalazka.linked_triple_pairs";
   let linkedTriplePairs = [];
   try {
-    const saved = JSON.parse(getPref(linkedTriplePref, "[]"));
+    const saved = JSON.parse(ctx.getPref(linkedTriplePref, "[]"));
     if (Array.isArray(saved))
       linkedTriplePairs = saved.filter(
         (pair) =>
@@ -145,7 +306,7 @@
   }
   function normalPanelIdExists(id) {
     try {
-      const apps = JSON.parse(getPref("zen.workspace.apps.sidebar.apps", "[]"));
+      const apps = JSON.parse(ctx.getPref("zen.workspace.apps.sidebar.apps", "[]"));
       return Array.isArray(apps) && apps.some((app) => app.id === id);
     } catch (_) {
       return false;
@@ -187,7 +348,7 @@
       return result;
     };
     essentialBadgeApps.updateAppBadge = updateBadge;
-    registerCleanup(() => {
+    ctx.registerCleanup(() => {
       if (essentialBadgeApps.updateAppBadge === updateBadge)
         essentialBadgeApps.updateAppBadge = originalEssentialBadgeUpdater;
     });
@@ -295,7 +456,7 @@
   }
   function loadEssentialInBackground(record) {
     const apps = window.Zentral?.Apps;
-    if (!apps?.getOrCreateAppBrowser) return false;
+    if (!apps?.getOrCreateAppBrowser || !document.getElementById("zen-app-panel-slider")) return false;
     const { browser, isNew } = apps.getOrCreateAppBrowser(record.app) || {};
     if (!browser) return false;
     if (isNew || browser.currentURI?.spec === "about:blank") {
@@ -313,7 +474,7 @@
           }),
       });
       record.loadedSource = record.app.url;
-      setTimeout(() => {
+      ctx.setTimeout(() => {
         if (
           !record.tab.isConnected ||
           !browser.isConnected ||
@@ -342,7 +503,7 @@
     return true;
   }
   function promoteEssentialPanel(record) {
-    const browser = getAllAppBrowsers().find(
+    const browser = ctx.getAllAppBrowsers().find(
       (b) => b._bgalazkaAppId === record.app.id,
     );
     // A linked launcher must survive its tab even if Smart Sleep never
@@ -352,7 +513,7 @@
     // Keep the same app id: Zentral's private browser map, active panel,
     // browsing history, mute, pin and in-page form state all stay intact.
     apps.saveApps();
-    const saved = JSON.parse(getPref("zen.workspace.apps.sidebar.apps", "[]"));
+    const saved = JSON.parse(ctx.getPref("zen.workspace.apps.sidebar.apps", "[]"));
     if (!Array.isArray(saved)) throw new Error("Invalid normal panel list");
     const app = {
       ...record.app,
@@ -363,13 +524,13 @@
       workspaceId: "all",
     };
     if (!saved.some((item) => item.id === app.id)) saved.push(app);
-    const assignments = getPanelContainerAssignments();
+    const assignments = ctx.getPanelContainerAssignments();
     if (record.userContextId > 0) assignments[app.id] = record.userContextId;
-    savePanelContainerAssignments(assignments);
-    const mobileIds = getMobileUaAppIds();
+    ctx.savePanelContainerAssignments(assignments);
+    const mobileIds = ctx.getMobileUaAppIds();
     if (record.mobileUa) mobileIds.add(app.id);
     else mobileIds.delete(app.id);
-    saveMobileUaAppIds(mobileIds);
+    ctx.saveMobileUaAppIds(mobileIds);
     // Do not use the best-effort preference helper here: a failed save must
     // throw so sync retains the live browser and retries instead of losing it.
     Services.prefs.setStringPref(
@@ -411,13 +572,13 @@
     if (
       root?.hasAttribute("open") &&
       !root.hasAttribute("closing") &&
-      getActiveAppBrowser()?._bgalazkaAppId === record.app.id
+      ctx.getActiveAppBrowser()?._bgalazkaAppId === record.app.id
     ) {
       apps.closePanel();
       return;
     }
     const source = getEssentialSource(record.tab);
-    const existing = getAllAppBrowsers().find(
+    const existing = ctx.getAllAppBrowsers().find(
       (b) => b._bgalazkaAppId === record.app.id,
     );
     if (!existing && source) record.app.url = source;
@@ -444,7 +605,7 @@
     if (isSyncingTiles) return;
     isSyncingTiles = true;
     try {
-      const enabled = getPref(EXT_PREFS.CORNER_TILES, false);
+      const enabled = ctx.getPref(ctx.EXT_PREFS.CORNER_TILES, false);
       const targets = new Set(
         enabled
           ? [...(window.gBrowser?.tabs || [])].filter(
@@ -457,7 +618,7 @@
                   "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
                 ) &&
                 (isEssentialPanelTab(tab) ||
-                  getPref(EXT_PREFS.ALL_TAB_PANELS, false)),
+                  ctx.getPref(ctx.EXT_PREFS.ALL_TAB_PANELS, false)),
             )
           : [],
       );
@@ -483,12 +644,12 @@
         essentialPanels.delete(id);
       }
       const browsers = new Map(
-        getAllAppBrowsers().map((b) => [b._bgalazkaAppId, b]),
+        ctx.getAllAppBrowsers().map((b) => [b._bgalazkaAppId, b]),
       );
       const root = document.getElementById("zen-app-panel-root");
       const active =
         root?.hasAttribute("open") && !root.hasAttribute("closing")
-          ? getActiveAppBrowser()?._bgalazkaAppId
+          ? ctx.getActiveAppBrowser()?._bgalazkaAppId
           : null;
       for (const tab of targets) {
         let record = essentialTabRecords.get(tab);
@@ -535,8 +696,7 @@
           essentialPanels.set(app.id, record);
           if (settings.panelId !== stableId) saveEssentialSettings(record);
         }
-        if (record.app.preload && !record.preloadAttempted)
-          scheduleEssentialPreload(record);
+        if (record.app.preload && !record.preloadAttempted) scheduleEssentialPreload(record);
         const essential = isEssentialPanelTab(tab);
         record.wasEssential = essential;
         const iconHost = !essential
@@ -629,7 +789,7 @@
       isSyncingTiles = false;
     }
   }
-  registerCleanup(() => {
+  ctx.registerCleanup(() => {
     for (const [id, record] of essentialPanels) {
       window.Zentral?.Apps?.closeApp?.(id);
       releaseTabPanelLauncher(record);
@@ -639,14 +799,12 @@
 
   let syncTimer = null;
   function requestTileSync(delay = 120) {
-    if (syncTimer) clearTimeout(syncTimer);
-    syncTimer = setTimeout(syncCornerTiles, delay);
+    if (syncTimer) ctx.clearTimeout(syncTimer);
+    syncTimer = ctx.setTimeout(syncCornerTiles, delay);
   }
-  registerCleanup(() => {
-    if (syncTimer) clearTimeout(syncTimer);
+  ctx.registerCleanup(() => {
+    if (syncTimer) ctx.clearTimeout(syncTimer);
   });
-    return { essentialPanels, linkedPairFor, getLinkedTriplePairs: () => linkedTriplePairs,
-      saveLinkedTriplePairs, unlinkTriplePair, requestTileSync,
-      syncCornerTiles, saveEssentialSettings, loadEssentialInBackground };
-  };
+});
+
 })();

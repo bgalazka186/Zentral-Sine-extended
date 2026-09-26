@@ -1,3 +1,8 @@
+(function(){
+"use strict";
+const Services=globalThis.Services||ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
+const ZentralRuntime=window.ZentralRuntime;
+ZentralRuntime.register({id:"logger",init(){
 // ==UserScript==
 // @name         Zentral-Logger
 // @description  Comprehensive diagnostic logger for Zentral (Apps Grid, Tab Groups, Settings & Layout Renderings).
@@ -1525,4 +1530,8 @@
     "Zentral-Logger",
     "Zentral-Logger v1.0.2 initialized with clean format & deduplication. Press Alt+L to export logs.",
   );
+})();
+
+}});
+
 })();

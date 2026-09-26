@@ -1,18 +1,10 @@
+(function(){
 "use strict";
-// Complete base class kept intact so private fields remain class-local.
-(function () {
-  const sources = (window.ZentralClassSources ||= Object.create(null));
-  sources.tabGroups = function defineZentralTabGroups({ Constants, Core, createSVGElement }) {
-  /* ====
-   * 4.0 TAB GROUPS MODULE (ZentralTabGroups)
-   * ============================================================================
-   */
-
-  /**
-   * Zentral Tab Groups Module
-   * Enhances native tab groups with color pickers, folder integration, tooltips, and state persistence.
-   */
-  class ZentralTabGroups {
+const Services=globalThis.Services||ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
+const ZentralRuntime=window.ZentralRuntime;
+ZentralRuntime.register({id:"tab-groups",init({shared}){
+const {Constants,Core,createSVGElement,SVG_STRINGS,WELL_KNOWN_SERVICES}=shared;
+class ZentralTabGroups {
     /** @private Tabstrip MutationObserver */
     #tabStripObserver = null;
     /** @private Native popup suppression listener */
@@ -5305,6 +5297,10 @@
       }
     }
   }
-    return ZentralTabGroups;
-  };
+const instance=new ZentralTabGroups();
+window.Zentral.TabGroups=instance;
+try { instance.init(); } catch(error) { try {instance.destroy();}catch(_){} delete window.Zentral.TabGroups; throw error; }
+return ()=>{instance.destroy();delete window.Zentral.TabGroups;};
+}});
+
 })();

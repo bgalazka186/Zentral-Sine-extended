@@ -1,44 +1,37 @@
+(function(){
 "use strict";
-// Containers, per-panel privacy and real-tab-backed add-on hosts share the
-// same browser creation boundary, so they stay together in this module.
-(function () {
-  const sources = (window.ZentralFeatureSources ||= Object.create(null));
-  sources.browserIntegrations = function initBrowserIntegrations({
-    BGALAZKA_EXT_PREFS, getPref, registerCleanup, safeCall,
-    setInterval, clearInterval, setTimeout, getAllAppBrowsers,
-    essentialPanels,
-  }) {
-  /* ==========================================================================
-   * FIREFOX CONTAINERS + PER-PANEL CACHE/COOKIE CLEARING
-   * -----------------------------------------------------------------------
-   * Adds two app-specific controls beside the native "Load at Startup" row:
-   *   1) Container: <name>  -> choose a Firefox Contextual Identity per app.
-   *   2) Clear Panel Cache & Cookies -> clear this app site's cookies/caches
-   *      only for the selected userContextId.
-   *
-   * WHY THIS LIVES ENTIRELY IN THE EXTENSION (see architecture notes 1 & 5):
-   * - Container assignments are stored in their own JSON pref, so we do not
-   *   add fields to Zentral's native app object or edit saveApps()/loadApps().
-   * - Firefox containers are backed by ContextualIdentityService. Its public
-   *   identities expose the numeric userContextId that Gecko stores in Origin
-   *   Attributes and uses to isolate cookie jars and other site state.
-   * - Zentral's native getOrCreateAppBrowser() hard-codes usercontextid="0"
-   *   BEFORE appending the <browser>. For a remote <browser>, the identity must
-   *   be present before connection/frame-loader creation. Because the base code
-   *   above this marker is intentionally immutable, the getOrCreate wrapper
-   *   below temporarily intercepts ONLY the synchronous setAttribute call made
-   *   while that one app browser is being constructed, then immediately restores
-   *   Element.prototype. Nothing remains globally patched after the call.
-   * - The same wrapper also stamps userContextId into subsequent load options
-   *   and content principals. Firefox's own URI-loading helper does the same
-   *   principal OriginAttributes adjustment for container-tab navigations.
-   * - ClearDataService.deleteDataFromSite() is used instead of globally clearing
-   *   a whole container. The OriginAttributes pattern { userContextId } keeps
-   *   the operation scoped to this app's selected container, while the site key
-   *   keeps it scoped to this app's configured site. A panel is unloaded first
-   *   so a live page cannot immediately repopulate cookies while clearing.
-   * ========================================================================== */
-  const PANEL_CONTAINERS_PREF =
+const Services=globalThis.Services||ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
+const ZentralRuntime=window.ZentralRuntime;
+// Feature: browser-integrations. Imports and exposed are listed in ARCHITECTURE.md.
+// Preparation publishes functions; activation preserves the baseline initialization order.
+ZentralRuntime.registerPart("browser-integrations", function* (ctx) {
+Object.defineProperties(ctx,{"ADDON_HOST_FOLDER_LABEL": {configurable:true,get:()=>ADDON_HOST_FOLDER_LABEL},
+"MOBILE_UA_STRING": {configurable:true,get:()=>MOBILE_UA_STRING},
+"addonHostByAppId": {configurable:true,get:()=>addonHostByAppId},
+"addonHostByTab": {configurable:true,get:()=>addonHostByTab},
+"addonHostFolder": {configurable:true,get:()=>addonHostFolder,set:value=>{addonHostFolder=value}},
+"applyPanelContainerLoadContext": {configurable:true,get:()=>applyPanelContainerLoadContext},
+"callGetOrCreateWithAddonHostBrowser": {configurable:true,get:()=>callGetOrCreateWithAddonHostBrowser},
+"ensureMobileUaMenuItem": {configurable:true,get:()=>ensureMobileUaMenuItem},
+"ensurePanelPrivacyMenuItems": {configurable:true,get:()=>ensurePanelPrivacyMenuItems},
+"findAddonHostFolder": {configurable:true,get:()=>findAddonHostFolder},
+"getMobileUaAppIds": {configurable:true,get:()=>getMobileUaAppIds},
+"getPanelContainerAssignments": {configurable:true,get:()=>getPanelContainerAssignments},
+"getPanelUserContextId": {configurable:true,get:()=>getPanelUserContextId},
+"isAddonTabIdBridgeEnabled": {configurable:true,get:()=>isAddonTabIdBridgeEnabled},
+"isMobileUaApp": {configurable:true,get:()=>isMobileUaApp},
+"keepAddonHostFolderCollapsed": {configurable:true,get:()=>keepAddonHostFolderCollapsed},
+"removeAddonHostRecord": {configurable:true,get:()=>removeAddonHostRecord},
+"removeEmptyAddonHostFolder": {configurable:true,get:()=>removeEmptyAddonHostFolder},
+"saveMobileUaAppIds": {configurable:true,get:()=>saveMobileUaAppIds},
+"savePanelContainerAssignments": {configurable:true,get:()=>savePanelContainerAssignments},
+"setAddonTabIdBridgeEnabled": {configurable:true,get:()=>setAddonTabIdBridgeEnabled},
+"syncAddonHostBrowserActivity": {configurable:true,get:()=>syncAddonHostBrowserActivity},
+"syncAppPanelBrowserActivity": {configurable:true,get:()=>syncAppPanelBrowserActivity},
+"unloadPanelBrowsersForAddonBridge": {configurable:true,get:()=>unloadPanelBrowsersForAddonBridge},
+"updateAddonHostInspection": {configurable:true,get:()=>updateAddonHostInspection}});
+yield;
+const PANEL_CONTAINERS_PREF =
     "zen.workspace.bgalazka.panel_container_assignments";
   const BASE_ZENTRAL_APPS_PREF = "zen.workspace.apps.sidebar.apps";
   const FIREFOX_CONTAINERS_ENABLED_PREF = "privacy.userContext.enabled";
@@ -167,17 +160,17 @@
 
   function getPanelUserContextId(appId) {
     if (!appId) return 0;
-    const essential = essentialPanels.get(appId);
+    const essential = ctx.essentialPanels.get(appId);
     if (essential) return essential.userContextId;
     return normalizeUserContextId(getPanelContainerAssignments()[appId]);
   }
 
   function setPanelUserContextId(appId, userContextId) {
     if (!appId) return;
-    const essential = essentialPanels.get(appId);
+    const essential = ctx.essentialPanels.get(appId);
     if (essential) {
       essential.userContextId = normalizeUserContextId(userContextId);
-      saveEssentialSettings(essential);
+      ctx.saveEssentialSettings(essential);
       return;
     }
     const assignments = getPanelContainerAssignments();
@@ -189,7 +182,7 @@
 
   function getStoredZentralApp(appId) {
     if (!appId) return null;
-    if (essentialPanels.has(appId)) return essentialPanels.get(appId).app;
+    if (ctx.essentialPanels.has(appId)) return ctx.essentialPanels.get(appId).app;
     try {
       const raw = Services.prefs.getStringPref(BASE_ZENTRAL_APPS_PREF, "[]");
       const apps = JSON.parse(raw);
@@ -702,7 +695,7 @@
 
       popup.addEventListener("popupshowing", onPopupShowing);
       popup.addEventListener("command", onClearCommand);
-      registerCleanup(() => {
+      ctx.registerCleanup(() => {
         try {
           popup.removeEventListener("popupshowing", onPopupShowing);
           popup.removeEventListener("command", onClearCommand);
@@ -718,18 +711,18 @@
     return true;
   }
 
-  if (!safeCall(ensurePanelPrivacyMenuItems, "ensurePanelPrivacyMenuItems")) {
+  if (!ctx.safeCall(ensurePanelPrivacyMenuItems, "ensurePanelPrivacyMenuItems")) {
     let panelPrivacyMenuAttempts = 0;
-    const panelPrivacyMenuTimer = setInterval(() => {
+    const panelPrivacyMenuTimer = ctx.setInterval(() => {
       panelPrivacyMenuAttempts++;
       if (
-        safeCall(ensurePanelPrivacyMenuItems, "ensurePanelPrivacyMenuItems") ||
+        ctx.safeCall(ensurePanelPrivacyMenuItems, "ensurePanelPrivacyMenuItems") ||
         panelPrivacyMenuAttempts > 40
       ) {
-        clearInterval(panelPrivacyMenuTimer);
+        ctx.clearInterval(panelPrivacyMenuTimer);
       }
     }, 150);
-    registerCleanup(() => clearInterval(panelPrivacyMenuTimer));
+    ctx.registerCleanup(() => ctx.clearInterval(panelPrivacyMenuTimer));
   }
 
   /* ==========================================================================
@@ -755,11 +748,11 @@
   let addonBridgeResetting = false;
 
   function isAddonTabIdBridgeEnabled() {
-    return getPref(BGALAZKA_EXT_PREFS.ADDON_TAB_ID_BRIDGE, false);
+    return ctx.getPref(ctx.BGALAZKA_EXT_PREFS.ADDON_TAB_ID_BRIDGE, false);
   }
 
   function isAddonHostFolderVisible() {
-    return getPref(BGALAZKA_EXT_PREFS.SHOW_ADDON_HOST_FOLDER, false);
+    return ctx.getPref(ctx.BGALAZKA_EXT_PREFS.SHOW_ADDON_HOST_FOLDER, false);
   }
 
   function updateAddonHostInspection() {
@@ -826,7 +819,7 @@
     folder.setAttribute("bgalazka-addon-host-folder", "true");
     // Zen applies the initial collapsed state on a zero-delay timer. Reveal
     // the folder's tab list when inspection is enabled, including at startup.
-    setTimeout(() => {
+    ctx.setTimeout(() => {
       try {
         if (!folder.isConnected) return;
         folder.collapsed = !isAddonHostFolderVisible();
@@ -1024,7 +1017,7 @@
       // <browser> into a real tab. Unload each loaded app so its next open goes
       // through the real-tab factory from the beginning.
       const ids = new Set();
-      for (const browser of getAllAppBrowsers()) {
+      for (const browser of ctx.getAllAppBrowsers()) {
         if (browser?._bgalazkaAppId) ids.add(browser._bgalazkaAppId);
       }
       for (const appId of addonHostByAppId.keys()) ids.add(appId);
@@ -1086,13 +1079,8 @@
   // also restores the resource-saving half of "smart sleep": browsers that
   // get hidden are explicitly deactivated instead of being left however
   // Gecko happens to leave them.
-  function syncAppPanelBrowserActivity(browsers) {
-    // requestAnimationFrame supplies a timestamp as its first argument.
-    // When used as a callback, collect browsers ourselves instead of trying
-    // to iterate that timestamp. Explicit caller-provided browser lists stay
-    // intact (e.g. the visible-only Zen CSS repair path).
-    if (!browsers || typeof browsers[Symbol.iterator] !== "function")
-      browsers = getAllAppBrowsers();
+  function syncAppPanelBrowserActivity(browsers = ctx.getAllAppBrowsers()) {
+    if (!browsers || typeof browsers[Symbol.iterator] !== "function") browsers = ctx.getAllAppBrowsers();
     for (const browser of browsers) {
       if (!browser?.isConnected) continue;
       try {
@@ -1104,7 +1092,7 @@
         // An Essential explicitly set to Load at Startup must stay active
         // while its panel is hidden so notification pages can keep updating.
         // Other hidden app browsers retain the existing idle behavior.
-        const essential = essentialPanels.get(browser._bgalazkaAppId);
+        const essential = ctx.essentialPanels.get(browser._bgalazkaAppId);
         const backgroundPreload =
           essential?.app.preload && essential.tab.isConnected;
         const hostRecord = addonHostByAppId.get(browser._bgalazkaAppId);
@@ -1458,7 +1446,7 @@
     restoreAddonHostBrowserToTab(record);
     addonHostByAppId.delete(record.appId);
     record.browser.zenModeActive = false;
-    setTimeout(() => {
+    ctx.setTimeout(() => {
       try {
         window.Zentral?.Apps?.closeApp?.(record.appId);
       } catch (_) {}
@@ -1482,7 +1470,7 @@
   window.addEventListener("TabSelect", addonHostTabSelectHandler, true);
   window.addEventListener("TabClose", addonHostTabCloseHandler);
   window.addEventListener("TabBrowserDiscarded", addonHostTabDiscardedHandler);
-  registerCleanup(() => {
+  ctx.registerCleanup(() => {
     window.removeEventListener("TabSelect", addonHostTabSelectHandler, true);
     window.removeEventListener("TabClose", addonHostTabCloseHandler);
     window.removeEventListener(
@@ -1632,22 +1620,140 @@
     }
   }
 
-    return {
-      addonHostByAppId, addonHostByTab, ADDON_HOST_FOLDER_LABEL,
-      setAddonHostFolder: (folder) => { addonHostFolder = folder; },
-      setLastNonAddonHostTab: (tab) => { lastNonAddonHostTab = tab; },
-      getPanelContainerAssignments, savePanelContainerAssignments,
-      getPanelUserContextId, setPanelUserContextId,
-      getFirefoxContainerState, getPanelContainerMenuLabel,
-      getContainerIconUrl, ensurePanelPrivacyMenuItems,
-      findAddonHostFolder, keepAddonHostFolderCollapsed,
-      updateAddonHostInspection, isAddonTabIdBridgeEnabled,
-      setAddonTabIdBridgeEnabled, removeAddonHostRecord,
-      removeEmptyAddonHostFolder, unloadPanelBrowsersForAddonBridge,
-      syncAddonHostBrowserActivity, syncAppPanelBrowserActivity,
-      callGetOrCreateWithAddonHostBrowser, applyPanelContainerLoadContext,
-      isAddonHostTab, isUsableNormalTab,
-      createNormalTabForAddonHost, repairAddonHostSelectionAfterTransition,
-    };
-  };
+  /* ==========================================================================
+   * MOBILE USER AGENT TOGGLE (per-app checkbox, mirrors native "Load at Startup")
+   * -----------------------------------------------------------------------
+   * Feature: a per-app "Mobile User Agent" checkbox living in the same tile
+   * right-click menu as the native "Load at Startup" item, remembered per-app
+   * across restarts exactly the same way.
+   *
+   * WHY THIS IS HOOKED RATHER THAN EDITED IN PLACE (see notes 1 & 5 above):
+   * - setupContextMenu() and getOrCreateAppBrowser() belong to the
+   *   ZentralApps class defined in the base mod's own IIFE, ABOVE the
+   *   Bgalazka marker. We never edit that source directly; we reach the
+   *   singleton instance (window.Zentral.Apps, see note 5) and either wrap
+   *   its methods or attach DOM nodes to elements it already built.
+   * - We deliberately do NOT add a "mobileUA" field to the base mod's own
+   *   app objects / saveApps() whitelist, since that means editing
+   *   ZentralApps.saveApps() itself. Instead the per-app flag lives in its
+   *   own dedicated pref (a JSON array of app ids), entirely inside this
+   *   extension, so the native save/load code never needs to change.
+   * - Gecko does not re-apply a <browser>'s "useragent"/"customuseragent"
+   *   attribute to an already-connected/loaded docShell. So flipping the
+   *   checkbox unloads that app's browser via the singleton's own
+   *   closeApp() (same public method "Unload App" already uses) instead of
+   *   trying to hot-swap the UA live — it reloads with the correct UA next
+   *   time the app is opened or preloaded.
+   * ========================================================================== */
+  const MOBILE_UA_PREF = "zen.workspace.bgalazka.mobile_ua_apps";
+  const MOBILE_UA_STRING =
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36";
+
+  function getMobileUaAppIds() {
+    try {
+      const raw = Services.prefs.getStringPref(MOBILE_UA_PREF, "[]");
+      const arr = JSON.parse(raw);
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch (_) {
+      return new Set();
+    }
+  }
+
+  function saveMobileUaAppIds(set) {
+    try {
+      Services.prefs.setStringPref(
+        MOBILE_UA_PREF,
+        JSON.stringify(Array.from(set)),
+      );
+    } catch (e) {
+      console.warn("[BgalazkaExtension] Failed to save mobile UA list:", e);
+    }
+  }
+
+  function isMobileUaApp(appId) {
+    if (ctx.essentialPanels.has(appId))
+      return !!ctx.essentialPanels.get(appId).mobileUa;
+    return !!appId && getMobileUaAppIds().has(appId);
+  }
+
+  function toggleMobileUaApp(appId) {
+    const essential = ctx.essentialPanels.get(appId);
+    if (essential) {
+      essential.mobileUa = !essential.mobileUa;
+      ctx.saveEssentialSettings(essential);
+      return essential.mobileUa;
+    }
+    const set = getMobileUaAppIds();
+    const next = !set.has(appId);
+    if (next) set.add(appId);
+    else set.delete(appId);
+    saveMobileUaAppIds(set);
+    return next;
+  }
+
+  // Injects one extra <menuitem> into the native tile context menu, right
+  // after "Load at Startup" — instead of editing ZentralApps.setupContextMenu().
+  function ensureMobileUaMenuItem() {
+    const popup = document.getElementById("zen-apps-sidebar-tile-context");
+    if (!popup) return false;
+    const preloadItem = popup.querySelector("#zen-apps-sidebar-preload-item");
+    if (!preloadItem) return false;
+
+    let item = popup.querySelector("#zen-apps-sidebar-mobile-ua-item");
+    if (!item) {
+      item = document.createXULElement("menuitem");
+      item.id = "zen-apps-sidebar-mobile-ua-item";
+      item.setAttribute("label", "Mobile User Agent");
+      item.setAttribute("type", "checkbox");
+      // Keep the privacy controls directly after the native preload row:
+      // Load at Startup -> Container -> Clear Cache & Cookies -> Mobile UA.
+      const insertionAnchor =
+        popup.querySelector("#zen-apps-sidebar-clear-panel-data-item") ||
+        popup.querySelector("#zen-apps-sidebar-container-menu") ||
+        preloadItem;
+      insertionAnchor.insertAdjacentElement("afterend", item);
+
+      // Same hide/show + checked-state contract as the native items: driven
+      // entirely by popup.dataset.activeAppId, which ZentralApps already
+      // sets before showing the menu.
+      popup.addEventListener("popupshowing", () => {
+        const appId = popup.dataset.activeAppId || "";
+        item.hidden = !appId;
+        if (!appId) return;
+        if (isMobileUaApp(appId)) item.setAttribute("checked", "true");
+        else item.removeAttribute("checked");
+      });
+
+      item.addEventListener("command", () => {
+        const appId = popup.dataset.activeAppId;
+        if (!appId) return;
+        const enabled = toggleMobileUaApp(appId);
+        if (enabled) item.setAttribute("checked", "true");
+        else item.removeAttribute("checked");
+
+        // Force a clean reload with the new UA (see note above).
+        const apps = window.Zentral?.Apps;
+        // Let the XUL command/popup finish before destroying its live remote
+        // browser. The next open creates a fresh context with the new UA.
+        if (apps?.closeApp) ctx.setTimeout(() => apps.closeApp(appId), 0);
+      });
+    }
+    return true;
+  }
+
+  if (!ctx.safeCall(ensureMobileUaMenuItem, "ensureMobileUaMenuItem")) {
+    let mobileUaAttempts = 0;
+    const mobileUaMenuTimer = ctx.setInterval(() => {
+      mobileUaAttempts++;
+      if (
+        ctx.safeCall(ensureMobileUaMenuItem, "ensureMobileUaMenuItem") ||
+        mobileUaAttempts > 40
+      ) {
+        ctx.clearInterval(mobileUaMenuTimer);
+      }
+    }, 150);
+    ctx.registerCleanup(() => ctx.clearInterval(mobileUaMenuTimer));
+  }
+});
+
 })();

@@ -1,15 +1,21 @@
+(function(){
 "use strict";
-// Sine loads this feature source before the extension starts. The extension
-// calls it at the original startup position with its live preference helpers.
-(function () {
-  const sources = (window.ZentralFeatureSources ||= Object.create(null));
-  sources.rss = function initRssDisplay({ EXT_PREFS, getPref, setInterval,
-    clearInterval, registerCleanup }) {
-  /* RSS sidebar display only. Zen owns fetching, tab creation, dismissal and
-   * session state. This never moves or closes its tabs or folders. An empty
-   * live folder can still contain Zen's restoration placeholder; only tabs
-   * explicitly marked as placeholders may be ignored. No tabstrip subtree observer: that
-   * pattern can crash Gecko during pinning (architecture note 4). */
+const Services=globalThis.Services||ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
+const ZentralRuntime=window.ZentralRuntime;
+
+function standaloneReady(start){
+ let started=false;
+ const run=()=>{if(started||!window.gBrowser)return;started=true;try{Services.obs.removeObserver(observer,"browser-delayed-startup-finished");}catch(_){}start();};
+ const observer={observe(subject,topic){if(subject===window&&topic==="browser-delayed-startup-finished")run();}};
+ if(window.gBrowser&&(!window.gBrowserInit||window.gBrowserInit.delayedStartupFinished))run();
+ else {Services.obs.addObserver(observer,"browser-delayed-startup-finished");window.addEventListener("unload",()=>{try{Services.obs.removeObserver(observer,"browser-delayed-startup-finished");}catch(_){}},{once:true});if(window.gBrowserInit?.delayedStartupFinished)run();}
+}
+(function(){
+function start(){
+ const cleanups=[];
+ const registerCleanup=fn=>cleanups.push(fn);
+ const getPref=(key,fallback)=>Services.prefs.getBoolPref(key,fallback);
+ const EXT_PREFS={RSS_HIDE_EMPTY:"zen.workspace.bgalazka.rss.hide_empty",RSS_COMPACT_HEADERS:"zen.workspace.bgalazka.rss.compact_headers"};
   const rssMarkedFolders = new Set();
   let rssScanTimer = null;
   const rssEnabled = () =>
@@ -132,6 +138,13 @@
   });
   syncRssFolderDisplay();
 
-    return { syncRssFolderDisplay };
-  };
+
+ const api={refresh:syncRssFolderDisplay,destroy(){cleanups.reverse().forEach(fn=>fn());}};
+ if(window.ZentralRuntime)ZentralRuntime.services.rss=api;
+ window.addEventListener("unload",()=>api.destroy(),{once:true});
+ return ()=>api.destroy();
+}
+if(window.ZentralRuntime)ZentralRuntime.register({id:"rss",init:start});else standaloneReady(start);
+})();
+
 })();

@@ -1,24 +1,26 @@
+(function(){
 "use strict";
-// Panel size, position, margins and pill drag mechanics.
-(function () {
-  const sources = (window.ZentralFeatureSources ||= Object.create(null));
-  sources.panelGeometry = function initPanelGeometry({
-    EXT_PREFS, getPref, setPref, registerCleanup, setTimeout,
-    safeCall, computeOppositeDockingSafeMaxWidth, extendHoverResizeHold,
-  }) {
-  /* ==========================================================================
-   * ALL-SIDES RESIZE: STATE + DRAG MATH (see note 16)
-   * -----------------------------------------------------------------------
-   * These two prefs deliberately live OUTSIDE BGALAZKA_EXT_PREFS (which the
-   * "Apply default or stored attribute states on startup" block at the end
-   * of this file auto-enumerates as BOOLEAN prefs and mirrors onto root
-   * attributes). Pulling numeric pixel offsets into that same object would
-   * make every startup silently hit-and-catch a type-mismatch exception on
-   * these two keys (getBoolPref() on an int-typed pref) and stamp a useless
-   * "bgalazka-panel-top-extra-px" attribute nothing reads. Same pattern as
-   * MOBILE_UA_PREF further below for the same reason.
-   * ========================================================================== */
-  const PANEL_TOP_EXTRA_PREF = "zen.workspace.bgalazka.panel_top_extra_px";
+const Services=globalThis.Services||ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
+const ZentralRuntime=window.ZentralRuntime;
+// Feature: geometry. Imports and exposed are listed in ARCHITECTURE.md.
+// Preparation publishes functions; activation preserves the baseline initialization order.
+ZentralRuntime.registerPart("geometry", function* (ctx) {
+Object.defineProperties(ctx,{"PANEL_HORIZONTAL_OFFSET_PREF": {configurable:true,get:()=>PANEL_HORIZONTAL_OFFSET_PREF},
+"applyHorizontalPanelOffset": {configurable:true,get:()=>applyHorizontalPanelOffset},
+"applyVerticalResizeExtras": {configurable:true,get:()=>applyVerticalResizeExtras},
+"cachedHorizontalOffset": {configurable:true,get:()=>cachedHorizontalOffset,set:value=>{cachedHorizontalOffset=value}},
+"ensurePillGrabberVerticalDrag": {configurable:true,get:()=>ensurePillGrabberVerticalDrag},
+"ensureVerticalResizeHandles": {configurable:true,get:()=>ensureVerticalResizeHandles},
+"getAppliedHorizontalOffset": {configurable:true,get:()=>getAppliedHorizontalOffset},
+"getHorizontalOffsetBounds": {configurable:true,get:()=>getHorizontalOffsetBounds},
+"getHorizontalOffsetPreference": {configurable:true,get:()=>getHorizontalOffsetPreference},
+"hPosDragState": {configurable:true,get:()=>hPosDragState,set:value=>{hPosDragState=value}},
+"hResizeState": {configurable:true,get:()=>hResizeState,set:value=>{hResizeState=value}},
+"startPanelHorizontalPositionDrag": {configurable:true,get:()=>startPanelHorizontalPositionDrag},
+"startPanelPositionDrag": {configurable:true,get:()=>startPanelPositionDrag},
+"vPosDragState": {configurable:true,get:()=>vPosDragState,set:value=>{vPosDragState=value}}});
+yield;
+const PANEL_TOP_EXTRA_PREF = "zen.workspace.bgalazka.panel_top_extra_px";
   const PANEL_BOTTOM_EXTRA_PREF =
     "zen.workspace.bgalazka.panel_bottom_extra_px";
   // Whole-panel vertical REPOSITION (not resize): positive = shifted UP from
@@ -89,16 +91,16 @@
    * import/export-config feature. Observers are cheap: they only fire on
    * an actual pref WRITE, not per frame.
    * ------------------------------------------------------------------ */
-  let cachedTopExtra = getPref(
+  let cachedTopExtra = ctx.getPref(
     PANEL_TOP_EXTRA_PREF,
     DEFAULT_PANEL_VERTICAL_EXTRA_PX,
   );
-  let cachedBottomExtra = getPref(
+  let cachedBottomExtra = ctx.getPref(
     PANEL_BOTTOM_EXTRA_PREF,
     DEFAULT_PANEL_VERTICAL_EXTRA_PX,
   );
-  let cachedPosOffset = getPref(PANEL_POSITION_OFFSET_PREF, 0);
-  let cachedHorizontalOffset = getPref(PANEL_HORIZONTAL_OFFSET_PREF, 0);
+  let cachedPosOffset = ctx.getPref(PANEL_POSITION_OFFSET_PREF, 0);
+  let cachedHorizontalOffset = ctx.getPref(PANEL_HORIZONTAL_OFFSET_PREF, 0);
   let hasSavedHorizontalOffset = Services.prefs.prefHasUserValue(
     PANEL_HORIZONTAL_OFFSET_PREF,
   );
@@ -118,13 +120,13 @@
         prefKey === PANEL_TOP_EXTRA_PREF || prefKey === PANEL_BOTTOM_EXTRA_PREF
           ? DEFAULT_PANEL_VERTICAL_EXTRA_PX
           : 0;
-      setCache(getPref(prefKey, fallback));
+      setCache(ctx.getPref(prefKey, fallback));
       applyVerticalResizeExtras(document.getElementById("zen-app-panel-root"));
       applyHorizontalPanelOffset(document.getElementById("zen-app-panel-root"));
     };
     try {
       Services.prefs.addObserver(prefKey, observer, false);
-      registerCleanup(() => {
+      ctx.registerCleanup(() => {
         try {
           Services.prefs.removeObserver(prefKey, observer);
         } catch (_) {}
@@ -139,8 +141,8 @@
   function saveVerticalExtras(top, bottom) {
     cachedTopExtra = Math.round(top);
     cachedBottomExtra = Math.round(bottom);
-    setPref(PANEL_TOP_EXTRA_PREF, cachedTopExtra);
-    setPref(PANEL_BOTTOM_EXTRA_PREF, cachedBottomExtra);
+    ctx.setPref(PANEL_TOP_EXTRA_PREF, cachedTopExtra);
+    ctx.setPref(PANEL_BOTTOM_EXTRA_PREF, cachedBottomExtra);
   }
 
   function getPositionOffset() {
@@ -149,7 +151,7 @@
 
   function savePositionOffset(px) {
     cachedPosOffset = Math.round(px);
-    setPref(PANEL_POSITION_OFFSET_PREF, cachedPosOffset);
+    ctx.setPref(PANEL_POSITION_OFFSET_PREF, cachedPosOffset);
   }
 
   function getHorizontalAnchorSide(root) {
@@ -321,11 +323,11 @@
     document.documentElement.removeAttribute("bgalazka-panel-hpos-dragging");
     if (hPosDragState) {
       cachedHorizontalOffset = Math.round(hPosDragState.liveOffset);
-      setPref(PANEL_HORIZONTAL_OFFSET_PREF, cachedHorizontalOffset);
+      ctx.setPref(PANEL_HORIZONTAL_OFFSET_PREF, cachedHorizontalOffset);
     }
     hPosDragState = null;
   }
-  registerCleanup(() => {
+  ctx.registerCleanup(() => {
     document.removeEventListener("mousemove", onPanelHorizontalPositionDrag);
     document.removeEventListener("mouseup", stopPanelHorizontalPositionDrag);
   });
@@ -344,7 +346,7 @@
   }
 
   function getPillPosition() {
-    const value = getPref(PILL_POSITION_PREF, 0);
+    const value = ctx.getPref(PILL_POSITION_PREF, 0);
     return typeof value === "number" && Number.isFinite(value)
       ? clampPillPosition(value)
       : 0;
@@ -391,10 +393,10 @@
     document.removeEventListener("mouseup", stopPillPositionDrag);
     document.documentElement.removeAttribute("bgalazka-pill-pos-dragging");
     if (pillPosDragState)
-      setPref(PILL_POSITION_PREF, Math.round(pillPosDragState.livePosition));
+      ctx.setPref(PILL_POSITION_PREF, Math.round(pillPosDragState.livePosition));
     pillPosDragState = null;
   }
-  registerCleanup(() => {
+  ctx.registerCleanup(() => {
     document.removeEventListener("mousemove", onPillPositionDrag);
     document.removeEventListener("mouseup", stopPillPositionDrag);
   });
@@ -478,7 +480,7 @@
     if (root.style.marginBottom !== marginBottom)
       root.style.marginBottom = marginBottom;
   }
-  registerCleanup(() => {
+  ctx.registerCleanup(() => {
     const root = document.getElementById("zen-app-panel-root");
     if (!root) return;
     root.style.marginTop = "";
@@ -494,10 +496,10 @@
   // the vertical axis, which the base mod has no equivalent of at all.
   function startVerticalResize(e, edge) {
     if (e.button !== 0) return;
-    if (!getPref(EXT_PREFS.ALL_SIDES_RESIZE, false)) return;
+    if (!ctx.getPref(ctx.EXT_PREFS.ALL_SIDES_RESIZE, false)) return;
     const root = document.getElementById("zen-app-panel-root");
     if (!root) return;
-    extendHoverResizeHold();
+    ctx.extendHoverResizeHold();
     e.preventDefault();
     e.stopPropagation();
 
@@ -526,7 +528,7 @@
 
   function onVerticalResizeDrag(e) {
     if (!vResizeState) return;
-    extendHoverResizeHold();
+    ctx.extendHoverResizeHold();
     const root = document.getElementById("zen-app-panel-root");
     if (!root) return;
     const diff = e.clientY - vResizeState.startY;
@@ -586,7 +588,7 @@
     }
     vResizeState = null;
   }
-  registerCleanup(() => {
+  ctx.registerCleanup(() => {
     document.removeEventListener("mousemove", onVerticalResizeDrag);
     document.removeEventListener("mouseup", stopVerticalResizeDrag);
   });
@@ -615,11 +617,11 @@
 
   function startHorizontalResize(e, edge) {
     if (e.button !== 0) return;
-    if (edge !== "pill" && !getPref(EXT_PREFS.ALL_SIDES_RESIZE, false)) return;
+    if (edge !== "pill" && !ctx.getPref(ctx.EXT_PREFS.ALL_SIDES_RESIZE, false)) return;
     const apps = window.Zentral?.Apps;
     const root = document.getElementById("zen-app-panel-root");
     if (!apps || !root || typeof apps.updateWidthVar !== "function") return;
-    extendHoverResizeHold();
+    ctx.extendHoverResizeHold();
     e.preventDefault();
     e.stopPropagation();
 
@@ -650,9 +652,9 @@
       maxWidth: Math.max(
         280,
         Math.min(
-          getPref(EXT_PREFS.OPPOSITE_DOCKING, false) &&
+          ctx.getPref(ctx.EXT_PREFS.OPPOSITE_DOCKING, false) &&
             !apps.isPlacementVerticalBar?.()
-            ? computeOppositeDockingSafeMaxWidth()
+            ? ctx.computeOppositeDockingSafeMaxWidth()
             : Math.max(280, Math.round(window.innerWidth * 0.8)),
           physicalEdge === "left"
             ? rootRect.right
@@ -670,7 +672,7 @@
 
   function onHorizontalResizeDrag(e) {
     if (!hResizeState) return;
-    extendHoverResizeHold();
+    ctx.extendHoverResizeHold();
     const root = document.getElementById("zen-app-panel-root");
     if (!root) return;
     const {
@@ -722,19 +724,19 @@
       hResizeState.apps.saveWidth?.(Math.round(hResizeState.liveWidth));
       if (hResizeState.adjustsOffset) {
         cachedHorizontalOffset = Math.round(hResizeState.liveOffset);
-        setPref(PANEL_HORIZONTAL_OFFSET_PREF, cachedHorizontalOffset);
+        ctx.setPref(PANEL_HORIZONTAL_OFFSET_PREF, cachedHorizontalOffset);
       }
       hResizeState = null;
     }
   }
-  registerCleanup(() => {
+  ctx.registerCleanup(() => {
     if (hResizeFrame) cancelAnimationFrame(hResizeFrame);
     document.removeEventListener("mousemove", onHorizontalResizeDrag);
     document.removeEventListener("mouseup", stopHorizontalResizeDrag);
   });
 
   function startCornerResize(e, verticalEdge, horizontalEdge) {
-    if (!getPref(EXT_PREFS.ALL_SIDES_RESIZE, false)) return;
+    if (!ctx.getPref(ctx.EXT_PREFS.ALL_SIDES_RESIZE, false)) return;
     // Corners intentionally start BOTH axis engines from the same mousedown.
     // There is no dominant-axis decision: every mousemove can change width
     // and height at the same time.
@@ -839,11 +841,11 @@
     if (vPosDragState) {
       savePositionOffset(vPosDragState.livePosOffset);
       cachedHorizontalOffset = Math.round(vPosDragState.liveHorizontalOffset);
-      setPref(PANEL_HORIZONTAL_OFFSET_PREF, cachedHorizontalOffset);
+      ctx.setPref(PANEL_HORIZONTAL_OFFSET_PREF, cachedHorizontalOffset);
     }
     vPosDragState = null;
   }
-  registerCleanup(() => {
+  ctx.registerCleanup(() => {
     document.removeEventListener("mousemove", onPanelPositionDrag);
     document.removeEventListener("mouseup", stopPanelPositionDrag);
   });
@@ -933,7 +935,7 @@
             window.removeEventListener("click", blockClick, true);
           };
           window.addEventListener("click", blockClick, true);
-          setTimeout(
+          ctx.setTimeout(
             () => window.removeEventListener("click", blockClick, true),
             300,
           );
@@ -960,7 +962,7 @@
         // From this point both document mousemove listeners run concurrently:
         // Zentral's native onDrag() changes width while our listener changes Y.
         const activationY = moveEvt.clientY;
-        safeCall(
+        ctx.safeCall(
           () => startPillPositionDrag(moveEvt, activationY, getPillPosition()),
           "ensurePillGrabberVerticalDrag/startPillPositionDrag",
         );
@@ -1039,18 +1041,6 @@
     });
     return true;
   }
+});
 
-    return {
-      PANEL_HORIZONTAL_OFFSET_PREF, PANEL_POSITION_OFFSET_PREF,
-      getVerticalExtras, getPositionOffset,
-      getHorizontalOffsetPreference, getAppliedHorizontalOffset,
-      getHorizontalOffsetBounds, applyHorizontalPanelOffset,
-      applyVerticalResizeExtras, ensurePillGrabberVerticalDrag,
-      ensureVerticalResizeHandles, startPanelPositionDrag,
-      startPanelHorizontalPositionDrag, startVerticalResize,
-      setCachedHorizontalOffset: (value) => { cachedHorizontalOffset = value; },
-      isHorizontalResizeActive: () => !!hResizeState,
-      isGeometryDragActive: () => !!(hResizeState || hPosDragState || vPosDragState),
-    };
-  };
 })();

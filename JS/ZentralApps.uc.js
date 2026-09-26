@@ -1,19 +1,10 @@
+(function(){
 "use strict";
-// Complete base class kept intact so private fields remain class-local.
-(function () {
-  const sources = (window.ZentralClassSources ||= Object.create(null));
-  sources.apps = function defineZentralApps({ Constants, Core, createSVGElement,
-    SVG_STRINGS, WELL_KNOWN_SERVICES }) {
-  /* ============================================================================
-   * 3.0 APPS MODULE (ZentralApps)
-   * ============================================================================
-   */
-
-  /**
-   * Zentral Apps Module
-   * Manages sidebar app grid, floating app panels, workspace isolation, and drag/drop reordering.
-   */
-  class ZentralApps {
+const Services=globalThis.Services||ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
+const ZentralRuntime=window.ZentralRuntime;
+ZentralRuntime.register({id:"apps",init({shared}){
+const {Constants,Core,createSVGElement,SVG_STRINGS,WELL_KNOWN_SERVICES}=shared;
+class ZentralApps {
     /** @private Side attribute MutationObserver */
     #sideObserver = null;
     /** @private Toolbox & theme mutation observer */
@@ -5491,6 +5482,10 @@
       this.scheduleRepositionGrid(200);
     }
   }
-    return ZentralApps;
-  };
+const instance=new ZentralApps();
+window.Zentral.Apps=instance;
+try { instance.init(); } catch(error) { try {instance.destroy();}catch(_){} delete window.Zentral.Apps; throw error; }
+return ()=>{instance.destroy();delete window.Zentral.Apps;};
+}});
+
 })();

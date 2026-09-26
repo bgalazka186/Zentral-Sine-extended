@@ -598,24 +598,6 @@
   overflow: visible !important;
   padding-bottom: 70px !important;
 }
-/* The dependency checklist is taller than the fixed settings dialog. Give
- * Developer its own scrollport just like Look, including room after the
- * final restart button. */
-#zentral-settings-modal #zs-panel-extension-developer {
-  height: 100% !important;
-  min-height: 0 !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  scrollbar-width: thin !important;
-}
-#zentral-settings-modal #zs-panel-extension-developer .zs-section-content {
-  display: block !important;
-  width: 100% !important;
-  height: auto !important;
-  min-height: max-content !important;
-  overflow: visible !important;
-  padding-bottom: 70px !important;
-}
 :root[bgalazka-look="atelier"] #zentral-settings-modal .zs-dialog {
   border: var(--zl-panel-border) solid var(--zl-button-border-color) !important;
   border-radius: var(--zl-radius) !important;
@@ -1025,5 +1007,3 @@
   ) !important;
 }
 
-
-:root { --zentral-css-look: 1; }

@@ -1,17 +1,13 @@
+(function(){
 "use strict";
-// Installed by the extension after its panel helpers are initialized.
-(function () {
-  const sources = (window.ZentralFeatureSources ||= Object.create(null));
-  sources.secondaryViews = function initSecondaryViews({ getPref, getLinkedTriplePairs, linkedPairFor, essentialPanels,
-    saveLinkedTriplePairs, unlinkTriplePair, registerCleanup, setTimeout,
-    clearTimeout, setInterval, clearInterval, setSecondaryFallbackPolling,
-    attachZenInternetPanelBrowser, updateZenCssBrowser, zenCssEnabled,
-    syncPanelPushState, updateWebToolbarState, syncAppPanelBrowserActivity,
-    periodicFallbackPollingEnabled, buildSearchUrl, looksLikeUrl,
-    navigatePanelHistory, parseSVG, PREF_ICONS }) {
-  /* Secondary views keep the native first panel and its toolbar intact. */
-  // Controller for triple view and super pin.
-  {
+const Services=globalThis.Services||ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
+const ZentralRuntime=window.ZentralRuntime;
+// Feature: secondary-views. Imports and exposed are listed in ARCHITECTURE.md.
+// Preparation publishes functions; activation preserves the baseline initialization order.
+ZentralRuntime.registerPart("secondary-views", function* (ctx) {
+Object.defineProperties(ctx,{});
+yield;
+(() => {
     const apps = window.Zentral?.Apps;
     if (!apps) return;
     const ui = document.documentElement;
@@ -70,7 +66,7 @@
     function savedNormalApps() {
       try {
         const list = JSON.parse(
-          getPref("zen.workspace.apps.sidebar.apps", "[]"),
+          ctx.getPref("zen.workspace.apps.sidebar.apps", "[]"),
         );
         return Array.isArray(list) ? list : [];
       } catch (_) {
@@ -78,7 +74,7 @@
       }
     }
     function resolvePairApp(pair, id) {
-      const tabRecord = essentialPanels.get(id);
+      const tabRecord = ctx.essentialPanels.get(id);
       if (tabRecord?.tab.isConnected) return tabRecord.app;
       const normal = savedNormalApps().find((app) => app.id === id);
       if (normal) return normal;
@@ -106,19 +102,19 @@
         if (url && url !== "about:blank" && /^(https?|about):/i.test(url))
           pair.apps[id].url = url;
       }
-      saveLinkedTriplePairs();
+      ctx.saveLinkedTriplePairs();
     }
     function linkCurrentPair(firstApp, secondApp) {
       const top = firstApp?.id;
       const bottom = secondApp?.id;
       if (!top || !bottom || top === bottom) return;
-      const same = linkedPairFor(top);
-      if (same && same === linkedPairFor(bottom)) {
+      const same = ctx.linkedPairFor(top);
+      if (same && same === ctx.linkedPairFor(bottom)) {
         state.pair = same;
         return;
       }
-      unlinkTriplePair(top);
-      unlinkTriplePair(bottom);
+      ctx.unlinkTriplePair(top);
+      ctx.unlinkTriplePair(bottom);
       const pair = {
         top,
         bottom,
@@ -128,9 +124,9 @@
           [bottom]: { ...secondApp, id: bottom },
         },
       };
-      getLinkedTriplePairs().push(pair);
+      ctx.linkedTriplePairs.push(pair);
       state.pair = pair;
-      saveLinkedTriplePairs();
+      ctx.saveLinkedTriplePairs();
     }
     function enterTriple(first) {
       state.first = first;
@@ -138,13 +134,13 @@
       const btn = document.getElementById("zen-app-dual-view-btn");
       btn?.setAttribute("data-hold-active", "true");
       ui.setAttribute("bgalazka-triple-view", "true");
-      syncPanelPushState();
+      ctx.syncPanelPushState();
       refreshViewZenCss(first);
     }
     function refreshViewZenCss(browser) {
-      if (!zenCssEnabled() || !browser?.isConnected) return;
-      attachZenInternetPanelBrowser(browser);
-      updateZenCssBrowser(browser);
+      if (!ctx.zenCssEnabled() || !browser?.isConnected) return;
+      ctx.attachZenInternetPanelBrowser(browser);
+      ctx.updateZenCssBrowser(browser);
     }
     function showPair(pair) {
       const top = resolvePairApp(pair, pair.top);
@@ -169,7 +165,7 @@
       if (!pair || state.mode !== "triple" || !state.second) return;
       rememberPair();
       [pair.top, pair.bottom] = [pair.bottom, pair.top];
-      saveLinkedTriplePairs();
+      ctx.saveLinkedTriplePairs();
       showPair(pair);
     }
     const markTiles = () =>
@@ -207,14 +203,9 @@
       if (usable <= 0) return;
       const min = Math.min(160, usable * 0.25);
       const top = Math.max(min, Math.min(usable - min, usable * state.share));
-      const topSize = `${top}px`;
-      const bottomSize = `${usable - top}px`;
-      // A ResizeObserver watches this same panel. Rewriting identical layout
-      // variables can feed another resize/paint pass on every callback.
-      if (panel.style.getPropertyValue("--bgalazka-top-share") !== topSize)
-        panel.style.setProperty("--bgalazka-top-share", topSize);
-      if (panel.style.getPropertyValue("--bgalazka-bottom-share") !== bottomSize)
-        panel.style.setProperty("--bgalazka-bottom-share", bottomSize);
+      const topValue=`${Math.round(top)}px`, bottomValue=`${Math.round(usable-top)}px`;
+      if(panel.style.getPropertyValue("--bgalazka-top-share")!==topValue)panel.style.setProperty("--bgalazka-top-share",topValue);
+      if(panel.style.getPropertyValue("--bgalazka-bottom-share")!==bottomValue)panel.style.setProperty("--bgalazka-bottom-share",bottomValue);
       if (state.handleFrame) cancelAnimationFrame(state.handleFrame);
       state.handleFrame = requestAnimationFrame(() => {
         state.handleFrame = null;
@@ -234,11 +225,11 @@
       state.handleFrame = null;
       state.dividerHandle?.remove();
       state.dividerHandle = null;
-      state.loadTimers.forEach(clearTimeout);
+      state.loadTimers.forEach(ctx.clearTimeout);
       state.loadTimers.length = 0;
       state.resizeCleanup?.();
       state.resizeCleanup = null;
-      clearInterval(state.poll);
+      ctx.clearInterval(state.poll);
       state.poll = null;
       state.secondToolbarCleanup?.();
       state.secondToolbarCleanup = null;
@@ -271,7 +262,7 @@
       ui.removeAttribute("bgalazka-triple-populated");
       // Do not wait for the toolbar's SPA fallback poll to hide the repair
       // control when Triple View loses its second panel.
-      updateWebToolbarState();
+      ctx.updateWebToolbarState();
       state.shell?.remove();
       state.shell = null;
       slider()?.style.removeProperty("--bgalazka-top-share");
@@ -295,7 +286,7 @@
       document
         .querySelector("#zen-app-panel-pill .zen-app-btn[data-pinned]")
         ?.removeAttribute("data-hold-active");
-      if (mode === "triple") syncPanelPushState();
+      if (mode === "triple") ctx.syncPanelPushState();
       if (mode === "super" && state.previousPin === false && isOpen()) {
         const pin = document.querySelector(
           "#zen-app-panel-pill .zen-app-btn[data-pinned]",
@@ -306,18 +297,18 @@
     }
     function leaveAndUnlinkTriple() {
       if (state.mode === "triple" && state.pair) {
-        unlinkTriplePair(state.pair.top);
+        ctx.unlinkTriplePair(state.pair.top);
         state.pair = null;
       }
       leaveMode();
     }
     function navigate(browser, value) {
       try {
-        const target = looksLikeUrl(value)
+        const target = ctx.looksLikeUrl(value)
           ? /^[a-z][a-z0-9+.-]*:\/\//i.test(value)
             ? value
             : "https://" + value
-          : buildSearchUrl(value);
+          : ctx.buildSearchUrl(value);
         const uri = Services.io.newURI(target);
         const options = {
           triggeringPrincipal:
@@ -339,7 +330,7 @@
       // while this panel is visible; leave the marker for a later open if it
       // was hidden before the remote frame finished reconnecting.
       for (const delay of [0, 80, 300, 1000, 2500]) {
-        setTimeout(() => {
+        ctx.setTimeout(() => {
           if (
             !browser.isConnected ||
             browser._bgalazkaSuperPinReturnURL !== url
@@ -382,20 +373,20 @@
       };
       const iconButton = (icon, title, action) => {
         const el = button("", title, action);
-        el.appendChild(parseSVG(icon));
+        el.appendChild(ctx.parseSVG(icon));
         return el;
       };
-      iconButton(PREF_ICONS.BACK, "Back", () =>
-        navigatePanelHistory(browser, -1),
+      iconButton(ctx.PREF_ICONS.BACK, "Back", () =>
+        ctx.navigatePanelHistory(browser, -1),
       );
-      iconButton(PREF_ICONS.RELOAD, "Reload", () => browser.reload());
-      iconButton(PREF_ICONS.FORWARD, "Forward", () =>
-        navigatePanelHistory(browser, 1),
+      iconButton(ctx.PREF_ICONS.RELOAD, "Reload", () => browser.reload());
+      iconButton(ctx.PREF_ICONS.FORWARD, "Forward", () =>
+        ctx.navigatePanelHistory(browser, 1),
       );
       const grip = document.createElement("div");
       grip.className = "bgalazka-second-grip";
       grip.title = "Drag to move second panel";
-      grip.appendChild(parseSVG(PREF_ICONS.DRAG_HANDLE));
+      grip.appendChild(ctx.parseSVG(ctx.PREF_ICONS.DRAG_HANDLE));
       const url = document.createElement("input");
       url.type = "text";
       url.className = "bgalazka-second-url";
@@ -409,10 +400,10 @@
         } else if (event.key === "Escape") url.blur();
       });
       bar.append(grip, url);
-      iconButton(PREF_ICONS.ZOOM_OUT, "Zoom out", () => zoom(-0.1));
+      iconButton(ctx.PREF_ICONS.ZOOM_OUT, "Zoom out", () => zoom(-0.1));
       const zoomText = button("100%", "Reset zoom", () => zoom(0));
       zoomText.classList.add("bgalazka-second-zoom-label");
-      iconButton(PREF_ICONS.ZOOM_IN, "Zoom in", () => zoom(0.1));
+      iconButton(ctx.PREF_ICONS.ZOOM_IN, "Zoom in", () => zoom(0.1));
       if (state.mode === "triple")
         button("⇅", "Swap top and bottom panels", swapPair).classList.add(
           "bgalazka-second-swap",
@@ -450,7 +441,7 @@
         ui.setAttribute("bgalazka-triple-populated", "true");
         // Make the primary toolbar's Triple View controls appear immediately;
         // the 1s poll is only a navigation fallback, not a UI lifecycle hook.
-        updateWebToolbarState();
+        ctx.updateWebToolbarState();
         const balance = (clientY) => {
           const panel = slider();
           const rect = panel.getBoundingClientRect();
@@ -701,24 +692,22 @@
         } catch (_) {}
       };
       refreshSecondaryToolbar();
-      syncSecondaryFallbackPolling();
+      ctx.syncSecondaryFallbackPolling();
     }
-    let syncSecondaryFallbackPolling = () => {
+    ctx.syncSecondaryFallbackPolling = () => {
       if (state.poll) {
-        clearInterval(state.poll);
+        ctx.clearInterval(state.poll);
         state.poll = null;
       }
       state.pollUpdate?.();
       if (
-        !periodicFallbackPollingEnabled() ||
+        !ctx.periodicFallbackPollingEnabled() ||
         !state.second?.isConnected ||
         !state.pollUpdate
       )
         return;
-      state.poll = setInterval(() => state.pollUpdate?.(), 1000);
+      state.poll = ctx.setInterval(() => state.pollUpdate?.(), 1000);
     };
-
-    setSecondaryFallbackPolling(() => syncSecondaryFallbackPolling());
 
     function openSecond(app, createLink = true) {
       if (!app?.id || !isOpen() || !state.first?.isConnected) return false;
@@ -736,7 +725,7 @@
       // after the move without delivering another load event to the wrapper.
       for (const delay of [400, 1600]) {
         state.loadTimers.push(
-          setTimeout(() => {
+          ctx.setTimeout(() => {
             if (state.mode && state.first?.isConnected)
               refreshViewZenCss(state.first);
             if (state.second === browser && browser.isConnected)
@@ -755,7 +744,7 @@
         navigate(browser, browser._bgalazkaSuperPinReturnURL || app.url);
       repairSuperPinReturn(browser);
       state.loadTimers.push(
-        setTimeout(() => {
+        ctx.setTimeout(() => {
           if (
             state.second === browser &&
             browser.isConnected &&
@@ -767,14 +756,14 @@
       );
       // Remote content may reset activity while its process starts. The
       // existing guarded sync only writes when Gecko actually changed it.
-      requestAnimationFrame(syncAppPanelBrowserActivity);
+      requestAnimationFrame(ctx.syncAppPanelBrowserActivity);
       for (const delay of [50, 250, 1000]) {
-        state.loadTimers.push(setTimeout(syncAppPanelBrowserActivity, delay));
+        state.loadTimers.push(ctx.setTimeout(ctx.syncAppPanelBrowserActivity, delay));
       }
       if (state.mode === "triple" && createLink) {
         const firstId = state.first?._bgalazkaAppId;
         const firstApp =
-          essentialPanels.get(firstId)?.app ||
+          ctx.essentialPanels.get(firstId)?.app ||
           savedNormalApps().find((item) => item.id === firstId);
         linkCurrentPair(firstApp, app);
       }
@@ -782,7 +771,7 @@
       return true;
     }
     apps.openPanel = function (app) {
-      const pair = app?.id && linkedPairFor(app.id);
+      const pair = app?.id && ctx.linkedPairFor(app.id);
       if (pair) {
         if (
           state.mode === "triple" &&
@@ -830,7 +819,7 @@
       return origCloseApp.call(this, id, ...args);
     };
     apps.removeApp = function (id, ...args) {
-      unlinkTriplePair(id);
+      ctx.unlinkTriplePair(id);
       if (state.pair && (state.pair.top === id || state.pair.bottom === id)) {
         state.pair = null;
         leaveMode();
@@ -858,7 +847,7 @@
         btn,
         x: event.clientX,
         y: event.clientY,
-        timer: setTimeout(() => {
+        timer: ctx.setTimeout(() => {
           pending = null;
           const first = active();
           if (!first || !isOpen()) return;
@@ -886,7 +875,7 @@
       };
     };
     const cancelPending = () => {
-      if (pending) clearTimeout(pending.timer);
+      if (pending) ctx.clearTimeout(pending.timer);
       pending = null;
     };
     const onMove = (event) => {
@@ -921,7 +910,7 @@
     window.addEventListener("pointercancel", cancelPending, true);
     window.addEventListener("blur", cancelPending);
     window.addEventListener("click", onClick, true);
-    registerCleanup(() => {
+    ctx.registerCleanup(() => {
       cancelPending();
       leaveMode();
       window.removeEventListener("pointerdown", onDown, true);
@@ -936,8 +925,7 @@
       apps.removeApp = origRemoveApp;
       apps.renderGrid = origRender;
     });
-  }
+  })();
+});
 
-
-  };
 })();

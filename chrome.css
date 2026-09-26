@@ -1,2 +1,1 @@
-/* Compatibility for installed Sine metadata still pointing at chrome.css. */
-@import url("CSS/chrome.css");
+/* Compatibility placeholder. The core owns stylesheet loading. */

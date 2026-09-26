@@ -1,26 +1,30 @@
+(function(){
 "use strict";
-// Web panel toolbar, search and navigation form one live feature group.
-(function () {
-  const sources = (window.ZentralFeatureSources ||= Object.create(null));
-  sources.webToolbar = function initWebToolbar({ BGALAZKA_EXT_PREFS,
-    PREF_ICONS, getPref, setPref, parseSVG, registerCleanup, safeCall,
-    setTimeout, clearTimeout, setInterval, clearInterval, startPanelPositionDrag,
-    repairVisiblePanelPresentation, zenCssEnabled, isDisposed }) {
-  /* ==========================================================================
-   * WEB PANEL NAVIGATION TOOLBAR
-   * Docked at the bottom of the floating app panel: back / forward / reload
-   * (moved here from the pill) + a URL bar, with optional zoom controls.
-   * Master-toggleable, URL-bar-toggleable, zoom-toggleable, and can be set to
-   * only reveal itself on hover instead of permanently reserving space.
-   * ========================================================================== */
-
-  // Multiple <browser> elements can live inside #zen-app-panel-slider (one
-  // per app, per getOrCreateAppBrowser() above), with only the active one
-  // NOT set to style.display = "none" (see openPanel()'s app-switch loop).
-  // There's no dedicated "active" attribute on the browser itself, so this
-  // is the only reliable way to find it from outside the class (activeAppId
-  // is a private field, see note 5).
-  function getActiveAppBrowser() {
+const Services=globalThis.Services||ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
+const ZentralRuntime=window.ZentralRuntime;
+// Feature: panel-toolbar. Imports and exposed are listed in ARCHITECTURE.md.
+// Preparation publishes functions; activation preserves the baseline initialization order.
+ZentralRuntime.registerPart("panel-toolbar", function* (ctx) {
+Object.defineProperties(ctx,{"QUICK_SWITCH_BUILTIN_TARGETS": {configurable:true,get:()=>QUICK_SWITCH_BUILTIN_TARGETS},
+"QUICK_SWITCH_CUSTOM_PREFS": {configurable:true,get:()=>QUICK_SWITCH_CUSTOM_PREFS},
+"QUICK_SWITCH_TARGET_PREF_PREFIX": {configurable:true,get:()=>QUICK_SWITCH_TARGET_PREF_PREFIX},
+"SEARCH_CUSTOM_ENGINE_PREFS": {configurable:true,get:()=>SEARCH_CUSTOM_ENGINE_PREFS},
+"applyForcePanelBlackVisual": {configurable:true,get:()=>applyForcePanelBlackVisual},
+"buildSearchUrl": {configurable:true,get:()=>buildSearchUrl},
+"canPanelNavigate": {configurable:true,get:()=>canPanelNavigate},
+"ensureWebToolbar": {configurable:true,get:()=>ensureWebToolbar},
+"forcePanelBlackState": {configurable:true,get:()=>forcePanelBlackState,set:value=>{forcePanelBlackState=value}},
+"getActiveAppBrowser": {configurable:true,get:()=>getActiveAppBrowser},
+"isValidQuickSwitchTemplate": {configurable:true,get:()=>isValidQuickSwitchTemplate},
+"looksLikeUrl": {configurable:true,get:()=>looksLikeUrl},
+"navigatePanelHistory": {configurable:true,get:()=>navigatePanelHistory},
+"periodicFallbackPollingEnabled": {configurable:true,get:()=>periodicFallbackPollingEnabled},
+"refreshBrowserSearchTemplate": {configurable:true,get:()=>refreshBrowserSearchTemplate},
+"startWebToolbarPolling": {configurable:true,get:()=>startWebToolbarPolling},
+"syncSecondaryFallbackPolling": {configurable:true,get:()=>syncSecondaryFallbackPolling,set:value=>{syncSecondaryFallbackPolling=value}},
+"updateWebToolbarState": {configurable:true,get:()=>updateWebToolbarState}});
+yield;
+function getActiveAppBrowser() {
     const panel = document.getElementById("zen-app-panel-slider");
     if (!panel) return null;
     // In Triple-View the secondary browser is nested in its own shell.
@@ -142,7 +146,7 @@
   // existing pref names preserves current users' engines while presenting all
   // six as one coherent list in Settings.
   const SEARCH_CUSTOM_ENGINE_PREFS = [
-    BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_CUSTOM_URL,
+    ctx.BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_CUSTOM_URL,
     ...QUICK_SWITCH_CUSTOM_PREFS,
   ];
   let cachedQuickSwitchTargets = null;
@@ -153,7 +157,7 @@
     "zen.workspace.bgalazka.web_toolbar_",
     searchTargetsObserver,
   );
-  registerCleanup(() =>
+  ctx.registerCleanup(() =>
     Services.prefs.removeObserver(
       "zen.workspace.bgalazka.web_toolbar_",
       searchTargetsObserver,
@@ -307,7 +311,7 @@
   function getQuickSwitchTargets() {
     if (cachedQuickSwitchTargets) return cachedQuickSwitchTargets;
     const builtIns = QUICK_SWITCH_BUILTIN_TARGETS.filter((target, index) =>
-      getPref(
+      ctx.getPref(
         QUICK_SWITCH_TARGET_PREF_PREFIX + target.key,
         index < 2, // retain the old DDG <-> Startpage behavior by default
       ),
@@ -319,7 +323,7 @@
     const custom = SEARCH_CUSTOM_ENGINE_PREFS.map((pref, index) => ({
       key: `custom-${index + 1}`,
       label: `Custom Engine ${index + 1}`,
-      template: String(getPref(pref, "") || "").trim(),
+      template: String(ctx.getPref(pref, "") || "").trim(),
     }))
       .filter(({ template }) => isValidQuickSwitchTemplate(template))
       .map((target) => ({
@@ -387,7 +391,7 @@
   // empty custom template or a not-yet-loaded browser-default template
   // never leaves the URL bar doing nothing.
   function buildSearchUrl(term) {
-    const mode = getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_ENGINE, "ddg");
+    const mode = ctx.getPref(ctx.BGALAZKA_EXT_PREFS.WEB_TOOLBAR_SEARCH_ENGINE, "ddg");
     let template;
     if (mode === "custom" || /^custom-\d+$/.test(mode)) {
       // "custom" is the legacy value for slot 1. New selections use
@@ -395,7 +399,7 @@
       const slot =
         mode === "custom" ? 0 : Math.max(0, parseInt(mode.slice(7), 10) - 1);
       const pref = SEARCH_CUSTOM_ENGINE_PREFS[slot];
-      template = (pref && getPref(pref, "")) || SEARCH_ENGINE_TEMPLATES.ddg;
+      template = (pref && ctx.getPref(pref, "")) || SEARCH_ENGINE_TEMPLATES.ddg;
     } else if (mode === "browser") {
       template = cachedBrowserSearchTemplate || SEARCH_ENGINE_TEMPLATES.ddg;
     } else {
@@ -459,8 +463,8 @@
   // preference persists it across restarts; the root attribute/button are
   // presentation mirrors only. This prevents panel/toolbars rebuilds or a
   // temporarily stale DOM attribute from inverting the next click.
-  let forcePanelBlackState = getPref(
-    BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK,
+  let forcePanelBlackState = ctx.getPref(
+    ctx.BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK,
     false,
   );
 
@@ -493,8 +497,8 @@
       forcePanelBlackState,
     );
     if (!instant) return;
-    if (forcePanelBlackSwitchTimer) clearTimeout(forcePanelBlackSwitchTimer);
-    forcePanelBlackSwitchTimer = setTimeout(() => {
+    if (forcePanelBlackSwitchTimer) ctx.clearTimeout(forcePanelBlackSwitchTimer);
+    forcePanelBlackSwitchTimer = ctx.setTimeout(() => {
       forcePanelBlackSwitchTimer = null;
       root.removeAttribute("bgalazka-panel-black-switching");
     }, 80);
@@ -505,13 +509,13 @@
     applyForcePanelBlackVisual(forced, null, instant);
     if (
       persist &&
-      getPref(BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, false) !== forced
+      ctx.getPref(ctx.BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, false) !== forced
     )
-      setPref(BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, forced);
+      ctx.setPref(ctx.BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, forced);
   }
 
-  registerCleanup(() => {
-    if (forcePanelBlackSwitchTimer) clearTimeout(forcePanelBlackSwitchTimer);
+  ctx.registerCleanup(() => {
+    if (forcePanelBlackSwitchTimer) ctx.clearTimeout(forcePanelBlackSwitchTimer);
     document.documentElement.removeAttribute("bgalazka-panel-black-switching");
   });
 
@@ -532,7 +536,7 @@
     const backBtn = document.createElement("button");
     backBtn.className = "zen-toolbar-btn zen-toolbar-back-btn";
     backBtn.title = "Back";
-    backBtn.appendChild(parseSVG(PREF_ICONS.BACK));
+    backBtn.appendChild(ctx.parseSVG(ctx.PREF_ICONS.BACK));
     backBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       navigatePanelHistory(getActiveAppBrowser(), -1);
@@ -541,7 +545,7 @@
     const fwdBtn = document.createElement("button");
     fwdBtn.className = "zen-toolbar-btn zen-toolbar-fwd-btn";
     fwdBtn.title = "Forward";
-    fwdBtn.appendChild(parseSVG(PREF_ICONS.FORWARD));
+    fwdBtn.appendChild(ctx.parseSVG(ctx.PREF_ICONS.FORWARD));
     fwdBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       const b = getActiveAppBrowser();
@@ -554,13 +558,13 @@
     const reloadBtn = document.createElement("button");
     reloadBtn.className = "zen-toolbar-btn zen-toolbar-reload-btn";
     reloadBtn.title = "Reload";
-    reloadBtn.appendChild(parseSVG(PREF_ICONS.RELOAD));
+    reloadBtn.appendChild(ctx.parseSVG(ctx.PREF_ICONS.RELOAD));
     reloadBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       const b = getActiveAppBrowser();
       if (!b) return;
       reloadBtn.classList.add("zen-toolbar-spinning");
-      setTimeout(() => reloadBtn.classList.remove("zen-toolbar-spinning"), 450);
+      ctx.setTimeout(() => reloadBtn.classList.remove("zen-toolbar-spinning"), 450);
       try {
         b.reload();
       } catch (_) {}
@@ -579,8 +583,8 @@
     const urlDragHandle = document.createElement("div");
     urlDragHandle.className = "zen-toolbar-urlbar-drag-handle";
     urlDragHandle.title = "Drag to move panel";
-    urlDragHandle.appendChild(parseSVG(PREF_ICONS.DRAG_HANDLE));
-    urlDragHandle.addEventListener("mousedown", startPanelPositionDrag);
+    urlDragHandle.appendChild(ctx.parseSVG(ctx.PREF_ICONS.DRAG_HANDLE));
+    urlDragHandle.addEventListener("mousedown", ctx.startPanelPositionDrag);
     urlWrap.appendChild(urlDragHandle);
 
     const urlInput = document.createElement("input");
@@ -640,7 +644,7 @@
       "zen-toolbar-btn bgalazka-panel-style-repair-btn";
     repairStyleBtn.title = "Repair Triple View panel styles";
     repairStyleBtn.style.display = "none";
-    repairStyleBtn.appendChild(parseSVG(PREF_ICONS.REPAIR_STYLE));
+    repairStyleBtn.appendChild(ctx.parseSVG(ctx.PREF_ICONS.REPAIR_STYLE));
     // Keep toolbar utility clicks from focusing the panel first. With panel
     // translucency enabled, button focus would otherwise kick :focus-within
     // to its brighter opacity just before the requested action, producing a
@@ -657,11 +661,11 @@
       // Restart the one-shot animation even on rapid repeated clicks.
       void repairStyleBtn.offsetWidth;
       repairStyleBtn.classList.add("zen-toolbar-spinning");
-      setTimeout(
+      ctx.setTimeout(
         () => repairStyleBtn.classList.remove("zen-toolbar-spinning"),
         450,
       );
-      repairVisiblePanelPresentation(true);
+      ctx.repairVisiblePanelPresentation(true);
     });
 
     // Quick opaque-black backing toggle. This does not overwrite any Look or
@@ -669,7 +673,7 @@
     const blackPanelBtn = document.createElement("button");
     blackPanelBtn.type = "button";
     blackPanelBtn.className = "zen-toolbar-btn bgalazka-panel-black-btn";
-    blackPanelBtn.appendChild(parseSVG(PREF_ICONS.PANEL_BLACK));
+    blackPanelBtn.appendChild(ctx.parseSVG(ctx.PREF_ICONS.PANEL_BLACK));
     blackPanelBtn.addEventListener("mousedown", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -681,8 +685,8 @@
       // change so this stays immediate even if pref observers are busy.
       const next = !forcePanelBlackState;
       applyForcePanelBlackVisual(next, blackPanelBtn);
-      if (getPref(BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, false) !== next)
-        setPref(BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, next);
+      if (ctx.getPref(ctx.BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, false) !== next)
+        ctx.setPref(ctx.BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, next);
     });
 
     // Search-engine quick-switch. When the current HTTP(S) page exposes a
@@ -692,7 +696,7 @@
     swapBtn.className = "zen-toolbar-btn zen-toolbar-swap-btn";
     swapBtn.title = "Search with next selected service";
     swapBtn.style.display = "none"; // shown by updateWebToolbarState() only when a GET search term is detected
-    swapBtn.appendChild(parseSVG(PREF_ICONS.SWAP));
+    swapBtn.appendChild(ctx.parseSVG(ctx.PREF_ICONS.SWAP));
     swapBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       const b = getActiveAppBrowser();
@@ -724,7 +728,7 @@
     const zoomOutBtn = document.createElement("button");
     zoomOutBtn.className = "zen-toolbar-btn zen-toolbar-zoom-btn";
     zoomOutBtn.title = "Zoom out";
-    zoomOutBtn.appendChild(parseSVG(PREF_ICONS.ZOOM_OUT));
+    zoomOutBtn.appendChild(ctx.parseSVG(ctx.PREF_ICONS.ZOOM_OUT));
     const zoomLabel = document.createElement("span");
     zoomLabel.className = "zen-toolbar-zoom-label";
     zoomLabel.title = "Reset zoom";
@@ -732,7 +736,7 @@
     const zoomInBtn = document.createElement("button");
     zoomInBtn.className = "zen-toolbar-btn zen-toolbar-zoom-btn";
     zoomInBtn.title = "Zoom in";
-    zoomInBtn.appendChild(parseSVG(PREF_ICONS.ZOOM_IN));
+    zoomInBtn.appendChild(ctx.parseSVG(ctx.PREF_ICONS.ZOOM_IN));
 
     const stepZoom = (delta) => {
       const b = getActiveAppBrowser();
@@ -769,6 +773,7 @@
       blackPanelBtn,
     );
     panel.append(hoverZone, toolbar);
+    ZentralRuntime.hooks.emit("panel-toolbar:ready", {toolbar, getActiveBrowser:getActiveAppBrowser});
     startWebToolbarPolling();
     return true;
   }
@@ -801,8 +806,8 @@
 
     if (repairStyleBtn) {
       const showRepair =
-        getPref(BGALAZKA_EXT_PREFS.SHOW_TRIPLE_STYLE_REPAIR, false) &&
-        zenCssEnabled() &&
+        ctx.getPref(ctx.BGALAZKA_EXT_PREFS.SHOW_TRIPLE_STYLE_REPAIR, false) &&
+        ctx.zenCssEnabled() &&
         document.documentElement.getAttribute("bgalazka-triple-view") ===
           "true" &&
         document.documentElement.getAttribute("bgalazka-triple-populated") ===
@@ -847,8 +852,8 @@
     // destination. A random page with ?q= or one arbitrary parameter is not
     // enough evidence to offer "search again elsewhere".
     if (swapBtn) {
-      const quickswitchOn = getPref(
-        BGALAZKA_EXT_PREFS.WEB_TOOLBAR_QUICKSWITCH,
+      const quickswitchOn = ctx.getPref(
+        ctx.BGALAZKA_EXT_PREFS.WEB_TOOLBAR_QUICKSWITCH,
         false,
       );
       const targets = quickswitchOn ? getQuickSwitchTargets() : [];
@@ -867,19 +872,19 @@
   }
 
   function periodicFallbackPollingEnabled() {
-    return getPref(BGALAZKA_EXT_PREFS.PERIODIC_FALLBACK_POLLING, false);
+    return ctx.getPref(ctx.BGALAZKA_EXT_PREFS.PERIODIC_FALLBACK_POLLING, false);
   }
 
   // Secondary Triple/Super toolbar installs its concrete synchronizer later.
   // Keeping this callable here lets the Settings toggle affect an already-open
   // Triple View without requiring the user to close/reopen it.
-  // The secondary-view controller owns its fallback polling callback.
+  let syncSecondaryFallbackPolling = () => {};
 
   let webToolbarPollTimer = null;
   let webToolbarObservedRoot = null;
   let webToolbarVisibilityObserver = null;
   function startWebToolbarPolling() {
-    if (isDisposed()) return;
+    if (ctx.extensionDisposed) return;
     const root = document.getElementById("zen-app-panel-root");
     if (root !== webToolbarObservedRoot) {
       webToolbarVisibilityObserver?.disconnect();
@@ -898,20 +903,20 @@
     const active =
       root?.hasAttribute("open") &&
       !root.hasAttribute("closing") &&
-      getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, false);
+      ctx.getPref(ctx.BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, false);
     if (active) updateWebToolbarState();
     if (!active || !periodicFallbackPollingEnabled()) {
-      clearInterval(webToolbarPollTimer);
+      ctx.clearInterval(webToolbarPollTimer);
       webToolbarPollTimer = null;
       return;
     }
     if (webToolbarPollTimer) return;
     // Normal loads/location changes are event-driven. This optional interval
     // only covers SPA history.pushState/replaceState edge cases.
-    webToolbarPollTimer = setInterval(updateWebToolbarState, 1000);
+    webToolbarPollTimer = ctx.setInterval(updateWebToolbarState, 1000);
   }
-  registerCleanup(() => {
-    clearInterval(webToolbarPollTimer);
+  ctx.registerCleanup(() => {
+    ctx.clearInterval(webToolbarPollTimer);
     webToolbarPollTimer = null;
     webToolbarVisibilityObserver?.disconnect();
   });
@@ -930,27 +935,19 @@
   // Called from here instead, well after both consts exist, with the same
   // retry-until-ready pattern ensureMobileUaMenuItem() uses below, in case
   // #zen-app-panel-slider somehow isn't in the DOM yet at this point.
-  if (!safeCall(ensureWebToolbar, "ensureWebToolbar")) {
+  if (!ctx.safeCall(ensureWebToolbar, "ensureWebToolbar")) {
     let webToolbarAttempts = 0;
-    const webToolbarTimer = setInterval(() => {
+    const webToolbarTimer = ctx.setInterval(() => {
       webToolbarAttempts++;
       if (
-        safeCall(ensureWebToolbar, "ensureWebToolbar") ||
+        ctx.safeCall(ensureWebToolbar, "ensureWebToolbar") ||
         webToolbarAttempts > 40
       ) {
-        clearInterval(webToolbarTimer);
+        ctx.clearInterval(webToolbarTimer);
       }
     }, 150);
-    registerCleanup(() => clearInterval(webToolbarTimer));
+    ctx.registerCleanup(() => ctx.clearInterval(webToolbarTimer));
   }
+});
 
-    return { getActiveAppBrowser, QUICK_SWITCH_BUILTIN_TARGETS,
-      QUICK_SWITCH_CUSTOM_PREFS, QUICK_SWITCH_TARGET_PREF_PREFIX,
-      SEARCH_CUSTOM_ENGINE_PREFS, isValidQuickSwitchTemplate,
-      refreshBrowserSearchTemplate, buildSearchUrl, looksLikeUrl,
-      canPanelNavigate, navigatePanelHistory, setForcePanelBlack,
-      applyForcePanelBlackVisual,
-      ensureWebToolbar, updateWebToolbarState,
-      periodicFallbackPollingEnabled, startWebToolbarPolling };
-  };
 })();
