@@ -15103,6 +15103,37 @@
  * ============================================================================================================= */
 
 (function initBgalazkaExtension() {
+  // Sine can run this file before Zen has finished restoring its sidebar and
+  // tabs. Build tiles and apply layout attributes only after that UI exists.
+  if (
+    typeof gBrowserInit !== "undefined" &&
+    !gBrowserInit.delayedStartupFinished
+  ) {
+    if (window.BgalazkaExtensionStartupPending) return;
+    window.BgalazkaExtensionStartupPending = true;
+    const ready = (subject, topic) => {
+      if (subject !== window) return;
+      cancelReady();
+      initBgalazkaExtension();
+    };
+    const cancelReady = () => {
+      if (!window.BgalazkaExtensionStartupPending) return;
+      window.BgalazkaExtensionStartupPending = false;
+      Services.obs.removeObserver(ready, "browser-delayed-startup-finished");
+      window.removeEventListener("unload", cancelReady);
+    };
+    Services.obs.addObserver(ready, "browser-delayed-startup-finished");
+    window.addEventListener("unload", cancelReady, { once: true });
+    if (typeof window.addUnloadListener === "function")
+      window.addUnloadListener(cancelReady);
+    else if (typeof UC_API !== "undefined" && UC_API.addUnloadListener)
+      UC_API.addUnloadListener(cancelReady);
+    // A synchronous startup completion around observer registration must not
+    // leave this instance waiting for an event that has already fired.
+    if (gBrowserInit.delayedStartupFinished)
+      ready(window, "browser-delayed-startup-finished");
+    return;
+  }
   /* NOTE 26 - PANEL INPUT SHIELD: configurable `panel_input_shield` keeps the open
    * panel as a pointer hit-test barrier and scopes mouse Back/Forward buttons
    * to the visible app browser. Its initial value follows PROFILE_DEFAULTS. */
@@ -29593,7 +29624,7 @@
       open.title = "Open source tab";
       open.textContent = "↗";
       open.addEventListener("click", () => {
-        if (current?.tab?.isConnected) gBrowser.selectedTab = current.tab;
+        if (canOpenSourceTab(current)) gBrowser.selectedTab = current.tab;
       });
       bar.append(playButton, caption, muteButton, next, open);
       const grip = document.createElement("div");
@@ -29649,6 +29680,25 @@
       a.data.frameId === b.data.frameId &&
       a.data.documentId === b.data.documentId &&
       a.data.id === b.data.id
+    );
+  }
+
+  function canOpenSourceTab(source) {
+    const tab = source?.tab;
+    return !!(
+      source?.data?.kind === "video" &&
+      !source.panel &&
+      tab?.isConnected &&
+      !tab.closing &&
+      source.browser?.isConnected &&
+      tab.linkedBrowser === source.browser &&
+      !source.browser.hasAttribute?.("bgalazka-addon-host-browser") &&
+      !source.browser._bgalazkaAppId &&
+      !tab.hasAttribute?.("bgalazka-addon-host") &&
+      !tab.hasAttribute?.("bgalazka-addon-host-fallback") &&
+      !tab.closest?.(
+        "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
+      )
     );
   }
 
@@ -29930,6 +29980,7 @@
     picture.hidden = current?.data.kind !== "video";
     seekBar.hidden = !current?.data.duration;
     controlBar.hidden = false;
+    box._openButton.hidden = !canOpenSourceTab(current);
     if (!current) {
       caption.textContent = sources.length
         ? "Choose a source"
@@ -30030,7 +30081,7 @@
       : source.tab?.label || "Playing video";
     caption.title = caption.textContent;
     box._nextButton.hidden = sources.length < 2;
-    box._openButton.hidden = source.panel || !source.tab;
+    box._openButton.hidden = !canOpenSourceTab(source);
     showState();
     refreshCard();
     if (changed) {
@@ -30283,7 +30334,19 @@
       mount();
       const items = Array.from(gBrowser.tabs)
         .filter((tab) => !tab.closing)
-        .map((tab) => ({ tab, browser: tab.linkedBrowser, panel: false }));
+        .map((tab) => ({
+          tab,
+          browser: tab.linkedBrowser,
+          panel: !!(
+            tab.hasAttribute("bgalazka-addon-host") ||
+            tab.hasAttribute("bgalazka-addon-host-fallback") ||
+            tab.closest(
+              "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
+            ) ||
+            tab.linkedBrowser?.hasAttribute?.("bgalazka-addon-host-browser") ||
+            tab.linkedBrowser?._bgalazkaAppId
+          ),
+        }));
       // Zentral's floating panels are standalone <browser>s, invisible to the
       // native Zen media toolbar. Include them without changing that toolbar.
       const known = new Set(items.map((item) => item.browser));
