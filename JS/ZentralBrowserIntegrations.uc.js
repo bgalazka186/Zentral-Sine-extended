@@ -987,10 +987,10 @@ const PANEL_CONTAINERS_PREF =
           skipSessionStore: true,
         });
       } catch (e) {
-        console.warn(
-          "[BgalazkaExtension] Failed to remove add-on host tab:",
-          e,
-        );
+        // Gecko can throw while removing the browser's progress listener
+        // *after* it has already detached the tab. Report only live failures.
+        if (record.tab?.isConnected)
+          console.warn("[BgalazkaExtension] Failed to remove add-on host tab:", e);
       }
     }
     return record;

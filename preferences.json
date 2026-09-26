@@ -6963,5 +6963,17 @@
     "label": "Local add-on manifest (JSON; restart required)",
     "type": "string",
     "defaultValue": "[]"
+  },
+  {
+    "property": "zen.workspace.bgalazka.panel_black_opacity",
+    "label": "Black panel backing opacity (0–100)",
+    "type": "input",
+    "defaultValue": 0
+  },
+  {
+    "property": "zen.workspace.bgalazka.panel_black_steps",
+    "label": "Black backing cycle levels (comma separated)",
+    "type": "input",
+    "defaultValue": "0,25,50,75,100"
   }
 ]

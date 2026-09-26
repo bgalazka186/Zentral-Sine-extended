@@ -24,9 +24,9 @@
 :root[bgalazka-force-panel-black="true"]
   #bgalazka-super-panel
   .bgalazka-super-bar {
-  --tabpanels-background-color: #000000 !important;
-  background: #000000 !important;
-  background-color: #000000 !important;
+  --tabpanels-background-color: color-mix(in srgb, #000000 var(--bgalazka-panel-black-opacity, 100%), transparent) !important;
+  background: color-mix(in srgb, #000000 var(--bgalazka-panel-black-opacity, 100%), transparent) !important;
+  background-color: color-mix(in srgb, #000000 var(--bgalazka-panel-black-opacity, 100%), transparent) !important;
 }
 
 :root[bgalazka-force-panel-black="true"]

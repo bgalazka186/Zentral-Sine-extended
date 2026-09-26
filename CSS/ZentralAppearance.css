@@ -337,19 +337,11 @@
   pointer-events: none;
   z-index: 3;
 }
-:root
-  .tabbrowser-tab:is([soundplaying], [muted], [activemedia-blocked])
-  .bgalazka-panel-icon-host
-  .zen-app-tile.bgalazka-tab-icon-panel {
+/* Keep the native audio overlay, but never let its favicon show beneath
+   the custom launcher tile. */
+:root .tabbrowser-tab[bgalazka-tab-panel-launcher="true"]
+  .bgalazka-panel-icon-host:has(> .bgalazka-tab-icon-panel) .tab-icon-image {
   visibility: hidden !important;
-  pointer-events: none !important;
-}
-:root
-  .tabbrowser-tab:is([soundplaying], [muted], [activemedia-blocked])
-  .bgalazka-panel-icon-host
-  .tab-icon-image {
-  visibility: visible !important;
-  pointer-events: none !important;
 }
 
 /* The black pill background needs a light active glyph and a visible border. */

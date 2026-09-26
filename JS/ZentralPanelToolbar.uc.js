@@ -459,64 +459,44 @@ function getActiveAppBrowser() {
   }
 
   let forcePanelBlackSwitchTimer = null;
-  // Runtime state is authoritative while this chrome window is alive. The
-  // preference persists it across restarts; the root attribute/button are
-  // presentation mirrors only. This prevents panel/toolbars rebuilds or a
-  // temporarily stale DOM attribute from inverting the next click.
-  let forcePanelBlackState = ctx.getPref(
-    ctx.BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK,
-    false,
-  );
-
-  function syncForcePanelBlackButton(button, forced = forcePanelBlackState) {
-    if (!button) return;
-    button.dataset.active = forced ? "true" : "false";
-    button.setAttribute("aria-pressed", forced ? "true" : "false");
-    button.title = forced
-      ? "Use saved panel background / transparency"
-      : "Force opaque black panel background";
+  const opacityPref = ctx.BGALAZKA_EXT_PREFS.PANEL_BLACK_OPACITY;
+  const stepsPref = ctx.BGALAZKA_EXT_PREFS.PANEL_BLACK_STEPS;
+  const clamp = n => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
+  let forcePanelBlackState = clamp(ctx.getPref(opacityPref, 0));
+  function backgroundSteps() {
+    const numbers = String(ctx.getPref(stepsPref, "0,25,50,75,100"))
+      .split(/[,;\s]+/).filter(Boolean).map(Number)
+      .filter(n => Number.isInteger(n) && n >= 0 && n <= 100);
+    return [...new Set(numbers.length ? numbers : [0,25,50,75,100])].sort((a,b) => a-b);
   }
-
-  function applyForcePanelBlackVisual(
-    forced = forcePanelBlackState,
-    button = null,
-    instant = true,
-  ) {
-    forcePanelBlackState = !!forced;
+  function syncForcePanelBlackButton(button, opacity = forcePanelBlackState) {
+    if (!button) return;
+    button.dataset.active = opacity > 0 ? "true" : "false";
+    button.setAttribute("aria-label", `Black panel backing ${opacity}%. Click to cycle; hold to reset.`);
+    button.setAttribute("aria-valuenow", String(opacity));
+    button.title = `Black panel backing ${opacity}%. Click to cycle; hold to reset to 0%.`;
+  }
+  function applyForcePanelBlackVisual(opacity = forcePanelBlackState, button = null, instant = true) {
+    forcePanelBlackState = clamp(opacity);
     const root = document.documentElement;
     if (instant) root.setAttribute("bgalazka-panel-black-switching", "true");
-    root.setAttribute(
-      "bgalazka-force-panel-black",
-      forcePanelBlackState ? "true" : "false",
-    );
-    syncForcePanelBlackButton(
-      button ||
-        document.querySelector(
-          "#zen-app-panel-toolbar .bgalazka-panel-black-btn",
-        ),
-      forcePanelBlackState,
-    );
-    if (!instant) return;
-    if (forcePanelBlackSwitchTimer) ctx.clearTimeout(forcePanelBlackSwitchTimer);
-    forcePanelBlackSwitchTimer = ctx.setTimeout(() => {
-      forcePanelBlackSwitchTimer = null;
-      root.removeAttribute("bgalazka-panel-black-switching");
-    }, 80);
+    root.setAttribute("bgalazka-force-panel-black", forcePanelBlackState > 0 ? "true" : "false");
+    root.style.setProperty("--bgalazka-panel-black-opacity", `${forcePanelBlackState}%`);
+    syncForcePanelBlackButton(button || document.querySelector("#zen-app-panel-toolbar .bgalazka-panel-black-btn"));
+    if (instant) {
+      if (forcePanelBlackSwitchTimer) ctx.clearTimeout(forcePanelBlackSwitchTimer);
+      forcePanelBlackSwitchTimer = ctx.setTimeout(() => {forcePanelBlackSwitchTimer = null;root.removeAttribute("bgalazka-panel-black-switching");}, 80);
+    }
   }
-
-  function setForcePanelBlack(forced, { persist = true, instant = true } = {}) {
-    forced = !!forced;
-    applyForcePanelBlackVisual(forced, null, instant);
-    if (
-      persist &&
-      ctx.getPref(ctx.BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, false) !== forced
-    )
-      ctx.setPref(ctx.BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, forced);
+  function setForcePanelBlack(opacity) {
+    opacity = clamp(opacity);
+    applyForcePanelBlackVisual(opacity);
+    if (ctx.getPref(opacityPref, 0) !== opacity) ctx.setPref(opacityPref, opacity);
   }
-
   ctx.registerCleanup(() => {
     if (forcePanelBlackSwitchTimer) ctx.clearTimeout(forcePanelBlackSwitchTimer);
     document.documentElement.removeAttribute("bgalazka-panel-black-switching");
+    document.documentElement.style.removeProperty("--bgalazka-panel-black-opacity");
   });
 
   function ensureWebToolbar() {
@@ -668,26 +648,29 @@ function getActiveAppBrowser() {
       ctx.repairVisiblePanelPresentation(true);
     });
 
-    // Quick opaque-black backing toggle. This does not overwrite any Look or
-    // translucency sliders; turning it off reveals the user's saved values.
+    // Click cycles user levels; a 600 ms hold resets to zero.
     const blackPanelBtn = document.createElement("button");
     blackPanelBtn.type = "button";
     blackPanelBtn.className = "zen-toolbar-btn bgalazka-panel-black-btn";
     blackPanelBtn.appendChild(ctx.parseSVG(ctx.PREF_ICONS.PANEL_BLACK));
-    blackPanelBtn.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+    let holdTimer = null;
+    let held = false;
+    const cancelHold = () => {if (holdTimer) ctx.clearTimeout(holdTimer);holdTimer = null;};
+    blackPanelBtn.addEventListener("pointerdown", e => {
+      if (e.button !== 0) return;
+      e.preventDefault();e.stopPropagation();held = false;cancelHold();
+      holdTimer = ctx.setTimeout(() => {holdTimer = null;held = true;setForcePanelBlack(0);}, 600);
     });
-    blackPanelBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      // Runtime state is authoritative; persistence happens after the visual
-      // change so this stays immediate even if pref observers are busy.
-      const next = !forcePanelBlackState;
-      applyForcePanelBlackVisual(next, blackPanelBtn);
-      if (ctx.getPref(ctx.BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, false) !== next)
-        ctx.setPref(ctx.BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, next);
+    blackPanelBtn.addEventListener("pointerup", cancelHold);
+    blackPanelBtn.addEventListener("pointercancel", cancelHold);
+    blackPanelBtn.addEventListener("pointerleave", cancelHold);
+    blackPanelBtn.addEventListener("click", e => {
+      e.preventDefault();e.stopPropagation();
+      if (held) {held = false;return;}
+      const steps = backgroundSteps();
+      setForcePanelBlack(steps.find(n => n > forcePanelBlackState) ?? steps[0]);
     });
+    ctx.registerCleanup(cancelHold);
 
     // Search-engine quick-switch. When the current HTTP(S) page exposes a
     // recognizable GET search term, each click advances to the next enabled
@@ -820,7 +803,7 @@ function getActiveAppBrowser() {
       const mirrored =
         document.documentElement.getAttribute("bgalazka-force-panel-black") ===
         "true";
-      if (mirrored !== forcePanelBlackState)
+      if (mirrored !== (forcePanelBlackState > 0))
         applyForcePanelBlackVisual(forcePanelBlackState, blackPanelBtn, false);
       else syncForcePanelBlackButton(blackPanelBtn, forcePanelBlackState);
     }

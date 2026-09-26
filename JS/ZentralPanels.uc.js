@@ -993,6 +993,9 @@ ZentralRuntime.register({id:"panels",init(){
    * 4. SETTINGS UI INJECTION (DOM-SAFE XHTML BUILDER)
    * ========================================================================== */
   const BGALAZKA_EXT_PREFS = {
+    FORCE_PANEL_BLACK: "zen.workspace.bgalazka.force_panel_black",
+    PANEL_BLACK_OPACITY: "zen.workspace.bgalazka.panel_black_opacity",
+    PANEL_BLACK_STEPS: "zen.workspace.bgalazka.panel_black_steps",
     TRANSLUCENCY: "zen.workspace.bgalazka.translucency",
     OPPOSITE_DOCKING: "zen.workspace.bgalazka.opposite_docking",
     HOVER_REVEAL_PANEL: "zen.workspace.bgalazka.hover_reveal_panel",
@@ -3247,26 +3250,29 @@ ZentralRuntime.register({id:"panels",init(){
       [BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ZOOM, "bgalazka-webtoolbar-zoom", false],
       [BGALAZKA_EXT_PREFS.WEB_TOOLBAR_TOP, "bgalazka-webtoolbar-top", false],
     ];
-    ctx.forcePanelBlackState = getPref(BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, false);
-    ctx.applyForcePanelBlackVisual(ctx.forcePanelBlackState, null, false);
+    // Migrate the old boolean once; the integer preference owns the state now.
+    const opacityPref = BGALAZKA_EXT_PREFS.PANEL_BLACK_OPACITY;
+    if (!Services.prefs.prefHasUserValue(opacityPref) &&
+        getPref(BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, false))
+      setPref(opacityPref, 100);
+    ctx.applyForcePanelBlackVisual(getPref(opacityPref, 0), null, false);
     try {
       const blackObserver = () => {
-        const forced = getPref(BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, false);
-        ctx.forcePanelBlackState = forced;
+        const opacity = getPref(opacityPref, 0);
         const button = document.querySelector(
           "#zen-app-panel-toolbar .bgalazka-panel-black-btn",
         );
-        ctx.applyForcePanelBlackVisual(forced, button, false);
+        ctx.applyForcePanelBlackVisual(opacity, button, false);
       };
       Services.prefs.addObserver(
-        BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK,
+        opacityPref,
         blackObserver,
         false,
       );
       registerCleanup(() => {
         try {
           Services.prefs.removeObserver(
-            BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK,
+            opacityPref,
             blackObserver,
           );
         } catch (_) {}
