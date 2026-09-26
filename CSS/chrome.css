@@ -1,0 +1,15 @@
+/* Ordered entrypoint. CSS fragments retain the original cascade order. */
+@import url("ZentralBase.css");
+@import url("ZentralPanelLayout.css");
+@import url("ZentralCornerPanels.css");
+@import url("ZentralControls.css");
+@import url("ZentralWebToolbar.css");
+@import url("ZentralPanelResize.css");
+@import url("ZentralSettings.css");
+@import url("ZentralIntegration.css");
+@import url("ZentralVideoPreview.css");
+@import url("ZentralLook.css");
+@import url("ZentralRssDisplay.css");
+@import url("ZentralTabDensity.css");
+@import url("ZentralPanelBlack.css");
+:root { --zentral-css-entrypoint: 1; }

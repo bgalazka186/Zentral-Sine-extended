@@ -1,0 +1,213 @@
+/* ==========================================================================
+   16. ALL-SIDES PANEL RESIZE (top/bottom edge drag handles)
+   -----------------------------------------------------------------------
+   See Zentral_uc.js note 16 for the JS half (drag math, persistence, pill
+   button, settings toggle). Unlike the native left/right resize strip,
+   top/bottom position never depends on data-panel-side, opposite-docking,
+   or dual-view/push -- the panel is always full-width within its own root,
+   so ONE unconditional rule set below covers normal docking, opposite
+   docking, and dual-view alike. Fully inert (pointer-events: none, opacity:
+   0) unless the master toggle attribute is on, so this costs nothing when
+   the feature is off.
+   ========================================================================== */
+.zen-app-resize-strip-top,
+.zen-app-resize-strip-bottom {
+  position: absolute !important;
+  left: 8px !important;
+  right: 8px !important;
+  height: 10px !important;
+  cursor: ns-resize !important;
+  z-index: 30 !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  background: transparent !important;
+  border-radius: 4px !important;
+  transition:
+    background-color 0.15s ease,
+    opacity 0.15s ease !important;
+}
+.zen-app-resize-strip-top {
+  top: -5px !important;
+}
+.zen-app-resize-strip-bottom {
+  bottom: -5px !important;
+}
+
+/* Master toggle: only becomes interactive when enabled (pill button or
+ * settings row, both write the same "bgalazka-all-sides-resize" attribute -
+ * see note 16). */
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-top,
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-bottom {
+  pointer-events: auto !important;
+}
+
+/* Hover highlight (only reachable at all when the toggle above already
+ * granted pointer-events) + an active-drag highlight keyed off the
+ * "bgalazka-vresize-active" attribute the JS sets for the duration of the
+ * drag, so the strip stays lit even when a fast mouse move momentarily
+ * leaves it (mousemove is tracked on `document`, not the strip itself --
+ * same reason the native left/right strip's own drag doesn't rely on
+ * :hover either). */
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-top:hover,
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-bottom:hover,
+:root[bgalazka-vresize-active="top"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-top,
+:root[bgalazka-vresize-active="bottom"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-bottom {
+  opacity: 1 !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 55%,
+    transparent
+  ) !important;
+}
+
+/* --------------------------------------------------------------------------
+ * ALL-SIDES WIDTH + CORNER HANDLES (extension-only maintenance note)
+ * --------------------------------------------------------------------------
+ * The native .zen-app-resize-strip is disabled here. The extension owns both
+ * outer and inner width edges plus four corners, so opposite-docking sign
+ * math has one source of truth instead of two competing drag handlers.
+ * Every edge/corner surface shares ALL_SIDES_RESIZE: off means no accidental
+ * edge resize; the pill's normal "Drag to resize" control is intentionally
+ * NOT gated here and remains available for its native horizontal behavior.
+ * The selectors use data-panel-side when our docking hook has set it, then
+ * keep Zen's native side attribute as a safe fallback during early startup.
+ * -------------------------------------------------------------------------- */
+#zen-app-panel-root .zen-app-resize-strip {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+.zen-app-resize-strip-outer,
+.zen-app-resize-strip-inner,
+.zen-app-resize-corner {
+  position: absolute !important;
+  z-index: 31 !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  background: transparent !important;
+}
+.zen-app-resize-strip-outer,
+.zen-app-resize-strip-inner {
+  top: 8px !important;
+  bottom: 8px !important;
+  width: 12px !important;
+  cursor: ew-resize !important;
+}
+.zen-app-resize-corner {
+  width: 16px !important;
+  height: 16px !important;
+  cursor: nwse-resize !important;
+}
+.zen-app-resize-corner-top-outer,
+.zen-app-resize-corner-top-inner {
+  top: -8px !important;
+}
+.zen-app-resize-corner-bottom-outer,
+.zen-app-resize-corner-bottom-inner {
+  bottom: -8px !important;
+}
+
+/* Native fallback: sidebar on the right means the outer/content edge is left. */
+:root[zen-right-side="true"] #zen-app-panel-root .zen-app-resize-strip-inner,
+:root[zen-right-side="true"] #zen-app-panel-root .zen-app-resize-corner-inner,
+:root:not([zen-right-side="true"])
+  #zen-app-panel-root
+  .zen-app-resize-strip-outer,
+:root:not([zen-right-side="true"])
+  #zen-app-panel-root
+  :is(.zen-app-resize-corner-top-outer, .zen-app-resize-corner-bottom-outer) {
+  right: -6px !important;
+  left: auto !important;
+}
+:root[zen-right-side="true"]
+  #zen-app-panel-root
+  :is(.zen-app-resize-corner-top-outer, .zen-app-resize-corner-bottom-outer),
+:root:not([zen-right-side="true"])
+  #zen-app-panel-root
+  .zen-app-resize-strip-inner,
+:root:not([zen-right-side="true"])
+  #zen-app-panel-root
+  .zen-app-resize-corner-inner,
+:root[zen-right-side="true"] #zen-app-panel-root .zen-app-resize-strip-outer {
+  left: -6px !important;
+  right: auto !important;
+}
+
+/* Precise extension-docking override. */
+#zen-app-panel-root[data-panel-side="right"] .zen-app-resize-strip-inner,
+#zen-app-panel-root[data-panel-side="right"] .zen-app-resize-corner-inner,
+#zen-app-panel-root[data-panel-side="left"] .zen-app-resize-corner-outer,
+#zen-app-panel-root[data-panel-side="left"] .zen-app-resize-strip-outer {
+  right: -6px !important;
+  left: auto !important;
+}
+#zen-app-panel-root[data-panel-side="right"] .zen-app-resize-corner-outer,
+#zen-app-panel-root[data-panel-side="left"] .zen-app-resize-strip-inner,
+#zen-app-panel-root[data-panel-side="left"] .zen-app-resize-corner-inner,
+#zen-app-panel-root[data-panel-side="right"] .zen-app-resize-strip-outer {
+  left: -6px !important;
+  right: auto !important;
+}
+
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-outer,
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-inner,
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-corner {
+  pointer-events: auto !important;
+}
+
+/* Only light up the currently targeted surface; transparent idle handles do
+ * not add visual noise or animation work while the panel is merely open. */
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-outer:hover,
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip-inner:hover,
+:root[bgalazka-all-sides-resize="true"]
+  #zen-app-panel-root
+  .zen-app-resize-corner:hover,
+:root[bgalazka-hresize-active] #zen-app-panel-root .zen-app-resize-strip-outer,
+:root[bgalazka-hresize-active] #zen-app-panel-root .zen-app-resize-strip-inner {
+  opacity: 1 !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 55%,
+    transparent
+  ) !important;
+}
+
+/* Pill button active state -- exact copy of the Dual-View button's own
+ * active styling (chrome.css section 4) for visual consistency. */
+#zen-app-panel-pill .zen-app-all-sides-resize-btn[data-active="true"] {
+  background-color: color-mix(
+    in srgb,
+    currentColor 20%,
+    transparent
+  ) !important;
+}
+#zen-app-panel-pill .zen-app-all-sides-resize-btn[data-active="true"] svg {
+  fill: currentColor !important;
+  stroke: currentColor !important;
+  stroke-width: 0.5 !important;
+}
+
+
+:root { --zentral-css-panelresize: 1; }

@@ -5,16 +5,68 @@
   "homepage": "https://github.com/bgalazka186/Zentral-Sine-extended",
   "supportsUnload": true,
   "style": {
-    "chrome": "chrome.css"
+    "chrome": "CSS/chrome.css"
   },
   "scripts": {
     "JS/zentral_logger.uc.js": {
       "include": ["chrome://browser/content/browser.xhtml"],
       "loadOrder": 1
     },
+    "JS/ZentralApps.uc.js": {
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 2
+    },
+    "JS/ZentralTabGroups.uc.js": {
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 3
+    },
+    "JS/ZentralSettings.uc.js": {
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 4
+    },
     "JS/Zentral.uc.js": {
       "include": ["chrome://browser/content/browser.xhtml"],
       "loadOrder": 10
+    },
+    "JS/ZentralPanelGeometry.uc.js": {
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 11
+    },
+    "JS/ZentralTileIsolation.uc.js": {
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 12
+    },
+    "JS/ZentralCornerPanels.uc.js": {
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 13
+    },
+    "JS/ZentralRssDisplay.uc.js": {
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 14
+    },
+    "JS/ZentralSecondaryViews.uc.js": {
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 15
+    },
+    "JS/ZentralWebToolbar.uc.js": {
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 16
+    },
+    "JS/ZentralExtensionSettings.uc.js": {
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 17
+    },
+    "JS/ZentralDevFileControls.uc.js": {
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 17.5
+    },
+    "JS/ZentralBrowserIntegrations.uc.js": {
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 18
+    },
+    "JS/ZentralPanelStyleBridge.uc.js": {
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 19
     },
     "JS/BgalazkaExtension.uc.js": {
       "include": ["chrome://browser/content/browser.xhtml"],

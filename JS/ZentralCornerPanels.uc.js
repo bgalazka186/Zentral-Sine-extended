@@ -1,0 +1,652 @@
+"use strict";
+// Corner-docked apps and essential-tab panel identities are one feature.
+(function () {
+  const sources = (window.ZentralFeatureSources ||= Object.create(null));
+  sources.cornerPanels = function initCornerPanels({ EXT_PREFS, getPref,
+    registerCleanup, setTimeout, clearTimeout, isolateTile,
+    pruneIsolationTiles, getAllAppBrowsers, getMobileUaAppIds,
+    saveMobileUaAppIds, getPanelContainerAssignments,
+    savePanelContainerAssignments }) {
+  /* ==========================================================================
+   * 3. CORNER TILES DOM SYNCHRONIZATION (SAFE & CRASH-PROOF, STABLE DOCKING)
+   * ========================================================================== */
+  let isSyncingTiles = false;
+
+  // Global root-level capture guard:
+  // Intercepts MMB at the window level BEFORE Zen's tabContainer or .tabbrowser-tab
+  // can capture it, preventing the underlying essential tab from hibernating/unloading.
+  const mmbEvents = [
+    "pointerdown",
+    "mousedown",
+    "pointerup",
+    "mouseup",
+    "click",
+    "auxclick",
+  ];
+  let lastUnloadTime = 0;
+
+  const onWindowMMBCapture = (e) => {
+    // STRICT: Only intercept Middle Mouse Button (button === 1).
+    // LMB (button 0) and RMB (button 2) pass straight through untouched.
+    if (e.button !== 1) return;
+
+    const target = e.target;
+    if (!target) return;
+
+    // Check if the click target is a corner-docked tile on a tab
+    const tile = target.closest?.(".zen-app-tile");
+    if (!tile) return;
+
+    const parentTab = tile.closest(".tabbrowser-tab");
+    if (!parentTab) return; // In sidebar grid, let base mod handle it
+
+    // Terminate event propagation at the root so the tab never sees it
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    // Trigger app unload on button release
+    if (e.type === "auxclick" || e.type === "mouseup") {
+      const now = Date.now();
+      if (now - lastUnloadTime < 250) return;
+      lastUnloadTime = now;
+
+      const appId = tile.getAttribute("data-app-id");
+      if (appId) {
+        try {
+          if (typeof window.Zentral?.Apps?.closeApp === "function") {
+            window.Zentral.Apps.closeApp(appId);
+          } else if (typeof window.ZenApps?.closeApp === "function") {
+            window.ZenApps.closeApp(appId);
+          }
+        } catch (_) {}
+
+        tile.dataset.loaded = "false";
+        tile.dataset.active = "false";
+        tile.querySelector(".zen-app-badge")?.remove();
+      }
+    }
+  };
+
+  mmbEvents.forEach((type) => {
+    window.addEventListener(type, onWindowMMBCapture, { capture: true });
+  });
+
+  registerCleanup(() => {
+    mmbEvents.forEach((type) => {
+      window.removeEventListener(type, onWindowMMBCapture, { capture: true });
+    });
+  });
+
+  // Essential duplicates have their own app identity/browser, but all panel
+  // UI and behavior comes from Zentral's existing panel engine. Never move a
+  // normal grid tile or create a second panel implementation.
+  const essentialPanels = new Map();
+  const essentialTabRecords = new WeakMap();
+  // Session restoration can expose dozens of saved Essentials at once.
+  // Never create all of their remote browsers in one synchronous tile pass.
+  let nextPreloadAt = 0;
+  const pendingPreloadTimers = new Set();
+  function scheduleEssentialPreload(record) {
+    // Reserve this record before queueing: tab-attribute events during session
+    // restore may request another tile sync before its timer has fired.
+    record.preloadAttempted = true;
+    const now = Date.now();
+    const delay = Math.max(0, nextPreloadAt - now);
+    nextPreloadAt = now + delay + 1500;
+    const timer = setTimeout(() => {
+      pendingPreloadTimers.delete(timer);
+      if (!record.tab.isConnected || !record.app.preload ||
+          essentialPanels.get(record.app.id) !== record) return;
+      try {
+        loadEssentialInBackground(record);
+      } catch (error) {
+        // A failed startup load stays failed until a deliberate user retry.
+        // Retrying on every tab change can create an unbounded browser loop.
+        console.warn("[BgalazkaExtension] Essential preload failed", error);
+      }
+    }, delay);
+    pendingPreloadTimers.add(timer);
+  }
+  registerCleanup(() => {
+    for (const timer of pendingPreloadTimers) clearTimeout(timer);
+    pendingPreloadTimers.clear();
+  });
+  // Pair identities belong to the extension, not to the lifetime of a browser.
+  const linkedTriplePref = "zen.workspace.bgalazka.linked_triple_pairs";
+  let linkedTriplePairs = [];
+  try {
+    const saved = JSON.parse(getPref(linkedTriplePref, "[]"));
+    if (Array.isArray(saved))
+      linkedTriplePairs = saved.filter(
+        (pair) =>
+          pair &&
+          typeof pair.top === "string" &&
+          typeof pair.bottom === "string" &&
+          pair.top !== pair.bottom &&
+          pair.apps &&
+          pair.apps[pair.top] &&
+          pair.apps[pair.bottom],
+      );
+  } catch (_) {}
+  const linkedPairFor = (id) =>
+    linkedTriplePairs.find((pair) => pair.top === id || pair.bottom === id);
+  function saveLinkedTriplePairs() {
+    Services.prefs.setStringPref(
+      linkedTriplePref,
+      JSON.stringify(linkedTriplePairs),
+    );
+  }
+  function unlinkTriplePair(id) {
+    const pair = linkedPairFor(id);
+    if (!pair) return;
+    linkedTriplePairs = linkedTriplePairs.filter((item) => item !== pair);
+    saveLinkedTriplePairs();
+  }
+  function normalPanelIdExists(id) {
+    try {
+      const apps = JSON.parse(getPref("zen.workspace.apps.sidebar.apps", "[]"));
+      return Array.isArray(apps) && apps.some((app) => app.id === id);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Essentials are separate app objects. Zentral's normal badge updater looks
+  // for a grid button, so title changes in a preloaded panel never reach the
+  // corner tile even though the site's background page received them.
+  const essentialBadgeApps = window.Zentral?.Apps;
+  const originalEssentialBadgeUpdater = essentialBadgeApps?.updateAppBadge;
+  if (typeof originalEssentialBadgeUpdater === "function") {
+    const updateBadge = function (appId, hasNotification, notifCount) {
+      const result = originalEssentialBadgeUpdater.call(
+        this,
+        appId,
+        hasNotification,
+        notifCount,
+      );
+      const tile = essentialPanels.get(appId)?.tile;
+      if (!tile?.isConnected) return result;
+      let badge = tile.querySelector(".zen-app-badge");
+      if (!hasNotification) {
+        badge?.remove();
+        return result;
+      }
+      if (!badge) {
+        badge = document.createElement("div");
+        badge.className = "zen-app-badge";
+        tile.appendChild(badge);
+      }
+      if (notifCount) {
+        badge.textContent = notifCount > 99 ? "99+" : String(notifCount);
+        badge.removeAttribute("data-dot");
+      } else {
+        badge.textContent = "";
+        badge.setAttribute("data-dot", "true");
+      }
+      return result;
+    };
+    essentialBadgeApps.updateAppBadge = updateBadge;
+    registerCleanup(() => {
+      if (essentialBadgeApps.updateAppBadge === updateBadge)
+        essentialBadgeApps.updateAppBadge = originalEssentialBadgeUpdater;
+    });
+  }
+
+  function syncEssentialBadge(record, browser) {
+    const apps = window.Zentral?.Apps;
+    if (
+      !record.tile?.isConnected ||
+      !apps?.extractBadgeFromTitle ||
+      !apps?.updateAppBadge
+    )
+      return;
+    let title = "";
+    if (browser?.isConnected) {
+      try {
+        title =
+          browser.browsingContext?.currentWindowGlobal?.documentTitle ||
+          browser.contentTitle ||
+          browser.getAttribute("label") ||
+          "";
+      } catch (_) {
+        title = browser.contentTitle || browser.getAttribute("label") || "";
+      }
+    }
+    // A new browser briefly has no title. Keep the last badge until the
+    // first page title arrives; clear it if its browser was actually closed.
+    if (!title && browser?.isConnected) return;
+    const { hasNotification, notifCount } = apps.extractBadgeFromTitle(title);
+    const badge = record.tile.querySelector(".zen-app-badge");
+    if (
+      record.app.hasNotification !== hasNotification ||
+      record.app.notificationCount !== notifCount ||
+      !!badge !== hasNotification
+    ) {
+      record.app.hasNotification = hasNotification;
+      record.app.notificationCount = notifCount;
+      apps.updateAppBadge(record.app.id, hasNotification, notifCount);
+    }
+  }
+  let nextEssentialId = 0;
+  const essentialIdPrefix = `bgalazka-essential-${Date.now()}-`;
+
+  const essentialSettingsCache = new WeakMap();
+  function essentialSessionStore() {
+    if (window.SessionStore) return window.SessionStore;
+    for (const uri of [
+      "resource:///modules/sessionstore/SessionStore.sys.mjs",
+      "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
+    ]) {
+      try {
+        return ChromeUtils.importESModule(uri).SessionStore;
+      } catch (_) {}
+    }
+    return null;
+  }
+  function readEssentialSettings(tab) {
+    if (essentialSettingsCache.has(tab)) return essentialSettingsCache.get(tab);
+    try {
+      const raw = essentialSessionStore()?.getCustomTabValue(
+        tab,
+        "bgalazka-panel-settings",
+      );
+      const restored =
+        raw ||
+        (() => {
+          try {
+            const state = JSON.parse(
+              essentialSessionStore()?.getTabState(tab) || "{}",
+            );
+            return state.extData?.["bgalazka-panel-settings"] || "";
+          } catch (_) {
+            return "";
+          }
+        })();
+      const value = restored ? JSON.parse(restored) : {};
+      return value && typeof value === "object" && !Array.isArray(value)
+        ? value
+        : {};
+    } catch (_) {
+      return {};
+    }
+  }
+  function saveEssentialSettings(record) {
+    const value = {
+      panelId: record.app.id,
+      preload: !!record.app.preload,
+      mobileUa: !!record.mobileUa,
+      userContextId: record.userContextId,
+      width: record.app.width,
+    };
+    essentialSettingsCache.set(record.tab, value);
+    try {
+      essentialSessionStore()?.setCustomTabValue(
+        record.tab,
+        "bgalazka-panel-settings",
+        JSON.stringify(value),
+      );
+    } catch (error) {
+      console.warn(
+        "[BgalazkaExtension] Could not persist essential panel settings",
+        error,
+      );
+    }
+  }
+  function loadEssentialInBackground(record) {
+    const apps = window.Zentral?.Apps;
+    if (!apps?.getOrCreateAppBrowser) return false;
+    const { browser, isNew } = apps.getOrCreateAppBrowser(record.app) || {};
+    if (!browser) return false;
+    if (isNew || browser.currentURI?.spec === "about:blank") {
+      browser.style.display = "none";
+      // This opt-in preload is meant to receive site notifications even
+      // before the Essential tab itself is selected or restored.
+      try {
+        browser.docShellIsActive = true;
+      } catch (_) {}
+      const uri = Services.io.newURI(record.app.url);
+      browser.fixupAndLoadURIString(record.app.url, {
+        triggeringPrincipal:
+          Services.scriptSecurityManager.createContentPrincipal(uri, {
+            userContextId: record.userContextId,
+          }),
+      });
+      record.loadedSource = record.app.url;
+      setTimeout(() => {
+        if (
+          !record.tab.isConnected ||
+          !browser.isConnected ||
+          browser.currentURI?.spec !== "about:blank" ||
+          browser.webProgress?.isLoadingDocument
+        )
+          return;
+        try {
+          browser.fixupAndLoadURIString(record.app.url, {
+            triggeringPrincipal:
+              Services.scriptSecurityManager.createContentPrincipal(
+                Services.io.newURI(record.app.url),
+                {
+                  userContextId: record.userContextId,
+                },
+              ),
+          });
+        } catch (error) {
+          console.warn(
+            "[BgalazkaExtension] Essential preload retry failed",
+            error,
+          );
+        }
+      }, 3000);
+    }
+    return true;
+  }
+  function promoteEssentialPanel(record) {
+    const browser = getAllAppBrowsers().find(
+      (b) => b._bgalazkaAppId === record.app.id,
+    );
+    // A linked launcher must survive its tab even if Smart Sleep never
+    // instantiated its browser. Promotion itself does not trigger a load.
+    if (!browser && !linkedPairFor(record.app.id)) return false;
+    const apps = window.Zentral?.Apps;
+    // Keep the same app id: Zentral's private browser map, active panel,
+    // browsing history, mute, pin and in-page form state all stay intact.
+    apps.saveApps();
+    const saved = JSON.parse(getPref("zen.workspace.apps.sidebar.apps", "[]"));
+    if (!Array.isArray(saved)) throw new Error("Invalid normal panel list");
+    const app = {
+      ...record.app,
+      url:
+        browser?.currentURI?.spec !== "about:blank"
+          ? browser?.currentURI?.spec || record.app.url
+          : record.app.url,
+      workspaceId: "all",
+    };
+    if (!saved.some((item) => item.id === app.id)) saved.push(app);
+    const assignments = getPanelContainerAssignments();
+    if (record.userContextId > 0) assignments[app.id] = record.userContextId;
+    savePanelContainerAssignments(assignments);
+    const mobileIds = getMobileUaAppIds();
+    if (record.mobileUa) mobileIds.add(app.id);
+    else mobileIds.delete(app.id);
+    saveMobileUaAppIds(mobileIds);
+    // Do not use the best-effort preference helper here: a failed save must
+    // throw so sync retains the live browser and retries instead of losing it.
+    Services.prefs.setStringPref(
+      "zen.workspace.apps.sidebar.apps",
+      JSON.stringify(saved),
+    );
+    apps.loadApps();
+    apps.renderGrid();
+    return true;
+  }
+
+  function getEssentialSource(tab) {
+    const url = tab.linkedBrowser?.currentURI?.spec;
+    return url && /^(https?|about):/i.test(url) && url !== "about:blank"
+      ? url
+      : null;
+  }
+
+  function getRestoredEssentialSource(tab) {
+    const live = getEssentialSource(tab);
+    if (live) return live;
+    try {
+      const state = JSON.parse(
+        essentialSessionStore()?.getTabState(tab) || "{}",
+      );
+      const entry = state.entries?.[Math.max(0, (state.index || 1) - 1)];
+      const url = entry?.url;
+      return url && /^(https?|about):/i.test(url) && url !== "about:blank"
+        ? url
+        : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  function openEssentialPanel(record) {
+    const apps = window.Zentral?.Apps;
+    if (!apps?.openPanel || !record.tab.isConnected) return;
+    const root = document.getElementById("zen-app-panel-root");
+    if (
+      root?.hasAttribute("open") &&
+      !root.hasAttribute("closing") &&
+      getActiveAppBrowser()?._bgalazkaAppId === record.app.id
+    ) {
+      apps.closePanel();
+      return;
+    }
+    const source = getEssentialSource(record.tab);
+    const existing = getAllAppBrowsers().find(
+      (b) => b._bgalazkaAppId === record.app.id,
+    );
+    if (!existing && source) record.app.url = source;
+    if (!record.app.url) return;
+    apps.openPanel(record.app);
+    if (!existing) record.loadedSource = record.app.url;
+    syncCornerTiles();
+  }
+
+  function isEssentialPanelTab(tab) {
+    // Pinned is not synonymous with Essential. Zen marks essentials explicitly.
+    return (
+      tab.hasAttribute("zen-essential") &&
+      tab.getAttribute("zen-essential") !== "false"
+    );
+  }
+  function releaseTabPanelLauncher(record) {
+    record.tile?.remove();
+    record.iconHost?.classList.remove("bgalazka-panel-icon-host");
+    record.tab.removeAttribute("bgalazka-tab-panel-launcher");
+  }
+
+  function syncCornerTiles() {
+    if (isSyncingTiles) return;
+    isSyncingTiles = true;
+    try {
+      const enabled = getPref(EXT_PREFS.CORNER_TILES, false);
+      const targets = new Set(
+        enabled
+          ? [...(window.gBrowser?.tabs || [])].filter(
+              (tab) =>
+                tab.isConnected &&
+                !tab.closing &&
+                !tab.hasAttribute("bgalazka-addon-host") &&
+                !tab.hasAttribute("bgalazka-addon-host-fallback") &&
+                !tab.closest(
+                  "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
+                ) &&
+                (isEssentialPanelTab(tab) ||
+                  getPref(EXT_PREFS.ALL_TAB_PANELS, false)),
+            )
+          : [],
+      );
+      for (const [id, record] of essentialPanels) {
+        if (targets.has(record.tab)) continue;
+        const removed =
+          record.tab.closing ||
+          !(window.gBrowser?.tabs || []).includes(record.tab) ||
+          (record.wasEssential && !isEssentialPanelTab(record.tab));
+        try {
+          if (!removed || !promoteEssentialPanel(record))
+            window.Zentral?.Apps?.closeApp?.(id);
+        } catch (error) {
+          // Never destroy a live page when saving its new normal-panel entry fails.
+          console.error(
+            "[BgalazkaExtension] Could not preserve removed essential panel",
+            error,
+          );
+          continue;
+        }
+        releaseTabPanelLauncher(record);
+        essentialTabRecords.delete(record.tab);
+        essentialPanels.delete(id);
+      }
+      const browsers = new Map(
+        getAllAppBrowsers().map((b) => [b._bgalazkaAppId, b]),
+      );
+      const root = document.getElementById("zen-app-panel-root");
+      const active =
+        root?.hasAttribute("open") && !root.hasAttribute("closing")
+          ? getActiveAppBrowser()?._bgalazkaAppId
+          : null;
+      for (const tab of targets) {
+        let record = essentialTabRecords.get(tab);
+        if (!record) {
+          const source = getRestoredEssentialSource(tab);
+          if (!source) continue; // wait until SessionStore has supplied its URL
+          const settings = readEssentialSettings(tab);
+          const savedId = settings.panelId;
+          const stableId =
+            typeof savedId === "string" &&
+            /^bgalazka-essential-[\w-]+$/.test(savedId) &&
+            !essentialPanels.has(savedId) &&
+            !normalPanelIdExists(savedId)
+              ? savedId
+              : essentialIdPrefix + ++nextEssentialId;
+          const app = {
+            preload: settings.preload === true,
+            width:
+              Number.isFinite(settings.width) && settings.width > 0
+                ? settings.width
+                : undefined,
+            id: stableId,
+            url: source,
+            title: tab.label || source,
+            workspaceId: "all",
+          };
+          record = {
+            tab,
+            app,
+            tile: null,
+            loadedSource: null,
+            preloadAttempted: false,
+            mobileUa: settings.mobileUa === true,
+            userContextId:
+              Number.isInteger(settings.userContextId) &&
+              settings.userContextId >= 0
+                ? settings.userContextId
+                : Number(
+                    tab.getAttribute("usercontextid") ||
+                      tab.linkedBrowser?.getAttribute("usercontextid"),
+                  ) || 0,
+          };
+          essentialTabRecords.set(tab, record);
+          essentialPanels.set(app.id, record);
+          if (settings.panelId !== stableId) saveEssentialSettings(record);
+        }
+        if (record.app.preload && !record.preloadAttempted)
+          scheduleEssentialPreload(record);
+        const essential = isEssentialPanelTab(tab);
+        record.wasEssential = essential;
+        const iconHost = !essential
+          ? tab.querySelector(".tab-icon-stack")
+          : null;
+        if (record.iconHost !== iconHost) {
+          record.iconHost?.classList.remove("bgalazka-panel-icon-host");
+          record.iconHost = iconHost;
+        }
+        iconHost?.classList.add("bgalazka-panel-icon-host");
+        if (!essential) tab.setAttribute("bgalazka-tab-panel-launcher", "true");
+        else tab.removeAttribute("bgalazka-tab-panel-launcher");
+        // Essential themes can tint the tab stack. Keep its panel button on
+        // the tab itself so only the tab's own filter (such as Arc unload
+        // grayscale) reaches it, not a stack-specific color treatment.
+        const host = iconHost || tab;
+        if (!record.tile?.isConnected || record.tile.parentNode !== host) {
+          record.tile?.remove();
+          const tile = document.createElement("button");
+          tile.type = "button";
+          tile.className = "zen-app-tile bgalazka-essential-tile";
+          tile.dataset.appId = record.app.id;
+          tile.appendChild(document.createElement("img"));
+          tile.addEventListener("click", (event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            event.stopPropagation();
+            openEssentialPanel(record);
+          });
+          tile.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const popup = document.getElementById(
+              "zen-apps-sidebar-tile-context",
+            );
+            if (popup) {
+              popup.dataset.activeAppId = record.app.id;
+              popup.openPopupAtScreen(event.screenX, event.screenY, true);
+            }
+          });
+          host.appendChild(tile);
+          record.tile = tile;
+          isolateTile(tile);
+        }
+        record.app.title = tab.label || record.app.url;
+        record.app.icon =
+          gBrowser?.getIcon?.(tab) ||
+          tab.getAttribute("image") ||
+          `page-icon:${record.app.url}`;
+        const tile = record.tile;
+        tile.classList.toggle("bgalazka-tab-icon-panel", !essential);
+        const icon = tile.querySelector("img");
+        if (icon.getAttribute("src") !== record.app.icon)
+          icon.setAttribute("src", record.app.icon);
+        const tabLoaded =
+          !tab.hasAttribute("pending") &&
+          (!tab.hasAttribute("zen-dormant") ||
+            tab.getAttribute("zen-dormant") === "false") &&
+          !tab.hasAttribute("discarded") &&
+          !!tab.linkedBrowser?.isConnected &&
+          !!tab.linkedBrowser?.browsingContext;
+        const panelBrowser = browsers.get(record.app.id);
+        const panelLoaded = !!panelBrowser?.isConnected;
+        const title = `${record.app.title} — tab ${tabLoaded ? "loaded" : "unloaded"}; panel ${panelLoaded ? "loaded" : "unloaded"}. Click to toggle panel; middle-click to unload panel.`;
+        if (tile.title !== title) {
+          tile.title = title;
+          tile.setAttribute("aria-label", title);
+        }
+        tile.dataset.active =
+          active === record.app.id ||
+          !!browsers
+            .get(record.app.id)
+            ?.hasAttribute("data-bgalazka-triple-slot")
+            ? "true"
+            : "false";
+        tile.dataset.loaded = panelLoaded ? "true" : "false";
+        if (record.app.preload && panelBrowser?.isConnected) {
+          // Preload may start before its remote browsingContext exists. The
+          // existing two-second tile sync also reasserts activation if Gecko
+          // resets this standalone browser while it remains in the background.
+          try {
+            panelBrowser.docShellIsActive = true;
+          } catch (_) {}
+        }
+        syncEssentialBadge(record, panelBrowser);
+        tile.dataset.tabLoaded = tabLoaded ? "true" : "false";
+      }
+      pruneIsolationTiles();
+    } finally {
+      isSyncingTiles = false;
+    }
+  }
+  registerCleanup(() => {
+    for (const [id, record] of essentialPanels) {
+      window.Zentral?.Apps?.closeApp?.(id);
+      releaseTabPanelLauncher(record);
+    }
+    essentialPanels.clear();
+  });
+
+  let syncTimer = null;
+  function requestTileSync(delay = 120) {
+    if (syncTimer) clearTimeout(syncTimer);
+    syncTimer = setTimeout(syncCornerTiles, delay);
+  }
+  registerCleanup(() => {
+    if (syncTimer) clearTimeout(syncTimer);
+  });
+    return { essentialPanels, linkedPairFor, getLinkedTriplePairs: () => linkedTriplePairs,
+      saveLinkedTriplePairs, unlinkTriplePair, requestTileSync,
+      syncCornerTiles, saveEssentialSettings, loadEssentialInBackground };
+  };
+})();
