@@ -15083,22 +15083,19 @@
  *          setTimeout fallback (30/150/500/1500ms) for slower spawns. If gray flashes on open are still
  *          reported after this, the next step is NOT to add more retries blindly -- log
  *          browser.browsingContext to find the actual real-world spawn latency and size the stagger to it.
- *       c) CONTINUOUS SELF-HEAL: Gecko can revoke docShellIsActive again later on its own even after a
- *          successful activation (matches the video-preview's "breaks after a random amount of time" report).
- *          panelStatusTimer's existing 2s interval also calls syncAppPanelBrowserActivity() now, unconditional
- *          (no pref gate, per the "must work without any toggle" requirement) but GATED behind a single
- *          `document.documentElement.getAttribute("zentral-app-panel-open") === "true"` read so it's a true
- *          no-op (no DOM query at all) during the vast majority of a session when no panel is open. Do not
- *          remove that gate thinking it's unrelated cleanup -- it's a real, measured perf fix (see note 29) and
- *          removing it just brings back an unconditional getAllAppBrowsers() call every 2s forever.
+ *       c) OPTIONAL CONTINUOUS SELF-HEAL: Gecko can revoke docShellIsActive again later on its own even after
+ *          a successful activation. Normal open/navigation retries remain event-driven; the Settings toggle
+ *          "Periodic Fallback Polling" can additionally run a 2s safety pass for docshell/CSS/UI state on
+ *          Zen builds that still show random stale/gray panels. It is OFF by default to avoid needless wakeups.
  *     VIDEO-SIDEBAR PREVIEW MIRRORS THE SAME BUG: startLivePreview()'s preview <browser> and paint()'s
  *     LIVE_MODES health-check branch got the identical three-part treatment (activate on create, activate once
  *     browsingContext exists, re-activate every health-check tick) for the same underlying reason. If a
  *     similar "loads, plays briefly, freezes to a still frame, then goes blank, audio/capture still work"
  *     report ever comes in for a DIFFERENT feature, look for a standalone createXULElement("browser") in that
  *     feature first -- this exact bug is very likely recurring in a fourth place.
- * 29. PERF: getAllAppBrowsers() is now called far more often than when it was written (every panel open/close,
- *     several retry timers, and the note-28 self-heal loop). It used to run an unconditional document-wide
+ * 29. PERF: getAllAppBrowsers() is used by panel lifecycle work and optional recovery. The periodic recovery
+ *     pass is disabled by default; when enabled it still reuses one browser collection for docshell/CSS checks.
+ *     The helper used to run an unconditional document-wide
  *     `document.querySelectorAll("#bgalazka-super-panel browser")` on every call even though that panel only
  *     exists while Triple/Super-View is in use (rare). It now checks `document.getElementById("bgalazka-super-panel")`
  *     first and only runs the scoped query when that container actually exists. Keep this shape if you add more
@@ -15167,6 +15164,13 @@
     ADDON_TAB_ID_BRIDGE: "zen.workspace.bgalazka.addon_tab_id_bridge",
     SHOW_ADDON_HOST_FOLDER: "zen.workspace.bgalazka.show_addon_host_folder",
     ZEN_INTERNET_PANEL_CSS: "zen.workspace.bgalazka.zen_internet_panel_css",
+    SHOW_TRIPLE_STYLE_REPAIR: "zen.workspace.bgalazka.show_triple_style_repair",
+    PERIODIC_FALLBACK_POLLING:
+      "zen.workspace.bgalazka.periodic_fallback_polling",
+    // Primary-toolbar quick override. No Settings row: this is deliberately a
+    // one-click escape hatch that preserves every user appearance pref and
+    // merely forces the panel backing surfaces to opaque black while active.
+    FORCE_PANEL_BLACK: "zen.workspace.bgalazka.force_panel_black",
     SMART_SLEEP: "zen.workspace.bgalazka.smart_sleep",
     AUDIO_INDICATOR: "zen.workspace.bgalazka.audio_indicator",
     HIDE_UNATTACHED_APP_CONTROLS:
@@ -17953,6 +17957,9 @@
     ADDON_TAB_ID_BRIDGE: "zen.workspace.bgalazka.addon_tab_id_bridge",
     SHOW_ADDON_HOST_FOLDER: "zen.workspace.bgalazka.show_addon_host_folder",
     ZEN_INTERNET_PANEL_CSS: "zen.workspace.bgalazka.zen_internet_panel_css",
+    SHOW_TRIPLE_STYLE_REPAIR: "zen.workspace.bgalazka.show_triple_style_repair",
+    PERIODIC_FALLBACK_POLLING:
+      "zen.workspace.bgalazka.periodic_fallback_polling",
     SMART_SLEEP: "zen.workspace.bgalazka.smart_sleep",
     AUDIO_INDICATOR: "zen.workspace.bgalazka.audio_indicator",
     // Keep the settings-side preference table complete. The previous build
@@ -18056,17 +18063,81 @@
     );
   }
 
+  function ensureSafeSuccessorBeforeNormalTabUnload(tab) {
+    if (gBrowser.selectedTab !== tab) return true;
+
+    try {
+      // Mirror Zen's pinned/Essential unload path whenever real-tab-backed
+      // Zentral web-panel hosts exist: blur away from the selected tab BEFORE
+      // explicitUnloadTabs() is allowed to run. Native Zen does the same with
+      // _findTabToBlurTo() for selected pinned/Essential tabs.
+      //
+      // The important Zentral-specific addition is that a panel host is never
+      // a valid blur target. If Zen's native successor finder returns one, or
+      // cannot find a usable successor, fall back to Zen's own invisible
+      // zen-empty-tab via selectEmptyTab(). This prevents a reparented panel
+      // browser from ever becoming the selected tab during the discard race.
+      if (!isAddonTabIdBridgeEnabled() || addonHostByAppId.size === 0) {
+        return true;
+      }
+
+      let successor = null;
+      if (typeof gBrowser._findTabToBlurTo === "function") {
+        try {
+          successor = gBrowser._findTabToBlurTo(tab, [tab]);
+        } catch (_) {}
+      }
+
+      if (
+        successor &&
+        successor !== tab &&
+        isUsableNormalTab(successor) &&
+        !isAddonHostTab(successor)
+      ) {
+        gBrowser.selectedTab = successor;
+        if (
+          gBrowser.selectedTab === successor &&
+          !isAddonHostTab(gBrowser.selectedTab)
+        ) {
+          lastNonAddonHostTab = successor;
+          return true;
+        }
+      }
+
+      const safeTab = createNormalTabForAddonHost();
+      return !!(
+        safeTab?.isConnected &&
+        gBrowser.selectedTab === safeTab &&
+        gBrowser.selectedTab !== tab &&
+        !isAddonHostTab(gBrowser.selectedTab)
+      );
+    } catch (error) {
+      console.warn(
+        "[BgalazkaExtension] Could not prepare a safe successor before unloading a selected normal tab:",
+        error,
+      );
+      // With panel hosts present, abort rather than let native successor
+      // selection choose a reparented host browser.
+      return false;
+    }
+  }
+
   async function unloadNormalTabFromMiddleClick(tab) {
     if (!tab?.isConnected || tab.closing || isNormalTabAlreadyUnloaded(tab)) {
       return;
     }
 
     try {
-      // Firefox/Zen's explicit unload path handles a selected tab by choosing
-      // another tab first, runs beforeunload checks, and marks the result as
-      // explicitly discarded.
+      if (!ensureSafeSuccessorBeforeNormalTabUnload(tab)) return;
+
+      // Match Zen's Essential behavior: selected tabs have already been moved
+      // to a verified non-host successor above, so explicitUnloadTabs() never
+      // has to choose between ordinary tabs and Zentral's hidden host tabs.
       if (typeof gBrowser.explicitUnloadTabs === "function") {
         await gBrowser.explicitUnloadTabs([tab]);
+        if (isAddonTabIdBridgeEnabled() && addonHostByAppId.size > 0) {
+          repairAddonHostSelectionAfterTransition(tab);
+        }
         return;
       }
 
@@ -18080,6 +18151,7 @@
             candidate?.isConnected &&
             !candidate.closing &&
             !candidate.hidden &&
+            !isAddonHostTab(candidate) &&
             !!candidate.linkedPanel,
         );
         if (replacement) {
@@ -18096,6 +18168,9 @@
         await gBrowser.prepareDiscardBrowser(tab);
       }
       gBrowser.discardBrowser?.(tab, true);
+      if (isAddonTabIdBridgeEnabled() && addonHostByAppId.size > 0) {
+        repairAddonHostSelectionAfterTransition(tab);
+      }
     } catch (_) {}
   }
 
@@ -18305,6 +18380,8 @@
     ZOOM_IN: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="8" x2="13" y2="8"/><line x1="8" y1="3" x2="8" y2="13"/></svg>`,
     GRABBER: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><circle cx="5" cy="4" r="1.5"/><circle cx="11" cy="4" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="12" r="1.5"/><circle cx="11" cy="12" r="1.5"/></svg>`,
     REFRESH: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13.8 6.5A5.5 5.5 0 1 0 8 13.5a5.5 5.5 0 0 0 5.2-3.7M14 2v4.5H9.5"/></svg>`,
+    REPAIR_STYLE: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.2 11.8 9.8 4.2"/><path d="m8.8 2.2 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z"/><path d="m3.2 9.3.7 1.4 1.4.7-1.4.7-.7 1.4-.7-1.4-1.4-.7 1.4-.7.7-1.4Z"/></svg>`,
+    PANEL_BLACK: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M8 2v12"/><path d="M8 2h4a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8z" fill="currentColor" stroke="none"/></svg>`,
     CLOSE: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>`,
     // Search-engine quick-switch (toolbar button) / dropdown icon: two
     // opposing arrows, standard "swap" glyph language.
@@ -19465,6 +19542,67 @@
     }
   }
 
+  let forcePanelBlackSwitchTimer = null;
+  // Runtime state is authoritative while this chrome window is alive. The
+  // preference persists it across restarts; the root attribute/button are
+  // presentation mirrors only. This prevents panel/toolbars rebuilds or a
+  // temporarily stale DOM attribute from inverting the next click.
+  let forcePanelBlackState = getPref(
+    BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK,
+    false,
+  );
+
+  function syncForcePanelBlackButton(button, forced = forcePanelBlackState) {
+    if (!button) return;
+    button.dataset.active = forced ? "true" : "false";
+    button.setAttribute("aria-pressed", forced ? "true" : "false");
+    button.title = forced
+      ? "Use saved panel background / transparency"
+      : "Force opaque black panel background";
+  }
+
+  function applyForcePanelBlackVisual(
+    forced = forcePanelBlackState,
+    button = null,
+    instant = true,
+  ) {
+    forcePanelBlackState = !!forced;
+    const root = document.documentElement;
+    if (instant) root.setAttribute("bgalazka-panel-black-switching", "true");
+    root.setAttribute(
+      "bgalazka-force-panel-black",
+      forcePanelBlackState ? "true" : "false",
+    );
+    syncForcePanelBlackButton(
+      button ||
+        document.querySelector(
+          "#zen-app-panel-toolbar .bgalazka-panel-black-btn",
+        ),
+      forcePanelBlackState,
+    );
+    if (!instant) return;
+    if (forcePanelBlackSwitchTimer) clearTimeout(forcePanelBlackSwitchTimer);
+    forcePanelBlackSwitchTimer = setTimeout(() => {
+      forcePanelBlackSwitchTimer = null;
+      root.removeAttribute("bgalazka-panel-black-switching");
+    }, 80);
+  }
+
+  function setForcePanelBlack(forced, { persist = true, instant = true } = {}) {
+    forced = !!forced;
+    applyForcePanelBlackVisual(forced, null, instant);
+    if (
+      persist &&
+      getPref(BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, false) !== forced
+    )
+      setPref(BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, forced);
+  }
+
+  registerCleanup(() => {
+    if (forcePanelBlackSwitchTimer) clearTimeout(forcePanelBlackSwitchTimer);
+    document.documentElement.removeAttribute("bgalazka-panel-black-switching");
+  });
+
   function ensureWebToolbar() {
     const panel = document.getElementById("zen-app-panel-slider");
     if (!panel) return false;
@@ -19581,6 +19719,60 @@
     urlInput.addEventListener("focus", () => urlInput.select());
     urlWrap.appendChild(urlInput);
 
+    // Triple View style repair: deliberately manual and cheap. Automatic
+    // health repair runs on the existing 2s panel tick; this button forces
+    // both visible panel browsers through docshell + Zen Internet CSS sync.
+    const repairStyleBtn = document.createElement("button");
+    repairStyleBtn.type = "button";
+    repairStyleBtn.className =
+      "zen-toolbar-btn bgalazka-panel-style-repair-btn";
+    repairStyleBtn.title = "Repair Triple View panel styles";
+    repairStyleBtn.style.display = "none";
+    repairStyleBtn.appendChild(parseSVG(PREF_ICONS.REPAIR_STYLE));
+    // Keep toolbar utility clicks from focusing the panel first. With panel
+    // translucency enabled, button focus would otherwise kick :focus-within
+    // to its brighter opacity just before the requested action, producing a
+    // needless flash/transition. Preventing mousedown focus keeps the action
+    // visually direct while the subsequent click still fires normally.
+    repairStyleBtn.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    repairStyleBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      repairStyleBtn.classList.remove("zen-toolbar-spinning");
+      // Restart the one-shot animation even on rapid repeated clicks.
+      void repairStyleBtn.offsetWidth;
+      repairStyleBtn.classList.add("zen-toolbar-spinning");
+      setTimeout(
+        () => repairStyleBtn.classList.remove("zen-toolbar-spinning"),
+        450,
+      );
+      repairVisiblePanelPresentation(true);
+    });
+
+    // Quick opaque-black backing toggle. This does not overwrite any Look or
+    // translucency sliders; turning it off reveals the user's saved values.
+    const blackPanelBtn = document.createElement("button");
+    blackPanelBtn.type = "button";
+    blackPanelBtn.className = "zen-toolbar-btn bgalazka-panel-black-btn";
+    blackPanelBtn.appendChild(parseSVG(PREF_ICONS.PANEL_BLACK));
+    blackPanelBtn.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    blackPanelBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // Runtime state is authoritative; persistence happens after the visual
+      // change so this stays immediate even if pref observers are busy.
+      const next = !forcePanelBlackState;
+      applyForcePanelBlackVisual(next, blackPanelBtn);
+      if (getPref(BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, false) !== next)
+        setPref(BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, next);
+    });
+
     // Search-engine quick-switch. When the current HTTP(S) page exposes a
     // recognizable GET search term, each click advances to the next enabled
     // built-in/custom target while preserving that exact term.
@@ -19654,7 +19846,16 @@
     });
     zoomWrap.append(zoomOutBtn, zoomLabel, zoomInBtn);
 
-    toolbar.append(backBtn, reloadBtn, fwdBtn, swapBtn, urlWrap, zoomWrap);
+    toolbar.append(
+      backBtn,
+      reloadBtn,
+      fwdBtn,
+      swapBtn,
+      urlWrap,
+      zoomWrap,
+      repairStyleBtn,
+      blackPanelBtn,
+    );
     panel.append(hoverZone, toolbar);
     startWebToolbarPolling();
     return true;
@@ -19681,6 +19882,31 @@
     const urlInput = toolbar.querySelector(".zen-toolbar-urlbar");
     const zoomLabel = toolbar.querySelector(".zen-toolbar-zoom-label");
     const swapBtn = toolbar.querySelector(".zen-toolbar-swap-btn");
+    const repairStyleBtn = toolbar.querySelector(
+      ".bgalazka-panel-style-repair-btn",
+    );
+    const blackPanelBtn = toolbar.querySelector(".bgalazka-panel-black-btn");
+
+    if (repairStyleBtn) {
+      const showRepair =
+        getPref(BGALAZKA_EXT_PREFS.SHOW_TRIPLE_STYLE_REPAIR, false) &&
+        zenCssEnabled() &&
+        document.documentElement.getAttribute("bgalazka-triple-view") ===
+          "true" &&
+        document.documentElement.getAttribute("bgalazka-triple-populated") ===
+          "true";
+      const display = showRepair ? "" : "none";
+      if (repairStyleBtn.style.display !== display)
+        repairStyleBtn.style.display = display;
+    }
+    if (blackPanelBtn) {
+      const mirrored =
+        document.documentElement.getAttribute("bgalazka-force-panel-black") ===
+        "true";
+      if (mirrored !== forcePanelBlackState)
+        applyForcePanelBlackVisual(forcePanelBlackState, blackPanelBtn, false);
+      else syncForcePanelBlackButton(blackPanelBtn, forcePanelBlackState);
+    }
 
     let curSpec = "";
     try {
@@ -19728,6 +19954,15 @@
     }
   }
 
+  function periodicFallbackPollingEnabled() {
+    return getPref(BGALAZKA_EXT_PREFS.PERIODIC_FALLBACK_POLLING, false);
+  }
+
+  // Secondary Triple/Super toolbar installs its concrete synchronizer later.
+  // Keeping this callable here lets the Settings toggle affect an already-open
+  // Triple View without requiring the user to close/reopen it.
+  let syncSecondaryFallbackPolling = () => {};
+
   let webToolbarPollTimer = null;
   let webToolbarObservedRoot = null;
   let webToolbarVisibilityObserver = null;
@@ -19752,14 +19987,16 @@
       root?.hasAttribute("open") &&
       !root.hasAttribute("closing") &&
       getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, false);
-    if (!active) {
+    if (active) updateWebToolbarState();
+    if (!active || !periodicFallbackPollingEnabled()) {
       clearInterval(webToolbarPollTimer);
       webToolbarPollTimer = null;
       return;
     }
     if (webToolbarPollTimer) return;
-    updateWebToolbarState();
-    webToolbarPollTimer = setInterval(updateWebToolbarState, 400);
+    // Normal loads/location changes are event-driven. This optional interval
+    // only covers SPA history.pushState/replaceState edge cases.
+    webToolbarPollTimer = setInterval(updateWebToolbarState, 1000);
   }
   registerCleanup(() => {
     clearInterval(webToolbarPollTimer);
@@ -21999,6 +22236,30 @@
         (enabled) => setZenInternetPanelCssEnabled(enabled),
       );
       content.appendChild(tZenInternetCss.row);
+      const tShowTripleStyleRepair = createToggleRow(
+        "Show Triple View Style Repair Button",
+        "Show the manual repair control at the end of the primary panel URL bar while Triple View is populated. Leave this off when the automatic document-generation styling fix is working normally.",
+        BGALAZKA_EXT_PREFS.SHOW_TRIPLE_STYLE_REPAIR,
+        null,
+        false,
+        PREF_ICONS.REPAIR_STYLE,
+        () => updateWebToolbarState(),
+      );
+      content.appendChild(tShowTripleStyleRepair.row);
+      const tPeriodicFallbackPolling = createToggleRow(
+        "Periodic Fallback Polling",
+        "Enable low-frequency safety polling for panel activation/CSS health plus primary and secondary toolbar state. Normal loads, navigation, styling, audio and panel lifecycle remain event-driven with this off. Turn it on only if your Zen build still develops stale or gray panels/UI over time.",
+        BGALAZKA_EXT_PREFS.PERIODIC_FALLBACK_POLLING,
+        null,
+        false,
+        PREF_ICONS.REFRESH,
+        () => {
+          startWebToolbarPolling();
+          syncPanelFallbackPolling();
+          syncSecondaryFallbackPolling();
+        },
+      );
+      content.appendChild(tPeriodicFallbackPolling.row);
       const tShowAddonHostFolder = createToggleRow(
         "Show Web Panel Tab ID Folder",
         "Reveal the Zentral Add-on Hosts folder and its tabs in the sidebar so you can check whether panel host tabs are cleaned up. Requires Real Tab IDs for Web Panels to create host tabs.",
@@ -22583,6 +22844,17 @@
         {
           input: tZenInternetCss.input,
           pref: BGALAZKA_EXT_PREFS.ZEN_INTERNET_PANEL_CSS,
+          def: false,
+        },
+        {
+          input: tShowTripleStyleRepair.input,
+          pref: BGALAZKA_EXT_PREFS.SHOW_TRIPLE_STYLE_REPAIR,
+          def: false,
+          onSync: () => updateWebToolbarState(),
+        },
+        {
+          input: tPeriodicFallbackPolling.input,
+          pref: BGALAZKA_EXT_PREFS.PERIODIC_FALLBACK_POLLING,
           def: false,
         },
         {
@@ -24669,8 +24941,8 @@
   // also restores the resource-saving half of "smart sleep": browsers that
   // get hidden are explicitly deactivated instead of being left however
   // Gecko happens to leave them.
-  function syncAppPanelBrowserActivity() {
-    for (const browser of getAllAppBrowsers()) {
+  function syncAppPanelBrowserActivity(browsers = getAllAppBrowsers()) {
+    for (const browser of browsers) {
       if (!browser?.isConnected) continue;
       try {
         // On close, the slider is hidden even though a child browser can
@@ -24803,19 +25075,25 @@
   }
 
   // The host's linkedBrowser belongs to a real tab, but that tab is never a
-  // valid destination for the selected browser. In particular, when the last
-  // selected tab closes with no ordinary tab left, Zen can still count hidden
-  // hosts as tabs and select one instead of its native empty-tab placeholder.
+  // valid destination for the selected browser. Keep this test centralized so
+  // unload, close, discard, and TabSelect recovery all enforce the same rule.
+  function isAddonHostTab(tab) {
+    return !!(
+      tab &&
+      (tab.hasAttribute?.("bgalazka-addon-host") ||
+        tab.hasAttribute?.("bgalazka-addon-host-fallback") ||
+        tab.closest?.(
+          "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
+        ))
+    );
+  }
+
   function isUsableNormalTab(tab) {
     return !!(
       tab?.isConnected &&
       !tab.closing &&
       !tab.hidden &&
-      !tab.hasAttribute("bgalazka-addon-host") &&
-      !tab.hasAttribute("bgalazka-addon-host-fallback") &&
-      !tab.closest(
-        "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
-      )
+      !isAddonHostTab(tab)
     );
   }
 
@@ -24879,35 +25157,119 @@
     }
   }
 
+  // Central invariant for the real-tab bridge: a Zentral panel host may exist
+  // in gBrowser for WebExtension tabId compatibility, but it must never remain
+  // the selected tab. Prefer an already-safe tab, then the last safe tab, then
+  // another ordinary tab, and finally Zen's own invisible empty tab.
+  function ensureSafeSelectedTabForAddonHosts(exceptTab = null) {
+    if (!isAddonTabIdBridgeEnabled() || addonHostByAppId.size === 0) {
+      return gBrowser.selectedTab;
+    }
+
+    const selected = gBrowser.selectedTab;
+    if (
+      selected !== exceptTab &&
+      isUsableNormalTab(selected) &&
+      !isAddonHostTab(selected)
+    ) {
+      lastNonAddonHostTab = selected;
+      return selected;
+    }
+
+    let candidate = null;
+    if (
+      lastNonAddonHostTab !== exceptTab &&
+      isUsableNormalTab(lastNonAddonHostTab) &&
+      !isAddonHostTab(lastNonAddonHostTab)
+    ) {
+      candidate = lastNonAddonHostTab;
+    } else {
+      candidate = findVisibleOrdinaryTab(exceptTab);
+    }
+
+    if (candidate) {
+      try {
+        gBrowser.selectedTab = candidate;
+        if (
+          gBrowser.selectedTab === candidate &&
+          candidate !== exceptTab &&
+          !isAddonHostTab(candidate)
+        ) {
+          lastNonAddonHostTab = candidate;
+          return candidate;
+        }
+      } catch (_) {}
+    }
+
+    const emptyTab = createNormalTabForAddonHost();
+    if (
+      emptyTab?.isConnected &&
+      gBrowser.selectedTab === emptyTab &&
+      emptyTab !== exceptTab &&
+      !isAddonHostTab(emptyTab)
+    ) {
+      return emptyTab;
+    }
+    return null;
+  }
+
+  // Selection can settle over more than one turn during close/discard. Repair
+  // immediately, in a microtask, on the next task, and once on the next frame.
+  // Every pass is conditional, so normal user selection is left untouched.
+  function repairAddonHostSelectionAfterTransition(exceptTab = null) {
+    if (!isAddonTabIdBridgeEnabled() || addonHostByAppId.size === 0) return;
+
+    const repair = () => {
+      if (!isAddonTabIdBridgeEnabled() || addonHostByAppId.size === 0) return;
+      const selected = gBrowser.selectedTab;
+      if (
+        selected === exceptTab ||
+        isAddonHostTab(selected) ||
+        !isUsableNormalTab(selected)
+      ) {
+        ensureSafeSelectedTabForAddonHosts(exceptTab);
+      }
+    };
+
+    repair();
+    Promise.resolve().then(repair);
+    window.setTimeout(repair, 0);
+    window.requestAnimationFrame?.(repair);
+  }
+
   // A click/keyboard selection of a host returns to a normal tab and opens
   // the corresponding panel. The saved tab can have closed in the meantime.
   // No MutationObserver is used -- see the tab crash guard above.
   const addonHostTabSelectHandler = (event) => {
     const tab = event.target;
     const record = addonHostByTab.get(tab);
+
+    // Enforce the invariant synchronously. This handler is registered in the
+    // capture phase below so our reparented panel browser is moved off the
+    // selected slot before ordinary bubbling TabSelect listeners run.
+    if (isAddonTabIdBridgeEnabled() && isAddonHostTab(tab)) {
+      const safeTab = ensureSafeSelectedTabForAddonHosts(tab);
+      if (record) keepAddonHostFolderCollapsed(record.tab?.group);
+      if (!safeTab) return;
+
+      // Preserve the old inspection-folder behavior: selecting a host means
+      // "show its panel", but the host itself never stays selected.
+      if (record?.app) {
+        window.setTimeout(() => {
+          try {
+            if (record.tab?.isConnected) {
+              window.Zentral?.Apps?.openPanel?.(record.app);
+            }
+          } catch (_) {}
+        }, 0);
+      }
+      return;
+    }
+
     if (!record) {
       if (isUsableNormalTab(tab)) lastNonAddonHostTab = tab;
       return;
     }
-    if (!isAddonTabIdBridgeEnabled()) return;
-    setTimeout(() => {
-      try {
-        if (gBrowser.selectedTab !== tab || !record.tab?.isConnected) return;
-        // A pinned/Essential tab can remain connected after Ctrl+W because
-        // Zen unloads it instead of sending TabClose. Returning to it can
-        // reactivate the just-discarded browser and leave the host selected.
-        const normalTab =
-          isOrdinaryTab(lastNonAddonHostTab) ||
-          (isUsableNormalTab(lastNonAddonHostTab) &&
-            lastNonAddonHostTab.hasAttribute("zen-empty-tab"))
-            ? lastNonAddonHostTab
-            : findVisibleOrdinaryTab(tab) || createNormalTabForAddonHost();
-        if (!normalTab) return;
-        gBrowser.selectedTab = normalTab;
-        if (record.app) window.Zentral?.Apps?.openPanel?.(record.app);
-      } catch (_) {}
-      keepAddonHostFolderCollapsed(record.tab?.group);
-    }, 0);
   };
 
   const addonHostTabCloseHandler = (event) => {
@@ -24955,32 +25317,22 @@
 
   const addonHostTabDiscardedHandler = (event) => {
     const tab = event.target;
-    if (
-      !isAddonTabIdBridgeEnabled() ||
-      !addonHostByAppId.size ||
-      (!tab.pinned && !tab.hasAttribute?.("zen-essential")) ||
-      (gBrowser.selectedTab !== tab && lastNonAddonHostTab !== tab)
-    )
-      return;
-    // Zen's close shortcut may discard a pinned tab or Essential without a
-    // TabClose event. Wait until Zen finishes its own selection, then replace
-    // a stranded unloaded tab/host with the native empty tab if needed.
+    if (!isAddonTabIdBridgeEnabled() || !addonHostByAppId.size) return;
+
+    // A discard can trigger more than one native selection adjustment. Treat
+    // every discard as a chance to reassert the bridge invariant; the repair
+    // helper is a no-op while a normal/Essential/empty tab is safely selected.
     if (lastNonAddonHostTab === tab) lastNonAddonHostTab = null;
-    setTimeout(() => {
-      const selected = gBrowser.selectedTab;
-      if (
-        !findVisibleOrdinaryTab(tab) &&
-        (selected === tab || selected?.hasAttribute?.("bgalazka-addon-host"))
-      )
-        createNormalTabForAddonHost();
-    }, 0);
+    repairAddonHostSelectionAfterTransition(tab);
   };
 
-  window.addEventListener("TabSelect", addonHostTabSelectHandler);
+  // Capture TabSelect so a real panel-host tab is redirected before normal
+  // bubbling listeners can treat its reparented browser as the active page.
+  window.addEventListener("TabSelect", addonHostTabSelectHandler, true);
   window.addEventListener("TabClose", addonHostTabCloseHandler);
   window.addEventListener("TabBrowserDiscarded", addonHostTabDiscardedHandler);
   registerCleanup(() => {
-    window.removeEventListener("TabSelect", addonHostTabSelectHandler);
+    window.removeEventListener("TabSelect", addonHostTabSelectHandler, true);
     window.removeEventListener("TabClose", addonHostTabCloseHandler);
     window.removeEventListener(
       "TabBrowserDiscarded",
@@ -25308,79 +25660,196 @@
     "ZentralZenCSS:" + Math.random().toString(36).slice(2);
   const ZEN_CSS_STYLE_ID = "zentral-zen-internet-styles";
   const ZEN_CSS_FRAME_SOURCE = `(() => {
-    if (this.__zentralZenCSSListener) return;
-    this.__zentralZenCSSListener = (message) => {
+    const bridgeGlobal = this;
+    const channel = "${ZEN_CSS_CHANNEL}";
+    const styleId = "${ZEN_CSS_STYLE_ID}";
+    const normalizedUrl = value => String(value || "").split("#")[0];
+    const currentInnerWindowId = () => {
       try {
-        const { css, url, sequence } = message.data || {};
-        const doc = content.document;
-        if (!doc || doc.URL.split("#")[0] !== url.split("#")[0]) return;
-        let state = this.__zentralZenCSSState;
-        if (!state || state.doc !== doc) {
-          state?.headObserver?.disconnect();
-          state?.nativeObserver?.disconnect();
-          state = { doc, css: "", native: null, style: null, head: null };
-          this.__zentralZenCSSState = state;
-          const updateNative = () => {
-            const native = doc.getElementById("zeninternet-styles");
-            if (native === state.native) return false;
-            state.nativeObserver?.disconnect();
-            state.native = native;
-            if (native) {
-              state.nativeObserver = new doc.defaultView.MutationObserver(sync);
-              state.nativeObserver.observe(native, {
-                childList: true, subtree: true, characterData: true,
-              });
-            }
-            return true;
-          };
-          const watchHead = () => {
-            const head = doc.head || doc.documentElement;
-            if (head === state.head) return;
-            state.headObserver?.disconnect();
-            state.head = head;
-            if (!head) return;
-            state.headObserver = new doc.defaultView.MutationObserver((mutations) => {
-              if (watchHead() || updateNative() ||
-                  (state.css && state.style && !state.style.isConnected)) sync();
-              if (!state.style?.textContent) return;
-              // A site's new stylesheet can override our earlier rules.
-              // Ignore Zen Internet's own element so its observer and ours
-              // never fight over which stylesheet is last.
-              const addedCss = mutations.some(({ addedNodes }) =>
-                Array.from(addedNodes).some((node) => node !== state.style &&
-                  node !== state.native && node.nodeType === 1 &&
-                  (node.localName === "style" ||
-                   (node.localName === "link" && /stylesheet/i.test(node.rel)))));
-              if (addedCss && state.head.lastChild !== state.style)
-                state.head.appendChild(state.style);
-            });
-            state.headObserver.observe(head, { childList: true });
-          };
-          const sync = () => {
-            updateNative();
-            let style = state.style || doc.getElementById("${ZEN_CSS_STYLE_ID}");
-            if (!style && state.css) {
-              style = doc.createElement("style");
-              style.id = "${ZEN_CSS_STYLE_ID}";
-            }
-            state.style = style;
-            if (!style) return;
-            const nativeCss = state.native?.textContent || "";
-            const desired = state.css && !nativeCss.includes(state.css.trim())
-              ? state.css : "";
-            if (style.textContent !== desired) style.textContent = desired;
-            if (desired && style.parentNode !== state.head)
-              state.head?.appendChild(style);
-          };
-          state.sync = sync;
-          watchHead();
+        return Number(content?.windowGlobalChild?.innerWindowId) || 0;
+      } catch (_) {
+        return 0;
+      }
+    };
+
+    // A userChrome mod can be reloaded while panel browsers/content processes
+    // survive. Never return just because an older Zentral bridge exists: that
+    // older bridge may listen on a different random channel, making every new
+    // parent message a no-op until a full page reload. Tear down the previous
+    // bridge/state and install this instance instead.
+    try { this.__zentralZenCSSBridge?.teardown?.(); } catch (_) {}
+    // Clean legacy bridge hooks from builds that predate __zentralZenCSSBridge.
+    // Their message channel was not recorded, so that old message listener can
+    // only die with the frame-global; its DOM listeners *are* removable here.
+    try {
+      const oldApply = this.__zentralZenCSSApplyPending;
+      if (typeof oldApply === "function") {
+        removeEventListener("DOMContentLoaded", oldApply, true);
+        removeEventListener("pageshow", oldApply, true);
+      }
+      this.__zentralZenCSSPending = null;
+      this.__zentralZenCSSApplyPending = null;
+      this.__zentralZenCSSListener = null;
+    } catch (_) {}
+    try {
+      const oldState = this.__zentralZenCSSState;
+      oldState?.headObserver?.disconnect();
+      oldState?.nativeObserver?.disconnect();
+      oldState?.style?.remove?.();
+    } catch (_) {}
+    this.__zentralZenCSSState = null;
+
+    let state = null;
+    const clearState = () => {
+      try {
+        state?.headObserver?.disconnect();
+        state?.nativeObserver?.disconnect();
+        state?.style?.remove?.();
+      } catch (_) {}
+      state = null;
+      this.__zentralZenCSSState = null;
+    };
+
+    const ensureState = doc => {
+      if (state?.doc === doc) return state;
+      clearState();
+      state = { doc, css: "", native: null, style: null, head: null };
+      this.__zentralZenCSSState = state;
+
+      const updateNative = () => {
+        const native = doc.getElementById("zeninternet-styles");
+        if (native === state.native) return false;
+        state.nativeObserver?.disconnect();
+        state.native = native;
+        if (native) {
+          state.nativeObserver = new doc.defaultView.MutationObserver(sync);
+          state.nativeObserver.observe(native, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+          });
         }
-        state.css = typeof css === "string" ? css : "";
-        state.sync();
-        sendAsyncMessage("${ZEN_CSS_CHANNEL}:ack", { url, sequence });
+        return true;
+      };
+
+      const watchHead = () => {
+        const head = doc.head || doc.documentElement;
+        if (head === state.head) return false;
+        state.headObserver?.disconnect();
+        state.head = head;
+        if (!head) return true;
+        state.headObserver = new doc.defaultView.MutationObserver(mutations => {
+          const nativeChanged = updateNative();
+          if (nativeChanged || (state.css && state.style && !state.style.isConnected))
+            sync();
+          if (!state.style?.textContent) return;
+          const addedCss = mutations.some(({ addedNodes }) =>
+            Array.from(addedNodes).some(node => node !== state.style &&
+              node !== state.native && node.nodeType === 1 &&
+              (node.localName === "style" ||
+               (node.localName === "link" && /stylesheet/i.test(node.rel)))));
+          if (addedCss && state.head?.lastChild !== state.style)
+            state.head?.appendChild(state.style);
+        });
+        state.headObserver.observe(head, { childList: true });
+        return true;
+      };
+
+      const sync = () => {
+        if (!state || state.doc !== doc) return;
+        watchHead();
+        updateNative();
+        let style = state.style || doc.getElementById(styleId);
+        if (!style && state.css) {
+          style = doc.createElement("style");
+          style.id = styleId;
+        }
+        state.style = style;
+        if (!style) return;
+        const nativeCss = state.native?.textContent || "";
+        const expected = String(state.css || "").trim();
+        const desired = expected && !nativeCss.includes(expected) ? state.css : "";
+        if (style.textContent !== desired) style.textContent = desired;
+        if (desired && style.parentNode !== state.head)
+          state.head?.appendChild(style);
+      };
+      state.sync = sync;
+      watchHead();
+      return state;
+    };
+
+    const announce = reason => {
+      try {
+        const doc = content.document;
+        const url = doc?.URL || "";
+        const windowId = currentInnerWindowId();
+        if (!/^https?:/i.test(url) || !windowId) return;
+        sendAsyncMessage(channel + ":ready", { url, windowId, reason });
       } catch (_) {}
     };
-    addMessageListener("${ZEN_CSS_CHANNEL}", this.__zentralZenCSSListener);
+
+    const onApply = message => {
+      try {
+        const data = message.data || {};
+        const doc = content.document;
+        const windowId = currentInnerWindowId();
+        if (!doc || !windowId || Number(data.windowId) !== windowId) return;
+        if (normalizedUrl(doc.URL) !== normalizedUrl(data.url)) return;
+        if (data.reset) clearState();
+        const current = ensureState(doc);
+        current.css = typeof data.css === "string" ? data.css : "";
+        current.sync();
+        const expected = current.css.trim();
+        const nativeCss = current.native?.textContent || "";
+        const injectedCss = current.style?.textContent || "";
+        const applied =
+          !expected ||
+          nativeCss.includes(expected) ||
+          (!!current.style?.isConnected && injectedCss.includes(expected));
+        sendAsyncMessage(channel + ":ack", {
+          url: data.url,
+          sequence: data.sequence,
+          windowId,
+          applied,
+          expectedLength: expected.length,
+          injectedLength: injectedCss.length,
+          nativeLength: nativeCss.length,
+          documentURL: doc.URL,
+        });
+      } catch (_) {}
+    };
+
+    const onProbe = message => {
+      const data = message.data || {};
+      if (data.clear) {
+        clearState();
+        return;
+      }
+      if (data.reset) clearState();
+      announce(data.reset ? "repair" : "probe");
+    };
+    const onDocument = () => announce("document");
+
+    addMessageListener(channel + ":apply", onApply);
+    addMessageListener(channel + ":probe", onProbe);
+    addEventListener("DOMContentLoaded", onDocument, true);
+    addEventListener("pageshow", onDocument, true);
+
+    const bridge = {
+      channel,
+      teardown() {
+        try { removeMessageListener(channel + ":apply", onApply); } catch (_) {}
+        try { removeMessageListener(channel + ":probe", onProbe); } catch (_) {}
+        try { removeEventListener("DOMContentLoaded", onDocument, true); } catch (_) {}
+        try { removeEventListener("pageshow", onDocument, true); } catch (_) {}
+        clearState();
+        if (bridgeGlobal.__zentralZenCSSBridge === bridge)
+          bridgeGlobal.__zentralZenCSSBridge = null;
+      },
+    };
+    this.__zentralZenCSSChannel = channel;
+    this.__zentralZenCSSBridge = bridge;
+    announce("install");
   })();`;
   const ZEN_CSS_FRAME_URI =
     "data:application/javascript;charset=utf-8," +
@@ -25589,97 +26058,194 @@
     return css;
   }
 
-  function sendZenCss(browser, css, url) {
-    if (!browser?.isConnected || !/^https?:/i.test(url)) return;
+  function currentZenCssInnerWindowId(browser) {
     try {
-      const manager = browser.messageManager;
-      if (!manager?.loadFrameScript || !manager?.sendAsyncMessage) return;
-      let record = zenCssBrowsers.get(browser);
-      if (record && record.manager !== manager) {
-        clearTimeout(record.retryTimer);
-        try {
-          record.manager.removeMessageListener(
-            `${ZEN_CSS_CHANNEL}:ack`,
-            record.onAck,
-          );
-        } catch (_) {}
-        try {
-          record.manager.removeDelayedFrameScript(ZEN_CSS_FRAME_URI);
-        } catch (_) {}
-        record = null;
-      }
-      if (!record) {
-        manager.loadFrameScript(ZEN_CSS_FRAME_URI, true);
-        record = {
-          manager,
-          sequence: 0,
-          retryTimer: null,
-          acknowledged: false,
-        };
-        record.onAck = (message) => {
-          if (
-            zenCssBrowsers.get(browser) !== record ||
-            message.data?.sequence !== record.sequence ||
-            message.data?.url !== record.url
-          )
-            return;
-          record.acknowledged = true;
-          clearTimeout(record.retryTimer);
-          record.retryTimer = null;
-        };
-        manager.addMessageListener(`${ZEN_CSS_CHANNEL}:ack`, record.onAck);
-        zenCssBrowsers.set(browser, record);
-      }
-      clearTimeout(record.retryTimer);
-      const sequence = ++record.sequence;
-      record.url = url;
-      record.acknowledged = false;
-      const delays = [120, 300, 650, 1200, 2000];
-      const deliver = (attempt) => {
-        if (
-          !browser.isConnected ||
-          zenCssBrowsers.get(browser) !== record ||
-          record.sequence !== sequence ||
-          record.acknowledged
-        )
-          return;
-        if (browser.messageManager !== manager) {
-          updateZenCssBrowser(browser);
-          return;
-        }
-        try {
-          manager.sendAsyncMessage(ZEN_CSS_CHANNEL, { css, url, sequence });
-        } catch (error) {
-          console.warn(
-            "[BgalazkaExtension] Zen Internet CSS delivery failed:",
-            error,
-          );
-        }
-        if (attempt < delays.length)
-          record.retryTimer = setTimeout(
-            () => deliver(attempt + 1),
-            delays[attempt],
-          );
-      };
-      deliver(0);
-    } catch (error) {
-      console.warn(
-        "[BgalazkaExtension] Zen Internet panel CSS injection failed:",
-        error,
+      return (
+        Number(browser?.browsingContext?.currentWindowGlobal?.innerWindowId) ||
+        0
       );
+    } catch (_) {
+      return 0;
     }
   }
 
-  async function updateZenCssBrowser(browser) {
-    // The panel containers already identify our browsers. A browser created
-    // before the app hook was installed may not have our optional app ID.
+  function cleanZenCssUrl(value) {
+    return String(value || "").split("#")[0];
+  }
+
+  function disposeZenCssRecord(browser, { clearContent = false } = {}) {
+    const record = zenCssBrowsers.get(browser);
+    if (!record) return;
+    clearTimeout(record.retryTimer);
+    if (clearContent) {
+      try {
+        record.manager.sendAsyncMessage(`${ZEN_CSS_CHANNEL}:probe`, {
+          clear: true,
+        });
+      } catch (_) {}
+    }
+    try {
+      record.manager.removeMessageListener(
+        `${ZEN_CSS_CHANNEL}:ready`,
+        record.onReady,
+      );
+    } catch (_) {}
+    try {
+      record.manager.removeMessageListener(
+        `${ZEN_CSS_CHANNEL}:ack`,
+        record.onAck,
+      );
+    } catch (_) {}
+    try {
+      record.manager.removeDelayedFrameScript(ZEN_CSS_FRAME_URI);
+    } catch (_) {}
+    zenCssBrowsers.delete(browser);
+  }
+
+  function ensureZenCssBridge(browser, { replace = false } = {}) {
+    if (!browser?.isConnected) return null;
+    let manager;
+    try {
+      manager = browser.messageManager;
+    } catch (_) {
+      return null;
+    }
+    if (!manager?.loadFrameScript || !manager?.sendAsyncMessage) return null;
+
+    let record = zenCssBrowsers.get(browser);
+    if (record && (replace || record.manager !== manager)) {
+      disposeZenCssRecord(browser, { clearContent: replace });
+      record = null;
+    }
+    if (record) return record;
+
+    record = {
+      manager,
+      sequence: 0,
+      retryTimer: null,
+      acknowledged: false,
+      ackWindowId: 0,
+      expectedCssLength: 0,
+      applied: false,
+      url: "",
+    };
+
+    record.onReady = (message) => {
+      if (zenCssBrowsers.get(browser) !== record || !browser.isConnected)
+        return;
+      const windowId = Number(message.data?.windowId) || 0;
+      const url = String(message.data?.url || "");
+      if (!windowId || !/^https?:/i.test(url)) return;
+      if (currentZenCssInnerWindowId(browser) !== windowId) return;
+      // The document tells us when it exists. This is the authoritative
+      // trigger; we no longer guess with 600/1800ms first-load timers.
+      updateZenCssBrowser(browser, {
+        targetUrl: url,
+        targetWindowId: windowId,
+      });
+    };
+
+    record.onAck = (message) => {
+      if (
+        zenCssBrowsers.get(browser) !== record ||
+        message.data?.sequence !== record.sequence ||
+        cleanZenCssUrl(message.data?.url) !== cleanZenCssUrl(record.url)
+      )
+        return;
+      const liveWindowId = currentZenCssInnerWindowId(browser);
+      const ackWindowId = Number(message.data?.windowId) || 0;
+      if (!liveWindowId || !ackWindowId || liveWindowId !== ackWindowId) return;
+      if (message.data?.applied !== true) return;
+      const expectedLength = Number(message.data?.expectedLength) || 0;
+      if (expectedLength !== record.expectedCssLength) return;
+      record.ackWindowId = ackWindowId;
+      record.applied = true;
+      record.acknowledged = true;
+      clearTimeout(record.retryTimer);
+      record.retryTimer = null;
+    };
+
+    manager.addMessageListener(`${ZEN_CSS_CHANNEL}:ready`, record.onReady);
+    manager.addMessageListener(`${ZEN_CSS_CHANNEL}:ack`, record.onAck);
+    zenCssBrowsers.set(browser, record);
+    try {
+      // The frame script replaces any older Zentral bridge living in this
+      // content process, even one from a previous hot-reloaded mod instance.
+      manager.loadFrameScript(ZEN_CSS_FRAME_URI, true, true);
+    } catch (error) {
+      disposeZenCssRecord(browser);
+      console.warn(
+        "[BgalazkaExtension] Could not install Zen Internet CSS bridge:",
+        error,
+      );
+      return null;
+    }
+    return record;
+  }
+
+  function sendZenCss(
+    browser,
+    css,
+    url,
+    { reset = false, targetWindowId = 0 } = {},
+  ) {
+    if (!browser?.isConnected || !/^https?:/i.test(url)) return;
+    const windowId = targetWindowId || currentZenCssInnerWindowId(browser);
+    if (!windowId) return;
+    const record = ensureZenCssBridge(browser);
+    if (!record) return;
+    const sequence = ++record.sequence;
+    record.url = url;
+    record.acknowledged = false;
+    record.ackWindowId = 0;
+    record.applied = false;
+    record.expectedCssLength = String(css || "").trim().length;
+    clearTimeout(record.retryTimer);
+
+    const payload = { css, url, sequence, reset, windowId };
+    const deliver = (attempt = 0) => {
+      if (
+        !browser.isConnected ||
+        zenCssBrowsers.get(browser) !== record ||
+        record.sequence !== sequence ||
+        record.acknowledged ||
+        currentZenCssInnerWindowId(browser) !== windowId
+      )
+        return;
+      try {
+        record.manager.sendAsyncMessage(`${ZEN_CSS_CHANNEL}:apply`, payload);
+      } catch (_) {
+        return;
+      }
+      // Only two short-lived retries for a document that explicitly announced
+      // itself. This replaces the old long blind retry ladder and disappears
+      // immediately after a verified ACK.
+      const delays = [250, 900];
+      if (attempt < delays.length)
+        record.retryTimer = setTimeout(
+          () => deliver(attempt + 1),
+          delays[attempt],
+        );
+    };
+    deliver();
+  }
+
+  async function updateZenCssBrowser(
+    browser,
+    { reset = false, targetUrl = null, targetWindowId = 0 } = {},
+  ) {
     if (!browser?.isConnected) return;
-    const url = browser.currentURI?.spec || "";
+    const windowId = targetWindowId || currentZenCssInnerWindowId(browser);
+    if (!windowId) {
+      ensureZenCssBridge(browser);
+      return;
+    }
+    const url = targetUrl || browser.currentURI?.spec || "";
     if (!/^https?:/i.test(url)) return;
     const version = (zenCssUpdateVersions.get(browser) || 0) + 1;
     zenCssUpdateVersions.set(browser, version);
     if (!zenCssEnabled()) {
-      if (zenCssBrowsers.has(browser)) sendZenCss(browser, "", url);
+      sendZenCss(browser, "", url, { reset, targetWindowId: windowId });
       return;
     }
     try {
@@ -25687,129 +26253,220 @@
       const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
       const css = source ? await buildZenCss(host, source) : "";
       if (
-        browser.currentURI?.spec === url &&
+        browser.isConnected &&
+        currentZenCssInnerWindowId(browser) === windowId &&
         zenCssUpdateVersions.get(browser) === version &&
         zenCssEnabled()
       )
-        sendZenCss(browser, css, url);
+        sendZenCss(browser, css, url, {
+          reset,
+          targetWindowId: windowId,
+        });
     } catch (error) {
       console.warn("[BgalazkaExtension] Zen Internet CSS read failed:", error);
     }
   }
 
+  function zenCssBrowserHealthy(browser) {
+    if (!browser?.isConnected) return true;
+    const windowId = currentZenCssInnerWindowId(browser);
+    if (!windowId) return false;
+    const record = zenCssBrowsers.get(browser);
+    return !!(
+      record &&
+      record.manager === browser.messageManager &&
+      record.acknowledged &&
+      record.applied &&
+      record.ackWindowId === windowId
+    );
+  }
+
+  function requestZenCssDocument(browser, { reset = false } = {}) {
+    if (!browser?.isConnected || !zenCssEnabled()) return;
+    const record = ensureZenCssBridge(browser, { replace: reset });
+    if (!record) return;
+    const sendProbe = () => {
+      if (!browser.isConnected || zenCssBrowsers.get(browser) !== record)
+        return;
+      try {
+        record.manager.sendAsyncMessage(`${ZEN_CSS_CHANNEL}:probe`, { reset });
+      } catch (_) {}
+    };
+    // loadFrameScript announces on install. Probe once after it has had a
+    // chance to register, covering content-process scheduling differences.
+    if (!reset) sendProbe();
+    else setTimeout(sendProbe, 40);
+  }
+
+  function repairZenInternetPanelCss(
+    browsers = getAllAppBrowsers(),
+    force = false,
+  ) {
+    if (!zenCssEnabled()) return;
+    if (force) zenCssSource = null;
+    for (const browser of browsers) {
+      if (!browser?.isConnected) continue;
+      attachZenInternetPanelBrowser(browser);
+      if (force || !zenCssBrowserHealthy(browser))
+        requestZenCssDocument(browser, { reset: force });
+    }
+  }
+
+  function repairVisiblePanelPresentation(forceZenCss = false) {
+    const visible = getAllAppBrowsers().filter(
+      (browser) => browser?.isConnected && browser.style.display !== "none",
+    );
+    if (!visible.length) return;
+    syncAppPanelBrowserActivity(visible);
+    if (forceZenCss) {
+      // Treat the button as an explicit FrameLoader/remoteness recovery, not
+      // merely a CSS resend. Reinstall every visible browser's bridge on the
+      // message manager that exists RIGHT NOW.
+      zenCssSource = null;
+      for (const browser of visible) {
+        attachZenInternetPanelBrowser(browser);
+        requestZenCssDocument(browser, { reset: true });
+      }
+    }
+    requestAnimationFrame(() => syncAppPanelBrowserActivity(visible));
+    setTimeout(() => {
+      const stillVisible = visible.filter(
+        (browser) => browser?.isConnected && browser.style.display !== "none",
+      );
+      syncAppPanelBrowserActivity(stillVisible);
+      if (forceZenCss) {
+        // If a remoteness swap landed just after the click, the event handler
+        // above normally reinstalls the bridge. This one verification pass
+        // only handles a transition that raced the button itself.
+        for (const browser of stillVisible)
+          if (!zenCssBrowserHealthy(browser))
+            requestZenCssDocument(browser, { reset: true });
+      }
+    }, 180);
+  }
+
+  // Kept as compatibility wrappers because navigation hooks elsewhere in this
+  // extension already call these names. They are now event-driven probes, not
+  // multi-second retry schedulers.
   function cancelZenCssFirstLoad(browser) {
     const pending = zenCssFirstLoads.get(browser);
     if (!pending) return;
-    for (const timer of pending.timers) clearTimeout(timer);
+    for (const timer of pending.timers || []) clearTimeout(timer);
     zenCssFirstLoads.delete(browser);
   }
 
   function scheduleZenCssFirstLoad(browser) {
     if (!zenCssEnabled() || !browser?.isConnected) return;
-    const url = browser.currentURI?.spec || "";
-    if (!/^https?:/i.test(url)) return;
-    if (zenCssFirstLoads.get(browser)?.url === url) return;
+    attachZenInternetPanelBrowser(browser);
+    requestZenCssDocument(browser);
+  }
+
+  function detachZenInternetPanelBrowser(
+    browser,
+    { clearContent = false } = {},
+  ) {
+    if (!browser) return;
     cancelZenCssFirstLoad(browser);
-    const pending = { url, timers: [] };
-    zenCssFirstLoads.set(browser, pending);
-    updateZenCssBrowser(browser);
-    // One later read covers initially empty local storage. The content
-    // observer handles subsequent stylesheet additions without more reads.
-    for (const delay of [600, 1800]) {
-      pending.timers.push(
-        setTimeout(() => {
-          if (
-            zenCssFirstLoads.get(browser) !== pending ||
-            !zenCssEnabled() ||
-            browser.currentURI?.spec !== url
-          )
-            return;
-          updateZenCssBrowser(browser);
-        }, delay),
-      );
+    const onRemoteness = browser._bgalazkaZenCssRemotenessHandler;
+    if (onRemoteness) {
+      try {
+        browser.removeEventListener("DidChangeBrowserRemoteness", onRemoteness);
+      } catch (_) {}
+      delete browser._bgalazkaZenCssRemotenessHandler;
     }
+    disposeZenCssRecord(browser, { clearContent });
+    delete browser._bgalazkaZenCssOnLoad;
   }
 
   function attachZenInternetPanelBrowser(browser) {
-    if (!browser || browser._bgalazkaZenCssOnLoad) return;
-    const onLoad = () => {
-      cancelZenCssFirstLoad(browser);
-      scheduleZenCssFirstLoad(browser);
-    };
-    browser._bgalazkaZenCssOnLoad = onLoad;
-    browser.addEventListener("pageshow", onLoad);
-    browser.addEventListener("load", onLoad);
-    scheduleZenCssFirstLoad(browser);
+    if (!browser?.isConnected) return;
+    if (!browser._bgalazkaZenCssRemotenessHandler) {
+      // Firefox can keep the same <browser> element while replacing its
+      // FrameLoader/message-manager endpoint. Delayed frame scripts are not a
+      // reliable substitute for explicitly reinstalling our bridge after that
+      // remoteness transition. Mozilla's own ContentPage helper does the same.
+      const onRemoteness = () => {
+        if (!browser.isConnected || !zenCssEnabled()) return;
+        // Invalidate any async CSS build that targeted the old WindowGlobal.
+        zenCssUpdateVersions.set(
+          browser,
+          (zenCssUpdateVersions.get(browser) || 0) + 1,
+        );
+        // Rebuild against the browser's NEW message manager/frame loader.
+        // reset=true also clears any stale content-side observer/style state.
+        requestZenCssDocument(browser, { reset: true });
+      };
+      browser._bgalazkaZenCssRemotenessHandler = onRemoteness;
+      browser.addEventListener("DidChangeBrowserRemoteness", onRemoteness);
+    }
+    browser._bgalazkaZenCssOnLoad = true;
+    ensureZenCssBridge(browser);
   }
 
   function refreshZenInternetPanelCss() {
     for (const browser of getAllAppBrowsers()) {
-      if (!zenCssEnabled() && !zenCssBrowsers.has(browser)) continue;
-      if (zenCssEnabled() && !browser._bgalazkaZenCssOnLoad) {
-        attachZenInternetPanelBrowser(browser);
+      if (!browser?.isConnected) continue;
+      if (!zenCssEnabled()) {
+        const record = zenCssBrowsers.get(browser);
+        if (record) {
+          try {
+            record.manager.sendAsyncMessage(`${ZEN_CSS_CHANNEL}:probe`, {
+              clear: true,
+            });
+          } catch (_) {}
+        }
         continue;
       }
-      updateZenCssBrowser(browser);
+      attachZenInternetPanelBrowser(browser);
+      const windowId = currentZenCssInnerWindowId(browser);
+      if (windowId)
+        updateZenCssBrowser(browser, {
+          targetUrl: browser.currentURI?.spec || "",
+          targetWindowId: windowId,
+        });
+      else requestZenCssDocument(browser);
     }
   }
 
   function setZenInternetPanelCssEnabled(enabled) {
-    if (enabled) zenCssSource = null;
-    refreshZenInternetPanelCss();
-    if (!enabled) {
-      for (const browser of getAllAppBrowsers()) {
-        cancelZenCssFirstLoad(browser);
-        const onLoad = browser._bgalazkaZenCssOnLoad;
-        if (!onLoad) continue;
-        browser.removeEventListener("pageshow", onLoad);
-        browser.removeEventListener("load", onLoad);
-        delete browser._bgalazkaZenCssOnLoad;
-      }
-      if (zenCssChangeTimer) {
-        clearTimeout(zenCssChangeTimer);
-        zenCssChangeTimer = null;
-      }
-      if (zenCssBackend) {
-        zenCssBackend.removeOnChangedListener(
-          ZEN_CSS_EXTENSION_ID,
-          zenCssStorageChanged,
-        );
-        zenCssBackend = null;
-      }
-      zenCssStorage = null;
-      zenCssExtension = null;
+    if (enabled) {
       zenCssSource = null;
+      refreshZenInternetPanelCss();
+      return;
     }
+    for (const browser of getAllAppBrowsers()) {
+      cancelZenCssFirstLoad(browser);
+      const record = zenCssBrowsers.get(browser);
+      if (record) {
+        try {
+          record.manager.sendAsyncMessage(`${ZEN_CSS_CHANNEL}:probe`, {
+            clear: true,
+          });
+        } catch (_) {}
+      }
+      detachZenInternetPanelBrowser(browser);
+    }
+    if (zenCssChangeTimer) {
+      clearTimeout(zenCssChangeTimer);
+      zenCssChangeTimer = null;
+    }
+    if (zenCssBackend) {
+      zenCssBackend.removeOnChangedListener(
+        ZEN_CSS_EXTENSION_ID,
+        zenCssStorageChanged,
+      );
+      zenCssBackend = null;
+    }
+    zenCssStorage = null;
+    zenCssExtension = null;
+    zenCssSource = null;
   }
 
-  const zenCssRefreshTimer = setInterval(() => {
-    if (zenCssEnabled()) refreshZenInternetPanelCss();
-  }, 30000);
   registerCleanup(() => {
-    clearInterval(zenCssRefreshTimer);
     if (zenCssChangeTimer) clearTimeout(zenCssChangeTimer);
     for (const browser of getAllAppBrowsers()) {
       cancelZenCssFirstLoad(browser);
-      if (zenCssBrowsers.has(browser))
-        sendZenCss(browser, "", browser.currentURI?.spec || "");
-      if (browser._bgalazkaZenCssOnLoad) {
-        browser.removeEventListener("pageshow", browser._bgalazkaZenCssOnLoad);
-        browser.removeEventListener("load", browser._bgalazkaZenCssOnLoad);
-        delete browser._bgalazkaZenCssOnLoad;
-      }
-      const record = zenCssBrowsers.get(browser);
-      if (!record) continue;
-      clearTimeout(record.retryTimer);
-      try {
-        record.manager.removeMessageListener(
-          `${ZEN_CSS_CHANNEL}:ack`,
-          record.onAck,
-        );
-      } catch (_) {}
-      try {
-        record.manager.removeDelayedFrameScript(ZEN_CSS_FRAME_URI);
-      } catch (_) {}
-      zenCssBrowsers.delete(browser);
+      detachZenInternetPanelBrowser(browser, { clearContent: true });
     }
     if (zenCssBackend)
       zenCssBackend.removeOnChangedListener(
@@ -26107,26 +26764,37 @@
     window.removeEventListener("command", essentialPreloadCommand, true);
     window.removeEventListener("contextmenu", essentialContextMenu, true);
   });
-  const panelStatusTimer = setInterval(() => {
+  let panelStatusTimer = null;
+  function runPanelFallbackMaintenance() {
+    if (document.getElementById("zs-addon-host-inspection"))
+      updateAddonHostInspection();
     if (getPref(EXT_PREFS.CORNER_TILES, false)) syncCornerTiles();
     if (getPref(BGALAZKA_EXT_PREFS.AUDIO_INDICATOR, false)) refreshPanelAudio();
-    // Unconditional, no toggle: a single activation at open-time can still
-    // lose the race if the content process/browsingContext isn't ready yet
-    // (see the retry loop below), or Gecko can revoke docShellIsActive on
-    // its own later. Re-asserting on a short interval makes this self-heal
-    // instead of requiring the user to close/reopen the panel.
-    // Perf: skip entirely (no DOM query at all) while no panel is open -
-    // there's nothing visible to lose activation, and this is the common
-    // case for most of a session. A single attribute read is effectively
-    // free compared to running getAllAppBrowsers() every 2s unconditionally.
+
+    // This entire maintenance pass is optional now. The normal path is
+    // event-driven; enable Periodic Fallback Polling only for a Zen build
+    // that still revokes docshell activity or leaves CSS/UI state stale.
     if (
       document.documentElement.getAttribute("zentral-app-panel-open") === "true"
     ) {
-      syncAppPanelBrowserActivity();
+      const panelBrowsers = getAllAppBrowsers();
+      syncAppPanelBrowserActivity(panelBrowsers);
+      if (zenCssEnabled()) repairZenInternetPanelCss(panelBrowsers, false);
     }
-  }, 2000);
+  }
+  function syncPanelFallbackPolling() {
+    if (panelStatusTimer) {
+      clearInterval(panelStatusTimer);
+      panelStatusTimer = null;
+    }
+    if (!periodicFallbackPollingEnabled() || extensionDisposed) return;
+    runPanelFallbackMaintenance();
+    panelStatusTimer = setInterval(runPanelFallbackMaintenance, 2000);
+  }
+  syncPanelFallbackPolling();
   registerCleanup(() => {
-    clearInterval(panelStatusTimer);
+    if (panelStatusTimer) clearInterval(panelStatusTimer);
+    panelStatusTimer = null;
     for (const controller of panelMediaListeners.values())
       mediaEvents.forEach((type) =>
         controller.removeEventListener(type, refreshPanelAudio),
@@ -26498,8 +27166,9 @@
   if (isAddonTabIdBridgeEnabled()) {
     setTimeout(unloadPanelBrowsersForAddonBridge, 0);
   }
-  const addonHostInspectionTimer = setInterval(updateAddonHostInspection, 1000);
-  registerCleanup(() => clearInterval(addonHostInspectionTimer));
+  // Add-on-host diagnostics used to have their own permanent 1s timer even
+  // while Settings was closed. The existing 2s maintenance tick now refreshes
+  // this label when it exists, avoiding an extra window wakeup.
 
   // A click normally emits mouseup too. Coalesce the pair and skip geometry
   // work entirely when an unrelated click occurs with no visible app panel.
@@ -26662,6 +27331,32 @@
       [BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ZOOM, "bgalazka-webtoolbar-zoom", false],
       [BGALAZKA_EXT_PREFS.WEB_TOOLBAR_TOP, "bgalazka-webtoolbar-top", false],
     ];
+    forcePanelBlackState = getPref(BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, false);
+    applyForcePanelBlackVisual(forcePanelBlackState, null, false);
+    try {
+      const blackObserver = () => {
+        const forced = getPref(BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK, false);
+        forcePanelBlackState = forced;
+        const button = document.querySelector(
+          "#zen-app-panel-toolbar .bgalazka-panel-black-btn",
+        );
+        applyForcePanelBlackVisual(forced, button, false);
+      };
+      Services.prefs.addObserver(
+        BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK,
+        blackObserver,
+        false,
+      );
+      registerCleanup(() => {
+        try {
+          Services.prefs.removeObserver(
+            BGALAZKA_EXT_PREFS.FORCE_PANEL_BLACK,
+            blackObserver,
+          );
+        } catch (_) {}
+      });
+    } catch (_) {}
+
     WEB_TOOLBAR_ATTR_MAP.forEach(([pref, attr, def]) => {
       document.documentElement.setAttribute(
         attr,
@@ -26852,6 +27547,8 @@
       divider: null,
       previousPin: null,
       poll: null,
+      pollUpdate: null,
+      secondToolbarCleanup: null,
       loadTimers: [],
       resizeCleanup: null,
       geometryObserver: null,
@@ -27061,6 +27758,9 @@
       state.resizeCleanup = null;
       clearInterval(state.poll);
       state.poll = null;
+      state.secondToolbarCleanup?.();
+      state.secondToolbarCleanup = null;
+      state.pollUpdate = null;
       const second = state.second;
       if (state.mode === "super" && second) {
         // Reparenting a live remote browser can reset its document without
@@ -27087,6 +27787,9 @@
       state.divider?.remove();
       state.divider = null;
       ui.removeAttribute("bgalazka-triple-populated");
+      // Do not wait for the toolbar's SPA fallback poll to hide the repair
+      // control when Triple View loses its second panel.
+      updateWebToolbarState();
       state.shell?.remove();
       state.shell = null;
       slider()?.style.removeProperty("--bgalazka-top-share");
@@ -27263,6 +27966,9 @@
         state.first.setAttribute("data-bgalazka-triple-slot", "top");
         browser.setAttribute("data-bgalazka-triple-slot", "bottom");
         ui.setAttribute("bgalazka-triple-populated", "true");
+        // Make the primary toolbar's Triple View controls appear immediately;
+        // the 1s poll is only a navigation fallback, not a UI lifecycle hook.
+        updateWebToolbarState();
         const balance = (clientY) => {
           const panel = slider();
           const rect = panel.getBoundingClientRect();
@@ -27470,7 +28176,7 @@
         grip.addEventListener("lostpointercapture", done);
       }
       state.shell = box;
-      state.poll = setInterval(() => {
+      const refreshSecondaryToolbar = () => {
         if (state.second !== browser || !box.isConnected) return;
         const liveURL = browser.currentURI?.spec;
         if (liveURL && liveURL !== "about:blank") state.secondURL = liveURL;
@@ -27482,8 +28188,54 @@
         try {
           zoomText.textContent = `${Math.round(ZoomManager.getZoomForBrowser(browser) * 100)}%`;
         } catch (_) {}
-      }, 500);
+      };
+      state.pollUpdate = refreshSecondaryToolbar;
+      const secondaryEvents = ["load", "pageshow", "DOMTitleChanged"];
+      secondaryEvents.forEach((type) =>
+        browser.addEventListener(type, refreshSecondaryToolbar),
+      );
+      const secondaryProgress = {
+        onLocationChange(progress) {
+          if (progress && !progress.isTopLevel) return;
+          refreshSecondaryToolbar();
+        },
+        QueryInterface: ChromeUtils.generateQI([
+          "nsIWebProgressListener",
+          "nsISupportsWeakReference",
+        ]),
+      };
+      try {
+        browser.webProgress?.addProgressListener(
+          secondaryProgress,
+          Ci.nsIWebProgress.NOTIFY_LOCATION,
+        );
+      } catch (_) {}
+      state.secondToolbarCleanup = () => {
+        secondaryEvents.forEach((type) =>
+          browser.removeEventListener(type, refreshSecondaryToolbar),
+        );
+        try {
+          browser.webProgress?.removeProgressListener(secondaryProgress);
+        } catch (_) {}
+      };
+      refreshSecondaryToolbar();
+      syncSecondaryFallbackPolling();
     }
+    syncSecondaryFallbackPolling = () => {
+      if (state.poll) {
+        clearInterval(state.poll);
+        state.poll = null;
+      }
+      state.pollUpdate?.();
+      if (
+        !periodicFallbackPollingEnabled() ||
+        !state.second?.isConnected ||
+        !state.pollUpdate
+      )
+        return;
+      state.poll = setInterval(() => state.pollUpdate?.(), 1000);
+    };
+
     function openSecond(app, createLink = true) {
       if (!app?.id || !isOpen() || !state.first?.isConnected) return false;
       if (app.id === state.first._bgalazkaAppId) return true;

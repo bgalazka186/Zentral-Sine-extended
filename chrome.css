@@ -9178,3 +9178,70 @@ panel[id*="tabgroup-editor"] {
   pointer-events: none !important;
   overflow: hidden !important;
 }
+
+/* During a quick background toggle, suppress the normal translucency fades.
+   Without this the toolbar click itself can focus the panel and start a 220ms
+   :focus-within opacity transition immediately before the black override. */
+:root[bgalazka-panel-black-switching="true"]
+  #zen-app-panel-root
+  #zen-app-panel-slider,
+:root[bgalazka-panel-black-switching="true"] #bgalazka-super-panel {
+  transition: none !important;
+}
+
+/* ========================================================================== 
+   QUICK PANEL BACKGROUND OVERRIDE + PRIMARY TOOLBAR REPAIR CONTROLS
+   --------------------------------------------------------------------------
+   JS toggles bgalazka-force-panel-black from the primary web-panel toolbar.
+   This is intentionally an override only: user Look/translucency preferences
+   remain untouched underneath and reappear immediately when the toggle is off.
+   ========================================================================== */
+:root[bgalazka-force-panel-black="true"] #zen-app-panel-root,
+:root[bgalazka-force-panel-black="true"]
+  #zen-app-panel-root
+  #zen-app-panel-clip,
+:root[bgalazka-force-panel-black="true"]
+  #zen-app-panel-root
+  #zen-app-panel-slider,
+:root[bgalazka-force-panel-black="true"]
+  #zen-app-panel-root
+  #zen-app-panel-toolbar,
+:root[bgalazka-force-panel-black="true"]
+  #zen-app-panel-root
+  #zen-app-panel-slider
+  > browser,
+:root[bgalazka-force-panel-black="true"] #bgalazka-super-panel,
+:root[bgalazka-force-panel-black="true"] #bgalazka-super-panel > browser,
+:root[bgalazka-force-panel-black="true"]
+  #bgalazka-super-panel
+  .bgalazka-super-bar {
+  --tabpanels-background-color: #000000 !important;
+  background: #000000 !important;
+  background-color: #000000 !important;
+}
+
+:root[bgalazka-force-panel-black="true"]
+  #zen-app-panel-root
+  #zen-app-panel-slider,
+:root[bgalazka-force-panel-black="true"] #bgalazka-super-panel {
+  opacity: 1 !important;
+  transition: none !important;
+}
+
+#zen-app-panel-toolbar .bgalazka-panel-black-btn[data-active="true"] {
+  color: var(--zen-primary-color, #83a5ff) !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #83a5ff) 24%,
+    transparent
+  ) !important;
+  outline: 1px solid
+    color-mix(in srgb, var(--zen-primary-color, #83a5ff) 60%, transparent) !important;
+  outline-offset: -1px !important;
+}
+
+#zen-app-panel-toolbar
+  .bgalazka-panel-style-repair-btn.zen-toolbar-spinning
+  svg {
+  animation: bgalazka-toolbar-spin 0.45s linear;
+}
