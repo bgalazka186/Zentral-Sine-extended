@@ -9,14 +9,24 @@
   },
   "scripts": {
     "JS/zentral_logger.uc.js": {
-      "include": ["chrome://browser/content/browser.xhtml"]
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 1
     },
     "JS/Zentral.uc.js": {
-      "include": ["chrome://browser/content/browser.xhtml"]
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 10
+    },
+    "JS/BgalazkaExtension.uc.js": {
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 20
+    },
+    "JS/ZentralVideoPreview.uc.js": {
+      "include": ["chrome://browser/content/browser.xhtml"],
+      "loadOrder": 30
     }
   },
   "author": "bgalazka186",
-  "version": "2.0.11",
+  "version": "2.1.0",
   "preferences": "preferences.json",
   "tags": ["apps", "tabs", "sidebar", "groups"],
   "fork": ["zen"],
