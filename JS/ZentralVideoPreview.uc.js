@@ -170,7 +170,7 @@
             return 480;
           }
         }
-        const BUILD = "video-preview-2026-09-27-9";
+        const BUILD = "video-preview-2026-09-27-10";
         const FRAME_SOURCE =
           '// Loaded into each browser\'s content process through its frame message manager.\n// The channel is replaced at startup so separate browser windows stay isolated.\n(function () {\n  // Shared by actor and frame-script transports; no parent-side privileges.\nclass ZentralVideoRenderer {\n  constructor(doc) { this.doc = doc; this.serial = 0; }\n  async start({ videoRef, mode, fit = "contain" }) {\n    if (this.doc?.documentURI !== "about:blank") throw new Error("Invalid preview document");\n    this.stop();\n    const serial = this.serial;\n    const { ContentDOMReference } = ChromeUtils.importESModule(\n      "resource://gre/modules/ContentDOMReference.sys.mjs");\n    const media = await ContentDOMReference.resolve(videoRef);\n    if (serial !== this.serial) throw new Error("Preview cancelled");\n    if (!media?.isConnected || media.localName !== "video")\n      throw new Error("Video reference unavailable in preview process");\n    this.source = media;\n    const doc = this.doc, win = doc.defaultView;\n    if (!doc.body) doc.documentElement.appendChild(doc.createElement("body"));\n    doc.body.style.cssText = "margin:0;overflow:hidden;background:#000";\n    const target = doc.createElement("video");\n    target.muted = true;\n    target.autoplay = true;\n    target.style.cssText = "display:block;width:100vw;height:100vh;object-fit:" +\n      (fit === "cover" ? "cover" : "contain") + ";background:#000";\n    doc.body.appendChild(target);\n    this.video = target;\n    this.mode = mode;\n    this.presentedCallbacks = 0;\n    if (typeof target.requestVideoFrameCallback === "function") {\n      const tick = () => {\n        if (this.video !== target) return;\n        this.presentedCallbacks++;\n        this.frameCallback = target.requestVideoFrameCallback(tick);\n      };\n      this.frameCallback = target.requestVideoFrameCallback(tick);\n    }\n    try {\n      if (mode === "native") {\n        if (media.isCloningElementVisually) throw new Error("Source already has a visual clone");\n        if (typeof media.cloneElementVisually !== "function") throw new Error("Native cloning unavailable");\n        await media.cloneElementVisually(target);\n      } else if (mode === "stream") {\n        const capture = media.captureStream || media.mozCaptureStream;\n        if (typeof capture !== "function") throw new Error("Stream capture unavailable");\n        this.stream = capture.call(media);\n        const tracks = this.stream.getVideoTracks();\n        if (!tracks.length) throw new Error("Stream contains no video track");\n        target.srcObject = new win.MediaStream(tracks);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else if (mode === "canvas-stream") {\n        // Create the canvas under the source document\'s principal. Drawing\n        // media from another origin into about:blank taints its capture stream.\n        const surface = media.ownerDocument.createElement("canvas");\n        surface.width = Math.min(640, media.videoWidth);\n        surface.height = Math.max(1, Math.round(surface.width * media.videoHeight / media.videoWidth));\n        const ctx = surface.getContext("2d", { alpha: false });\n        ctx.drawImage(media, 0, 0, surface.width, surface.height);\n        this.stream = surface.captureStream(30);\n        target.srcObject = this.stream;\n        // Keep all copies inside the source process. No per-frame JPEG or IPC.\n        // Use the visible preview window clock: source rVFC may stop in a hidden tab.\n        let lastTime = NaN;\n        this.timer = win.setInterval(() => {\n          if (!media.isConnected || media.ended) { this.failure = "Source ended or detached"; return; }\n          if (media.currentTime === lastTime || media.readyState < 2) return;\n          try {\n            ctx.drawImage(media, 0, 0, surface.width, surface.height);\n            lastTime = media.currentTime;\n          } catch (error) { this.failure = String(error); }\n        }, 1000 / 30);\n        await target.play();\n        if (serial !== this.serial) throw new Error("Preview cancelled");\n        await this.firstFrame(target);\n      } else throw new Error("Unknown preview mode");\n      if (serial !== this.serial) throw new Error("Preview cancelled");\n      return { ok: true, mode };\n    } catch (error) {\n      if (serial === this.serial) this.stop();\n      throw error;\n    }\n  }\n  firstFrame(target) {\n    if (target.readyState >= 2 && target.videoWidth > 0) return Promise.resolve();\n    return new Promise((resolve, reject) => {\n      const win = this.doc.defaultView;\n      const done = error => {\n        win.clearTimeout(timer);\n        target.removeEventListener("loadeddata", loaded);\n        this.cancelWait = null;\n        error ? reject(error) : resolve();\n      };\n      const loaded = () => done();\n      const timer = win.setTimeout(() => done(new Error("Stream produced no decoded frame")), 1800);\n      this.cancelWait = () => done(new Error("Preview cancelled"));\n      target.addEventListener("loadeddata", loaded, { once: true });\n    });\n  }\n  health() {\n    const tracks = this.stream?.getVideoTracks() || [];\n    const rect = this.video?.getBoundingClientRect();\n    const ok = !!this.video?.isConnected && !!this.source?.isConnected && !this.failure &&\n      !this.source.ended && ((this.mode === "native" && this.source.isCloningElementVisually) ||\n        (this.video.readyState >= 2 && tracks.some(track => track.readyState !== "ended" && !track.muted)));\n    return { ok, error: ok ? null : this.failure || "Preview disconnected or stream unavailable",\n      paused: this.source?.paused, time: this.source?.currentTime,\n      sourceFrames: this.source?.getVideoPlaybackQuality?.().totalVideoFrames || 0,\n      frames: this.video?.getVideoPlaybackQuality?.().totalVideoFrames || 0,\n      presentedCallbacks: this.presentedCallbacks || 0,\n      readyState: this.video?.readyState, targetPaused: this.video?.paused,\n      targetTime: this.video?.currentTime, visibility: this.doc.visibilityState,\n      dimensions: [this.video?.videoWidth, this.video?.videoHeight],\n      targetRect: rect ? [Math.round(rect.width), Math.round(rect.height)] : null,\n      viewport: [this.doc.defaultView.innerWidth, this.doc.defaultView.innerHeight],\n      tracks: tracks.map(track => ({ readyState: track.readyState, muted: track.muted })) };\n  }\n  stop() {\n    ++this.serial;\n    this.cancelWait?.();\n    if (this.timer != null) this.doc.defaultView.clearInterval(this.timer);\n    this.timer = null;\n    if (this.mode === "native" && this.source) {\n      try { this.source.stopCloningElementVisually?.(); } catch (_) {}\n    }\n    try { this.video?.cancelVideoFrameCallback?.(this.frameCallback); } catch (_) {}\n    this.frameCallback = null;\n    this.video?.remove();\n    this.video = null;\n    for (const track of this.stream?.getTracks() || []) track.stop();\n    this.stream = null;\n    this.source = null;\n    this.failure = null;\n  }\n}\n\n\n  function captionText(doc = content.document, media = null) {\n    try {\n      media ??= doc?.querySelector("video");\n      for (const track of media?.textTracks || []) {\n        if (track.mode !== "showing" || !["captions", "subtitles"].includes(track.kind)) continue;\n        const cues = Array.from(track.activeCues || []);\n        if (cues.length) return cues.map(cue => cue.text || "").join(" ").replace(/\\s+/g, " ").slice(0, 1000);\n      }\n      const host = doc?.location?.hostname || "";\n      if (host !== "youtube.com" && !host.endsWith(".youtube.com") &&\n          host !== "youtube-nocookie.com" && !host.endsWith(".youtube-nocookie.com")) return "";\n      const button = doc.querySelector(".ytp-subtitles-button");\n      if (button && button.getAttribute("aria-pressed") !== "true" &&\n          !button.classList.contains("ytp-button-active")) return "";\n      return Array.from(doc.querySelectorAll(".ytp-caption-segment"))\n        .filter(el => {\n          const style = doc.defaultView.getComputedStyle(el);\n          const parent = el.closest(".caption-window");\n          const parentStyle = parent && doc.defaultView.getComputedStyle(parent);\n          return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0" &&\n            (!parentStyle || (parentStyle.display !== "none" && parentStyle.visibility !== "hidden" && parentStyle.opacity !== "0"));\n        }).map(el => el.textContent.trim()).filter(Boolean).join(" ").replace(/\\s+/g, " ").slice(0, 1000);\n    } catch (_) { return ""; }\n  }\n\n\n  let captionObserver = null;\n  let watchedMedia = null;\n  let captionTracks = [];\n  let captionQueued = false;\n  const onCaptionChange = () => {\n    if (captionQueued || !watchedMedia) return;\n    captionQueued = true;\n    content.setTimeout(() => {\n      captionQueued = false;\n      if (stopped || !watchedMedia) return;\n      sendAsyncMessage(CHANNEL + ":caption", {\n        frameId: frameId(), id: ids.get(watchedMedia),\n        text: captionText(content.document, watchedMedia),\n      });\n    }, 50);\n  };\n  function watchCaption(id, active = true) {\n    captionObserver?.disconnect(); captionObserver = null;\n    for (const track of captionTracks) track.removeEventListener("cuechange", onCaptionChange);\n    captionTracks = [];\n    watchedMedia = active ? elements.get(id) || null : null;\n    if (!watchedMedia) return false;\n    for (const track of watchedMedia.textTracks || []) {\n      track.addEventListener("cuechange", onCaptionChange);\n      captionTracks.push(track);\n    }\n    if (/(^|\\.)youtube(?:-nocookie)?\\.com$/.test(content.document.location?.hostname || "")) {\n      const root = content.document.querySelector(".ytp-caption-window-container") ||\n        content.document.querySelector(".html5-video-player");\n      if (root) {\n        captionObserver = new content.MutationObserver(onCaptionChange);\n        captionObserver.observe(root, { childList: true, characterData: true, subtree: true });\n      }\n    }\n    onCaptionChange();\n    return true;\n  }\n\n  let renderer = null;\n  let stopped = false;\n  const CHANNEL = "__CHANNEL__";\n  const ids = new WeakMap();\n  const elements = new Map();\n  let nextId = 0;\n  const frameId = () => content.browsingContext?.id || 0;\n\n  const audioCache = new WeakMap();\nfunction hasVideoAudioTrack(media, cacheAudio = true) {\n  // Track presence is independent of the viewer\'s mute and volume choices.\n  try {\n    if (media.srcObject?.getAudioTracks) return media.srcObject.getAudioTracks().length > 0;\n    if (media.audioTracks) return media.audioTracks.length > 0;\n    const key = media.currentSrc || media.src || "";\n    const cached = audioCache.get(media);\n    if (cacheAudio && cached?.key === key && Date.now() - cached.at < 30000)\n      return cached.hasAudio;\n    const capture = media.captureStream || media.mozCaptureStream;\n    if (typeof capture !== "function") return false;\n    const stream = capture.call(media);\n    const hasAudio = stream.getAudioTracks().length > 0;\n    for (const track of stream.getTracks()) track.stop();\n    if (cacheAudio) audioCache.set(media, { key, at: Date.now(), hasAudio });\n    return hasAudio;\n  } catch (_) { return false; }\n}\n\n  function list({ requireAudio = false, cacheAudio = true } = {}) {\n    const doc = content.document;\n    if (!doc) return [];\n    const found = [];\n    const live = new Set();\n    for (const media of doc.querySelectorAll("video")) {\n      if (media.localName !== "video" || media.ended || media.readyState < 1) continue;\n      const box = media.getBoundingClientRect();\n      const x = Math.max(0, box.left);\n      const y = Math.max(0, box.top);\n      const width = Math.min(content.innerWidth, box.right) - x;\n      const height = Math.min(content.innerHeight, box.bottom) - y;\n      if (media.videoWidth < 240 || media.videoHeight < 135 ||\n          (Number.isFinite(media.duration) && media.duration > 0 && media.duration < 8) ||\n          (requireAudio && !hasVideoAudioTrack(media, cacheAudio))) continue;\n      let id = ids.get(media);\n      if (!id) { id = ++nextId; ids.set(media, id); }\n      elements.set(id, media);\n      live.add(id);\n      const label = media.getAttribute("aria-label") || media.getAttribute("title") ||\n        media.closest("[aria-label]")?.getAttribute("aria-label") ||\n        doc.title || "Video";\n      let videoRef = null;\n      try {\n        const { ContentDOMReference } = ChromeUtils.importESModule(\n          "resource://gre/modules/ContentDOMReference.sys.mjs");\n        videoRef = ContentDOMReference.get(media);\n      } catch (_) {}\n      found.push({ id, videoRef, documentId: content.windowGlobalChild?.innerWindowId || 0,\n        frameId: frameId(), label: String(label).slice(0, 100),\n        kind: "video",\n        canClone: typeof media.cloneElementVisually === "function",\n        canStream: typeof (media.captureStream || media.mozCaptureStream) === "function",\n        canCanvasStream: typeof doc.createElement("canvas").captureStream === "function",\n        rect: width > 0 && height > 0 ? { x, y, width, height } : null,\n        score: (media.paused ? 0 : 10000000) + Math.max(0, width) * Math.max(0, height),\n        paused: media.paused, muted: media.muted,\n        currentTime: media.currentTime,\n        duration: Number.isFinite(media.duration) ? media.duration : 0,\n        width: media.videoWidth || 0, height: media.videoHeight || 0 });\n    }\n    for (const id of elements.keys()) if (!live.has(id)) elements.delete(id);\n    return found;\n  }\n\n\n  const frameStates = new WeakMap();\n  function stopFrameTracking(media) {\n    const state = frameStates.get(media);\n    if (!state) return;\n    state.active = false;\n    try { media.cancelVideoFrameCallback?.(state.callbackId); } catch (_) {}\n    frameStates.delete(media);\n  }\n  function unchangedFrame(media, frameAware) {\n    if (!frameAware || typeof media.requestVideoFrameCallback !== "function") return false;\n    let state = frameStates.get(media);\n    if (!state) {\n      state = { presented: 0, seen: -1, callbackAt: 0, capturedAt: 0, active: true, callbackId: null };\n      frameStates.set(media, state);\n      const tick = (_, metadata) => {\n        if (!state.active || !media.isConnected) return;\n        state.presented = metadata.presentedFrames;\n        state.callbackAt = media.ownerDocument.defaultView.performance.now();\n        state.callbackId = media.requestVideoFrameCallback(tick);\n      };\n      state.callbackId = media.requestVideoFrameCallback(tick);\n    }\n    const now = media.ownerDocument.defaultView.performance.now();\n    if (state.seen === state.presented && now - state.callbackAt < 250 &&\n        now - state.capturedAt < 1000) return true;\n    state.seen = state.presented;\n    state.capturedAt = now;\n    return false;\n  }\n\n  let captureCanvas, captureContext;\n  function captureFrame({ id, captureWidth = 480, binary = false, frameAware = true }) {\n    const media = elements.get(id);\n    if (!media?.isConnected || media.localName !== "video" || media.readyState < 2)\n      throw new Error("No decoded video frame available");\n    if (unchangedFrame(media, frameAware)) return { unchanged: true };\n    const maxDimension = Math.max(160, Math.min(640, Math.round(captureWidth) || 480));\n    const width = Math.max(1, Math.min(media.videoWidth,\n      Math.round(maxDimension * media.videoWidth / Math.max(media.videoWidth, media.videoHeight))));\n    const height = Math.max(1, Math.round(width * media.videoHeight / media.videoWidth));\n    captureCanvas ??= content.document.createElement("canvas");\n    if (captureCanvas.width !== width || captureCanvas.height !== height) {\n      captureCanvas.width = width; captureCanvas.height = height;\n    }\n    captureContext ??= captureCanvas.getContext("2d", { alpha: false, willReadFrequently: true });\n    captureContext.drawImage(media, 0, 0, width, height);\n    if (binary) return { pixels: captureContext.getImageData(0, 0, width, height).data.buffer, width, height };\n    return { url: captureCanvas.toDataURL("image/jpeg", 0.75), width, height };\n  }\n\n  function controlMedia({ id, action, value }) {\n    const media = elements.get(id);\n    if (!media?.isConnected) return null;\n    switch (action) {\n      case "toggle":\n        if (media.paused) media.play().catch(() => {});\n        else media.pause();\n        break;\n      case "mute": media.muted = !media.muted; break;\n      case "seek":\n        if (Number.isFinite(value) && Number.isFinite(media.duration))\n          media.currentTime = Math.max(0, Math.min(media.duration, value));\n        break;\n    }\n    return { paused: media.paused, muted: media.muted,\n      currentTime: media.currentTime,\n      duration: Number.isFinite(media.duration) ? media.duration : 0 };\n  }\n\n  async function onRequest(message) {\n    const { requestId, kind, frameId: requestedFrame, ...args } = message.data;\n    if (stopped || (kind !== "List" && requestedFrame !== frameId())) return;\n    try {\n      let result;\n      if (kind === "List") result = list(args);\n      else if (kind === "Preview") {\n        renderer ??= new ZentralVideoRenderer(content.document);\n        result = await renderer.start(args);\n      } else if (kind === "Health") result = renderer?.health() || { ok: false };\n      else if (kind === "StopPreview") { renderer?.stop(); result = true; }\n      else if (kind === "Caption") result = captionText(content.document, elements.get(args.id));\n      else if (kind === "WatchCaption") result = watchCaption(args.id, args.active);\n      else if (kind === "ActorCheck") {\n        ChromeUtils.importESModule(args.moduleURI);\n        result = true;\n      } else result = kind === "Capture" ? captureFrame(args) : controlMedia(args);\n      if (!stopped) sendAsyncMessage(CHANNEL + ":reply", { requestId, result });\n    } catch (error) {\n      if (!stopped) sendAsyncMessage(CHANNEL + ":reply", { requestId, error: String(error), result: [] });\n    }\n  }\n  function onShutdown() {\n    stopped = true;\n    renderer?.stop();\n    removeMessageListener(CHANNEL + ":request", onRequest);\n    removeMessageListener(CHANNEL + ":shutdown", onShutdown);\n    watchCaption(0, false);\n    for (const media of elements.values()) stopFrameTracking(media);\n    elements.clear();\n    captureCanvas = captureContext = null;\n    for (const event of mediaEvents) removeEventListener(event, onMediaEvent, true);\n  }\n  const mediaEvents = ["play", "playing", "pause", "ended", "emptied", "volumechange", "loadedmetadata"];\n  let eventQueued = false;\n  function onMediaEvent(event) {\n    if (event.target?.localName !== "video" || eventQueued) return;\n    eventQueued = true;\n    content.setTimeout(() => {\n      eventQueued = false;\n      if (!stopped) sendAsyncMessage(CHANNEL + ":media", { frameId: frameId() });\n    }, 100);\n  }\n  for (const event of mediaEvents) addEventListener(event, onMediaEvent, true);\n  addEventListener("unload", () => renderer?.stop());\n  addMessageListener(CHANNEL + ":request", onRequest);\n  addMessageListener(CHANNEL + ":shutdown", onShutdown);\n})();\n';
         const ACTOR_SOURCE =
@@ -191,6 +191,9 @@
         const metrics = {
           scans: 0,
           discoveryCalls: 0,
+          discoveryCacheHits: 0,
+          dirtyInspections: 0,
+          paintWakeups: 0,
           lastScanMs: 0,
           frames: 0,
           captureMs: 0,
@@ -242,7 +245,6 @@
         let captionText = "";
         let captionNode = null;
         let captionTimer = null;
-        let mediaEventTimer = null;
         let pictureObserver = null;
         let cardObserver = null;
         let wakeTimer = null;
@@ -266,7 +268,6 @@
         let nextRenderProbe = 0;
         let nextHealthCheck = 0;
         let lastHealth = null;
-        let lastScan = 0;
         let heightPx = 0,
           radiusPx = 0;
         let cropCache = null;
@@ -291,7 +292,16 @@
         } catch (_) {}
         let disposed = false;
         let scanning = false;
+        let activeScanToken = 0;
         let scanCursor = 0;
+        // Events mark individual browsers dirty; the bounded sweep is a safety net.
+        const dirtyBrowsers = new Set();
+        const discoveryCache = new Map();
+        const DISCOVERY_CACHE_MS = 20000;
+        const EMPTY_DISCOVERY_CACHE_MS = 5000;
+        let discoveryWakeTimer = null;
+        let queuedDiscovery = false;
+        let queuedFullScan = false;
         let sources = [];
         let current = null;
         let box = null;
@@ -308,6 +318,7 @@
         let frameTimer = null;
         let paintTimerMs = 0;
         let nextStillCapture = 0;
+        let captureWorkMs = 0;
         let lastPaintStatusAt = 0;
         let mountTimer = null;
         let compactCheckTimer = null;
@@ -504,18 +515,8 @@
           }
           const state = { manager, pending, onResult };
           state.onMedia = () => {
-            if (
-              !featureOn(MEDIA_EVENTS_PREF) ||
-              !enabled() ||
-              compactPaused ||
-              disposed
-            )
-              return;
-            clearTimeout(mediaEventTimer);
-            mediaEventTimer = setTimeout(() => {
-              mediaEventTimer = null;
-              scan();
-            }, 150);
+            if (!featureOn(MEDIA_EVENTS_PREF)) return;
+            queueDiscovery(browser);
           };
           manager.addMessageListener(CHANNEL + ":media", state.onMedia);
           state.onCaption = (message) => {
@@ -2082,11 +2083,10 @@
             box._pinButton = pinButton;
             box._compactButton = compactButton;
           }
-          if (
+          const attached =
             box.parentNode !== controls.parentNode ||
-            box.previousSibling !== controls
-          )
-            controls.after(box);
+            box.previousSibling !== controls;
+          if (attached) controls.after(box);
           if (
             !visibilityObserver &&
             typeof IntersectionObserver === "function"
@@ -2101,6 +2101,12 @@
               visibilityObserver?.disconnect();
               visibilityObserver = null;
             }
+          }
+          // The first scan can finish before Zen creates a visible sidebar anchor.
+          // A later mount must reveal and populate the card on its own.
+          if (attached) {
+            if (current) select(current, true, previewAutoSelected);
+            else refreshCard();
           }
         }
 
@@ -2572,6 +2578,8 @@
             clearCaptionWatch();
             setCaption("");
             adaptiveWidth = slowCaptures = fastCaptures = 0;
+            captureWorkMs = 0;
+            nextStillCapture = 0;
             cropCache = null;
             canvas.width = 1;
             canvas.height = 1;
@@ -2729,12 +2737,10 @@
                 )
                   return [];
                 const candidates = await limited(
-                  global
-                    .getActor(ACTOR)
-                    .sendQuery("List", {
-                      requireAudio: requireAudio(),
-                      cacheAudio: featureOn(AUDIO_CACHE_PREF),
-                    }),
+                  global.getActor(ACTOR).sendQuery("List", {
+                    requireAudio: requireAudio(),
+                    cacheAudio: featureOn(AUDIO_CACHE_PREF),
+                  }),
                   2500,
                   "actor reply",
                 );
@@ -2775,14 +2781,15 @@
           }
         }
 
-        async function inspectBrowser(item) {
+        async function inspectBrowser(item, probeNewBrowser = false) {
           if (!item.browser?.browsingContext || item.tab?.closing) return [];
           const generation = scanGeneration;
           diagnostics.inspected++;
           const choice = discoveryChoice();
           const locked =
             choice === "auto"
-              ? discoveryLocks.get(item.browser) || discoveryWinner
+              ? discoveryLocks.get(item.browser) ||
+                (probeNewBrowser ? null : discoveryWinner)
               : choice;
           const permittedLock =
             experimentalBridgeDisabled() && locked === "actor" ? null : locked;
@@ -2806,8 +2813,6 @@
           if (permittedLock) groups[permittedLock] = await run(permittedLock);
           if (
             choice === "auto" &&
-            (!discoveryWinner ||
-              item.browser === compactResumeSource?.browser) &&
             (!permittedLock || !groups[permittedLock].length)
           ) {
             discoveryLocks.delete(item.browser);
@@ -2851,12 +2856,29 @@
           );
         }
 
+        function queueDiscovery(browser) {
+          if (disposed || !enabled() || compactPaused) return;
+          if (browser) dirtyBrowsers.add(browser);
+          queuedDiscovery = true;
+          if (scanning || discoveryWakeTimer) return;
+          discoveryWakeTimer = setTimeout(() => {
+            discoveryWakeTimer = null;
+            if (scanning) return;
+            queuedDiscovery = false;
+            scan();
+          }, 75);
+        }
+
         async function scan(all = false, resumeOnly = false) {
-          if (disposed || !enabled() || compactPaused || scanning || testingAll)
+          if (disposed || !enabled() || compactPaused || testingAll) return;
+          if (scanning) {
+            if (all) queuedFullScan = true;
             return;
+          }
           scanning = true;
+          const scanToken = ++activeScanToken;
+          queuedDiscovery = false;
           const scanStarted = Date.now();
-          lastScan = scanStarted;
           metrics.scans++;
           const generation = ++scanGeneration;
           try {
@@ -2897,6 +2919,10 @@
                 browserReports.delete(browser);
                 discoveryLocks.delete(browser);
               }
+            for (const browser of discoveryCache.keys())
+              if (!known.has(browser)) discoveryCache.delete(browser);
+            for (const browser of dirtyBrowsers)
+              if (!known.has(browser)) dirtyBrowsers.delete(browser);
             for (const key of unavailableBySource.keys())
               if (!sources.some((source) => sourceKey(source) === key))
                 unavailableBySource.delete(key);
@@ -2924,6 +2950,18 @@
                 ? items.find((item) => item.tab?.soundPlaying)
                 : null);
             if (active) batch.push(active);
+            const selectedItem = items.find(
+              (item) => item.tab === gBrowser.selectedTab,
+            );
+            if (
+              selectedItem &&
+              dirtyBrowsers.has(selectedItem.browser) &&
+              !batch.includes(selectedItem)
+            )
+              batch.push(selectedItem);
+            for (const item of items)
+              if (dirtyBrowsers.has(item.browser) && !batch.includes(item))
+                batch.push(item);
             if (!resumeOnly || !active) {
               const focused = items.find(
                 (item) => item.tab === gBrowser.selectedTab,
@@ -2944,7 +2982,55 @@
               scanCursor =
                 (scanCursor + (all ? items.length : 12)) % items.length;
             }
-            const found = (await Promise.all(batch.map(inspectBrowser))).flat();
+            const now = Date.now();
+            const found = (
+              await Promise.all(
+                batch.map(async (item) => {
+                  const browser = item.browser;
+                  const wasDirty = dirtyBrowsers.delete(browser);
+                  const cached = discoveryCache.get(browser);
+                  const global = browser?.browsingContext?.currentWindowGlobal;
+                  const cacheAgeLimit = cached?.sources.length
+                    ? DISCOVERY_CACHE_MS
+                    : EMPTY_DISCOVERY_CACHE_MS;
+                  if (
+                    !all &&
+                    !wasDirty &&
+                    cached &&
+                    cached.global === global &&
+                    now - cached.at < cacheAgeLimit
+                  ) {
+                    metrics.discoveryCacheHits++;
+                    return cached.sources.map((source) => ({
+                      ...source,
+                      tab: item.tab,
+                      panel: item.panel,
+                    }));
+                  }
+                  if (wasDirty) metrics.dirtyInspections++;
+                  if (cached && cached.global !== global)
+                    discoveryLocks.delete(browser);
+                  // A newly selected browser can use a different discovery method
+                  // from the pinned/current one; probe its methods concurrently.
+                  const result = await inspectBrowser(
+                    item,
+                    wasDirty &&
+                      browser === selectedItem?.browser &&
+                      !discoveryLocks.has(browser),
+                  );
+                  if (
+                    generation === scanGeneration &&
+                    !dirtyBrowsers.has(browser)
+                  )
+                    discoveryCache.set(browser, {
+                      global,
+                      at: Date.now(),
+                      sources: result,
+                    });
+                  return result;
+                }),
+              )
+            ).flat();
             if (disposed || generation !== scanGeneration) return;
             diagnostics.found = found.length;
             if (found.length) diagnostics.lastError = "";
@@ -3003,11 +3089,24 @@
                 pinnedSource.id = pinnedMatch.data.id;
               }
             }
+            // Playback may start after TabSelect's scan. Prefer the selected
+            // playing tab on each pass, while honoring manual and pinned choices.
+            const selectedPlaying =
+              autoShowVideo() &&
+              selectedItem &&
+              sources.find(
+                (source) =>
+                  source.browser === selectedItem.browser &&
+                  source.data.kind === "video" &&
+                  !source.data.paused,
+              );
             if (pinnedMatch) select(pinnedMatch, false, true);
             else if (pinnedSource) {
               current = null;
               resetRendering();
-            } else if (stillPlaying) select(stillPlaying);
+            } else if (selectedPlaying && (previewAutoSelected || !current))
+              select(selectedPlaying, false, true);
+            else if (stillPlaying) select(stillPlaying);
             else {
               current = null;
               previewAutoSelected = false;
@@ -3029,10 +3128,17 @@
             refreshCard();
           } catch (error) {
             recordError(error);
+            refreshCard();
           } finally {
-            if (generation === scanGeneration) {
+            if (scanToken === activeScanToken) {
               scanning = false;
               metrics.lastScanMs = Date.now() - scanStarted;
+              if (queuedFullScan) {
+                queuedFullScan = false;
+                setTimeout(() => scan(true), 0);
+              } else if (queuedDiscovery || dirtyBrowsers.size) {
+                queueDiscovery();
+              }
             }
           }
         }
@@ -3560,6 +3666,7 @@
             for (const mode of modes) {
               if (generation !== previewGeneration || disposed) return;
               const started = Date.now();
+              const workStarted = performance.now();
               let bitmap;
               try {
                 if (LIVE_MODES.includes(mode))
@@ -3617,9 +3724,20 @@
                       )
                     ).toFixed(1),
                   );
-                  metrics.captureMs += Date.now() - started;
-                  recordCaptureDuration(Date.now() - started);
-                  nextStillCapture = Date.now() + captureIntervalMs();
+                  const workMs = performance.now() - workStarted;
+                  metrics.captureMs += workMs;
+                  recordCaptureDuration(workMs);
+                  // Leave headroom when a capture and draw use most of a frame.
+                  // Cheap captures retain the user's requested 60 fps ceiling.
+                  captureWorkMs = captureWorkMs
+                    ? captureWorkMs * 0.75 + workMs * 0.25
+                    : workMs;
+                  const budget = Math.max(
+                    captureIntervalMs(),
+                    captureWorkMs * 1.25,
+                  );
+                  nextStillCapture =
+                    Date.now() + Math.max(1, Math.ceil(budget - workMs));
                 }
                 if (generation !== previewGeneration) return;
                 previewMode = mode;
@@ -3668,21 +3786,32 @@
         }
 
         function updatePaintTimer(active = true) {
-          if (!scanTimer) return;
-          if (!active && featureOn(IDLE_TIMER_PREF)) {
-            clearInterval(frameTimer);
-            frameTimer = null;
+          clearTimeout(frameTimer);
+          frameTimer = null;
+          if (!scanTimer || renderBusy) return;
+          if (
+            (!active || !current || videoHidden || !previewVisible()) &&
+            featureOn(IDLE_TIMER_PREF)
+          ) {
             paintTimerMs = 0;
             return;
           }
-          const interval =
-            active && WORKING_MODES.includes(previewMode)
-              ? captureIntervalMs()
-              : FRAME_MS;
-          if (frameTimer && paintTimerMs === interval) return;
-          clearInterval(frameTimer);
-          paintTimerMs = interval;
-          frameTimer = setInterval(paint, interval);
+          // A single timeout is scheduled after the previous asynchronous paint.
+          // Live preview health does not need 10 empty wakeups per second.
+          const due =
+            active && LIVE_MODES.includes(previewMode)
+              ? nextHealthCheck
+              : active && WORKING_MODES.includes(previewMode)
+                ? nextStillCapture
+                : active && nextRenderProbe
+                  ? nextRenderProbe
+                  : Date.now() + FRAME_MS;
+          paintTimerMs = Math.max(1, due - Date.now());
+          frameTimer = setTimeout(() => {
+            frameTimer = null;
+            metrics.paintWakeups++;
+            paint();
+          }, paintTimerMs);
         }
 
         function compactTabbarHidden() {
@@ -3727,8 +3856,6 @@
           clearCaptionWatch();
           clearInterval(captionTimer);
           captionTimer = null;
-          clearTimeout(mediaEventTimer);
-          mediaEventTimer = null;
           setCaption("");
           if (compactPaused) return;
           compactPaused = true;
@@ -3743,13 +3870,19 @@
               at: Date.now(),
             };
           ++scanGeneration; // Ignore replies from a scan started before hiding.
+          clearTimeout(discoveryWakeTimer);
+          discoveryWakeTimer = null;
+          dirtyBrowsers.clear();
+          discoveryCache.clear();
+          queuedDiscovery = queuedFullScan = false;
           clearTimeout(compactMountTimer);
           compactMountTimer = null;
           clearInterval(scanTimer);
-          clearInterval(frameTimer);
+          clearTimeout(frameTimer);
           clearInterval(mountTimer);
           scanTimer = frameTimer = mountTimer = null;
           paintTimerMs = 0;
+          ++activeScanToken;
           scanning = false; // An old scan may still be settling after cancellation.
           resetRendering(); // Stops live renderers and cancels pending still captures.
           for (const browser of bridges.keys()) releaseBridge(browser);
@@ -3807,15 +3940,18 @@
           clearCaptionWatch();
           clearTimeout(wakeTimer);
           wakeTimer = null;
-          clearTimeout(mediaEventTimer);
-          mediaEventTimer = null;
+          clearTimeout(discoveryWakeTimer);
+          discoveryWakeTimer = null;
+          dirtyBrowsers.clear();
+          discoveryCache.clear();
+          queuedDiscovery = queuedFullScan = false;
           clearInterval(captionTimer);
           captionTimer = null;
           setCaption("");
           ++scanGeneration;
           resetRendering();
           clearInterval(scanTimer);
-          clearInterval(frameTimer);
+          clearTimeout(frameTimer);
           clearInterval(mountTimer);
           clearTimeout(compactMountTimer);
           compactMountTimer = null;
@@ -3827,6 +3963,7 @@
           compactHiddenSince = 0;
           previewAutoSelected = false;
           compactPaused = false;
+          ++activeScanToken;
           scanning = false;
           browserReports.clear();
           discoveryLocks.clear();
@@ -3869,8 +4006,8 @@
           if (!experimentalBridgeDisabled()) ensureActor();
           mount();
           scanTimer = setInterval(scan, POLL_MS);
-          paintTimerMs = FRAME_MS;
-          frameTimer = setInterval(paint, FRAME_MS);
+          paintTimerMs = 0;
+          updatePaintTimer();
           captionTimer = setInterval(refreshCaption, 750);
           mountTimer = setInterval(mount, 3000);
           // A compact reveal can finish after the first mount attempt.
@@ -3904,9 +4041,18 @@
           if (enabled()) start();
           injectSetting();
         };
-        const onTab = () => {
+        const onTab = (event) => {
           wakePaint();
-          if (enabled() && Date.now() - lastScan >= POLL_MS) scan();
+          const tab = event.target;
+          if (
+            event.type === "TabAttrModified" &&
+            tab !== gBrowser.selectedTab &&
+            !tab?.soundPlaying
+          )
+            return;
+          if (event.type === "TabClose")
+            discoveryCache.delete(tab?.linkedBrowser);
+          queueDiscovery(tab?.linkedBrowser);
         };
         const onRenderPref = () => {
           unavailableBySource.delete(sourceKey(current));
@@ -3927,6 +4073,7 @@
         };
         const onDiscoveryPref = () => {
           discoveryLocks.clear();
+          discoveryCache.clear();
           discoveryWinner = null;
           ++scanGeneration; // Ignore results of an old automatic probe.
           sources = [];
@@ -4039,6 +4186,8 @@
             experimentalBridgeDisabled: experimentalBridgeDisabled(),
             renderer: previewMode,
             captureRateFps: captureRateTenths() / 10,
+            captureWorkMs: Math.round(captureWorkMs * 10) / 10,
+            nextPaintDelayMs: paintTimerMs,
             pauseWhenCompactHidden: pauseWhenCompactHidden(),
             compactPaused,
             resumePending: !!compactResumeSource,
