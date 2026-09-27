@@ -64,13 +64,13 @@
   display: flex !important;
   flex: 0 0 auto !important;
   min-height: 27px !important;
-  flex-wrap: wrap !important;
+  flex-wrap: nowrap !important;
   align-items: center !important;
-  gap: 4px !important;
+  gap: 2px !important;
   min-width: 0 !important;
 }
 #zentral-video-preview .zentral-video-preview-caption {
-  flex: 1 1 auto !important;
+  flex: 1 999 auto !important;
   min-width: 0 !important;
   overflow: hidden !important;
   white-space: nowrap !important;
@@ -125,39 +125,25 @@
 #zentral-video-preview .zentral-video-preview-auto {
   font-size: 10px !important;
 }
-#zentral-video-preview .zentral-video-preview-view-actions {
-  box-sizing: border-box !important;
-  display: flex !important;
-  position: static !important;
-  flex: 0 0 auto !important;
-  flex-wrap: wrap !important;
-  justify-content: flex-end !important;
-  width: 100% !important;
-  min-width: 0 !important;
-  gap: 4px !important;
-  align-items: stretch !important;
-}
-#zentral-video-preview .zentral-video-preview-view-actions[hidden] {
-  display: none !important;
-}
-#zentral-video-preview .zentral-video-preview-view-actions > button {
+#zentral-video-preview .zentral-video-preview-bar > button {
   box-sizing: border-box !important;
   position: static !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  width: 100% !important;
-  min-width: 0 !important;
-  max-width: 100% !important;
+  flex: 0 1 26px !important;
+  width: 26px !important;
+  min-width: 18px !important;
+  max-width: 26px !important;
   padding: 0 !important;
   margin: 0 !important;
   overflow: hidden !important;
   white-space: nowrap !important;
 }
-#zentral-video-preview .zentral-video-preview-view-actions > button[hidden] {
+#zentral-video-preview .zentral-video-preview-bar > button[hidden] {
   display: none !important;
 }
-#zentral-video-preview .zentral-video-preview-view-actions svg {
+#zentral-video-preview .zentral-video-preview-bar svg {
   display: block !important;
   flex: 0 0 16px !important;
   width: 16px !important;
@@ -227,8 +213,7 @@
 /* Contain intrinsic widths from source labels, canvas and remote browser.
    Compact mode can now use Zen's normal sidebar width without our card
    contributing a larger min-content width during the mode transition. */
-#zentral-video-preview > *,
-#zentral-video-preview .zentral-video-preview-bar > * {
+#zentral-video-preview > * {
   box-sizing: border-box !important;
   min-inline-size: 0 !important;
   max-inline-size: 100% !important;
@@ -312,11 +297,8 @@
   opacity: 0.72;
 }
 
-/* Keep the playback row compact and the view actions independently sized. */
-#zentral-video-preview .zentral-video-preview-bar > button:not([hidden]),
-#zentral-video-preview
-  .zentral-video-preview-view-actions
-  > button:not([hidden]) {
+/* Keep all controls on one line while the title yields the available width. */
+#zentral-video-preview .zentral-video-preview-bar > button:not([hidden]) {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
