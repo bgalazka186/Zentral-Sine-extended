@@ -2,7 +2,7 @@
 "use strict";
 const Services=globalThis.Services||ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
 const ZentralRuntime=window.ZentralRuntime;
-ZentralRuntime.register({id:"apps",init({shared}){
+ZentralRuntime.register({id:"apps",init({shared,runtime}){
 const {Constants,Core,createSVGElement,SVG_STRINGS,WELL_KNOWN_SERVICES}=shared;
 class ZentralApps {
     /** @private Side attribute MutationObserver */
@@ -5484,8 +5484,19 @@ class ZentralApps {
   }
 const instance=new ZentralApps();
 window.Zentral.Apps=instance;
-try { instance.init(); } catch(error) { try {instance.destroy();}catch(_){} delete window.Zentral.Apps; throw error; }
-return ()=>{instance.destroy();delete window.Zentral.Apps;};
+const availableAtStart=!!Core.getPref(Constants.Apps.PREF_ENABLED);
+let started=false,disposed=false,watching=false;
+const onEnabled=()=>{
+  if(disposed||started||!(!!Core.getPref(Constants.Apps.PREF_ENABLED)))return;
+  try{instance.init();started=true;runtime.setAvailable("apps",true);}
+  catch(error){try{instance.destroy();}catch(_){}runtime.failFeature("apps",error);}
+  if(watching){Services.prefs.removeObserver(Constants.Apps.PREF_ENABLED,onEnabled);watching=false;}
+};
+try{
+  if(availableAtStart){instance.init();started=true;}
+  else{runtime.setAvailable("apps",false);Services.prefs.addObserver(Constants.Apps.PREF_ENABLED,onEnabled);watching=true;}
+}catch(error){try{instance.destroy();}catch(_){}delete window.Zentral.Apps;throw error;}
+return ()=>{disposed=true;if(watching){Services.prefs.removeObserver(Constants.Apps.PREF_ENABLED,onEnabled);watching=false;}instance.destroy();delete window.Zentral.Apps;};
 }});
 
 })();

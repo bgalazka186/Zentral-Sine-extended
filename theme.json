@@ -1,8 +1,8 @@
 {
-  "id": "zentral",
-  "name": "Zentral",
+  "id": "zentral-sine-extended",
+  "name": "Zentral Extended",
   "description": "Unified Apps Grid, Tab Groups & Settings for Zen Browser",
-  "homepage": "https://github.com/Michele501st/Zentral-Sine",
+  "homepage": "https://github.com/bgalazka186/Zentral-Sine-extended",
   "supportsUnload": true,
   "style": {
     "chrome": "",
@@ -10,24 +10,14 @@
   },
   "scripts": {
     "JS/Zentral.uc.js": {
-      "include": [
-        "chrome://browser/content/browser.xhtml"
-      ],
+      "include": ["chrome://browser/content/browser.xhtml"],
       "loadOrder": 1
     }
   },
-  "author": "Michele501st",
-  "version": "3.0.0-framework",
+  "author": "bgalazka186",
+  "version": "2.0.0",
   "preferences": "preferences.json",
-  "tags": [
-    "apps",
-    "tabs",
-    "sidebar",
-    "groups"
-  ],
-  "fork": [
-    "zen"
-  ],
-  "readme": "https://raw.githubusercontent.com/Michele501st/Zentral-Sine/main/README.md",
-  "updatedAt": "2026-09-16T22:31:11Z"
+  "tags": ["apps", "tabs", "sidebar", "groups"],
+  "fork": ["zen"],
+  "readme": "https://raw.githubusercontent.com/bgalazka186/Zentral-Sine-extended/main/README.md"
 }

@@ -2,7 +2,7 @@
 "use strict";
 const Services=globalThis.Services||ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
 const ZentralRuntime=window.ZentralRuntime;
-ZentralRuntime.register({id:"tab-groups",init({shared}){
+ZentralRuntime.register({id:"tab-groups",init({shared,runtime}){
 const {Constants,Core,createSVGElement,SVG_STRINGS,WELL_KNOWN_SERVICES}=shared;
 class ZentralTabGroups {
     /** @private Tabstrip MutationObserver */
@@ -5299,8 +5299,19 @@ class ZentralTabGroups {
   }
 const instance=new ZentralTabGroups();
 window.Zentral.TabGroups=instance;
-try { instance.init(); } catch(error) { try {instance.destroy();}catch(_){} delete window.Zentral.TabGroups; throw error; }
-return ()=>{instance.destroy();delete window.Zentral.TabGroups;};
+const availableAtStart=!!Core.getPref(Constants.TabGroups.PREF_ENABLED) && !(typeof PrivateBrowsingUtils !== "undefined" && PrivateBrowsingUtils.isWindowPrivate(window));
+let started=false,disposed=false,watching=false;
+const onEnabled=()=>{
+  if(disposed||started||!(!!Core.getPref(Constants.TabGroups.PREF_ENABLED) && !(typeof PrivateBrowsingUtils !== "undefined" && PrivateBrowsingUtils.isWindowPrivate(window))))return;
+  try{instance.init();started=true;runtime.setAvailable("tab-groups",true);}
+  catch(error){try{instance.destroy();}catch(_){}runtime.failFeature("tab-groups",error);}
+  if(watching){Services.prefs.removeObserver(Constants.TabGroups.PREF_ENABLED,onEnabled);watching=false;}
+};
+try{
+  if(availableAtStart){instance.init();started=true;}
+  else{runtime.setAvailable("tab-groups",false);Services.prefs.addObserver(Constants.TabGroups.PREF_ENABLED,onEnabled);watching=true;}
+}catch(error){try{instance.destroy();}catch(_){}delete window.Zentral.TabGroups;throw error;}
+return ()=>{disposed=true;if(watching){Services.prefs.removeObserver(Constants.TabGroups.PREF_ENABLED,onEnabled);watching=false;}instance.destroy();delete window.Zentral.TabGroups;};
 }});
 
 })();
