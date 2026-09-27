@@ -71,6 +71,34 @@
       Services.prefs.setIntPref(key, Math.round(value));
     else Services.prefs.setStringPref(key, String(value));
   };
+  const arcSidebarPref = "zen.workspace.zentral.arc2.match_compact_sidebar";
+  const arcSidebarColorPref = "arc-compact-sidebar-bg";
+  const arcSidebarAttribute = "zentral-arc2-regular-sidebar";
+  const arcSidebarColorProperty = "--zentral-arc2-sidebar-background";
+  const syncArcSidebar = () => {
+    const color = getPref(arcSidebarColorPref, "");
+    const active =
+      getPref(arcSidebarPref, false) === true &&
+      typeof color === "string" &&
+      color.trim() !== "";
+    document.documentElement.toggleAttribute(arcSidebarAttribute, active);
+    if (active)
+      document.documentElement.style.setProperty(
+        arcSidebarColorProperty,
+        color,
+      );
+    else document.documentElement.style.removeProperty(arcSidebarColorProperty);
+  };
+  const arcSidebarObserver = { observe: syncArcSidebar };
+  syncArcSidebar();
+  Services.prefs.addObserver(arcSidebarPref, arcSidebarObserver);
+  Services.prefs.addObserver(arcSidebarColorPref, arcSidebarObserver);
+  disposers.push(() => {
+    Services.prefs.removeObserver(arcSidebarPref, arcSidebarObserver);
+    Services.prefs.removeObserver(arcSidebarColorPref, arcSidebarObserver);
+    document.documentElement.removeAttribute(arcSidebarAttribute);
+    document.documentElement.style.removeProperty(arcSidebarColorProperty);
+  });
   const enabled = (id) =>
     id === "extension-settings"
       ? true
@@ -432,6 +460,18 @@
     },
   ];
   const SETTINGS_SCHEMA = [
+    {
+      type: "text",
+      label: "**Original Zentral · Arc 2.0 Compatibility**",
+      size: "18px",
+    },
+    {
+      property: "zen.workspace.zentral.arc2.match_compact_sidebar",
+      label:
+        "Arc 2.0 tweak: apply compact mode sidebar theme to regular mode sidebar",
+      type: "checkbox",
+      defaultValue: false,
+    },
     {
       type: "text",
       label: "**Original Zentral · Apps and Panels**",
@@ -9860,6 +9900,20 @@
           }
         };
         lookCategory.subPanel._syncLook = syncLookControls;
+        addLookHeading("Arc 2.0");
+        const arcSidebarToggle = createToggleRow(
+          "Arc 2.0 tweak: apply compact mode sidebar theme to regular mode sidebar",
+          "Follow Arc 2.0's compact sidebar color and opacity. Applies immediately; the main browser background keeps its current opacity.",
+          arcSidebarPref,
+          null,
+          false,
+        );
+        lookCategory.subContent.append(arcSidebarToggle.row);
+        panel._toggles.push({
+          input: arcSidebarToggle.input,
+          pref: arcSidebarPref,
+          def: false,
+        });
         addLookHeading("Style");
         addLookSelect(
           "Interface style",
@@ -10941,13 +10995,11 @@
         )
           continue;
         try {
-          const cleanup = definitions
-            .get(m.id)
-            .init({
-              shared: runtime.shared,
-              services: runtime.services,
-              runtime,
-            });
+          const cleanup = definitions.get(m.id).init({
+            shared: runtime.shared,
+            services: runtime.services,
+            runtime,
+          });
           if (cleanup && typeof cleanup.then === "function")
             throw new Error(
               "init must be synchronous; use browser-ready events within a feature",

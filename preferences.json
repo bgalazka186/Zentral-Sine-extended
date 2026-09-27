@@ -1,6 +1,17 @@
 [
   {
     "type": "text",
+    "label": "**Arc 2.0 Compatibility**",
+    "size": "18px"
+  },
+  {
+    "property": "zen.workspace.zentral.arc2.match_compact_sidebar",
+    "label": "Arc 2.0 tweak: apply compact mode sidebar theme to regular mode sidebar",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "type": "text",
     "label": "**Original Zentral · Apps and Panels**",
     "size": "18px"
   },
@@ -6974,6 +6985,6 @@
     "property": "zen.workspace.bgalazka.panel_black_steps",
     "label": "Black backing cycle levels (comma separated)",
     "type": "input",
-    "defaultValue": "0,25,50,75,100"
+    "defaultValue": "0,1,5,10,20,30,40,50,60,70,80,90,100"
   }
 ]

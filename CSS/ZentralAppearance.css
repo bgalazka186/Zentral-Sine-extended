@@ -1,6 +1,13 @@
 /* Scope extension settings to a stable dark surface. Zen can change its
  * workspace colors while this dialog is open; fixed text and surface colors
  * prevent a light theme from producing white text on white backgrounds. */
+/* The toolbox contains the upper buttons, URL bar, and tabbar. Paint it once
+ * in regular mode, since Zen hides the titlebar's compact background here. */
+:root[zentral-arc2-regular-sidebar]:not([zen-compact-mode="true"])
+  #navigator-toolbox {
+  background: var(--zentral-arc2-sidebar-background) !important;
+}
+
 #zentral-settings-modal .zs-tab-bar {
   flex-wrap: wrap !important;
   overflow-x: hidden !important;
@@ -339,8 +346,10 @@
 }
 /* Keep the native audio overlay, but never let its favicon show beneath
    the custom launcher tile. */
-:root .tabbrowser-tab[bgalazka-tab-panel-launcher="true"]
-  .bgalazka-panel-icon-host:has(> .bgalazka-tab-icon-panel) .tab-icon-image {
+:root
+  .tabbrowser-tab[bgalazka-tab-panel-launcher="true"]
+  .bgalazka-panel-icon-host:has(> .bgalazka-tab-icon-panel)
+  .tab-icon-image {
   visibility: hidden !important;
 }
 
@@ -998,4 +1007,3 @@
     transparent
   ) !important;
 }
-
