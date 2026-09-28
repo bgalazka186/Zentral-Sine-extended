@@ -6,9 +6,11 @@
  * Extension Settings Panel: High-Visibility Controls & Colors
  * -------------------------------------------------------------------------- */
 
-/* The cap-like toggle removes only the standalone app grid and its footer;
- * tab-attached panel launchers are mounted inside tab icons elsewhere. */
-:root[bgalazka-hide-unattached-app-controls="true"]
+/* Keep the standalone grid and its footer available whenever this workspace
+ * has an app, including one promoted from a tab-attached panel. */
+:root[bgalazka-hide-unattached-app-controls="true"]:not(
+    [zentral-apps-has-visible-apps]
+  )
   :is(#zen-apps-sidebar-grid, #zentral-apps-vertical-bar-footer) {
   display: none !important;
 }
@@ -510,4 +512,3 @@
   #zen-apps-sidebar-mobile-ua-item {
   display: none !important;
 }
-

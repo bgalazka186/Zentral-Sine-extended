@@ -2143,7 +2143,275 @@
     {
       type: "text",
       label:
-        "Compact tabs and folders is off by default. The three spacing values take effect only when it is on.",
+        "Compact tabs and folders is off by default. The three spacing values take effect only when it is on. Icon, New Tab, address bar and Essentials controls work independently.",
+    },
+    {
+      property: "zen.workspace.bgalazka.look.density_icons",
+      label: "Compact sidebar controls",
+      type: "checkbox",
+      defaultValue: false,
+    },
+    {
+      property: "zen.workspace.bgalazka.look.density_newtab",
+      label: "Compact New Tab button",
+      type: "checkbox",
+      defaultValue: false,
+    },
+    {
+      property: "zen.workspace.bgalazka.look.density_urlbar",
+      label: "Compact address bar",
+      type: "checkbox",
+      defaultValue: false,
+    },
+    {
+      property: "zen.workspace.bgalazka.look.density_essentials",
+      label: "Custom Essentials height",
+      type: "checkbox",
+      defaultValue: false,
+    },
+    {
+      property: "zen.workspace.bgalazka.look.essentials_height",
+      label: "Essentials Height",
+      type: "dropdown",
+      defaultValue: 32,
+      options: [
+        { label: "20 px", value: 20 },
+        { label: "21 px", value: 21 },
+        { label: "22 px", value: 22 },
+        { label: "23 px", value: 23 },
+        { label: "24 px", value: 24 },
+        { label: "25 px", value: 25 },
+        { label: "26 px", value: 26 },
+        { label: "27 px", value: 27 },
+        { label: "28 px", value: 28 },
+        { label: "29 px", value: 29 },
+        { label: "30 px", value: 30 },
+        { label: "31 px", value: 31 },
+        { label: "32 px", value: 32 },
+        { label: "33 px", value: 33 },
+        { label: "34 px", value: 34 },
+        { label: "35 px", value: 35 },
+        { label: "36 px", value: 36 },
+        { label: "37 px", value: 37 },
+        { label: "38 px", value: 38 },
+        { label: "39 px", value: 39 },
+        { label: "40 px", value: 40 },
+        { label: "41 px", value: 41 },
+        { label: "42 px", value: 42 },
+        { label: "43 px", value: 43 },
+        { label: "44 px", value: 44 },
+        { label: "45 px", value: 45 },
+        { label: "46 px", value: 46 },
+        { label: "47 px", value: 47 },
+        { label: "48 px", value: 48 },
+        { label: "49 px", value: 49 },
+        { label: "50 px", value: 50 },
+        { label: "51 px", value: 51 },
+        { label: "52 px", value: 52 },
+        { label: "53 px", value: 53 },
+        { label: "54 px", value: 54 },
+        { label: "55 px", value: 55 },
+        { label: "56 px", value: 56 },
+        { label: "57 px", value: 57 },
+        { label: "58 px", value: 58 },
+        { label: "59 px", value: 59 },
+        { label: "60 px", value: 60 },
+        { label: "61 px", value: 61 },
+        { label: "62 px", value: 62 },
+        { label: "63 px", value: 63 },
+        { label: "64 px", value: 64 },
+      ],
+    },
+    {
+      property: "zen.workspace.bgalazka.look.tabbar_section_gap",
+      label: "Pinned to Normal Tabs Spacing",
+      type: "dropdown",
+      defaultValue: 2,
+      options: [
+        { label: "0 px", value: 0 },
+        { label: "1 px", value: 1 },
+        { label: "2 px", value: 2 },
+        { label: "3 px", value: 3 },
+        { label: "4 px", value: 4 },
+        { label: "5 px", value: 5 },
+        { label: "6 px", value: 6 },
+        { label: "7 px", value: 7 },
+        { label: "8 px", value: 8 },
+        { label: "9 px", value: 9 },
+        { label: "10 px", value: 10 },
+        { label: "11 px", value: 11 },
+        { label: "12 px", value: 12 },
+        { label: "13 px", value: 13 },
+        { label: "14 px", value: 14 },
+        { label: "15 px", value: 15 },
+        { label: "16 px", value: 16 },
+        { label: "17 px", value: 17 },
+        { label: "18 px", value: 18 },
+        { label: "19 px", value: 19 },
+        { label: "20 px", value: 20 },
+      ],
+    },
+    {
+      property: "zen.workspace.bgalazka.look.folder_icon_size",
+      label: "Folder icon size",
+      type: "dropdown",
+      defaultValue: 20,
+      options: [
+        { label: "12 px", value: 12 },
+        { label: "13 px", value: 13 },
+        { label: "14 px", value: 14 },
+        { label: "15 px", value: 15 },
+        { label: "16 px", value: 16 },
+        { label: "17 px", value: 17 },
+        { label: "18 px", value: 18 },
+        { label: "19 px", value: 19 },
+        { label: "20 px", value: 20 },
+        { label: "21 px", value: 21 },
+        { label: "22 px", value: 22 },
+        { label: "23 px", value: 23 },
+        { label: "24 px", value: 24 },
+        { label: "25 px", value: 25 },
+        { label: "26 px", value: 26 },
+        { label: "27 px", value: 27 },
+        { label: "28 px", value: 28 },
+      ],
+    },
+    {
+      property: "zen.workspace.bgalazka.look.workspace_icon_size",
+      label: "Workspace icon size",
+      type: "dropdown",
+      defaultValue: 16,
+      options: [
+        { label: "12 px", value: 12 },
+        { label: "13 px", value: 13 },
+        { label: "14 px", value: 14 },
+        { label: "15 px", value: 15 },
+        { label: "16 px", value: 16 },
+        { label: "17 px", value: 17 },
+        { label: "18 px", value: 18 },
+        { label: "19 px", value: 19 },
+        { label: "20 px", value: 20 },
+        { label: "21 px", value: 21 },
+        { label: "22 px", value: 22 },
+        { label: "23 px", value: 23 },
+        { label: "24 px", value: 24 },
+        { label: "25 px", value: 25 },
+        { label: "26 px", value: 26 },
+        { label: "27 px", value: 27 },
+        { label: "28 px", value: 28 },
+      ],
+    },
+    {
+      property: "zen.workspace.bgalazka.look.workspace_height",
+      label: "Workspace indicator height",
+      type: "dropdown",
+      defaultValue: 22,
+      options: [
+        { label: "18 px", value: 18 },
+        { label: "19 px", value: 19 },
+        { label: "20 px", value: 20 },
+        { label: "21 px", value: 21 },
+        { label: "22 px", value: 22 },
+        { label: "23 px", value: 23 },
+        { label: "24 px", value: 24 },
+        { label: "25 px", value: 25 },
+        { label: "26 px", value: 26 },
+        { label: "27 px", value: 27 },
+        { label: "28 px", value: 28 },
+        { label: "29 px", value: 29 },
+        { label: "30 px", value: 30 },
+        { label: "31 px", value: 31 },
+        { label: "32 px", value: 32 },
+        { label: "33 px", value: 33 },
+        { label: "34 px", value: 34 },
+        { label: "35 px", value: 35 },
+        { label: "36 px", value: 36 },
+        { label: "37 px", value: 37 },
+        { label: "38 px", value: 38 },
+        { label: "39 px", value: 39 },
+        { label: "40 px", value: 40 },
+      ],
+    },
+    {
+      property: "zen.workspace.bgalazka.look.bottom_bar_height",
+      label: "Bottom bar height",
+      type: "dropdown",
+      defaultValue: 24,
+      options: [
+        { label: "20 px", value: 20 },
+        { label: "21 px", value: 21 },
+        { label: "22 px", value: 22 },
+        { label: "23 px", value: 23 },
+        { label: "24 px", value: 24 },
+        { label: "25 px", value: 25 },
+        { label: "26 px", value: 26 },
+        { label: "27 px", value: 27 },
+        { label: "28 px", value: 28 },
+        { label: "29 px", value: 29 },
+        { label: "30 px", value: 30 },
+        { label: "31 px", value: 31 },
+        { label: "32 px", value: 32 },
+        { label: "33 px", value: 33 },
+        { label: "34 px", value: 34 },
+        { label: "35 px", value: 35 },
+        { label: "36 px", value: 36 },
+        { label: "37 px", value: 37 },
+        { label: "38 px", value: 38 },
+        { label: "39 px", value: 39 },
+        { label: "40 px", value: 40 },
+      ],
+    },
+    {
+      property: "zen.workspace.bgalazka.look.urlbar_top_gap",
+      label: "Space above address bar",
+      type: "dropdown",
+      defaultValue: 0,
+      options: [
+        { label: "0 px", value: 0 },
+        { label: "1 px", value: 1 },
+        { label: "2 px", value: 2 },
+        { label: "3 px", value: 3 },
+        { label: "4 px", value: 4 },
+        { label: "5 px", value: 5 },
+        { label: "6 px", value: 6 },
+        { label: "7 px", value: 7 },
+        { label: "8 px", value: 8 },
+        { label: "9 px", value: 9 },
+        { label: "10 px", value: 10 },
+        { label: "11 px", value: 11 },
+        { label: "12 px", value: 12 },
+        { label: "13 px", value: 13 },
+        { label: "14 px", value: 14 },
+        { label: "15 px", value: 15 },
+        { label: "16 px", value: 16 },
+      ],
+    },
+    {
+      property: "zen.workspace.bgalazka.look.newtab_height",
+      label: "New Tab button height",
+      type: "dropdown",
+      defaultValue: 20,
+      options: [
+        { label: "18 px", value: 18 },
+        { label: "19 px", value: 19 },
+        { label: "20 px", value: 20 },
+        { label: "21 px", value: 21 },
+        { label: "22 px", value: 22 },
+        { label: "23 px", value: 23 },
+        { label: "24 px", value: 24 },
+        { label: "25 px", value: 25 },
+        { label: "26 px", value: 26 },
+        { label: "27 px", value: 27 },
+        { label: "28 px", value: 28 },
+        { label: "29 px", value: 29 },
+        { label: "30 px", value: 30 },
+        { label: "31 px", value: 31 },
+        { label: "32 px", value: 32 },
+        { label: "33 px", value: 33 },
+        { label: "34 px", value: 34 },
+        { label: "35 px", value: 35 },
+        { label: "36 px", value: 36 },
+      ],
     },
     {
       property: "zen.workspace.bgalazka.look.compact_tabbar",
@@ -3132,7 +3400,7 @@
       property: "zen.workspace.bgalazka.panel_black_steps",
       label: "Black backing cycle levels (comma separated)",
       type: "input",
-      defaultValue: "0,25,50,75,100",
+      defaultValue: "0,1,5,10,20,30,40,50,60,70,80,90,100",
     },
   ];
   const Constants = {
@@ -7567,6 +7835,18 @@
       TABBAR_ROW_HEIGHT: ctx.EXT_PREFS.TABBAR_ROW_HEIGHT,
       TABBAR_ROW_GAP: ctx.EXT_PREFS.TABBAR_ROW_GAP,
       TABBAR_ICON_GAP: ctx.EXT_PREFS.TABBAR_ICON_GAP,
+      DENSITY_ICONS: "zen.workspace.bgalazka.look.density_icons",
+      DENSITY_NEWTAB: "zen.workspace.bgalazka.look.density_newtab",
+      DENSITY_URLBAR: "zen.workspace.bgalazka.look.density_urlbar",
+      DENSITY_ESSENTIALS: "zen.workspace.bgalazka.look.density_essentials",
+      ESSENTIALS_HEIGHT: "zen.workspace.bgalazka.look.essentials_height",
+      TABBAR_SECTION_GAP: "zen.workspace.bgalazka.look.tabbar_section_gap",
+      FOLDER_ICON_SIZE: "zen.workspace.bgalazka.look.folder_icon_size",
+      WORKSPACE_ICON_SIZE: "zen.workspace.bgalazka.look.workspace_icon_size",
+      WORKSPACE_HEIGHT: "zen.workspace.bgalazka.look.workspace_height",
+      BOTTOM_BAR_HEIGHT: "zen.workspace.bgalazka.look.bottom_bar_height",
+      URLBAR_TOP_GAP: "zen.workspace.bgalazka.look.urlbar_top_gap",
+      NEWTAB_HEIGHT: "zen.workspace.bgalazka.look.newtab_height",
     });
     const LOOK_DEFAULTS = Object.freeze({
       [LOOK_PREFS.STYLE]: "atelier",
@@ -7592,6 +7872,18 @@
       [LOOK_PREFS.TABBAR_ROW_HEIGHT]: 20,
       [LOOK_PREFS.TABBAR_ROW_GAP]: 0,
       [LOOK_PREFS.TABBAR_ICON_GAP]: 4,
+      [LOOK_PREFS.DENSITY_ICONS]: false,
+      [LOOK_PREFS.DENSITY_NEWTAB]: false,
+      [LOOK_PREFS.DENSITY_URLBAR]: false,
+      [LOOK_PREFS.DENSITY_ESSENTIALS]: false,
+      [LOOK_PREFS.ESSENTIALS_HEIGHT]: 32,
+      [LOOK_PREFS.TABBAR_SECTION_GAP]: 2,
+      [LOOK_PREFS.FOLDER_ICON_SIZE]: 20,
+      [LOOK_PREFS.WORKSPACE_ICON_SIZE]: 16,
+      [LOOK_PREFS.WORKSPACE_HEIGHT]: 22,
+      [LOOK_PREFS.BOTTOM_BAR_HEIGHT]: 24,
+      [LOOK_PREFS.URLBAR_TOP_GAP]: 0,
+      [LOOK_PREFS.NEWTAB_HEIGHT]: 20,
       [LOOK_PREFS.VIDEO_RADIUS]: 0,
       [LOOK_PREFS.PANEL_BORDER]: 1,
       [LOOK_PREFS.TOOLBAR_SURFACE]: "#202224",
@@ -7852,6 +8144,14 @@
       [LOOK_PREFS.TABBAR_ROW_HEIGHT]: [18, 36],
       [LOOK_PREFS.TABBAR_ROW_GAP]: [0, 8],
       [LOOK_PREFS.TABBAR_ICON_GAP]: [0, 12],
+      [LOOK_PREFS.ESSENTIALS_HEIGHT]: [20, 64],
+      [LOOK_PREFS.TABBAR_SECTION_GAP]: [0, 20],
+      [LOOK_PREFS.FOLDER_ICON_SIZE]: [12, 28],
+      [LOOK_PREFS.WORKSPACE_ICON_SIZE]: [12, 28],
+      [LOOK_PREFS.WORKSPACE_HEIGHT]: [18, 40],
+      [LOOK_PREFS.BOTTOM_BAR_HEIGHT]: [20, 40],
+      [LOOK_PREFS.URLBAR_TOP_GAP]: [0, 16],
+      [LOOK_PREFS.NEWTAB_HEIGHT]: [18, 36],
       [LOOK_GROUP_PREFS.LABEL_OPACITY]: [0, 100],
       [ctx.BGALAZKA_EXT_PREFS.OPACITY_UNPINNED]: [10, 100],
       [ctx.BGALAZKA_EXT_PREFS.OPACITY_PINNED_FOCUS]: [10, 100],
@@ -7861,6 +8161,17 @@
     });
     const applyLook = () => {
       const root = document.documentElement;
+      for (const [key, attribute] of [
+        ["DENSITY_ICONS", "bgalazka-density-icons"],
+        ["DENSITY_NEWTAB", "bgalazka-density-newtab"],
+        ["DENSITY_URLBAR", "bgalazka-density-urlbar"],
+        ["DENSITY_ESSENTIALS", "bgalazka-density-essentials"],
+      ]) {
+        root.setAttribute(
+          attribute,
+          ctx.getPref(LOOK_PREFS[key], false) === true ? "true" : "false",
+        );
+      }
       for (const [key, attribute] of [
         ["STYLE", "bgalazka-look"],
         ["SPACING", "bgalazka-look-spacing"],
@@ -7900,6 +8211,14 @@
         "TABBAR_ROW_HEIGHT",
         "TABBAR_ROW_GAP",
         "TABBAR_ICON_GAP",
+        "ESSENTIALS_HEIGHT",
+        "TABBAR_SECTION_GAP",
+        "FOLDER_ICON_SIZE",
+        "WORKSPACE_ICON_SIZE",
+        "WORKSPACE_HEIGHT",
+        "BOTTOM_BAR_HEIGHT",
+        "URLBAR_TOP_GAP",
+        "NEWTAB_HEIGHT",
         "SURFACE_OPACITY",
         "RAISED_OPACITY",
         "TOOLBAR_OPACITY",
@@ -9204,7 +9523,7 @@
 
         const tHideUnattached = createToggleRow(
           "Hide Unattached App Controls",
-          "Hide standalone app buttons, Add App, and the three-dot utility controls; tab-attached panel launchers remain available",
+          "Hide the standalone app area when this workspace has no apps; show it when an app is available, including one released from a tab",
           ctx.BGALAZKA_EXT_PREFS.HIDE_UNATTACHED_APP_CONTROLS,
           "bgalazka-hide-unattached-app-controls",
           false,
@@ -9610,6 +9929,10 @@
           ctx.BGALAZKA_EXT_PREFS.ADDON_TAB_ID_BRIDGE,
           ctx.BGALAZKA_EXT_PREFS.SHOW_ADDON_HOST_FOLDER,
           ctx.EXT_PREFS.TABBAR_COMPACT,
+          LOOK_PREFS.DENSITY_ICONS,
+          LOOK_PREFS.DENSITY_NEWTAB,
+          LOOK_PREFS.DENSITY_URLBAR,
+          LOOK_PREFS.DENSITY_ESSENTIALS,
           ctx.EXT_PREFS.RSS_HIDE_EMPTY,
           ctx.EXT_PREFS.RSS_COMPACT_HEADERS,
         ]);
@@ -9878,7 +10201,15 @@
           if (
             key !== LOOK_PREFS.TABBAR_ROW_HEIGHT &&
             key !== LOOK_PREFS.TABBAR_ROW_GAP &&
-            key !== LOOK_PREFS.TABBAR_ICON_GAP
+            key !== LOOK_PREFS.TABBAR_ICON_GAP &&
+            key !== LOOK_PREFS.ESSENTIALS_HEIGHT &&
+            key !== LOOK_PREFS.TABBAR_SECTION_GAP &&
+            key !== LOOK_PREFS.FOLDER_ICON_SIZE &&
+            key !== LOOK_PREFS.WORKSPACE_ICON_SIZE &&
+            key !== LOOK_PREFS.WORKSPACE_HEIGHT &&
+            key !== LOOK_PREFS.BOTTOM_BAR_HEIGHT &&
+            key !== LOOK_PREFS.URLBAR_TOP_GAP &&
+            key !== LOOK_PREFS.NEWTAB_HEIGHT
           )
             control.input.addEventListener("input", () =>
               ensureCustomLook(key),
@@ -9942,7 +10273,19 @@
                 key === LOOK_PREFS.TABBAR_COMPACT ||
                 key === LOOK_PREFS.TABBAR_ROW_HEIGHT ||
                 key === LOOK_PREFS.TABBAR_ROW_GAP ||
-                key === LOOK_PREFS.TABBAR_ICON_GAP
+                key === LOOK_PREFS.TABBAR_ICON_GAP ||
+                key === LOOK_PREFS.DENSITY_ICONS ||
+                key === LOOK_PREFS.DENSITY_NEWTAB ||
+                key === LOOK_PREFS.DENSITY_URLBAR ||
+                key === LOOK_PREFS.DENSITY_ESSENTIALS ||
+                key === LOOK_PREFS.ESSENTIALS_HEIGHT ||
+                key === LOOK_PREFS.TABBAR_SECTION_GAP ||
+                key === LOOK_PREFS.FOLDER_ICON_SIZE ||
+                key === LOOK_PREFS.WORKSPACE_ICON_SIZE ||
+                key === LOOK_PREFS.WORKSPACE_HEIGHT ||
+                key === LOOK_PREFS.BOTTOM_BAR_HEIGHT ||
+                key === LOOK_PREFS.URLBAR_TOP_GAP ||
+                key === LOOK_PREFS.NEWTAB_HEIGHT
               )
                 continue;
               if (
@@ -10099,6 +10442,106 @@
           LOOK_PREFS.TABBAR_ICON_GAP,
           0,
           12,
+          " px",
+        );
+        for (const [label, description, key, attribute] of [
+          [
+            "Compact sidebar controls",
+            "Use 16 px toolbar and Essentials icons. Folder and workspace sizes have separate sliders below.",
+            LOOK_PREFS.DENSITY_ICONS,
+            "bgalazka-density-icons",
+          ],
+          [
+            "Compact New Tab button",
+            "Use the New Tab height slider below with tighter padding.",
+            LOOK_PREFS.DENSITY_NEWTAB,
+            "bgalazka-density-newtab",
+          ],
+          [
+            "Compact address bar",
+            "Fit the idle address bar to its text with minimal padding. The expanded address field keeps its normal layout.",
+            LOOK_PREFS.DENSITY_URLBAR,
+            "bgalazka-density-urlbar",
+          ],
+          [
+            "Custom Essentials height",
+            "Enable the Essentials tile height slider below.",
+            LOOK_PREFS.DENSITY_ESSENTIALS,
+            "bgalazka-density-essentials",
+          ],
+        ]) {
+          const control = createToggleRow(
+            label,
+            description,
+            key,
+            attribute,
+            false,
+          );
+          lookCategory.subContent.append(control.row);
+          panel._toggles.push({ input: control.input, pref: key, def: false });
+        }
+        addLookSlider(
+          "Essentials height",
+          "Tile height in pixels when Custom Essentials height is on",
+          LOOK_PREFS.ESSENTIALS_HEIGHT,
+          20,
+          64,
+          " px",
+        );
+        addLookSlider(
+          "Pinned to normal tabs spacing",
+          "Extra space on each side of the divider when Compact tabs and folders is on; Clear stays clickable",
+          LOOK_PREFS.TABBAR_SECTION_GAP,
+          0,
+          20,
+          " px",
+        );
+        addLookSlider(
+          "Folder icon size",
+          "Folder and live-folder icons when Compact sidebar controls is on",
+          LOOK_PREFS.FOLDER_ICON_SIZE,
+          12,
+          28,
+          " px",
+        );
+        addLookSlider(
+          "Workspace icon size",
+          "Workspace indicator icon when Compact sidebar controls is on",
+          LOOK_PREFS.WORKSPACE_ICON_SIZE,
+          12,
+          28,
+          " px",
+        );
+        addLookSlider(
+          "Workspace indicator height",
+          "Minimum height of the workspace name row when Compact sidebar controls is on",
+          LOOK_PREFS.WORKSPACE_HEIGHT,
+          18,
+          40,
+          " px",
+        );
+        addLookSlider(
+          "Bottom bar height",
+          "Bottom toolbar height when Compact sidebar controls is on",
+          LOOK_PREFS.BOTTOM_BAR_HEIGHT,
+          20,
+          40,
+          " px",
+        );
+        addLookSlider(
+          "Space above address bar",
+          "Spacing below the top buttons when Compact address bar is on",
+          LOOK_PREFS.URLBAR_TOP_GAP,
+          0,
+          16,
+          " px",
+        );
+        addLookSlider(
+          "New Tab button height",
+          "Row height when Compact New Tab button is on",
+          LOOK_PREFS.NEWTAB_HEIGHT,
+          18,
+          36,
           " px",
         );
         addLookHeading("Shape & depth");
