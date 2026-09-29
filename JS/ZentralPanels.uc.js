@@ -3641,6 +3641,192 @@
 
       window.ZentralRuntime.runPart("secondary-views");
 
+      // Startup opening is independent of each app's background preload flag.
+      const startupPanelPref = "zen.workspace.bgalazka.open_at_startup";
+      const readStartupPanel = () => {
+        try {
+          const value = JSON.parse(getPref(startupPanelPref, "null"));
+          return value &&
+            typeof value.id === "string" &&
+            ["single", "triple"].includes(value.mode)
+            ? value
+            : null;
+        } catch (_) {
+          return null;
+        }
+      };
+      const startupApp = (id) => {
+        const essential = ctx.essentialPanels.get(id);
+        if (essential?.tab.isConnected) return essential.app;
+        try {
+          const saved = JSON.parse(
+            getPref("zen.workspace.apps.sidebar.apps", "[]"),
+          );
+          return Array.isArray(saved)
+            ? saved.find((app) => app.id === id)
+            : null;
+        } catch (_) {
+          return null;
+        }
+      };
+      const startupAutohideAvailable = () =>
+        getPref(BGALAZKA_EXT_PREFS.OPPOSITE_DOCKING, false) === true &&
+        getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) === true &&
+        !window.Zentral?.Apps?.isPlacementVerticalBar?.();
+      const onStartupMenu = (event) => {
+        const popup = event.target;
+        if (popup.id !== "zen-apps-sidebar-tile-context") return;
+        const preload = popup.querySelector("#zen-apps-sidebar-preload-item");
+        if (!preload) return;
+        let menu = popup.querySelector("#zen-apps-sidebar-open-startup-menu");
+        if (!menu) {
+          menu = document.createXULElement("menu");
+          menu.id = "zen-apps-sidebar-open-startup-menu";
+          menu.setAttribute("label", "Open at Startup");
+          const choices = document.createXULElement("menupopup");
+          choices.id = "zen-apps-sidebar-open-startup-popup";
+          for (const [mode, label] of [
+            ["off", "Off"],
+            ["single", "This Panel (Autohide)"],
+            ["triple", "Linked Triple View (Autohide)"],
+          ]) {
+            const item = document.createXULElement("menuitem");
+            item.dataset.startupMode = mode;
+            item.setAttribute("label", label);
+            item.setAttribute("type", "radio");
+            item.addEventListener("command", () => {
+              const id = popup.dataset.activeAppId;
+              if (!id) return;
+              if (mode === "off") {
+                if (readStartupPanel()?.id === id)
+                  setPref(startupPanelPref, "null");
+              } else {
+                if (mode === "triple" && !ctx.linkedPairFor(id)) return;
+                setPref(startupPanelPref, JSON.stringify({ id, mode }));
+              }
+            });
+            choices.appendChild(item);
+          }
+          const requirement = document.createXULElement("menuitem");
+          requirement.id = "zen-apps-sidebar-open-startup-requirement";
+          requirement.setAttribute(
+            "label",
+            "Requires Autohide in Opposite-Side Docking mode",
+          );
+          requirement.setAttribute("disabled", "true");
+          choices.appendChild(requirement);
+          menu.appendChild(choices);
+          preload.insertAdjacentElement("afterend", menu);
+        }
+        const id = popup.dataset.activeAppId;
+        menu.hidden = !id;
+        if (!id) return;
+        const autohideReady = startupAutohideAvailable();
+        menu.querySelector(
+          "#zen-apps-sidebar-open-startup-requirement",
+        ).hidden = autohideReady;
+        const selected = readStartupPanel();
+        for (const item of menu.querySelectorAll(
+          "menuitem[data-startup-mode]",
+        )) {
+          const mode = item.dataset.startupMode;
+          const checked =
+            mode === "off"
+              ? !selected || selected.id !== id
+              : selected?.id === id && selected.mode === mode;
+          if (checked) item.setAttribute("checked", "true");
+          else item.removeAttribute("checked");
+          const unavailable =
+            mode !== "off" &&
+            (!autohideReady ||
+              (mode === "triple" &&
+                (!ctx.linkedPairFor(id) || !ctx.openStartupSinglePanel)));
+          item.disabled = !!unavailable;
+          if (unavailable) item.setAttribute("disabled", "true");
+          else item.removeAttribute("disabled");
+          if (unavailable)
+            item.setAttribute(
+              "tooltiptext",
+              !autohideReady
+                ? "Enable Autohide and Opposite-Side Docking in Zentral Settings first"
+                : "Link this panel in Triple View first",
+            );
+          else item.removeAttribute("tooltiptext");
+        }
+      };
+      window.addEventListener("popupshowing", onStartupMenu);
+      registerCleanup(() => {
+        window.removeEventListener("popupshowing", onStartupMenu);
+        document.getElementById("zen-apps-sidebar-open-startup-menu")?.remove();
+      });
+
+      // SessionStore may restore Essential tab identities after panel setup.
+      // A panel opened manually before then takes precedence in this window.
+      if (readStartupPanel()) {
+        let attempts = 0;
+        let startupTimer = null;
+        const openSavedPanel = () => {
+          const selection = readStartupPanel();
+          const apps = window.Zentral?.Apps;
+          const root = document.getElementById("zen-app-panel-root");
+          if (!selection || !apps?.openPanel || root?.hasAttribute("open"))
+            return true;
+          if (!startupAutohideAvailable()) return true;
+          const app = startupApp(selection.id);
+          if (!app) return ++attempts >= 120;
+          if (
+            selection.mode === "triple" &&
+            (!ctx.linkedPairFor(selection.id) || !ctx.openStartupSinglePanel)
+          )
+            return true;
+          try {
+            if (selection.mode === "triple") {
+              // Take the exact launcher path used by a manual tile click. The
+              // linked-pair wrapper then opens both panels in their saved order.
+              const tile = [
+                ...document.querySelectorAll(".zen-app-tile[data-app-id]"),
+              ].find(
+                (node) =>
+                  node.isConnected && node.dataset.appId === selection.id,
+              );
+              if (!tile) return ++attempts >= 120;
+              tile.click();
+              if (
+                document.documentElement.getAttribute(
+                  "bgalazka-triple-view",
+                ) !== "true"
+              )
+                console.warn(
+                  "[Zentral] Startup tile click did not enter Triple View",
+                );
+              setTimeout(onHoverRootLeave, 1200);
+            } else {
+              (ctx.openStartupSinglePanel || apps.openPanel.bind(apps))(app);
+              setTimeout(onHoverRootLeave, 1200);
+            }
+          } catch (error) {
+            console.warn("[Zentral] Could not open startup panel", error);
+          }
+          return true;
+        };
+        const start = setTimeout(
+          () => {
+            if (openSavedPanel()) return;
+            startupTimer = setInterval(() => {
+              if (openSavedPanel()) {
+                clearInterval(startupTimer);
+                startupTimer = null;
+              }
+            }, 500);
+          },
+          readStartupPanel()?.mode === "triple" ? 4000 : 2000,
+        );
+        registerCleanup(() => {
+          clearTimeout(start);
+          if (startupTimer) clearInterval(startupTimer);
+        });
+      }
+
       /* ==========================================================================
        * 6. CLEANUP / UNLOAD
        * ========================================================================== */
