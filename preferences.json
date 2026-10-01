@@ -1,5 +1,11 @@
 [
   {
+    "property": "zen.workspace.zentral.startup.enabled",
+    "label": "Enable Load at Startup in essential and pinned tab right-click menus",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
     "type": "text",
     "label": "**Arc 2.0 Compatibility**",
     "size": "18px"
@@ -7678,6 +7684,12 @@
   {
     "property": "zen.workspace.zentral.modules.rss.enabled",
     "label": "Load RSS folder display",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.startup.enabled",
+    "label": "Load selected-tab startup controller",
     "type": "checkbox",
     "defaultValue": true
   },

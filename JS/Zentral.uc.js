@@ -362,6 +362,13 @@
         "Independent folder styling; normal live preference switches.",
     },
     {
+      id: "startup",
+      name: "Load selected tabs at startup",
+      file: "JS/ZentralStartup.uc.js",
+      description:
+        "Independent tab startup controller; waits for session and workspace restoration. Owns its stylesheet.",
+    },
+    {
       id: "tab-unload",
       name: "Middle-click tab unloading",
       file: "JS/ZentralTabUnload.uc.js",
@@ -460,6 +467,12 @@
     },
   ];
   const SETTINGS_SCHEMA = [
+    {
+      property: "zen.workspace.zentral.startup.enabled",
+      label: "Enable Load at Startup in essential and pinned tab right-click menus",
+      type: "checkbox",
+      defaultValue: false,
+    },
     {
       type: "text",
       label: "**Original Zentral · Arc 2.0 Compatibility**",
@@ -9264,6 +9277,16 @@
           },
         );
         content.appendChild(audioIndicator.row);
+        const tabStartup = createToggleRow(
+          "Load Selected Tabs at Startup",
+          "Adds Load at Startup to essential and pinned tab right-click menus. Choose each tab individually; only existing sleeping tabs are woken.",
+          "zen.workspace.zentral.startup.enabled",
+          null,
+          false,
+          ctx.PREF_ICONS.PIN,
+          () => {},
+        );
+        content.appendChild(tabStartup.row);
         const smartSleep = createToggleRow(
           "Smart Sleep (defer preloads)",
           "Defer configured background panel preloads at startup; opened panels keep running",
