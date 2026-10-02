@@ -166,7 +166,14 @@
 :root[bgalazka-panel-input-shield="true"]
   #zen-app-panel-root[open]:not([data-insta-peek="true"])
   #zen-app-panel-slider
-  > browser {
+  browser {
+  pointer-events: auto !important;
+}
+
+/* The floating Super View is a separate surface outside the main root.
+ * Keep the same opt-in hit-test barrier without intercepting its controls. */
+:root[bgalazka-panel-input-shield="true"] #bgalazka-super-panel,
+:root[bgalazka-panel-input-shield="true"] #bgalazka-super-panel browser {
   pointer-events: auto !important;
 }
 
@@ -530,4 +537,3 @@
   filter: none !important;
   opacity: 1 !important;
 }
-
