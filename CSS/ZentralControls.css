@@ -6,12 +6,16 @@
  * Extension Settings Panel: High-Visibility Controls & Colors
  * -------------------------------------------------------------------------- */
 
-/* Keep the standalone grid and its footer available whenever this workspace
- * has an app, including one promoted from a tab-attached panel. */
+/* Hide empty app launchers when requested. The second bar's footer contains
+ * browser tools and settings that remain useful without any workspace apps. */
 :root[bgalazka-hide-unattached-app-controls="true"]:not(
     [zentral-apps-has-visible-apps]
   )
-  :is(#zen-apps-sidebar-grid, #zentral-apps-vertical-bar-footer) {
+  #zen-apps-sidebar-grid,
+:root[bgalazka-hide-unattached-app-controls="true"]:not(
+    [zentral-apps-has-visible-apps]
+  ):not([zentral-apps-placement="vertical-bar"])
+  #zentral-apps-vertical-bar-footer {
   display: none !important;
 }
 
@@ -511,4 +515,93 @@
 #zen-apps-sidebar-tile-context[data-active-app-id=""]
   #zen-apps-sidebar-mobile-ua-item {
   display: none !important;
+}
+
+/* A pinned Apps Bar already occupies frame space. An autohiding bar overlays
+ * the page, so Dual/Triple View must reserve that extra footprint as well. */
+:root[zentral-apps-placement="vertical-bar"][zentral-apps-autohide="true"][bgalazka-push-page="true"][bgalazka-panel-pinned="true"][bgalazka-panel-side="right"]
+  #tabbrowser-tabbox {
+  margin-right: calc(
+    var(--bgalazka-panel-width, 350px) + 12px +
+      var(--zentral-appsbar-push-extra, 52px)
+  ) !important;
+}
+:root[zentral-apps-placement="vertical-bar"][zentral-apps-autohide="true"][bgalazka-push-page="true"][bgalazka-panel-pinned="true"][bgalazka-panel-side="left"]
+  #tabbrowser-tabbox {
+  margin-left: calc(
+    var(--bgalazka-panel-width, 350px) + 12px +
+      var(--zentral-appsbar-push-extra, 52px)
+  ) !important;
+}
+
+/* Hidden two-bar panels release ALL page space, including the overlaid
+ * Apps Bar reservation. Include the push-state attributes so this beats
+ * both the two-bar push rule and the legacy 6px hidden-panel gutter. */
+:root[zentral-apps-placement="vertical-bar"][bgalazka-hover-panel-hidden][bgalazka-hover-panel-enabled][bgalazka-panel-side]
+  #tabbrowser-tabbox,
+:root[zentral-apps-placement="vertical-bar"][bgalazka-hover-panel-hidden][bgalazka-hover-panel-enabled][bgalazka-push-page="true"][bgalazka-panel-pinned="true"][bgalazka-panel-side]
+  #tabbrowser-tabbox {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* A hidden panel is still logically open. Let the second bar hide when
+ * neither it nor its trigger is hovered, even if an open marker remains. */
+:root[zentral-apps-placement="vertical-bar"][zentral-apps-autohide="true"][bgalazka-hover-panel-hidden][bgalazka-panel-side="right"]
+  #zentral-apps-vertical-bar:not([data-revealed="true"]):not(:hover) {
+  transform: translateX(calc(100% + 16px)) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+:root[zentral-apps-placement="vertical-bar"][zentral-apps-autohide="true"][bgalazka-hover-panel-hidden][bgalazka-panel-side="left"]
+  #zentral-apps-vertical-bar:not([data-revealed="true"]):not(:hover) {
+  transform: translateX(calc(-100% - 16px)) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+/* Autohide in normal docking: release page push completely, just as in
+ * Apps Bar mode. This is inert unless a panel is actually hover-hidden. */
+:root[bgalazka-hover-panel-hidden][bgalazka-hover-panel-enabled]:not(
+    [bgalazka-opposite-docking="true"]
+  )[bgalazka-panel-side]
+  #tabbrowser-tabbox,
+:root[bgalazka-hover-panel-hidden][bgalazka-hover-panel-enabled]:not(
+    [bgalazka-opposite-docking="true"]
+  )[bgalazka-push-page="true"][bgalazka-panel-pinned="true"][bgalazka-panel-side]
+  #tabbrowser-tabbox {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Constrain the settings flex chain so Panels scrolls inside the dialog,
+ * rather than expanding below its clipped body. Use one scroll container. */
+#zentral-settings-modal .zs-dialog > .zs-body {
+  min-height: 0 !important;
+}
+
+#zentral-settings-modal .zs-body > #zs-panel-bgalazka {
+  min-height: 0 !important;
+  height: auto !important;
+  flex: 1 1 0 !important;
+  overflow: hidden !important;
+}
+
+#zentral-settings-modal .zs-body > #zs-panel-bgalazka > .zs-section-content {
+  min-height: 0 !important;
+  flex: 1 1 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+}
+
+#zentral-settings-modal
+  .zs-body
+  > #zs-panel-bgalazka
+  > .zs-section-content
+  > * {
+  flex-shrink: 0 !important;
 }

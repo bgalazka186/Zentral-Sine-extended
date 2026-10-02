@@ -1429,6 +1429,14 @@
           border: none !important;
         }
 
+        :root:not([zentral-apps-placement="vertical-bar"]) .zentral-browser-tool,
+        :root[bgalazka-appsbar-library="false"] #zentral-apps-vb-library-btn,
+        :root:not([bgalazka-appsbar-history="true"]) #zentral-apps-vb-history-btn,
+        :root:not([bgalazka-appsbar-downloads="true"]) #zentral-apps-vb-downloads-btn,
+        :root:not([bgalazka-appsbar-bookmarks="true"]) #zentral-apps-vb-bookmarks-btn {
+          display: none !important;
+        }
+
         /* Mode A: Autohide DISABLED (Pinned / Docked into Frame) */
         :root[zentral-apps-placement="vertical-bar"]:not([zentral-apps-autohide="true"]) #zentral-apps-vertical-bar {
           position: relative !important;
@@ -2228,7 +2236,7 @@
               if (this.isPlacementVerticalBar()) {
                 if (Core.getPref(Constants.Apps.PREF_AUTOHIDE, false) !== true)
                   return;
-                if (this.#state.activeAppId) return; // Keep revealed while panel is open
+                if (this.isAppPanelKeepingAppsRevealed()) return;
 
                 const isRight = this.isVerticalBarOnRight();
                 const triggerDist = 1; // Screen edge proximity (within 1px of bezel)
@@ -2446,6 +2454,55 @@
               footer.id = "zentral-apps-vertical-bar-footer";
             }
 
+            // The native Library contains all three browser collections.
+            // Keep one compact shortcut by default; direct shortcuts are opt-in.
+            for (const [key, label, section, icon] of [
+              [
+                `library`,
+                `Library (History, Downloads, Bookmarks)`,
+                `AllBookmarks`,
+                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3v11M6 3v11M10 3v11M13 3l2 10"/><path d="M1 3h10M1 13h10"/></svg>`,
+              ],
+              [
+                `history`,
+                `History`,
+                `History`,
+                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>`,
+              ],
+              [
+                `downloads`,
+                `Downloads`,
+                `Downloads`,
+                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M4 6l4 4 4-4M2 11v3h12v-3"/></svg>`,
+              ],
+              [
+                `bookmarks`,
+                `Bookmarks`,
+                `AllBookmarks`,
+                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h8v12l-4-3-4 3z"/></svg>`,
+              ],
+            ]) {
+              const id = "zentral-apps-vb-" + key + "-btn";
+              if (footer.querySelector("#" + id)) continue;
+              const button = document.createElement("button");
+              button.id = id;
+              button.type = "button";
+              button.className =
+                "zen-app-tile zen-app-vb-footer-btn zentral-browser-tool";
+              button.title = label;
+              button.setAttribute("aria-label", label);
+              button.appendChild(this.#createSVG(icon));
+              button.addEventListener("mousedown", (event) => {
+                if (event.button === 0) event.stopPropagation();
+              });
+              button.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                this.openBrowserLibrary(section);
+              });
+              footer.appendChild(button);
+            }
+
             let autohideBtn = footer.querySelector(
               "#zentral-apps-vb-autohide-btn",
             );
@@ -2634,6 +2691,43 @@
           }
         }
 
+        /** Opens or focuses the browser's native Library collection. */
+        openBrowserLibrary(section = "AllBookmarks") {
+          if (!["AllBookmarks", "History", "Downloads"].includes(section))
+            return false;
+          try {
+            if (
+              typeof window.PlacesCommandHook?.showPlacesOrganizer ===
+              "function"
+            ) {
+              window.PlacesCommandHook.showPlacesOrganizer(section);
+            } else {
+              const organizer =
+                Services.wm.getMostRecentWindow("Places:Organizer");
+              if (organizer && !organizer.closed) {
+                organizer.PlacesOrganizer.selectLeftPaneContainerByHierarchy(
+                  section,
+                );
+                organizer.focus();
+              } else {
+                window.openDialog(
+                  "chrome://browser/content/places/places.xhtml",
+                  "",
+                  "chrome,toolbar=yes,dialog=no,resizable",
+                  section,
+                );
+              }
+            }
+            return true;
+          } catch (error) {
+            console.warn(
+              "[ZentralApps] Could not open browser Library:",
+              error,
+            );
+            return false;
+          }
+        }
+
         /**
          * Updates documentElement and trigger state based on autohide preference.
          */
@@ -2785,6 +2879,33 @@
          * Sets whether the autohide apps grid is currently revealed.
          * @param {boolean} hovered - Whether cursor is over trigger or grid.
          */
+        // An open but hover-hidden panel must not pin the Apps Bar open.
+        // Sidebar mode keeps its original active-app rule.
+        isAppPanelKeepingAppsRevealed() {
+          return (
+            !!this.#state.activeAppId &&
+            !(
+              this.isPlacementVerticalBar() &&
+              document.documentElement.hasAttribute(
+                "bgalazka-hover-panel-hidden",
+              )
+            )
+          );
+        }
+
+        syncPanelAutohideVisibility() {
+          if (
+            !this.isPlacementVerticalBar() ||
+            document.documentElement.getAttribute("zentral-apps-autohide") !==
+              "true"
+          )
+            return;
+          this.setAutohideHovered(
+            this.isAppPanelKeepingAppsRevealed() ||
+              !!this.#dom.verticalBar?.matches(":hover"),
+          );
+        }
+
         setAutohideHovered(hovered) {
           this.cancelAutohideReveal();
           if (this.#state.autohideCollapseTimer) {
@@ -2794,7 +2915,7 @@
           if (this.#dom.grid) {
             if (hovered) {
               this.#dom.grid.setAttribute("data-revealed", "true");
-            } else if (!this.#state.activeAppId) {
+            } else if (!this.isAppPanelKeepingAppsRevealed()) {
               this.#dom.grid.removeAttribute("data-revealed");
             }
           }
@@ -2802,7 +2923,7 @@
             if (hovered) {
               this.updateVerticalBarBounds();
               this.#dom.verticalBar.setAttribute("data-revealed", "true");
-            } else if (!this.#state.activeAppId) {
+            } else if (!this.isAppPanelKeepingAppsRevealed()) {
               this.#dom.verticalBar.removeAttribute("data-revealed");
             }
           }
@@ -2813,12 +2934,21 @@
          * @param {number} [delay=250] - Delay in milliseconds.
          */
         scheduleAutohideCollapse(delay = 250) {
+          // Mousemove may request collapse every frame. For a hover-hidden
+          // two-bar panel, keep the first deadline instead of postponing it
+          // until the pointer stops moving. Sidebar timing stays unchanged.
+          if (
+            this.isPlacementVerticalBar() &&
+            !this.isAppPanelKeepingAppsRevealed() &&
+            this.#state.autohideCollapseTimer
+          )
+            return;
           this.cancelAutohideReveal();
           if (this.#state.autohideCollapseTimer)
             clearTimeout(this.#state.autohideCollapseTimer);
           this.#state.autohideCollapseTimer = setTimeout(() => {
             this.#state.autohideCollapseTimer = null;
-            if (!this.#state.activeAppId) {
+            if (!this.isAppPanelKeepingAppsRevealed()) {
               this.setAutohideHovered(false);
             }
           }, delay);
@@ -3491,7 +3621,11 @@
             this.#dom.root.style.pointerEvents = "";
           }
           this.#state.activeAppId = app.id;
-          this.#state.isPinned = false;
+          // Pin synchronously, before the open animation or outside-click
+          // listener can run. Startup and every launcher use this same path.
+          this.#state.isPinned =
+            Core.getPref("zen.workspace.bgalazka.hover_reveal_panel", false) ===
+            true;
           this.#state.isExpanded = false;
           document.documentElement.setAttribute(
             "zentral-app-panel-open",
@@ -3499,8 +3633,15 @@
           );
           this.setAutohideHovered(true);
           this.#state.preExpandWidth = null;
-          if (this.#dom.pinBtn)
-            this.#dom.pinBtn.setAttribute("data-pinned", "false");
+          if (this.#dom.pinBtn) {
+            this.#dom.pinBtn.setAttribute(
+              "data-pinned",
+              this.#state.isPinned ? "true" : "false",
+            );
+            this.#dom.pinBtn.title = this.#state.isPinned
+              ? "Unpin panel"
+              : "Pin panel";
+          }
           if (this.#dom.expandBtn) {
             this.#dom.expandBtn.title = "Expand panel";
             this.#dom.expandBtn.replaceChildren(
@@ -3872,11 +4013,14 @@
               btn.appendChild(badge);
             }
             if (notifCount) {
-              badge.textContent = notifCount > 99 ? "99+" : notifCount;
-              badge.removeAttribute("data-dot");
+              const text = notifCount > 99 ? "99+" : String(notifCount);
+              if (badge.textContent !== text) badge.textContent = text;
+              if (badge.hasAttribute("data-dot"))
+                badge.removeAttribute("data-dot");
             } else {
-              badge.textContent = "";
-              badge.setAttribute("data-dot", "true");
+              if (badge.textContent !== "") badge.textContent = "";
+              if (badge.getAttribute("data-dot") !== "true")
+                badge.setAttribute("data-dot", "true");
             }
           } else {
             if (badge) badge.remove();
@@ -3886,9 +4030,12 @@
         syncAllAppBadges() {
           if (!this.#state.appBrowsers || this.#state.appBrowsers.size === 0)
             return;
+          const appsById = new Map();
+          for (const app of this.#state.apps)
+            if (!appsById.has(app.id)) appsById.set(app.id, app);
           for (const [appId, browser] of this.#state.appBrowsers.entries()) {
             if (!browser || !browser.isConnected) continue;
-            const app = this.#state.apps.find((a) => a.id === appId);
+            const app = appsById.get(appId);
             if (!app) continue;
 
             let title = "";
@@ -4086,6 +4233,7 @@
             "titlebar-buttonbox-container",
             "zen-appcontent-wrapper",
             "tabbrowser-tabbox",
+            "zentral-apps-vertical-bar",
             "tabbrowser-tabpanels",
             "appcontent",
           ];
@@ -4200,7 +4348,56 @@
           }
         }
 
+        // Apps Bar panels share the space between BOTH bars. Never measure the
+        // pushed tabbox here: its margin depends on the panel width itself.
+        getAppsBarPanelBounds() {
+          const gap = 12;
+          const onRight = this.isVerticalBarOnRight();
+          const bar = this.#dom.verticalBar;
+          const style = bar ? window.getComputedStyle(bar) : null;
+          const autohide =
+            document.documentElement.getAttribute("zentral-apps-autohide") ===
+            "true";
+          // Autohide translates the bar offscreen. Use its untransformed width
+          // and CSS inset so revealing it never moves an already-open panel.
+          let barInset = 0;
+          if (autohide) {
+            const inset = parseFloat(onRight ? style?.right : style?.left);
+            barInset =
+              (bar?.offsetWidth || 44) +
+              (Number.isFinite(inset) ? Math.max(0, inset) : 8);
+          } else if (bar) {
+            const rect = bar.getBoundingClientRect();
+            barInset = onRight ? window.innerWidth - rect.left : rect.right;
+          }
+          if (!Number.isFinite(barInset) || barInset <= 0) barInset = 44;
+          const sidebar =
+            document.getElementById("sidebar-box") ||
+            document.getElementById("sidebar-container") ||
+            document.getElementById("vertical-tabs") ||
+            gBrowser?.tabContainer;
+          const rect = sidebar?.getBoundingClientRect();
+          let left = gap;
+          let right = window.innerWidth - gap;
+          if (onRight) {
+            right -= barInset;
+            if (rect?.width > 0) left = Math.max(left, rect.right + gap);
+          } else {
+            left += barInset;
+            if (rect?.width > 0) right = Math.min(right, rect.left - gap);
+          }
+          return { left, right, barInset, autohide };
+        }
+
+        getAppsBarPanelMaxWidth() {
+          const { left, right } = this.getAppsBarPanelBounds();
+          // Keep the outward-growing pill reachable beside the native sidebar.
+          return Math.max(1, Math.floor(right - left - 44));
+        }
+
         updateWidthVar(px) {
+          if (this.isPlacementVerticalBar())
+            px = Math.max(1, Math.min(px, this.getAppsBarPanelMaxWidth()));
           if (this.#state.activeAppId && !this.#state.isExpanded) {
             const app = this.#state.apps.find(
               (a) => a.id === this.#state.activeAppId,
@@ -4246,18 +4443,49 @@
 
           if (this.isPlacementVerticalBar()) {
             const isVbRight = this.isVerticalBarOnRight();
-            const vbOffset = 44 + sideGap;
+            const bounds = this.getAppsBarPanelBounds();
+            // These properties are consumed only by Apps Bar CSS overrides.
+            root.style.setProperty(
+              "--zentral-appsbar-panel-inset",
+              bounds.barInset + gap + "px",
+            );
+            root.style.setProperty(
+              "--zentral-appsbar-edge-inset",
+              bounds.barInset + "px",
+            );
+            document.documentElement.style.setProperty(
+              "--zentral-appsbar-push-extra",
+              (bounds.autohide ? bounds.barInset : 0) + "px",
+            );
+            if (panelWidth > this.getAppsBarPanelMaxWidth())
+              this.updateWidthVar(this.getAppsBarPanelMaxWidth());
 
             if (isVbRight) {
-              targetRight = vbOffset;
+              targetRight = window.innerWidth - bounds.right;
               panelRight = window.innerWidth - targetRight;
               panelLeft = panelRight - panelWidth;
             } else {
-              targetLeft = vbOffset;
+              targetLeft = bounds.left;
               panelLeft = targetLeft;
               panelRight = panelLeft + panelWidth;
             }
           } else {
+            if (
+              document.documentElement.getAttribute(
+                "bgalazka-edge-attached-panels",
+              ) === "true" &&
+              document.documentElement.getAttribute(
+                "bgalazka-opposite-docking",
+              ) !== "true"
+            ) {
+              const inset = this.isPanelAttachedToRight()
+                ? window.innerWidth - sidebarRect.left
+                : sidebarRect.right;
+              root.style.setProperty(
+                "--zentral-sidebar-edge-inset",
+                Math.max(0, inset) + "px",
+              );
+            }
             if (this.isPanelAttachedToRight()) {
               targetRight = Math.max(
                 gap,
@@ -4669,10 +4897,7 @@
             const gap = 12;
             let fullWidth = window.innerWidth - gap * 2;
             if (this.isPlacementVerticalBar()) {
-              const vb = this.#dom.verticalBar;
-              const vbRect = vb ? vb.getBoundingClientRect() : null;
-              const vbWidth = vbRect && vbRect.width > 0 ? vbRect.width : 44;
-              fullWidth = window.innerWidth - vbWidth - gap * 2;
+              fullWidth = this.getAppsBarPanelMaxWidth();
             } else if (gBrowser?.tabContainer) {
               const tcRect = gBrowser.tabContainer.getBoundingClientRect();
               if (this.isPanelAttachedToRight()) {
@@ -4689,7 +4914,8 @@
                 fullWidth = window.innerWidth - targetLeft - gap;
               }
             }
-            fullWidth = Math.max(Constants.Apps.MIN_WIDTH_PX, fullWidth);
+            if (!this.isPlacementVerticalBar())
+              fullWidth = Math.max(Constants.Apps.MIN_WIDTH_PX, fullWidth);
 
             this.#state.isExpanded = true;
             this.updateWidthVar(fullWidth);

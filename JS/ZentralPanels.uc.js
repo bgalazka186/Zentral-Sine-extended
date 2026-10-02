@@ -199,6 +199,27 @@
 
       const ATTR_MAP = [
         {
+          pref: "zen.workspace.bgalazka.appsbar_library",
+          attr: "bgalazka-appsbar-library",
+          defaultVal: true,
+        },
+        {
+          pref: "zen.workspace.bgalazka.appsbar_history",
+          attr: "bgalazka-appsbar-history",
+          defaultVal: false,
+        },
+        {
+          pref: "zen.workspace.bgalazka.appsbar_downloads",
+          attr: "bgalazka-appsbar-downloads",
+          defaultVal: false,
+        },
+        {
+          pref: "zen.workspace.bgalazka.appsbar_bookmarks",
+          attr: "bgalazka-appsbar-bookmarks",
+          defaultVal: false,
+        },
+
+        {
           pref: EXT_PREFS.TRANSLUCENCY,
           attr: "bgalazka-translucency",
           defaultVal: false,
@@ -269,6 +290,7 @@
       // linked pairs, shortcuts, private URLs, panel coordinates and viewport
       // dimensions out of this table. Existing saved preferences always win.
       const PROFILE_DEFAULTS = Object.freeze({
+        "zen.workspace.bgalazka.appsbar_library": true,
         [EXT_PREFS.TRANSLUCENCY]: true,
         [EXT_PREFS.OPPOSITE_DOCKING]: true,
         [EXT_PREFS.TAB_ISOLATION]: true,
@@ -369,6 +391,9 @@
       }
 
       function computeOppositeDockingSafeMaxWidth() {
+        const apps = window.Zentral?.Apps;
+        if (apps?.isPlacementVerticalBar?.())
+          return apps.getAppsBarPanelMaxWidth();
         const gap = 12; // must match the gap our positionPanel() override uses
         const sidebarEl =
           document.getElementById("sidebar-box") ||
@@ -653,7 +678,12 @@
               (root.style.top !== oldTop || root.style.bottom !== oldBottom)
             )
               ctx.applyVerticalResizeExtras(root);
-            if (root) root._bgalazkaLastSide = undefined;
+            if (root) {
+              const side = root.getAttribute("data-panel-side");
+              if (root._bgalazkaLastSide !== side)
+                ctx.applyHorizontalPanelOffset(root);
+              root._bgalazkaLastSide = side;
+            }
             return;
           }
           if (!root) return;
@@ -736,7 +766,12 @@
         appsInstance.openPanel = function (app) {
           if (origOpenPanel) origOpenPanel(app);
           const openedRoot = document.getElementById("zen-app-panel-root");
-          openedRoot?.removeAttribute("data-pinned");
+          const openedPin = document.querySelector(
+            "#zen-app-panel-pill .zen-app-btn[data-pinned]",
+          );
+          if (openedPin?.getAttribute("data-pinned") === "true")
+            openedRoot?.setAttribute("data-pinned", "true");
+          else openedRoot?.removeAttribute("data-pinned");
           ctx.applyVerticalResizeExtras(openedRoot);
           ctx.applyHorizontalPanelOffset(openedRoot);
 
@@ -746,8 +781,8 @@
           // without the user ever touching expand or the resize strip. Clamp
           // it down here too, same helper as toggleExpand/onDrag above.
           if (
-            getPref(EXT_PREFS.OPPOSITE_DOCKING, false) &&
-            !this.isPlacementVerticalBar?.()
+            getPref(EXT_PREFS.OPPOSITE_DOCKING, false) ||
+            this.isPlacementVerticalBar?.()
           ) {
             const root = document.getElementById("zen-app-panel-root");
             const safeMax = computeOppositeDockingSafeMaxWidth();
@@ -860,8 +895,8 @@
         appsInstance.toggleExpand = function () {
           if (origToggleExpand) origToggleExpand();
           if (
-            !getPref(EXT_PREFS.OPPOSITE_DOCKING, false) ||
-            this.isPlacementVerticalBar?.()
+            !getPref(EXT_PREFS.OPPOSITE_DOCKING, false) &&
+            !this.isPlacementVerticalBar?.()
           )
             return;
 
@@ -909,8 +944,8 @@
           // grabber. Flipping it again here double-inverts the native drag.
           if (origOnDrag) origOnDrag(e);
           if (
-            !getPref(EXT_PREFS.OPPOSITE_DOCKING, false) ||
-            this.isPlacementVerticalBar?.()
+            !getPref(EXT_PREFS.OPPOSITE_DOCKING, false) &&
+            !this.isPlacementVerticalBar?.()
           )
             return;
 
@@ -964,6 +999,9 @@
         let wrappedHandleOutsideClick = null;
         if (typeof origHandleOutsideClick === "function") {
           wrappedHandleOutsideClick = function (e) {
+            // Reassert native pin state before an outside click can close a
+            // hover-hidden panel, even if another feature just reset its pin.
+            ensureAutohidePanelPinned();
             // A split view stays open while the user interacts with the webpage.
             // Triple View must still do this when its page-push option is off.
             const splitViewKeepsPanelOpen =
@@ -1058,6 +1096,11 @@
        * 4. SETTINGS UI INJECTION (DOM-SAFE XHTML BUILDER)
        * ========================================================================== */
       const BGALAZKA_EXT_PREFS = {
+        APPSBAR_LIBRARY: "zen.workspace.bgalazka.appsbar_library",
+        APPSBAR_HISTORY: "zen.workspace.bgalazka.appsbar_history",
+        APPSBAR_DOWNLOADS: "zen.workspace.bgalazka.appsbar_downloads",
+        APPSBAR_BOOKMARKS: "zen.workspace.bgalazka.appsbar_bookmarks",
+
         FORCE_PANEL_BLACK: "zen.workspace.bgalazka.force_panel_black",
         PANEL_BLACK_OPACITY: "zen.workspace.bgalazka.panel_black_opacity",
         PANEL_BLACK_STEPS: "zen.workspace.bgalazka.panel_black_steps",
@@ -1793,6 +1836,11 @@
       }
 
       const PREF_ICONS = {
+        LIBRARY: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3v11M6 3v11M10 3v11M13 3l2 10"/><path d="M1 3h10M1 13h10"/></svg>`,
+        HISTORY: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/></svg>`,
+        DOWNLOADS: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M4 6l4 4 4-4M2 11v3h12v-3"/></svg>`,
+        BOOKMARKS: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h8v12l-4-3-4 3z"/></svg>`,
+
         GLASS: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="8.5" height="8.5" rx="2"/><rect x="5.5" y="5.5" width="8.5" height="8.5" rx="2" stroke-dasharray="2 2"/></svg>`,
         DOCK: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2" width="13" height="12" rx="2"/><line x1="10" y1="2" x2="10" y2="14"/></svg>`,
         PUSH: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2" width="7" height="12" rx="1.5"/><rect x="10.5" y="2" width="4" height="12" rx="1" stroke-dasharray="2 2"/></svg>`,
@@ -1843,17 +1891,87 @@
       let hoverContextTimer = null;
       const hoverRevealId = "bgalazka-panel-reveal-edge";
 
-      function hoverPanelAvailable() {
-        return (
-          getPref(BGALAZKA_EXT_PREFS.OPPOSITE_DOCKING, false) === true &&
-          !window.Zentral?.Apps?.isPlacementVerticalBar?.()
+      function ensureAutohidePanelPinned() {
+        if (!getPref("zen.workspace.bgalazka.hover_reveal_panel", false))
+          return;
+        const root = document.getElementById("zen-app-panel-root");
+        const pin = document.querySelector(
+          "#zen-app-panel-pill .zen-app-btn[data-pinned]",
         );
+        if (!root?.hasAttribute("open") || root.hasAttribute("closing") || !pin)
+          return;
+        // Change native state through the real action, not merely its CSS marker.
+        // Turning autohide off leaves this deliberate pin in place.
+        if (pin.getAttribute("data-pinned") !== "true")
+          window.Zentral?.Apps?.togglePin?.();
+      }
+      function hoverPanelAvailable() {
+        return !!window.Zentral?.Apps;
+      }
+      function updateHiddenPanelGeometry(root) {
+        if (
+          !root ||
+          !document.documentElement.hasAttribute("bgalazka-hover-panel-hidden")
+        )
+          return;
+        const side =
+          root.getAttribute("data-panel-side") ||
+          (window.Zentral?.Apps?.isPanelAttachedToRight?.() ? "right" : "left");
+        // offsetLeft/offsetWidth exclude the hide transform. Reading the
+        // animated rectangle here compounds the outset after a layout change.
+        const inset =
+          side === "left"
+            ? root.offsetLeft
+            : window.innerWidth - root.offsetLeft - root.offsetWidth;
+        root.style.setProperty(
+          "--bgalazka-hover-outset",
+          `${Math.max(80, inset + 80)}px`,
+        );
+        document.documentElement.setAttribute("bgalazka-panel-side", side);
       }
       function updateRevealEdgeGeometry() {
         const edge = document.getElementById(hoverRevealId);
         const box = document.getElementById("tabbrowser-tabbox");
         if (!edge || !box) return;
         const rect = box.getBoundingClientRect();
+        const apps = window.Zentral?.Apps;
+        if (apps?.isPlacementVerticalBar?.()) {
+          const bounds = apps.getAppsBarPanelBounds();
+          // When both surfaces hide, return the reveal target to the bezel.
+          // A target left floating inside the page steals clicks there.
+          const barInset =
+            bounds.autohide &&
+            document.documentElement.hasAttribute("bgalazka-hover-panel-hidden")
+              ? 0
+              : bounds.barInset;
+          const onRight = apps.isVerticalBarOnRight();
+          edge.style.left = onRight ? "auto" : barInset + "px";
+          edge.style.right = onRight ? barInset + "px" : "auto";
+        } else {
+          const panel = document.getElementById("zen-app-panel-root");
+          const onRight = panel?.getAttribute("data-panel-side") === "right";
+          const ui = document.documentElement;
+          const atViewportEdge =
+            ui.getAttribute("bgalazka-opposite-docking") === "true";
+          let inset = 0;
+          if (!atViewportEdge) {
+            const sidebar =
+              document.getElementById("sidebar-box") ||
+              document.getElementById("sidebar-container") ||
+              document.getElementById("vertical-tabs") ||
+              window.gBrowser?.tabContainer;
+            const sidebarRect = sidebar?.getBoundingClientRect();
+            if (sidebarRect?.width > 0)
+              inset = onRight
+                ? window.innerWidth - sidebarRect.left
+                : sidebarRect.right;
+          }
+          // Follow the native bar's content-facing edge, including compact or
+          // temporarily collapsed layouts. Never keep a stale opposite-side inset.
+          inset = Math.max(0, Math.min(window.innerWidth - 6, inset));
+          edge.style.left = onRight ? "auto" : inset + "px";
+          edge.style.right = onRight ? inset + "px" : "auto";
+        }
         edge.style.top = `${Math.max(0, rect.top)}px`;
         edge.style.height = `${Math.max(0, Math.min(window.innerHeight, rect.bottom) - Math.max(0, rect.top))}px`;
       }
@@ -1897,24 +2015,29 @@
           root?.hasAttribute("open") &&
           !root.hasAttribute("closing");
         const shouldHide = !!(enabled && hidden);
-        if (
-          shouldHide &&
-          !document.documentElement.hasAttribute("bgalazka-hover-panel-hidden")
-        ) {
-          const side = root.getAttribute("data-panel-side") || "right";
-          const rect = root.getBoundingClientRect();
-          const inset =
-            side === "left" ? rect.left : window.innerWidth - rect.right;
-          root.style.setProperty(
-            "--bgalazka-hover-outset",
-            `${Math.max(80, inset + 80)}px`,
-          );
-          document.documentElement.setAttribute("bgalazka-panel-side", side);
-        }
+        const hiddenChanged =
+          document.documentElement.hasAttribute(
+            "bgalazka-hover-panel-hidden",
+          ) !== shouldHide;
         document.documentElement.toggleAttribute(
           "bgalazka-hover-panel-hidden",
           shouldHide,
         );
+        updateHiddenPanelGeometry(root);
+        const apps = window.Zentral?.Apps;
+        if (
+          hiddenChanged &&
+          (apps?.isPlacementVerticalBar?.() ||
+            document.documentElement.getAttribute(
+              "bgalazka-opposite-docking",
+            ) !== "true")
+        ) {
+          if (apps?.isPlacementVerticalBar?.())
+            apps.syncPanelAutohideVisibility?.();
+          // Closing a hidden panel must release its push reservation now,
+          // rather than briefly restoring it before the deferred close sync.
+          syncPanelPushState();
+        }
         const edge = document.getElementById(hoverRevealId);
         if (edge) {
           edge.hidden = !shouldHide;
@@ -1929,6 +2052,7 @@
         }
       }
       function syncHoverPanelAvailability() {
+        ensureAutohidePanelPinned();
         const available = hoverPanelAvailable();
         const btn = document.getElementById("zen-app-hover-reveal-btn");
         if (btn) {
@@ -1941,10 +2065,8 @@
             getPref(BGALAZKA_EXT_PREFS.HIDE_HOVER_REVEAL_BTN, false);
           btn.disabled = !available && !triple;
           btn.title = triple
-            ? available
-              ? `Click: toggle autohide. Hold: ${pushing ? "stop" : "resume"} pushing the webpage in Triple View.`
-              : `Hover requires Opposite-Side Docking. Hold: ${pushing ? "stop" : "resume"} pushing the webpage in Triple View.`
-            : "Show panel on hover at the opposite edge";
+            ? `Click: toggle autohide. Hold: ${pushing ? "stop" : "resume"} pushing the webpage in Triple View.`
+            : "Show panel on hover at its docked edge";
           btn.setAttribute("aria-label", btn.title);
           btn.setAttribute(
             "data-hold-active",
@@ -1971,6 +2093,54 @@
           setHoverPanelHidden(false);
         }
       }
+      function isAppsBarHoverSurfaceHovered() {
+        if (!window.Zentral?.Apps?.isPlacementVerticalBar?.()) return false;
+        return !!(
+          document
+            .getElementById("zentral-apps-vertical-bar")
+            ?.matches(":hover") ||
+          document
+            .getElementById("zentral-apps-vertical-bar-trigger")
+            ?.matches(":hover")
+        );
+      }
+      function appsBarHoverSurface(event) {
+        if (!window.Zentral?.Apps?.isPlacementVerticalBar?.()) return null;
+        return event.target.closest?.(
+          "#zentral-apps-vertical-bar, #zentral-apps-vertical-bar-trigger",
+        );
+      }
+      const onAppsBarPanelPointerOver = (event) => {
+        if (
+          !appsBarHoverSurface(event) ||
+          !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)
+        )
+          return;
+        const root = document.getElementById("zen-app-panel-root");
+        if (!root?.hasAttribute("open") || root.hasAttribute("closing")) return;
+        clearHoverHide();
+        setHoverPanelHidden(false);
+      };
+      const onAppsBarPanelPointerOut = (event) => {
+        if (
+          !appsBarHoverSurface(event) ||
+          !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)
+        )
+          return;
+        const root = document.getElementById("zen-app-panel-root");
+        if (!root?.hasAttribute("open") || root.hasAttribute("closing")) return;
+        // Moving among bar buttons, its trigger, and the panel is one hover
+        // session. The existing delay also bridges the gutter between them.
+        if (
+          event.relatedTarget?.closest?.(
+            "#zentral-apps-vertical-bar, #zentral-apps-vertical-bar-trigger, #zen-app-panel-root, #bgalazka-panel-reveal-edge",
+          )
+        ) {
+          clearHoverHide();
+          return;
+        }
+        onHoverRootLeave();
+      };
       const onHoverRootEnter = () => clearHoverHide();
       const onHoverRootLeave = () => {
         clearHoverHide();
@@ -1978,7 +2148,8 @@
           !hoverPanelAvailable() ||
           !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) ||
           hoverResizing ||
-          hoverMenuVisible()
+          hoverMenuVisible() ||
+          isAppsBarHoverSurfaceHovered()
         )
           return;
         hoverHideTimer = setTimeout(
@@ -1989,6 +2160,7 @@
             if (
               root?.matches(":hover") ||
               edge?.matches(":hover") ||
+              isAppsBarHoverSurfaceHovered() ||
               hoverResizing ||
               hoverMenuVisible()
             )
@@ -2036,7 +2208,7 @@
           btn.id = "zen-app-hover-reveal-btn";
           btn.type = "button";
           btn.className = "zen-app-btn zen-app-hover-reveal-btn";
-          btn.title = "Show panel on hover at the opposite edge";
+          btn.title = "Show panel on hover at its docked edge";
           btn.setAttribute("aria-label", btn.title);
           btn.setAttribute("aria-pressed", "false");
           btn.appendChild(parseSVG(PREF_ICONS.HOVER_EYE));
@@ -2257,6 +2429,9 @@
       window.addEventListener("popupshowing", onHoverPopupShowing, true);
       window.addEventListener("popuphidden", onHoverPopupHidden, true);
       window.addEventListener("contextmenu", onHoverContextMenu, true);
+      // Delegate so late-created/rebuilt Apps Bars need no listener rebinding.
+      document.addEventListener("pointerover", onAppsBarPanelPointerOver, true);
+      document.addEventListener("pointerout", onAppsBarPanelPointerOut, true);
       document.addEventListener("pointerover", onWebPagePointer, true);
       window.addEventListener("focusout", onHoverPanelFocusOut, true);
       window.addEventListener("focusin", onHoverPanelFocusIn, true);
@@ -2277,6 +2452,16 @@
         );
       }
       registerCleanup(() => {
+        document.removeEventListener(
+          "pointerover",
+          onAppsBarPanelPointerOver,
+          true,
+        );
+        document.removeEventListener(
+          "pointerout",
+          onAppsBarPanelPointerOut,
+          true,
+        );
         document.removeEventListener("pointerover", onWebPagePointer, true);
         window.removeEventListener("focusout", onHoverPanelFocusOut, true);
         window.removeEventListener("focusin", onHoverPanelFocusIn, true);
@@ -2306,6 +2491,7 @@
           "bgalazka-hover-panel-enabled",
         );
         document.documentElement.removeAttribute("bgalazka-hover-panel-hidden");
+        window.Zentral?.Apps?.syncPanelAutohideVisibility?.();
       });
 
       function ensurePillDualViewButton() {
@@ -2448,6 +2634,7 @@
         ctx.applyVerticalResizeExtras(root);
         if (!ctx.hResizeState && !ctx.hPosDragState && !ctx.vPosDragState)
           ctx.applyHorizontalPanelOffset(root);
+        updateHiddenPanelGeometry(root);
         updateRevealEdgeGeometry();
       }
       function schedulePanelModeGeometrySync() {
@@ -3708,6 +3895,37 @@
           syncPanelPushState();
         }, 40);
       };
+      let wasAppsBarLayout = !!window.Zentral?.Apps?.isPlacementVerticalBar?.();
+      const appsBarLayoutObserver = new MutationObserver(() => {
+        const isAppsBar = !!window.Zentral?.Apps?.isPlacementVerticalBar?.();
+        const needsSync =
+          isAppsBar ||
+          wasAppsBarLayout ||
+          getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false);
+        wasAppsBarLayout = isAppsBar;
+        if (!needsSync) return;
+        window.Zentral?.Apps?.positionPanel?.();
+        syncPanelPushState();
+        window.Zentral?.Apps?.syncPanelAutohideVisibility?.();
+        updateHiddenPanelGeometry(
+          document.getElementById("zen-app-panel-root"),
+        );
+        updateRevealEdgeGeometry();
+      });
+      appsBarLayoutObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: [
+          "zentral-apps-placement",
+          "zentral-apps-autohide",
+          "zen-right-side",
+          "zen-sidebar-right",
+          "zen-sidebar-collapsed",
+          "zen-sidebar-expanded",
+          "zen-compact-mode",
+          "bgalazka-edge-attached-panels",
+        ],
+      });
+      registerCleanup(() => appsBarLayoutObserver.disconnect());
       window.addEventListener("click", requestPanelPushSync, true);
       window.addEventListener("mouseup", requestPanelPushSync, true);
       window.addEventListener("resize", requestPanelPushSync, {
@@ -4114,9 +4332,7 @@
         }
       };
       const startupAutohideAvailable = () =>
-        getPref(BGALAZKA_EXT_PREFS.OPPOSITE_DOCKING, false) === true &&
-        getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) === true &&
-        !window.Zentral?.Apps?.isPlacementVerticalBar?.();
+        getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) === true;
       const onStartupMenu = (event) => {
         const popup = event.target;
         if (popup.id !== "zen-apps-sidebar-tile-context") return;
@@ -4155,7 +4371,7 @@
           requirement.id = "zen-apps-sidebar-open-startup-requirement";
           requirement.setAttribute(
             "label",
-            "Requires Autohide in Opposite-Side Docking mode",
+            "Enable panel Autohide to use startup panels",
           );
           requirement.setAttribute("disabled", "true");
           choices.appendChild(requirement);
@@ -4192,7 +4408,7 @@
             item.setAttribute(
               "tooltiptext",
               !autohideReady
-                ? "Enable Autohide and Opposite-Side Docking in Zentral Settings first"
+                ? "Enable panel Autohide in Zentral Settings first"
                 : "Link this panel in Triple View first",
             );
           else item.removeAttribute("tooltiptext");

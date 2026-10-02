@@ -1007,3 +1007,26 @@
     transparent
   ) !important;
 }
+
+/* Normal docking supports the same hide animation as opposite docking.
+ * Follow the panel's physical side; use the outset calculated before transforms. */
+:root[bgalazka-hover-panel-hidden][bgalazka-hover-panel-enabled]:not(
+    [bgalazka-opposite-docking="true"]
+  )
+  #zen-app-panel-root[open][data-panel-side="right"] {
+  transform: translateX(
+    calc(100% + var(--bgalazka-hover-outset, 80px))
+  ) !important;
+  pointer-events: none !important;
+  transition: transform 0.2s ease !important;
+}
+:root[bgalazka-hover-panel-hidden][bgalazka-hover-panel-enabled]:not(
+    [bgalazka-opposite-docking="true"]
+  )
+  #zen-app-panel-root[open][data-panel-side="left"] {
+  transform: translateX(
+    calc(-100% - var(--bgalazka-hover-outset, 80px))
+  ) !important;
+  pointer-events: none !important;
+  transition: transform 0.2s ease !important;
+}

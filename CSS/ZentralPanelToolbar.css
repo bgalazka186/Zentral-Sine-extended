@@ -257,3 +257,27 @@
   bottom: auto;
 }
 
+/* In two-bar mode, edge attachment means the Apps Bar's inner edge. */
+:root[zentral-apps-placement="vertical-bar"][bgalazka-edge-attached-panels="true"]
+  #zen-app-panel-root[data-panel-side="right"] {
+  right: var(--zentral-appsbar-edge-inset, 44px) !important;
+}
+:root[zentral-apps-placement="vertical-bar"][bgalazka-edge-attached-panels="true"]
+  #zen-app-panel-root[data-panel-side="left"] {
+  left: var(--zentral-appsbar-edge-inset, 44px) !important;
+}
+
+/* Normal docking attaches to the native bar's content edge. This avoids
+ * covering the tabbar and leaving a tabbar-sized gap in pushed-page mode. */
+:root[bgalazka-edge-attached-panels="true"]:not(
+    [bgalazka-opposite-docking="true"]
+  ):not([zentral-apps-placement="vertical-bar"])
+  #zen-app-panel-root[data-panel-side="right"] {
+  right: var(--zentral-sidebar-edge-inset, 0px) !important;
+}
+:root[bgalazka-edge-attached-panels="true"]:not(
+    [bgalazka-opposite-docking="true"]
+  ):not([zentral-apps-placement="vertical-bar"])
+  #zen-app-panel-root[data-panel-side="left"] {
+  left: var(--zentral-sidebar-edge-inset, 0px) !important;
+}

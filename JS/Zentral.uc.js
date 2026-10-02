@@ -510,29 +510,30 @@
       property: "zen.workspace.apps.sidebar.apps_per_row",
       label: "Apps Displayed Per Row",
       type: "dropdown",
-      defaultValue: "7",
+      defaultValue: 7,
       options: [
-        { label: "3 Apps", value: "3" },
-        { label: "4 Apps", value: "4" },
-        { label: "5 Apps", value: "5" },
-        { label: "6 Apps", value: "6" },
-        { label: "7 Apps (Default)", value: "7" },
-        { label: "8 Apps", value: "8" },
-        { label: "9 Apps", value: "9" },
-        { label: "10 Apps", value: "10" },
+        { label: "1 App", value: 1 },
+        { label: "3 Apps", value: 3 },
+        { label: "4 Apps", value: 4 },
+        { label: "5 Apps", value: 5 },
+        { label: "6 Apps", value: 6 },
+        { label: "7 Apps (Default)", value: 7 },
+        { label: "8 Apps", value: 8 },
+        { label: "9 Apps", value: 9 },
+        { label: "10 Apps", value: 10 },
       ],
     },
     {
       property: "zen.workspace.apps.sidebar.max_rows",
       label: "Maximum Grid Rows",
       type: "dropdown",
-      defaultValue: "3",
+      defaultValue: 3,
       options: [
-        { label: "1 Row", value: "1" },
-        { label: "2 Rows", value: "2" },
-        { label: "3 Rows (Default)", value: "3" },
-        { label: "4 Rows", value: "4" },
-        { label: "5 Rows", value: "5" },
+        { label: "1 Row", value: 1 },
+        { label: "2 Rows", value: 2 },
+        { label: "3 Rows (Default)", value: 3 },
+        { label: "4 Rows", value: 4 },
+        { label: "5 Rows", value: 5 },
       ],
     },
     {
@@ -540,14 +541,7 @@
       label: "Maximum Apps",
       type: "dropdown",
       defaultValue: 21,
-      options: [
-        { label: "7", value: 7 },
-        { label: "14", value: 14 },
-        { label: "21", value: 21 },
-        { label: "28", value: 28 },
-        { label: "35", value: 35 },
-        { label: "42", value: 42 },
-      ],
+      options: numericOptions(7, 42, 7),
     },
     {
       property: "zen.workspace.apps.sidebar.hide_utility_section",
@@ -619,7 +613,11 @@
       type: "string",
       defaultValue: "Alt+Q",
     },
-    { type: "text", label: "**Original Zentral · Tab Groups**", size: "18px" },
+    {
+      type: "text",
+      label: "**Original Zentral · Tab Groups**",
+      size: "18px",
+    },
     {
       property: "zen.workspace.tabgroups.enabled",
       label: "Enable Enhanced Tab Groups & Color Picker",
@@ -667,7 +665,11 @@
         { label: "100", value: 100 },
       ],
     },
-    { type: "text", label: "**Original Zentral · Diagnostics**", size: "18px" },
+    {
+      type: "text",
+      label: "**Original Zentral · Diagnostics**",
+      size: "18px",
+    },
     {
       type: "text",
       label:
@@ -741,8 +743,33 @@
       defaultValue: true,
     },
     {
+      property: "zen.workspace.bgalazka.appsbar_library",
+      label: "Apps Bar: Show Library Button",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.bgalazka.appsbar_history",
+      label: "Apps Bar: Show History Button",
+      type: "checkbox",
+      defaultValue: false,
+    },
+    {
+      property: "zen.workspace.bgalazka.appsbar_downloads",
+      label: "Apps Bar: Show Downloads Button",
+      type: "checkbox",
+      defaultValue: false,
+    },
+    {
+      property: "zen.workspace.bgalazka.appsbar_bookmarks",
+      label: "Apps Bar: Show Bookmarks Button",
+      type: "checkbox",
+      defaultValue: false,
+    },
+    {
       property: "zen.workspace.bgalazka.hover_reveal_panel",
-      label: "Hide Opposite-Side Panel Until Hover (retains its open app)",
+      label:
+        "Autohide Panel Until Hover (all docking modes; keeps its app pinned)",
       type: "checkbox",
       defaultValue: false,
     },
@@ -939,7 +966,11 @@
         "The whole-panel opacity settings above apply to a single panel. In dual or triple view, the pinned/unpinned opacity filter is ignored so the Look surface opacity settings can make the tab background completely clear.",
       size: "12px",
     },
-    { type: "text", label: "**Bgalazka Extension · Look**", size: "18px" },
+    {
+      type: "text",
+      label: "**Bgalazka Extension · Look**",
+      size: "18px",
+    },
     {
       type: "text",
       label:
@@ -956,7 +987,11 @@
         { label: "Classic — original interface", value: "classic" },
       ],
     },
-    { type: "text", label: "**Palette**", size: "15px" },
+    {
+      type: "text",
+      label: "**Palette**",
+      size: "15px",
+    },
     {
       type: "text",
       label:
@@ -1005,7 +1040,11 @@
       defaultValue: "#a4aaad",
       border: "value",
     },
-    { type: "text", label: "**Surface Opacity**", size: "15px" },
+    {
+      type: "text",
+      label: "**Surface Opacity**",
+      size: "15px",
+    },
     {
       type: "text",
       label:
@@ -1017,1126 +1056,82 @@
       label: "Main panel surface opacity (%)",
       type: "dropdown",
       defaultValue: 100,
-      options: [
-        { label: "0", value: 0 },
-        { label: "1", value: 1 },
-        { label: "2", value: 2 },
-        { label: "3", value: 3 },
-        { label: "4", value: 4 },
-        { label: "5", value: 5 },
-        { label: "6", value: 6 },
-        { label: "7", value: 7 },
-        { label: "8", value: 8 },
-        { label: "9", value: 9 },
-        { label: "10", value: 10 },
-        { label: "11", value: 11 },
-        { label: "12", value: 12 },
-        { label: "13", value: 13 },
-        { label: "14", value: 14 },
-        { label: "15", value: 15 },
-        { label: "16", value: 16 },
-        { label: "17", value: 17 },
-        { label: "18", value: 18 },
-        { label: "19", value: 19 },
-        { label: "20", value: 20 },
-        { label: "21", value: 21 },
-        { label: "22", value: 22 },
-        { label: "23", value: 23 },
-        { label: "24", value: 24 },
-        { label: "25", value: 25 },
-        { label: "26", value: 26 },
-        { label: "27", value: 27 },
-        { label: "28", value: 28 },
-        { label: "29", value: 29 },
-        { label: "30", value: 30 },
-        { label: "31", value: 31 },
-        { label: "32", value: 32 },
-        { label: "33", value: 33 },
-        { label: "34", value: 34 },
-        { label: "35", value: 35 },
-        { label: "36", value: 36 },
-        { label: "37", value: 37 },
-        { label: "38", value: 38 },
-        { label: "39", value: 39 },
-        { label: "40", value: 40 },
-        { label: "41", value: 41 },
-        { label: "42", value: 42 },
-        { label: "43", value: 43 },
-        { label: "44", value: 44 },
-        { label: "45", value: 45 },
-        { label: "46", value: 46 },
-        { label: "47", value: 47 },
-        { label: "48", value: 48 },
-        { label: "49", value: 49 },
-        { label: "50", value: 50 },
-        { label: "51", value: 51 },
-        { label: "52", value: 52 },
-        { label: "53", value: 53 },
-        { label: "54", value: 54 },
-        { label: "55", value: 55 },
-        { label: "56", value: 56 },
-        { label: "57", value: 57 },
-        { label: "58", value: 58 },
-        { label: "59", value: 59 },
-        { label: "60", value: 60 },
-        { label: "61", value: 61 },
-        { label: "62", value: 62 },
-        { label: "63", value: 63 },
-        { label: "64", value: 64 },
-        { label: "65", value: 65 },
-        { label: "66", value: 66 },
-        { label: "67", value: 67 },
-        { label: "68", value: 68 },
-        { label: "69", value: 69 },
-        { label: "70", value: 70 },
-        { label: "71", value: 71 },
-        { label: "72", value: 72 },
-        { label: "73", value: 73 },
-        { label: "74", value: 74 },
-        { label: "75", value: 75 },
-        { label: "76", value: 76 },
-        { label: "77", value: 77 },
-        { label: "78", value: 78 },
-        { label: "79", value: 79 },
-        { label: "80", value: 80 },
-        { label: "81", value: 81 },
-        { label: "82", value: 82 },
-        { label: "83", value: 83 },
-        { label: "84", value: 84 },
-        { label: "85", value: 85 },
-        { label: "86", value: 86 },
-        { label: "87", value: 87 },
-        { label: "88", value: 88 },
-        { label: "89", value: 89 },
-        { label: "90", value: 90 },
-        { label: "91", value: 91 },
-        { label: "92", value: 92 },
-        { label: "93", value: 93 },
-        { label: "94", value: 94 },
-        { label: "95", value: 95 },
-        { label: "96", value: 96 },
-        { label: "97", value: 97 },
-        { label: "98", value: 98 },
-        { label: "99", value: 99 },
-        { label: "100", value: 100 },
-      ],
+      options: numericOptions(0, 100),
     },
     {
       property: "zen.workspace.bgalazka.look.raised_opacity",
       label: "Raised card opacity (%)",
       type: "dropdown",
       defaultValue: 100,
-      options: [
-        { label: "0", value: 0 },
-        { label: "1", value: 1 },
-        { label: "2", value: 2 },
-        { label: "3", value: 3 },
-        { label: "4", value: 4 },
-        { label: "5", value: 5 },
-        { label: "6", value: 6 },
-        { label: "7", value: 7 },
-        { label: "8", value: 8 },
-        { label: "9", value: 9 },
-        { label: "10", value: 10 },
-        { label: "11", value: 11 },
-        { label: "12", value: 12 },
-        { label: "13", value: 13 },
-        { label: "14", value: 14 },
-        { label: "15", value: 15 },
-        { label: "16", value: 16 },
-        { label: "17", value: 17 },
-        { label: "18", value: 18 },
-        { label: "19", value: 19 },
-        { label: "20", value: 20 },
-        { label: "21", value: 21 },
-        { label: "22", value: 22 },
-        { label: "23", value: 23 },
-        { label: "24", value: 24 },
-        { label: "25", value: 25 },
-        { label: "26", value: 26 },
-        { label: "27", value: 27 },
-        { label: "28", value: 28 },
-        { label: "29", value: 29 },
-        { label: "30", value: 30 },
-        { label: "31", value: 31 },
-        { label: "32", value: 32 },
-        { label: "33", value: 33 },
-        { label: "34", value: 34 },
-        { label: "35", value: 35 },
-        { label: "36", value: 36 },
-        { label: "37", value: 37 },
-        { label: "38", value: 38 },
-        { label: "39", value: 39 },
-        { label: "40", value: 40 },
-        { label: "41", value: 41 },
-        { label: "42", value: 42 },
-        { label: "43", value: 43 },
-        { label: "44", value: 44 },
-        { label: "45", value: 45 },
-        { label: "46", value: 46 },
-        { label: "47", value: 47 },
-        { label: "48", value: 48 },
-        { label: "49", value: 49 },
-        { label: "50", value: 50 },
-        { label: "51", value: 51 },
-        { label: "52", value: 52 },
-        { label: "53", value: 53 },
-        { label: "54", value: 54 },
-        { label: "55", value: 55 },
-        { label: "56", value: 56 },
-        { label: "57", value: 57 },
-        { label: "58", value: 58 },
-        { label: "59", value: 59 },
-        { label: "60", value: 60 },
-        { label: "61", value: 61 },
-        { label: "62", value: 62 },
-        { label: "63", value: 63 },
-        { label: "64", value: 64 },
-        { label: "65", value: 65 },
-        { label: "66", value: 66 },
-        { label: "67", value: 67 },
-        { label: "68", value: 68 },
-        { label: "69", value: 69 },
-        { label: "70", value: 70 },
-        { label: "71", value: 71 },
-        { label: "72", value: 72 },
-        { label: "73", value: 73 },
-        { label: "74", value: 74 },
-        { label: "75", value: 75 },
-        { label: "76", value: 76 },
-        { label: "77", value: 77 },
-        { label: "78", value: 78 },
-        { label: "79", value: 79 },
-        { label: "80", value: 80 },
-        { label: "81", value: 81 },
-        { label: "82", value: 82 },
-        { label: "83", value: 83 },
-        { label: "84", value: 84 },
-        { label: "85", value: 85 },
-        { label: "86", value: 86 },
-        { label: "87", value: 87 },
-        { label: "88", value: 88 },
-        { label: "89", value: 89 },
-        { label: "90", value: 90 },
-        { label: "91", value: 91 },
-        { label: "92", value: 92 },
-        { label: "93", value: 93 },
-        { label: "94", value: 94 },
-        { label: "95", value: 95 },
-        { label: "96", value: 96 },
-        { label: "97", value: 97 },
-        { label: "98", value: 98 },
-        { label: "99", value: 99 },
-        { label: "100", value: 100 },
-      ],
+      options: numericOptions(0, 100),
     },
     {
       property: "zen.workspace.bgalazka.look.toolbar_opacity",
       label: "Navigation toolbar opacity (%)",
       type: "dropdown",
       defaultValue: 100,
-      options: [
-        { label: "0", value: 0 },
-        { label: "1", value: 1 },
-        { label: "2", value: 2 },
-        { label: "3", value: 3 },
-        { label: "4", value: 4 },
-        { label: "5", value: 5 },
-        { label: "6", value: 6 },
-        { label: "7", value: 7 },
-        { label: "8", value: 8 },
-        { label: "9", value: 9 },
-        { label: "10", value: 10 },
-        { label: "11", value: 11 },
-        { label: "12", value: 12 },
-        { label: "13", value: 13 },
-        { label: "14", value: 14 },
-        { label: "15", value: 15 },
-        { label: "16", value: 16 },
-        { label: "17", value: 17 },
-        { label: "18", value: 18 },
-        { label: "19", value: 19 },
-        { label: "20", value: 20 },
-        { label: "21", value: 21 },
-        { label: "22", value: 22 },
-        { label: "23", value: 23 },
-        { label: "24", value: 24 },
-        { label: "25", value: 25 },
-        { label: "26", value: 26 },
-        { label: "27", value: 27 },
-        { label: "28", value: 28 },
-        { label: "29", value: 29 },
-        { label: "30", value: 30 },
-        { label: "31", value: 31 },
-        { label: "32", value: 32 },
-        { label: "33", value: 33 },
-        { label: "34", value: 34 },
-        { label: "35", value: 35 },
-        { label: "36", value: 36 },
-        { label: "37", value: 37 },
-        { label: "38", value: 38 },
-        { label: "39", value: 39 },
-        { label: "40", value: 40 },
-        { label: "41", value: 41 },
-        { label: "42", value: 42 },
-        { label: "43", value: 43 },
-        { label: "44", value: 44 },
-        { label: "45", value: 45 },
-        { label: "46", value: 46 },
-        { label: "47", value: 47 },
-        { label: "48", value: 48 },
-        { label: "49", value: 49 },
-        { label: "50", value: 50 },
-        { label: "51", value: 51 },
-        { label: "52", value: 52 },
-        { label: "53", value: 53 },
-        { label: "54", value: 54 },
-        { label: "55", value: 55 },
-        { label: "56", value: 56 },
-        { label: "57", value: 57 },
-        { label: "58", value: 58 },
-        { label: "59", value: 59 },
-        { label: "60", value: 60 },
-        { label: "61", value: 61 },
-        { label: "62", value: 62 },
-        { label: "63", value: 63 },
-        { label: "64", value: 64 },
-        { label: "65", value: 65 },
-        { label: "66", value: 66 },
-        { label: "67", value: 67 },
-        { label: "68", value: 68 },
-        { label: "69", value: 69 },
-        { label: "70", value: 70 },
-        { label: "71", value: 71 },
-        { label: "72", value: 72 },
-        { label: "73", value: 73 },
-        { label: "74", value: 74 },
-        { label: "75", value: 75 },
-        { label: "76", value: 76 },
-        { label: "77", value: 77 },
-        { label: "78", value: 78 },
-        { label: "79", value: 79 },
-        { label: "80", value: 80 },
-        { label: "81", value: 81 },
-        { label: "82", value: 82 },
-        { label: "83", value: 83 },
-        { label: "84", value: 84 },
-        { label: "85", value: 85 },
-        { label: "86", value: 86 },
-        { label: "87", value: 87 },
-        { label: "88", value: 88 },
-        { label: "89", value: 89 },
-        { label: "90", value: 90 },
-        { label: "91", value: 91 },
-        { label: "92", value: 92 },
-        { label: "93", value: 93 },
-        { label: "94", value: 94 },
-        { label: "95", value: 95 },
-        { label: "96", value: 96 },
-        { label: "97", value: 97 },
-        { label: "98", value: 98 },
-        { label: "99", value: 99 },
-        { label: "100", value: 100 },
-      ],
+      options: numericOptions(0, 100),
     },
     {
       property: "zen.workspace.bgalazka.look.address_opacity",
       label: "Secondary address field opacity (%)",
       type: "dropdown",
       defaultValue: 100,
-      options: [
-        { label: "0", value: 0 },
-        { label: "1", value: 1 },
-        { label: "2", value: 2 },
-        { label: "3", value: 3 },
-        { label: "4", value: 4 },
-        { label: "5", value: 5 },
-        { label: "6", value: 6 },
-        { label: "7", value: 7 },
-        { label: "8", value: 8 },
-        { label: "9", value: 9 },
-        { label: "10", value: 10 },
-        { label: "11", value: 11 },
-        { label: "12", value: 12 },
-        { label: "13", value: 13 },
-        { label: "14", value: 14 },
-        { label: "15", value: 15 },
-        { label: "16", value: 16 },
-        { label: "17", value: 17 },
-        { label: "18", value: 18 },
-        { label: "19", value: 19 },
-        { label: "20", value: 20 },
-        { label: "21", value: 21 },
-        { label: "22", value: 22 },
-        { label: "23", value: 23 },
-        { label: "24", value: 24 },
-        { label: "25", value: 25 },
-        { label: "26", value: 26 },
-        { label: "27", value: 27 },
-        { label: "28", value: 28 },
-        { label: "29", value: 29 },
-        { label: "30", value: 30 },
-        { label: "31", value: 31 },
-        { label: "32", value: 32 },
-        { label: "33", value: 33 },
-        { label: "34", value: 34 },
-        { label: "35", value: 35 },
-        { label: "36", value: 36 },
-        { label: "37", value: 37 },
-        { label: "38", value: 38 },
-        { label: "39", value: 39 },
-        { label: "40", value: 40 },
-        { label: "41", value: 41 },
-        { label: "42", value: 42 },
-        { label: "43", value: 43 },
-        { label: "44", value: 44 },
-        { label: "45", value: 45 },
-        { label: "46", value: 46 },
-        { label: "47", value: 47 },
-        { label: "48", value: 48 },
-        { label: "49", value: 49 },
-        { label: "50", value: 50 },
-        { label: "51", value: 51 },
-        { label: "52", value: 52 },
-        { label: "53", value: 53 },
-        { label: "54", value: 54 },
-        { label: "55", value: 55 },
-        { label: "56", value: 56 },
-        { label: "57", value: 57 },
-        { label: "58", value: 58 },
-        { label: "59", value: 59 },
-        { label: "60", value: 60 },
-        { label: "61", value: 61 },
-        { label: "62", value: 62 },
-        { label: "63", value: 63 },
-        { label: "64", value: 64 },
-        { label: "65", value: 65 },
-        { label: "66", value: 66 },
-        { label: "67", value: 67 },
-        { label: "68", value: 68 },
-        { label: "69", value: 69 },
-        { label: "70", value: 70 },
-        { label: "71", value: 71 },
-        { label: "72", value: 72 },
-        { label: "73", value: 73 },
-        { label: "74", value: 74 },
-        { label: "75", value: 75 },
-        { label: "76", value: 76 },
-        { label: "77", value: 77 },
-        { label: "78", value: 78 },
-        { label: "79", value: 79 },
-        { label: "80", value: 80 },
-        { label: "81", value: 81 },
-        { label: "82", value: 82 },
-        { label: "83", value: 83 },
-        { label: "84", value: 84 },
-        { label: "85", value: 85 },
-        { label: "86", value: 86 },
-        { label: "87", value: 87 },
-        { label: "88", value: 88 },
-        { label: "89", value: 89 },
-        { label: "90", value: 90 },
-        { label: "91", value: 91 },
-        { label: "92", value: 92 },
-        { label: "93", value: 93 },
-        { label: "94", value: 94 },
-        { label: "95", value: 95 },
-        { label: "96", value: 96 },
-        { label: "97", value: 97 },
-        { label: "98", value: 98 },
-        { label: "99", value: 99 },
-        { label: "100", value: 100 },
-      ],
+      options: numericOptions(0, 100),
     },
     {
       property: "zen.workspace.bgalazka.look.button_opacity",
       label: "Panel button background opacity (%)",
       type: "dropdown",
       defaultValue: 100,
-      options: [
-        { label: "0", value: 0 },
-        { label: "1", value: 1 },
-        { label: "2", value: 2 },
-        { label: "3", value: 3 },
-        { label: "4", value: 4 },
-        { label: "5", value: 5 },
-        { label: "6", value: 6 },
-        { label: "7", value: 7 },
-        { label: "8", value: 8 },
-        { label: "9", value: 9 },
-        { label: "10", value: 10 },
-        { label: "11", value: 11 },
-        { label: "12", value: 12 },
-        { label: "13", value: 13 },
-        { label: "14", value: 14 },
-        { label: "15", value: 15 },
-        { label: "16", value: 16 },
-        { label: "17", value: 17 },
-        { label: "18", value: 18 },
-        { label: "19", value: 19 },
-        { label: "20", value: 20 },
-        { label: "21", value: 21 },
-        { label: "22", value: 22 },
-        { label: "23", value: 23 },
-        { label: "24", value: 24 },
-        { label: "25", value: 25 },
-        { label: "26", value: 26 },
-        { label: "27", value: 27 },
-        { label: "28", value: 28 },
-        { label: "29", value: 29 },
-        { label: "30", value: 30 },
-        { label: "31", value: 31 },
-        { label: "32", value: 32 },
-        { label: "33", value: 33 },
-        { label: "34", value: 34 },
-        { label: "35", value: 35 },
-        { label: "36", value: 36 },
-        { label: "37", value: 37 },
-        { label: "38", value: 38 },
-        { label: "39", value: 39 },
-        { label: "40", value: 40 },
-        { label: "41", value: 41 },
-        { label: "42", value: 42 },
-        { label: "43", value: 43 },
-        { label: "44", value: 44 },
-        { label: "45", value: 45 },
-        { label: "46", value: 46 },
-        { label: "47", value: 47 },
-        { label: "48", value: 48 },
-        { label: "49", value: 49 },
-        { label: "50", value: 50 },
-        { label: "51", value: 51 },
-        { label: "52", value: 52 },
-        { label: "53", value: 53 },
-        { label: "54", value: 54 },
-        { label: "55", value: 55 },
-        { label: "56", value: 56 },
-        { label: "57", value: 57 },
-        { label: "58", value: 58 },
-        { label: "59", value: 59 },
-        { label: "60", value: 60 },
-        { label: "61", value: 61 },
-        { label: "62", value: 62 },
-        { label: "63", value: 63 },
-        { label: "64", value: 64 },
-        { label: "65", value: 65 },
-        { label: "66", value: 66 },
-        { label: "67", value: 67 },
-        { label: "68", value: 68 },
-        { label: "69", value: 69 },
-        { label: "70", value: 70 },
-        { label: "71", value: 71 },
-        { label: "72", value: 72 },
-        { label: "73", value: 73 },
-        { label: "74", value: 74 },
-        { label: "75", value: 75 },
-        { label: "76", value: 76 },
-        { label: "77", value: 77 },
-        { label: "78", value: 78 },
-        { label: "79", value: 79 },
-        { label: "80", value: 80 },
-        { label: "81", value: 81 },
-        { label: "82", value: 82 },
-        { label: "83", value: 83 },
-        { label: "84", value: 84 },
-        { label: "85", value: 85 },
-        { label: "86", value: 86 },
-        { label: "87", value: 87 },
-        { label: "88", value: 88 },
-        { label: "89", value: 89 },
-        { label: "90", value: 90 },
-        { label: "91", value: 91 },
-        { label: "92", value: 92 },
-        { label: "93", value: 93 },
-        { label: "94", value: 94 },
-        { label: "95", value: 95 },
-        { label: "96", value: 96 },
-        { label: "97", value: 97 },
-        { label: "98", value: 98 },
-        { label: "99", value: 99 },
-        { label: "100", value: 100 },
-      ],
+      options: numericOptions(0, 100),
     },
     {
       property: "zen.workspace.bgalazka.look.tile_opacity",
       label: "App tile background opacity (%)",
       type: "dropdown",
       defaultValue: 100,
-      options: [
-        { label: "0", value: 0 },
-        { label: "1", value: 1 },
-        { label: "2", value: 2 },
-        { label: "3", value: 3 },
-        { label: "4", value: 4 },
-        { label: "5", value: 5 },
-        { label: "6", value: 6 },
-        { label: "7", value: 7 },
-        { label: "8", value: 8 },
-        { label: "9", value: 9 },
-        { label: "10", value: 10 },
-        { label: "11", value: 11 },
-        { label: "12", value: 12 },
-        { label: "13", value: 13 },
-        { label: "14", value: 14 },
-        { label: "15", value: 15 },
-        { label: "16", value: 16 },
-        { label: "17", value: 17 },
-        { label: "18", value: 18 },
-        { label: "19", value: 19 },
-        { label: "20", value: 20 },
-        { label: "21", value: 21 },
-        { label: "22", value: 22 },
-        { label: "23", value: 23 },
-        { label: "24", value: 24 },
-        { label: "25", value: 25 },
-        { label: "26", value: 26 },
-        { label: "27", value: 27 },
-        { label: "28", value: 28 },
-        { label: "29", value: 29 },
-        { label: "30", value: 30 },
-        { label: "31", value: 31 },
-        { label: "32", value: 32 },
-        { label: "33", value: 33 },
-        { label: "34", value: 34 },
-        { label: "35", value: 35 },
-        { label: "36", value: 36 },
-        { label: "37", value: 37 },
-        { label: "38", value: 38 },
-        { label: "39", value: 39 },
-        { label: "40", value: 40 },
-        { label: "41", value: 41 },
-        { label: "42", value: 42 },
-        { label: "43", value: 43 },
-        { label: "44", value: 44 },
-        { label: "45", value: 45 },
-        { label: "46", value: 46 },
-        { label: "47", value: 47 },
-        { label: "48", value: 48 },
-        { label: "49", value: 49 },
-        { label: "50", value: 50 },
-        { label: "51", value: 51 },
-        { label: "52", value: 52 },
-        { label: "53", value: 53 },
-        { label: "54", value: 54 },
-        { label: "55", value: 55 },
-        { label: "56", value: 56 },
-        { label: "57", value: 57 },
-        { label: "58", value: 58 },
-        { label: "59", value: 59 },
-        { label: "60", value: 60 },
-        { label: "61", value: 61 },
-        { label: "62", value: 62 },
-        { label: "63", value: 63 },
-        { label: "64", value: 64 },
-        { label: "65", value: 65 },
-        { label: "66", value: 66 },
-        { label: "67", value: 67 },
-        { label: "68", value: 68 },
-        { label: "69", value: 69 },
-        { label: "70", value: 70 },
-        { label: "71", value: 71 },
-        { label: "72", value: 72 },
-        { label: "73", value: 73 },
-        { label: "74", value: 74 },
-        { label: "75", value: 75 },
-        { label: "76", value: 76 },
-        { label: "77", value: 77 },
-        { label: "78", value: 78 },
-        { label: "79", value: 79 },
-        { label: "80", value: 80 },
-        { label: "81", value: 81 },
-        { label: "82", value: 82 },
-        { label: "83", value: 83 },
-        { label: "84", value: 84 },
-        { label: "85", value: 85 },
-        { label: "86", value: 86 },
-        { label: "87", value: 87 },
-        { label: "88", value: 88 },
-        { label: "89", value: 89 },
-        { label: "90", value: 90 },
-        { label: "91", value: 91 },
-        { label: "92", value: 92 },
-        { label: "93", value: 93 },
-        { label: "94", value: 94 },
-        { label: "95", value: 95 },
-        { label: "96", value: 96 },
-        { label: "97", value: 97 },
-        { label: "98", value: 98 },
-        { label: "99", value: 99 },
-        { label: "100", value: 100 },
-      ],
+      options: numericOptions(0, 100),
     },
     {
       property: "zen.workspace.bgalazka.look.video_opacity",
       label: "Video preview canvas opacity (%)",
       type: "dropdown",
       defaultValue: 100,
-      options: [
-        { label: "0", value: 0 },
-        { label: "1", value: 1 },
-        { label: "2", value: 2 },
-        { label: "3", value: 3 },
-        { label: "4", value: 4 },
-        { label: "5", value: 5 },
-        { label: "6", value: 6 },
-        { label: "7", value: 7 },
-        { label: "8", value: 8 },
-        { label: "9", value: 9 },
-        { label: "10", value: 10 },
-        { label: "11", value: 11 },
-        { label: "12", value: 12 },
-        { label: "13", value: 13 },
-        { label: "14", value: 14 },
-        { label: "15", value: 15 },
-        { label: "16", value: 16 },
-        { label: "17", value: 17 },
-        { label: "18", value: 18 },
-        { label: "19", value: 19 },
-        { label: "20", value: 20 },
-        { label: "21", value: 21 },
-        { label: "22", value: 22 },
-        { label: "23", value: 23 },
-        { label: "24", value: 24 },
-        { label: "25", value: 25 },
-        { label: "26", value: 26 },
-        { label: "27", value: 27 },
-        { label: "28", value: 28 },
-        { label: "29", value: 29 },
-        { label: "30", value: 30 },
-        { label: "31", value: 31 },
-        { label: "32", value: 32 },
-        { label: "33", value: 33 },
-        { label: "34", value: 34 },
-        { label: "35", value: 35 },
-        { label: "36", value: 36 },
-        { label: "37", value: 37 },
-        { label: "38", value: 38 },
-        { label: "39", value: 39 },
-        { label: "40", value: 40 },
-        { label: "41", value: 41 },
-        { label: "42", value: 42 },
-        { label: "43", value: 43 },
-        { label: "44", value: 44 },
-        { label: "45", value: 45 },
-        { label: "46", value: 46 },
-        { label: "47", value: 47 },
-        { label: "48", value: 48 },
-        { label: "49", value: 49 },
-        { label: "50", value: 50 },
-        { label: "51", value: 51 },
-        { label: "52", value: 52 },
-        { label: "53", value: 53 },
-        { label: "54", value: 54 },
-        { label: "55", value: 55 },
-        { label: "56", value: 56 },
-        { label: "57", value: 57 },
-        { label: "58", value: 58 },
-        { label: "59", value: 59 },
-        { label: "60", value: 60 },
-        { label: "61", value: 61 },
-        { label: "62", value: 62 },
-        { label: "63", value: 63 },
-        { label: "64", value: 64 },
-        { label: "65", value: 65 },
-        { label: "66", value: 66 },
-        { label: "67", value: 67 },
-        { label: "68", value: 68 },
-        { label: "69", value: 69 },
-        { label: "70", value: 70 },
-        { label: "71", value: 71 },
-        { label: "72", value: 72 },
-        { label: "73", value: 73 },
-        { label: "74", value: 74 },
-        { label: "75", value: 75 },
-        { label: "76", value: 76 },
-        { label: "77", value: 77 },
-        { label: "78", value: 78 },
-        { label: "79", value: 79 },
-        { label: "80", value: 80 },
-        { label: "81", value: 81 },
-        { label: "82", value: 82 },
-        { label: "83", value: 83 },
-        { label: "84", value: 84 },
-        { label: "85", value: 85 },
-        { label: "86", value: 86 },
-        { label: "87", value: 87 },
-        { label: "88", value: 88 },
-        { label: "89", value: 89 },
-        { label: "90", value: 90 },
-        { label: "91", value: 91 },
-        { label: "92", value: 92 },
-        { label: "93", value: 93 },
-        { label: "94", value: 94 },
-        { label: "95", value: 95 },
-        { label: "96", value: 96 },
-        { label: "97", value: 97 },
-        { label: "98", value: 98 },
-        { label: "99", value: 99 },
-        { label: "100", value: 100 },
-      ],
+      options: numericOptions(0, 100),
     },
     {
       property: "zen.workspace.bgalazka.look.video_control_opacity",
       label: "Video control strip opacity (%)",
       type: "dropdown",
       defaultValue: 100,
-      options: [
-        { label: "0", value: 0 },
-        { label: "1", value: 1 },
-        { label: "2", value: 2 },
-        { label: "3", value: 3 },
-        { label: "4", value: 4 },
-        { label: "5", value: 5 },
-        { label: "6", value: 6 },
-        { label: "7", value: 7 },
-        { label: "8", value: 8 },
-        { label: "9", value: 9 },
-        { label: "10", value: 10 },
-        { label: "11", value: 11 },
-        { label: "12", value: 12 },
-        { label: "13", value: 13 },
-        { label: "14", value: 14 },
-        { label: "15", value: 15 },
-        { label: "16", value: 16 },
-        { label: "17", value: 17 },
-        { label: "18", value: 18 },
-        { label: "19", value: 19 },
-        { label: "20", value: 20 },
-        { label: "21", value: 21 },
-        { label: "22", value: 22 },
-        { label: "23", value: 23 },
-        { label: "24", value: 24 },
-        { label: "25", value: 25 },
-        { label: "26", value: 26 },
-        { label: "27", value: 27 },
-        { label: "28", value: 28 },
-        { label: "29", value: 29 },
-        { label: "30", value: 30 },
-        { label: "31", value: 31 },
-        { label: "32", value: 32 },
-        { label: "33", value: 33 },
-        { label: "34", value: 34 },
-        { label: "35", value: 35 },
-        { label: "36", value: 36 },
-        { label: "37", value: 37 },
-        { label: "38", value: 38 },
-        { label: "39", value: 39 },
-        { label: "40", value: 40 },
-        { label: "41", value: 41 },
-        { label: "42", value: 42 },
-        { label: "43", value: 43 },
-        { label: "44", value: 44 },
-        { label: "45", value: 45 },
-        { label: "46", value: 46 },
-        { label: "47", value: 47 },
-        { label: "48", value: 48 },
-        { label: "49", value: 49 },
-        { label: "50", value: 50 },
-        { label: "51", value: 51 },
-        { label: "52", value: 52 },
-        { label: "53", value: 53 },
-        { label: "54", value: 54 },
-        { label: "55", value: 55 },
-        { label: "56", value: 56 },
-        { label: "57", value: 57 },
-        { label: "58", value: 58 },
-        { label: "59", value: 59 },
-        { label: "60", value: 60 },
-        { label: "61", value: 61 },
-        { label: "62", value: 62 },
-        { label: "63", value: 63 },
-        { label: "64", value: 64 },
-        { label: "65", value: 65 },
-        { label: "66", value: 66 },
-        { label: "67", value: 67 },
-        { label: "68", value: 68 },
-        { label: "69", value: 69 },
-        { label: "70", value: 70 },
-        { label: "71", value: 71 },
-        { label: "72", value: 72 },
-        { label: "73", value: 73 },
-        { label: "74", value: 74 },
-        { label: "75", value: 75 },
-        { label: "76", value: 76 },
-        { label: "77", value: 77 },
-        { label: "78", value: 78 },
-        { label: "79", value: 79 },
-        { label: "80", value: 80 },
-        { label: "81", value: 81 },
-        { label: "82", value: 82 },
-        { label: "83", value: 83 },
-        { label: "84", value: 84 },
-        { label: "85", value: 85 },
-        { label: "86", value: 86 },
-        { label: "87", value: 87 },
-        { label: "88", value: 88 },
-        { label: "89", value: 89 },
-        { label: "90", value: 90 },
-        { label: "91", value: 91 },
-        { label: "92", value: 92 },
-        { label: "93", value: 93 },
-        { label: "94", value: 94 },
-        { label: "95", value: 95 },
-        { label: "96", value: 96 },
-        { label: "97", value: 97 },
-        { label: "98", value: 98 },
-        { label: "99", value: 99 },
-        { label: "100", value: 100 },
-      ],
+      options: numericOptions(0, 100),
     },
     {
       property: "zen.workspace.bgalazka.look.popup_opacity",
       label: "Panel popup opacity (%)",
       type: "dropdown",
       defaultValue: 100,
-      options: [
-        { label: "0", value: 0 },
-        { label: "1", value: 1 },
-        { label: "2", value: 2 },
-        { label: "3", value: 3 },
-        { label: "4", value: 4 },
-        { label: "5", value: 5 },
-        { label: "6", value: 6 },
-        { label: "7", value: 7 },
-        { label: "8", value: 8 },
-        { label: "9", value: 9 },
-        { label: "10", value: 10 },
-        { label: "11", value: 11 },
-        { label: "12", value: 12 },
-        { label: "13", value: 13 },
-        { label: "14", value: 14 },
-        { label: "15", value: 15 },
-        { label: "16", value: 16 },
-        { label: "17", value: 17 },
-        { label: "18", value: 18 },
-        { label: "19", value: 19 },
-        { label: "20", value: 20 },
-        { label: "21", value: 21 },
-        { label: "22", value: 22 },
-        { label: "23", value: 23 },
-        { label: "24", value: 24 },
-        { label: "25", value: 25 },
-        { label: "26", value: 26 },
-        { label: "27", value: 27 },
-        { label: "28", value: 28 },
-        { label: "29", value: 29 },
-        { label: "30", value: 30 },
-        { label: "31", value: 31 },
-        { label: "32", value: 32 },
-        { label: "33", value: 33 },
-        { label: "34", value: 34 },
-        { label: "35", value: 35 },
-        { label: "36", value: 36 },
-        { label: "37", value: 37 },
-        { label: "38", value: 38 },
-        { label: "39", value: 39 },
-        { label: "40", value: 40 },
-        { label: "41", value: 41 },
-        { label: "42", value: 42 },
-        { label: "43", value: 43 },
-        { label: "44", value: 44 },
-        { label: "45", value: 45 },
-        { label: "46", value: 46 },
-        { label: "47", value: 47 },
-        { label: "48", value: 48 },
-        { label: "49", value: 49 },
-        { label: "50", value: 50 },
-        { label: "51", value: 51 },
-        { label: "52", value: 52 },
-        { label: "53", value: 53 },
-        { label: "54", value: 54 },
-        { label: "55", value: 55 },
-        { label: "56", value: 56 },
-        { label: "57", value: 57 },
-        { label: "58", value: 58 },
-        { label: "59", value: 59 },
-        { label: "60", value: 60 },
-        { label: "61", value: 61 },
-        { label: "62", value: 62 },
-        { label: "63", value: 63 },
-        { label: "64", value: 64 },
-        { label: "65", value: 65 },
-        { label: "66", value: 66 },
-        { label: "67", value: 67 },
-        { label: "68", value: 68 },
-        { label: "69", value: 69 },
-        { label: "70", value: 70 },
-        { label: "71", value: 71 },
-        { label: "72", value: 72 },
-        { label: "73", value: 73 },
-        { label: "74", value: 74 },
-        { label: "75", value: 75 },
-        { label: "76", value: 76 },
-        { label: "77", value: 77 },
-        { label: "78", value: 78 },
-        { label: "79", value: 79 },
-        { label: "80", value: 80 },
-        { label: "81", value: 81 },
-        { label: "82", value: 82 },
-        { label: "83", value: 83 },
-        { label: "84", value: 84 },
-        { label: "85", value: 85 },
-        { label: "86", value: 86 },
-        { label: "87", value: 87 },
-        { label: "88", value: 88 },
-        { label: "89", value: 89 },
-        { label: "90", value: 90 },
-        { label: "91", value: 91 },
-        { label: "92", value: 92 },
-        { label: "93", value: 93 },
-        { label: "94", value: 94 },
-        { label: "95", value: 95 },
-        { label: "96", value: 96 },
-        { label: "97", value: 97 },
-        { label: "98", value: 98 },
-        { label: "99", value: 99 },
-        { label: "100", value: 100 },
-      ],
+      options: numericOptions(0, 100),
     },
-    { type: "text", label: "**Shape and Spacing**", size: "15px" },
+    {
+      type: "text",
+      label: "**Shape and Spacing**",
+      size: "15px",
+    },
     {
       property: "zen.workspace.bgalazka.look.radius",
       label: "Panel and control corner radius (px; 0 = square)",
       type: "dropdown",
       defaultValue: 0,
-      options: [
-        { label: "0", value: 0 },
-        { label: "1", value: 1 },
-        { label: "2", value: 2 },
-        { label: "3", value: 3 },
-        { label: "4", value: 4 },
-        { label: "5", value: 5 },
-        { label: "6", value: 6 },
-        { label: "7", value: 7 },
-        { label: "8", value: 8 },
-        { label: "9", value: 9 },
-        { label: "10", value: 10 },
-        { label: "11", value: 11 },
-        { label: "12", value: 12 },
-        { label: "13", value: 13 },
-        { label: "14", value: 14 },
-        { label: "15", value: 15 },
-        { label: "16", value: 16 },
-        { label: "17", value: 17 },
-        { label: "18", value: 18 },
-        { label: "19", value: 19 },
-        { label: "20", value: 20 },
-        { label: "21", value: 21 },
-        { label: "22", value: 22 },
-        { label: "23", value: 23 },
-        { label: "24", value: 24 },
-        { label: "25", value: 25 },
-        { label: "26", value: 26 },
-      ],
+      options: numericOptions(0, 26),
     },
     {
       property: "zen.workspace.bgalazka.look.depth",
       label: "Surface shadow depth (%; 0 = flat)",
       type: "dropdown",
       defaultValue: 0,
-      options: [
-        { label: "0", value: 0 },
-        { label: "1", value: 1 },
-        { label: "2", value: 2 },
-        { label: "3", value: 3 },
-        { label: "4", value: 4 },
-        { label: "5", value: 5 },
-        { label: "6", value: 6 },
-        { label: "7", value: 7 },
-        { label: "8", value: 8 },
-        { label: "9", value: 9 },
-        { label: "10", value: 10 },
-        { label: "11", value: 11 },
-        { label: "12", value: 12 },
-        { label: "13", value: 13 },
-        { label: "14", value: 14 },
-        { label: "15", value: 15 },
-        { label: "16", value: 16 },
-        { label: "17", value: 17 },
-        { label: "18", value: 18 },
-        { label: "19", value: 19 },
-        { label: "20", value: 20 },
-        { label: "21", value: 21 },
-        { label: "22", value: 22 },
-        { label: "23", value: 23 },
-        { label: "24", value: 24 },
-        { label: "25", value: 25 },
-        { label: "26", value: 26 },
-        { label: "27", value: 27 },
-        { label: "28", value: 28 },
-        { label: "29", value: 29 },
-        { label: "30", value: 30 },
-        { label: "31", value: 31 },
-        { label: "32", value: 32 },
-        { label: "33", value: 33 },
-        { label: "34", value: 34 },
-        { label: "35", value: 35 },
-        { label: "36", value: 36 },
-        { label: "37", value: 37 },
-        { label: "38", value: 38 },
-        { label: "39", value: 39 },
-        { label: "40", value: 40 },
-        { label: "41", value: 41 },
-        { label: "42", value: 42 },
-        { label: "43", value: 43 },
-        { label: "44", value: 44 },
-        { label: "45", value: 45 },
-        { label: "46", value: 46 },
-        { label: "47", value: 47 },
-        { label: "48", value: 48 },
-        { label: "49", value: 49 },
-        { label: "50", value: 50 },
-        { label: "51", value: 51 },
-        { label: "52", value: 52 },
-        { label: "53", value: 53 },
-        { label: "54", value: 54 },
-        { label: "55", value: 55 },
-        { label: "56", value: 56 },
-        { label: "57", value: 57 },
-        { label: "58", value: 58 },
-        { label: "59", value: 59 },
-        { label: "60", value: 60 },
-        { label: "61", value: 61 },
-        { label: "62", value: 62 },
-        { label: "63", value: 63 },
-        { label: "64", value: 64 },
-        { label: "65", value: 65 },
-        { label: "66", value: 66 },
-        { label: "67", value: 67 },
-        { label: "68", value: 68 },
-        { label: "69", value: 69 },
-        { label: "70", value: 70 },
-        { label: "71", value: 71 },
-        { label: "72", value: 72 },
-        { label: "73", value: 73 },
-        { label: "74", value: 74 },
-        { label: "75", value: 75 },
-        { label: "76", value: 76 },
-        { label: "77", value: 77 },
-        { label: "78", value: 78 },
-        { label: "79", value: 79 },
-        { label: "80", value: 80 },
-        { label: "81", value: 81 },
-        { label: "82", value: 82 },
-        { label: "83", value: 83 },
-        { label: "84", value: 84 },
-        { label: "85", value: 85 },
-        { label: "86", value: 86 },
-        { label: "87", value: 87 },
-        { label: "88", value: 88 },
-        { label: "89", value: 89 },
-        { label: "90", value: 90 },
-        { label: "91", value: 91 },
-        { label: "92", value: 92 },
-        { label: "93", value: 93 },
-        { label: "94", value: 94 },
-        { label: "95", value: 95 },
-        { label: "96", value: 96 },
-        { label: "97", value: 97 },
-        { label: "98", value: 98 },
-        { label: "99", value: 99 },
-        { label: "100", value: 100 },
-      ],
+      options: numericOptions(0, 100),
     },
     {
       property: "zen.workspace.bgalazka.look.spacing",
@@ -2161,8 +1156,15 @@
         { label: "3", value: 3 },
       ],
     },
-    { type: "text", label: "**Navigation Toolbar**", size: "15px" },
-    { type: "text", label: "**Tab Bar Density**" },
+    {
+      type: "text",
+      label: "**Navigation Toolbar**",
+      size: "15px",
+    },
+    {
+      type: "text",
+      label: "**Tab Bar Density**",
+    },
     {
       type: "text",
       label:
@@ -2533,7 +1535,11 @@
         { label: "3", value: 3 },
       ],
     },
-    { type: "text", label: "**Buttons and Tiles**", size: "15px" },
+    {
+      type: "text",
+      label: "**Buttons and Tiles**",
+      size: "15px",
+    },
     {
       property: "zen.workspace.bgalazka.look.button_style",
       label: "Button style",
@@ -2583,23 +1589,7 @@
       label: "Button size (px)",
       type: "dropdown",
       defaultValue: 22,
-      options: [
-        { label: "18", value: 18 },
-        { label: "19", value: 19 },
-        { label: "20", value: 20 },
-        { label: "21", value: 21 },
-        { label: "22", value: 22 },
-        { label: "23", value: 23 },
-        { label: "24", value: 24 },
-        { label: "25", value: 25 },
-        { label: "26", value: 26 },
-        { label: "27", value: 27 },
-        { label: "28", value: 28 },
-        { label: "29", value: 29 },
-        { label: "30", value: 30 },
-        { label: "31", value: 31 },
-        { label: "32", value: 32 },
-      ],
+      options: numericOptions(18, 32),
     },
     {
       property: "zen.workspace.bgalazka.look.tile_style",
@@ -2626,25 +1616,7 @@
       label: "Selection row padding (px)",
       type: "dropdown",
       defaultValue: 4,
-      options: [
-        { label: "4", value: 4 },
-        { label: "5", value: 5 },
-        { label: "6", value: 6 },
-        { label: "7", value: 7 },
-        { label: "8", value: 8 },
-        { label: "9", value: 9 },
-        { label: "10", value: 10 },
-        { label: "11", value: 11 },
-        { label: "12", value: 12 },
-        { label: "13", value: 13 },
-        { label: "14", value: 14 },
-        { label: "15", value: 15 },
-        { label: "16", value: 16 },
-        { label: "17", value: 17 },
-        { label: "18", value: 18 },
-        { label: "19", value: 19 },
-        { label: "20", value: 20 },
-      ],
+      options: numericOptions(4, 20),
     },
     {
       property: "zen.workspace.bgalazka.look.row_rule",
@@ -2657,7 +1629,11 @@
         { label: "2", value: 2 },
       ],
     },
-    { type: "text", label: "**Sidebar Video Look**", size: "15px" },
+    {
+      type: "text",
+      label: "**Sidebar Video Look**",
+      size: "15px",
+    },
     {
       type: "text",
       label:
@@ -2716,48 +1692,14 @@
       label: "Video control padding (px)",
       type: "dropdown",
       defaultValue: 0,
-      options: [
-        { label: "0", value: 0 },
-        { label: "1", value: 1 },
-        { label: "2", value: 2 },
-        { label: "3", value: 3 },
-        { label: "4", value: 4 },
-        { label: "5", value: 5 },
-        { label: "6", value: 6 },
-        { label: "7", value: 7 },
-        { label: "8", value: 8 },
-        { label: "9", value: 9 },
-        { label: "10", value: 10 },
-        { label: "11", value: 11 },
-        { label: "12", value: 12 },
-        { label: "13", value: 13 },
-        { label: "14", value: 14 },
-        { label: "15", value: 15 },
-        { label: "16", value: 16 },
-      ],
+      options: numericOptions(0, 16),
     },
     {
       property: "zen.workspace.bgalazka.look.video_row_height",
       label: "Video source row height (px)",
       type: "dropdown",
       defaultValue: 22,
-      options: [
-        { label: "22", value: 22 },
-        { label: "23", value: 23 },
-        { label: "24", value: 24 },
-        { label: "25", value: 25 },
-        { label: "26", value: 26 },
-        { label: "27", value: 27 },
-        { label: "28", value: 28 },
-        { label: "29", value: 29 },
-        { label: "30", value: 30 },
-        { label: "31", value: 31 },
-        { label: "32", value: 32 },
-        { label: "33", value: 33 },
-        { label: "34", value: 34 },
-        { label: "35", value: 35 },
-        { label: "36", value: 36 },
-      ],
+      options: numericOptions(22, 36),
     },
     {
       property: "zen.workspace.bgalazka.look.video_source_style",
@@ -2799,7 +1741,11 @@
       type: "checkbox",
       defaultValue: false,
     },
-    { type: "text", label: "**Bgalazka Extension · Pill**", size: "18px" },
+    {
+      type: "text",
+      label: "**Bgalazka Extension · Pill**",
+      size: "18px",
+    },
     {
       property: "zen.workspace.bgalazka.hide_pill",
       label: "Hide Floating Pill Menu",
@@ -2938,7 +1884,11 @@
       type: "checkbox",
       defaultValue: true,
     },
-    { type: "text", label: "**Bgalazka Extension · Search**", size: "18px" },
+    {
+      type: "text",
+      label: "**Bgalazka Extension · Search**",
+      size: "18px",
+    },
     {
       property: "zen.workspace.bgalazka.web_toolbar_search_engine",
       label: "Default Panel Search Engine",
@@ -3073,7 +2023,11 @@
       label: "**Bgalazka Extension · Tab Launchers**",
       size: "18px",
     },
-    { type: "text", label: "**Bgalazka Extension · RSS**", size: "18px" },
+    {
+      type: "text",
+      label: "**Bgalazka Extension · RSS**",
+      size: "18px",
+    },
     {
       type: "text",
       label:
@@ -3425,7 +2379,304 @@
       type: "input",
       defaultValue: "0,1,5,10,20,30,40,50,60,70,80,90,100",
     },
+    {
+      property: "zen.workspace.zentral.modules.logger.enabled",
+      label: "Load Diagnostic logger",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.apps.enabled",
+      label: "Load Apps and base panel engine",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.tab-groups.enabled",
+      label: "Load Tab groups",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.geometry.enabled",
+      label: "Load Panel geometry",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.corner-panels.enabled",
+      label: "Load Corner panels and tile interaction",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.panel-toolbar.enabled",
+      label: "Load Panel URL bar, search and navigation",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.browser-integrations.enabled",
+      label: "Load Containers and add-on browser hosts",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.panel-styles.enabled",
+      label: "Load Panel browser collection and Zen Internet styles",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.secondary-views.enabled",
+      label: "Load Triple View and Super Pin",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.rss.enabled",
+      label: "Load RSS folder display",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.startup.enabled",
+      label: "Load selected-tab startup controller",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.tab-unload.enabled",
+      label: "Load Middle-click tab unloading",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.panels.enabled",
+      label: "Load Panel extension coordinator",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.video.enabled",
+      label: "Load Sidebar video preview",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.css.Base.enabled",
+      label: "Load CSS/ZentralBase.css",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.css.Panels.enabled",
+      label: "Load CSS/ZentralPanels.css",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.css.CornerPanels.enabled",
+      label: "Load CSS/ZentralCornerPanels.css",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.css.Controls.enabled",
+      label: "Load CSS/ZentralControls.css",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.css.PanelToolbar.enabled",
+      label: "Load CSS/ZentralPanelToolbar.css",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.css.PanelGeometry.enabled",
+      label: "Load CSS/ZentralPanelGeometry.css",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.css.Settings.enabled",
+      label: "Load CSS/ZentralSettings.css",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.css.BrowserIntegrations.enabled",
+      label: "Load CSS/ZentralBrowserIntegrations.css",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.css.VideoPreview.enabled",
+      label: "Load CSS/ZentralVideoPreview.css",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.css.Appearance.enabled",
+      label: "Load CSS/ZentralAppearance.css",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.css.RssDisplay.enabled",
+      label: "Load CSS/ZentralRssDisplay.css",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.css.TabDensity.enabled",
+      label: "Load CSS/ZentralTabDensity.css",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.css.PanelBackground.enabled",
+      label: "Load CSS/ZentralPanelBackground.css",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.addons",
+      label: "Local add-on manifest (JSON; restart required)",
+      type: "string",
+      defaultValue: "[]",
+    },
+    {
+      property: "zen.workspace.zentral.video_preview.hide_button",
+      label: "Show hide/show video button",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.video_preview.auto_height_button",
+      label: "Show Auto height button after resizing",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.video_preview.video_hidden",
+      label: "Video preview: video hidden",
+      type: "checkbox",
+      defaultValue: false,
+    },
+    {
+      property: "zen.workspace.zentral.video_preview.binary_frames",
+      label: "Transfer raw frames (fall back to JPEG)",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.video_preview.display_capture_cap",
+      label: "Limit still capture to displayed size",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.video_preview.adaptive_detail",
+      label: "Adapt still capture detail under load",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.video_preview.media_event_hints",
+      label: "Refresh sources on media events",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.video_preview.youtube_captions",
+      label: "Mirror captions (text tracks and YouTube)",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.video_preview.stop_idle_timer",
+      label: "Stop paint timer when preview is not visible",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.video_preview.audio_probe_cache",
+      label: "Cache audio-track checks for 30 seconds",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.video_preview.frame_aware_capture",
+      label: "Skip duplicate decoded frames",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.video_preview.caption_events",
+      label: "Use caption change events when available",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.video_preview.pin_source_button",
+      label: "Show pin source button",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.video_preview.compact_card_button",
+      label: "Show compact card button",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.video_preview.compact_card",
+      label: "Video preview: compact card",
+      type: "checkbox",
+      defaultValue: false,
+    },
+    {
+      property: "zen.workspace.zentral.video_preview.performance_diagnostics",
+      label: "Show performance diagnostics",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.bgalazka.mmb_unload_normal_tabs",
+      label: "Middle-click unloads normal tabs",
+      type: "checkbox",
+      defaultValue: false,
+    },
+    {
+      property: "zen.workspace.bgalazka.show_triple_style_repair",
+      label: "Show Triple View style repair button",
+      type: "checkbox",
+      defaultValue: false,
+    },
+    {
+      property: "zen.workspace.bgalazka.periodic_fallback_polling",
+      label: "Periodic fallback polling",
+      type: "checkbox",
+      defaultValue: false,
+    },
+    {
+      property: "zen.workspace.bgalazka.force_panel_black",
+      label: "Force black panel backing",
+      type: "checkbox",
+      defaultValue: false,
+    },
   ];
+  function numericOptions(start, end, step = 1) {
+    return Array.from(
+      { length: Math.floor((end - start) / step) + 1 },
+      (_, index) => {
+        const value = start + index * step;
+        return { label: String(value), value };
+      },
+    );
+  }
   const Constants = {
     /**
      * 1.1 Apps Module Preference Keys & Dimension Constraints
@@ -7353,6 +6604,10 @@
   ZentralRuntime.registerPart("extension-settings", function* (ctx) {
     Object.defineProperties(ctx, {
       injectSettingsUI: { configurable: true, get: () => injectSettingsUI },
+      syncSettingsAfterImport: {
+        configurable: true,
+        get: () => syncChangedSetting,
+      },
     });
     yield;
     function createKeybindRow(labelText, sublabelText, prefKey, defaultVal) {
@@ -8286,27 +7541,51 @@
       console.error("[BgalazkaExtension] Look initialization failed:", error);
     }
 
-    function syncAppearanceAfterImport() {
-      applyLook();
-      ctx.updateCSSVars();
-      ctx.applyAttributes();
-      window.Zentral?.TabGroups?.applyLabelOpacityPref?.();
-      window.Zentral?.TabGroups?.applyChevronPref?.();
-      window.Zentral?.TabGroups?.applyIndicatorTypePref?.();
-      window.Zentral?.Settings?.populate?.();
-      const videoRadius = document.getElementById("zs-video-preview-radius");
-      if (videoRadius) {
-        videoRadius.value = ctx.getPref(LOOK_PREFS.VIDEO_RADIUS, 0);
-        videoRadius.dispatchEvent(new Event("input", { bubbles: true }));
+    function syncChangedSetting(key) {
+      syncAppearanceAfterImport([key]);
+    }
+    function syncAppearanceAfterImport(keys = null) {
+      const changed = (key) => !keys || keys.includes(key);
+      const lookChanged = !keys || keys.some((key) => LOOK_KEYS.has(key));
+      if (lookChanged) applyLook();
+      if (
+        !keys ||
+        keys.some((key) => key.startsWith("zen.workspace.bgalazka."))
+      ) {
+        ctx.updateCSSVars();
+        ctx.applyAttributes();
+      }
+      if (
+        !keys ||
+        keys.some((key) => key.startsWith("zen.workspace.tabgroups."))
+      ) {
+        window.Zentral?.TabGroups?.applyLabelOpacityPref?.();
+        window.Zentral?.TabGroups?.applyChevronPref?.();
+        window.Zentral?.TabGroups?.applyIndicatorTypePref?.();
+      }
+      if (
+        !keys ||
+        keys.some((key) =>
+          Object.hasOwn(window.Zentral?.Core?.defaultPrefs || {}, key),
+        )
+      )
+        window.Zentral?.Settings?.populate?.();
+      if (changed(LOOK_PREFS.VIDEO_RADIUS)) {
+        const videoRadius = document.getElementById("zs-video-preview-radius");
+        if (videoRadius) {
+          videoRadius.value = ctx.getPref(LOOK_PREFS.VIDEO_RADIUS, 0);
+        }
       }
       const panel = document.getElementById("zs-panel-bgalazka");
       panel?._toggles?.forEach(({ input, pref, def, onSync, isSelect }) => {
+        if (!changed(pref)) return;
         const value = ctx.getPref(pref, def);
         if (isSelect) input.value = value;
         else input.checked = value;
         onSync?.(value);
       });
-      document.getElementById("zs-panel-extension-look")?._syncLook?.();
+      if (lookChanged)
+        document.getElementById("zs-panel-extension-look")?._syncLook?.();
     }
 
     // Export only owned preference keys; reject arbitrary keys and malformed
@@ -8315,29 +7594,44 @@
     // instance avoids reaching across IIFE scope and tracks future base keys.
     const baseBackupKeys = () =>
       new Set(Object.keys(window.Zentral?.Core?.defaultPrefs || {}));
-    const reusableBaseDefaults = new Set([
-      "zen.workspace.apps.sidebar.animation_speed",
-      "zen.workspace.apps.sidebar.animation_type",
-      "zen.workspace.apps.sidebar.apps_per_row",
-      "zen.workspace.apps.sidebar.max_apps",
-      "zen.workspace.apps.sidebar.max_rows",
-      "zen.workspace.apps.sidebar.hide_utility_section",
-      "zen.workspace.tabgroups.enabled",
-      "zen.workspace.tabgroups.thumbnails",
+    let cachedBackupSchema = null;
+    let cachedBackupSchemaLength = -1;
+    const backupSchema = () => {
+      // Registration appends settings. Rebuild only when new settings arrive.
+      if (cachedBackupSchemaLength !== SETTINGS_SCHEMA.length) {
+        cachedBackupSchema = new Map();
+        for (const item of SETTINGS_SCHEMA)
+          if (item.property) cachedBackupSchema.set(item.property, item);
+        cachedBackupSchemaLength = SETTINGS_SCHEMA.length;
+      }
+      return cachedBackupSchema;
+    };
+    const backupColorKeys = new Set([
+      ...LOOK_COLORS.map((name) => LOOK_PREFS[name]),
+      ctx.BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_COLOR,
     ]);
+    const backupDefault = (key) =>
+      LOOK_DEFAULTS[key] ??
+      ctx.PROFILE_DEFAULTS[key] ??
+      window.Zentral?.Core?.defaultPrefs?.[key] ??
+      backupSchema().get(key)?.defaultValue;
     const fullBackupKeys = () =>
       new Set([
         ...baseBackupKeys(),
+        ...backupSchema().keys(),
         ...Object.keys(ctx.PROFILE_DEFAULTS),
         ...Services.prefs.getChildList("zen.workspace.bgalazka."),
         ...Services.prefs.getChildList("zen.workspace.zentral.video_preview."),
+        ...Services.prefs.getChildList("zen.workspace.zentral.modules."),
         ...LOOK_KEYS,
       ]);
     const ownedBackupKey = (key) =>
       LOOK_KEYS.has(key) ||
-      baseBackupKeys().has(key) ||
+      Object.hasOwn(window.Zentral?.Core?.defaultPrefs || {}, key) ||
+      backupSchema().has(key) ||
       key.startsWith("zen.workspace.bgalazka.") ||
-      key.startsWith("zen.workspace.zentral.video_preview.");
+      key.startsWith("zen.workspace.zentral.video_preview.") ||
+      /^zen\.workspace\.zentral\.modules\.[\w.-]+\.enabled$/.test(key);
     async function chooseBackupFile(mode, title, defaultName) {
       const picker = Cc["@mozilla.org/filepicker;1"].createInstance(
         Ci.nsIFilePicker,
@@ -8373,12 +7667,7 @@
     async function exportBackup(scope) {
       const prefs = {};
       for (const key of scope === "look" ? LOOK_KEYS : fullBackupKeys()) {
-        const baseline =
-          LOOK_DEFAULTS[key] ??
-          ctx.PROFILE_DEFAULTS[key] ??
-          (reusableBaseDefaults.has(key)
-            ? window.Zentral?.Core?.defaultPrefs?.[key]
-            : undefined);
+        const baseline = backupDefault(key);
         if (
           scope === "full" &&
           !Services.prefs.prefHasUserValue(key) &&
@@ -8445,10 +7734,10 @@
       const entries = Object.entries(data.prefs);
       if (entries.length > 1500 || !entries.length)
         throw new Error("Invalid settings count");
-      const changes = entries.filter(
+      const requestedChanges = entries.filter(
         ([key]) => scope === "full" || LOOK_KEYS.has(key),
       );
-      if (scope === "look" && !changes.length)
+      if (scope === "look" && !requestedChanges.length)
         throw new Error("No Look options in this file");
       for (const [key, value] of entries) {
         if (
@@ -8459,15 +7748,40 @@
           (typeof value === "string" && value.length > 8 * 1024 * 1024)
         )
           throw new Error("Invalid preference in settings file: " + key);
+        const expected = backupDefault(key);
+        // Older grid menus wrote numeric strings; keep these exports importable.
+        const legacyGridValue =
+          [
+            "zen.workspace.apps.sidebar.apps_per_row",
+            "zen.workspace.apps.sidebar.max_rows",
+          ].includes(key) &&
+          typeof value === "string" &&
+          /^\d+$/.test(value);
+        if (
+          expected !== undefined &&
+          typeof value !== typeof expected &&
+          !legacyGridValue
+        )
+          throw new Error("Invalid preference type: " + key);
+        const declared = backupSchema().get(key);
+        if (
+          declared?.options &&
+          typeof value === "string" &&
+          !legacyGridValue &&
+          !declared.options.some((option) => option.value === value) &&
+          value !== expected
+        )
+          throw new Error("Invalid preference option: " + key);
+        if (
+          typeof value === "number" &&
+          (value < -2147483648 || value > 2147483647)
+        )
+          throw new Error("Preference integer out of range: " + key);
         if (LOOK_KEYS.has(key)) {
           const expected = LOOK_DEFAULTS[key];
           if (
             typeof value !== typeof expected ||
-            ([
-              ...LOOK_COLORS.map((name) => LOOK_PREFS[name]),
-              ctx.BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_COLOR,
-            ].includes(key) &&
-              !/^#[0-9a-fA-F]{6}$/.test(value)) ||
+            (backupColorKeys.has(key) && !/^#[0-9a-fA-F]{6}$/.test(value)) ||
             (LOOK_ENUMS[key] && !LOOK_ENUMS[key].includes(value)) ||
             (LOOK_BOUNDS[key] &&
               (value < LOOK_BOUNDS[key][0] || value > LOOK_BOUNDS[key][1]))
@@ -8475,6 +7789,23 @@
             throw new Error("Invalid Look value: " + key);
         }
       }
+      const changes = requestedChanges.filter(([key, value]) => {
+        if (!Services.prefs.prefHasUserValue(key)) return true;
+        try {
+          const type = Services.prefs.getPrefType(key);
+          const existing =
+            type === Services.prefs.PREF_BOOL
+              ? Services.prefs.getBoolPref(key)
+              : type === Services.prefs.PREF_INT
+                ? Services.prefs.getIntPref(key)
+                : type === Services.prefs.PREF_STRING
+                  ? Services.prefs.getStringPref(key)
+                  : undefined;
+          return existing !== value;
+        } catch (_) {
+          return true;
+        }
+      });
       // Store original types as well: a malformed or interrupted write can be
       // rolled back without discarding an existing preference.
       const previous = new Map(
@@ -8516,7 +7847,16 @@
         }
         throw error;
       }
-      syncAppearanceAfterImport();
+      for (const [key, value] of changes)
+        window.Zentral?.Core?.emit(`config:${key}`, value);
+      if (changes.some(([key]) => key.startsWith("zen.workspace.apps."))) {
+        const apps = window.Zentral?.Apps;
+        apps?.applyHideUtilitySectionPref?.();
+        apps?.repositionGrid?.();
+        apps?.updateAutohideState?.();
+        apps?.renderGrid?.();
+      }
+      syncAppearanceAfterImport(changes.map(([key]) => key));
       return true;
     }
     function addLookBackupControls(container) {
@@ -8730,8 +8070,8 @@
         content.appendChild(t2.row);
 
         const tHoverReveal = createToggleRow(
-          "Show Opposite-Side Panels on Hover",
-          "Requires Opposite-Side Docking. Leave a panel to hide it, then hover the outer edge to reveal it",
+          "Autohide Panels",
+          "Available in every docking and bar layout. Leave a panel to hide it, then hover its docked edge to reveal it",
           ctx.BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL,
           null,
           false,
@@ -8742,7 +8082,7 @@
 
         const tEdgeAttached = createToggleRow(
           "Edge-Attached Panels",
-          "Dock every floating panel flush to its current screen edge and temporarily ignore saved panel margins/position offsets; does not pin or push the webpage",
+          "Dock panels flush to the adjacent bar or opposite screen edge and temporarily ignore saved position offsets; does not pin or push the webpage",
           ctx.BGALAZKA_EXT_PREFS.EDGE_ATTACHED_PANELS,
           "bgalazka-edge-attached-panels",
           false,
@@ -8980,6 +8320,58 @@
         // ====================================================================
         // 3b. Extension — Hide Pill Controls
         // ====================================================================
+        const appsBarToolsHeader = document.createElement("div");
+        appsBarToolsHeader.id = "zs-appsbar-tools-heading";
+        appsBarToolsHeader.className = "zs-section-header";
+        const appsBarToolsTitle = document.createElement("h3");
+        appsBarToolsTitle.className = "zs-section-title";
+        appsBarToolsTitle.textContent = "Apps Bar — Browser Tools";
+        appsBarToolsHeader.appendChild(appsBarToolsTitle);
+        content.appendChild(appsBarToolsHeader);
+        const appsBarToolToggles = [
+          [
+            "LIBRARY",
+            "Show Library Button",
+            "Open the native Library with History, Downloads, and Bookmarks",
+            true,
+          ],
+          [
+            "HISTORY",
+            "Show History Button",
+            "Add a direct History shortcut to the second bar",
+            false,
+          ],
+          [
+            "DOWNLOADS",
+            "Show Downloads Button",
+            "Add a direct Downloads shortcut to the second bar",
+            false,
+          ],
+          [
+            "BOOKMARKS",
+            "Show Bookmarks Button",
+            "Add a direct Bookmarks shortcut to the second bar",
+            false,
+          ],
+        ].map(([key, label, description, def]) => {
+          const pref = ctx.BGALAZKA_EXT_PREFS["APPSBAR_" + key];
+          const control = createToggleRow(
+            label,
+            description,
+            pref,
+            "bgalazka-appsbar-" + key.toLowerCase(),
+            def,
+            ctx.PREF_ICONS[key],
+          );
+          content.appendChild(control.row);
+          return { row: control.row, input: control.input, pref, def };
+        });
+        // Keep browser tools easy to find before the longer panel options.
+        content.prepend(
+          appsBarToolsHeader,
+          ...appsBarToolToggles.map(({ row }) => row),
+        );
+
         const hidePillHeader = document.createElement("div");
         hidePillHeader.className = "zs-section-header";
         hidePillHeader.style.marginTop = "20px";
@@ -9565,6 +8957,7 @@
         content.appendChild(tHideUnattached.row);
 
         panel._toggles.push(
+          ...appsBarToolToggles,
           ...[s1, s2, s3].map(({ input, badge }, index) => ({
             input,
             pref: [
@@ -11051,6 +10444,7 @@
   }
   function setFeaturePref(key, value) {
     Core.setPref(key, value);
+    runtime.panelContext?.syncSettingsAfterImport?.(key);
     const apps = window.Zentral?.Apps,
       tabs = window.Zentral?.TabGroups;
     try {
@@ -11286,6 +10680,17 @@
               "font-size:11px;color:#94a3b8;overflow-wrap:anywhere",
             ),
           );
+          const context = runtime.panelContext;
+          const fallback =
+            context?.PROFILE_DEFAULTS?.[item.property] ??
+            Core.defaultPrefs[item.property] ??
+            item.defaultValue;
+          const current =
+            Core.defaultPrefs[item.property] !== undefined
+              ? Core.getPref(item.property, fallback)
+              : context && item.property.startsWith("zen.workspace.bgalazka.")
+                ? context.getPref(item.property, fallback)
+                : getPref(item.property, fallback);
           let input;
           if (item.type === "dropdown") {
             input = element("select");
@@ -11294,7 +10699,16 @@
               o.value = String(opt.value);
               input.append(o);
             }
-            input.value = String(getPref(item.property, item.defaultValue));
+            if (
+              ![...input.options].some(
+                (option) => option.value === String(current),
+              )
+            ) {
+              const option = element("option", String(current) + " (current)");
+              option.value = String(current);
+              input.append(option);
+            }
+            input.value = String(current);
           } else {
             input = element("input");
             input.type =
@@ -11303,14 +10717,19 @@
                 : typeof item.defaultValue === "number"
                   ? "number"
                   : "text";
-            if (input.type === "checkbox")
-              input.checked = getPref(item.property, item.defaultValue);
-            else input.value = getPref(item.property, item.defaultValue);
+            if (input.type === "checkbox") input.checked = current;
+            else input.value = current;
           }
           input.addEventListener("change", () => {
             let value = input.type === "checkbox" ? input.checked : input.value;
             if (typeof item.defaultValue === "number") value = Number(value);
-            if (typeof value === "number" && !Number.isFinite(value)) return;
+            if (
+              typeof value === "number" &&
+              (!Number.isInteger(value) ||
+                value < -2147483648 ||
+                value > 2147483647)
+            )
+              return;
             setFeaturePref(item.property, value);
           });
           row.append(left, input);

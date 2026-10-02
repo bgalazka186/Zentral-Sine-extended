@@ -280,17 +280,11 @@
           );
         } catch (_) {}
         try {
-          radiusPx = Math.max(
-            0,
-            Math.min(24, Services.prefs.getIntPref(RADIUS_PREF, 0)),
-          );
+          radiusPx = Math.max(0, Math.min(24, readInt(RADIUS_PREF, 0)));
         } catch (_) {}
         let widthPercent = 100;
         try {
-          widthPercent = Math.max(
-            35,
-            Math.min(100, Services.prefs.getIntPref(WIDTH_PREF, 100)),
-          );
+          widthPercent = Math.max(35, Math.min(100, readInt(WIDTH_PREF, 100)));
         } catch (_) {}
         let disposed = false;
         let scanning = false;
@@ -743,7 +737,12 @@
                 initial,
               );
               checkbox.addEventListener("change", () => {
-                Services.prefs.setBoolPref(preference, checkbox.checked);
+                videoSettingFromMenu = true;
+                try {
+                  Services.prefs.setBoolPref(preference, checkbox.checked);
+                } finally {
+                  videoSettingFromMenu = false;
+                }
                 onchange();
               });
               row.append(text, checkbox);
@@ -829,7 +828,11 @@
               AUTO_SHOW_PREF,
               true,
               () => {
-                if (!autoShowVideo() && previewAutoSelected) {
+                if (
+                  changes.has(AUTO_SHOW_PREF) &&
+                  !autoShowVideo() &&
+                  previewAutoSelected
+                ) {
                   current = null;
                   previewAutoSelected = false;
                   resetRendering();
@@ -4215,6 +4218,98 @@
           refreshCard();
           if (enabled()) scan(true);
         };
+        // Changes from import and the independent settings manager must also
+        // update cached dimensions/state and the original video settings menu.
+        // Coalesce a bulk import into one refresh, without polling.
+        let videoSettingFromMenu = false;
+        const videoSettingsBranch = "zen.workspace.zentral.video_preview.";
+        const directlyObservedVideoPrefs = new Set([
+          PREF,
+          EXPERIMENTAL_DISABLED_PREF,
+          PAUSE_COMPACT_PREF,
+          CAPTURE_RATE_PREF,
+          RENDER_PREF,
+          DISCOVERY_PREF,
+        ]);
+        const changedVideoPrefs = new Set();
+        let videoSettingsQueued = false;
+        const onVideoSetting = (_subject, _topic, key) => {
+          if (
+            disposed ||
+            videoSettingFromMenu ||
+            directlyObservedVideoPrefs.has(key)
+          )
+            return;
+          changedVideoPrefs.add(key);
+          if (videoSettingsQueued) return;
+          videoSettingsQueued = true;
+          queueMicrotask(() => {
+            videoSettingsQueued = false;
+            if (disposed) {
+              changedVideoPrefs.clear();
+              return;
+            }
+            const changes = new Set(changedVideoPrefs);
+            changedVideoPrefs.clear();
+            const readInt = (pref, fallback) => {
+              try {
+                return Services.prefs.getIntPref(pref, fallback);
+              } catch (_) {
+                return fallback;
+              }
+            };
+            heightPx = Math.max(0, Math.min(800, readInt(HEIGHT_PREF, 0)));
+            radiusPx = Math.max(0, Math.min(24, readInt(RADIUS_PREF, 0)));
+            widthPercent = Math.max(
+              35,
+              Math.min(100, readInt(WIDTH_PREF, 100)),
+            );
+            videoHidden = Services.prefs.getBoolPref(VIDEO_HIDDEN_PREF, false);
+            cardCompact = Services.prefs.getBoolPref(COMPACT_STATE_PREF, false);
+            if (changes.has(PIN_BUTTON_PREF) && !featureOn(PIN_BUTTON_PREF))
+              pinnedSource = null;
+            if (changes.has(ADAPTIVE_DETAIL_PREF))
+              adaptiveWidth = slowCaptures = fastCaptures = 0;
+            if (
+              changes.has(CAPTURE_WIDTH_PREF) ||
+              changes.has(DISPLAY_CAP_PREF) ||
+              changes.has(FRAME_AWARE_PREF)
+            )
+              nextStillCapture = 0;
+            if (
+              changes.has(CAPTIONS_PREF) ||
+              changes.has(CAPTION_EVENTS_PREF)
+            ) {
+              clearCaptionWatch();
+              if (featureOn(CAPTIONS_PREF)) refreshCaption();
+              else setCaption("");
+            }
+            if (
+              changes.has(AUTO_SHOW_PREF) &&
+              !autoShowVideo() &&
+              previewAutoSelected
+            ) {
+              current = null;
+              previewAutoSelected = false;
+              resetRendering();
+            }
+            fitPicture();
+            refreshCard();
+            updatePaintTimer();
+            injectSetting();
+            if (
+              enabled() &&
+              [
+                HIDE_DUPLICATES_PREF,
+                REQUIRE_AUDIO_PREF,
+                AUTO_SHOW_PREF,
+                AUDIO_CACHE_PREF,
+              ].some((pref) => changes.has(pref))
+            )
+              scan(true);
+          });
+        };
+        Services.prefs.addObserver(videoSettingsBranch, onVideoSetting);
         Services.prefs.addObserver(
           EXPERIMENTAL_DISABLED_PREF,
           onExperimentalPref,
@@ -4262,6 +4357,8 @@
         function destroy() {
           if (disposed) return;
           disposed = true;
+          changedVideoPrefs.clear();
+          Services.prefs.removeObserver(videoSettingsBranch, onVideoSetting);
           compactObserver.disconnect();
           pictureObserver?.disconnect();
           pictureObserver = null;

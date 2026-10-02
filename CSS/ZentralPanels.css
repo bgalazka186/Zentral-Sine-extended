@@ -537,3 +537,14 @@
   filter: none !important;
   opacity: 1 !important;
 }
+
+/* Apps Bar panels attach to the inner edge of the second bar, even when
+ * Opposite-Side Docking is enabled. Keep both sets of controls accessible. */
+:root[zentral-apps-placement="vertical-bar"][bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"] {
+  right: var(--zentral-appsbar-panel-inset, 56px) !important;
+}
+:root[zentral-apps-placement="vertical-bar"][bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"] {
+  left: var(--zentral-appsbar-panel-inset, 56px) !important;
+}

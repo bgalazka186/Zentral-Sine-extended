@@ -7,7 +7,7 @@
   },
   {
     "type": "text",
-    "label": "**Arc 2.0 Compatibility**",
+    "label": "**Original Zentral · Arc 2.0 Compatibility**",
     "size": "18px"
   },
   {
@@ -31,39 +31,43 @@
     "property": "zen.workspace.apps.sidebar.apps_per_row",
     "label": "Apps Displayed Per Row",
     "type": "dropdown",
-    "defaultValue": "7",
+    "defaultValue": 7,
     "options": [
       {
+        "label": "1 App",
+        "value": 1
+      },
+      {
         "label": "3 Apps",
-        "value": "3"
+        "value": 3
       },
       {
         "label": "4 Apps",
-        "value": "4"
+        "value": 4
       },
       {
         "label": "5 Apps",
-        "value": "5"
+        "value": 5
       },
       {
         "label": "6 Apps",
-        "value": "6"
+        "value": 6
       },
       {
         "label": "7 Apps (Default)",
-        "value": "7"
+        "value": 7
       },
       {
         "label": "8 Apps",
-        "value": "8"
+        "value": 8
       },
       {
         "label": "9 Apps",
-        "value": "9"
+        "value": 9
       },
       {
         "label": "10 Apps",
-        "value": "10"
+        "value": 10
       }
     ]
   },
@@ -71,27 +75,27 @@
     "property": "zen.workspace.apps.sidebar.max_rows",
     "label": "Maximum Grid Rows",
     "type": "dropdown",
-    "defaultValue": "3",
+    "defaultValue": 3,
     "options": [
       {
         "label": "1 Row",
-        "value": "1"
+        "value": 1
       },
       {
         "label": "2 Rows",
-        "value": "2"
+        "value": 2
       },
       {
         "label": "3 Rows (Default)",
-        "value": "3"
+        "value": 3
       },
       {
         "label": "4 Rows",
-        "value": "4"
+        "value": 4
       },
       {
         "label": "5 Rows",
-        "value": "5"
+        "value": 5
       }
     ]
   },
@@ -406,8 +410,32 @@
     "defaultValue": true
   },
   {
+    "property": "zen.workspace.bgalazka.appsbar_library",
+    "label": "Apps Bar: Show Library Button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.bgalazka.appsbar_history",
+    "label": "Apps Bar: Show History Button",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.bgalazka.appsbar_downloads",
+    "label": "Apps Bar: Show Downloads Button",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.bgalazka.appsbar_bookmarks",
+    "label": "Apps Bar: Show Bookmarks Button",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
     "property": "zen.workspace.bgalazka.hover_reveal_panel",
-    "label": "Hide Opposite-Side Panel Until Hover (retains its open app)",
+    "label": "Autohide Panel Until Hover (all docking modes; keeps its app pinned)",
     "type": "checkbox",
     "defaultValue": false
   },
@@ -7618,14 +7646,16 @@
     "defaultValue": true
   },
   {
-    "type": "text",
-    "label": "**Framework file loading · restart required**",
-    "size": "18px"
+    "property": "zen.workspace.bgalazka.panel_black_opacity",
+    "label": "Black panel backing opacity (0–100)",
+    "type": "input",
+    "defaultValue": 0
   },
   {
-    "type": "text",
-    "label": "All files default to enabled. Sine loads only the core; the core loads these modules. Settings and recovery are built in.",
-    "size": "12px"
+    "property": "zen.workspace.bgalazka.panel_black_steps",
+    "label": "Black backing cycle levels (comma separated)",
+    "type": "input",
+    "defaultValue": "0,1,5,10,20,30,40,50,60,70,80,90,100"
   },
   {
     "property": "zen.workspace.zentral.modules.logger.enabled",
@@ -7796,15 +7826,123 @@
     "defaultValue": "[]"
   },
   {
-    "property": "zen.workspace.bgalazka.panel_black_opacity",
-    "label": "Black panel backing opacity (0–100)",
-    "type": "input",
-    "defaultValue": 0
+    "property": "zen.workspace.zentral.video_preview.hide_button",
+    "label": "Show hide/show video button",
+    "type": "checkbox",
+    "defaultValue": true
   },
   {
-    "property": "zen.workspace.bgalazka.panel_black_steps",
-    "label": "Black backing cycle levels (comma separated)",
-    "type": "input",
-    "defaultValue": "0,1,5,10,20,30,40,50,60,70,80,90,100"
+    "property": "zen.workspace.zentral.video_preview.auto_height_button",
+    "label": "Show Auto height button after resizing",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.video_hidden",
+    "label": "Video preview: video hidden",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.binary_frames",
+    "label": "Transfer raw frames (fall back to JPEG)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.display_capture_cap",
+    "label": "Limit still capture to displayed size",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.adaptive_detail",
+    "label": "Adapt still capture detail under load",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.media_event_hints",
+    "label": "Refresh sources on media events",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.youtube_captions",
+    "label": "Mirror captions (text tracks and YouTube)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.stop_idle_timer",
+    "label": "Stop paint timer when preview is not visible",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.audio_probe_cache",
+    "label": "Cache audio-track checks for 30 seconds",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.frame_aware_capture",
+    "label": "Skip duplicate decoded frames",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_events",
+    "label": "Use caption change events when available",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.pin_source_button",
+    "label": "Show pin source button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.compact_card_button",
+    "label": "Show compact card button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.compact_card",
+    "label": "Video preview: compact card",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.performance_diagnostics",
+    "label": "Show performance diagnostics",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.bgalazka.mmb_unload_normal_tabs",
+    "label": "Middle-click unloads normal tabs",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.bgalazka.show_triple_style_repair",
+    "label": "Show Triple View style repair button",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.bgalazka.periodic_fallback_polling",
+    "label": "Periodic fallback polling",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.bgalazka.force_panel_black",
+    "label": "Force black panel backing",
+    "type": "checkbox",
+    "defaultValue": false
   }
 ]
