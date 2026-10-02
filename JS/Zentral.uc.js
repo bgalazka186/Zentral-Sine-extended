@@ -11,7 +11,15 @@
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
   const VERSION = "3.0.2-framework";
-  const ROOT = "chrome://sine/content/zentral/";
+  // Sine installs this package under theme.json's id. Resolve from the
+  // executing script so local folders and installed copies use their own files.
+  // Keep this universal: never hard-code a mod id, folder name, or profile path.
+  // Modules that need assets should resolve them against runtime.rootURI.
+  const ROOT = Services.io.newURI(
+    "../",
+    null,
+    Services.io.newURI(Components.stack.filename),
+  ).spec;
   const PREF = "zen.workspace.zentral.modules.";
   const definitions = new Map(),
     parts = new Map(),
@@ -113,6 +121,7 @@
   };
   const runtime = (window.ZentralRuntime = {
     version: VERSION,
+    rootURI: ROOT,
     hooks,
     services: { platform: Services },
     shared: null,
@@ -469,7 +478,8 @@
   const SETTINGS_SCHEMA = [
     {
       property: "zen.workspace.zentral.startup.enabled",
-      label: "Enable Load at Startup in essential and pinned tab right-click menus",
+      label:
+        "Enable Load at Startup in essential and pinned tab right-click menus",
       type: "checkbox",
       defaultValue: false,
     },

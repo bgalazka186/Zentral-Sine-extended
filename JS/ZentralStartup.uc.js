@@ -4,6 +4,10 @@
 // ==/UserScript==
 (function () {
   "use strict";
+  // Keep paths universal: use the core root, or this script's own location.
+  // Never hard-code a mod id, folder name, or profile path.
+  // Capture this file before initialize() is called by the core.
+  const SCRIPT_URI = Components.stack.filename;
   // The core registers this feature during its declaration pass, then starts
   // it after browser readiness. Without the core, initialize directly and
   // use the same browser/session/workspace readiness gates below.
@@ -13,6 +17,9 @@
       globalThis.Services ||
       ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
         .Services;
+    const ROOT =
+      window.ZentralRuntime?.rootURI ||
+      Services.io.newURI("../", null, Services.io.newURI(SCRIPT_URI)).spec;
     const PREF = "zen.workspace.zentral.startup.enabled";
     const TAB_KEY = "zentral-load-at-startup";
     const ITEM_ID = "zentral-tab-load-at-startup";
@@ -244,11 +251,9 @@
         "browser-delayed-startup-finished",
       ),
     );
-    // Same Sine package root as the existing core; CSS failure cannot block logic.
+    // Use this installation's package root; CSS failure cannot block logic.
     try {
-      sheet = Services.io.newURI(
-        "chrome://sine/content/zentral/CSS/ZentralStartup.css",
-      );
+      sheet = Services.io.newURI(ROOT + "CSS/ZentralStartup.css");
       window.windowUtils.loadSheet(sheet, window.windowUtils.USER_SHEET);
     } catch (error) {
       sheet = null;
