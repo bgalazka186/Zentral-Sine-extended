@@ -2045,7 +2045,11 @@
           getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) === true &&
           root?.hasAttribute("open") &&
           !root.hasAttribute("closing");
-        const shouldHide = !!(enabled && hidden);
+        const shouldHide = !!(
+          enabled &&
+          hidden &&
+          !isSameSideNativeSidebarHovered()
+        );
         const hiddenChanged =
           document.documentElement.hasAttribute(
             "bgalazka-hover-panel-hidden",
@@ -2124,6 +2128,55 @@
           setHoverPanelHidden(false);
         }
       }
+      function sameSideNativeSidebar() {
+        const root = document.getElementById("zen-app-panel-root");
+        const apps = window.Zentral?.Apps;
+        if (
+          !root?.hasAttribute("open") ||
+          root.hasAttribute("closing") ||
+          typeof apps?.isSidebarRight !== "function"
+        )
+          return null;
+        const side = root.getAttribute("data-panel-side");
+        if (side !== "left" && side !== "right") return null;
+        if ((side === "right") !== apps.isSidebarRight()) return null;
+        return (
+          window.ZentralRuntime?.nativeSidebarElement?.() ||
+          window.gBrowser?.tabContainer ||
+          null
+        );
+      }
+      function isSameSideNativeSidebarHovered() {
+        return !!sameSideNativeSidebar()?.matches(":hover");
+      }
+      const onNativeSidebarPanelPointerOver = (event) => {
+        const sidebar = sameSideNativeSidebar();
+        if (
+          !sidebar?.contains(event.target) ||
+          !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)
+        )
+          return;
+        clearHoverHide();
+        setHoverPanelHidden(false);
+      };
+      const onNativeSidebarPanelPointerOut = (event) => {
+        const sidebar = sameSideNativeSidebar();
+        if (
+          !sidebar?.contains(event.target) ||
+          !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)
+        )
+          return;
+        if (
+          (event.relatedTarget && sidebar.contains(event.relatedTarget)) ||
+          event.relatedTarget?.closest?.(
+            "#zen-app-panel-root, #bgalazka-panel-reveal-edge",
+          )
+        ) {
+          clearHoverHide();
+          return;
+        }
+        onHoverRootLeave();
+      };
       function isAppsBarHoverSurfaceHovered() {
         if (!window.Zentral?.Apps?.isPlacementVerticalBar?.()) return false;
         return !!(
@@ -2180,7 +2233,8 @@
           !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) ||
           hoverResizing ||
           hoverMenuVisible() ||
-          isAppsBarHoverSurfaceHovered()
+          isAppsBarHoverSurfaceHovered() ||
+          isSameSideNativeSidebarHovered()
         )
           return;
         hoverHideTimer = setTimeout(
@@ -2192,6 +2246,7 @@
               root?.matches(":hover") ||
               edge?.matches(":hover") ||
               isAppsBarHoverSurfaceHovered() ||
+              isSameSideNativeSidebarHovered() ||
               hoverResizing ||
               hoverMenuVisible()
             )
@@ -2465,6 +2520,16 @@
       // Delegate so late-created/rebuilt Apps Bars need no listener rebinding.
       document.addEventListener("pointerover", onAppsBarPanelPointerOver, true);
       document.addEventListener("pointerout", onAppsBarPanelPointerOut, true);
+      document.addEventListener(
+        "pointerover",
+        onNativeSidebarPanelPointerOver,
+        true,
+      );
+      document.addEventListener(
+        "pointerout",
+        onNativeSidebarPanelPointerOut,
+        true,
+      );
       document.addEventListener("pointerover", onWebPagePointer, true);
       window.addEventListener("focusout", onHoverPanelFocusOut, true);
       window.addEventListener("focusin", onHoverPanelFocusIn, true);
@@ -2493,6 +2558,16 @@
         document.removeEventListener(
           "pointerout",
           onAppsBarPanelPointerOut,
+          true,
+        );
+        document.removeEventListener(
+          "pointerover",
+          onNativeSidebarPanelPointerOver,
+          true,
+        );
+        document.removeEventListener(
+          "pointerout",
+          onNativeSidebarPanelPointerOut,
           true,
         );
         document.removeEventListener("pointerover", onWebPagePointer, true);
