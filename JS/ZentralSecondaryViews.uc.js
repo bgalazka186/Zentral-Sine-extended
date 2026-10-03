@@ -629,7 +629,12 @@
               );
               if (edge.includes("w")) left = start.left + start.width - width;
               if (edge.includes("n")) top = start.top + start.height - height;
-              box.style.left = `${Math.max(0, left)}px`;
+              const bounds = window.ZentralRuntime.sidebarSafeBounds();
+              width = Math.min(
+                width,
+                Math.max(0, bounds.right - bounds.left - 24),
+              );
+              box.style.left = `${Math.max(bounds.left + 12, Math.min(bounds.right - width - 12, left))}px`;
               box.style.top = `${Math.max(0, top)}px`;
               box.style.width = `${width}px`;
               box.style.height = `${height}px`;
@@ -657,10 +662,11 @@
           });
           grip.addEventListener("pointermove", (event) => {
             if (!drag || event.pointerId !== drag.id) return;
+            const bounds = window.ZentralRuntime.sidebarSafeBounds();
             box.style.left = `${Math.max(
-              0,
+              bounds.left + 12,
               Math.min(
-                window.innerWidth - box.getBoundingClientRect().width,
+                bounds.right - box.getBoundingClientRect().width - 12,
                 drag.left + event.clientX - drag.x,
               ),
             )}px`;
@@ -680,6 +686,7 @@
           grip.addEventListener("lostpointercapture", done);
         }
         state.shell = box;
+        window.ZentralRuntime?.requestSidebarLayout?.();
         const refreshSecondaryToolbar = () => {
           if (state.second !== browser || !box.isConnected) return;
           const nextSearch = ctx.getPanelQuickSwitchTarget?.(browser);

@@ -273,6 +273,280 @@
       delete window.ZentralRuntime;
     },
   });
+
+  // Measure native chrome, never the pushed web-content box.
+  function nativeSidebarElement() {
+    const tabs = window.gBrowser?.tabContainer;
+    const candidates = [
+      document.getElementById("navigator-toolbox"),
+      document.getElementById("sidebar-container"),
+      document.getElementById("vertical-tabs"),
+      document.getElementById("sidebar-box"),
+      tabs,
+    ];
+    return (
+      candidates.find(
+        (el) =>
+          el?.isConnected &&
+          (el === tabs || el.contains(tabs)) &&
+          el.getBoundingClientRect().width < window.innerWidth * 0.65,
+      ) ||
+      tabs ||
+      null
+    );
+  }
+  function nativeSidebarRect() {
+    const el = nativeSidebarElement();
+    return (
+      el?.getBoundingClientRect() || {
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: 0,
+        width: 0,
+        height: 0,
+      }
+    );
+  }
+  function sidebarSafeBounds() {
+    let left = 0,
+      right = window.innerWidth;
+    const native = nativeSidebarElement();
+    const nodes = new Set([native, document.getElementById("sidebar-box")]);
+    const ui = document.documentElement;
+    const onRight =
+      ui.getAttribute("zen-right-side") === "true" ||
+      ui.getAttribute("zen-sidebar-right") === "true";
+    if (ui.getAttribute("zen-compact-mode") === "true") {
+      if (onRight) right -= 8;
+      else left += 8;
+    }
+    for (const node of nodes) {
+      if (!node?.isConnected) continue;
+      const style = window.getComputedStyle(node),
+        rect = node.getBoundingClientRect();
+      if (
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.opacity === "0" ||
+        rect.width <= 0 ||
+        rect.width >= window.innerWidth * 0.65 ||
+        rect.height <= 0 ||
+        rect.right <= 0 ||
+        rect.left >= window.innerWidth
+      )
+        continue;
+      if (rect.left + rect.width / 2 < window.innerWidth / 2)
+        left = Math.max(left, rect.right);
+      else right = Math.min(right, rect.left);
+    }
+    return {
+      left: Math.max(0, Math.min(left, window.innerWidth)),
+      right: Math.max(left, Math.min(right, window.innerWidth)),
+      top: 0,
+      bottom: window.innerHeight,
+    };
+  }
+  function setLayoutStyle(node, name, value) {
+    if (node.style.getPropertyValue(name) !== value)
+      node.style.setProperty(name, value);
+  }
+  function constrainPanelToSidebar(panel) {
+    if (!panel?.hasAttribute("open")) return;
+    const bounds = sidebarSafeBounds(),
+      side = panel.getAttribute("data-panel-side");
+    const width = panel.getBoundingClientRect().width;
+    const style = window.getComputedStyle(panel);
+    const ml = parseFloat(style.marginLeft) || 0,
+      mr = parseFloat(style.marginRight) || 0;
+    const requested =
+      side === "right"
+        ? window.innerWidth - (parseFloat(panel.style.right) || 0) - width - mr
+        : (parseFloat(panel.style.left) || 0) + ml;
+    const min = bounds.left + (side === "right" ? 44 : 12);
+    const max = Math.max(
+      min,
+      bounds.right - width - (side === "left" ? 44 : 12),
+    );
+    const left = Math.max(min, Math.min(max, requested));
+    setLayoutStyle(
+      panel,
+      "--zentral-safe-panel-left",
+      Math.round(left - ml) + "px",
+    );
+    setLayoutStyle(
+      panel,
+      "--zentral-safe-panel-right",
+      Math.round(window.innerWidth - left - width - mr) + "px",
+    );
+  }
+  runtime.nativeSidebarElement = nativeSidebarElement;
+  runtime.nativeSidebarRect = nativeSidebarRect;
+  runtime.sidebarSafeBounds = sidebarSafeBounds;
+  runtime.constrainPanelToSidebar = constrainPanelToSidebar;
+  function installSidebarLayoutTracking() {
+    let frame = null,
+      disposed = false;
+    const transitions = new Map(),
+      watched = new Set();
+    const geometry =
+      /^(transform|translate|width|height|min-width|max-width|left|right|inset.*|margin.*|padding.*|flex-basis|opacity)$/;
+    const queue = () => {
+      if (!disposed && frame == null)
+        frame = window.requestAnimationFrame(update);
+    };
+    runtime.requestSidebarLayout = queue;
+    const resize = new ResizeObserver(queue);
+    const anchors = new MutationObserver(queue);
+    const bind = () => {
+      const native = nativeSidebarElement();
+      for (const start of [
+        native,
+        window.gBrowser?.tabContainer,
+        document.getElementById("sidebar-box"),
+      ]) {
+        if (!start) continue;
+        for (
+          let node = start;
+          node && node !== document.documentElement;
+          node = node.parentElement
+        ) {
+          if (watched.has(node)) continue;
+          watched.add(node);
+          resize.observe(node);
+          anchors.observe(node, {
+            attributes: true,
+            attributeFilter: [
+              "style",
+              "class",
+              "hidden",
+              "collapsed",
+              "zen-sidebar-expanded",
+              "zen-sidebar-hidden",
+            ],
+          });
+        }
+      }
+    };
+    const update = () => {
+      frame = null;
+      if (disposed) return;
+      bind();
+      const bounds = sidebarSafeBounds(),
+        ui = document.documentElement;
+      if (ui.getAttribute("zentral-safe-layout") !== "true")
+        ui.setAttribute("zentral-safe-layout", "true");
+      setLayoutStyle(ui, "--zentral-safe-left", Math.ceil(bounds.left) + "px");
+      setLayoutStyle(
+        ui,
+        "--zentral-safe-right",
+        Math.ceil(window.innerWidth - bounds.right) + "px",
+      );
+      window.Zentral?.Apps?.positionPanel?.();
+      constrainPanelToSidebar(document.getElementById("zen-app-panel-root"));
+      runtime.panelContext?.syncSidebarLayout?.();
+      const superPanel = document.getElementById("bgalazka-super-panel");
+      if (ui.getAttribute("bgalazka-super-pin") === "true" && superPanel) {
+        const rect = superPanel.getBoundingClientRect();
+        const width = Math.min(
+          rect.width,
+          Math.max(0, bounds.right - bounds.left - 24),
+        );
+        if (rect.width > width)
+          setLayoutStyle(superPanel, "width", width + "px");
+        setLayoutStyle(
+          superPanel,
+          "left",
+          Math.round(
+            Math.max(
+              bounds.left + 12,
+              Math.min(bounds.right - width - 12, rect.left),
+            ),
+          ) + "px",
+        );
+      }
+      if (transitions.size) queue();
+    };
+    const rootObserver = new MutationObserver(() => {
+      window.Zentral?.Apps?.scheduleRepositionGrid?.(0);
+      queue();
+    });
+    rootObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: [
+        "zen-right-side",
+        "zen-sidebar-right",
+        "zen-sidebar-collapsed",
+        "zen-sidebar-expanded",
+        "zen-sidebar-hidden",
+        "zen-compact-mode",
+        "zen-compact-navbar-visible",
+        "zen-compact-sidebar-visible",
+        "inFullscreen",
+      ],
+    });
+    const transition = (event) => {
+      if (!watched.has(event.target) || !geometry.test(event.propertyName))
+        return;
+      let props = transitions.get(event.target);
+      if (event.type === "transitionrun" || event.type === "transitionstart") {
+        if (!props) transitions.set(event.target, (props = new Set()));
+        props.add(event.propertyName);
+      } else {
+        props?.delete(event.propertyName);
+        if (!props?.size) transitions.delete(event.target);
+      }
+      queue();
+    };
+    const prefs = {
+      observe: () => {
+        window.Zentral?.Apps?.scheduleRepositionGrid?.(0);
+        queue();
+      },
+    };
+    Services.prefs.addObserver("zen.view.", prefs);
+    for (const type of [
+      "transitionrun",
+      "transitionstart",
+      "transitionend",
+      "transitioncancel",
+    ])
+      window.addEventListener(type, transition, true);
+    for (const type of [
+      "resize",
+      "aftercustomization",
+      "zen-workspace-switched",
+    ])
+      window.addEventListener(type, queue);
+    bind();
+    update();
+    disposers.push(() => {
+      delete runtime.requestSidebarLayout;
+      disposed = true;
+      if (frame != null) window.cancelAnimationFrame(frame);
+      resize.disconnect();
+      anchors.disconnect();
+      rootObserver.disconnect();
+      Services.prefs.removeObserver("zen.view.", prefs);
+      for (const type of [
+        "transitionrun",
+        "transitionstart",
+        "transitionend",
+        "transitioncancel",
+      ])
+        window.removeEventListener(type, transition, true);
+      for (const type of [
+        "resize",
+        "aftercustomization",
+        "zen-workspace-switched",
+      ])
+        window.removeEventListener(type, queue);
+      for (const name of ["--zentral-safe-left", "--zentral-safe-right"])
+        document.documentElement.style.removeProperty(name);
+      document.documentElement.removeAttribute("zentral-safe-layout");
+    });
+  }
+
   const MANIFEST = [
     {
       id: "logger",
@@ -11107,6 +11381,7 @@
       }
     }
     activateReady();
+    installSidebarLayoutTracking();
     console.info("[Zentral] Framework startup complete", runtime.snapshot());
     emit();
   }

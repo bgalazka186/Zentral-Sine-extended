@@ -734,9 +734,8 @@
 
           // 2. Physical DOM measurement of the sidebar container
           const sidebarBox =
-            document.getElementById("sidebar-box") ||
-            document.getElementById("sidebar-container") ||
-            document.getElementById("vertical-tabs");
+            window.ZentralRuntime?.nativeSidebarElement?.() ||
+            gBrowser?.tabContainer;
           if (sidebarBox && sidebarBox.isConnected) {
             const rect = sidebarBox.getBoundingClientRect();
             if (rect.width > 0) {
@@ -825,6 +824,10 @@
          * @returns {boolean} True if the sidebar is physically not expanded.
          */
         isPhysicallySidebarCollapsed() {
+          if (
+            document.documentElement.getAttribute("zen-compact-mode") === "true"
+          )
+            return true;
           // DOM attribute set by Zen in Collapsed Sidebar mode
           const collapsedAttr = document.documentElement.getAttribute(
             "zen-sidebar-collapsed",
@@ -834,9 +837,7 @@
           // Compact mode: sidebar is visually collapsed but pref says expanded.
           // Detect by measuring physical width of the tab/sidebar container.
           const sidebarBox =
-            document.getElementById("tabbrowser-tabbox") ||
-            document.getElementById("sidebar-box") ||
-            document.getElementById("sidebar-container") ||
+            window.ZentralRuntime?.nativeSidebarElement?.() ||
             gBrowser?.tabContainer;
           if (sidebarBox) {
             const rect = sidebarBox.getBoundingClientRect();
@@ -4375,6 +4376,9 @@
               "zen-compact-mode",
               "zen-sidebar-hidden",
               "zen-right-side",
+              "zen-sidebar-right",
+              "zen-sidebar-collapsed",
+              "zen-compact-sidebar-visible",
               "style",
               "zen-compact-navbar-visible",
             ],
@@ -4448,9 +4452,8 @@
           }
           if (!Number.isFinite(barInset) || barInset <= 0) barInset = 44;
           const sidebar =
-            document.getElementById("sidebar-box") ||
-            document.getElementById("sidebar-container") ||
-            document.getElementById("vertical-tabs") ||
+            window.ZentralRuntime?.nativeSidebarElement?.() ||
+            gBrowser?.tabContainer ||
             gBrowser?.tabContainer;
           const rect = sidebar?.getBoundingClientRect();
           let left = gap;
@@ -4502,9 +4505,8 @@
 
           let sidebarRect = tcRect;
           const sidebarEl =
-            document.getElementById("sidebar-box") ||
-            document.getElementById("sidebar-container") ||
-            document.getElementById("vertical-tabs");
+            window.ZentralRuntime?.nativeSidebarElement?.() ||
+            gBrowser?.tabContainer;
           if (sidebarEl) {
             const sRect = sidebarEl.getBoundingClientRect();
             if (sRect.width > 0 && sRect.height > 0) {
@@ -4640,6 +4642,7 @@
             root.style.transform = "translateX(0)";
             root.setAttribute("data-panel-side", "left");
           }
+          window.ZentralRuntime?.constrainPanelToSidebar?.(root);
         }
 
         updateVerticalBarBounds() {
@@ -5805,7 +5808,10 @@
 
           this.#sideObserver = new window.MutationObserver((mutations) => {
             for (const m of mutations) {
-              if (m.attributeName === "zen-right-side") {
+              if (
+                m.attributeName === "zen-right-side" ||
+                m.attributeName === "zen-sidebar-right"
+              ) {
                 this.repositionGrid();
                 this.renderGrid();
                 if (
@@ -5817,7 +5823,8 @@
               if (
                 m.attributeName === "zen-sidebar-collapsed" ||
                 m.attributeName === "zen-compact-mode" ||
-                m.attributeName === "zen-sidebar-expanded"
+                m.attributeName === "zen-sidebar-expanded" ||
+                m.attributeName === "zen-sidebar-hidden"
               ) {
                 Core.log(
                   "ZentralApps",
@@ -5838,6 +5845,9 @@
             attributes: true,
             attributeFilter: [
               "zen-right-side",
+              "zen-sidebar-right",
+              "zen-sidebar-collapsed",
+              "zen-compact-sidebar-visible",
               "zen-sidebar-collapsed",
               "zen-compact-mode",
               "zen-sidebar-expanded",
@@ -5908,9 +5918,8 @@
           );
 
           const sidebarBox =
-            document.getElementById("tabbrowser-tabbox") ||
-            document.getElementById("sidebar-box") ||
-            document.getElementById("sidebar-container");
+            window.ZentralRuntime?.nativeSidebarElement?.() ||
+            gBrowser?.tabContainer;
           if (sidebarBox && typeof ResizeObserver !== "undefined") {
             let lastWidth = sidebarBox.getBoundingClientRect().width;
             this.#resizeObs = new ResizeObserver((entries) => {

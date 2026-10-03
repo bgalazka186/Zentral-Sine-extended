@@ -397,9 +397,8 @@
           return apps.getAppsBarPanelMaxWidth();
         const gap = 12; // must match the gap our positionPanel() override uses
         const sidebarEl =
-          document.getElementById("sidebar-box") ||
-          document.getElementById("sidebar-container") ||
-          document.getElementById("vertical-tabs");
+          window.ZentralRuntime?.nativeSidebarElement?.() ||
+          gBrowser?.tabContainer;
         const sidebarRect = sidebarEl
           ? sidebarEl.getBoundingClientRect()
           : gBrowser?.tabContainer?.getBoundingClientRect();
@@ -683,8 +682,7 @@
             if (root) {
               if (this.isPlacementVerticalBar() && isOppositeDockingCached()) {
                 const sidebar =
-                  document.getElementById("sidebar-box") ||
-                  document.getElementById("sidebar-container") ||
+                  window.ZentralRuntime?.nativeSidebarElement?.() ||
                   gBrowser?.tabContainer;
                 const rect = sidebar?.getBoundingClientRect();
                 if (rect)
@@ -703,6 +701,7 @@
                 ctx.applyHorizontalPanelOffset(root);
               root._bgalazkaLastSide = side;
             }
+            window.ZentralRuntime?.constrainPanelToSidebar?.(root);
             return;
           }
           if (!root) return;
@@ -763,6 +762,7 @@
           if (root.getAttribute("data-panel-side") !== side)
             root.setAttribute("data-panel-side", side);
           if (sideChanged) ctx.applyHorizontalPanelOffset(root);
+          window.ZentralRuntime?.constrainPanelToSidebar?.(root);
         };
 
         // Mirror data-pinned onto #zen-app-panel-root so the translucency CSS (which
@@ -1977,9 +1977,7 @@
           let inset = 0;
           if (!atViewportEdge) {
             const sidebar =
-              document.getElementById("sidebar-box") ||
-              document.getElementById("sidebar-container") ||
-              document.getElementById("vertical-tabs") ||
+              window.ZentralRuntime?.nativeSidebarElement?.() ||
               window.gBrowser?.tabContainer;
             const sidebarRect = sidebar?.getBoundingClientRect();
             if (sidebarRect?.width > 0)
@@ -1992,6 +1990,18 @@
           inset = Math.max(0, Math.min(window.innerWidth - 6, inset));
           edge.style.left = onRight ? "auto" : inset + "px";
           edge.style.right = onRight ? inset + "px" : "auto";
+        }
+        const safe = window.ZentralRuntime?.sidebarSafeBounds?.();
+        if (safe) {
+          if (edge.style.left !== "auto")
+            edge.style.left =
+              Math.max(safe.left, parseFloat(edge.style.left) || 0) + "px";
+          if (edge.style.right !== "auto")
+            edge.style.right =
+              Math.max(
+                window.innerWidth - safe.right,
+                parseFloat(edge.style.right) || 0,
+              ) + "px";
         }
         edge.style.top = `${Math.max(0, rect.top)}px`;
         edge.style.height = `${Math.max(0, Math.min(window.innerHeight, rect.bottom) - Math.max(0, rect.top))}px`;
@@ -4489,6 +4499,18 @@
         delete ctx.recreateLoadedPanels;
       });
       ctx.reconcileFeaturePreferences();
+
+      ctx.syncSidebarLayout = () => {
+        updateRevealEdgeGeometry();
+        syncPanelPushState();
+        window.ZentralRuntime?.constrainPanelToSidebar?.(
+          document.getElementById("zen-app-panel-root"),
+        );
+        ctx.syncSecondaryToolbarPreferences?.();
+      };
+      registerCleanup(() => {
+        delete ctx.syncSidebarLayout;
+      });
 
       // Startup opening is independent of each app's background preload flag.
       const startupPanelPref = "zen.workspace.bgalazka.open_at_startup";

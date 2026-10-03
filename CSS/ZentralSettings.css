@@ -410,3 +410,23 @@
   display: block !important;
 }
 
+/* Settings cover the usable workspace, not native sidebar controls. */
+:root[zentral-safe-layout="true"] #zentral-settings-modal {
+  left: var(--zentral-safe-left, 0px) !important;
+  right: var(--zentral-safe-right, 0px) !important;
+  height: auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+}
+:root[zentral-safe-layout="true"] #zentral-settings-modal .zs-dialog {
+  max-width: calc(100% - 24px) !important;
+  min-width: 0 !important;
+  max-height: calc(100vh - 24px) !important;
+}
+:root[zentral-safe-layout="true"] #zentral-control-center {
+  left: calc(var(--zentral-safe-left, 0px) + 12px) !important;
+  right: calc(var(--zentral-safe-right, 0px) + 12px) !important;
+  width: auto !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}

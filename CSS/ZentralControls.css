@@ -676,3 +676,36 @@
   ) !important;
   color: white !important;
 }
+
+/* Keep native sidebar content and the compact reveal bezel reachable. */
+:root[zentral-safe-layout="true"] #zen-app-panel-root {
+  max-width: max(
+    0px,
+    calc(
+      100vw - var(--zentral-safe-left, 0px) - var(--zentral-safe-right, 0px) -
+        68px
+    )
+  ) !important;
+  min-width: 0 !important;
+}
+:root[zentral-safe-layout="true"][zentral-apps-placement][bgalazka-edge-attached-panels][bgalazka-opposite-docking][bgalazka-push-page]
+  #zen-app-panel-root[open][data-panel-side="left"] {
+  left: var(--zentral-safe-panel-left, 12px) !important;
+  right: auto !important;
+}
+:root[zentral-safe-layout="true"][zentral-apps-placement][bgalazka-edge-attached-panels][bgalazka-opposite-docking][bgalazka-push-page]
+  #zen-app-panel-root[open][data-panel-side="right"] {
+  right: var(--zentral-safe-panel-right, 12px) !important;
+  left: auto !important;
+}
+:root[zentral-safe-layout="true"][bgalazka-super-pin="true"]
+  #bgalazka-super-panel {
+  max-width: max(
+    0px,
+    calc(
+      100vw - var(--zentral-safe-left, 0px) - var(--zentral-safe-right, 0px) -
+        24px
+    )
+  ) !important;
+  min-width: 0 !important;
+}

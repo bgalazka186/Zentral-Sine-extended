@@ -258,9 +258,13 @@
       const left = root.offsetLeft;
       const right = left + root.offsetWidth;
       const appliedOffset = getAppliedHorizontalOffset(root);
+      const bounds = window.ZentralRuntime?.sidebarSafeBounds?.() || {
+        left: 0,
+        right: window.innerWidth,
+      };
       return {
-        min: appliedOffset - left,
-        max: appliedOffset + (window.innerWidth - right),
+        min: appliedOffset + bounds.left - left,
+        max: appliedOffset + (bounds.right - right),
       };
     }
 
