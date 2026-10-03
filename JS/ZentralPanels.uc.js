@@ -291,6 +291,7 @@
       // dimensions out of this table. Existing saved preferences always win.
       const PROFILE_DEFAULTS = Object.freeze({
         "zen.workspace.bgalazka.appsbar_library": true,
+        "zen.workspace.bgalazka.triple_inward_toolbars": true,
         [EXT_PREFS.TRANSLUCENCY]: true,
         [EXT_PREFS.OPPOSITE_DOCKING]: true,
         [EXT_PREFS.TAB_ISOLATION]: true,
@@ -392,7 +393,7 @@
 
       function computeOppositeDockingSafeMaxWidth() {
         const apps = window.Zentral?.Apps;
-        if (apps?.isPlacementVerticalBar?.())
+        if (apps?.isPanelDockedToAppsBar?.())
           return apps.getAppsBarPanelMaxWidth();
         const gap = 12; // must match the gap our positionPanel() override uses
         const sidebarEl =
@@ -654,8 +655,9 @@
         const origIsPanelAttachedToRight =
           appsInstance.isPanelAttachedToRight?.bind(appsInstance);
         appsInstance.isPanelAttachedToRight = function () {
-          if (isOppositeDockingCached() && !this.isPlacementVerticalBar()) {
-            return !this.isSidebarRight();
+          if (isOppositeDockingCached()) {
+            // Opposite means opposite to this launcher mode's native anchor.
+            return !origIsPanelAttachedToRight();
           }
           return origIsPanelAttachedToRight
             ? origIsPanelAttachedToRight()
@@ -679,6 +681,23 @@
             )
               ctx.applyVerticalResizeExtras(root);
             if (root) {
+              if (this.isPlacementVerticalBar() && isOppositeDockingCached()) {
+                const sidebar =
+                  document.getElementById("sidebar-box") ||
+                  document.getElementById("sidebar-container") ||
+                  gBrowser?.tabContainer;
+                const rect = sidebar?.getBoundingClientRect();
+                if (rect)
+                  root.style.setProperty(
+                    "--zentral-sidebar-edge-inset",
+                    Math.max(
+                      0,
+                      this.isPanelAttachedToRight()
+                        ? window.innerWidth - rect.left
+                        : rect.right,
+                    ) + "px",
+                  );
+              }
               const side = root.getAttribute("data-panel-side");
               if (root._bgalazkaLastSide !== side)
                 ctx.applyHorizontalPanelOffset(root);
@@ -1172,6 +1191,7 @@
           "zen.workspace.bgalazka.web_toolbar_quickswitch",
         // Dock the toolbar at the top of the web panel instead of the bottom.
         WEB_TOOLBAR_TOP: "zen.workspace.bgalazka.web_toolbar_top",
+        TRIPLE_INWARD_TOOLBARS: "zen.workspace.bgalazka.triple_inward_toolbars",
         HIDE_DUAL_VIEW: "zen.workspace.bgalazka.hide_dual_view",
         HIDE_PIN: "zen.workspace.bgalazka.hide_pin",
         HIDE_EXPAND: "zen.workspace.bgalazka.hide_expand",
@@ -1935,7 +1955,7 @@
         if (!edge || !box) return;
         const rect = box.getBoundingClientRect();
         const apps = window.Zentral?.Apps;
-        if (apps?.isPlacementVerticalBar?.()) {
+        if (apps?.isPanelDockedToAppsBar?.()) {
           const bounds = apps.getAppsBarPanelBounds();
           // When both surfaces hide, return the reveal target to the bezel.
           // A target left floating inside the page steals clicks there.
@@ -1952,7 +1972,8 @@
           const onRight = panel?.getAttribute("data-panel-side") === "right";
           const ui = document.documentElement;
           const atViewportEdge =
-            ui.getAttribute("bgalazka-opposite-docking") === "true";
+            ui.getAttribute("bgalazka-opposite-docking") === "true" &&
+            !apps?.isPlacementVerticalBar?.();
           let inset = 0;
           if (!atViewportEdge) {
             const sidebar =
@@ -2356,10 +2377,11 @@
         }, 1000);
         event.preventDefault();
         event.stopImmediatePropagation();
-        setPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false);
+        hoverHoldUntil = Date.now() + 5000;
         clearHoverHide();
         syncHoverPanelAvailability();
         setHoverPanelHidden(false);
+        onHoverRootLeave();
       };
       const onActiveLauncherClick = (event) => {
         if (event.button !== 0) return;
@@ -2379,9 +2401,10 @@
           return;
         event.preventDefault();
         event.stopImmediatePropagation();
-        setPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false);
+        hoverHoldUntil = Date.now() + 5000;
         syncHoverPanelAvailability();
         setHoverPanelHidden(false);
+        onHoverRootLeave();
       };
       const onHoverPopupShowing = (event) => {
         if (
@@ -2878,14 +2901,49 @@
         );
       }
 
+      function getKeyboardPanelBrowser(e = null) {
+        const surfaces = [
+          document.getElementById("zen-app-panel-root"),
+          document.getElementById("bgalazka-super-panel"),
+        ].filter(Boolean);
+        const candidates = [
+          ...(e?.composedPath?.() || []),
+          document.activeElement,
+        ];
+        for (const node of candidates) {
+          if (
+            node?.localName === "browser" &&
+            surfaces.some((surface) => surface.contains(node))
+          )
+            return node;
+          const surface = node?.closest?.(
+            "#bgalazka-super-panel, #bgalazka-super-panel-shell",
+          );
+          const browser =
+            surface?.querySelector("browser") ||
+            surface?.parentElement?.querySelector(
+              'browser[data-bgalazka-triple-slot="bottom"]',
+            );
+          if (browser) return browser;
+        }
+        return ctx.getActiveAppBrowser?.() || getVisiblePanelBrowser();
+      }
+
       function panelOwnsKeyboardEvent(e) {
         const root = document.getElementById("zen-app-panel-root");
         if (!root?.hasAttribute("open") || root.dataset.instaPeek === "true")
           return false;
         const path = e.composedPath?.() || [];
-        if (path.includes(root)) return true;
+        const superPanel = document.getElementById("bgalazka-super-panel");
+        if (path.includes(root) || (superPanel && path.includes(superPanel)))
+          return true;
         const active = document.activeElement;
-        return Boolean(active && (active === root || root.contains(active)));
+        return Boolean(
+          active &&
+          (active === root ||
+            root.contains(active) ||
+            superPanel?.contains(active)),
+        );
       }
 
       function toggleExtensionBooleanPref(pref, rootAttr = null) {
@@ -2900,8 +2958,7 @@
         return next;
       }
 
-      function stepActivePanelZoom(delta) {
-        const browser = ctx.getActiveAppBrowser?.() || getVisiblePanelBrowser();
+      function stepActivePanelZoom(delta, browser = getKeyboardPanelBrowser()) {
         if (!browser) return false;
         try {
           const cur = ZoomManager.getZoomForBrowser(browser);
@@ -2915,9 +2972,9 @@
         }
       }
 
-      function runExtensionKeybindAction(actionKey) {
+      function runExtensionKeybindAction(actionKey, event = null) {
         const apps = window.Zentral?.Apps;
-        const browser = ctx.getActiveAppBrowser?.() || getVisiblePanelBrowser();
+        const browser = getKeyboardPanelBrowser(event);
         switch (actionKey) {
           case "CLOSE_PANEL":
             apps?.closePanel?.();
@@ -2951,9 +3008,14 @@
             if (!getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_URLBAR, false))
               return false;
             ctx.ensureWebToolbar();
-            const input = document.querySelector(
-              "#zen-app-panel-toolbar .zen-toolbar-urlbar",
-            );
+            const secondary =
+              browser?.getAttribute?.("data-bgalazka-triple-slot") ===
+                "bottom" || browser?.closest?.("#bgalazka-super-panel");
+            const input = secondary
+              ? document.querySelector(".bgalazka-second-url")
+              : document.querySelector(
+                  "#zen-app-panel-toolbar .zen-toolbar-urlbar",
+                );
             if (!input) return false;
             input.focus();
             input.select?.();
@@ -3018,11 +3080,11 @@
             );
             return true;
           case "ZOOM_IN":
-            return stepActivePanelZoom(0.1);
+            return stepActivePanelZoom(0.1, browser);
           case "ZOOM_OUT":
-            return stepActivePanelZoom(-0.1);
+            return stepActivePanelZoom(-0.1, browser);
           case "ZOOM_RESET":
-            return stepActivePanelZoom(0);
+            return stepActivePanelZoom(0, browser);
           case "OPEN_SETTINGS":
             window.Zentral?.Settings?.open?.();
             return true;
@@ -3052,7 +3114,7 @@
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        runExtensionKeybindAction(match.key);
+        runExtensionKeybindAction(match.key, e);
       };
       window.addEventListener("keydown", extensionKeybindHandler, true);
       registerCleanup(() =>
@@ -4060,6 +4122,11 @@
       {
         const WEB_TOOLBAR_ATTR_MAP = [
           [
+            BGALAZKA_EXT_PREFS.TRIPLE_INWARD_TOOLBARS,
+            "bgalazka-triple-inward-toolbars",
+            true,
+          ],
+          [
             BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED,
             "bgalazka-webtoolbar",
             false,
@@ -4301,7 +4368,127 @@
 
       /* Secondary views keep the native first panel and its toolbar intact. */
 
+      // Browser identity changes recreate only loaded contexts, preserving the current URL.
+      ctx.recreateLoadedPanels = (ids) => {
+        const apps = window.Zentral?.Apps;
+        if (!apps) return;
+        let saved = [];
+        try {
+          saved = JSON.parse(getPref("zen.workspace.apps.sidebar.apps", "[]"));
+        } catch (_) {}
+        const view = apps.capturePanelViewState();
+        const visible = view.open ? ctx.getActiveAppBrowser?.() : null;
+        for (const id of ids) {
+          const old = ctx
+            .getAllAppBrowsers()
+            .find((b) => b._bgalazkaAppId === id);
+          const app =
+            ctx.essentialPanels.get(id)?.app || saved.find((a) => a.id === id);
+          if (!old || !app) continue;
+          const next = {
+            ...app,
+            url:
+              old.currentURI?.spec !== "about:blank"
+                ? old.currentURI?.spec || app.url
+                : app.url,
+          };
+          const closePanel = apps.closePanel;
+          try {
+            apps.closePanel = () => {};
+            apps.closeApp(id);
+          } finally {
+            apps.closePanel = closePanel;
+          }
+          if (old === visible) {
+            apps.openPanel(next);
+            apps.restorePanelViewState(view);
+          } else {
+            const created = apps.getOrCreateAppBrowser(next);
+            if (created?.browser) {
+              created.browser.style.display = "none";
+              created.browser.fixupAndLoadURIString(next.url, {
+                triggeringPrincipal:
+                  Services.scriptSecurityManager.getSystemPrincipal(),
+              });
+            }
+          }
+        }
+        ctx.syncAppPanelBrowserActivity?.();
+      };
       window.ZentralRuntime.runPart("secondary-views");
+      let featureSyncTimer = null;
+      let lastBridgeState = getPref(
+        BGALAZKA_EXT_PREFS.ADDON_TAB_ID_BRIDGE,
+        true,
+      );
+      ctx.reconcileFeaturePreferences = () => {
+        if (featureSyncTimer != null) return;
+        featureSyncTimer = setTimeout(() => {
+          featureSyncTimer = null;
+          const bridgeState = getPref(
+            BGALAZKA_EXT_PREFS.ADDON_TAB_ID_BRIDGE,
+            true,
+          );
+          const bridgeChanged = bridgeState !== lastBridgeState;
+          lastBridgeState = bridgeState;
+          applyAttributes();
+          for (const [key, pref] of Object.entries(BGALAZKA_EXT_PREFS)) {
+            if (key === "TRIPLE_PUSH_PAGE") continue;
+            const value = getPref(pref, false);
+            if (typeof value === "boolean")
+              document.documentElement.setAttribute(
+                "bgalazka-" + key.toLowerCase().replaceAll("_", "-"),
+                String(value),
+              );
+          }
+          for (const name of [
+            "secondary_toolbar_swap",
+            "secondary_toolbar_close",
+          ])
+            document.documentElement.setAttribute(
+              "bgalazka-" + name.replaceAll("_", "-"),
+              String(getPref("zen.workspace.bgalazka." + name, true)),
+            );
+          if (bridgeChanged) ctx.unloadPanelBrowsersForAddonBridge?.();
+          syncHoverPanelAvailability();
+          syncPanelPushState();
+          ctx.requestTileSync(0);
+          ctx.updateWebToolbarState?.();
+          ctx.syncSecondaryToolbarPreferences?.();
+          syncPanelFallbackPolling();
+          ctx.syncSecondaryFallbackPolling?.();
+          window.Zentral?.Apps?.positionPanel?.();
+          ctx.updatePanelHeightVar?.();
+          ctx.applyHorizontalPanelOffset?.(
+            document.getElementById("zen-app-panel-root"),
+          );
+        }, 0);
+      };
+      const featurePrefObserver = {
+        observe: () => ctx.reconcileFeaturePreferences(),
+      };
+      Services.prefs.addObserver(
+        "zen.workspace.bgalazka.",
+        featurePrefObserver,
+      );
+      Services.prefs.addObserver(
+        "zen.workspace.apps.sidebar.enabled",
+        featurePrefObserver,
+      );
+      registerCleanup(() => {
+        Services.prefs.removeObserver(
+          "zen.workspace.bgalazka.",
+          featurePrefObserver,
+        );
+        Services.prefs.removeObserver(
+          "zen.workspace.apps.sidebar.enabled",
+          featurePrefObserver,
+        );
+        clearTimeout(featureSyncTimer);
+        delete ctx.reconcileFeaturePreferences;
+        delete ctx.recreateLoadedPanels;
+      });
+      ctx.reconcileFeaturePreferences();
 
       // Startup opening is independent of each app's background preload flag.
       const startupPanelPref = "zen.workspace.bgalazka.open_at_startup";

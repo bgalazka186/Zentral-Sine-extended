@@ -107,10 +107,34 @@
     document.documentElement.removeAttribute(arcSidebarAttribute);
     document.documentElement.style.removeProperty(arcSidebarColorProperty);
   });
+  const unsafeCorePref =
+    "zen.workspace.zentral.modules.allow_unsafe_core_disable";
+  const protectedModules = new Set([
+    "apps",
+    "panels",
+    "geometry",
+    "corner-panels",
+    "panel-toolbar",
+    "browser-integrations",
+    "panel-styles",
+  ]);
+  const protectedCSS = new Set([
+    "Base",
+    "Panels",
+    "CornerPanels",
+    "Controls",
+    "PanelToolbar",
+    "PanelGeometry",
+    "BrowserIntegrations",
+    "Appearance",
+  ]);
+  const unsafeCoreDisabled = () => getPref(unsafeCorePref, false) === true;
   const enabled = (id) =>
     id === "extension-settings"
       ? true
-      : getPref(PREF + id + ".enabled", true) !== false;
+      : protectedModules.has(id) && !unsafeCoreDisabled()
+        ? true
+        : getPref(PREF + id + ".enabled", true) !== false;
   const emit = () =>
     window.dispatchEvent(new CustomEvent("zentral-runtime-change"));
   const fail = (r, error) => {
@@ -476,6 +500,31 @@
     },
   ];
   const SETTINGS_SCHEMA = [
+    {
+      property: "zen.workspace.bgalazka.triple_inward_toolbars",
+      label: "Triple View: URL bars face the divider",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.bgalazka.secondary_toolbar_swap",
+      label: "Show secondary panel swap control",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.bgalazka.secondary_toolbar_close",
+      label: "Show secondary close/unlink control",
+      type: "checkbox",
+      defaultValue: true,
+    },
+    {
+      property: "zen.workspace.zentral.modules.allow_unsafe_core_disable",
+      label:
+        "I am being stupid and want to disable core elements of the mod (restart required)",
+      type: "checkbox",
+      defaultValue: false,
+    },
     {
       property: "zen.workspace.zentral.startup.enabled",
       label:
@@ -1719,7 +1768,7 @@
     },
     {
       property: "zen.workspace.bgalazka.smart_sleep",
-      label: "Defer Panel Preloads",
+      label: "Defer Automatic Panel Preloads",
       type: "checkbox",
       defaultValue: true,
     },
@@ -2869,7 +2918,8 @@
         [Constants.Apps.PREF_ANIMATION_SPEED]: 0,
         [Constants.Apps.PREF_ANIMATION_TYPE]: "none",
         [Constants.Apps.PREF_ENABLED]: true,
-        [Constants.Apps.PREF_MAX_APPS]: -1,
+        [Constants.Apps.PREF_MAX_APPS]: 21,
+        "zen.workspace.bgalazka.smart_sleep": true,
         [Constants.Apps.PREF_APPS_PER_ROW]: 1,
         [Constants.Apps.PREF_MAX_ROWS]: 1,
         [Constants.Apps.PREF_AUTOHIDE]: false,
@@ -6714,7 +6764,9 @@
         }
         if (
           prefKey ===
-          (ctx.EXT_PREFS?.CORNER_TILES || ctx.BGALAZKA_EXT_PREFS.CORNER_TILES)
+            (ctx.EXT_PREFS?.CORNER_TILES ||
+              ctx.BGALAZKA_EXT_PREFS.CORNER_TILES) ||
+          prefKey === ctx.BGALAZKA_EXT_PREFS.ALL_TAB_PANELS
         ) {
           ctx.requestTileSync(50);
         }
@@ -7542,6 +7594,7 @@
     }
 
     function syncChangedSetting(key) {
+      ctx.reconcileFeaturePreferences?.(key);
       syncAppearanceAfterImport([key]);
     }
     function syncAppearanceAfterImport(keys = null) {
@@ -8058,7 +8111,7 @@
 
         const t2 = createToggleRow(
           "Opposite-Side Docking & Controls",
-          "Dock floating panels, pill menus, and resize handles opposite to active sidebar",
+          "Reverse the default panel side for the selected Sidebar or Apps Bar launcher mode",
           ctx.BGALAZKA_EXT_PREFS.OPPOSITE_DOCKING,
           "bgalazka-opposite-docking",
           false,
@@ -8094,6 +8147,30 @@
           },
         );
         content.appendChild(tEdgeAttached.row);
+        for (const [key, label] of [
+          ["secondary_toolbar_swap", "Show secondary panel swap control"],
+          ["secondary_toolbar_close", "Show secondary close/unlink control"],
+        ]) {
+          const pref = "zen.workspace.bgalazka." + key;
+          const control = createToggleRow(
+            label,
+            "Applies to Triple and Super views; changes live",
+            pref,
+            "bgalazka-" + key.replaceAll("_", "-"),
+            true,
+            ctx.PREF_ICONS.DOCK,
+          );
+          content.appendChild(control.row);
+        }
+
+        const liveNote = document.createElement("p");
+        liveNote.className = "zs-sublabel";
+        liveNote.textContent =
+          "Feature switches apply live from this window, Sine, or about:config. " +
+          "Edge attachment and page push lock move and height gestures; saved free-position values return later. " +
+          "Container, mobile UA and Real Tab IDs changes recreate loaded panels and restore their views. " +
+          "Module/CSS loading and local add-ons apply after restart; core files stay protected unless unsafe disabling is enabled in Developer settings.";
+        content.appendChild(liveNote);
 
         const tPush = createToggleRow(
           "Dual-View Mode",
@@ -8441,6 +8518,13 @@
           "bgalazka-webtoolbar-top",
           false,
         );
+        const tTripleInwardToolbars = createToggleRow(
+          "Triple View: URL Bars Face the Divider",
+          "Place the top panel's toolbar at its bottom and the bottom panel's toolbar at its top; overrides toolbar placement only in Triple View",
+          ctx.BGALAZKA_EXT_PREFS.TRIPLE_INWARD_TOOLBARS,
+          "bgalazka-triple-inward-toolbars",
+          true,
+        );
         const tToolbarUrlbar = createToggleRow(
           "Show URL Bar",
           "Display and allow editing the current page's address",
@@ -8578,6 +8662,7 @@
         webToolbarSubgroup.append(
           tToolbarAutohide.row,
           tToolbarTop.row,
+          tTripleInwardToolbars.row,
           tToolbarUrlbar.row,
           tToolbarZoom.row,
         );
@@ -8891,11 +8976,7 @@
           "bgalazka-corner-tiles",
           false,
           ctx.PREF_ICONS.CORNER,
-          (enabled) =>
-            cornerSubgroup.setAttribute(
-              "data-hidden",
-              enabled ? "false" : "true",
-            ),
+          (enabled) => cornerSubgroup.setAttribute("data-hidden", "false"),
         );
         content.appendChild(t4.row);
 
@@ -8938,12 +9019,7 @@
           t3.row,
           tBadges.row,
         );
-        cornerSubgroup.setAttribute(
-          "data-hidden",
-          ctx.getPref(ctx.BGALAZKA_EXT_PREFS.CORNER_TILES, false)
-            ? "false"
-            : "true",
-        );
+        cornerSubgroup.setAttribute("data-hidden", "false");
         content.appendChild(cornerSubgroup);
 
         const tHideUnattached = createToggleRow(
@@ -9118,6 +9194,16 @@
               document.documentElement.setAttribute(
                 "bgalazka-webtoolbar-autohide",
                 v ? "true" : "false",
+              ),
+          },
+          {
+            input: tTripleInwardToolbars.input,
+            pref: ctx.BGALAZKA_EXT_PREFS.TRIPLE_INWARD_TOOLBARS,
+            def: true,
+            onSync: (v) =>
+              document.documentElement.setAttribute(
+                "bgalazka-triple-inward-toolbars",
+                String(v),
               ),
           },
           {
@@ -9312,8 +9398,7 @@
             input: t4.input,
             pref: ctx.BGALAZKA_EXT_PREFS.CORNER_TILES,
             def: false,
-            onSync: (v) =>
-              cornerSubgroup.setAttribute("data-hidden", v ? "false" : "true"),
+            onSync: (v) => cornerSubgroup.setAttribute("data-hidden", "false"),
           },
           {
             input: tAllTabs.input,
@@ -10557,7 +10642,8 @@
         const input = element("input");
         input.type = "checkbox";
         input.checked = enabled(r.id);
-        input.disabled = !!r.builtin;
+        input.disabled =
+          !!r.builtin || (protectedModules.has(r.id) && !unsafeCoreDisabled());
         input.addEventListener("change", () => {
           setPref(PREF + r.id + ".enabled", input.checked);
           developer();
@@ -10617,6 +10703,26 @@
         }
         body.append(card);
       }
+      const unsafeRow = element(
+        "label",
+        null,
+        "display:flex;gap:8px;padding:10px;color:#fcd34d",
+      );
+      const unsafeInput = element("input");
+      unsafeInput.type = "checkbox";
+      unsafeInput.checked = unsafeCoreDisabled();
+      unsafeInput.addEventListener("change", () => {
+        setPref(unsafeCorePref, unsafeInput.checked);
+        developer();
+      });
+      unsafeRow.append(
+        unsafeInput,
+        element(
+          "span",
+          "I am being stupid and want to disable core elements of the mod (restart required)",
+        ),
+      );
+      body.prepend(unsafeRow);
       body.append(element("h3", "CSS files"));
       for (const s of styles.values()) {
         const row = element(
@@ -10626,7 +10732,11 @@
         );
         const input = element("input");
         input.type = "checkbox";
-        input.checked = getPref(PREF + "css." + s.id + ".enabled", true);
+        input.checked =
+          protectedCSS.has(s.id) && !unsafeCoreDisabled()
+            ? true
+            : getPref(PREF + "css." + s.id + ".enabled", true);
+        input.disabled = protectedCSS.has(s.id) && !unsafeCoreDisabled();
         input.addEventListener("change", () =>
           setPref(PREF + "css." + s.id + ".enabled", input.checked),
         );
@@ -10845,7 +10955,10 @@
   async function loadCSS(spec) {
     const row = { ...spec, state: "loading" };
     styles.set(spec.id, row);
-    if (!getPref(PREF + "css." + spec.id + ".enabled", true)) {
+    if (
+      !(protectedCSS.has(spec.id) && !unsafeCoreDisabled()) &&
+      !getPref(PREF + "css." + spec.id + ".enabled", true)
+    ) {
       row.state = "disabled";
       return;
     }
@@ -10905,6 +11018,7 @@
             if (typeof cleanup.destroy === "function")
               disposers.push(() => cleanup.destroy());
           }
+          if (r.state === "failed") continue;
           r.state = availability.get(m.id) === false ? "dormant" : "active";
           r.reason = undefined;
         } catch (e) {

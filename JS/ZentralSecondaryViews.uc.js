@@ -417,10 +417,22 @@
           } else if (event.key === "Escape") url.blur();
         });
         bar.append(grip, url);
-        iconButton(ctx.PREF_ICONS.ZOOM_OUT, "Zoom out", () => zoom(-0.1));
+        iconButton(ctx.PREF_ICONS.ZOOM_OUT, "Zoom out", () =>
+          zoom(-0.1),
+        ).classList.add("bgalazka-second-zoom");
         const zoomText = button("100%", "Reset zoom", () => zoom(0));
-        zoomText.classList.add("bgalazka-second-zoom-label");
-        iconButton(ctx.PREF_ICONS.ZOOM_IN, "Zoom in", () => zoom(0.1));
+        zoomText.classList.add(
+          "bgalazka-second-zoom-label",
+          "bgalazka-second-zoom",
+        );
+        iconButton(ctx.PREF_ICONS.ZOOM_IN, "Zoom in", () =>
+          zoom(0.1),
+        ).classList.add("bgalazka-second-zoom");
+        const quickSwitch = button("⇄", "Switch search engine", () => {
+          const next = ctx.getPanelQuickSwitchTarget?.(browser);
+          if (next) navigate(browser, next.url);
+        });
+        quickSwitch.classList.add("bgalazka-second-quickswitch");
         if (state.mode === "triple")
           button("⇅", "Swap top and bottom panels", swapPair).classList.add(
             "bgalazka-second-swap",
@@ -670,6 +682,18 @@
         state.shell = box;
         const refreshSecondaryToolbar = () => {
           if (state.second !== browser || !box.isConnected) return;
+          const nextSearch = ctx.getPanelQuickSwitchTarget?.(browser);
+          quickSwitch.style.setProperty(
+            "display",
+            ctx.getPref(
+              ctx.BGALAZKA_EXT_PREFS.WEB_TOOLBAR_QUICKSWITCH,
+              false,
+            ) && nextSearch
+              ? "inline-flex"
+              : "none",
+            "important",
+          );
+          if (nextSearch) quickSwitch.title = "Search with " + nextSearch.label;
           const liveURL = browser.currentURI?.spec;
           if (liveURL && liveURL !== "about:blank") state.secondURL = liveURL;
           if (document.activeElement !== url)
@@ -793,6 +817,84 @@
       }
       // Startup can request one panel even when it belongs to a saved Triple View pair.
       // Normal launcher clicks still restore the linked pair through the wrapper below.
+
+      ctx.syncSecondaryToolbarPreferences = () => {
+        state.pollUpdate?.();
+        fitSecondaryBrowsers();
+      };
+      const fallbackRecreatePanels = ctx.recreateLoadedPanels;
+      ctx.recreateLoadedPanels = (ids) => {
+        const view = apps.capturePanelViewState();
+        const primary = view.open
+          ? state.mode
+            ? state.first
+            : active()
+          : null;
+        const loaded = new Map(
+          ctx
+            .getAllAppBrowsers()
+            .map((browser) => [browser._bgalazkaAppId, browser]),
+        );
+        for (const id of ids) {
+          const old = loaded.get(id);
+          const source =
+            ctx.essentialPanels.get(id)?.app ||
+            savedNormalApps().find((a) => a.id === id);
+          if (!old || !source) continue;
+          const app = {
+            ...source,
+            url:
+              old.currentURI?.spec && old.currentURI.spec !== "about:blank"
+                ? old.currentURI.spec
+                : source.url,
+          };
+          const isFirst = old === primary;
+          const isSecond = old === state.second;
+          const shellStyle = state.shell?.style.cssText;
+          const share = state.share,
+            pair = state.pair;
+
+          if (isSecond) discardSecond();
+          const closePanel = apps.closePanel;
+          try {
+            apps.closePanel = () => {};
+            origCloseApp.call(apps, id);
+          } finally {
+            apps.closePanel = closePanel;
+          }
+          if (isFirst) {
+            origOpen.call(apps, app);
+            if (state.mode)
+              state.first = ctx
+                .getAllAppBrowsers()
+                .find((b) => b._bgalazkaAppId === id);
+            else state.first = null;
+            if (state.mode === "triple")
+              state.first?.setAttribute("data-bgalazka-triple-slot", "top");
+            if (state.second) state.second.style.display = "";
+            apps.restorePanelViewState(view);
+          } else if (isSecond) {
+            openSecond(app, false);
+            if (state.mode === "super" && state.shell && shellStyle)
+              state.shell.style.cssText = shellStyle;
+          } else {
+            const created = apps.getOrCreateAppBrowser(app);
+            if (created?.browser) {
+              created.browser.style.display = "none";
+              navigate(created.browser, app.url);
+            }
+          }
+          state.share = share;
+          state.pair = pair;
+          if (state.mode) fitSecondaryBrowsers();
+        }
+        markTiles();
+        ctx.syncAppPanelBrowserActivity();
+      };
+      ctx.registerCleanup(() => {
+        ctx.recreateLoadedPanels = fallbackRecreatePanels;
+        delete ctx.syncSecondaryToolbarPreferences;
+      });
       ctx.openStartupSinglePanel = (app) => origOpen.call(apps, app);
       apps.openPanel = function (app) {
         const pair = app?.id && ctx.linkedPairFor(app.id);

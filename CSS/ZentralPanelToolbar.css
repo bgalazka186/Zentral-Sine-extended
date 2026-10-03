@@ -258,11 +258,15 @@
 }
 
 /* In two-bar mode, edge attachment means the Apps Bar's inner edge. */
-:root[zentral-apps-placement="vertical-bar"][bgalazka-edge-attached-panels="true"]
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [bgalazka-opposite-docking="true"]
+  )[bgalazka-edge-attached-panels="true"]
   #zen-app-panel-root[data-panel-side="right"] {
   right: var(--zentral-appsbar-edge-inset, 44px) !important;
 }
-:root[zentral-apps-placement="vertical-bar"][bgalazka-edge-attached-panels="true"]
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [bgalazka-opposite-docking="true"]
+  )[bgalazka-edge-attached-panels="true"]
   #zen-app-panel-root[data-panel-side="left"] {
   left: var(--zentral-appsbar-edge-inset, 44px) !important;
 }
@@ -280,4 +284,33 @@
   ):not([zentral-apps-placement="vertical-bar"])
   #zen-app-panel-root[data-panel-side="left"] {
   left: var(--zentral-sidebar-edge-inset, 0px) !important;
+}
+
+/* Top overlay stays revealed after leaving its trigger and while editing the URL. */
+:root[bgalazka-webtoolbar="true"][bgalazka-webtoolbar-autohide="true"]
+  #zen-app-panel-toolbar:is(:hover, :focus-within),
+:root[bgalazka-webtoolbar="true"][bgalazka-webtoolbar-top="true"][bgalazka-webtoolbar-autohide="true"]
+  #zen-app-panel-toolbar:is(:hover, :focus-within) {
+  transform: translateY(0);
+  opacity: 1;
+}
+/* Shared toolbar settings apply to secondary surfaces too. */
+:root:not([bgalazka-webtoolbar="true"]) .bgalazka-super-bar {
+  display: none !important;
+}
+:root:not([bgalazka-webtoolbar-urlbar="true"]) .bgalazka-second-url,
+:root:not([bgalazka-webtoolbar-urlbar="true"]) .bgalazka-second-grip {
+  display: none !important;
+}
+:root:not([bgalazka-webtoolbar-zoom="true"]) .bgalazka-second-zoom {
+  display: none !important;
+}
+
+:root[zentral-apps-placement="vertical-bar"][bgalazka-opposite-docking="true"][bgalazka-edge-attached-panels="true"]
+  #zen-app-panel-root[data-panel-side="left"] {
+  left: var(--zentral-sidebar-edge-inset, 0px) !important;
+}
+:root[zentral-apps-placement="vertical-bar"][bgalazka-opposite-docking="true"][bgalazka-edge-attached-panels="true"]
+  #zen-app-panel-root[data-panel-side="right"] {
+  right: var(--zentral-sidebar-edge-inset, 0px) !important;
 }

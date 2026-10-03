@@ -163,13 +163,19 @@
  * -------------------------------------------------------------------------- */
 
 /* Solid surface when Dual-View is active */
-:root[bgalazka-translucency="true"][bgalazka-push-page="true"][bgalazka-panel-pinned="true"]
+:root[bgalazka-translucency="true"][bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"]
   #zen-app-panel-root
   #zen-app-panel-slider,
-:root[bgalazka-translucency="true"][bgalazka-push-page="true"][bgalazka-panel-pinned="true"]
+:root[bgalazka-translucency="true"][bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"]
   #zen-app-panel-root:is(:hover, :focus-within)
   #zen-app-panel-slider,
-:root[bgalazka-translucency="true"][bgalazka-push-page="true"][bgalazka-panel-pinned="true"]
+:root[bgalazka-translucency="true"][bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"]
   #zen-app-panel-root:not(:hover):not(:focus-within)
   #zen-app-panel-slider {
   opacity: 1 !important;
@@ -184,13 +190,17 @@
     margin-left 0.22s cubic-bezier(0.25, 1, 0.5, 1) !important;
 }
 
-:root[bgalazka-push-page="true"][bgalazka-panel-pinned="true"][bgalazka-panel-side="right"]
+:root[bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"][bgalazka-panel-side="right"]
   #tabbrowser-tabbox {
   margin-right: calc(var(--bgalazka-panel-width, 350px) + 12px) !important;
   margin-left: 0 !important;
 }
 
-:root[bgalazka-push-page="true"][bgalazka-panel-pinned="true"][bgalazka-panel-side="left"]
+:root[bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"][bgalazka-panel-side="left"]
   #tabbrowser-tabbox {
   margin-left: calc(var(--bgalazka-panel-width, 350px) + 12px) !important;
   margin-right: 0 !important;
@@ -519,14 +529,22 @@
 
 /* A pinned Apps Bar already occupies frame space. An autohiding bar overlays
  * the page, so Dual/Triple View must reserve that extra footprint as well. */
-:root[zentral-apps-placement="vertical-bar"][zentral-apps-autohide="true"][bgalazka-push-page="true"][bgalazka-panel-pinned="true"][bgalazka-panel-side="right"]
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [bgalazka-opposite-docking="true"]
+  )[zentral-apps-autohide="true"][bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"][bgalazka-panel-side="right"]
   #tabbrowser-tabbox {
   margin-right: calc(
     var(--bgalazka-panel-width, 350px) + 12px +
       var(--zentral-appsbar-push-extra, 52px)
   ) !important;
 }
-:root[zentral-apps-placement="vertical-bar"][zentral-apps-autohide="true"][bgalazka-push-page="true"][bgalazka-panel-pinned="true"][bgalazka-panel-side="left"]
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [bgalazka-opposite-docking="true"]
+  )[zentral-apps-autohide="true"][bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"][bgalazka-panel-side="left"]
   #tabbrowser-tabbox {
   margin-left: calc(
     var(--bgalazka-panel-width, 350px) + 12px +
@@ -537,9 +555,15 @@
 /* Hidden two-bar panels release ALL page space, including the overlaid
  * Apps Bar reservation. Include the push-state attributes so this beats
  * both the two-bar push rule and the legacy 6px hidden-panel gutter. */
-:root[zentral-apps-placement="vertical-bar"][bgalazka-hover-panel-hidden][bgalazka-hover-panel-enabled][bgalazka-panel-side]
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [bgalazka-opposite-docking="true"]
+  )[bgalazka-hover-panel-hidden][bgalazka-hover-panel-enabled][bgalazka-panel-side]
   #tabbrowser-tabbox,
-:root[zentral-apps-placement="vertical-bar"][bgalazka-hover-panel-hidden][bgalazka-hover-panel-enabled][bgalazka-push-page="true"][bgalazka-panel-pinned="true"][bgalazka-panel-side]
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [bgalazka-opposite-docking="true"]
+  )[bgalazka-hover-panel-hidden][bgalazka-hover-panel-enabled][bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"][bgalazka-panel-side]
   #tabbrowser-tabbox {
   margin-left: 0 !important;
   margin-right: 0 !important;
@@ -547,14 +571,18 @@
 
 /* A hidden panel is still logically open. Let the second bar hide when
  * neither it nor its trigger is hovered, even if an open marker remains. */
-:root[zentral-apps-placement="vertical-bar"][zentral-apps-autohide="true"][bgalazka-hover-panel-hidden][bgalazka-panel-side="right"]
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [bgalazka-opposite-docking="true"]
+  )[zentral-apps-autohide="true"][bgalazka-hover-panel-hidden][bgalazka-panel-side="right"]
   #zentral-apps-vertical-bar:not([data-revealed="true"]):not(:hover) {
   transform: translateX(calc(100% + 16px)) !important;
   opacity: 0 !important;
   pointer-events: none !important;
   visibility: hidden !important;
 }
-:root[zentral-apps-placement="vertical-bar"][zentral-apps-autohide="true"][bgalazka-hover-panel-hidden][bgalazka-panel-side="left"]
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [bgalazka-opposite-docking="true"]
+  )[zentral-apps-autohide="true"][bgalazka-hover-panel-hidden][bgalazka-panel-side="left"]
   #zentral-apps-vertical-bar:not([data-revealed="true"]):not(:hover) {
   transform: translateX(calc(-100% - 16px)) !important;
   opacity: 0 !important;
@@ -570,7 +598,9 @@
   #tabbrowser-tabbox,
 :root[bgalazka-hover-panel-hidden][bgalazka-hover-panel-enabled]:not(
     [bgalazka-opposite-docking="true"]
-  )[bgalazka-push-page="true"][bgalazka-panel-pinned="true"][bgalazka-panel-side]
+  )[bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"][bgalazka-panel-side]
   #tabbrowser-tabbox {
   margin-left: 0 !important;
   margin-right: 0 !important;
@@ -604,4 +634,45 @@
   > .zs-section-content
   > * {
   flex-shrink: 0 !important;
+}
+
+/* Reveal targets never overlap page content, independently of docking. */
+#zen-app-panel-root[data-panel-side="left"] .zen-app-hover-zone {
+  right: -44px !important;
+  left: auto !important;
+}
+#zen-app-panel-root[data-panel-side="right"] .zen-app-hover-zone {
+  left: -44px !important;
+  right: auto !important;
+}
+/* Retain the DOM and hooks during live Apps suspension to avoid reparenting remote browsers. */
+:root[zentral-apps-enabled="false"]
+  :is(
+    #zen-apps-sidebar-grid,
+    #zentral-apps-vertical-bar,
+    #zentral-apps-vertical-bar-trigger,
+    #zen-apps-autohide-trigger,
+    #zen-app-panel-root,
+    #bgalazka-super-panel,
+    .bgalazka-essential-tile,
+    #bgalazka-panel-reveal-edge
+  ) {
+  display: none !important;
+}
+:root[zentral-insta-peek="true"] #bgalazka-super-panel {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+:root[zentral-insta-peek="true"] #tabbrowser-tabbox {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+/* Expanded-pill appearance has its own preference, independent of the idle marker. */
+#zen-app-panel-pill {
+  background: color-mix(
+    in srgb,
+    black var(--bgalazka-pill-background-opacity, 90%),
+    transparent
+  ) !important;
+  color: white !important;
 }

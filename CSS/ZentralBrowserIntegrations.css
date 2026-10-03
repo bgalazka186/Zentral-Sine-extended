@@ -677,3 +677,87 @@
   background: transparent !important;
 }
 
+/* All panel toolbars use the same master, URL and zoom preferences. */
+:root:not([bgalazka-webtoolbar="true"])
+  #bgalazka-super-panel
+  .bgalazka-super-bar {
+  display: none !important;
+}
+:root:not([bgalazka-webtoolbar-urlbar="true"])
+  #bgalazka-super-panel
+  .bgalazka-second-url,
+:root:not([bgalazka-webtoolbar-urlbar="true"])
+  #bgalazka-super-panel
+  .bgalazka-second-grip,
+:root:not([bgalazka-webtoolbar-zoom="true"])
+  #bgalazka-super-panel
+  .bgalazka-super-bar
+  .bgalazka-second-zoom,
+:root[bgalazka-secondary-toolbar-swap="false"]
+  #bgalazka-super-panel
+  .bgalazka-second-swap,
+:root[bgalazka-secondary-toolbar-close="false"]
+  #bgalazka-super-panel
+  .bgalazka-second-close {
+  display: none !important;
+}
+:root[bgalazka-triple-view="true"][bgalazka-triple-populated="true"]:not(
+    [bgalazka-webtoolbar="true"]
+  )
+  #bgalazka-super-panel {
+  height: 0 !important;
+  min-height: 0 !important;
+  flex-basis: 0 !important;
+}
+/* Top placement orders each bar before its own browser without moving remote content. */
+:root[bgalazka-triple-view="true"][bgalazka-triple-populated="true"][bgalazka-webtoolbar-top="true"]
+  #zen-app-panel-toolbar {
+  order: -3 !important;
+}
+:root[bgalazka-triple-view="true"][bgalazka-triple-populated="true"]:not(
+    [bgalazka-webtoolbar-top="true"]
+  )
+  #bgalazka-super-panel {
+  order: 3 !important;
+}
+:root[bgalazka-super-pin="true"]:not([bgalazka-webtoolbar-top="true"])
+  #bgalazka-super-panel
+  .bgalazka-super-bar {
+  order: 1 !important;
+}
+/* Autohide leaves a small target accessible; focus reveals controls while editing. */
+:root[bgalazka-webtoolbar="true"][bgalazka-webtoolbar-autohide="true"]
+  #bgalazka-super-panel:not(:hover):not(:focus-within)
+  .bgalazka-super-bar {
+  opacity: 0 !important;
+}
+:root[bgalazka-triple-view="true"][bgalazka-triple-populated="true"][bgalazka-webtoolbar-autohide="true"]
+  #zen-app-panel-toolbar:not(:hover):not(:focus-within) {
+  opacity: 0 !important;
+}
+/* Peek releases every pushed margin, including Triple View. */
+:root[zentral-insta-peek="true"][bgalazka-push-page][bgalazka-panel-side][zentral-apps-placement]
+  #tabbrowser-tabbox {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+:root[zentral-insta-peek="true"] #bgalazka-super-panel {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+:root[zentral-apps-placement="vertical-bar"][bgalazka-opposite-docking="true"][bgalazka-hover-panel-hidden="true"]
+  #tabbrowser-tabbox {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Inward toolbars override global placement only in populated Triple View.
+ * Change flex order, never reparent loaded remote browsers. */
+:root[bgalazka-triple-view="true"][bgalazka-triple-populated="true"][bgalazka-triple-inward-toolbars="true"]
+  #zen-app-panel-toolbar {
+  order: -1 !important;
+}
+:root[bgalazka-triple-view="true"][bgalazka-triple-populated="true"][bgalazka-triple-inward-toolbars="true"]
+  #bgalazka-super-panel {
+  order: 1 !important;
+}

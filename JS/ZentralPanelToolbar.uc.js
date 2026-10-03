@@ -412,6 +412,17 @@
       return targets[(currentIndex + 1) % targets.length];
     }
 
+    ctx.getPanelQuickSwitchTarget = (browser) => {
+      const current = browser?.currentURI?.spec || "";
+      const query = extractGetSearchQuery(current);
+      const next = getNextQuickSwitchTarget(current);
+      return query != null && next
+        ? {
+            url: next.template.replaceAll("%s", encodeURIComponent(query)),
+            label: next.label || next.key,
+          }
+        : null;
+    };
     // Best-effort mirror of Firefox's OWN default search engine, for the
     // "Browser Default" option. Services.search is promise-based, and we
     // don't want the URL bar's Enter handler to await anything (typing +

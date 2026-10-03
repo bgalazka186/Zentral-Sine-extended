@@ -209,3 +209,12 @@
   stroke-width: 0.5 !important;
 }
 
+:root:is([bgalazka-push-page="true"], [bgalazka-edge-attached-panels="true"])
+  #zen-app-panel-root
+  :is(
+    .zen-app-resize-strip-top,
+    .zen-app-resize-strip-bottom,
+    .zen-app-resize-corner
+  ) {
+  display: none !important;
+}

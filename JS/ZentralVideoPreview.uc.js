@@ -4024,7 +4024,7 @@
           for (const browser of bridges.keys()) releaseBridge(browser);
           sources = [];
           current = null;
-          pinnedSource = null;
+          // Capture pause must preserve the user's source lock.
           previewAutoSelected = false;
           browserReports.clear();
           discoveryLocks.clear();

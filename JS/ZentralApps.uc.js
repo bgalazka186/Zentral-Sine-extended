@@ -377,6 +377,83 @@
         /**
          * Initializes the Apps Module UI, preferences, event observers, and preloading timers.
          */
+        capturePanelViewState() {
+          return {
+            open:
+              !!this.#dom.root?.hasAttribute("open") &&
+              !this.#dom.root?.hasAttribute("closing"),
+            pinned: this.#state.isPinned,
+            expanded: this.#state.isExpanded,
+            width: this.#state.panelWidthPx,
+            preExpandWidth: this.#state.preExpandWidth,
+          };
+        }
+
+        restorePanelViewState(view) {
+          if (!view?.open) return;
+          this.#state.isExpanded = !!view.expanded;
+          this.#state.preExpandWidth = view.preExpandWidth;
+          if (Number.isFinite(view.width) && view.width > 0)
+            this.updateWidthVar(view.width);
+          if (this.#state.isPinned !== !!view.pinned) this.togglePin();
+          if (this.#dom.expandBtn) {
+            this.#dom.expandBtn.title = view.expanded
+              ? "Restore panel"
+              : "Expand panel";
+            this.#dom.expandBtn.replaceChildren(
+              this.#createSVG(
+                view.expanded ? SVG_STRINGS.COLLAPSE : SVG_STRINGS.EXPAND,
+              ),
+            );
+          }
+          this.positionPanel();
+        }
+
+        isAppPreloadEnabled(id) {
+          return (
+            !!Core.getPref(Constants.Apps.PREF_ENABLED, true) &&
+            this.#state.apps.some(
+              (app) => app.id === id && app.preload === true,
+            )
+          );
+        }
+
+        scheduleAutomaticPreloads() {
+          if (this._preloadTimer) clearTimeout(this._preloadTimer);
+          this._preloadTimer = setTimeout(
+            () => {
+              this._preloadTimer = null;
+              if (!this._destroyed) this.preloadAppsSequence();
+            },
+            Core.getPref("zen.workspace.bgalazka.smart_sleep", true)
+              ? 5000
+              : 2000,
+          );
+        }
+
+        syncEnabled() {
+          const on = !!Core.getPref(Constants.Apps.PREF_ENABLED, true);
+          document.documentElement.setAttribute(
+            "zentral-apps-enabled",
+            String(on),
+          );
+          if (!on) {
+            this.closePanel();
+            for (const id of [...this.#state.appBrowsers.keys()])
+              this.closeApp(id);
+            this.stopPositionTracking();
+            if (this._preloadTimer) clearTimeout(this._preloadTimer);
+            this._preloadTimer = null;
+            this.stopBadgeSyncLoop();
+          } else {
+            this.loadApps();
+            this.renderGrid();
+            this.repositionGrid();
+            this.updateAutohideState();
+            this.scheduleAutomaticPreloads();
+          }
+        }
+
         init() {
           if (!Core.getPref(Constants.Apps.PREF_ENABLED)) {
             Core.log("ZentralApps", "Apps Grid feature is disabled.");
@@ -401,10 +478,7 @@
           Core.emit("appsInitComplete", this);
 
           // Preload apps sequentially after browser startup
-          this._preloadTimer = setTimeout(() => {
-            this._preloadTimer = null;
-            if (!this._destroyed) this.preloadAppsSequence();
-          }, 2000);
+          this.scheduleAutomaticPreloads();
         }
 
         /**
@@ -549,16 +623,14 @@
          * Uses staggered delays to prevent startup performance hits.
          */
         async preloadAppsSequence() {
-          const preloadedApps = Core.getPref(
-            "zen.workspace.bgalazka.smart_sleep",
-            false,
-          )
-            ? []
-            : this.#state.apps.filter((a) => a.preload === true);
+          if (!Core.getPref(Constants.Apps.PREF_ENABLED, true)) return;
+          const preloadedApps = this.#state.apps.filter(
+            (a) => a.preload === true,
+          );
           for (const app of preloadedApps) {
             if (
               this._destroyed ||
-              Core.getPref("zen.workspace.bgalazka.smart_sleep", false)
+              !Core.getPref(Constants.Apps.PREF_ENABLED, true)
             )
               break;
             if (!this.#state.apps.includes(app) || !app.preload) continue;
@@ -566,6 +638,9 @@
             if (isNew) {
               // Preloading must never make an unselected browser look active.
               browser.style.display = "none";
+              try {
+                browser.docShellIsActive = true;
+              } catch (_) {}
               try {
                 const uri = Services.io.newURI(app.url);
                 if (typeof browser.fixupAndLoadURIString === "function") {
@@ -3606,6 +3681,7 @@
         }
 
         openPanel(app) {
+          if (!Core.getPref(Constants.Apps.PREF_ENABLED, true)) return;
           Core.log(
             "ZentralApps",
             "openPanel called for app:",
@@ -4389,6 +4465,15 @@
           return { left, right, barInset, autohide };
         }
 
+        isPanelDockedToAppsBar() {
+          return (
+            this.isPlacementVerticalBar() &&
+            document.documentElement.getAttribute(
+              "bgalazka-opposite-docking",
+            ) !== "true"
+          );
+        }
+
         getAppsBarPanelMaxWidth() {
           const { left, right } = this.getAppsBarPanelBounds();
           // Keep the outward-growing pill reachable beside the native sidebar.
@@ -4396,7 +4481,7 @@
         }
 
         updateWidthVar(px) {
-          if (this.isPlacementVerticalBar())
+          if (this.isPanelDockedToAppsBar())
             px = Math.max(1, Math.min(px, this.getAppsBarPanelMaxWidth()));
           if (this.#state.activeAppId && !this.#state.isExpanded) {
             const app = this.#state.apps.find(
@@ -4441,7 +4526,7 @@
           let panelLeft = 0;
           let panelRight = window.innerWidth;
 
-          if (this.isPlacementVerticalBar()) {
+          if (this.isPanelDockedToAppsBar()) {
             const isVbRight = this.isVerticalBarOnRight();
             const bounds = this.getAppsBarPanelBounds();
             // These properties are consumed only by Apps Bar CSS overrides.
@@ -5413,6 +5498,10 @@
               this.#state.isInstaPeeking = true;
               if (this.#dom.root) {
                 this.#dom.root.setAttribute("data-insta-peek", "true");
+                document.documentElement.setAttribute(
+                  "zentral-insta-peek",
+                  "true",
+                );
               }
             }
           }
@@ -5474,6 +5563,7 @@
             this.#state.isInstaPeeking = false;
             if (this.#dom.root) {
               this.#dom.root.removeAttribute("data-insta-peek");
+              document.documentElement.removeAttribute("zentral-insta-peek");
             }
           }
         }
@@ -5865,50 +5955,45 @@
       }
       const instance = new ZentralApps();
       window.Zentral.Apps = instance;
-      const availableAtStart = !!Core.getPref(Constants.Apps.PREF_ENABLED);
       let started = false,
         disposed = false,
-        watching = false;
+        booting = true;
       const onEnabled = () => {
-        if (disposed || started || !!!Core.getPref(Constants.Apps.PREF_ENABLED))
-          return;
+        if (disposed) return;
+        const on = !!Core.getPref(Constants.Apps.PREF_ENABLED, true);
+        document.documentElement.setAttribute(
+          "zentral-apps-enabled",
+          String(on),
+        );
         try {
-          instance.init();
-          started = true;
-          runtime.setAvailable("apps", true);
+          if (on && !started) {
+            instance.init();
+            started = true;
+          } else if (started) instance.syncEnabled();
+          runtime.setAvailable("apps", on);
         } catch (error) {
           try {
             instance.destroy();
           } catch (_) {}
+          started = false;
           runtime.failFeature("apps", error);
-        }
-        if (watching) {
-          Services.prefs.removeObserver(Constants.Apps.PREF_ENABLED, onEnabled);
-          watching = false;
+          if (booting) throw error;
         }
       };
+      Services.prefs.addObserver(Constants.Apps.PREF_ENABLED, onEnabled);
       try {
-        if (availableAtStart) {
-          instance.init();
-          started = true;
-        } else {
-          runtime.setAvailable("apps", false);
-          Services.prefs.addObserver(Constants.Apps.PREF_ENABLED, onEnabled);
-          watching = true;
-        }
+        onEnabled();
       } catch (error) {
-        try {
-          instance.destroy();
-        } catch (_) {}
+        Services.prefs.removeObserver(Constants.Apps.PREF_ENABLED, onEnabled);
         delete window.Zentral.Apps;
         throw error;
+      } finally {
+        booting = false;
       }
       return () => {
         disposed = true;
-        if (watching) {
-          Services.prefs.removeObserver(Constants.Apps.PREF_ENABLED, onEnabled);
-          watching = false;
-        }
+        Services.prefs.removeObserver(Constants.Apps.PREF_ENABLED, onEnabled);
+        document.documentElement.removeAttribute("zentral-apps-enabled");
         instance.destroy();
         delete window.Zentral.Apps;
       };

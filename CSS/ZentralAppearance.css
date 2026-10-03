@@ -136,12 +136,16 @@
 /* Match the three root attributes of the push-page rule above. On the
  * right-hand panel (left tabbar), the former two-attribute selector lost
  * the cascade and left the full panel-width margin behind after autohide. */
-:root[bgalazka-hover-panel-hidden][bgalazka-opposite-docking="true"][bgalazka-panel-side="right"]
+:root[bgalazka-hover-panel-hidden]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-opposite-docking="true"][bgalazka-panel-side="right"]
   #tabbrowser-tabbox {
   margin-right: 6px !important;
   margin-left: 0 !important;
 }
-:root[bgalazka-hover-panel-hidden][bgalazka-opposite-docking="true"][bgalazka-panel-side="left"]
+:root[bgalazka-hover-panel-hidden]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-opposite-docking="true"][bgalazka-panel-side="left"]
   #tabbrowser-tabbox {
   margin-left: 6px !important;
   margin-right: 0 !important;
@@ -163,7 +167,9 @@
   left: 0;
   right: auto;
 }
-:root[bgalazka-hover-panel-hidden][bgalazka-opposite-docking="true"]
+:root[bgalazka-hover-panel-hidden]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-opposite-docking="true"]
   #zen-app-panel-root[open][data-panel-side="right"] {
   transform: translateX(
     calc(100% + var(--bgalazka-hover-outset, 80px))
@@ -171,7 +177,9 @@
   pointer-events: none !important;
   transition: transform 0.2s ease !important;
 }
-:root[bgalazka-hover-panel-hidden][bgalazka-opposite-docking="true"]
+:root[bgalazka-hover-panel-hidden]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-opposite-docking="true"]
   #zen-app-panel-root[open][data-panel-side="left"] {
   transform: translateX(
     calc(-100% - var(--bgalazka-hover-outset, 80px))
@@ -943,7 +951,9 @@
 /* Ordinary floating panels keep the existing pinned opacity behavior.
    Split views use the full-opacity rules below instead. */
 :root[bgalazka-look="atelier"][bgalazka-translucency="true"]:not(
-    [bgalazka-push-page="true"][bgalazka-panel-pinned="true"]
+    [bgalazka-push-page="true"]:not(
+        [zentral-insta-peek="true"]
+      )[bgalazka-panel-pinned="true"]
   )
   #zen-app-panel-root:not([data-pinned="true"])
   #zen-app-panel-slider {
@@ -955,7 +965,9 @@
   ) !important;
 }
 :root[bgalazka-look="atelier"][bgalazka-translucency="true"]:not(
-    [bgalazka-push-page="true"][bgalazka-panel-pinned="true"]
+    [bgalazka-push-page="true"]:not(
+        [zentral-insta-peek="true"]
+      )[bgalazka-panel-pinned="true"]
   )
   #zen-app-panel-root[data-pinned="true"]:is(:hover, :focus-within)
   #zen-app-panel-slider {
@@ -967,7 +979,9 @@
   ) !important;
 }
 :root[bgalazka-look="atelier"][bgalazka-translucency="true"]:not(
-    [bgalazka-push-page="true"][bgalazka-panel-pinned="true"]
+    [bgalazka-push-page="true"]:not(
+        [zentral-insta-peek="true"]
+      )[bgalazka-panel-pinned="true"]
   )
   #zen-app-panel-root[data-pinned="true"]:not(:hover):not(:focus-within)
   #zen-app-panel-slider {
@@ -996,7 +1010,9 @@
 }
 :root[bgalazka-look="atelier"][bgalazka-translucency="true"]:is(
     [bgalazka-triple-view="true"],
-    [bgalazka-push-page="true"][bgalazka-panel-pinned="true"]
+    [bgalazka-push-page="true"]:not(
+        [zentral-insta-peek="true"]
+      )[bgalazka-panel-pinned="true"]
   )
   #zen-app-panel-root[open]
   #zen-app-panel-slider {

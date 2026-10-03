@@ -286,18 +286,20 @@
         ) === "true";
       const anchorSide = getHorizontalAnchorSide(root);
       if (dualViewActive || edgeAttachedPanels) {
-        const edgeMargin = dualViewActive ? "-12px" : "0px";
+        const edgeMargin =
+          dualViewActive && !edgeAttachedPanels ? "-12px" : "0px";
         const leftMargin = anchorSide === "left" ? edgeMargin : "0px";
         const rightMargin = anchorSide === "right" ? edgeMargin : "0px";
         if (root.style.marginLeft !== leftMargin)
           root.style.marginLeft = leftMargin;
         if (root.style.marginRight !== rightMargin)
           root.style.marginRight = rightMargin;
-        root._bgalazkaAppliedHorizontalOffset = dualViewActive
-          ? anchorSide === "right"
-            ? 12
-            : -12
-          : 0;
+        root._bgalazkaAppliedHorizontalOffset =
+          dualViewActive && !edgeAttachedPanels
+            ? anchorSide === "right"
+              ? 12
+              : -12
+            : 0;
         root._bgalazkaHorizontalAnchorSide = anchorSide;
         return;
       }
@@ -333,7 +335,17 @@
     // Panel Horizontal Offset preference. This is intentionally separate from
     // width resizing: dragging the all-sides pill button sideways should move
     // the complete panel left/right without changing its saved width.
+    // Locked modes ignore offsets: refuse gestures instead of editing hidden saved geometry.
+    function panelGeometryLocked() {
+      const ui = document.documentElement;
+      return (
+        ui.getAttribute("bgalazka-push-page") === "true" ||
+        ui.getAttribute("bgalazka-edge-attached-panels") === "true"
+      );
+    }
+
     function startPanelHorizontalPositionDrag(e, startX = e.clientX) {
+      if (panelGeometryLocked()) return;
       if (e.button !== 0) return;
       const root = document.getElementById("zen-app-panel-root");
       if (!root) return;
@@ -573,6 +585,7 @@
     // mousedown, live style writes on mousemove, persist on mouseup) but for
     // the vertical axis, which the base mod has no equivalent of at all.
     function startVerticalResize(e, edge) {
+      if (panelGeometryLocked()) return;
       if (e.button !== 0) return;
       if (!ctx.getPref(ctx.EXT_PREFS.ALL_SIDES_RESIZE, false)) return;
       const root = document.getElementById("zen-app-panel-root");
@@ -718,6 +731,8 @@
       const physicalEdge =
         handleCenterX < rootRect.left + rootRect.width / 2 ? "left" : "right";
       const anchorSide = getHorizontalAnchorSide(root);
+      if (panelGeometryLocked() && physicalEdge === anchorSide) return;
+      ctx.extendHoverResizeHold();
       const startOffset = getAppliedHorizontalOffset(root);
 
       hResizeState = {
@@ -846,6 +861,7 @@
      * enabled -- see ensureWebToolbar()), not a 3rd resize edge.
      * ========================================================================== */
     function startPanelPositionDrag(e) {
+      if (panelGeometryLocked()) return;
       if (e.button !== 0) return;
       const root = document.getElementById("zen-app-panel-root");
       if (!root) return;

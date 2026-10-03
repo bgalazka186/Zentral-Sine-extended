@@ -7,7 +7,7 @@
   },
   {
     "type": "text",
-    "label": "**Original Zentral · Arc 2.0 Compatibility**",
+    "label": "**Original Zentral \u00b7 Arc 2.0 Compatibility**",
     "size": "18px"
   },
   {
@@ -18,7 +18,7 @@
   },
   {
     "type": "text",
-    "label": "**Original Zentral · Apps and Panels**",
+    "label": "**Original Zentral \u00b7 Apps and Panels**",
     "size": "18px"
   },
   {
@@ -263,7 +263,7 @@
   },
   {
     "type": "text",
-    "label": "**Original Zentral · Tab Groups**",
+    "label": "**Original Zentral \u00b7 Tab Groups**",
     "size": "18px"
   },
   {
@@ -336,7 +336,7 @@
   },
   {
     "type": "text",
-    "label": "**Original Zentral · Diagnostics**",
+    "label": "**Original Zentral \u00b7 Diagnostics**",
     "size": "18px"
   },
   {
@@ -400,12 +400,12 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Panel Layout**",
+    "label": "**Bgalazka Extension \u00b7 Panel Layout**",
     "size": "18px"
   },
   {
     "property": "zen.workspace.bgalazka.opposite_docking",
-    "label": "Opposite-Side Docking",
+    "label": "Reverse the default panel side for Sidebar / Apps Bar mode",
     "type": "checkbox",
     "defaultValue": true
   },
@@ -513,7 +513,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Advanced Panel Position**",
+    "label": "**Bgalazka Extension \u00b7 Advanced Panel Position**",
     "size": "18px"
   },
   {
@@ -639,7 +639,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Appearance**",
+    "label": "**Bgalazka Extension \u00b7 Appearance**",
     "size": "18px"
   },
   {
@@ -823,7 +823,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Look**",
+    "label": "**Bgalazka Extension \u00b7 Look**",
     "size": "18px"
   },
   {
@@ -833,16 +833,16 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.style",
-    "label": "Interface Style — Atelier or original Classic",
+    "label": "Interface Style \u2014 Atelier or original Classic",
     "type": "dropdown",
     "defaultValue": "atelier",
     "options": [
       {
-        "label": "Atelier — customizable interface",
+        "label": "Atelier \u2014 customizable interface",
         "value": "atelier"
       },
       {
-        "label": "Classic — original interface",
+        "label": "Classic \u2014 original interface",
         "value": "classic"
       }
     ]
@@ -6520,7 +6520,7 @@
   },
   {
     "type": "text",
-    "label": "Video colors and borders affect only Zentral’s sidebar video preview. Its preview size, discovery, and capture behavior are in Video Preview below.",
+    "label": "Video colors and borders affect only Zentral\u2019s sidebar video preview. Its preview size, discovery, and capture behavior are in Video Preview below.",
     "size": "12px"
   },
   {
@@ -6750,7 +6750,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.smart_sleep",
-    "label": "Defer Panel Preloads",
+    "label": "Defer automatic panel preloads (startup selections still load)",
     "type": "checkbox",
     "defaultValue": true
   },
@@ -6774,7 +6774,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Pill**",
+    "label": "**Bgalazka Extension \u00b7 Pill**",
     "size": "18px"
   },
   {
@@ -6939,7 +6939,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Navigation Toolbar**",
+    "label": "**Bgalazka Extension \u00b7 Navigation Toolbar**",
     "size": "18px"
   },
   {
@@ -6974,7 +6974,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Search**",
+    "label": "**Bgalazka Extension \u00b7 Search**",
     "size": "18px"
   },
   {
@@ -7157,12 +7157,12 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Tab Launchers**",
+    "label": "**Bgalazka Extension \u00b7 Tab Launchers**",
     "size": "18px"
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · RSS**",
+    "label": "**Bgalazka Extension \u00b7 RSS**",
     "size": "18px"
   },
   {
@@ -7220,7 +7220,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Keyboard Shortcuts**",
+    "label": "**Bgalazka Extension \u00b7 Keyboard Shortcuts**",
     "size": "18px"
   },
   {
@@ -7339,7 +7339,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Video Preview**",
+    "label": "**Bgalazka Extension \u00b7 Video Preview**",
     "size": "18px"
   },
   {
@@ -7534,7 +7534,7 @@
         "value": 50
       },
       {
-        "label": "10 frames/s — default",
+        "label": "10 frames/s \u2014 default",
         "value": 100
       },
       {
@@ -7647,7 +7647,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.panel_black_opacity",
-    "label": "Black panel backing opacity (0–100)",
+    "label": "Black panel backing opacity (0\u2013100)",
     "type": "input",
     "defaultValue": 0
   },
@@ -7944,5 +7944,29 @@
     "label": "Force black panel backing",
     "type": "checkbox",
     "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.bgalazka.secondary_toolbar_swap",
+    "label": "Show secondary panel swap control",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.bgalazka.secondary_toolbar_close",
+    "label": "Show secondary close/unlink control",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.allow_unsafe_core_disable",
+    "label": "I am being stupid and want to disable core elements of the mod (restart required)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.bgalazka.triple_inward_toolbars",
+    "label": "Triple View: URL bars face the divider",
+    "type": "checkbox",
+    "defaultValue": true
   }
 ]

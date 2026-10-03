@@ -238,6 +238,7 @@
       if (essential) {
         essential.userContextId = normalizeUserContextId(userContextId);
         ctx.saveEssentialSettings(essential);
+        ctx.setTimeout(() => ctx.recreateLoadedPanels?.([appId]), 0);
         return;
       }
       const assignments = getPanelContainerAssignments();
@@ -584,7 +585,7 @@
             // Container identity is part of the remote browser's OriginAttributes
             // and cannot be safely hot-swapped. Recreate on next open/preload.
             try {
-              window.Zentral?.Apps?.closeApp?.(appId);
+              // The identity preference observer schedules recreation after this popup closes.
             } catch (_) {}
           });
           containerPopup.appendChild(item);
@@ -1129,6 +1130,10 @@
         }
         for (const appId of addonHostByAppId.keys()) ids.add(appId);
 
+        if (ctx.recreateLoadedPanels) {
+          ctx.recreateLoadedPanels([...ids]);
+          return;
+        }
         try {
           apps.closePanel?.();
         } catch (_) {}
@@ -1202,7 +1207,8 @@
           // Other hidden app browsers retain the existing idle behavior.
           const essential = ctx.essentialPanels.get(browser._bgalazkaAppId);
           const backgroundPreload =
-            essential?.app.preload && essential.tab.isConnected;
+            (essential?.app.preload && essential.tab.isConnected) ||
+            window.Zentral?.Apps?.isAppPreloadEnabled?.(browser._bgalazkaAppId);
           const hostRecord = addonHostByAppId.get(browser._bgalazkaAppId);
           const adoptedHost =
             hostRecord?.adoptedByZentral && hostRecord.browser === browser;
@@ -1227,7 +1233,7 @@
         "bgalazka-addon-tab-id-bridge",
         enabled ? "true" : "false",
       );
-      unloadPanelBrowsersForAddonBridge();
+      ctx.reconcileFeaturePreferences?.();
     }
 
     function callGetOrCreateWithAddonHostBrowser(
@@ -1857,6 +1863,50 @@
      *   time the app is opened or preloaded.
      * ========================================================================== */
     const MOBILE_UA_PREF = "zen.workspace.bgalazka.mobile_ua_apps";
+    const readIdentityAssignments = () => {
+      let containers = {},
+        mobile = [];
+      try {
+        containers = JSON.parse(ctx.getPref(PANEL_CONTAINERS_PREF, "{}")) || {};
+      } catch (_) {}
+      try {
+        mobile = JSON.parse(ctx.getPref(MOBILE_UA_PREF, "[]")) || [];
+      } catch (_) {}
+      if (!Array.isArray(mobile)) mobile = [];
+      return { containers, mobile: new Set(mobile) };
+    };
+    let lastIdentityAssignments = readIdentityAssignments(),
+      identityTimer = null;
+    const identityObserver = {
+      observe: () => {
+        if (identityTimer != null) return;
+        identityTimer = ctx.setTimeout(() => {
+          identityTimer = null;
+          const next = readIdentityAssignments(),
+            previous = lastIdentityAssignments;
+          lastIdentityAssignments = next;
+          const ids = new Set([
+            ...Object.keys(previous.containers),
+            ...Object.keys(next.containers),
+            ...previous.mobile,
+            ...next.mobile,
+          ]);
+          const changed = [...ids].filter(
+            (id) =>
+              (previous.containers[id] || 0) !== (next.containers[id] || 0) ||
+              previous.mobile.has(id) !== next.mobile.has(id),
+          );
+          if (changed.length) ctx.recreateLoadedPanels?.(changed);
+        }, 0);
+      },
+    };
+    for (const pref of [PANEL_CONTAINERS_PREF, MOBILE_UA_PREF])
+      Services.prefs.addObserver(pref, identityObserver);
+    ctx.registerCleanup(() => {
+      for (const pref of [PANEL_CONTAINERS_PREF, MOBILE_UA_PREF])
+        Services.prefs.removeObserver(pref, identityObserver);
+      if (identityTimer != null) ctx.clearTimeout(identityTimer);
+    });
     const MOBILE_UA_STRING =
       "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36";
 
@@ -1892,6 +1942,7 @@
       if (essential) {
         essential.mobileUa = !essential.mobileUa;
         ctx.saveEssentialSettings(essential);
+        ctx.setTimeout(() => ctx.recreateLoadedPanels?.([appId]), 0);
         return essential.mobileUa;
       }
       const set = getMobileUaAppIds();
@@ -1946,7 +1997,7 @@
           const apps = window.Zentral?.Apps;
           // Let the XUL command/popup finish before destroying its live remote
           // browser. The next open creates a fresh context with the new UA.
-          if (apps?.closeApp) ctx.setTimeout(() => apps.closeApp(appId), 0);
+          // The identity preference observer schedules recreation after this popup closes.
         });
       }
       return true;
