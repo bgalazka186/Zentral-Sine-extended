@@ -17,6 +17,12 @@
     "defaultValue": false
   },
   {
+    "property": "zen.workspace.zentral.arc2.match_compact_library",
+    "label": "Arc 2.0 tweak: apply compact sidebar color and opacity to Zen Library",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
     "type": "text",
     "label": "**Original Zentral · Apps and Panels**",
     "size": "18px"
@@ -6551,15 +6557,23 @@
     "defaultValue": 480,
     "options": [
       {
-        "label": "320",
+        "label": "160 px",
+        "value": 160
+      },
+      {
+        "label": "240 px",
+        "value": 240
+      },
+      {
+        "label": "320 px",
         "value": 320
       },
       {
-        "label": "480",
+        "label": "480 px",
         "value": 480
       },
       {
-        "label": "640",
+        "label": "640 px",
         "value": 640
       }
     ]
@@ -6613,6 +6627,122 @@
       {
         "label": "60 frames/s",
         "value": 600
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.scan_interval_ms",
+    "label": "Source discovery interval (slower = less polling; events can still scan)",
+    "type": "dropdown",
+    "defaultValue": 5000,
+    "options": [
+      {
+        "label": "5 s · default",
+        "value": 5000
+      },
+      {
+        "label": "15 s",
+        "value": 15000
+      },
+      {
+        "label": "30 s",
+        "value": 30000
+      },
+      {
+        "label": "60 s · lazy",
+        "value": 60000
+      },
+      {
+        "label": "2 min · very lazy",
+        "value": 120000
+      },
+      {
+        "label": "Events and manual refresh only",
+        "value": 0
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_poll_ms",
+    "label": "Caption recovery interval (slower = delayed recovery from missed events)",
+    "type": "dropdown",
+    "defaultValue": 750,
+    "options": [
+      {
+        "label": "250 ms",
+        "value": 250
+      },
+      {
+        "label": "500 ms",
+        "value": 500
+      },
+      {
+        "label": "750 ms",
+        "value": 750
+      },
+      {
+        "label": "1500 ms",
+        "value": 1500
+      },
+      {
+        "label": "3000 ms",
+        "value": 3000
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.canvas_stream_width_px",
+    "label": "Canvas stream width (smaller = less detail and drawing work)",
+    "type": "dropdown",
+    "defaultValue": 640,
+    "options": [
+      {
+        "label": "160 px",
+        "value": 160
+      },
+      {
+        "label": "240 px",
+        "value": 240
+      },
+      {
+        "label": "320 px",
+        "value": 320
+      },
+      {
+        "label": "480 px",
+        "value": 480
+      },
+      {
+        "label": "640 px",
+        "value": 640
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.canvas_stream_fps",
+    "label": "Canvas stream FPS (lower = less smooth video and drawing work)",
+    "type": "dropdown",
+    "defaultValue": 30,
+    "options": [
+      {
+        "label": "5 FPS",
+        "value": 5
+      },
+      {
+        "label": "10 FPS",
+        "value": 10
+      },
+      {
+        "label": "15 FPS",
+        "value": 15
+      },
+      {
+        "label": "24 FPS",
+        "value": 24
+      },
+      {
+        "label": "30 FPS",
+        "value": 30
       }
     ]
   },

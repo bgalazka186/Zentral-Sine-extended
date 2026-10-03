@@ -80,17 +80,28 @@
     else Services.prefs.setStringPref(key, String(value));
   };
   const arcSidebarPref = "zen.workspace.zentral.arc2.match_compact_sidebar";
+  const arcLibraryPref = "zen.workspace.zentral.arc2.match_compact_library";
+  const arcLibraryAttribute = "zentral-arc2-library";
   const arcSidebarColorPref = "arc-compact-sidebar-bg";
   const arcSidebarAttribute = "zentral-arc2-regular-sidebar";
   const arcSidebarColorProperty = "--zentral-arc2-sidebar-background";
+  // Arc stores its color and alpha together (for example rgba/8-digit hex).
+  // Reuse that exact CSS value; opacity on the Library element would also fade
+  // text/icons, and painting multiple matching surfaces would stack the alpha.
   const syncArcSidebar = () => {
     const color = getPref(arcSidebarColorPref, "");
-    const active =
-      getPref(arcSidebarPref, false) === true &&
-      typeof color === "string" &&
-      color.trim() !== "";
-    document.documentElement.toggleAttribute(arcSidebarAttribute, active);
-    if (active)
+    const validColor = typeof color === "string" && color.trim() !== "";
+    const sidebarActive = getPref(arcSidebarPref, false) === true && validColor;
+    const libraryActive = getPref(arcLibraryPref, false) === true && validColor;
+    document.documentElement.toggleAttribute(
+      arcSidebarAttribute,
+      sidebarActive,
+    );
+    document.documentElement.toggleAttribute(
+      arcLibraryAttribute,
+      libraryActive,
+    );
+    if (sidebarActive || libraryActive)
       document.documentElement.style.setProperty(
         arcSidebarColorProperty,
         color,
@@ -100,11 +111,14 @@
   const arcSidebarObserver = { observe: syncArcSidebar };
   syncArcSidebar();
   Services.prefs.addObserver(arcSidebarPref, arcSidebarObserver);
+  Services.prefs.addObserver(arcLibraryPref, arcSidebarObserver);
   Services.prefs.addObserver(arcSidebarColorPref, arcSidebarObserver);
   disposers.push(() => {
     Services.prefs.removeObserver(arcSidebarPref, arcSidebarObserver);
+    Services.prefs.removeObserver(arcLibraryPref, arcSidebarObserver);
     Services.prefs.removeObserver(arcSidebarColorPref, arcSidebarObserver);
     document.documentElement.removeAttribute(arcSidebarAttribute);
+    document.documentElement.removeAttribute(arcLibraryAttribute);
     document.documentElement.style.removeProperty(arcSidebarColorProperty);
   });
   const unsafeCorePref =
@@ -815,6 +829,13 @@
       property: "zen.workspace.zentral.arc2.match_compact_sidebar",
       label:
         "Arc 2.0 tweak: apply compact mode sidebar theme to regular mode sidebar",
+      type: "checkbox",
+      defaultValue: false,
+    },
+    {
+      property: "zen.workspace.zentral.arc2.match_compact_library",
+      label:
+        "Arc 2.0 tweak: apply compact sidebar color and opacity to Zen Library",
       type: "checkbox",
       defaultValue: false,
     },
@@ -10025,6 +10046,19 @@
           false,
         );
         lookCategory.subContent.append(arcSidebarToggle.row);
+        const arcLibraryToggle = createToggleRow(
+          "Arc 2.0 tweak: apply compact sidebar theme to Zen Library",
+          "Use Arc 2.0's compact sidebar background color and opacity for the new Zen Library. Applies immediately, including while Library is open.",
+          arcLibraryPref,
+          null,
+          false,
+        );
+        lookCategory.subContent.append(arcLibraryToggle.row);
+        panel._toggles.push({
+          input: arcLibraryToggle.input,
+          pref: arcLibraryPref,
+          def: false,
+        });
         panel._toggles.push({
           input: arcSidebarToggle.input,
           pref: arcSidebarPref,
