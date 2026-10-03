@@ -16,6 +16,31 @@
         WELL_KNOWN_SERVICES,
       } = shared;
       class ZentralTabGroups {
+        /** Compatibility protections share the existing experimental master switch. */
+        libraryCompatibilityEnabled() {
+          try {
+            return !Services.prefs.getBoolPref(
+              "zen.workspace.zentral.video_preview.disable_experimental_bridge",
+              true,
+            );
+          } catch (_) {
+            return false;
+          }
+        }
+
+        isLibraryCopy(node) {
+          return (
+            this.libraryCompatibilityEnabled() &&
+            !!node?.closest?.("zen-library, zen-library-spaces-section")
+          );
+        }
+
+        queryLiveTabNodes(selector) {
+          return Array.from(document.querySelectorAll(selector)).filter(
+            (node) => !this.isLibraryCopy(node),
+          );
+        }
+
         /** @private Tabstrip MutationObserver */
         #tabStripObserver = null;
         /** @private Native popup suppression listener */
@@ -378,7 +403,7 @@
               this.saveTabGroupState();
             } catch (_) {}
             const allGroups = Array.from(
-              document.querySelectorAll("tab-group:not([split-view-group])"),
+              this.queryLiveTabNodes("tab-group:not([split-view-group])"),
             );
 
             // 5. Flatten groups cleanly into regular top-level tabs across their respective workspaces
@@ -581,25 +606,23 @@
             const ss = this.#getSessionStore();
 
             // 0. Scrub any empty ghost groups lingering in the DOM (0 tabs and 0 child groups)
-            document
-              .querySelectorAll(
-                "tab-group:not([split-view-group]):not([zen-split-view]):not([is-zen-split])",
-              )
-              .forEach((g) => {
-                const directTabs = g.querySelectorAll(
-                  "tab, tabbrowser-tab, .tabbrowser-tab",
-                );
-                const childGroups = g.querySelectorAll("tab-group");
-                if (
-                  directTabs.length === 0 &&
-                  childGroups.length === 0 &&
-                  !this.#state.creatingGroup
-                ) {
-                  try {
-                    g.remove();
-                  } catch (_) {}
-                }
-              });
+            this.queryLiveTabNodes(
+              "tab-group:not([split-view-group]):not([zen-split-view]):not([is-zen-split])",
+            ).forEach((g) => {
+              const directTabs = g.querySelectorAll(
+                "tab, tabbrowser-tab, .tabbrowser-tab",
+              );
+              const childGroups = g.querySelectorAll("tab-group");
+              if (
+                directTabs.length === 0 &&
+                childGroups.length === 0 &&
+                !this.#state.creatingGroup
+              ) {
+                try {
+                  g.remove();
+                } catch (_) {}
+              }
+            });
 
             let savedState = null;
             try {
@@ -626,9 +649,9 @@
                 } catch (_) {}
               }
               try {
-                document
-                  .querySelectorAll("tab, tabbrowser-tab, .tabbrowser-tab")
-                  .forEach((t) => tabSet.add(t));
+                this.queryLiveTabNodes(
+                  "tab, tabbrowser-tab, .tabbrowser-tab",
+                ).forEach((t) => tabSet.add(t));
               } catch (_) {}
               try {
                 if (gBrowser?.tabs) {
@@ -637,7 +660,9 @@
                   }
                 }
               } catch (_) {}
-              return Array.from(tabSet);
+              return Array.from(tabSet).filter(
+                (tab) => !this.isLibraryCopy(tab),
+              );
             };
 
             const allTabs = getAllTabs();
@@ -1347,9 +1372,9 @@
             try {
               this.reconstructSavedGroups();
               this.loadTabGroupState();
-              document
-                .querySelectorAll("tab-group:not([split-view-group])")
-                .forEach((g) => this.processGroup(g));
+              this.queryLiveTabNodes(
+                "tab-group:not([split-view-group])",
+              ).forEach((g) => this.processGroup(g));
             } catch (err) {
               console.error(
                 "[ZentralTabGroups] Error settling session restore state:",
@@ -1384,9 +1409,9 @@
             try {
               this.reconstructSavedGroups();
               this.loadTabGroupState();
-              document
-                .querySelectorAll("tab-group:not([split-view-group])")
-                .forEach((g) => this.processGroup(g));
+              this.queryLiveTabNodes(
+                "tab-group:not([split-view-group])",
+              ).forEach((g) => this.processGroup(g));
             } catch (_) {}
           };
           window.addEventListener(
@@ -2109,6 +2134,7 @@
             let needsSave = false;
             let groupsStructureChanged = false;
             for (const mutation of mutations) {
+              if (this.isLibraryCopy(mutation.target)) continue;
               if (mutation.type === "attributes") {
                 const attr = mutation.attributeName;
                 if (
@@ -2152,6 +2178,7 @@
 
               if (mutation.type === "childList") {
                 for (const node of mutation.addedNodes) {
+                  if (this.isLibraryCopy(node)) continue;
                   if (node.nodeType !== Node.ELEMENT_NODE) continue;
 
                   const tag = node.tagName?.toUpperCase();
@@ -2294,6 +2321,7 @@
 
           if (!this.#groupRightClickBlocker) {
             this.#groupRightClickBlocker = (event) => {
+              if (this.isLibraryCopy(event.target)) return;
               if (event.button !== 2) return;
               const target = event.target;
               if (target.closest("#tab-label-input")) return;
@@ -2336,6 +2364,7 @@
           // Global capture-phase contextmenu listener to guarantee right-click triggers custom menu on any group header
           if (!this.#groupContextMenuHandler) {
             this.#groupContextMenuHandler = (event) => {
+              if (this.isLibraryCopy(event.target)) return;
               const target = event.target;
               if (target.closest("#tab-label-input")) return;
               // Check if right click was on a tab-group header / pill
@@ -2486,7 +2515,7 @@
          * Scans and processes all existing tab group DOM elements in the workspace.
          */
         processExistingGroups() {
-          const groups = document.querySelectorAll(
+          const groups = this.queryLiveTabNodes(
             "tab-group:not([split-view-group])",
           );
           groups.forEach((group) => this.processGroup(group));
@@ -2603,6 +2632,7 @@
          * @param {Element} group - Tab group DOM element.
          */
         processGroup(group) {
+          if (this.isLibraryCopy(group)) return;
           // Use a WeakSet instead of a DOM attribute to avoid persisting across restarts
           // and to prevent guard bypasses when native code resets group attributes.
           if (
@@ -3748,7 +3778,7 @@
 
             // 1. Query active tab groups in DOM order (top to bottom on tabstrip)
             const activeGroups = Array.from(
-              document.querySelectorAll("tab-group:not([split-view-group])"),
+              this.queryLiveTabNodes("tab-group:not([split-view-group])"),
             );
 
             // 2. Find all group items in the submenu
@@ -3880,6 +3910,7 @@
         }
 
         onTabGroupCreate(event) {
+          if (this.isLibraryCopy(event.target)) return;
           try {
             const target = event.target;
             const group = target?.closest
@@ -4366,6 +4397,7 @@
          * @param {Element} group - Tab group DOM element.
          */
         checkAndApplyFirstTimeGroupColor(group) {
+          if (this.isLibraryCopy(group)) return;
           // 1. Never run while the browser is starting up / restoring sessions
           if (this.#isRestoring) return;
 
@@ -4426,6 +4458,7 @@
          * @param {Array<Element>} [cachedAllGroups=null] - Optional pre-queried tab-group array to eliminate redundant DOM queries.
          */
         updateGroupSubGroupsBadge(group, cachedAllGroups = null) {
+          if (this.isLibraryCopy(group)) return;
           if (
             !group ||
             !group.isConnected ||
@@ -4448,7 +4481,7 @@
           const allGroups =
             cachedAllGroups ||
             Array.from(
-              document.querySelectorAll(
+              this.queryLiveTabNodes(
                 "tab-group:not([split-view-group]):not([zen-split-view]):not([is-zen-split])",
               ),
             ).filter((g) => !g.classList?.contains("zen-split-view"));
@@ -4489,7 +4522,7 @@
           this.#isUpdatingBadges = true;
           try {
             const allGroups = Array.from(
-              document.querySelectorAll(
+              this.queryLiveTabNodes(
                 "tab-group:not([split-view-group]):not([zen-split-view]):not([is-zen-split])",
               ),
             ).filter((g) => !g.classList?.contains("zen-split-view"));
@@ -4925,6 +4958,7 @@
          * @param {Element} folder - Zen folder DOM element.
          */
         convertFolderToGroup(folder) {
+          if (this.isLibraryCopy(folder)) return;
           const tabsToGroup = folder.allItemsRecursive.filter(
             (item) =>
               gBrowser.isTab(item) && !item.hasAttribute("zen-empty-tab"),
@@ -5027,9 +5061,8 @@
             const raw = Core.getPref(Constants.TabGroups.PREF_COLORS);
             if (raw && raw !== "{}") colors = JSON.parse(raw) || {};
           } catch (_) {}
-          document
-            .querySelectorAll("tab-group:not([split-view-group])")
-            .forEach((group) => {
+          this.queryLiveTabNodes("tab-group:not([split-view-group])").forEach(
+            (group) => {
               if (group.id) {
                 const customColor = group.style.getPropertyValue(
                   "--zentral-custom-color",
@@ -5048,7 +5081,8 @@
                       : null;
                 if (color) colors[group.id] = color;
               }
-            });
+            },
+          );
           Core.setPref(Constants.TabGroups.PREF_COLORS, JSON.stringify(colors));
           this.scheduleStateSave();
         }
@@ -5124,11 +5158,10 @@
             // Clean any tabs that are no longer part of any tab group (guarding other workspaces)
             const allBrowserTabs = Array.from(
               gBrowser?.tabs ||
-                document.querySelectorAll(
-                  "tab, tabbrowser-tab, .tabbrowser-tab",
-                ),
+                this.queryLiveTabNodes("tab, tabbrowser-tab, .tabbrowser-tab"),
             );
             allBrowserTabs.forEach((tab) => {
+              if (this.isLibraryCopy(tab)) return;
               // Guard: Never strip attributes or SessionStore from tabs belonging to other workspaces
               const tabWs = this.getWorkspaceForElement(tab);
               if (currentWs && tabWs && tabWs !== currentWs) return;
@@ -5200,7 +5233,7 @@
 
             // Identify live groups currently present in the DOM
             const liveGroups = Array.from(
-              document.querySelectorAll(
+              this.queryLiveTabNodes(
                 "tab-group:not([split-view-group]):not([zen-split-view]):not([is-zen-split])",
               ),
             );
@@ -5409,7 +5442,7 @@
 
             // Sort ascending by saved index
             const groupsToProcess = Array.from(
-              document.querySelectorAll("tab-group:not([split-view-group])"),
+              this.queryLiveTabNodes("tab-group:not([split-view-group])"),
             ).sort((a, b) => {
               const aIdx = state[a.id]?.index ?? Infinity;
               const bIdx = state[b.id]?.index ?? Infinity;

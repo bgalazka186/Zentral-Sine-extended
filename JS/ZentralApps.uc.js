@@ -37,6 +37,13 @@
         #toolbarBgListeners = [];
         #tabContextMenu = null;
         #tabContextPopupHandler = null;
+        #libraryGuardObserver = null;
+        #libraryGuardPrefObserver = null;
+        #libraryGuardAPI = null;
+        #libraryGuardOriginalAnimation = null;
+        #libraryGuardAnimation = null;
+        #libraryGuardStyle = null;
+        #libraryYieldingToPanel = false;
 
         /**
          * Module tear down for Sine hot unloading
@@ -44,6 +51,8 @@
         destroy() {
           try {
             Core.log("ZentralApps", "Destroying Apps module...");
+
+            this.destroyLibraryPanelGuard();
 
             // 1. Clear timers and animation frames
             if (this.#state.repositionTimer) {
@@ -432,6 +441,7 @@
         }
 
         syncEnabled() {
+          this.syncLibraryPanelGuard();
           const on = !!Core.getPref(Constants.Apps.PREF_ENABLED, true);
           document.documentElement.setAttribute(
             "zentral-apps-enabled",
@@ -468,6 +478,7 @@
           this.renderGrid();
           this.setupContextMenu();
           this.setupObservers();
+          this.setupLibraryPanelGuard();
 
           // Expose legacy/debug global helper
           window.ZenApps = {
@@ -2530,13 +2541,13 @@
               footer.id = "zentral-apps-vertical-bar-footer";
             }
 
-            // The native Library contains all three browser collections.
+            // Zen 1.23 provides its own Library; retain direct Places shortcuts.
             // Keep one compact shortcut by default; direct shortcuts are opt-in.
             for (const [key, label, section, icon] of [
               [
                 `library`,
-                `Library (History, Downloads, Bookmarks)`,
-                `AllBookmarks`,
+                `Zen Library`,
+                `ZenLibrary`,
                 `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3v11M6 3v11M10 3v11M13 3l2 10"/><path d="M1 3h10M1 13h10"/></svg>`,
               ],
               [
@@ -2553,8 +2564,8 @@
               ],
               [
                 `bookmarks`,
-                `Bookmarks`,
-                `AllBookmarks`,
+                `Bookmarks sidebar`,
+                `BookmarksSidebar`,
                 `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h8v12l-4-3-4 3z"/></svg>`,
               ],
             ]) {
@@ -2574,7 +2585,10 @@
               button.addEventListener("click", (event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                this.openBrowserLibrary(section);
+                if (section === "ZenLibrary") this.openZenLibrary();
+                else if (section === "BookmarksSidebar")
+                  this.openBookmarksSidebar();
+                else this.openBrowserLibrary(section);
               });
               footer.appendChild(button);
             }
@@ -2764,6 +2778,199 @@
             this.#dom.pinBtn = pinBtn;
             this.#dom.expandBtn = expandBtn;
             this.#dom.refreshBtn = refreshBtn;
+          }
+        }
+
+        libraryPanelGuardEnabled() {
+          return (
+            !this._destroyed &&
+            !!Core.getPref(Constants.Apps.PREF_ENABLED, true) &&
+            !Services.prefs.getBoolPref(
+              "zen.workspace.zentral.video_preview.disable_experimental_bridge",
+              true,
+            )
+          );
+        }
+
+        /** Close through the current public method so secondary views clean up too. */
+        closePanelsForLibrary() {
+          if (!this.libraryPanelGuardEnabled()) return;
+          this.#libraryYieldingToPanel = false;
+          this.closePanel();
+          // Finish the existing close animation before Library takes the space.
+          if (this.#state.closeTimerId) {
+            clearTimeout(this.#state.closeTimerId);
+            this.#state.closeTimerId = null;
+          }
+          const root =
+            this.#dom.root || document.getElementById("zen-app-panel-root");
+          root?.removeAttribute("open");
+          root?.removeAttribute("closing");
+          if (root) root.style.pointerEvents = "";
+          this.stopPositionTracking();
+        }
+
+        closeLibraryForPanel() {
+          if (!this.libraryPanelGuardEnabled()) return;
+          const library = document.querySelector("zen-library[open]");
+          if (!library || this.#libraryYieldingToPanel) return;
+          this.#libraryYieldingToPanel = true;
+          try {
+            this.#libraryGuardAPI?.close();
+          } catch (error) {
+            this.#libraryYieldingToPanel = false;
+            console.warn("[ZentralApps] Could not close Zen Library:", error);
+          }
+        }
+
+        setupLibraryPanelGuard() {
+          if (this.#libraryGuardPrefObserver) return;
+          this.#libraryGuardPrefObserver = () => this.syncLibraryPanelGuard();
+          Services.prefs.addObserver(
+            "zen.workspace.zentral.video_preview.disable_experimental_bridge",
+            this.#libraryGuardPrefObserver,
+          );
+          this.syncLibraryPanelGuard();
+        }
+
+        syncLibraryPanelGuard() {
+          this.removeLibraryPanelGuard();
+          if (!this.libraryPanelGuardEnabled()) return;
+          try {
+            // This module is window-scoped, as in Zen's native command handler.
+            const { ZenLibrary } = ChromeUtils.importESModule(
+              "moz-src:///zen/library/ZenLibrary.mjs",
+              { global: "current" },
+            );
+            if (
+              typeof ZenLibrary?.animateProgress !== "function" ||
+              typeof ZenLibrary?.close !== "function"
+            )
+              return;
+            this.#libraryGuardAPI = ZenLibrary;
+            const original = ZenLibrary.animateProgress;
+            const apps = this;
+            this.#libraryGuardOriginalAnimation = original;
+            this.#libraryGuardAnimation = function (target, ...args) {
+              if (target > 0) apps.closePanelsForLibrary();
+              return original.call(this, target, ...args);
+            };
+            ZenLibrary.animateProgress = this.#libraryGuardAnimation;
+            this.#libraryGuardStyle = document.createElement("style");
+            this.#libraryGuardStyle.id = "zentral-library-panel-guard";
+            // Library keeps [open] throughout its spring closing animation.
+            // Never paint or accept input on an overlapping panel during it.
+            this.#libraryGuardStyle.textContent =
+              ":root:has(zen-library[open]) #zen-app-panel-root { visibility: hidden !important; pointer-events: none !important; }";
+            document.documentElement.appendChild(this.#libraryGuardStyle);
+            this.#libraryGuardObserver = new MutationObserver((records) => {
+              if (!this.libraryPanelGuardEnabled()) return;
+              for (const record of records) {
+                if (
+                  record.type === "attributes" &&
+                  record.target.localName === "zen-library"
+                ) {
+                  if (!record.target.hasAttribute("open")) {
+                    this.#libraryYieldingToPanel = false;
+                  } else if (!this.#libraryYieldingToPanel) {
+                    this.closePanelsForLibrary();
+                  }
+                } else if (
+                  record.type === "attributes" &&
+                  record.target.id === "zen-app-panel-root" &&
+                  record.target.hasAttribute("open") &&
+                  !record.target.hasAttribute("closing")
+                ) {
+                  this.closeLibraryForPanel();
+                } else if (
+                  record.type === "childList" &&
+                  Array.from(record.addedNodes).some(
+                    (node) =>
+                      node.localName === "zen-library" &&
+                      node.hasAttribute("open"),
+                  )
+                ) {
+                  this.closePanelsForLibrary();
+                }
+              }
+            });
+            this.#libraryGuardObserver.observe(document.documentElement, {
+              subtree: true,
+              childList: true,
+              attributes: true,
+              attributeFilter: ["open"],
+            });
+            // If enabled while both are visible, Library owns the space.
+            if (document.querySelector("zen-library[open]"))
+              this.closePanelsForLibrary();
+          } catch (error) {
+            this.removeLibraryPanelGuard();
+            Core.log("ZentralApps", "Library panel guard unavailable:", error);
+          }
+        }
+
+        removeLibraryPanelGuard() {
+          this.#libraryGuardObserver?.disconnect();
+          this.#libraryGuardObserver = null;
+          if (
+            this.#libraryGuardAPI?.animateProgress ===
+            this.#libraryGuardAnimation
+          ) {
+            this.#libraryGuardAPI.animateProgress =
+              this.#libraryGuardOriginalAnimation;
+          }
+          this.#libraryGuardAPI = null;
+          this.#libraryGuardAnimation = this.#libraryGuardOriginalAnimation =
+            null;
+          this.#libraryGuardStyle?.remove();
+          this.#libraryGuardStyle = null;
+          this.#libraryYieldingToPanel = false;
+        }
+
+        destroyLibraryPanelGuard() {
+          this.removeLibraryPanelGuard();
+          if (this.#libraryGuardPrefObserver) {
+            Services.prefs.removeObserver(
+              "zen.workspace.zentral.video_preview.disable_experimental_bridge",
+              this.#libraryGuardPrefObserver,
+            );
+            this.#libraryGuardPrefObserver = null;
+          }
+        }
+
+        /** Uses the same command as Zen's native Library toolbar button. */
+        openZenLibrary() {
+          try {
+            const command = document.getElementById("cmd_zenToggleLibrary");
+            if (
+              Services.prefs.getBoolPref("zen.library.enabled", false) &&
+              typeof command?.doCommand === "function" &&
+              command.getAttribute("disabled") !== "true"
+            ) {
+              command.doCommand();
+              return true;
+            }
+          } catch (error) {
+            console.warn("[ZentralApps] Could not open Zen Library:", error);
+            return false;
+          }
+          // Older Zen versions and users who disabled Zen Library keep Places.
+          return this.openBrowserLibrary("AllBookmarks");
+        }
+
+        /** Same in-window action as the native Ctrl+B shortcut. */
+        async openBookmarksSidebar() {
+          try {
+            if (typeof window.SidebarController?.toggle !== "function")
+              return false;
+            await window.SidebarController.toggle("viewBookmarksSidebar");
+            return true;
+          } catch (error) {
+            console.warn(
+              "[ZentralApps] Could not open bookmarks sidebar:",
+              error,
+            );
+            return false;
           }
         }
 
@@ -3683,6 +3890,7 @@
 
         openPanel(app) {
           if (!Core.getPref(Constants.Apps.PREF_ENABLED, true)) return;
+          this.closeLibraryForPanel();
           Core.log(
             "ZentralApps",
             "openPanel called for app:",

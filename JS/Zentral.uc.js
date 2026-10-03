@@ -8683,7 +8683,7 @@
           [
             "LIBRARY",
             "Show Library Button",
-            "Open the native Library with History, Downloads, and Bookmarks",
+            "Open Zen Library (or the classic Library when unavailable)",
             true,
           ],
           [
@@ -8701,7 +8701,7 @@
           [
             "BOOKMARKS",
             "Show Bookmarks Button",
-            "Add a direct Bookmarks shortcut to the second bar",
+            "Open bookmarks in the current window’s sidebar",
             false,
           ],
         ].map(([key, label, description, def]) => {
