@@ -1126,6 +1126,8 @@
         TRANSLUCENCY: "zen.workspace.bgalazka.translucency",
         OPPOSITE_DOCKING: "zen.workspace.bgalazka.opposite_docking",
         HOVER_REVEAL_PANEL: "zen.workspace.bgalazka.hover_reveal_panel",
+        HOVER_REVEAL_DELAY: "zen.workspace.bgalazka.hover_reveal_delay_ms",
+        HOVER_REVEAL_WIDTH: "zen.workspace.bgalazka.hover_reveal_width_px",
         HIDE_HOVER_REVEAL_BTN: "zen.workspace.bgalazka.hide_hover_reveal_btn",
         EDGE_ATTACHED_PANELS: "zen.workspace.bgalazka.edge_attached_panels",
         PUSH_PAGE: "zen.workspace.bgalazka.push_page",
@@ -1903,6 +1905,11 @@
       let hoverBoundRoot = null;
       let hoverHideTimer = null;
       let hoverRevealFrame = null;
+      let hoverRevealTimer = null;
+      let hoverRevealSurface = null;
+      let hoverRevealLedgeBounds = null;
+      const HIDDEN_PANEL_REVEAL_DEFAULT_MS = 160;
+      const HIDDEN_PANEL_REVEAL_DEFAULT_WIDTH_PX = 6;
       let hoverResizing = false;
       let hoverHoldUntil = 0;
       let hoverTypingUntil = 0;
@@ -1949,10 +1956,25 @@
         );
         document.documentElement.setAttribute("bgalazka-panel-side", side);
       }
+      function getHiddenPanelRevealWidth() {
+        const width = getPref(
+          BGALAZKA_EXT_PREFS.HOVER_REVEAL_WIDTH,
+          HIDDEN_PANEL_REVEAL_DEFAULT_WIDTH_PX,
+        );
+        return typeof width === "number" && Number.isFinite(width)
+          ? Math.max(1, Math.min(64, Math.round(width)))
+          : HIDDEN_PANEL_REVEAL_DEFAULT_WIDTH_PX;
+      }
       function updateRevealEdgeGeometry() {
+        const revealWidth = getHiddenPanelRevealWidth();
+        const width = revealWidth + "px";
+        const uiStyle = document.documentElement.style;
+        if (uiStyle.getPropertyValue("--bgalazka-hover-reveal-width") !== width)
+          uiStyle.setProperty("--bgalazka-hover-reveal-width", width);
         const edge = document.getElementById(hoverRevealId);
         const box = document.getElementById("tabbrowser-tabbox");
         if (!edge || !box) return;
+        if (edge.style.width !== width) edge.style.width = width;
         const rect = box.getBoundingClientRect();
         const apps = window.Zentral?.Apps;
         if (apps?.isPanelDockedToAppsBar?.()) {
@@ -1987,7 +2009,7 @@
           }
           // Follow the native bar's content-facing edge, including compact or
           // temporarily collapsed layouts. Never keep a stale opposite-side inset.
-          inset = Math.max(0, Math.min(window.innerWidth - 6, inset));
+          inset = Math.max(0, Math.min(window.innerWidth - revealWidth, inset));
           edge.style.left = onRight ? "auto" : inset + "px";
           edge.style.right = onRight ? inset + "px" : "auto";
         }
@@ -2006,6 +2028,99 @@
         edge.style.top = `${Math.max(0, rect.top)}px`;
         edge.style.height = `${Math.max(0, Math.min(window.innerHeight, rect.bottom) - Math.max(0, rect.top))}px`;
       }
+      function clearHoverReveal() {
+        if (hoverRevealTimer) clearTimeout(hoverRevealTimer);
+        hoverRevealTimer = null;
+        hoverRevealSurface = null;
+      }
+      function getHiddenPanelRevealDelay() {
+        const delay = getPref(
+          BGALAZKA_EXT_PREFS.HOVER_REVEAL_DELAY,
+          HIDDEN_PANEL_REVEAL_DEFAULT_MS,
+        );
+        return typeof delay === "number" && Number.isFinite(delay)
+          ? Math.max(0, Math.min(2000, Math.round(delay)))
+          : HIDDEN_PANEL_REVEAL_DEFAULT_MS;
+      }
+      function scheduleHoverReveal(surface) {
+        clearHoverHide();
+        if (
+          !document.documentElement.hasAttribute("bgalazka-hover-panel-hidden")
+        )
+          return;
+        if (hoverRevealTimer && hoverRevealSurface === surface) return;
+        clearHoverReveal();
+        hoverRevealSurface = surface;
+        hoverRevealTimer = setTimeout(() => {
+          clearHoverReveal();
+          if (
+            surface?.isConnected &&
+            surface.matches(":hover") &&
+            document.hasFocus() &&
+            hoverPanelAvailable() &&
+            getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)
+          ) {
+            // Revealing removes the strip from hit testing. Preserve its ledge
+            // until a real pointer movement leaves it, rather than treating the
+            // resulting pointerleave as the user leaving the panel.
+            if (
+              surface.id === hoverRevealId ||
+              surface.id === "zentral-apps-vertical-bar-trigger"
+            ) {
+              const rect = surface.getBoundingClientRect();
+              hoverRevealLedgeBounds = {
+                left: rect.left,
+                right: rect.right,
+                top: rect.top,
+                bottom: rect.bottom,
+              };
+            }
+            setHoverPanelHidden(false);
+          }
+        }, getHiddenPanelRevealDelay());
+      }
+
+      const onHoverLedgePointerMove = (event) => {
+        const bounds = hoverRevealLedgeBounds;
+        if (!bounds) return;
+        if (
+          event.clientX >= bounds.left &&
+          event.clientX <= bounds.right &&
+          event.clientY >= bounds.top &&
+          event.clientY <= bounds.bottom
+        )
+          return;
+        hoverRevealLedgeBounds = null;
+        onHoverRootLeave();
+      };
+      const onHoverLedgeWindowLeave = () => {
+        clearHoverReveal();
+        hoverRevealLedgeBounds = null;
+        onHoverRootLeave();
+      };
+      document.addEventListener("pointermove", onHoverLedgePointerMove, true);
+      document.documentElement.addEventListener(
+        "pointerleave",
+        onHoverLedgeWindowLeave,
+      );
+      window.addEventListener("blur", onHoverLedgeWindowLeave);
+      window.addEventListener("resize", onHoverLedgeWindowLeave);
+      registerCleanup(() => {
+        clearHoverReveal();
+        hoverRevealLedgeBounds = null;
+        document.removeEventListener(
+          "pointermove",
+          onHoverLedgePointerMove,
+          true,
+        );
+        document.documentElement.removeEventListener(
+          "pointerleave",
+          onHoverLedgeWindowLeave,
+        );
+        window.removeEventListener("blur", onHoverLedgeWindowLeave);
+        window.removeEventListener("resize", onHoverLedgeWindowLeave);
+      });
+
       function clearHoverHide() {
         if (hoverHideTimer) clearTimeout(hoverHideTimer);
         hoverHideTimer = null;
@@ -2039,6 +2154,7 @@
         );
       }
       function setHoverPanelHidden(hidden) {
+        clearHoverReveal();
         const root = document.getElementById("zen-app-panel-root");
         const enabled =
           hoverPanelAvailable() &&
@@ -2050,6 +2166,7 @@
           hidden &&
           !isSameSideNativeSidebarHovered()
         );
+        if (!enabled || shouldHide) hoverRevealLedgeBounds = null;
         const hiddenChanged =
           document.documentElement.hasAttribute(
             "bgalazka-hover-panel-hidden",
@@ -2156,10 +2273,14 @@
           !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)
         )
           return;
-        clearHoverHide();
-        setHoverPanelHidden(false);
+        scheduleHoverReveal(sidebar);
       };
       const onNativeSidebarPanelPointerOut = (event) => {
+        if (
+          hoverRevealSurface &&
+          !hoverRevealSurface.contains(event.relatedTarget)
+        )
+          clearHoverReveal();
         const sidebar = sameSideNativeSidebar();
         if (
           !sidebar?.contains(event.target) ||
@@ -2202,10 +2323,14 @@
           return;
         const root = document.getElementById("zen-app-panel-root");
         if (!root?.hasAttribute("open") || root.hasAttribute("closing")) return;
-        clearHoverHide();
-        setHoverPanelHidden(false);
+        scheduleHoverReveal(appsBarHoverSurface(event));
       };
       const onAppsBarPanelPointerOut = (event) => {
+        if (
+          hoverRevealSurface &&
+          !hoverRevealSurface.contains(event.relatedTarget)
+        )
+          clearHoverReveal();
         if (
           !appsBarHoverSurface(event) ||
           !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)
@@ -2225,14 +2350,19 @@
         }
         onHoverRootLeave();
       };
-      const onHoverRootEnter = () => clearHoverHide();
+      const onHoverRootEnter = () => {
+        clearHoverReveal();
+        clearHoverHide();
+      };
       const onHoverRootLeave = () => {
+        clearHoverReveal();
         clearHoverHide();
         if (
           !hoverPanelAvailable() ||
           !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) ||
           hoverResizing ||
           hoverMenuVisible() ||
+          hoverRevealLedgeBounds ||
           isAppsBarHoverSurfaceHovered() ||
           isSameSideNativeSidebarHovered()
         )
@@ -2245,6 +2375,7 @@
             if (
               root?.matches(":hover") ||
               edge?.matches(":hover") ||
+              hoverRevealLedgeBounds ||
               isAppsBarHoverSurfaceHovered() ||
               isSameSideNativeSidebarHovered() ||
               hoverResizing ||
@@ -2281,9 +2412,9 @@
           edge.id = hoverRevealId;
           edge.hidden = true;
           edge.title = "Hover to reveal panels";
+          edge.style.width = getHiddenPanelRevealWidth() + "px";
           edge.addEventListener("pointerenter", () => {
-            clearHoverHide();
-            setHoverPanelHidden(false);
+            scheduleHoverReveal(edge);
           });
           edge.addEventListener("pointerleave", onHoverRootLeave);
           document.documentElement.appendChild(edge);
@@ -2535,6 +2666,24 @@
       window.addEventListener("focusin", onHoverPanelFocusIn, true);
       window.addEventListener("keydown", onHoverPanelKeyDown, true);
       window.addEventListener("resize", updateRevealEdgeGeometry);
+      const onHoverRevealWidthChange = () => {
+        clearHoverReveal();
+        hoverRevealLedgeBounds = null;
+        updateRevealEdgeGeometry();
+        const edge = document.getElementById(hoverRevealId);
+        if (edge?.matches(":hover")) scheduleHoverReveal(edge);
+        else onHoverRootLeave();
+      };
+      Services.prefs.addObserver(
+        BGALAZKA_EXT_PREFS.HOVER_REVEAL_WIDTH,
+        onHoverRevealWidthChange,
+      );
+      registerCleanup(() =>
+        Services.prefs.removeObserver(
+          BGALAZKA_EXT_PREFS.HOVER_REVEAL_WIDTH,
+          onHoverRevealWidthChange,
+        ),
+      );
       const onHoverPrefChange = () => {
         syncHoverPanelAvailability();
         schedulePanelModeGeometrySync();
@@ -2594,6 +2743,9 @@
         hoverBoundRoot?.removeEventListener("pointerenter", onHoverRootEnter);
         hoverBoundRoot?.removeEventListener("pointerleave", onHoverRootLeave);
         document.getElementById(hoverRevealId)?.remove();
+        document.documentElement.style.removeProperty(
+          "--bgalazka-hover-reveal-width",
+        );
         document.getElementById("zen-app-hover-reveal-btn")?.remove();
         document.documentElement.removeAttribute(
           "bgalazka-hover-panel-enabled",

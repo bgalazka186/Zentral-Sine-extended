@@ -141,7 +141,7 @@
   }
 }
 
-/* Opposite-side Hover-to-Show. The six-pixel reveal strip occupies space
+/* Opposite-side Hover-to-Show. The adjustable reveal strip occupies space
  * reserved outside the web viewport; it never overlays page content. */
 #bgalazka-panel-reveal-edge[hidden],
 #zen-app-hover-reveal-btn[hidden] {
@@ -154,20 +154,20 @@
     [zentral-insta-peek="true"]
   )[bgalazka-opposite-docking="true"][bgalazka-panel-side="right"]
   #tabbrowser-tabbox {
-  margin-right: 6px !important;
+  margin-right: var(--bgalazka-hover-reveal-width, 6px) !important;
   margin-left: 0 !important;
 }
 :root[bgalazka-hover-panel-hidden]:not(
     [zentral-insta-peek="true"]
   )[bgalazka-opposite-docking="true"][bgalazka-panel-side="left"]
   #tabbrowser-tabbox {
-  margin-left: 6px !important;
+  margin-left: var(--bgalazka-hover-reveal-width, 6px) !important;
   margin-right: 0 !important;
 }
 #bgalazka-panel-reveal-edge {
   position: fixed !important;
   right: 0;
-  width: 6px;
+  width: var(--bgalazka-hover-reveal-width, 6px);
   z-index: 2147483640 !important;
   pointer-events: auto;
   background: color-mix(

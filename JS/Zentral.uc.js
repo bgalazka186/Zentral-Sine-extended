@@ -377,10 +377,13 @@
       side === "right"
         ? window.innerWidth - (parseFloat(panel.style.right) || 0) - width - mr
         : (parseFloat(panel.style.left) || 0) + ml;
-    const min = bounds.left + (side === "right" ? 44 : 12);
+    // Keep panels flush with their docked edge in every mode. Panel geometry
+    // already removes the native inset; adding 12px here cancels that offset
+    // and leaves a gap. Only the pill on the opposite side needs clearance.
+    const min = bounds.left + (side === "right" ? 44 : 0);
     const max = Math.max(
       min,
-      bounds.right - width - (side === "left" ? 44 : 12),
+      bounds.right - width - (side === "left" ? 44 : 0),
     );
     const left = Math.max(min, Math.min(max, requested));
     setLayoutStyle(
@@ -1116,6 +1119,38 @@
         "Autohide Panel Until Hover (all docking modes; keeps its app pinned)",
       type: "checkbox",
       defaultValue: false,
+    },
+    {
+      property: "zen.workspace.bgalazka.hover_reveal_delay_ms",
+      label:
+        "Hidden Panel Reveal Delay (ms; fine adjustment in extension settings)",
+      type: "dropdown",
+      defaultValue: 160,
+      options: [
+        { label: "Instant", value: 0 },
+        { label: "80 ms", value: 80 },
+        { label: "160 ms (default)", value: 160 },
+        { label: "320 ms", value: 320 },
+        { label: "500 ms", value: 500 },
+        { label: "1000 ms", value: 1000 },
+        { label: "2000 ms", value: 2000 },
+      ],
+    },
+    {
+      property: "zen.workspace.bgalazka.hover_reveal_width_px",
+      label:
+        "Hidden Panel Hover Area Width (px; fine adjustment in extension settings)",
+      type: "dropdown",
+      defaultValue: 6,
+      options: [
+        { label: "1 px", value: 1 },
+        { label: "3 px", value: 3 },
+        { label: "6 px (default)", value: 6 },
+        { label: "12 px", value: 12 },
+        { label: "24 px", value: 24 },
+        { label: "48 px", value: 48 },
+        { label: "64 px", value: 64 },
+      ],
     },
     {
       property: "zen.workspace.bgalazka.hide_hover_reveal_btn",
@@ -8427,6 +8462,27 @@
           () => ctx.syncHoverPanelAvailability(),
         );
         content.appendChild(tHoverReveal.row);
+        const hoverRevealDelaySlider = createSliderRow(
+          "Hidden Panel Reveal Delay",
+          "Time the cursor must stay at the ledge before a hidden panel appears. 0 ms opens immediately; default is 160 ms.",
+          ctx.BGALAZKA_EXT_PREFS.HOVER_REVEAL_DELAY,
+          0,
+          2000,
+          160,
+          " ms",
+        );
+        hoverRevealDelaySlider.input.step = 10;
+        content.appendChild(hoverRevealDelaySlider.row);
+        const hoverRevealWidthSlider = createSliderRow(
+          "Hidden Panel Hover Area Width",
+          "Width of the ledge that reveals a hidden panel. The current size, 6 px, is the default.",
+          ctx.BGALAZKA_EXT_PREFS.HOVER_REVEAL_WIDTH,
+          1,
+          64,
+          6,
+          " px",
+        );
+        content.appendChild(hoverRevealWidthSlider.row);
 
         const tEdgeAttached = createToggleRow(
           "Edge-Attached Panels",
@@ -9365,6 +9421,24 @@
             pref: ctx.BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL,
             def: false,
             onSync: () => ctx.syncHoverPanelAvailability(),
+          },
+          {
+            input: hoverRevealDelaySlider.input,
+            pref: ctx.BGALAZKA_EXT_PREFS.HOVER_REVEAL_DELAY,
+            def: 160,
+            isSelect: true,
+            onSync: (value) => {
+              hoverRevealDelaySlider.badge.textContent = value + " ms";
+            },
+          },
+          {
+            input: hoverRevealWidthSlider.input,
+            pref: ctx.BGALAZKA_EXT_PREFS.HOVER_REVEAL_WIDTH,
+            def: 6,
+            isSelect: true,
+            onSync: (value) => {
+              hoverRevealWidthSlider.badge.textContent = value + " px";
+            },
           },
           {
             input: tEdgeAttached.input,

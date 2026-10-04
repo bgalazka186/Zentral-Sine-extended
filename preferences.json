@@ -7,7 +7,7 @@
   },
   {
     "type": "text",
-    "label": "**Original Zentral · Arc 2.0 Compatibility**",
+    "label": "**Original Zentral \u00b7 Arc 2.0 Compatibility**",
     "size": "18px"
   },
   {
@@ -24,7 +24,7 @@
   },
   {
     "type": "text",
-    "label": "**Original Zentral · Apps and Panels**",
+    "label": "**Original Zentral \u00b7 Apps and Panels**",
     "size": "18px"
   },
   {
@@ -269,7 +269,7 @@
   },
   {
     "type": "text",
-    "label": "**Original Zentral · Tab Groups**",
+    "label": "**Original Zentral \u00b7 Tab Groups**",
     "size": "18px"
   },
   {
@@ -342,7 +342,7 @@
   },
   {
     "type": "text",
-    "label": "**Original Zentral · Diagnostics**",
+    "label": "**Original Zentral \u00b7 Diagnostics**",
     "size": "18px"
   },
   {
@@ -406,7 +406,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Panel Layout**",
+    "label": "**Bgalazka Extension \u00b7 Panel Layout**",
     "size": "18px"
   },
   {
@@ -444,6 +444,78 @@
     "label": "Autohide Panel Until Hover (all docking modes; keeps its app pinned)",
     "type": "checkbox",
     "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.bgalazka.hover_reveal_delay_ms",
+    "label": "Hidden Panel Reveal Delay (ms; fine adjustment in extension settings)",
+    "type": "dropdown",
+    "defaultValue": 160,
+    "options": [
+      {
+        "label": "Instant",
+        "value": 0
+      },
+      {
+        "label": "80 ms",
+        "value": 80
+      },
+      {
+        "label": "160 ms (default)",
+        "value": 160
+      },
+      {
+        "label": "320 ms",
+        "value": 320
+      },
+      {
+        "label": "500 ms",
+        "value": 500
+      },
+      {
+        "label": "1000 ms",
+        "value": 1000
+      },
+      {
+        "label": "2000 ms",
+        "value": 2000
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.hover_reveal_width_px",
+    "label": "Hidden Panel Hover Area Width (px; fine adjustment in extension settings)",
+    "type": "dropdown",
+    "defaultValue": 6,
+    "options": [
+      {
+        "label": "1 px",
+        "value": 1
+      },
+      {
+        "label": "3 px",
+        "value": 3
+      },
+      {
+        "label": "6 px (default)",
+        "value": 6
+      },
+      {
+        "label": "12 px",
+        "value": 12
+      },
+      {
+        "label": "24 px",
+        "value": 24
+      },
+      {
+        "label": "48 px",
+        "value": 48
+      },
+      {
+        "label": "64 px",
+        "value": 64
+      }
+    ]
   },
   {
     "property": "zen.workspace.bgalazka.hide_hover_reveal_btn",
@@ -519,7 +591,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Advanced Panel Position**",
+    "label": "**Bgalazka Extension \u00b7 Advanced Panel Position**",
     "size": "18px"
   },
   {
@@ -645,7 +717,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Appearance**",
+    "label": "**Bgalazka Extension \u00b7 Appearance**",
     "size": "18px"
   },
   {
@@ -829,7 +901,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Look**",
+    "label": "**Bgalazka Extension \u00b7 Look**",
     "size": "18px"
   },
   {
@@ -839,16 +911,16 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.style",
-    "label": "Interface Style — Atelier or original Classic",
+    "label": "Interface Style \u2014 Atelier or original Classic",
     "type": "dropdown",
     "defaultValue": "atelier",
     "options": [
       {
-        "label": "Atelier — customizable interface",
+        "label": "Atelier \u2014 customizable interface",
         "value": "atelier"
       },
       {
-        "label": "Classic — original interface",
+        "label": "Classic \u2014 original interface",
         "value": "classic"
       }
     ]
@@ -5727,7 +5799,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Pill**",
+    "label": "**Bgalazka Extension \u00b7 Pill**",
     "size": "18px"
   },
   {
@@ -5892,7 +5964,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Navigation Toolbar**",
+    "label": "**Bgalazka Extension \u00b7 Navigation Toolbar**",
     "size": "18px"
   },
   {
@@ -5927,7 +5999,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Search**",
+    "label": "**Bgalazka Extension \u00b7 Search**",
     "size": "18px"
   },
   {
@@ -6110,12 +6182,12 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Tab Launchers**",
+    "label": "**Bgalazka Extension \u00b7 Tab Launchers**",
     "size": "18px"
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · RSS**",
+    "label": "**Bgalazka Extension \u00b7 RSS**",
     "size": "18px"
   },
   {
@@ -6173,7 +6245,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Keyboard Shortcuts**",
+    "label": "**Bgalazka Extension \u00b7 Keyboard Shortcuts**",
     "size": "18px"
   },
   {
@@ -6292,7 +6364,7 @@
   },
   {
     "type": "text",
-    "label": "**Bgalazka Extension · Video Preview**",
+    "label": "**Bgalazka Extension \u00b7 Video Preview**",
     "size": "18px"
   },
   {
@@ -6317,19 +6389,19 @@
         "value": "auto"
       },
       {
-        "label": "Native cloning · frame",
+        "label": "Native cloning \u00b7 frame",
         "value": "frame-native"
       },
       {
-        "label": "Native cloning · actor",
+        "label": "Native cloning \u00b7 actor",
         "value": "native"
       },
       {
-        "label": "Video stream · frame",
+        "label": "Video stream \u00b7 frame",
         "value": "frame-stream"
       },
       {
-        "label": "Video stream · actor",
+        "label": "Video stream \u00b7 actor",
         "value": "stream"
       },
       {
@@ -6609,7 +6681,7 @@
         "value": 50
       },
       {
-        "label": "10 frames/s — default",
+        "label": "10 frames/s \u2014 default",
         "value": 100
       },
       {
@@ -6637,7 +6709,7 @@
     "defaultValue": 5000,
     "options": [
       {
-        "label": "5 s · default",
+        "label": "5 s \u00b7 default",
         "value": 5000
       },
       {
@@ -6649,11 +6721,11 @@
         "value": 30000
       },
       {
-        "label": "60 s · lazy",
+        "label": "60 s \u00b7 lazy",
         "value": 60000
       },
       {
-        "label": "2 min · very lazy",
+        "label": "2 min \u00b7 very lazy",
         "value": 120000
       },
       {
@@ -6760,7 +6832,7 @@
   },
   {
     "property": "zen.workspace.zentral.video_preview.discovery",
-    "label": "Source discovery (Actor option requires experiments)",
+    "label": "Source discovery (Automatic: frame, then actor, then direct)",
     "type": "dropdown",
     "defaultValue": "auto",
     "options": [
@@ -6829,6 +6901,53 @@
     "label": "Use caption change events when available",
     "type": "checkbox",
     "defaultValue": true
+  },
+  {
+    "type": "text",
+    "label": "Video Preview \u00b7 Advanced power saving (controls in Experimental options)",
+    "size": "14px"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.suspend_hidden_preview",
+    "label": "Suspend receivers while hidden/minimized (brief restart on reveal)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.light_frame_monitoring",
+    "label": "Sample frame telemetry every 2 seconds (full telemetry in tests)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.slow_health_checks",
+    "label": "Slow steady-state health checks (10\u201315 second failure detection)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.pinned_discovery_only",
+    "label": "Limit periodic discovery to a valid pinned source (Refresh finds others)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.slow_caption_recovery",
+    "label": "Use caption events with 3 second recovery polling (missed cues recover later)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.renderer_retry_backoff",
+    "label": "Back off repeated renderer failures up to 5 minutes",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.suspend_when_source_visible",
+    "label": "Suspend sidebar video while original is visible (instead of stream fallback)",
+    "type": "checkbox",
+    "defaultValue": false
   },
   {
     "property": "zen.workspace.zentral.video_preview.performance_diagnostics",
@@ -7893,7 +8012,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.panel_black_opacity",
-    "label": "Black panel backing opacity (0–100)",
+    "label": "Black panel backing opacity (0\u2013100)",
     "type": "input",
     "defaultValue": 0
   },

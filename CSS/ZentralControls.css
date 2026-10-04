@@ -194,7 +194,7 @@
     [zentral-insta-peek="true"]
   )[bgalazka-panel-pinned="true"][bgalazka-panel-side="right"]
   #tabbrowser-tabbox {
-  margin-right: calc(var(--bgalazka-panel-width, 350px) + 12px) !important;
+  margin-right: var(--bgalazka-panel-width, 350px) !important;
   margin-left: 0 !important;
 }
 
@@ -202,7 +202,7 @@
     [zentral-insta-peek="true"]
   )[bgalazka-panel-pinned="true"][bgalazka-panel-side="left"]
   #tabbrowser-tabbox {
-  margin-left: calc(var(--bgalazka-panel-width, 350px) + 12px) !important;
+  margin-left: var(--bgalazka-panel-width, 350px) !important;
   margin-right: 0 !important;
 }
 
@@ -527,7 +527,8 @@
   display: none !important;
 }
 
-/* A pinned Apps Bar already occupies frame space. An autohiding bar overlays
+/* Reserve only the actual panel and overlay footprint, without an extra gutter.
+ * A pinned Apps Bar already occupies frame space. An autohiding bar overlays
  * the page, so Dual/Triple View must reserve that extra footprint as well. */
 :root[zentral-apps-placement="vertical-bar"]:not(
     [bgalazka-opposite-docking="true"]
@@ -536,8 +537,7 @@
   )[bgalazka-panel-pinned="true"][bgalazka-panel-side="right"]
   #tabbrowser-tabbox {
   margin-right: calc(
-    var(--bgalazka-panel-width, 350px) + 12px +
-      var(--zentral-appsbar-push-extra, 52px)
+    var(--bgalazka-panel-width, 350px) + var(--zentral-appsbar-push-extra, 52px)
   ) !important;
 }
 :root[zentral-apps-placement="vertical-bar"]:not(
@@ -547,8 +547,7 @@
   )[bgalazka-panel-pinned="true"][bgalazka-panel-side="left"]
   #tabbrowser-tabbox {
   margin-left: calc(
-    var(--bgalazka-panel-width, 350px) + 12px +
-      var(--zentral-appsbar-push-extra, 52px)
+    var(--bgalazka-panel-width, 350px) + var(--zentral-appsbar-push-extra, 52px)
   ) !important;
 }
 
