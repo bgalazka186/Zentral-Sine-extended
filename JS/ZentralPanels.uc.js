@@ -3517,71 +3517,94 @@
 
       window.ZentralRuntime.runPart("panel-styles");
 
-      const popupHookedWindows = new WeakSet();
+      let popupAdapter = null;
       let popupHookUnsupported = false;
 
       function hookPopupContainment() {
-        const bdw = window.browserDOMWindow;
-        if (!bdw) return false;
-        if (popupHookUnsupported || popupHookedWindows.has(bdw)) return true;
-        const origOpenURI = bdw.openURI;
-        if (!origOpenURI) return false;
+        const original = window.browserDOMWindow;
+        if (!original) return false;
+        if (popupHookUnsupported || popupAdapter) return true;
 
-        const openURIWrapper = function (
-          aURI,
-          aOpener,
-          aWhere,
-          aFlags,
-          aTriggeringPrincipal,
-          aCsp,
-        ) {
-          try {
-            if (aOpener) {
-              const matched = ctx
-                .getAllAppBrowsers()
-                .find(
-                  (b) => b.browsingContext && b.browsingContext === aOpener,
-                );
-              if (matched) {
-                if (aURI) {
-                  if (typeof matched.fixupAndLoadURIString === "function") {
-                    matched.fixupAndLoadURIString(aURI.spec, {
-                      triggeringPrincipal: aTriggeringPrincipal,
-                    });
-                  } else if (matched.loadURI) {
-                    matched.loadURI(aURI, {
-                      triggeringPrincipal: aTriggeringPrincipal,
-                    });
-                  }
-                }
-                // aURI can be null (e.g. window.open() called with no URL,
-                // navigated separately right after) -- either way, handing back
-                // our OWN browsingContext instead of creating a new one is what
-                // keeps the whole thing contained to the panel.
-                return matched.browsingContext;
-              }
-            }
-          } catch (e) {
-            console.warn("[BgalazkaExtension] Popup containment failed:", e);
-          }
-          return origOpenURI.call(
-            bdw,
-            aURI,
-            aOpener,
-            aWhere,
-            aFlags,
-            aTriggeringPrincipal,
-            aCsp,
-          );
+        // browserDOMWindow is an XPCOM interface: its methods are read-only.
+        // Install a complete delegating implementation through the window setter.
+        const adapter = {
+          QueryInterface: ChromeUtils.generateQI(["nsIBrowserDOMWindow"]),
+          get tabCount() {
+            return original.tabCount;
+          },
+          canClose() {
+            return original.canClose();
+          },
         };
+        for (const method of [
+          "openURI",
+          "createContentWindow",
+          "openURIInFrame",
+          "createContentWindowInFrame",
+        ]) {
+          adapter[method] = function (...args) {
+            const [uri, info, where, flags] = args;
+            const inFrame = method.endsWith("InFrame");
+            const createOnly = method.startsWith("create");
+            const api = Ci.nsIBrowserDOMWindow;
+            try {
+              // External opens and printing retain Gecko's native routing.
+              if (
+                !(flags & api.OPEN_EXTERNAL) &&
+                where !== api.OPEN_PRINT_BROWSER
+              ) {
+                const opener = inFrame
+                  ? info?.openWindowInfo?.parent
+                  : info?.parent;
+                const context = opener?.top || opener;
+                const matched = ctx
+                  .getAllAppBrowsers()
+                  .find(
+                    (browser) =>
+                      browser.isConnected &&
+                      browser.browsingContext &&
+                      (browser.browsingContext === context ||
+                        (inFrame && info?.openerBrowser === browser)),
+                  );
+                if (matched) {
+                  if (!createOnly && uri) {
+                    const options = {
+                      triggeringPrincipal: inFrame
+                        ? info.triggeringPrincipal
+                        : args[4],
+                    };
+                    if (inFrame) {
+                      options.referrerInfo = info.referrerInfo;
+                      options.policyContainer = info.policyContainer;
+                    } else if (args[5]) {
+                      // Gecko renamed the sixth argument from CSP to policy container.
+                      if (typeof Ci.nsIPolicyContainer !== "undefined")
+                        options.policyContainer = args[5];
+                      else options.csp = args[5];
+                    }
+                    if (flags & api.OPEN_NO_REFERRER)
+                      options.referrerInfo = null;
+                    matched.loadURI(uri, options);
+                  }
+                  return inFrame ? matched : matched.browsingContext;
+                }
+              }
+            } catch (error) {
+              console.warn(
+                "[BgalazkaExtension] Popup containment failed:",
+                error,
+              );
+            }
+            return original[method](...args);
+          };
+        }
         try {
-          bdw.openURI = openURIWrapper;
-          if (bdw.openURI !== openURIWrapper)
-            throw new Error("browserDOMWindow.openURI did not accept the hook");
+          window.browserDOMWindow = adapter;
+          // The getter may return a new XPCOM wrapper, so identity is not a test.
+          if (!window.browserDOMWindow)
+            throw new Error("browserDOMWindow setter rejected the adapter");
+          popupAdapter = window.browserDOMWindow;
         } catch (error) {
-          // WrappedNative objects can reject changes to interface methods as well
-          // as custom properties. Leave Gecko's popup routing intact and stop the
-          // retry timer; repeating this assignment cannot make it writable.
           popupHookUnsupported = true;
           console.warn(
             "[BgalazkaExtension] Popup containment unavailable:",
@@ -3589,15 +3612,13 @@
           );
           return true;
         }
-        popupHookedWindows.add(bdw);
-
         registerCleanup(() => {
           try {
-            if (popupHookedWindows.has(bdw)) {
-              if (bdw.openURI === openURIWrapper) bdw.openURI = origOpenURI;
-              popupHookedWindows.delete(bdw);
-            }
+            // Do not overwrite a replacement installed by another extension.
+            if (window.browserDOMWindow === popupAdapter)
+              window.browserDOMWindow = original;
           } catch (_) {}
+          popupAdapter = null;
         });
         return true;
       }
@@ -4178,8 +4199,12 @@
         const origCloseApp = apps.closeApp?.bind(apps);
         if (origCloseApp) {
           apps.closeApp = function (appId, ...args) {
+            const host = ctx.removeAddonHostRecord(appId);
+            if (host?.removalFailed) {
+              if (ctx.getActiveAppBrowser() === host.browser) apps.closePanel();
+              return false;
+            }
             pruneNavigationListeners(appId);
-            ctx.removeAddonHostRecord(appId);
             const res = origCloseApp(appId, ...args);
             if (!ctx.addonHostByAppId.size)
               setTimeout(ctx.removeEmptyAddonHostFolder, 0);
@@ -4190,8 +4215,12 @@
         const origRemoveApp = apps.removeApp?.bind(apps);
         if (origRemoveApp) {
           apps.removeApp = function (appId, ...args) {
+            const host = ctx.removeAddonHostRecord(appId);
+            if (host?.removalFailed) {
+              if (ctx.getActiveAppBrowser() === host.browser) apps.closePanel();
+              return false;
+            }
             pruneNavigationListeners(appId);
-            ctx.removeAddonHostRecord(appId);
             const res = origRemoveApp(appId, ...args);
             if (!ctx.addonHostByAppId.size)
               setTimeout(ctx.removeEmptyAddonHostFolder, 0);

@@ -4437,7 +4437,9 @@
           b.addEventListener("load", checkAndUpdateBadge);
           b.addEventListener("pageshow", checkAndUpdateBadge);
 
-          this.#dom.panel.appendChild(b);
+          if (typeof b._zentralMoveTo === "function")
+            b._zentralMoveTo(this.#dom.panel);
+          else this.#dom.panel.appendChild(b);
           this.#state.appBrowsers.set(app.id, b);
           const matchingTiles = Array.from(
             document.querySelectorAll(".zen-app-tile[data-app-id]"),

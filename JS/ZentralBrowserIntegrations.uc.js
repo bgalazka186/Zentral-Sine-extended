@@ -1007,6 +1007,8 @@
         };
         addonHostByAppId.set(appId, record);
         addonHostByTab.set(tab, record);
+        browser._zentralMoveTo = (parent) =>
+          moveAddonHostBrowser(record, parent);
 
         putAddonHostTabInFolder(tab);
         // Folder creation can select its internal placeholder. Do not lend a
@@ -1034,57 +1036,94 @@
       }
     }
 
-    function restoreAddonHostBrowserToTab(record) {
-      const browser = record?.browser;
-      const parent = record?.originalParent;
-      if (!browser || !parent?.isConnected || browser.parentNode === parent)
-        return;
-      try {
-        const before =
-          record.originalNextSibling?.parentNode === parent
-            ? record.originalNextSibling
-            : null;
+    function moveAddonHostBrowser(record, parent, before = null) {
+      const browser = record.browser;
+      if (browser.parentNode === parent) return;
+      // State-preserving moves avoid destroying the browser's native progress
+      // owner. Older Gecko reconstructs it on insertion; reattach the existing
+      // tabbrowser filter to that new owner once, without a polling/retry loop.
+      const oldProgress = browser.webProgress;
+      const filter = gBrowser._tabFilters?.get(record.tab);
+      if (
+        typeof parent.moveBefore === "function" &&
+        typeof browser.connectedMoveCallback === "function"
+      ) {
+        parent.moveBefore(browser, before);
+      } else {
         parent.insertBefore(browser, before);
-      } catch (e) {
-        try {
-          parent.appendChild(browser);
-        } catch (_) {}
+        const progress = browser.webProgress;
+        if (filter && progress && progress !== oldProgress)
+          progress.addProgressListener(filter, Ci.nsIWebProgress.NOTIFY_ALL);
       }
+    }
+
+    function restoreAddonHostBrowserToTab(record) {
+      const parent = record?.originalParent;
+      if (!record?.browser || !parent?.isConnected)
+        throw new Error("Add-on host tab browser stack is unavailable");
+      const before =
+        record.originalNextSibling?.parentNode === parent
+          ? record.originalNextSibling
+          : null;
+      moveAddonHostBrowser(record, parent, before);
     }
 
     function removeAddonHostRecord(appId, { removeTab = true } = {}) {
       const record = addonHostByAppId.get(appId);
       if (!record) return null;
-
-      // Remove our lookup FIRST. Our own removeTab() emits TabClose; doing this
-      // first distinguishes that expected event from a user manually closing a
-      // host tab, which is handled by addonHostTabCloseHandler below.
-      addonHostByAppId.delete(appId);
-      if (record.browser) {
-        // Return the linkedBrowser to normal tab-switcher ownership before
-        // restoring/removing its backing tab.
-        record.browser.zenModeActive = false;
-        record.browser._bgalazkaAddonHostBrowser = false;
-        record.browser._bgalazkaAddonHostTab = null;
-      }
-
-      if (removeTab && record.tab?.isConnected) {
-        restoreAddonHostBrowserToTab(record);
-        try {
+      record.removalFailed = false;
+      const panelParent = record.browser?.parentNode;
+      const wasZenActive = record.browser?.zenModeActive;
+      record.removing = true;
+      try {
+        if (removeTab && record.tab?.isConnected) {
+          restoreAddonHostBrowserToTab(record);
+          record.browser.zenModeActive = false;
           gBrowser.removeTab(record.tab, {
             animate: false,
             skipPermitUnload: true,
             skipSessionStore: true,
           });
-        } catch (e) {
-          // Gecko can throw while removing the browser's progress listener
-          // *after* it has already detached the tab. Report only live failures.
-          if (record.tab?.isConnected)
-            console.warn(
-              "[BgalazkaExtension] Failed to remove add-on host tab:",
-              e,
+          if (record.tab.isConnected)
+            throw new Error(
+              "Native tab removal left the add-on host connected",
             );
         }
+      } catch (error) {
+        if (record.tab?.isConnected) {
+          record.removalFailed = true;
+          try {
+            if (
+              panelParent?.isConnected &&
+              panelParent !== record.originalParent
+            )
+              moveAddonHostBrowser(record, panelParent);
+            record.browser.zenModeActive = wasZenActive;
+          } catch (restoreError) {
+            console.warn(
+              "[Zentral] Could not restore panel after failed host close:",
+              restoreError,
+            );
+          }
+          // Keep both lookups and ownership flags. Base closeApp must not remove
+          // a browser still owned by a live native tab. A later explicit unload
+          // can try again; no automatic retry is scheduled.
+          console.warn(
+            "[BgalazkaExtension] Failed to remove add-on host tab:",
+            error,
+          );
+          return record;
+        }
+      } finally {
+        record.removing = false;
+      }
+      addonHostByAppId.delete(appId);
+      addonHostByTab.delete(record.tab);
+      if (record.browser) {
+        record.browser.zenModeActive = false;
+        record.browser._bgalazkaAddonHostBrowser = false;
+        record.browser._bgalazkaAddonHostTab = null;
+        delete record.browser._zentralMoveTo;
       }
       return record;
     }
@@ -1611,13 +1650,21 @@
         }
         return;
       }
-      if (addonHostByAppId.get(record.appId) !== record) return;
+      if (record.removing || addonHostByAppId.get(record.appId) !== record)
+        return;
 
       // This path means the user/Zen closed the backing tab directly. Let the
       // tab close finish first, then ask Zentral to unload the matching private
       // Map entry/browser. Our own programmatic teardown removes the Map record
       // before removeTab(), so it never enters this branch.
-      restoreAddonHostBrowserToTab(record);
+      try {
+        restoreAddonHostBrowserToTab(record);
+      } catch (error) {
+        console.warn(
+          "[Zentral] Could not restore closing host browser:",
+          error,
+        );
+      }
       addonHostByAppId.delete(record.appId);
       record.browser.zenModeActive = false;
       ctx.setTimeout(() => {
