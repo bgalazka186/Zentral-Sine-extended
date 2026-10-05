@@ -22,6 +22,7 @@
         #toolboxThemeObserver = null;
         /** @private Pref observer callback */
         #layoutObserver = null;
+        #badgePollingObserver = null;
         /** @private ResizeObserver on sidebar */
         #resizeObs = null;
         /** @private ResizeObserver on the Apps grid */
@@ -247,6 +248,13 @@
               this._badgeSyncHandler = null;
             }
             this._badgeSyncInitialized = false;
+            if (this.#badgePollingObserver) {
+              Services.prefs.removeObserver(
+                "zen.workspace.apps.sidebar.badge_poll_interval_ms",
+                this.#badgePollingObserver,
+              );
+              this.#badgePollingObserver = null;
+            }
             this.stopBadgeSyncLoop();
             // HIGH-04: Cancel any pending debounced theme sync timer
             if (this._syncThemeTimer) {
@@ -651,6 +659,7 @@
               browser.style.display = "none";
               try {
                 browser.docShellIsActive = true;
+                if (browser.isRemoteBrowser) browser.renderLayers = false;
               } catch (_) {}
               try {
                 const uri = Services.io.newURI(app.url);
@@ -3051,7 +3060,11 @@
 
           if (!this._badgeSyncInitialized) {
             this._badgeSyncInitialized = true;
-            this._badgeSyncHandler = () => this.syncAllAppBadges();
+            this._badgeSyncHandler = (event) => {
+              const browser = event.target?.linkedBrowser;
+              if (browser?._bgalazkaAppId)
+                this.syncAllAppBadges(browser._bgalazkaAppId);
+            };
             window.addEventListener("TabSelect", this._badgeSyncHandler, {
               passive: true,
             });
@@ -4041,7 +4054,10 @@
           if (this.#dom.root) {
             this.#dom.root.setAttribute("closing", "true");
             this.#dom.root.style.pointerEvents = "none";
+            if (this.#dom.root.contains(document.activeElement))
+              gBrowser.selectedBrowser?.focus();
           }
+          this.stopPositionTracking();
 
           this.endInstaPeek();
 
@@ -4312,13 +4328,17 @@
           }
         }
 
-        syncAllAppBadges() {
+        syncAllAppBadges(onlyAppId = null) {
           if (!this.#state.appBrowsers || this.#state.appBrowsers.size === 0)
             return;
           const appsById = new Map();
           for (const app of this.#state.apps)
             if (!appsById.has(app.id)) appsById.set(app.id, app);
+          for (const record of window.ZentralRuntime?.panelContext?.essentialPanels?.values() ||
+            [])
+            appsById.set(record.app.id, record.app);
           for (const [appId, browser] of this.#state.appBrowsers.entries()) {
+            if (onlyAppId && onlyAppId !== appId) continue;
             if (!browser || !browser.isConnected) continue;
             const app = appsById.get(appId);
             if (!app) continue;
@@ -4335,6 +4355,7 @@
                 browser.contentTitle || browser.getAttribute("label") || "";
             }
 
+            if (!title && browser.isConnected) continue;
             const { hasNotification, notifCount } =
               this.extractBadgeFromTitle(title);
             if (
@@ -4348,33 +4369,49 @@
           }
         }
 
-        /**
-         * Starts a lightweight polling timer for active background app browsers.
-         * Only runs when at least one app browser is loaded (size > 0),
-         * ensuring zero idle CPU usage when no apps are open.
-         */
+        // Title/load events are authoritative even when the panel is closed.
+        // This optional fallback covers browser builds which miss title events.
+        syncBadgePollingPreference() {
+          this.stopBadgeSyncLoop();
+          this.ensureBadgeSyncLoop();
+        }
+
         ensureBadgeSyncLoop() {
-          if (this._badgeSyncLoopTimer) return;
+          if (!this.#badgePollingObserver) {
+            this.#badgePollingObserver = {
+              observe: () => this.syncBadgePollingPreference(),
+            };
+            Services.prefs.addObserver(
+              "zen.workspace.apps.sidebar.badge_poll_interval_ms",
+              this.#badgePollingObserver,
+            );
+          }
+          if (
+            this._badgeSyncLoopTimer ||
+            this._destroyed ||
+            !this.#state.appBrowsers?.size
+          )
+            return;
+          const raw = Number(
+            Core.getPref(
+              "zen.workspace.apps.sidebar.badge_poll_interval_ms",
+              0,
+            ),
+          );
+          if (!Number.isFinite(raw) || raw <= 0) return;
+          const delay = Math.max(1000, Math.min(3600000, raw));
           this._badgeSyncLoopTimer = setInterval(() => {
-            if (
-              !this.#state.appBrowsers ||
-              this.#state.appBrowsers.size === 0
-            ) {
+            if (!this.#state.appBrowsers?.size) {
               this.stopBadgeSyncLoop();
               return;
             }
             this.syncAllAppBadges();
-          }, 1500);
+          }, delay);
         }
 
-        /**
-         * Stops the background app badge polling timer.
-         */
         stopBadgeSyncLoop() {
-          if (this._badgeSyncLoopTimer) {
-            clearInterval(this._badgeSyncLoopTimer);
-            this._badgeSyncLoopTimer = null;
-          }
+          if (this._badgeSyncLoopTimer) clearInterval(this._badgeSyncLoopTimer);
+          this._badgeSyncLoopTimer = null;
         }
 
         getOrCreateAppBrowser(app) {
@@ -4393,28 +4430,7 @@
           b.style.cssText =
             "width: 100%; height: 100%; flex: 1; border: none; overflow: hidden;";
 
-          const checkAndUpdateBadge = () => {
-            let title = "";
-            try {
-              title =
-                b.browsingContext?.currentWindowGlobal?.documentTitle ||
-                b.contentTitle ||
-                b.getAttribute("label") ||
-                "";
-            } catch (_) {
-              title = b.contentTitle || b.getAttribute("label") || "";
-            }
-            const { hasNotification, notifCount } =
-              this.extractBadgeFromTitle(title);
-            if (
-              app.hasNotification !== hasNotification ||
-              app.notificationCount !== notifCount
-            ) {
-              app.hasNotification = hasNotification;
-              app.notificationCount = notifCount;
-              this.updateAppBadge(app.id, hasNotification, notifCount);
-            }
-          };
+          const checkAndUpdateBadge = () => this.syncAllAppBadges(app.id);
 
           b.addEventListener("pagetitlechanged", checkAndUpdateBadge);
           b.addEventListener("DOMTitleChanged", checkAndUpdateBadge);
@@ -4455,13 +4471,23 @@
           const rafLoop = () => {
             if (!this._isTrackingPosition) return;
             reposition();
+            for (const [target, properties] of this
+              ._activePositionTransitions || []) {
+              for (const [property, deadline] of properties)
+                if (!target.isConnected || Date.now() >= deadline)
+                  properties.delete(property);
+              if (!properties.size)
+                this._activePositionTransitions.delete(target);
+            }
             if (
               this._activePositionTransitions?.size ||
               Date.now() - lastActivityTime < 200
             ) {
               rafId = requestAnimationFrame(rafLoop);
+              this._positionTrackingRAF = rafId;
             } else {
               rafId = null;
+              this._positionTrackingRAF = null;
             }
           };
 
@@ -4474,19 +4500,12 @@
             lastActivityTime = Date.now();
             if (!rafId) {
               rafId = requestAnimationFrame(rafLoop);
+              this._positionTrackingRAF = rafId;
             }
           };
 
-          this._mouseMoveHandler = (e) => {
-            const now = Date.now();
-            if (now - (this._lastThrottle || 0) > 16) {
-              triggerBurst();
-              this._lastThrottle = now;
-            }
-          };
-          window.addEventListener("mousemove", this._mouseMoveHandler, {
-            passive: true,
-          });
+          // Pointer movement is not a geometry change. Resize/transition events
+          // already track the native sidebar without taxing its hover path.
 
           // Track transitions only on positioning anchors or their ancestors.
           // Animated tab icons and other descendants cannot move the panel.
@@ -4550,10 +4569,10 @@
             if (event.type === "transitionstart") {
               let properties = activeTransitions.get(target);
               if (!properties) {
-                properties = new Set();
+                properties = new Map();
                 activeTransitions.set(target, properties);
               }
-              properties.add(property);
+              properties.set(property, Date.now() + 5000);
             } else {
               const properties = activeTransitions.get(target);
               properties?.delete(property);
@@ -4587,7 +4606,6 @@
               "zen-sidebar-right",
               "zen-sidebar-collapsed",
               "zen-compact-sidebar-visible",
-              "style",
               "zen-compact-navbar-visible",
             ],
           });
@@ -4600,6 +4618,9 @@
 
         stopPositionTracking() {
           this._isTrackingPosition = false;
+          if (this._positionTrackingRAF != null)
+            cancelAnimationFrame(this._positionTrackingRAF);
+          this._positionTrackingRAF = null;
 
           if (this._sidebarResizeObserver) {
             this._sidebarResizeObserver.disconnect();
@@ -6040,12 +6061,11 @@
                 );
                 this.scheduleRepositionGrid(80);
               }
-              if (
-                m.attributeName === "style" ||
-                m.attributeName === "zen-compact-mode"
-              ) {
-                this.syncVerticalBarTheme();
-                this.updateVerticalBarBounds();
+              if (m.attributeName === "zen-compact-mode") {
+                if (this.isPlacementVerticalBar()) {
+                  this.syncVerticalBarTheme();
+                  this.updateVerticalBarBounds();
+                }
               }
             }
           });
@@ -6055,12 +6075,9 @@
               "zen-right-side",
               "zen-sidebar-right",
               "zen-sidebar-collapsed",
-              "zen-compact-sidebar-visible",
-              "zen-sidebar-collapsed",
               "zen-compact-mode",
               "zen-sidebar-expanded",
               "zen-sidebar-hidden",
-              "style",
             ],
           });
 

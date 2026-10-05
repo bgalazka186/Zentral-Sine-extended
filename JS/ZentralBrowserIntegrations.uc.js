@@ -794,24 +794,9 @@
       return true;
     }
 
-    if (
-      !ctx.safeCall(ensurePanelPrivacyMenuItems, "ensurePanelPrivacyMenuItems")
-    ) {
-      let panelPrivacyMenuAttempts = 0;
-      const panelPrivacyMenuTimer = ctx.setInterval(() => {
-        panelPrivacyMenuAttempts++;
-        if (
-          ctx.safeCall(
-            ensurePanelPrivacyMenuItems,
-            "ensurePanelPrivacyMenuItems",
-          ) ||
-          panelPrivacyMenuAttempts > 40
-        ) {
-          ctx.clearInterval(panelPrivacyMenuTimer);
-        }
-      }, 150);
-      ctx.registerCleanup(() => ctx.clearInterval(panelPrivacyMenuTimer));
-    }
+    ctx.retryPanelTask("privacy-menu", () =>
+      ctx.safeCall(ensurePanelPrivacyMenuItems, "ensurePanelPrivacyMenuItems"),
+    );
 
     /* ==========================================================================
      * FIREFOX ADD-ON TAB-ID BRIDGE (architecture note 27)
@@ -1155,76 +1140,52 @@
     }
 
     function syncAddonHostBrowserActivity() {
-      for (const record of addonHostByAppId.values()) {
-        if (!record?.adoptedByZentral || !record.browser?.isConnected) continue;
-        try {
-          // Zen's tab switcher can deactivate a real tab-backed browser when
-          // another tab is selected. Split view uses zenModeActive to prevent
-          // that; an adopted panel browser needs the same protection.
-          record.browser.zenModeActive = true;
-          if (record.browser.docShellIsActive !== true)
-            record.browser.docShellIsActive = true;
-        } catch (_) {}
-      }
+      syncAppPanelBrowserActivity();
     }
 
-    // ROOT FIX for "panel loads, plays for a second, then goes gray while
-    // audio keeps playing" -- see ARCHITECTURE NOTE 28 above initBgalazkaExtension()
-    // for the full symptom/diagnosis/fix history before changing anything here.
-    //
-    // Short version: core's getOrCreateAppBrowser() (and the
-    // preload-sequence path) create standalone <browser remote="true">
-    // elements that never sit in gBrowser's tab strip. Nothing in Gecko
-    // activates those docShells on its own, and nothing in core ever sets
-    // docShellIsActive either (see BUG-NOTES above the addon-host fix,
-    // which only patches one narrow adopted-browser case). Gecko paints the
-    // very first frame regardless, then treats the docShell as inactive and
-    // stops compositing it - the tab's content process (and its audio) is
-    // untouched, so playback continues while the panel goes visually gray.
-    // This is independent of smart_sleep / any other toggle: it happens to
-    // every panel browser, preloaded or not, the moment it's first shown.
-    //
-    // Fix: mirror docShellIsActive to the same display:none/'' visibility
-    // flag core already uses to track which panel browser is on-screen
-    // (getAllAppBrowsers() covers the normal grid, the Essentials/addon-host
-    // bridge, and Triple/Super-View secondary browsers in one pass). This
-    // also restores the resource-saving half of "smart sleep": browsers that
-    // get hidden are explicitly deactivated instead of being left however
-    // Gecko happens to leave them.
+    function panelBrowserVisible(browser) {
+      const root = document.getElementById("zen-app-panel-root");
+      if (
+        !root?.hasAttribute("open") ||
+        root.hasAttribute("closing") ||
+        document.documentElement.hasAttribute("bgalazka-hover-panel-hidden") ||
+        root.getAttribute("data-insta-peek") === "true" ||
+        browser.style.display === "none" ||
+        browser.hasAttribute("hidden")
+      )
+        return false;
+      return true;
+    }
+
     function syncAppPanelBrowserActivity(browsers = ctx.getAllAppBrowsers()) {
       if (!browsers || typeof browsers[Symbol.iterator] !== "function")
         browsers = ctx.getAllAppBrowsers();
       for (const browser of browsers) {
         if (!browser?.isConnected) continue;
         try {
-          // On close, the slider is hidden even though a child browser can
-          // retain display:"". Do not keep a hidden panel's docshell active.
-          const panelOpen =
-            document.documentElement.getAttribute("zentral-app-panel-open") ===
-            "true";
-          // An Essential explicitly set to Load at Startup must stay active
-          // while its panel is hidden so notification pages can keep updating.
-          // Other hidden app browsers retain the existing idle behavior.
+          const visible = panelBrowserVisible(browser);
           const essential = ctx.essentialPanels.get(browser._bgalazkaAppId);
-          const backgroundPreload =
+          const notifications = !!(
             (essential?.app.preload && essential.tab.isConnected) ||
-            window.Zentral?.Apps?.isAppPreloadEnabled?.(browser._bgalazkaAppId);
-          const hostRecord = addonHostByAppId.get(browser._bgalazkaAppId);
-          const adoptedHost =
-            hostRecord?.adoptedByZentral && hostRecord.browser === browser;
-          // A real-tab-backed browser must stay active while it is adopted.
-          // syncAddonHostBrowserActivity() keeps it active on close, so setting
-          // it false here immediately afterward caused an activation fight.
-          const shouldBeActive =
-            !!adoptedHost ||
-            !!backgroundPreload ||
-            (panelOpen && browser.style.display !== "none");
-          // Gecko may reset this flag during navigation/process swaps. Only
-          // write on a real state change: repeatedly assigning true while a
-          // remote browser is loading can keep its tab in a busy/gray cycle.
-          if (browser.docShellIsActive !== shouldBeActive)
-            browser.docShellIsActive = shouldBeActive;
-        } catch (_) {}
+            window.Zentral?.Apps?.isAppPreloadEnabled?.(browser._bgalazkaAppId)
+          );
+          const host = addonHostByAppId.get(browser._bgalazkaAppId);
+          if (host?.adoptedByZentral && host.browser === browser) {
+            // The native tab switcher must not override Zentral's policy for
+            // a reparented browser. This protection does not require painting.
+            browser.zenModeActive = visible || notifications;
+          }
+          const active = visible || notifications;
+          if (browser.docShellIsActive !== active)
+            browser.docShellIsActive = active;
+          // docShellIsActive=true also enables layers. Turn them back off for
+          // notification documents: keep sockets/scripts/badge events alive,
+          // without compositing an invisible browser. Do not unload or freeze.
+          if (browser.isRemoteBrowser && browser.renderLayers !== visible)
+            browser.renderLayers = visible;
+        } catch (error) {
+          console.warn("[Zentral] Panel activity update failed", error);
+        }
       }
     }
 
@@ -2003,18 +1964,8 @@
       return true;
     }
 
-    if (!ctx.safeCall(ensureMobileUaMenuItem, "ensureMobileUaMenuItem")) {
-      let mobileUaAttempts = 0;
-      const mobileUaMenuTimer = ctx.setInterval(() => {
-        mobileUaAttempts++;
-        if (
-          ctx.safeCall(ensureMobileUaMenuItem, "ensureMobileUaMenuItem") ||
-          mobileUaAttempts > 40
-        ) {
-          ctx.clearInterval(mobileUaMenuTimer);
-        }
-      }, 150);
-      ctx.registerCleanup(() => ctx.clearInterval(mobileUaMenuTimer));
-    }
+    ctx.retryPanelTask("mobile-menu", () =>
+      ctx.safeCall(ensureMobileUaMenuItem, "ensureMobileUaMenuItem"),
+    );
   });
 })();

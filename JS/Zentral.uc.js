@@ -332,8 +332,10 @@
       ui.getAttribute("zen-right-side") === "true" ||
       ui.getAttribute("zen-sidebar-right") === "true";
     if (ui.getAttribute("zen-compact-mode") === "true") {
-      if (onRight) right -= 8;
-      else left += 8;
+      // Preserve the native 8px reveal bezel even when a panel's exterior
+      // resize grip extends 14px beyond its box.
+      if (onRight) right -= 22;
+      else left += 22;
     }
     for (const node of nodes) {
       if (!node?.isConnected) continue;
@@ -413,6 +415,10 @@
         frame = window.requestAnimationFrame(update);
     };
     runtime.requestSidebarLayout = queue;
+    const rebind = () => {
+      bind();
+      queue();
+    };
     const resize = new ResizeObserver(queue);
     const anchors = new MutationObserver(queue);
     const bind = () => {
@@ -448,7 +454,6 @@
     const update = () => {
       frame = null;
       if (disposed) return;
-      bind();
       const bounds = sidebarSafeBounds(),
         ui = document.documentElement;
       if (ui.getAttribute("zentral-safe-layout") !== "true")
@@ -459,9 +464,15 @@
         "--zentral-safe-right",
         Math.ceil(window.innerWidth - bounds.right) + "px",
       );
-      window.Zentral?.Apps?.positionPanel?.();
-      constrainPanelToSidebar(document.getElementById("zen-app-panel-root"));
-      runtime.panelContext?.syncSidebarLayout?.();
+      const panel = document.getElementById("zen-app-panel-root");
+      const panelVisible =
+        panel?.hasAttribute("open") &&
+        !panel.hasAttribute("closing") &&
+        !ui.hasAttribute("bgalazka-hover-panel-hidden");
+      if (panelVisible) {
+        window.Zentral?.Apps?.positionPanel?.();
+        runtime.panelContext?.syncSidebarLayout?.();
+      }
       const superPanel = document.getElementById("bgalazka-super-panel");
       if (ui.getAttribute("bgalazka-super-pin") === "true" && superPanel) {
         const rect = superPanel.getBoundingClientRect();
@@ -482,9 +493,20 @@
           ) + "px",
         );
       }
-      if (transitions.size) queue();
+      // Missing transitionend (e.g. a detached anchor) must not spin forever.
+      for (const [node, props] of transitions) {
+        for (const [name, deadline] of props)
+          if (!node.isConnected || Date.now() >= deadline) props.delete(name);
+        if (!props.size) transitions.delete(node);
+      }
+      if (
+        transitions.size &&
+        (panelVisible || ui.getAttribute("bgalazka-super-pin") === "true")
+      )
+        queue();
     };
     const rootObserver = new MutationObserver(() => {
+      bind();
       window.Zentral?.Apps?.scheduleRepositionGrid?.(0);
       queue();
     });
@@ -507,8 +529,8 @@
         return;
       let props = transitions.get(event.target);
       if (event.type === "transitionrun" || event.type === "transitionstart") {
-        if (!props) transitions.set(event.target, (props = new Set()));
-        props.add(event.propertyName);
+        if (!props) transitions.set(event.target, (props = new Map()));
+        props.set(event.propertyName, Date.now() + 5000);
       } else {
         props?.delete(event.propertyName);
         if (!props?.size) transitions.delete(event.target);
@@ -534,7 +556,7 @@
       "aftercustomization",
       "zen-workspace-switched",
     ])
-      window.addEventListener(type, queue);
+      window.addEventListener(type, rebind);
     bind();
     update();
     disposers.push(() => {
@@ -557,7 +579,7 @@
         "aftercustomization",
         "zen-workspace-switched",
       ])
-        window.removeEventListener(type, queue);
+        window.removeEventListener(type, rebind);
       for (const name of ["--zentral-safe-left", "--zentral-safe-right"])
         document.documentElement.style.removeProperty(name);
       document.documentElement.removeAttribute("zentral-safe-layout");
@@ -3033,6 +3055,142 @@
       label: "Show Triple View style repair button",
       type: "checkbox",
       defaultValue: false,
+    },
+    {
+      property: "zen.workspace.bgalazka.panel_retry_limit",
+      label: "Panel recovery retry limit",
+      type: "dropdown",
+      defaultValue: 2,
+      options: [
+        {
+          label: "Off",
+          value: 0,
+        },
+        {
+          label: "1",
+          value: 1,
+        },
+        {
+          label: "2",
+          value: 2,
+        },
+        {
+          label: "3",
+          value: 3,
+        },
+        {
+          label: "4",
+          value: 4,
+        },
+        {
+          label: "6",
+          value: 6,
+        },
+      ],
+    },
+    {
+      property: "zen.workspace.bgalazka.panel_retry_delay_ms",
+      label: "Panel recovery retry delay",
+      type: "dropdown",
+      defaultValue: 500,
+      options: [
+        {
+          label: "100 ms",
+          value: 100,
+        },
+        {
+          label: "250 ms",
+          value: 250,
+        },
+        {
+          label: "500 ms",
+          value: 500,
+        },
+        {
+          label: "1 second",
+          value: 1000,
+        },
+        {
+          label: "2 seconds",
+          value: 2000,
+        },
+        {
+          label: "5 seconds",
+          value: 5000,
+        },
+      ],
+    },
+    {
+      property: "zen.workspace.bgalazka.panel_fallback_interval_ms",
+      label: "Panel troubleshooting refresh interval",
+      type: "dropdown",
+      defaultValue: 10000,
+      options: [
+        {
+          label: "1 second",
+          value: 1000,
+        },
+        {
+          label: "5 seconds",
+          value: 5000,
+        },
+        {
+          label: "10 seconds",
+          value: 10000,
+        },
+        {
+          label: "30 seconds",
+          value: 30000,
+        },
+        {
+          label: "1 minute",
+          value: 60000,
+        },
+        {
+          label: "5 minutes",
+          value: 300000,
+        },
+      ],
+    },
+    {
+      property: "zen.workspace.apps.sidebar.badge_poll_interval_ms",
+      label: "Notification badge fallback refresh",
+      type: "dropdown",
+      defaultValue: 0,
+      options: [
+        {
+          label: "Off (use notification events)",
+          value: 0,
+        },
+        {
+          label: "1.5 seconds",
+          value: 1500,
+        },
+        {
+          label: "5 seconds",
+          value: 5000,
+        },
+        {
+          label: "15 seconds",
+          value: 15000,
+        },
+        {
+          label: "1 minute",
+          value: 60000,
+        },
+        {
+          label: "5 minutes",
+          value: 300000,
+        },
+        {
+          label: "15 minutes",
+          value: 900000,
+        },
+        {
+          label: "1 hour",
+          value: 3600000,
+        },
+      ],
     },
     {
       property: "zen.workspace.bgalazka.periodic_fallback_polling",
@@ -7180,12 +7338,15 @@
         const optionEl = document.createElement("option");
         optionEl.value = opt.value;
         optionEl.textContent = opt.label;
-        if (opt.value === currentVal) optionEl.selected = true;
+        if (String(opt.value) === String(currentVal)) optionEl.selected = true;
         select.appendChild(optionEl);
       });
 
       select.addEventListener("change", () => {
-        ctx.setPref(prefKey, select.value);
+        const option = options.find(
+          (option) => String(option.value) === select.value,
+        );
+        ctx.setPref(prefKey, option ? option.value : select.value);
         // BUG FIX: this used to unconditionally write "bgalazka-pill-position"
         // here regardless of which setting owned the row (a leftover from
         // when this function was only ever sketched out for that one use).
@@ -9081,6 +9242,110 @@
           },
         );
         content.appendChild(tPeriodicFallbackPolling.row);
+        const recoveryControls = [];
+        {
+          const pref = "zen.workspace.bgalazka.panel_retry_limit";
+          const control = createSelectRow(
+            "Panel recovery retry limit",
+            "Maximum additional attempts per operation. Off keeps the initial attempt and normal load/navigation events. All panel recovery shares one bounded timer.",
+            pref,
+            [
+              { label: "Off", value: 0 },
+              { label: "1", value: 1 },
+              { label: "2", value: 2 },
+              { label: "3", value: 3 },
+              { label: "4", value: 4 },
+              { label: "6", value: 6 },
+            ],
+            2,
+            ctx.PREF_ICONS.REFRESH,
+          );
+          content.appendChild(control.row);
+          recoveryControls.push({
+            input: control.select,
+            pref,
+            def: 2,
+            isSelect: true,
+          });
+        }
+        {
+          const pref = "zen.workspace.bgalazka.panel_retry_delay_ms";
+          const control = createSelectRow(
+            "Panel recovery retry delay",
+            "Minimum time between recovery attempts. Applied only when an operation has not completed.",
+            pref,
+            [
+              { label: "100 ms", value: 100 },
+              { label: "250 ms", value: 250 },
+              { label: "500 ms", value: 500 },
+              { label: "1 second", value: 1000 },
+              { label: "2 seconds", value: 2000 },
+              { label: "5 seconds", value: 5000 },
+            ],
+            500,
+            ctx.PREF_ICONS.REFRESH,
+          );
+          content.appendChild(control.row);
+          recoveryControls.push({
+            input: control.select,
+            pref,
+            def: 500,
+            isSelect: true,
+          });
+        }
+        {
+          const pref = "zen.workspace.bgalazka.panel_fallback_interval_ms";
+          const control = createSelectRow(
+            "Panel troubleshooting refresh interval",
+            "How often the optional troubleshooting pass checks visible panels. Closed and autohidden panels are excluded.",
+            pref,
+            [
+              { label: "1 second", value: 1000 },
+              { label: "5 seconds", value: 5000 },
+              { label: "10 seconds", value: 10000 },
+              { label: "30 seconds", value: 30000 },
+              { label: "1 minute", value: 60000 },
+              { label: "5 minutes", value: 300000 },
+            ],
+            10000,
+            ctx.PREF_ICONS.REFRESH,
+          );
+          content.appendChild(control.row);
+          recoveryControls.push({
+            input: control.select,
+            pref,
+            def: 10000,
+            isSelect: true,
+          });
+        }
+        {
+          const pref = "zen.workspace.apps.sidebar.badge_poll_interval_ms";
+          const control = createSelectRow(
+            "Notification badge fallback refresh",
+            "Title and load events update badges immediately, including while closed. Enable this fallback only for missed events; slow intervals reduce background work.",
+            pref,
+            [
+              { label: "Off (use notification events)", value: 0 },
+              { label: "1.5 seconds", value: 1500 },
+              { label: "5 seconds", value: 5000 },
+              { label: "15 seconds", value: 15000 },
+              { label: "1 minute", value: 60000 },
+              { label: "5 minutes", value: 300000 },
+              { label: "15 minutes", value: 900000 },
+              { label: "1 hour", value: 3600000 },
+            ],
+            0,
+            ctx.PREF_ICONS.REFRESH,
+          );
+          content.appendChild(control.row);
+          recoveryControls.push({
+            input: control.select,
+            pref,
+            def: 0,
+            isSelect: true,
+          });
+        }
+
         const tShowAddonHostFolder = createToggleRow(
           "Show Web Panel Tab ID Folder",
           "Reveal the Zentral Add-on Hosts folder and its tabs in the sidebar so you can check whether panel host tabs are cleaned up. Requires Real Tab IDs for Web Panels to create host tabs.",
@@ -9802,7 +10067,10 @@
         // Clicking each control runs its existing live-update handler.
         const presetActions = document.createElement("div");
         presetActions.className = "zs-extension-presets";
+        panel._toggles.push(...recoveryControls);
         const recommendedExceptions = new Set([
+          ctx.BGALAZKA_EXT_PREFS.PERIODIC_FALLBACK_POLLING,
+          ctx.BGALAZKA_EXT_PREFS.SHOW_TRIPLE_STYLE_REPAIR,
           ctx.BGALAZKA_EXT_PREFS.EDGE_ATTACHED_PANELS,
           ctx.BGALAZKA_EXT_PREFS.WEB_TOOLBAR_TOP,
           ctx.BGALAZKA_EXT_PREFS.WEB_TOOLBAR_AUTOHIDE,

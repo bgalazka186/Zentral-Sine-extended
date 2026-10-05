@@ -516,6 +516,7 @@
         // before the Essential tab itself is selected or restored.
         try {
           browser.docShellIsActive = true;
+          if (browser.isRemoteBrowser) browser.renderLayers = false;
         } catch (_) {}
         const uri = Services.io.newURI(record.app.url);
         browser.fixupAndLoadURIString(record.app.url, {
@@ -525,14 +526,19 @@
             }),
         });
         record.loadedSource = record.app.url;
-        ctx.setTimeout(() => {
+        let preloadStarted = false;
+        ctx.retryPanelTask(browser, () => {
+          if (!preloadStarted) {
+            preloadStarted = true;
+            return false;
+          }
           if (
             !record.tab.isConnected ||
             !browser.isConnected ||
             browser.currentURI?.spec !== "about:blank" ||
             browser.webProgress?.isLoadingDocument
           )
-            return;
+            return true;
           try {
             browser.fixupAndLoadURIString(record.app.url, {
               triggeringPrincipal:
@@ -549,7 +555,8 @@
               error,
             );
           }
-        }, 3000);
+          return true;
+        });
       }
       return true;
     }
@@ -832,18 +839,14 @@
               ? "true"
               : "false";
           tile.dataset.loaded = panelLoaded ? "true" : "false";
-          if (record.app.preload && panelBrowser?.isConnected) {
-            // Preload may start before its remote browsingContext exists. The
-            // existing two-second tile sync also reasserts activation if Gecko
-            // resets this standalone browser while it remains in the background.
-            try {
-              panelBrowser.docShellIsActive = true;
-            } catch (_) {}
-          }
           syncEssentialBadge(record, panelBrowser);
           tile.dataset.tabLoaded = tabLoaded ? "true" : "false";
         }
         pruneIsolationTiles();
+        ctx.syncAppPanelBrowserActivity?.();
+        window.dispatchEvent(
+          new CustomEvent("zentral-essential-tiles-changed"),
+        );
       } finally {
         isSyncingTiles = false;
       }

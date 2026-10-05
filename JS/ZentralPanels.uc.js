@@ -132,6 +132,83 @@
         window.removeEventListener("unload", performBgalazkaUnload);
       });
 
+      // One window timer services all bounded panel retries. A task returning
+      // true is finished. Replacing/cancelling a key invalidates its old work.
+      const panelRetryJobs = new Map();
+      let panelRetryTimer = null;
+      let panelRetryDue = 0;
+      let panelStatusTimer = null;
+      function panelRetryOptions() {
+        const count = Number(
+          getPref("zen.workspace.bgalazka.panel_retry_limit", 2),
+        );
+        const delay = Number(
+          getPref("zen.workspace.bgalazka.panel_retry_delay_ms", 500),
+        );
+        return {
+          attempts: Number.isFinite(count)
+            ? Math.max(0, Math.min(6, Math.trunc(count)))
+            : 2,
+          delay: Number.isFinite(delay)
+            ? Math.max(100, Math.min(5000, delay))
+            : 500,
+        };
+      }
+      function armPanelRetries() {
+        const due = panelRetryJobs.size
+          ? Math.min(...Array.from(panelRetryJobs.values(), (job) => job.due))
+          : 0;
+        if (panelRetryTimer != null && due === panelRetryDue) return;
+        clearTimeout(panelRetryTimer);
+        panelRetryTimer = null;
+        panelRetryDue = due;
+        if (!due || extensionDisposed) return;
+        panelRetryTimer = setTimeout(
+          () => {
+            panelRetryTimer = null;
+            panelRetryDue = 0;
+            const now = Date.now();
+            for (const [key, job] of [...panelRetryJobs]) {
+              if (job.due > now || panelRetryJobs.get(key) !== job) continue;
+              const done = safeCall(job.task, "panel retry") !== false;
+              if (panelRetryJobs.get(key) !== job) continue;
+              if (done || job.remaining <= 1) panelRetryJobs.delete(key);
+              else {
+                job.remaining--;
+                job.due = Date.now() + job.delay;
+              }
+            }
+            armPanelRetries();
+          },
+          Math.max(0, due - Date.now()),
+        );
+      }
+      ctx.cancelPanelRetry = (key) => {
+        panelRetryJobs.delete(key);
+        armPanelRetries();
+      };
+      ctx.retryPanelTask = (key, task) => {
+        ctx.cancelPanelRetry(key);
+        const done = safeCall(task, "panel task") !== false;
+        const { attempts, delay } = panelRetryOptions();
+        if (!done && attempts && !extensionDisposed) {
+          panelRetryJobs.set(key, {
+            task,
+            remaining: attempts,
+            delay,
+            due: Date.now() + delay,
+          });
+          armPanelRetries();
+        }
+      };
+      ctx.cancelPanelRetries = () => {
+        panelRetryJobs.clear();
+        clearTimeout(panelRetryTimer);
+        panelRetryTimer = null;
+        panelRetryDue = 0;
+      };
+      registerCleanup(ctx.cancelPanelRetries);
+
       const EXT_PREFS = {
         TRANSLUCENCY: "zen.workspace.bgalazka.translucency",
         OPPOSITE_DOCKING: "zen.workspace.bgalazka.opposite_docking",
@@ -149,6 +226,12 @@
         ZEN_INTERNET_PANEL_CSS: "zen.workspace.bgalazka.zen_internet_panel_css",
         SHOW_TRIPLE_STYLE_REPAIR:
           "zen.workspace.bgalazka.show_triple_style_repair",
+        PANEL_RETRY_LIMIT: "zen.workspace.bgalazka.panel_retry_limit",
+        PANEL_RETRY_DELAY_MS: "zen.workspace.bgalazka.panel_retry_delay_ms",
+        PANEL_FALLBACK_INTERVAL_MS:
+          "zen.workspace.bgalazka.panel_fallback_interval_ms",
+        BADGE_POLL_INTERVAL_MS:
+          "zen.workspace.apps.sidebar.badge_poll_interval_ms",
         PERIODIC_FALLBACK_POLLING:
           "zen.workspace.bgalazka.periodic_fallback_polling",
         // Primary-toolbar quick override. No Settings row: this is deliberately a
@@ -1076,18 +1159,10 @@
         return true;
       };
 
-      // window.Zentral.Apps is assigned synchronously when the base script parses (before
-      // Zentral.Init() itself, which may be deferred until browser-delayed-startup-finished),
-      // but retry briefly just in case script load order ever changes.
-      if (!safeCall(patchAppsInstance, "patchAppsInstance")) {
-        let attempts = 0;
-        const retryTimer = setInterval(() => {
-          attempts++;
-          if (safeCall(patchAppsInstance, "patchAppsInstance") || attempts > 40)
-            clearInterval(retryTimer);
-        }, 150);
-        registerCleanup(() => clearInterval(retryTimer));
-      }
+      ctx.retryPanelTask("apps-patch", () =>
+        safeCall(patchAppsInstance, "patchAppsInstance"),
+      );
+
       /* ==========================================================================
        * 2. TAB CLICK ISOLATION (note 6)
        * -----------------------------------------------------------------------
@@ -1233,6 +1308,12 @@
         ZEN_INTERNET_PANEL_CSS: "zen.workspace.bgalazka.zen_internet_panel_css",
         SHOW_TRIPLE_STYLE_REPAIR:
           "zen.workspace.bgalazka.show_triple_style_repair",
+        PANEL_RETRY_LIMIT: "zen.workspace.bgalazka.panel_retry_limit",
+        PANEL_RETRY_DELAY_MS: "zen.workspace.bgalazka.panel_retry_delay_ms",
+        PANEL_FALLBACK_INTERVAL_MS:
+          "zen.workspace.bgalazka.panel_fallback_interval_ms",
+        BADGE_POLL_INTERVAL_MS:
+          "zen.workspace.apps.sidebar.badge_poll_interval_ms",
         PERIODIC_FALLBACK_POLLING:
           "zen.workspace.bgalazka.periodic_fallback_polling",
         SMART_SLEEP: "zen.workspace.bgalazka.smart_sleep",
@@ -1326,6 +1407,9 @@
         return Boolean(
           root?.hasAttribute("open") &&
           !root.hasAttribute("closing") &&
+          !document.documentElement.hasAttribute(
+            "bgalazka-hover-panel-hidden",
+          ) &&
           root.dataset.instaPeek !== "true",
         );
       }
@@ -2177,6 +2261,19 @@
         );
         updateHiddenPanelGeometry(root);
         const apps = window.Zentral?.Apps;
+        if (hiddenChanged) {
+          if (shouldHide) {
+            apps?.stopPositionTracking?.();
+            ctx.cancelPanelRetry("panel-activity");
+            if (root?.contains(document.activeElement))
+              gBrowser.selectedBrowser?.focus();
+            ctx.syncAppPanelBrowserActivity?.();
+          } else if (enabled) {
+            apps?.startPositionTracking?.();
+            ctx.requestPanelActivity?.();
+          }
+          syncPanelFallbackPolling();
+        }
         if (
           hiddenChanged &&
           (apps?.isPlacementVerticalBar?.() ||
@@ -3505,19 +3602,9 @@
         return true;
       }
 
-      if (!safeCall(hookPopupContainment, "hookPopupContainment")) {
-        let popupHookAttempts = 0;
-        const popupHookTimer = setInterval(() => {
-          popupHookAttempts++;
-          if (
-            safeCall(hookPopupContainment, "hookPopupContainment") ||
-            popupHookAttempts > 40
-          ) {
-            clearInterval(popupHookTimer);
-          }
-        }, 150);
-        registerCleanup(() => clearInterval(popupHookTimer));
-      }
+      ctx.retryPanelTask("popup-containment", () =>
+        safeCall(hookPopupContainment, "hookPopupContainment"),
+      );
 
       // Audio state belongs to the panel browser, never the underlying essential.
       // Controller events work across remote content; polling also covers older
@@ -3734,39 +3821,76 @@
         window.removeEventListener("command", essentialPreloadCommand, true);
         window.removeEventListener("contextmenu", essentialContextMenu, true);
       });
-      let panelStatusTimer = null;
+      const panelActivityRetryKey = "panel-activity";
+      ctx.requestPanelActivity = () => {
+        ctx.retryPanelTask(panelActivityRetryKey, () => {
+          ctx.syncAppPanelBrowserActivity();
+          const root = document.getElementById("zen-app-panel-root");
+          if (
+            !root?.hasAttribute("open") ||
+            root.hasAttribute("closing") ||
+            document.documentElement.hasAttribute("bgalazka-hover-panel-hidden")
+          )
+            return true;
+          return ctx
+            .getAllAppBrowsers()
+            .every(
+              (browser) =>
+                !browser.isConnected ||
+                browser.style.display === "none" ||
+                browser.hasAttribute("hidden") ||
+                (browser.browsingContext &&
+                  browser.docShellIsActive &&
+                  (!browser.isRemoteBrowser || browser.renderLayers)),
+            );
+        });
+      };
+      function panelMaintenanceVisible() {
+        const root = document.getElementById("zen-app-panel-root");
+        return (
+          root?.hasAttribute("open") &&
+          !root.hasAttribute("closing") &&
+          !document.documentElement.hasAttribute("bgalazka-hover-panel-hidden")
+        );
+      }
       function runPanelFallbackMaintenance() {
-        if (document.getElementById("zs-addon-host-inspection"))
-          ctx.updateAddonHostInspection();
-        if (getPref(EXT_PREFS.CORNER_TILES, false)) ctx.syncCornerTiles();
+        if (!panelMaintenanceVisible()) return;
+        const browsers = ctx
+          .getAllAppBrowsers()
+          .filter(
+            (browser) =>
+              browser.isConnected &&
+              browser.style.display !== "none" &&
+              !browser.hasAttribute("hidden"),
+          );
+        ctx.syncAppPanelBrowserActivity(browsers);
+        if (ctx.zenCssEnabled()) ctx.repairZenInternetPanelCss(browsers, false);
+        ctx.updateWebToolbarState();
+        ctx.updateSecondaryFallbackState?.();
         if (getPref(BGALAZKA_EXT_PREFS.AUDIO_INDICATOR, false))
           refreshPanelAudio();
-
-        // This entire maintenance pass is optional now. The normal path is
-        // event-driven; enable Periodic Fallback Polling only for a Zen build
-        // that still revokes docshell activity or leaves CSS/UI state stale.
-        if (
-          document.documentElement.getAttribute("zentral-app-panel-open") ===
-          "true"
-        ) {
-          const panelBrowsers = ctx.getAllAppBrowsers();
-          ctx.syncAppPanelBrowserActivity(panelBrowsers);
-          if (ctx.zenCssEnabled())
-            ctx.repairZenInternetPanelCss(panelBrowsers, false);
-        }
       }
       function syncPanelFallbackPolling() {
-        if (panelStatusTimer) {
-          clearInterval(panelStatusTimer);
-          panelStatusTimer = null;
-        }
-        if (!ctx.periodicFallbackPollingEnabled() || extensionDisposed) return;
-        runPanelFallbackMaintenance();
-        panelStatusTimer = setInterval(runPanelFallbackMaintenance, 2000);
+        const raw = Number(
+          getPref("zen.workspace.bgalazka.panel_fallback_interval_ms", 10000),
+        );
+        const delay = Number.isFinite(raw)
+          ? Math.max(1000, Math.min(300000, raw))
+          : 10000;
+        const active =
+          ctx.periodicFallbackPollingEnabled() &&
+          !extensionDisposed &&
+          panelMaintenanceVisible();
+        if (active && panelStatusTimer && panelStatusTimer.delay === delay)
+          return;
+        if (panelStatusTimer) clearInterval(panelStatusTimer.id);
+        panelStatusTimer = active
+          ? { id: setInterval(runPanelFallbackMaintenance, delay), delay }
+          : null;
       }
       syncPanelFallbackPolling();
       registerCleanup(() => {
-        if (panelStatusTimer) clearInterval(panelStatusTimer);
+        if (panelStatusTimer) clearInterval(panelStatusTimer.id);
         panelStatusTimer = null;
         for (const controller of panelMediaListeners.values())
           mediaEvents.forEach((type) =>
@@ -3806,9 +3930,12 @@
                 (!appId || browser._bgalazkaAppId !== appId)
               )
                 return;
-              ["load", "pageshow", "DOMTitleChanged"].forEach((type) =>
-                browser.removeEventListener(type, onNav),
-              );
+              [
+                "XULFrameLoaderCreated",
+                "load",
+                "pageshow",
+                "DOMTitleChanged",
+              ].forEach((type) => browser.removeEventListener(type, onNav));
               try {
                 browser.webProgress?.removeProgressListener(progressListener);
               } catch (_) {}
@@ -3840,6 +3967,7 @@
               !document
                 .getElementById("zen-app-panel-root")
                 ?.hasAttribute("closing");
+            ctx.cancelPanelRetry("panel-activity");
             const res = origOpen(...args);
             if (ctx.zenCssEnabled()) {
               const openedBrowser = ctx.getActiveAppBrowser();
@@ -3859,29 +3987,17 @@
             )
               this.togglePin?.();
             refreshPanelAudio();
-            ctx.syncAddonHostBrowserActivity();
-            ctx.syncAppPanelBrowserActivity();
-            // A single deferred re-assertion can still lose the race against a
-            // cold content-process spawn (new site/container/first launch),
-            // which is exactly what left panels gray until manually closed and
-            // reopened. requestAnimationFrame lands before the next paint,
-            // which is tighter than any setTimeout; stagger a few more after it
-            // as a fallback for slower spawns.
-            requestAnimationFrame(ctx.syncAppPanelBrowserActivity);
-            for (const delay of [30, 150, 500, 1500]) {
-              setTimeout(ctx.syncAppPanelBrowserActivity, delay);
-            }
-            setTimeout(() => {
-              ensurePillDualViewButton();
-              ensurePillHoverRevealButton();
-              ensurePillAllSidesResizeButton();
-              ctx.ensureVerticalResizeHandles();
-              ctx.ensurePillGrabberVerticalDrag();
-              syncPanelPushState();
-              ctx.ensureWebToolbar();
-              refreshPanelAudio();
-              ctx.updateWebToolbarState();
-            }, 30);
+            ctx.requestPanelActivity();
+            syncPanelFallbackPolling();
+            ensurePillDualViewButton();
+            ensurePillHoverRevealButton();
+            ensurePillAllSidesResizeButton();
+            ctx.ensureVerticalResizeHandles();
+            ctx.ensurePillGrabberVerticalDrag();
+            syncPanelPushState();
+            ctx.ensureWebToolbar();
+            refreshPanelAudio();
+            ctx.updateWebToolbarState();
             return res;
           };
         }
@@ -3889,11 +4005,12 @@
         const origClose = apps.closePanel?.bind(apps);
         if (origClose) {
           apps.closePanel = function (...args) {
+            ctx.cancelPanelRetry(panelActivityRetryKey);
             const res = origClose(...args);
             clearHoverHide();
             setHoverPanelHidden(false);
-            ctx.syncAddonHostBrowserActivity();
             ctx.syncAppPanelBrowserActivity();
+            syncPanelFallbackPolling();
             setTimeout(syncPanelPushState, 30);
             return res;
           };
@@ -3940,12 +4057,6 @@
               getPref(BGALAZKA_EXT_PREFS.ZEN_INTERNET_PANEL_CSS, false)
             )
               ctx.attachZenInternetPanelBrowser(result.browser);
-            if (result?.browser?._bgalazkaAddonHostBrowser) {
-              try {
-                if (result.browser.docShellIsActive !== true)
-                  result.browser.docShellIsActive = true;
-              } catch (_) {}
-            }
             // BUG FIX: setAttribute("useragent"/"customuseragent", ...) is only
             // ever read by the <browser> element once, at its connectedCallback
             // — which already ran inside origGetOrCreateBrowser's own
@@ -3976,13 +4087,15 @@
             // fallback in startWebToolbarPolling() above, since those don't
             // reliably fire these events).
             if (result?.browser && !navigationListeners.has(result.browser)) {
-              const onNav = () => {
+              const onNav = (event) => {
                 // A process swap can revoke activation after openPanel's first
                 // retries. Reassert promptly on navigation instead of waiting
                 // for the periodic status check.
-                ctx.syncAppPanelBrowserActivity();
+                if (event?.type !== "DOMTitleChanged")
+                  ctx.requestPanelActivity();
                 ctx.updateWebToolbarState();
               };
+              result.browser.addEventListener("XULFrameLoaderCreated", onNav);
               result.browser.addEventListener("load", onNav);
               result.browser.addEventListener("pageshow", onNav);
               result.browser.addEventListener("DOMTitleChanged", onNav);
@@ -3997,6 +4110,7 @@
               const progressListener = {
                 onLocationChange(progress) {
                   if (progress && !progress.isTopLevel) return;
+                  ctx.requestPanelActivity();
                   ctx.scheduleZenCssFirstLoad(result.browser);
                   ctx.updateWebToolbarState();
                 },
@@ -4010,6 +4124,7 @@
                     ctx.cancelZenCssFirstLoad(result.browser);
                     ctx.scheduleZenCssFirstLoad(result.browser);
                   }
+                  ctx.requestPanelActivity();
                   ctx.updateWebToolbarState();
                 },
                 QueryInterface: ChromeUtils.generateQI([
@@ -4098,9 +4213,12 @@
                 "DOMAudioPlaybackStopped",
                 onAudioStopped,
               );
-              ["load", "pageshow", "DOMTitleChanged"].forEach((type) =>
-                browser.removeEventListener(type, onNav),
-              );
+              [
+                "XULFrameLoaderCreated",
+                "load",
+                "pageshow",
+                "DOMTitleChanged",
+              ].forEach((type) => browser.removeEventListener(type, onNav));
             },
           );
           navigationListeners.clear();
@@ -4112,18 +4230,9 @@
         return true;
       };
 
-      if (!safeCall(hookAppsInstance, "hookAppsInstance")) {
-        let hookAttempts = 0;
-        const hookTimer = setInterval(() => {
-          hookAttempts++;
-          if (
-            safeCall(hookAppsInstance, "hookAppsInstance") ||
-            hookAttempts > 40
-          )
-            clearInterval(hookTimer);
-        }, 150);
-        registerCleanup(() => clearInterval(hookTimer));
-      }
+      ctx.retryPanelTask("apps-hooks", () =>
+        safeCall(hookAppsInstance, "hookAppsInstance"),
+      );
 
       // SessionStore may restore last session's host tabs and Zen folder before
       // this script starts. They do not belong to this window's live bridge.
@@ -4161,11 +4270,18 @@
         }
         if (!ctx.addonHostByAppId.size) ctx.removeEmptyAddonHostFolder();
       }
-      // Session restoration can inject the folder after the first UI sync.
-      const restoredHostTimers = [0, 1000, 4000].map((delay) =>
-        setTimeout(pruneRestoredAddonHosts, delay),
+      pruneRestoredAddonHosts();
+      const restoredHostObserver = { observe: pruneRestoredAddonHosts };
+      Services.obs.addObserver(
+        restoredHostObserver,
+        "sessionstore-windows-restored",
       );
-      registerCleanup(() => restoredHostTimers.forEach(clearTimeout));
+      registerCleanup(() =>
+        Services.obs.removeObserver(
+          restoredHostObserver,
+          "sessionstore-windows-restored",
+        ),
+      );
 
       // Hot-reload/startup normalization: if the opt-in bridge was already on
       // and a standalone panel browser predates this extension instance, unload it
@@ -4514,15 +4630,7 @@
         return true;
       };
 
-      if (!patchSettingsInstance()) {
-        let attempts = 0;
-        const retryTimer = setInterval(() => {
-          attempts++;
-          if (patchSettingsInstance() || attempts > 40)
-            clearInterval(retryTimer);
-        }, 150);
-        registerCleanup(() => clearInterval(retryTimer));
-      }
+      ctx.retryPanelTask("settings-hook", patchSettingsInstance);
 
       // Safe window event hooks that fire strictly AFTER tab operations finish
       const tabPinnedHandler = () => ctx.requestTileSync(80);
@@ -4574,7 +4682,6 @@
 
       // Initialize
       ctx.requestTileSync(150);
-      setTimeout(() => ctx.requestTileSync(150), 1600);
 
       // ALL-SIDES RESIZE (note 16): the panel root usually already exists by
       // this point (see patchAppsInstance's own retry comment above), but this
@@ -4584,24 +4691,13 @@
       const initAllSidesResizeUi = () => {
         const ok = ctx.ensureVerticalResizeHandles();
         ensurePillAllSidesResizeButton();
-        // Not actually an all-sides-resize feature (note 25, not 16) -- just
-        // reusing this same "root/pill exists yet?" retry loop instead of
-        // spinning up a near-identical second setInterval for it.
+        // Both features need the same root/pill lifecycle.
         ctx.ensurePillGrabberVerticalDrag();
         return ok;
       };
-      if (!safeCall(initAllSidesResizeUi, "initAllSidesResizeUi")) {
-        let vResizeInitAttempts = 0;
-        const vResizeInitTimer = setInterval(() => {
-          vResizeInitAttempts++;
-          if (
-            safeCall(initAllSidesResizeUi, "initAllSidesResizeUi") ||
-            vResizeInitAttempts > 40
-          )
-            clearInterval(vResizeInitTimer);
-        }, 150);
-        registerCleanup(() => clearInterval(vResizeInitTimer));
-      }
+      ctx.retryPanelTask("resize-ui", () =>
+        safeCall(initAllSidesResizeUi, "initAllSidesResizeUi"),
+      );
 
       /* Secondary views keep the native first panel and its toolbar intact. */
 
@@ -4694,6 +4790,7 @@
           ctx.syncSecondaryToolbarPreferences?.();
           syncPanelFallbackPolling();
           ctx.syncSecondaryFallbackPolling?.();
+          ctx.syncAppPanelBrowserActivity?.();
           window.Zentral?.Apps?.positionPanel?.();
           ctx.updatePanelHeightVar?.();
           ctx.applyHorizontalPanelOffset?.(
@@ -4702,7 +4799,16 @@
         }, 0);
       };
       const featurePrefObserver = {
-        observe: () => ctx.reconcileFeaturePreferences(),
+        observe(subject, topic, key) {
+          if (
+            [
+              BGALAZKA_EXT_PREFS.PANEL_RETRY_LIMIT,
+              BGALAZKA_EXT_PREFS.PANEL_RETRY_DELAY_MS,
+            ].includes(key)
+          )
+            ctx.cancelPanelRetries();
+          ctx.reconcileFeaturePreferences();
+        },
       };
       Services.prefs.addObserver(
         "zen.workspace.bgalazka.",
@@ -4733,7 +4839,6 @@
         window.ZentralRuntime?.constrainPanelToSidebar?.(
           document.getElementById("zen-app-panel-root"),
         );
-        ctx.syncSecondaryToolbarPreferences?.();
       };
       registerCleanup(() => {
         delete ctx.syncSidebarLayout;
@@ -4859,8 +4964,8 @@
       // SessionStore may restore Essential tab identities after panel setup.
       // A panel opened manually before then takes precedence in this window.
       if (readStartupPanel()) {
-        let attempts = 0;
-        let startupTimer = null;
+        let startupFinished = false;
+        const startupKey = "startup-panel";
         const openSavedPanel = () => {
           const selection = readStartupPanel();
           const apps = window.Zentral?.Apps;
@@ -4869,7 +4974,7 @@
             return true;
           if (!startupAutohideAvailable()) return true;
           const app = startupApp(selection.id);
-          if (!app) return ++attempts >= 120;
+          if (!app) return false;
           if (
             selection.mode === "triple" &&
             (!ctx.linkedPairFor(selection.id) || !ctx.openStartupSinglePanel)
@@ -4885,7 +4990,7 @@
                 (node) =>
                   node.isConnected && node.dataset.appId === selection.id,
               );
-              if (!tile) return ++attempts >= 120;
+              if (!tile) return false;
               tile.click();
               if (
                 document.documentElement.getAttribute(
@@ -4905,21 +5010,41 @@
           }
           return true;
         };
+        const tryStartupPanel = () => {
+          if (startupFinished || extensionDisposed) return true;
+          const finished = openSavedPanel();
+          if (finished) {
+            startupFinished = true;
+            ctx.cancelPanelRetry(startupKey);
+          }
+          return finished;
+        };
+        const onRestore = () => {
+          if (!startupFinished) ctx.retryPanelTask(startupKey, tryStartupPanel);
+        };
+        const restoreObserver = { observe: onRestore };
+        Services.obs.addObserver(
+          restoreObserver,
+          "sessionstore-windows-restored",
+        );
+        window.addEventListener("SSTabRestored", onRestore);
+        window.addEventListener("zentral-essential-tiles-changed", onRestore);
         const start = setTimeout(
-          () => {
-            if (openSavedPanel()) return;
-            startupTimer = setInterval(() => {
-              if (openSavedPanel()) {
-                clearInterval(startupTimer);
-                startupTimer = null;
-              }
-            }, 500);
-          },
+          onRestore,
           readStartupPanel()?.mode === "triple" ? 4000 : 2000,
         );
         registerCleanup(() => {
           clearTimeout(start);
-          if (startupTimer) clearInterval(startupTimer);
+          ctx.cancelPanelRetry(startupKey);
+          Services.obs.removeObserver(
+            restoreObserver,
+            "sessionstore-windows-restored",
+          );
+          window.removeEventListener("SSTabRestored", onRestore);
+          window.removeEventListener(
+            "zentral-essential-tiles-changed",
+            onRestore,
+          );
         });
       }
 

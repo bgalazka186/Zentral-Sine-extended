@@ -504,7 +504,7 @@
         let nextStillCapture = 0;
         let captureWorkMs = 0;
         let lastPaintStatusAt = 0;
-        let mountTimer = null;
+        let mountObserver = null;
         let compactCheckTimer = null;
         let compactPaused = false;
         let compactResumeSource = null;
@@ -3972,6 +3972,8 @@
           const failures = unavailableBySource.get(sourceKey(source));
           if (failures?.has(mode)) {
             const failure = failures.get(mode);
+            if (failure.until === Infinity)
+              return `${failure.reason}; recovery limit reached (restart preview to retry)`;
             if (Date.now() < failure.until)
               return `${failure.reason}; retry in ${Math.ceil((failure.until - Date.now()) / 1000)}s`;
             failures.delete(mode);
@@ -4004,18 +4006,25 @@
           const retryKey = key + ":" + mode;
           const attempts = (rendererRetryCounts.get(retryKey) || 0) + 1;
           rendererRetryCounts.set(retryKey, attempts);
+          const rawLimit = Services.prefs.getIntPref(
+            "zen.workspace.bgalazka.panel_retry_limit",
+            2,
+          );
+          const retryLimit = Math.max(0, Math.min(6, rawLimit));
           unavailableBySource.get(key).set(mode, {
             reason: String(error).slice(0, 100),
             until:
-              Date.now() +
-              (!experimentalBridgeDisabled() &&
-              /origin-clean|protected-media|capability|process-mismatch|origin-attributes/.test(
-                String(error),
-              )
-                ? 300000
-                : powerOn(RETRY_BACKOFF_PREF)
-                  ? Math.min(300000, 30000 * 2 ** Math.min(attempts - 1, 4))
-                  : 30000),
+              attempts > retryLimit
+                ? Infinity
+                : Date.now() +
+                  (!experimentalBridgeDisabled() &&
+                  /origin-clean|protected-media|capability|process-mismatch|origin-attributes/.test(
+                    String(error),
+                  )
+                    ? 300000
+                    : powerOn(RETRY_BACKOFF_PREF)
+                      ? Math.min(300000, 30000 * 2 ** Math.min(attempts - 1, 4))
+                      : 30000),
           });
         }
 
@@ -6194,8 +6203,9 @@
           compactMountTimer = null;
           clearInterval(scanTimer);
           clearTimeout(frameTimer);
-          clearInterval(mountTimer);
-          scanTimer = frameTimer = mountTimer = null;
+          mountObserver?.disconnect();
+          mountObserver = null;
+          scanTimer = frameTimer = null;
           paintTimerMs = 0;
           ++activeScanToken;
           scanning = false; // An old scan may still be settling after cancellation.
@@ -6213,15 +6223,15 @@
               compactResumeSource.method,
             );
           discoveryWinner = null;
-          unavailableBySource.clear();
-          rendererRetryCounts.clear();
           if (box) box.hidden = true;
           diagnostics.phase = "paused (compact tabbar hidden)";
           refreshSettingList();
         }
 
-        function syncCompactVisibility() {
+        function syncCompactVisibility(settled = false) {
           if (disposed) return;
+          clearTimeout(compactCheckTimer);
+          compactCheckTimer = null;
           const watching =
             enabled() &&
             pauseWhenCompactHidden() &&
@@ -6230,25 +6240,30 @@
           const hidden = watching && compactTabbarHidden();
           if (hidden) {
             if (!compactHiddenSince) compactHiddenSince = Date.now();
-            // Ignore single-frame layout/opacity changes during the reveal animation.
-            if (Date.now() - compactHiddenSince >= 350) pauseCompactPreview();
+            const remaining = 350 - (Date.now() - compactHiddenSince);
+            if (remaining <= 0) pauseCompactPreview();
+            else
+              compactCheckTimer = setTimeout(
+                () => syncCompactVisibility(true),
+                remaining,
+              );
           } else {
             compactHiddenSince = 0;
+            if (compactPaused && enabled()) {
+              // Keep source/renderer reconstruction off the native reveal event.
+              if (watching && !settled)
+                compactCheckTimer = setTimeout(
+                  () => syncCompactVisibility(true),
+                  250,
+                );
+              else {
+                compactPaused = false;
+                if (compactResumeSource) compactResumeSource.at = Date.now();
+                start(true);
+                refreshSettingList();
+              }
+            }
           }
-          if (!hidden && compactPaused && enabled()) {
-            compactPaused = false;
-            if (compactResumeSource) compactResumeSource.at = Date.now();
-            start(true); // Verify the remembered or audible source first.
-            refreshSettingList();
-          }
-          // Catch CSS-only hover reveals that do not change observed attributes.
-          clearTimeout(compactCheckTimer);
-          compactCheckTimer = watching
-            ? setTimeout(
-                syncCompactVisibility,
-                compactPaused || hidden ? 100 : 500,
-              )
-            : null;
         }
 
         function stop() {
@@ -6272,10 +6287,11 @@
           resetRendering();
           clearInterval(scanTimer);
           clearTimeout(frameTimer);
-          clearInterval(mountTimer);
+          mountObserver?.disconnect();
+          mountObserver = null;
           clearTimeout(compactMountTimer);
           compactMountTimer = null;
-          scanTimer = frameTimer = mountTimer = null;
+          scanTimer = frameTimer = null;
           paintTimerMs = 0;
           sources = [];
           current = null;
@@ -6338,10 +6354,40 @@
           paintTimerMs = 0;
           updatePaintTimer();
           restartCaptionTimer();
-          mountTimer = setInterval(() => {
-            mount();
-            suspendHiddenReceiver();
-          }, 3000);
+          mountObserver = new MutationObserver((records) => {
+            if (
+              !records.some((record) => {
+                const target = record.target;
+                if (
+                  box?.contains(target) ||
+                  target?.closest?.("tab, .tabbrowser-tab")
+                )
+                  return false;
+                return [...record.addedNodes, ...record.removedNodes].some(
+                  (node) =>
+                    node === box ||
+                    (node.nodeType === 1 &&
+                      (node.matches?.(
+                        "#zen-media-controls-toolbar,#zen-sidebar-bottom-buttons,#tabbrowser-tabs,#vertical-tabs",
+                      ) ||
+                        node.querySelector?.(
+                          "#zen-media-controls-toolbar,#zen-sidebar-bottom-buttons,#tabbrowser-tabs,#vertical-tabs",
+                        ))),
+                );
+              })
+            )
+              return;
+            clearTimeout(compactMountTimer);
+            compactMountTimer = setTimeout(() => {
+              compactMountTimer = null;
+              if (!disposed && !compactPaused && enabled()) mount();
+            }, 100);
+          });
+          const sidebar =
+            document.getElementById("navigator-toolbox") ||
+            gBrowser.tabContainer.parentElement;
+          if (sidebar)
+            mountObserver.observe(sidebar, { childList: true, subtree: true });
           // A compact reveal can finish after the first mount attempt.
           compactMountTimer = setTimeout(() => {
             compactMountTimer = null;
@@ -6446,6 +6492,8 @@
           discoveryCache.delete(source.browser);
         }
         const onRenderPref = async () => {
+          unavailableBySource.clear();
+          rendererRetryCounts.clear();
           resetRendering();
           visibilityCheckAt = 0;
           visibilitySourceKey = "";
@@ -6611,7 +6659,6 @@
           gBrowser.tabContainer.addEventListener(type, onTab);
         const compactObserver = new MutationObserver(() => {
           syncCompactVisibility();
-          onVisibilityWake();
         });
         compactObserver.observe(document.documentElement, {
           attributes: true,
@@ -6619,24 +6666,28 @@
             "zen-compact-mode",
             "zen-sidebar-hidden",
             "zen-sidebar-expanded",
+            "zen-compact-sidebar-visible",
           ],
         });
         const compactTabs = gBrowser.tabContainer;
         const onCompactEnter = () => {
           compactHovering = true;
           compactHiddenSince = 0;
-          clearTimeout(compactLeaveTimer);
           syncCompactVisibility();
         };
-        let compactLeaveTimer = null;
         const onCompactLeave = () => {
           compactHovering = false;
-          clearTimeout(compactLeaveTimer);
-          compactLeaveTimer = setTimeout(syncCompactVisibility, 250);
+          compactHiddenSince = Date.now();
+          clearTimeout(compactCheckTimer);
+          compactCheckTimer = setTimeout(
+            () => syncCompactVisibility(true),
+            350,
+          );
         };
         compactTabs.addEventListener("pointerenter", onCompactEnter);
         compactTabs.addEventListener("pointerleave", onCompactLeave);
-        const onVisibilityWake = () => {
+        const onVisibilityWake = (event) => {
+          if (event?.type !== "scroll") mount();
           suspendHiddenReceiver();
           wakePaint();
         };
@@ -6660,7 +6711,6 @@
           window.removeEventListener("scroll", onVisibilityWake, true);
           compactTabs.removeEventListener("pointerenter", onCompactEnter);
           compactTabs.removeEventListener("pointerleave", onCompactLeave);
-          clearTimeout(compactLeaveTimer);
           clearTimeout(compactCheckTimer);
           compactCheckTimer = null;
           stop();

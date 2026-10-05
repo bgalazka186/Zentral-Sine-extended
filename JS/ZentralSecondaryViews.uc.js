@@ -21,10 +21,8 @@
         shell: null,
         divider: null,
         previousPin: null,
-        poll: null,
         pollUpdate: null,
         secondToolbarCleanup: null,
-        loadTimers: [],
         resizeCleanup: null,
         geometryObserver: null,
         share: 0.5,
@@ -238,16 +236,13 @@
         state.handleFrame = null;
         state.dividerHandle?.remove();
         state.dividerHandle = null;
-        state.loadTimers.forEach(ctx.clearTimeout);
-        state.loadTimers.length = 0;
         state.resizeCleanup?.();
         state.resizeCleanup = null;
-        ctx.clearInterval(state.poll);
-        state.poll = null;
         state.secondToolbarCleanup?.();
         state.secondToolbarCleanup = null;
         state.pollUpdate = null;
         const second = state.second;
+        if (second) ctx.cancelPanelRetry(second);
         if (state.mode === "super" && second) {
           // Reparenting a live remote browser can reset its document without
           // removing the element from Zentral's private app-browser Map.
@@ -282,6 +277,7 @@
         slider()?.style.removeProperty("--bgalazka-bottom-share");
         state.first?.removeAttribute("data-bgalazka-triple-slot");
         second?.removeAttribute("data-bgalazka-triple-slot");
+        ctx.syncAppPanelBrowserActivity();
       }
       function leaveMode() {
         if (!state.mode) return;
@@ -343,27 +339,23 @@
       function repairSuperPinReturn(browser) {
         const url = browser?._bgalazkaSuperPinReturnURL;
         if (!url) return;
-        // The reset can happen a paint or two after reparenting. Check only
-        // while this panel is visible; leave the marker for a later open if it
-        // was hidden before the remote frame finished reconnecting.
-        for (const delay of [0, 80, 300, 1000, 2500]) {
-          ctx.setTimeout(() => {
-            if (
-              !browser.isConnected ||
-              browser._bgalazkaSuperPinReturnURL !== url
-            )
-              return;
-            if (!isOpen() || browser.style.display === "none") return;
-            const current = browser.currentURI?.spec;
-            if (
-              current === "about:blank" &&
-              !browser.webProgress?.isLoadingDocument
-            )
-              navigate(browser, url);
-            if (delay === 2500 && browser.currentURI?.spec !== "about:blank")
-              delete browser._bgalazkaSuperPinReturnURL;
-          }, delay);
-        }
+        ctx.retryPanelTask(browser, () => {
+          if (
+            !browser.isConnected ||
+            browser._bgalazkaSuperPinReturnURL !== url ||
+            !isOpen() ||
+            ui.hasAttribute("bgalazka-hover-panel-hidden") ||
+            browser.style.display === "none"
+          )
+            return true;
+          const current = browser.currentURI?.spec;
+          if (current && current !== "about:blank") {
+            delete browser._bgalazkaSuperPinReturnURL;
+            return true;
+          }
+          if (!browser.webProgress?.isLoadingDocument) navigate(browser, url);
+          return false;
+        });
       }
       function makeShell(browser, app) {
         // SuperPin needs a native XUL container for its remote browser to
@@ -744,20 +736,17 @@
         refreshSecondaryToolbar();
         ctx.syncSecondaryFallbackPolling();
       }
-      ctx.syncSecondaryFallbackPolling = () => {
-        if (state.poll) {
-          ctx.clearInterval(state.poll);
-          state.poll = null;
-        }
-        state.pollUpdate?.();
-        if (
-          !ctx.periodicFallbackPollingEnabled() ||
-          !state.second?.isConnected ||
-          !state.pollUpdate
-        )
-          return;
-        state.poll = ctx.setInterval(() => state.pollUpdate?.(), 1000);
+      ctx.updateSecondaryFallbackState = () => {
+        if (isOpen() && !ui.hasAttribute("bgalazka-hover-panel-hidden"))
+          state.pollUpdate?.();
       };
+      ctx.syncSecondaryFallbackPolling = () => {
+        ctx.updateSecondaryFallbackState();
+        ctx.syncPanelFallbackPolling();
+      };
+      ctx.registerCleanup(() => {
+        delete ctx.updateSecondaryFallbackState;
+      });
 
       function openSecond(app, createLink = true) {
         if (!app?.id || !isOpen() || !state.first?.isConnected) return false;
@@ -771,21 +760,6 @@
         makeShell(browser, app); // attach before navigating a remote browser
         refreshViewZenCss(state.first);
         refreshViewZenCss(browser);
-        // Superpin reparents the remote browser; the document can restart
-        // after the move without delivering another load event to the wrapper.
-        for (const delay of [400, 1600]) {
-          state.loadTimers.push(
-            ctx.setTimeout(() => {
-              if (state.mode && state.first?.isConnected)
-                refreshViewZenCss(state.first);
-              if (state.second === browser && browser.isConnected)
-                refreshViewZenCss(browser);
-            }, delay),
-          );
-        }
-        try {
-          browser.docShellIsActive = true;
-        } catch (_) {}
         if (
           isNew ||
           (browser.currentURI?.spec === "about:blank" &&
@@ -793,25 +767,7 @@
         )
           navigate(browser, browser._bgalazkaSuperPinReturnURL || app.url);
         repairSuperPinReturn(browser);
-        state.loadTimers.push(
-          ctx.setTimeout(() => {
-            if (
-              state.second === browser &&
-              browser.isConnected &&
-              browser.currentURI?.spec === "about:blank" &&
-              !browser.webProgress?.isLoadingDocument
-            )
-              navigate(browser, browser._bgalazkaSuperPinReturnURL || app.url);
-          }, 2500),
-        );
-        // Remote content may reset activity while its process starts. The
-        // existing guarded sync only writes when Gecko actually changed it.
-        requestAnimationFrame(ctx.syncAppPanelBrowserActivity);
-        for (const delay of [50, 250, 1000]) {
-          state.loadTimers.push(
-            ctx.setTimeout(ctx.syncAppPanelBrowserActivity, delay),
-          );
-        }
+        ctx.requestPanelActivity();
         if (state.mode === "triple" && createLink) {
           const firstId = state.first?._bgalazkaAppId;
           const firstApp =

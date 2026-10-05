@@ -8191,6 +8191,142 @@
     "defaultValue": false
   },
   {
+    "property": "zen.workspace.bgalazka.panel_retry_limit",
+    "label": "Panel recovery retry limit",
+    "type": "dropdown",
+    "defaultValue": 2,
+    "options": [
+      {
+        "label": "Off",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "6",
+        "value": 6
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.panel_retry_delay_ms",
+    "label": "Panel recovery retry delay",
+    "type": "dropdown",
+    "defaultValue": 500,
+    "options": [
+      {
+        "label": "100 ms",
+        "value": 100
+      },
+      {
+        "label": "250 ms",
+        "value": 250
+      },
+      {
+        "label": "500 ms",
+        "value": 500
+      },
+      {
+        "label": "1 second",
+        "value": 1000
+      },
+      {
+        "label": "2 seconds",
+        "value": 2000
+      },
+      {
+        "label": "5 seconds",
+        "value": 5000
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.panel_fallback_interval_ms",
+    "label": "Panel troubleshooting refresh interval",
+    "type": "dropdown",
+    "defaultValue": 10000,
+    "options": [
+      {
+        "label": "1 second",
+        "value": 1000
+      },
+      {
+        "label": "5 seconds",
+        "value": 5000
+      },
+      {
+        "label": "10 seconds",
+        "value": 10000
+      },
+      {
+        "label": "30 seconds",
+        "value": 30000
+      },
+      {
+        "label": "1 minute",
+        "value": 60000
+      },
+      {
+        "label": "5 minutes",
+        "value": 300000
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.apps.sidebar.badge_poll_interval_ms",
+    "label": "Notification badge fallback refresh",
+    "type": "dropdown",
+    "defaultValue": 0,
+    "options": [
+      {
+        "label": "Off (use notification events)",
+        "value": 0
+      },
+      {
+        "label": "1.5 seconds",
+        "value": 1500
+      },
+      {
+        "label": "5 seconds",
+        "value": 5000
+      },
+      {
+        "label": "15 seconds",
+        "value": 15000
+      },
+      {
+        "label": "1 minute",
+        "value": 60000
+      },
+      {
+        "label": "5 minutes",
+        "value": 300000
+      },
+      {
+        "label": "15 minutes",
+        "value": 900000
+      },
+      {
+        "label": "1 hour",
+        "value": 3600000
+      }
+    ]
+  },
+  {
     "property": "zen.workspace.bgalazka.periodic_fallback_polling",
     "label": "Periodic fallback polling",
     "type": "checkbox",

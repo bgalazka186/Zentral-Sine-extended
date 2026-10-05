@@ -152,19 +152,27 @@
    without adding an overlay that would block the web page inside the panel.
    Insta Peek stays intentionally non-interactive. The root attribute follows its preference.
    ========================================================================== */
-:root[bgalazka-panel-input-shield="true"]
-  #zen-app-panel-root[open]:not([data-insta-peek="true"]) {
+
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-panel-input-shield="true"]
+  #zen-app-panel-root[open]:not([closing]):not([data-insta-peek="true"]) {
   pointer-events: auto !important;
 }
-
-:root[bgalazka-panel-input-shield="true"]
-  #zen-app-panel-root[open]:not([data-insta-peek="true"])
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-panel-input-shield="true"]
+  #zen-app-panel-root[open]:not([closing]):not([data-insta-peek="true"])
   #zen-app-panel-clip,
-:root[bgalazka-panel-input-shield="true"]
-  #zen-app-panel-root[open]:not([data-insta-peek="true"])
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-panel-input-shield="true"]
+  #zen-app-panel-root[open]:not([closing]):not([data-insta-peek="true"])
   #zen-app-panel-slider,
-:root[bgalazka-panel-input-shield="true"]
-  #zen-app-panel-root[open]:not([data-insta-peek="true"])
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-panel-input-shield="true"]
+  #zen-app-panel-root[open]:not([closing]):not([data-insta-peek="true"])
   #zen-app-panel-slider
   browser {
   pointer-events: auto !important;
@@ -172,8 +180,16 @@
 
 /* The floating Super View is a separate surface outside the main root.
  * Keep the same opt-in hit-test barrier without intercepting its controls. */
-:root[bgalazka-panel-input-shield="true"] #bgalazka-super-panel,
-:root[bgalazka-panel-input-shield="true"] #bgalazka-super-panel browser {
+
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-panel-input-shield="true"]
+  #bgalazka-super-panel,
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-panel-input-shield="true"]
+  #bgalazka-super-panel
+  browser {
   pointer-events: auto !important;
 }
 
@@ -337,6 +353,12 @@
   width: 14px !important;
   cursor: ew-resize !important;
   z-index: 30 !important;
+}
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  .zen-app-resize-strip {
   pointer-events: auto !important;
 }
 :root[bgalazka-opposite-docking="true"]
@@ -345,8 +367,14 @@
   left: 0px !important;
   right: auto !important;
   /* top is set by the unified "Pill Menu Vertical Offset" rule in section 3 */
-  pointer-events: auto !important;
   z-index: 999999 !important;
+}
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill {
+  pointer-events: auto !important;
 }
 /* MINI PILL ON (default; toggle: "Show Mini Pill When Idle"): instead of
  * native autohide (opacity 0, fully invisible until the hover-zone strip is
@@ -413,6 +441,12 @@
   .zen-app-hover-zone {
   left: -44px !important;
   right: auto !important;
+}
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  .zen-app-hover-zone {
   pointer-events: auto !important;
 }
 
@@ -435,6 +469,12 @@
   width: 14px !important;
   cursor: ew-resize !important;
   z-index: 30 !important;
+}
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  .zen-app-resize-strip {
   pointer-events: auto !important;
 }
 :root[bgalazka-opposite-docking="true"]
@@ -443,8 +483,14 @@
   right: 0px !important;
   left: auto !important;
   /* top is set by the unified "Pill Menu Vertical Offset" rule in section 3 */
-  pointer-events: auto !important;
   z-index: 999999 !important;
+}
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  #zen-app-panel-pill {
+  pointer-events: auto !important;
 }
 /* MINI PILL ON, mirrored from the right-docked block above: anchored at
  * right:0, translated +100% of its own width outward, so its
@@ -515,6 +561,12 @@
   .zen-app-hover-zone {
   right: -44px !important;
   left: auto !important;
+}
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  .zen-app-hover-zone {
   pointer-events: auto !important;
 }
 
@@ -551,4 +603,18 @@
   )
   #zen-app-panel-root[data-panel-side="left"] {
   left: var(--zentral-appsbar-panel-inset, 56px) !important;
+}
+
+/* A parent-only pointer-events:none does not disable opted-in descendants.
+ * Closing/hover-hidden browsers and chrome controls must all stop hit testing. */
+:root #zen-app-panel-root[closing],
+:root #zen-app-panel-root[closing] *,
+:root[bgalazka-hover-panel-hidden] #zen-app-panel-root,
+:root[bgalazka-hover-panel-hidden] #zen-app-panel-root *,
+:root #zen-app-panel-root:not([open]) *,
+:root:not([zentral-app-panel-open]) #bgalazka-super-panel,
+:root:not([zentral-app-panel-open]) #bgalazka-super-panel *,
+:root[bgalazka-hover-panel-hidden] #bgalazka-super-panel,
+:root[bgalazka-hover-panel-hidden] #bgalazka-super-panel * {
+  pointer-events: none !important;
 }

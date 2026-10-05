@@ -3605,8 +3605,12 @@ panel[id*="tabgroup-editor"] {
     0 8px 32px rgba(0, 0, 0, 0.55),
     0 2px 10px rgba(0, 0, 0, 0.3) !important;
   box-sizing: border-box !important;
-  pointer-events: auto !important;
   will-change: transform;
+}
+:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])
+  #zen-app-panel-root
+  #zen-app-panel-slider {
+  pointer-events: auto !important;
 }
 
 #zentral-apps-vertical-bar #zen-apps-sidebar-grid {

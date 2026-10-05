@@ -1011,7 +1011,6 @@
     // Triple View without requiring the user to close/reopen it.
     let syncSecondaryFallbackPolling = () => {};
 
-    let webToolbarPollTimer = null;
     let webToolbarObservedRoot = null;
     let webToolbarVisibilityObserver = null;
     function startWebToolbarPolling() {
@@ -1036,19 +1035,9 @@
         !root.hasAttribute("closing") &&
         ctx.getPref(ctx.BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, false);
       if (active) updateWebToolbarState();
-      if (!active || !periodicFallbackPollingEnabled()) {
-        ctx.clearInterval(webToolbarPollTimer);
-        webToolbarPollTimer = null;
-        return;
-      }
-      if (webToolbarPollTimer) return;
-      // Normal loads/location changes are event-driven. This optional interval
-      // only covers SPA history.pushState/replaceState edge cases.
-      webToolbarPollTimer = ctx.setInterval(updateWebToolbarState, 1000);
+      ctx.syncPanelFallbackPolling();
     }
     ctx.registerCleanup(() => {
-      ctx.clearInterval(webToolbarPollTimer);
-      webToolbarPollTimer = null;
       webToolbarVisibilityObserver?.disconnect();
     });
     startWebToolbarPolling();
@@ -1066,18 +1055,8 @@
     // Called from here instead, well after both consts exist, with the same
     // retry-until-ready pattern ensureMobileUaMenuItem() uses below, in case
     // #zen-app-panel-slider somehow isn't in the DOM yet at this point.
-    if (!ctx.safeCall(ensureWebToolbar, "ensureWebToolbar")) {
-      let webToolbarAttempts = 0;
-      const webToolbarTimer = ctx.setInterval(() => {
-        webToolbarAttempts++;
-        if (
-          ctx.safeCall(ensureWebToolbar, "ensureWebToolbar") ||
-          webToolbarAttempts > 40
-        ) {
-          ctx.clearInterval(webToolbarTimer);
-        }
-      }, 150);
-      ctx.registerCleanup(() => ctx.clearInterval(webToolbarTimer));
-    }
+    ctx.retryPanelTask("toolbar-ui", () =>
+      ctx.safeCall(ensureWebToolbar, "ensureWebToolbar"),
+    );
   });
 })();

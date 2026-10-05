@@ -36,10 +36,15 @@
 /* Master toggle: only becomes interactive when enabled (pill button or
  * settings row, both write the same "bgalazka-all-sides-resize" attribute -
  * see note 16). */
-:root[bgalazka-all-sides-resize="true"]
+
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-all-sides-resize="true"]
   #zen-app-panel-root
   .zen-app-resize-strip-top,
-:root[bgalazka-all-sides-resize="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-all-sides-resize="true"]
   #zen-app-panel-root
   .zen-app-resize-strip-bottom {
   pointer-events: auto !important;
@@ -160,14 +165,19 @@
   left: -6px !important;
   right: auto !important;
 }
-
-:root[bgalazka-all-sides-resize="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-all-sides-resize="true"]
   #zen-app-panel-root
   .zen-app-resize-strip-outer,
-:root[bgalazka-all-sides-resize="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-all-sides-resize="true"]
   #zen-app-panel-root
   .zen-app-resize-strip-inner,
-:root[bgalazka-all-sides-resize="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-all-sides-resize="true"]
   #zen-app-panel-root
   .zen-app-resize-corner {
   pointer-events: auto !important;
