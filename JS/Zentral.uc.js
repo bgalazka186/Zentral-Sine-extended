@@ -3205,6 +3205,2384 @@
       defaultValue: false,
     },
   ];
+  const SETTINGS_ORGANIZATION = {
+    categories: [
+      {
+        id: "apps",
+        label: "Apps & Launchers",
+        group: "Apps & Tabs",
+        owner: "apps",
+        sections: [
+          {
+            label: "Launcher grid & placement",
+            properties: [
+              "zen.workspace.apps.sidebar.enabled",
+              "zen.workspace.apps.sidebar.apps_per_row",
+              "zen.workspace.apps.sidebar.max_rows",
+              "zen.workspace.apps.sidebar.max_apps",
+              "zen.workspace.apps.sidebar.hide_utility_section",
+              "zen.workspace.apps.sidebar.autohide",
+              "zen.workspace.apps.sidebar.placement",
+              "zen.workspace.apps.sidebar.width",
+              "zen.workspace.apps.sidebar.animation_speed",
+              "zen.workspace.apps.sidebar.animation_type",
+            ],
+          },
+        ],
+      },
+      {
+        id: "app-tools",
+        label: "App Bar Tools",
+        group: "Apps & Tabs",
+        owner: "panels",
+        sections: [
+          {
+            label: "Browser shortcuts",
+            properties: [
+              "zen.workspace.bgalazka.appsbar_library",
+              "zen.workspace.bgalazka.appsbar_history",
+              "zen.workspace.bgalazka.appsbar_downloads",
+              "zen.workspace.bgalazka.appsbar_bookmarks",
+            ],
+          },
+        ],
+      },
+      {
+        id: "tab-groups",
+        label: "Tab Groups",
+        group: "Apps & Tabs",
+        owner: "tab-groups",
+        sections: [
+          {
+            label: "Group behavior & indicators",
+            properties: [
+              "zen.workspace.tabgroups.enabled",
+              "zen.workspace.tabgroups.collapse_on_launch",
+              "zen.workspace.tabgroups.show_chevron",
+              "zen.workspace.tabgroups.indicator_type",
+              "zen.workspace.tabgroups.thumbnails",
+              "zen.workspace.tabgroups.label_opacity",
+            ],
+          },
+        ],
+      },
+      {
+        id: "tab-panels",
+        label: "Tab Panel Launchers",
+        group: "Apps & Tabs",
+        owner: "corner-panels",
+        sections: [
+          {
+            label: "Launchers, loaded state & badges",
+            properties: [
+              "zen.workspace.bgalazka.corner_tiles",
+              "zen.workspace.bgalazka.all_tab_panels",
+              "zen.workspace.bgalazka.hover_corner_tiles",
+              "zen.workspace.bgalazka.tab_isolation",
+              "zen.workspace.bgalazka.hide_corner_badges",
+              "zen.workspace.bgalazka.hide_unattached_app_controls",
+            ],
+          },
+        ],
+      },
+      {
+        id: "rss",
+        label: "RSS Folders",
+        group: "Apps & Tabs",
+        owner: "rss",
+        sections: [
+          {
+            label: "Live-folder display",
+            properties: [
+              "zen.workspace.bgalazka.rss.hide_empty",
+              "zen.workspace.bgalazka.rss.compact_headers",
+            ],
+          },
+        ],
+      },
+      {
+        id: "panel-layout",
+        label: "Panel Layout",
+        group: "Panels",
+        owner: "geometry",
+        sections: [
+          {
+            label: "Docking, size & input",
+            properties: [
+              "zen.workspace.bgalazka.opposite_docking",
+              "zen.workspace.bgalazka.edge_attached_panels",
+              "zen.workspace.bgalazka.all_sides_resize",
+              "zen.workspace.bgalazka.panel_input_shield",
+              "zen.workspace.bgalazka.panel_horizontal_offset_px",
+              "zen.workspace.bgalazka.panel_top_extra_px",
+              "zen.workspace.bgalazka.panel_bottom_extra_px",
+              "zen.workspace.bgalazka.panel_position_offset_px",
+            ],
+          },
+        ],
+      },
+      {
+        id: "panel-hover",
+        label: "Hover Reveal",
+        group: "Panels",
+        owner: "panels",
+        sections: [
+          {
+            label: "Autohide & reveal target",
+            properties: [
+              "zen.workspace.bgalazka.hover_reveal_panel",
+              "zen.workspace.bgalazka.hover_reveal_delay_ms",
+              "zen.workspace.bgalazka.hover_reveal_width_px",
+            ],
+          },
+        ],
+      },
+      {
+        id: "multi-view",
+        label: "Dual, Triple & Super View",
+        group: "Panels",
+        owner: "secondary-views",
+        sections: [
+          {
+            label: "Page push & secondary controls",
+            properties: [
+              "zen.workspace.bgalazka.push_page",
+              "zen.workspace.bgalazka.triple_push_page",
+              "zen.workspace.bgalazka.secondary_toolbar_swap",
+              "zen.workspace.bgalazka.secondary_toolbar_close",
+              "zen.workspace.bgalazka.triple_inward_toolbars",
+            ],
+          },
+        ],
+      },
+      {
+        id: "panel-toolbar",
+        label: "Navigation Toolbar",
+        group: "Panels",
+        owner: "panel-toolbar",
+        sections: [
+          {
+            label: "Navigation & placement",
+            properties: [
+              "zen.workspace.bgalazka.web_toolbar_enabled",
+              "zen.workspace.bgalazka.web_toolbar_autohide",
+              "zen.workspace.bgalazka.web_toolbar_top",
+              "zen.workspace.bgalazka.web_toolbar_urlbar",
+              "zen.workspace.bgalazka.web_toolbar_zoom",
+            ],
+          },
+        ],
+      },
+      {
+        id: "search",
+        label: "Search Engines",
+        group: "Panels",
+        owner: "panel-toolbar",
+        sections: [
+          {
+            label: "Search engines & quick switch",
+            properties: [
+              "zen.workspace.bgalazka.web_toolbar_search_engine",
+              "zen.workspace.bgalazka.web_toolbar_search_custom_url",
+              "zen.workspace.bgalazka.web_toolbar_quickswitch_custom_1",
+              "zen.workspace.bgalazka.web_toolbar_quickswitch_custom_2",
+              "zen.workspace.bgalazka.web_toolbar_quickswitch_custom_3",
+              "zen.workspace.bgalazka.web_toolbar_quickswitch_custom_4",
+              "zen.workspace.bgalazka.web_toolbar_quickswitch_custom_5",
+              "zen.workspace.bgalazka.web_toolbar_quickswitch",
+              "zen.workspace.bgalazka.web_toolbar_quickswitch_target.ddg",
+              "zen.workspace.bgalazka.web_toolbar_quickswitch_target.startpage",
+              "zen.workspace.bgalazka.web_toolbar_quickswitch_target.brave",
+              "zen.workspace.bgalazka.web_toolbar_quickswitch_target.yahoo",
+              "zen.workspace.bgalazka.web_toolbar_quickswitch_target.ecosia",
+              "zen.workspace.bgalazka.web_toolbar_quickswitch_target.qwant",
+              "zen.workspace.bgalazka.web_toolbar_quickswitch_target.youtube",
+              "zen.workspace.bgalazka.web_toolbar_quickswitch_target.wikipedia",
+              "zen.workspace.bgalazka.web_toolbar_quickswitch_target.reddit",
+              "zen.workspace.bgalazka.web_toolbar_quickswitch_target.github",
+            ],
+          },
+        ],
+      },
+      {
+        id: "pill",
+        label: "Floating Pill",
+        group: "Panels",
+        owner: "panels",
+        sections: [
+          {
+            label: "Visibility, buttons & mini pill",
+            properties: [
+              "zen.workspace.bgalazka.hide_hover_reveal_btn",
+              "zen.workspace.bgalazka.hide_pill",
+              "zen.workspace.bgalazka.pill_position",
+              "zen.workspace.bgalazka.pill_peek_dot",
+              "zen.workspace.bgalazka.pill_peek_dot_color",
+              "zen.workspace.bgalazka.pill_peek_dot_opacity",
+              "zen.workspace.bgalazka.pill_background_opacity",
+              "zen.workspace.bgalazka.hide_dual_view",
+              "zen.workspace.bgalazka.hide_all_sides_resize_btn",
+              "zen.workspace.bgalazka.hide_pin",
+              "zen.workspace.bgalazka.hide_expand",
+              "zen.workspace.bgalazka.hide_grabber",
+              "zen.workspace.bgalazka.hide_refresh",
+              "zen.workspace.bgalazka.hide_close",
+            ],
+          },
+        ],
+      },
+      {
+        id: "notifications",
+        label: "Notifications & Audio",
+        group: "Panels",
+        owner: "apps",
+        sections: [
+          {
+            label: "Audio indicator & mute",
+            properties: ["zen.workspace.bgalazka.audio_indicator"],
+          },
+          {
+            label: "Notification refresh",
+            properties: ["zen.workspace.apps.sidebar.badge_poll_interval_ms"],
+          },
+        ],
+      },
+      {
+        id: "startup",
+        label: "Startup & Background",
+        group: "Panels",
+        owner: "panels",
+        sections: [
+          {
+            label: "Selected tabs",
+            properties: ["zen.workspace.zentral.startup.enabled"],
+          },
+          {
+            label: "Panel background loading",
+            properties: ["zen.workspace.bgalazka.smart_sleep"],
+          },
+        ],
+      },
+      {
+        id: "shortcuts",
+        label: "Keyboard & Mouse",
+        group: "Panels",
+        owner: "panels",
+        sections: [
+          {
+            label: "Insta Peek",
+            properties: ["zen.workspace.apps.insta_peek.shortcut"],
+          },
+          {
+            label: "Panel shortcuts & mouse actions",
+            properties: [
+              "zen.workspace.bgalazka.keybinds_enabled",
+              "zen.workspace.bgalazka.keybind.close_panel",
+              "zen.workspace.bgalazka.keybind.back",
+              "zen.workspace.bgalazka.keybind.forward",
+              "zen.workspace.bgalazka.keybind.reload",
+              "zen.workspace.bgalazka.keybind.focus_url",
+              "zen.workspace.bgalazka.keybind.toggle_pin",
+              "zen.workspace.bgalazka.keybind.toggle_expand",
+              "zen.workspace.bgalazka.keybind.toggle_dual_view",
+              "zen.workspace.bgalazka.keybind.toggle_resize",
+              "zen.workspace.bgalazka.keybind.toggle_toolbar",
+              "zen.workspace.bgalazka.keybind.toggle_translucency",
+              "zen.workspace.bgalazka.keybind.toggle_opposite_docking",
+              "zen.workspace.bgalazka.keybind.toggle_edge_attached",
+              "zen.workspace.bgalazka.keybind.toggle_input_shield",
+              "zen.workspace.bgalazka.keybind.zoom_in",
+              "zen.workspace.bgalazka.keybind.zoom_out",
+              "zen.workspace.bgalazka.keybind.zoom_reset",
+              "zen.workspace.bgalazka.keybind.open_settings",
+              "zen.workspace.bgalazka.mmb_unload_normal_tabs",
+            ],
+          },
+        ],
+      },
+      {
+        id: "theme",
+        label: "Theme & Colors",
+        group: "Appearance",
+        owner: "extension-settings",
+        sections: [
+          {
+            label: "Palette, transparency & shape",
+            properties: [
+              "zen.workspace.bgalazka.look.style",
+              "zen.workspace.bgalazka.look.canvas",
+              "zen.workspace.bgalazka.look.surface",
+              "zen.workspace.bgalazka.look.raised",
+              "zen.workspace.bgalazka.look.accent",
+              "zen.workspace.bgalazka.look.text",
+              "zen.workspace.bgalazka.look.muted",
+              "zen.workspace.bgalazka.look.surface_opacity",
+              "zen.workspace.bgalazka.look.raised_opacity",
+              "zen.workspace.bgalazka.look.popup_opacity",
+              "zen.workspace.bgalazka.look.radius",
+              "zen.workspace.bgalazka.look.depth",
+              "zen.workspace.bgalazka.look.spacing",
+              "zen.workspace.bgalazka.look.panel_border",
+            ],
+          },
+        ],
+      },
+      {
+        id: "interface",
+        label: "Buttons & Controls",
+        group: "Appearance",
+        owner: "extension-settings",
+        sections: [
+          {
+            label: "Buttons, app tiles & selection rows",
+            properties: [
+              "zen.workspace.bgalazka.look.button_opacity",
+              "zen.workspace.bgalazka.look.tile_opacity",
+              "zen.workspace.bgalazka.look.button_style",
+              "zen.workspace.bgalazka.look.button_surface",
+              "zen.workspace.bgalazka.look.button_text",
+              "zen.workspace.bgalazka.look.button_border_color",
+              "zen.workspace.bgalazka.look.button_border",
+              "zen.workspace.bgalazka.look.control_size",
+              "zen.workspace.bgalazka.look.tile_style",
+              "zen.workspace.bgalazka.look.row_style",
+              "zen.workspace.bgalazka.look.row_padding",
+              "zen.workspace.bgalazka.look.row_rule",
+            ],
+          },
+        ],
+      },
+      {
+        id: "tab-density",
+        label: "Tabbar & Sidebar Density",
+        group: "Appearance",
+        owner: "extension-settings",
+        sections: [
+          {
+            label: "Sidebar sizing & spacing",
+            properties: [
+              "zen.workspace.bgalazka.look.density_icons",
+              "zen.workspace.bgalazka.look.density_newtab",
+              "zen.workspace.bgalazka.look.density_urlbar",
+              "zen.workspace.bgalazka.look.density_essentials",
+              "zen.workspace.bgalazka.look.essentials_height",
+              "zen.workspace.bgalazka.look.tabbar_section_gap",
+              "zen.workspace.bgalazka.look.folder_icon_size",
+              "zen.workspace.bgalazka.look.workspace_icon_size",
+              "zen.workspace.bgalazka.look.workspace_height",
+              "zen.workspace.bgalazka.look.bottom_bar_height",
+              "zen.workspace.bgalazka.look.urlbar_top_gap",
+              "zen.workspace.bgalazka.look.newtab_height",
+              "zen.workspace.bgalazka.look.compact_tabbar",
+              "zen.workspace.bgalazka.look.tabbar_row_height",
+              "zen.workspace.bgalazka.look.tabbar_row_gap",
+              "zen.workspace.bgalazka.look.tabbar_icon_gap",
+            ],
+          },
+        ],
+      },
+      {
+        id: "panel-appearance",
+        label: "Panel Appearance",
+        group: "Appearance",
+        owner: "panel-styles",
+        sections: [
+          {
+            label: "Translucency & blur",
+            properties: [
+              "zen.workspace.bgalazka.translucency",
+              "zen.workspace.bgalazka.opacity_unpinned",
+              "zen.workspace.bgalazka.opacity_pinned_focus",
+              "zen.workspace.bgalazka.opacity_pinned_blur",
+              "zen.workspace.bgalazka.blur_intensity",
+            ],
+          },
+        ],
+      },
+      {
+        id: "panel-backing",
+        label: "Panel Backing",
+        group: "Appearance",
+        owner: "panels",
+        sections: [
+          {
+            label: "Black backing & cycle levels",
+            properties: [
+              "zen.workspace.bgalazka.panel_black_opacity",
+              "zen.workspace.bgalazka.panel_black_steps",
+              "zen.workspace.bgalazka.force_panel_black",
+            ],
+          },
+        ],
+      },
+      {
+        id: "toolbar-appearance",
+        label: "Toolbar Appearance",
+        group: "Appearance",
+        owner: "panel-toolbar",
+        sections: [
+          {
+            label: "Colors & transparency",
+            properties: [
+              "zen.workspace.bgalazka.look.toolbar_opacity",
+              "zen.workspace.bgalazka.look.address_opacity",
+              "zen.workspace.bgalazka.look.toolbar_surface",
+              "zen.workspace.bgalazka.look.toolbar_url",
+              "zen.workspace.bgalazka.look.toolbar_border",
+            ],
+          },
+        ],
+      },
+      {
+        id: "arc",
+        label: "Arc Compatibility",
+        group: "Appearance",
+        owner: "extension-settings",
+        sections: [
+          {
+            label: "Arc 2.0 theme integration",
+            properties: [
+              "zen.workspace.zentral.arc2.match_compact_sidebar",
+              "zen.workspace.zentral.arc2.match_compact_library",
+            ],
+          },
+        ],
+      },
+      {
+        id: "video-playback",
+        label: "Video Playback",
+        group: "Video",
+        owner: "video",
+        sections: [
+          {
+            label: "Playback & captions",
+            properties: [
+              "zen.workspace.zentral.video_preview.enabled",
+              "zen.workspace.zentral.video_preview.renderer",
+              "zen.workspace.zentral.video_preview.selected_mode_only",
+              "zen.workspace.zentral.video_preview.keep_source_visible",
+              "zen.workspace.zentral.video_preview.youtube_captions",
+            ],
+          },
+        ],
+      },
+      {
+        id: "video-sources",
+        label: "Video Sources",
+        group: "Video",
+        owner: "video",
+        sections: [
+          {
+            label: "Discovery & source selection",
+            properties: [
+              "zen.workspace.zentral.video_preview.auto_show_video",
+              "zen.workspace.zentral.video_preview.require_audio",
+              "zen.workspace.zentral.video_preview.hide_muted_duplicates",
+              "zen.workspace.zentral.video_preview.discovery",
+              "zen.workspace.zentral.video_preview.pinned_discovery_only",
+            ],
+          },
+        ],
+      },
+      {
+        id: "video-appearance",
+        label: "Video Appearance",
+        group: "Video",
+        owner: "video",
+        sections: [
+          {
+            label: "Card layout & controls",
+            properties: [
+              "zen.workspace.zentral.video_preview.fit_width",
+              "zen.workspace.zentral.video_preview.width_percent",
+              "zen.workspace.zentral.video_preview.height_px",
+              "zen.workspace.zentral.video_preview.radius_px",
+              "zen.workspace.zentral.video_preview.framing",
+              "zen.workspace.zentral.video_preview.hide_button",
+              "zen.workspace.zentral.video_preview.auto_height_button",
+              "zen.workspace.zentral.video_preview.video_hidden",
+              "zen.workspace.zentral.video_preview.pin_source_button",
+              "zen.workspace.zentral.video_preview.compact_card_button",
+              "zen.workspace.zentral.video_preview.compact_card",
+            ],
+          },
+          {
+            label: "Colors & source list",
+            properties: [
+              "zen.workspace.bgalazka.look.video_opacity",
+              "zen.workspace.bgalazka.look.video_control_opacity",
+              "zen.workspace.bgalazka.look.video_canvas",
+              "zen.workspace.bgalazka.look.video_control",
+              "zen.workspace.bgalazka.look.video_text",
+              "zen.workspace.bgalazka.look.video_muted",
+              "zen.workspace.bgalazka.look.video_selected",
+              "zen.workspace.bgalazka.look.video_border",
+              "zen.workspace.bgalazka.look.video_padding",
+              "zen.workspace.bgalazka.look.video_row_height",
+              "zen.workspace.bgalazka.look.video_source_style",
+            ],
+          },
+        ],
+      },
+      {
+        id: "video-performance",
+        label: "Video Performance",
+        group: "Video",
+        owner: "video",
+        sections: [
+          {
+            label: "Capture & background work",
+            properties: [
+              "zen.workspace.zentral.video_preview.pause_when_compact_hidden",
+              "zen.workspace.zentral.video_preview.capture_width_px",
+              "zen.workspace.zentral.video_preview.capture_rate_tenths",
+              "zen.workspace.zentral.video_preview.scan_interval_ms",
+              "zen.workspace.zentral.video_preview.caption_poll_ms",
+              "zen.workspace.zentral.video_preview.canvas_stream_width_px",
+              "zen.workspace.zentral.video_preview.canvas_stream_fps",
+              "zen.workspace.zentral.video_preview.display_capture_cap",
+              "zen.workspace.zentral.video_preview.adaptive_detail",
+              "zen.workspace.zentral.video_preview.frame_aware_capture",
+              "zen.workspace.zentral.video_preview.stop_idle_timer",
+              "zen.workspace.zentral.video_preview.audio_probe_cache",
+              "zen.workspace.zentral.video_preview.media_event_hints",
+              "zen.workspace.zentral.video_preview.caption_events",
+              "zen.workspace.zentral.video_preview.suspend_hidden_preview",
+              "zen.workspace.zentral.video_preview.light_frame_monitoring",
+              "zen.workspace.zentral.video_preview.slow_health_checks",
+              "zen.workspace.zentral.video_preview.slow_caption_recovery",
+              "zen.workspace.zentral.video_preview.renderer_retry_backoff",
+              "zen.workspace.zentral.video_preview.suspend_when_source_visible",
+            ],
+          },
+        ],
+      },
+      {
+        id: "video-experiments",
+        label: "Video Experiments",
+        group: "Video",
+        owner: "video",
+        sections: [
+          {
+            label: "Experimental methods & tests",
+            properties: [
+              "zen.workspace.zentral.video_preview.disable_experimental_bridge",
+              "zen.workspace.zentral.video_preview.experimental_legacy_capture",
+              "zen.workspace.zentral.video_preview.binary_frames",
+              "zen.workspace.zentral.video_preview.performance_diagnostics",
+            ],
+          },
+        ],
+      },
+      {
+        id: "compatibility",
+        label: "Browser & Add-on Compatibility",
+        group: "Advanced",
+        owner: "browser-integrations",
+        sections: [
+          {
+            label: "Browser hosts & website styles",
+            properties: [
+              "zen.workspace.bgalazka.addon_tab_id_bridge",
+              "zen.workspace.bgalazka.zen_internet_panel_css",
+              "zen.workspace.bgalazka.show_addon_host_folder",
+            ],
+          },
+        ],
+      },
+      {
+        id: "recovery",
+        label: "Panel Recovery",
+        group: "Advanced",
+        owner: "panels",
+        sections: [
+          {
+            label: "Bounded recovery & optional troubleshooting",
+            properties: [
+              "zen.workspace.bgalazka.show_triple_style_repair",
+              "zen.workspace.bgalazka.panel_retry_limit",
+              "zen.workspace.bgalazka.panel_retry_delay_ms",
+              "zen.workspace.bgalazka.panel_fallback_interval_ms",
+              "zen.workspace.bgalazka.periodic_fallback_polling",
+            ],
+          },
+        ],
+      },
+      {
+        id: "logging",
+        label: "Logs & Diagnostics",
+        group: "Advanced",
+        owner: "logger",
+        sections: [
+          {
+            label: "Capture & reports",
+            properties: [
+              "zen.workspace.zentral.debug",
+              "zen.workspace.zentral.debug.full",
+              "zen.workspace.zentral.debug.core",
+              "zen.workspace.zentral.debug.tabs",
+              "zen.workspace.zentral.debug.apps",
+              "zen.workspace.zentral.debug.menus",
+              "zen.workspace.zentral.debug.layout",
+              "zen.workspace.zentral.report_endpoint",
+              "zentral.logger.path",
+            ],
+          },
+        ],
+      },
+      {
+        id: "modules",
+        label: "Modules & CSS Files",
+        group: "Advanced",
+        owner: "core",
+        sections: [
+          {
+            label: "File loading",
+            properties: [
+              "zen.workspace.zentral.modules.video.enabled",
+              "zen.workspace.zentral.modules.css.VideoPreview.enabled",
+              "zen.workspace.zentral.modules.logger.enabled",
+              "zen.workspace.zentral.modules.apps.enabled",
+              "zen.workspace.zentral.modules.tab-groups.enabled",
+              "zen.workspace.zentral.modules.geometry.enabled",
+              "zen.workspace.zentral.modules.corner-panels.enabled",
+              "zen.workspace.zentral.modules.panel-toolbar.enabled",
+              "zen.workspace.zentral.modules.browser-integrations.enabled",
+              "zen.workspace.zentral.modules.panel-styles.enabled",
+              "zen.workspace.zentral.modules.secondary-views.enabled",
+              "zen.workspace.zentral.modules.rss.enabled",
+              "zen.workspace.zentral.modules.startup.enabled",
+              "zen.workspace.zentral.modules.tab-unload.enabled",
+              "zen.workspace.zentral.modules.panels.enabled",
+              "zen.workspace.zentral.modules.css.Base.enabled",
+              "zen.workspace.zentral.modules.css.Panels.enabled",
+              "zen.workspace.zentral.modules.css.CornerPanels.enabled",
+              "zen.workspace.zentral.modules.css.Controls.enabled",
+              "zen.workspace.zentral.modules.css.PanelToolbar.enabled",
+              "zen.workspace.zentral.modules.css.PanelGeometry.enabled",
+              "zen.workspace.zentral.modules.css.Settings.enabled",
+              "zen.workspace.zentral.modules.css.BrowserIntegrations.enabled",
+              "zen.workspace.zentral.modules.css.Appearance.enabled",
+              "zen.workspace.zentral.modules.css.RssDisplay.enabled",
+              "zen.workspace.zentral.modules.css.TabDensity.enabled",
+              "zen.workspace.zentral.modules.css.PanelBackground.enabled",
+              "zen.workspace.zentral.modules.allow_unsafe_core_disable",
+            ],
+          },
+        ],
+      },
+      {
+        id: "addons",
+        label: "Local Add-ons",
+        group: "Advanced",
+        owner: "core",
+        sections: [
+          {
+            label: "Local registrations",
+            properties: ["zen.workspace.zentral.addons"],
+          },
+        ],
+      },
+    ],
+    settings: {
+      "zen.workspace.zentral.startup.enabled": {
+        category: "startup",
+        section: "Selected tabs",
+        owner: "startup",
+      },
+      "zen.workspace.zentral.arc2.match_compact_sidebar": {
+        category: "arc",
+        section: "Arc 2.0 theme integration",
+        owner: "extension-settings",
+      },
+      "zen.workspace.zentral.arc2.match_compact_library": {
+        category: "arc",
+        section: "Arc 2.0 theme integration",
+        owner: "extension-settings",
+      },
+      "zen.workspace.apps.sidebar.enabled": {
+        category: "apps",
+        section: "Launcher grid & placement",
+        owner: "apps",
+      },
+      "zen.workspace.apps.sidebar.apps_per_row": {
+        category: "apps",
+        section: "Launcher grid & placement",
+        owner: "apps",
+      },
+      "zen.workspace.apps.sidebar.max_rows": {
+        category: "apps",
+        section: "Launcher grid & placement",
+        owner: "apps",
+      },
+      "zen.workspace.apps.sidebar.max_apps": {
+        category: "apps",
+        section: "Launcher grid & placement",
+        owner: "apps",
+      },
+      "zen.workspace.apps.sidebar.hide_utility_section": {
+        category: "apps",
+        section: "Launcher grid & placement",
+        owner: "apps",
+      },
+      "zen.workspace.apps.sidebar.autohide": {
+        category: "apps",
+        section: "Launcher grid & placement",
+        owner: "apps",
+      },
+      "zen.workspace.apps.sidebar.placement": {
+        category: "apps",
+        section: "Launcher grid & placement",
+        owner: "apps",
+      },
+      "zen.workspace.apps.sidebar.width": {
+        category: "apps",
+        section: "Launcher grid & placement",
+        owner: "apps",
+      },
+      "zen.workspace.apps.sidebar.animation_speed": {
+        category: "apps",
+        section: "Launcher grid & placement",
+        owner: "apps",
+      },
+      "zen.workspace.apps.sidebar.animation_type": {
+        category: "apps",
+        section: "Launcher grid & placement",
+        owner: "apps",
+      },
+      "zen.workspace.apps.insta_peek.shortcut": {
+        category: "shortcuts",
+        section: "Insta Peek",
+        owner: "apps",
+      },
+      "zen.workspace.tabgroups.enabled": {
+        category: "tab-groups",
+        section: "Group behavior & indicators",
+        owner: "tab-groups",
+      },
+      "zen.workspace.tabgroups.collapse_on_launch": {
+        category: "tab-groups",
+        section: "Group behavior & indicators",
+        owner: "tab-groups",
+      },
+      "zen.workspace.tabgroups.show_chevron": {
+        category: "tab-groups",
+        section: "Group behavior & indicators",
+        owner: "tab-groups",
+      },
+      "zen.workspace.tabgroups.indicator_type": {
+        category: "tab-groups",
+        section: "Group behavior & indicators",
+        owner: "tab-groups",
+      },
+      "zen.workspace.tabgroups.thumbnails": {
+        category: "tab-groups",
+        section: "Group behavior & indicators",
+        owner: "tab-groups",
+      },
+      "zen.workspace.tabgroups.label_opacity": {
+        category: "tab-groups",
+        section: "Group behavior & indicators",
+        owner: "tab-groups",
+      },
+      "zen.workspace.zentral.debug": {
+        category: "logging",
+        section: "Capture & reports",
+        owner: "logger",
+      },
+      "zen.workspace.zentral.debug.full": {
+        category: "logging",
+        section: "Capture & reports",
+        owner: "logger",
+      },
+      "zen.workspace.zentral.debug.core": {
+        category: "logging",
+        section: "Capture & reports",
+        owner: "logger",
+      },
+      "zen.workspace.zentral.debug.tabs": {
+        category: "logging",
+        section: "Capture & reports",
+        owner: "logger",
+      },
+      "zen.workspace.zentral.debug.apps": {
+        category: "logging",
+        section: "Capture & reports",
+        owner: "logger",
+      },
+      "zen.workspace.zentral.debug.menus": {
+        category: "logging",
+        section: "Capture & reports",
+        owner: "logger",
+      },
+      "zen.workspace.zentral.debug.layout": {
+        category: "logging",
+        section: "Capture & reports",
+        owner: "logger",
+      },
+      "zen.workspace.zentral.report_endpoint": {
+        category: "logging",
+        section: "Capture & reports",
+        owner: "logger",
+      },
+      "zentral.logger.path": {
+        category: "logging",
+        section: "Capture & reports",
+        owner: "logger",
+      },
+      "zen.workspace.bgalazka.opposite_docking": {
+        category: "panel-layout",
+        section: "Docking, size & input",
+        owner: "geometry",
+      },
+      "zen.workspace.bgalazka.appsbar_library": {
+        category: "app-tools",
+        section: "Browser shortcuts",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.appsbar_history": {
+        category: "app-tools",
+        section: "Browser shortcuts",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.appsbar_downloads": {
+        category: "app-tools",
+        section: "Browser shortcuts",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.appsbar_bookmarks": {
+        category: "app-tools",
+        section: "Browser shortcuts",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.hover_reveal_panel": {
+        category: "panel-hover",
+        section: "Autohide & reveal target",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.hover_reveal_delay_ms": {
+        category: "panel-hover",
+        section: "Autohide & reveal target",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.hover_reveal_width_px": {
+        category: "panel-hover",
+        section: "Autohide & reveal target",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.hide_hover_reveal_btn": {
+        category: "pill",
+        section: "Visibility, buttons & mini pill",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.edge_attached_panels": {
+        category: "panel-layout",
+        section: "Docking, size & input",
+        owner: "geometry",
+      },
+      "zen.workspace.bgalazka.push_page": {
+        category: "multi-view",
+        section: "Page push & secondary controls",
+        owner: "secondary-views",
+      },
+      "zen.workspace.bgalazka.triple_push_page": {
+        category: "multi-view",
+        section: "Page push & secondary controls",
+        owner: "secondary-views",
+      },
+      "zen.workspace.bgalazka.all_sides_resize": {
+        category: "panel-layout",
+        section: "Docking, size & input",
+        owner: "geometry",
+      },
+      "zen.workspace.bgalazka.panel_input_shield": {
+        category: "panel-layout",
+        section: "Docking, size & input",
+        owner: "geometry",
+      },
+      "zen.workspace.bgalazka.panel_horizontal_offset_px": {
+        category: "panel-layout",
+        section: "Docking, size & input",
+        owner: "geometry",
+      },
+      "zen.workspace.bgalazka.panel_top_extra_px": {
+        category: "panel-layout",
+        section: "Docking, size & input",
+        owner: "geometry",
+      },
+      "zen.workspace.bgalazka.panel_bottom_extra_px": {
+        category: "panel-layout",
+        section: "Docking, size & input",
+        owner: "geometry",
+      },
+      "zen.workspace.bgalazka.panel_position_offset_px": {
+        category: "panel-layout",
+        section: "Docking, size & input",
+        owner: "geometry",
+      },
+      "zen.workspace.bgalazka.translucency": {
+        category: "panel-appearance",
+        section: "Translucency & blur",
+        owner: "panel-styles",
+      },
+      "zen.workspace.bgalazka.opacity_unpinned": {
+        category: "panel-appearance",
+        section: "Translucency & blur",
+        owner: "panel-styles",
+      },
+      "zen.workspace.bgalazka.opacity_pinned_focus": {
+        category: "panel-appearance",
+        section: "Translucency & blur",
+        owner: "panel-styles",
+      },
+      "zen.workspace.bgalazka.opacity_pinned_blur": {
+        category: "panel-appearance",
+        section: "Translucency & blur",
+        owner: "panel-styles",
+      },
+      "zen.workspace.bgalazka.blur_intensity": {
+        category: "panel-appearance",
+        section: "Translucency & blur",
+        owner: "panel-styles",
+      },
+      "zen.workspace.bgalazka.look.style": {
+        category: "theme",
+        section: "Palette, transparency & shape",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.canvas": {
+        category: "theme",
+        section: "Palette, transparency & shape",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.surface": {
+        category: "theme",
+        section: "Palette, transparency & shape",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.raised": {
+        category: "theme",
+        section: "Palette, transparency & shape",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.accent": {
+        category: "theme",
+        section: "Palette, transparency & shape",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.text": {
+        category: "theme",
+        section: "Palette, transparency & shape",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.muted": {
+        category: "theme",
+        section: "Palette, transparency & shape",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.surface_opacity": {
+        category: "theme",
+        section: "Palette, transparency & shape",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.raised_opacity": {
+        category: "theme",
+        section: "Palette, transparency & shape",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.toolbar_opacity": {
+        category: "toolbar-appearance",
+        section: "Colors & transparency",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.look.address_opacity": {
+        category: "toolbar-appearance",
+        section: "Colors & transparency",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.look.button_opacity": {
+        category: "interface",
+        section: "Buttons, app tiles & selection rows",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.tile_opacity": {
+        category: "interface",
+        section: "Buttons, app tiles & selection rows",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.popup_opacity": {
+        category: "theme",
+        section: "Palette, transparency & shape",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.radius": {
+        category: "theme",
+        section: "Palette, transparency & shape",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.depth": {
+        category: "theme",
+        section: "Palette, transparency & shape",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.spacing": {
+        category: "theme",
+        section: "Palette, transparency & shape",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.panel_border": {
+        category: "theme",
+        section: "Palette, transparency & shape",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.density_icons": {
+        category: "tab-density",
+        section: "Sidebar sizing & spacing",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.density_newtab": {
+        category: "tab-density",
+        section: "Sidebar sizing & spacing",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.density_urlbar": {
+        category: "tab-density",
+        section: "Sidebar sizing & spacing",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.density_essentials": {
+        category: "tab-density",
+        section: "Sidebar sizing & spacing",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.essentials_height": {
+        category: "tab-density",
+        section: "Sidebar sizing & spacing",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.tabbar_section_gap": {
+        category: "tab-density",
+        section: "Sidebar sizing & spacing",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.folder_icon_size": {
+        category: "tab-density",
+        section: "Sidebar sizing & spacing",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.workspace_icon_size": {
+        category: "tab-density",
+        section: "Sidebar sizing & spacing",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.workspace_height": {
+        category: "tab-density",
+        section: "Sidebar sizing & spacing",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.bottom_bar_height": {
+        category: "tab-density",
+        section: "Sidebar sizing & spacing",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.urlbar_top_gap": {
+        category: "tab-density",
+        section: "Sidebar sizing & spacing",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.newtab_height": {
+        category: "tab-density",
+        section: "Sidebar sizing & spacing",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.compact_tabbar": {
+        category: "tab-density",
+        section: "Sidebar sizing & spacing",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.tabbar_row_height": {
+        category: "tab-density",
+        section: "Sidebar sizing & spacing",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.tabbar_row_gap": {
+        category: "tab-density",
+        section: "Sidebar sizing & spacing",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.tabbar_icon_gap": {
+        category: "tab-density",
+        section: "Sidebar sizing & spacing",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.toolbar_surface": {
+        category: "toolbar-appearance",
+        section: "Colors & transparency",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.look.toolbar_url": {
+        category: "toolbar-appearance",
+        section: "Colors & transparency",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.look.toolbar_border": {
+        category: "toolbar-appearance",
+        section: "Colors & transparency",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.look.button_style": {
+        category: "interface",
+        section: "Buttons, app tiles & selection rows",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.button_surface": {
+        category: "interface",
+        section: "Buttons, app tiles & selection rows",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.button_text": {
+        category: "interface",
+        section: "Buttons, app tiles & selection rows",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.button_border_color": {
+        category: "interface",
+        section: "Buttons, app tiles & selection rows",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.button_border": {
+        category: "interface",
+        section: "Buttons, app tiles & selection rows",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.control_size": {
+        category: "interface",
+        section: "Buttons, app tiles & selection rows",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.tile_style": {
+        category: "interface",
+        section: "Buttons, app tiles & selection rows",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.row_style": {
+        category: "interface",
+        section: "Buttons, app tiles & selection rows",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.row_padding": {
+        category: "interface",
+        section: "Buttons, app tiles & selection rows",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.look.row_rule": {
+        category: "interface",
+        section: "Buttons, app tiles & selection rows",
+        owner: "extension-settings",
+      },
+      "zen.workspace.bgalazka.audio_indicator": {
+        category: "notifications",
+        section: "Audio indicator & mute",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.smart_sleep": {
+        category: "startup",
+        section: "Panel background loading",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.addon_tab_id_bridge": {
+        category: "compatibility",
+        section: "Browser hosts & website styles",
+        owner: "browser-integrations",
+      },
+      "zen.workspace.bgalazka.zen_internet_panel_css": {
+        category: "compatibility",
+        section: "Browser hosts & website styles",
+        owner: "panel-styles",
+      },
+      "zen.workspace.bgalazka.show_addon_host_folder": {
+        category: "compatibility",
+        section: "Browser hosts & website styles",
+        owner: "browser-integrations",
+      },
+      "zen.workspace.bgalazka.hide_pill": {
+        category: "pill",
+        section: "Visibility, buttons & mini pill",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.pill_position": {
+        category: "pill",
+        section: "Visibility, buttons & mini pill",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.pill_peek_dot": {
+        category: "pill",
+        section: "Visibility, buttons & mini pill",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.pill_peek_dot_color": {
+        category: "pill",
+        section: "Visibility, buttons & mini pill",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.pill_peek_dot_opacity": {
+        category: "pill",
+        section: "Visibility, buttons & mini pill",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.pill_background_opacity": {
+        category: "pill",
+        section: "Visibility, buttons & mini pill",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.hide_dual_view": {
+        category: "pill",
+        section: "Visibility, buttons & mini pill",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.hide_all_sides_resize_btn": {
+        category: "pill",
+        section: "Visibility, buttons & mini pill",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.hide_pin": {
+        category: "pill",
+        section: "Visibility, buttons & mini pill",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.hide_expand": {
+        category: "pill",
+        section: "Visibility, buttons & mini pill",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.hide_grabber": {
+        category: "pill",
+        section: "Visibility, buttons & mini pill",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.hide_refresh": {
+        category: "pill",
+        section: "Visibility, buttons & mini pill",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.hide_close": {
+        category: "pill",
+        section: "Visibility, buttons & mini pill",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.web_toolbar_enabled": {
+        category: "panel-toolbar",
+        section: "Navigation & placement",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_autohide": {
+        category: "panel-toolbar",
+        section: "Navigation & placement",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_top": {
+        category: "panel-toolbar",
+        section: "Navigation & placement",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_urlbar": {
+        category: "panel-toolbar",
+        section: "Navigation & placement",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_zoom": {
+        category: "panel-toolbar",
+        section: "Navigation & placement",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_search_engine": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_search_custom_url": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_quickswitch_custom_1": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_quickswitch_custom_2": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_quickswitch_custom_3": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_quickswitch_custom_4": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_quickswitch_custom_5": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_quickswitch": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_quickswitch_target.ddg": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_quickswitch_target.startpage": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_quickswitch_target.brave": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_quickswitch_target.yahoo": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_quickswitch_target.ecosia": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_quickswitch_target.qwant": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_quickswitch_target.youtube": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_quickswitch_target.wikipedia": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_quickswitch_target.reddit": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.web_toolbar_quickswitch_target.github": {
+        category: "search",
+        section: "Search engines & quick switch",
+        owner: "panel-toolbar",
+      },
+      "zen.workspace.bgalazka.rss.hide_empty": {
+        category: "rss",
+        section: "Live-folder display",
+        owner: "rss",
+      },
+      "zen.workspace.bgalazka.rss.compact_headers": {
+        category: "rss",
+        section: "Live-folder display",
+        owner: "rss",
+      },
+      "zen.workspace.bgalazka.corner_tiles": {
+        category: "tab-panels",
+        section: "Launchers, loaded state & badges",
+        owner: "corner-panels",
+      },
+      "zen.workspace.bgalazka.all_tab_panels": {
+        category: "tab-panels",
+        section: "Launchers, loaded state & badges",
+        owner: "corner-panels",
+      },
+      "zen.workspace.bgalazka.hover_corner_tiles": {
+        category: "tab-panels",
+        section: "Launchers, loaded state & badges",
+        owner: "corner-panels",
+      },
+      "zen.workspace.bgalazka.tab_isolation": {
+        category: "tab-panels",
+        section: "Launchers, loaded state & badges",
+        owner: "corner-panels",
+      },
+      "zen.workspace.bgalazka.hide_corner_badges": {
+        category: "tab-panels",
+        section: "Launchers, loaded state & badges",
+        owner: "corner-panels",
+      },
+      "zen.workspace.bgalazka.hide_unattached_app_controls": {
+        category: "tab-panels",
+        section: "Launchers, loaded state & badges",
+        owner: "corner-panels",
+      },
+      "zen.workspace.bgalazka.keybinds_enabled": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.close_panel": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.back": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.forward": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.reload": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.focus_url": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.toggle_pin": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.toggle_expand": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.toggle_dual_view": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.toggle_resize": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.toggle_toolbar": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.toggle_translucency": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.toggle_opposite_docking": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.toggle_edge_attached": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.toggle_input_shield": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.zoom_in": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.zoom_out": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.zoom_reset": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.keybind.open_settings": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "panels",
+      },
+      "zen.workspace.zentral.video_preview.enabled": {
+        category: "video-playback",
+        section: "Playback & captions",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.renderer": {
+        category: "video-playback",
+        section: "Playback & captions",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.selected_mode_only": {
+        category: "video-playback",
+        section: "Playback & captions",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.keep_source_visible": {
+        category: "video-playback",
+        section: "Playback & captions",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.auto_show_video": {
+        category: "video-sources",
+        section: "Discovery & source selection",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.require_audio": {
+        category: "video-sources",
+        section: "Discovery & source selection",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.hide_muted_duplicates": {
+        category: "video-sources",
+        section: "Discovery & source selection",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.pause_when_compact_hidden": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.fit_width": {
+        category: "video-appearance",
+        section: "Card layout & controls",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.width_percent": {
+        category: "video-appearance",
+        section: "Card layout & controls",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.height_px": {
+        category: "video-appearance",
+        section: "Card layout & controls",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.radius_px": {
+        category: "video-appearance",
+        section: "Card layout & controls",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.framing": {
+        category: "video-appearance",
+        section: "Card layout & controls",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.hide_button": {
+        category: "video-appearance",
+        section: "Card layout & controls",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.auto_height_button": {
+        category: "video-appearance",
+        section: "Card layout & controls",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.video_hidden": {
+        category: "video-appearance",
+        section: "Card layout & controls",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.pin_source_button": {
+        category: "video-appearance",
+        section: "Card layout & controls",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.compact_card_button": {
+        category: "video-appearance",
+        section: "Card layout & controls",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.compact_card": {
+        category: "video-appearance",
+        section: "Card layout & controls",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.youtube_captions": {
+        category: "video-playback",
+        section: "Playback & captions",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.capture_width_px": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.capture_rate_tenths": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.scan_interval_ms": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.caption_poll_ms": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.canvas_stream_width_px": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.canvas_stream_fps": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.disable_experimental_bridge": {
+        category: "video-experiments",
+        section: "Experimental methods & tests",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.experimental_legacy_capture": {
+        category: "video-experiments",
+        section: "Experimental methods & tests",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.discovery": {
+        category: "video-sources",
+        section: "Discovery & source selection",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.binary_frames": {
+        category: "video-experiments",
+        section: "Experimental methods & tests",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.display_capture_cap": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.adaptive_detail": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.frame_aware_capture": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.stop_idle_timer": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.audio_probe_cache": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.media_event_hints": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.caption_events": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.suspend_hidden_preview": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.light_frame_monitoring": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.slow_health_checks": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.pinned_discovery_only": {
+        category: "video-sources",
+        section: "Discovery & source selection",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.slow_caption_recovery": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.renderer_retry_backoff": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.suspend_when_source_visible": {
+        category: "video-performance",
+        section: "Capture & background work",
+        owner: "video",
+      },
+      "zen.workspace.zentral.video_preview.performance_diagnostics": {
+        category: "video-experiments",
+        section: "Experimental methods & tests",
+        owner: "video",
+      },
+      "zen.workspace.bgalazka.look.video_opacity": {
+        category: "video-appearance",
+        section: "Colors & source list",
+        owner: "video",
+      },
+      "zen.workspace.bgalazka.look.video_control_opacity": {
+        category: "video-appearance",
+        section: "Colors & source list",
+        owner: "video",
+      },
+      "zen.workspace.bgalazka.look.video_canvas": {
+        category: "video-appearance",
+        section: "Colors & source list",
+        owner: "video",
+      },
+      "zen.workspace.bgalazka.look.video_control": {
+        category: "video-appearance",
+        section: "Colors & source list",
+        owner: "video",
+      },
+      "zen.workspace.bgalazka.look.video_text": {
+        category: "video-appearance",
+        section: "Colors & source list",
+        owner: "video",
+      },
+      "zen.workspace.bgalazka.look.video_muted": {
+        category: "video-appearance",
+        section: "Colors & source list",
+        owner: "video",
+      },
+      "zen.workspace.bgalazka.look.video_selected": {
+        category: "video-appearance",
+        section: "Colors & source list",
+        owner: "video",
+      },
+      "zen.workspace.bgalazka.look.video_border": {
+        category: "video-appearance",
+        section: "Colors & source list",
+        owner: "video",
+      },
+      "zen.workspace.bgalazka.look.video_padding": {
+        category: "video-appearance",
+        section: "Colors & source list",
+        owner: "video",
+      },
+      "zen.workspace.bgalazka.look.video_row_height": {
+        category: "video-appearance",
+        section: "Colors & source list",
+        owner: "video",
+      },
+      "zen.workspace.bgalazka.look.video_source_style": {
+        category: "video-appearance",
+        section: "Colors & source list",
+        owner: "video",
+      },
+      "zen.workspace.zentral.modules.video.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.css.VideoPreview.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.bgalazka.panel_black_opacity": {
+        category: "panel-backing",
+        section: "Black backing & cycle levels",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.panel_black_steps": {
+        category: "panel-backing",
+        section: "Black backing & cycle levels",
+        owner: "panels",
+      },
+      "zen.workspace.zentral.modules.logger.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.apps.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.tab-groups.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.geometry.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.corner-panels.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.panel-toolbar.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.browser-integrations.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.panel-styles.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.secondary-views.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.rss.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.startup.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.tab-unload.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.panels.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.css.Base.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.css.Panels.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.css.CornerPanels.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.css.Controls.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.css.PanelToolbar.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.css.PanelGeometry.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.css.Settings.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.css.BrowserIntegrations.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.css.Appearance.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.css.RssDisplay.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.css.TabDensity.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.modules.css.PanelBackground.enabled": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.zentral.addons": {
+        category: "addons",
+        section: "Local registrations",
+        owner: "core",
+      },
+      "zen.workspace.bgalazka.mmb_unload_normal_tabs": {
+        category: "shortcuts",
+        section: "Panel shortcuts & mouse actions",
+        owner: "tab-unload",
+      },
+      "zen.workspace.bgalazka.show_triple_style_repair": {
+        category: "recovery",
+        section: "Bounded recovery & optional troubleshooting",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.panel_retry_limit": {
+        category: "recovery",
+        section: "Bounded recovery & optional troubleshooting",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.panel_retry_delay_ms": {
+        category: "recovery",
+        section: "Bounded recovery & optional troubleshooting",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.panel_fallback_interval_ms": {
+        category: "recovery",
+        section: "Bounded recovery & optional troubleshooting",
+        owner: "panels",
+      },
+      "zen.workspace.apps.sidebar.badge_poll_interval_ms": {
+        category: "notifications",
+        section: "Notification refresh",
+        owner: "apps",
+      },
+      "zen.workspace.bgalazka.periodic_fallback_polling": {
+        category: "recovery",
+        section: "Bounded recovery & optional troubleshooting",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.force_panel_black": {
+        category: "panel-backing",
+        section: "Black backing & cycle levels",
+        owner: "panels",
+      },
+      "zen.workspace.bgalazka.secondary_toolbar_swap": {
+        category: "multi-view",
+        section: "Page push & secondary controls",
+        owner: "secondary-views",
+      },
+      "zen.workspace.bgalazka.secondary_toolbar_close": {
+        category: "multi-view",
+        section: "Page push & secondary controls",
+        owner: "secondary-views",
+      },
+      "zen.workspace.zentral.modules.allow_unsafe_core_disable": {
+        category: "modules",
+        section: "File loading",
+        owner: "core",
+      },
+      "zen.workspace.bgalazka.triple_inward_toolbars": {
+        category: "multi-view",
+        section: "Page push & secondary controls",
+        owner: "secondary-views",
+      },
+    },
+  };
+  function validPanelBackingSteps(value) {
+    const tokens = String(value)
+      .trim()
+      .split(/[,;\s]+/)
+      .filter(Boolean);
+    return (
+      tokens.length > 0 &&
+      tokens.every((token) => /^\d+$/.test(token) && Number(token) <= 100)
+    );
+  }
+  function settingsModuleLoaded(id) {
+    if (!id || id === "core") return true;
+    return ["active", "dormant"].includes(records.get(id)?.state);
+  }
+  function settingsMetadata(item) {
+    return (
+      SETTINGS_ORGANIZATION.settings[item.property] || {
+        category: "addons",
+        section: "Registered add-on settings",
+        owner: item.feature || "core",
+      }
+    );
+  }
+  function settingsItemAvailable(item) {
+    return settingsModuleLoaded(settingsMetadata(item).owner);
+  }
+  function selectSettingsCategory(modal, target) {
+    for (const button of modal.querySelectorAll(".zs-tab-btn"))
+      button.setAttribute(
+        "data-active",
+        button.dataset.settingsCategory === target ? "true" : "false",
+      );
+    for (const panel of modal.querySelectorAll(".zs-tab-panel"))
+      panel.setAttribute(
+        "data-active",
+        panel.dataset.settingsCategory === target ? "true" : "false",
+      );
+  }
+  function ensureSettingsCategory(modal, id) {
+    const definition = SETTINGS_ORGANIZATION.categories.find(
+      (category) => category.id === id,
+    );
+    if (!definition) throw new Error("Unknown settings category: " + id);
+    let panel = modal.querySelector("#zs-panel-organized-" + id);
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "zs-panel-organized-" + id;
+      panel.className = "zs-tab-panel zs-organized-panel";
+      panel.dataset.settingsCategory = id;
+      panel.dataset.settingsOwner = definition.owner;
+      const heading = document.createElement("h3");
+      heading.className = "zs-section-title";
+      heading.textContent = definition.label;
+      const content = document.createElement("div");
+      content.className = "zs-section-content zs-organized-content";
+      panel.append(heading, content);
+      modal.querySelector(".zs-body").appendChild(panel);
+      const button = document.createElement("button");
+      button.id = "zs-tab-btn-organized-" + id;
+      button.type = "button";
+      button.className = "zs-tab-btn";
+      button.dataset.settingsCategory = id;
+      button.textContent = definition.label;
+      button.addEventListener("click", () => selectSettingsCategory(modal, id));
+      modal.querySelector(".zs-tab-bar").appendChild(button);
+      if (id !== "modules" && id !== "addons") {
+        const all = document.createElement("button");
+        all.type = "button";
+        all.className = "zs-category-all-settings";
+        all.textContent = "All " + definition.label.toLowerCase() + " settings";
+        all.title =
+          "Open every setting in this category, including advanced values";
+        all.addEventListener("click", () => openManager(id));
+        panel.appendChild(all);
+      }
+    }
+    return {
+      panel,
+      button: modal.querySelector("#zs-tab-btn-organized-" + id),
+      content: panel.querySelector(".zs-organized-content"),
+    };
+  }
+  runtime.ensureSettingsCategory = ensureSettingsCategory;
+  runtime.selectSettingsCategory = selectSettingsCategory;
+  runtime.settingsModuleLoaded = settingsModuleLoaded;
+  runtime.settingsMetadata = settingsMetadata;
+  function organizeNativeSettings(modal) {
+    if (!modal?.querySelector(".zs-body")) return;
+    const bar = modal.querySelector(".zs-tab-bar");
+    modal
+      .querySelector(".zs-dialog")
+      ?.setAttribute("data-settings-organized", "true");
+    // Existing controls are moved, preserving their handlers, recorder state,
+    // live saves, and parent visibility rules. No preference values are rewritten.
+    for (const [id, category] of [
+      ["zs-ag-col", "apps"],
+      ["zs-tg-col", "tab-groups"],
+    ]) {
+      const column = modal.querySelector("#" + id);
+      if (column) {
+        const target = ensureSettingsCategory(modal, category).content;
+        if (column.parentElement !== target) target.appendChild(column);
+      }
+    }
+    const baseKeys = {
+      "zs-ag-enabled": "apps.sidebar.enabled",
+      "zs-ag-placement": "apps.sidebar.placement",
+      "zs-apps-row": "apps.sidebar.apps_per_row",
+      "zs-max-rows": "apps.sidebar.max_rows",
+      "zs-max-apps": "apps.sidebar.max_apps",
+      "zs-hide-utility-section": "apps.sidebar.hide_utility_section",
+      "zs-ag-autohide": "apps.sidebar.autohide",
+      "zs-panel-width": "apps.sidebar.width",
+      "zs-anim-type": "apps.sidebar.animation_type",
+      "zs-anim-speed": "apps.sidebar.animation_speed",
+      "zs-insta-peek-shortcut": "apps.insta_peek.shortcut",
+      "zs-tg-enabled": "tabgroups.enabled",
+      "zs-tg-collapse": "tabgroups.collapse_on_launch",
+      "zs-tg-thumbnails": "tabgroups.thumbnails",
+      "zs-tg-chevron": "tabgroups.show_chevron",
+      "zs-tg-indicator-type": "tabgroups.indicator_type",
+      "zs-tg-opacity": "tabgroups.label_opacity",
+    };
+    for (const [id, suffix] of Object.entries(baseKeys)) {
+      const input = modal.querySelector("#" + id);
+      const row = input?.closest(".zs-row, .zs-stacked-slider");
+      if (row) row.dataset.settingKey = "zen.workspace." + suffix;
+    }
+    // Ensure even advanced settings absent from legacy UI have a category route.
+    for (const category of SETTINGS_ORGANIZATION.categories) {
+      if (category.id === "logging" || !settingsModuleLoaded(category.owner))
+        continue;
+      if (
+        !SETTINGS_SCHEMA.some(
+          (item) =>
+            item.property &&
+            settingsMetadata(item).category === category.id &&
+            settingsItemAvailable(item),
+        )
+      )
+        continue;
+      const target = ensureSettingsCategory(modal, category.id);
+      if (
+        ["modules", "addons"].includes(category.id) &&
+        !target.content.children.length
+      ) {
+        const route = document.createElement("button");
+        route.type = "button";
+        route.textContent =
+          category.id === "modules"
+            ? "Manage modules and CSS files"
+            : "Manage local add-ons";
+        route.addEventListener("click", () => openManager(category.id));
+        target.content.appendChild(route);
+      }
+    }
+    const seen = new Set();
+    const units = new Set();
+    for (const row of [...modal.querySelectorAll("[data-setting-key]")]) {
+      const meta = SETTINGS_ORGANIZATION.settings[row.dataset.settingKey];
+      if (!meta) continue;
+      if (row.dataset.videoSettings === "row") continue;
+      // Video's complex controls are grouped by its own module. Its shared
+      // appearance controls use the same category identity and lifecycle.
+      if (seen.has(row.dataset.settingKey)) {
+        row.remove();
+        continue;
+      }
+      seen.add(row.dataset.settingKey);
+      row.dataset.settingsOwner = meta.owner;
+      let unit = row;
+      for (
+        let parent = row.parentElement;
+        parent && !parent.classList.contains("zs-section-content");
+        parent = parent.parentElement
+      ) {
+        if (
+          !parent.classList.contains("zs-conditional-group") &&
+          !parent.classList.contains("zs-look-group")
+        )
+          continue;
+        const members = [...parent.querySelectorAll("[data-setting-key]")];
+        if (
+          members.every(
+            (member) =>
+              SETTINGS_ORGANIZATION.settings[member.dataset.settingKey]
+                ?.category === meta.category,
+          )
+        )
+          unit = parent;
+      }
+      if (units.has(unit)) continue;
+      units.add(unit);
+      const content = ensureSettingsCategory(modal, meta.category).content;
+      let segment = [...content.children].find(
+        (node) => node.dataset.settingsSection === meta.section,
+      );
+      if (!segment) {
+        segment = document.createElement("section");
+        segment.className = "zs-category-segment";
+        segment.dataset.settingsSection = meta.section;
+        const heading = document.createElement("h4");
+        heading.textContent = meta.section;
+        segment.appendChild(heading);
+        content.appendChild(segment);
+      }
+      if (unit.parentElement !== segment) segment.appendChild(unit);
+    }
+    // Non-setting actions and explanatory status remain next to their controls.
+    for (const [selector, category] of [
+      [".zs-look-themes, .zs-look-actions, .zs-look-action", "theme"],
+      [".zs-extension-presets", "recovery"],
+      ["#zs-addon-host-inspection", "compatibility"],
+    ]) {
+      const target = modal.querySelector(
+        "#zs-panel-organized-" + category + " .zs-organized-content",
+      );
+      if (target)
+        for (const node of [...modal.querySelectorAll(selector)])
+          if (node.parentElement !== target && !target.contains(node))
+            target.appendChild(node);
+    }
+    // Only retire the old extension pages once their controls were built.
+    for (const button of modal.querySelectorAll(
+      '#zs-tab-btn-bgalazka, [id^="zs-tab-btn-extension-"]',
+    )) {
+      button.hidden = true;
+      button.setAttribute("data-active", "false");
+    }
+    const original = modal.querySelector('.zs-tab-btn[data-tab="settings"]');
+    if (original) {
+      original.hidden = true;
+      original.setAttribute("data-active", "false");
+    }
+    for (const panel of modal.querySelectorAll(
+      "#zs-panel-settings, #zs-panel-bgalazka, .zs-extension-subpanel",
+    ))
+      panel.setAttribute("data-active", "false");
+    const logs = modal.querySelector('.zs-tab-btn[data-tab="diagnostics"]');
+    if (logs) {
+      logs.textContent = "Logs & Diagnostics";
+      logs.dataset.settingsCategory = "logging";
+      logs.hidden = !settingsModuleLoaded("logger");
+    }
+    const logPanel = modal.querySelector("#zs-panel-diagnostics");
+    if (logPanel) logPanel.dataset.settingsCategory = "logging";
+    for (const category of SETTINGS_ORGANIZATION.categories) {
+      const target = modal.querySelector("#zs-panel-organized-" + category.id);
+      const button = modal.querySelector(
+        "#zs-tab-btn-organized-" + category.id,
+      );
+      if (!target || !button) continue;
+      const available = settingsModuleLoaded(category.owner);
+      button.hidden = !available;
+      if (!available) target.setAttribute("data-active", "false");
+      for (const row of target.querySelectorAll("[data-settings-owner]"))
+        row.hidden = !settingsModuleLoaded(row.dataset.settingsOwner);
+    }
+    for (const heading of bar.querySelectorAll(".zs-category-heading"))
+      heading.remove();
+    let group = null;
+    for (const definition of SETTINGS_ORGANIZATION.categories) {
+      const button =
+        definition.id === "logging"
+          ? logs
+          : modal.querySelector("#zs-tab-btn-organized-" + definition.id);
+      if (!button || button.hidden) continue;
+      if (group !== definition.group) {
+        group = definition.group;
+        const heading = document.createElement("span");
+        heading.className = "zs-category-heading";
+        heading.textContent = group;
+        bar.appendChild(heading);
+      }
+      bar.appendChild(button);
+    }
+    if (!bar.dataset.organizedGuard) {
+      bar.dataset.organizedGuard = "true";
+      bar.addEventListener(
+        "click",
+        (event) => {
+          const clicked = event.target.closest?.(".zs-tab-btn");
+          if (clicked?.dataset.settingsCategory)
+            selectSettingsCategory(modal, clicked.dataset.settingsCategory);
+        },
+        true,
+      );
+    }
+    if (!modal.querySelector('.zs-tab-btn[data-active="true"]:not([hidden])')) {
+      const first = bar.querySelector(
+        ".zs-tab-btn[data-settings-category]:not([hidden])",
+      );
+      if (first) selectSettingsCategory(modal, first.dataset.settingsCategory);
+    }
+    if (!bar.querySelector("#zs-settings-search")) {
+      const search = document.createElement("input");
+      search.id = "zs-settings-search";
+      search.type = "search";
+      search.placeholder = "Find a setting";
+      search.setAttribute("aria-label", "Search all available settings");
+      const results = document.createElement("div");
+      results.id = "zs-settings-search-results";
+      results.hidden = true;
+      search.addEventListener("input", () => {
+        results.replaceChildren();
+        const query = search.value.trim().toLowerCase();
+        results.hidden = !query;
+        if (!query) return;
+        const matches = SETTINGS_SCHEMA.filter(
+          (item) =>
+            item.property &&
+            settingsItemAvailable(item) &&
+            (
+              item.label +
+              " " +
+              item.property +
+              " " +
+              SETTINGS_ORGANIZATION.categories.find(
+                (category) => category.id === settingsMetadata(item).category,
+              )?.label
+            )
+              .toLowerCase()
+              .includes(query),
+        );
+        for (const item of matches) {
+          const meta = settingsMetadata(item),
+            definition = SETTINGS_ORGANIZATION.categories.find(
+              (category) => category.id === meta.category,
+            );
+          const result = document.createElement("button");
+          result.type = "button";
+          result.textContent = item.label + " · " + definition.label;
+          result.addEventListener("click", () => {
+            const row = [...modal.querySelectorAll("[data-setting-key]")].find(
+              (row) => row.dataset.settingKey === item.property,
+            );
+            const category = modal.querySelector(
+              "#zs-panel-organized-" + meta.category,
+            );
+            if (
+              row &&
+              category &&
+              !row.closest('[data-hidden="true"], [hidden]')
+            ) {
+              selectSettingsCategory(modal, meta.category);
+              row.scrollIntoView({ block: "center" });
+              const control = row.querySelector("input, select, button");
+              control?.focus();
+            } else openManager(meta.category, item.property);
+          });
+          results.appendChild(result);
+        }
+        if (!matches.length)
+          results.textContent = "No matching settings in loaded modules.";
+      });
+      bar.prepend(search, results);
+    }
+  }
+  runtime.organizeSettings = organizeNativeSettings;
+  const refreshSettingsCategories = () => {
+    const modal = document.getElementById("zentral-settings-modal");
+    if (modal) organizeNativeSettings(modal);
+  };
+  window.addEventListener("zentral-runtime-change", refreshSettingsCategories);
+  disposers.push(() =>
+    window.removeEventListener(
+      "zentral-runtime-change",
+      refreshSettingsCategories,
+    ),
+  );
+
   function numericOptions(start, end, step = 1) {
     return Array.from(
       { length: Math.floor((end - start) / step) + 1 },
@@ -5622,6 +8000,165 @@
         .zs-btn-save:active {
           transform: scale(0.98);
         }
+
+/* Category navigation stays scrollable instead of wrapping dozens of tabs. */
+#zentral-settings-modal .zs-dialog[data-settings-organized="true"] {
+  display: grid !important;
+  grid-template-columns: minmax(160px, 210px) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+#zentral-settings-modal .zs-dialog[data-settings-organized="true"] > .zs-header,
+#zentral-settings-modal .zs-dialog[data-settings-organized="true"] > .zs-footer {
+  grid-column: 1 / -1;
+}
+#zentral-settings-modal .zs-dialog[data-settings-organized="true"] > .zs-tab-bar {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch;
+  gap: 3px !important;
+  min-height: 0;
+  overflow-y: auto !important;
+  padding: 12px !important;
+  border-right: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-bottom: none !important;
+}
+#zentral-settings-modal .zs-dialog[data-settings-organized="true"] > .zs-body {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  padding: 16px !important;
+}
+#zentral-settings-modal .zs-dialog[data-settings-organized="true"] .zs-tab-btn {
+  white-space: normal !important;
+  text-align: left;
+  padding: 8px 10px !important;
+  line-height: 1.3;
+  border-radius: 6px !important;
+}
+#zentral-settings-modal .zs-dialog[data-settings-organized="true"] .zs-tab-btn[data-active="true"] {
+  background: color-mix(in srgb, var(--zen-primary-color, #6366f1) 20%, transparent) !important;
+}
+#zentral-settings-modal .zs-dialog[data-settings-organized="true"] .zs-tab-btn::after {
+  display: none;
+}
+#zentral-settings-modal .zs-dialog[data-settings-organized="true"] .zs-category-heading {
+  flex: 0 0 auto !important;
+  margin-top: 14px;
+  padding: 4px 10px;
+}
+#zentral-settings-modal .zs-organized-panel > .zs-organized-content {
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+#zentral-settings-modal .zs-organized-content > .zs-col {
+  width: 100%;
+  border: none !important;
+  padding: 0 !important;
+}
+#zentral-settings-modal .zs-category-segment > h4 {
+  font-size: 13px;
+  margin: 18px 0 8px;
+  opacity: 0.8;
+}
+#zentral-settings-modal .zs-category-all-settings {
+  flex: 0 0 auto;
+  padding: 9px;
+  margin-top: 12px;
+  cursor: pointer;
+}
+#zentral-settings-modal #zs-settings-search {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px;
+  flex: 0 0 auto;
+}
+#zentral-settings-modal #zs-settings-search-results {
+  flex: 0 0 auto;
+  max-height: 45%;
+  overflow-y: auto;
+  font-size: 12px;
+}
+#zentral-settings-modal #zs-settings-search-results button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px;
+  white-space: normal;
+  cursor: pointer;
+}
+#zentral-settings-modal .zs-tab-btn[hidden],
+#zentral-settings-modal [data-settings-owner][hidden],
+#zentral-settings-modal #zs-settings-search-results[hidden] {
+  display: none !important;
+}
+
+/* Inner groups grow naturally inside the category's sole content scroller. */
+#zentral-settings-modal .zs-organized-content > *,
+#zentral-settings-modal .zs-organized-content .zs-category-segment,
+#zentral-settings-modal .zs-organized-content .zvp-settings-group {
+  flex-shrink: 0;
+}
+#zentral-settings-modal .zs-organized-content > .zs-col {
+  height: auto !important;
+  flex: 0 0 auto !important;
+  overflow: visible !important;
+}
+#zentral-settings-modal .zs-organized-content > .zs-col > .zs-section-content {
+  overflow: visible !important;
+  height: auto !important;
+  flex: 0 0 auto !important;
+}
+#zentral-settings-modal .zs-organized-content {
+  padding-bottom: 32px;
+  overscroll-behavior: contain;
+}
+
+#zentral-settings-modal .zs-organized-content {
+  display: block !important;
+}
+#zentral-settings-modal .zs-organized-content .zs-row {
+  min-width: 0;
+  box-sizing: border-box;
+}
+#zentral-settings-modal .zs-organized-content .zs-label-container {
+  min-width: 0;
+}
+#zentral-settings-modal .zs-organized-content .zs-keybind-input {
+  width: 160px;
+  max-width: 48%;
+  padding: 8px;
+  color: inherit;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 6px;
+}
+
+/* The matrix moved from a narrow column to a full-width category. Its old
+ * 420px clipped box cannot contain six rows of full-width square cells. */
+#zentral-settings-modal .zs-organized-content .zs-matrix-wrapper:not([data-hidden="true"]) {
+  max-height: none !important;
+  overflow: visible !important;
+}
+#zentral-settings-modal .zs-organized-content .zs-matrix-grid {
+  width: min(100%, 480px) !important;
+  max-width: 100% !important;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  grid-template-rows: repeat(6, auto);
+}
+#zentral-settings-modal .zs-organized-content .zs-matrix-header,
+#zentral-settings-modal .zs-organized-content .zs-matrix-readout {
+  flex-wrap: wrap;
+}
+#zentral-settings-modal .zs-organized-content .zs-matrix-readout,
+#zentral-settings-modal .zs-organized-content .zs-matrix-badge {
+  color: var(--zl-text, #e4e4e7) !important;
+}
       `;
       try {
         const style = document.createElement("style");
@@ -7151,6 +9688,7 @@
     function createKeybindRow(labelText, sublabelText, prefKey, defaultVal) {
       const row = document.createElement("div");
       row.className = "zs-row zs-keybind-row";
+      row.dataset.settingKey = prefKey;
 
       const labelContainer = document.createElement("div");
       labelContainer.className = "zs-label-container";
@@ -7209,6 +9747,7 @@
     ) {
       const row = document.createElement("div");
       row.className = "zs-row";
+      row.dataset.settingKey = prefKey;
 
       const leftBox = document.createElement("div");
       leftBox.className = "zs-setting-with-icon";
@@ -7292,6 +9831,7 @@
     ) {
       const row = document.createElement("div");
       row.className = "zs-row";
+      row.dataset.settingKey = prefKey;
 
       const leftBox = document.createElement("div");
       leftBox.className = "zs-setting-with-icon";
@@ -7379,6 +9919,7 @@
     ) {
       const row = document.createElement("div");
       row.className = "zs-row";
+      row.dataset.settingKey = prefKey;
       row.style.display = "flex";
       row.style.flexDirection = "column";
       row.style.alignItems = "stretch";
@@ -7426,6 +9967,18 @@
 
       const commitTextValue = () => {
         const val = input.value.trim();
+        if (
+          prefKey === ctx.BGALAZKA_EXT_PREFS.PANEL_BLACK_STEPS &&
+          !validPanelBackingSteps(val)
+        ) {
+          const message =
+            "Enter whole percentages from 0 to 100, separated by commas. The previous values remain saved.";
+          input.setCustomValidity(message);
+          input.setAttribute("aria-invalid", "true");
+          error.textContent = message;
+          error.hidden = false;
+          return false;
+        }
         if (
           ctx.SEARCH_CUSTOM_ENGINE_PREFS.includes(prefKey) &&
           val &&
@@ -7481,6 +10034,7 @@
     ) {
       const row = document.createElement("div");
       row.className = "zs-row";
+      row.dataset.settingKey = prefKey;
       row.style.display = "flex";
       row.style.flexDirection = "column";
       row.style.alignItems = "stretch";
@@ -7553,6 +10107,7 @@
     function createColorRow(labelText, sublabelText, prefKey, defaultVal) {
       const row = document.createElement("div");
       row.className = "zs-row";
+      row.dataset.settingKey = prefKey;
 
       const leftBox = document.createElement("div");
       leftBox.style.display = "flex";
@@ -8510,6 +11065,37 @@
         content.className = "zs-section-content";
         content.style.paddingTop = "14px";
         panel._toggles = [];
+        const blackOpacity = createSliderRow(
+          "Black backing opacity",
+          "0% removes the black backing; 100% makes it solid. Changes apply immediately.",
+          ctx.BGALAZKA_EXT_PREFS.PANEL_BLACK_OPACITY,
+          0,
+          100,
+          0,
+          "%",
+        );
+        const blackSteps = createTextRow(
+          "Pill backing cycle levels",
+          "Comma-separated whole percentages from 0 to 100. The pill button cycles through these values in ascending order.",
+          ctx.BGALAZKA_EXT_PREFS.PANEL_BLACK_STEPS,
+          "0,1,5,10,20,30,40,50,60,70,80,90,100",
+        );
+        blackSteps.input.value = ctx.getPref(
+          ctx.BGALAZKA_EXT_PREFS.PANEL_BLACK_STEPS,
+          "0,1,5,10,20,30,40,50,60,70,80,90,100",
+        );
+        content.append(blackOpacity.row, blackSteps.row);
+        panel._syncBacking = () => {
+          blackOpacity.input.value = ctx.getPref(
+            ctx.BGALAZKA_EXT_PREFS.PANEL_BLACK_OPACITY,
+            0,
+          );
+          blackOpacity.badge.textContent = blackOpacity.input.value + "%";
+          blackSteps.input.value = ctx.getPref(
+            ctx.BGALAZKA_EXT_PREFS.PANEL_BLACK_STEPS,
+            "0,1,5,10,20,30,40,50,60,70,80,90,100",
+          );
+        };
 
         // ====================================================================
         // 1. Panel Appearance & Translucency
@@ -10890,21 +13476,6 @@
             { value: "filled", label: "Filled" },
           ],
         );
-        addLookSlider(
-          "Video corners",
-          "0 px keeps the sidebar video square",
-          LOOK_PREFS.VIDEO_RADIUS,
-          0,
-          24,
-          " px",
-        );
-        const videoLookInput = lookControls.at(-1).input;
-        videoLookInput.addEventListener("input", () => {
-          const original = document.getElementById("zs-video-preview-radius");
-          if (!original) return;
-          original.value = videoLookInput.value;
-          original.dispatchEvent(new Event("input", { bubbles: true }));
-        });
         addLookHeading("Existing appearance");
         lookCategory.subContent.append(aestheticHeader, t1.row, slidersGroup);
         const pillLookGroup = document.createElement("div");
@@ -10986,7 +13557,25 @@
               '#zs-panel-bgalazka, .zs-extension-subpanel, #zs-tab-btn-bgalazka, [id^="zs-tab-btn-extension-"]',
             )
             .forEach((node) => node.remove());
-          if (wasActive) modal.querySelector(".zs-tab-btn")?.click();
+          for (const node of modal.querySelectorAll("[data-setting-key]")) {
+            const meta =
+              SETTINGS_ORGANIZATION.settings[node.dataset.settingKey];
+            if (meta && !["apps", "tab-groups"].includes(meta.owner))
+              node.remove();
+          }
+          for (const category of SETTINGS_ORGANIZATION.categories) {
+            if (
+              ["apps", "tab-groups", "video", "logger", "core"].includes(
+                category.owner,
+              )
+            )
+              continue;
+            modal.querySelector("#zs-panel-organized-" + category.id)?.remove();
+            modal
+              .querySelector("#zs-tab-btn-organized-" + category.id)
+              ?.remove();
+          }
+          if (wasActive) selectSettingsCategory(modal, "apps");
         });
       } else if (Array.isArray(panel._toggles)) {
         panel._toggles.forEach(({ input, pref, def, onSync, isSelect }) => {
@@ -11001,6 +13590,7 @@
         });
       }
 
+      panel._syncBacking?.();
       modal.querySelector("#zs-panel-extension-look")?._syncLook?.();
       applyLook();
       const extensionCategories = [
@@ -11061,7 +13651,7 @@
       const baseDiagnostics = modal.querySelector(
         '.zs-tab-btn[data-tab="diagnostics"]',
       );
-      if (baseSettings) baseSettings.textContent = "Settings";
+      if (baseSettings) baseSettings.textContent = "Apps & Launchers";
       if (baseDiagnostics) baseDiagnostics.textContent = "Diagnostics";
       const diagnosticPanel = modal.querySelector("#zs-panel-diagnostics");
       if (
@@ -11158,6 +13748,7 @@
           delete tabBar.dataset.bgalazkaCategoryGuard;
         });
       }
+      organizeNativeSettings(modal);
     }
   });
 
@@ -11203,10 +13794,11 @@
     if (r.state === "failed") return "FAILED — " + r.error.split("\n")[0];
     return r.state.toUpperCase();
   }
-  function openManager() {
+  function openManager(initialCategory = "", initialQuery = "") {
+    if (typeof initialCategory !== "string") initialCategory = "";
     if (manager?.isConnected) {
-      manager.hidden = false;
-      return;
+      manager.remove();
+      manager = null;
     }
     manager = element(
       "div",
@@ -11404,12 +13996,55 @@
       search.style.cssText =
         "box-sizing:border-box;width:100%;padding:9px;margin-bottom:10px";
       body.append(search);
+      const category = element("select");
+      category.setAttribute("aria-label", "Settings category");
+      category.style.cssText = "width:100%;padding:8px;margin-bottom:10px";
+      category.append(element("option", "All categories"));
+      category.firstElementChild.value = "";
+      for (const group of SETTINGS_ORGANIZATION.categories) {
+        if (
+          !SETTINGS_SCHEMA.some(
+            (item) =>
+              item.property &&
+              settingsMetadata(item).category === group.id &&
+              settingsItemAvailable(item),
+          )
+        )
+          continue;
+        const option = element("option", group.group + " · " + group.label);
+        option.value = group.id;
+        category.append(option);
+      }
+      category.value = initialCategory;
+      search.value = initialQuery;
       const list = element("div");
-      body.append(list);
+      body.append(category, list);
       function render() {
         list.replaceChildren();
         const query = search.value.toLowerCase();
-        for (const item of SETTINGS_SCHEMA) {
+        if (category.value === "addons")
+          list.append(button("Edit local add-on registrations", addons));
+        let lastSection = "";
+        const sorted = [...SETTINGS_SCHEMA]
+          .filter((item) => item.property && settingsItemAvailable(item))
+          .sort((a, b) => {
+            const ids = SETTINGS_ORGANIZATION.categories.map(
+              (category) => category.id,
+            );
+            return (
+              ids.indexOf(settingsMetadata(a).category) -
+              ids.indexOf(settingsMetadata(b).category)
+            );
+          });
+        for (const item of sorted) {
+          const meta = settingsMetadata(item);
+          if (category.value && meta.category !== category.value) continue;
+          // File switches use the protected module manager, not raw editors.
+          if (
+            meta.category === "modules" ||
+            item.property === "zen.workspace.zentral.addons"
+          )
+            continue;
           if (!item.property) {
             if (!query && item.type === "text")
               list.append(
@@ -11421,12 +14056,22 @@
               );
             continue;
           }
-          if (item.property.startsWith(PREF)) continue;
+
           if (
             query &&
             !`${item.label} ${item.property}`.toLowerCase().includes(query)
           )
             continue;
+          const heading =
+            SETTINGS_ORGANIZATION.categories.find(
+              (category) => category.id === meta.category,
+            )?.label +
+            " · " +
+            meta.section;
+          if (lastSection !== heading) {
+            list.append(element("h3", heading));
+            lastSection = heading;
+          }
           const row = element(
             "label",
             null,
@@ -11497,6 +14142,10 @@
         }
       }
       search.addEventListener("input", render);
+      category.addEventListener("change", () => {
+        if (category.value === "modules") developer();
+        else render();
+      });
       render();
     }
     function addons() {
@@ -11542,7 +14191,9 @@
     );
     manager.append(nav, body);
     document.documentElement.append(manager);
-    developer();
+    if (initialCategory === "modules") developer();
+    else if (initialCategory || initialQuery) preferences();
+    else developer();
   }
   // Attach a route to the independent manager even when an optional settings tab fails.
   const originalOpen = Settings.open.bind(Settings);
@@ -11555,6 +14206,7 @@
       b.style.margin = "8px";
       (modal.querySelector(".zs-tab-bar") || modal).prepend(b);
     }
+    if (modal) organizeNativeSettings(modal);
     return result;
   };
   const onKey = (e) => {

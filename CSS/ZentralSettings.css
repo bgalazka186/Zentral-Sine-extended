@@ -430,3 +430,178 @@
   min-width: 0 !important;
   box-sizing: border-box !important;
 }
+
+/* Category navigation stays scrollable instead of wrapping dozens of tabs. */
+#zentral-settings-modal .zs-dialog[data-settings-organized="true"] {
+  display: grid !important;
+  grid-template-columns: minmax(160px, 210px) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+#zentral-settings-modal .zs-dialog[data-settings-organized="true"] > .zs-header,
+#zentral-settings-modal
+  .zs-dialog[data-settings-organized="true"]
+  > .zs-footer {
+  grid-column: 1 / -1;
+}
+#zentral-settings-modal
+  .zs-dialog[data-settings-organized="true"]
+  > .zs-tab-bar {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch;
+  gap: 3px !important;
+  min-height: 0;
+  overflow-y: auto !important;
+  padding: 12px !important;
+  border-right: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-bottom: none !important;
+}
+#zentral-settings-modal .zs-dialog[data-settings-organized="true"] > .zs-body {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  padding: 16px !important;
+}
+#zentral-settings-modal .zs-dialog[data-settings-organized="true"] .zs-tab-btn {
+  white-space: normal !important;
+  text-align: left;
+  padding: 8px 10px !important;
+  line-height: 1.3;
+  border-radius: 6px !important;
+}
+#zentral-settings-modal
+  .zs-dialog[data-settings-organized="true"]
+  .zs-tab-btn[data-active="true"] {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 20%,
+    transparent
+  ) !important;
+}
+#zentral-settings-modal
+  .zs-dialog[data-settings-organized="true"]
+  .zs-tab-btn::after {
+  display: none;
+}
+#zentral-settings-modal
+  .zs-dialog[data-settings-organized="true"]
+  .zs-category-heading {
+  flex: 0 0 auto !important;
+  margin-top: 14px;
+  padding: 4px 10px;
+}
+#zentral-settings-modal .zs-organized-panel > .zs-organized-content {
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+#zentral-settings-modal .zs-organized-content > .zs-col {
+  width: 100%;
+  border: none !important;
+  padding: 0 !important;
+}
+#zentral-settings-modal .zs-category-segment > h4 {
+  font-size: 13px;
+  margin: 18px 0 8px;
+  opacity: 0.8;
+}
+#zentral-settings-modal .zs-category-all-settings {
+  flex: 0 0 auto;
+  padding: 9px;
+  margin-top: 12px;
+  cursor: pointer;
+}
+#zentral-settings-modal #zs-settings-search {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px;
+  flex: 0 0 auto;
+}
+#zentral-settings-modal #zs-settings-search-results {
+  flex: 0 0 auto;
+  max-height: 45%;
+  overflow-y: auto;
+  font-size: 12px;
+}
+#zentral-settings-modal #zs-settings-search-results button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px;
+  white-space: normal;
+  cursor: pointer;
+}
+#zentral-settings-modal .zs-tab-btn[hidden],
+#zentral-settings-modal [data-settings-owner][hidden],
+#zentral-settings-modal #zs-settings-search-results[hidden] {
+  display: none !important;
+}
+
+/* Inner groups grow naturally inside the category's sole content scroller. */
+#zentral-settings-modal .zs-organized-content > *,
+#zentral-settings-modal .zs-organized-content .zs-category-segment,
+#zentral-settings-modal .zs-organized-content .zvp-settings-group {
+  flex-shrink: 0;
+}
+#zentral-settings-modal .zs-organized-content > .zs-col {
+  height: auto !important;
+  flex: 0 0 auto !important;
+  overflow: visible !important;
+}
+#zentral-settings-modal .zs-organized-content > .zs-col > .zs-section-content {
+  overflow: visible !important;
+  height: auto !important;
+  flex: 0 0 auto !important;
+}
+#zentral-settings-modal .zs-organized-content {
+  padding-bottom: 32px;
+  overscroll-behavior: contain;
+}
+
+#zentral-settings-modal .zs-organized-content {
+  display: block !important;
+}
+#zentral-settings-modal .zs-organized-content .zs-row {
+  min-width: 0;
+  box-sizing: border-box;
+}
+#zentral-settings-modal .zs-organized-content .zs-label-container {
+  min-width: 0;
+}
+#zentral-settings-modal .zs-organized-content .zs-keybind-input {
+  width: 160px;
+  max-width: 48%;
+  padding: 8px;
+  color: inherit;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 6px;
+}
+
+/* The matrix moved from a narrow column to a full-width category. Its old
+ * 420px clipped box cannot contain six rows of full-width square cells. */
+#zentral-settings-modal
+  .zs-organized-content
+  .zs-matrix-wrapper:not([data-hidden="true"]) {
+  max-height: none !important;
+  overflow: visible !important;
+}
+#zentral-settings-modal .zs-organized-content .zs-matrix-grid {
+  width: min(100%, 480px) !important;
+  max-width: 100% !important;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  grid-template-rows: repeat(6, auto);
+}
+#zentral-settings-modal .zs-organized-content .zs-matrix-header,
+#zentral-settings-modal .zs-organized-content .zs-matrix-readout {
+  flex-wrap: wrap;
+}
+#zentral-settings-modal .zs-organized-content .zs-matrix-readout,
+#zentral-settings-modal .zs-organized-content .zs-matrix-badge {
+  color: var(--zl-text, #e4e4e7) !important;
+}

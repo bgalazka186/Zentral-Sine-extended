@@ -841,7 +841,9 @@
         // SECTION 3: Video settings and opt-in diagnostic controls.
         function ensureVideoTestControls(content) {
           content =
-            content.querySelector("#zs-video-preview-advanced") || content;
+            document.getElementById("zs-video-preview-advanced") ||
+            content.querySelector("#zs-video-preview-advanced") ||
+            content;
           if (content.querySelector("#zs-video-preview-test-all")) return;
           const testButton = document.createElement("button");
           testButton.id = "zs-video-preview-test-all";
@@ -907,6 +909,106 @@
             button: modal.querySelector("#zs-tab-btn-video-cloning"),
             content,
           };
+        }
+
+        function organizeVideoSettings(
+          modal,
+          originalContent,
+          category,
+          originalPanel,
+        ) {
+          if (
+            !ZentralRuntime?.ensureSettingsCategory ||
+            originalPanel.dataset.videoOrganized === "true"
+          )
+            return;
+          const own = (id) => ZentralRuntime.ensureSettingsCategory(modal, id);
+          const playback = own("video-playback");
+          const appearance = own("video-appearance");
+          const keys = {
+            width: WIDTH_PREF,
+            height: HEIGHT_PREF,
+            radius: RADIUS_PREF,
+            framing: FRAMING_PREF,
+            renderer: RENDER_PREF,
+            discovery: DISCOVERY_PREF,
+            "capture-width": CAPTURE_WIDTH_PREF,
+            "capture-rate": CAPTURE_RATE_PREF,
+            "pause-compact": PAUSE_COMPACT_PREF,
+            "disable-experimental": EXPERIMENTAL_DISABLED_PREF,
+          };
+          for (const [id, pref] of Object.entries(keys)) {
+            const control = modal.querySelector("#zs-video-preview-" + id);
+            const row = control?.closest(".zs-row, label");
+            if (row) row.dataset.settingKey = pref;
+          }
+          // Playback/source/capture/testing sections are built here and removed
+          // as one module. Shared style prefs remain in their existing namespace.
+          for (const section of [
+            ...modal.querySelectorAll("[data-video-settings]"),
+          ]) {
+            const target = own(section.dataset.settingsCategory).content;
+            if (section.parentElement !== target) target.appendChild(section);
+          }
+          const enable = modal.querySelector("#zs-video-preview-row");
+          if (enable && enable.parentElement !== playback.content)
+            playback.content.prepend(enable);
+          const appearanceIds = [
+            "fit-width",
+            "hide-button",
+            "auto-height-button",
+            "pin-button",
+            "compact-button",
+          ];
+          for (const id of appearanceIds) {
+            const row = modal
+              .querySelector("#zs-video-preview-" + id)
+              ?.closest(".zs-row");
+            if (row && row.parentElement !== appearance.content)
+              appearance.content.appendChild(row);
+          }
+          for (const id of ["width", "height", "radius"]) {
+            const control = modal.querySelector("#zs-video-preview-" + id);
+            const row = control?.closest(".zs-row");
+            if (row && row.parentElement !== appearance.content)
+              appearance.content.appendChild(row);
+          }
+          for (const row of [...modal.querySelectorAll("[data-setting-key]")]) {
+            if (
+              !row.dataset.settingKey.startsWith(
+                "zen.workspace.zentral.video_preview.",
+              )
+            )
+              continue;
+            if (
+              !row.querySelector('[id^="zs-video-preview-"]') &&
+              row.id !== "zs-video-preview-row"
+            )
+              continue;
+            const meta = ZentralRuntime.settingsMetadata({
+              property: row.dataset.settingKey,
+            });
+            row.dataset.videoSettings = "row";
+            row.dataset.settingsOwner = "video";
+            const target = own(meta.category).content;
+            if (!target.contains(row)) target.appendChild(row);
+          }
+          const resetHeight = modal.querySelector(
+            "#zs-video-preview-reset-height",
+          );
+          if (resetHeight && resetHeight.parentElement !== appearance.content)
+            appearance.content.appendChild(resetHeight);
+          const experiments = own("video-experiments");
+          const switchRow = modal
+            .querySelector("#zs-video-preview-disable-experimental")
+            ?.closest(".zs-row");
+          if (switchRow && switchRow.parentElement !== experiments.content)
+            experiments.content.prepend(switchRow);
+          category.hidden = true;
+          category.setAttribute("data-active", "false");
+          originalPanel.setAttribute("data-active", "false");
+          originalPanel.dataset.videoOrganized = "true";
+          ZentralRuntime.organizeSettings?.(modal);
         }
 
         function injectSetting() {
@@ -985,6 +1087,7 @@
             const row = document.createElement("div");
             row.id = "zs-video-preview-row";
             row.className = "zs-row";
+            row.dataset.settingKey = PREF;
             const labels = document.createElement("div");
             labels.className = "zs-label-container";
             const title = document.createElement("span");
@@ -1015,6 +1118,7 @@
             ) => {
               const row = document.createElement("label");
               row.className = "zs-row";
+              row.dataset.settingKey = preference;
               row.style.cssText =
                 "display:flex;align-items:center;justify-content:space-between;gap:12px";
               const text = document.createElement("span");
@@ -1393,6 +1497,7 @@
             );
             height.value.textContent = heightPx ? heightPx + " px" : "Auto";
             const resetHeight = document.createElement("button");
+            resetHeight.id = "zs-video-preview-reset-height";
             resetHeight.type = "button";
             resetHeight.className = "zs-btn-save";
             resetHeight.textContent = "Auto height (video ratio)";
@@ -1620,6 +1725,13 @@
               const summary = document.createElement("p");
               summary.textContent = description;
               section.append(heading, summary, ...nodes.filter(Boolean));
+              section.dataset.videoSettings = "true";
+              section.dataset.settingsCategory =
+                title === "Playback & layout"
+                  ? "video-playback"
+                  : title === "Still capture"
+                    ? "video-performance"
+                    : "video-sources";
               content.appendChild(section);
             };
             group("Playback & layout", "Sidebar controls and appearance.", [
@@ -1650,6 +1762,8 @@
             );
             const performance = document.createElement("section");
             performance.id = "zs-video-preview-performance";
+            performance.dataset.videoSettings = "true";
+            performance.dataset.settingsCategory = "video-performance";
             performance.className = "zvp-settings-group";
             const performanceTitle = document.createElement("h4");
             performanceTitle.textContent = "Power & responsiveness";
@@ -1667,6 +1781,7 @@
             ) => {
               const row = document.createElement("label");
               row.textContent = label + " ";
+              row.dataset.settingKey = pref;
               const select = document.createElement("select");
               select.id = "zs-video-preview-" + id;
               for (const [value, text] of values) {
@@ -1755,6 +1870,8 @@
             content.appendChild(experimentalRow);
             const advanced = document.createElement("section");
             advanced.id = "zs-video-preview-advanced";
+            advanced.dataset.videoSettings = "true";
+            advanced.dataset.settingsCategory = "video-experiments";
             advanced.className = "zvp-settings-group";
             const advancedTitle = document.createElement("h4");
             advancedTitle.textContent = "Experimental options & tests";
@@ -1817,6 +1934,7 @@
               if (content.querySelector("#" + id))
                 advanced.appendChild(content.querySelector("#" + id));
           }
+          organizeVideoSettings(modal, content, category, panel);
           const advanced = modal.querySelector("#zs-video-preview-advanced");
           if (advanced) {
             advanced.hidden = experimentalBridgeDisabled();
@@ -6744,6 +6862,16 @@
           );
           category?.remove();
           document.getElementById("zs-panel-video-cloning")?.remove();
+          for (const id of [
+            "video-playback",
+            "video-sources",
+            "video-appearance",
+            "video-performance",
+            "video-experiments",
+          ]) {
+            document.getElementById("zs-panel-organized-" + id)?.remove();
+            document.getElementById("zs-tab-btn-organized-" + id)?.remove();
+          }
           document.getElementById("zs-tab-btn-extension-video-dev")?.remove();
           document.getElementById("zs-panel-extension-video-dev")?.remove();
           delete window.ZentralVideoPreview;
@@ -6817,7 +6945,209 @@
       return () => window.ZentralVideoPreview?.destroy?.();
     };
     if (window.ZentralRuntime)
-      ZentralRuntime.register({ id: "video", init: start });
+      ZentralRuntime.register({
+        id: "video",
+        settings: [
+          {
+            property: "zen.workspace.zentral.video_preview.selected_mode_only",
+            label:
+              "Use only the selected method (disable fallback; ignored for Automatic)",
+            type: "checkbox",
+            defaultValue: false,
+          },
+          {
+            property: "zen.workspace.zentral.video_preview.keep_source_visible",
+            label:
+              "Keep video on its page while visible (defer native cloning)",
+            type: "checkbox",
+            defaultValue: true,
+          },
+          {
+            property:
+              "zen.workspace.zentral.video_preview.pinned_discovery_only",
+            label:
+              "Limit periodic discovery to a valid pinned source (Refresh finds others)",
+            type: "checkbox",
+            defaultValue: true,
+          },
+          {
+            property: "zen.workspace.zentral.video_preview.scan_interval_ms",
+            label:
+              "Source discovery interval (slower = less polling; events can still scan)",
+            type: "dropdown",
+            defaultValue: 5000,
+            options: [
+              {
+                label: "5 s \u00b7 default",
+                value: 5000,
+              },
+              {
+                label: "15 s",
+                value: 15000,
+              },
+              {
+                label: "30 s",
+                value: 30000,
+              },
+              {
+                label: "60 s \u00b7 lazy",
+                value: 60000,
+              },
+              {
+                label: "2 min \u00b7 very lazy",
+                value: 120000,
+              },
+              {
+                label: "Events and manual refresh only",
+                value: 0,
+              },
+            ],
+          },
+          {
+            property: "zen.workspace.zentral.video_preview.caption_poll_ms",
+            label:
+              "Caption recovery interval (slower = delayed recovery from missed events)",
+            type: "dropdown",
+            defaultValue: 750,
+            options: [
+              {
+                label: "250 ms",
+                value: 250,
+              },
+              {
+                label: "500 ms",
+                value: 500,
+              },
+              {
+                label: "750 ms",
+                value: 750,
+              },
+              {
+                label: "1500 ms",
+                value: 1500,
+              },
+              {
+                label: "3000 ms",
+                value: 3000,
+              },
+            ],
+          },
+          {
+            property:
+              "zen.workspace.zentral.video_preview.canvas_stream_width_px",
+            label:
+              "Canvas stream width (smaller = less detail and drawing work)",
+            type: "dropdown",
+            defaultValue: 640,
+            options: [
+              {
+                label: "160 px",
+                value: 160,
+              },
+              {
+                label: "240 px",
+                value: 240,
+              },
+              {
+                label: "320 px",
+                value: 320,
+              },
+              {
+                label: "480 px",
+                value: 480,
+              },
+              {
+                label: "640 px",
+                value: 640,
+              },
+            ],
+          },
+          {
+            property: "zen.workspace.zentral.video_preview.canvas_stream_fps",
+            label:
+              "Canvas stream FPS (lower = less smooth video and drawing work)",
+            type: "dropdown",
+            defaultValue: 30,
+            options: [
+              {
+                label: "5 FPS",
+                value: 5,
+              },
+              {
+                label: "10 FPS",
+                value: 10,
+              },
+              {
+                label: "15 FPS",
+                value: 15,
+              },
+              {
+                label: "24 FPS",
+                value: 24,
+              },
+              {
+                label: "30 FPS",
+                value: 30,
+              },
+            ],
+          },
+          {
+            property:
+              "zen.workspace.zentral.video_preview.suspend_hidden_preview",
+            label:
+              "Suspend receivers while hidden/minimized (brief restart on reveal)",
+            type: "checkbox",
+            defaultValue: true,
+          },
+          {
+            property:
+              "zen.workspace.zentral.video_preview.light_frame_monitoring",
+            label:
+              "Sample frame telemetry every 2 seconds (full telemetry in tests)",
+            type: "checkbox",
+            defaultValue: true,
+          },
+          {
+            property: "zen.workspace.zentral.video_preview.slow_health_checks",
+            label:
+              "Slow steady-state health checks (10\u201315 second failure detection)",
+            type: "checkbox",
+            defaultValue: true,
+          },
+          {
+            property:
+              "zen.workspace.zentral.video_preview.slow_caption_recovery",
+            label:
+              "Use caption events with 3 second recovery polling (missed cues recover later)",
+            type: "checkbox",
+            defaultValue: true,
+          },
+          {
+            property:
+              "zen.workspace.zentral.video_preview.renderer_retry_backoff",
+            label: "Back off repeated renderer failures up to 5 minutes",
+            type: "checkbox",
+            defaultValue: true,
+          },
+          {
+            property:
+              "zen.workspace.zentral.video_preview.suspend_when_source_visible",
+            label:
+              "Suspend sidebar video while original is visible (instead of stream fallback)",
+            type: "checkbox",
+            defaultValue: false,
+          },
+          {
+            property:
+              "zen.workspace.zentral.video_preview.experimental_legacy_capture",
+            label:
+              "Allow legacy stream capture (requires experiments; may affect source audio)",
+            type: "checkbox",
+            defaultValue: false,
+          },
+        ],
+        init: start,
+      });
     else standaloneReady(start);
   })();
 })();

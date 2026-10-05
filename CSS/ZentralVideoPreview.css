@@ -278,7 +278,7 @@
   z-index: 1 !important;
 }
 
-#zs-panel-video-cloning .zvp-settings-group {
+#zentral-settings-modal [data-settings-owner="video"] .zvp-settings-group {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -287,11 +287,11 @@
   border-radius: 9px;
   min-width: 0;
 }
-#zs-panel-video-cloning .zvp-settings-group > h4 {
+#zentral-settings-modal [data-settings-owner="video"] .zvp-settings-group > h4 {
   margin: 0;
   font-size: 13px;
 }
-#zs-panel-video-cloning .zvp-settings-group > p {
+#zentral-settings-modal [data-settings-owner="video"] .zvp-settings-group > p {
   margin: 0 0 4px;
   font-size: 11px;
   opacity: 0.72;
