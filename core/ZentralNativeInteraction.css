@@ -1,0 +1,40 @@
+/*
+ * ZENTRAL FILE GUIDE - core/ZentralNativeInteraction.css
+ * Purpose: Disable page input while split views resize; keep native hidden tabs hidden.
+ * Loaded by: core/ZentralRuntime.js via core/ZentralCatalog.js at USER_SHEET origin.
+ * Activation: legacy zen.workspace.zentral.modules.css.Base.enabled switch; owners core (always available).
+ * Interactions: feature controllers apply the selectors/attributes below; this file owns presentation only.
+ * Cleanup: Runtime unregisters this sheet; do not change stylesheet origin or cascade order.
+ * Dependencies: Catalog defines order/owner gating.
+ * Collaborators: core/ZentralRuntime.js; core/ZentralCatalog.js
+ * DOM IDs: #tabbrowser-tabpanels; #tabbrowser-tabs
+ * Attributes: hidden; zen-split-resizing
+ */
+/* Split View Resizing & Splitter Drag Isolation */
+.zen-split-view-splitter {
+  user-select: none !important;
+  -moz-user-select: none !important;
+  -moz-user-drag: none !important;
+  -webkit-user-drag: none !important;
+}
+
+
+#tabbrowser-tabpanels[zen-split-resizing] browser,
+#tabbrowser-tabpanels[zen-split-resizing] .browserSidebarContainer,
+#tabbrowser-tabpanels[zen-split-resizing] iframe {
+  pointer-events: none !important;
+  user-select: none !important;
+  -moz-user-select: none !important;
+}
+
+
+#tabbrowser-tabs :is(tab, .tabbrowser-tab)[hidden] {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  visibility: hidden !important;
+}

@@ -1,0 +1,180 @@
+/*
+ * ZENTRAL FILE GUIDE - features/apps/styles/ZentralUtilityPlacement.css
+ * Purpose: Horizontal utility placement, reveal dimensions and permanent-hide policy.
+ * Loaded by: core/ZentralRuntime.js via core/ZentralCatalog.js at USER_SHEET origin.
+ * Activation: legacy zen.workspace.zentral.modules.css.Base.enabled switch; owners apps.
+ * Interactions: feature controllers apply the selectors/attributes below; this file owns presentation only.
+ * Cleanup: Runtime unregisters this sheet; do not change stylesheet origin or cascade order.
+ * Dependencies: Catalog defines order/owner gating.
+ * Collaborators: core/ZentralRuntime.js; core/ZentralCatalog.js; features/apps/ZentralApps.uc.js;
+ * features/apps/controllers/ZentralAppsLauncher.js; features/apps/controllers/ZentralAppsInteractions.js
+ * DOM IDs: #zen-apps-sidebar-grid; #zentral-apps-utility-section; #zentral-utility-autohide-btn
+ * Attributes: data-permanently-hidden; data-revealed; data-utility-revealed; zentral-app-panel-open;
+ * zentral-apps-hide-utility; zentral-apps-placement
+ */
+/* Horizontal Toolbar Mode Styling */
+.zen-apps-horizontal #zentral-apps-utility-section {
+  flex-direction: row !important;
+  align-items: center !important;
+  width: auto !important;
+  height: 100% !important;
+  margin: 0 0 0 2px !important;
+  grid-column: auto !important;
+  flex-shrink: 0 !important;
+}
+
+
+.zen-apps-horizontal #zentral-apps-utility-section .zentral-apps-utility-dots {
+  display: none !important;
+}
+
+
+.zen-apps-horizontal
+  #zentral-apps-utility-section
+  .zentral-apps-utility-dots-vertical {
+  display: flex !important;
+  order: 0 !important;
+}
+
+
+.zen-apps-horizontal
+  #zentral-apps-utility-section
+  .zentral-apps-utility-divider {
+  width: 1px !important;
+  height: 16px !important;
+  margin: 0 4px 0 2px !important;
+  background-color: color-mix(
+    in srgb,
+    currentColor 12%,
+    transparent
+  ) !important;
+  opacity: 0 !important;
+  transform: scaleY(0) !important;
+  transform-origin: center !important;
+  order: 1 !important;
+}
+
+
+.zen-apps-horizontal
+  #zentral-apps-utility-section
+  .zentral-apps-utility-content {
+  order: 2 !important;
+  flex-direction: row !important;
+  max-height: 100% !important;
+  max-width: 0 !important;
+  width: auto !important;
+  transform: translateX(-4px) !important;
+  transition:
+    max-width 0.24s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.12s ease,
+    transform 0.22s cubic-bezier(0.25, 1, 0.5, 1) !important;
+}
+
+
+.zen-apps-horizontal #zentral-apps-utility-section .zentral-apps-utility-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  padding: 0 !important;
+  width: auto !important;
+  gap: 4px !important;
+}
+
+
+.zen-apps-horizontal #zentral-apps-utility-section .zentral-utility-slot {
+  width: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+
+.zen-apps-horizontal
+  #zentral-apps-utility-section[data-utility-revealed="true"]
+  .zentral-apps-utility-dots-vertical {
+  display: none !important;
+}
+
+
+.zen-apps-horizontal
+  #zentral-apps-utility-section[data-utility-revealed="true"]
+  .zentral-apps-utility-divider {
+  opacity: 0.5 !important;
+  transform: scaleY(1) !important;
+}
+
+
+.zen-apps-horizontal
+  #zentral-apps-utility-section[data-utility-revealed="true"]
+  .zentral-apps-utility-content {
+  max-width: 36px !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transform: translateX(0) !important;
+}
+
+
+.zen-apps-horizontal #zentral-utility-autohide-btn {
+  display: none !important;
+}
+
+
+/* Hide Utility Section in Vertical Bar placement mode (VB uses its footer) */
+:root[zentral-apps-placement="vertical-bar"] #zentral-apps-utility-section {
+  display: none !important;
+}
+
+
+/* Permanently hide Utility Section when preference is enabled */
+:root[zentral-apps-hide-utility="true"] #zentral-apps-utility-section,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid
+  #zentral-apps-utility-section,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid:hover
+  #zentral-apps-utility-section,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid[data-revealed="true"]
+  #zentral-apps-utility-section,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid[zentral-app-panel-open="true"]
+  #zentral-apps-utility-section,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid
+  .zentral-apps-utility-content,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid:hover
+  .zentral-apps-utility-content,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid[data-revealed="true"]
+  .zentral-apps-utility-content,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid[zentral-app-panel-open="true"]
+  .zentral-apps-utility-content,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid
+  .zentral-utility-btn,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid
+  .zentral-apps-utility-dots,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid
+  .zentral-apps-utility-dots-vertical,
+:root[zentral-apps-hide-utility="true"]
+  #zen-apps-sidebar-grid
+  .zentral-apps-utility-divider,
+#zentral-apps-utility-section[data-permanently-hidden="true"],
+#zen-apps-sidebar-grid
+  #zentral-apps-utility-section[data-permanently-hidden="true"],
+#zen-apps-sidebar-grid:hover
+  #zentral-apps-utility-section[data-permanently-hidden="true"] {
+  display: none !important;
+  max-height: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}

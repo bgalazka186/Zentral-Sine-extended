@@ -1,0 +1,750 @@
+/*
+ * ZENTRAL FILE GUIDE - features/tabs/ZentralTabDensity.css
+ *
+ * Purpose: Native tab spacing/density/sizing presentation independent of Apps.
+ * Interaction / execution: Registered in original relative order at USER_SHEET origin by Runtime (Startup
+ *   owns its startup stylesheet); owner gating stays in Catalog.
+ * Ownership / failure: Selectors/attributes/CSS variables are the interface; do not change stylesheet
+ *   origin, regroup nonadjacent Base rules, or weaken closing/hidden input rules. Owner removes injected
+ *   styles or Runtime removes registered sheets at teardown.
+ * Direct source consumers: core/ZentralCatalog.js
+ * Local interface selectors (subset by prefix): #bgalazka-super-panel; #zen-app-panel-root;
+ *   #zen-app-panel-slider; .bgalazka-essential-tile; .bgalazka-panel-icon-host; .zen-app-tile;
+ *   .zentral-standard; .zentral-tab-title-wrapper
+ * Attribute selectors used: aria-hidden; bgalazka-addon-host; bgalazka-addon-host-fallback;
+ *   bgalazka-addon-host-folder; bgalazka-corner-tiles; bgalazka-density-essentials; bgalazka-density-icons;
+ *   bgalazka-density-newtab; bgalazka-density-urlbar; bgalazka-panel-black-switching;
+ *   bgalazka-rss-compact-headers; bgalazka-rss-live-folder; bgalazka-tabbar-compact; breakout-extend;
+ *   collapsed; hidden; pending; pinned; selected; style; zen-essential
+ *
+ * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
+ * contracts from this source, not a promise that every collaborator is enabled at runtime.
+ */
+/* Optional density for ordinary tab rows and folder headers. Let the row grow
+ * with the label's own font metrics: another mod may own font-size/line-height.
+ * These row rules exclude Essentials and the extension's 1px add-on host tabs.
+ * Independent icon, New Tab, URL bar and Essentials switches follow below. */
+:root[bgalazka-tabbar-compact="true"]
+  :is(tab, .tabbrowser-tab):not([zen-essential]):not([bgalazka-addon-host]):not(
+    [bgalazka-addon-host-fallback]
+  ):not([hidden]):not([aria-hidden="true"]):not(.zen-essentials-container *) {
+  /* Ordinary workspace tabs may live outside the #tabbrowser-tabs subtree.
+   * Keep the size variable local to each visible row, not on the tabstrip. */
+  --tab-min-height: var(--bgalazka-look-tabbar-row-height, 20px);
+  min-height: var(--bgalazka-look-tabbar-row-height, 20px) !important;
+  height: auto !important;
+  max-height: none !important;
+  margin-block: var(--bgalazka-look-tabbar-row-gap, 0px) !important;
+}
+:root[bgalazka-tabbar-compact="true"]
+  :is(tab, .tabbrowser-tab):not([zen-essential]):not([bgalazka-addon-host]):not(
+    [bgalazka-addon-host-fallback]
+  ):not([hidden]):not([aria-hidden="true"]):not(.zen-essentials-container *)
+  .tab-content {
+  min-height: var(--bgalazka-look-tabbar-row-height, 20px) !important;
+  height: auto !important;
+  max-height: none !important;
+  padding-block: 0 !important;
+  padding-inline: 6px !important;
+  align-items: center !important;
+  box-sizing: border-box !important;
+}
+/* Native Zen sizes ordinary rows through this inner stack. Changing only
+ * the tab and .tab-content leaves that stack at its usual 36px minimum. */
+:root[bgalazka-tabbar-compact="true"]
+  .tabbrowser-tab:not([pinned]):not([zen-essential]):not([hidden]):not(
+    [aria-hidden="true"]
+  ):not([bgalazka-addon-host]):not([bgalazka-addon-host-fallback]):not(
+    .zen-essentials-container *
+  )
+  > .tab-stack {
+  min-height: var(--bgalazka-look-tabbar-row-height, 20px) !important;
+  height: auto !important;
+  max-height: none !important;
+}
+:root[bgalazka-tabbar-compact="true"]
+  .tabbrowser-tab:not([pinned]):not([zen-essential]):not([hidden]):not(
+    [aria-hidden="true"]
+  ):not([bgalazka-addon-host]):not([bgalazka-addon-host-fallback]):not(
+    .zen-essentials-container *
+  )
+  > .tab-stack
+  > .tab-background {
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  margin-block: 0 !important;
+  align-self: stretch !important;
+}
+/* Reserve a distinct icon slot. The panel launcher owns its wider icon host. */
+:root[bgalazka-tabbar-compact="true"]
+  :is(tab, .tabbrowser-tab):not([pinned]):not([zen-essential]):not(
+    .zen-essentials-container *
+  )
+  .tab-icon-stack:not(.bgalazka-panel-icon-host) {
+  flex: 0 0 16px !important;
+  min-width: 16px !important;
+  margin-inline-end: var(--bgalazka-look-tabbar-icon-gap, 4px) !important;
+}
+:root[bgalazka-tabbar-compact="true"]
+  :is(tab, .tabbrowser-tab):not([pinned]):not([zen-essential]):not(
+    .zen-essentials-container *
+  )
+  .tab-icon-stack:not(.bgalazka-panel-icon-host)
+  .tab-icon-image {
+  max-width: 16px !important;
+  max-height: 16px !important;
+  object-fit: contain !important;
+}
+:root[bgalazka-tabbar-compact="true"]
+  :is(tab, .tabbrowser-tab):not([pinned]):not([zen-essential]):not(
+    .zen-essentials-container *
+  )
+  .tab-label-container {
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
+}
+:root[bgalazka-tabbar-compact="true"]
+  :is(tab, .tabbrowser-tab):not([pinned]):not([zen-essential]):not(
+    .zen-essentials-container *
+  )
+  .tab-label {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+/* Base Zentral fixes group cards at var(--tab-min-height). Override the card
+ * and its inner wrapper together so the title never spills onto the next row. */
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  :is(zen-folder:not([bgalazka-addon-host-folder="true"]), tab-group)
+  > .tab-group-label-container,
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  tab-group.zentral-standard
+  > .tab-group-label-container
+  .zentral-tab-title-wrapper {
+  min-height: var(--bgalazka-look-tabbar-row-height, 20px) !important;
+  height: auto !important;
+  max-height: none !important;
+  padding-block: 0 !important;
+  margin-block: var(--bgalazka-look-tabbar-row-gap, 0px) !important;
+  box-sizing: border-box !important;
+  align-items: center !important;
+}
+/* Zentral gives the outer group its own 2px margin, independently of its
+ * header; include that spacing in the user's row-gap setting too. */
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  :is(
+    tab-group.zentral-standard,
+    zen-folder:not([bgalazka-addon-host-folder="true"])
+  ) {
+  margin-block: var(--bgalazka-look-tabbar-row-gap, 0px) !important;
+}
+/* Collapsed children must beat the density rule's min-height and max-height.
+ * Otherwise hidden tabs still occupy their full rows, leaving an empty group
+ * outline above the selected tab. Keep that selected tab visible. */
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  :is(tab-group, zen-folder)[collapsed]
+  .tab-group-container
+  :is(tab, .tabbrowser-tab):not([selected]):not([pinned]:not([pending])) {
+  min-height: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  :is(tab-group, zen-folder)[collapsed]
+  .tab-group-container
+  :is(tab, .tabbrowser-tab):not([selected]):not([pinned]:not([pending]))
+  .tab-content {
+  min-height: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  padding-block: 0 !important;
+  overflow: hidden !important;
+}
+/* A nested folder is itself a flex row in its parent's tab container. Zen
+ * hides its contents when the parent collapses, but the folder's own header
+ * keeps a minimum height unless the entire child folder is collapsed too.
+ * Target only descendants of a collapsed parent; an expanded parent's child
+ * folder stays visible even when that child has its own collapsed state. */
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  :is(tab-group, zen-folder)[collapsed]
+  .tab-group-container
+  :is(tab-group, zen-folder):not([bgalazka-addon-host-folder="true"]):not(
+    :has(
+      .tabbrowser-tab[pinned]:is([selected], :not([pending])):not(
+          [aria-hidden="true"]
+        )
+    )
+  ) {
+  min-height: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  flex: 0 0 0px !important;
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+/* Keep the collapsed container's box as short as its surviving selected tab.
+ * Without this, a nested folder's own container can retain empty flex space. */
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  :is(
+    tab-group.zentral-standard,
+    zen-folder:not([bgalazka-addon-host-folder="true"])
+  )[collapsed]
+  > .tab-group-container {
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  flex: 0 0 auto !important;
+  row-gap: 0 !important;
+  padding-block: 0 !important;
+}
+:root[bgalazka-tabbar-compact="true"]
+  #tabbrowser-tabs
+  :is(zen-folder:not([bgalazka-addon-host-folder="true"]), tab-group)
+  > .tab-group-label-container
+  :is(.tab-group-label, .tab-label, .tab-group-label-text) {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+/* The separate RSS switch fixes its header at 24px. If both density switches
+ * are on, keep that 24px minimum but allow enlarged titles to grow. */
+:root[bgalazka-tabbar-compact="true"][bgalazka-rss-compact-headers]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-rss-live-folder="true"]
+  > .tab-group-label-container {
+  min-height: var(--bgalazka-look-tabbar-row-height, 20px) !important;
+  height: auto !important;
+  max-height: none !important;
+  padding-block: 0 !important;
+  margin-block: var(--bgalazka-look-tabbar-row-gap, 0px) !important;
+}
+
+/* Clicking Zen's space indicator collapses pinned items by writing a zero
+ * inline height and aria-hidden to unloaded tabs. The compact row rules must
+ * honor that native state, including pinned tabs inside nested folders. */
+:root[bgalazka-tabbar-compact="true"]
+  :is(
+    #tabbrowser-tabs .zen-workspace-pinned-tabs-section,
+    .zen-workspace-pinned-tabs-section
+  )
+  .tabbrowser-tab[pinned]:is([aria-hidden="true"], [style*="height: 0px"]) {
+  min-height: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  flex: 0 0 0px !important;
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+/* Zen also zeroes folder headers when the space indicator is collapsed. Our
+ * ordinary folder-header minimum would revive an invisible blank row. Keep
+ * a folder's body available when it still contains a visible loaded site. */
+:root[bgalazka-tabbar-compact="true"]
+  :is(
+    #tabbrowser-tabs .zen-workspace-pinned-tabs-section,
+    .zen-workspace-pinned-tabs-section
+  )
+  :is(zen-folder, tab-group)
+  > .tab-group-label-container[style*="height: 0"] {
+  min-height: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+/* An empty folder (or one holding only unloaded, hidden tabs) should not
+ * retain its own box after Zen has hidden its header. Loaded visible tabs in
+ * the same folder remain laid out and clickable. */
+:root[bgalazka-tabbar-compact="true"]
+  :is(
+    #tabbrowser-tabs .zen-workspace-pinned-tabs-section,
+    .zen-workspace-pinned-tabs-section
+  )
+  :is(zen-folder, tab-group):not([bgalazka-addon-host-folder="true"]):has(
+    > .tab-group-label-container[style*="height: 0"]
+  ):not(
+    :has(
+      .tabbrowser-tab[pinned]:is([selected], :not([pending])):not(
+          [aria-hidden="true"]
+        ):not([style*="height: 0"])
+    )
+  ) {
+  min-height: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  flex: 0 0 0px !important;
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+
+/* During a quick background toggle, suppress the normal translucency fades.
+   Without this the toolbar click itself can focus the panel and start a 220ms
+   :focus-within opacity transition immediately before the black override. */
+:root[bgalazka-panel-black-switching="true"]
+  #zen-app-panel-root
+  #zen-app-panel-slider,
+:root[bgalazka-panel-black-switching="true"] #bgalazka-super-panel {
+  transition: none !important;
+}
+
+/* Independent density switches. Sizes match the 16px ordinary favicon slot;
+ * restrict selectors to browser chrome so page content and popups keep theirs. */
+:root[bgalazka-density-icons="true"] #navigator-toolbox {
+  --toolbarbutton-inner-padding: 3px;
+}
+:root[bgalazka-density-icons="true"]
+  :is(#navigator-toolbox, #zen-sidebar-bottom-buttons)
+  .toolbarbutton-icon,
+:root[bgalazka-density-icons="true"]
+  :is(#zen-workspaces-button, .zen-workspace-button)
+  :is(image, img, svg),
+:root[bgalazka-density-icons="true"]
+  #tabbrowser-tabs
+  .tab-group-label-container
+  :is(.tab-group-icon, .tab-group-icon-container, .tab-group-label-icon),
+:root[bgalazka-density-icons="true"]
+  :is(
+    #zen-essentials-container,
+    .zen-essentials-container,
+    .tabbrowser-tab[zen-essential="true"]
+  )
+  .tab-icon-image {
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  max-width: 16px !important;
+  max-height: 16px !important;
+  padding: 0 !important;
+  object-fit: contain !important;
+  flex-shrink: 0 !important;
+}
+:root[bgalazka-density-icons="true"]
+  #tabbrowser-tabs
+  .tab-group-label-container
+  :is(.tab-group-label-icon, .tab-group-icon-container) {
+  margin-block: 0 !important;
+  margin-inline: 0 !important;
+}
+:root[bgalazka-density-icons="true"]
+  #tabbrowser-tabs
+  .tab-group-label-container {
+  padding-block: 0 !important;
+  column-gap: var(--bgalazka-look-tabbar-icon-gap, 4px) !important;
+}
+:root[bgalazka-density-icons="true"]
+  :is(#navigator-toolbox, #zen-sidebar-bottom-buttons)
+  .toolbarbutton-badge-stack {
+  padding: 3px !important;
+}
+
+/* New Tab uses an explicit row height, including its clickable container. */
+:root[bgalazka-density-newtab="true"]
+  :is(
+    #tabs-newtab-button,
+    #new-tab-button,
+    .tabs-newtab-button,
+    #zen-tabs-newtab-button,
+    .zen-workspace-newtab-button
+  ) {
+  --tab-min-height: var(--bgalazka-look-newtab-height, 20px);
+  min-height: max(var(--bgalazka-look-newtab-height, 20px), 1lh) !important;
+  height: max(var(--bgalazka-look-newtab-height, 20px), 1lh) !important;
+  max-height: max(var(--bgalazka-look-newtab-height, 20px), 1lh) !important;
+  flex-grow: 0 !important;
+  box-sizing: border-box !important;
+  padding-block: 0 !important;
+  padding-inline: 6px !important;
+  margin-block: var(--bgalazka-look-tabbar-row-gap, 0px) !important;
+  --toolbarbutton-inner-padding: 0px;
+  --toolbarbutton-outer-padding: 0px;
+}
+:root[bgalazka-density-newtab="true"]
+  :is(
+    #tabs-newtab-button,
+    #new-tab-button,
+    .tabs-newtab-button,
+    #zen-tabs-newtab-button,
+    .zen-workspace-newtab-button
+  )
+  .toolbarbutton-icon {
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  padding: 0 !important;
+  margin-block: 0 !important;
+}
+:root[bgalazka-density-newtab="true"]
+  :is(
+    #tabs-newtab-button,
+    #new-tab-button,
+    .tabs-newtab-button,
+    #zen-tabs-newtab-button,
+    .zen-workspace-newtab-button
+  )
+  .toolbarbutton-text {
+  padding-block: 0 !important;
+  margin-block: 0 !important;
+  margin-inline-start: var(--bgalazka-look-tabbar-icon-gap, 4px) !important;
+}
+
+/* Only the idle URL bar: its text sets the line box. Do not constrain the
+ * expanded editor, suggestions or identity/security popups. */
+:root[bgalazka-density-urlbar="true"]
+  #urlbar-container:not(:has(#urlbar[breakout-extend])) {
+  --urlbar-container-height: max(22px, calc(1.4em + 4px));
+  --urlbar-height: max(22px, calc(1.4em + 4px));
+  min-height: var(--urlbar-container-height) !important;
+  height: var(--urlbar-container-height) !important;
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+}
+:root[bgalazka-density-urlbar="true"] #urlbar:not([breakout-extend]) {
+  min-height: max(22px, calc(1.4em + 4px)) !important;
+  height: max(22px, calc(1.4em + 4px)) !important;
+  margin-block: 0 !important;
+  --urlbar-icon-padding: 2px;
+}
+:root[bgalazka-density-urlbar="true"]
+  #urlbar:not([breakout-extend])
+  :is(.urlbar-input-container, #urlbar-input-container) {
+  min-height: 0 !important;
+  height: 100% !important;
+  padding-block: 2px !important;
+  box-sizing: border-box !important;
+}
+:root[bgalazka-density-urlbar="true"]
+  #urlbar:not([breakout-extend])
+  :is(.urlbar-icon, #identity-icon) {
+  width: 16px !important;
+  height: 16px !important;
+  padding: 0 !important;
+  margin-block: 0 !important;
+}
+
+/* Let the Essentials grid measure its own rows. Zen watches the section's
+ * border box to place the workspace strip below it; forced host heights and
+ * overflow break that measurement and leave a dead area over the tiles. */
+:root[bgalazka-density-essentials="true"] #zen-essentials {
+  --tab-min-height: var(--bgalazka-look-essentials-height, 32px);
+  min-height: 0 !important;
+  height: auto !important;
+  flex: 0 0 auto !important;
+}
+:root[bgalazka-density-essentials="true"]
+  #zen-essentials
+  > .zen-essentials-container:not([hidden]) {
+  --tab-min-height: var(--bgalazka-look-essentials-height, 32px);
+  min-height: 0 !important;
+  height: auto !important;
+  flex: 0 0 auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  grid-auto-rows: var(--bgalazka-look-essentials-height, 32px) !important;
+  align-content: start !important;
+  padding-block: 0 !important;
+  margin-block: 0 !important;
+}
+:root[bgalazka-density-essentials="true"]
+  #zen-essentials
+  > .zen-essentials-container:not([hidden])
+  > .tabbrowser-tab[zen-essential]:not([hidden]):not([aria-hidden="true"]):not(
+    [style*="height: 0"]
+  ):not([bgalazka-addon-host]):not([bgalazka-addon-host-fallback]) {
+  --tab-min-height: var(--bgalazka-look-essentials-height, 32px);
+  min-height: var(--bgalazka-look-essentials-height, 32px) !important;
+  height: var(--bgalazka-look-essentials-height, 32px) !important;
+  max-height: var(--bgalazka-look-essentials-height, 32px) !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+  box-sizing: border-box !important;
+  -moz-window-dragging: no-drag !important;
+  position: relative !important;
+  --bgalazka-essential-launcher-size: clamp(
+    12px,
+    calc(var(--bgalazka-look-essentials-height, 32px) * 0.45),
+    22px
+  );
+}
+:root[bgalazka-density-essentials="true"]
+  #zen-essentials
+  > .zen-essentials-container:not([hidden])
+  > .tabbrowser-tab[zen-essential]:not([hidden]):not([aria-hidden="true"]):not(
+    [style*="height: 0"]
+  )
+  > .tab-stack,
+:root[bgalazka-density-essentials="true"]
+  #zen-essentials
+  > .zen-essentials-container:not([hidden])
+  > .tabbrowser-tab[zen-essential]:not([hidden]):not([aria-hidden="true"]):not(
+    [style*="height: 0"]
+  )
+  > .tab-stack
+  > :is(.tab-content, .tab-background) {
+  min-height: var(--bgalazka-look-essentials-height, 32px) !important;
+  height: var(--bgalazka-look-essentials-height, 32px) !important;
+  max-height: var(--bgalazka-look-essentials-height, 32px) !important;
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+  box-sizing: border-box !important;
+}
+:root[bgalazka-density-essentials="true"]
+  #zen-essentials
+  > .zen-essentials-container:not([hidden])
+  > .tabbrowser-tab[zen-essential]:not([hidden]):not([aria-hidden="true"])
+  > .tab-stack {
+  align-self: stretch !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+:root[bgalazka-density-essentials="true"]
+  #zen-essentials
+  > .zen-essentials-container:not([hidden])
+  > .tabbrowser-tab[zen-essential]:not([hidden]):not([aria-hidden="true"])
+  > .tab-stack
+  > .tab-content {
+  -moz-window-dragging: no-drag !important;
+}
+
+/* The pinned/normal boundary has its own margins in Zen. Tighten those
+ * independently of individual rows; keep the separator's Clear action. */
+:root[bgalazka-tabbar-compact="true"] .zen-workspace-pinned-tabs-section {
+  margin-block-end: 0 !important;
+  padding-block-end: 0 !important;
+}
+:root[bgalazka-tabbar-compact="true"] .zen-workspace-normal-tabs-section {
+  margin-block-start: 0 !important;
+  padding-block-start: 0 !important;
+}
+:root[bgalazka-tabbar-compact="true"]
+  :is(
+    .pinned-tabs-container-separator,
+    .vertical-pinned-tabs-container-separator,
+    #vertical-pinned-tabs-container-separator
+  ) {
+  /* Reserve the same space before and during hover. The Clear action must
+   * not contribute its intrinsic height to the pinned/normal boundary. */
+  position: relative !important;
+  box-sizing: border-box !important;
+  min-height: 16px !important;
+  height: 16px !important;
+  max-height: 16px !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  padding-block: 0 !important;
+  margin-block: var(--bgalazka-look-tabbar-section-gap, 2px) !important;
+}
+:root[bgalazka-tabbar-compact="true"]
+  :is(
+    .pinned-tabs-container-separator,
+    .vertical-pinned-tabs-container-separator,
+    #vertical-pinned-tabs-container-separator
+  )
+  :is(toolbarseparator, .zen-workspace-close-unpinned-tabs-button) {
+  min-height: 0 !important;
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+  --toolbarbutton-inner-padding: 0px;
+}
+:root[bgalazka-tabbar-compact="true"]
+  :is(
+    .pinned-tabs-container-separator,
+    .vertical-pinned-tabs-container-separator,
+    #vertical-pinned-tabs-container-separator
+  )
+  .zen-workspace-close-unpinned-tabs-button {
+  /* Preserve Zen's hover visibility and click action without moving tabs. */
+  position: absolute !important;
+  inset-block-start: 0 !important;
+  inset-inline-end: 0 !important;
+  box-sizing: border-box !important;
+  min-height: 16px !important;
+  height: 16px !important;
+  max-height: 16px !important;
+}
+
+/* Size the native folder artwork once. Do not separately scale its
+ * pseudo-elements or nested images: live folders use layered artwork. */
+:root[bgalazka-density-icons="true"]
+  #tabbrowser-tabs
+  zen-folder
+  > .tab-group-label-container
+  .tab-group-folder-icon,
+:root[bgalazka-density-icons="true"]
+  #tabbrowser-tabs
+  zen-folder
+  > .tab-group-label-container
+  .tab-group-icon-container,
+:root[bgalazka-density-icons="true"]
+  #tabbrowser-tabs
+  tab-group
+  > .tab-group-label-container
+  .tab-group-icon-container {
+  width: var(--bgalazka-look-folder-icon-size, 20px) !important;
+  height: var(--bgalazka-look-folder-icon-size, 20px) !important;
+  min-width: var(--bgalazka-look-folder-icon-size, 20px) !important;
+  min-height: var(--bgalazka-look-folder-icon-size, 20px) !important;
+  max-width: var(--bgalazka-look-folder-icon-size, 20px) !important;
+  max-height: var(--bgalazka-look-folder-icon-size, 20px) !important;
+  font-size: var(--bgalazka-look-folder-icon-size, 20px) !important;
+  line-height: 1 !important;
+}
+/* The indicator is a workspace section in current Zen; size its whole row,
+ * including its native inline padding, instead of just its icon. */
+:root[bgalazka-density-icons="true"]
+  :is(#zen-current-workspace-indicator, .zen-current-workspace-indicator) {
+  min-height: max(
+    var(--bgalazka-look-workspace-height, 22px),
+    var(--bgalazka-look-workspace-icon-size, 16px)
+  ) !important;
+  height: max(
+    var(--bgalazka-look-workspace-height, 22px),
+    var(--bgalazka-look-workspace-icon-size, 16px)
+  ) !important;
+  max-height: max(
+    var(--bgalazka-look-workspace-height, 22px),
+    var(--bgalazka-look-workspace-icon-size, 16px)
+  ) !important;
+  box-sizing: border-box !important;
+  padding-block: 0 !important;
+  margin-block: var(--bgalazka-look-tabbar-row-gap, 0px) !important;
+  gap: var(--bgalazka-look-tabbar-icon-gap, 4px) !important;
+  align-items: center !important;
+}
+:root[bgalazka-density-icons="true"]
+  :is(#zen-current-workspace-indicator, .zen-current-workspace-indicator)
+  :is(.zen-current-workspace-indicator-icon, image, img, svg) {
+  width: var(--bgalazka-look-workspace-icon-size, 16px) !important;
+  height: var(--bgalazka-look-workspace-icon-size, 16px) !important;
+  min-width: var(--bgalazka-look-workspace-icon-size, 16px) !important;
+  min-height: var(--bgalazka-look-workspace-icon-size, 16px) !important;
+  max-width: var(--bgalazka-look-workspace-icon-size, 16px) !important;
+  max-height: var(--bgalazka-look-workspace-icon-size, 16px) !important;
+  font-size: var(--bgalazka-look-workspace-icon-size, 16px) !important;
+  line-height: 1 !important;
+  padding: 0 !important;
+  margin-block: 0 !important;
+}
+:root[bgalazka-density-icons="true"]
+  :is(#zen-current-workspace-indicator, .zen-current-workspace-indicator)
+  :is(label, .zen-current-workspace-indicator-name) {
+  margin-block: 0 !important;
+  padding-block: 0 !important;
+  line-height: 1.2 !important;
+}
+
+/* Compact the actual bottom toolbar and its buttons, not just their images. */
+:root[bgalazka-density-icons="true"] #zen-sidebar-bottom-buttons {
+  min-height: 0 !important;
+  height: auto !important;
+  padding-block: 0 !important;
+  margin-block: 0 !important;
+  align-items: center !important;
+}
+:root[bgalazka-density-icons="true"]
+  #zen-sidebar-bottom-buttons
+  :is(toolbarbutton, #zen-workspaces-button, .zen-workspace-button) {
+  min-height: var(--bgalazka-look-bottom-bar-height, 24px) !important;
+  height: var(--bgalazka-look-bottom-bar-height, 24px) !important;
+  max-height: var(--bgalazka-look-bottom-bar-height, 24px) !important;
+  padding-block: 0 !important;
+  margin-block: 0 !important;
+  box-sizing: border-box !important;
+  --toolbarbutton-inner-padding: 2px;
+}
+:root[bgalazka-density-icons="true"]
+  #zen-sidebar-bottom-buttons
+  .toolbarbutton-badge-stack {
+  min-height: 0 !important;
+  padding: 2px !important;
+}
+
+/* Adjust only the gap before the address field. Leave the titlebar and
+ * top-button row at their native heights so window controls cannot clip. */
+:root[bgalazka-density-urlbar="true"] #nav-bar {
+  margin-block-start: var(--bgalazka-look-urlbar-top-gap, 0px) !important;
+}
+:root[bgalazka-density-newtab="true"]
+  :is(
+    #tabs-newtab-button,
+    #new-tab-button,
+    .tabs-newtab-button,
+    #zen-tabs-newtab-button,
+    .zen-workspace-newtab-button
+  )
+  .toolbarbutton-badge-stack {
+  min-height: 0 !important;
+  padding-block: 0 !important;
+  margin-block: 0 !important;
+}
+
+/* The corner launcher remains a smaller target within the full tab. */
+:root[bgalazka-density-essentials="true"][bgalazka-corner-tiles="true"]
+  #zen-essentials
+  > .zen-essentials-container:not([hidden])
+  > .tabbrowser-tab[zen-essential]:not([hidden])
+  > .zen-app-tile.bgalazka-essential-tile {
+  box-sizing: border-box !important;
+  width: var(--bgalazka-essential-launcher-size) !important;
+  min-width: var(--bgalazka-essential-launcher-size) !important;
+  max-width: var(--bgalazka-essential-launcher-size) !important;
+  height: var(--bgalazka-essential-launcher-size) !important;
+  min-height: var(--bgalazka-essential-launcher-size) !important;
+  max-height: var(--bgalazka-essential-launcher-size) !important;
+  bottom: 0 !important;
+  right: 0 !important;
+}
+:root[bgalazka-density-essentials="true"][bgalazka-corner-tiles="true"]
+  #zen-essentials
+  > .zen-essentials-container:not([hidden])
+  > .tabbrowser-tab[zen-essential]:not([hidden])
+  > .zen-app-tile.bgalazka-essential-tile
+  :is(img, svg, image) {
+  width: min(
+    14px,
+    calc(var(--bgalazka-essential-launcher-size) - 2px)
+  ) !important;
+  min-width: 0 !important;
+  max-width: min(
+    14px,
+    calc(var(--bgalazka-essential-launcher-size) - 2px)
+  ) !important;
+  height: min(
+    14px,
+    calc(var(--bgalazka-essential-launcher-size) - 2px)
+  ) !important;
+  min-height: 0 !important;
+  max-height: min(
+    14px,
+    calc(var(--bgalazka-essential-launcher-size) - 2px)
+  ) !important;
+}

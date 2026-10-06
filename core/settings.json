@@ -1,0 +1,332 @@
+{
+  "_documentation": {
+    "purpose": "Settings schema and category/section metadata owned by core.",
+    "consumer": "features/settings/controllers/ZentralSettingsCatalog.js reads schema/settings; Runtime filters availability, UI controllers render controls.",
+    "feature_source": "core/ZentralRuntime.js",
+    "contract": "This object is data only. Missing descriptor hides owner settings; it does not start or unload the feature. Keep property/defaultValue and category IDs synchronized with preferences.json and features/settings/layout.json."
+  },
+  "owner": "core",
+  "schema": [
+    {
+      "property": "zen.workspace.zentral.modules.video.enabled",
+      "label": "Load Sidebar video preview",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.css.VideoPreview.enabled",
+      "label": "Load features/video/ZentralVideoPreview.css",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.logger.enabled",
+      "label": "Load Diagnostic logger",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.apps.enabled",
+      "label": "Load Apps and base panel engine",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.tab-groups.enabled",
+      "label": "Load Tab groups",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.geometry.enabled",
+      "label": "Load Panel geometry",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.corner-panels.enabled",
+      "label": "Load Corner panels and tile interaction",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.panel-toolbar.enabled",
+      "label": "Load Panel URL bar, search and navigation",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.browser-integrations.enabled",
+      "label": "Load Containers and add-on browser hosts",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.panel-styles.enabled",
+      "label": "Load Panel browser collection and Zen Internet styles",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.secondary-views.enabled",
+      "label": "Load Triple View and Super Pin",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.rss.enabled",
+      "label": "Load RSS folder display",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.startup.enabled",
+      "label": "Load selected-tab startup controller",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.tab-unload.enabled",
+      "label": "Load Middle-click tab unloading",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.panels.enabled",
+      "label": "Load Panel extension coordinator",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.css.Base.enabled",
+      "label": "Load CSS/ZentralBase.css",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.css.Panels.enabled",
+      "label": "Load features/panels/ZentralPanels.css",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.css.CornerPanels.enabled",
+      "label": "Load features/panels/corner-tiles/ZentralCornerPanels.css",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.css.Controls.enabled",
+      "label": "Load features/settings/styles/ZentralControls.css",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.css.PanelToolbar.enabled",
+      "label": "Load features/panels/navigation/styles/ZentralPanelToolbar.css",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.css.PanelGeometry.enabled",
+      "label": "Load features/panels/geometry/ZentralPanelGeometry.css",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.css.Settings.enabled",
+      "label": "Load features/settings/styles/ZentralSettings.css",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.css.BrowserIntegrations.enabled",
+      "label": "Load features/panels/browsers/ZentralBrowserIntegrations.css",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.css.Appearance.enabled",
+      "label": "Load features/appearance/ZentralAppearance.css",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.css.RssDisplay.enabled",
+      "label": "Load features/rss/ZentralRssDisplay.css",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.css.TabDensity.enabled",
+      "label": "Load features/tabs/ZentralTabDensity.css",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.css.PanelBackground.enabled",
+      "label": "Load features/panels/navigation/styles/ZentralPanelBackground.css",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.allow_unsafe_core_disable",
+      "label": "I am being stupid and want to disable core elements of the mod (restart required)",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.addons",
+      "label": "Local add-on manifest (JSON; restart required)",
+      "type": "string",
+      "defaultValue": "[]"
+    }
+  ],
+  "settings": {
+    "zen.workspace.zentral.modules.video.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.css.VideoPreview.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.logger.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.apps.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.tab-groups.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.geometry.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.corner-panels.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.panel-toolbar.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.browser-integrations.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.panel-styles.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.secondary-views.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.rss.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.startup.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.tab-unload.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.panels.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.css.Base.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.css.Panels.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.css.CornerPanels.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.css.Controls.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.css.PanelToolbar.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.css.PanelGeometry.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.css.Settings.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.css.BrowserIntegrations.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.css.Appearance.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.css.RssDisplay.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.css.TabDensity.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.css.PanelBackground.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.allow_unsafe_core_disable": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.addons": {
+      "category": "addons",
+      "section": "Local registrations",
+      "owner": "core"
+    }
+  }
+}

@@ -1,0 +1,74 @@
+/*
+ * ZENTRAL FILE GUIDE - features/panels/navigation/styles/ZentralPanelBackground.css
+ *
+ * Purpose: Toolbar-controlled panel black backing and related root attribute rules.
+ * Interaction / execution: Registered in original relative order at USER_SHEET origin by Runtime (Startup
+ *   owns its startup stylesheet); owner gating stays in Catalog.
+ * Ownership / failure: Selectors/attributes/CSS variables are the interface; do not change stylesheet
+ *   origin, regroup nonadjacent Base rules, or weaken closing/hidden input rules. Owner removes injected
+ *   styles or Runtime removes registered sheets at teardown.
+ * Direct source consumers: core/ZentralCatalog.js
+ * Local interface selectors (subset by prefix): #bgalazka-super-panel; #zen-app-panel-clip;
+ *   #zen-app-panel-root; #zen-app-panel-slider; #zen-app-panel-toolbar; .bgalazka-panel-black-btn;
+ *   .bgalazka-panel-style-repair-btn; .bgalazka-super-bar
+ * Attribute selectors used: bgalazka-force-panel-black; data-active
+ *
+ * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
+ * contracts from this source, not a promise that every collaborator is enabled at runtime.
+ */
+/* ========================================================================== 
+   QUICK PANEL BACKGROUND OVERRIDE + PRIMARY TOOLBAR REPAIR CONTROLS
+   --------------------------------------------------------------------------
+   JS toggles bgalazka-force-panel-black from the primary web-panel toolbar.
+   This is intentionally an override only: user Look/translucency preferences
+   remain untouched underneath and reappear immediately when the toggle is off.
+   ========================================================================== */
+:root[bgalazka-force-panel-black="true"] #zen-app-panel-root,
+:root[bgalazka-force-panel-black="true"]
+  #zen-app-panel-root
+  #zen-app-panel-clip,
+:root[bgalazka-force-panel-black="true"]
+  #zen-app-panel-root
+  #zen-app-panel-slider,
+:root[bgalazka-force-panel-black="true"]
+  #zen-app-panel-root
+  #zen-app-panel-toolbar,
+:root[bgalazka-force-panel-black="true"]
+  #zen-app-panel-root
+  #zen-app-panel-slider
+  > browser,
+:root[bgalazka-force-panel-black="true"] #bgalazka-super-panel,
+:root[bgalazka-force-panel-black="true"] #bgalazka-super-panel > browser,
+:root[bgalazka-force-panel-black="true"]
+  #bgalazka-super-panel
+  .bgalazka-super-bar {
+  --tabpanels-background-color: color-mix(in srgb, #000000 var(--bgalazka-panel-black-opacity, 100%), transparent) !important;
+  background: color-mix(in srgb, #000000 var(--bgalazka-panel-black-opacity, 100%), transparent) !important;
+  background-color: color-mix(in srgb, #000000 var(--bgalazka-panel-black-opacity, 100%), transparent) !important;
+}
+
+:root[bgalazka-force-panel-black="true"]
+  #zen-app-panel-root
+  #zen-app-panel-slider,
+:root[bgalazka-force-panel-black="true"] #bgalazka-super-panel {
+  opacity: 1 !important;
+  transition: none !important;
+}
+
+#zen-app-panel-toolbar .bgalazka-panel-black-btn[data-active="true"] {
+  color: var(--zen-primary-color, #83a5ff) !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #83a5ff) 24%,
+    transparent
+  ) !important;
+  outline: 1px solid
+    color-mix(in srgb, var(--zen-primary-color, #83a5ff) 60%, transparent) !important;
+  outline-offset: -1px !important;
+}
+
+#zen-app-panel-toolbar
+  .bgalazka-panel-style-repair-btn.zen-toolbar-spinning
+  svg {
+  animation: bgalazka-toolbar-spin 0.45s linear;
+}

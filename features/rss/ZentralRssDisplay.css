@@ -1,0 +1,81 @@
+/*
+ * ZENTRAL FILE GUIDE - features/rss/ZentralRssDisplay.css
+ *
+ * Purpose: RSS folder and badge display states.
+ * Interaction / execution: Registered in original relative order at USER_SHEET origin by Runtime (Startup
+ *   owns its startup stylesheet); owner gating stays in Catalog.
+ * Ownership / failure: Selectors/attributes/CSS variables are the interface; do not change stylesheet
+ *   origin, regroup nonadjacent Base rules, or weaken closing/hidden input rules. Owner removes injected
+ *   styles or Runtime removes registered sheets at teardown.
+ * Direct source consumers: core/ZentralCatalog.js
+ * Local interface selectors (subset by prefix): #zentral-settings-modal; #zs-panel-extension-rss;
+ *   .zs-label; .zs-label-container; .zs-row; .zs-section-content; .zs-section-header; .zs-section-title;
+ *   .zs-sublabel
+ * Attribute selectors used: bgalazka-rss-compact-headers; bgalazka-rss-empty; bgalazka-rss-hide-empty;
+ *   bgalazka-rss-live-folder
+ *
+ * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
+ * contracts from this source, not a promise that every collaborator is enabled at runtime.
+ */
+/* RSS controls: the root attributes are set only by default-off switches.
+ * Styling is limited to Zen's own live folders marked by the extension JS;
+ * no tab or folder is moved, removed, or changed in Zen's session data. */
+:root[bgalazka-rss-hide-empty]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-rss-live-folder="true"][bgalazka-rss-empty] {
+  display: none !important;
+}
+
+:root[bgalazka-rss-compact-headers]
+  #tabbrowser-tabs
+  zen-folder[bgalazka-rss-live-folder="true"]
+  > .tab-group-label-container {
+  min-height: 24px !important;
+  height: 24px !important;
+  padding-block: 0 !important;
+  margin-block: 0 !important;
+}
+
+#zentral-settings-modal #zs-panel-extension-rss {
+  overflow-y: auto !important;
+  scrollbar-width: thin !important;
+}
+#zentral-settings-modal #zs-panel-extension-rss .zs-section-content {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  padding: 14px 18px 22px !important;
+}
+#zentral-settings-modal #zs-panel-extension-rss .zs-section-header {
+  display: flex !important;
+  align-items: center !important;
+  min-height: 36px !important;
+}
+#zentral-settings-modal #zs-panel-extension-rss .zs-section-title {
+  margin: 0 !important;
+  font-size: 15px !important;
+  color: inherit !important;
+}
+#zentral-settings-modal #zs-panel-extension-rss .zs-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+  min-height: 42px !important;
+}
+#zentral-settings-modal #zs-panel-extension-rss .zs-label-container {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 3px !important;
+  flex: 1 1 auto !important;
+}
+#zentral-settings-modal #zs-panel-extension-rss .zs-label {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+#zentral-settings-modal #zs-panel-extension-rss .zs-sublabel {
+  font-size: 11.5px !important;
+  opacity: 0.68 !important;
+  line-height: 1.35 !important;
+}
+

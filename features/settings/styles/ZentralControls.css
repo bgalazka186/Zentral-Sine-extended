@@ -1,0 +1,745 @@
+/*
+ * ZENTRAL FILE GUIDE - features/settings/styles/ZentralControls.css
+ *
+ * Purpose: Shared panel and settings control presentation.
+ * Interaction / execution: Registered in original relative order at USER_SHEET origin by Runtime (Startup
+ *   owns its startup stylesheet); owner gating stays in Catalog.
+ * Ownership / failure: Selectors/attributes/CSS variables are the interface; do not change stylesheet
+ *   origin, regroup nonadjacent Base rules, or weaken closing/hidden input rules. Owner removes injected
+ *   styles or Runtime removes registered sheets at teardown.
+ * Direct source consumers: core/ZentralCatalog.js
+ * Local interface selectors (subset by prefix): #bgalazka-panel-reveal-edge; #bgalazka-super-panel;
+ *   #zen-app-panel-pill; #zen-app-panel-root; #zen-app-panel-slider; #zen-apps-autohide-trigger;
+ *   #zen-apps-sidebar-clear-panel-data-item; #zen-apps-sidebar-container-menu;
+ *   #zen-apps-sidebar-container-popup; #zen-apps-sidebar-grid; #zen-apps-sidebar-mobile-ua-item;
+ *   #zen-apps-sidebar-preload-item; #zen-apps-sidebar-tile-context; #zentral-apps-vertical-bar;
+ *   #zentral-apps-vertical-bar-footer; #zentral-apps-vertical-bar-trigger; #zentral-settings-modal;
+ *   #zs-panel-bgalazka; .bgalazka-container-choice; .bgalazka-container-status; .bgalazka-essential-tile;
+ *   .zen-app-all-sides-resize-btn; .zen-app-badge; .zen-app-btn; .zen-app-close-btn;
+ *   .zen-app-dual-view-btn; .zen-app-grabber; .zen-app-hover-zone; .zen-app-refresh-btn;
+ *   .zen-app-resize-strip; .zen-app-tile; .zs-body; .zs-conditional-group; .zs-dialog; .zs-icon-preview;
+ *   .zs-range-slider; .zs-section-content; .zs-setting-with-icon; .zs-slider; .zs-switch; .zs-tab-btn
+ * Attribute selectors used: _moz-menuactive; bgalazka-edge-attached-panels;
+ *   bgalazka-hide-all-sides-resize-btn; bgalazka-hide-close; bgalazka-hide-corner-badges;
+ *   bgalazka-hide-dual-view; bgalazka-hide-expand; bgalazka-hide-grabber; bgalazka-hide-pill;
+ *   bgalazka-hide-pin; bgalazka-hide-refresh; bgalazka-hide-unattached-app-controls;
+ *   bgalazka-hover-panel-enabled; bgalazka-hover-panel-hidden; bgalazka-opposite-docking;
+ *   bgalazka-panel-pinned; bgalazka-panel-side; bgalazka-pill-peek-dot; bgalazka-push-page;
+ *   bgalazka-super-pin; bgalazka-translucency; checked; data-active; data-active-app-id; data-hidden;
+ *   data-panel-side; data-pinned; data-revealed; hidden; open; title; zentral-apps-autohide;
+ *   zentral-apps-enabled; zentral-apps-has-visible-apps; zentral-apps-placement; zentral-insta-peek;
+ *   zentral-safe-layout
+ *
+ * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
+ * contracts from this source, not a promise that every collaborator is enabled at runtime.
+ */
+/* ==========================================================================
+   5. PILL MENU, UI COMPONENT TOGGLES & MODAL HIGH-CONTRAST THEME
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+ * Extension Settings Panel: High-Visibility Controls & Colors
+ * -------------------------------------------------------------------------- */
+
+/* Hide empty app launchers when requested. The second bar's footer contains
+ * browser tools and settings that remain useful without any workspace apps. */
+:root[bgalazka-hide-unattached-app-controls="true"]:not(
+    [zentral-apps-has-visible-apps]
+  )
+  #zen-apps-sidebar-grid,
+:root[bgalazka-hide-unattached-app-controls="true"]:not(
+    [zentral-apps-has-visible-apps]
+  ):not([zentral-apps-placement="vertical-bar"])
+  #zentral-apps-vertical-bar-footer {
+  display: none !important;
+}
+
+/* Extension-panel toggled switch track — scoped so base Zentral settings stay untouched. */
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-switch
+  input:checked
+  + .zs-slider {
+  background-color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 90%,
+    #ffffff
+  ) !important;
+  box-shadow:
+    0 0 10px
+      color-mix(in srgb, var(--zen-primary-color, #6366f1) 55%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Extension-panel switch handle (thumb). */
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-switch
+  input:checked
+  + .zs-slider:before {
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6) !important;
+  transform: translateX(16px) !important;
+}
+
+/* Extension-panel icon badges (bright, clear & high-contrast). */
+#zentral-settings-modal #zs-panel-bgalazka .zs-setting-with-icon {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+
+#zentral-settings-modal #zs-panel-bgalazka .zs-icon-preview {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  border-radius: 8px !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 18%,
+    rgba(255, 255, 255, 0.05)
+  ) !important;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--zen-primary-color, #6366f1) 45%,
+      rgba(255, 255, 255, 0.15)
+    ) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #818cf8) 75%,
+    #ffffff
+  ) !important;
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.35),
+    inset 0 0 8px
+      color-mix(in srgb, var(--zen-primary-color, #6366f1) 14%, transparent) !important;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+}
+
+#zentral-settings-modal #zs-panel-bgalazka .zs-icon-preview svg {
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  display: block !important;
+  pointer-events: none !important;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) !important;
+}
+
+/* Global Range Slider Thumb Accent */
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-range-slider::-webkit-slider-thumb {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 85%,
+    #ffffff
+  ) !important;
+  box-shadow:
+    0 0 8px
+      color-mix(in srgb, var(--zen-primary-color, #6366f1) 60%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Global Tab Navigation Underline Active Glow */
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-tab-btn[data-active="true"]::after {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 85%,
+    #ffffff
+  ) !important;
+  box-shadow: 0 0 10px
+    color-mix(in srgb, var(--zen-primary-color, #6366f1) 70%, transparent) !important;
+}
+
+/* Zero-gap slide transition for dependent setting groups */
+#zentral-settings-modal #zs-panel-bgalazka .zs-conditional-group {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  overflow: hidden !important;
+  max-height: 700px !important;
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+  transition:
+    max-height 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.2s ease,
+    transform 0.24s ease,
+    margin 0.24s ease,
+    padding 0.24s ease !important;
+}
+
+#zentral-settings-modal
+  #zs-panel-bgalazka
+  .zs-conditional-group[data-hidden="true"] {
+  max-height: 0 !important;
+  opacity: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  transform: translateY(-6px) !important;
+}
+
+/* --------------------------------------------------------------------------
+ * 1. Dual-View Mode: Solid Surface & Single-Box Page Push
+ * -------------------------------------------------------------------------- */
+
+/* Solid surface when Dual-View is active */
+:root[bgalazka-translucency="true"][bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"]
+  #zen-app-panel-root
+  #zen-app-panel-slider,
+:root[bgalazka-translucency="true"][bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"]
+  #zen-app-panel-root:is(:hover, :focus-within)
+  #zen-app-panel-slider,
+:root[bgalazka-translucency="true"][bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"]
+  #zen-app-panel-root:not(:hover):not(:focus-within)
+  #zen-app-panel-slider {
+  opacity: 1 !important;
+  background-color: var(--tabpanels-background-color, #1e1e24) !important;
+  backdrop-filter: none !important;
+}
+
+/* Scoped strictly to the outer tabbox to eliminate the 2x offset */
+#tabbrowser-tabbox {
+  transition:
+    margin-right 0.22s cubic-bezier(0.25, 1, 0.5, 1),
+    margin-left 0.22s cubic-bezier(0.25, 1, 0.5, 1) !important;
+}
+
+:root[bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"][bgalazka-panel-side="right"]
+  #tabbrowser-tabbox {
+  margin-right: var(--bgalazka-panel-width, 350px) !important;
+  margin-left: 0 !important;
+}
+
+:root[bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"][bgalazka-panel-side="left"]
+  #tabbrowser-tabbox {
+  margin-left: var(--bgalazka-panel-width, 350px) !important;
+  margin-right: 0 !important;
+}
+
+/* Hover-only styling for Essential and ordinary tabs is defined together at
+ * the end of this sheet, after the ordinary favicon launcher layout. */
+
+/* Keep the invisible pill reveal target beside the pill, not along the
+ * entire panel edge. Its height follows the actual pill via ResizeObserver;
+ * the same vertical offset and clamp as the pill keep both aligned. */
+#zen-app-panel-root .zen-app-hover-zone {
+  top: clamp(
+    14px,
+    calc(50% + var(--bgalazka-pill-offset, 0%)),
+    calc(100% - 14px)
+  ) !important;
+  bottom: auto !important;
+  height: var(--zentral-pill-hover-height, 0px) !important;
+  transform: translateY(-50%);
+}
+
+/* --------------------------------------------------------------------------
+ * 3. Pill Menu Vertical Offset (numeric, -50% to +50%, 0% = centered)
+ * --------------------------------------------------------------------------
+ * BUG FIX / FEATURE CHANGE: this used to be three fixed keyword positions
+ * (top/center/bottom, each a hardcoded 14px-from-edge or 50%-centered
+ * value) driven by a string pref that never actually persisted (see the
+ * getPref/setPref string-branch fix near the top of the JS file). Replaced
+ * with a single continuous offset from center, in percent of the panel's
+ * own height, via --bgalazka-pill-offset (set in updateCSSVars()).
+ *
+ * FAILSAFE: clamp() guarantees the pill can never be pushed fully off the
+ * top or bottom edge no matter what value is stored (even out-of-range
+ * leftovers from a bad pref edit) -- it always keeps at least 14px of
+ * clearance from the container's top/bottom edge, the same clearance the
+ * old fixed "Top"/"Bottom" keyword presets used.
+ *
+ * These selectors intentionally match the exact specificity of the rules
+ * they override (native #zen-app-panel-pill's inline top:50%, and this
+ * file's own opposite-docking per-side blocks above, which no longer set
+ * `top` themselves) so this one rule is the single source of truth for
+ * pill's vertical position, regardless of docking mode/side. Only `top`
+ * (and `bottom: auto`, to make sure a stray `bottom` from elsewhere can't
+ * fight it) is set here -- transform/scale/left/right stay owned by the
+ * base mod's rules and the mini-pill rules above. */
+#zen-app-panel-pill {
+  top: clamp(
+    14px,
+    calc(50% + var(--bgalazka-pill-offset, 0%)),
+    calc(100% - 14px)
+  ) !important;
+  bottom: auto !important;
+}
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill,
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  #zen-app-panel-pill {
+  top: clamp(
+    14px,
+    calc(50% + var(--bgalazka-pill-offset, 0%)),
+    calc(100% - 14px)
+  ) !important;
+  bottom: auto !important;
+}
+
+/* --------------------------------------------------------------------------
+ * 3b. Mini Pill (shrunk idle pill) for NORMAL (non-opposite) docking
+ * --------------------------------------------------------------------------
+ * BUG FIX: the mini-pill rules in section 2 only applied when
+ * bgalazka-opposite-docking="true". If a user is on normal docking (or has
+ * turned opposite docking off), NONE of that CSS ever matched, so the mini
+ * pill simply never rendered anywhere -- there was no "off" bug, the ON
+ * rules were just unreachable outside opposite-docking mode. These rules add
+ * the same mini-pill behavior for normal docking.
+ *
+ * note 20 (design correction, v6.1): this used to reuse native's own
+ * translate(-50%)/translate(50%) "straddle the edge" transform (half the
+ * pill sits on top of the panel/page content, even at rest, and MORE of it
+ * does as it grows, since growing from a straddled center expands equally
+ * in both directions). That's how the plain native pill has always looked,
+ * but it's a bad fit for the mini-pill/peek-dot feature specifically: the
+ * whole point of a small idle indicator is to stay out of the way, and
+ * growing it by expanding onto the page is the opposite of that -- as
+ * reported, part of the page becomes genuinely unreachable under the
+ * pill while it's expanded. Opposite-docking's mini-pill (section 2)
+ * never had this problem because it was built on translate(-100%)/(100%)
+ * "fully outside" instead -- the pill's panel-touching edge stays pinned
+ * flush against the panel boundary at every scale (see that section's own
+ * notes for the transform math) and it only ever grows OUTWARD, away from
+ * the page, never over it. These rules now copy that exact approach for
+ * normal docking too, so behavior matches between the two docking modes:
+ * `translate(-100%/100%, -50%)` instead of `translate(-50%/50%, -50%)`,
+ * paired with an edge-based transform-origin (the pill's own inner edge --
+ * "right center" for data-panel-side="right", "left center" for "left" --
+ * which is what makes that edge stay flush at the panel boundary
+ * regardless of scale; see section 2's notes for why an edge origin is
+ * *correct* for a translate(100%) layout even though it was *wrong* for
+ * the old translate(50%) one this replaces). The values below are
+ * otherwise identical to section 2's, since the pill's own left:0/right:0
+ * anchor point (set by native, per data-panel-side) is the same in both
+ * docking modes -- only the panel ROOT's on-screen position differs
+ * between them, which doesn't affect the pill's position relative to it.
+ *
+ * Selector specificity here is deliberately LOWER than the opposite-docking
+ * rules above (2 attribute selectors vs. their 3), so when opposite docking
+ * IS active, its own rules still win this cascade and these normal-mode
+ * ones simply don't apply -- both sets of rules can coexist in the
+ * stylesheet without one needing to exclude the other with :not(). */
+:root[bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill {
+  transform-origin: right center !important;
+  transform: translate(-100%, -50%) scale(0.22) !important;
+  opacity: var(--bgalazka-pill-peek-opacity, 90%) !important;
+  background: var(--bgalazka-pill-peek-color, #4da6ff) !important;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease,
+    background-color 0.18s ease !important;
+}
+:root[bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  .zen-app-hover-zone:hover
+  ~ #zen-app-panel-pill,
+:root[bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill:hover,
+:root[bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  .zen-app-resize-strip:hover
+  ~ #zen-app-panel-pill {
+  transform: translate(-100%, -50%) scale(1) !important;
+  opacity: 1 !important;
+  background: color-mix(
+    in srgb,
+    black var(--bgalazka-pill-background-opacity, 90%),
+    transparent
+  ) !important;
+  color: #ffffff !important;
+}
+:root[bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  #zen-app-panel-pill {
+  transform-origin: left center !important;
+  transform: translate(100%, -50%) scale(0.22) !important;
+  opacity: var(--bgalazka-pill-peek-opacity, 90%) !important;
+  background: var(--bgalazka-pill-peek-color, #4da6ff) !important;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease,
+    background-color 0.18s ease !important;
+}
+:root[bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  .zen-app-hover-zone:hover
+  ~ #zen-app-panel-pill,
+:root[bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  #zen-app-panel-pill:hover,
+:root[bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  .zen-app-resize-strip:hover
+  ~ #zen-app-panel-pill {
+  transform: translate(100%, -50%) scale(1) !important;
+  opacity: 1 !important;
+  background: color-mix(
+    in srgb,
+    black var(--bgalazka-pill-background-opacity, 90%),
+    transparent
+  ) !important;
+  color: #ffffff !important;
+}
+
+/* --------------------------------------------------------------------------
+ * 4. Floating App Panel Pill: Button Toggles & Dual-View Styling
+ * -------------------------------------------------------------------------- */
+:root[bgalazka-hide-pill="true"] #zen-app-panel-pill {
+  display: none !important;
+}
+
+/* Dual-View Button Active State — Exact copy of Pinned button theme */
+#zen-app-panel-pill .zen-app-dual-view-btn[data-active="true"] {
+  background-color: color-mix(
+    in srgb,
+    currentColor 20%,
+    transparent
+  ) !important;
+}
+
+#zen-app-panel-pill .zen-app-dual-view-btn[data-active="true"] svg {
+  fill: currentColor !important;
+  stroke: currentColor !important;
+  stroke-width: 0.5 !important;
+}
+
+:root[bgalazka-hide-dual-view="true"]
+  #zen-app-panel-pill
+  .zen-app-dual-view-btn {
+  display: none !important;
+}
+
+:root[bgalazka-hide-all-sides-resize-btn="true"]
+  #zen-app-panel-pill
+  .zen-app-all-sides-resize-btn {
+  display: none !important;
+}
+
+:root[bgalazka-hide-pin="true"]
+  #zen-app-panel-pill
+  .zen-app-btn:is([title*="Pin" i], [title*="pin" i], [data-pinned]) {
+  display: none !important;
+}
+
+:root[bgalazka-hide-expand="true"]
+  #zen-app-panel-pill
+  :is(.zen-app-btn[title="Expand panel"], .zen-app-btn[title="Restore panel"]) {
+  display: none !important;
+}
+
+:root[bgalazka-hide-grabber="true"] #zen-app-panel-pill .zen-app-grabber {
+  display: none !important;
+}
+
+/* GRABBER DUAL-AXIS DRAG (note 22): native sets cursor:ew-resize on this
+ * element with no !important (see the JS-injected base stylesheet); the ID
+ * selector here already outweighs that on specificity alone, !important is
+ * just for consistency with the rest of this file. "move" reads as
+ * "drag me around" rather than "drag me sideways only", which now matches
+ * what Zentral_uc.js note 25 actually lets the handle do. */
+#zen-app-panel-pill .zen-app-grabber {
+  cursor: move !important;
+}
+
+:root[bgalazka-hide-refresh="true"] #zen-app-panel-pill .zen-app-refresh-btn {
+  display: none !important;
+}
+
+:root[bgalazka-hide-close="true"] #zen-app-panel-pill .zen-app-close-btn {
+  display: none !important;
+}
+/* --------------------------------------------------------------------------
+ * 5. Corner Tile Badge Toggle
+ * -------------------------------------------------------------------------- */
+:root[bgalazka-hide-corner-badges="true"]
+  :is(.tabbrowser-tab, #zen-essentials-container .tabbrowser-tab)
+  .zen-app-tile
+  .zen-app-badge {
+  display: none !important;
+}
+
+/* --------------------------------------------------------------------------
+ * 6. Firefox Container + Per-Panel Data Controls — Tile Context Menu
+ * -----------------------------------------------------------------------
+ * JS injects these beside the native "Load at Startup" row. These selectors
+ * only target extension-created nodes, so base Zentral/Firefox chrome remains
+ * untouched when the nodes do not exist. The explicit no-active-app hiding
+ * mirrors the native menu's own app-specific item behavior above the marker.
+ * -------------------------------------------------------------------------- */
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-container-menu[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-container-menu,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-container-menu,
+#zen-apps-sidebar-tile-context
+  #zen-apps-sidebar-clear-panel-data-item[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-clear-panel-data-item,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-clear-panel-data-item {
+  display: none !important;
+}
+
+/* Container choices use Firefox's own container SVGs where available. Keep
+ * sizing modest so the submenu stays visually aligned with native XUL rows. */
+#zen-apps-sidebar-container-popup
+  .bgalazka-container-choice.menuitem-iconic
+  .menu-iconic-icon {
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+}
+
+#zen-apps-sidebar-container-popup .bgalazka-container-choice[checked="true"] {
+  font-weight: 600 !important;
+}
+
+#zen-apps-sidebar-container-popup .bgalazka-container-status {
+  opacity: 0.68 !important;
+  font-style: italic !important;
+}
+
+/* Clearing cookies is destructive but not equivalent to removing the app;
+ * use a restrained warning tint rather than the strong red Remove App style. */
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-clear-panel-data-item {
+  color: color-mix(in srgb, currentColor 78%, #ff9f43 22%) !important;
+}
+
+#zen-apps-sidebar-tile-context
+  #zen-apps-sidebar-clear-panel-data-item:is(:hover, [_moz-menuactive="true"]) {
+  background-color: color-mix(in srgb, #ff9f43 14%, transparent) !important;
+  border-radius: var(--arrowpanel-menuitem-border-radius, 4px) !important;
+}
+
+/* --------------------------------------------------------------------------
+ * 7. Mobile User Agent Toggle — Tile Context Menu Item
+ * -----------------------------------------------------------------------
+ * The #zen-apps-sidebar-mobile-ua-item menuitem is injected by the JS
+ * extension (see the "MOBILE USER AGENT TOGGLE" block below the marker in
+ * Zentral_uc.js) directly next to the native "Load at Startup" item, rather
+ * than by editing ZentralApps.setupContextMenu(). It needs the same
+ * hide-when-no-active-app treatment the base mod gives its own app-specific
+ * items (compare #zen-apps-sidebar-preload-item above the marker) so it
+ * doesn't show when right-clicking empty grid space.
+ * -------------------------------------------------------------------------- */
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-mobile-ua-item[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-mobile-ua-item,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-mobile-ua-item {
+  display: none !important;
+}
+
+/* Reserve only the actual panel and overlay footprint, without an extra gutter.
+ * A pinned Apps Bar already occupies frame space. An autohiding bar overlays
+ * the page, so Dual/Triple View must reserve that extra footprint as well. */
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [bgalazka-opposite-docking="true"]
+  )[zentral-apps-autohide="true"][bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"][bgalazka-panel-side="right"]
+  #tabbrowser-tabbox {
+  margin-right: calc(
+    var(--bgalazka-panel-width, 350px) + var(--zentral-appsbar-push-extra, 52px)
+  ) !important;
+}
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [bgalazka-opposite-docking="true"]
+  )[zentral-apps-autohide="true"][bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"][bgalazka-panel-side="left"]
+  #tabbrowser-tabbox {
+  margin-left: calc(
+    var(--bgalazka-panel-width, 350px) + var(--zentral-appsbar-push-extra, 52px)
+  ) !important;
+}
+
+/* Hidden two-bar panels release ALL page space, including the overlaid
+ * Apps Bar reservation. Include the push-state attributes so this beats
+ * both the two-bar push rule and the legacy 6px hidden-panel gutter. */
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [bgalazka-opposite-docking="true"]
+  )[bgalazka-hover-panel-hidden][bgalazka-hover-panel-enabled][bgalazka-panel-side]
+  #tabbrowser-tabbox,
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [bgalazka-opposite-docking="true"]
+  )[bgalazka-hover-panel-hidden][bgalazka-hover-panel-enabled][bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"][bgalazka-panel-side]
+  #tabbrowser-tabbox {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* A hidden panel is still logically open. Let the second bar hide when
+ * neither it nor its trigger is hovered, even if an open marker remains. */
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [bgalazka-opposite-docking="true"]
+  )[zentral-apps-autohide="true"][bgalazka-hover-panel-hidden][bgalazka-panel-side="right"]
+  #zentral-apps-vertical-bar:not([data-revealed="true"]):not(:hover) {
+  transform: translateX(calc(100% + 16px)) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [bgalazka-opposite-docking="true"]
+  )[zentral-apps-autohide="true"][bgalazka-hover-panel-hidden][bgalazka-panel-side="left"]
+  #zentral-apps-vertical-bar:not([data-revealed="true"]):not(:hover) {
+  transform: translateX(calc(-100% - 16px)) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+/* Autohide in normal docking: release page push completely, just as in
+ * Apps Bar mode. This is inert unless a panel is actually hover-hidden. */
+:root[bgalazka-hover-panel-hidden][bgalazka-hover-panel-enabled]:not(
+    [bgalazka-opposite-docking="true"]
+  )[bgalazka-panel-side]
+  #tabbrowser-tabbox,
+:root[bgalazka-hover-panel-hidden][bgalazka-hover-panel-enabled]:not(
+    [bgalazka-opposite-docking="true"]
+  )[bgalazka-push-page="true"]:not(
+    [zentral-insta-peek="true"]
+  )[bgalazka-panel-pinned="true"][bgalazka-panel-side]
+  #tabbrowser-tabbox {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Constrain the settings flex chain so Panels scrolls inside the dialog,
+ * rather than expanding below its clipped body. Use one scroll container. */
+#zentral-settings-modal .zs-dialog > .zs-body {
+  min-height: 0 !important;
+}
+
+#zentral-settings-modal .zs-body > #zs-panel-bgalazka {
+  min-height: 0 !important;
+  height: auto !important;
+  flex: 1 1 0 !important;
+  overflow: hidden !important;
+}
+
+#zentral-settings-modal .zs-body > #zs-panel-bgalazka > .zs-section-content {
+  min-height: 0 !important;
+  flex: 1 1 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+}
+
+#zentral-settings-modal
+  .zs-body
+  > #zs-panel-bgalazka
+  > .zs-section-content
+  > * {
+  flex-shrink: 0 !important;
+}
+
+/* Reveal targets never overlap page content, independently of docking. */
+#zen-app-panel-root[data-panel-side="left"] .zen-app-hover-zone {
+  right: -44px !important;
+  left: auto !important;
+}
+#zen-app-panel-root[data-panel-side="right"] .zen-app-hover-zone {
+  left: -44px !important;
+  right: auto !important;
+}
+/* Retain the DOM and hooks during live Apps suspension to avoid reparenting remote browsers. */
+:root[zentral-apps-enabled="false"]
+  :is(
+    #zen-apps-sidebar-grid,
+    #zentral-apps-vertical-bar,
+    #zentral-apps-vertical-bar-trigger,
+    #zen-apps-autohide-trigger,
+    #zen-app-panel-root,
+    #bgalazka-super-panel,
+    .bgalazka-essential-tile,
+    #bgalazka-panel-reveal-edge
+  ) {
+  display: none !important;
+}
+:root[zentral-insta-peek="true"] #bgalazka-super-panel {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+:root[zentral-insta-peek="true"] #tabbrowser-tabbox {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+/* Expanded-pill appearance has its own preference, independent of the idle marker. */
+#zen-app-panel-pill {
+  background: color-mix(
+    in srgb,
+    black var(--bgalazka-pill-background-opacity, 90%),
+    transparent
+  ) !important;
+  color: white !important;
+}
+
+/* Keep native sidebar content and the compact reveal bezel reachable. */
+:root[zentral-safe-layout="true"] #zen-app-panel-root {
+  max-width: max(
+    0px,
+    calc(
+      100vw - var(--zentral-safe-left, 0px) - var(--zentral-safe-right, 0px) -
+        68px
+    )
+  ) !important;
+  min-width: 0 !important;
+}
+:root[zentral-safe-layout="true"][zentral-apps-placement][bgalazka-edge-attached-panels][bgalazka-opposite-docking][bgalazka-push-page]
+  #zen-app-panel-root[open][data-panel-side="left"] {
+  left: var(--zentral-safe-panel-left, 12px) !important;
+  right: auto !important;
+}
+:root[zentral-safe-layout="true"][zentral-apps-placement][bgalazka-edge-attached-panels][bgalazka-opposite-docking][bgalazka-push-page]
+  #zen-app-panel-root[open][data-panel-side="right"] {
+  right: var(--zentral-safe-panel-right, 12px) !important;
+  left: auto !important;
+}
+:root[zentral-safe-layout="true"][bgalazka-super-pin="true"]
+  #bgalazka-super-panel {
+  max-width: max(
+    0px,
+    calc(
+      100vw - var(--zentral-safe-left, 0px) - var(--zentral-safe-right, 0px) -
+        24px
+    )
+  ) !important;
+  min-width: 0 !important;
+}

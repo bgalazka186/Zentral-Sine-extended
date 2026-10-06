@@ -1,0 +1,112 @@
+{
+  "_documentation": {
+    "purpose": "Settings schema and category/section metadata owned by logger.",
+    "consumer": "features/settings/controllers/ZentralSettingsCatalog.js reads schema/settings; Runtime filters availability, UI controllers render controls.",
+    "feature_source": "features/diagnostics/ZentralLogger.uc.js",
+    "contract": "This object is data only. Missing descriptor hides owner settings; it does not start or unload the feature. Keep property/defaultValue and category IDs synchronized with preferences.json and features/settings/layout.json."
+  },
+  "owner": "logger",
+  "schema": [
+    {
+      "property": "zen.workspace.zentral.debug",
+      "label": "Enable Diagnostic Logging in Console Buffer",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.debug.full",
+      "label": "Capture Full Diagnostic Log (All Modules)",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.debug.core",
+      "label": "Core Engine & Gecko Errors (Always On)",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.debug.tabs",
+      "label": "Tab Groups & Drag-and-Drop Tracing",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.debug.apps",
+      "label": "Apps Sidebar & Panels Tracing",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.debug.menus",
+      "label": "Context Menus & Popups Tracing",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.debug.layout",
+      "label": "Layout Inspector & CSS Computed Styles Snapshot",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.report_endpoint",
+      "label": "Base Mod Issue Report Endpoint (not for extension issues)",
+      "type": "string",
+      "defaultValue": "https://zentral-issue-reporter.michele-pierini.workers.dev/"
+    },
+    {
+      "property": "zentral.logger.path",
+      "label": "Base Mod Diagnostic Log Folder (absolute path)",
+      "type": "string",
+      "defaultValue": ""
+    }
+  ],
+  "settings": {
+    "zen.workspace.zentral.debug": {
+      "category": "logging",
+      "section": "Capture & reports",
+      "owner": "logger"
+    },
+    "zen.workspace.zentral.debug.full": {
+      "category": "logging",
+      "section": "Capture & reports",
+      "owner": "logger"
+    },
+    "zen.workspace.zentral.debug.core": {
+      "category": "logging",
+      "section": "Capture & reports",
+      "owner": "logger"
+    },
+    "zen.workspace.zentral.debug.tabs": {
+      "category": "logging",
+      "section": "Capture & reports",
+      "owner": "logger"
+    },
+    "zen.workspace.zentral.debug.apps": {
+      "category": "logging",
+      "section": "Capture & reports",
+      "owner": "logger"
+    },
+    "zen.workspace.zentral.debug.menus": {
+      "category": "logging",
+      "section": "Capture & reports",
+      "owner": "logger"
+    },
+    "zen.workspace.zentral.debug.layout": {
+      "category": "logging",
+      "section": "Capture & reports",
+      "owner": "logger"
+    },
+    "zen.workspace.zentral.report_endpoint": {
+      "category": "logging",
+      "section": "Capture & reports",
+      "owner": "logger"
+    },
+    "zentral.logger.path": {
+      "category": "logging",
+      "section": "Capture & reports",
+      "owner": "logger"
+    }
+  }
+}

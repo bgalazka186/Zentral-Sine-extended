@@ -1,0 +1,68 @@
+{
+  "_documentation": {
+    "purpose": "Settings schema and category/section metadata owned by secondary-views.",
+    "consumer": "features/settings/controllers/ZentralSettingsCatalog.js reads schema/settings; Runtime filters availability, UI controllers render controls.",
+    "feature_source": "features/panels/secondary-views/ZentralSecondaryViews.uc.js",
+    "contract": "This object is data only. Missing descriptor hides owner settings; it does not start or unload the feature. Keep property/defaultValue and category IDs synchronized with preferences.json and features/settings/layout.json."
+  },
+  "owner": "secondary-views",
+  "schema": [
+    {
+      "property": "zen.workspace.bgalazka.push_page",
+      "label": "Dual-View Mode",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.bgalazka.triple_push_page",
+      "label": "Push Page in Triple View",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.bgalazka.secondary_toolbar_swap",
+      "label": "Show secondary panel swap control",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.bgalazka.secondary_toolbar_close",
+      "label": "Show secondary close/unlink control",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.bgalazka.triple_inward_toolbars",
+      "label": "Triple View: URL bars face the divider",
+      "type": "checkbox",
+      "defaultValue": true
+    }
+  ],
+  "settings": {
+    "zen.workspace.bgalazka.push_page": {
+      "category": "multi-view",
+      "section": "Page push & secondary controls",
+      "owner": "secondary-views"
+    },
+    "zen.workspace.bgalazka.triple_push_page": {
+      "category": "multi-view",
+      "section": "Page push & secondary controls",
+      "owner": "secondary-views"
+    },
+    "zen.workspace.bgalazka.secondary_toolbar_swap": {
+      "category": "multi-view",
+      "section": "Page push & secondary controls",
+      "owner": "secondary-views"
+    },
+    "zen.workspace.bgalazka.secondary_toolbar_close": {
+      "category": "multi-view",
+      "section": "Page push & secondary controls",
+      "owner": "secondary-views"
+    },
+    "zen.workspace.bgalazka.triple_inward_toolbars": {
+      "category": "multi-view",
+      "section": "Page push & secondary controls",
+      "owner": "secondary-views"
+    }
+  }
+}

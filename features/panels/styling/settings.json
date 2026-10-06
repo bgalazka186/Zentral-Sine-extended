@@ -1,0 +1,223 @@
+{
+  "_documentation": {
+    "purpose": "Settings schema and category/section metadata owned by panel-styles.",
+    "consumer": "features/settings/controllers/ZentralSettingsCatalog.js reads schema/settings; Runtime filters availability, UI controllers render controls.",
+    "feature_source": "features/panels/styling/ZentralPanelStyles.uc.js",
+    "contract": "This object is data only. Missing descriptor hides owner settings; it does not start or unload the feature. Keep property/defaultValue and category IDs synchronized with preferences.json and features/settings/layout.json."
+  },
+  "owner": "panel-styles",
+  "schema": [
+    {
+      "property": "zen.workspace.bgalazka.translucency",
+      "label": "Enable Whole-Panel Translucency in Single-Panel View",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.bgalazka.opacity_unpinned",
+      "label": "Whole-Panel Opacity: Unpinned (%)",
+      "type": "dropdown",
+      "defaultValue": 92,
+      "options": [
+        {
+          "label": "10",
+          "value": 10
+        },
+        {
+          "label": "25",
+          "value": 25
+        },
+        {
+          "label": "45",
+          "value": 45
+        },
+        {
+          "label": "60",
+          "value": 60
+        },
+        {
+          "label": "75",
+          "value": 75
+        },
+        {
+          "label": "85",
+          "value": 85
+        },
+        {
+          "label": "90",
+          "value": 90
+        },
+        {
+          "label": "92",
+          "value": 92
+        },
+        {
+          "label": "100",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.opacity_pinned_focus",
+      "label": "Whole-Panel Opacity: Pinned and Focused (%)",
+      "type": "dropdown",
+      "defaultValue": 85,
+      "options": [
+        {
+          "label": "10",
+          "value": 10
+        },
+        {
+          "label": "25",
+          "value": 25
+        },
+        {
+          "label": "45",
+          "value": 45
+        },
+        {
+          "label": "60",
+          "value": 60
+        },
+        {
+          "label": "75",
+          "value": 75
+        },
+        {
+          "label": "85",
+          "value": 85
+        },
+        {
+          "label": "90",
+          "value": 90
+        },
+        {
+          "label": "92",
+          "value": 92
+        },
+        {
+          "label": "100",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.opacity_pinned_blur",
+      "label": "Whole-Panel Opacity: Pinned and Unfocused (%)",
+      "type": "dropdown",
+      "defaultValue": 45,
+      "options": [
+        {
+          "label": "10",
+          "value": 10
+        },
+        {
+          "label": "25",
+          "value": 25
+        },
+        {
+          "label": "45",
+          "value": 45
+        },
+        {
+          "label": "60",
+          "value": 60
+        },
+        {
+          "label": "75",
+          "value": 75
+        },
+        {
+          "label": "85",
+          "value": 85
+        },
+        {
+          "label": "90",
+          "value": 90
+        },
+        {
+          "label": "92",
+          "value": 92
+        },
+        {
+          "label": "100",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.blur_intensity",
+      "label": "Panel Background Blur (px)",
+      "type": "dropdown",
+      "defaultValue": 0,
+      "options": [
+        {
+          "label": "0",
+          "value": 0
+        },
+        {
+          "label": "5",
+          "value": 5
+        },
+        {
+          "label": "10",
+          "value": 10
+        },
+        {
+          "label": "15",
+          "value": 15
+        },
+        {
+          "label": "20",
+          "value": 20
+        },
+        {
+          "label": "30",
+          "value": 30
+        },
+        {
+          "label": "40",
+          "value": 40
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.zen_internet_panel_css",
+      "label": "Use Zen Internet CSS in Web Panels (experimental)",
+      "type": "checkbox",
+      "defaultValue": false
+    }
+  ],
+  "settings": {
+    "zen.workspace.bgalazka.translucency": {
+      "category": "panel-appearance",
+      "section": "Translucency & blur",
+      "owner": "panel-styles"
+    },
+    "zen.workspace.bgalazka.opacity_unpinned": {
+      "category": "panel-appearance",
+      "section": "Translucency & blur",
+      "owner": "panel-styles"
+    },
+    "zen.workspace.bgalazka.opacity_pinned_focus": {
+      "category": "panel-appearance",
+      "section": "Translucency & blur",
+      "owner": "panel-styles"
+    },
+    "zen.workspace.bgalazka.opacity_pinned_blur": {
+      "category": "panel-appearance",
+      "section": "Translucency & blur",
+      "owner": "panel-styles"
+    },
+    "zen.workspace.bgalazka.blur_intensity": {
+      "category": "panel-appearance",
+      "section": "Translucency & blur",
+      "owner": "panel-styles"
+    },
+    "zen.workspace.bgalazka.zen_internet_panel_css": {
+      "category": "compatibility",
+      "section": "Browser hosts & website styles",
+      "owner": "panel-styles"
+    }
+  }
+}

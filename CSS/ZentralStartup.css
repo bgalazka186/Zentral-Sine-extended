@@ -1,5 +1,0 @@
-/* Standalone native tab RMB control. No Zentral base/panel CSS required. */
-#zentral-tab-load-at-startup[hidden="true"],
-:root:not([zentral-startup-enabled]) #zentral-tab-load-at-startup {
-  display: none !important;
-}

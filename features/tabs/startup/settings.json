@@ -1,0 +1,24 @@
+{
+  "_documentation": {
+    "purpose": "Settings schema and category/section metadata owned by startup.",
+    "consumer": "features/settings/controllers/ZentralSettingsCatalog.js reads schema/settings; Runtime filters availability, UI controllers render controls.",
+    "feature_source": "features/tabs/startup/ZentralStartup.uc.js",
+    "contract": "This object is data only. Missing descriptor hides owner settings; it does not start or unload the feature. Keep property/defaultValue and category IDs synchronized with preferences.json and features/settings/layout.json."
+  },
+  "owner": "startup",
+  "schema": [
+    {
+      "property": "zen.workspace.zentral.startup.enabled",
+      "label": "Enable Load at Startup in essential and pinned tab right-click menus",
+      "type": "checkbox",
+      "defaultValue": false
+    }
+  ],
+  "settings": {
+    "zen.workspace.zentral.startup.enabled": {
+      "category": "startup",
+      "section": "Selected tabs",
+      "owner": "startup"
+    }
+  }
+}

@@ -1,0 +1,179 @@
+/*
+ * ZENTRAL FILE GUIDE - features/panels/corner-tiles/ZentralCornerPanels.css
+ *
+ * Purpose: Essential corner tiles and their panel interaction visuals.
+ * Interaction / execution: Registered in original relative order at USER_SHEET origin by Runtime (Startup
+ *   owns its startup stylesheet); owner gating stays in Catalog.
+ * Ownership / failure: Selectors/attributes/CSS variables are the interface; do not change stylesheet
+ *   origin, regroup nonadjacent Base rules, or weaken closing/hidden input rules. Owner removes injected
+ *   styles or Runtime removes registered sheets at teardown.
+ * Direct source consumers: core/ZentralCatalog.js
+ * Local interface selectors (subset by prefix): #zen-apps-sidebar-grid; .zen-app-badge; .zen-app-tile;
+ *   .zen-apps-autohide-dots; .zen-apps-horizontal
+ * Attribute selectors used: bgalazka-corner-tiles; data-active; zen-essential
+ *
+ * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
+ * contracts from this source, not a promise that every collaborator is enabled at runtime.
+ */
+/* ==========================================================================
+   4. ENCLOSED CORNER-DOCKED BUTTONS (FLUSH BOTTOM-RIGHT EDGES)
+   ========================================================================== */
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  ) {
+  position: relative !important;
+}
+
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile {
+  position: absolute !important;
+  right: 0px !important;
+  bottom: 0px !important;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  max-width: 22px !important;
+  max-height: 22px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 6px 0 4px 0 !important;
+  /* Fix: pointer-events must be auto in HTML/CSS (all is invalid syntax in HTML and causes Gecko to drop it) */
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  box-shadow: -1px -1px 3px rgba(0, 0, 0, 0.55) !important;
+  /* Opaque base background prevents essential tab gradient and container tints from bleeding through */
+  background: var(--tabpanels-background-color, #18181f) !important;
+  border-top: 1px solid
+    color-mix(in srgb, currentColor 20%, rgba(255, 255, 255, 0.2)) !important;
+  border-left: 1px solid
+    color-mix(in srgb, currentColor 20%, rgba(255, 255, 255, 0.2)) !important;
+  border-right: none !important;
+  border-bottom: none !important;
+  transform: none !important;
+  z-index: 2147483647 !important;
+  /* Prevent Gecko from mistaking clicks on the tile as tab/window drag operations */
+  -moz-window-dragging: no-drag !important;
+  -moz-user-drag: none !important;
+  user-select: none !important;
+}
+
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile:hover {
+  background: color-mix(
+    in srgb,
+    var(--tabpanels-background-color, #272730) 80%,
+    rgba(255, 255, 255, 0.15)
+  ) !important;
+  border-top-color: color-mix(
+    in srgb,
+    currentColor 35%,
+    rgba(255, 255, 255, 0.4)
+  ) !important;
+  border-left-color: color-mix(
+    in srgb,
+    currentColor 35%,
+    rgba(255, 255, 255, 0.4)
+  ) !important;
+}
+
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile[data-active="true"] {
+  background-color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #707ac2) 36%,
+    rgba(22, 22, 28, 0.95)
+  ) !important;
+  border-top: 1.5px solid
+    color-mix(
+      in srgb,
+      var(--zen-primary-color, #707ac2) 75%,
+      rgba(255, 255, 255, 0.4)
+    ) !important;
+  border-left: 1.5px solid
+    color-mix(
+      in srgb,
+      var(--zen-primary-color, #707ac2) 75%,
+      rgba(255, 255, 255, 0.4)
+    ) !important;
+  box-shadow:
+    -1px -1px 6px
+      color-mix(in srgb, var(--zen-primary-color, #707ac2) 40%, transparent),
+    -1px -1px 3px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Ensure child elements do not swallow mouse events so the tile container receives the click */
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile
+  * {
+  pointer-events: none !important;
+}
+
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  :is(.zen-app-tile img, .zen-app-tile svg, .zen-app-tile image) {
+  width: 14px !important;
+  height: 14px !important;
+  min-width: 14px !important;
+  min-height: 14px !important;
+  max-width: 14px !important;
+  max-height: 14px !important;
+  pointer-events: none !important;
+}
+
+:root[bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )
+  .zen-app-tile
+  .zen-app-badge {
+  top: -3px !important;
+  right: -3px !important;
+  min-width: 10px !important;
+  height: 10px !important;
+  font-size: 7px !important;
+  line-height: 10px !important;
+  padding: 0 2px !important;
+  pointer-events: none !important;
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+:root[bgalazka-corner-tiles="true"]
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal)
+  .zen-apps-autohide-dots {
+  display: none !important;
+}
+

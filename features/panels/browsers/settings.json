@@ -1,0 +1,35 @@
+{
+  "_documentation": {
+    "purpose": "Settings schema and category/section metadata owned by browser-integrations.",
+    "consumer": "features/settings/controllers/ZentralSettingsCatalog.js reads schema/settings; Runtime filters availability, UI controllers render controls.",
+    "feature_source": "features/panels/browsers/ZentralBrowserIntegrations.uc.js",
+    "contract": "This object is data only. Missing descriptor hides owner settings; it does not start or unload the feature. Keep property/defaultValue and category IDs synchronized with preferences.json and features/settings/layout.json."
+  },
+  "owner": "browser-integrations",
+  "schema": [
+    {
+      "property": "zen.workspace.bgalazka.addon_tab_id_bridge",
+      "label": "Real Tab IDs for Web Panels",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.bgalazka.show_addon_host_folder",
+      "label": "Show Web Panel Tab ID Folder in Sidebar (requires Real Tab IDs)",
+      "type": "checkbox",
+      "defaultValue": false
+    }
+  ],
+  "settings": {
+    "zen.workspace.bgalazka.addon_tab_id_bridge": {
+      "category": "compatibility",
+      "section": "Browser hosts & website styles",
+      "owner": "browser-integrations"
+    },
+    "zen.workspace.bgalazka.show_addon_host_folder": {
+      "category": "compatibility",
+      "section": "Browser hosts & website styles",
+      "owner": "browser-integrations"
+    }
+  }
+}

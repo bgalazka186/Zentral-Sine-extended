@@ -1,0 +1,75 @@
+/*
+ * ZENTRAL FILE GUIDE - features/apps/styles/ZentralAppMenus.css
+ * Purpose: App context-menu empty-area filtering and destructive Remove action.
+ * Loaded by: core/ZentralRuntime.js via core/ZentralCatalog.js at USER_SHEET origin.
+ * Activation: legacy zen.workspace.zentral.modules.css.Base.enabled switch; owners apps.
+ * Interactions: feature controllers apply the selectors/attributes below; this file owns presentation only.
+ * Cleanup: Runtime unregisters this sheet; do not change stylesheet origin or cascade order.
+ * Dependencies: Catalog defines order/owner gating.
+ * Collaborators: core/ZentralRuntime.js; core/ZentralCatalog.js; features/apps/ZentralApps.uc.js;
+ * features/apps/controllers/ZentralAppsLauncher.js; features/apps/controllers/ZentralAppsInteractions.js
+ * DOM IDs: #ff5555; #ff6b6b; #zen-apps-sidebar-close-app-item; #zen-apps-sidebar-pin-to-menu; #zen-apps-
+ * sidebar-preload-item; #zen-apps-sidebar-refresh-item; #zen-apps-sidebar-remove-item; #zen-apps-sidebar-
+ * sec1-sep; #zen-apps-sidebar-sec2-sep; #zen-apps-sidebar-sec3-sep; #zen-apps-sidebar-tile-context
+ * Attributes: _moz-menuactive; data-active-app-id; hidden
+ * Consumed variables: --arrowpanel-menuitem-border-radius
+ */
+/* Hide app-specific items and separators in Apps Grid context menu when right-clicking empty space */
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-sec1-sep[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-sec1-sep,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-sec1-sep,
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-sec2-sep[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-sec2-sep,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-sec2-sep,
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-sec3-sep[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-sec3-sep,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-sec3-sep,
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-refresh-item[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-refresh-item,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-refresh-item,
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-preload-item[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-preload-item,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-preload-item,
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-close-app-item[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-close-app-item,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-close-app-item,
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-pin-to-menu[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-pin-to-menu,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-pin-to-menu,
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-remove-item[hidden="true"],
+#zen-apps-sidebar-tile-context:not([data-active-app-id])
+  #zen-apps-sidebar-remove-item,
+#zen-apps-sidebar-tile-context[data-active-app-id=""]
+  #zen-apps-sidebar-remove-item {
+  display: none !important;
+}
+
+
+/* Red styling for "Remove App" button to emphasize its destructive action */
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-remove-item {
+  color: #ff5555 !important;
+  font-weight: 500 !important;
+}
+
+
+#zen-apps-sidebar-tile-context #zen-apps-sidebar-remove-item:hover,
+#zen-apps-sidebar-tile-context
+  #zen-apps-sidebar-remove-item[_moz-menuactive="true"] {
+  background-color: rgba(255, 68, 68, 0.2) !important;
+  color: #ff6b6b !important;
+  border-radius: var(--arrowpanel-menuitem-border-radius, 4px) !important;
+}

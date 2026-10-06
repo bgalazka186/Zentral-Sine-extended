@@ -1,0 +1,78 @@
+/*
+ * ZENTRAL FILE GUIDE - features/groups/styles/ZentralGroupStructure.css
+ * Purpose: Native group layout, keyboard focus and split-group header suppression.
+ * Loaded by: core/ZentralRuntime.js via core/ZentralCatalog.js at USER_SHEET origin.
+ * Activation: legacy zen.workspace.zentral.modules.css.Base.enabled switch; owners tab-groups.
+ * Interactions: feature controllers apply the selectors/attributes below; this file owns presentation only.
+ * Cleanup: Runtime unregisters this sheet; do not change stylesheet origin or cascade order.
+ * Dependencies: Catalog defines order/owner gating.
+ * Collaborators: core/ZentralRuntime.js; core/ZentralCatalog.js; features/groups/ZentralTabGroups.uc.js;
+ * features/groups/controllers/ZentralGroupsDom.js; features/groups/controllers/ZentralGroupsMenus.js
+ * DOM IDs: #region
+ * Attributes: is-zen-split; split-view-group; zen-split-view
+ * Consumed variables: --zen-primary-color
+ */
+/* ============================================================================ */
+/*               ZENTRAL TAB GROUPS & UI STYLESHEET (v1.0.2)                  */
+/* ============================================================================ */
+/*  Part of the Zentral userChrome.js suite for Zen Browser.                   */
+/*  License: CC BY-NC-SA 4.0                                                   */
+/* ============================================================================ */
+/* #region Original Mod */
+/* Remove focus frame/outline on click */
+tab-group.zentral-standard :focus:not(:focus-visible) {
+  outline: none !important;
+}
+
+tab-group.zentral-standard :focus-visible {
+  outline: 2px solid var(--zen-primary-color, #83a5ff) !important;
+  outline-offset: 2px !important;
+}
+
+
+tab-group.zentral-standard {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  margin: 2px 0 !important;
+}
+
+
+/* Neutralize native pill backgrounds & aspect-ratio constraints */
+tab-group.zentral-standard > .tab-group-label-container,
+tab-group.zentral-standard > .tab-group-label-container .tab-group-label {
+  background: transparent !important;
+}
+
+
+/* Zero-gap & layout isolation for Split Views & Hidden Tabs */
+tab-group:is(
+  [split-view-group],
+  [zen-split-view],
+  [is-zen-split],
+  .zen-split-view
+) {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+}
+
+
+tab-group:is(
+    [split-view-group],
+    [zen-split-view],
+    [is-zen-split],
+    .zen-split-view
+  )
+  > :is(.tab-group-label-container, .tab-group-container::after) {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}

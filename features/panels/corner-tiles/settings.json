@@ -1,0 +1,79 @@
+{
+  "_documentation": {
+    "purpose": "Settings schema and category/section metadata owned by corner-panels.",
+    "consumer": "features/settings/controllers/ZentralSettingsCatalog.js reads schema/settings; Runtime filters availability, UI controllers render controls.",
+    "feature_source": "features/panels/corner-tiles/ZentralCornerPanels.uc.js",
+    "contract": "This object is data only. Missing descriptor hides owner settings; it does not start or unload the feature. Keep property/defaultValue and category IDs synchronized with preferences.json and features/settings/layout.json."
+  },
+  "owner": "corner-panels",
+  "schema": [
+    {
+      "property": "zen.workspace.bgalazka.corner_tiles",
+      "label": "Panels on Essential Tabs",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.bgalazka.all_tab_panels",
+      "label": "Panel Launchers on All Tabs",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.bgalazka.hover_corner_tiles",
+      "label": "Hover-Only Corner Tiles",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.tab_isolation",
+      "label": "Dim Unloaded Tabs",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.bgalazka.hide_corner_badges",
+      "label": "Hide Corner Notification Badges",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.hide_unattached_app_controls",
+      "label": "Hide Unattached App Controls",
+      "type": "checkbox",
+      "defaultValue": false
+    }
+  ],
+  "settings": {
+    "zen.workspace.bgalazka.corner_tiles": {
+      "category": "tab-panels",
+      "section": "Launchers, loaded state & badges",
+      "owner": "corner-panels"
+    },
+    "zen.workspace.bgalazka.all_tab_panels": {
+      "category": "tab-panels",
+      "section": "Launchers, loaded state & badges",
+      "owner": "corner-panels"
+    },
+    "zen.workspace.bgalazka.hover_corner_tiles": {
+      "category": "tab-panels",
+      "section": "Launchers, loaded state & badges",
+      "owner": "corner-panels"
+    },
+    "zen.workspace.bgalazka.tab_isolation": {
+      "category": "tab-panels",
+      "section": "Launchers, loaded state & badges",
+      "owner": "corner-panels"
+    },
+    "zen.workspace.bgalazka.hide_corner_badges": {
+      "category": "tab-panels",
+      "section": "Launchers, loaded state & badges",
+      "owner": "corner-panels"
+    },
+    "zen.workspace.bgalazka.hide_unattached_app_controls": {
+      "category": "tab-panels",
+      "section": "Launchers, loaded state & badges",
+      "owner": "corner-panels"
+    }
+  }
+}

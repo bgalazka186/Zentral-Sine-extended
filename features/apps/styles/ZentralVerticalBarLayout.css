@@ -1,0 +1,445 @@
+/*
+ * ZENTRAL FILE GUIDE - features/apps/styles/ZentralVerticalBarLayout.css
+ * Purpose: Vertical app bar docking, autohide frame, background, footer and geometry.
+ * Loaded by: core/ZentralRuntime.js via core/ZentralCatalog.js at USER_SHEET origin.
+ * Activation: legacy zen.workspace.zentral.modules.css.Base.enabled switch; owners apps.
+ * Interactions: feature controllers apply the selectors/attributes below; this file owns presentation only.
+ * Cleanup: Runtime unregisters this sheet; do not change stylesheet origin or cascade order.
+ * Dependencies: Catalog defines order/owner gating.
+ * Collaborators: core/ZentralRuntime.js; core/ZentralCatalog.js; features/apps/ZentralApps.uc.js;
+ * features/apps/controllers/ZentralAppsLauncher.js; features/apps/controllers/ZentralAppsInteractions.js
+ * DOM IDs: #browser; #ff3b30; #ffffff; #zen-app-panel-clip; #zen-app-panel-root; #zen-app-panel-slider;
+ * #zen-apps-sidebar-grid; #zentral-apps-vertical-bar; #zentral-apps-vertical-bar-bg; #zentral-apps-
+ * vertical-bar-footer
+ * Attributes: bgalazka-hover-panel-hidden; data-dot; data-insta-peek; data-revealed; open; zen-right-side;
+ * zen-sidebar-right; zentral-app-panel-open; zentral-apps-autohide; zentral-apps-placement
+ * Consumed variables: --arrowpanel-color; --tabpanels-background-color; --zen-border-radius; --zen-colors-
+ * text; --zen-element-separation; --zen-grainy-background-opacity; --zen-primary-color
+ */
+/* --------------------------------------------------------------------------
+ * Zentral Apps Vertical Bar
+ * -------------------------------------------------------------------------- */
+#zentral-apps-vertical-bar {
+  display: none !important;
+}
+
+
+/* Base style */
+:root[zentral-apps-placement="vertical-bar"] #zentral-apps-vertical-bar {
+  min-height: 0 !important;
+  max-height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  box-sizing: border-box !important;
+  color: var(--zen-colors-text, var(--arrowpanel-color, inherit)) !important;
+  padding: 8px 0 !important;
+  gap: 6px !important;
+  overflow: visible !important;
+  user-select: none !important;
+  border: none !important;
+}
+
+
+/* ==========================================================================
+ * Mode A: Autohide DISABLED (Pinned / Docked into Frame)
+ * - In-flow flex child inside #browser
+ * - Webpage width adjusts seamlessly
+ * - Transparent background reveals native window frame (Mica/Acrylic/theme)
+ * - No vertical divider line
+ * ========================================================================== */
+:root[zentral-apps-placement="vertical-bar"]:not([zentral-apps-autohide="true"])
+  #zentral-apps-vertical-bar {
+  position: relative !important;
+  width: 44px !important;
+  min-width: 44px !important;
+  max-width: 44px !important;
+  height: calc(100% - var(--zen-element-separation, 8px) * 2) !important;
+  max-height: calc(100% - var(--zen-element-separation, 8px) * 2) !important;
+  min-height: 0 !important;
+  flex: 0 0 44px !important;
+  flex-shrink: 0 !important;
+  z-index: 10 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  border: none !important;
+  border-radius: var(--zen-border-radius, 8px) !important;
+  transform: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+  padding: 8px 4px !important;
+  margin-top: var(--zen-element-separation, 8px) !important;
+  margin-bottom: var(--zen-element-separation, 8px) !important;
+  transition:
+    width 0.22s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.18s ease !important;
+}
+
+
+/* Outer margin matching Zen's element separation for exact visual symmetry */
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [zentral-apps-autohide="true"]
+  )[zen-right-side="true"]
+  #zentral-apps-vertical-bar,
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [zentral-apps-autohide="true"]
+  )[zen-sidebar-right="true"]
+  #zentral-apps-vertical-bar {
+  margin-left: var(--zen-element-separation, 8px) !important;
+  margin-right: 0 !important;
+}
+
+
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [zentral-apps-autohide="true"]
+  ):not([zen-right-side="true"]):not([zen-sidebar-right="true"])
+  #zentral-apps-vertical-bar {
+  margin-right: var(--zen-element-separation, 8px) !important;
+  margin-left: 0 !important;
+}
+
+
+:root[zentral-apps-placement="vertical-bar"]:not([zentral-apps-autohide="true"])
+  #zentral-apps-vertical-bar
+  #zen-apps-sidebar-grid {
+  padding: 0 !important;
+}
+
+
+/* ==========================================================================
+ * Mode B: Autohide ENABLED (Compact Floating Panel)
+ * - Fixed floating panel over webpage with rounded corners on all sides
+ * - Uses Zen's native frosted glass material (samples exact theme colors underneath)
+ * - Slides in/out with transform: translateX(...)
+ * ========================================================================== */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar {
+  position: fixed !important;
+  width: 48px !important;
+  min-width: 48px !important;
+  max-width: 48px !important;
+  z-index: 2147483500 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  transition:
+    transform 0.25s cubic-bezier(0.075, 0.82, 0.165, 1),
+    opacity 0.15s ease,
+    visibility 0.25s ease,
+    top 0.18s cubic-bezier(0.25, 1, 0.5, 1) !important;
+  will-change: transform, opacity;
+  overflow: visible !important;
+  padding: 8px 5px !important;
+  box-sizing: border-box !important;
+}
+
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  #zen-apps-sidebar-grid {
+  padding: 0 !important;
+}
+
+
+/* Zen Native Compact Toolbar Background Element (Inherits Zen's exact Compact Mode Sidebar theme & material) */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg {
+  display: flex !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: -1 !important;
+  pointer-events: none !important;
+  border-radius: var(--zen-border-radius, 8px) !important;
+}
+
+
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg::before,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg::after {
+  border-radius: inherit !important;
+}
+
+
+/* When Vertical Bar is on Left (Sidebar on Right): anchor gradient to top-left edge */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg::before,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg::after,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg::before,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg::after {
+  background-position: left top !important;
+}
+
+
+/* When Vertical Bar is on Right (Sidebar on Left): anchor gradient to top-right edge */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
+    [zen-right-side="true"]
+  ):not([zen-sidebar-right="true"])
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg::before,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
+    [zen-right-side="true"]
+  ):not([zen-sidebar-right="true"])
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg::after {
+  background-position: right top !important;
+}
+
+
+/* Soften film grain intensity to match Compact Sidebar visual density */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar
+  #zentral-apps-vertical-bar-bg
+  .zen-browser-grain {
+  opacity: calc(var(--zen-grainy-background-opacity, 0.4) * 0.35) !important;
+}
+
+
+/* Autohide Mode B: Position on Left (Sidebar on Right) */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+  #zentral-apps-vertical-bar,
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+  #zentral-apps-vertical-bar {
+  left: 8px !important;
+  right: auto !important;
+}
+
+
+/* Autohide Mode B: Position on Right (Sidebar on Left) */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
+    [zen-right-side="true"]
+  ):not([zen-sidebar-right="true"])
+  #zentral-apps-vertical-bar {
+  right: 8px !important;
+  left: auto !important;
+}
+
+
+/* Autohide Mode B: Idle/Collapsed State on Left */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+  #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
+    [zentral-app-panel-open="true"]
+  ),
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+  #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
+    [zentral-app-panel-open="true"]
+  ) {
+  transform: translateX(calc(-100% - 16px)) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+
+/* Autohide Mode B: Idle/Collapsed State on Right */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
+    [zen-right-side="true"]
+  ):not([zen-sidebar-right="true"])
+  #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
+    [zentral-app-panel-open="true"]
+  ) {
+  transform: translateX(calc(100% + 16px)) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+
+/* Autohide Mode B: Revealed State on Hover / Active Panel */
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar[data-revealed="true"],
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
+  #zentral-apps-vertical-bar[zentral-app-panel-open="true"] {
+  transform: translateX(0) !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+}
+
+
+#zen-app-panel-root {
+  position: fixed;
+  display: none;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 2147483600 !important;
+}
+
+#zen-app-panel-root[open] {
+  display: block;
+}
+
+#zen-app-panel-root[data-insta-peek="true"] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  transition: none !important;
+}
+
+
+/* Floating App Panel Frame & Soft 1px Border (Softens boundary against webpage) */
+#zen-app-panel-root #zen-app-panel-clip {
+  position: absolute !important;
+  inset: 0 !important;
+  overflow: hidden !important;
+  border-radius: var(--zen-border-radius, 8px) !important;
+  pointer-events: none !important;
+}
+
+
+#zen-app-panel-root #zen-app-panel-slider {
+  position: absolute !important;
+  inset: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  border-radius: inherit !important;
+  overflow: hidden !important;
+  background: var(--tabpanels-background-color, #1e1e24) !important;
+  border: 2px solid
+    color-mix(
+      in srgb,
+      var(--zen-primary-color, currentColor) 25%,
+      rgba(255, 255, 255, 0.14)
+    ) !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.55),
+    0 2px 10px rgba(0, 0, 0, 0.3) !important;
+  box-sizing: border-box !important;
+  will-change: transform;
+}
+
+:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden]) #zen-app-panel-root #zen-app-panel-slider {
+  pointer-events: auto !important;
+}
+
+
+#zentral-apps-vertical-bar #zen-apps-sidebar-grid {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  width: 100% !important;
+  height: 0 !important;
+  flex: 1 1 0px !important;
+  padding: 4px 0 2px 0 !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  gap: 6px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  scrollbar-width: none !important;
+  background: transparent !important;
+  box-sizing: border-box !important;
+}
+
+
+#zentral-apps-vertical-bar #zen-apps-sidebar-grid::-webkit-scrollbar {
+  display: none !important;
+}
+
+
+#zentral-apps-vertical-bar #zen-apps-sidebar-grid .zen-apps-scroll-box {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 6px !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: min-content !important;
+  max-height: none !important;
+  flex-shrink: 0 !important;
+  opacity: 1 !important;
+  transform: none !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  box-sizing: border-box !important;
+  padding: 4px 0 2px 0 !important;
+  margin: 0 !important;
+}
+
+
+#zentral-apps-vertical-bar-footer {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  width: 100% !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  gap: 6px !important;
+  padding: 4px 0 0 0 !important;
+  box-sizing: border-box !important;
+  margin-top: auto !important;
+  z-index: 10 !important;
+}
+
+
+#zentral-apps-vertical-bar .zen-app-tile,
+#zentral-apps-vertical-bar .zen-app-add-btn,
+#zentral-apps-vertical-bar .zen-app-vb-footer-btn {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  max-width: 36px !important;
+  max-height: 36px !important;
+  box-sizing: border-box !important;
+  margin: 0 auto !important;
+  flex-shrink: 0 !important;
+  overflow: visible !important;
+}
+
+
+.zen-app-badge {
+  position: absolute !important;
+  top: 0px !important;
+  right: 0px !important;
+  min-width: 14px !important;
+  height: 14px !important;
+  padding: 0 3px !important;
+  border-radius: 7px !important;
+  background-color: #ff3b30 !important;
+  color: #ffffff !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  line-height: 14px !important;
+  text-align: center !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+  pointer-events: none !important;
+  z-index: 20 !important;
+  box-sizing: border-box !important;
+}
+
+
+.zen-app-badge[data-dot="true"] {
+  min-width: 8px !important;
+  width: 8px !important;
+  height: 8px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  top: 2px !important;
+  right: 2px !important;
+  font-size: 0 !important;
+}
+
+
+#zentral-apps-vertical-bar .zen-app-vb-footer-btn svg {
+  width: 18px !important;
+  height: 18px !important;
+  pointer-events: none !important;
+}

@@ -1,0 +1,111 @@
+{
+  "_documentation": {
+    "purpose": "Settings schema and category/section metadata owned by tab-groups.",
+    "consumer": "features/settings/controllers/ZentralSettingsCatalog.js reads schema/settings; Runtime filters availability, UI controllers render controls.",
+    "feature_source": "features/groups/ZentralTabGroups.uc.js",
+    "contract": "This object is data only. Missing descriptor hides owner settings; it does not start or unload the feature. Keep property/defaultValue and category IDs synchronized with preferences.json and features/settings/layout.json."
+  },
+  "owner": "tab-groups",
+  "schema": [
+    {
+      "property": "zen.workspace.tabgroups.enabled",
+      "label": "Enable Enhanced Tab Groups & Color Picker",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.tabgroups.collapse_on_launch",
+      "label": "Collapse Tab Groups on Browser Startup",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.tabgroups.show_chevron",
+      "label": "Show Open/Close Indicator on Tab Group Pills",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.tabgroups.indicator_type",
+      "label": "Tab Group Indicator Style",
+      "type": "dropdown",
+      "defaultValue": "circle",
+      "options": [
+        {
+          "label": "Circle Dot",
+          "value": "circle"
+        },
+        {
+          "label": "Chevron Arrow",
+          "value": "chevron"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.tabgroups.thumbnails",
+      "label": "Show Tab Thumbnails on Hover",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.tabgroups.label_opacity",
+      "label": "Tab Group Label Opacity (%)",
+      "type": "dropdown",
+      "defaultValue": 85,
+      "options": [
+        {
+          "label": "40",
+          "value": 40
+        },
+        {
+          "label": "55",
+          "value": 55
+        },
+        {
+          "label": "70",
+          "value": 70
+        },
+        {
+          "label": "85",
+          "value": 85
+        },
+        {
+          "label": "100",
+          "value": 100
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "zen.workspace.tabgroups.enabled": {
+      "category": "tab-groups",
+      "section": "Group behavior & indicators",
+      "owner": "tab-groups"
+    },
+    "zen.workspace.tabgroups.collapse_on_launch": {
+      "category": "tab-groups",
+      "section": "Group behavior & indicators",
+      "owner": "tab-groups"
+    },
+    "zen.workspace.tabgroups.show_chevron": {
+      "category": "tab-groups",
+      "section": "Group behavior & indicators",
+      "owner": "tab-groups"
+    },
+    "zen.workspace.tabgroups.indicator_type": {
+      "category": "tab-groups",
+      "section": "Group behavior & indicators",
+      "owner": "tab-groups"
+    },
+    "zen.workspace.tabgroups.thumbnails": {
+      "category": "tab-groups",
+      "section": "Group behavior & indicators",
+      "owner": "tab-groups"
+    },
+    "zen.workspace.tabgroups.label_opacity": {
+      "category": "tab-groups",
+      "section": "Group behavior & indicators",
+      "owner": "tab-groups"
+    }
+  }
+}

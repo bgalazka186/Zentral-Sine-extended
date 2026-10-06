@@ -1,0 +1,35 @@
+{
+  "_documentation": {
+    "purpose": "Settings schema and category/section metadata owned by rss.",
+    "consumer": "features/settings/controllers/ZentralSettingsCatalog.js reads schema/settings; Runtime filters availability, UI controllers render controls.",
+    "feature_source": "features/rss/ZentralRssDisplay.uc.js",
+    "contract": "This object is data only. Missing descriptor hides owner settings; it does not start or unload the feature. Keep property/defaultValue and category IDs synchronized with preferences.json and features/settings/layout.json."
+  },
+  "owner": "rss",
+  "schema": [
+    {
+      "property": "zen.workspace.bgalazka.rss.hide_empty",
+      "label": "Hide Empty RSS Live Folders",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.rss.compact_headers",
+      "label": "Compact RSS Live-Folder Headers",
+      "type": "checkbox",
+      "defaultValue": false
+    }
+  ],
+  "settings": {
+    "zen.workspace.bgalazka.rss.hide_empty": {
+      "category": "rss",
+      "section": "Live-folder display",
+      "owner": "rss"
+    },
+    "zen.workspace.bgalazka.rss.compact_headers": {
+      "category": "rss",
+      "section": "Live-folder display",
+      "owner": "rss"
+    }
+  }
+}

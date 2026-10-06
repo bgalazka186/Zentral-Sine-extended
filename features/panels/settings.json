@@ -1,0 +1,783 @@
+{
+  "_documentation": {
+    "purpose": "Settings schema and category/section metadata owned by panels.",
+    "consumer": "features/settings/controllers/ZentralSettingsCatalog.js reads schema/settings; Runtime filters availability, UI controllers render controls.",
+    "feature_source": "features/panels/ZentralPanels.uc.js",
+    "contract": "This object is data only. Missing descriptor hides owner settings; it does not start or unload the feature. Keep property/defaultValue and category IDs synchronized with preferences.json and features/settings/layout.json."
+  },
+  "owner": "panels",
+  "schema": [
+    {
+      "property": "zen.workspace.bgalazka.appsbar_library",
+      "label": "Apps Bar: Show Library Button",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.bgalazka.appsbar_history",
+      "label": "Apps Bar: Show History Button",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.appsbar_downloads",
+      "label": "Apps Bar: Show Downloads Button",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.appsbar_bookmarks",
+      "label": "Apps Bar: Show Bookmarks Button",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.hover_reveal_panel",
+      "label": "Autohide Panel Until Hover (all docking modes; keeps its app pinned)",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.hover_reveal_delay_ms",
+      "label": "Hidden Panel Reveal Delay (ms; fine adjustment in extension settings)",
+      "type": "dropdown",
+      "defaultValue": 160,
+      "options": [
+        {
+          "label": "Instant",
+          "value": 0
+        },
+        {
+          "label": "80 ms",
+          "value": 80
+        },
+        {
+          "label": "160 ms (default)",
+          "value": 160
+        },
+        {
+          "label": "320 ms",
+          "value": 320
+        },
+        {
+          "label": "500 ms",
+          "value": 500
+        },
+        {
+          "label": "1000 ms",
+          "value": 1000
+        },
+        {
+          "label": "2000 ms",
+          "value": 2000
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.hover_reveal_width_px",
+      "label": "Hidden Panel Hover Area Width (px; fine adjustment in extension settings)",
+      "type": "dropdown",
+      "defaultValue": 6,
+      "options": [
+        {
+          "label": "1 px",
+          "value": 1
+        },
+        {
+          "label": "3 px",
+          "value": 3
+        },
+        {
+          "label": "6 px (default)",
+          "value": 6
+        },
+        {
+          "label": "12 px",
+          "value": 12
+        },
+        {
+          "label": "24 px",
+          "value": 24
+        },
+        {
+          "label": "48 px",
+          "value": 48
+        },
+        {
+          "label": "64 px",
+          "value": 64
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.hide_hover_reveal_btn",
+      "label": "Hide Hover-Reveal Button in the Pill Menu",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.hide_pill",
+      "label": "Hide Floating Pill Menu",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.pill_position",
+      "label": "Pill Vertical Offset (%)",
+      "type": "dropdown",
+      "defaultValue": 0,
+      "options": [
+        {
+          "label": "-50",
+          "value": -50
+        },
+        {
+          "label": "-25",
+          "value": -25
+        },
+        {
+          "label": "0",
+          "value": 0
+        },
+        {
+          "label": "25",
+          "value": 25
+        },
+        {
+          "label": "50",
+          "value": 50
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.pill_peek_dot",
+      "label": "Show Mini Pill When Idle",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.bgalazka.pill_peek_dot_color",
+      "label": "Mini Pill Color",
+      "type": "string",
+      "defaultValue": "#5e0002"
+    },
+    {
+      "property": "zen.workspace.bgalazka.pill_peek_dot_opacity",
+      "label": "Mini Pill Opacity (%)",
+      "type": "dropdown",
+      "defaultValue": 31,
+      "options": [
+        {
+          "label": "10",
+          "value": 10
+        },
+        {
+          "label": "30",
+          "value": 30
+        },
+        {
+          "label": "31",
+          "value": 31
+        },
+        {
+          "label": "50",
+          "value": 50
+        },
+        {
+          "label": "70",
+          "value": 70
+        },
+        {
+          "label": "90",
+          "value": 90
+        },
+        {
+          "label": "100",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.pill_background_opacity",
+      "label": "Pill Background Opacity (%)",
+      "type": "dropdown",
+      "defaultValue": 48,
+      "options": [
+        {
+          "label": "10",
+          "value": 10
+        },
+        {
+          "label": "30",
+          "value": 30
+        },
+        {
+          "label": "48",
+          "value": 48
+        },
+        {
+          "label": "50",
+          "value": 50
+        },
+        {
+          "label": "70",
+          "value": 70
+        },
+        {
+          "label": "90",
+          "value": 90
+        },
+        {
+          "label": "100",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.hide_dual_view",
+      "label": "Hide Dual-View Button",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.hide_all_sides_resize_btn",
+      "label": "Hide All-Sides Resize Button",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.hide_pin",
+      "label": "Hide Pin Button",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.hide_expand",
+      "label": "Hide Expand Button",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.hide_grabber",
+      "label": "Hide Resize Grabber",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.hide_refresh",
+      "label": "Hide Pill Refresh Button",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.hide_close",
+      "label": "Hide Pill Close Button",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.audio_indicator",
+      "label": "Panel Audio Indicator and Mute",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.bgalazka.smart_sleep",
+      "label": "Defer automatic panel preloads (startup selections still load)",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybinds_enabled",
+      "label": "Enable Extension Shortcuts",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.close_panel",
+      "label": "Shortcut: Close Panel",
+      "type": "string",
+      "defaultValue": "Escape"
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.back",
+      "label": "Shortcut: Panel Back",
+      "type": "string",
+      "defaultValue": "Alt+ArrowLeft"
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.forward",
+      "label": "Shortcut: Panel Forward",
+      "type": "string",
+      "defaultValue": "Alt+ArrowRight"
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.reload",
+      "label": "Shortcut: Reload Panel",
+      "type": "string",
+      "defaultValue": "Ctrl+R"
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.focus_url",
+      "label": "Shortcut: Focus Panel URL",
+      "type": "string",
+      "defaultValue": "Ctrl+L"
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.toggle_pin",
+      "label": "Shortcut: Toggle Pin",
+      "type": "string",
+      "defaultValue": "Ctrl+Shift+P"
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.toggle_expand",
+      "label": "Shortcut: Expand Panel",
+      "type": "string",
+      "defaultValue": "Ctrl+Shift+E"
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.toggle_dual_view",
+      "label": "Shortcut: Toggle Dual-View",
+      "type": "string",
+      "defaultValue": "Ctrl+Shift+D"
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.toggle_resize",
+      "label": "Shortcut: Toggle Resize",
+      "type": "string",
+      "defaultValue": "Ctrl+Shift+R"
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.toggle_toolbar",
+      "label": "Shortcut: Toggle Toolbar",
+      "type": "string",
+      "defaultValue": "Ctrl+Shift+T"
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.toggle_translucency",
+      "label": "Shortcut: Toggle Translucency",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.toggle_opposite_docking",
+      "label": "Shortcut: Toggle Opposite Docking",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.toggle_edge_attached",
+      "label": "Shortcut: Toggle Edge Attachment",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.toggle_input_shield",
+      "label": "Shortcut: Toggle Input Shield",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.zoom_in",
+      "label": "Shortcut: Panel Zoom In",
+      "type": "string",
+      "defaultValue": "Ctrl+Shift+Plus"
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.zoom_out",
+      "label": "Shortcut: Panel Zoom Out",
+      "type": "string",
+      "defaultValue": "Ctrl+Minus"
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.zoom_reset",
+      "label": "Shortcut: Panel Zoom Reset",
+      "type": "string",
+      "defaultValue": "Ctrl+0"
+    },
+    {
+      "property": "zen.workspace.bgalazka.keybind.open_settings",
+      "label": "Shortcut: Open Zentral Settings",
+      "type": "string",
+      "defaultValue": "Ctrl+Shift+Comma"
+    },
+    {
+      "property": "zen.workspace.bgalazka.panel_black_opacity",
+      "label": "Black panel backing opacity (0–100)",
+      "type": "input",
+      "defaultValue": 0
+    },
+    {
+      "property": "zen.workspace.bgalazka.panel_black_steps",
+      "label": "Black backing cycle levels (comma separated)",
+      "type": "input",
+      "defaultValue": "0,1,5,10,20,30,40,50,60,70,80,90,100"
+    },
+    {
+      "property": "zen.workspace.bgalazka.force_panel_black",
+      "label": "Force black panel backing",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.show_triple_style_repair",
+      "label": "Show Triple View style repair button",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.panel_retry_limit",
+      "label": "Panel recovery retry limit",
+      "type": "dropdown",
+      "defaultValue": 2,
+      "options": [
+        {
+          "label": "Off",
+          "value": 0
+        },
+        {
+          "label": "1",
+          "value": 1
+        },
+        {
+          "label": "2",
+          "value": 2
+        },
+        {
+          "label": "3",
+          "value": 3
+        },
+        {
+          "label": "4",
+          "value": 4
+        },
+        {
+          "label": "6",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.panel_retry_delay_ms",
+      "label": "Panel recovery retry delay",
+      "type": "dropdown",
+      "defaultValue": 500,
+      "options": [
+        {
+          "label": "100 ms",
+          "value": 100
+        },
+        {
+          "label": "250 ms",
+          "value": 250
+        },
+        {
+          "label": "500 ms",
+          "value": 500
+        },
+        {
+          "label": "1 second",
+          "value": 1000
+        },
+        {
+          "label": "2 seconds",
+          "value": 2000
+        },
+        {
+          "label": "5 seconds",
+          "value": 5000
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.panel_fallback_interval_ms",
+      "label": "Panel troubleshooting refresh interval",
+      "type": "dropdown",
+      "defaultValue": 10000,
+      "options": [
+        {
+          "label": "1 second",
+          "value": 1000
+        },
+        {
+          "label": "5 seconds",
+          "value": 5000
+        },
+        {
+          "label": "10 seconds",
+          "value": 10000
+        },
+        {
+          "label": "30 seconds",
+          "value": 30000
+        },
+        {
+          "label": "1 minute",
+          "value": 60000
+        },
+        {
+          "label": "5 minutes",
+          "value": 300000
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.periodic_fallback_polling",
+      "label": "Periodic fallback polling",
+      "type": "checkbox",
+      "defaultValue": false
+    }
+  ],
+  "settings": {
+    "zen.workspace.bgalazka.appsbar_library": {
+      "category": "app-tools",
+      "section": "Browser shortcuts",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.appsbar_history": {
+      "category": "app-tools",
+      "section": "Browser shortcuts",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.appsbar_downloads": {
+      "category": "app-tools",
+      "section": "Browser shortcuts",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.appsbar_bookmarks": {
+      "category": "app-tools",
+      "section": "Browser shortcuts",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.hover_reveal_panel": {
+      "category": "panel-hover",
+      "section": "Autohide & reveal target",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.hover_reveal_delay_ms": {
+      "category": "panel-hover",
+      "section": "Autohide & reveal target",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.hover_reveal_width_px": {
+      "category": "panel-hover",
+      "section": "Autohide & reveal target",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.hide_hover_reveal_btn": {
+      "category": "pill",
+      "section": "Visibility, buttons & mini pill",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.hide_pill": {
+      "category": "pill",
+      "section": "Visibility, buttons & mini pill",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.pill_position": {
+      "category": "pill",
+      "section": "Visibility, buttons & mini pill",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.pill_peek_dot": {
+      "category": "pill",
+      "section": "Visibility, buttons & mini pill",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.pill_peek_dot_color": {
+      "category": "pill",
+      "section": "Visibility, buttons & mini pill",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.pill_peek_dot_opacity": {
+      "category": "pill",
+      "section": "Visibility, buttons & mini pill",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.pill_background_opacity": {
+      "category": "pill",
+      "section": "Visibility, buttons & mini pill",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.hide_dual_view": {
+      "category": "pill",
+      "section": "Visibility, buttons & mini pill",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.hide_all_sides_resize_btn": {
+      "category": "pill",
+      "section": "Visibility, buttons & mini pill",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.hide_pin": {
+      "category": "pill",
+      "section": "Visibility, buttons & mini pill",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.hide_expand": {
+      "category": "pill",
+      "section": "Visibility, buttons & mini pill",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.hide_grabber": {
+      "category": "pill",
+      "section": "Visibility, buttons & mini pill",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.hide_refresh": {
+      "category": "pill",
+      "section": "Visibility, buttons & mini pill",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.hide_close": {
+      "category": "pill",
+      "section": "Visibility, buttons & mini pill",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.audio_indicator": {
+      "category": "notifications",
+      "section": "Audio indicator & mute",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.smart_sleep": {
+      "category": "startup",
+      "section": "Panel background loading",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybinds_enabled": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.close_panel": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.back": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.forward": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.reload": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.focus_url": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.toggle_pin": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.toggle_expand": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.toggle_dual_view": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.toggle_resize": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.toggle_toolbar": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.toggle_translucency": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.toggle_opposite_docking": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.toggle_edge_attached": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.toggle_input_shield": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.zoom_in": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.zoom_out": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.zoom_reset": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.keybind.open_settings": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.panel_black_opacity": {
+      "category": "panel-backing",
+      "section": "Black backing & cycle levels",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.panel_black_steps": {
+      "category": "panel-backing",
+      "section": "Black backing & cycle levels",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.force_panel_black": {
+      "category": "panel-backing",
+      "section": "Black backing & cycle levels",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.show_triple_style_repair": {
+      "category": "recovery",
+      "section": "Bounded recovery & optional troubleshooting",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.panel_retry_limit": {
+      "category": "recovery",
+      "section": "Bounded recovery & optional troubleshooting",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.panel_retry_delay_ms": {
+      "category": "recovery",
+      "section": "Bounded recovery & optional troubleshooting",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.panel_fallback_interval_ms": {
+      "category": "recovery",
+      "section": "Bounded recovery & optional troubleshooting",
+      "owner": "panels"
+    },
+    "zen.workspace.bgalazka.periodic_fallback_polling": {
+      "category": "recovery",
+      "section": "Bounded recovery & optional troubleshooting",
+      "owner": "panels"
+    }
+  }
+}

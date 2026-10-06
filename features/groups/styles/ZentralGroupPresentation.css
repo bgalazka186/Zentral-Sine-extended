@@ -1,0 +1,1113 @@
+/*
+ * ZENTRAL FILE GUIDE - features/groups/styles/ZentralGroupPresentation.css
+ * Purpose: Group headers/cards, initials, marquee, hover preview and tooltip presentation.
+ * Loaded by: core/ZentralRuntime.js via core/ZentralCatalog.js at USER_SHEET origin.
+ * Activation: legacy zen.workspace.zentral.modules.css.Base.enabled switch; owners tab-groups.
+ * Interactions: feature controllers apply the selectors/attributes below; this file owns presentation only.
+ * Cleanup: Runtime unregisters this sheet; do not change stylesheet origin or cascade order.
+ * Dependencies: Catalog defines order/owner gating.
+ * Collaborators: core/ZentralRuntime.js; core/ZentralCatalog.js; features/groups/ZentralTabGroups.uc.js;
+ * features/groups/controllers/ZentralGroupsDom.js; features/groups/controllers/ZentralGroupsMenus.js
+ * DOM IDs: #fbfbfe; #ff5555; #ffffff; #main-window; #tabbrowser-tabs; #zentral-group-color-picker
+ * Attributes: collapsed; data-active; data-has-subgroups; data-overflows; data-unloaded; depth; nesting-
+ * level; open; selected; zen-right-side; zen-sidebar-collapsed; zen-sidebar-right; zentral-indicator-type;
+ * zentral-label-opacity-below-85; zentral-show-chevron; zentral-sidebar-collapsed
+ * Consumed variables: --tab-group-color; --tab-min-height; --zen-primary-color; --zentral-custom-color;
+ * --zentral-marquee-duration; --zentral-tabgroup-contrast-color; --zentral-tabgroup-label-opacity
+ */
+/* ===========================================================================
+   Smooth Translucent Full-Width Header Card Tinted with Group Color
+   =========================================================================== */
+/* Base Container (Full width across the sidebar) */
+tab-group.zentral-standard > .tab-group-label-container {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  pointer-events: auto !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  height: var(--tab-min-height, 36px) !important;
+  min-height: var(--tab-min-height, 36px) !important;
+  max-height: var(--tab-min-height, 36px) !important;
+  aspect-ratio: auto !important;
+  margin: 2px 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  opacity: 1 !important;
+  position: relative !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+
+/* Extension Shelf retired */
+tab-group.zentral-standard > .tab-group-label-container::before {
+  display: none !important;
+  content: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+
+/* Title Card (Left Sidebar default: 100% full-width, right-aligned content facing webpage) */
+tab-group.zentral-standard
+  > .tab-group-label-container
+  .zentral-tab-title-wrapper {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  height: var(--tab-min-height, 36px) !important;
+  min-height: var(--tab-min-height, 36px) !important;
+  max-height: var(--tab-min-height, 36px) !important;
+  padding: 0 8px 0 10px !important;
+  border-radius: 8px !important;
+  background-color: color-mix(
+    in srgb,
+    var(--zentral-custom-color, var(--tab-group-color, #777777))
+      calc(var(--zentral-tabgroup-label-opacity, 0.85) * 100%),
+    transparent
+  ) !important;
+  z-index: 3 !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  transition:
+    background-color 0.2s ease,
+    border-radius 0.2s ease !important;
+}
+
+
+/* Nested Groups on Left Sidebar: 8px compact stepped indentation on the RIGHT (facing webpage content) */
+:is(
+    tab-group.zentral-standard tab-group.zentral-standard,
+    tab-group.zentral-standard[depth],
+    tab-group.zentral-standard[nesting-level]
+  )
+  > .tab-group-label-container
+  .zentral-tab-title-wrapper {
+  margin-right: 8px !important;
+  margin-left: 0 !important;
+  width: calc(100% - 8px) !important;
+  min-width: calc(100% - 8px) !important;
+}
+
+
+#zentral-group-color-picker,
+#zentral-group-color-picker::part(content),
+#zentral-group-color-picker::part(arrow),
+panel#zentral-group-color-picker,
+#zentral-group-color-picker .panel-arrowcontent,
+#zentral-group-color-picker .panel-subview-body {
+  --panel-background: transparent !important;
+  --panel-border-color: transparent !important;
+  --panel-box-shadow: none !important;
+  --panel-padding: 0 !important;
+  --arrowpanel-background: transparent !important;
+  --arrowpanel-border-color: transparent !important;
+  --arrowpanel-border-radius: 0px !important;
+  --arrowpanel-box-shadow: none !important;
+  --arrowpanel-padding: 0 !important;
+  --arrowpanel-margin: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  appearance: none !important;
+}
+
+
+.zentral-tg-cp-box {
+  padding: 12px 14px 14px 14px !important;
+  gap: 10px !important;
+  background: #1e1e24 !important;
+  color: #fbfbfe !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75) !important;
+  width: 184px !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  overflow: visible !important;
+}
+
+
+/* Right Sidebar Mode (Sidebar on Right side of screen -> Outer edge is on RIGHT, content on LEFT) */
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  tab-group.zentral-standard
+  > .tab-group-label-container {
+  justify-content: flex-start !important;
+}
+
+
+html[zen-sidebar-right="true"]
+  tab-group.zentral-standard
+  > .tab-group-label-container
+  .zentral-tab-title-wrapper,
+html[zen-right-side="true"]
+  tab-group.zentral-standard
+  > .tab-group-label-container
+  .zentral-tab-title-wrapper {
+  justify-content: flex-start !important;
+  padding: 0 10px 0 8px !important;
+  margin-left: 0 !important;
+  margin-right: auto !important;
+  width: 100% !important;
+  min-width: 100% !important;
+}
+
+
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  :is(
+    tab-group.zentral-standard tab-group.zentral-standard,
+    tab-group.zentral-standard[depth],
+    tab-group.zentral-standard[nesting-level]
+  )
+  > .tab-group-label-container
+  .zentral-tab-title-wrapper {
+  margin-left: 8px !important;
+  margin-right: 0 !important;
+  width: calc(100% - 8px) !important;
+  min-width: calc(100% - 8px) !important;
+}
+
+
+html[zen-sidebar-right="true"]
+  tab-group.zentral-standard
+  > .tab-group-label-container::before,
+html[zen-right-side="true"]
+  tab-group.zentral-standard
+  > .tab-group-label-container::before {
+  display: none !important;
+  content: none !important;
+}
+
+
+/* Hover State Highlights for Full-Width Group Card */
+tab-group.zentral-standard
+  > .tab-group-label-container:is(:hover, :has(tab:hover))
+  .zentral-tab-title-wrapper {
+  background-color: color-mix(
+    in srgb,
+    var(--zentral-custom-color, var(--tab-group-color, #777777)) 85%,
+    #ffffff 15%
+  ) !important;
+  border-radius: 8px !important;
+}
+
+
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  tab-group.zentral-standard
+  > .tab-group-label-container:is(:hover, :has(tab:hover))
+  .zentral-tab-title-wrapper {
+  border-radius: 8px !important;
+}
+
+
+html[zentral-label-opacity-below-85="true"]
+  tab-group.zentral-standard
+  > .tab-group-label-container:is(:hover, :has(tab:hover))
+  .zentral-tab-title-wrapper {
+  background-color: var(
+    --zentral-custom-color,
+    var(--tab-group-color, #777777)
+  ) !important;
+  border-radius: 8px !important;
+}
+
+
+html[zentral-label-opacity-below-85="true"]:is(
+    [zen-sidebar-right="true"],
+    [zen-right-side="true"]
+  )
+  tab-group.zentral-standard
+  > .tab-group-label-container:is(:hover, :has(tab:hover))
+  .zentral-tab-title-wrapper {
+  border-radius: 8px !important;
+}
+
+
+/* Label text - Dynamically Auto-Contrast (Black or White) based on Label Color */
+/* Left Sidebar: Text is order 1, Indicator is order 2 (closest to right / webpage content) */
+tab-group.zentral-standard > .tab-group-label-container .tab-group-label {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  flex: 0 1 auto !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  max-height: 100% !important;
+  line-height: 1 !important;
+  align-self: center !important;
+  text-align: end !important;
+  background-color: transparent !important;
+  opacity: 1 !important;
+  color: var(--zentral-tabgroup-contrast-color, #ffffff) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25) !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  padding: 0 !important;
+  margin: -2px 6px 0 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  width: auto !important;
+  max-width: 100% !important;
+  order: 1 !important;
+  transition: color 0.15s ease !important;
+}
+
+
+/* Right Sidebar: Indicator is order 1 (closest to left / webpage content), Text is order 2 */
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  #tabbrowser-tabs
+  tab-group
+  > .tab-group-label-container
+  .tab-group-label {
+  text-align: start !important;
+  order: 2 !important;
+  margin: -2px 0 0 6px !important;
+}
+
+
+/* Sub-Groups Counter Badge */
+.zentral-subgroups-badge {
+  display: none !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 2px 7px !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  border-radius: 10px !important;
+  background: color-mix(in srgb, currentColor 18%, transparent) !important;
+  color: var(--zentral-tabgroup-contrast-color, #ffffff) !important;
+  letter-spacing: 0.02em !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  order: 0 !important;
+  margin-right: auto !important;
+  margin-left: 0 !important;
+  transition: opacity 0.15s ease !important;
+}
+
+
+/* Right Sidebar: Place badge at the far right edge (opposite from left-aligned name) */
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  #tabbrowser-tabs
+  tab-group
+  > .tab-group-label-container
+  .zentral-subgroups-badge {
+  order: 3 !important;
+  margin-left: auto !important;
+  margin-right: 0 !important;
+}
+
+
+/* Reveal ONLY when the parent group is collapsed and has sub-groups */
+tab-group[collapsed="true"][data-has-subgroups]
+  > .tab-group-label-container
+  .zentral-subgroups-badge {
+  display: inline-flex !important;
+}
+
+
+/* Hide in collapsed sidebar mode */
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  > .tab-group-label-container
+  .zentral-subgroups-badge {
+  display: none !important;
+}
+
+
+/* Icon container within title wrapper */
+/* Left Sidebar: Order 2 (closer to right / webpage content) */
+.tab-group-icon-container,
+#tabbrowser-tabs tab-group .tab-group-icon-container,
+#tabbrowser-tabs tab-group[collapsed] .tab-group-icon-container {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  max-width: 16px !important;
+  max-height: 16px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  flex-shrink: 0 !important;
+  order: 2 !important;
+  overflow: visible !important;
+}
+
+
+/* Right Sidebar: Order 1 (closer to left / webpage content) */
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  #tabbrowser-tabs
+  tab-group
+  .tab-group-icon-container,
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  #tabbrowser-tabs
+  tab-group[collapsed]
+  .tab-group-icon-container {
+  order: 1 !important;
+}
+
+
+/* Circular Group State Indicator - Dynamically Auto-Contrast (Black or White) based on Label Color */
+#tabbrowser-tabs tab-group > .tab-group-label-container .tab-group-icon,
+#tabbrowser-tabs
+  tab-group[collapsed]
+  > .tab-group-label-container
+  .tab-group-icon,
+tab-group .tab-group-icon,
+tab-group[collapsed] .tab-group-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+  opacity: 1 !important;
+  color: var(--zentral-tabgroup-contrast-color, #ffffff) !important;
+  fill: var(--zentral-tabgroup-contrast-color, #ffffff) !important;
+  stroke: var(--zentral-tabgroup-contrast-color, #ffffff) !important;
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  max-width: 16px !important;
+  max-height: 16px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  flex-shrink: 0 !important;
+  order: 1 !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  background-image: none !important;
+  text-decoration: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  cursor: pointer !important;
+  overflow: visible !important;
+}
+
+
+/* 1. Closed State: Small Solid full dot (Fixed size, pure opacity fade - zero zoom bounce) */
+tab-group .tab-group-icon::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  margin: auto !important;
+  width: 6.5px !important;
+  height: 6.5px !important;
+  border-radius: 50% !important;
+  background-color: currentColor !important;
+  opacity: 0 !important;
+  transform: none !important;
+  transition: opacity 0.16s ease !important;
+  pointer-events: none !important;
+}
+
+
+tab-group[collapsed] .tab-group-icon::before {
+  opacity: 1 !important;
+  transform: none !important;
+  transition: opacity 0.2s ease !important;
+}
+
+
+/* Complete obliteration of native image.group-marker and children inside .tab-group-icon on tabstrip ONLY */
+tab-group
+  :is(
+    .group-marker,
+    .tab-group-icon > *,
+    .tab-group-icon :is(image, img, svg, label, span)
+  ) {
+  display: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  opacity: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  list-style-image: none !important;
+  background: none !important;
+  background-image: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+
+tab-group .group-marker::before,
+tab-group .group-marker::after,
+tab-group[collapsed] .group-marker::before,
+tab-group[collapsed] .group-marker::after,
+.group-marker::before,
+.group-marker::after {
+  display: none !important;
+  content: none !important;
+  border: none !important;
+}
+
+
+/* 2. Open State: Concentric Circles with central dot (Zen logo style) */
+tab-group .tab-group-icon::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  margin: auto !important;
+  display: block !important;
+  width: 16px !important;
+  height: 16px !important;
+  background-color: currentColor !important;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='12' cy='12' r='10.4' stroke='black' stroke-width='2.0'/%3E%3Ccircle cx='12' cy='12' r='6.2' stroke='black' stroke-width='1.8'/%3E%3Ccircle cx='12' cy='12' r='1.6' fill='black'/%3E%3C/svg%3E") !important;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='12' cy='12' r='10.4' stroke='black' stroke-width='2.0'/%3E%3Ccircle cx='12' cy='12' r='6.2' stroke='black' stroke-width='1.8'/%3E%3Ccircle cx='12' cy='12' r='1.6' fill='black'/%3E%3C/svg%3E") !important;
+  -webkit-mask-size: contain !important;
+  mask-size: contain !important;
+  -webkit-mask-repeat: no-repeat !important;
+  mask-repeat: no-repeat !important;
+  -webkit-mask-position: center !important;
+  mask-position: center !important;
+  opacity: 1 !important;
+  transform: scale(1) !important;
+  transition:
+    opacity 0.22s ease,
+    transform 0.24s cubic-bezier(0.25, 1, 0.5, 1) !important;
+  pointer-events: none !important;
+  overflow: visible !important;
+}
+
+
+tab-group[collapsed] .tab-group-icon::after {
+  opacity: 0 !important;
+  transform: scale(0.41) !important;
+  transition:
+    opacity 0.18s ease,
+    transform 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+
+/* Hide indicator icon completely when user disables Group Indicator in Zentral Settings */
+:is(html, :root, #main-window)[zentral-show-chevron="false"]
+  :is(#tabbrowser-tabs, tab-group, .tab-group-label-container)
+  :is(.tab-group-icon, .tab-group-icon-container),
+:is(html, :root, #main-window)[zentral-show-chevron="false"]
+  tab-group
+  :is(.tab-group-icon, .tab-group-icon-container),
+:is(html, :root, #main-window)[zentral-show-chevron="false"]
+  .tab-group-icon-container,
+:is(html, :root, #main-window)[zentral-show-chevron="false"] .tab-group-icon {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  pointer-events: none !important;
+}
+
+
+:is(html, :root, #main-window)[zentral-show-chevron="false"]
+  tab-group
+  :is(.tab-group-icon, .tab-group-icon-container)::before,
+:is(html, :root, #main-window)[zentral-show-chevron="false"]
+  tab-group
+  :is(.tab-group-icon, .tab-group-icon-container)::after {
+  display: none !important;
+  content: none !important;
+  opacity: 0 !important;
+}
+
+
+/* Chevron Indicator Option */
+:is(html, :root, #main-window)[zentral-indicator-type="chevron"]
+  tab-group
+  .tab-group-icon::before {
+  display: none !important;
+}
+
+
+:is(html, :root, #main-window)[zentral-indicator-type="chevron"]
+  tab-group
+  .tab-group-icon::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  margin: auto !important;
+  display: block !important;
+  width: 14px !important;
+  height: 14px !important;
+  background-color: currentColor !important;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  -webkit-mask-size: contain !important;
+  mask-size: contain !important;
+  -webkit-mask-repeat: no-repeat !important;
+  mask-repeat: no-repeat !important;
+  -webkit-mask-position: center !important;
+  mask-position: center !important;
+  opacity: 1 !important;
+  transform: rotate(0deg) !important;
+  transition:
+    transform 0.2s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.18s ease !important;
+  pointer-events: none !important;
+}
+
+
+:is(html, :root, #main-window)[zentral-indicator-type="chevron"]
+  tab-group[collapsed]
+  .tab-group-icon::after {
+  opacity: 1 !important;
+  transform: rotate(-90deg) !important;
+  transition:
+    transform 0.2s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.18s ease !important;
+}
+
+
+/* Hierarchy & Nested Groups Indentation (Mirrored for Left vs Right Sidebar) */
+tab-group.zentral-standard tab-group.zentral-standard {
+  margin-right: 8px !important;
+  margin-left: 0 !important;
+  position: relative !important;
+  width: calc(100% - 8px) !important;
+}
+
+
+/* No vertical line connecting parent label to nested group header */
+tab-group.zentral-standard tab-group.zentral-standard::before {
+  display: none !important;
+  content: none !important;
+}
+
+
+.zentral-group-initials {
+  display: none !important;
+}
+
+
+/* Top-level group tab container: flush margin and no guide line */
+tab-group.zentral-standard > .tab-group-container {
+  max-height: 100% !important;
+  position: relative !important;
+  margin: 0 !important;
+}
+
+
+tab-group.zentral-standard > .tab-group-container::after {
+  display: none !important;
+  content: none !important;
+}
+
+
+/* Nested Tab Group Container: 8px indented on the RIGHT (facing webpage content) */
+tab-group.zentral-standard tab-group.zentral-standard .tab-group-container {
+  max-height: 100% !important;
+  position: relative !important;
+  margin-right: 8px !important;
+  margin-left: 0 !important;
+  margin-inline-start: 0 !important;
+  margin-inline-end: 8px !important;
+}
+
+
+/* Vertical Guide Line: Only connects the nested label with its own tabs, using the nested label's color */
+tab-group.zentral-standard
+  tab-group.zentral-standard
+  .tab-group-container::after {
+  content: "" !important;
+  display: block !important;
+  position: absolute !important;
+  right: 0px !important;
+  left: auto !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  background-color: var(
+    --zentral-custom-color,
+    var(--tab-group-color, #777777)
+  ) !important;
+  height: 100% !important;
+  width: 2px !important;
+  border-radius: 1px !important;
+  z-index: 2 !important;
+  pointer-events: none !important;
+  opacity: 0.9 !important;
+}
+
+
+/* Right Sidebar Mode Overrides (Outer edge is on the RIGHT, webpage content on LEFT) */
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  tab-group.zentral-standard
+  tab-group.zentral-standard {
+  margin-left: 8px !important;
+  margin-right: 0 !important;
+}
+
+
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  tab-group.zentral-standard
+  tab-group.zentral-standard
+  .tab-group-container {
+  margin-left: 8px !important;
+  margin-right: 0 !important;
+  margin-inline-start: 8px !important;
+  margin-inline-end: 0 !important;
+}
+
+
+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+  tab-group.zentral-standard
+  tab-group.zentral-standard
+  .tab-group-container::after {
+  left: 0px !important;
+  right: auto !important;
+}
+
+
+tab-group.zentral-standard[collapsed] .tab-group-container::after {
+  display: none !important;
+}
+
+
+tab-group.zentral-standard .tab-group-container tab,
+tab-group.zentral-standard .tab-group-container tab-group {
+  transition:
+    max-height 0.15s ease,
+    opacity 0.15s ease !important;
+}
+
+
+tab-group.zentral-standard[collapsed] .tab-group-container tab:not([selected]),
+tab-group.zentral-standard[collapsed] .tab-group-container tab-group {
+  max-height: 0 !important;
+  min-height: 0 !important;
+  opacity: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+
+
+/* Hide tree guide lines and native pseudo-elements when a tab group is collapsed/closed or in Collapsed Sidebar Mode */
+tab-group[collapsed] .tab-group-container::after,
+tab-group[collapsed] .tab-group-container::before,
+tab-group[collapsed]::before,
+tab-group[collapsed]::after,
+tab-group[collapsed] > .tab-group-label-container::before,
+tab-group[collapsed] > .tab-group-label-container::after,
+tab-group:not([open]) .tab-group-container::after,
+tab-group:not([open]) .tab-group-container::before,
+#tabbrowser-tabs[zentral-sidebar-collapsed="true"] tab-group::before,
+#tabbrowser-tabs[zentral-sidebar-collapsed="true"] tab-group::after,
+#tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  tab-group
+  .tab-group-container::before,
+#tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  tab-group
+  .tab-group-container::after,
+#tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  tab-group
+  > .tab-group-label-container::before,
+#tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  tab-group
+  > .tab-group-label-container::after,
+html[zentral-sidebar-collapsed="true"] tab-group::before,
+html[zentral-sidebar-collapsed="true"] tab-group::after,
+html[zentral-sidebar-collapsed="true"] tab-group .tab-group-container::before,
+html[zentral-sidebar-collapsed="true"] tab-group .tab-group-container::after,
+html[zentral-sidebar-collapsed="true"]
+  tab-group
+  > .tab-group-label-container::before,
+html[zentral-sidebar-collapsed="true"]
+  tab-group
+  > .tab-group-label-container::after,
+html[zen-sidebar-collapsed="true"] tab-group::before,
+html[zen-sidebar-collapsed="true"] tab-group::after,
+html[zen-sidebar-collapsed="true"] tab-group .tab-group-container::before,
+html[zen-sidebar-collapsed="true"] tab-group .tab-group-container::after,
+html[zen-sidebar-collapsed="true"]
+  tab-group
+  > .tab-group-label-container::before,
+html[zen-sidebar-collapsed="true"]
+  tab-group
+  > .tab-group-label-container::after {
+  display: none !important;
+  content: none !important;
+  border: none !important;
+  width: 0 !important;
+  opacity: 0 !important;
+}
+
+
+/* Collapsed Sidebar Mode Styling */
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  > .tab-group-label-container {
+  justify-content: center !important;
+  align-items: center !important;
+  padding: 0 !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  height: var(--tab-min-height, 36px) !important;
+  min-height: var(--tab-min-height, 36px) !important;
+  max-height: var(--tab-min-height, 36px) !important;
+  box-sizing: border-box !important;
+}
+
+
+/* Disable Chevrons completely in Collapsed Sidebar Mode */
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  :is(.tab-group-icon, .tab-group-icon-container) {
+  display: none !important;
+  visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+
+/* Hide Expanded Mode Label Title text in Collapsed Sidebar Mode */
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  > .tab-group-label-container
+  .tab-group-label {
+  display: none !important;
+}
+
+
+/* Title Wrapper in Collapsed Sidebar Mode: Left-align content & constrain within rounded pill */
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  > .tab-group-label-container
+  .zentral-tab-title-wrapper {
+  justify-content: flex-start !important;
+  padding: 0 4px 0 6px !important;
+  overflow: hidden !important;
+}
+
+
+/* Collapsed Label Text & Marquee Shell: Starts from the very first letter (never cut off) */
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  > .tab-group-label-container
+  .zentral-group-initials {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.02em !important;
+  color: var(--zentral-tabgroup-contrast-color, #ffffff) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
+  text-align: start !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+  overflow: hidden !important;
+  position: relative !important;
+  user-select: none !important;
+  pointer-events: none !important;
+  mask-image: linear-gradient(
+    to right,
+    black calc(100% - 6px),
+    transparent 100%
+  );
+}
+
+
+/* Marquee Track (Resting: Starts at x=0 showing first letters cleanly) */
+.zentral-group-initials .zentral-marquee-track {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  white-space: nowrap !important;
+  will-change: transform !important;
+  transform: translateX(0);
+}
+
+
+.zentral-group-initials .zentral-marquee-item {
+  display: inline-flex !important;
+  align-items: center !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+
+
+.zentral-group-initials .zentral-marquee-text {
+  white-space: nowrap !important;
+  display: inline-block !important;
+}
+
+
+.zentral-group-initials .zentral-marquee-spacer {
+  display: none !important;
+  padding: 0 4px !important;
+  opacity: 0.6 !important;
+  font-size: 9px !important;
+}
+
+
+.zentral-group-initials .zentral-marquee-item:nth-child(2) {
+  display: none !important;
+}
+
+
+/* On Hover: Trigger Continuous Marquee Carousel if overflowing */
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group:hover
+  > .tab-group-label-container
+  .zentral-group-initials[data-overflows="true"]
+  .zentral-marquee-track,
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  > .tab-group-label-container:hover
+  .zentral-group-initials[data-overflows="true"]
+  .zentral-marquee-track {
+  animation: zentral-collapsed-marquee var(--zentral-marquee-duration, 3.5s)
+    linear infinite !important;
+  animation-delay: 400ms !important;
+}
+
+
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group:hover
+  > .tab-group-label-container
+  .zentral-group-initials[data-overflows="true"]
+  .zentral-marquee-spacer,
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  > .tab-group-label-container:hover
+  .zentral-group-initials[data-overflows="true"]
+  .zentral-marquee-spacer {
+  display: inline-block !important;
+}
+
+
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group:hover
+  > .tab-group-label-container
+  .zentral-group-initials[data-overflows="true"]
+  .zentral-marquee-item:nth-child(2),
+:is(
+    html[zentral-sidebar-collapsed="true"],
+    html[zen-sidebar-collapsed="true"],
+    #tabbrowser-tabs[zentral-sidebar-collapsed="true"]
+  )
+  tab-group
+  > .tab-group-label-container:hover
+  .zentral-group-initials[data-overflows="true"]
+  .zentral-marquee-item:nth-child(2) {
+  display: inline-flex !important;
+}
+
+
+@keyframes zentral-collapsed-marquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+
+/* ===========================================================================
+   Zentral - Tab Group Thumbnail Popup Styles
+   =========================================================================== */
+.zentral-tooltip-row {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 6px 10px !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  max-width: 320px !important;
+  border: 1px solid transparent !important;
+  box-sizing: border-box !important;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease !important;
+}
+
+
+.zentral-tooltip-row:hover {
+  background-color: color-mix(
+    in srgb,
+    currentColor 10%,
+    transparent
+  ) !important;
+}
+
+
+/* Active Tab in Thumbnail Preview */
+.zentral-tooltip-row[data-active="true"] {
+  background-color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #707ac2) 24%,
+    rgba(255, 255, 255, 0.12)
+  ) !important;
+  border: 1px solid
+    color-mix(in srgb, var(--zen-primary-color, #707ac2) 45%, transparent) !important;
+  opacity: 1 !important;
+}
+
+
+.zentral-tooltip-row[data-active="true"] .zentral-tooltip-title {
+  color: var(--zen-primary-color, currentColor) !important;
+  font-weight: 600 !important;
+}
+
+
+/* Unloaded / Dormant Tab in Thumbnail Preview */
+.zentral-tooltip-row[data-unloaded="true"]:not([data-active="true"]) {
+  opacity: 0.55 !important;
+}
+
+
+.zentral-tooltip-row[data-unloaded="true"]:not([data-active="true"]):hover {
+  opacity: 0.88 !important;
+}
+
+
+/* Close Tab ("X") Button on Thumbnail Hover */
+.zentral-tooltip-close-btn {
+  appearance: none !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 6px !important;
+  color: inherit !important;
+  padding: 3px !important;
+  width: 22px !important;
+  height: 22px !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease !important;
+  flex-shrink: 0 !important;
+  margin-left: auto !important;
+}
+
+
+.zentral-tooltip-row:hover .zentral-tooltip-close-btn {
+  opacity: 0.65 !important;
+  pointer-events: auto !important;
+}
+
+
+.zentral-tooltip-close-btn:hover {
+  opacity: 1 !important;
+  background-color: rgba(255, 77, 77, 0.22) !important;
+  color: #ff5555 !important;
+}
+
+
+.zentral-tooltip-close-btn svg {
+  width: 12px !important;
+  height: 12px !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 2 !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+  display: block !important;
+}

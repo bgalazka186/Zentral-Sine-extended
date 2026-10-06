@@ -1,0 +1,24 @@
+{
+  "_documentation": {
+    "purpose": "Settings schema and category/section metadata owned by tab-unload.",
+    "consumer": "features/settings/controllers/ZentralSettingsCatalog.js reads schema/settings; Runtime filters availability, UI controllers render controls.",
+    "feature_source": "features/tabs/unloading/ZentralTabUnload.uc.js",
+    "contract": "This object is data only. Missing descriptor hides owner settings; it does not start or unload the feature. Keep property/defaultValue and category IDs synchronized with preferences.json and features/settings/layout.json."
+  },
+  "owner": "tab-unload",
+  "schema": [
+    {
+      "property": "zen.workspace.bgalazka.mmb_unload_normal_tabs",
+      "label": "Middle-click unloads normal tabs",
+      "type": "checkbox",
+      "defaultValue": false
+    }
+  ],
+  "settings": {
+    "zen.workspace.bgalazka.mmb_unload_normal_tabs": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "tab-unload"
+    }
+  }
+}

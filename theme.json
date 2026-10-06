@@ -9,15 +9,24 @@
     "content": ""
   },
   "scripts": {
-    "JS/Zentral.uc.js": {
-      "include": ["chrome://browser/content/browser.xhtml"],
+    "core/Zentral.uc.js": {
+      "include": [
+        "chrome://browser/content/browser.xhtml"
+      ],
       "loadOrder": 1
     }
   },
   "author": "bgalazka186",
-  "version": "2.1.15",
+  "version": "2.2.0",
   "preferences": "preferences.json",
-  "tags": ["apps", "tabs", "sidebar", "groups"],
-  "fork": ["zen"],
+  "tags": [
+    "apps",
+    "tabs",
+    "sidebar",
+    "groups"
+  ],
+  "fork": [
+    "zen"
+  ],
   "readme": "https://raw.githubusercontent.com/bgalazka186/Zentral-Sine-extended/main/README.md"
 }

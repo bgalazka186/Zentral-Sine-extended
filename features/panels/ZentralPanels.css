@@ -1,0 +1,615 @@
+/*
+ * ZENTRAL FILE GUIDE - features/panels/ZentralPanels.css
+ *
+ * Purpose: Extended panel visibility, hit testing, toolbar/pill and closing/hover state presentation.
+ * Interaction / execution: Registered in original relative order at USER_SHEET origin by Runtime (Startup
+ *   owns its startup stylesheet); owner gating stays in Catalog.
+ * Ownership / failure: Selectors/attributes/CSS variables are the interface; do not change stylesheet
+ *   origin, regroup nonadjacent Base rules, or weaken closing/hidden input rules. Owner removes injected
+ *   styles or Runtime removes registered sheets at teardown.
+ * Direct source consumers: core/ZentralCatalog.js
+ * Local interface selectors (subset by prefix): #bgalazka-super-panel; #zen-app-panel-clip;
+ *   #zen-app-panel-pill; #zen-app-panel-root; #zen-app-panel-slider; #zentral-settings-modal;
+ *   #zs-panel-bgalazka; .bgalazka-essential-tile; .zen-app-hover-zone; .zen-app-resize-strip;
+ *   .zen-app-resize-strip-bottom; .zen-app-resize-strip-top; .zen-app-tile; .zs-restart-btn
+ * Attribute selectors used: bgalazka-hover-panel-hidden; bgalazka-opposite-docking;
+ *   bgalazka-panel-input-shield; bgalazka-pill-peek-dot; bgalazka-translucency; closing; data-insta-peek;
+ *   data-loaded; data-panel-side; data-pinned; data-tab-loaded; open; zentral-app-panel-open;
+ *   zentral-apps-placement
+ *
+ * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
+ * contracts from this source, not a promise that every collaborator is enabled at runtime.
+ */
+/* =============================================================================================================
+ * BGALAZKA'S EXTENSION TO THE ZENTRAL MOD (v2)
+ * -------------------------------------------------------------------------------------------------------------
+ * ARCHITECTURAL NOTES & INSTRUCTIONS FOR FUTURE AI AGENTS:
+ * 0. DEFAULT-OFF CONTRACT (CRITICAL): extension CSS must be visually inert on a fresh install. Any selector that
+ *    changes normal browser/Zentral UI must be gated by an explicit `bgalazka-*="true"` opt-in attribute. Keep
+ *    extension-settings styling scoped to #zs-panel-bgalazka so installing the extension does not restyle base
+ *    Zentral settings. New feature CSS must follow the same opt-in rule.
+ * 1. ONLY modify or append code BELOW this marker when working on Bgalazka's Extension.
+ * 2. ALWAYS deliver fully compiled, complete ready-to-paste chunks for both the JS and CSS extension sections.
+ * 3. EXPLAIN THE "WHY" IN CODE COMMENTS: Document Gecko/Zen workarounds so future models do not undo working solutions.
+ * 4. TAB CRASH GUARD: NEVER attach a MutationObserver with { childList: true, subtree: true } to the tabstrip,
+ *    the settings modal's ancestor tree, or documentElement. Modifying/observing tab children during
+ *    gBrowser.pinTab() triggers a fatal C++ assertion crash in Gecko's frame constructor. This includes
+ *    observers that merely WATCH an ancestor of the tabstrip with subtree:true, even if they don't mutate
+ *    anything themselves — the previous version of this file did exactly that to detect the settings modal
+ *    opening (observing documentElement), which is the same forbidden pattern and the most likely cause of
+ *    "crashes when pinning". Detect UI state changes via method hooks instead (see section 5).
+ * 5. SCOPE BUG (CRITICAL): `ZentralApps`, `ZentralTabGroups`, and `ZentralSettings` are `class` declarations
+ *    scoped INSIDE the base mod's own top-level IIFE. They are NOT global identifiers. Referencing the bare
+ *    class name from this separately-appended IIFE (`typeof ZentralApps !== "undefined"`) always evaluates to
+ *    false, silently skipping any code guarded by it — this is what happened in the previous version and is
+ *    why the opposite-docking/pin-state hooks never actually ran. Always reach the class via the singleton
+ *    instance instead: `window.Zentral.Apps`, `window.Zentral.TabGroups`, `window.Zentral.Settings`.
+ * 6. TAB CLICK PASS-THROUGH: Any click on a tile inside a tab bubbles to the tab unless mousedown, mouseup,
+ *    click, and auxclick are stopped in the CAPTURE phase (e.stopPropagation()). This prevents essential tabs
+ *    from switching on LMB.
+ * 7. OPPOSITE-SIDE DOCKING MATH: Native Zentral's positionPanel() calculates targetRight as
+ *    (window.innerWidth - sidebarRect.left). If the sidebar is on the left, targetRight evaluates to ~1920px,
+ *    pushing the panel completely off the screen! We must hook positionPanel() and isPanelAttachedToRight()
+ *    on the Apps INSTANCE (see note 5) to force root.style.right/left = "12px" directly.
+ * 8. RESIZE INVERSION: Zentral's onDrag() internally checks this.isPanelAttachedToRight() ? (startW - diff) : (startW + diff).
+ *    Hooking isPanelAttachedToRight() to return true when docked opposite makes native Zentral invert resize
+ *    math automatically — no need to touch onDrag/startResize ourselves.
+ * 9. PANEL OPACITY: Web pages inside <browser> render opaque backgrounds. Applying only background-color to
+ *    the slider is invisible behind the page canvas. Real transparency requires setting CSS `opacity` on
+ *    #zen-app-panel-slider itself.
+ * 10. NATIVE FEATURE PARITY (v1.0.2): the base mod now natively sets data-loaded="true"/"false" on tiles
+ *     (in renderGrid/getOrCreateAppBrowser/closeApp, searched via a document-wide querySelectorAll so it stays
+ *     correct even after we move a tile into an essential tab's corner) and natively handles middle-click
+ *     unload on the tile itself (mousedown+auxclick, stopPropagation). We must NOT reimplement either of
+ *     these anymore — our old duplicate implementations were overwriting the native, more-accurate state and
+ *     silently blocking the native middle-click handler from ever running (capture-phase
+ *     stopImmediatePropagation upstream prevents the tile's own listeners from firing at all).
+ * 11. CORNER-TILE DOCKING STABILITY: assigning tiles to essential tabs by array INDEX reshuffles every
+ *     existing assignment whenever a tab is added/removed/reordered, and Zen's split-view feature can clone a
+ *     pinned tab (with whatever tile is docked inside it) producing a duplicate icon. Docking must be done by
+ *     a STABLE ID persisted on the tab element itself, and only against tabs that are genuine members of
+ *     gBrowser.tabs (not split-view clones).
+ * 13. PILL CONTRAST: the native pill's background (`var(--zen-colors-tertiary, ...)`) is a THEME color that can
+ *     land close to the page's own colors behind it, making the pill's icons hard to read. Expanded/hovered
+ *     pills therefore use a plain BLACK background with forced white icons. Its alpha is controlled by the
+ *     dedicated --bgalazka-pill-background-opacity variable, while --bgalazka-pill-peek-opacity controls ONLY
+ *     the shrunk idle mini pill. The two settings are intentionally independent so a subtle idle marker does
+ *     not make the opened pill controls equally transparent.
+ * 14. WEB TOOLBAR SEARCH QUICK-SWITCH BUTTON: see Zentral_uc.js note 14 for the JS half (search-engine
+ *     picker, URL-vs-search detection, Back-button home fallback). The quick-switch button reuses the exact
+ *     same `.zen-toolbar-btn` sizing/hover styling as back/forward/reload below -- its visibility (only on a
+ *     recognized DDG/Startpage results page) is toggled from JS via inline style.display rather than a CSS
+ *     attribute selector, since it depends on the CURRENT PAGE'S URL, which has no CSS selector to key off.
+ * 15. TOOLBAR TOP DOCKING (v4): see the "TOOLBAR POSITION: TOP-OF-PANEL" rules near the end of this file.
+ *     Flipping `order` from 999 to a very negative number is enough to move the toolbar from last to first
+ *     child of the #zen-app-panel-slider flex column -- no separate top-docked layout was needed. The
+ *     autohide overlay case additionally needs its own top/bottom + transform-direction flip since that mode
+ *     positions the toolbar with `position: absolute` instead of relying on flex order at all.
+ * 16. ALL-SIDES RESIZE (v5): native Zentral only ever offers ONE resize edge (.zen-app-resize-strip, the
+ *     side facing the browser content, width-only). We add two MORE strips, .zen-app-resize-strip-top and
+ *     .zen-app-resize-strip-bottom, that let the user drag the panel's height too. These are the ONE part of
+ *     this whole extension that needs NO per-side (data-panel-side) or opposite-docking CSS at all: the panel
+ *     always spans the full width of #zen-app-panel-root regardless of which side it's docked on or whether
+ *     dual-view/push is active, so a single unconditional rule set covers every mode. See "ALL-SIDES PANEL
+ *     RESIZE" near the end of this file, and Zentral_uc.js note 16 for the JS half (drag math + persistence).
+ * 17. ALL-SIDES RESIZE: WHY THE INNER (SIDEBAR-FACING) EDGE HAS NO STRIP (v5 follow-up): only 3 of the 4
+ *     edges got a drag surface -- top, bottom, and the existing native outer (content-facing) edge. The 4th,
+ *     the edge touching the sidebar side (e.g. the LEFT edge when data-panel-side="left"), was deliberately
+ *     left alone. Reason: top/bottom are cheap because positionPanel() recomputes them from scratch on EVERY
+ *     call, so layering a saved "extra" on top every time is naturally idempotent (note 16). Width has no such
+ *     from-scratch recomputation -- root.style.width is native persisted STATE (panelWidthPx), only ever
+ *     touched by onDrag/updateWidthVar/toggleExpand/opposite-docking's safe-max clamp/dual-view's push-margin
+ *     sync (note 12). Dragging the inner edge would need to change width AND the anchor (left/right) together
+ *     while keeping the outer edge fixed -- but with no idempotent "natural width" to layer on top of the way
+ *     top/bottom have, we'd have to cache-and-diff against a value five other pieces of native/extension code
+ *     also mutate, which is exactly the class of fragile, easy-to-silently-break interaction note 5's whole
+ *     "reach the singleton, don't reimplement" philosophy exists to avoid. Left unimplemented on purpose; see
+ *     Zentral_uc.js note 17 for the same reasoning from the JS side.
+ * 18. PANEL POSITION DRAG / URL BAR GRIP (v6+): a small grip (.zen-toolbar-urlbar-drag-handle) inside the web
+ *     toolbar's URL bar lets the user drag the WHOLE panel in 2D (reposition, not resize). Vertical movement
+ *     uses the persisted top/bottom position offset and horizontal movement uses the persisted physical panel
+ *     offset, so both axes restore exactly after temporary Dual-View / Edge-Attached suppression. See
+ *     Zentral_uc.js note 18 for the drag math. `.zen-toolbar-urlwrap` had to gain `display: flex` to lay the grip and the `<input>` out side
+ *     by side -- the pre-existing hide rule for it (right below) had to gain `!important` to match, since our
+ *     new `!important` display declaration would otherwise always beat a plain one regardless of selector
+ *     specificity, silently breaking the "hide URL bar" toggle.
+ * 19. OPPOSITE-DOCKING STRIP/HOVER-ZONE ATE CLICKS MEANT FOR THE PAGE'S OWN SCROLLBAR (v6 fix): section 2's
+ *     per-side .zen-app-resize-strip AND .zen-app-hover-zone overrides only ever changed which edge they sit
+ *     on (left/right), never their offset-vs-width relationship, so both kept the native "straddle the edge"
+ *     geometry (part outside the panel, part inside, on top of page content). For data-panel-side="left" that
+ *     inward part lands on the panel's right/inner edge -- which is also where a page's own vertical
+ *     scrollbar ALWAYS renders (LTR or RTL, Gecko paints it on the physical right) -- and both elements have
+ *     pointer-events:auto while the panel is open, so they intercepted scrollbar clicks/drags before the
+ *     <browser> ever saw them. The hover-zone was the bigger offender (44px wide native, ~20px of it inward at
+ *     the old -24px offset, and it also drives the pill's :hover reveal -- hence hovering near that edge would
+ *     visibly "activate" the pill even when nothing was deliberately being hovered) but the resize-strip
+ *     contributed too (~6px inward at the old -8px offset). Fix, applied to BOTH elements on BOTH sides for
+ *     consistency: offset changed to exactly -(element's own width) so each sits ENTIRELY outside the panel
+ *     (0px inward overlap) instead of straddling the edge -- same interactive-area size as before, just moved
+ *     outward. See the inline comments on all four affected rules in section 2 for the per-element math.
+ * 20. NORMAL-MODE MINI PILL COVERED PAGE CONTENT WHEN IT GREW (v6.1 fix, superseding an earlier v6 attempt):
+ *     section 3b originally reused native's own translate(-50%/50%) "straddle the edge" transform for the
+ *     mini-pill/peek-dot feature, just scaled down when idle. A first pass fixed a resulting ~15px horizontal
+ *     drift (caused by an incorrectly edge-anchored transform-origin fighting that straddle transform) by
+ *     restoring the default center origin -- which fixed the drift, but exposed the real, underlying design
+ *     problem: a straddle transform inherently sits HALF the pill on top of the panel/page even at rest, and
+ *     growing it from a centered pivot expands that overlap equally in both directions, so part of the page
+ *     became genuinely unreachable under the expanded pill. Opposite-docking's mini-pill (section 2) never had
+ *     this problem, because it was built on translate(-100%/100%) "fully outside" instead, whose panel-touching
+ *     edge stays pinned flush against the panel boundary at any scale (via an edge-based transform-origin,
+ *     which is the *correct* choice for THAT transform -- it was only ever wrong when paired with the -50%
+ *     straddle transform this replaces). Fix: section 3b now copies section 2's translate(-100%/100%) + edge-
+ *     origin approach outright, so normal-mode's mini pill grows outward the same way opposite-mode's already
+ *     did, never covering the page. See section 3b's own header comment for the full before/after and the
+ *     transform math shared with section 2.
+ * 22. GRABBER DUAL-AXIS DRAG: see Zentral_uc.js note 25 for the JS half (deadzone + handoff to the existing
+ *     "vertical offset" reposition drag). The CSS half is just the cursor hint below, in section 4's pill-button
+ *     rules -- `cursor: move` replaces native's `ew-resize` so the handle no longer visually promises
+ *     horizontal-only, now that it does both.
+ * 23. FIREFOX ADD-ON TAB-ID HOSTS (JS note 27): when the opt-in bridge is enabled, each loaded Zentral app is
+ *     backed by a genuine pinned Firefox tab and all hosts are corralled into one collapsed Zen folder. The rules
+ *     near the end of this extension section make ONLY that marked folder/tabs ultra-compact. Do not use display:none
+ *     or the native `hidden` attribute on the backing tabs: the entire point is to leave them as real, present Zen/
+ *     Firefox tabs while making their implementation-detail UI almost disappear. The root attribute follows its preference.
+ * ============================================================================================================= */
+
+/* CSS Variable Defaults for Settings-Controlled Translucency */
+:root {
+  --bg-opacity-unpinned: 92%;
+  --bg-opacity-pinned-focus: 85%;
+  --bg-opacity-pinned-blur: 45%;
+  --bgalazka-pill-offset: 0%;
+  --bgalazka-pill-peek-color: #4da6ff;
+  --bgalazka-pill-peek-opacity: 90%;
+  --bgalazka-pill-background-opacity: 90%;
+}
+
+/* ==========================================================================
+   PANEL INPUT SHIELD (JS note 26)
+   --------------------------------------------------------------------------
+   Base Zentral leaves #zen-app-panel-root and #zen-app-panel-clip transparent
+   to hit testing (pointer-events:none) and relies on the slider to opt back in.
+   This setting makes every existing panel layer an explicit hit-test target,
+   preventing pointer presses from falling through a focused/translucent panel
+   without adding an overlay that would block the web page inside the panel.
+   Insta Peek stays intentionally non-interactive. The root attribute follows its preference.
+   ========================================================================== */
+
+:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-panel-input-shield="true"]
+  #zen-app-panel-root[open]:not([closing]):not([data-insta-peek="true"]) {
+  pointer-events: auto !important;
+}
+:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-panel-input-shield="true"]
+  #zen-app-panel-root[open]:not([closing]):not([data-insta-peek="true"])
+  #zen-app-panel-clip,
+:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-panel-input-shield="true"]
+  #zen-app-panel-root[open]:not([closing]):not([data-insta-peek="true"])
+  #zen-app-panel-slider,
+:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-panel-input-shield="true"]
+  #zen-app-panel-root[open]:not([closing]):not([data-insta-peek="true"])
+  #zen-app-panel-slider
+  browser {
+  pointer-events: auto !important;
+}
+
+/* The floating Super View is a separate surface outside the main root.
+ * Keep the same opt-in hit-test barrier without intercepting its controls. */
+
+:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-panel-input-shield="true"] #bgalazka-super-panel,
+:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-panel-input-shield="true"] #bgalazka-super-panel browser {
+  pointer-events: auto !important;
+}
+
+/* PILL CONTRAST (note 13): opt-in only. The extension must not recolor the
+ * native/base Zentral pill on a fresh install, so this black/white treatment
+ * is gated by "Show Mini Pill When Idle". Higher-specificity idle/hover rules
+ * further below still win while that feature is enabled. */
+:root[bgalazka-pill-peek-dot="true"] #zen-app-panel-pill {
+  background: color-mix(
+    in srgb,
+    black var(--bgalazka-pill-background-opacity, 90%),
+    transparent
+  ) !important;
+  color: #ffffff !important;
+}
+
+/* Settings Panel & Restart Browser Button */
+#zentral-settings-modal #zs-panel-bgalazka {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-right: 8px !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #3f3f46 transparent !important;
+}
+
+#zentral-settings-modal #zs-panel-bgalazka .zs-restart-btn {
+  appearance: none !important;
+  outline: none !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 8px !important;
+  color: #e4e4e7 !important;
+  padding: 6px 14px !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  font-family: inherit !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+}
+
+#zentral-settings-modal #zs-panel-bgalazka .zs-restart-btn:hover {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 25%,
+    rgba(255, 255, 255, 0.12)
+  ) !important;
+  border-color: var(--zen-primary-color, #6366f1) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px) !important;
+}
+
+#zentral-settings-modal #zs-panel-bgalazka .zs-restart-btn:active {
+  transform: scale(0.97) !important;
+}
+
+#zentral-settings-modal #zs-panel-bgalazka .zs-restart-btn svg {
+  color: inherit !important;
+  flex-shrink: 0 !important;
+}
+
+/* ==========================================================================
+   1. PINNED PANEL TRANSLUCENCY (LIVE SETTINGS LINKED)
+   ========================================================================== */
+:root[bgalazka-translucency="true"] #zen-app-panel-root #zen-app-panel-slider {
+  transition:
+    opacity 0.22s ease,
+    background-color 0.22s ease !important;
+}
+
+/* Unpinned State: Direct binding to CSS variables */
+:root[bgalazka-translucency="true"]
+  #zen-app-panel-root:not([data-pinned="true"])
+  #zen-app-panel-slider {
+  background-color: color-mix(
+    in srgb,
+    var(--tabpanels-background-color, #1e1e24) var(--bg-opacity-unpinned, 92%),
+    transparent
+  ) !important;
+  opacity: var(--bg-opacity-unpinned, 0.92) !important;
+}
+
+/* Pinned + Hovered or Focused */
+:root[bgalazka-translucency="true"]
+  #zen-app-panel-root[data-pinned="true"]:is(:hover, :focus-within)
+  #zen-app-panel-slider {
+  background-color: color-mix(
+    in srgb,
+    var(--tabpanels-background-color, #1e1e24)
+      var(--bg-opacity-pinned-focus, 85%),
+    transparent
+  ) !important;
+  opacity: var(--bg-opacity-pinned-focus, 0.85) !important;
+}
+
+/* Pinned + Unfocused */
+:root[bgalazka-translucency="true"]
+  #zen-app-panel-root[data-pinned="true"]:not(:hover):not(:focus-within)
+  #zen-app-panel-slider {
+  background-color: color-mix(
+    in srgb,
+    var(--tabpanels-background-color, #1e1e24)
+      var(--bg-opacity-pinned-blur, 45%),
+    transparent
+  ) !important;
+  opacity: var(--bg-opacity-pinned-blur, 0.45) !important;
+}
+
+/* BUG FIX: this rule used to unconditionally force the pill to
+ * opacity:1/pointer-events:auto whenever translucency was on (translucency
+ * defaults to true), which permanently defeated the native pill's
+ * hover-to-reveal behavior (opacity:0 until hovered) -- the pill was
+ * effectively "stuck visible" at all times instead of autohiding, which is
+ * the bug reported as "pill menu is visible all the time". Translucency
+ * should only affect the panel's background transparency, never the pill's
+ * own show/hide behavior, so this override is removed entirely. Autohide
+ * now works via the native mod's own #zen-app-panel-pill opacity rules
+ * again. See section 2 below for the "mini pill" idle state (a shrunk,
+ * colored version of the pill kept visible instead of fully invisible),
+ * which is user-toggleable and configurable in settings, instead of this
+ * blanket always-on-everywhere override. */
+
+/* ==========================================================================
+   2. OPPOSITE-SIDE DOCKING, PILL MENU & RESIZE STRIP
+   ========================================================================== */
+:root[bgalazka-opposite-docking="true"]
+  :is(
+    #browser,
+    #tabbrowser-tabpanels,
+    #tabbrowser-tabbox,
+    .browserSidebarContainer,
+    #sidebar-box,
+    #navigator-toolbox
+  ) {
+  max-width: unset !important;
+}
+
+/* Panel on Right (Sidebar on Left) */
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"] {
+  right: 12px !important;
+  left: auto !important;
+}
+/* note 19 (see the big writeup above, and the data-panel-side="left" hover-
+ * zone rule further down for the part that actually caused the reported
+ * bug): offset == width (-14px for a 14px strip) so the whole grab area
+ * sits OUTSIDE the panel instead of the old -8px, which let 6px of it
+ * bleed onto the page content at this edge. */
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  .zen-app-resize-strip {
+  left: -14px !important;
+  right: auto !important;
+  width: 14px !important;
+  cursor: ew-resize !important;
+  z-index: 30 !important;
+}
+:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  .zen-app-resize-strip {
+  pointer-events: auto !important;
+}
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill {
+  left: 0px !important;
+  right: auto !important;
+  /* top is set by the unified "Pill Menu Vertical Offset" rule in section 3 */
+  z-index: 999999 !important;
+}
+:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill {
+  pointer-events: auto !important;
+}
+/* MINI PILL ON (default; toggle: "Show Mini Pill When Idle"): instead of
+ * native autohide (opacity 0, fully invisible until the hover-zone strip is
+ * hovered), keep a small, colored, shrunk-down version of the pill always
+ * visible so its edge location is discoverable, and expand to full size +
+ * normal theme color on hover/focus. transform-origin is pinned to the
+ * pill's own anchor edge (right, since it translates -100% off its left:0
+ * anchor) so it shrinks *toward* the screen edge instead of drifting toward
+ * panel/screen center. Idle color and opacity come from --bgalazka-pill-peek-color
+ * and --bgalazka-pill-peek-opacity (both user-configurable in settings)
+ * since the panel's own theme color can blend into page content and become
+ * hard to spot in practice. */
+:root[bgalazka-opposite-docking="true"][bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill {
+  transform-origin: right center !important;
+  transform: translate(-100%, -50%) scale(0.22) !important;
+  opacity: var(--bgalazka-pill-peek-opacity, 90%) !important;
+  background: var(--bgalazka-pill-peek-color, #4da6ff) !important;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease,
+    background-color 0.18s ease !important;
+}
+:root[bgalazka-opposite-docking="true"][bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  .zen-app-hover-zone:hover
+  ~ #zen-app-panel-pill,
+:root[bgalazka-opposite-docking="true"][bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill:hover,
+:root[bgalazka-opposite-docking="true"][bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  .zen-app-resize-strip:hover
+  ~ #zen-app-panel-pill {
+  transform: translate(-100%, -50%) scale(1) !important;
+  opacity: 1 !important;
+  /* Black @ peek-opacity instead of the theme var (note 13): guarantees
+   * readable icons regardless of theme/page colors behind the pill. */
+  background: color-mix(
+    in srgb,
+    black var(--bgalazka-pill-background-opacity, 90%),
+    transparent
+  ) !important;
+  color: #ffffff !important;
+}
+/* MINI PILL OFF: classic fully-invisible-until-hover, just repositioned for
+ * opposite docking (opacity/pointer-events on hover already come from the
+ * base mod's own #zen-app-panel-pill:hover rule, untouched by us). */
+:root[bgalazka-opposite-docking="true"]:not([bgalazka-pill-peek-dot="true"])
+  #zen-app-panel-root[data-panel-side="right"]
+  #zen-app-panel-pill {
+  transform: translate(-100%, -50%) !important;
+}
+/* note 19: -44px, not -24px -- the native .zen-app-hover-zone is 44px wide
+ * (set in Zentral_uc.js, untouched by us), so -24px still let 20px of it
+ * sit INSIDE the panel. offset == native width (-44px) pushes the whole
+ * 44px reveal zone outside with 0px inward overlap, same size as before,
+ * just fully external instead of straddling the edge. See the
+ * data-panel-side="left" copy of this rule for why the inward half is the
+ * one that actually breaks things (it's the "you hovered over me" bug). */
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  .zen-app-hover-zone {
+  left: -44px !important;
+  right: auto !important;
+}
+:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="right"]
+  .zen-app-hover-zone {
+  pointer-events: auto !important;
+}
+
+/* Panel on Left (Sidebar on Right) */
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"] {
+  right: auto !important;
+  left: 12px !important;
+}
+/* note 19: mirror of the data-panel-side="right" resize-strip fix above --
+ * offset == width (-14px) so this sits fully outside the panel too. On its
+ * own this wasn't enough to fix the scrollbar bug (see the hover-zone rule
+ * below, which was the bigger culprit on this side); fixing both is what
+ * actually resolves it. */
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  .zen-app-resize-strip {
+  right: -14px !important;
+  left: auto !important;
+  width: 14px !important;
+  cursor: ew-resize !important;
+  z-index: 30 !important;
+}
+:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  .zen-app-resize-strip {
+  pointer-events: auto !important;
+}
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  #zen-app-panel-pill {
+  right: 0px !important;
+  left: auto !important;
+  /* top is set by the unified "Pill Menu Vertical Offset" rule in section 3 */
+  z-index: 999999 !important;
+}
+:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  #zen-app-panel-pill {
+  pointer-events: auto !important;
+}
+/* MINI PILL ON, mirrored from the right-docked block above: anchored at
+ * right:0, translated +100% of its own width outward, so its
+ * transform-origin is pinned to its LEFT edge (the one touching the panel)
+ * so it shrinks toward the screen edge, not away from it. */
+:root[bgalazka-opposite-docking="true"][bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  #zen-app-panel-pill {
+  transform-origin: left center !important;
+  transform: translate(100%, -50%) scale(0.22) !important;
+  opacity: var(--bgalazka-pill-peek-opacity, 90%) !important;
+  background: var(--bgalazka-pill-peek-color, #4da6ff) !important;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease,
+    background-color 0.18s ease !important;
+}
+:root[bgalazka-opposite-docking="true"][bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  .zen-app-hover-zone:hover
+  ~ #zen-app-panel-pill,
+:root[bgalazka-opposite-docking="true"][bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  #zen-app-panel-pill:hover,
+:root[bgalazka-opposite-docking="true"][bgalazka-pill-peek-dot="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  .zen-app-resize-strip:hover
+  ~ #zen-app-panel-pill {
+  transform: translate(100%, -50%) scale(1) !important;
+  opacity: 1 !important;
+  background: color-mix(
+    in srgb,
+    black var(--bgalazka-pill-background-opacity, 90%),
+    transparent
+  ) !important;
+  color: #ffffff !important;
+}
+/* MINI PILL OFF: classic fully-invisible-until-hover, repositioned only. */
+:root[bgalazka-opposite-docking="true"]:not([bgalazka-pill-peek-dot="true"])
+  #zen-app-panel-root[data-panel-side="left"]
+  #zen-app-panel-pill {
+  transform: translate(100%, -50%) !important;
+}
+/* note 19 (THE ACTUAL FIX for "can't grab the scrollbar" / "hovering over
+ * the edge lights up the pill even though I'm not touching the strip"):
+ * .zen-app-hover-zone is native, 44px wide (Zentral_uc.js), invisible, and
+ * the native rule `#zen-app-panel-root[open] .zen-app-hover-zone {
+ * pointer-events: auto }` makes it fully interactive -- and :hover-active
+ * -- for as long as the panel is open, i.e. exactly while you're trying to
+ * use the page inside it. At the old `right: -24px` (width still the
+ * native 44px), this zone spanned -24px to +20px: a full 20px of *invisible,
+ * hoverable, pointer-events:auto* real estate sitting on top of the page
+ * content at this edge. A left-docked panel's own scrollbar lives on
+ * exactly this edge (pages always put their vertical scrollbar on their
+ * right, and this is the panel's right/inner edge), so that 20px band
+ * intercepted the scrollbar entirely: hovering it triggered the pill's
+ * `:hover` reveal (the "you hovered over me" effect), and it ate clicks
+ * before they ever reached the <browser> underneath -- much bigger and
+ * more disruptive than the resize-strip's old 6px overlap fixed above,
+ * which is why fixing only the strip wasn't enough on its own.
+ * Fix: `right: -44px` (== the zone's own native width) pins the whole 44px
+ * hover-reveal area OUTSIDE the panel (-44px to 0px), 0px overlap, so it
+ * can still do its job (revealing the pill on autohide) without ever
+ * covering page content or its scrollbar. Zone size is unchanged, just
+ * moved outward instead of straddling the edge. */
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  .zen-app-hover-zone {
+  right: -44px !important;
+  left: auto !important;
+}
+:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root[data-panel-side="left"]
+  .zen-app-hover-zone {
+  pointer-events: auto !important;
+}
+
+:root[bgalazka-opposite-docking="true"]
+  #zen-app-panel-root
+  .zen-app-resize-strip {
+  min-width: 14px !important;
+}
+
+/* Other mods may dim an unloaded tab at the tab level. Leave the tab and
+ * its icon stack alone; a parent grayscale also affects our child launcher.
+ * Reset only the loaded favicon image when the panel or tab is loaded. */
+:root
+  .tabbrowser-tab
+  .zen-app-tile.bgalazka-essential-tile:is(
+    [data-tab-loaded="true"],
+    [data-loaded="true"]
+  )
+  img {
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+/* Apps Bar panels attach to the inner edge of the second bar, even when
+ * Opposite-Side Docking is enabled. Keep both sets of controls accessible. */
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [bgalazka-opposite-docking="true"]
+  )
+  #zen-app-panel-root[data-panel-side="right"] {
+  right: var(--zentral-appsbar-panel-inset, 56px) !important;
+}
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [bgalazka-opposite-docking="true"]
+  )
+  #zen-app-panel-root[data-panel-side="left"] {
+  left: var(--zentral-appsbar-panel-inset, 56px) !important;
+}
+
+/* A parent-only pointer-events:none does not disable opted-in descendants.
+ * Closing/hover-hidden browsers and chrome controls must all stop hit testing. */
+:root #zen-app-panel-root[closing],
+:root #zen-app-panel-root[closing] *,
+:root[bgalazka-hover-panel-hidden] #zen-app-panel-root,
+:root[bgalazka-hover-panel-hidden] #zen-app-panel-root *,
+:root #zen-app-panel-root:not([open]) *,
+:root:not([zentral-app-panel-open]) #bgalazka-super-panel,
+:root:not([zentral-app-panel-open]) #bgalazka-super-panel *,
+:root[bgalazka-hover-panel-hidden] #bgalazka-super-panel,
+:root[bgalazka-hover-panel-hidden] #bgalazka-super-panel * {
+  pointer-events: none !important;
+}

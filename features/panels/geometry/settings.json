@@ -1,0 +1,229 @@
+{
+  "_documentation": {
+    "purpose": "Settings schema and category/section metadata owned by geometry.",
+    "consumer": "features/settings/controllers/ZentralSettingsCatalog.js reads schema/settings; Runtime filters availability, UI controllers render controls.",
+    "feature_source": "features/panels/geometry/ZentralPanelGeometry.uc.js",
+    "contract": "This object is data only. Missing descriptor hides owner settings; it does not start or unload the feature. Keep property/defaultValue and category IDs synchronized with preferences.json and features/settings/layout.json."
+  },
+  "owner": "geometry",
+  "schema": [
+    {
+      "property": "zen.workspace.bgalazka.opposite_docking",
+      "label": "Reverse the default panel side for Sidebar / Apps Bar mode",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.bgalazka.edge_attached_panels",
+      "label": "Edge-Attached Panels",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.all_sides_resize",
+      "label": "All-Sides Panel Resize",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.panel_input_shield",
+      "label": "Prevent Panel Input Pass-Through",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.bgalazka.panel_horizontal_offset_px",
+      "label": "Panel Horizontal Offset (px; use extension settings for fine adjustment)",
+      "type": "dropdown",
+      "defaultValue": 0,
+      "options": [
+        {
+          "label": "-200",
+          "value": -200
+        },
+        {
+          "label": "-100",
+          "value": -100
+        },
+        {
+          "label": "-50",
+          "value": -50
+        },
+        {
+          "label": "0",
+          "value": 0
+        },
+        {
+          "label": "50",
+          "value": 50
+        },
+        {
+          "label": "100",
+          "value": 100
+        },
+        {
+          "label": "200",
+          "value": 200
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.panel_top_extra_px",
+      "label": "Panel Top Height Adjustment (px)",
+      "type": "dropdown",
+      "defaultValue": 4,
+      "options": [
+        {
+          "label": "-100",
+          "value": -100
+        },
+        {
+          "label": "-50",
+          "value": -50
+        },
+        {
+          "label": "-20",
+          "value": -20
+        },
+        {
+          "label": "0",
+          "value": 0
+        },
+        {
+          "label": "4",
+          "value": 4
+        },
+        {
+          "label": "20",
+          "value": 20
+        },
+        {
+          "label": "50",
+          "value": 50
+        },
+        {
+          "label": "100",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.panel_bottom_extra_px",
+      "label": "Panel Bottom Height Adjustment (px)",
+      "type": "dropdown",
+      "defaultValue": 4,
+      "options": [
+        {
+          "label": "-100",
+          "value": -100
+        },
+        {
+          "label": "-50",
+          "value": -50
+        },
+        {
+          "label": "-20",
+          "value": -20
+        },
+        {
+          "label": "0",
+          "value": 0
+        },
+        {
+          "label": "4",
+          "value": 4
+        },
+        {
+          "label": "20",
+          "value": 20
+        },
+        {
+          "label": "50",
+          "value": 50
+        },
+        {
+          "label": "100",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.panel_position_offset_px",
+      "label": "Whole Panel Vertical Offset (px)",
+      "type": "dropdown",
+      "defaultValue": 0,
+      "options": [
+        {
+          "label": "-200",
+          "value": -200
+        },
+        {
+          "label": "-100",
+          "value": -100
+        },
+        {
+          "label": "-50",
+          "value": -50
+        },
+        {
+          "label": "0",
+          "value": 0
+        },
+        {
+          "label": "50",
+          "value": 50
+        },
+        {
+          "label": "100",
+          "value": 100
+        },
+        {
+          "label": "200",
+          "value": 200
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "zen.workspace.bgalazka.opposite_docking": {
+      "category": "panel-layout",
+      "section": "Docking, size & input",
+      "owner": "geometry"
+    },
+    "zen.workspace.bgalazka.edge_attached_panels": {
+      "category": "panel-layout",
+      "section": "Docking, size & input",
+      "owner": "geometry"
+    },
+    "zen.workspace.bgalazka.all_sides_resize": {
+      "category": "panel-layout",
+      "section": "Docking, size & input",
+      "owner": "geometry"
+    },
+    "zen.workspace.bgalazka.panel_input_shield": {
+      "category": "panel-layout",
+      "section": "Docking, size & input",
+      "owner": "geometry"
+    },
+    "zen.workspace.bgalazka.panel_horizontal_offset_px": {
+      "category": "panel-layout",
+      "section": "Docking, size & input",
+      "owner": "geometry"
+    },
+    "zen.workspace.bgalazka.panel_top_extra_px": {
+      "category": "panel-layout",
+      "section": "Docking, size & input",
+      "owner": "geometry"
+    },
+    "zen.workspace.bgalazka.panel_bottom_extra_px": {
+      "category": "panel-layout",
+      "section": "Docking, size & input",
+      "owner": "geometry"
+    },
+    "zen.workspace.bgalazka.panel_position_offset_px": {
+      "category": "panel-layout",
+      "section": "Docking, size & input",
+      "owner": "geometry"
+    }
+  }
+}

@@ -8233,7 +8233,7 @@
   },
   {
     "property": "zen.workspace.zentral.modules.css.VideoPreview.enabled",
-    "label": "Load CSS/ZentralVideoPreview.css",
+    "label": "Load features/video/ZentralVideoPreview.css",
     "type": "checkbox",
     "defaultValue": true
   },
@@ -8323,67 +8323,67 @@
   },
   {
     "property": "zen.workspace.zentral.modules.css.Panels.enabled",
-    "label": "Load CSS/ZentralPanels.css",
+    "label": "Load features/panels/ZentralPanels.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.CornerPanels.enabled",
-    "label": "Load CSS/ZentralCornerPanels.css",
+    "label": "Load features/panels/corner-tiles/ZentralCornerPanels.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.Controls.enabled",
-    "label": "Load CSS/ZentralControls.css",
+    "label": "Load features/settings/styles/ZentralControls.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.PanelToolbar.enabled",
-    "label": "Load CSS/ZentralPanelToolbar.css",
+    "label": "Load features/panels/navigation/styles/ZentralPanelToolbar.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.PanelGeometry.enabled",
-    "label": "Load CSS/ZentralPanelGeometry.css",
+    "label": "Load features/panels/geometry/ZentralPanelGeometry.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.Settings.enabled",
-    "label": "Load CSS/ZentralSettings.css",
+    "label": "Load features/settings/styles/ZentralSettings.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.BrowserIntegrations.enabled",
-    "label": "Load CSS/ZentralBrowserIntegrations.css",
+    "label": "Load features/panels/browsers/ZentralBrowserIntegrations.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.Appearance.enabled",
-    "label": "Load CSS/ZentralAppearance.css",
+    "label": "Load features/appearance/ZentralAppearance.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.RssDisplay.enabled",
-    "label": "Load CSS/ZentralRssDisplay.css",
+    "label": "Load features/rss/ZentralRssDisplay.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.TabDensity.enabled",
-    "label": "Load CSS/ZentralTabDensity.css",
+    "label": "Load features/tabs/ZentralTabDensity.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.PanelBackground.enabled",
-    "label": "Load CSS/ZentralPanelBackground.css",
+    "label": "Load features/panels/navigation/styles/ZentralPanelBackground.css",
     "type": "checkbox",
     "defaultValue": true
   },

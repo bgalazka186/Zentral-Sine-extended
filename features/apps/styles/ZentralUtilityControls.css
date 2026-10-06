@@ -1,0 +1,266 @@
+/*
+ * ZENTRAL FILE GUIDE - features/apps/styles/ZentralUtilityControls.css
+ * Purpose: Utility section reveal transition, dot triggers, slots, buttons and divider.
+ * Loaded by: core/ZentralRuntime.js via core/ZentralCatalog.js at USER_SHEET origin.
+ * Activation: legacy zen.workspace.zentral.modules.css.Base.enabled switch; owners apps.
+ * Interactions: feature controllers apply the selectors/attributes below; this file owns presentation only.
+ * Cleanup: Runtime unregisters this sheet; do not change stylesheet origin or cascade order.
+ * Dependencies: Catalog defines order/owner gating.
+ * Collaborators: core/ZentralRuntime.js; core/ZentralCatalog.js; features/apps/ZentralApps.uc.js;
+ * features/apps/controllers/ZentralAppsLauncher.js; features/apps/controllers/ZentralAppsInteractions.js
+ * DOM IDs: #zen-apps-sidebar-grid; #zentral-apps-utility-section
+ * Attributes: data-revealed; data-utility-revealed; zen-sidebar-collapsed; zentral-app-panel-open; zentral-
+ * apps-autohide; zentral-apps-placement; zentral-sidebar-collapsed
+ * Consumed variables: --toolbarbutton-border-radius; --zen-primary-color
+ */
+/* ==========================================================================
+ * Zentral Apps Utility Section
+ * ========================================================================== */
+#zentral-apps-utility-section {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+  margin: 0 0 2px 0 !important;
+  padding: 0 !important;
+  z-index: 12 !important;
+  user-select: none !important;
+  grid-column: 1 / -1 !important;
+}
+
+
+/* 3 Horizontal Dots Trigger Strip (Vertical Sidebar mode) */
+.zentral-apps-utility-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3.5px;
+  width: 100%;
+  height: 8px;
+  min-height: 8px;
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 0.18s ease;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  order: 0;
+}
+
+
+.zentral-apps-utility-dots:hover {
+  opacity: 1;
+}
+
+
+.zentral-apps-utility-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background-color: currentColor;
+  opacity: 0.75;
+}
+
+
+/* Vertical 3 dots trigger (for Horizontal Toolbar mode) */
+.zentral-apps-utility-dots-vertical {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3.5px;
+  width: 10px;
+  height: 28px;
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 0.2s ease;
+  padding: 0 2px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  order: 0;
+}
+
+
+.zentral-apps-utility-dots-vertical:hover {
+  opacity: 1;
+}
+
+
+.zentral-apps-utility-dots-vertical:hover .zentral-apps-utility-dot {
+  opacity: 1;
+  transform: scale(1.2);
+}
+
+
+/* Utility Content Row & Single-Piece Slide Transition */
+.zentral-apps-utility-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transform: translateY(-8px);
+  order: 1;
+  will-change: transform, opacity;
+  transition:
+    max-height 0.24s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.12s ease,
+    transform 0.24s cubic-bezier(0.25, 1, 0.5, 1),
+    visibility 0.24s ease;
+}
+
+
+.zentral-apps-utility-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  justify-items: center;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+
+
+/* Utility Slot (Grid Column Cell) */
+.zentral-utility-slot {
+  width: 100%;
+  height: 28px;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-sizing: border-box;
+  border-radius: var(--toolbarbutton-border-radius, 6px);
+  transition: background-color 0.15s ease;
+}
+
+
+.zentral-utility-slot.zentral-utility-slot-dragover {
+  background-color: color-mix(
+    in srgb,
+    var(--zen-primary-color, currentColor) 20%,
+    transparent
+  );
+  outline: 1px dashed var(--zen-primary-color, currentColor);
+  outline-offset: -1px;
+}
+
+
+/* 28px Buttons */
+.zentral-utility-btn {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  max-width: 28px !important;
+  max-height: 28px !important;
+  padding: 0 !important;
+  border-radius: var(--toolbarbutton-border-radius, 6px) !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  color: inherit !important;
+  opacity: 0.85 !important;
+  flex-shrink: 0 !important;
+  transition:
+    background-color 0.15s ease,
+    opacity 0.15s ease,
+    transform 0.15s ease !important;
+}
+
+
+.zentral-utility-btn:hover {
+  background-color: var(
+    --toolbarbutton-hover-background,
+    color-mix(in srgb, currentColor 14%, transparent)
+  ) !important;
+  opacity: 1 !important;
+}
+
+
+.zentral-utility-btn:active {
+  transform: scale(0.94) !important;
+}
+
+
+.zentral-utility-btn svg {
+  width: 16px !important;
+  height: 16px !important;
+  pointer-events: none !important;
+}
+
+
+
+/* Morphing Divider Line (Lighter color) */
+.zentral-apps-utility-divider {
+  width: calc(100% - 16px);
+  height: 1px;
+  background-color: color-mix(in srgb, currentColor 12%, transparent);
+  margin: 2px auto 3px auto;
+  pointer-events: none;
+  order: 2;
+}
+
+
+/* When Hidden in Autohide OFF: Divider takes 0 space */
+:root:not([zentral-apps-autohide="true"])
+  #zentral-apps-utility-section:not([data-utility-revealed="true"])
+  .zentral-apps-utility-divider {
+  display: none !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+
+/* When Revealed (Autohide OFF): Dots disappear, Content slides down as a single piece */
+#zentral-apps-utility-section[data-utility-revealed="true"]
+  .zentral-apps-utility-dots {
+  display: none !important;
+}
+
+
+#zentral-apps-utility-section[data-utility-revealed="true"]
+  .zentral-apps-utility-content {
+  max-height: 38px !important;
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+  overflow: visible !important;
+  margin-bottom: 2px !important;
+}
+
+
+#zentral-apps-utility-section[data-utility-revealed="true"]
+  .zentral-apps-utility-divider {
+  display: block !important;
+  opacity: 0.5 !important;
+}
+
+
+/* While grid is collapsed in autohide, utility section is hidden with the grid */
+:root[zentral-apps-autohide="true"]:not(
+    [zentral-apps-placement="vertical-bar"]
+  ):not([zentral-sidebar-collapsed="true"]):not([zen-sidebar-collapsed="true"])
+  #zen-apps-sidebar-grid:not(.zen-apps-horizontal):not(
+    [data-revealed="true"]
+  ):not(:hover):not([zentral-app-panel-open="true"])
+  #zentral-apps-utility-section {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
+}

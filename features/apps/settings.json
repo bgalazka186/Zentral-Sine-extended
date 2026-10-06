@@ -1,0 +1,353 @@
+{
+  "_documentation": {
+    "purpose": "Settings schema and category/section metadata owned by apps.",
+    "consumer": "features/settings/controllers/ZentralSettingsCatalog.js reads schema/settings; Runtime filters availability, UI controllers render controls.",
+    "feature_source": "features/apps/ZentralApps.uc.js",
+    "contract": "This object is data only. Missing descriptor hides owner settings; it does not start or unload the feature. Keep property/defaultValue and category IDs synchronized with preferences.json and features/settings/layout.json."
+  },
+  "owner": "apps",
+  "schema": [
+    {
+      "property": "zen.workspace.apps.sidebar.enabled",
+      "label": "Enable Apps Sidebar Grid & Floating Panels",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.apps.sidebar.apps_per_row",
+      "label": "Apps Displayed Per Row",
+      "type": "dropdown",
+      "defaultValue": 7,
+      "options": [
+        {
+          "label": "1 App",
+          "value": 1
+        },
+        {
+          "label": "3 Apps",
+          "value": 3
+        },
+        {
+          "label": "4 Apps",
+          "value": 4
+        },
+        {
+          "label": "5 Apps",
+          "value": 5
+        },
+        {
+          "label": "6 Apps",
+          "value": 6
+        },
+        {
+          "label": "7 Apps (Default)",
+          "value": 7
+        },
+        {
+          "label": "8 Apps",
+          "value": 8
+        },
+        {
+          "label": "9 Apps",
+          "value": 9
+        },
+        {
+          "label": "10 Apps",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.apps.sidebar.max_rows",
+      "label": "Maximum Grid Rows",
+      "type": "dropdown",
+      "defaultValue": 3,
+      "options": [
+        {
+          "label": "1 Row",
+          "value": 1
+        },
+        {
+          "label": "2 Rows",
+          "value": 2
+        },
+        {
+          "label": "3 Rows (Default)",
+          "value": 3
+        },
+        {
+          "label": "4 Rows",
+          "value": 4
+        },
+        {
+          "label": "5 Rows",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.apps.sidebar.max_apps",
+      "label": "Maximum Apps",
+      "type": "dropdown",
+      "defaultValue": 21,
+      "options": [
+        {
+          "label": "7",
+          "value": 7
+        },
+        {
+          "label": "14",
+          "value": 14
+        },
+        {
+          "label": "21",
+          "value": 21
+        },
+        {
+          "label": "28",
+          "value": 28
+        },
+        {
+          "label": "35",
+          "value": 35
+        },
+        {
+          "label": "42",
+          "value": 42
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.apps.sidebar.hide_utility_section",
+      "label": "Hide Utility Section in App Box",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.apps.sidebar.autohide",
+      "label": "Autohide Apps Sidebar",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.apps.sidebar.placement",
+      "label": "Apps Placement",
+      "type": "dropdown",
+      "defaultValue": "sidebar",
+      "options": [
+        {
+          "label": "sidebar",
+          "value": "sidebar"
+        },
+        {
+          "label": "vertical-bar",
+          "value": "vertical-bar"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.apps.sidebar.width",
+      "label": "Panel Width (px)",
+      "type": "dropdown",
+      "defaultValue": 350,
+      "options": [
+        {
+          "label": "280",
+          "value": 280
+        },
+        {
+          "label": "320",
+          "value": 320
+        },
+        {
+          "label": "350",
+          "value": 350
+        },
+        {
+          "label": "400",
+          "value": 400
+        },
+        {
+          "label": "480",
+          "value": 480
+        },
+        {
+          "label": "560",
+          "value": 560
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.apps.sidebar.animation_speed",
+      "label": "Panel Animation Duration (ms)",
+      "type": "dropdown",
+      "defaultValue": 450,
+      "options": [
+        {
+          "label": "150",
+          "value": 150
+        },
+        {
+          "label": "250",
+          "value": 250
+        },
+        {
+          "label": "350",
+          "value": 350
+        },
+        {
+          "label": "450",
+          "value": 450
+        },
+        {
+          "label": "600",
+          "value": 600
+        },
+        {
+          "label": "800",
+          "value": 800
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.apps.sidebar.animation_type",
+      "label": "Panel Animation Easing Curve",
+      "type": "dropdown",
+      "defaultValue": "spring-gentle",
+      "options": [
+        {
+          "label": "Smooth Slide",
+          "value": "slide"
+        },
+        {
+          "label": "Snappy Spring",
+          "value": "spring-snappy"
+        },
+        {
+          "label": "Gentle Spring",
+          "value": "spring-gentle"
+        },
+        {
+          "label": "Bouncy Spring",
+          "value": "spring-bouncy"
+        },
+        {
+          "label": "Elastic",
+          "value": "elastic"
+        },
+        {
+          "label": "Instant",
+          "value": "none"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.apps.sidebar.badge_poll_interval_ms",
+      "label": "Notification badge fallback refresh",
+      "type": "dropdown",
+      "defaultValue": 0,
+      "options": [
+        {
+          "label": "Off (use notification events)",
+          "value": 0
+        },
+        {
+          "label": "1.5 seconds",
+          "value": 1500
+        },
+        {
+          "label": "5 seconds",
+          "value": 5000
+        },
+        {
+          "label": "15 seconds",
+          "value": 15000
+        },
+        {
+          "label": "1 minute",
+          "value": 60000
+        },
+        {
+          "label": "5 minutes",
+          "value": 300000
+        },
+        {
+          "label": "15 minutes",
+          "value": 900000
+        },
+        {
+          "label": "1 hour",
+          "value": 3600000
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.apps.insta_peek.shortcut",
+      "label": "Insta-Peek Shortcut",
+      "type": "string",
+      "defaultValue": "Alt+Q"
+    }
+  ],
+  "settings": {
+    "zen.workspace.apps.sidebar.enabled": {
+      "category": "apps",
+      "section": "Launcher grid & placement",
+      "owner": "apps"
+    },
+    "zen.workspace.apps.sidebar.apps_per_row": {
+      "category": "apps",
+      "section": "Launcher grid & placement",
+      "owner": "apps"
+    },
+    "zen.workspace.apps.sidebar.max_rows": {
+      "category": "apps",
+      "section": "Launcher grid & placement",
+      "owner": "apps"
+    },
+    "zen.workspace.apps.sidebar.max_apps": {
+      "category": "apps",
+      "section": "Launcher grid & placement",
+      "owner": "apps"
+    },
+    "zen.workspace.apps.sidebar.hide_utility_section": {
+      "category": "apps",
+      "section": "Launcher grid & placement",
+      "owner": "apps"
+    },
+    "zen.workspace.apps.sidebar.autohide": {
+      "category": "apps",
+      "section": "Launcher grid & placement",
+      "owner": "apps"
+    },
+    "zen.workspace.apps.sidebar.placement": {
+      "category": "apps",
+      "section": "Launcher grid & placement",
+      "owner": "apps"
+    },
+    "zen.workspace.apps.sidebar.width": {
+      "category": "apps",
+      "section": "Launcher grid & placement",
+      "owner": "apps"
+    },
+    "zen.workspace.apps.sidebar.animation_speed": {
+      "category": "apps",
+      "section": "Launcher grid & placement",
+      "owner": "apps"
+    },
+    "zen.workspace.apps.sidebar.animation_type": {
+      "category": "apps",
+      "section": "Launcher grid & placement",
+      "owner": "apps"
+    },
+    "zen.workspace.apps.sidebar.badge_poll_interval_ms": {
+      "category": "notifications",
+      "section": "Notification refresh",
+      "owner": "apps"
+    },
+    "zen.workspace.apps.insta_peek.shortcut": {
+      "category": "shortcuts",
+      "section": "Insta Peek",
+      "owner": "apps"
+    }
+  }
+}
