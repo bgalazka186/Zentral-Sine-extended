@@ -116,27 +116,26 @@
   // Reuse that exact CSS value; opacity on the Library element would also fade
   // text/icons, and painting multiple matching surfaces would stack the alpha.
   const syncArcSidebar = () => {
+    // Sine can load this runtime before browser.xhtml has a root element.
+    // DOM styling must not abort registration of the entire framework.
+    const ui = document.documentElement;
+    if (stopped || !ui) return;
     const color = getPref(arcSidebarColorPref, "");
     const validColor = typeof color === "string" && color.trim() !== "";
     const sidebarActive = getPref(arcSidebarPref, false) === true && validColor;
     const libraryActive = getPref(arcLibraryPref, false) === true && validColor;
-    document.documentElement.toggleAttribute(
-      arcSidebarAttribute,
-      sidebarActive,
-    );
-    document.documentElement.toggleAttribute(
-      arcLibraryAttribute,
-      libraryActive,
-    );
+    ui.toggleAttribute(arcSidebarAttribute, sidebarActive);
+    ui.toggleAttribute(arcLibraryAttribute, libraryActive);
     if (sidebarActive || libraryActive)
-      document.documentElement.style.setProperty(
-        arcSidebarColorProperty,
-        color,
-      );
-    else document.documentElement.style.removeProperty(arcSidebarColorProperty);
+      ui.style.setProperty(arcSidebarColorProperty, color);
+    else ui.style.removeProperty(arcSidebarColorProperty);
   };
   const arcSidebarObserver = { observe: syncArcSidebar };
   syncArcSidebar();
+  if (!document.documentElement)
+    document.addEventListener("DOMContentLoaded", syncArcSidebar, {
+      once: true,
+    });
   Services.prefs.addObserver(arcSidebarPref, arcSidebarObserver);
   Services.prefs.addObserver(arcLibraryPref, arcSidebarObserver);
   Services.prefs.addObserver(arcSidebarColorPref, arcSidebarObserver);
@@ -144,9 +143,11 @@
     Services.prefs.removeObserver(arcSidebarPref, arcSidebarObserver);
     Services.prefs.removeObserver(arcLibraryPref, arcSidebarObserver);
     Services.prefs.removeObserver(arcSidebarColorPref, arcSidebarObserver);
-    document.documentElement.removeAttribute(arcSidebarAttribute);
-    document.documentElement.removeAttribute(arcLibraryAttribute);
-    document.documentElement.style.removeProperty(arcSidebarColorProperty);
+    document.removeEventListener("DOMContentLoaded", syncArcSidebar);
+    const ui = document.documentElement;
+    ui?.removeAttribute(arcSidebarAttribute);
+    ui?.removeAttribute(arcLibraryAttribute);
+    ui?.style.removeProperty(arcSidebarColorProperty);
   });
   const unsafeCorePref =
     "zen.workspace.zentral.modules.allow_unsafe_core_disable";
@@ -289,7 +290,10 @@
         })),
         css: [...styles.values()].map((r) => ({
           ...r,
-          nextEnabled: getPref(PREF + "css." + (r.legacyControl || r.id) + ".enabled", true),
+          nextEnabled: getPref(
+            PREF + "css." + (r.legacyControl || r.id) + ".enabled",
+            true,
+          ),
         })),
       };
     },
@@ -312,352 +316,439 @@
       hookLast.clear();
       hookListeners.clear();
       delete window.ZentralRuntime;
-      if (runtime.shared && window.Zentral?.Core === runtime.shared.Core) delete window.Zentral;
+      if (runtime.shared && window.Zentral?.Core === runtime.shared.Core)
+        delete window.Zentral;
       moduleLoader.destroy();
     },
   });
 
   // Native sidebar geometry is part of the runtime lifecycle.
-  const { installSidebarLayoutTracking } = (function ({ runtime, getPref, disposers }) {
-  // Measure native chrome, never the pushed web-content box.
-  function nativeSidebarElement() {
-    const tabs = window.gBrowser?.tabContainer;
-    const candidates = [
-      document.getElementById("navigator-toolbox"),
-      document.getElementById("sidebar-container"),
-      document.getElementById("vertical-tabs"),
-      document.getElementById("sidebar-box"),
-      tabs,
-    ];
-    return (
-      candidates.find(
-        (el) =>
-          el?.isConnected &&
-          (el === tabs || el.contains(tabs)) &&
-          el.getBoundingClientRect().width < window.innerWidth * 0.65,
-      ) ||
-      tabs ||
-      null
-    );
-  }
-  function nativeSidebarRect() {
-    const el = nativeSidebarElement();
-    return (
-      el?.getBoundingClientRect() || {
-        left: 0,
-        right: 0,
-        top: 0,
-        bottom: 0,
-        width: 0,
-        height: 0,
-      }
-    );
-  }
-  function sidebarSafeBounds() {
-    let left = 0,
-      right = window.innerWidth;
-    const native = nativeSidebarElement();
-    const nodes = new Set([native, document.getElementById("sidebar-box")]);
-    const ui = document.documentElement;
-    const onRight =
-      ui.getAttribute("zen-right-side") === "true" ||
-      ui.getAttribute("zen-sidebar-right") === "true";
-    if (ui.getAttribute("zen-compact-mode") === "true") {
-      // Preserve the native 8px reveal bezel even when a panel's exterior
-      // resize grip extends 14px beyond its box.
-      if (onRight) right -= 22;
-      else left += 22;
-    }
-    for (const node of nodes) {
-      if (!node?.isConnected) continue;
-      const style = window.getComputedStyle(node),
-        rect = node.getBoundingClientRect();
-      if (
-        style.display === "none" ||
-        style.visibility === "hidden" ||
-        style.opacity === "0" ||
-        rect.width <= 0 ||
-        rect.width >= window.innerWidth * 0.65 ||
-        rect.height <= 0 ||
-        rect.right <= 0 ||
-        rect.left >= window.innerWidth
-      )
-        continue;
-      if (rect.left + rect.width / 2 < window.innerWidth / 2)
-        left = Math.max(left, rect.right);
-      else right = Math.min(right, rect.left);
-    }
-    return {
-      left: Math.max(0, Math.min(left, window.innerWidth)),
-      right: Math.max(left, Math.min(right, window.innerWidth)),
-      top: 0,
-      bottom: window.innerHeight,
-    };
-  }
-  function setLayoutStyle(node, name, value) {
-    if (node.style.getPropertyValue(name) !== value)
-      node.style.setProperty(name, value);
-  }
-  function constrainPanelToSidebar(panel) {
-    if (!panel?.hasAttribute("open")) return;
-    const bounds = sidebarSafeBounds(),
-      side = panel.getAttribute("data-panel-side");
-    const width = panel.getBoundingClientRect().width;
-    const style = window.getComputedStyle(panel);
-    const ml = parseFloat(style.marginLeft) || 0,
-      mr = parseFloat(style.marginRight) || 0;
-    const requested =
-      side === "right"
-        ? window.innerWidth - (parseFloat(panel.style.right) || 0) - width - mr
-        : (parseFloat(panel.style.left) || 0) + ml;
-    // Keep panels flush with their docked edge in every mode. Panel geometry
-    // already removes the native inset; adding 12px here cancels that offset
-    // and leaves a gap. Only the pill on the opposite side needs clearance.
-    const min = bounds.left + (side === "right" ? 44 : 0);
-    const max = Math.max(
-      min,
-      bounds.right - width - (side === "left" ? 44 : 0),
-    );
-    const left = Math.max(min, Math.min(max, requested));
-    setLayoutStyle(
-      panel,
-      "--zentral-safe-panel-left",
-      Math.round(left - ml) + "px",
-    );
-    setLayoutStyle(
-      panel,
-      "--zentral-safe-panel-right",
-      Math.round(window.innerWidth - left - width - mr) + "px",
-    );
-  }
-  runtime.nativeSidebarElement = nativeSidebarElement;
-  runtime.nativeSidebarRect = nativeSidebarRect;
-  runtime.sidebarSafeBounds = sidebarSafeBounds;
-  runtime.constrainPanelToSidebar = constrainPanelToSidebar;
-  function installSidebarLayoutTracking() {
-    let frame = null,
-      disposed = false;
-    const transitions = new Map(),
-      watched = new Set();
-    const geometry =
-      /^(transform|translate|width|height|min-width|max-width|left|right|inset.*|margin.*|padding.*|flex-basis|opacity)$/;
-    const queue = () => {
-      if (!disposed && frame == null)
-        frame = window.requestAnimationFrame(update);
-    };
-    runtime.requestSidebarLayout = queue;
-    const rebind = () => { bind(); queue(); };
-    const resize = new ResizeObserver(queue);
-    const anchors = new MutationObserver(queue);
-    const bind = () => {
-      const native = nativeSidebarElement();
-      for (const start of [
-        native,
-        window.gBrowser?.tabContainer,
+  const { installSidebarLayoutTracking } = (function ({
+    runtime,
+    getPref,
+    disposers,
+  }) {
+    // Measure native chrome, never the pushed web-content box.
+    function nativeSidebarElement() {
+      const tabs = window.gBrowser?.tabContainer;
+      const candidates = [
+        document.getElementById("navigator-toolbox"),
+        document.getElementById("sidebar-container"),
+        document.getElementById("vertical-tabs"),
         document.getElementById("sidebar-box"),
-      ]) {
-        if (!start) continue;
-        for (
-          let node = start;
-          node && node !== document.documentElement;
-          node = node.parentElement
-        ) {
-          if (watched.has(node)) continue;
-          watched.add(node);
-          resize.observe(node);
-          anchors.observe(node, {
-            attributes: true,
-            attributeFilter: [
-              "style",
-              "class",
-              "hidden",
-              "collapsed",
-              "zen-sidebar-expanded",
-              "zen-sidebar-hidden",
-            ],
-          });
-        }
-      }
-    };
-    const update = () => {
-      frame = null;
-      if (disposed) return;
-      const bounds = sidebarSafeBounds(),
-        ui = document.documentElement;
-      if (ui.getAttribute("zentral-safe-layout") !== "true")
-        ui.setAttribute("zentral-safe-layout", "true");
-      setLayoutStyle(ui, "--zentral-safe-left", Math.ceil(bounds.left) + "px");
-      setLayoutStyle(
-        ui,
-        "--zentral-safe-right",
-        Math.ceil(window.innerWidth - bounds.right) + "px",
+        tabs,
+      ];
+      return (
+        candidates.find(
+          (el) =>
+            el?.isConnected &&
+            (el === tabs || el.contains(tabs)) &&
+            el.getBoundingClientRect().width < window.innerWidth * 0.65,
+        ) ||
+        tabs ||
+        null
       );
-      const panel = document.getElementById("zen-app-panel-root");
-      const panelVisible = panel?.hasAttribute("open") &&
-        !panel.hasAttribute("closing") && !ui.hasAttribute("bgalazka-hover-panel-hidden");
-      if (panelVisible) {
-        window.Zentral?.Apps?.positionPanel?.();
-        runtime.panelContext?.syncSidebarLayout?.();
+    }
+    function nativeSidebarRect() {
+      const el = nativeSidebarElement();
+      return (
+        el?.getBoundingClientRect() || {
+          left: 0,
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: 0,
+          height: 0,
+        }
+      );
+    }
+    function sidebarSafeBounds() {
+      let left = 0,
+        right = window.innerWidth;
+      const native = nativeSidebarElement();
+      const nodes = new Set([native, document.getElementById("sidebar-box")]);
+      const ui = document.documentElement;
+      const onRight =
+        ui.getAttribute("zen-right-side") === "true" ||
+        ui.getAttribute("zen-sidebar-right") === "true";
+      if (ui.getAttribute("zen-compact-mode") === "true") {
+        // Preserve the native 8px reveal bezel even when a panel's exterior
+        // resize grip extends 14px beyond its box.
+        if (onRight) right -= 22;
+        else left += 22;
       }
-      const superPanel = document.getElementById("bgalazka-super-panel");
-      if (ui.getAttribute("bgalazka-super-pin") === "true" && superPanel) {
-        const rect = superPanel.getBoundingClientRect();
-        const width = Math.min(
-          rect.width,
-          Math.max(0, bounds.right - bounds.left - 24),
-        );
-        if (rect.width > width)
-          setLayoutStyle(superPanel, "width", width + "px");
+      for (const node of nodes) {
+        if (!node?.isConnected) continue;
+        const style = window.getComputedStyle(node),
+          rect = node.getBoundingClientRect();
+        if (
+          style.display === "none" ||
+          style.visibility === "hidden" ||
+          style.opacity === "0" ||
+          rect.width <= 0 ||
+          rect.width >= window.innerWidth * 0.65 ||
+          rect.height <= 0 ||
+          rect.right <= 0 ||
+          rect.left >= window.innerWidth
+        )
+          continue;
+        if (rect.left + rect.width / 2 < window.innerWidth / 2)
+          left = Math.max(left, rect.right);
+        else right = Math.min(right, rect.left);
+      }
+      return {
+        left: Math.max(0, Math.min(left, window.innerWidth)),
+        right: Math.max(left, Math.min(right, window.innerWidth)),
+        top: 0,
+        bottom: window.innerHeight,
+      };
+    }
+    function setLayoutStyle(node, name, value) {
+      if (node.style.getPropertyValue(name) !== value)
+        node.style.setProperty(name, value);
+    }
+    function constrainPanelToSidebar(panel) {
+      if (!panel?.hasAttribute("open")) return;
+      const bounds = sidebarSafeBounds(),
+        side = panel.getAttribute("data-panel-side");
+      const width = panel.getBoundingClientRect().width;
+      const style = window.getComputedStyle(panel);
+      const ml = parseFloat(style.marginLeft) || 0,
+        mr = parseFloat(style.marginRight) || 0;
+      const requested =
+        side === "right"
+          ? window.innerWidth -
+            (parseFloat(panel.style.right) || 0) -
+            width -
+            mr
+          : (parseFloat(panel.style.left) || 0) + ml;
+      // Keep panels flush with their docked edge in every mode. Panel geometry
+      // already removes the native inset; adding 12px here cancels that offset
+      // and leaves a gap. Only the pill on the opposite side needs clearance.
+      const min = bounds.left + (side === "right" ? 44 : 0);
+      const max = Math.max(
+        min,
+        bounds.right - width - (side === "left" ? 44 : 0),
+      );
+      const left = Math.max(min, Math.min(max, requested));
+      setLayoutStyle(
+        panel,
+        "--zentral-safe-panel-left",
+        Math.round(left - ml) + "px",
+      );
+      setLayoutStyle(
+        panel,
+        "--zentral-safe-panel-right",
+        Math.round(window.innerWidth - left - width - mr) + "px",
+      );
+    }
+    runtime.nativeSidebarElement = nativeSidebarElement;
+    runtime.nativeSidebarRect = nativeSidebarRect;
+    runtime.sidebarSafeBounds = sidebarSafeBounds;
+    runtime.constrainPanelToSidebar = constrainPanelToSidebar;
+    function installSidebarLayoutTracking() {
+      let frame = null,
+        disposed = false;
+      const transitions = new Map(),
+        watched = new Set();
+      const geometry =
+        /^(transform|translate|width|height|min-width|max-width|left|right|inset.*|margin.*|padding.*|flex-basis|opacity)$/;
+      const queue = () => {
+        if (!disposed && frame == null)
+          frame = window.requestAnimationFrame(update);
+      };
+      runtime.requestSidebarLayout = queue;
+      const rebind = () => {
+        bind();
+        queue();
+      };
+      const resize = new ResizeObserver(queue);
+      const anchors = new MutationObserver(queue);
+      const bind = () => {
+        const native = nativeSidebarElement();
+        for (const start of [
+          native,
+          window.gBrowser?.tabContainer,
+          document.getElementById("sidebar-box"),
+        ]) {
+          if (!start) continue;
+          for (
+            let node = start;
+            node && node !== document.documentElement;
+            node = node.parentElement
+          ) {
+            if (watched.has(node)) continue;
+            watched.add(node);
+            resize.observe(node);
+            anchors.observe(node, {
+              attributes: true,
+              attributeFilter: [
+                "style",
+                "class",
+                "hidden",
+                "collapsed",
+                "zen-sidebar-expanded",
+                "zen-sidebar-hidden",
+              ],
+            });
+          }
+        }
+      };
+      const update = () => {
+        frame = null;
+        if (disposed) return;
+        const bounds = sidebarSafeBounds(),
+          ui = document.documentElement;
+        if (ui.getAttribute("zentral-safe-layout") !== "true")
+          ui.setAttribute("zentral-safe-layout", "true");
         setLayoutStyle(
-          superPanel,
-          "left",
-          Math.round(
-            Math.max(
-              bounds.left + 12,
-              Math.min(bounds.right - width - 12, rect.left),
-            ),
-          ) + "px",
+          ui,
+          "--zentral-safe-left",
+          Math.ceil(bounds.left) + "px",
         );
-      }
-      // Missing transitionend (e.g. a detached anchor) must not spin forever.
-      for (const [node, props] of transitions) {
-        for (const [name, deadline] of props)
-          if (!node.isConnected || Date.now() >= deadline) props.delete(name);
-        if (!props.size) transitions.delete(node);
-      }
-      if (transitions.size && (panelVisible ||
-          ui.getAttribute("bgalazka-super-pin") === "true")) queue();
-    };
-    const rootObserver = new MutationObserver(() => {
-      bind();
-      window.Zentral?.Apps?.scheduleRepositionGrid?.(0);
-      queue();
-    });
-    rootObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: [
-        "zen-right-side",
-        "zen-sidebar-right",
-        "zen-sidebar-collapsed",
-        "zen-sidebar-expanded",
-        "zen-sidebar-hidden",
-        "zen-compact-mode",
-        "zen-compact-navbar-visible",
-        "zen-compact-sidebar-visible",
-        "inFullscreen",
-      ],
-    });
-    const transition = (event) => {
-      if (!watched.has(event.target) || !geometry.test(event.propertyName))
-        return;
-      let props = transitions.get(event.target);
-      if (event.type === "transitionrun" || event.type === "transitionstart") {
-        if (!props) transitions.set(event.target, (props = new Map()));
-        props.set(event.propertyName, Date.now() + 5000);
-      } else {
-        props?.delete(event.propertyName);
-        if (!props?.size) transitions.delete(event.target);
-      }
-      queue();
-    };
-    const prefs = {
-      observe: () => {
+        setLayoutStyle(
+          ui,
+          "--zentral-safe-right",
+          Math.ceil(window.innerWidth - bounds.right) + "px",
+        );
+        const panel = document.getElementById("zen-app-panel-root");
+        const panelVisible =
+          panel?.hasAttribute("open") &&
+          !panel.hasAttribute("closing") &&
+          !ui.hasAttribute("bgalazka-hover-panel-hidden");
+        if (panelVisible) {
+          window.Zentral?.Apps?.positionPanel?.();
+          runtime.panelContext?.syncSidebarLayout?.();
+        }
+        const superPanel = document.getElementById("bgalazka-super-panel");
+        if (ui.getAttribute("bgalazka-super-pin") === "true" && superPanel) {
+          const rect = superPanel.getBoundingClientRect();
+          const width = Math.min(
+            rect.width,
+            Math.max(0, bounds.right - bounds.left - 24),
+          );
+          if (rect.width > width)
+            setLayoutStyle(superPanel, "width", width + "px");
+          setLayoutStyle(
+            superPanel,
+            "left",
+            Math.round(
+              Math.max(
+                bounds.left + 12,
+                Math.min(bounds.right - width - 12, rect.left),
+              ),
+            ) + "px",
+          );
+        }
+        // Missing transitionend (e.g. a detached anchor) must not spin forever.
+        for (const [node, props] of transitions) {
+          for (const [name, deadline] of props)
+            if (!node.isConnected || Date.now() >= deadline) props.delete(name);
+          if (!props.size) transitions.delete(node);
+        }
+        if (
+          transitions.size &&
+          (panelVisible || ui.getAttribute("bgalazka-super-pin") === "true")
+        )
+          queue();
+      };
+      const rootObserver = new MutationObserver(() => {
+        bind();
         window.Zentral?.Apps?.scheduleRepositionGrid?.(0);
         queue();
-      },
-    };
-    Services.prefs.addObserver("zen.view.", prefs);
-    for (const type of [
-      "transitionrun",
-      "transitionstart",
-      "transitionend",
-      "transitioncancel",
-    ])
-      window.addEventListener(type, transition, true);
-    for (const type of [
-      "resize",
-      "aftercustomization",
-      "zen-workspace-switched",
-    ])
-      window.addEventListener(type, rebind);
-    bind();
-    update();
-    disposers.push(() => {
-      delete runtime.requestSidebarLayout;
-      disposed = true;
-      if (frame != null) window.cancelAnimationFrame(frame);
-      resize.disconnect();
-      anchors.disconnect();
-      rootObserver.disconnect();
-      Services.prefs.removeObserver("zen.view.", prefs);
+      });
+      rootObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: [
+          "zen-right-side",
+          "zen-sidebar-right",
+          "zen-sidebar-collapsed",
+          "zen-sidebar-expanded",
+          "zen-sidebar-hidden",
+          "zen-compact-mode",
+          "zen-compact-navbar-visible",
+          "zen-compact-sidebar-visible",
+          "inFullscreen",
+        ],
+      });
+      const transition = (event) => {
+        if (!watched.has(event.target) || !geometry.test(event.propertyName))
+          return;
+        let props = transitions.get(event.target);
+        if (
+          event.type === "transitionrun" ||
+          event.type === "transitionstart"
+        ) {
+          if (!props) transitions.set(event.target, (props = new Map()));
+          props.set(event.propertyName, Date.now() + 5000);
+        } else {
+          props?.delete(event.propertyName);
+          if (!props?.size) transitions.delete(event.target);
+        }
+        queue();
+      };
+      const prefs = {
+        observe: () => {
+          window.Zentral?.Apps?.scheduleRepositionGrid?.(0);
+          queue();
+        },
+      };
+      Services.prefs.addObserver("zen.view.", prefs);
       for (const type of [
         "transitionrun",
         "transitionstart",
         "transitionend",
         "transitioncancel",
       ])
-        window.removeEventListener(type, transition, true);
+        window.addEventListener(type, transition, true);
       for (const type of [
         "resize",
         "aftercustomization",
         "zen-workspace-switched",
       ])
-        window.removeEventListener(type, rebind);
-      for (const name of ["--zentral-safe-left", "--zentral-safe-right"])
-        document.documentElement.style.removeProperty(name);
-      document.documentElement.removeAttribute("zentral-safe-layout");
-    });
-  }
+        window.addEventListener(type, rebind);
+      bind();
+      update();
+      disposers.push(() => {
+        delete runtime.requestSidebarLayout;
+        disposed = true;
+        if (frame != null) window.cancelAnimationFrame(frame);
+        resize.disconnect();
+        anchors.disconnect();
+        rootObserver.disconnect();
+        Services.prefs.removeObserver("zen.view.", prefs);
+        for (const type of [
+          "transitionrun",
+          "transitionstart",
+          "transitionend",
+          "transitioncancel",
+        ])
+          window.removeEventListener(type, transition, true);
+        for (const type of [
+          "resize",
+          "aftercustomization",
+          "zen-workspace-switched",
+        ])
+          window.removeEventListener(type, rebind);
+        for (const name of ["--zentral-safe-left", "--zentral-safe-right"])
+          document.documentElement.style.removeProperty(name);
+        document.documentElement.removeAttribute("zentral-safe-layout");
+      });
+    }
 
-return { installSidebarLayoutTracking };
-})({ runtime, getPref, disposers });
+    return { installSidebarLayoutTracking };
+  })({ runtime, getPref, disposers });
   moduleLoader.load("core/ZentralCatalog.js");
-  const { MANIFEST, CSS_MANIFEST, settingsSupport = true } = moduleLoader.create("catalog");
+  const {
+    MANIFEST,
+    CSS_MANIFEST,
+    settingsSupport = true,
+  } = moduleLoader.create("catalog");
   moduleLoader.diagnosticsOnly = !settingsSupport;
-  moduleLoader.settingsOwners = new Set(["core", ...MANIFEST.map(item => item.id)]);
-  const catalogAvailable = settingsSupport && moduleLoader.load("features/settings/controllers/ZentralSettingsCatalog.js", { optional: true, owner: "settings" });
+  moduleLoader.settingsOwners = new Set([
+    "core",
+    ...MANIFEST.map((item) => item.id),
+  ]);
+  const catalogAvailable =
+    settingsSupport &&
+    moduleLoader.load(
+      "features/settings/controllers/ZentralSettingsCatalog.js",
+      { optional: true, owner: "settings" },
+    );
   const { SETTINGS_SCHEMA, SETTINGS_ORGANIZATION } = catalogAvailable
-    ? moduleLoader.create("settings-catalog", undefined, { optional: true }) || { SETTINGS_SCHEMA: [], SETTINGS_ORGANIZATION: { categories: [], settings: {}, availableOwners: [] } }
-    : { SETTINGS_SCHEMA: [], SETTINGS_ORGANIZATION: { categories: [], settings: {}, availableOwners: [] } };
+    ? moduleLoader.create("settings-catalog", undefined, {
+        optional: true,
+      }) || {
+        SETTINGS_SCHEMA: [],
+        SETTINGS_ORGANIZATION: {
+          categories: [],
+          settings: {},
+          availableOwners: [],
+        },
+      }
+    : {
+        SETTINGS_SCHEMA: [],
+        SETTINGS_ORGANIZATION: {
+          categories: [],
+          settings: {},
+          availableOwners: [],
+        },
+      };
   function validPanelBackingSteps(value) {
-    const tokens=String(value).trim().split(/[,;\s]+/).filter(Boolean);
-    return tokens.length > 0 && tokens.every(token => /^\d+$/.test(token) && Number(token) <= 100);
+    const tokens = String(value)
+      .trim()
+      .split(/[,;\s]+/)
+      .filter(Boolean);
+    return (
+      tokens.length > 0 &&
+      tokens.every((token) => /^\d+$/.test(token) && Number(token) <= 100)
+    );
   }
   function settingsOwnerAvailable(id) {
     // Local add-ons register their schema through addSettings rather than an
     // installed owner descriptor; only catalog-owned packages need one.
-    if (moduleLoader.settingsOwners && !moduleLoader.settingsOwners.has(id)) return true;
-    return !SETTINGS_ORGANIZATION.availableOwners || SETTINGS_ORGANIZATION.availableOwners.includes(id);
+    if (moduleLoader.settingsOwners && !moduleLoader.settingsOwners.has(id))
+      return true;
+    return (
+      !SETTINGS_ORGANIZATION.availableOwners ||
+      SETTINGS_ORGANIZATION.availableOwners.includes(id)
+    );
   }
   function settingsModuleLoaded(id) {
     if (!id) return true;
-    if ((id === "core" || MANIFEST.some(item => item.id === id)) && !settingsOwnerAvailable(id)) return false;
+    if (
+      (id === "core" || MANIFEST.some((item) => item.id === id)) &&
+      !settingsOwnerAvailable(id)
+    )
+      return false;
     if (id === "core") return true;
-    if (id === "video" && typeof moduleLoader !== "undefined" &&
-        moduleLoader.sources().some(row => row.file === "features/video/controllers/ZentralVideoSettings.js" && row.state === "failed")) return false;
+    if (
+      id === "video" &&
+      typeof moduleLoader !== "undefined" &&
+      moduleLoader
+        .sources()
+        .some(
+          (row) =>
+            row.file === "features/video/controllers/ZentralVideoSettings.js" &&
+            row.state === "failed",
+        )
+    )
+      return false;
     return ["active", "dormant"].includes(records.get(id)?.state);
   }
   function settingsMetadata(item) {
-    return SETTINGS_ORGANIZATION.settings[item.property] || {
-      category: "addons", section: "Registered add-on settings", owner: item.feature || "core",
-    };
+    return (
+      SETTINGS_ORGANIZATION.settings[item.property] || {
+        category: "addons",
+        section: "Registered add-on settings",
+        owner: item.feature || "core",
+      }
+    );
   }
   function settingsItemAvailable(item) {
     return settingsModuleLoaded(settingsMetadata(item).owner);
   }
   function selectSettingsCategory(modal, target) {
     for (const button of modal.querySelectorAll(".zs-tab-btn"))
-      button.setAttribute("data-active", button.dataset.settingsCategory === target ? "true" : "false");
+      button.setAttribute(
+        "data-active",
+        button.dataset.settingsCategory === target ? "true" : "false",
+      );
     for (const panel of modal.querySelectorAll(".zs-tab-panel"))
-      panel.setAttribute("data-active", panel.dataset.settingsCategory === target ? "true" : "false");
+      panel.setAttribute(
+        "data-active",
+        panel.dataset.settingsCategory === target ? "true" : "false",
+      );
   }
   function ensureSettingsCategory(modal, id) {
-    const definition = SETTINGS_ORGANIZATION.categories.find(category => category.id === id);
+    const definition = SETTINGS_ORGANIZATION.categories.find(
+      (category) => category.id === id,
+    );
     if (!definition) throw new Error("Unknown settings category: " + id);
-    let panel = modal.querySelector('#zs-panel-organized-' + id);
+    let panel = modal.querySelector("#zs-panel-organized-" + id);
     if (!panel) {
       panel = document.createElement("div");
-      panel.id = 'zs-panel-organized-' + id;
+      panel.id = "zs-panel-organized-" + id;
       panel.className = "zs-tab-panel zs-organized-panel";
       panel.dataset.settingsCategory = id;
       panel.dataset.settingsOwner = definition.owner;
@@ -669,7 +760,7 @@ return { installSidebarLayoutTracking };
       panel.append(heading, content);
       modal.querySelector(".zs-body").appendChild(panel);
       const button = document.createElement("button");
-      button.id = 'zs-tab-btn-organized-' + id;
+      button.id = "zs-tab-btn-organized-" + id;
       button.type = "button";
       button.className = "zs-tab-btn";
       button.dataset.settingsCategory = id;
@@ -681,13 +772,17 @@ return { installSidebarLayoutTracking };
         all.type = "button";
         all.className = "zs-category-all-settings";
         all.textContent = "All " + definition.label.toLowerCase() + " settings";
-        all.title = "Open every setting in this category, including advanced values";
+        all.title =
+          "Open every setting in this category, including advanced values";
         all.addEventListener("click", () => openManager(id));
         panel.appendChild(all);
       }
     }
-    return { panel, button: modal.querySelector('#zs-tab-btn-organized-' + id),
-      content: panel.querySelector('.zs-organized-content') };
+    return {
+      panel,
+      button: modal.querySelector("#zs-tab-btn-organized-" + id),
+      content: panel.querySelector(".zs-organized-content"),
+    };
   }
   runtime.ensureSettingsCategory = ensureSettingsCategory;
   runtime.selectSettingsCategory = selectSettingsCategory;
@@ -695,200 +790,380 @@ return { installSidebarLayoutTracking };
   runtime.settingsOwnerAvailable = settingsOwnerAvailable;
   runtime.settingsMetadata = settingsMetadata;
   function settingsCategoryAvailable(category) {
-    return SETTINGS_SCHEMA.some(item => settingsMetadata(item).category === category.id && settingsItemAvailable(item));
+    return SETTINGS_SCHEMA.some(
+      (item) =>
+        settingsMetadata(item).category === category.id &&
+        settingsItemAvailable(item),
+    );
   }
   function setSettingsUnavailable(node, unavailable) {
     if (unavailable) {
-      if (!Object.hasOwn(node.dataset, 'settingsUnavailable')) node.dataset.settingsUnavailable = String(node.hidden);
+      if (!Object.hasOwn(node.dataset, "settingsUnavailable"))
+        node.dataset.settingsUnavailable = String(node.hidden);
       node.hidden = true;
-    } else if (Object.hasOwn(node.dataset, 'settingsUnavailable')) {
-      node.hidden = node.dataset.settingsUnavailable === 'true';
+    } else if (Object.hasOwn(node.dataset, "settingsUnavailable")) {
+      node.hidden = node.dataset.settingsUnavailable === "true";
       delete node.dataset.settingsUnavailable;
     }
   }
   function organizeNativeSettings(modal) {
-    if (!modal?.querySelector('.zs-body')) return;
-    const bar = modal.querySelector('.zs-tab-bar');
-    modal.querySelector('.zs-dialog')?.setAttribute('data-settings-organized', 'true');
+    if (!modal?.querySelector(".zs-body")) return;
+    const bar = modal.querySelector(".zs-tab-bar");
+    modal
+      .querySelector(".zs-dialog")
+      ?.setAttribute("data-settings-organized", "true");
     // Existing controls are moved, preserving their handlers, recorder state,
     // live saves, and parent visibility rules. No preference values are rewritten.
-    for (const [id, category] of [['zs-ag-col','apps'],['zs-tg-col','tab-groups']]) {
-      const column = modal.querySelector('#'+id);
+    for (const [id, category] of [
+      ["zs-ag-col", "apps"],
+      ["zs-tg-col", "tab-groups"],
+    ]) {
+      const column = modal.querySelector("#" + id);
       if (column) {
-        if (!SETTINGS_ORGANIZATION.categories.some(item => item.id === category)) { column.hidden = true; continue; }
+        if (
+          !SETTINGS_ORGANIZATION.categories.some((item) => item.id === category)
+        ) {
+          column.hidden = true;
+          continue;
+        }
         const target = ensureSettingsCategory(modal, category).content;
         if (column.parentElement !== target) target.appendChild(column);
       }
     }
     const baseKeys = {
-      'zs-ag-enabled':'apps.sidebar.enabled','zs-ag-placement':'apps.sidebar.placement',
-      'zs-apps-row':'apps.sidebar.apps_per_row','zs-max-rows':'apps.sidebar.max_rows',
-      'zs-max-apps':'apps.sidebar.max_apps','zs-hide-utility-section':'apps.sidebar.hide_utility_section',
-      'zs-ag-autohide':'apps.sidebar.autohide','zs-panel-width':'apps.sidebar.width',
-      'zs-anim-type':'apps.sidebar.animation_type','zs-anim-speed':'apps.sidebar.animation_speed',
-      'zs-insta-peek-shortcut':'apps.insta_peek.shortcut',
-      'zs-tg-enabled':'tabgroups.enabled','zs-tg-collapse':'tabgroups.collapse_on_launch',
-      'zs-tg-thumbnails':'tabgroups.thumbnails','zs-tg-chevron':'tabgroups.show_chevron',
-      'zs-tg-indicator-type':'tabgroups.indicator_type','zs-tg-opacity':'tabgroups.label_opacity',
+      "zs-ag-enabled": "apps.sidebar.enabled",
+      "zs-ag-placement": "apps.sidebar.placement",
+      "zs-apps-row": "apps.sidebar.apps_per_row",
+      "zs-max-rows": "apps.sidebar.max_rows",
+      "zs-max-apps": "apps.sidebar.max_apps",
+      "zs-hide-utility-section": "apps.sidebar.hide_utility_section",
+      "zs-ag-autohide": "apps.sidebar.autohide",
+      "zs-panel-width": "apps.sidebar.width",
+      "zs-anim-type": "apps.sidebar.animation_type",
+      "zs-anim-speed": "apps.sidebar.animation_speed",
+      "zs-insta-peek-shortcut": "apps.insta_peek.shortcut",
+      "zs-tg-enabled": "tabgroups.enabled",
+      "zs-tg-collapse": "tabgroups.collapse_on_launch",
+      "zs-tg-thumbnails": "tabgroups.thumbnails",
+      "zs-tg-chevron": "tabgroups.show_chevron",
+      "zs-tg-indicator-type": "tabgroups.indicator_type",
+      "zs-tg-opacity": "tabgroups.label_opacity",
     };
     for (const [id, suffix] of Object.entries(baseKeys)) {
-      const input = modal.querySelector('#'+id);
-      const row = input?.closest('.zs-row, .zs-stacked-slider');
-      if (row) row.dataset.settingKey = 'zen.workspace.'+suffix;
+      const input = modal.querySelector("#" + id);
+      const row = input?.closest(".zs-row, .zs-stacked-slider");
+      if (row) row.dataset.settingKey = "zen.workspace." + suffix;
     }
     // Ensure even advanced settings absent from legacy UI have a category route.
     for (const category of SETTINGS_ORGANIZATION.categories) {
-      if (category.id === "logging" || !settingsCategoryAvailable(category)) continue;
-      const target = ensureSettingsCategory(modal,category.id);
-      if (["modules","addons"].includes(category.id) && !target.content.children.length) {
-        const route=document.createElement("button");route.type="button";
-        route.textContent=category.id === "modules" ? "Manage modules and CSS files" : "Manage local add-ons";
-        route.addEventListener("click",()=>openManager(category.id));target.content.appendChild(route);
+      if (category.id === "logging" || !settingsCategoryAvailable(category))
+        continue;
+      const target = ensureSettingsCategory(modal, category.id);
+      if (
+        ["modules", "addons"].includes(category.id) &&
+        !target.content.children.length
+      ) {
+        const route = document.createElement("button");
+        route.type = "button";
+        route.textContent =
+          category.id === "modules"
+            ? "Manage modules and CSS files"
+            : "Manage local add-ons";
+        route.addEventListener("click", () => openManager(category.id));
+        target.content.appendChild(route);
       }
     }
     const seen = new Set();
     const units = new Set();
-    for (const row of [...modal.querySelectorAll('[data-setting-key]')]) {
+    for (const row of [...modal.querySelectorAll("[data-setting-key]")]) {
       const meta = SETTINGS_ORGANIZATION.settings[row.dataset.settingKey];
-      if (!meta) { setSettingsUnavailable(row, true); continue; }
+      if (!meta) {
+        setSettingsUnavailable(row, true);
+        continue;
+      }
       if (row.dataset.videoSettings === "row") continue;
       // Video's complex controls are grouped by its own module. Its shared
       // appearance controls use the same category identity and lifecycle.
-      if (seen.has(row.dataset.settingKey)) { row.remove(); continue; }
+      if (seen.has(row.dataset.settingKey)) {
+        row.remove();
+        continue;
+      }
       seen.add(row.dataset.settingKey);
       row.dataset.settingsOwner = meta.owner;
       let unit = row;
-      for (let parent = row.parentElement; parent && !parent.classList.contains('zs-section-content'); parent = parent.parentElement) {
-        if (!parent.classList.contains('zs-conditional-group') && !parent.classList.contains('zs-look-group')) continue;
-        const members = [...parent.querySelectorAll('[data-setting-key]')];
-        if (members.every(member => {
-          const memberMeta = SETTINGS_ORGANIZATION.settings[member.dataset.settingKey];
-          return memberMeta?.category === meta.category && memberMeta.section === meta.section;
-        })) unit = parent;
+      for (
+        let parent = row.parentElement;
+        parent && !parent.classList.contains("zs-section-content");
+        parent = parent.parentElement
+      ) {
+        if (
+          !parent.classList.contains("zs-conditional-group") &&
+          !parent.classList.contains("zs-look-group")
+        )
+          continue;
+        const members = [...parent.querySelectorAll("[data-setting-key]")];
+        if (
+          members.every((member) => {
+            const memberMeta =
+              SETTINGS_ORGANIZATION.settings[member.dataset.settingKey];
+            return (
+              memberMeta?.category === meta.category &&
+              memberMeta.section === meta.section
+            );
+          })
+        )
+          unit = parent;
       }
       if (units.has(unit)) continue;
       units.add(unit);
       const content = ensureSettingsCategory(modal, meta.category).content;
-      let segment = [...content.children].find(node=>node.dataset.settingsSection === meta.section);
+      let segment = [...content.children].find(
+        (node) => node.dataset.settingsSection === meta.section,
+      );
       if (!segment) {
-        segment=document.createElement("section");segment.className="zs-category-segment";
-        segment.dataset.settingsSection=meta.section;
-        const heading=document.createElement("h4");heading.textContent=meta.section;
-        segment.appendChild(heading);content.appendChild(segment);
+        segment = document.createElement("section");
+        segment.className = "zs-category-segment";
+        segment.dataset.settingsSection = meta.section;
+        const heading = document.createElement("h4");
+        heading.textContent = meta.section;
+        segment.appendChild(heading);
+        content.appendChild(segment);
       }
       if (unit.parentElement !== segment) segment.appendChild(unit);
     }
     // Non-setting actions and explanatory status remain next to their controls.
     for (const [selector, category] of [
-      ['.zs-look-themes, .zs-look-actions, .zs-look-action','theme'],
-      ['.zs-extension-presets','recovery'],['#zs-addon-host-inspection','compatibility'],
+      [".zs-look-themes, .zs-look-actions, .zs-look-action", "theme"],
+      [".zs-extension-presets", "recovery"],
+      ["#zs-addon-host-inspection", "compatibility"],
     ]) {
-      const target = modal.querySelector('#zs-panel-organized-'+category+' .zs-organized-content');
-      if (target) for (const node of [...modal.querySelectorAll(selector)])
-        if (node.parentElement !== target && !target.contains(node)) target.appendChild(node);
+      const target = modal.querySelector(
+        "#zs-panel-organized-" + category + " .zs-organized-content",
+      );
+      if (target)
+        for (const node of [...modal.querySelectorAll(selector)])
+          if (node.parentElement !== target && !target.contains(node))
+            target.appendChild(node);
     }
     // Only retire the old extension pages once their controls were built.
-    for (const button of modal.querySelectorAll('#zs-tab-btn-bgalazka, [id^="zs-tab-btn-extension-"]')) {
-      button.hidden = true; button.setAttribute('data-active','false');
+    for (const button of modal.querySelectorAll(
+      '#zs-tab-btn-bgalazka, [id^="zs-tab-btn-extension-"]',
+    )) {
+      button.hidden = true;
+      button.setAttribute("data-active", "false");
     }
     const original = modal.querySelector('.zs-tab-btn[data-tab="settings"]');
-    if (original) { original.hidden = true; original.setAttribute('data-active','false'); }
-    for (const panel of modal.querySelectorAll('#zs-panel-settings, #zs-panel-bgalazka, .zs-extension-subpanel'))
-      panel.setAttribute('data-active','false');
+    if (original) {
+      original.hidden = true;
+      original.setAttribute("data-active", "false");
+    }
+    for (const panel of modal.querySelectorAll(
+      "#zs-panel-settings, #zs-panel-bgalazka, .zs-extension-subpanel",
+    ))
+      panel.setAttribute("data-active", "false");
     const logs = modal.querySelector('.zs-tab-btn[data-tab="diagnostics"]');
-    if (logs) { logs.textContent = 'Logs & Diagnostics'; logs.dataset.settingsCategory='logging'; logs.hidden=!settingsModuleLoaded('logger'); }
-    const logPanel = modal.querySelector('#zs-panel-diagnostics');
-    if (logPanel) logPanel.dataset.settingsCategory='logging';
+    if (logs) {
+      logs.textContent = "Logs & Diagnostics";
+      logs.dataset.settingsCategory = "logging";
+      logs.hidden = !settingsModuleLoaded("logger");
+    }
+    const logPanel = modal.querySelector("#zs-panel-diagnostics");
+    if (logPanel) logPanel.dataset.settingsCategory = "logging";
     for (const category of SETTINGS_ORGANIZATION.categories) {
-      const target = modal.querySelector('#zs-panel-organized-'+category.id);
-      const button = modal.querySelector('#zs-tab-btn-organized-'+category.id);
+      const target = modal.querySelector("#zs-panel-organized-" + category.id);
+      const button = modal.querySelector(
+        "#zs-tab-btn-organized-" + category.id,
+      );
       if (!target || !button) continue;
       const available = settingsCategoryAvailable(category);
       button.hidden = !available;
-      if (!available) target.setAttribute('data-active','false');
-      for (const row of target.querySelectorAll('[data-settings-owner]'))
-        setSettingsUnavailable(row, !settingsModuleLoaded(row.dataset.settingsOwner));
-      const sectionOrder = new Map(category.sections.map((section, index) => [section.label, index]));
-      const ranks = new Map(SETTINGS_SCHEMA.map((item, index) => [item.property, index]));
-      const rank = node => Math.min(...[node, ...node.querySelectorAll('[data-setting-key]')]
-        .map(row => ranks.get(row.dataset.settingKey) ?? Infinity));
-      const content = target.querySelector('.zs-organized-content');
-      for (const segment of content.querySelectorAll('.zs-category-segment')) {
-        const definition = category.sections.find(section => section.label === segment.dataset.settingsSection);
-        segment.hidden = !definition?.properties.some(property => settingsItemAvailable({ property }));
+      if (!available) target.setAttribute("data-active", "false");
+      for (const row of target.querySelectorAll("[data-settings-owner]"))
+        setSettingsUnavailable(
+          row,
+          !settingsModuleLoaded(row.dataset.settingsOwner),
+        );
+      const sectionOrder = new Map(
+        category.sections.map((section, index) => [section.label, index]),
+      );
+      const ranks = new Map(
+        SETTINGS_SCHEMA.map((item, index) => [item.property, index]),
+      );
+      const rank = (node) =>
+        Math.min(
+          ...[node, ...node.querySelectorAll("[data-setting-key]")].map(
+            (row) => ranks.get(row.dataset.settingKey) ?? Infinity,
+          ),
+        );
+      const content = target.querySelector(".zs-organized-content");
+      for (const segment of content.querySelectorAll(".zs-category-segment")) {
+        const definition = category.sections.find(
+          (section) => section.label === segment.dataset.settingsSection,
+        );
+        segment.hidden = !definition?.properties.some((property) =>
+          settingsItemAvailable({ property }),
+        );
         // Move whole units so conditional groups and their event handlers remain intact.
-        for (const unit of [...segment.children].filter(node => node.localName !== 'h4').sort((a, b) => rank(a) - rank(b))) segment.appendChild(unit);
+        for (const unit of [...segment.children]
+          .filter((node) => node.localName !== "h4")
+          .sort((a, b) => rank(a) - rank(b)))
+          segment.appendChild(unit);
       }
-      const sections = [...content.children].filter(node => node.classList.contains('zs-category-segment'));
-      for (const segment of sections.sort((a, b) => (sectionOrder.get(a.dataset.settingsSection) ?? Infinity) - (sectionOrder.get(b.dataset.settingsSection) ?? Infinity))) content.appendChild(segment);
+      const sections = [...content.children].filter((node) =>
+        node.classList.contains("zs-category-segment"),
+      );
+      for (const segment of sections.sort(
+        (a, b) =>
+          (sectionOrder.get(a.dataset.settingsSection) ?? Infinity) -
+          (sectionOrder.get(b.dataset.settingsSection) ?? Infinity),
+      ))
+        content.appendChild(segment);
     }
-    for (const heading of bar.querySelectorAll('.zs-category-heading')) heading.remove();
+    for (const heading of bar.querySelectorAll(".zs-category-heading"))
+      heading.remove();
     let group = null;
     for (const definition of SETTINGS_ORGANIZATION.categories) {
-      const button = definition.id === 'logging' ? logs : modal.querySelector('#zs-tab-btn-organized-'+definition.id);
+      const button =
+        definition.id === "logging"
+          ? logs
+          : modal.querySelector("#zs-tab-btn-organized-" + definition.id);
       if (!button || button.hidden) continue;
       if (group !== definition.group) {
         group = definition.group;
-        const heading = document.createElement('span');
-        heading.className = 'zs-category-heading'; heading.textContent = group;
+        const heading = document.createElement("span");
+        heading.className = "zs-category-heading";
+        heading.textContent = group;
         bar.appendChild(heading);
       }
       bar.appendChild(button);
     }
     if (!bar.dataset.organizedGuard) {
-      bar.dataset.organizedGuard="true";
-      bar.addEventListener("click",event=>{
-        const clicked=event.target.closest?.(".zs-tab-btn");
-        if (clicked?.dataset.settingsCategory) selectSettingsCategory(modal,clicked.dataset.settingsCategory);
-      },true);
+      bar.dataset.organizedGuard = "true";
+      bar.addEventListener(
+        "click",
+        (event) => {
+          const clicked = event.target.closest?.(".zs-tab-btn");
+          if (clicked?.dataset.settingsCategory)
+            selectSettingsCategory(modal, clicked.dataset.settingsCategory);
+        },
+        true,
+      );
     }
     if (!modal.querySelector('.zs-tab-btn[data-active="true"]:not([hidden])')) {
-      const first=bar.querySelector('.zs-tab-btn[data-settings-category]:not([hidden])');
-      if (first) selectSettingsCategory(modal,first.dataset.settingsCategory);
+      const first = bar.querySelector(
+        ".zs-tab-btn[data-settings-category]:not([hidden])",
+      );
+      if (first) selectSettingsCategory(modal, first.dataset.settingsCategory);
     }
-    if (!bar.querySelector('#zs-settings-search')) {
-      const search = document.createElement('input');
-      search.id = 'zs-settings-search'; search.type = 'search'; search.placeholder = 'Find a setting';
-      search.setAttribute('aria-label','Search all available settings');
-      const results = document.createElement('div'); results.id = 'zs-settings-search-results';
+    if (!bar.querySelector("#zs-settings-search")) {
+      const search = document.createElement("input");
+      search.id = "zs-settings-search";
+      search.type = "search";
+      search.placeholder = "Find a setting";
+      search.setAttribute("aria-label", "Search all available settings");
+      const results = document.createElement("div");
+      results.id = "zs-settings-search-results";
       results.hidden = true;
-      search.addEventListener('input', () => {
-        results.replaceChildren(); const query=search.value.trim().toLowerCase(); results.hidden=!query;
+      search.addEventListener("input", () => {
+        results.replaceChildren();
+        const query = search.value.trim().toLowerCase();
+        results.hidden = !query;
         if (!query) return;
-        const matches=SETTINGS_SCHEMA.filter(item => item.property && settingsItemAvailable(item) &&
-          (item.label+' '+item.property+' '+SETTINGS_ORGANIZATION.categories.find(category=>category.id===settingsMetadata(item).category)?.label).toLowerCase().includes(query));
+        const matches = SETTINGS_SCHEMA.filter(
+          (item) =>
+            item.property &&
+            settingsItemAvailable(item) &&
+            (
+              item.label +
+              " " +
+              item.property +
+              " " +
+              SETTINGS_ORGANIZATION.categories.find(
+                (category) => category.id === settingsMetadata(item).category,
+              )?.label
+            )
+              .toLowerCase()
+              .includes(query),
+        );
         for (const item of matches) {
-          const meta=settingsMetadata(item), definition=SETTINGS_ORGANIZATION.categories.find(category=>category.id===meta.category);
-          const result=document.createElement('button'); result.type='button';
-          result.textContent=item.label+' · '+definition.label;
-          result.addEventListener('click',()=>{
-            const row=[...modal.querySelectorAll('[data-setting-key]')].find(row=>row.dataset.settingKey===item.property);
-            const category=modal.querySelector('#zs-panel-organized-'+meta.category);
-            if (row && category && !row.closest('[data-hidden="true"], [hidden]')) {
-              selectSettingsCategory(modal,meta.category);row.scrollIntoView({block:'center'});
-              const control=row.querySelector('input, select, button');control?.focus();
-            } else openManager(meta.category,item.property);
+          const meta = settingsMetadata(item),
+            definition = SETTINGS_ORGANIZATION.categories.find(
+              (category) => category.id === meta.category,
+            );
+          const result = document.createElement("button");
+          result.type = "button";
+          result.textContent = item.label + " · " + definition.label;
+          result.addEventListener("click", () => {
+            const row = [...modal.querySelectorAll("[data-setting-key]")].find(
+              (row) => row.dataset.settingKey === item.property,
+            );
+            const category = modal.querySelector(
+              "#zs-panel-organized-" + meta.category,
+            );
+            if (
+              row &&
+              category &&
+              !row.closest('[data-hidden="true"], [hidden]')
+            ) {
+              selectSettingsCategory(modal, meta.category);
+              row.scrollIntoView({ block: "center" });
+              const control = row.querySelector("input, select, button");
+              control?.focus();
+            } else openManager(meta.category, item.property);
           });
           results.appendChild(result);
         }
-        if (!matches.length) results.textContent='No matching settings in loaded modules.';
+        if (!matches.length)
+          results.textContent = "No matching settings in loaded modules.";
       });
-      bar.prepend(search,results);
+      bar.prepend(search, results);
     }
   }
   runtime.organizeSettings = organizeNativeSettings;
   const refreshSettingsCategories = () => {
-    const modal=document.getElementById("zentral-settings-modal");
+    const modal = document.getElementById("zentral-settings-modal");
     if (modal) organizeNativeSettings(modal);
   };
-  window.addEventListener("zentral-runtime-change",refreshSettingsCategories);
-  disposers.push(()=>window.removeEventListener("zentral-runtime-change",refreshSettingsCategories));
+  window.addEventListener("zentral-runtime-change", refreshSettingsCategories);
+  disposers.push(() =>
+    window.removeEventListener(
+      "zentral-runtime-change",
+      refreshSettingsCategories,
+    ),
+  );
 
   moduleLoader.load("core/ZentralShared.js");
-  const { Constants, Core, createSVGElement, SVG_STRINGS, WELL_KNOWN_SERVICES } = moduleLoader.create("shared", { Services, runtime });
-  const shellAvailable = settingsSupport && moduleLoader.load("features/settings/controllers/ZentralSettingsShell.js", { optional: true, owner: "settings" });
-  const Settings = (shellAvailable ? moduleLoader.create("settings-shell", { Services, Core, Constants, createSVGElement, SVG_STRINGS, WELL_KNOWN_SERVICES, runtime }, { optional: true }) : null) || {
-    open: () => moduleLoader.showDiagnostics(), destroy() {}, close() {}
+  const {
+    Constants,
+    Core,
+    createSVGElement,
+    SVG_STRINGS,
+    WELL_KNOWN_SERVICES,
+  } = moduleLoader.create("shared", { Services, runtime });
+  const shellAvailable =
+    settingsSupport &&
+    moduleLoader.load("features/settings/controllers/ZentralSettingsShell.js", {
+      optional: true,
+      owner: "settings",
+    });
+  const Settings = (shellAvailable
+    ? moduleLoader.create(
+        "settings-shell",
+        {
+          Services,
+          Core,
+          Constants,
+          createSVGElement,
+          SVG_STRINGS,
+          WELL_KNOWN_SERVICES,
+          runtime,
+        },
+        { optional: true },
+      )
+    : null) || {
+    open: () => moduleLoader.showDiagnostics(),
+    destroy() {},
+    close() {},
   };
   disposers.push(() => Settings.destroy());
   window.Zentral = { Core, Settings };
@@ -900,27 +1175,105 @@ return { installSidebarLayoutTracking };
     SVG_STRINGS,
     WELL_KNOWN_SERVICES,
   };
-  const extensionSettingsAvailable = settingsSupport && moduleLoader.load("features/settings/controllers/ZentralFeatureSettings.js", { optional: true, owner: "extension-settings" });
-  if (extensionSettingsAvailable) moduleLoader.create("feature-settings", { Services, ZentralRuntime, Core, Settings, Constants, organizeNativeSettings, validPanelBackingSteps, SETTINGS_SCHEMA, SETTINGS_ORGANIZATION, selectSettingsCategory, arcSidebarPref, arcLibraryPref }, { optional: true });
-  const developerAvailable = settingsSupport && moduleLoader.load("features/settings/controllers/ZentralDeveloperSettings.js", { optional: true, owner: "settings" });
-  const developer = developerAvailable ? moduleLoader.create("developer-settings", { Services, Core, Settings, runtime, records, styles, MANIFEST, CSS_MANIFEST, SETTINGS_SCHEMA, SETTINGS_ORGANIZATION, getPref, setPref, enabled, unsafeCoreDisabled, protectedModules, protectedCSS, PREF, ROOT, VERSION, disposers, settingsMetadata, settingsItemAvailable, selectSettingsCategory, organizeNativeSettings, validateAddons, unsafeCorePref }, { optional: true }) : null;
-  function openManager(...args) { return developer ? developer.openManager(...args) : moduleLoader.showDiagnostics(); }
+  const extensionSettingsAvailable =
+    settingsSupport &&
+    moduleLoader.load(
+      "features/settings/controllers/ZentralFeatureSettings.js",
+      { optional: true, owner: "extension-settings" },
+    );
+  if (extensionSettingsAvailable)
+    moduleLoader.create(
+      "feature-settings",
+      {
+        Services,
+        ZentralRuntime,
+        Core,
+        Settings,
+        Constants,
+        organizeNativeSettings,
+        validPanelBackingSteps,
+        SETTINGS_SCHEMA,
+        SETTINGS_ORGANIZATION,
+        selectSettingsCategory,
+        arcSidebarPref,
+        arcLibraryPref,
+      },
+      { optional: true },
+    );
+  const developerAvailable =
+    settingsSupport &&
+    moduleLoader.load(
+      "features/settings/controllers/ZentralDeveloperSettings.js",
+      { optional: true, owner: "settings" },
+    );
+  const developer = developerAvailable
+    ? moduleLoader.create(
+        "developer-settings",
+        {
+          Services,
+          Core,
+          Settings,
+          runtime,
+          records,
+          styles,
+          MANIFEST,
+          CSS_MANIFEST,
+          SETTINGS_SCHEMA,
+          SETTINGS_ORGANIZATION,
+          getPref,
+          setPref,
+          enabled,
+          unsafeCoreDisabled,
+          protectedModules,
+          protectedCSS,
+          PREF,
+          ROOT,
+          VERSION,
+          disposers,
+          settingsMetadata,
+          settingsItemAvailable,
+          selectSettingsCategory,
+          organizeNativeSettings,
+          validateAddons,
+          unsafeCorePref,
+        },
+        { optional: true },
+      )
+    : null;
+  function openManager(...args) {
+    return developer
+      ? developer.openManager(...args)
+      : moduleLoader.showDiagnostics();
+  }
   function validateAddons(list) {
     if (!Array.isArray(list)) throw new Error("Add-ons must be an array");
     const known = new Set(MANIFEST.map((m) => m.id));
     for (const x of list) {
       if (!x || !/^addon-[a-z0-9-]+$/.test(x.id) || known.has(x.id))
         throw new Error("Use a unique id starting with addon-");
-      if (!/^(?:JS|core|features)\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+(?:\.uc)?\.js$/.test(x.file))
-        throw new Error("Add-on JS must be a local JS/, core/ or features/ script path");
+      if (
+        !/^(?:JS|core|features)\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+(?:\.uc)?\.js$/.test(
+          x.file,
+        )
+      )
+        throw new Error(
+          "Add-on JS must be a local JS/, core/ or features/ script path",
+        );
       if (x.requires && !Array.isArray(x.requires))
         throw new Error("requires must be an array");
       if (
         x.css &&
         (!Array.isArray(x.css) ||
-          x.css.some((p) => !/^(?:CSS|core|features)\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.css$/.test(p)))
+          x.css.some(
+            (p) =>
+              !/^(?:CSS|core|features)\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.css$/.test(
+                p,
+              ),
+          ))
       )
-        throw new Error("CSS must contain local CSS/, core/ or features/ stylesheet paths");
+        throw new Error(
+          "CSS must contain local CSS/, core/ or features/ stylesheet paths",
+        );
       known.add(x.id);
     }
     return list;
@@ -930,16 +1283,29 @@ return { installSidebarLayoutTracking };
     const row = { ...spec, state: "loading" };
     styles.set(spec.id, row);
     const owners = spec.owners || (spec.owner ? [spec.owner] : []);
-    if (owners.length && !owners.some(id => id === "settings"
-      ? moduleLoader.has("settings-shell")
-      : ["registered", "active", "dormant"].includes(records.get(id)?.state))) {
-      row.state = "blocked"; row.reason = "Owner source unavailable or disabled";
+    if (
+      owners.length &&
+      !owners.some((id) =>
+        id === "settings"
+          ? moduleLoader.has("settings-shell")
+          : ["registered", "active", "dormant"].includes(
+              records.get(id)?.state,
+            ),
+      )
+    ) {
+      row.state = "blocked";
+      row.reason = "Owner source unavailable or disabled";
       return;
     }
 
     if (
-      !(protectedCSS.has(spec.legacyControl || spec.id) && !unsafeCoreDisabled()) &&
-      !getPref(PREF + "css." + (spec.legacyControl || spec.id) + ".enabled", true)
+      !(
+        protectedCSS.has(spec.legacyControl || spec.id) && !unsafeCoreDisabled()
+      ) &&
+      !getPref(
+        PREF + "css." + (spec.legacyControl || spec.id) + ".enabled",
+        true,
+      )
     ) {
       row.state = "disabled";
       return;
@@ -978,7 +1344,8 @@ return { installSidebarLayoutTracking };
         if (
           sourceDeps.some(
             (id) =>
-              !MANIFEST.find(part => part.id === id)?.optional && !["registered", "active", "blocked"].includes(
+              !MANIFEST.find((part) => part.id === id)?.optional &&
+              !["registered", "active", "blocked"].includes(
                 records.get(id)?.state,
               ),
           )
@@ -1040,6 +1407,7 @@ return { installSidebarLayoutTracking };
   async function boot() {
     if (ready || stopped) return;
     ready = true;
+    syncArcSidebar();
     window.clearTimeout(readinessNotice);
     let addons = [];
     try {
@@ -1076,8 +1444,7 @@ return { installSidebarLayoutTracking };
       const r = records.get(m.id);
       if (!r.enabledAtStart) continue;
       try {
-        if (m.file)
-          moduleLoader.load(m.file, { owner: m.id });
+        if (m.file) moduleLoader.load(m.file, { owner: m.id });
         if (!definitions.has(m.id) && !parts.has(m.id))
           throw new Error("Source did not register " + m.id);
         r.state = "registered";

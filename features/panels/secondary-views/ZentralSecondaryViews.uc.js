@@ -359,9 +359,14 @@
         const url = browser?._bgalazkaSuperPinReturnURL;
         if (!url) return;
         ctx.retryPanelTask(browser, () => {
-          if (!browser.isConnected || browser._bgalazkaSuperPinReturnURL !== url ||
-              !isOpen() || ui.hasAttribute("bgalazka-hover-panel-hidden") ||
-              browser.style.display === "none") return true;
+          if (
+            !browser.isConnected ||
+            browser._bgalazkaSuperPinReturnURL !== url ||
+            !isOpen() ||
+            ui.hasAttribute("bgalazka-hover-panel-hidden") ||
+            browser.style.display === "none"
+          )
+            return true;
           const current = browser.currentURI?.spec;
           if (current && current !== "about:blank") {
             delete browser._bgalazkaSuperPinReturnURL;
@@ -511,7 +516,6 @@
           state.geometryObserver.observe(bar);
           const toolbar = document.getElementById("zen-app-panel-toolbar");
           if (toolbar) state.geometryObserver.observe(toolbar);
-          requestAnimationFrame(fitSecondaryBrowsers);
           let shield = null;
           let grabOffset = 0;
           let pointerId = null;
@@ -692,6 +696,9 @@
           grip.addEventListener("lostpointercapture", done);
         }
         state.shell = box;
+        // Establish both remote viewport sizes before openSecond navigates.
+        // ResizeObserver handles subsequent geometry changes without reloads.
+        fitSecondaryBrowsers();
         window.ZentralRuntime?.requestSidebarLayout?.();
         const refreshSecondaryToolbar = () => {
           if (state.second !== browser || !box.isConnected) return;
@@ -751,13 +758,16 @@
         ctx.syncSecondaryFallbackPolling();
       }
       ctx.updateSecondaryFallbackState = () => {
-        if (isOpen() && !ui.hasAttribute("bgalazka-hover-panel-hidden")) state.pollUpdate?.();
+        if (isOpen() && !ui.hasAttribute("bgalazka-hover-panel-hidden"))
+          state.pollUpdate?.();
       };
       ctx.syncSecondaryFallbackPolling = () => {
         ctx.updateSecondaryFallbackState();
         ctx.syncPanelFallbackPolling();
       };
-      ctx.registerCleanup(() => { delete ctx.updateSecondaryFallbackState; });
+      ctx.registerCleanup(() => {
+        delete ctx.updateSecondaryFallbackState;
+      });
 
       function openSecond(app, createLink = true) {
         if (!app?.id || !isOpen() || !state.first?.isConnected) return false;

@@ -202,67 +202,98 @@
 
       // One window timer services all bounded panel retries. A task returning
       // true is finished. Replacing/cancelling a key invalidates its old work.
-  // Bounded retries belong to the coordinator that cancels them.
-      (function ({ ctx, getPref, safeCall, registerCleanup, setTimeout, clearTimeout, isDisposed }) {
-      const panelRetryJobs = new Map();
-      let panelRetryTimer = null;
-      let panelRetryDue = 0;
-      function panelRetryOptions() {
-        const count = Number(getPref("zen.workspace.bgalazka.panel_retry_limit", 2));
-        const delay = Number(getPref("zen.workspace.bgalazka.panel_retry_delay_ms", 500));
-        return {
-          attempts: Number.isFinite(count) ? Math.max(0, Math.min(6, Math.trunc(count))) : 2,
-          delay: Number.isFinite(delay) ? Math.max(100, Math.min(5000, delay)) : 500,
+      // Bounded retries belong to the coordinator that cancels them.
+      (function ({
+        ctx,
+        getPref,
+        safeCall,
+        registerCleanup,
+        setTimeout,
+        clearTimeout,
+        isDisposed,
+      }) {
+        const panelRetryJobs = new Map();
+        let panelRetryTimer = null;
+        let panelRetryDue = 0;
+        function panelRetryOptions() {
+          const count = Number(
+            getPref("zen.workspace.bgalazka.panel_retry_limit", 2),
+          );
+          const delay = Number(
+            getPref("zen.workspace.bgalazka.panel_retry_delay_ms", 500),
+          );
+          return {
+            attempts: Number.isFinite(count)
+              ? Math.max(0, Math.min(6, Math.trunc(count)))
+              : 2,
+            delay: Number.isFinite(delay)
+              ? Math.max(100, Math.min(5000, delay))
+              : 500,
+          };
+        }
+        function armPanelRetries() {
+          const due = panelRetryJobs.size
+            ? Math.min(...Array.from(panelRetryJobs.values(), (job) => job.due))
+            : 0;
+          if (panelRetryTimer != null && due === panelRetryDue) return;
+          clearTimeout(panelRetryTimer);
+          panelRetryTimer = null;
+          panelRetryDue = due;
+          if (!due || isDisposed()) return;
+          panelRetryTimer = setTimeout(
+            () => {
+              panelRetryTimer = null;
+              panelRetryDue = 0;
+              const now = Date.now();
+              for (const [key, job] of [...panelRetryJobs]) {
+                if (job.due > now || panelRetryJobs.get(key) !== job) continue;
+                const done = safeCall(job.task, "panel retry") !== false;
+                if (panelRetryJobs.get(key) !== job) continue;
+                if (done || job.remaining <= 1) panelRetryJobs.delete(key);
+                else {
+                  job.remaining--;
+                  job.due = Date.now() + job.delay;
+                }
+              }
+              armPanelRetries();
+            },
+            Math.max(0, due - Date.now()),
+          );
+        }
+        ctx.cancelPanelRetry = (key) => {
+          panelRetryJobs.delete(key);
+          armPanelRetries();
         };
-      }
-      function armPanelRetries() {
-        const due = panelRetryJobs.size
-          ? Math.min(...Array.from(panelRetryJobs.values(), job => job.due)) : 0;
-        if (panelRetryTimer != null && due === panelRetryDue) return;
-        clearTimeout(panelRetryTimer);
-        panelRetryTimer = null;
-        panelRetryDue = due;
-        if (!due || isDisposed()) return;
-        panelRetryTimer = setTimeout(() => {
+        ctx.retryPanelTask = (key, task) => {
+          ctx.cancelPanelRetry(key);
+          const done = safeCall(task, "panel task") !== false;
+          const { attempts, delay } = panelRetryOptions();
+          if (!done && attempts && !isDisposed()) {
+            panelRetryJobs.set(key, {
+              task,
+              remaining: attempts,
+              delay,
+              due: Date.now() + delay,
+            });
+            armPanelRetries();
+          }
+        };
+        ctx.cancelPanelRetries = () => {
+          panelRetryJobs.clear();
+          clearTimeout(panelRetryTimer);
           panelRetryTimer = null;
           panelRetryDue = 0;
-          const now = Date.now();
-          for (const [key, job] of [...panelRetryJobs]) {
-            if (job.due > now || panelRetryJobs.get(key) !== job) continue;
-            const done = safeCall(job.task, "panel retry") !== false;
-            if (panelRetryJobs.get(key) !== job) continue;
-            if (done || job.remaining <= 1) panelRetryJobs.delete(key);
-            else {
-              job.remaining--;
-              job.due = Date.now() + job.delay;
-            }
-          }
-          armPanelRetries();
-        }, Math.max(0, due - Date.now()));
-      }
-      ctx.cancelPanelRetry = (key) => {
-        panelRetryJobs.delete(key);
-        armPanelRetries();
-      };
-      ctx.retryPanelTask = (key, task) => {
-        ctx.cancelPanelRetry(key);
-        const done = safeCall(task, "panel task") !== false;
-        const { attempts, delay } = panelRetryOptions();
-        if (!done && attempts && !isDisposed()) {
-          panelRetryJobs.set(key, { task, remaining: attempts, delay, due: Date.now() + delay });
-          armPanelRetries();
-        }
-      };
-      ctx.cancelPanelRetries = () => {
-        panelRetryJobs.clear();
-        clearTimeout(panelRetryTimer);
-        panelRetryTimer = null;
-        panelRetryDue = 0;
-      };
-      registerCleanup(ctx.cancelPanelRetries);
-
-
-})({ ctx, getPref, safeCall, registerCleanup, setTimeout, clearTimeout, isDisposed: () => extensionDisposed });
+        };
+        registerCleanup(ctx.cancelPanelRetries);
+      })({
+        ctx,
+        getPref,
+        safeCall,
+        registerCleanup,
+        setTimeout,
+        clearTimeout,
+        isDisposed: () => extensionDisposed,
+      });
       let panelStatusTimer = null;
       const EXT_PREFS = {
         TRANSLUCENCY: "zen.workspace.bgalazka.translucency",
@@ -283,8 +314,10 @@
           "zen.workspace.bgalazka.show_triple_style_repair",
         PANEL_RETRY_LIMIT: "zen.workspace.bgalazka.panel_retry_limit",
         PANEL_RETRY_DELAY_MS: "zen.workspace.bgalazka.panel_retry_delay_ms",
-        PANEL_FALLBACK_INTERVAL_MS: "zen.workspace.bgalazka.panel_fallback_interval_ms",
-        BADGE_POLL_INTERVAL_MS: "zen.workspace.apps.sidebar.badge_poll_interval_ms",
+        PANEL_FALLBACK_INTERVAL_MS:
+          "zen.workspace.bgalazka.panel_fallback_interval_ms",
+        BADGE_POLL_INTERVAL_MS:
+          "zen.workspace.apps.sidebar.badge_poll_interval_ms",
         PERIODIC_FALLBACK_POLLING:
           "zen.workspace.bgalazka.periodic_fallback_polling",
         // Primary-toolbar quick override. No Settings row: this is deliberately a
@@ -1212,7 +1245,9 @@
         return true;
       };
 
-      ctx.retryPanelTask("apps-patch", () => safeCall(patchAppsInstance, "patchAppsInstance"));
+      ctx.retryPanelTask("apps-patch", () =>
+        safeCall(patchAppsInstance, "patchAppsInstance"),
+      );
 
       /* ==========================================================================
        * 2. TAB CLICK ISOLATION (note 6)
@@ -1361,8 +1396,10 @@
           "zen.workspace.bgalazka.show_triple_style_repair",
         PANEL_RETRY_LIMIT: "zen.workspace.bgalazka.panel_retry_limit",
         PANEL_RETRY_DELAY_MS: "zen.workspace.bgalazka.panel_retry_delay_ms",
-        PANEL_FALLBACK_INTERVAL_MS: "zen.workspace.bgalazka.panel_fallback_interval_ms",
-        BADGE_POLL_INTERVAL_MS: "zen.workspace.apps.sidebar.badge_poll_interval_ms",
+        PANEL_FALLBACK_INTERVAL_MS:
+          "zen.workspace.bgalazka.panel_fallback_interval_ms",
+        BADGE_POLL_INTERVAL_MS:
+          "zen.workspace.apps.sidebar.badge_poll_interval_ms",
         PERIODIC_FALLBACK_POLLING:
           "zen.workspace.bgalazka.periodic_fallback_polling",
         SMART_SLEEP: "zen.workspace.bgalazka.smart_sleep",
@@ -1405,8 +1442,23 @@
       // browser-level shortcuts/buttons can still escape the focused app panel
       // and act on the main tab behind it. This is one-way: enabling keybinds
       // turns the shield on, but disabling keybinds never turns the shield off.
-      window.ZentralModuleLoader.load("features/panels/interaction/ZentralPanelInput.js", { owner: "panels" });
-      const { getVisiblePanelBrowser } = window.ZentralModuleLoader.create("panels/ZentralPanelInput", { BGALAZKA_EXT_PREFS, Services, clearTimeout, ctx, getPref, registerCleanup, setPref, setTimeout });
+      window.ZentralModuleLoader.load(
+        "features/panels/interaction/ZentralPanelInput.js",
+        { owner: "panels" },
+      );
+      const { getVisiblePanelBrowser } = window.ZentralModuleLoader.create(
+        "panels/ZentralPanelInput",
+        {
+          BGALAZKA_EXT_PREFS,
+          Services,
+          clearTimeout,
+          ctx,
+          getPref,
+          registerCleanup,
+          setPref,
+          setTimeout,
+        },
+      );
       function parseSVG(markup) {
         try {
           const parser = new DOMParser();
@@ -1468,8 +1520,37 @@
       // A hidden panel retains its browser and active app. The reveal strip is
       // separate from the translated panel root, so it remains reachable at the
       // outer edge without sitting over webpage content.
-      window.ZentralModuleLoader.load("features/panels/interaction/ZentralPanelHover.js", { owner: "panels" });
-      const { clearHoverHide, ensureAutohidePanelPinned, ensurePillHoverRevealButton, extendHoverResizeHold, onHoverRootLeave, setHoverPanelHidden, syncHoverPanelAvailability, updateHiddenPanelGeometry, updateRevealEdgeGeometry } = window.ZentralModuleLoader.create("panels/ZentralPanelHover", { BGALAZKA_EXT_PREFS, PREF_ICONS, Services, ZentralRuntime, clearTimeout, ctx, getPref, parseSVG, registerCleanup, schedulePanelModeGeometrySync, setPref, setTimeout, syncPanelFallbackPolling, syncPanelPushState, togglePanelPushPreference });
+      window.ZentralModuleLoader.load(
+        "features/panels/interaction/ZentralPanelHover.js",
+        { owner: "panels" },
+      );
+      const {
+        clearHoverHide,
+        ensureAutohidePanelPinned,
+        ensurePillHoverRevealButton,
+        extendHoverResizeHold,
+        onHoverRootLeave,
+        setHoverPanelHidden,
+        syncHoverPanelAvailability,
+        updateHiddenPanelGeometry,
+        updateRevealEdgeGeometry,
+      } = window.ZentralModuleLoader.create("panels/ZentralPanelHover", {
+        BGALAZKA_EXT_PREFS,
+        PREF_ICONS,
+        Services,
+        ZentralRuntime,
+        clearTimeout,
+        ctx,
+        getPref,
+        parseSVG,
+        registerCleanup,
+        schedulePanelModeGeometrySync,
+        setPref,
+        setTimeout,
+        syncPanelFallbackPolling,
+        syncPanelPushState,
+        togglePanelPushPreference,
+      });
       function ensurePillDualViewButton() {
         const pill = document.getElementById("zen-app-panel-pill");
         if (!pill) return;
@@ -2136,39 +2217,86 @@
 
       window.ZentralRuntime.runPart("panel-styles");
 
-      const popupAvailable = window.ZentralModuleLoader.load("features/panels/interaction/ZentralPanelPopupRouting.js", { optional: true, owner: "panel-popup-routing" });
+      const popupAvailable = window.ZentralModuleLoader.load(
+        "features/panels/interaction/ZentralPanelPopupRouting.js",
+        { optional: true, owner: "panel-popup-routing" },
+      );
       const { hookPopupContainment } = popupAvailable
-        ? window.ZentralModuleLoader.create("panel-popup-routing", { ctx, registerCleanup }, { optional: true }) || { hookPopupContainment: () => true }
+        ? window.ZentralModuleLoader.create(
+            "panel-popup-routing",
+            { ctx, registerCleanup },
+            { optional: true },
+          ) || { hookPopupContainment: () => true }
         : { hookPopupContainment: () => true };
-      ctx.retryPanelTask("popup-containment", () => safeCall(hookPopupContainment, "hookPopupContainment"));
+      ctx.retryPanelTask("popup-containment", () =>
+        safeCall(hookPopupContainment, "hookPopupContainment"),
+      );
 
       // Audio state belongs to the panel browser, never the underlying essential.
       // Controller events work across remote content; polling also covers older
       // Gecko builds and a controller being replaced by a process switch.
-      window.ZentralModuleLoader.load("features/panels/interaction/ZentralPanelAudio.js", { owner: "panels" });
-      const { ensureNativeAudioButton, mediaEvents, onAudioStarted, onAudioStopped, panelActivityRetryKey, panelMediaListeners, refreshPanelAudio, togglePanelAudio } = window.ZentralModuleLoader.create("panels/ZentralPanelAudio", { BGALAZKA_EXT_PREFS, ctx, getPref, parseSVG, registerCleanup });
+      window.ZentralModuleLoader.load(
+        "features/panels/interaction/ZentralPanelAudio.js",
+        { owner: "panels" },
+      );
+      const {
+        ensureNativeAudioButton,
+        mediaEvents,
+        onAudioStarted,
+        onAudioStopped,
+        panelActivityRetryKey,
+        panelMediaListeners,
+        refreshPanelAudio,
+        togglePanelAudio,
+      } = window.ZentralModuleLoader.create("panels/ZentralPanelAudio", {
+        BGALAZKA_EXT_PREFS,
+        ctx,
+        getPref,
+        parseSVG,
+        registerCleanup,
+      });
       function panelMaintenanceVisible() {
         const root = document.getElementById("zen-app-panel-root");
-        return root?.hasAttribute("open") && !root.hasAttribute("closing") &&
-          !document.documentElement.hasAttribute("bgalazka-hover-panel-hidden");
+        return (
+          root?.hasAttribute("open") &&
+          !root.hasAttribute("closing") &&
+          !document.documentElement.hasAttribute("bgalazka-hover-panel-hidden")
+        );
       }
       function runPanelFallbackMaintenance() {
         if (!panelMaintenanceVisible()) return;
-        const browsers = ctx.getAllAppBrowsers().filter(browser =>
-          browser.isConnected && browser.style.display !== "none" && !browser.hasAttribute("hidden"));
+        const browsers = ctx
+          .getAllAppBrowsers()
+          .filter(
+            (browser) =>
+              browser.isConnected &&
+              browser.style.display !== "none" &&
+              !browser.hasAttribute("hidden"),
+          );
         ctx.syncAppPanelBrowserActivity(browsers);
         if (ctx.zenCssEnabled()) ctx.repairZenInternetPanelCss(browsers, false);
         ctx.updateWebToolbarState();
         ctx.updateSecondaryFallbackState?.();
-        if (getPref(BGALAZKA_EXT_PREFS.AUDIO_INDICATOR, false)) refreshPanelAudio();
+        if (getPref(BGALAZKA_EXT_PREFS.AUDIO_INDICATOR, false))
+          refreshPanelAudio();
       }
       function syncPanelFallbackPolling() {
-        const raw = Number(getPref("zen.workspace.bgalazka.panel_fallback_interval_ms", 10000));
-        const delay = Number.isFinite(raw) ? Math.max(1000, Math.min(300000, raw)) : 10000;
-        const active = ctx.periodicFallbackPollingEnabled() && !extensionDisposed && panelMaintenanceVisible();
-        if (active && panelStatusTimer && panelStatusTimer.delay === delay) return;
+        const raw = Number(
+          getPref("zen.workspace.bgalazka.panel_fallback_interval_ms", 10000),
+        );
+        const delay = Number.isFinite(raw)
+          ? Math.max(1000, Math.min(300000, raw))
+          : 10000;
+        const active =
+          ctx.periodicFallbackPollingEnabled() &&
+          !extensionDisposed &&
+          panelMaintenanceVisible();
+        if (active && panelStatusTimer && panelStatusTimer.delay === delay)
+          return;
         if (panelStatusTimer) clearInterval(panelStatusTimer.id);
-        panelStatusTimer = active ? { id: setInterval(runPanelFallbackMaintenance, delay), delay } : null;
+        panelStatusTimer = active
+          ? { id: setInterval(runPanelFallbackMaintenance, delay), delay }
+          : null;
       }
       syncPanelFallbackPolling();
       registerCleanup(() => {
@@ -2212,9 +2340,12 @@
                 (!appId || browser._bgalazkaAppId !== appId)
               )
                 return;
-              ["XULFrameLoaderCreated", "load", "pageshow", "DOMTitleChanged"].forEach((type) =>
-                browser.removeEventListener(type, onNav),
-              );
+              [
+                "XULFrameLoaderCreated",
+                "load",
+                "pageshow",
+                "DOMTitleChanged",
+              ].forEach((type) => browser.removeEventListener(type, onNav));
               try {
                 browser.webProgress?.removeProgressListener(progressListener);
               } catch (_) {}
@@ -2371,7 +2502,8 @@
                 // A process swap can revoke activation after openPanel's first
                 // retries. Reassert promptly on navigation instead of waiting
                 // for the periodic status check.
-                if (event?.type !== "DOMTitleChanged") ctx.requestPanelActivity();
+                if (event?.type !== "DOMTitleChanged")
+                  ctx.requestPanelActivity();
                 ctx.updateWebToolbarState();
               };
               result.browser.addEventListener("XULFrameLoaderCreated", onNav);
@@ -2500,9 +2632,12 @@
                 "DOMAudioPlaybackStopped",
                 onAudioStopped,
               );
-              ["XULFrameLoaderCreated", "load", "pageshow", "DOMTitleChanged"].forEach((type) =>
-                browser.removeEventListener(type, onNav),
-              );
+              [
+                "XULFrameLoaderCreated",
+                "load",
+                "pageshow",
+                "DOMTitleChanged",
+              ].forEach((type) => browser.removeEventListener(type, onNav));
             },
           );
           navigationListeners.clear();
@@ -2514,7 +2649,9 @@
         return true;
       };
 
-      ctx.retryPanelTask("apps-hooks", () => safeCall(hookAppsInstance, "hookAppsInstance"));
+      ctx.retryPanelTask("apps-hooks", () =>
+        safeCall(hookAppsInstance, "hookAppsInstance"),
+      );
 
       // SessionStore may restore last session's host tabs and Zen folder before
       // this script starts. They do not belong to this window's live bridge.
@@ -2554,8 +2691,16 @@
       }
       pruneRestoredAddonHosts();
       const restoredHostObserver = { observe: pruneRestoredAddonHosts };
-      Services.obs.addObserver(restoredHostObserver, "sessionstore-windows-restored");
-      registerCleanup(() => Services.obs.removeObserver(restoredHostObserver, "sessionstore-windows-restored"));
+      Services.obs.addObserver(
+        restoredHostObserver,
+        "sessionstore-windows-restored",
+      );
+      registerCleanup(() =>
+        Services.obs.removeObserver(
+          restoredHostObserver,
+          "sessionstore-windows-restored",
+        ),
+      );
 
       // Hot-reload/startup normalization: if the opt-in bridge was already on
       // and a standalone panel browser predates this extension instance, unload it
@@ -2969,7 +3114,9 @@
         ctx.ensurePillGrabberVerticalDrag();
         return ok;
       };
-      ctx.retryPanelTask("resize-ui", () => safeCall(initAllSidesResizeUi, "initAllSidesResizeUi"));
+      ctx.retryPanelTask("resize-ui", () =>
+        safeCall(initAllSidesResizeUi, "initAllSidesResizeUi"),
+      );
 
       /* Secondary views keep the native first panel and its toolbar intact. */
 
@@ -3072,7 +3219,12 @@
       };
       const featurePrefObserver = {
         observe(subject, topic, key) {
-          if ([BGALAZKA_EXT_PREFS.PANEL_RETRY_LIMIT, BGALAZKA_EXT_PREFS.PANEL_RETRY_DELAY_MS].includes(key))
+          if (
+            [
+              BGALAZKA_EXT_PREFS.PANEL_RETRY_LIMIT,
+              BGALAZKA_EXT_PREFS.PANEL_RETRY_DELAY_MS,
+            ].includes(key)
+          )
             ctx.cancelPanelRetries();
           ctx.reconcileFeaturePreferences();
         },
@@ -3232,7 +3384,8 @@
       // A panel opened manually before then takes precedence in this window.
       if (readStartupPanel()) {
         let startupFinished = false;
-        const startupKey = "startup-panel";
+        let startupReady = false;
+        let startupCancelled = false;
         const openSavedPanel = () => {
           const selection = readStartupPanel();
           const apps = window.Zentral?.Apps;
@@ -3278,27 +3431,67 @@
           return true;
         };
         const tryStartupPanel = () => {
-          if (startupFinished || extensionDisposed) return true;
+          if (startupFinished || startupCancelled || extensionDisposed)
+            return true;
+          if (!startupReady) return false;
           const finished = openSavedPanel();
           if (finished) {
             startupFinished = true;
-            ctx.cancelPanelRetry(startupKey);
+            stopWatchingStartup();
           }
           return finished;
         };
-        const onRestore = () => { if (!startupFinished) ctx.retryPanelTask(startupKey, tryStartupPanel); };
-        const restoreObserver = { observe: onRestore };
-        Services.obs.addObserver(restoreObserver, "sessionstore-windows-restored");
+        const onRestore = () => {
+          tryStartupPanel();
+        };
+        const stopWatchingStartup = () => {
+          window.removeEventListener("SSTabRestored", onRestore);
+          window.removeEventListener(
+            "zentral-essential-tiles-changed",
+            onRestore,
+          );
+        };
         window.addEventListener("SSTabRestored", onRestore);
         window.addEventListener("zentral-essential-tiles-changed", onRestore);
-        const start = setTimeout(onRestore, readStartupPanel()?.mode === "triple" ? 4000 : 2000);
         registerCleanup(() => {
-          clearTimeout(start);
-          ctx.cancelPanelRetry(startupKey);
-          Services.obs.removeObserver(restoreObserver, "sessionstore-windows-restored");
-          window.removeEventListener("SSTabRestored", onRestore);
-          window.removeEventListener("zentral-essential-tiles-changed", onRestore);
+          startupCancelled = true;
+          stopWatchingStartup();
         });
+        // Cold Windows starts can restore native tabs/workspaces later than a
+        // fixed delay. Opening host tabs before that point races SessionStore
+        // and the native tab switcher's viewport/activity changes. Wait once
+        // for actual readiness, independently of optional repair settings.
+        (async () => {
+          try {
+            let store = window.SessionStore;
+            if (!store) {
+              for (const uri of [
+                "resource:///modules/sessionstore/SessionStore.sys.mjs",
+                "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
+              ]) {
+                try {
+                  store = ChromeUtils.importESModule(uri).SessionStore;
+                  if (store) break;
+                } catch (_) {}
+              }
+            }
+            if (!store?.promiseAllWindowsRestored)
+              throw new Error("SessionStore readiness is unavailable");
+            await store.promiseAllWindowsRestored;
+            if (
+              window.gZenWorkspaces?.workspaceEnabled &&
+              !window.gZenWorkspaces.privateWindowOrDisabled
+            )
+              await window.gZenWorkspaces.promiseInitialized;
+            if (startupCancelled || extensionDisposed) return;
+            startupReady = true;
+            ctx.requestTileSync(0);
+            onRestore();
+          } catch (error) {
+            stopWatchingStartup();
+            console.warn("[Zentral] Startup panel readiness failed", error);
+          }
+        })();
       }
 
       /* ==========================================================================

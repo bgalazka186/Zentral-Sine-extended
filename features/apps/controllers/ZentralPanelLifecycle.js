@@ -35,11 +35,19 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("apps/ZentralPanelLifecycle", function ({ Services, shared, runtime, access }) {
-const { Constants, Core, createSVGElement, SVG_STRINGS, WELL_KNOWN_SERVICES } = shared;
-return {
-// Responsibility: ZentralPanelHost
-getOrCreateAppBrowser(app) {
+  window.ZentralModuleLoader.define(
+    "apps/ZentralPanelLifecycle",
+    function ({ Services, shared, runtime, access }) {
+      const {
+        Constants,
+        Core,
+        createSVGElement,
+        SVG_STRINGS,
+        WELL_KNOWN_SERVICES,
+      } = shared;
+      return {
+        // Responsibility: ZentralPanelHost
+        getOrCreateAppBrowser(app) {
           let b = access.state.appBrowsers.get(app.id);
           if (b && b.isConnected) return { browser: b, isNew: false };
 
@@ -62,7 +70,8 @@ getOrCreateAppBrowser(app) {
           b.addEventListener("load", checkAndUpdateBadge);
           b.addEventListener("pageshow", checkAndUpdateBadge);
 
-          if (typeof b._zentralMoveTo === "function") b._zentralMoveTo(access.dom.panel);
+          if (typeof b._zentralMoveTo === "function")
+            b._zentralMoveTo(access.dom.panel);
           else access.dom.panel.appendChild(b);
           access.state.appBrowsers.set(app.id, b);
           const matchingTiles = Array.from(
@@ -72,7 +81,7 @@ getOrCreateAppBrowser(app) {
           this.ensureBadgeSyncLoop();
           return { browser: b, isNew: true };
         },
-async preloadAppsSequence() {
+        async preloadAppsSequence() {
           if (!Core.getPref(Constants.Apps.PREF_ENABLED, true)) return;
           const preloadedApps = access.state.apps.filter(
             (a) => a.preload === true,
@@ -126,7 +135,7 @@ async preloadAppsSequence() {
             this.ensureBadgeSyncLoop();
           }
         },
-scheduleAutomaticPreloads() {
+        scheduleAutomaticPreloads() {
           if (this._preloadTimer) clearTimeout(this._preloadTimer);
           this._preloadTimer = setTimeout(
             () => {
@@ -138,7 +147,7 @@ scheduleAutomaticPreloads() {
               : 2000,
           );
         },
-isAppPreloadEnabled(id) {
+        isAppPreloadEnabled(id) {
           return (
             !!Core.getPref(Constants.Apps.PREF_ENABLED, true) &&
             access.state.apps.some(
@@ -146,7 +155,7 @@ isAppPreloadEnabled(id) {
             )
           );
         },
-closeApp(appId) {
+        closeApp(appId) {
           if (!appId) return;
           if (access.state.activeAppId === appId) {
             this.closePanel();
@@ -161,7 +170,10 @@ closeApp(appId) {
             browser.remove();
             access.state.appBrowsers.delete(appId);
           }
-          if (!access.state.appBrowsers || access.state.appBrowsers.size === 0) {
+          if (
+            !access.state.appBrowsers ||
+            access.state.appBrowsers.size === 0
+          ) {
             this.stopBadgeSyncLoop();
           }
           const tiles = Array.from(
@@ -177,7 +189,7 @@ closeApp(appId) {
             app.hasNotification = false;
           }
         },
-removeApp(id) {
+        removeApp(id) {
           const idx = access.state.apps.findIndex((app) => app.id === id);
           if (idx === -1) return;
           access.state.apps.splice(idx, 1);
@@ -188,13 +200,16 @@ removeApp(id) {
           const b = access.state.appBrowsers.get(id);
           if (b && b.isConnected) b.parentNode.removeChild(b);
           access.state.appBrowsers.delete(id);
-          if (!access.state.appBrowsers || access.state.appBrowsers.size === 0) {
+          if (
+            !access.state.appBrowsers ||
+            access.state.appBrowsers.size === 0
+          ) {
             this.stopBadgeSyncLoop();
           }
 
           this.renderGrid();
         },
-refreshApp(appId) {
+        refreshApp(appId) {
           if (!appId) return;
           const app = access.state.apps.find((a) => a.id === appId);
           if (!app) return;
@@ -279,8 +294,8 @@ refreshApp(appId) {
           }
         },
 
-// Responsibility: ZentralPanelPresentation
-openPanel(app) {
+        // Responsibility: ZentralPanelPresentation
+        openPanel(app) {
           if (!Core.getPref(Constants.Apps.PREF_ENABLED, true)) return;
           this.closeLibraryForPanel();
           Core.log(
@@ -347,6 +362,24 @@ openPanel(app) {
           this.updateVerticalBarBounds();
           this.startPositionTracking();
 
+          // Establish the visible host and animation origin before attaching
+          // or navigating a browser. A cold start previously constructed it
+          // under a display:none root and only opened the host after loadURI.
+          const isTopSlide =
+            this.isCollapsedLayoutMode() && !this.isPlacementVerticalBar();
+          const isFromRight = this.isPanelAttachedToRight();
+          const slideFrom = isTopSlide
+            ? "translateY(-100%)"
+            : isFromRight
+              ? "translateX(100%)"
+              : "translateX(-100%)";
+          access.dom.panel.style.transition = "none";
+          access.dom.panel.style.transform = slideFrom;
+          if (access.dom.root) {
+            access.dom.root.removeAttribute("closing");
+            access.dom.root.setAttribute("open", "true");
+          }
+
           const { browser, isNew } = this.getOrCreateAppBrowser(app);
 
           for (const [id, b] of access.state.appBrowsers.entries()) {
@@ -379,20 +412,6 @@ openPanel(app) {
             }
           }
 
-          const isTopSlide =
-            this.isCollapsedLayoutMode() && !this.isPlacementVerticalBar();
-          const isFromRight = this.isPanelAttachedToRight();
-          const slideFrom = isTopSlide
-            ? "translateY(-100%)"
-            : isFromRight
-              ? "translateX(100%)"
-              : "translateX(-100%)";
-          access.dom.panel.style.transition = "none";
-          access.dom.panel.style.transform = slideFrom;
-          if (access.dom.root) {
-            access.dom.root.removeAttribute("closing");
-            access.dom.root.setAttribute("open", "true");
-          }
           access.dom.panel.getBoundingClientRect(); // Reflow
 
           if (this._openPanelRAF) cancelAnimationFrame(this._openPanelRAF);
@@ -413,11 +432,14 @@ openPanel(app) {
               : "translateX(0)";
           });
         },
-closePanel() {
+        closePanel() {
           this.onStopDrag();
           Core.log("ZentralApps", "closePanel called");
           if (access.dom.root?.hasAttribute("closing")) return;
-          if (!access.state.activeAppId && !access.dom.root?.hasAttribute("open"))
+          if (
+            !access.state.activeAppId &&
+            !access.dom.root?.hasAttribute("open")
+          )
             return;
 
           if (this._openPanelRAF) {
@@ -433,7 +455,8 @@ closePanel() {
           if (access.dom.root) {
             access.dom.root.setAttribute("closing", "true");
             access.dom.root.style.pointerEvents = "none";
-            if (access.dom.root.contains(document.activeElement)) gBrowser.selectedBrowser?.focus();
+            if (access.dom.root.contains(document.activeElement))
+              gBrowser.selectedBrowser?.focus();
           }
           this.stopPositionTracking();
 
@@ -493,7 +516,7 @@ closePanel() {
             this.stopPositionTracking();
           }, slideMs + 20);
         },
-isPanelOpen() {
+        isPanelOpen() {
           // activeAppId selects the app; root[open] stays until the close animation
           // ends. The documentElement attribute follows activeAppId for CSS.
           return !!(
@@ -502,7 +525,7 @@ isPanelOpen() {
             document.getElementById("zen-app-panel-root")?.hasAttribute("open")
           );
         },
-capturePanelViewState() {
+        capturePanelViewState() {
           return {
             open:
               !!access.dom.root?.hasAttribute("open") &&
@@ -513,7 +536,7 @@ capturePanelViewState() {
             preExpandWidth: access.state.preExpandWidth,
           };
         },
-restorePanelViewState(view) {
+        restorePanelViewState(view) {
           if (!view?.open) return;
           access.state.isExpanded = !!view.expanded;
           access.state.preExpandWidth = view.preExpandWidth;
@@ -532,7 +555,7 @@ restorePanelViewState(view) {
           }
           this.positionPanel();
         },
-togglePin() {
+        togglePin() {
           access.state.isPinned = !access.state.isPinned;
           Core.log(
             "ZentralApps",
@@ -549,7 +572,7 @@ togglePin() {
               : "Pin panel";
           }
         },
-toggleExpand() {
+        toggleExpand() {
           Core.log(
             "ZentralApps",
             "toggleExpand - current isExpanded:",
@@ -603,7 +626,8 @@ toggleExpand() {
               );
             }
           }
-        }
-};
-});
+        },
+      };
+    },
+  );
 })();
