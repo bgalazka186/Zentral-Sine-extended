@@ -27,7 +27,25 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("panels/ZentralPanelHover", function ({ BGALAZKA_EXT_PREFS, PREF_ICONS, Services, ZentralRuntime, clearTimeout, ctx, getPref, parseSVG, registerCleanup, schedulePanelModeGeometrySync, setPref, setTimeout, syncPanelFallbackPolling, syncPanelPushState, togglePanelPushPreference }) {
+  window.ZentralModuleLoader.define(
+    "panels/ZentralPanelHover",
+    function ({
+      BGALAZKA_EXT_PREFS,
+      PREF_ICONS,
+      Services,
+      ZentralRuntime,
+      clearTimeout,
+      ctx,
+      getPref,
+      parseSVG,
+      registerCleanup,
+      schedulePanelModeGeometrySync,
+      setPref,
+      setTimeout,
+      syncPanelFallbackPolling,
+      syncPanelPushState,
+      togglePanelPushPreference,
+    }) {
       let hoverBoundRoot = null;
       let hoverHideTimer = null;
       let hoverRevealFrame = null;
@@ -287,11 +305,7 @@
           getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) === true &&
           root?.hasAttribute("open") &&
           !root.hasAttribute("closing");
-        const shouldHide = !!(
-          enabled &&
-          hidden &&
-          !isSameSideNativeSidebarHovered()
-        );
+        const shouldHide = !!(enabled && hidden);
         if (!enabled || shouldHide) hoverRevealLedgeBounds = null;
         const hiddenChanged =
           document.documentElement.hasAttribute(
@@ -307,7 +321,8 @@
           if (shouldHide) {
             apps?.stopPositionTracking?.();
             ctx.cancelPanelRetry("panel-activity");
-            if (root?.contains(document.activeElement)) gBrowser.selectedBrowser?.focus();
+            if (root?.contains(document.activeElement))
+              gBrowser.selectedBrowser?.focus();
             ctx.syncAppPanelBrowserActivity?.();
           } else if (enabled) {
             apps?.startPositionTracking?.();
@@ -383,59 +398,8 @@
           setHoverPanelHidden(false);
         }
       }
-      function sameSideNativeSidebar() {
-        const root = document.getElementById("zen-app-panel-root");
-        const apps = window.Zentral?.Apps;
-        if (
-          !root?.hasAttribute("open") ||
-          root.hasAttribute("closing") ||
-          typeof apps?.isSidebarRight !== "function"
-        )
-          return null;
-        const side = root.getAttribute("data-panel-side");
-        if (side !== "left" && side !== "right") return null;
-        if ((side === "right") !== apps.isSidebarRight()) return null;
-        return (
-          window.ZentralRuntime?.nativeSidebarElement?.() ||
-          window.gBrowser?.tabContainer ||
-          null
-        );
-      }
-      function isSameSideNativeSidebarHovered() {
-        return !!sameSideNativeSidebar()?.matches(":hover");
-      }
-      const onNativeSidebarPanelPointerOver = (event) => {
-        const sidebar = sameSideNativeSidebar();
-        if (
-          !sidebar?.contains(event.target) ||
-          !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)
-        )
-          return;
-        scheduleHoverReveal(sidebar);
-      };
-      const onNativeSidebarPanelPointerOut = (event) => {
-        if (
-          hoverRevealSurface &&
-          !hoverRevealSurface.contains(event.relatedTarget)
-        )
-          clearHoverReveal();
-        const sidebar = sameSideNativeSidebar();
-        if (
-          !sidebar?.contains(event.target) ||
-          !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false)
-        )
-          return;
-        if (
-          (event.relatedTarget && sidebar.contains(event.relatedTarget)) ||
-          event.relatedTarget?.closest?.(
-            "#zen-app-panel-root, #bgalazka-panel-reveal-edge",
-          )
-        ) {
-          clearHoverHide();
-          return;
-        }
-        onHoverRootLeave();
-      };
+      // Native tabbar hover belongs to Zen. Only Zentral's panel, launcher
+      // and explicit reveal controls participate in this hover session.
       function isAppsBarHoverSurfaceHovered() {
         if (!window.Zentral?.Apps?.isPlacementVerticalBar?.()) return false;
         return !!(
@@ -501,8 +465,7 @@
           hoverResizing ||
           hoverMenuVisible() ||
           hoverRevealLedgeBounds ||
-          isAppsBarHoverSurfaceHovered() ||
-          isSameSideNativeSidebarHovered()
+          isAppsBarHoverSurfaceHovered()
         )
           return;
         hoverHideTimer = setTimeout(
@@ -515,7 +478,6 @@
               edge?.matches(":hover") ||
               hoverRevealLedgeBounds ||
               isAppsBarHoverSurfaceHovered() ||
-              isSameSideNativeSidebarHovered() ||
               hoverResizing ||
               hoverMenuVisible()
             )
@@ -789,16 +751,6 @@
       // Delegate so late-created/rebuilt Apps Bars need no listener rebinding.
       document.addEventListener("pointerover", onAppsBarPanelPointerOver, true);
       document.addEventListener("pointerout", onAppsBarPanelPointerOut, true);
-      document.addEventListener(
-        "pointerover",
-        onNativeSidebarPanelPointerOver,
-        true,
-      );
-      document.addEventListener(
-        "pointerout",
-        onNativeSidebarPanelPointerOut,
-        true,
-      );
       document.addEventListener("pointerover", onWebPagePointer, true);
       window.addEventListener("focusout", onHoverPanelFocusOut, true);
       window.addEventListener("focusin", onHoverPanelFocusIn, true);
@@ -847,16 +799,6 @@
           onAppsBarPanelPointerOut,
           true,
         );
-        document.removeEventListener(
-          "pointerover",
-          onNativeSidebarPanelPointerOver,
-          true,
-        );
-        document.removeEventListener(
-          "pointerout",
-          onNativeSidebarPanelPointerOut,
-          true,
-        );
         document.removeEventListener("pointerover", onWebPagePointer, true);
         window.removeEventListener("focusout", onHoverPanelFocusOut, true);
         window.removeEventListener("focusin", onHoverPanelFocusIn, true);
@@ -892,6 +834,17 @@
         window.Zentral?.Apps?.syncPanelAutohideVisibility?.();
       });
 
-return { clearHoverHide, ensureAutohidePanelPinned, ensurePillHoverRevealButton, extendHoverResizeHold, onHoverRootLeave, setHoverPanelHidden, syncHoverPanelAvailability, updateHiddenPanelGeometry, updateRevealEdgeGeometry };
-});
+      return {
+        clearHoverHide,
+        ensureAutohidePanelPinned,
+        ensurePillHoverRevealButton,
+        extendHoverResizeHold,
+        onHoverRootLeave,
+        setHoverPanelHidden,
+        syncHoverPanelAvailability,
+        updateHiddenPanelGeometry,
+        updateRevealEdgeGeometry,
+      };
+    },
+  );
 })();

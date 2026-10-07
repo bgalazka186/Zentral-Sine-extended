@@ -552,9 +552,24 @@
         )
           queue();
       };
-      const rootObserver = new MutationObserver(() => {
-        bind();
-        window.Zentral?.Apps?.scheduleRepositionGrid?.(0);
+      const launcherLayoutAttributes = new Set([
+        "zen-right-side",
+        "zen-sidebar-right",
+        "zen-sidebar-collapsed",
+        "zen-sidebar-expanded",
+        "zen-sidebar-hidden",
+        "zen-compact-mode",
+        "inFullscreen",
+      ]);
+      const rootObserver = new MutationObserver((mutations) => {
+        // Native reveal/hide changes geometry, not the launcher's DOM home.
+        // Avoid moving/repainting toolbar children during Zen's animation.
+        if (
+          mutations.some((m) => launcherLayoutAttributes.has(m.attributeName))
+        ) {
+          bind();
+          window.Zentral?.Apps?.scheduleRepositionGrid?.(0);
+        }
         queue();
       });
       rootObserver.observe(document.documentElement, {

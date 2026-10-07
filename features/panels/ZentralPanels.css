@@ -175,17 +175,25 @@
    Insta Peek stays intentionally non-interactive. The root attribute follows its preference.
    ========================================================================== */
 
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-panel-input-shield="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-panel-input-shield="true"]
   #zen-app-panel-root[open]:not([closing]):not([data-insta-peek="true"]) {
   pointer-events: auto !important;
 }
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-panel-input-shield="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-panel-input-shield="true"]
   #zen-app-panel-root[open]:not([closing]):not([data-insta-peek="true"])
   #zen-app-panel-clip,
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-panel-input-shield="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-panel-input-shield="true"]
   #zen-app-panel-root[open]:not([closing]):not([data-insta-peek="true"])
   #zen-app-panel-slider,
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-panel-input-shield="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-panel-input-shield="true"]
   #zen-app-panel-root[open]:not([closing]):not([data-insta-peek="true"])
   #zen-app-panel-slider
   browser {
@@ -195,8 +203,15 @@
 /* The floating Super View is a separate surface outside the main root.
  * Keep the same opt-in hit-test barrier without intercepting its controls. */
 
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-panel-input-shield="true"] #bgalazka-super-panel,
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-panel-input-shield="true"] #bgalazka-super-panel browser {
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-panel-input-shield="true"]
+  #bgalazka-super-panel,
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-panel-input-shield="true"]
+  #bgalazka-super-panel
+  browser {
   pointer-events: auto !important;
 }
 
@@ -329,17 +344,8 @@
 /* ==========================================================================
    2. OPPOSITE-SIDE DOCKING, PILL MENU & RESIZE STRIP
    ========================================================================== */
-:root[bgalazka-opposite-docking="true"]
-  :is(
-    #browser,
-    #tabbrowser-tabpanels,
-    #tabbrowser-tabbox,
-    .browserSidebarContainer,
-    #sidebar-box,
-    #navigator-toolbox
-  ) {
-  max-width: unset !important;
-}
+/* Docking positions Zentral's fixed panels only. Native toolbox, sidebar and
+ * web-content width limits belong to Zen and must survive panel autohide. */
 
 /* Panel on Right (Sidebar on Left) */
 :root[bgalazka-opposite-docking="true"]
@@ -361,7 +367,9 @@
   cursor: ew-resize !important;
   z-index: 30 !important;
 }
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-opposite-docking="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-opposite-docking="true"]
   #zen-app-panel-root[data-panel-side="right"]
   .zen-app-resize-strip {
   pointer-events: auto !important;
@@ -374,7 +382,9 @@
   /* top is set by the unified "Pill Menu Vertical Offset" rule in section 3 */
   z-index: 999999 !important;
 }
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-opposite-docking="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-opposite-docking="true"]
   #zen-app-panel-root[data-panel-side="right"]
   #zen-app-panel-pill {
   pointer-events: auto !important;
@@ -445,7 +455,9 @@
   left: -44px !important;
   right: auto !important;
 }
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-opposite-docking="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-opposite-docking="true"]
   #zen-app-panel-root[data-panel-side="right"]
   .zen-app-hover-zone {
   pointer-events: auto !important;
@@ -471,7 +483,9 @@
   cursor: ew-resize !important;
   z-index: 30 !important;
 }
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-opposite-docking="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-opposite-docking="true"]
   #zen-app-panel-root[data-panel-side="left"]
   .zen-app-resize-strip {
   pointer-events: auto !important;
@@ -484,7 +498,9 @@
   /* top is set by the unified "Pill Menu Vertical Offset" rule in section 3 */
   z-index: 999999 !important;
 }
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-opposite-docking="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-opposite-docking="true"]
   #zen-app-panel-root[data-panel-side="left"]
   #zen-app-panel-pill {
   pointer-events: auto !important;
@@ -559,7 +575,9 @@
   right: -44px !important;
   left: auto !important;
 }
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-opposite-docking="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-opposite-docking="true"]
   #zen-app-panel-root[data-panel-side="left"]
   .zen-app-hover-zone {
   pointer-events: auto !important;
