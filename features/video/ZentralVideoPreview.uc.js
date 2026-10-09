@@ -1213,6 +1213,9 @@
           get normalLivePreviewEnabled() {
             return normalLivePreviewEnabled;
           },
+          get nativePreviewDeferred() {
+            return nativePreviewDeferred;
+          },
           get pinnedSource() {
             return pinnedSource;
           },
@@ -2081,6 +2084,9 @@
           },
           get previewModeNotice() {
             return previewModeNotice;
+          },
+          get nativePreviewDeferred() {
+            return nativePreviewDeferred;
           },
           set previewModeNotice(value) {
             previewModeNotice = value;
@@ -3297,6 +3303,16 @@
             Services.prefs.getBoolPref(STRICT_MODE_PREF, false)
           );
         }
+        function nativePreviewDeferred() {
+          // Automatic can also exhaust its fallbacks while the on-page video
+          // blocks native cloning. A selected source alone is not a preview.
+          return (
+            current?.data.kind === "video" &&
+            sourceVisibilityBlocked &&
+            !previewMode &&
+            ["auto", "frame-native", "native"].includes(rendererChoice())
+          );
+        }
         function visibilityPolicyApplies() {
           const choice = rendererChoice();
           return (
@@ -3781,7 +3797,9 @@
             running: !!scanTimer,
             sources: sources.length,
             active: !!current,
-            visible: !!box?.isConnected && !box.hidden,
+            nativeDeferred: nativePreviewDeferred(),
+            visible:
+              !!box?.isConnected && !box.hidden && !nativePreviewDeferred(),
           }),
         };
         hookSettings();

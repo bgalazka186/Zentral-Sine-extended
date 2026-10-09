@@ -14,7 +14,7 @@
  *   .zentral-video-preview-picture; .zentral-video-preview-pin; .zentral-video-preview-player;
  *   .zentral-video-preview-resize; .zentral-video-preview-seek; .zentral-video-preview-source;
  *   .zentral-video-preview-sources; .zentral-video-preview-subtitles
- * Attribute selectors used: aria-pressed; aria-selected; data-compact-card; data-settings-owner; hidden;
+ * Attribute selectors used: aria-pressed; aria-selected; data-compact-card; data-native-deferred; data-settings-owner; hidden;
  *   title
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
@@ -118,6 +118,10 @@
   min-height: 0 !important;
 }
 
+/* Waiting for native cloning removes only the empty picture, keeping the
+   playback controls and source selector available. */
+#zentral-video-preview[data-native-deferred] .zentral-video-preview-picture,
+#zentral-video-preview[data-native-deferred] .zentral-video-preview-resize,
 #zentral-video-preview .zentral-video-preview-picture[hidden],
 #zentral-video-preview .zentral-video-preview-seek[hidden],
 #zentral-video-preview .zentral-video-preview-resize[hidden] {
