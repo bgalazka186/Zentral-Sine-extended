@@ -32,11 +32,19 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("groups/ZentralGroupsNativeAdapter", function ({ Services, shared, runtime, access }) {
-const { Constants, Core, createSVGElement, SVG_STRINGS, WELL_KNOWN_SERVICES } = shared;
-return {
-// Responsibility: ZentralGroupsNativeAdapter
-setupTabOpenHandler() {
+  window.ZentralModuleLoader.define(
+    "groups/ZentralGroupsNativeAdapter",
+    function ({ Services, shared, runtime, access }) {
+      const {
+        Constants,
+        Core,
+        createSVGElement,
+        SVG_STRINGS,
+        WELL_KNOWN_SERVICES,
+      } = shared;
+      return {
+        // Responsibility: ZentralGroupsNativeAdapter
+        setupTabOpenHandler() {
           if (access.tabOpenListener) return;
           access.tabOpenListener = (e) => {
             const tab = e.target;
@@ -188,7 +196,7 @@ setupTabOpenHandler() {
             );
           }
         },
-hookAddTab() {
+        hookAddTab() {
           if (!window.gBrowser || window.gBrowser._zentralAddTabHooked) return;
           window.gBrowser._zentralAddTabHooked = true;
           access.origAddTab = window.gBrowser.addTab;
@@ -246,7 +254,7 @@ hookAddTab() {
             return tab;
           };
         },
-setupObserver() {
+        setupObserver() {
           const observer = new MutationObserver((mutations) => {
             let needsSave = false;
             let groupsStructureChanged = false;
@@ -536,7 +544,7 @@ setupObserver() {
             );
           }
         },
-setupPopupSuppression() {
+        setupPopupSuppression() {
           if (access.popupShowingListener) return;
           access.popupShowingListener = (e) => {
             const target = e.target;
@@ -569,7 +577,7 @@ setupPopupSuppression() {
           );
           this.removeBuiltinTabGroupMenu();
         },
-removeBuiltinTabGroupMenu(root = document) {
+        removeBuiltinTabGroupMenu(root = document) {
           try {
             const selectors = [
               "#tab-group-editor",
@@ -609,7 +617,7 @@ removeBuiltinTabGroupMenu(root = document) {
             );
           }
         },
-initTabDragSelectionGuard() {
+        initTabDragSelectionGuard() {
           const tabContainer =
             gBrowser?.tabContainer ||
             document.getElementById("tabbrowser-tabs");
@@ -992,8 +1000,8 @@ initTabDragSelectionGuard() {
           };
         },
 
-// Responsibility: ZentralGroupsLibraryCompatibility
-libraryCompatibilityEnabled() {
+        // Responsibility: ZentralGroupsLibraryCompatibility
+        libraryCompatibilityEnabled() {
           try {
             return !Services.prefs.getBoolPref(
               "zen.workspace.zentral.video_preview.disable_experimental_bridge",
@@ -1003,17 +1011,18 @@ libraryCompatibilityEnabled() {
             return false;
           }
         },
-isLibraryCopy(node) {
+        isLibraryCopy(node) {
           return (
             this.libraryCompatibilityEnabled() &&
             !!node?.closest?.("zen-library, zen-library-spaces-section")
           );
         },
-queryLiveTabNodes(selector) {
+        queryLiveTabNodes(selector) {
           return Array.from(document.querySelectorAll(selector)).filter(
             (node) => !this.isLibraryCopy(node),
           );
-        }
-};
-});
+        },
+      };
+    },
+  );
 })();

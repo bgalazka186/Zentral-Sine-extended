@@ -22,7 +22,18 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("panels/ZentralPanelInput", function ({ BGALAZKA_EXT_PREFS, Services, clearTimeout, ctx, getPref, registerCleanup, setPref, setTimeout }) {
+  window.ZentralModuleLoader.define(
+    "panels/ZentralPanelInput",
+    function ({
+      BGALAZKA_EXT_PREFS,
+      Services,
+      clearTimeout,
+      ctx,
+      getPref,
+      registerCleanup,
+      setPref,
+      setTimeout,
+    }) {
       function ensureInputShieldForKeybinds() {
         if (!getPref(BGALAZKA_EXT_PREFS.KEYBINDS_ENABLED, false)) return;
         if (!getPref(BGALAZKA_EXT_PREFS.PANEL_INPUT_SHIELD, false)) {
@@ -74,7 +85,9 @@
         return Boolean(
           root?.hasAttribute("open") &&
           !root.hasAttribute("closing") &&
-          !document.documentElement.hasAttribute("bgalazka-hover-panel-hidden") &&
+          !document.documentElement.hasAttribute(
+            "bgalazka-hover-panel-hidden",
+          ) &&
           root.dataset.instaPeek !== "true",
         );
       }
@@ -590,6 +603,7 @@
         restorePanelContextMenu();
       });
 
-return { getVisiblePanelBrowser };
-});
+      return { getVisiblePanelBrowser };
+    },
+  );
 })();

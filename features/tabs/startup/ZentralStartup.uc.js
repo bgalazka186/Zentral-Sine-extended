@@ -36,7 +36,8 @@
         .Services;
     const ROOT =
       window.ZentralRuntime?.rootURI ||
-      Services.io.newURI("../../../", null, Services.io.newURI(SCRIPT_URI)).spec;
+      Services.io.newURI("../../../", null, Services.io.newURI(SCRIPT_URI))
+        .spec;
     const PREF = "zen.workspace.zentral.startup.enabled";
     const TAB_KEY = "zentral-load-at-startup";
     const ITEM_ID = "zentral-tab-load-at-startup";
@@ -270,7 +271,9 @@
     );
     // Use this installation's package root; CSS failure cannot block logic.
     try {
-      sheet = Services.io.newURI(ROOT + "features/tabs/startup/ZentralStartup.css");
+      sheet = Services.io.newURI(
+        ROOT + "features/tabs/startup/ZentralStartup.css",
+      );
       window.windowUtils.loadSheet(sheet, window.windowUtils.USER_SHEET);
     } catch (error) {
       sheet = null;

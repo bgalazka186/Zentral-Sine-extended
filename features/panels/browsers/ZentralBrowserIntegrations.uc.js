@@ -831,7 +831,8 @@
     }
 
     ctx.retryPanelTask("privacy-menu", () =>
-      ctx.safeCall(ensurePanelPrivacyMenuItems, "ensurePanelPrivacyMenuItems"));
+      ctx.safeCall(ensurePanelPrivacyMenuItems, "ensurePanelPrivacyMenuItems"),
+    );
 
     /* ==========================================================================
      * FIREFOX ADD-ON TAB-ID BRIDGE (architecture note 27)
@@ -1042,7 +1043,8 @@
         };
         addonHostByAppId.set(appId, record);
         addonHostByTab.set(tab, record);
-        browser._zentralMoveTo = parent => moveAddonHostBrowser(record, parent);
+        browser._zentralMoveTo = (parent) =>
+          moveAddonHostBrowser(record, parent);
 
         putAddonHostTabInFolder(tab);
         // Folder creation can select its internal placeholder. Do not lend a
@@ -1078,8 +1080,10 @@
       // tabbrowser filter to that new owner once, without a polling/retry loop.
       const oldProgress = browser.webProgress;
       const filter = gBrowser._tabFilters?.get(record.tab);
-      if (typeof parent.moveBefore === "function" &&
-          typeof browser.connectedMoveCallback === "function") {
+      if (
+        typeof parent.moveBefore === "function" &&
+        typeof browser.connectedMoveCallback === "function"
+      ) {
         parent.moveBefore(browser, before);
       } else {
         parent.insertBefore(browser, before);
@@ -1093,8 +1097,10 @@
       const parent = record?.originalParent;
       if (!record?.browser || !parent?.isConnected)
         throw new Error("Add-on host tab browser stack is unavailable");
-      const before = record.originalNextSibling?.parentNode === parent
-        ? record.originalNextSibling : null;
+      const before =
+        record.originalNextSibling?.parentNode === parent
+          ? record.originalNextSibling
+          : null;
       moveAddonHostBrowser(record, parent, before);
     }
 
@@ -1115,22 +1121,33 @@
             skipSessionStore: true,
           });
           if (record.tab.isConnected)
-            throw new Error("Native tab removal left the add-on host connected");
+            throw new Error(
+              "Native tab removal left the add-on host connected",
+            );
         }
       } catch (error) {
         if (record.tab?.isConnected) {
           record.removalFailed = true;
           try {
-            if (panelParent?.isConnected && panelParent !== record.originalParent)
+            if (
+              panelParent?.isConnected &&
+              panelParent !== record.originalParent
+            )
               moveAddonHostBrowser(record, panelParent);
             record.browser.zenModeActive = wasZenActive;
           } catch (restoreError) {
-            console.warn("[Zentral] Could not restore panel after failed host close:", restoreError);
+            console.warn(
+              "[Zentral] Could not restore panel after failed host close:",
+              restoreError,
+            );
           }
           // Keep both lookups and ownership flags. Base closeApp must not remove
           // a browser still owned by a live native tab. A later explicit unload
           // can try again; no automatic retry is scheduled.
-          console.warn("[BgalazkaExtension] Failed to remove add-on host tab:", error);
+          console.warn(
+            "[BgalazkaExtension] Failed to remove add-on host tab:",
+            error,
+          );
           return record;
         }
       } finally {
@@ -1203,15 +1220,24 @@
 
     function panelBrowserVisible(browser) {
       const root = document.getElementById("zen-app-panel-root");
-      if (!root?.hasAttribute("open") || root.hasAttribute("closing") ||
-          document.documentElement.hasAttribute("bgalazka-hover-panel-hidden") ||
-          root.getAttribute("data-insta-peek") === "true" ||
-          browser.style.display === "none" || browser.hasAttribute("hidden")) return false;
+      if (
+        !root?.hasAttribute("open") ||
+        root.hasAttribute("closing") ||
+        document.documentElement.hasAttribute("bgalazka-hover-panel-hidden") ||
+        root.getAttribute("data-insta-peek") === "true" ||
+        browser.style.display === "none" ||
+        browser.hasAttribute("hidden")
+      )
+        return false;
       // An inline-visible browser may still live inside a hidden Triple/Super
       // shell. Do not reactivate that remote document just because another panel is open.
       const style = window.getComputedStyle(browser);
-      return style.display !== "none" && style.visibility !== "hidden" &&
-        style.visibility !== "collapse" && browser.getClientRects().length > 0;
+      return (
+        style.display !== "none" &&
+        style.visibility !== "hidden" &&
+        style.visibility !== "collapse" &&
+        browser.getClientRects().length > 0
+      );
     }
 
     function syncAppPanelBrowserActivity(browsers = ctx.getAllAppBrowsers()) {
@@ -1223,7 +1249,8 @@
         if (!browser?.isConnected) continue;
         // Ownership is the boundary even for explicit/retry caller lists. A
         // restored native tab must never inherit our inactive/layers-off policy.
-        if (!panel?.contains(browser) && !secondary?.contains(browser)) continue;
+        if (!panel?.contains(browser) && !secondary?.contains(browser))
+          continue;
         try {
           const visible = panelBrowserVisible(browser);
           const essential = ctx.essentialPanels.get(browser._bgalazkaAppId);
@@ -1673,14 +1700,21 @@
         }
         return;
       }
-      if (record.removing || addonHostByAppId.get(record.appId) !== record) return;
+      if (record.removing || addonHostByAppId.get(record.appId) !== record)
+        return;
 
       // This path means the user/Zen closed the backing tab directly. Let the
       // tab close finish first, then ask Zentral to unload the matching private
       // Map entry/browser. Our own programmatic teardown removes the Map record
       // before removeTab(), so it never enters this branch.
-      try { restoreAddonHostBrowserToTab(record); }
-      catch (error) { console.warn("[Zentral] Could not restore closing host browser:", error); }
+      try {
+        restoreAddonHostBrowserToTab(record);
+      } catch (error) {
+        console.warn(
+          "[Zentral] Could not restore closing host browser:",
+          error,
+        );
+      }
       addonHostByAppId.delete(record.appId);
       record.browser.zenModeActive = false;
       ctx.setTimeout(() => {
@@ -2027,7 +2061,8 @@
       return true;
     }
 
-    ctx.retryPanelTask("mobile-menu", () => ctx.safeCall(ensureMobileUaMenuItem, "ensureMobileUaMenuItem"));
-
+    ctx.retryPanelTask("mobile-menu", () =>
+      ctx.safeCall(ensureMobileUaMenuItem, "ensureMobileUaMenuItem"),
+    );
   });
 })();

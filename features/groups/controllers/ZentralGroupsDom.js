@@ -29,10 +29,18 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("groups/ZentralGroupsDom", function ({ Services, shared, runtime, access }) {
-const { Constants, Core, createSVGElement, SVG_STRINGS, WELL_KNOWN_SERVICES } = shared;
-return {
-updateCollapsedLabel(labelContainer, title) {
+  window.ZentralModuleLoader.define(
+    "groups/ZentralGroupsDom",
+    function ({ Services, shared, runtime, access }) {
+      const {
+        Constants,
+        Core,
+        createSVGElement,
+        SVG_STRINGS,
+        WELL_KNOWN_SERVICES,
+      } = shared;
+      return {
+        updateCollapsedLabel(labelContainer, title) {
           if (!labelContainer) return;
           let initialsEl = labelContainer.querySelector(
             ".zentral-group-initials",
@@ -104,7 +112,7 @@ updateCollapsedLabel(labelContainer, title) {
 
           initialsEl.appendChild(track);
         },
-safeHideTooltip(delayMs = 350) {
+        safeHideTooltip(delayMs = 350) {
           if (window.zentralTooltipHideTimer) {
             clearTimeout(window.zentralTooltipHideTimer);
             window.zentralTooltipHideTimer = null;
@@ -130,7 +138,7 @@ safeHideTooltip(delayMs = 350) {
             panel.hidePopup();
           }, delayMs);
         },
-getDirectTabs(group) {
+        getDirectTabs(group) {
           if (!group) return [];
 
           const domTabs = Array.from(
@@ -180,14 +188,14 @@ getDirectTabs(group) {
 
           return directTabs;
         },
-processExistingGroups() {
+        processExistingGroups() {
           const groups = this.queryLiveTabNodes(
             "tab-group:not([split-view-group])",
           );
           groups.forEach((group) => this.processGroup(group));
           this.loadTabGroupState();
         },
-renameGroupKeydown(event) {
+        renameGroupKeydown(event) {
           event.stopPropagation();
           if (event.key === "Enter") {
             event.preventDefault();
@@ -223,7 +231,7 @@ renameGroupKeydown(event) {
             this.renameGroupHalt(event, true);
           }
         },
-renameGroupStart(group, selectAll = true) {
+        renameGroupStart(group, selectAll = true) {
           if (!group || access.state.groupEdited) return;
           const labelElement = group.querySelector(".tab-group-label");
           if (!labelElement) return;
@@ -260,7 +268,7 @@ renameGroupStart(group, selectAll = true) {
           input.addEventListener("keydown", (e) => this.renameGroupKeydown(e));
           input.addEventListener("blur", (e) => this.renameGroupHalt(e));
         },
-renameGroupHalt(event, force = false) {
+        renameGroupHalt(event, force = false) {
           if (access.state.isStartingRename && !force) return;
           if (!access.state.groupEdited) return;
 
@@ -270,12 +278,14 @@ renameGroupHalt(event, force = false) {
           document.documentElement.removeAttribute("zen-renaming-group");
           if (input) input.remove();
           if (access.state.groupEdited) {
-            access.state.groupEdited.classList.remove("tab-group-label-editing");
+            access.state.groupEdited.classList.remove(
+              "tab-group-label-editing",
+            );
             access.state.groupEdited.style.display = "";
             access.state.groupEdited = null;
           }
         },
-processGroup(group) {
+        processGroup(group) {
           if (this.isLibraryCopy(group)) return;
           // Use a WeakSet instead of a DOM attribute to avoid persisting across restarts
           // and to prevent guard bypasses when native code resets group attributes.
@@ -820,14 +830,14 @@ processGroup(group) {
           const parentGroup = group.parentElement?.closest("tab-group");
           if (parentGroup) this.updateGroupSubGroupsBadge(parentGroup);
         },
-scheduleBadgeUpdate() {
+        scheduleBadgeUpdate() {
           if (access.badgeUpdateRAF) return;
           access.badgeUpdateRAF = window.requestAnimationFrame(() => {
             access.badgeUpdateRAF = null;
             this.updateAllSubGroupsBadges();
           });
         },
-updateGroupSubGroupsBadge(group, cachedAllGroups = null) {
+        updateGroupSubGroupsBadge(group, cachedAllGroups = null) {
           if (this.isLibraryCopy(group)) return;
           if (
             !group ||
@@ -882,7 +892,7 @@ updateGroupSubGroupsBadge(group, cachedAllGroups = null) {
             badge.textContent = targetText;
           }
         },
-updateAllSubGroupsBadges() {
+        updateAllSubGroupsBadges() {
           if (access.isUpdatingBadges) return;
           access.isUpdatingBadges = true;
           try {
@@ -900,7 +910,7 @@ updateAllSubGroupsBadges() {
             access.isUpdatingBadges = false;
           }
         },
-applyChevronPref() {
+        applyChevronPref() {
           const showChevron = Core.getPref(
             Constants.TabGroups.PREF_SHOW_CHEVRON,
           );
@@ -909,7 +919,7 @@ applyChevronPref() {
             showChevron !== false ? "true" : "false",
           );
         },
-applyIndicatorTypePref() {
+        applyIndicatorTypePref() {
           const indicatorType = Core.getPref(
             Constants.TabGroups.PREF_INDICATOR_TYPE,
             "circle",
@@ -919,7 +929,7 @@ applyIndicatorTypePref() {
             indicatorType === "chevron" ? "chevron" : "circle",
           );
         },
-applyLabelOpacityPref() {
+        applyLabelOpacityPref() {
           const opacityPct = Core.getPref(
             Constants.TabGroups.PREF_LABEL_OPACITY,
           );
@@ -935,7 +945,8 @@ applyLabelOpacityPref() {
             "zentral-label-opacity-below-85",
             val < 85 ? "true" : "false",
           );
-        }
-};
-});
+        },
+      };
+    },
+  );
 })();

@@ -26,11 +26,19 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("groups/ZentralGroupsColors", function ({ Services, shared, runtime, access }) {
-const { Constants, Core, createSVGElement, SVG_STRINGS, WELL_KNOWN_SERVICES } = shared;
-return {
-// Responsibility: ZentralGroupsColors
-isGroupKnownInSavedState(groupId) {
+  window.ZentralModuleLoader.define(
+    "groups/ZentralGroupsColors",
+    function ({ Services, shared, runtime, access }) {
+      const {
+        Constants,
+        Core,
+        createSVGElement,
+        SVG_STRINGS,
+        WELL_KNOWN_SERVICES,
+      } = shared;
+      return {
+        // Responsibility: ZentralGroupsColors
+        isGroupKnownInSavedState(groupId) {
           if (!groupId) return false;
           try {
             const stateStr = Core.getPref(Constants.TabGroups.PREF_STATE);
@@ -50,7 +58,7 @@ isGroupKnownInSavedState(groupId) {
           } catch (_) {}
           return false;
         },
-extractTabFaviconColor(tab) {
+        extractTabFaviconColor(tab) {
           return new Promise((resolve) => {
             if (!tab) return resolve(null);
 
@@ -160,7 +168,7 @@ extractTabFaviconColor(tab) {
             setTimeout(() => finish(null), 1000);
           });
         },
-getTabFallbackColor(tab) {
+        getTabFallbackColor(tab) {
           if (tab) {
             const identityColors = {
               blue: [55, 142, 240],
@@ -194,7 +202,7 @@ getTabFallbackColor(tab) {
           } catch (_) {}
           return [112, 122, 194];
         },
-async applyAverageGroupColor(group, force = false) {
+        async applyAverageGroupColor(group, force = false) {
           if (!group || !group.isConnected) return;
 
           if (!force) {
@@ -299,7 +307,7 @@ async applyAverageGroupColor(group, force = false) {
             group._zentralColoringInProgress = false;
           }
         },
-checkAndApplyFirstTimeGroupColor(group) {
+        checkAndApplyFirstTimeGroupColor(group) {
           if (this.isLibraryCopy(group)) return;
           // 1. Never run while the browser is starting up / restoring sessions
           if (access.isRestoring) return;
@@ -342,7 +350,7 @@ checkAndApplyFirstTimeGroupColor(group) {
           // This is a brand new group created for the FIRST TIME EVER:
           this.applyAverageGroupColor(group, false);
         },
-calculateAverageColor(colors) {
+        calculateAverageColor(colors) {
           if (colors.length === 0) return [0, 0, 0];
           const total = colors.reduce(
             (acc, c) => [acc[0] + c[0], acc[1] + c[1], acc[2] + c[2]],
@@ -354,7 +362,7 @@ calculateAverageColor(colors) {
             Math.round(total[2] / colors.length),
           ];
         },
-getContrastColor(colorStr) {
+        getContrastColor(colorStr) {
           if (!colorStr) return "#ffffff";
           let r, g, b;
           const str = colorStr.trim();
@@ -383,13 +391,13 @@ getContrastColor(colorStr) {
           }
           return "#ffffff";
         },
-clearStoredColorData() {
+        clearStoredColorData() {
           if (window.gZenThemePicker) {
             delete window.gZenThemePicker._currentTabGroup;
             delete window.gZenThemePicker._tabGroupForColorPicker;
           }
         },
-async saveTabGroupColors() {
+        async saveTabGroupColors() {
           let colors = {};
           try {
             const raw = Core.getPref(Constants.TabGroups.PREF_COLORS);
@@ -420,7 +428,7 @@ async saveTabGroupColors() {
           Core.setPref(Constants.TabGroups.PREF_COLORS, JSON.stringify(colors));
           this.scheduleStateSave();
         },
-async loadSavedColors() {
+        async loadSavedColors() {
           try {
             const colors = JSON.parse(
               Core.getPref(Constants.TabGroups.PREF_COLORS),
@@ -443,7 +451,7 @@ async loadSavedColors() {
             }
           } catch (e) {}
         },
-async removeSavedColor(groupId) {
+        async removeSavedColor(groupId) {
           try {
             const colors = JSON.parse(
               Core.getPref(Constants.TabGroups.PREF_COLORS),
@@ -459,8 +467,8 @@ async removeSavedColor(groupId) {
           } catch (e) {}
         },
 
-// Responsibility: ZentralGroupsColorPicker
-ensureColorPickerPanel() {
+        // Responsibility: ZentralGroupsColorPicker
+        ensureColorPickerPanel() {
           if (
             access.state.colorPickerPanel &&
             access.state.colorPickerPanel.isConnected
@@ -757,7 +765,8 @@ ensureColorPickerPanel() {
 
           access.state.colorPickerPanel = panel;
           return panel;
-        }
-};
-});
+        },
+      };
+    },
+  );
 })();

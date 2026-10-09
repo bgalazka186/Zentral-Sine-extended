@@ -42,17 +42,14 @@
     sans-serif !important;
 }
 
-
 #zentral-settings-modal[data-open="true"] {
   display: flex !important;
   animation: zsFadeIn 0.18s ease-out !important;
 }
 
-
 #zentral-settings-modal[data-open="false"] {
   display: none !important;
 }
-
 
 @keyframes zsFadeIn {
   from {
@@ -62,7 +59,6 @@
     opacity: 1;
   }
 }
-
 
 @keyframes zsModalPop {
   from {
@@ -75,7 +71,6 @@
   }
 }
 
-
 @keyframes zsTabFadeIn {
   from {
     opacity: 0;
@@ -86,7 +81,6 @@
     transform: translateY(0);
   }
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-dialog {
   background: #0d0d12 !important;
@@ -106,7 +100,6 @@
   animation: zsModalPop 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
-
 /* Top Header */
 #zentral-settings-modal #zs-panel-bgalazka .zs-header {
   padding: 18px 32px 14px 32px !important;
@@ -119,13 +112,11 @@
   flex-shrink: 0 !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-title-group {
   display: flex !important;
   align-items: center !important;
   gap: 12px !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-title {
   margin: 0 !important;
@@ -134,7 +125,6 @@
   letter-spacing: -0.02em !important;
   color: #ffffff !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-version-badge {
   font-family:
@@ -157,13 +147,11 @@
   font-weight: 500 !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-header-actions {
   display: flex !important;
   align-items: center !important;
   gap: 20px !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-kofi-btn {
   -moz-appearance: none !important;
@@ -185,18 +173,15 @@
   text-decoration: none !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-kofi-btn:hover {
   transform: translateY(-1px) scale(1.03) !important;
   filter: brightness(1) drop-shadow(0 3px 8px rgba(19, 195, 117, 0.45)) !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-kofi-btn:active {
   transform: translateY(0) scale(0.97) !important;
   filter: brightness(0.95) !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-kofi-btn svg {
   height: 36px !important;
@@ -204,7 +189,6 @@
   display: block !important;
   pointer-events: none !important;
 }
-
 
 /* Clean Close Button "X" (no outside box) */
 #zentral-settings-modal #zs-panel-bgalazka .zs-close-btn {
@@ -226,11 +210,9 @@
   padding: 0 !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-close-btn * {
   pointer-events: none !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-close-btn:hover {
   color: #ffffff !important;
@@ -239,7 +221,6 @@
   box-shadow: none !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-close-btn:active {
   color: #d4d4d8 !important;
   background: transparent !important;
@@ -247,7 +228,6 @@
   box-shadow: none !important;
   transform: scale(0.94) !important;
 }
-
 
 /* Tabs Navigation (no outside boxes) */
 #zentral-settings-modal #zs-panel-bgalazka .zs-tab-bar {
@@ -258,7 +238,6 @@
   gap: 24px !important;
   flex-shrink: 0 !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-tab-btn {
   -moz-appearance: none !important;
@@ -278,7 +257,6 @@
   user-select: none !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-tab-btn:hover {
   color: #d4d4d8 !important;
   background: transparent !important;
@@ -286,7 +264,6 @@
   outline: none !important;
   box-shadow: none !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-tab-btn[data-active="true"] {
   color: #ffffff !important;
@@ -296,7 +273,6 @@
   outline: none !important;
   box-shadow: none !important;
 }
-
 
 #zentral-settings-modal
   #zs-panel-bgalazka
@@ -310,7 +286,6 @@
   background: var(--zen-primary-color, #6366f1) !important;
 }
 
-
 /* Modal Body & Tab Panels */
 #zentral-settings-modal #zs-panel-bgalazka .zs-body {
   padding: 22px 32px !important;
@@ -321,7 +296,6 @@
   background: #0d0d12 !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-tab-panel {
   display: none !important;
   flex-direction: column !important;
@@ -331,12 +305,10 @@
   min-height: 0 !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-tab-panel[data-active="true"] {
   display: flex !important;
   animation: zsTabFadeIn 0.18s ease-out !important;
 }
-
 
 /* 2-Column Side-by-Side Open Layout with Vertical Separator */
 #zentral-settings-modal #zs-panel-bgalazka .zs-columns {
@@ -351,7 +323,6 @@
   overflow: hidden !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-col {
   display: flex !important;
   flex-direction: column !important;
@@ -362,18 +333,15 @@
   overflow: hidden !important;
 }
 
-
 #zentral-settings-modal #zs-ag-col {
   padding-right: 24px !important;
   border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
-
 #zentral-settings-modal #zs-tg-col {
   padding-left: 24px !important;
   overflow: visible !important;
 }
-
 
 /* Section Header with Outside Divider Line */
 #zentral-settings-modal #zs-panel-bgalazka .zs-section-header {
@@ -391,7 +359,6 @@
   z-index: 10 !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-section-title {
   font-size: 13px !important;
   text-transform: uppercase !important;
@@ -401,7 +368,6 @@
   margin: 0 !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-header-toggle {
   display: flex !important;
   align-items: center !important;
@@ -409,14 +375,12 @@
   pointer-events: auto !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-toggle-status {
   font-size: 12px !important;
   font-weight: 500 !important;
   color: #a1a1aa !important;
   user-select: none !important;
 }
-
 
 /* Section Content Container (Scrollable with un-squeezed elements) */
 #zentral-settings-modal #zs-panel-bgalazka .zs-section-content {
@@ -434,11 +398,9 @@
     filter 0.2s ease !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-section-content > * {
   flex-shrink: 0 !important;
 }
-
 
 #zentral-settings-modal
   #zs-panel-bgalazka
@@ -447,14 +409,12 @@
   width: 5px !important;
 }
 
-
 #zentral-settings-modal
   #zs-panel-bgalazka
   .zs-section-content::-webkit-scrollbar-track,
 #zentral-settings-modal #zs-panel-bgalazka .zs-col::-webkit-scrollbar-track {
   background: transparent !important;
 }
-
 
 #zentral-settings-modal
   #zs-panel-bgalazka
@@ -463,7 +423,6 @@
   background: #3f3f46 !important;
   border-radius: 9999px !important;
 }
-
 
 #zentral-settings-modal
   #zs-panel-bgalazka
@@ -474,7 +433,6 @@
   background: #52525b !important;
 }
 
-
 #zentral-settings-modal
   #zs-panel-bgalazka
   .zs-section-content[data-disabled="true"] {
@@ -482,7 +440,6 @@
   pointer-events: none !important;
   filter: grayscale(0.65) !important;
 }
-
 
 /* Setting Rows */
 #zentral-settings-modal #zs-panel-bgalazka .zs-row {
@@ -493,7 +450,6 @@
   min-height: 30px !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-label-container {
   display: flex !important;
   flex-direction: column !important;
@@ -501,13 +457,11 @@
   min-width: 0 !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-label {
   font-size: 13.5px !important;
   font-weight: 500 !important;
   color: #ffffff !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-sublabel {
   font-size: 11.5px !important;
@@ -516,7 +470,6 @@
   line-height: 1.35 !important;
 }
 
-
 /* Visual Placement Cards (No glow) */
 #zentral-settings-modal #zs-panel-bgalazka .zs-placement-group {
   display: flex !important;
@@ -524,13 +477,11 @@
   gap: 8px !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-placement-cards {
   display: grid !important;
   grid-template-columns: 1fr 1fr !important;
   gap: 12px !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-placement-btn {
   -moz-appearance: none !important;
@@ -556,11 +507,9 @@
   box-shadow: none !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-placement-btn * {
   pointer-events: none !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-placement-btn:hover {
   border-color: rgba(255, 255, 255, 0.22) !important;
@@ -568,7 +517,6 @@
   color: #f4f4f5 !important;
   box-shadow: none !important;
 }
-
 
 #zentral-settings-modal
   #zs-panel-bgalazka
@@ -586,7 +534,6 @@
     #ffffff
   ) !important;
 }
-
 
 #zentral-settings-modal
   #zs-panel-bgalazka
@@ -606,7 +553,6 @@
   box-sizing: border-box !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-placement-sidebar-container {
   width: 24px !important;
   height: 100% !important;
@@ -621,7 +567,6 @@
   flex-shrink: 0 !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-placement-appbox-indicator {
   width: 100% !important;
   height: 15px !important;
@@ -634,7 +579,6 @@
     border-color 0.15s ease !important;
 }
 
-
 #zentral-settings-modal
   .zs-placement-btn[data-active="true"]
   .zs-placement-appbox-indicator {
@@ -646,14 +590,12 @@
   border-color: var(--zen-primary-color, #6366f1) !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-placement-sidebar-body {
   width: 100% !important;
   flex: 1 1 auto !important;
   background: rgba(255, 255, 255, 0.03) !important;
   border-radius: 2px !important;
 }
-
 
 #zentral-settings-modal
   #zs-panel-bgalazka
@@ -667,7 +609,6 @@
     border-color 0.15s ease !important;
 }
 
-
 #zentral-settings-modal
   .zs-placement-btn[data-active="true"]
   .zs-placement-bar-indicator {
@@ -679,7 +620,6 @@
   border-color: var(--zen-primary-color, #6366f1) !important;
 }
 
-
 #zentral-settings-modal
   #zs-panel-bgalazka
   .zs-placement-btn
@@ -690,7 +630,6 @@
   border-radius: 3px !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-placement-label {
   font-size: 13px !important;
   font-weight: 500 !important;
@@ -698,7 +637,6 @@
     color 0.15s ease,
     font-weight 0.15s ease !important;
 }
-
 
 #zentral-settings-modal
   .zs-placement-btn[data-active="true"]
@@ -710,7 +648,6 @@
   ) !important;
   font-weight: 700 !important;
 }
-
 
 /* Horizontal Capsule Stepper (- [value] +) */
 #zentral-settings-modal #zs-panel-bgalazka .zs-h-stepper {
@@ -725,7 +662,6 @@
   box-sizing: border-box !important;
   flex-shrink: 0 !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-h-btn {
   -moz-appearance: none !important;
@@ -750,18 +686,15 @@
   padding: 0 !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-h-btn:hover {
   background: #27272a !important;
   color: #ffffff !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-h-btn:active {
   background: var(--zen-primary-color, #6366f1) !important;
   color: #ffffff !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-h-val {
   width: 32px !important;
@@ -778,7 +711,6 @@
   padding: 0 !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-h-val::-webkit-outer-spin-button,
 #zentral-settings-modal
   #zs-panel-bgalazka
@@ -787,14 +719,12 @@
   margin: 0 !important;
 }
 
-
 /* Insta-Peek Shortcut Recorder Button */
 #zentral-settings-modal #zs-panel-bgalazka .zs-shortcut-recorder {
   display: inline-flex !important;
   align-items: center !important;
   position: relative !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-shortcut-btn {
   -moz-appearance: none !important;
@@ -830,12 +760,10 @@
   user-select: none !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-shortcut-btn:hover {
   background: #27272a !important;
   border-color: rgba(255, 255, 255, 0.22) !important;
 }
-
 
 #zentral-settings-modal
   #zs-panel-bgalazka
@@ -851,7 +779,6 @@
   color: #ffffff !important;
 }
 
-
 /* Stacked Sliders with Monospace Badge */
 #zentral-settings-modal #zs-panel-bgalazka .zs-stacked-slider {
   display: flex !important;
@@ -860,13 +787,11 @@
   width: 100% !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-stacked-slider-header {
   display: flex !important;
   justify-content: space-between !important;
   align-items: flex-end !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-mono-badge {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
@@ -879,7 +804,6 @@
   letter-spacing: 0.02em !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-range-slider {
   width: 100% !important;
   height: 5px !important;
@@ -891,7 +815,6 @@
   cursor: pointer !important;
   transition: background-color 0.15s ease !important;
 }
-
 
 #zentral-settings-modal
   #zs-panel-bgalazka
@@ -906,13 +829,11 @@
   transition: transform 0.12s ease !important;
 }
 
-
 #zentral-settings-modal
   #zs-panel-bgalazka
   .zs-range-slider::-webkit-slider-thumb:hover {
   transform: scale(1.15) !important;
 }
-
 
 /* 10x6 Selection Matrix (Full width, square ratio, squircle corners, equal gaps) */
 #zentral-settings-modal #zs-panel-bgalazka .zs-matrix-wrapper {
@@ -938,7 +859,6 @@
     transform 0.32s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
-
 #zentral-settings-modal
   #zs-panel-bgalazka
   .zs-matrix-wrapper[data-hidden="true"] {
@@ -953,7 +873,6 @@
   pointer-events: none !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-matrix-header {
   display: flex !important;
   justify-content: space-between !important;
@@ -961,13 +880,11 @@
   gap: 12px !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-matrix-title {
   font-size: 13px !important;
   font-weight: 600 !important;
   color: #ffffff !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-matrix-readout {
   font-size: 12px !important;
@@ -978,7 +895,6 @@
   gap: 8px !important;
   flex-shrink: 0 !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-matrix-badge {
   background: #18181b !important;
@@ -995,7 +911,6 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-matrix-grid {
   display: grid !important;
   grid-template-columns: repeat(10, 1fr) !important;
@@ -1008,7 +923,6 @@
   box-sizing: border-box !important;
   padding: 4px 0 2px 0 !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-matrix-cell {
   aspect-ratio: 1 / 1 !important;
@@ -1027,7 +941,6 @@
   box-sizing: border-box !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-matrix-cell:hover,
 #zentral-settings-modal #zs-panel-bgalazka .zs-matrix-cell[data-hover="true"] {
   background: color-mix(
@@ -1038,7 +951,6 @@
   border-color: var(--zen-primary-color, #6366f1) !important;
   box-shadow: none !important;
 }
-
 
 #zentral-settings-modal
   #zs-panel-bgalazka
@@ -1051,7 +963,6 @@
   ) !important;
   box-shadow: none !important;
 }
-
 
 #zentral-settings-modal
   #zs-panel-bgalazka
@@ -1069,7 +980,6 @@
   transform: none !important;
 }
 
-
 /* Animation Preview Sandbox */
 #zentral-settings-modal #zs-panel-bgalazka .zs-anim-preview-group {
   display: flex !important;
@@ -1080,7 +990,6 @@
   border-radius: 12px !important;
   padding: 8px 12px !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-anim-preview-box {
   position: relative !important;
@@ -1094,7 +1003,6 @@
   cursor: pointer !important;
   user-select: none !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-anim-preview-sidebar {
   width: 28px !important;
@@ -1110,14 +1018,12 @@
   z-index: 2 !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-anim-preview-dot {
   width: 12px !important;
   height: 12px !important;
   border-radius: 3.5px !important;
   background: rgba(255, 255, 255, 0.15) !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-anim-preview-panel {
   position: absolute !important;
@@ -1152,7 +1058,6 @@
       var(--zs-preview-anim-curve, cubic-bezier(0.25, 1, 0.5, 1)) !important;
 }
 
-
 #zentral-settings-modal
   #zs-panel-bgalazka
   .zs-anim-preview-box:hover
@@ -1165,7 +1070,6 @@
   transform: translateX(0) scale(1) !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-anim-preview-pill {
   height: 5px !important;
   width: 44px !important;
@@ -1173,14 +1077,12 @@
   background: var(--zen-primary-color, #6366f1) !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-anim-preview-line {
   height: 3.5px !important;
   border-radius: 2px !important;
   background: rgba(255, 255, 255, 0.2) !important;
   margin-top: 1px !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-anim-preview-hint {
   position: absolute !important;
@@ -1190,7 +1092,6 @@
   pointer-events: none !important;
   transition: opacity 0.15s ease !important;
 }
-
 
 #zentral-settings-modal
   #zs-panel-bgalazka
@@ -1202,7 +1103,6 @@
   opacity: 0 !important;
 }
 
-
 #zentral-settings-modal #zs-panel-diagnostics {
   overflow-y: auto !important;
   overflow-x: hidden !important;
@@ -1211,34 +1111,28 @@
   scrollbar-color: #3f3f46 transparent !important;
 }
 
-
 #zentral-settings-modal #zs-panel-diagnostics::-webkit-scrollbar {
   width: 5px !important;
 }
 
-
 #zentral-settings-modal #zs-panel-diagnostics::-webkit-scrollbar-track {
   background: transparent !important;
 }
-
 
 #zentral-settings-modal #zs-panel-diagnostics::-webkit-scrollbar-thumb {
   background: #3f3f46 !important;
   border-radius: 9999px !important;
 }
 
-
 #zentral-settings-modal #zs-panel-diagnostics::-webkit-scrollbar-thumb:hover {
   background: #52525b !important;
 }
-
 
 /* Custom Sleek Dropdown (Completely Glitch-Free) */
 #zentral-settings-modal #zs-panel-bgalazka .zs-custom-select {
   position: relative !important;
   user-select: none !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-trigger {
   -moz-appearance: none !important;
@@ -1268,7 +1162,6 @@
   white-space: nowrap !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-label {
   white-space: nowrap !important;
   overflow: hidden !important;
@@ -1282,24 +1175,20 @@
   gap: 7px !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-trigger * {
   pointer-events: none !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-trigger:hover {
   background-color: #27272a !important;
   border-color: rgba(255, 255, 255, 0.22) !important;
 }
 
-
 #zentral-settings-modal
   .zs-custom-select[data-open="true"]
   .zs-custom-select-trigger {
   border-color: var(--zen-primary-color, #6366f1) !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-arrow {
   width: 14px !important;
@@ -1314,13 +1203,11 @@
   display: block !important;
 }
 
-
 #zentral-settings-modal
   .zs-custom-select[data-open="true"]
   .zs-custom-select-arrow {
   transform: rotate(180deg) !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-menu {
   position: absolute !important;
@@ -1340,13 +1227,11 @@
   animation: zsTabFadeIn 0.12s ease-out !important;
 }
 
-
 #zentral-settings-modal
   .zs-custom-select[data-open="true"]
   .zs-custom-select-menu {
   display: flex !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-option {
   padding: 6px 10px !important;
@@ -1364,12 +1249,10 @@
   gap: 7px !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-option:hover {
   background: #27272a !important;
   color: #ffffff !important;
 }
-
 
 #zentral-settings-modal
   #zs-panel-bgalazka
@@ -1387,7 +1270,6 @@
   font-weight: 600 !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-cat-icon {
   width: 14px !important;
   height: 14px !important;
@@ -1397,7 +1279,6 @@
   flex-shrink: 0 !important;
   display: block !important;
 }
-
 
 #zentral-settings-modal
   #zs-panel-bgalazka
@@ -1409,12 +1290,10 @@
   color: currentColor !important;
 }
 
-
 /* Conditional Indicator Type Row with Smooth Zero-Gap Slide */
 #zentral-settings-modal #zs-tg-content {
   overflow: visible !important;
 }
-
 
 #zentral-settings-modal #zs-tg-indicator-type-row {
   overflow: visible !important;
@@ -1431,7 +1310,6 @@
     transform 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
-
 #zentral-settings-modal #zs-tg-indicator-type-row[data-hidden="true"] {
   min-height: 0 !important;
   height: 0 !important;
@@ -1447,7 +1325,6 @@
   visibility: hidden !important;
 }
 
-
 /* Apple/Zen Toggle Switch */
 #zentral-settings-modal #zs-panel-bgalazka .zs-switch {
   position: relative !important;
@@ -1458,14 +1335,12 @@
   pointer-events: auto !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-switch input {
   opacity: 0 !important;
   width: 0 !important;
   height: 0 !important;
   pointer-events: auto !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-slider {
   position: absolute !important;
@@ -1475,7 +1350,6 @@
   transition: background-color 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
   border-radius: 9999px !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-slider:before {
   position: absolute !important;
@@ -1490,7 +1364,6 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
 }
 
-
 #zentral-settings-modal
   #zs-panel-bgalazka
   .zs-switch
@@ -1498,7 +1371,6 @@
   + .zs-slider {
   background-color: var(--zen-primary-color, #6366f1) !important;
 }
-
 
 #zentral-settings-modal
   #zs-panel-bgalazka
@@ -1508,7 +1380,6 @@
   transform: translateX(16px) !important;
 }
 
-
 #zentral-settings-modal
   #zs-panel-bgalazka
   .zs-switch
@@ -1517,7 +1388,6 @@
   opacity: 0.55 !important;
   cursor: not-allowed !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-modules-subgroup {
   display: flex !important;
@@ -1535,19 +1405,16 @@
     border-color 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
 }
 
-
 #zentral-settings-modal
   #zs-panel-bgalazka
   .zs-modules-subgroup[data-hidden="true"] {
   display: none !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-section-disabled {
   opacity: 0.45 !important;
   pointer-events: none !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-text-input {
   -moz-appearance: none !important;
@@ -1571,7 +1438,6 @@
     background 0.18s ease !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-textarea-input {
   -moz-appearance: none !important;
   appearance: none !important;
@@ -1593,7 +1459,6 @@
   min-height: 76px !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-text-input:focus,
 #zentral-settings-modal #zs-panel-bgalazka .zs-textarea-input:focus {
   background: #18181b !important;
@@ -1602,12 +1467,10 @@
     color-mix(in srgb, var(--zen-primary-color, #6366f1) 25%, transparent) !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-text-input::placeholder,
 #zentral-settings-modal #zs-panel-bgalazka .zs-textarea-input::placeholder {
   color: rgba(255, 255, 255, 0.35) !important;
 }
-
 
 /* Reset and Action Buttons */
 #zentral-settings-modal #zs-panel-bgalazka .zs-reset-btn {
@@ -1630,18 +1493,15 @@
   margin-top: auto !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-reset-btn:hover {
   background: #27272a !important;
   color: #ffffff !important;
   border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-reset-btn:active {
   transform: scale(0.98) !important;
 }
-
 
 /* Footer Action Bar */
 #zentral-settings-modal #zs-panel-bgalazka .zs-footer {
@@ -1653,7 +1513,6 @@
   background: #13131a !important;
   flex-shrink: 0 !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-btn-cancel {
   -moz-appearance: none !important;
@@ -1672,17 +1531,14 @@
     color 0.15s ease !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-btn-cancel:hover {
   background: #27272a !important;
   color: #ffffff !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-btn-cancel:active {
   transform: scale(0.98) !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-btn-save {
   -moz-appearance: none !important;
@@ -1702,13 +1558,11 @@
     transform 0.15s ease !important;
 }
 
-
 #zentral-settings-modal #zs-panel-bgalazka .zs-btn-save:hover {
   filter: brightness(1.1) !important;
   transform: translateY(-1px) !important;
   box-shadow: none !important;
 }
-
 
 #zentral-settings-modal #zs-panel-bgalazka .zs-btn-save:active {
   transform: scale(0.98) !important;

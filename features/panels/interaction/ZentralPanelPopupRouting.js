@@ -19,7 +19,9 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("panel-popup-routing", function ({ ctx, registerCleanup }) {
+  window.ZentralModuleLoader.define(
+    "panel-popup-routing",
+    function ({ ctx, registerCleanup }) {
       let popupAdapter = null;
       let popupHookUnsupported = false;
 
@@ -32,11 +34,19 @@
         // Install a complete delegating implementation through the window setter.
         const adapter = {
           QueryInterface: ChromeUtils.generateQI(["nsIBrowserDOMWindow"]),
-          get tabCount() { return original.tabCount; },
-          canClose() { return original.canClose(); },
+          get tabCount() {
+            return original.tabCount;
+          },
+          canClose() {
+            return original.canClose();
+          },
         };
-        for (const method of ["openURI", "createContentWindow",
-          "openURIInFrame", "createContentWindowInFrame"]) {
+        for (const method of [
+          "openURI",
+          "createContentWindow",
+          "openURIInFrame",
+          "createContentWindowInFrame",
+        ]) {
           adapter[method] = function (...args) {
             const [uri, info, where, flags] = args;
             const inFrame = method.endsWith("InFrame");
@@ -44,17 +54,29 @@
             const api = Ci.nsIBrowserDOMWindow;
             try {
               // External opens and printing retain Gecko's native routing.
-              if (!(flags & api.OPEN_EXTERNAL) && where !== api.OPEN_PRINT_BROWSER) {
-                const opener = inFrame ? info?.openWindowInfo?.parent : info?.parent;
+              if (
+                !(flags & api.OPEN_EXTERNAL) &&
+                where !== api.OPEN_PRINT_BROWSER
+              ) {
+                const opener = inFrame
+                  ? info?.openWindowInfo?.parent
+                  : info?.parent;
                 const context = opener?.top || opener;
-                const matched = ctx.getAllAppBrowsers().find(browser =>
-                  browser.isConnected && browser.browsingContext &&
-                  (browser.browsingContext === context ||
-                    (inFrame && info?.openerBrowser === browser)));
+                const matched = ctx
+                  .getAllAppBrowsers()
+                  .find(
+                    (browser) =>
+                      browser.isConnected &&
+                      browser.browsingContext &&
+                      (browser.browsingContext === context ||
+                        (inFrame && info?.openerBrowser === browser)),
+                  );
                 if (matched) {
                   if (!createOnly && uri) {
                     const options = {
-                      triggeringPrincipal: inFrame ? info.triggeringPrincipal : args[4],
+                      triggeringPrincipal: inFrame
+                        ? info.triggeringPrincipal
+                        : args[4],
                     };
                     if (inFrame) {
                       options.referrerInfo = info.referrerInfo;
@@ -65,14 +87,18 @@
                         options.policyContainer = args[5];
                       else options.csp = args[5];
                     }
-                    if (flags & api.OPEN_NO_REFERRER) options.referrerInfo = null;
+                    if (flags & api.OPEN_NO_REFERRER)
+                      options.referrerInfo = null;
                     matched.loadURI(uri, options);
                   }
                   return inFrame ? matched : matched.browsingContext;
                 }
               }
             } catch (error) {
-              console.warn("[BgalazkaExtension] Popup containment failed:", error);
+              console.warn(
+                "[BgalazkaExtension] Popup containment failed:",
+                error,
+              );
             }
             return original[method](...args);
           };
@@ -85,7 +111,10 @@
           popupAdapter = window.browserDOMWindow;
         } catch (error) {
           popupHookUnsupported = true;
-          console.warn("[BgalazkaExtension] Popup containment unavailable:", error);
+          console.warn(
+            "[BgalazkaExtension] Popup containment unavailable:",
+            error,
+          );
           return true;
         }
         registerCleanup(() => {
@@ -99,6 +128,7 @@
         return true;
       }
 
-return { hookPopupContainment };
-});
+      return { hookPopupContainment };
+    },
+  );
 })();

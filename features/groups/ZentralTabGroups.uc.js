@@ -36,11 +36,26 @@
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
   const ZentralRuntime = window.ZentralRuntime;
-  window.ZentralModuleLoader.load("features/groups/controllers/ZentralGroupsStore.js", { owner: "tab-groups" });
-  window.ZentralModuleLoader.load("features/groups/controllers/ZentralGroupsDom.js", { owner: "tab-groups" });
-  window.ZentralModuleLoader.load("features/groups/controllers/ZentralGroupsMenus.js", { owner: "tab-groups" });
-  window.ZentralModuleLoader.load("features/groups/controllers/ZentralGroupsColors.js", { owner: "tab-groups" });
-  window.ZentralModuleLoader.load("features/groups/controllers/ZentralGroupsNativeAdapter.js", { owner: "tab-groups" });
+  window.ZentralModuleLoader.load(
+    "features/groups/controllers/ZentralGroupsStore.js",
+    { owner: "tab-groups" },
+  );
+  window.ZentralModuleLoader.load(
+    "features/groups/controllers/ZentralGroupsDom.js",
+    { owner: "tab-groups" },
+  );
+  window.ZentralModuleLoader.load(
+    "features/groups/controllers/ZentralGroupsMenus.js",
+    { owner: "tab-groups" },
+  );
+  window.ZentralModuleLoader.load(
+    "features/groups/controllers/ZentralGroupsColors.js",
+    { owner: "tab-groups" },
+  );
+  window.ZentralModuleLoader.load(
+    "features/groups/controllers/ZentralGroupsNativeAdapter.js",
+    { owner: "tab-groups" },
+  );
   ZentralRuntime.register({
     id: "tab-groups",
     init({ shared, runtime }) {
@@ -53,11 +68,6 @@
       } = shared;
       class ZentralTabGroups {
         /** Compatibility protections share the existing experimental master switch. */
-
-
-
-
-
 
         /** @private Tabstrip MutationObserver */
         #tabStripObserver = null;
@@ -127,7 +137,6 @@
          * @param {Element} el - Tab or tab-group element.
          * @returns {string} Workspace UUID string or active workspace fallback.
          */
-
 
         /**
          * Creates an SVG element from an XML string.
@@ -531,11 +540,213 @@
          */
         constructor() {
           const owner = this;
-          Object.assign(this, window.ZentralModuleLoader.create("groups/ZentralGroupsStore", { Services, shared, runtime, access: { getSessionStore: (...args) => owner.#getSessionStore(...args), get isRestoring() { return owner.#isRestoring; }, set isRestoring(value) { owner.#isRestoring = value; }, get state() { return owner.#state; }, set state(value) { owner.#state = value; } } }));
-          Object.assign(this, window.ZentralModuleLoader.create("groups/ZentralGroupsDom", { Services, shared, runtime, access: { get badgeUpdateRAF() { return owner.#badgeUpdateRAF; }, set badgeUpdateRAF(value) { owner.#badgeUpdateRAF = value; }, createSVG: (...args) => owner.#createSVG(...args), get groupObservers() { return owner.#groupObservers; }, set groupObservers(value) { owner.#groupObservers = value; }, get isUpdatingBadges() { return owner.#isUpdatingBadges; }, set isUpdatingBadges(value) { owner.#isUpdatingBadges = value; }, get processedGroups() { return owner.#processedGroups; }, set processedGroups(value) { owner.#processedGroups = value; }, get state() { return owner.#state; }, set state(value) { owner.#state = value; } } }));
-          Object.assign(this, window.ZentralModuleLoader.create("groups/ZentralGroupsMenus", { Services, shared, runtime, access: { get folderMenuHandler() { return owner.#folderMenuHandler; }, set folderMenuHandler(value) { owner.#folderMenuHandler = value; }, get folderMenuTimer() { return owner.#folderMenuTimer; }, set folderMenuTimer(value) { owner.#folderMenuTimer = value; }, getSessionStore: (...args) => owner.#getSessionStore(...args), get state() { return owner.#state; }, set state(value) { owner.#state = value; } } }));
-          Object.assign(this, window.ZentralModuleLoader.create("groups/ZentralGroupsColors", { Services, shared, runtime, access: { get isRestoring() { return owner.#isRestoring; }, set isRestoring(value) { owner.#isRestoring = value; }, get colorPickerDragCleanup() { return owner.#colorPickerDragCleanup; }, set colorPickerDragCleanup(value) { owner.#colorPickerDragCleanup = value; }, get state() { return owner.#state; }, set state(value) { owner.#state = value; } } }));
-          Object.assign(this, window.ZentralModuleLoader.create("groups/ZentralGroupsNativeAdapter", { Services, shared, runtime, access: { get dragGuardCleanup() { return owner.#dragGuardCleanup; }, set dragGuardCleanup(value) { owner.#dragGuardCleanup = value; }, getSessionStore: (...args) => owner.#getSessionStore(...args), get groupContextMenuHandler() { return owner.#groupContextMenuHandler; }, set groupContextMenuHandler(value) { owner.#groupContextMenuHandler = value; }, get groupObservers() { return owner.#groupObservers; }, set groupObservers(value) { owner.#groupObservers = value; }, get groupRightClickBlocker() { return owner.#groupRightClickBlocker; }, set groupRightClickBlocker(value) { owner.#groupRightClickBlocker = value; }, get isRestoring() { return owner.#isRestoring; }, set isRestoring(value) { owner.#isRestoring = value; }, get origAddTab() { return owner.#origAddTab; }, set origAddTab(value) { owner.#origAddTab = value; }, get popupShowingListener() { return owner.#popupShowingListener; }, set popupShowingListener(value) { owner.#popupShowingListener = value; }, get processedGroups() { return owner.#processedGroups; }, set processedGroups(value) { owner.#processedGroups = value; }, get state() { return owner.#state; }, set state(value) { owner.#state = value; }, get tabDragGuardInitialized() { return owner.#tabDragGuardInitialized; }, set tabDragGuardInitialized(value) { owner.#tabDragGuardInitialized = value; }, get tabOpenListener() { return owner.#tabOpenListener; }, set tabOpenListener(value) { owner.#tabOpenListener = value; }, get tabStripObserver() { return owner.#tabStripObserver; }, set tabStripObserver(value) { owner.#tabStripObserver = value; } } }));
+          Object.assign(
+            this,
+            window.ZentralModuleLoader.create("groups/ZentralGroupsStore", {
+              Services,
+              shared,
+              runtime,
+              access: {
+                getSessionStore: (...args) => owner.#getSessionStore(...args),
+                get isRestoring() {
+                  return owner.#isRestoring;
+                },
+                set isRestoring(value) {
+                  owner.#isRestoring = value;
+                },
+                get state() {
+                  return owner.#state;
+                },
+                set state(value) {
+                  owner.#state = value;
+                },
+              },
+            }),
+          );
+          Object.assign(
+            this,
+            window.ZentralModuleLoader.create("groups/ZentralGroupsDom", {
+              Services,
+              shared,
+              runtime,
+              access: {
+                get badgeUpdateRAF() {
+                  return owner.#badgeUpdateRAF;
+                },
+                set badgeUpdateRAF(value) {
+                  owner.#badgeUpdateRAF = value;
+                },
+                createSVG: (...args) => owner.#createSVG(...args),
+                get groupObservers() {
+                  return owner.#groupObservers;
+                },
+                set groupObservers(value) {
+                  owner.#groupObservers = value;
+                },
+                get isUpdatingBadges() {
+                  return owner.#isUpdatingBadges;
+                },
+                set isUpdatingBadges(value) {
+                  owner.#isUpdatingBadges = value;
+                },
+                get processedGroups() {
+                  return owner.#processedGroups;
+                },
+                set processedGroups(value) {
+                  owner.#processedGroups = value;
+                },
+                get state() {
+                  return owner.#state;
+                },
+                set state(value) {
+                  owner.#state = value;
+                },
+              },
+            }),
+          );
+          Object.assign(
+            this,
+            window.ZentralModuleLoader.create("groups/ZentralGroupsMenus", {
+              Services,
+              shared,
+              runtime,
+              access: {
+                get folderMenuHandler() {
+                  return owner.#folderMenuHandler;
+                },
+                set folderMenuHandler(value) {
+                  owner.#folderMenuHandler = value;
+                },
+                get folderMenuTimer() {
+                  return owner.#folderMenuTimer;
+                },
+                set folderMenuTimer(value) {
+                  owner.#folderMenuTimer = value;
+                },
+                getSessionStore: (...args) => owner.#getSessionStore(...args),
+                get state() {
+                  return owner.#state;
+                },
+                set state(value) {
+                  owner.#state = value;
+                },
+              },
+            }),
+          );
+          Object.assign(
+            this,
+            window.ZentralModuleLoader.create("groups/ZentralGroupsColors", {
+              Services,
+              shared,
+              runtime,
+              access: {
+                get isRestoring() {
+                  return owner.#isRestoring;
+                },
+                set isRestoring(value) {
+                  owner.#isRestoring = value;
+                },
+                get colorPickerDragCleanup() {
+                  return owner.#colorPickerDragCleanup;
+                },
+                set colorPickerDragCleanup(value) {
+                  owner.#colorPickerDragCleanup = value;
+                },
+                get state() {
+                  return owner.#state;
+                },
+                set state(value) {
+                  owner.#state = value;
+                },
+              },
+            }),
+          );
+          Object.assign(
+            this,
+            window.ZentralModuleLoader.create(
+              "groups/ZentralGroupsNativeAdapter",
+              {
+                Services,
+                shared,
+                runtime,
+                access: {
+                  get dragGuardCleanup() {
+                    return owner.#dragGuardCleanup;
+                  },
+                  set dragGuardCleanup(value) {
+                    owner.#dragGuardCleanup = value;
+                  },
+                  getSessionStore: (...args) => owner.#getSessionStore(...args),
+                  get groupContextMenuHandler() {
+                    return owner.#groupContextMenuHandler;
+                  },
+                  set groupContextMenuHandler(value) {
+                    owner.#groupContextMenuHandler = value;
+                  },
+                  get groupObservers() {
+                    return owner.#groupObservers;
+                  },
+                  set groupObservers(value) {
+                    owner.#groupObservers = value;
+                  },
+                  get groupRightClickBlocker() {
+                    return owner.#groupRightClickBlocker;
+                  },
+                  set groupRightClickBlocker(value) {
+                    owner.#groupRightClickBlocker = value;
+                  },
+                  get isRestoring() {
+                    return owner.#isRestoring;
+                  },
+                  set isRestoring(value) {
+                    owner.#isRestoring = value;
+                  },
+                  get origAddTab() {
+                    return owner.#origAddTab;
+                  },
+                  set origAddTab(value) {
+                    owner.#origAddTab = value;
+                  },
+                  get popupShowingListener() {
+                    return owner.#popupShowingListener;
+                  },
+                  set popupShowingListener(value) {
+                    owner.#popupShowingListener = value;
+                  },
+                  get processedGroups() {
+                    return owner.#processedGroups;
+                  },
+                  set processedGroups(value) {
+                    owner.#processedGroups = value;
+                  },
+                  get state() {
+                    return owner.#state;
+                  },
+                  set state(value) {
+                    owner.#state = value;
+                  },
+                  get tabDragGuardInitialized() {
+                    return owner.#tabDragGuardInitialized;
+                  },
+                  set tabDragGuardInitialized(value) {
+                    owner.#tabDragGuardInitialized = value;
+                  },
+                  get tabOpenListener() {
+                    return owner.#tabOpenListener;
+                  },
+                  set tabOpenListener(value) {
+                    owner.#tabOpenListener = value;
+                  },
+                  get tabStripObserver() {
+                    return owner.#tabStripObserver;
+                  },
+                  set tabStripObserver(value) {
+                    owner.#tabStripObserver = value;
+                  },
+                },
+              },
+            ),
+          );
 
           // Method bindings
           this.onTabGroupCreate = this.onTabGroupCreate.bind(this);
@@ -550,11 +761,9 @@
          * @returns {Object} Sanitized state
          */
 
-
         /**
          * Reconstructs tab-group containers from tabs tagged with data-zentral-group-* attributes, SessionStore values, or saved state.
          */
-
 
         /* --------------------------------------------------------------------------
          * 4.2 Custom CSS & Visual Enhancements
@@ -567,20 +776,17 @@
          * @param {string} title - Group title text.
          */
 
-
         /**
          * Safely schedules or executes hiding of the tab group tooltip panel,
          * ensuring it does NOT close if the user is currently hovering over the popup or label.
          * @param {number} [delayMs=350] - Delay before hide check in milliseconds.
          */
 
-
         /**
          * Retrieves only the direct tabs belonging to a group, excluding tabs inside nested child groups.
          * @param {Element} group - Tab group DOM element.
          * @returns {Array<Element>} Array of direct tab elements.
          */
-
 
         /**
          * Initializes Tab Groups module observers, styles, color palettes, and tooltip containers.
@@ -852,22 +1058,22 @@
          * Reads show_chevron preference and sets zentral-show-chevron attribute on root.
          */
 
-
         /**
          * Reads indicator_type preference ("circle"|"chevron") and sets zentral-indicator-type attribute on root.
          */
-
 
         /**
          * Reads label_opacity preference (0-100) and sets --zentral-tabgroup-label-opacity CSS variable and state attribute on root.
          */
 
-
         /**
          * Injects CSS styles for customized tab group pills, initial badges, and color pickers.
          */
         injectStyles() {
-          const css = window.ZentralModuleLoader.readText("features/groups/styles/ZentralGroupsInjected.css", "tab-groups");
+          const css = window.ZentralModuleLoader.readText(
+            "features/groups/styles/ZentralGroupsInjected.css",
+            "tab-groups",
+          );
           try {
             const styleEl = document.createElement("style");
             styleEl.id = "zentral-tabgroups-styles";
@@ -889,17 +1095,14 @@
          * inside the same group. Tabs opened from an App Panel are kept outside of any group.
          */
 
-
         /**
          * Hooks gBrowser.addTab to ensure any tab opened while an App Panel is active
          * is created outside of any group, bypassing Zen's default selectedTab inheritance.
          */
 
-
         /**
          * Registers a MutationObserver on the tab strip to track added, removed, or collapsed tab groups.
          */
-
 
         /* --------------------------------------------------------------------------
          * 4.5 Custom Tooltips & Context Menus
@@ -914,23 +1117,19 @@
          * Installs capture-phase listener on window to block native Firefox tab group editor panels.
          */
 
-
         /**
          * Removes builtin native tab group context menus and editor panels to prevent UI redundancy.
          * @param {Element|Document} [root=document] - Container scope to scan.
          */
 
-
         /**
          * Scans and processes all existing tab group DOM elements in the workspace.
          */
-
 
         /**
          * Handles keyboard events when editing tab group titles (Enter to confirm, Escape to cancel).
          * @param {KeyboardEvent} event - Keydown event object.
          */
-
 
         /**
          * Replaces tab group text label with an inline text input to begin group renaming.
@@ -938,19 +1137,16 @@
          * @param {boolean} [selectAll=true] - Whether to select full text in input.
          */
 
-
         /**
          * Halts tab group title rename operation and restores original text label.
          * @param {FocusEvent} event - Blur event on text input.
          * @param {boolean} [force=false] - Force halt regardless of active state.
          */
 
-
         /**
          * Enhances a tab group DOM node with custom icons, close buttons, tooltips, and context menus.
          * @param {Element} group - Tab group DOM element.
          */
-
 
         /**
          * Constructs or returns the shared context menu popup for tab groups.
@@ -971,20 +1167,15 @@
          * Attaches custom context menu actions to native Zen folder menus.
          */
 
-
         /**
          * Enhances native tab context menu (#tabContextMenu) to ensure all existing
          * tab groups are populated and selectable when right-clicking tabs to add/move to group.
          */
 
-
-
-
         /**
          * Binds right-click context menu event listener and helper methods to a specific tab group.
          * @param {Element} group - Tab group DOM element.
          */
-
 
         /**
          * Checks if a tab group ID is already recorded in persistent storage (PREF_STATE or PREF_COLORS).
@@ -993,7 +1184,6 @@
          * @returns {boolean} True if the group was previously saved/known.
          */
 
-
         /**
          * Asynchronously extracts the dominant/average RGB color from a tab's favicon image.
          * Uses HTMLImageElement in chrome privilege without CORS restrictions.
@@ -1001,20 +1191,17 @@
          * @returns {Promise<Array<number>|null>} [r, g, b] color tuple or null.
          */
 
-
         /**
          * Resolves a fallback color for a tab from container identity colors or Zen primary color.
          * @param {Element} tab - Tab element.
          * @returns {Array<number>} [r, g, b] color tuple.
          */
 
-
         /**
          * Computes the average favicon color from all member tabs and applies it to the tab group.
          * @param {Element} group - Tab group element.
          * @param {boolean} [force=false] - Force apply even if already colored.
          */
-
 
         /**
          * Checks whether a tab group is being created for the first time ever, and if so,
@@ -1023,11 +1210,9 @@
          * @param {Element} group - Tab group DOM element.
          */
 
-
         /**
          * Schedules a debounced refresh of sub-groups indicator badges.
          */
-
 
         /**
          * Updates the sub-groups indicator badge on a tab group header.
@@ -1036,18 +1221,15 @@
          * @param {Array<Element>} [cachedAllGroups=null] - Optional pre-queried tab-group array to eliminate redundant DOM queries.
          */
 
-
         /**
          * Refreshes sub-group badges across all tab groups in the document.
          * Pre-queries and batches tab group elements for O(N) traversal efficiency.
          */
 
-
         /**
          * Prevents dormant tabs and split views from being selected and loaded while being dragged or reordered.
          * Defers mousedown tab selection until mouseup (for clicks) and isolates the drag payload during startTabDrag (for drags).
          */
-
 
         /* --------------------------------------------------------------------------
          * 4.3 Group Hierarchy & Storage Serialization
@@ -1059,12 +1241,10 @@
          * @param {Element} group - Tab group DOM element.
          */
 
-
         /**
          * Converts a native Zen tab folder into a Zentral tab group.
          * @param {Element} folder - Zen folder DOM element.
          */
-
 
         /**
          * Computes the average RGB color from an array of RGB color tuples.
@@ -1072,49 +1252,40 @@
          * @returns {Array<number>} Average [r, g, b] color tuple.
          */
 
-
         /**
          * Determines contrasting text color ('black' or 'white') for a given background color string.
          * @param {string} colorStr - Hex or RGB color string.
          * @returns {string} 'black' or 'white'.
          */
 
-
         /**
          * Clears cached color picker reference objects from window global scope.
          */
-
 
         /**
          * Saves tab group custom colors map to user preferences.
          */
 
-
         /**
          * Loads and applies saved custom tab group colors from user preferences.
          */
-
 
         /**
          * Removes a stored color entry for a deleted tab group.
          * @param {string} groupId - Unique tab group ID string.
          */
 
-
         /**
          * Schedules debounced state save for tab groups to prevent excessive disk writes.
          */
-
 
         /**
          * Serializes tab group hierarchy, parent relationships, and collapsed states to user preferences.
          */
 
-
         /**
          * Restores saved tab group DOM hierarchy, nestings, and collapsed states from user preferences.
          */
-
       }
       const instance = new ZentralTabGroups();
       window.Zentral.TabGroups = instance;

@@ -24,11 +24,19 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("apps/ZentralAppsInteractions", function ({ Services, shared, runtime, access }) {
-const { Constants, Core, createSVGElement, SVG_STRINGS, WELL_KNOWN_SERVICES } = shared;
-return {
-// Responsibility: ZentralAppsMenus
-setupContextMenu() {
+  window.ZentralModuleLoader.define(
+    "apps/ZentralAppsInteractions",
+    function ({ Services, shared, runtime, access }) {
+      const {
+        Constants,
+        Core,
+        createSVGElement,
+        SVG_STRINGS,
+        WELL_KNOWN_SERVICES,
+      } = shared;
+      return {
+        // Responsibility: ZentralAppsMenus
+        setupContextMenu() {
           let oldPopup = document.getElementById(
             "zen-apps-sidebar-tile-context",
           );
@@ -303,7 +311,7 @@ setupContextMenu() {
                 window.ZentralSettingsInstance.open();
             });
         },
-handleTabContextMenuCommand() {
+        handleTabContextMenuCommand() {
           const tab =
             typeof TabContextMenu !== "undefined" && TabContextMenu.contextTab
               ? TabContextMenu.contextTab
@@ -321,8 +329,8 @@ handleTabContextMenuCommand() {
           if (url !== "about:blank") this.addApp(url, title, icon);
         },
 
-// Responsibility: ZentralAppsShortcuts
-handleOutsideClick(e) {
+        // Responsibility: ZentralAppsShortcuts
+        handleOutsideClick(e) {
           if (
             !access.state.activeAppId ||
             access.state.isPinned ||
@@ -394,7 +402,7 @@ handleOutsideClick(e) {
           );
           this.closePanel();
         },
-isShortcutMatch(e, shortcutStr) {
+        isShortcutMatch(e, shortcutStr) {
           if (!shortcutStr || shortcutStr === "None") return false;
           const parts = shortcutStr.split("+").map((p) => p.trim());
           if (parts.length === 0) return false;
@@ -434,14 +442,17 @@ isShortcutMatch(e, shortcutStr) {
 
           return false;
         },
-handleInstaPeekKeyDown(e) {
+        handleInstaPeekKeyDown(e) {
           const shortcut = Core.getPref(
             Constants.Apps.PREF_INSTA_PEEK_SHORTCUT,
             "Alt+Q",
           );
           if (!shortcut || shortcut === "None") return;
 
-          if (!access.state.activeAppId || !access.dom.root?.hasAttribute("open"))
+          if (
+            !access.state.activeAppId ||
+            !access.dom.root?.hasAttribute("open")
+          )
             return;
 
           if (this.isShortcutMatch(e, shortcut)) {
@@ -460,7 +471,7 @@ handleInstaPeekKeyDown(e) {
             }
           }
         },
-handleInstaPeekKeyUp(e) {
+        handleInstaPeekKeyUp(e) {
           if (!access.state.isInstaPeeking) return;
 
           const shortcut = Core.getPref(
@@ -504,12 +515,12 @@ handleInstaPeekKeyUp(e) {
             this.endInstaPeek();
           }
         },
-handleInstaPeekBlur() {
+        handleInstaPeekBlur() {
           if (access.state.isInstaPeeking) {
             this.endInstaPeek();
           }
         },
-endInstaPeek() {
+        endInstaPeek() {
           if (access.state.isInstaPeeking) {
             access.state.isInstaPeeking = false;
             if (access.dom.root) {
@@ -517,7 +528,8 @@ endInstaPeek() {
               document.documentElement.removeAttribute("zentral-insta-peek");
             }
           }
-        }
-};
-});
+        },
+      };
+    },
+  );
 })();

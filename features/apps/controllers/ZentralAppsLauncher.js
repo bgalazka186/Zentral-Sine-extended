@@ -45,11 +45,19 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("apps/ZentralAppsLauncher", function ({ Services, shared, runtime, access }) {
-const { Constants, Core, createSVGElement, SVG_STRINGS, WELL_KNOWN_SERVICES } = shared;
-return {
-// Responsibility: ZentralAppsLauncher
-createContainers() {
+  window.ZentralModuleLoader.define(
+    "apps/ZentralAppsLauncher",
+    function ({ Services, shared, runtime, access }) {
+      const {
+        Constants,
+        Core,
+        createSVGElement,
+        SVG_STRINGS,
+        WELL_KNOWN_SERVICES,
+      } = shared;
+      return {
+        // Responsibility: ZentralAppsLauncher
+        createContainers() {
           if (!access.dom.grid) {
             access.dom.grid = document.createElement("div");
             access.dom.grid.id = "zen-apps-sidebar-grid";
@@ -642,7 +650,7 @@ createContainers() {
             access.dom.refreshBtn = refreshBtn;
           }
         },
-renderGrid() {
+        renderGrid() {
           if (!access.dom.grid) return;
           const oldAddBtn =
             document.querySelector(
@@ -951,7 +959,8 @@ renderGrid() {
             }
             if (
               access.dom.scrollBox &&
-              access.dom.scrollBox.scrollWidth > access.dom.scrollBox.clientWidth
+              access.dom.scrollBox.scrollWidth >
+                access.dom.scrollBox.clientWidth
             ) {
               access.dom.scrollBox.scrollLeft =
                 access.dom.scrollBox.scrollWidth -
@@ -960,7 +969,7 @@ renderGrid() {
             }
           });
         },
-renderUtilitySection() {
+        renderUtilitySection() {
           if (!access.dom.utilitySection || !access.dom.utilityRow) return;
           const row = access.dom.utilityRow;
           row.replaceChildren();
@@ -1140,7 +1149,7 @@ renderUtilitySection() {
             row.appendChild(slotEl);
           }
         },
-updateScrollMask() {
+        updateScrollMask() {
           const scrollBox = access.dom.scrollBox;
           if (!scrollBox) return;
 
@@ -1172,7 +1181,7 @@ updateScrollMask() {
           scrollBox.style.maskImage = mask;
           scrollBox.style.webkitMaskImage = mask;
         },
-repositionGrid() {
+        repositionGrid() {
           const grid = access.dom.grid;
           if (!grid) return;
           try {
@@ -1322,7 +1331,7 @@ repositionGrid() {
             console.warn("[ZentralApps] Failed to reposition grid", e);
           }
         },
-updateVerticalBarBounds() {
+        updateVerticalBarBounds() {
           const vb = access.dom.verticalBar;
           if (!vb || !this.isPlacementVerticalBar()) return;
 
@@ -1390,7 +1399,7 @@ updateVerticalBarBounds() {
           this.syncVerticalBarTheme();
           this.updateVerticalBarAddBtnPlacement();
         },
-updateVerticalBarAddBtnPlacement() {
+        updateVerticalBarAddBtnPlacement() {
           if (!this.isPlacementVerticalBar() || !access.dom.verticalBar) return;
           const vb = access.dom.verticalBar;
           const grid = access.dom.grid;
@@ -1436,7 +1445,7 @@ updateVerticalBarAddBtnPlacement() {
             }
           }
         },
-updateAutohideState() {
+        updateAutohideState() {
           const isAutohide =
             Core.getPref(Constants.Apps.PREF_AUTOHIDE, false) === true;
           const isCollapsed = this.isPhysicallySidebarCollapsed();
@@ -1452,7 +1461,8 @@ updateAutohideState() {
             isVerticalBar ? "vertical-bar" : "sidebar",
           );
           if (!activeAutohide) {
-            if (access.dom.grid) access.dom.grid.removeAttribute("data-revealed");
+            if (access.dom.grid)
+              access.dom.grid.removeAttribute("data-revealed");
             if (access.dom.verticalBar)
               access.dom.verticalBar.removeAttribute("data-revealed");
           }
@@ -1475,7 +1485,8 @@ updateAutohideState() {
             this._badgeSyncInitialized = true;
             this._badgeSyncHandler = (event) => {
               const browser = event.target?.linkedBrowser;
-              if (browser?._bgalazkaAppId) this.syncAllAppBadges(browser._bgalazkaAppId);
+              if (browser?._bgalazkaAppId)
+                this.syncAllAppBadges(browser._bgalazkaAppId);
             };
             window.addEventListener("TabSelect", this._badgeSyncHandler, {
               passive: true,
@@ -1488,7 +1499,7 @@ updateAutohideState() {
             this.ensureBadgeSyncLoop();
           }
         },
-applyHideUtilitySectionPref() {
+        applyHideUtilitySectionPref() {
           const hide =
             Core.getPref(Constants.Apps.PREF_HIDE_UTILITY_SECTION, false) ===
             true;
@@ -1507,14 +1518,15 @@ applyHideUtilitySectionPref() {
                 "none",
                 "important",
               );
-              if (access.dom.utilityRow) access.dom.utilityRow.replaceChildren();
+              if (access.dom.utilityRow)
+                access.dom.utilityRow.replaceChildren();
             } else {
               access.dom.utilitySection.style.removeProperty("display");
               this.renderUtilitySection();
             }
           }
         },
-setUtilityHovered(hovered) {
+        setUtilityHovered(hovered) {
           if (access.state.utilityCollapseTimer) {
             clearTimeout(access.state.utilityCollapseTimer);
             access.state.utilityCollapseTimer = null;
@@ -1533,7 +1545,7 @@ setUtilityHovered(hovered) {
             util.removeAttribute("data-utility-revealed");
           }
         },
-scheduleUtilityCollapse(delay = 350) {
+        scheduleUtilityCollapse(delay = 350) {
           if (access.state.utilityCollapseTimer)
             clearTimeout(access.state.utilityCollapseTimer);
           access.state.utilityCollapseTimer = setTimeout(() => {
@@ -1541,7 +1553,7 @@ scheduleUtilityCollapse(delay = 350) {
             this.setUtilityHovered(false);
           }, delay);
         },
-scheduleAutohideReveal(delay = 320) {
+        scheduleAutohideReveal(delay = 320) {
           if (access.state.autohideCollapseTimer) {
             clearTimeout(access.state.autohideCollapseTimer);
             access.state.autohideCollapseTimer = null;
@@ -1552,13 +1564,13 @@ scheduleAutohideReveal(delay = 320) {
             this.setAutohideHovered(true);
           }, delay);
         },
-cancelAutohideReveal() {
+        cancelAutohideReveal() {
           if (access.state.autohideRevealTimer) {
             clearTimeout(access.state.autohideRevealTimer);
             access.state.autohideRevealTimer = null;
           }
         },
-isAppPanelKeepingAppsRevealed() {
+        isAppPanelKeepingAppsRevealed() {
           return (
             !!access.state.activeAppId &&
             !(
@@ -1569,7 +1581,7 @@ isAppPanelKeepingAppsRevealed() {
             )
           );
         },
-syncPanelAutohideVisibility() {
+        syncPanelAutohideVisibility() {
           if (
             !this.isPlacementVerticalBar() ||
             document.documentElement.getAttribute("zentral-apps-autohide") !==
@@ -1581,7 +1593,7 @@ syncPanelAutohideVisibility() {
               !!access.dom.verticalBar?.matches(":hover"),
           );
         },
-setAutohideHovered(hovered) {
+        setAutohideHovered(hovered) {
           this.cancelAutohideReveal();
           if (access.state.autohideCollapseTimer) {
             clearTimeout(access.state.autohideCollapseTimer);
@@ -1603,7 +1615,7 @@ setAutohideHovered(hovered) {
             }
           }
         },
-scheduleAutohideCollapse(delay = 250) {
+        scheduleAutohideCollapse(delay = 250) {
           // Mousemove may request collapse every frame. For a hover-hidden
           // two-bar panel, keep the first deadline instead of postponing it
           // until the pointer stops moving. Sidebar timing stays unchanged.
@@ -1624,15 +1636,15 @@ scheduleAutohideCollapse(delay = 250) {
           }, delay);
         },
 
-// Responsibility: ZentralAppsAppearance
-_debouncedSyncTheme(delay = 32) {
+        // Responsibility: ZentralAppsAppearance
+        _debouncedSyncTheme(delay = 32) {
           if (this._syncThemeTimer) clearTimeout(this._syncThemeTimer);
           this._syncThemeTimer = setTimeout(() => {
             this._syncThemeTimer = null;
             this.syncVerticalBarTheme();
           }, delay);
         },
-syncVerticalBarTheme() {
+        syncVerticalBarTheme() {
           const vb = access.dom.verticalBar;
           if (!vb) return;
 
@@ -1815,7 +1827,8 @@ syncVerticalBarTheme() {
           }
 
           vb.style.removeProperty("--zen-theme-gradient-override");
-        }
-};
-});
+        },
+      };
+    },
+  );
 })();

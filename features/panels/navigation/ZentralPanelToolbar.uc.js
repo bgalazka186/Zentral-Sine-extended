@@ -1090,7 +1090,8 @@
     // Called from here instead, well after both consts exist, with the same
     // retry-until-ready pattern ensureMobileUaMenuItem() uses below, in case
     // #zen-app-panel-slider somehow isn't in the DOM yet at this point.
-    ctx.retryPanelTask("toolbar-ui", () => ctx.safeCall(ensureWebToolbar, "ensureWebToolbar"));
-
+    ctx.retryPanelTask("toolbar-ui", () =>
+      ctx.safeCall(ensureWebToolbar, "ensureWebToolbar"),
+    );
   });
 })();

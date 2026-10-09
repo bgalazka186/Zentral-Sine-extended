@@ -27,7 +27,6 @@
   transform: rotate(360deg) !important;
 }
 
-
 /* When Autohide is active in expanded vertical sidebar */
 :root[zentral-apps-autohide="true"]:not(
     [zentral-apps-placement="vertical-bar"]
@@ -47,7 +46,6 @@
     padding 0.24s cubic-bezier(0.25, 1, 0.5, 1),
     background-color 0.18s ease !important;
 }
-
 
 /* Scrollbox grid layout in Vertical Sidebar */
 :root:not([zentral-apps-placement="vertical-bar"])
@@ -76,7 +74,6 @@
   .zen-apps-scroll-box::-webkit-scrollbar {
   display: none !important;
 }
-
 
 /* Collapsed Strip State: Show 3 dots, hide all inner tiles and utility with Vertical Bar transition */
 :root[zentral-apps-autohide="true"]:not(
@@ -152,7 +149,6 @@
   max-height: 0 !important;
   overflow: hidden !important;
 }
-
 
 /* Expanded Grid State: Hide 3 dots, reveal the solid single-piece grid with exact dimensions */
 :root[zentral-apps-autohide="true"]:not(
@@ -276,7 +272,6 @@
     opacity 0.2s ease,
     visibility 0.24s ease !important;
 }
-
 
 /* Scoped to expanded / revealed state only in autohide */
 :root[zentral-apps-autohide="true"]:not([zentral-apps-hide-utility="true"])

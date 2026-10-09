@@ -20,10 +20,18 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("apps/ZentralAppModel", function ({ Services, shared, runtime, access }) {
-const { Constants, Core, createSVGElement, SVG_STRINGS, WELL_KNOWN_SERVICES } = shared;
-return {
-loadApps() {
+  window.ZentralModuleLoader.define(
+    "apps/ZentralAppModel",
+    function ({ Services, shared, runtime, access }) {
+      const {
+        Constants,
+        Core,
+        createSVGElement,
+        SVG_STRINGS,
+        WELL_KNOWN_SERVICES,
+      } = shared;
+      return {
+        loadApps() {
           access.state.apps = [];
           try {
             const str = Core.getPref(Constants.Apps.PREF_APPS);
@@ -78,7 +86,7 @@ loadApps() {
             console.warn("[ZentralApps] Failed to load apps pref:", e);
           }
         },
-saveApps() {
+        saveApps() {
           try {
             const clean = access.state.apps.map(
               ({ id, url, title, icon, width, preload, workspaceId }) => ({
@@ -96,7 +104,7 @@ saveApps() {
             console.warn("[ZentralApps] Failed to save apps pref:", e);
           }
         },
-loadUtilityOrder() {
+        loadUtilityOrder() {
           // LOW-02: UTILITY_SLOTS_COUNT is always 4 (defined constant); || 4 fallback was dead code.
           const slotCount = Constants.Apps.UTILITY_SLOTS_COUNT;
           try {
@@ -134,7 +142,7 @@ loadUtilityOrder() {
           defaultSlots[3] = "settings";
           access.state.utilitySlots = defaultSlots;
         },
-saveUtilityOrder() {
+        saveUtilityOrder() {
           try {
             Core.setPref(
               Constants.Apps.PREF_UTILITY_ORDER,
@@ -144,7 +152,7 @@ saveUtilityOrder() {
             console.warn("[ZentralApps] Failed to save utility order pref:", e);
           }
         },
-addApp(url, title, icon) {
+        addApp(url, title, icon) {
           const limit = Math.max(
             0,
             Math.min(
@@ -183,7 +191,7 @@ addApp(url, title, icon) {
           this.saveApps();
           this.renderGrid();
         },
-getZenWorkspacesList() {
+        getZenWorkspacesList() {
           const list = [];
           const seen = new Set();
           try {
@@ -222,7 +230,7 @@ getZenWorkspacesList() {
           }
           return list;
         },
-formatAppDisplayName(title, url = "") {
+        formatAppDisplayName(title, url = "") {
           let host = "";
           if (url) {
             try {
@@ -292,7 +300,8 @@ formatAppDisplayName(title, url = "") {
           }
 
           return raw || host || "App";
-        }
-};
-});
+        },
+      };
+    },
+  );
 })();

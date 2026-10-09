@@ -466,10 +466,14 @@
   overflow: hidden;
 }
 #zentral-settings-modal .zs-dialog[data-settings-organized="true"] > .zs-header,
-#zentral-settings-modal .zs-dialog[data-settings-organized="true"] > .zs-footer {
+#zentral-settings-modal
+  .zs-dialog[data-settings-organized="true"]
+  > .zs-footer {
   grid-column: 1 / -1;
 }
-#zentral-settings-modal .zs-dialog[data-settings-organized="true"] > .zs-tab-bar {
+#zentral-settings-modal
+  .zs-dialog[data-settings-organized="true"]
+  > .zs-tab-bar {
   grid-column: 1;
   grid-row: 2;
   display: flex !important;
@@ -497,13 +501,23 @@
   line-height: 1.3;
   border-radius: 6px !important;
 }
-#zentral-settings-modal .zs-dialog[data-settings-organized="true"] .zs-tab-btn[data-active="true"] {
-  background: color-mix(in srgb, var(--zen-primary-color, #6366f1) 20%, transparent) !important;
+#zentral-settings-modal
+  .zs-dialog[data-settings-organized="true"]
+  .zs-tab-btn[data-active="true"] {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #6366f1) 20%,
+    transparent
+  ) !important;
 }
-#zentral-settings-modal .zs-dialog[data-settings-organized="true"] .zs-tab-btn::after {
+#zentral-settings-modal
+  .zs-dialog[data-settings-organized="true"]
+  .zs-tab-btn::after {
   display: none;
 }
-#zentral-settings-modal .zs-dialog[data-settings-organized="true"] .zs-category-heading {
+#zentral-settings-modal
+  .zs-dialog[data-settings-organized="true"]
+  .zs-category-heading {
   flex: 0 0 auto !important;
   margin-top: 14px;
   padding: 4px 10px;
@@ -598,7 +612,9 @@
 
 /* The matrix moved from a narrow column to a full-width category. Its old
  * 420px clipped box cannot contain six rows of full-width square cells. */
-#zentral-settings-modal .zs-organized-content .zs-matrix-wrapper:not([data-hidden="true"]) {
+#zentral-settings-modal
+  .zs-organized-content
+  .zs-matrix-wrapper:not([data-hidden="true"]) {
   max-height: none !important;
   overflow: visible !important;
 }

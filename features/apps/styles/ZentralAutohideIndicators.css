@@ -34,10 +34,6 @@
   display: none !important;
 }
 
-
-
-
-
 /* Eye open/closed visibility for utility autohide button */
 :root[zentral-apps-autohide="true"] #zentral-utility-autohide-btn .zs-eye-open {
   display: none !important;

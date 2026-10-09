@@ -19,288 +19,328 @@
  */
 /* Canonical author-sheet source, mounted by its feature. */
 
+/* Suppress Native Firefox/Zen Tab Group Editor Popups */
+#tab-group-editor,
+#tabgroup-editor-panel,
+#tabGroupEditor,
+tabgroup-editor-panel,
+.tab-group-editor,
+#tabGroupContextMenu,
+tabgroup-meu,
+panel[id*="tab-group-editor"],
+panel[id*="tabgroup-editor"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  width: 0 !important;
+}
 
-        /* Suppress Native Firefox/Zen Tab Group Editor Popups */
-        #tab-group-editor,
-        #tabgroup-editor-panel,
-        #tabGroupEditor,
-        tabgroup-editor-panel,
-        .tab-group-editor,
-        #tabGroupContextMenu,
-        tabgroup-meu,
-        panel[id*="tab-group-editor"],
-        panel[id*="tabgroup-editor"] {
-          display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-          height: 0 !important;
-          width: 0 !important;
-        }
+/* Zentral Tooltip Styling (Matched to native Zen tab previews) */
+#zentral-tabgroup-tooltip {
+  --panel-background: transparent !important;
+  --panel-border-color: transparent !important;
+  background: transparent !important;
+  border: none !important;
+}
+#zentral-tabgroup-tooltip::part(content) {
+  border: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+#zentral-tabgroup-tooltip-container {
+  background: var(
+    --zen-colors-tertiary,
+    var(--arrowpanel-background, var(--tabpanels-background-color, #1e1e22))
+  ) !important;
+  color: var(
+    --zen-colors-text,
+    var(--arrowpanel-color, var(--in-content-page-color, #fbfbfe))
+  ) !important;
+  border: 1px solid
+    var(
+      --zen-colors-border,
+      var(
+        --arrowpanel-border-color,
+        color-mix(in srgb, currentColor 12%, rgba(255, 255, 255, 0.08))
+      )
+    ) !important;
+  border-radius: 12px !important;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.55),
+    0 0 0 1px color-mix(in srgb, currentColor 8%, transparent) !important;
+  padding: 6px !important;
+  gap: 2px !important;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+  max-height: 320px !important;
+}
+.zentral-tooltip-row {
+  position: relative !important;
+  padding: 6px 10px !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  border: 1px solid transparent !important;
+  box-sizing: border-box !important;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  max-width: 320px !important;
+}
+#tab-label-input {
+  background: rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid color-mix(in srgb, currentColor 40%, transparent) !important;
+  border-radius: 6px !important;
+  color: var(--zentral-tabgroup-contrast-color, #ffffff) !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  font-family: inherit !important;
+  text-align: center !important;
+  padding: 2px 6px !important;
+  margin: 0 !important;
+  outline: none !important;
+  width: 100% !important;
+  max-width: 180px !important;
+  box-sizing: border-box !important;
+  order: 2 !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+.zentral-tooltip-row:hover {
+  background-color: color-mix(
+    in srgb,
+    currentColor 10%,
+    transparent
+  ) !important;
+}
+.zentral-tooltip-row[data-active="true"] {
+  background-color: color-mix(
+    in srgb,
+    var(--zen-primary-color, #707ac2) 24%,
+    rgba(255, 255, 255, 0.12)
+  ) !important;
+  border: 1px solid
+    color-mix(in srgb, var(--zen-primary-color, #707ac2) 45%, transparent) !important;
+  opacity: 1 !important;
+}
+.zentral-tooltip-row[data-active="true"] .zentral-tooltip-title {
+  color: var(--zen-primary-color, currentColor) !important;
+  font-weight: 600 !important;
+}
+.zentral-tooltip-row[data-unloaded="true"]:not([data-active="true"]) {
+  opacity: 0.55 !important;
+}
+.zentral-tooltip-row[data-unloaded="true"]:not([data-active="true"]):hover {
+  opacity: 0.88 !important;
+}
+.zentral-tooltip-close-btn {
+  appearance: none !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 6px !important;
+  color: inherit !important;
+  padding: 3px !important;
+  width: 22px !important;
+  height: 22px !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease !important;
+  flex-shrink: 0 !important;
+  margin-left: auto !important;
+}
+.zentral-tooltip-row:hover .zentral-tooltip-close-btn {
+  opacity: 0.65 !important;
+  pointer-events: auto !important;
+}
+.zentral-tooltip-close-btn:hover {
+  opacity: 1 !important;
+  background-color: rgba(255, 77, 77, 0.22) !important;
+  color: #ff5555 !important;
+}
+.zentral-tooltip-close-btn svg {
+  width: 12px !important;
+  height: 12px !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 2 !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+  display: block !important;
+}
+.zentral-tooltip-text-col {
+  display: flex !important;
+  flex-direction: column !important;
+  min-width: 0 !important;
+  flex: 1 !important;
+}
+.zentral-tooltip-title {
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  color: inherit !important;
+}
+.zentral-tooltip-domain {
+  font-size: 10.5px !important;
+  opacity: 0.65 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  margin-top: 1px !important;
+  color: inherit !important;
+}
 
-        /* Zentral Tooltip Styling (Matched to native Zen tab previews) */
-        #zentral-tabgroup-tooltip {
-          --panel-background: transparent !important;
-          --panel-border-color: transparent !important;
-          background: transparent !important;
-          border: none !important;
-        }
-        #zentral-tabgroup-tooltip::part(content) {
-          border: none !important;
-          background: transparent !important;
-          padding: 0 !important;
-          box-shadow: none !important;
-        }
-        #zentral-tabgroup-tooltip-container {
-          background: var(--zen-colors-tertiary, var(--arrowpanel-background, var(--tabpanels-background-color, #1e1e22))) !important;
-          color: var(--zen-colors-text, var(--arrowpanel-color, var(--in-content-page-color, #fbfbfe))) !important;
-          border: 1px solid var(--zen-colors-border, var(--arrowpanel-border-color, color-mix(in srgb, currentColor 12%, rgba(255, 255, 255, 0.08)))) !important;
-          border-radius: 12px !important;
-          box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px color-mix(in srgb, currentColor 8%, transparent) !important;
-          padding: 6px !important;
-          gap: 2px !important;
-          font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-          font-size: 13px !important;
-          line-height: 1.4 !important;
-          max-height: 320px !important;
-        }
-        .zentral-tooltip-row {
-          position: relative !important;
-          padding: 6px 10px !important;
-          border-radius: 8px !important;
-          cursor: pointer !important;
-          border: 1px solid transparent !important;
-          box-sizing: border-box !important;
-          transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease !important;
-          display: flex !important;
-          align-items: center !important;
-          gap: 10px !important;
-          max-width: 320px !important;
-        }
-        #tab-label-input {
-          background: rgba(0, 0, 0, 0.3) !important;
-          border: 1px solid color-mix(in srgb, currentColor 40%, transparent) !important;
-          border-radius: 6px !important;
-          color: var(--zentral-tabgroup-contrast-color, #ffffff) !important;
-          font-size: 13.5px !important;
-          font-weight: 600 !important;
-          font-family: inherit !important;
-          text-align: center !important;
-          padding: 2px 6px !important;
-          margin: 0 !important;
-          outline: none !important;
-          width: 100% !important;
-          max-width: 180px !important;
-          box-sizing: border-box !important;
-          order: 2 !important;
-          box-shadow: inset 0 1px 3px rgba(0,0,0,0.3) !important;
-        }
-        .zentral-tooltip-row:hover {
-          background-color: color-mix(in srgb, currentColor 10%, transparent) !important;
-        }
-        .zentral-tooltip-row[data-active="true"] {
-          background-color: color-mix(in srgb, var(--zen-primary-color, #707ac2) 24%, rgba(255, 255, 255, 0.12)) !important;
-          border: 1px solid color-mix(in srgb, var(--zen-primary-color, #707ac2) 45%, transparent) !important;
-          opacity: 1 !important;
-        }
-        .zentral-tooltip-row[data-active="true"] .zentral-tooltip-title {
-          color: var(--zen-primary-color, currentColor) !important;
-          font-weight: 600 !important;
-        }
-        .zentral-tooltip-row[data-unloaded="true"]:not([data-active="true"]) {
-          opacity: 0.55 !important;
-        }
-        .zentral-tooltip-row[data-unloaded="true"]:not([data-active="true"]):hover {
-          opacity: 0.88 !important;
-        }
-        .zentral-tooltip-close-btn {
-          appearance: none !important;
-          background: transparent !important;
-          border: none !important;
-          border-radius: 6px !important;
-          color: inherit !important;
-          padding: 3px !important;
-          width: 22px !important;
-          height: 22px !important;
-          cursor: pointer !important;
-          display: flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-          transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease !important;
-          flex-shrink: 0 !important;
-          margin-left: auto !important;
-        }
-        .zentral-tooltip-row:hover .zentral-tooltip-close-btn {
-          opacity: 0.65 !important;
-          pointer-events: auto !important;
-        }
-        .zentral-tooltip-close-btn:hover {
-          opacity: 1 !important;
-          background-color: rgba(255, 77, 77, 0.22) !important;
-          color: #ff5555 !important;
-        }
-        .zentral-tooltip-close-btn svg {
-          width: 12px !important;
-          height: 12px !important;
-          fill: none !important;
-          stroke: currentColor !important;
-          stroke-width: 2 !important;
-          stroke-linecap: round !important;
-          stroke-linejoin: round !important;
-          display: block !important;
-        }
-        .zentral-tooltip-text-col {
-          display: flex !important;
-          flex-direction: column !important;
-          min-width: 0 !important;
-          flex: 1 !important;
-        }
-        .zentral-tooltip-title {
-          font-size: 12.5px !important;
-          font-weight: 500 !important;
-          white-space: nowrap !important;
-          overflow: hidden !important;
-          text-overflow: ellipsis !important;
-          color: inherit !important;
-        }
-        .zentral-tooltip-domain {
-          font-size: 10.5px !important;
-          opacity: 0.65 !important;
-          white-space: nowrap !important;
-          overflow: hidden !important;
-          text-overflow: ellipsis !important;
-          margin-top: 1px !important;
-          color: inherit !important;
-        }
+/* Zentral Color Picker Panel Styling */
+#zentral-group-color-picker,
+#zentral-group-color-picker::part(content),
+#zentral-group-color-picker::part(arrow),
+panel#zentral-group-color-picker,
+#zentral-group-color-picker .panel-arrowcontent,
+#zentral-group-color-picker .panel-subview-body {
+  --panel-background: transparent !important;
+  --panel-border-color: transparent !important;
+  --panel-box-shadow: none !important;
+  --panel-padding: 0 !important;
+  --arrowpanel-background: transparent !important;
+  --arrowpanel-border-color: transparent !important;
+  --arrowpanel-border-radius: 0px !important;
+  --arrowpanel-borderRadius: 0px !important;
+  --arrowpanel-box-shadow: none !important;
+  --arrowpanel-padding: 0 !important;
+  --arrowpanel-margin: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
 
-        /* Zentral Color Picker Panel Styling */
-        #zentral-group-color-picker,
-        #zentral-group-color-picker::part(content),
-        #zentral-group-color-picker::part(arrow),
-        panel#zentral-group-color-picker,
-        #zentral-group-color-picker .panel-arrowcontent,
-        #zentral-group-color-picker .panel-subview-body {
-          --panel-background: transparent !important;
-          --panel-border-color: transparent !important;
-          --panel-box-shadow: none !important;
-          --panel-padding: 0 !important;
-          --arrowpanel-background: transparent !important;
-          --arrowpanel-border-color: transparent !important;
-          --arrowpanel-border-radius: 0px !important;
-          --arrowpanel-borderRadius: 0px !important;
-          --arrowpanel-box-shadow: none !important;
-          --arrowpanel-padding: 0 !important;
-          --arrowpanel-margin: 0 !important;
-          border: none !important;
-          background: transparent !important;
-          background-color: transparent !important;
-          box-shadow: none !important;
-          outline: none !important;
-          padding: 0 !important;
-          margin: 0 !important;
-        }
+.zentral-tg-cp-box {
+  padding: 12px 14px 14px 14px !important;
+  gap: 10px !important;
+  background: #1e1e24 !important;
+  color: var(--in-content-page-color, #fbfbfe) !important;
+  border: 1px solid
+    color-mix(in srgb, currentColor 14%, rgba(255, 255, 255, 0.12)) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75) !important;
+  width: 184px !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  overflow: visible !important;
+}
 
-        .zentral-tg-cp-box {
-          padding: 12px 14px 14px 14px !important;
-          gap: 10px !important;
-          background: #1e1e24 !important;
-          color: var(--in-content-page-color, #fbfbfe) !important;
-          border: 1px solid color-mix(in srgb, currentColor 14%, rgba(255, 255, 255, 0.12)) !important;
-          border-radius: 18px !important;
-          box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75) !important;
-          width: 184px !important;
-          box-sizing: border-box !important;
-          margin: 0 !important;
-          overflow: visible !important;
-        }
+.zentral-color-swatch {
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 50% !important;
+  cursor: pointer !important;
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent) !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15) !important;
+  transition:
+    transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.15s ease !important;
+}
 
-        .zentral-color-swatch {
-          width: 24px !important;
-          height: 24px !important;
-          border-radius: 50% !important;
-          cursor: pointer !important;
-          border: 1px solid color-mix(in srgb, currentColor 15%, transparent) !important;
-          box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15) !important;
-          transition: transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.15s ease !important;
-        }
+.zentral-color-swatch:hover {
+  transform: scale(1.15) !important;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35) !important;
+  z-index: 2 !important;
+}
 
-        .zentral-color-swatch:hover {
-          transform: scale(1.15) !important;
-          box-shadow: 0 4px 10px rgba(0,0,0,0.35) !important;
-          z-index: 2 !important;
-        }
+.zentral-tg-btn {
+  flex: 1 !important;
+  padding: 6px 8px !important;
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent) !important;
+  background: color-mix(in srgb, currentColor 8%, transparent) !important;
+  color: inherit !important;
+  cursor: pointer !important;
+  border-radius: 8px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  transition: all 0.15s ease !important;
+  outline: none !important;
+}
 
-        .zentral-tg-btn {
-          flex: 1 !important;
-          padding: 6px 8px !important;
-          border: 1px solid color-mix(in srgb, currentColor 14%, transparent) !important;
-          background: color-mix(in srgb, currentColor 8%, transparent) !important;
-          color: inherit !important;
-          cursor: pointer !important;
-          border-radius: 8px !important;
-          font-size: 11px !important;
-          font-weight: 500 !important;
-          transition: all 0.15s ease !important;
-          outline: none !important;
-        }
+.zentral-tg-btn:hover {
+  background: color-mix(in srgb, currentColor 14%, transparent) !important;
+  border-color: color-mix(in srgb, currentColor 22%, transparent) !important;
+}
 
-        .zentral-tg-btn:hover {
-          background: color-mix(in srgb, currentColor 14%, transparent) !important;
-          border-color: color-mix(in srgb, currentColor 22%, transparent) !important;
-        }
+.zentral-tg-btn:active {
+  transform: scale(0.97) !important;
+}
 
-        .zentral-tg-btn:active {
-          transform: scale(0.97) !important;
-        }
+.zentral-tg-input {
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  padding: 5px 6px !important;
+  border-radius: 8px !important;
+  background: color-mix(in srgb, currentColor 8%, transparent) !important;
+  color: inherit !important;
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent) !important;
+  text-align: center !important;
+  outline: none !important;
+  transition: all 0.15s ease !important;
+}
 
-        .zentral-tg-input {
-          font-size: 11px !important;
-          font-weight: 500 !important;
-          padding: 5px 6px !important;
-          border-radius: 8px !important;
-          background: color-mix(in srgb, currentColor 8%, transparent) !important;
-          color: inherit !important;
-          border: 1px solid color-mix(in srgb, currentColor 14%, transparent) !important;
-          text-align: center !important;
-          outline: none !important;
-          transition: all 0.15s ease !important;
-        }
+.zentral-tg-input:focus {
+  border-color: var(--zen-primary-color, #70a0ff) !important;
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--zen-primary-color, #70a0ff) 25%, transparent) !important;
+}
 
-        .zentral-tg-input:focus {
-          border-color: var(--zen-primary-color, #70a0ff) !important;
-          box-shadow: 0 0 0 2px color-mix(in srgb, var(--zen-primary-color, #70a0ff) 25%, transparent) !important;
-        }
+.zentral-tg-drag-handle {
+  width: 100% !important;
+  height: 18px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: grab !important;
+  margin-top: -2px !important;
+  margin-bottom: 2px !important;
+  user-select: none !important;
+  -moz-user-select: none !important;
+}
 
-        .zentral-tg-drag-handle {
-          width: 100% !important;
-          height: 18px !important;
-          display: flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-          cursor: grab !important;
-          margin-top: -2px !important;
-          margin-bottom: 2px !important;
-          user-select: none !important;
-          -moz-user-select: none !important;
-        }
+.zentral-tg-drag-handle:active {
+  cursor: grabbing !important;
+}
 
-        .zentral-tg-drag-handle:active {
-          cursor: grabbing !important;
-        }
+.zentral-tg-drag-pill {
+  width: 32px !important;
+  height: 4px !important;
+  border-radius: 2px !important;
+  background: color-mix(in srgb, currentColor 22%, transparent) !important;
+  transition:
+    background 0.15s ease,
+    width 0.15s ease !important;
+  pointer-events: none !important;
+}
 
-        .zentral-tg-drag-pill {
-          width: 32px !important;
-          height: 4px !important;
-          border-radius: 2px !important;
-          background: color-mix(in srgb, currentColor 22%, transparent) !important;
-          transition: background 0.15s ease, width 0.15s ease !important;
-          pointer-events: none !important;
-        }
-
-        .zentral-tg-drag-handle:hover .zentral-tg-drag-pill {
-          background: color-mix(in srgb, currentColor 45%, transparent) !important;
-          width: 40px !important;
-        }
-      
+.zentral-tg-drag-handle:hover .zentral-tg-drag-pill {
+  background: color-mix(in srgb, currentColor 45%, transparent) !important;
+  width: 40px !important;
+}

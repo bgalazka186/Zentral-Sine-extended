@@ -6,11 +6,11 @@ Start at `ZentralCornerPanels.uc.js`. Required panel generator part. Owns Essent
 
 Send this folder for a change confined to its behavior. Include the specific outside collaborator below only if the issue crosses that interface. Each source header explains its callers, contracts and cleanup. Folder ownership does not make every internal controller optional or independently installable.
 
-| File | Responsibility |
-| --- | --- |
-| `ZentralCornerPanels.css` | Essential corner tiles and their panel interaction visuals. |
+| File                        | Responsibility                                                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `ZentralCornerPanels.css`   | Essential corner tiles and their panel interaction visuals.                                                                          |
 | `ZentralCornerPanels.uc.js` | Creates Essential-tab corner tiles, panel linkage and background loading, manages linked Triple View pairs and tile input isolation. |
-| `settings.json` | Settings schema and category/section metadata owned by corner-panels. |
+| `settings.json`             | Settings schema and category/section metadata owned by corner-panels.                                                                |
 
 ## Outside collaborators
 

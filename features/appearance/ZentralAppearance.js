@@ -556,6 +556,19 @@
         document.getElementById("zs-panel-extension-look")?._syncLook?.();
     }
 
-return { LOOK_GROUP_PREFS, LOOK_PREFS, LOOK_DEFAULTS, LOOK_THEMES, LOOK_KEYS, LOOK_TRANSPARENCY_KEYS, LOOK_COLORS, LOOK_ENUMS, LOOK_BOUNDS, applyLook, syncChangedSetting, syncAppearanceAfterImport };
-});
+    return {
+      LOOK_GROUP_PREFS,
+      LOOK_PREFS,
+      LOOK_DEFAULTS,
+      LOOK_THEMES,
+      LOOK_KEYS,
+      LOOK_TRANSPARENCY_KEYS,
+      LOOK_COLORS,
+      LOOK_ENUMS,
+      LOOK_BOUNDS,
+      applyLook,
+      syncChangedSetting,
+      syncAppearanceAfterImport,
+    };
+  });
 })();

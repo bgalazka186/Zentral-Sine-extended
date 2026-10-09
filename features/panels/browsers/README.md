@@ -6,11 +6,11 @@ Start at `ZentralBrowserIntegrations.uc.js`. Required panel generator part. Owns
 
 Send this folder for a change confined to its behavior. Include the specific outside collaborator below only if the issue crosses that interface. Each source header explains its callers, contracts and cleanup. Folder ownership does not make every internal controller optional or independently installable.
 
-| File | Responsibility |
-| --- | --- |
-| `ZentralBrowserIntegrations.css` | Container/mobile-UA/add-on host controls and browser integration presentation. |
+| File                               | Responsibility                                                                                                                        |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `ZentralBrowserIntegrations.css`   | Container/mobile-UA/add-on host controls and browser integration presentation.                                                        |
 | `ZentralBrowserIntegrations.uc.js` | Owns containers/mobile user agent, add-on real-tab host records/folder, browser adoption/removal and docshell/render activity policy. |
-| `settings.json` | Settings schema and category/section metadata owned by browser-integrations. |
+| `settings.json`                    | Settings schema and category/section metadata owned by browser-integrations.                                                          |
 
 ## Outside collaborators
 

@@ -46,7 +46,6 @@ tab-group.zentral-standard > .tab-group-label-container {
   overflow: visible !important;
 }
 
-
 /* Extension Shelf retired */
 tab-group.zentral-standard > .tab-group-label-container::before {
   display: none !important;
@@ -56,7 +55,6 @@ tab-group.zentral-standard > .tab-group-label-container::before {
   opacity: 0 !important;
   pointer-events: none !important;
 }
-
 
 /* Title Card (Left Sidebar default: 100% full-width, right-aligned content facing webpage) */
 tab-group.zentral-standard
@@ -89,7 +87,6 @@ tab-group.zentral-standard
     border-radius 0.2s ease !important;
 }
 
-
 /* Nested Groups on Left Sidebar: 8px compact stepped indentation on the RIGHT (facing webpage content) */
 :is(
     tab-group.zentral-standard tab-group.zentral-standard,
@@ -103,7 +100,6 @@ tab-group.zentral-standard
   width: calc(100% - 8px) !important;
   min-width: calc(100% - 8px) !important;
 }
-
 
 #zentral-group-color-picker,
 #zentral-group-color-picker::part(content),
@@ -131,7 +127,6 @@ panel#zentral-group-color-picker,
   appearance: none !important;
 }
 
-
 .zentral-tg-cp-box {
   padding: 12px 14px 14px 14px !important;
   gap: 10px !important;
@@ -146,14 +141,12 @@ panel#zentral-group-color-picker,
   overflow: visible !important;
 }
 
-
 /* Right Sidebar Mode (Sidebar on Right side of screen -> Outer edge is on RIGHT, content on LEFT) */
 :is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
   tab-group.zentral-standard
   > .tab-group-label-container {
   justify-content: flex-start !important;
 }
-
 
 html[zen-sidebar-right="true"]
   tab-group.zentral-standard
@@ -171,7 +164,6 @@ html[zen-right-side="true"]
   min-width: 100% !important;
 }
 
-
 :is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
   :is(
     tab-group.zentral-standard tab-group.zentral-standard,
@@ -186,7 +178,6 @@ html[zen-right-side="true"]
   min-width: calc(100% - 8px) !important;
 }
 
-
 html[zen-sidebar-right="true"]
   tab-group.zentral-standard
   > .tab-group-label-container::before,
@@ -196,7 +187,6 @@ html[zen-right-side="true"]
   display: none !important;
   content: none !important;
 }
-
 
 /* Hover State Highlights for Full-Width Group Card */
 tab-group.zentral-standard
@@ -210,14 +200,12 @@ tab-group.zentral-standard
   border-radius: 8px !important;
 }
 
-
 :is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
   tab-group.zentral-standard
   > .tab-group-label-container:is(:hover, :has(tab:hover))
   .zentral-tab-title-wrapper {
   border-radius: 8px !important;
 }
-
 
 html[zentral-label-opacity-below-85="true"]
   tab-group.zentral-standard
@@ -230,7 +218,6 @@ html[zentral-label-opacity-below-85="true"]
   border-radius: 8px !important;
 }
 
-
 html[zentral-label-opacity-below-85="true"]:is(
     [zen-sidebar-right="true"],
     [zen-right-side="true"]
@@ -240,7 +227,6 @@ html[zentral-label-opacity-below-85="true"]:is(
   .zentral-tab-title-wrapper {
   border-radius: 8px !important;
 }
-
 
 /* Label text - Dynamically Auto-Contrast (Black or White) based on Label Color */
 /* Left Sidebar: Text is order 1, Indicator is order 2 (closest to right / webpage content) */
@@ -273,7 +259,6 @@ tab-group.zentral-standard > .tab-group-label-container .tab-group-label {
   transition: color 0.15s ease !important;
 }
 
-
 /* Right Sidebar: Indicator is order 1 (closest to left / webpage content), Text is order 2 */
 :is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
   #tabbrowser-tabs
@@ -284,7 +269,6 @@ tab-group.zentral-standard > .tab-group-label-container .tab-group-label {
   order: 2 !important;
   margin: -2px 0 0 6px !important;
 }
-
 
 /* Sub-Groups Counter Badge */
 .zentral-subgroups-badge {
@@ -308,7 +292,6 @@ tab-group.zentral-standard > .tab-group-label-container .tab-group-label {
   transition: opacity 0.15s ease !important;
 }
 
-
 /* Right Sidebar: Place badge at the far right edge (opposite from left-aligned name) */
 :is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
   #tabbrowser-tabs
@@ -320,14 +303,12 @@ tab-group.zentral-standard > .tab-group-label-container .tab-group-label {
   margin-right: 0 !important;
 }
 
-
 /* Reveal ONLY when the parent group is collapsed and has sub-groups */
 tab-group[collapsed="true"][data-has-subgroups]
   > .tab-group-label-container
   .zentral-subgroups-badge {
   display: inline-flex !important;
 }
-
 
 /* Hide in collapsed sidebar mode */
 :is(
@@ -340,7 +321,6 @@ tab-group[collapsed="true"][data-has-subgroups]
   .zentral-subgroups-badge {
   display: none !important;
 }
-
 
 /* Icon container within title wrapper */
 /* Left Sidebar: Order 2 (closer to right / webpage content) */
@@ -364,7 +344,6 @@ tab-group[collapsed="true"][data-has-subgroups]
   overflow: visible !important;
 }
 
-
 /* Right Sidebar: Order 1 (closer to left / webpage content) */
 :is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
   #tabbrowser-tabs
@@ -376,7 +355,6 @@ tab-group[collapsed="true"][data-has-subgroups]
   .tab-group-icon-container {
   order: 1 !important;
 }
-
 
 /* Circular Group State Indicator - Dynamically Auto-Contrast (Black or White) based on Label Color */
 #tabbrowser-tabs tab-group > .tab-group-label-container .tab-group-icon,
@@ -416,7 +394,6 @@ tab-group[collapsed] .tab-group-icon {
   overflow: visible !important;
 }
 
-
 /* 1. Closed State: Small Solid full dot (Fixed size, pure opacity fade - zero zoom bounce) */
 tab-group .tab-group-icon::before {
   content: "" !important;
@@ -433,13 +410,11 @@ tab-group .tab-group-icon::before {
   pointer-events: none !important;
 }
 
-
 tab-group[collapsed] .tab-group-icon::before {
   opacity: 1 !important;
   transform: none !important;
   transition: opacity 0.2s ease !important;
 }
-
 
 /* Complete obliteration of native image.group-marker and children inside .tab-group-icon on tabstrip ONLY */
 tab-group
@@ -469,7 +444,6 @@ tab-group
   appearance: none !important;
 }
 
-
 tab-group .group-marker::before,
 tab-group .group-marker::after,
 tab-group[collapsed] .group-marker::before,
@@ -480,7 +454,6 @@ tab-group[collapsed] .group-marker::after,
   content: none !important;
   border: none !important;
 }
-
 
 /* 2. Open State: Concentric Circles with central dot (Zen logo style) */
 tab-group .tab-group-icon::after {
@@ -509,7 +482,6 @@ tab-group .tab-group-icon::after {
   overflow: visible !important;
 }
 
-
 tab-group[collapsed] .tab-group-icon::after {
   opacity: 0 !important;
   transform: scale(0.41) !important;
@@ -517,7 +489,6 @@ tab-group[collapsed] .tab-group-icon::after {
     opacity 0.18s ease,
     transform 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
-
 
 /* Hide indicator icon completely when user disables Group Indicator in Zentral Settings */
 :is(html, :root, #main-window)[zentral-show-chevron="false"]
@@ -543,7 +514,6 @@ tab-group[collapsed] .tab-group-icon::after {
   pointer-events: none !important;
 }
 
-
 :is(html, :root, #main-window)[zentral-show-chevron="false"]
   tab-group
   :is(.tab-group-icon, .tab-group-icon-container)::before,
@@ -555,14 +525,12 @@ tab-group[collapsed] .tab-group-icon::after {
   opacity: 0 !important;
 }
 
-
 /* Chevron Indicator Option */
 :is(html, :root, #main-window)[zentral-indicator-type="chevron"]
   tab-group
   .tab-group-icon::before {
   display: none !important;
 }
-
 
 :is(html, :root, #main-window)[zentral-indicator-type="chevron"]
   tab-group
@@ -591,7 +559,6 @@ tab-group[collapsed] .tab-group-icon::after {
   pointer-events: none !important;
 }
 
-
 :is(html, :root, #main-window)[zentral-indicator-type="chevron"]
   tab-group[collapsed]
   .tab-group-icon::after {
@@ -602,7 +569,6 @@ tab-group[collapsed] .tab-group-icon::after {
     opacity 0.18s ease !important;
 }
 
-
 /* Hierarchy & Nested Groups Indentation (Mirrored for Left vs Right Sidebar) */
 tab-group.zentral-standard tab-group.zentral-standard {
   margin-right: 8px !important;
@@ -611,18 +577,15 @@ tab-group.zentral-standard tab-group.zentral-standard {
   width: calc(100% - 8px) !important;
 }
 
-
 /* No vertical line connecting parent label to nested group header */
 tab-group.zentral-standard tab-group.zentral-standard::before {
   display: none !important;
   content: none !important;
 }
 
-
 .zentral-group-initials {
   display: none !important;
 }
-
 
 /* Top-level group tab container: flush margin and no guide line */
 tab-group.zentral-standard > .tab-group-container {
@@ -631,12 +594,10 @@ tab-group.zentral-standard > .tab-group-container {
   margin: 0 !important;
 }
 
-
 tab-group.zentral-standard > .tab-group-container::after {
   display: none !important;
   content: none !important;
 }
-
 
 /* Nested Tab Group Container: 8px indented on the RIGHT (facing webpage content) */
 tab-group.zentral-standard tab-group.zentral-standard .tab-group-container {
@@ -647,7 +608,6 @@ tab-group.zentral-standard tab-group.zentral-standard .tab-group-container {
   margin-inline-start: 0 !important;
   margin-inline-end: 8px !important;
 }
-
 
 /* Vertical Guide Line: Only connects the nested label with its own tabs, using the nested label's color */
 tab-group.zentral-standard
@@ -672,7 +632,6 @@ tab-group.zentral-standard
   opacity: 0.9 !important;
 }
 
-
 /* Right Sidebar Mode Overrides (Outer edge is on the RIGHT, webpage content on LEFT) */
 :is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
   tab-group.zentral-standard
@@ -680,7 +639,6 @@ tab-group.zentral-standard
   margin-left: 8px !important;
   margin-right: 0 !important;
 }
-
 
 :is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
   tab-group.zentral-standard
@@ -692,7 +650,6 @@ tab-group.zentral-standard
   margin-inline-end: 0 !important;
 }
 
-
 :is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
   tab-group.zentral-standard
   tab-group.zentral-standard
@@ -701,11 +658,9 @@ tab-group.zentral-standard
   right: auto !important;
 }
 
-
 tab-group.zentral-standard[collapsed] .tab-group-container::after {
   display: none !important;
 }
-
 
 tab-group.zentral-standard .tab-group-container tab,
 tab-group.zentral-standard .tab-group-container tab-group {
@@ -713,7 +668,6 @@ tab-group.zentral-standard .tab-group-container tab-group {
     max-height 0.15s ease,
     opacity 0.15s ease !important;
 }
-
 
 tab-group.zentral-standard[collapsed] .tab-group-container tab:not([selected]),
 tab-group.zentral-standard[collapsed] .tab-group-container tab-group {
@@ -727,7 +681,6 @@ tab-group.zentral-standard[collapsed] .tab-group-container tab-group {
   pointer-events: none !important;
   overflow: hidden !important;
 }
-
 
 /* Hide tree guide lines and native pseudo-elements when a tab group is collapsed/closed or in Collapsed Sidebar Mode */
 tab-group[collapsed] .tab-group-container::after,
@@ -779,7 +732,6 @@ html[zen-sidebar-collapsed="true"]
   opacity: 0 !important;
 }
 
-
 /* Collapsed Sidebar Mode Styling */
 :is(
     html[zentral-sidebar-collapsed="true"],
@@ -798,7 +750,6 @@ html[zen-sidebar-collapsed="true"]
   max-height: var(--tab-min-height, 36px) !important;
   box-sizing: border-box !important;
 }
-
 
 /* Disable Chevrons completely in Collapsed Sidebar Mode */
 :is(
@@ -820,7 +771,6 @@ html[zen-sidebar-collapsed="true"]
   pointer-events: none !important;
 }
 
-
 /* Hide Expanded Mode Label Title text in Collapsed Sidebar Mode */
 :is(
     html[zentral-sidebar-collapsed="true"],
@@ -832,7 +782,6 @@ html[zen-sidebar-collapsed="true"]
   .tab-group-label {
   display: none !important;
 }
-
 
 /* Title Wrapper in Collapsed Sidebar Mode: Left-align content & constrain within rounded pill */
 :is(
@@ -847,7 +796,6 @@ html[zen-sidebar-collapsed="true"]
   padding: 0 4px 0 6px !important;
   overflow: hidden !important;
 }
-
 
 /* Collapsed Label Text & Marquee Shell: Starts from the very first letter (never cut off) */
 :is(
@@ -884,7 +832,6 @@ html[zen-sidebar-collapsed="true"]
   );
 }
 
-
 /* Marquee Track (Resting: Starts at x=0 showing first letters cleanly) */
 .zentral-group-initials .zentral-marquee-track {
   display: inline-flex !important;
@@ -896,7 +843,6 @@ html[zen-sidebar-collapsed="true"]
   transform: translateX(0);
 }
 
-
 .zentral-group-initials .zentral-marquee-item {
   display: inline-flex !important;
   align-items: center !important;
@@ -904,12 +850,10 @@ html[zen-sidebar-collapsed="true"]
   flex-shrink: 0 !important;
 }
 
-
 .zentral-group-initials .zentral-marquee-text {
   white-space: nowrap !important;
   display: inline-block !important;
 }
-
 
 .zentral-group-initials .zentral-marquee-spacer {
   display: none !important;
@@ -918,11 +862,9 @@ html[zen-sidebar-collapsed="true"]
   font-size: 9px !important;
 }
 
-
 .zentral-group-initials .zentral-marquee-item:nth-child(2) {
   display: none !important;
 }
-
 
 /* On Hover: Trigger Continuous Marquee Carousel if overflowing */
 :is(
@@ -948,7 +890,6 @@ html[zen-sidebar-collapsed="true"]
   animation-delay: 400ms !important;
 }
 
-
 :is(
     html[zentral-sidebar-collapsed="true"],
     html[zen-sidebar-collapsed="true"],
@@ -969,7 +910,6 @@ html[zen-sidebar-collapsed="true"]
   .zentral-marquee-spacer {
   display: inline-block !important;
 }
-
 
 :is(
     html[zentral-sidebar-collapsed="true"],
@@ -992,7 +932,6 @@ html[zen-sidebar-collapsed="true"]
   display: inline-flex !important;
 }
 
-
 @keyframes zentral-collapsed-marquee {
   0% {
     transform: translateX(0%);
@@ -1001,7 +940,6 @@ html[zen-sidebar-collapsed="true"]
     transform: translateX(-50%);
   }
 }
-
 
 /* ===========================================================================
    Zentral - Tab Group Thumbnail Popup Styles
@@ -1023,7 +961,6 @@ html[zen-sidebar-collapsed="true"]
     opacity 0.15s ease !important;
 }
 
-
 .zentral-tooltip-row:hover {
   background-color: color-mix(
     in srgb,
@@ -1031,7 +968,6 @@ html[zen-sidebar-collapsed="true"]
     transparent
   ) !important;
 }
-
 
 /* Active Tab in Thumbnail Preview */
 .zentral-tooltip-row[data-active="true"] {
@@ -1045,23 +981,19 @@ html[zen-sidebar-collapsed="true"]
   opacity: 1 !important;
 }
 
-
 .zentral-tooltip-row[data-active="true"] .zentral-tooltip-title {
   color: var(--zen-primary-color, currentColor) !important;
   font-weight: 600 !important;
 }
-
 
 /* Unloaded / Dormant Tab in Thumbnail Preview */
 .zentral-tooltip-row[data-unloaded="true"]:not([data-active="true"]) {
   opacity: 0.55 !important;
 }
 
-
 .zentral-tooltip-row[data-unloaded="true"]:not([data-active="true"]):hover {
   opacity: 0.88 !important;
 }
-
 
 /* Close Tab ("X") Button on Thumbnail Hover */
 .zentral-tooltip-close-btn {
@@ -1087,19 +1019,16 @@ html[zen-sidebar-collapsed="true"]
   margin-left: auto !important;
 }
 
-
 .zentral-tooltip-row:hover .zentral-tooltip-close-btn {
   opacity: 0.65 !important;
   pointer-events: auto !important;
 }
-
 
 .zentral-tooltip-close-btn:hover {
   opacity: 1 !important;
   background-color: rgba(255, 77, 77, 0.22) !important;
   color: #ff5555 !important;
 }
-
 
 .zentral-tooltip-close-btn svg {
   width: 12px !important;

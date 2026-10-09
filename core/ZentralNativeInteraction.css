@@ -18,7 +18,6 @@
   -webkit-user-drag: none !important;
 }
 
-
 #tabbrowser-tabpanels[zen-split-resizing] browser,
 #tabbrowser-tabpanels[zen-split-resizing] .browserSidebarContainer,
 #tabbrowser-tabpanels[zen-split-resizing] iframe {
@@ -26,7 +25,6 @@
   user-select: none !important;
   -moz-user-select: none !important;
 }
-
 
 #tabbrowser-tabs :is(tab, .tabbrowser-tab)[hidden] {
   display: none !important;

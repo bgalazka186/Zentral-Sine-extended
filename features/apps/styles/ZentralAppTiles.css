@@ -48,7 +48,6 @@
     opacity 0.15s ease !important;
 }
 
-
 /* Unloaded App Styling - Desaturated appearance retaining subtle brand tint */
 .zen-app-tile[data-loaded="false"] img,
 .zen-app-tile[data-loaded="false"] svg,
@@ -66,7 +65,6 @@
     opacity 0.2s ease !important;
 }
 
-
 .zen-app-tile[data-loaded="false"]:hover img,
 .zen-app-tile[data-loaded="false"]:hover svg,
 .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
@@ -80,7 +78,6 @@
   filter: saturate(75%) opacity(0.95) !important;
 }
 
-
 /* Loaded App Styling - A tiny bit more saturated than normal */
 .zen-app-tile[data-loaded="true"] img,
 .zen-app-tile[data-loaded="true"] svg {
@@ -91,13 +88,11 @@
     opacity 0.2s ease !important;
 }
 
-
 .zen-app-tile[data-loaded="true"]:hover img,
 .zen-app-tile[data-loaded="true"]:hover svg {
   filter: saturate(128%) !important;
   opacity: 1 !important;
 }
-
 
 /* Vertical Bar Loaded & Unloaded App Styling */
 #zentral-apps-vertical-bar .zen-app-tile[data-loaded="true"] img,
@@ -110,12 +105,10 @@
     opacity 0.2s ease !important;
 }
 
-
 #zentral-apps-vertical-bar .zen-app-tile[data-loaded="true"]:hover img,
 #zentral-apps-vertical-bar .zen-app-tile[data-loaded="true"]:hover svg {
   filter: saturate(128%) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
 }
-
 
 #zentral-apps-vertical-bar .zen-app-tile[data-loaded="false"] img,
 #zentral-apps-vertical-bar .zen-app-tile[data-loaded="false"] svg,
@@ -136,7 +129,6 @@
     opacity 0.2s ease !important;
 }
 
-
 #zentral-apps-vertical-bar .zen-app-tile[data-loaded="false"]:hover img,
 #zentral-apps-vertical-bar .zen-app-tile[data-loaded="false"]:hover svg,
 #zentral-apps-vertical-bar
@@ -152,7 +144,6 @@
   filter: saturate(75%) opacity(0.95) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
 }
 
-
 #zentral-apps-vertical-bar .zen-app-add-btn svg {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) !important;
   transition:
@@ -160,11 +151,9 @@
     filter 0.15s ease !important;
 }
 
-
 #zentral-apps-vertical-bar .zen-app-add-btn:hover svg {
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
 }
-
 
 :is(
     :root[zen-compact-mode="true"],
@@ -190,7 +179,6 @@
     opacity 0.2s ease !important;
 }
 
-
 :is(
     :root[zen-compact-mode="true"],
     :root[zen-sidebar-collapsed="true"],
@@ -210,7 +198,6 @@
   filter: saturate(128%) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
 }
 
-
 :is(
     :root[zen-compact-mode="true"],
     :root[zen-sidebar-collapsed="true"],
@@ -224,7 +211,6 @@
     transform 0.15s ease,
     filter 0.15s ease !important;
 }
-
 
 :is(
     :root[zen-compact-mode="true"],
@@ -253,7 +239,6 @@
     opacity 0.2s ease !important;
 }
 
-
 :is(
     :root[zen-compact-mode="true"],
     :root[zen-sidebar-collapsed="true"],
@@ -276,7 +261,6 @@
   svg {
   filter: saturate(75%) opacity(0.95) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
 }
-
 
 :is(
     :root[zen-compact-mode="true"],
@@ -300,7 +284,6 @@
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2) !important;
 }
 
-
 :is(
     :root[zen-compact-mode="true"],
     :root[zen-sidebar-collapsed="true"],
@@ -320,7 +303,6 @@
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
 }
 
-
 /* Horizontal Top Toolbar Mode (Collapsed Sidebar): Clean native highlight, NO pop-out */
 #zen-apps-sidebar-grid.zen-apps-horizontal .zen-app-tile:hover,
 :is(
@@ -336,7 +318,6 @@
   transform: none !important;
   box-shadow: none !important;
 }
-
 
 #zen-apps-sidebar-grid.zen-apps-horizontal
   .zen-app-tile[data-loaded="true"]:hover
@@ -360,7 +341,6 @@
   svg {
   filter: saturate(128%) !important;
 }
-
 
 #zen-apps-sidebar-grid.zen-apps-horizontal
   .zen-app-tile:not([data-loaded="true"]):not(.zen-app-add-btn):not(
@@ -392,7 +372,6 @@
   svg {
   filter: saturate(75%) opacity(0.95) !important;
 }
-
 
 :is(
     :root[zen-compact-mode="true"],
@@ -418,7 +397,6 @@
   transform: scale(0.96) !important;
 }
 
-
 :is(
     :root[zen-compact-mode="true"],
     :root[zen-sidebar-collapsed="true"],
@@ -443,7 +421,6 @@
     0 1px 3px rgba(0, 0, 0, 0.2) !important;
 }
 
-
 :is(
     :root[zen-compact-mode="true"],
     :root[zen-sidebar-collapsed="true"],
@@ -467,7 +444,6 @@
     ) !important;
 }
 
-
 :is(
     :root[zen-compact-mode="true"],
     :root[zen-sidebar-collapsed="true"],
@@ -478,7 +454,6 @@
   border: 1.5px dashed color-mix(in srgb, currentColor 25%, transparent) !important;
   opacity: 0.85 !important;
 }
-
 
 :is(
     :root[zen-compact-mode="true"],

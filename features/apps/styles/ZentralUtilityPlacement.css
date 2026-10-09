@@ -23,11 +23,9 @@
   flex-shrink: 0 !important;
 }
 
-
 .zen-apps-horizontal #zentral-apps-utility-section .zentral-apps-utility-dots {
   display: none !important;
 }
-
 
 .zen-apps-horizontal
   #zentral-apps-utility-section
@@ -35,7 +33,6 @@
   display: flex !important;
   order: 0 !important;
 }
-
 
 .zen-apps-horizontal
   #zentral-apps-utility-section
@@ -54,7 +51,6 @@
   order: 1 !important;
 }
 
-
 .zen-apps-horizontal
   #zentral-apps-utility-section
   .zentral-apps-utility-content {
@@ -70,7 +66,6 @@
     transform 0.22s cubic-bezier(0.25, 1, 0.5, 1) !important;
 }
 
-
 .zen-apps-horizontal #zentral-apps-utility-section .zentral-apps-utility-row {
   display: flex !important;
   flex-direction: row !important;
@@ -80,13 +75,11 @@
   gap: 4px !important;
 }
 
-
 .zen-apps-horizontal #zentral-apps-utility-section .zentral-utility-slot {
   width: auto !important;
   height: auto !important;
   min-height: 0 !important;
 }
-
 
 .zen-apps-horizontal
   #zentral-apps-utility-section[data-utility-revealed="true"]
@@ -94,14 +87,12 @@
   display: none !important;
 }
 
-
 .zen-apps-horizontal
   #zentral-apps-utility-section[data-utility-revealed="true"]
   .zentral-apps-utility-divider {
   opacity: 0.5 !important;
   transform: scaleY(1) !important;
 }
-
 
 .zen-apps-horizontal
   #zentral-apps-utility-section[data-utility-revealed="true"]
@@ -112,17 +103,14 @@
   transform: translateX(0) !important;
 }
 
-
 .zen-apps-horizontal #zentral-utility-autohide-btn {
   display: none !important;
 }
-
 
 /* Hide Utility Section in Vertical Bar placement mode (VB uses its footer) */
 :root[zentral-apps-placement="vertical-bar"] #zentral-apps-utility-section {
   display: none !important;
 }
-
 
 /* Permanently hide Utility Section when preference is enabled */
 :root[zentral-apps-hide-utility="true"] #zentral-apps-utility-section,

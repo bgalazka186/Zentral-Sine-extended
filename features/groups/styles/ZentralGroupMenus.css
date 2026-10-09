@@ -42,7 +42,6 @@ panel[id*="tabgroup-editor"] {
   box-shadow: none !important;
 }
 
-
 /* --------------------------------------------------------------------------
  * Context Menu: Suppress Closed Groups from 'Add Tab to Group' Submenu
  * -------------------------------------------------------------------------- */
@@ -53,7 +52,6 @@ panel[id*="tabgroup-editor"] {
   display: none !important;
 }
 
-
 /* --------------------------------------------------------------------------
  * Context Menu: Tab Group Icon Colors & Squircles in Submenu
  * -------------------------------------------------------------------------- */
@@ -61,7 +59,6 @@ panel[id*="tabgroup-editor"] {
 #context_moveTabToGroupPopupMenu .menuitem-iconic.tab-group-icon {
   --tab-group-color-undefined: #777777;
 }
-
 
 #context_moveTabToGroupPopupMenu menuitem.tab-group-icon .menu-iconic-icon,
 #context_moveTabToGroupPopupMenu menuitem.tab-group-icon image,
@@ -77,16 +74,11 @@ panel[id*="tabgroup-editor"] {
   border-radius: 4px !important;
 }
 
-
-
-
-
 /* Red styling for "Close Group" button in Tab Group context menu */
 #zentral-tabgroup-context-menu #zentral-tg-item-close {
   color: #ff5555 !important;
   font-weight: 500 !important;
 }
-
 
 #zentral-tabgroup-context-menu #zentral-tg-item-close:hover,
 #zentral-tabgroup-context-menu #zentral-tg-item-close[_moz-menuactive="true"] {

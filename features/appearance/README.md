@@ -6,10 +6,10 @@ Start at `ZentralAppearance.js`. Exports look defaults/themes/validation and app
 
 Send this folder for a change confined to its behavior. Include the specific outside collaborator below only if the issue crosses that interface. Each source header explains its callers, contracts and cleanup. Folder ownership does not make every internal controller optional or independently installable.
 
-| File | Responsibility |
-| --- | --- |
-| `ZentralAppearance.css` | Theme/look variables, colors and opacity rules driven by Appearance settings/root attributes. |
-| `ZentralAppearance.js` | Look preference definitions/themes, color/bounds validation and root attribute/CSS-variable synchronization after edits/imports. |
+| File                    | Responsibility                                                                                                                   |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `ZentralAppearance.css` | Theme/look variables, colors and opacity rules driven by Appearance settings/root attributes.                                    |
+| `ZentralAppearance.js`  | Look preference definitions/themes, color/bounds validation and root attribute/CSS-variable synchronization after edits/imports. |
 
 ## Outside collaborators
 

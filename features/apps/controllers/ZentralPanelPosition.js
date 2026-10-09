@@ -31,10 +31,18 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("apps/ZentralPanelPosition", function ({ Services, shared, runtime, access }) {
-const { Constants, Core, createSVGElement, SVG_STRINGS, WELL_KNOWN_SERVICES } = shared;
-return {
-isSidebarRight() {
+  window.ZentralModuleLoader.define(
+    "apps/ZentralPanelPosition",
+    function ({ Services, shared, runtime, access }) {
+      const {
+        Constants,
+        Core,
+        createSVGElement,
+        SVG_STRINGS,
+        WELL_KNOWN_SERVICES,
+      } = shared;
+      return {
+        isSidebarRight() {
           // 1. Direct Zen root attributes
           if (
             document.documentElement.getAttribute("zen-right-side") === "true"
@@ -75,28 +83,28 @@ isSidebarRight() {
 
           return false;
         },
-isPlacementVerticalBar() {
+        isPlacementVerticalBar() {
           return (
             Core.getPref(Constants.Apps.PREF_PLACEMENT, "sidebar") ===
             "vertical-bar"
           );
         },
-isVerticalBarOnRight() {
+        isVerticalBarOnRight() {
           return !this.isSidebarRight();
         },
-isPanelAttachedToRight() {
+        isPanelAttachedToRight() {
           if (this.isPlacementVerticalBar()) {
             return this.isVerticalBarOnRight();
           }
           return this.isSidebarRight();
         },
-isCollapsedSidebar() {
+        isCollapsedSidebar() {
           // Fully delegate to the single authoritative collapse-detection method.
           // Previously this method duplicated zen-sidebar-collapsed + sidebar-expanded pref reads
           // that isPhysicallySidebarCollapsed() already handles — removed duplication (Q-05).
           return this.isPhysicallySidebarCollapsed();
         },
-isCollapsedLayoutMode() {
+        isCollapsedLayoutMode() {
           if (access.dom.grid?.classList.contains("zen-apps-horizontal"))
             return true;
           if (this.isPhysicallySidebarCollapsed()) return true;
@@ -110,7 +118,7 @@ isCollapsedLayoutMode() {
           );
           return !useSingleToolbar && !sidebarExpanded;
         },
-isPhysicallySidebarCollapsed() {
+        isPhysicallySidebarCollapsed() {
           if (
             document.documentElement.getAttribute("zen-compact-mode") === "true"
           )
@@ -149,7 +157,7 @@ isPhysicallySidebarCollapsed() {
 
           return false;
         },
-startPositionTracking() {
+        startPositionTracking() {
           if (this._isTrackingPosition) return;
           this._isTrackingPosition = true;
 
@@ -173,10 +181,13 @@ startPositionTracking() {
           const rafLoop = () => {
             if (!this._isTrackingPosition) return;
             reposition();
-            for (const [target, properties] of this._activePositionTransitions || []) {
+            for (const [target, properties] of this
+              ._activePositionTransitions || []) {
               for (const [property, deadline] of properties)
-                if (!target.isConnected || Date.now() >= deadline) properties.delete(property);
-              if (!properties.size) this._activePositionTransitions.delete(target);
+                if (!target.isConnected || Date.now() >= deadline)
+                  properties.delete(property);
+              if (!properties.size)
+                this._activePositionTransitions.delete(target);
             }
             if (
               this._activePositionTransitions?.size ||
@@ -314,9 +325,10 @@ startPositionTracking() {
             passive: true,
           });
         },
-stopPositionTracking() {
+        stopPositionTracking() {
           this._isTrackingPosition = false;
-          if (this._positionTrackingRAF != null) cancelAnimationFrame(this._positionTrackingRAF);
+          if (this._positionTrackingRAF != null)
+            cancelAnimationFrame(this._positionTrackingRAF);
           this._positionTrackingRAF = null;
 
           if (this._sidebarResizeObserver) {
@@ -353,7 +365,7 @@ stopPositionTracking() {
             this._windowResizeListener = null;
           }
         },
-getAppsBarPanelBounds() {
+        getAppsBarPanelBounds() {
           const gap = 12;
           const onRight = this.isVerticalBarOnRight();
           const bar = access.dom.verticalBar;
@@ -390,7 +402,7 @@ getAppsBarPanelBounds() {
           }
           return { left, right, barInset, autohide };
         },
-isPanelDockedToAppsBar() {
+        isPanelDockedToAppsBar() {
           return (
             this.isPlacementVerticalBar() &&
             document.documentElement.getAttribute(
@@ -398,12 +410,12 @@ isPanelDockedToAppsBar() {
             ) !== "true"
           );
         },
-getAppsBarPanelMaxWidth() {
+        getAppsBarPanelMaxWidth() {
           const { left, right } = this.getAppsBarPanelBounds();
           // Keep the outward-growing pill reachable beside the native sidebar.
           return Math.max(1, Math.floor(right - left - 44));
         },
-updateWidthVar(px) {
+        updateWidthVar(px) {
           if (this.isPanelDockedToAppsBar())
             px = Math.max(1, Math.min(px, this.getAppsBarPanelMaxWidth()));
           if (access.state.activeAppId && !access.state.isExpanded) {
@@ -416,7 +428,7 @@ updateWidthVar(px) {
           if (access.dom.root)
             access.dom.root.style.width = Math.round(px) + "px";
         },
-positionPanel() {
+        positionPanel() {
           const root = access.dom.root;
           if (!root || !gBrowser?.tabContainer) return;
           const tcRect = gBrowser.tabContainer.getBoundingClientRect();
@@ -563,14 +575,14 @@ positionPanel() {
           }
           window.ZentralRuntime?.constrainPanelToSidebar?.(root);
         },
-loadWidth() {
+        loadWidth() {
           let width = Core.getPref(Constants.Apps.PREF_WIDTH);
           return Math.max(
             Constants.Apps.MIN_WIDTH_PX,
             width || window.innerWidth * 0.333,
           );
         },
-saveWidth(px) {
+        saveWidth(px) {
           if (access.state.activeAppId) {
             const app = access.state.apps.find(
               (a) => a.id === access.state.activeAppId,
@@ -579,7 +591,7 @@ saveWidth(px) {
             this.saveApps();
           }
         },
-startResize(e) {
+        startResize(e) {
           if (e.button !== 0) return;
           e.preventDefault();
           this._startX = e.clientX;
@@ -596,7 +608,7 @@ startResize(e) {
           document.addEventListener("mouseup", this.onStopDrag);
           window.addEventListener("blur", this.onStopDrag);
         },
-prepareResize() {
+        prepareResize() {
           if (!access.state.isExpanded) return;
           access.state.isExpanded = false;
           if (access.dom.expandBtn) {
@@ -606,7 +618,7 @@ prepareResize() {
             );
           }
         },
-onDrag(e) {
+        onDrag(e) {
           this.prepareResize();
           const diff = e.clientX - this._startX;
           let newW = this.isPanelAttachedToRight()
@@ -618,22 +630,24 @@ onDrag(e) {
           );
           this.updateWidthVar(newW);
         },
-onStopDrag() {
+        onStopDrag() {
           document.removeEventListener("mousemove", this.onDrag);
           document.removeEventListener("mouseup", this.onStopDrag);
           window.removeEventListener("blur", this.onStopDrag);
           if (access.dom.panel) access.dom.panel.style.pointerEvents = "";
-          if (this._zentralWidthDragging) this.saveWidth(access.state.panelWidthPx);
+          if (this._zentralWidthDragging)
+            this.saveWidth(access.state.panelWidthPx);
           this._zentralWidthDragging = false;
         },
-scheduleRepositionGrid(delay = 120) {
+        scheduleRepositionGrid(delay = 120) {
           if (access.state.repositionTimer)
             clearTimeout(access.state.repositionTimer);
           access.state.repositionTimer = setTimeout(() => {
             access.state.repositionTimer = null;
             this.repositionGrid();
           }, delay);
-        }
-};
-});
+        },
+      };
+    },
+  );
 })();

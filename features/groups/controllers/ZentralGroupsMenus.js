@@ -27,10 +27,18 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("groups/ZentralGroupsMenus", function ({ Services, shared, runtime, access }) {
-const { Constants, Core, createSVGElement, SVG_STRINGS, WELL_KNOWN_SERVICES } = shared;
-return {
-ensureSharedContextMenu() {
+  window.ZentralModuleLoader.define(
+    "groups/ZentralGroupsMenus",
+    function ({ Services, shared, runtime, access }) {
+      const {
+        Constants,
+        Core,
+        createSVGElement,
+        SVG_STRINGS,
+        WELL_KNOWN_SERVICES,
+      } = shared;
+      return {
+        ensureSharedContextMenu() {
           const popupSet =
             document.getElementById("mainPopupSet") ||
             document.documentElement ||
@@ -261,7 +269,7 @@ ensureSharedContextMenu() {
           access.state.sharedContextMenu = contextMenu;
           return contextMenu;
         },
-addFolderContextMenuItems() {
+        addFolderContextMenuItems() {
           access.folderMenuTimer = setTimeout(() => {
             access.folderMenuTimer = null;
             const folderMenu = document.getElementById("zenFolderActions");
@@ -298,7 +306,7 @@ addFolderContextMenuItems() {
             }
           }, 1500);
         },
-enhanceTabContextMenu() {
+        enhanceTabContextMenu() {
           const tabContextMenu = document.getElementById("tabContextMenu");
           if (!tabContextMenu || tabContextMenu._zentralEnhanced) return;
           tabContextMenu._zentralEnhanced = true;
@@ -442,7 +450,7 @@ enhanceTabContextMenu() {
             );
           }
         },
-onTabGroupCreate(event) {
+        onTabGroupCreate(event) {
           if (this.isLibraryCopy(event.target)) return;
           try {
             const target = event.target;
@@ -462,7 +470,8 @@ onTabGroupCreate(event) {
               ("defaultGroupName" in group &&
                 group.label === group.defaultGroupName)
             ) {
-              if (!access.state.groupEdited) this.renameGroupStart(group, false);
+              if (!access.state.groupEdited)
+                this.renameGroupStart(group, false);
             }
             this.checkAndApplyFirstTimeGroupColor(group);
           } catch (e) {
@@ -472,7 +481,7 @@ onTabGroupCreate(event) {
             );
           }
         },
-addContextMenu(group) {
+        addContextMenu(group) {
           const sharedMenu = this.ensureSharedContextMenu();
           const labelContainer = group.querySelector(
             ".tab-group-label-container",
@@ -622,7 +631,7 @@ addContextMenu(group) {
             }
           };
         },
-convertGroupToFolder(group) {
+        convertGroupToFolder(group) {
           if (!window.gZenFolders) return;
           const tabs = Array.from(group.tabs);
           if (tabs.length === 0) return;
@@ -642,7 +651,7 @@ convertGroupToFolder(group) {
             } catch (e) {}
           }
         },
-convertFolderToGroup(folder) {
+        convertFolderToGroup(folder) {
           if (this.isLibraryCopy(folder)) return;
           const tabsToGroup = folder.allItemsRecursive.filter(
             (item) =>
@@ -672,7 +681,8 @@ convertFolderToGroup(folder) {
               folder.delete();
             this.processGroup(newGroup);
           }, 200);
-        }
-};
-});
+        },
+      };
+    },
+  );
 })();

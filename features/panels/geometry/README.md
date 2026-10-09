@@ -6,11 +6,11 @@ Start at `ZentralPanelGeometry.uc.js`. Required panel generator part. Owns dragg
 
 Send this folder for a change confined to its behavior. Include the specific outside collaborator below only if the issue crosses that interface. Each source header explains its callers, contracts and cleanup. Folder ownership does not make every internal controller optional or independently installable.
 
-| File | Responsibility |
-| --- | --- |
-| `ZentralPanelGeometry.css` | Extended panel position/drag/resize and related geometry states. |
+| File                         | Responsibility                                                                           |
+| ---------------------------- | ---------------------------------------------------------------------------------------- |
+| `ZentralPanelGeometry.css`   | Extended panel position/drag/resize and related geometry states.                         |
 | `ZentralPanelGeometry.uc.js` | Adds horizontal offset, all-sides/vertical resize handles and pill-based panel dragging. |
-| `settings.json` | Settings schema and category/section metadata owned by geometry. |
+| `settings.json`              | Settings schema and category/section metadata owned by geometry.                         |
 
 ## Outside collaborators
 

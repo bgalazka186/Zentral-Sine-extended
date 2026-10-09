@@ -29,10 +29,18 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("apps/ZentralLibraryCompatibility", function ({ Services, shared, runtime, access }) {
-const { Constants, Core, createSVGElement, SVG_STRINGS, WELL_KNOWN_SERVICES } = shared;
-return {
-libraryPanelGuardEnabled() {
+  window.ZentralModuleLoader.define(
+    "apps/ZentralLibraryCompatibility",
+    function ({ Services, shared, runtime, access }) {
+      const {
+        Constants,
+        Core,
+        createSVGElement,
+        SVG_STRINGS,
+        WELL_KNOWN_SERVICES,
+      } = shared;
+      return {
+        libraryPanelGuardEnabled() {
           return (
             !this._destroyed &&
             !!Core.getPref(Constants.Apps.PREF_ENABLED, true) &&
@@ -42,7 +50,7 @@ libraryPanelGuardEnabled() {
             )
           );
         },
-closePanelsForLibrary() {
+        closePanelsForLibrary() {
           if (!this.libraryPanelGuardEnabled()) return;
           access.libraryYieldingToPanel = false;
           this.closePanel();
@@ -58,7 +66,7 @@ closePanelsForLibrary() {
           if (root) root.style.pointerEvents = "";
           this.stopPositionTracking();
         },
-closeLibraryForPanel() {
+        closeLibraryForPanel() {
           if (!this.libraryPanelGuardEnabled()) return;
           const library = document.querySelector("zen-library[open]");
           if (!library || access.libraryYieldingToPanel) return;
@@ -70,7 +78,7 @@ closeLibraryForPanel() {
             console.warn("[ZentralApps] Could not close Zen Library:", error);
           }
         },
-setupLibraryPanelGuard() {
+        setupLibraryPanelGuard() {
           if (access.libraryGuardPrefObserver) return;
           access.libraryGuardPrefObserver = () => this.syncLibraryPanelGuard();
           Services.prefs.addObserver(
@@ -79,7 +87,7 @@ setupLibraryPanelGuard() {
           );
           this.syncLibraryPanelGuard();
         },
-syncLibraryPanelGuard() {
+        syncLibraryPanelGuard() {
           this.removeLibraryPanelGuard();
           if (!this.libraryPanelGuardEnabled()) return;
           try {
@@ -154,7 +162,7 @@ syncLibraryPanelGuard() {
             Core.log("ZentralApps", "Library panel guard unavailable:", error);
           }
         },
-removeLibraryPanelGuard() {
+        removeLibraryPanelGuard() {
           access.libraryGuardObserver?.disconnect();
           access.libraryGuardObserver = null;
           if (
@@ -171,7 +179,7 @@ removeLibraryPanelGuard() {
           access.libraryGuardStyle = null;
           access.libraryYieldingToPanel = false;
         },
-destroyLibraryPanelGuard() {
+        destroyLibraryPanelGuard() {
           this.removeLibraryPanelGuard();
           if (access.libraryGuardPrefObserver) {
             Services.prefs.removeObserver(
@@ -181,7 +189,7 @@ destroyLibraryPanelGuard() {
             access.libraryGuardPrefObserver = null;
           }
         },
-openZenLibrary() {
+        openZenLibrary() {
           try {
             const command = document.getElementById("cmd_zenToggleLibrary");
             if (
@@ -199,7 +207,7 @@ openZenLibrary() {
           // Older Zen versions and users who disabled Zen Library keep Places.
           return this.openBrowserLibrary("AllBookmarks");
         },
-async openBookmarksSidebar() {
+        async openBookmarksSidebar() {
           try {
             if (typeof window.SidebarController?.toggle !== "function")
               return false;
@@ -213,7 +221,7 @@ async openBookmarksSidebar() {
             return false;
           }
         },
-openBrowserLibrary(section = "AllBookmarks") {
+        openBrowserLibrary(section = "AllBookmarks") {
           if (!["AllBookmarks", "History", "Downloads"].includes(section))
             return false;
           try {
@@ -247,7 +255,8 @@ openBrowserLibrary(section = "AllBookmarks") {
             );
             return false;
           }
-        }
-};
-});
+        },
+      };
+    },
+  );
 })();

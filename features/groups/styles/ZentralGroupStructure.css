@@ -29,7 +29,6 @@ tab-group.zentral-standard :focus-visible {
   outline-offset: 2px !important;
 }
 
-
 tab-group.zentral-standard {
   display: flex !important;
   flex-direction: column !important;
@@ -37,13 +36,11 @@ tab-group.zentral-standard {
   margin: 2px 0 !important;
 }
 
-
 /* Neutralize native pill backgrounds & aspect-ratio constraints */
 tab-group.zentral-standard > .tab-group-label-container,
 tab-group.zentral-standard > .tab-group-label-container .tab-group-label {
   background: transparent !important;
 }
-
 
 /* Zero-gap & layout isolation for Split Views & Hidden Tabs */
 tab-group:is(
@@ -56,7 +53,6 @@ tab-group:is(
   padding: 0 !important;
   border: none !important;
 }
-
 
 tab-group:is(
     [split-view-group],

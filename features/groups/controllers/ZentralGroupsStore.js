@@ -23,10 +23,18 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("groups/ZentralGroupsStore", function ({ Services, shared, runtime, access }) {
-const { Constants, Core, createSVGElement, SVG_STRINGS, WELL_KNOWN_SERVICES } = shared;
-return {
-sanitizeState(state) {
+  window.ZentralModuleLoader.define(
+    "groups/ZentralGroupsStore",
+    function ({ Services, shared, runtime, access }) {
+      const {
+        Constants,
+        Core,
+        createSVGElement,
+        SVG_STRINGS,
+        WELL_KNOWN_SERVICES,
+      } = shared;
+      return {
+        sanitizeState(state) {
           if (!state || typeof state !== "object")
             return { groups: {}, tabMapping: {} };
           const groups = { ...(state.groups || {}) };
@@ -58,7 +66,7 @@ sanitizeState(state) {
 
           return { groups, tabMapping };
         },
-reconstructSavedGroups() {
+        reconstructSavedGroups() {
           try {
             const ss = access.getSessionStore();
 
@@ -571,7 +579,7 @@ reconstructSavedGroups() {
             );
           }
         },
-getWorkspaceForElement(el) {
+        getWorkspaceForElement(el) {
           if (!el) return "";
           try {
             // 1. Direct workspace ID attribute
@@ -613,7 +621,7 @@ getWorkspaceForElement(el) {
           } catch (_) {}
           return window.gZenWorkspaces?.activeWorkspace || "";
         },
-scheduleStateSave() {
+        scheduleStateSave() {
           if (access.isRestoring) return;
           if (access.state.saveStateTimer)
             clearTimeout(access.state.saveStateTimer);
@@ -622,7 +630,7 @@ scheduleStateSave() {
             1000,
           );
         },
-saveTabGroupState() {
+        saveTabGroupState() {
           try {
             const ss = access.getSessionStore();
             const currentWs = window.gZenWorkspaces?.activeWorkspace;
@@ -898,7 +906,7 @@ saveTabGroupState() {
             console.warn("[ZentralTabGroups] Error saving state", e);
           }
         },
-loadTabGroupState() {
+        loadTabGroupState() {
           try {
             const stateStr = Core.getPref(Constants.TabGroups.PREF_STATE);
             const forceCollapse = Core.getPref(
@@ -1027,7 +1035,8 @@ loadTabGroupState() {
           } catch (e) {
             console.warn("[ZentralTabGroups] Failed to load state", e);
           }
-        }
-};
-});
+        },
+      };
+    },
+  );
 })();

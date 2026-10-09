@@ -21,10 +21,18 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("apps/ZentralAppNotifications", function ({ Services, shared, runtime, access }) {
-const { Constants, Core, createSVGElement, SVG_STRINGS, WELL_KNOWN_SERVICES } = shared;
-return {
-extractBadgeFromTitle(title) {
+  window.ZentralModuleLoader.define(
+    "apps/ZentralAppNotifications",
+    function ({ Services, shared, runtime, access }) {
+      const {
+        Constants,
+        Core,
+        createSVGElement,
+        SVG_STRINGS,
+        WELL_KNOWN_SERVICES,
+      } = shared;
+      return {
+        extractBadgeFromTitle(title) {
           if (!title || typeof title !== "string")
             return { hasNotification: false, notifCount: null };
           const trimmed = title.trim();
@@ -53,7 +61,7 @@ extractBadgeFromTitle(title) {
 
           return { hasNotification: false, notifCount: null };
         },
-updateAppBadge(appId, hasNotification, notifCount) {
+        updateAppBadge(appId, hasNotification, notifCount) {
           const btn = document.getElementById("zen-app-btn-" + appId);
           if (!btn) return;
           let badge = btn.querySelector(".zen-app-badge");
@@ -77,13 +85,14 @@ updateAppBadge(appId, hasNotification, notifCount) {
             if (badge) badge.remove();
           }
         },
-syncAllAppBadges(onlyAppId = null) {
+        syncAllAppBadges(onlyAppId = null) {
           if (!access.state.appBrowsers || access.state.appBrowsers.size === 0)
             return;
           const appsById = new Map();
           for (const app of access.state.apps)
             if (!appsById.has(app.id)) appsById.set(app.id, app);
-          for (const record of window.ZentralRuntime?.panelContext?.essentialPanels?.values() || [])
+          for (const record of window.ZentralRuntime?.panelContext?.essentialPanels?.values() ||
+            [])
             appsById.set(record.app.id, record.app);
           for (const [appId, browser] of access.state.appBrowsers.entries()) {
             if (onlyAppId && onlyAppId !== appId) continue;
@@ -116,28 +125,47 @@ syncAllAppBadges(onlyAppId = null) {
             }
           }
         },
-syncBadgePollingPreference() {
+        syncBadgePollingPreference() {
           this.stopBadgeSyncLoop();
           this.ensureBadgeSyncLoop();
         },
-ensureBadgeSyncLoop() {
+        ensureBadgeSyncLoop() {
           if (!access.badgePollingObserver) {
-            access.badgePollingObserver = { observe: () => this.syncBadgePollingPreference() };
-            Services.prefs.addObserver("zen.workspace.apps.sidebar.badge_poll_interval_ms", access.badgePollingObserver);
+            access.badgePollingObserver = {
+              observe: () => this.syncBadgePollingPreference(),
+            };
+            Services.prefs.addObserver(
+              "zen.workspace.apps.sidebar.badge_poll_interval_ms",
+              access.badgePollingObserver,
+            );
           }
-          if (this._badgeSyncLoopTimer || this._destroyed || !access.state.appBrowsers?.size) return;
-          const raw = Number(Core.getPref("zen.workspace.apps.sidebar.badge_poll_interval_ms", 0));
+          if (
+            this._badgeSyncLoopTimer ||
+            this._destroyed ||
+            !access.state.appBrowsers?.size
+          )
+            return;
+          const raw = Number(
+            Core.getPref(
+              "zen.workspace.apps.sidebar.badge_poll_interval_ms",
+              0,
+            ),
+          );
           if (!Number.isFinite(raw) || raw <= 0) return;
           const delay = Math.max(1000, Math.min(3600000, raw));
           this._badgeSyncLoopTimer = setInterval(() => {
-            if (!access.state.appBrowsers?.size) { this.stopBadgeSyncLoop(); return; }
+            if (!access.state.appBrowsers?.size) {
+              this.stopBadgeSyncLoop();
+              return;
+            }
             this.syncAllAppBadges();
           }, delay);
         },
-stopBadgeSyncLoop() {
+        stopBadgeSyncLoop() {
           if (this._badgeSyncLoopTimer) clearInterval(this._badgeSyncLoopTimer);
           this._badgeSyncLoopTimer = null;
-        }
-};
-});
+        },
+      };
+    },
+  );
 })();

@@ -6,10 +6,10 @@ Start at `ZentralPanelStyles.uc.js`. Required panel generator part. Enumerates o
 
 Send this folder for a change confined to its behavior. Include the specific outside collaborator below only if the issue crosses that interface. Each source header explains its callers, contracts and cleanup. Folder ownership does not make every internal controller optional or independently installable.
 
-| File | Responsibility |
-| --- | --- |
+| File                       | Responsibility                                                                                                                |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `ZentralPanelStyles.uc.js` | Enumerates owned panel browsers, repairs visible presentation and synchronizes opt-in Zen Internet styles into panel content. |
-| `settings.json` | Settings schema and category/section metadata owned by panel-styles. |
+| `settings.json`            | Settings schema and category/section metadata owned by panel-styles.                                                          |
 
 ## Outside collaborators
 

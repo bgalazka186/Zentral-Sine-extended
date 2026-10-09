@@ -42,13 +42,34 @@
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
   const ZentralRuntime = window.ZentralRuntime;
-  window.ZentralModuleLoader.load("features/apps/controllers/ZentralAppModel.js", { owner: "apps" });
-  window.ZentralModuleLoader.load("features/apps/controllers/ZentralAppsLauncher.js", { owner: "apps" });
-  window.ZentralModuleLoader.load("features/apps/controllers/ZentralPanelLifecycle.js", { owner: "apps" });
-  window.ZentralModuleLoader.load("features/apps/controllers/ZentralPanelPosition.js", { owner: "apps" });
-  window.ZentralModuleLoader.load("features/apps/controllers/ZentralAppNotifications.js", { owner: "apps" });
-  window.ZentralModuleLoader.load("features/apps/controllers/ZentralAppsInteractions.js", { owner: "apps" });
-  window.ZentralModuleLoader.load("features/apps/controllers/ZentralLibraryCompatibility.js", { owner: "apps" });
+  window.ZentralModuleLoader.load(
+    "features/apps/controllers/ZentralAppModel.js",
+    { owner: "apps" },
+  );
+  window.ZentralModuleLoader.load(
+    "features/apps/controllers/ZentralAppsLauncher.js",
+    { owner: "apps" },
+  );
+  window.ZentralModuleLoader.load(
+    "features/apps/controllers/ZentralPanelLifecycle.js",
+    { owner: "apps" },
+  );
+  window.ZentralModuleLoader.load(
+    "features/apps/controllers/ZentralPanelPosition.js",
+    { owner: "apps" },
+  );
+  window.ZentralModuleLoader.load(
+    "features/apps/controllers/ZentralAppNotifications.js",
+    { owner: "apps" },
+  );
+  window.ZentralModuleLoader.load(
+    "features/apps/controllers/ZentralAppsInteractions.js",
+    { owner: "apps" },
+  );
+  window.ZentralModuleLoader.load(
+    "features/apps/controllers/ZentralLibraryCompatibility.js",
+    { owner: "apps" },
+  );
   ZentralRuntime.register({
     id: "apps",
     init({ shared, runtime }) {
@@ -292,7 +313,10 @@
             }
             this._badgeSyncInitialized = false;
             if (this.#badgePollingObserver) {
-              Services.prefs.removeObserver("zen.workspace.apps.sidebar.badge_poll_interval_ms", this.#badgePollingObserver);
+              Services.prefs.removeObserver(
+                "zen.workspace.apps.sidebar.badge_poll_interval_ms",
+                this.#badgePollingObserver,
+              );
               this.#badgePollingObserver = null;
             }
             this.stopBadgeSyncLoop();
@@ -397,13 +421,215 @@
          */
         constructor() {
           const owner = this;
-          Object.assign(this, window.ZentralModuleLoader.create("apps/ZentralAppModel", { Services, shared, runtime, access: { get state() { return owner.#state; }, set state(value) { owner.#state = value; } } }));
-          Object.assign(this, window.ZentralModuleLoader.create("apps/ZentralAppsLauncher", { Services, shared, runtime, access: { createSVG: (...args) => owner.#createSVG(...args), get dom() { return owner.#dom; }, set dom(value) { owner.#dom = value; }, get gridResizeObs() { return owner.#gridResizeObs; }, set gridResizeObs(value) { owner.#gridResizeObs = value; }, get pillHoverZoneResizeObs() { return owner.#pillHoverZoneResizeObs; }, set pillHoverZoneResizeObs(value) { owner.#pillHoverZoneResizeObs = value; }, get state() { return owner.#state; }, set state(value) { owner.#state = value; } } }));
-          Object.assign(this, window.ZentralModuleLoader.create("apps/ZentralPanelLifecycle", { Services, shared, runtime, access: { get dom() { return owner.#dom; }, set dom(value) { owner.#dom = value; }, get state() { return owner.#state; }, set state(value) { owner.#state = value; }, createSVG: (...args) => owner.#createSVG(...args), getEasingBezier: (...args) => owner.#getEasingBezier(...args) } }));
-          Object.assign(this, window.ZentralModuleLoader.create("apps/ZentralPanelPosition", { Services, shared, runtime, access: { createSVG: (...args) => owner.#createSVG(...args), get dom() { return owner.#dom; }, set dom(value) { owner.#dom = value; }, get state() { return owner.#state; }, set state(value) { owner.#state = value; } } }));
-          Object.assign(this, window.ZentralModuleLoader.create("apps/ZentralAppNotifications", { Services, shared, runtime, access: { get badgePollingObserver() { return owner.#badgePollingObserver; }, set badgePollingObserver(value) { owner.#badgePollingObserver = value; }, get state() { return owner.#state; }, set state(value) { owner.#state = value; } } }));
-          Object.assign(this, window.ZentralModuleLoader.create("apps/ZentralAppsInteractions", { Services, shared, runtime, access: { get state() { return owner.#state; }, set state(value) { owner.#state = value; }, get dom() { return owner.#dom; }, set dom(value) { owner.#dom = value; } } }));
-          Object.assign(this, window.ZentralModuleLoader.create("apps/ZentralLibraryCompatibility", { Services, shared, runtime, access: { get dom() { return owner.#dom; }, set dom(value) { owner.#dom = value; }, get libraryGuardAPI() { return owner.#libraryGuardAPI; }, set libraryGuardAPI(value) { owner.#libraryGuardAPI = value; }, get libraryGuardAnimation() { return owner.#libraryGuardAnimation; }, set libraryGuardAnimation(value) { owner.#libraryGuardAnimation = value; }, get libraryGuardObserver() { return owner.#libraryGuardObserver; }, set libraryGuardObserver(value) { owner.#libraryGuardObserver = value; }, get libraryGuardOriginalAnimation() { return owner.#libraryGuardOriginalAnimation; }, set libraryGuardOriginalAnimation(value) { owner.#libraryGuardOriginalAnimation = value; }, get libraryGuardPrefObserver() { return owner.#libraryGuardPrefObserver; }, set libraryGuardPrefObserver(value) { owner.#libraryGuardPrefObserver = value; }, get libraryGuardStyle() { return owner.#libraryGuardStyle; }, set libraryGuardStyle(value) { owner.#libraryGuardStyle = value; }, get libraryYieldingToPanel() { return owner.#libraryYieldingToPanel; }, set libraryYieldingToPanel(value) { owner.#libraryYieldingToPanel = value; }, get state() { return owner.#state; }, set state(value) { owner.#state = value; } } }));
+          Object.assign(
+            this,
+            window.ZentralModuleLoader.create("apps/ZentralAppModel", {
+              Services,
+              shared,
+              runtime,
+              access: {
+                get state() {
+                  return owner.#state;
+                },
+                set state(value) {
+                  owner.#state = value;
+                },
+              },
+            }),
+          );
+          Object.assign(
+            this,
+            window.ZentralModuleLoader.create("apps/ZentralAppsLauncher", {
+              Services,
+              shared,
+              runtime,
+              access: {
+                createSVG: (...args) => owner.#createSVG(...args),
+                get dom() {
+                  return owner.#dom;
+                },
+                set dom(value) {
+                  owner.#dom = value;
+                },
+                get gridResizeObs() {
+                  return owner.#gridResizeObs;
+                },
+                set gridResizeObs(value) {
+                  owner.#gridResizeObs = value;
+                },
+                get pillHoverZoneResizeObs() {
+                  return owner.#pillHoverZoneResizeObs;
+                },
+                set pillHoverZoneResizeObs(value) {
+                  owner.#pillHoverZoneResizeObs = value;
+                },
+                get state() {
+                  return owner.#state;
+                },
+                set state(value) {
+                  owner.#state = value;
+                },
+              },
+            }),
+          );
+          Object.assign(
+            this,
+            window.ZentralModuleLoader.create("apps/ZentralPanelLifecycle", {
+              Services,
+              shared,
+              runtime,
+              access: {
+                get dom() {
+                  return owner.#dom;
+                },
+                set dom(value) {
+                  owner.#dom = value;
+                },
+                get state() {
+                  return owner.#state;
+                },
+                set state(value) {
+                  owner.#state = value;
+                },
+                createSVG: (...args) => owner.#createSVG(...args),
+                getEasingBezier: (...args) => owner.#getEasingBezier(...args),
+              },
+            }),
+          );
+          Object.assign(
+            this,
+            window.ZentralModuleLoader.create("apps/ZentralPanelPosition", {
+              Services,
+              shared,
+              runtime,
+              access: {
+                createSVG: (...args) => owner.#createSVG(...args),
+                get dom() {
+                  return owner.#dom;
+                },
+                set dom(value) {
+                  owner.#dom = value;
+                },
+                get state() {
+                  return owner.#state;
+                },
+                set state(value) {
+                  owner.#state = value;
+                },
+              },
+            }),
+          );
+          Object.assign(
+            this,
+            window.ZentralModuleLoader.create("apps/ZentralAppNotifications", {
+              Services,
+              shared,
+              runtime,
+              access: {
+                get badgePollingObserver() {
+                  return owner.#badgePollingObserver;
+                },
+                set badgePollingObserver(value) {
+                  owner.#badgePollingObserver = value;
+                },
+                get state() {
+                  return owner.#state;
+                },
+                set state(value) {
+                  owner.#state = value;
+                },
+              },
+            }),
+          );
+          Object.assign(
+            this,
+            window.ZentralModuleLoader.create("apps/ZentralAppsInteractions", {
+              Services,
+              shared,
+              runtime,
+              access: {
+                get state() {
+                  return owner.#state;
+                },
+                set state(value) {
+                  owner.#state = value;
+                },
+                get dom() {
+                  return owner.#dom;
+                },
+                set dom(value) {
+                  owner.#dom = value;
+                },
+              },
+            }),
+          );
+          Object.assign(
+            this,
+            window.ZentralModuleLoader.create(
+              "apps/ZentralLibraryCompatibility",
+              {
+                Services,
+                shared,
+                runtime,
+                access: {
+                  get dom() {
+                    return owner.#dom;
+                  },
+                  set dom(value) {
+                    owner.#dom = value;
+                  },
+                  get libraryGuardAPI() {
+                    return owner.#libraryGuardAPI;
+                  },
+                  set libraryGuardAPI(value) {
+                    owner.#libraryGuardAPI = value;
+                  },
+                  get libraryGuardAnimation() {
+                    return owner.#libraryGuardAnimation;
+                  },
+                  set libraryGuardAnimation(value) {
+                    owner.#libraryGuardAnimation = value;
+                  },
+                  get libraryGuardObserver() {
+                    return owner.#libraryGuardObserver;
+                  },
+                  set libraryGuardObserver(value) {
+                    owner.#libraryGuardObserver = value;
+                  },
+                  get libraryGuardOriginalAnimation() {
+                    return owner.#libraryGuardOriginalAnimation;
+                  },
+                  set libraryGuardOriginalAnimation(value) {
+                    owner.#libraryGuardOriginalAnimation = value;
+                  },
+                  get libraryGuardPrefObserver() {
+                    return owner.#libraryGuardPrefObserver;
+                  },
+                  set libraryGuardPrefObserver(value) {
+                    owner.#libraryGuardPrefObserver = value;
+                  },
+                  get libraryGuardStyle() {
+                    return owner.#libraryGuardStyle;
+                  },
+                  set libraryGuardStyle(value) {
+                    owner.#libraryGuardStyle = value;
+                  },
+                  get libraryYieldingToPanel() {
+                    return owner.#libraryYieldingToPanel;
+                  },
+                  set libraryYieldingToPanel(value) {
+                    owner.#libraryYieldingToPanel = value;
+                  },
+                  get state() {
+                    return owner.#state;
+                  },
+                  set state(value) {
+                    owner.#state = value;
+                  },
+                },
+              },
+            ),
+          );
 
           // Binding methods to maintain 'this' context across event callbacks
           this.handleTabContextMenuCommand =
@@ -443,13 +669,6 @@
         /**
          * Initializes the Apps Module UI, preferences, event observers, and preloading timers.
          */
-
-
-
-
-
-
-
 
         syncEnabled() {
           this.syncLibraryPanelGuard();
@@ -507,39 +726,32 @@
          * Loads configured web app objects from user preferences.
          */
 
-
         /**
          * Serializes and saves the active apps list to user preferences.
          */
-
 
         /**
          * Loads the preferred display slot positions for the Apps Grid Utility Section buttons.
          */
 
-
         /**
          * Persists the preferred display slot positions for the Apps Grid Utility Section buttons.
          */
-
 
         /**
          * Sequentially preloads browser background instances for apps configured with preload enabled.
          * Uses staggered delays to prevent startup performance hits.
          */
 
-
         /**
          * Retrieves stored panel width or calculates fallback based on window proportion.
          * @returns {number} Panel width in pixels.
          */
 
-
         /**
          * Persists custom panel width for active app object.
          * @param {number} px - Panel width in pixels.
          */
-
 
         /* --------------------------------------------------------------------------
          * 3.3 Layout & Sidebar Position Detection
@@ -551,12 +763,10 @@
          * @returns {boolean} True if sidebar is on the right side.
          */
 
-
         /**
          * Determines whether the Apps grid is configured to be placed in the opposite Vertical Bar.
          * @returns {boolean} True if apps placement is set to 'vertical-bar'.
          */
-
 
         /**
          * Determines whether the opposite Vertical Bar is on the right side of the screen.
@@ -564,18 +774,15 @@
          * @returns {boolean} True if the Vertical Bar is on the right.
          */
 
-
         /**
          * Determines whether the active floating app panel should attach to and slide from the right.
          * @returns {boolean} True if panel attaches to the right edge.
          */
 
-
         /**
          * Determines whether the Zen sidebar is currently collapsed.
          * @returns {boolean} True if sidebar is collapsed.
          */
-
 
         /**
          * Determines whether Zen Browser is using the "Collapsed Sidebar" layout mode (horizontal apps bar in top toolbar).
@@ -586,13 +793,11 @@
          * @returns {boolean} True if in Collapsed Sidebar layout mode.
          */
 
-
         /**
          * Checks physical sidebar state via DOM attributes and pixel width.
          * Handles both Collapsed Sidebar mode and Compact Mode (sidebar-expanded=true but visually thin/hidden).
          * @returns {boolean} True if the sidebar is physically not expanded.
          */
-
 
         /* --------------------------------------------------------------------------
          * 3.2 CSS Style Injection (Constructable Stylesheets)
@@ -609,7 +814,10 @@
           )
             return;
           this._stylesInjected = true;
-          const css = window.ZentralModuleLoader.readText("features/apps/styles/ZentralAppsInjected.css", "apps");
+          const css = window.ZentralModuleLoader.readText(
+            "features/apps/styles/ZentralAppsInjected.css",
+            "apps",
+          );
           try {
             const style = document.createElement("style");
             style.id = "zen-apps-sidebar-styles";
@@ -640,57 +848,35 @@
          * Updates CSS gradient scroll masks on horizontal apps scroll boxes.
          */
 
-
         /**
          * Creates and attaches persistent DOM elements for the app grid and panel overlays.
          */
 
-
-
-
         /** Close through the current public method so secondary views clean up too. */
-
-
-
-
-
-
-
-
-
-
-
 
         /** Uses the same command as Zen's native Library toolbar button. */
 
-
         /** Same in-window action as the native Ctrl+B shortcut. */
 
-
         /** Opens or focuses the browser's native Library collection. */
-
 
         /**
          * Updates documentElement and trigger state based on autohide preference.
          */
 
-
         /**
          * Updates documentElement and utilitySection state based on hide utility section preference.
          */
-
 
         /**
          * Sets whether the utility section is revealed (Autohide OFF mode).
          * @param {boolean} hovered - Whether utility section or apps grid is hovered.
          */
 
-
         /**
          * Schedules collapse of the utility section after cursor leaves.
          * @param {number} [delay=350] - Delay in milliseconds.
          */
-
 
         /**
          * Schedules delayed reveal when cursor moves to the edge in autohide mode.
@@ -698,11 +884,9 @@
          * @param {number} [delay=320] - Delay in milliseconds.
          */
 
-
         /**
          * Cancels any pending autohide reveal timer.
          */
-
 
         /**
          * Sets whether the autohide apps grid is currently revealed.
@@ -711,22 +895,15 @@
         // An open but hover-hidden panel must not pin the Apps Bar open.
         // Sidebar mode keeps its original active-app rule.
 
-
-
-
-
-
         /**
          * Schedules delayed collapse after cursor leaves apps grid.
          * @param {number} [delay=250] - Delay in milliseconds.
          */
 
-
         /**
          * Renders the draggable buttons (Settings, Autohide) inside the Apps Grid Utility Section.
          * Supports free slot positioning across all grid columns.
          */
-
 
         /**
          * Formats an app's title into a clean, friendly service/brand name
@@ -736,96 +913,11 @@
          * @returns {string} Human-friendly service title.
          */
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         // Title/load events are authoritative even when the panel is closed.
         // This optional fallback covers browser builds which miss title events.
 
-
-
-
-
-
-
-
-
-
-
-
         // Apps Bar panels share the space between BOTH bars. Never measure the
         // pushed tabbox here: its margin depends on the panel width itself.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
         setupObservers() {
           const menu = document.getElementById("tabContextMenu");
@@ -928,9 +1020,7 @@
                 );
                 this.scheduleRepositionGrid(80);
               }
-              if (
-                m.attributeName === "zen-compact-mode"
-              ) {
+              if (m.attributeName === "zen-compact-mode") {
                 if (this.isPlacementVerticalBar()) {
                   this.syncVerticalBarTheme();
                   this.updateVerticalBarBounds();

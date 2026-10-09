@@ -20,889 +20,923 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("settings-shell", function ({ Services, Core, Constants, createSVGElement, SVG_STRINGS, WELL_KNOWN_SERVICES, runtime }) {
-  class ZentralSettings {
-    /**
-     * Constructs ZentralSettings instance.
-     */
-    constructor() {
-      /** @type {Element|null} Reference to modal dialog overlay container */
-      this.modal = null;
-      this._stopShortcutRecordings = new Set();
-    }
-
-    /**
-     * Module initialization hook.
-     */
-    init() {}
-
-    /**
-     * Module tear down for Sine hot unloading
-     */
-    destroy() {
-      try {
-        Core.log("ZentralSettings", "Destroying Settings module...");
-        for (const stop of this._stopShortcutRecordings) stop();
-        this._stopShortcutRecordings.clear();
-        if (this.modal) {
-          if (this.close) this.close();
-          if (this.modal.parentNode) this.modal.remove();
+  window.ZentralModuleLoader.define(
+    "settings-shell",
+    function ({
+      Services,
+      Core,
+      Constants,
+      createSVGElement,
+      SVG_STRINGS,
+      WELL_KNOWN_SERVICES,
+      runtime,
+    }) {
+      class ZentralSettings {
+        /**
+         * Constructs ZentralSettings instance.
+         */
+        constructor() {
+          /** @type {Element|null} Reference to modal dialog overlay container */
           this.modal = null;
+          this._stopShortcutRecordings = new Set();
         }
-        if (this._matrixMouseUpHandler) {
-          window.removeEventListener("mouseup", this._matrixMouseUpHandler);
-          this._matrixMouseUpHandler = null;
-        }
-        if (this._escapeKeyHandler) {
-          window.removeEventListener("keydown", this._escapeKeyHandler);
-          this._escapeKeyHandler = null;
-        }
-        const modalEl = document.getElementById("zentral-settings-modal");
-        if (modalEl) modalEl.remove();
-        const stylesEl = document.getElementById("zentral-settings-styles");
-        if (stylesEl) stylesEl.remove();
-        this._stylesInjected = false;
-        delete window.ZentralSettingsInstance;
-      } catch (e) {
-        console.error("[Zentral] Settings destroy error:", e);
-      }
-    }
 
-    /**
-     * Dynamically positions the modal dialog to fit the content area, excluding the sidebar.
-     */
-    updatePosition() {
-      if (!this.modal) return;
-      try {
-        const sidebar =
-          document.getElementById("sidebar-box") ||
-          document.getElementById("sidebar-container") ||
-          document.getElementById("vertical-tabs") ||
-          document
-            .getElementById("tabbrowser-tabs")
-            ?.closest(
-              "#sidebar-box, #sidebar-container, #vertical-tabs, .zen-sidebar",
-            ) ||
-          document.getElementById("tabbrowser-tabs");
+        /**
+         * Module initialization hook.
+         */
+        init() {}
 
-        const isSidebarCollapsed =
-          document.documentElement.getAttribute("zen-sidebar-collapsed") ===
-            "true" ||
-          document.documentElement.getAttribute("zentral-sidebar-collapsed") ===
-            "true";
-
-        if (sidebar && !isSidebarCollapsed) {
-          const sRect = sidebar.getBoundingClientRect();
-          const isRight =
-            document.documentElement.getAttribute("zen-sidebar-right") ===
-              "true" ||
-            document.documentElement.getAttribute("zen-right-side") ===
-              "true" ||
-            sRect.left > window.innerWidth / 2;
-
-          if (sRect.width > 20 && sRect.width < window.innerWidth) {
-            if (isRight) {
-              this.modal.style.left = "0px";
-              this.modal.style.top = "0px";
-              this.modal.style.bottom = "0px";
-              this.modal.style.right =
-                window.innerWidth - Math.round(sRect.left) + "px";
-              this.modal.style.width = Math.round(sRect.left) + "px";
-            } else {
-              this.modal.style.left = Math.round(sRect.right) + "px";
-              this.modal.style.top = "0px";
-              this.modal.style.bottom = "0px";
-              this.modal.style.right = "0px";
-              this.modal.style.width =
-                window.innerWidth - Math.round(sRect.right) + "px";
+        /**
+         * Module tear down for Sine hot unloading
+         */
+        destroy() {
+          try {
+            Core.log("ZentralSettings", "Destroying Settings module...");
+            for (const stop of this._stopShortcutRecordings) stop();
+            this._stopShortcutRecordings.clear();
+            if (this.modal) {
+              if (this.close) this.close();
+              if (this.modal.parentNode) this.modal.remove();
+              this.modal = null;
             }
-            this.modal.style.height = "100vh";
-            return;
+            if (this._matrixMouseUpHandler) {
+              window.removeEventListener("mouseup", this._matrixMouseUpHandler);
+              this._matrixMouseUpHandler = null;
+            }
+            if (this._escapeKeyHandler) {
+              window.removeEventListener("keydown", this._escapeKeyHandler);
+              this._escapeKeyHandler = null;
+            }
+            const modalEl = document.getElementById("zentral-settings-modal");
+            if (modalEl) modalEl.remove();
+            const stylesEl = document.getElementById("zentral-settings-styles");
+            if (stylesEl) stylesEl.remove();
+            this._stylesInjected = false;
+            delete window.ZentralSettingsInstance;
+          } catch (e) {
+            console.error("[Zentral] Settings destroy error:", e);
           }
         }
-      } catch (_) {}
 
-      this.modal.style.left = "0px";
-      this.modal.style.top = "0px";
-      this.modal.style.right = "0px";
-      this.modal.style.bottom = "0px";
-      this.modal.style.width = "100vw";
-      this.modal.style.height = "100vh";
-    }
+        /**
+         * Dynamically positions the modal dialog to fit the content area, excluding the sidebar.
+         */
+        updatePosition() {
+          if (!this.modal) return;
+          try {
+            const sidebar =
+              document.getElementById("sidebar-box") ||
+              document.getElementById("sidebar-container") ||
+              document.getElementById("vertical-tabs") ||
+              document
+                .getElementById("tabbrowser-tabs")
+                ?.closest(
+                  "#sidebar-box, #sidebar-container, #vertical-tabs, .zen-sidebar",
+                ) ||
+              document.getElementById("tabbrowser-tabs");
 
-    /**
-     * Opens the settings modal dialog.
-     */
-    open() {
-      if (!this.modal) {
-        this.createModal();
-      }
-      this.modal.setAttribute("data-open", "true");
-      this.modal.style.setProperty("display", "flex", "important");
-      this.populate();
-      this.updatePosition();
+            const isSidebarCollapsed =
+              document.documentElement.getAttribute("zen-sidebar-collapsed") ===
+                "true" ||
+              document.documentElement.getAttribute(
+                "zentral-sidebar-collapsed",
+              ) === "true";
 
-      if (!this._escapeKeyHandler) {
-        this._escapeKeyHandler = (e) => {
-          if (
-            e.key === "Escape" &&
-            this.modal &&
-            this.modal.getAttribute("data-open") === "true"
-          ) {
-            this.close();
-          }
-        };
-        window.addEventListener("keydown", this._escapeKeyHandler);
-      }
+            if (sidebar && !isSidebarCollapsed) {
+              const sRect = sidebar.getBoundingClientRect();
+              const isRight =
+                document.documentElement.getAttribute("zen-sidebar-right") ===
+                  "true" ||
+                document.documentElement.getAttribute("zen-right-side") ===
+                  "true" ||
+                sRect.left > window.innerWidth / 2;
 
-      if (!this._resizeHandler) {
-        this._resizeHandler = () => this.updatePosition();
-        window.addEventListener("resize", this._resizeHandler, {
-          passive: true,
-        });
-      }
-    }
-
-    /**
-     * Closes the settings modal dialog.
-     */
-    close() {
-      for (const stop of this._stopShortcutRecordings) stop();
-      if (this.modal) {
-        this.modal.setAttribute("data-open", "false");
-        this.modal.style.setProperty("display", "none", "important");
-      }
-      if (this._escapeKeyHandler) {
-        window.removeEventListener("keydown", this._escapeKeyHandler);
-        this._escapeKeyHandler = null;
-      }
-      if (this._resizeHandler) {
-        window.removeEventListener("resize", this._resizeHandler);
-        this._resizeHandler = null;
-      }
-    }
-
-    /**
-     * Opens the native OS directory picker dialog to select an export folder.
-     * @returns {Promise<string|null>} Selected directory path or null if cancelled.
-     */
-    async pickExportFolder() {
-      return new Promise((resolve) => {
-        try {
-          const nsIFilePicker =
-            Ci?.nsIFilePicker || Components.interfaces.nsIFilePicker;
-          const fp = (
-            Cc?.["@mozilla.org/filepicker;1"] ||
-            Components.classes["@mozilla.org/filepicker;1"]
-          ).createInstance(nsIFilePicker);
-
-          const parentWin = window.browsingContext || window;
-          fp.init(
-            parentWin,
-            "Select Diagnostic Log Export Directory",
-            nsIFilePicker.modeGetFolder,
-          );
-
-          let resolved = false;
-          const onDone = (result) => {
-            if (resolved) return;
-            resolved = true;
-            if (result === nsIFilePicker.returnOK && fp.file) {
-              resolve(fp.file.path);
-            } else {
-              resolve(null);
-            }
-          };
-
-          if (typeof fp.open === "function") {
-            try {
-              const res = fp.open({
-                done(val) {
-                  onDone(val);
-                },
-              });
-              if (res && typeof res.then === "function") {
-                res.then((result) => onDone(result)).catch(() => onDone(null));
-              }
-            } catch (_) {
-              try {
-                const res2 = fp.open((val) => onDone(val));
-                if (res2 && typeof res2.then === "function") {
-                  res2
-                    .then((result) => onDone(result))
-                    .catch(() => onDone(null));
+              if (sRect.width > 20 && sRect.width < window.innerWidth) {
+                if (isRight) {
+                  this.modal.style.left = "0px";
+                  this.modal.style.top = "0px";
+                  this.modal.style.bottom = "0px";
+                  this.modal.style.right =
+                    window.innerWidth - Math.round(sRect.left) + "px";
+                  this.modal.style.width = Math.round(sRect.left) + "px";
+                } else {
+                  this.modal.style.left = Math.round(sRect.right) + "px";
+                  this.modal.style.top = "0px";
+                  this.modal.style.bottom = "0px";
+                  this.modal.style.right = "0px";
+                  this.modal.style.width =
+                    window.innerWidth - Math.round(sRect.right) + "px";
                 }
-              } catch (e2) {
+                this.modal.style.height = "100vh";
+                return;
+              }
+            }
+          } catch (_) {}
+
+          this.modal.style.left = "0px";
+          this.modal.style.top = "0px";
+          this.modal.style.right = "0px";
+          this.modal.style.bottom = "0px";
+          this.modal.style.width = "100vw";
+          this.modal.style.height = "100vh";
+        }
+
+        /**
+         * Opens the settings modal dialog.
+         */
+        open() {
+          if (!this.modal) {
+            this.createModal();
+          }
+          this.modal.setAttribute("data-open", "true");
+          this.modal.style.setProperty("display", "flex", "important");
+          this.populate();
+          this.updatePosition();
+
+          if (!this._escapeKeyHandler) {
+            this._escapeKeyHandler = (e) => {
+              if (
+                e.key === "Escape" &&
+                this.modal &&
+                this.modal.getAttribute("data-open") === "true"
+              ) {
+                this.close();
+              }
+            };
+            window.addEventListener("keydown", this._escapeKeyHandler);
+          }
+
+          if (!this._resizeHandler) {
+            this._resizeHandler = () => this.updatePosition();
+            window.addEventListener("resize", this._resizeHandler, {
+              passive: true,
+            });
+          }
+        }
+
+        /**
+         * Closes the settings modal dialog.
+         */
+        close() {
+          for (const stop of this._stopShortcutRecordings) stop();
+          if (this.modal) {
+            this.modal.setAttribute("data-open", "false");
+            this.modal.style.setProperty("display", "none", "important");
+          }
+          if (this._escapeKeyHandler) {
+            window.removeEventListener("keydown", this._escapeKeyHandler);
+            this._escapeKeyHandler = null;
+          }
+          if (this._resizeHandler) {
+            window.removeEventListener("resize", this._resizeHandler);
+            this._resizeHandler = null;
+          }
+        }
+
+        /**
+         * Opens the native OS directory picker dialog to select an export folder.
+         * @returns {Promise<string|null>} Selected directory path or null if cancelled.
+         */
+        async pickExportFolder() {
+          return new Promise((resolve) => {
+            try {
+              const nsIFilePicker =
+                Ci?.nsIFilePicker || Components.interfaces.nsIFilePicker;
+              const fp = (
+                Cc?.["@mozilla.org/filepicker;1"] ||
+                Components.classes["@mozilla.org/filepicker;1"]
+              ).createInstance(nsIFilePicker);
+
+              const parentWin = window.browsingContext || window;
+              fp.init(
+                parentWin,
+                "Select Diagnostic Log Export Directory",
+                nsIFilePicker.modeGetFolder,
+              );
+
+              let resolved = false;
+              const onDone = (result) => {
+                if (resolved) return;
+                resolved = true;
+                if (result === nsIFilePicker.returnOK && fp.file) {
+                  resolve(fp.file.path);
+                } else {
+                  resolve(null);
+                }
+              };
+
+              if (typeof fp.open === "function") {
+                try {
+                  const res = fp.open({
+                    done(val) {
+                      onDone(val);
+                    },
+                  });
+                  if (res && typeof res.then === "function") {
+                    res
+                      .then((result) => onDone(result))
+                      .catch(() => onDone(null));
+                  }
+                } catch (_) {
+                  try {
+                    const res2 = fp.open((val) => onDone(val));
+                    if (res2 && typeof res2.then === "function") {
+                      res2
+                        .then((result) => onDone(result))
+                        .catch(() => onDone(null));
+                    }
+                  } catch (e2) {
+                    onDone(null);
+                  }
+                }
+              } else if (typeof fp.show === "function") {
+                const res = fp.show();
+                onDone(res);
+              } else {
                 onDone(null);
               }
+            } catch (err) {
+              console.error(
+                "[ZentralSettings] Error opening folder picker:",
+                err,
+              );
+              resolve(null);
             }
-          } else if (typeof fp.show === "function") {
-            const res = fp.show();
-            onDone(res);
-          } else {
-            onDone(null);
-          }
-        } catch (err) {
-          console.error("[ZentralSettings] Error opening folder picker:", err);
-          resolve(null);
-        }
-      });
-    }
-
-    /**
-     * Updates the folder button label and description based on current export path.
-     * @param {string} path - Directory path.
-     */
-    updatePathUI(path) {
-      if (!this.modal) return;
-      const label = this.modal.querySelector("#zs-btn-choose-path-label");
-      const btn = this.modal.querySelector("#zs-btn-choose-path");
-      const clearBtn = this.modal.querySelector("#zs-btn-clear-path");
-      const desc = this.modal.querySelector("#zs-pref-logger-path-desc");
-      if (!label || !btn) return;
-
-      if (path && path.trim() !== "") {
-        const cleanPath = path.trim();
-        const parts = cleanPath.split(/[\\/]/).filter(Boolean);
-        const folderName = parts.pop() || cleanPath;
-        label.textContent = folderName;
-        btn.title = cleanPath;
-        if (clearBtn) clearBtn.style.display = "flex";
-        if (desc) desc.textContent = `Saving to: ${cleanPath}`;
-      } else {
-        label.textContent = "Default Folder";
-        btn.title =
-          "Logs will be saved in profile chrome/logs directory. Click to change folder.";
-        if (clearBtn) clearBtn.style.display = "none";
-        if (desc)
-          desc.textContent = "Directory where diagnostic logs are saved";
-      }
-    }
-
-    /**
-     * Reads preferences from ZentralCore and populates modal input fields and switches.
-     */
-    populate() {
-      if (!this.modal) return;
-      const get = (id) => this.modal.querySelector("#" + id);
-      if (!get("zs-anim-speed")) return;
-
-      const appsEnabled =
-        Core.getPref(Constants.Apps.PREF_ENABLED, true) !== false;
-      if (get("zs-ag-enabled")) {
-        get("zs-ag-enabled").checked = appsEnabled;
-        if (get("zs-ag-status")) {
-          get("zs-ag-status").textContent = appsEnabled
-            ? "Enabled"
-            : "Disabled";
-          get("zs-ag-status").setAttribute(
-            "data-enabled",
-            appsEnabled ? "true" : "false",
-          );
-        }
-        if (get("zs-ag-content")) {
-          get("zs-ag-content").setAttribute(
-            "data-disabled",
-            !appsEnabled ? "true" : "false",
-          );
-        }
-      }
-
-      const placement =
-        Core.getPref(Constants.Apps.PREF_PLACEMENT, "sidebar") || "sidebar";
-      if (get("zs-ag-placement")) get("zs-ag-placement").value = placement;
-      if (get("zs-ag-col"))
-        get("zs-ag-col").setAttribute("data-placement", placement);
-      this.modal.querySelectorAll(".zs-placement-btn").forEach((btn) => {
-        btn.setAttribute(
-          "data-active",
-          btn.dataset.placement === placement ? "true" : "false",
-        );
-      });
-
-      // Show/hide Apps Box Matrix with smooth slide animation based on placement
-      const matrixWrapper = get("zs-matrix-wrapper");
-      if (matrixWrapper) {
-        if (placement === "sidebar") {
-          matrixWrapper.removeAttribute("data-hidden");
-        } else {
-          matrixWrapper.setAttribute("data-hidden", "true");
-        }
-      }
-
-      const utilityRow = get("zs-utility-section-row");
-      if (utilityRow) {
-        if (placement === "sidebar") {
-          utilityRow.removeAttribute("data-hidden");
-        } else {
-          utilityRow.setAttribute("data-hidden", "true");
-        }
-      }
-
-      const cols = Core.getPref(Constants.Apps.PREF_APPS_PER_ROW, 7) || 7;
-      const rows = Core.getPref(Constants.Apps.PREF_MAX_ROWS, 3) || 3;
-      this.updateMatrixUI(cols, rows);
-
-      const animType =
-        Core.getPref(Constants.Apps.PREF_ANIMATION_TYPE, "slide") || "slide";
-      const animSpeed =
-        Core.getPref(Constants.Apps.PREF_ANIMATION_SPEED, 450) ?? 450;
-      const maxApps = Core.getPref(Constants.Apps.PREF_MAX_APPS, 21) || 21;
-
-      const animDropdown = this.modal.querySelector("#zs-anim-type-dropdown");
-      if (animDropdown && animDropdown.syncValue) {
-        animDropdown.syncValue(animType);
-      } else if (get("zs-anim-type")) {
-        get("zs-anim-type").value = animType;
-      }
-
-      get("zs-anim-speed").value = animSpeed;
-      if (get("zs-anim-speed-slider"))
-        get("zs-anim-speed-slider").value = animSpeed;
-      if (get("zs-anim-speed-badge"))
-        get("zs-anim-speed-badge").textContent = `${animSpeed} ms`;
-      get("zs-max-apps").value = maxApps;
-      if (get("zs-hide-utility-section")) {
-        get("zs-hide-utility-section").checked =
-          Core.getPref(Constants.Apps.PREF_HIDE_UTILITY_SECTION, false) ===
-          true;
-      }
-
-      const instaPeekShortcut =
-        Core.getPref(Constants.Apps.PREF_INSTA_PEEK_SHORTCUT, "Alt+Q") ||
-        "Alt+Q";
-      const instaPeekBtn = this.modal.querySelector("#zs-insta-peek-btn");
-      if (instaPeekBtn && instaPeekBtn.syncValue) {
-        instaPeekBtn.syncValue(instaPeekShortcut);
-      } else if (get("zs-insta-peek-shortcut")) {
-        get("zs-insta-peek-shortcut").value = instaPeekShortcut;
-      }
-
-      this.updatePreviewDemo(animType, animSpeed);
-
-      const tgEnabled =
-        Core.getPref(Constants.TabGroups.PREF_ENABLED, true) !== false;
-      if (get("zs-tg-enabled")) {
-        get("zs-tg-enabled").checked = tgEnabled;
-        if (get("zs-tg-status")) {
-          get("zs-tg-status").textContent = tgEnabled ? "Enabled" : "Disabled";
-          get("zs-tg-status").setAttribute(
-            "data-enabled",
-            tgEnabled ? "true" : "false",
-          );
-        }
-        if (get("zs-tg-content")) {
-          get("zs-tg-content").setAttribute(
-            "data-disabled",
-            !tgEnabled ? "true" : "false",
-          );
-        }
-      }
-
-      get("zs-tg-collapse").checked =
-        Core.getPref(Constants.TabGroups.PREF_COLLAPSE_ON_LAUNCH, false) ===
-        true;
-      get("zs-tg-thumbnails").checked =
-        Core.getPref(Constants.TabGroups.PREF_THUMBNAILS, true) !== false;
-
-      const showIndicator =
-        Core.getPref(Constants.TabGroups.PREF_SHOW_CHEVRON, true) !== false;
-      get("zs-tg-chevron").checked = showIndicator;
-      const indicatorTypeRow = get("zs-tg-indicator-type-row");
-      if (indicatorTypeRow) {
-        if (showIndicator) {
-          indicatorTypeRow.removeAttribute("data-hidden");
-        } else {
-          indicatorTypeRow.setAttribute("data-hidden", "true");
-        }
-      }
-
-      const indicatorType =
-        Core.getPref(Constants.TabGroups.PREF_INDICATOR_TYPE, "circle") ||
-        "circle";
-      const tgDropdown = this.modal.querySelector(
-        "#zs-tg-indicator-type-dropdown",
-      );
-      if (tgDropdown && tgDropdown.syncValue) {
-        tgDropdown.syncValue(indicatorType);
-      } else if (get("zs-tg-indicator-type")) {
-        get("zs-tg-indicator-type").value = indicatorType;
-      }
-
-      const opacity =
-        Core.getPref(Constants.TabGroups.PREF_LABEL_OPACITY, 85) ?? 85;
-      if (get("zs-tg-opacity")) {
-        get("zs-tg-opacity").value = opacity;
-        if (get("zs-tg-opacity-badge"))
-          get("zs-tg-opacity-badge").textContent = opacity + "%";
-      }
-
-      if (get("zs-pref-logger-enabled")) {
-        get("zs-pref-logger-enabled").checked = Core.getPref(
-          Constants.Diagnostics.PREF_LOGGER_ENABLED,
-          false,
-        );
-      }
-      if (get("zs-pref-logger-full")) {
-        get("zs-pref-logger-full").checked = Core.getPref(
-          Constants.Diagnostics.PREF_LOGGER_FULL,
-          true,
-        );
-      }
-      if (get("zs-pref-logger-core")) {
-        get("zs-pref-logger-core").checked = true; // Always on
-      }
-      if (get("zs-pref-logger-tabs")) {
-        get("zs-pref-logger-tabs").checked = Core.getPref(
-          Constants.Diagnostics.PREF_LOGGER_TABS,
-          false,
-        );
-      }
-      if (get("zs-pref-logger-apps")) {
-        get("zs-pref-logger-apps").checked = Core.getPref(
-          Constants.Diagnostics.PREF_LOGGER_APPS,
-          false,
-        );
-      }
-      if (get("zs-pref-logger-menus")) {
-        get("zs-pref-logger-menus").checked = Core.getPref(
-          Constants.Diagnostics.PREF_LOGGER_MENUS,
-          false,
-        );
-      }
-      if (get("zs-pref-logger-layout")) {
-        get("zs-pref-logger-layout").checked = Core.getPref(
-          Constants.Diagnostics.PREF_LOGGER_LAYOUT,
-          false,
-        );
-      }
-      if (get("zs-pref-logger-path")) {
-        const savedPath = Core.getPref(
-          Constants.Diagnostics.PREF_LOGGER_PATH,
-          "",
-        );
-        get("zs-pref-logger-path").value = savedPath;
-        this.updatePathUI(savedPath);
-      }
-
-      this.updateLoggerUIState();
-    }
-
-    /**
-     * Synchronizes dynamic visibility and interactivity across Diagnostic Logging toggles.
-     */
-    updateLoggerUIState() {
-      if (!this.modal) return;
-      const get = (id) => this.modal.querySelector("#" + id);
-      const masterToggle = get("zs-pref-logger-enabled");
-      const fullToggle = get("zs-pref-logger-full");
-      const optionsSection = get("zs-logger-options-section");
-      const modulesContainer = get("zs-logger-modules-container");
-
-      const isMasterOn = masterToggle ? masterToggle.checked : false;
-      if (optionsSection) {
-        if (isMasterOn) {
-          optionsSection.classList.remove("zs-section-disabled");
-        } else {
-          optionsSection.classList.add("zs-section-disabled");
-        }
-      }
-
-      const isFull = fullToggle ? fullToggle.checked : true;
-      if (modulesContainer) {
-        modulesContainer.setAttribute("data-hidden", isFull ? "true" : "false");
-      }
-    }
-
-    /**
-     * Updates the animation preview demo element with live easing curve and duration.
-     * @param {string} type - Animation easing type
-     * @param {number} speedMs - Animation duration in milliseconds
-     */
-    updatePreviewDemo(type, speedMs) {
-      if (!this.modal) return;
-      const previewBox = this.modal.querySelector("#zs-anim-preview-box");
-      if (!previewBox) return;
-
-      let curve = "cubic-bezier(0.25, 1, 0.5, 1)";
-      if (type === "spring-snappy")
-        curve = "cubic-bezier(0.175, 0.885, 0.32, 1.275)";
-      else if (type === "spring-gentle")
-        curve = "cubic-bezier(0.34, 1.3, 0.64, 1)";
-      else if (type === "spring-bouncy")
-        curve = "cubic-bezier(0.68, -0.55, 0.265, 1.55)";
-      else if (type === "elastic")
-        curve = "cubic-bezier(0.68, -0.6, 0.32, 1.6)";
-      else if (type === "none") curve = "step-end";
-
-      const duration =
-        type === "none" || speedMs <= 0
-          ? "0.01s"
-          : `${(speedMs / 1000).toFixed(2)}s`;
-      previewBox.style.setProperty("--zs-preview-anim-curve", curve);
-      previewBox.style.setProperty("--zs-preview-anim-duration", duration);
-    }
-
-    /**
-     * Updates the 10x6 matrix selection visual state and hidden inputs.
-     * @param {number} cols - Columns count (1 to 10)
-     * @param {number} rows - Rows count (1 to 6)
-     */
-    updateMatrixUI(cols, rows) {
-      if (!this.modal) return;
-      const clampedCols = Math.max(1, Math.min(10, parseInt(cols, 10) || 1));
-      const clampedRows = Math.max(1, Math.min(6, parseInt(rows, 10) || 1));
-
-      const cells = this.modal.querySelectorAll(".zs-matrix-cell");
-      cells.forEach((cell) => {
-        const c = parseInt(cell.dataset.col, 10);
-        const r = parseInt(cell.dataset.row, 10);
-        cell.setAttribute(
-          "data-selected",
-          c <= clampedCols && r <= clampedRows ? "true" : "false",
-        );
-      });
-
-      const get = (id) => this.modal.querySelector("#" + id);
-      if (get("zs-apps-row")) get("zs-apps-row").value = clampedCols;
-      if (get("zs-max-rows")) get("zs-max-rows").value = clampedRows;
-      if (get("zs-matrix-dims"))
-        get("zs-matrix-dims").textContent =
-          `${clampedCols} Columns × ${clampedRows} Rows`;
-      if (get("zs-matrix-total-badge"))
-        get("zs-matrix-total-badge").textContent =
-          `${clampedCols * clampedRows} Visible Apps`;
-    }
-
-    /**
-     * Reads form fields from modal UI, saves settings via ZentralCore, and triggers UI re-renders.
-     */
-    save() {
-      if (!this.modal) return;
-      const get = (id) => this.modal.querySelector("#" + id);
-      Core.setPref(Constants.Apps.PREF_ENABLED, get("zs-ag-enabled").checked);
-      if (get("zs-ag-placement")) {
-        Core.setPref(
-          Constants.Apps.PREF_PLACEMENT,
-          get("zs-ag-placement").value,
-        );
-      }
-      Core.setPref(
-        Constants.Apps.PREF_ANIMATION_TYPE,
-        get("zs-anim-type").value,
-      );
-      Core.setPref(
-        Constants.Apps.PREF_ANIMATION_SPEED,
-        parseInt(get("zs-anim-speed").value) || 0,
-      );
-      Core.setPref(
-        Constants.Apps.PREF_MAX_APPS,
-        parseInt(get("zs-max-apps").value) || 21,
-      );
-      if (get("zs-hide-utility-section")) {
-        Core.setPref(
-          Constants.Apps.PREF_HIDE_UTILITY_SECTION,
-          get("zs-hide-utility-section").checked,
-        );
-      }
-      Core.setPref(
-        Constants.Apps.PREF_APPS_PER_ROW,
-        parseInt(get("zs-apps-row").value) || 7,
-      );
-      Core.setPref(
-        Constants.Apps.PREF_MAX_ROWS,
-        parseInt(get("zs-max-rows").value) || 3,
-      );
-      if (get("zs-insta-peek-shortcut")) {
-        Core.setPref(
-          Constants.Apps.PREF_INSTA_PEEK_SHORTCUT,
-          get("zs-insta-peek-shortcut").value || "Alt+Q",
-        );
-      }
-
-      Core.setPref(
-        Constants.TabGroups.PREF_ENABLED,
-        get("zs-tg-enabled").checked,
-      );
-      Core.setPref(
-        Constants.TabGroups.PREF_COLLAPSE_ON_LAUNCH,
-        get("zs-tg-collapse").checked,
-      );
-      Core.setPref(
-        Constants.TabGroups.PREF_THUMBNAILS,
-        get("zs-tg-thumbnails").checked,
-      );
-      Core.setPref(
-        Constants.TabGroups.PREF_SHOW_CHEVRON,
-        get("zs-tg-chevron").checked,
-      );
-      if (get("zs-tg-indicator-type")) {
-        Core.setPref(
-          Constants.TabGroups.PREF_INDICATOR_TYPE,
-          get("zs-tg-indicator-type").value,
-        );
-      }
-      if (get("zs-tg-opacity")) {
-        Core.setPref(
-          Constants.TabGroups.PREF_LABEL_OPACITY,
-          Number.isFinite(parseInt(get("zs-tg-opacity").value, 10))
-            ? Math.max(
-                0,
-                Math.min(100, parseInt(get("zs-tg-opacity").value, 10)),
-              )
-            : 85,
-        );
-      }
-
-      if (get("zs-pref-logger-enabled")) {
-        Core.setPref(
-          Constants.Diagnostics.PREF_LOGGER_ENABLED,
-          get("zs-pref-logger-enabled").checked,
-        );
-      }
-      if (get("zs-pref-logger-full")) {
-        Core.setPref(
-          Constants.Diagnostics.PREF_LOGGER_FULL,
-          get("zs-pref-logger-full").checked,
-        );
-      }
-      Core.setPref(Constants.Diagnostics.PREF_LOGGER_CORE, true);
-      if (get("zs-pref-logger-tabs")) {
-        Core.setPref(
-          Constants.Diagnostics.PREF_LOGGER_TABS,
-          get("zs-pref-logger-tabs").checked,
-        );
-      }
-      if (get("zs-pref-logger-apps")) {
-        Core.setPref(
-          Constants.Diagnostics.PREF_LOGGER_APPS,
-          get("zs-pref-logger-apps").checked,
-        );
-      }
-      if (get("zs-pref-logger-menus")) {
-        Core.setPref(
-          Constants.Diagnostics.PREF_LOGGER_MENUS,
-          get("zs-pref-logger-menus").checked,
-        );
-      }
-      if (get("zs-pref-logger-layout")) {
-        Core.setPref(
-          Constants.Diagnostics.PREF_LOGGER_LAYOUT,
-          get("zs-pref-logger-layout").checked,
-        );
-      }
-      if (get("zs-pref-logger-path")) {
-        Core.setPref(
-          Constants.Diagnostics.PREF_LOGGER_PATH,
-          get("zs-pref-logger-path").value.trim(),
-        );
-      }
-
-      this.close();
-      if (window.Zentral?.Apps) {
-        window.Zentral.Apps.applyHideUtilitySectionPref();
-        window.Zentral.Apps.repositionGrid();
-        window.Zentral.Apps.updateAutohideState();
-        window.Zentral.Apps.renderGrid();
-      }
-      if (window.Zentral?.TabGroups) {
-        window.Zentral.TabGroups.applyChevronPref();
-        window.Zentral.TabGroups.applyIndicatorTypePref();
-        window.Zentral.TabGroups.applyLabelOpacityPref();
-      }
-    }
-
-    injectStyles() {
-      const existing = document.getElementById("zentral-settings-styles");
-      if (existing) existing.remove();
-      this._stylesInjected = true;
-      const css = window.ZentralModuleLoader.readText("features/settings/styles/ZentralSettingsInjected.css", "settings");
-      try {
-        const style = document.createElement("style");
-        style.id = "zentral-settings-styles";
-        style.textContent = css;
-        (document.head || document.documentElement).appendChild(style);
-      } catch (e) {
-        console.error("[Zentral] Error injecting settings styles:", e);
-      }
-    }
-
-    /**
-     * Configures a custom dropdown select component with glitch-free option selection.
-     * @param {string} dropdownId - Element ID of .zs-custom-select
-     * @param {string} hiddenInputId - Element ID of associated hidden input
-     * @param {Function} [onSelectCallback] - Optional callback when value changes
-     */
-    setupCustomSelect(dropdownId, hiddenInputId, onSelectCallback) {
-      if (!this.modal) return;
-      const dropdown = this.modal.querySelector("#" + dropdownId);
-      const hiddenInput = this.modal.querySelector("#" + hiddenInputId);
-      if (!dropdown || !hiddenInput) return;
-
-      const trigger = dropdown.querySelector(".zs-custom-select-trigger");
-      const label = dropdown.querySelector(".zs-custom-select-label");
-      const options = dropdown.querySelectorAll(".zs-custom-select-option");
-
-      const syncUI = (val) => {
-        hiddenInput.value = val;
-        options.forEach((opt) => {
-          const isSelected = opt.dataset.value === val;
-          opt.setAttribute("data-selected", isSelected ? "true" : "false");
-          if (isSelected && label) {
-            label.innerHTML = opt.innerHTML;
-          }
-        });
-      };
-
-      if (trigger) {
-        trigger.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const isOpen = dropdown.getAttribute("data-open") === "true";
-          this.modal.querySelectorAll(".zs-custom-select").forEach((d) => {
-            if (d !== dropdown) d.removeAttribute("data-open");
           });
-          if (isOpen) {
-            dropdown.removeAttribute("data-open");
+        }
+
+        /**
+         * Updates the folder button label and description based on current export path.
+         * @param {string} path - Directory path.
+         */
+        updatePathUI(path) {
+          if (!this.modal) return;
+          const label = this.modal.querySelector("#zs-btn-choose-path-label");
+          const btn = this.modal.querySelector("#zs-btn-choose-path");
+          const clearBtn = this.modal.querySelector("#zs-btn-clear-path");
+          const desc = this.modal.querySelector("#zs-pref-logger-path-desc");
+          if (!label || !btn) return;
+
+          if (path && path.trim() !== "") {
+            const cleanPath = path.trim();
+            const parts = cleanPath.split(/[\\/]/).filter(Boolean);
+            const folderName = parts.pop() || cleanPath;
+            label.textContent = folderName;
+            btn.title = cleanPath;
+            if (clearBtn) clearBtn.style.display = "flex";
+            if (desc) desc.textContent = `Saving to: ${cleanPath}`;
           } else {
-            dropdown.setAttribute("data-open", "true");
+            label.textContent = "Default Folder";
+            btn.title =
+              "Logs will be saved in profile chrome/logs directory. Click to change folder.";
+            if (clearBtn) clearBtn.style.display = "none";
+            if (desc)
+              desc.textContent = "Directory where diagnostic logs are saved";
           }
-        });
-      }
+        }
 
-      options.forEach((opt) => {
-        opt.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const val = opt.dataset.value;
-          syncUI(val);
-          dropdown.removeAttribute("data-open");
-          if (typeof onSelectCallback === "function") {
-            onSelectCallback(val);
+        /**
+         * Reads preferences from ZentralCore and populates modal input fields and switches.
+         */
+        populate() {
+          if (!this.modal) return;
+          const get = (id) => this.modal.querySelector("#" + id);
+          if (!get("zs-anim-speed")) return;
+
+          const appsEnabled =
+            Core.getPref(Constants.Apps.PREF_ENABLED, true) !== false;
+          if (get("zs-ag-enabled")) {
+            get("zs-ag-enabled").checked = appsEnabled;
+            if (get("zs-ag-status")) {
+              get("zs-ag-status").textContent = appsEnabled
+                ? "Enabled"
+                : "Disabled";
+              get("zs-ag-status").setAttribute(
+                "data-enabled",
+                appsEnabled ? "true" : "false",
+              );
+            }
+            if (get("zs-ag-content")) {
+              get("zs-ag-content").setAttribute(
+                "data-disabled",
+                !appsEnabled ? "true" : "false",
+              );
+            }
           }
-        });
-      });
 
-      dropdown.syncValue = syncUI;
-    }
+          const placement =
+            Core.getPref(Constants.Apps.PREF_PLACEMENT, "sidebar") || "sidebar";
+          if (get("zs-ag-placement")) get("zs-ag-placement").value = placement;
+          if (get("zs-ag-col"))
+            get("zs-ag-col").setAttribute("data-placement", placement);
+          this.modal.querySelectorAll(".zs-placement-btn").forEach((btn) => {
+            btn.setAttribute(
+              "data-active",
+              btn.dataset.placement === placement ? "true" : "false",
+            );
+          });
 
-    /**
-     * Configures an interactive shortcut recorder button.
-     * Click to record, press key combination, Escape to cancel, Backspace/Delete to clear to "None".
-     * @param {string} buttonId - Button ID (e.g. "zs-insta-peek-btn")
-     * @param {string} hiddenInputId - Hidden input ID (e.g. "zs-insta-peek-shortcut")
-     * @param {Function} [onChangeCallback] - Optional callback
-     */
-    setupShortcutRecorder(buttonId, hiddenInputId, onChangeCallback) {
-      if (!this.modal) return;
-      const btn = this.modal.querySelector("#" + buttonId);
-      const input = this.modal.querySelector("#" + hiddenInputId);
-      if (!btn || !input) return;
+          // Show/hide Apps Box Matrix with smooth slide animation based on placement
+          const matrixWrapper = get("zs-matrix-wrapper");
+          if (matrixWrapper) {
+            if (placement === "sidebar") {
+              matrixWrapper.removeAttribute("data-hidden");
+            } else {
+              matrixWrapper.setAttribute("data-hidden", "true");
+            }
+          }
 
-      const label = btn.querySelector(".zs-shortcut-label") || btn;
-      let isRecording = false;
+          const utilityRow = get("zs-utility-section-row");
+          if (utilityRow) {
+            if (placement === "sidebar") {
+              utilityRow.removeAttribute("data-hidden");
+            } else {
+              utilityRow.setAttribute("data-hidden", "true");
+            }
+          }
 
-      const stopRecording = () => {
-        if (!isRecording) return;
-        isRecording = false;
-        window.removeEventListener("keydown", onKeyDown, true);
-        btn.removeAttribute("data-recording");
-        label.textContent = input.value;
-      };
-      this._stopShortcutRecordings.add(stopRecording);
+          const cols = Core.getPref(Constants.Apps.PREF_APPS_PER_ROW, 7) || 7;
+          const rows = Core.getPref(Constants.Apps.PREF_MAX_ROWS, 3) || 3;
+          this.updateMatrixUI(cols, rows);
 
-      const syncUI = (val) => {
-        stopRecording();
-        const displayVal = !val || val === "None" ? "None" : val;
-        input.value = displayVal;
-        label.textContent = displayVal;
-        btn.setAttribute("data-value", displayVal);
-      };
+          const animType =
+            Core.getPref(Constants.Apps.PREF_ANIMATION_TYPE, "slide") ||
+            "slide";
+          const animSpeed =
+            Core.getPref(Constants.Apps.PREF_ANIMATION_SPEED, 450) ?? 450;
+          const maxApps = Core.getPref(Constants.Apps.PREF_MAX_APPS, 21) || 21;
 
-      btn.syncValue = syncUI;
+          const animDropdown = this.modal.querySelector(
+            "#zs-anim-type-dropdown",
+          );
+          if (animDropdown && animDropdown.syncValue) {
+            animDropdown.syncValue(animType);
+          } else if (get("zs-anim-type")) {
+            get("zs-anim-type").value = animType;
+          }
 
-      const onKeyDown = (e) => {
-        if (!isRecording) return;
-        e.preventDefault();
-        e.stopPropagation();
+          get("zs-anim-speed").value = animSpeed;
+          if (get("zs-anim-speed-slider"))
+            get("zs-anim-speed-slider").value = animSpeed;
+          if (get("zs-anim-speed-badge"))
+            get("zs-anim-speed-badge").textContent = `${animSpeed} ms`;
+          get("zs-max-apps").value = maxApps;
+          if (get("zs-hide-utility-section")) {
+            get("zs-hide-utility-section").checked =
+              Core.getPref(Constants.Apps.PREF_HIDE_UTILITY_SECTION, false) ===
+              true;
+          }
 
-        if (e.key === "Escape") {
-          syncUI(input.value);
-          return;
+          const instaPeekShortcut =
+            Core.getPref(Constants.Apps.PREF_INSTA_PEEK_SHORTCUT, "Alt+Q") ||
+            "Alt+Q";
+          const instaPeekBtn = this.modal.querySelector("#zs-insta-peek-btn");
+          if (instaPeekBtn && instaPeekBtn.syncValue) {
+            instaPeekBtn.syncValue(instaPeekShortcut);
+          } else if (get("zs-insta-peek-shortcut")) {
+            get("zs-insta-peek-shortcut").value = instaPeekShortcut;
+          }
+
+          this.updatePreviewDemo(animType, animSpeed);
+
+          const tgEnabled =
+            Core.getPref(Constants.TabGroups.PREF_ENABLED, true) !== false;
+          if (get("zs-tg-enabled")) {
+            get("zs-tg-enabled").checked = tgEnabled;
+            if (get("zs-tg-status")) {
+              get("zs-tg-status").textContent = tgEnabled
+                ? "Enabled"
+                : "Disabled";
+              get("zs-tg-status").setAttribute(
+                "data-enabled",
+                tgEnabled ? "true" : "false",
+              );
+            }
+            if (get("zs-tg-content")) {
+              get("zs-tg-content").setAttribute(
+                "data-disabled",
+                !tgEnabled ? "true" : "false",
+              );
+            }
+          }
+
+          get("zs-tg-collapse").checked =
+            Core.getPref(Constants.TabGroups.PREF_COLLAPSE_ON_LAUNCH, false) ===
+            true;
+          get("zs-tg-thumbnails").checked =
+            Core.getPref(Constants.TabGroups.PREF_THUMBNAILS, true) !== false;
+
+          const showIndicator =
+            Core.getPref(Constants.TabGroups.PREF_SHOW_CHEVRON, true) !== false;
+          get("zs-tg-chevron").checked = showIndicator;
+          const indicatorTypeRow = get("zs-tg-indicator-type-row");
+          if (indicatorTypeRow) {
+            if (showIndicator) {
+              indicatorTypeRow.removeAttribute("data-hidden");
+            } else {
+              indicatorTypeRow.setAttribute("data-hidden", "true");
+            }
+          }
+
+          const indicatorType =
+            Core.getPref(Constants.TabGroups.PREF_INDICATOR_TYPE, "circle") ||
+            "circle";
+          const tgDropdown = this.modal.querySelector(
+            "#zs-tg-indicator-type-dropdown",
+          );
+          if (tgDropdown && tgDropdown.syncValue) {
+            tgDropdown.syncValue(indicatorType);
+          } else if (get("zs-tg-indicator-type")) {
+            get("zs-tg-indicator-type").value = indicatorType;
+          }
+
+          const opacity =
+            Core.getPref(Constants.TabGroups.PREF_LABEL_OPACITY, 85) ?? 85;
+          if (get("zs-tg-opacity")) {
+            get("zs-tg-opacity").value = opacity;
+            if (get("zs-tg-opacity-badge"))
+              get("zs-tg-opacity-badge").textContent = opacity + "%";
+          }
+
+          if (get("zs-pref-logger-enabled")) {
+            get("zs-pref-logger-enabled").checked = Core.getPref(
+              Constants.Diagnostics.PREF_LOGGER_ENABLED,
+              false,
+            );
+          }
+          if (get("zs-pref-logger-full")) {
+            get("zs-pref-logger-full").checked = Core.getPref(
+              Constants.Diagnostics.PREF_LOGGER_FULL,
+              true,
+            );
+          }
+          if (get("zs-pref-logger-core")) {
+            get("zs-pref-logger-core").checked = true; // Always on
+          }
+          if (get("zs-pref-logger-tabs")) {
+            get("zs-pref-logger-tabs").checked = Core.getPref(
+              Constants.Diagnostics.PREF_LOGGER_TABS,
+              false,
+            );
+          }
+          if (get("zs-pref-logger-apps")) {
+            get("zs-pref-logger-apps").checked = Core.getPref(
+              Constants.Diagnostics.PREF_LOGGER_APPS,
+              false,
+            );
+          }
+          if (get("zs-pref-logger-menus")) {
+            get("zs-pref-logger-menus").checked = Core.getPref(
+              Constants.Diagnostics.PREF_LOGGER_MENUS,
+              false,
+            );
+          }
+          if (get("zs-pref-logger-layout")) {
+            get("zs-pref-logger-layout").checked = Core.getPref(
+              Constants.Diagnostics.PREF_LOGGER_LAYOUT,
+              false,
+            );
+          }
+          if (get("zs-pref-logger-path")) {
+            const savedPath = Core.getPref(
+              Constants.Diagnostics.PREF_LOGGER_PATH,
+              "",
+            );
+            get("zs-pref-logger-path").value = savedPath;
+            this.updatePathUI(savedPath);
+          }
+
+          this.updateLoggerUIState();
         }
 
-        if (e.key === "Backspace" || e.key === "Delete") {
-          syncUI("None");
-          if (typeof onChangeCallback === "function") onChangeCallback("None");
-          return;
+        /**
+         * Synchronizes dynamic visibility and interactivity across Diagnostic Logging toggles.
+         */
+        updateLoggerUIState() {
+          if (!this.modal) return;
+          const get = (id) => this.modal.querySelector("#" + id);
+          const masterToggle = get("zs-pref-logger-enabled");
+          const fullToggle = get("zs-pref-logger-full");
+          const optionsSection = get("zs-logger-options-section");
+          const modulesContainer = get("zs-logger-modules-container");
+
+          const isMasterOn = masterToggle ? masterToggle.checked : false;
+          if (optionsSection) {
+            if (isMasterOn) {
+              optionsSection.classList.remove("zs-section-disabled");
+            } else {
+              optionsSection.classList.add("zs-section-disabled");
+            }
+          }
+
+          const isFull = fullToggle ? fullToggle.checked : true;
+          if (modulesContainer) {
+            modulesContainer.setAttribute(
+              "data-hidden",
+              isFull ? "true" : "false",
+            );
+          }
         }
 
-        if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) {
-          return;
+        /**
+         * Updates the animation preview demo element with live easing curve and duration.
+         * @param {string} type - Animation easing type
+         * @param {number} speedMs - Animation duration in milliseconds
+         */
+        updatePreviewDemo(type, speedMs) {
+          if (!this.modal) return;
+          const previewBox = this.modal.querySelector("#zs-anim-preview-box");
+          if (!previewBox) return;
+
+          let curve = "cubic-bezier(0.25, 1, 0.5, 1)";
+          if (type === "spring-snappy")
+            curve = "cubic-bezier(0.175, 0.885, 0.32, 1.275)";
+          else if (type === "spring-gentle")
+            curve = "cubic-bezier(0.34, 1.3, 0.64, 1)";
+          else if (type === "spring-bouncy")
+            curve = "cubic-bezier(0.68, -0.55, 0.265, 1.55)";
+          else if (type === "elastic")
+            curve = "cubic-bezier(0.68, -0.6, 0.32, 1.6)";
+          else if (type === "none") curve = "step-end";
+
+          const duration =
+            type === "none" || speedMs <= 0
+              ? "0.01s"
+              : `${(speedMs / 1000).toFixed(2)}s`;
+          previewBox.style.setProperty("--zs-preview-anim-curve", curve);
+          previewBox.style.setProperty("--zs-preview-anim-duration", duration);
         }
 
-        const parts = [];
-        if (e.ctrlKey) parts.push("Ctrl");
-        if (e.altKey) parts.push("Alt");
-        if (e.shiftKey) parts.push("Shift");
-        if (e.metaKey) parts.push("Meta");
+        /**
+         * Updates the 10x6 matrix selection visual state and hidden inputs.
+         * @param {number} cols - Columns count (1 to 10)
+         * @param {number} rows - Rows count (1 to 6)
+         */
+        updateMatrixUI(cols, rows) {
+          if (!this.modal) return;
+          const clampedCols = Math.max(
+            1,
+            Math.min(10, parseInt(cols, 10) || 1),
+          );
+          const clampedRows = Math.max(1, Math.min(6, parseInt(rows, 10) || 1));
 
-        let key = e.key;
-        if (key === " " || key === "Spacebar") key = "Space";
-        else if (key.length === 1) key = key.toUpperCase();
-        else if (key.startsWith("Arrow")) key = key.replace("Arrow", "");
+          const cells = this.modal.querySelectorAll(".zs-matrix-cell");
+          cells.forEach((cell) => {
+            const c = parseInt(cell.dataset.col, 10);
+            const r = parseInt(cell.dataset.row, 10);
+            cell.setAttribute(
+              "data-selected",
+              c <= clampedCols && r <= clampedRows ? "true" : "false",
+            );
+          });
 
-        parts.push(key);
-        const combo = parts.join("+");
-
-        syncUI(combo);
-        if (typeof onChangeCallback === "function") onChangeCallback(combo);
-      };
-
-      btn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (isRecording) {
-          syncUI(input.value);
-          return;
+          const get = (id) => this.modal.querySelector("#" + id);
+          if (get("zs-apps-row")) get("zs-apps-row").value = clampedCols;
+          if (get("zs-max-rows")) get("zs-max-rows").value = clampedRows;
+          if (get("zs-matrix-dims"))
+            get("zs-matrix-dims").textContent =
+              `${clampedCols} Columns × ${clampedRows} Rows`;
+          if (get("zs-matrix-total-badge"))
+            get("zs-matrix-total-badge").textContent =
+              `${clampedCols * clampedRows} Visible Apps`;
         }
-        isRecording = true;
-        btn.setAttribute("data-recording", "true");
-        label.textContent = "Press keys...";
-        window.addEventListener("keydown", onKeyDown, true);
-      });
 
-      this.modal.addEventListener("mousedown", (e) => {
-        if (isRecording && !e.target.closest("#" + buttonId)) {
-          syncUI(input.value);
+        /**
+         * Reads form fields from modal UI, saves settings via ZentralCore, and triggers UI re-renders.
+         */
+        save() {
+          if (!this.modal) return;
+          const get = (id) => this.modal.querySelector("#" + id);
+          Core.setPref(
+            Constants.Apps.PREF_ENABLED,
+            get("zs-ag-enabled").checked,
+          );
+          if (get("zs-ag-placement")) {
+            Core.setPref(
+              Constants.Apps.PREF_PLACEMENT,
+              get("zs-ag-placement").value,
+            );
+          }
+          Core.setPref(
+            Constants.Apps.PREF_ANIMATION_TYPE,
+            get("zs-anim-type").value,
+          );
+          Core.setPref(
+            Constants.Apps.PREF_ANIMATION_SPEED,
+            parseInt(get("zs-anim-speed").value) || 0,
+          );
+          Core.setPref(
+            Constants.Apps.PREF_MAX_APPS,
+            parseInt(get("zs-max-apps").value) || 21,
+          );
+          if (get("zs-hide-utility-section")) {
+            Core.setPref(
+              Constants.Apps.PREF_HIDE_UTILITY_SECTION,
+              get("zs-hide-utility-section").checked,
+            );
+          }
+          Core.setPref(
+            Constants.Apps.PREF_APPS_PER_ROW,
+            parseInt(get("zs-apps-row").value) || 7,
+          );
+          Core.setPref(
+            Constants.Apps.PREF_MAX_ROWS,
+            parseInt(get("zs-max-rows").value) || 3,
+          );
+          if (get("zs-insta-peek-shortcut")) {
+            Core.setPref(
+              Constants.Apps.PREF_INSTA_PEEK_SHORTCUT,
+              get("zs-insta-peek-shortcut").value || "Alt+Q",
+            );
+          }
+
+          Core.setPref(
+            Constants.TabGroups.PREF_ENABLED,
+            get("zs-tg-enabled").checked,
+          );
+          Core.setPref(
+            Constants.TabGroups.PREF_COLLAPSE_ON_LAUNCH,
+            get("zs-tg-collapse").checked,
+          );
+          Core.setPref(
+            Constants.TabGroups.PREF_THUMBNAILS,
+            get("zs-tg-thumbnails").checked,
+          );
+          Core.setPref(
+            Constants.TabGroups.PREF_SHOW_CHEVRON,
+            get("zs-tg-chevron").checked,
+          );
+          if (get("zs-tg-indicator-type")) {
+            Core.setPref(
+              Constants.TabGroups.PREF_INDICATOR_TYPE,
+              get("zs-tg-indicator-type").value,
+            );
+          }
+          if (get("zs-tg-opacity")) {
+            Core.setPref(
+              Constants.TabGroups.PREF_LABEL_OPACITY,
+              Number.isFinite(parseInt(get("zs-tg-opacity").value, 10))
+                ? Math.max(
+                    0,
+                    Math.min(100, parseInt(get("zs-tg-opacity").value, 10)),
+                  )
+                : 85,
+            );
+          }
+
+          if (get("zs-pref-logger-enabled")) {
+            Core.setPref(
+              Constants.Diagnostics.PREF_LOGGER_ENABLED,
+              get("zs-pref-logger-enabled").checked,
+            );
+          }
+          if (get("zs-pref-logger-full")) {
+            Core.setPref(
+              Constants.Diagnostics.PREF_LOGGER_FULL,
+              get("zs-pref-logger-full").checked,
+            );
+          }
+          Core.setPref(Constants.Diagnostics.PREF_LOGGER_CORE, true);
+          if (get("zs-pref-logger-tabs")) {
+            Core.setPref(
+              Constants.Diagnostics.PREF_LOGGER_TABS,
+              get("zs-pref-logger-tabs").checked,
+            );
+          }
+          if (get("zs-pref-logger-apps")) {
+            Core.setPref(
+              Constants.Diagnostics.PREF_LOGGER_APPS,
+              get("zs-pref-logger-apps").checked,
+            );
+          }
+          if (get("zs-pref-logger-menus")) {
+            Core.setPref(
+              Constants.Diagnostics.PREF_LOGGER_MENUS,
+              get("zs-pref-logger-menus").checked,
+            );
+          }
+          if (get("zs-pref-logger-layout")) {
+            Core.setPref(
+              Constants.Diagnostics.PREF_LOGGER_LAYOUT,
+              get("zs-pref-logger-layout").checked,
+            );
+          }
+          if (get("zs-pref-logger-path")) {
+            Core.setPref(
+              Constants.Diagnostics.PREF_LOGGER_PATH,
+              get("zs-pref-logger-path").value.trim(),
+            );
+          }
+
+          this.close();
+          if (window.Zentral?.Apps) {
+            window.Zentral.Apps.applyHideUtilitySectionPref();
+            window.Zentral.Apps.repositionGrid();
+            window.Zentral.Apps.updateAutohideState();
+            window.Zentral.Apps.renderGrid();
+          }
+          if (window.Zentral?.TabGroups) {
+            window.Zentral.TabGroups.applyChevronPref();
+            window.Zentral.TabGroups.applyIndicatorTypePref();
+            window.Zentral.TabGroups.applyLabelOpacityPref();
+          }
         }
-      });
-    }
 
-    createModal() {
-      this.injectStyles();
-      this.modal = document.createElementNS(
-        "http://www.w3.org/1999/xhtml",
-        "div",
-      );
-      this.modal.id = "zentral-settings-modal";
-      this.modal.setAttribute("data-open", "true");
-
-      const content = document.createElementNS(
-        "http://www.w3.org/1999/xhtml",
-        "div",
-      );
-      content.className = "zs-dialog";
-
-      // Generate 60 matrix cells (6 rows x 10 cols)
-      let matrixCellsHtml = "";
-      for (let r = 1; r <= 6; r++) {
-        for (let c = 1; c <= 10; c++) {
-          matrixCellsHtml += `<div class="zs-matrix-cell" data-row="${r}" data-col="${c}" title="Row ${r}, Col ${c}"></div>`;
+        injectStyles() {
+          const existing = document.getElementById("zentral-settings-styles");
+          if (existing) existing.remove();
+          this._stylesInjected = true;
+          const css = window.ZentralModuleLoader.readText(
+            "features/settings/styles/ZentralSettingsInjected.css",
+            "settings",
+          );
+          try {
+            const style = document.createElement("style");
+            style.id = "zentral-settings-styles";
+            style.textContent = css;
+            (document.head || document.documentElement).appendChild(style);
+          } catch (e) {
+            console.error("[Zentral] Error injecting settings styles:", e);
+          }
         }
-      }
 
-      const htmlStr = `
+        /**
+         * Configures a custom dropdown select component with glitch-free option selection.
+         * @param {string} dropdownId - Element ID of .zs-custom-select
+         * @param {string} hiddenInputId - Element ID of associated hidden input
+         * @param {Function} [onSelectCallback] - Optional callback when value changes
+         */
+        setupCustomSelect(dropdownId, hiddenInputId, onSelectCallback) {
+          if (!this.modal) return;
+          const dropdown = this.modal.querySelector("#" + dropdownId);
+          const hiddenInput = this.modal.querySelector("#" + hiddenInputId);
+          if (!dropdown || !hiddenInput) return;
+
+          const trigger = dropdown.querySelector(".zs-custom-select-trigger");
+          const label = dropdown.querySelector(".zs-custom-select-label");
+          const options = dropdown.querySelectorAll(".zs-custom-select-option");
+
+          const syncUI = (val) => {
+            hiddenInput.value = val;
+            options.forEach((opt) => {
+              const isSelected = opt.dataset.value === val;
+              opt.setAttribute("data-selected", isSelected ? "true" : "false");
+              if (isSelected && label) {
+                label.innerHTML = opt.innerHTML;
+              }
+            });
+          };
+
+          if (trigger) {
+            trigger.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const isOpen = dropdown.getAttribute("data-open") === "true";
+              this.modal.querySelectorAll(".zs-custom-select").forEach((d) => {
+                if (d !== dropdown) d.removeAttribute("data-open");
+              });
+              if (isOpen) {
+                dropdown.removeAttribute("data-open");
+              } else {
+                dropdown.setAttribute("data-open", "true");
+              }
+            });
+          }
+
+          options.forEach((opt) => {
+            opt.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const val = opt.dataset.value;
+              syncUI(val);
+              dropdown.removeAttribute("data-open");
+              if (typeof onSelectCallback === "function") {
+                onSelectCallback(val);
+              }
+            });
+          });
+
+          dropdown.syncValue = syncUI;
+        }
+
+        /**
+         * Configures an interactive shortcut recorder button.
+         * Click to record, press key combination, Escape to cancel, Backspace/Delete to clear to "None".
+         * @param {string} buttonId - Button ID (e.g. "zs-insta-peek-btn")
+         * @param {string} hiddenInputId - Hidden input ID (e.g. "zs-insta-peek-shortcut")
+         * @param {Function} [onChangeCallback] - Optional callback
+         */
+        setupShortcutRecorder(buttonId, hiddenInputId, onChangeCallback) {
+          if (!this.modal) return;
+          const btn = this.modal.querySelector("#" + buttonId);
+          const input = this.modal.querySelector("#" + hiddenInputId);
+          if (!btn || !input) return;
+
+          const label = btn.querySelector(".zs-shortcut-label") || btn;
+          let isRecording = false;
+
+          const stopRecording = () => {
+            if (!isRecording) return;
+            isRecording = false;
+            window.removeEventListener("keydown", onKeyDown, true);
+            btn.removeAttribute("data-recording");
+            label.textContent = input.value;
+          };
+          this._stopShortcutRecordings.add(stopRecording);
+
+          const syncUI = (val) => {
+            stopRecording();
+            const displayVal = !val || val === "None" ? "None" : val;
+            input.value = displayVal;
+            label.textContent = displayVal;
+            btn.setAttribute("data-value", displayVal);
+          };
+
+          btn.syncValue = syncUI;
+
+          const onKeyDown = (e) => {
+            if (!isRecording) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (e.key === "Escape") {
+              syncUI(input.value);
+              return;
+            }
+
+            if (e.key === "Backspace" || e.key === "Delete") {
+              syncUI("None");
+              if (typeof onChangeCallback === "function")
+                onChangeCallback("None");
+              return;
+            }
+
+            if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) {
+              return;
+            }
+
+            const parts = [];
+            if (e.ctrlKey) parts.push("Ctrl");
+            if (e.altKey) parts.push("Alt");
+            if (e.shiftKey) parts.push("Shift");
+            if (e.metaKey) parts.push("Meta");
+
+            let key = e.key;
+            if (key === " " || key === "Spacebar") key = "Space";
+            else if (key.length === 1) key = key.toUpperCase();
+            else if (key.startsWith("Arrow")) key = key.replace("Arrow", "");
+
+            parts.push(key);
+            const combo = parts.join("+");
+
+            syncUI(combo);
+            if (typeof onChangeCallback === "function") onChangeCallback(combo);
+          };
+
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (isRecording) {
+              syncUI(input.value);
+              return;
+            }
+            isRecording = true;
+            btn.setAttribute("data-recording", "true");
+            label.textContent = "Press keys...";
+            window.addEventListener("keydown", onKeyDown, true);
+          });
+
+          this.modal.addEventListener("mousedown", (e) => {
+            if (isRecording && !e.target.closest("#" + buttonId)) {
+              syncUI(input.value);
+            }
+          });
+        }
+
+        createModal() {
+          this.injectStyles();
+          this.modal = document.createElementNS(
+            "http://www.w3.org/1999/xhtml",
+            "div",
+          );
+          this.modal.id = "zentral-settings-modal";
+          this.modal.setAttribute("data-open", "true");
+
+          const content = document.createElementNS(
+            "http://www.w3.org/1999/xhtml",
+            "div",
+          );
+          content.className = "zs-dialog";
+
+          // Generate 60 matrix cells (6 rows x 10 cols)
+          let matrixCellsHtml = "";
+          for (let r = 1; r <= 6; r++) {
+            for (let c = 1; c <= 10; c++) {
+              matrixCellsHtml += `<div class="zs-matrix-cell" data-row="${r}" data-col="${c}" title="Row ${r}, Col ${c}"></div>`;
+            }
+          }
+
+          const htmlStr = `
         <div class="zs-header">
           <div class="zs-title-group">
             <h2 class="zs-title">Zentral Settings</h2>
@@ -1383,844 +1417,886 @@
         </div>
       `;
 
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(htmlStr, "text/html");
-      while (doc.body.firstChild) {
-        content.appendChild(doc.body.firstChild);
-      }
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(htmlStr, "text/html");
+          while (doc.body.firstChild) {
+            content.appendChild(doc.body.firstChild);
+          }
 
-      this.modal.appendChild(content);
-      const container =
-        document.getElementById("browser") ||
-        document.body ||
-        document.documentElement;
-      container.appendChild(this.modal);
+          this.modal.appendChild(content);
+          const container =
+            document.getElementById("browser") ||
+            document.body ||
+            document.documentElement;
+          container.appendChild(this.modal);
 
-      // Tab Switching Logic
-      const tabBtns = this.modal.querySelectorAll(".zs-tab-btn");
-      const tabPanels = this.modal.querySelectorAll(".zs-tab-panel");
-      tabBtns.forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const targetTab = btn.dataset.tab;
-          tabBtns.forEach((b) =>
-            b.setAttribute("data-active", b === btn ? "true" : "false"),
-          );
-          tabPanels.forEach((p) =>
-            p.setAttribute(
-              "data-active",
-              p.dataset.tab === targetTab ? "true" : "false",
-            ),
-          );
-        });
-      });
-
-      this.modal
-        .querySelector("#zs-kofi-btn")
-        ?.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          this.close();
-          const kofiUrl = "https://ko-fi.com/michele501st";
-          if (window.gBrowser?.addTab) {
-            const newTab = window.gBrowser.addTab(kofiUrl, {
-              triggeringPrincipal:
-                Services.scriptSecurityManager.getSystemPrincipal(),
-              inBackground: false,
+          // Tab Switching Logic
+          const tabBtns = this.modal.querySelectorAll(".zs-tab-btn");
+          const tabPanels = this.modal.querySelectorAll(".zs-tab-panel");
+          tabBtns.forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const targetTab = btn.dataset.tab;
+              tabBtns.forEach((b) =>
+                b.setAttribute("data-active", b === btn ? "true" : "false"),
+              );
+              tabPanels.forEach((p) =>
+                p.setAttribute(
+                  "data-active",
+                  p.dataset.tab === targetTab ? "true" : "false",
+                ),
+              );
             });
-            if (newTab) {
-              window.gBrowser.selectedTab = newTab;
-            }
-          } else {
-            window.open(kofiUrl, "_blank");
-          }
-        });
+          });
 
-      this.modal
-        .querySelector("#zs-close")
-        .addEventListener("click", () => this.close());
-      this.modal
-        .querySelector("#zs-cancel")
-        .addEventListener("click", () => this.close());
-      this.modal
-        .querySelector("#zs-save")
-        .addEventListener("click", () => this.save());
-
-      // Close open custom selects when clicking anywhere else
-      this.modal.addEventListener("click", (e) => {
-        if (!e.target.closest(".zs-custom-select")) {
           this.modal
-            .querySelectorAll(".zs-custom-select")
-            .forEach((d) => d.removeAttribute("data-open"));
-        }
-      });
+            .querySelector("#zs-kofi-btn")
+            ?.addEventListener("click", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              this.close();
+              const kofiUrl = "https://ko-fi.com/michele501st";
+              if (window.gBrowser?.addTab) {
+                const newTab = window.gBrowser.addTab(kofiUrl, {
+                  triggeringPrincipal:
+                    Services.scriptSecurityManager.getSystemPrincipal(),
+                  inBackground: false,
+                });
+                if (newTab) {
+                  window.gBrowser.selectedTab = newTab;
+                }
+              } else {
+                window.open(kofiUrl, "_blank");
+              }
+            });
 
-      // Header Enable/Disable toggle sync (only disables section content, never lock out the toggle itself)
-      const agToggle = this.modal.querySelector("#zs-ag-enabled");
-      const agStatus = this.modal.querySelector("#zs-ag-status");
-      const agContent = this.modal.querySelector("#zs-ag-content");
-      if (agToggle) {
-        agToggle.addEventListener("change", () => {
-          const isEnabled = agToggle.checked;
-          if (agStatus) {
-            agStatus.textContent = isEnabled ? "Enabled" : "Disabled";
-            agStatus.setAttribute("data-enabled", isEnabled ? "true" : "false");
-          }
-          if (agContent)
-            agContent.setAttribute(
-              "data-disabled",
-              !isEnabled ? "true" : "false",
-            );
-        });
-      }
+          this.modal
+            .querySelector("#zs-close")
+            .addEventListener("click", () => this.close());
+          this.modal
+            .querySelector("#zs-cancel")
+            .addEventListener("click", () => this.close());
+          this.modal
+            .querySelector("#zs-save")
+            .addEventListener("click", () => this.save());
 
-      const tgToggle = this.modal.querySelector("#zs-tg-enabled");
-      const tgStatus = this.modal.querySelector("#zs-tg-status");
-      const tgContent = this.modal.querySelector("#zs-tg-content");
-      if (tgToggle) {
-        tgToggle.addEventListener("change", () => {
-          const isEnabled = tgToggle.checked;
-          if (tgStatus) {
-            tgStatus.textContent = isEnabled ? "Enabled" : "Disabled";
-            tgStatus.setAttribute("data-enabled", isEnabled ? "true" : "false");
-          }
-          if (tgContent)
-            tgContent.setAttribute(
-              "data-disabled",
-              !isEnabled ? "true" : "false",
-            );
-        });
-      }
-
-      // Placement Visual Cards selection + Conditional matrix smooth slide visibility + Scrollable Apps Column
-      const placementBtns = this.modal.querySelectorAll(".zs-placement-btn");
-      const placementInput = this.modal.querySelector("#zs-ag-placement");
-      const matrixWrapper = this.modal.querySelector("#zs-matrix-wrapper");
-      const agCol = this.modal.querySelector("#zs-ag-col");
-
-      placementBtns.forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const placement = btn.dataset.placement;
-          if (placementInput) placementInput.value = placement;
-          placementBtns.forEach((b) =>
-            b.setAttribute("data-active", b === btn ? "true" : "false"),
-          );
-          if (agCol) agCol.setAttribute("data-placement", placement);
-          if (matrixWrapper) {
-            if (placement === "sidebar") {
-              matrixWrapper.removeAttribute("data-hidden");
-            } else {
-              matrixWrapper.setAttribute("data-hidden", "true");
-              if (agCol) agCol.scrollTop = 0;
+          // Close open custom selects when clicking anywhere else
+          this.modal.addEventListener("click", (e) => {
+            if (!e.target.closest(".zs-custom-select")) {
+              this.modal
+                .querySelectorAll(".zs-custom-select")
+                .forEach((d) => d.removeAttribute("data-open"));
             }
+          });
+
+          // Header Enable/Disable toggle sync (only disables section content, never lock out the toggle itself)
+          const agToggle = this.modal.querySelector("#zs-ag-enabled");
+          const agStatus = this.modal.querySelector("#zs-ag-status");
+          const agContent = this.modal.querySelector("#zs-ag-content");
+          if (agToggle) {
+            agToggle.addEventListener("change", () => {
+              const isEnabled = agToggle.checked;
+              if (agStatus) {
+                agStatus.textContent = isEnabled ? "Enabled" : "Disabled";
+                agStatus.setAttribute(
+                  "data-enabled",
+                  isEnabled ? "true" : "false",
+                );
+              }
+              if (agContent)
+                agContent.setAttribute(
+                  "data-disabled",
+                  !isEnabled ? "true" : "false",
+                );
+            });
           }
-          const utilityRow = this.modal.querySelector(
-            "#zs-utility-section-row",
+
+          const tgToggle = this.modal.querySelector("#zs-tg-enabled");
+          const tgStatus = this.modal.querySelector("#zs-tg-status");
+          const tgContent = this.modal.querySelector("#zs-tg-content");
+          if (tgToggle) {
+            tgToggle.addEventListener("change", () => {
+              const isEnabled = tgToggle.checked;
+              if (tgStatus) {
+                tgStatus.textContent = isEnabled ? "Enabled" : "Disabled";
+                tgStatus.setAttribute(
+                  "data-enabled",
+                  isEnabled ? "true" : "false",
+                );
+              }
+              if (tgContent)
+                tgContent.setAttribute(
+                  "data-disabled",
+                  !isEnabled ? "true" : "false",
+                );
+            });
+          }
+
+          // Placement Visual Cards selection + Conditional matrix smooth slide visibility + Scrollable Apps Column
+          const placementBtns =
+            this.modal.querySelectorAll(".zs-placement-btn");
+          const placementInput = this.modal.querySelector("#zs-ag-placement");
+          const matrixWrapper = this.modal.querySelector("#zs-matrix-wrapper");
+          const agCol = this.modal.querySelector("#zs-ag-col");
+
+          placementBtns.forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const placement = btn.dataset.placement;
+              if (placementInput) placementInput.value = placement;
+              placementBtns.forEach((b) =>
+                b.setAttribute("data-active", b === btn ? "true" : "false"),
+              );
+              if (agCol) agCol.setAttribute("data-placement", placement);
+              if (matrixWrapper) {
+                if (placement === "sidebar") {
+                  matrixWrapper.removeAttribute("data-hidden");
+                } else {
+                  matrixWrapper.setAttribute("data-hidden", "true");
+                  if (agCol) agCol.scrollTop = 0;
+                }
+              }
+              const utilityRow = this.modal.querySelector(
+                "#zs-utility-section-row",
+              );
+              if (utilityRow) {
+                if (placement === "sidebar") {
+                  utilityRow.removeAttribute("data-hidden");
+                } else {
+                  utilityRow.setAttribute("data-hidden", "true");
+                }
+              }
+            });
+          });
+
+          // Horizontal Stepper (+ / -)
+          this.modal.querySelectorAll(".zs-h-btn").forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+              e.preventDefault();
+              const targetId = btn.dataset.target;
+              const step = parseInt(btn.dataset.step, 10) || 1;
+              const input = this.modal.querySelector("#" + targetId);
+              if (input) {
+                const min = input.min !== "" ? parseInt(input.min, 10) : 1;
+                const max = input.max !== "" ? parseInt(input.max, 10) : 100;
+                let current = parseInt(input.value, 10);
+                if (isNaN(current)) current = 21;
+                let nextVal = current + step;
+                if (nextVal < min) nextVal = min;
+                if (nextVal > max) nextVal = max;
+                input.value = nextVal;
+                input.dispatchEvent(new Event("input", { bubbles: true }));
+                input.dispatchEvent(new Event("change", { bubbles: true }));
+              }
+            });
+          });
+
+          // 10x6 Selection Matrix Mouse Handlers
+          let isDraggingMatrix = false;
+          const matrixGrid = this.modal.querySelector("#zs-matrix-grid");
+          const matrixCells = this.modal.querySelectorAll(".zs-matrix-cell");
+
+          matrixCells.forEach((cell) => {
+            cell.addEventListener("mousedown", (e) => {
+              e.preventDefault();
+              isDraggingMatrix = true;
+              const c = parseInt(cell.dataset.col, 10);
+              const r = parseInt(cell.dataset.row, 10);
+              this.updateMatrixUI(c, r);
+            });
+
+            cell.addEventListener("mouseenter", () => {
+              const c = parseInt(cell.dataset.col, 10);
+              const r = parseInt(cell.dataset.row, 10);
+              if (isDraggingMatrix) {
+                this.updateMatrixUI(c, r);
+              } else {
+                matrixCells.forEach((other) => {
+                  const oc = parseInt(other.dataset.col, 10);
+                  const or = parseInt(other.dataset.row, 10);
+                  other.setAttribute(
+                    "data-hover",
+                    oc <= c && or <= r ? "true" : "false",
+                  );
+                });
+              }
+            });
+          });
+
+          if (matrixGrid) {
+            matrixGrid.addEventListener("mouseleave", () => {
+              matrixCells.forEach((c) => c.removeAttribute("data-hover"));
+            });
+          }
+
+          this._matrixMouseUpHandler = () => {
+            if (isDraggingMatrix) isDraggingMatrix = false;
+          };
+          window.addEventListener("mouseup", this._matrixMouseUpHandler);
+
+          // Animation Type and Speed Sync + Preview Demo
+          const animSpeedSlider = this.modal.querySelector(
+            "#zs-anim-speed-slider",
           );
-          if (utilityRow) {
-            if (placement === "sidebar") {
-              utilityRow.removeAttribute("data-hidden");
-            } else {
-              utilityRow.setAttribute("data-hidden", "true");
-            }
-          }
-        });
-      });
+          const animSpeedInput = this.modal.querySelector("#zs-anim-speed");
+          const animSpeedBadge = this.modal.querySelector(
+            "#zs-anim-speed-badge",
+          );
+          const animPreviewBox = this.modal.querySelector(
+            "#zs-anim-preview-box",
+          );
+          const animTypeDropdown = this.modal.querySelector(
+            "#zs-anim-type-dropdown",
+          );
 
-      // Horizontal Stepper (+ / -)
-      this.modal.querySelectorAll(".zs-h-btn").forEach((btn) => {
-        btn.addEventListener("click", (e) => {
-          e.preventDefault();
-          const targetId = btn.dataset.target;
-          const step = parseInt(btn.dataset.step, 10) || 1;
-          const input = this.modal.querySelector("#" + targetId);
-          if (input) {
-            const min = input.min !== "" ? parseInt(input.min, 10) : 1;
-            const max = input.max !== "" ? parseInt(input.max, 10) : 100;
-            let current = parseInt(input.value, 10);
-            if (isNaN(current)) current = 21;
-            let nextVal = current + step;
-            if (nextVal < min) nextVal = min;
-            if (nextVal > max) nextVal = max;
-            input.value = nextVal;
-            input.dispatchEvent(new Event("input", { bubbles: true }));
-            input.dispatchEvent(new Event("change", { bubbles: true }));
-          }
-        });
-      });
-
-      // 10x6 Selection Matrix Mouse Handlers
-      let isDraggingMatrix = false;
-      const matrixGrid = this.modal.querySelector("#zs-matrix-grid");
-      const matrixCells = this.modal.querySelectorAll(".zs-matrix-cell");
-
-      matrixCells.forEach((cell) => {
-        cell.addEventListener("mousedown", (e) => {
-          e.preventDefault();
-          isDraggingMatrix = true;
-          const c = parseInt(cell.dataset.col, 10);
-          const r = parseInt(cell.dataset.row, 10);
-          this.updateMatrixUI(c, r);
-        });
-
-        cell.addEventListener("mouseenter", () => {
-          const c = parseInt(cell.dataset.col, 10);
-          const r = parseInt(cell.dataset.row, 10);
-          if (isDraggingMatrix) {
-            this.updateMatrixUI(c, r);
-          } else {
-            matrixCells.forEach((other) => {
-              const oc = parseInt(other.dataset.col, 10);
-              const or = parseInt(other.dataset.row, 10);
-              other.setAttribute(
-                "data-hover",
-                oc <= c && or <= r ? "true" : "false",
+          let previewPulseTimeout = null;
+          if (animPreviewBox) {
+            animPreviewBox.addEventListener("click", () => {
+              animPreviewBox.setAttribute("data-preview-active", "true");
+              if (previewPulseTimeout) clearTimeout(previewPulseTimeout);
+              const speed =
+                parseInt(animSpeedInput ? animSpeedInput.value : "450", 10) ||
+                450;
+              previewPulseTimeout = setTimeout(
+                () => {
+                  if (animPreviewBox)
+                    animPreviewBox.removeAttribute("data-preview-active");
+                },
+                Math.max(speed + 500, 1000),
               );
             });
           }
-        });
-      });
 
-      if (matrixGrid) {
-        matrixGrid.addEventListener("mouseleave", () => {
-          matrixCells.forEach((c) => c.removeAttribute("data-hover"));
-        });
-      }
-
-      this._matrixMouseUpHandler = () => {
-        if (isDraggingMatrix) isDraggingMatrix = false;
-      };
-      window.addEventListener("mouseup", this._matrixMouseUpHandler);
-
-      // Animation Type and Speed Sync + Preview Demo
-      const animSpeedSlider = this.modal.querySelector("#zs-anim-speed-slider");
-      const animSpeedInput = this.modal.querySelector("#zs-anim-speed");
-      const animSpeedBadge = this.modal.querySelector("#zs-anim-speed-badge");
-      const animPreviewBox = this.modal.querySelector("#zs-anim-preview-box");
-      const animTypeDropdown = this.modal.querySelector(
-        "#zs-anim-type-dropdown",
-      );
-
-      let previewPulseTimeout = null;
-      if (animPreviewBox) {
-        animPreviewBox.addEventListener("click", () => {
-          animPreviewBox.setAttribute("data-preview-active", "true");
-          if (previewPulseTimeout) clearTimeout(previewPulseTimeout);
-          const speed =
-            parseInt(animSpeedInput ? animSpeedInput.value : "450", 10) || 450;
-          previewPulseTimeout = setTimeout(
-            () => {
-              if (animPreviewBox)
-                animPreviewBox.removeAttribute("data-preview-active");
-            },
-            Math.max(speed + 500, 1000),
-          );
-        });
-      }
-
-      const onAnimChange = (typeVal) => {
-        const hiddenInput = this.modal.querySelector("#zs-anim-type");
-        const type = typeVal || (hiddenInput ? hiddenInput.value : "slide");
-        let speed = parseInt(animSpeedInput ? animSpeedInput.value : "450", 10);
-        if (isNaN(speed)) speed = 0;
-
-        if (speed <= 0 && type !== "none") {
-          if (animTypeDropdown && animTypeDropdown.syncValue)
-            animTypeDropdown.syncValue("none");
-        }
-        if (animSpeedBadge) animSpeedBadge.textContent = `${speed} ms`;
-        this.updatePreviewDemo(type, speed);
-      };
-
-      this.setupCustomSelect(
-        "zs-anim-type-dropdown",
-        "zs-anim-type",
-        (selectedType) => {
-          if (selectedType === "none") {
-            if (animSpeedInput) animSpeedInput.value = 0;
-            if (animSpeedSlider) animSpeedSlider.value = 0;
-          } else {
-            const currentSpeed = parseInt(
-              animSpeedInput ? animSpeedInput.value : "0",
+          const onAnimChange = (typeVal) => {
+            const hiddenInput = this.modal.querySelector("#zs-anim-type");
+            const type = typeVal || (hiddenInput ? hiddenInput.value : "slide");
+            let speed = parseInt(
+              animSpeedInput ? animSpeedInput.value : "450",
               10,
             );
-            if (currentSpeed === 0) {
-              if (animSpeedInput) animSpeedInput.value = 450;
-              if (animSpeedSlider) animSpeedSlider.value = 450;
+            if (isNaN(speed)) speed = 0;
+
+            if (speed <= 0 && type !== "none") {
+              if (animTypeDropdown && animTypeDropdown.syncValue)
+                animTypeDropdown.syncValue("none");
             }
-          }
-          onAnimChange(selectedType);
-        },
-      );
-
-      this.setupShortcutRecorder("zs-insta-peek-btn", "zs-insta-peek-shortcut");
-      this.setupCustomSelect(
-        "zs-tg-indicator-type-dropdown",
-        "zs-tg-indicator-type",
-      );
-
-      if (animSpeedSlider) {
-        animSpeedSlider.addEventListener("input", (e) => {
-          const val = parseInt(e.target.value, 10) || 0;
-          if (animSpeedInput) animSpeedInput.value = val;
-          const currentTypeInput = this.modal.querySelector("#zs-anim-type");
-          const currentType = currentTypeInput
-            ? currentTypeInput.value
-            : "slide";
-          if (val === 0 && animTypeDropdown && animTypeDropdown.syncValue) {
-            animTypeDropdown.syncValue("none");
-          } else if (
-            val > 0 &&
-            currentType === "none" &&
-            animTypeDropdown &&
-            animTypeDropdown.syncValue
-          ) {
-            animTypeDropdown.syncValue("slide");
-          }
-          onAnimChange();
-        });
-      }
-
-      if (animSpeedInput) {
-        animSpeedInput.addEventListener("input", (e) => {
-          let val = parseInt(e.target.value, 10);
-          if (isNaN(val)) val = 0;
-          if (val < 0) val = 0;
-          if (val > 2000) val = 2000;
-          if (animSpeedSlider) animSpeedSlider.value = val;
-          const currentTypeInput = this.modal.querySelector("#zs-anim-type");
-          const currentType = currentTypeInput
-            ? currentTypeInput.value
-            : "slide";
-          if (val === 0 && animTypeDropdown && animTypeDropdown.syncValue) {
-            animTypeDropdown.syncValue("none");
-          } else if (
-            val > 0 &&
-            currentType === "none" &&
-            animTypeDropdown &&
-            animTypeDropdown.syncValue
-          ) {
-            animTypeDropdown.syncValue("slide");
-          }
-          onAnimChange();
-        });
-      }
-
-      // Group Indicator toggle -> smoothly slides/shows Indicator Type row
-      const chevronToggle = this.modal.querySelector("#zs-tg-chevron");
-      const indicatorTypeRow = this.modal.querySelector(
-        "#zs-tg-indicator-type-row",
-      );
-      if (chevronToggle && indicatorTypeRow) {
-        chevronToggle.addEventListener("change", () => {
-          if (chevronToggle.checked) {
-            indicatorTypeRow.removeAttribute("data-hidden");
-          } else {
-            indicatorTypeRow.setAttribute("data-hidden", "true");
-          }
-        });
-      }
-
-      // Tab Groups Opacity Slider Live Sync
-      const opacitySlider = this.modal.querySelector("#zs-tg-opacity");
-      const opacityBadge = this.modal.querySelector("#zs-tg-opacity-badge");
-      if (opacitySlider) {
-        opacitySlider.addEventListener("input", (e) => {
-          const val = parseInt(e.target.value, 10) || 85;
-          if (opacityBadge) opacityBadge.textContent = `${val}%`;
-          document.documentElement.style.setProperty(
-            "--zentral-tabgroup-label-opacity",
-            (val / 100).toFixed(2),
-          );
-          document.documentElement.setAttribute(
-            "zentral-label-opacity-below-85",
-            val < 85 ? "true" : "false",
-          );
-        });
-      }
-
-      // Helper to auto-save all diagnostics options immediately on change
-      const saveDiagnosticsPrefsImmediately = () => {
-        if (loggerMasterToggle) {
-          Core.setPref(
-            Constants.Diagnostics.PREF_LOGGER_ENABLED,
-            loggerMasterToggle.checked,
-          );
-          Core.setPref(Constants.Diagnostics.PREF_LOGGER_CORE, true);
-        }
-        if (loggerFullToggle) {
-          Core.setPref(
-            Constants.Diagnostics.PREF_LOGGER_FULL,
-            loggerFullToggle.checked,
-          );
-        }
-        if (tabsToggle) {
-          Core.setPref(
-            Constants.Diagnostics.PREF_LOGGER_TABS,
-            tabsToggle.checked,
-          );
-        }
-        if (appsToggle) {
-          Core.setPref(
-            Constants.Diagnostics.PREF_LOGGER_APPS,
-            appsToggle.checked,
-          );
-        }
-        if (menusToggle) {
-          Core.setPref(
-            Constants.Diagnostics.PREF_LOGGER_MENUS,
-            menusToggle.checked,
-          );
-        }
-        if (layoutToggle) {
-          Core.setPref(
-            Constants.Diagnostics.PREF_LOGGER_LAYOUT,
-            layoutToggle.checked,
-          );
-        }
-        if (pathInput) {
-          Core.setPref(
-            Constants.Diagnostics.PREF_LOGGER_PATH,
-            (pathInput.value || "").trim(),
-          );
-        }
-      };
-
-      // Diagnostic Logging Master Toggle
-      const loggerMasterToggle = this.modal.querySelector(
-        "#zs-pref-logger-enabled",
-      );
-      if (loggerMasterToggle) {
-        loggerMasterToggle.addEventListener("change", () => {
-          this.updateLoggerUIState();
-          saveDiagnosticsPrefsImmediately();
-        });
-      }
-
-      // Diagnostic Logging Full Log Toggle & Modular Sub-Selections
-      const loggerFullToggle = this.modal.querySelector("#zs-pref-logger-full");
-      const tabsToggle = this.modal.querySelector("#zs-pref-logger-tabs");
-      const appsToggle = this.modal.querySelector("#zs-pref-logger-apps");
-      const menusToggle = this.modal.querySelector("#zs-pref-logger-menus");
-      const layoutToggle = this.modal.querySelector("#zs-pref-logger-layout");
-
-      if (loggerFullToggle) {
-        loggerFullToggle.addEventListener("change", () => {
-          if (!loggerFullToggle.checked) {
-            // When unchecking Full Log, reveal modules with optional ones unchecked by default
-            if (tabsToggle) tabsToggle.checked = false;
-            if (appsToggle) appsToggle.checked = false;
-            if (menusToggle) menusToggle.checked = false;
-            if (layoutToggle) layoutToggle.checked = false;
-          }
-          this.updateLoggerUIState();
-          saveDiagnosticsPrefsImmediately();
-        });
-      }
-
-      const optionalModuleToggles = [
-        tabsToggle,
-        appsToggle,
-        menusToggle,
-        layoutToggle,
-      ].filter(Boolean);
-      optionalModuleToggles.forEach((toggle) => {
-        toggle.addEventListener("change", () => {
-          const allChecked = optionalModuleToggles.every((t) => t.checked);
-          if (allChecked && loggerFullToggle) {
-            // If all optional modules get individually checked, switch back to Full Log mode
-            loggerFullToggle.checked = true;
-            this.updateLoggerUIState();
-          }
-          saveDiagnosticsPrefsImmediately();
-        });
-      });
-
-      const choosePathBtn = this.modal.querySelector("#zs-btn-choose-path");
-      const clearPathBtn = this.modal.querySelector("#zs-btn-clear-path");
-      const pathInput = this.modal.querySelector("#zs-pref-logger-path");
-
-      if (choosePathBtn) {
-        choosePathBtn.addEventListener("click", async () => {
-          const selectedFolder = await this.pickExportFolder();
-          if (selectedFolder) {
-            pathInput.value = selectedFolder;
-            this.updatePathUI(selectedFolder);
-            saveDiagnosticsPrefsImmediately();
-          }
-        });
-      }
-
-      if (clearPathBtn) {
-        clearPathBtn.addEventListener("click", () => {
-          pathInput.value = "";
-          this.updatePathUI("");
-          saveDiagnosticsPrefsImmediately();
-        });
-      }
-
-      const captureBtn = this.modal.querySelector("#zs-btn-capture-log");
-      if (captureBtn) {
-        captureBtn.addEventListener("click", () => {
-          saveDiagnosticsPrefsImmediately();
-          const loggerToggle = this.modal.querySelector(
-            "#zs-pref-logger-enabled",
-          );
-          const isEnabled = loggerToggle
-            ? loggerToggle.checked
-            : Core.getPref(Constants.Diagnostics.PREF_LOGGER_ENABLED, false);
-
-          if (!isEnabled) {
-            captureBtn.textContent = "⚠️ Logging Disabled";
-            captureBtn.style.background = "#ef4444";
-            captureBtn.style.color = "#ffffff";
-            captureBtn.style.pointerEvents = "none";
-
-            try {
-              const promptService =
-                Services.prompt ||
-                Cc["@mozilla.org/embedcomp/prompt-service;1"]?.getService(
-                  Ci.nsIPromptService,
-                );
-              if (promptService) {
-                promptService.alert(
-                  window,
-                  "Zentral Diagnostics — Inactive",
-                  "Diagnostic Logging is currently disabled.\n\nPlease toggle 'Enable Diagnostic Logging' ON above and save changes before exporting logs.",
-                );
-              }
-            } catch (_) {}
-
-            setTimeout(() => {
-              if (this.modal && captureBtn) {
-                captureBtn.textContent = "Export";
-                captureBtn.style.background = "var(--zen-primary-color)";
-                captureBtn.style.pointerEvents = "auto";
-              }
-            }, 2500);
-            return;
-          }
-
-          if (pathInput && pathInput.value) {
-            Core.setPref(
-              Constants.Diagnostics.PREF_LOGGER_PATH,
-              pathInput.value.trim(),
-            );
-          }
-          window.dispatchEvent(new CustomEvent("ZentralCaptureLog"));
-
-          const originalText = "Export";
-          const originalBg = "var(--zen-primary-color)";
-          captureBtn.textContent = "✓ Exported!";
-          captureBtn.style.background = "#10b981";
-          captureBtn.style.color = "#ffffff";
-          captureBtn.style.pointerEvents = "none";
-
-          setTimeout(() => {
-            if (this.modal && captureBtn) {
-              captureBtn.textContent = originalText;
-              captureBtn.style.background = originalBg;
-              captureBtn.style.pointerEvents = "auto";
-            }
-          }, 2200);
-        });
-      }
-
-      // -----------------------------------------------------------------------
-      // Issue Report Submission Engine
-      // -----------------------------------------------------------------------
-      this.setupCustomSelect(
-        "zs-report-category-dropdown",
-        "zs-report-category",
-      );
-
-      const submitReportBtn = this.modal.querySelector("#zs-btn-submit-report");
-      const titleInput = this.modal.querySelector("#zs-report-title");
-      const categoryInput = this.modal.querySelector("#zs-report-category");
-      const descInput = this.modal.querySelector("#zs-report-description");
-      const attachLogCheckbox = this.modal.querySelector(
-        "#zs-report-attach-log",
-      );
-      const statusEl = this.modal.querySelector("#zs-report-status");
-
-      if (submitReportBtn && titleInput && descInput) {
-        submitReportBtn.addEventListener("click", async () => {
-          saveDiagnosticsPrefsImmediately();
-          const title = titleInput.value.trim();
-          const desc = descInput.value.trim();
-          const category = categoryInput ? categoryInput.value : "bug";
-          const attachLogs = attachLogCheckbox
-            ? attachLogCheckbox.checked
-            : true;
-
-          if (!title) {
-            titleInput.focus();
-            titleInput.style.borderColor = "#ef4444";
-            setTimeout(() => {
-              if (titleInput) titleInput.style.borderColor = "";
-            }, 2000);
-            return;
-          }
-          if (!desc) {
-            descInput.focus();
-            descInput.style.borderColor = "#ef4444";
-            setTimeout(() => {
-              if (descInput) descInput.style.borderColor = "";
-            }, 2000);
-            return;
-          }
-
-          // Visual loading state
-          submitReportBtn.disabled = true;
-          submitReportBtn.style.opacity = "0.7";
-          submitReportBtn.style.pointerEvents = "none";
-          const origBtnHTML = submitReportBtn.innerHTML;
-          submitReportBtn.innerHTML = `<span>Submitting...</span>`;
-
-          if (statusEl) {
-            statusEl.style.display = "inline";
-            statusEl.style.color = "rgba(255, 255, 255, 0.6)";
-            statusEl.textContent = "Connecting to GitHub...";
-          }
-
-          // 1. Gather diagnostic logs & system metadata
-          let logContent = "";
-          if (attachLogs) {
-            if (window.ZentralLogger?.generateLogString) {
-              logContent = window.ZentralLogger.generateLogString();
-            } else if (window.ZentralLogger?.entries) {
-              logContent = window.ZentralLogger.entries.join("\n");
-            }
-          }
-
-          // Safety guard: GitHub limits issue bodies to 65,536 characters.
-          // Truncate logs if necessary, preserving the initial snapshot & most recent trace events.
-          let sendLogContent = logContent;
-          if (sendLogContent && sendLogContent.length > 50000) {
-            const head = sendLogContent.slice(0, 12000);
-            const tail = sendLogContent.slice(-36000);
-            sendLogContent = `${head}\n\n... [Log truncated: Preserved initial system snapshot & most recent events to fit GitHub's 65,536-character limit] ...\n\n${tail}`;
-          }
-
-          const systemInfo = {
-            zentralVersion: "v1.0.2",
-            zenVersion: navigator.userAgent,
-            platform: navigator.platform || "Desktop",
-            windowSize: `${window.innerWidth}x${window.innerHeight}`,
-            dpr: window.devicePixelRatio || 1,
-            sidebarMode:
-              document.documentElement.getAttribute("zen-sidebar-expanded") ===
-              "true"
-                ? "Expanded"
-                : "Compact",
+            if (animSpeedBadge) animSpeedBadge.textContent = `${speed} ms`;
+            this.updatePreviewDemo(type, speed);
           };
 
-          // 2. Attempt background submission to Cloudflare Worker endpoint if configured
-          const endpointPref = Core.getPref(
-            Constants.Diagnostics.PREF_REPORT_ENDPOINT,
-          );
-          let endpoint = null;
-          try {
-            const candidate = new URL(endpointPref);
-            if (candidate.protocol === "https:") endpoint = candidate.href;
-          } catch (_) {}
-          let submitted = false;
-
-          if (endpoint) {
-            try {
-              const resp = await fetch(endpoint, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  title,
-                  description: desc,
-                  category,
-                  systemInfo,
-                  logs: sendLogContent,
-                }),
-              });
-
-              const result = resp.status === 204 ? {} : await resp.json();
-              if (resp.ok && result?.success) {
-                submitted = true;
-                if (statusEl) {
-                  statusEl.style.display = "inline";
-                  statusEl.style.color = "#10b981";
-                  statusEl.replaceChildren();
-                  const issueUrl = new URL(String(result.issueUrl || ""));
-                  if (
-                    issueUrl.protocol === "https:" &&
-                    issueUrl.hostname === "github.com"
-                  ) {
-                    const link = document.createElement("a");
-                    link.href = issueUrl.href;
-                    link.target = "_blank";
-                    link.rel = "noopener noreferrer";
-                    link.style.cssText =
-                      "color: #10b981; text-decoration: underline";
-                    link.textContent = `✓ Issue #${String(result.issueNumber).slice(0, 30)} created!`;
-                    statusEl.appendChild(link);
-                  } else {
-                    statusEl.textContent =
-                      "Issue created; open GitHub to view it.";
-                  }
-                }
-                titleInput.value = "";
-                descInput.value = "";
+          this.setupCustomSelect(
+            "zs-anim-type-dropdown",
+            "zs-anim-type",
+            (selectedType) => {
+              if (selectedType === "none") {
+                if (animSpeedInput) animSpeedInput.value = 0;
+                if (animSpeedSlider) animSpeedSlider.value = 0;
               } else {
-                console.warn(
-                  "[Zentral-Report] Worker returned error:",
-                  resp.status,
-                  result,
+                const currentSpeed = parseInt(
+                  animSpeedInput ? animSpeedInput.value : "0",
+                  10,
                 );
+                if (currentSpeed === 0) {
+                  if (animSpeedInput) animSpeedInput.value = 450;
+                  if (animSpeedSlider) animSpeedSlider.value = 450;
+                }
               }
-            } catch (postErr) {
-              console.warn(
-                "[Zentral-Report] Worker submission failed, falling back to Web:",
-                postErr,
+              onAnimChange(selectedType);
+            },
+          );
+
+          this.setupShortcutRecorder(
+            "zs-insta-peek-btn",
+            "zs-insta-peek-shortcut",
+          );
+          this.setupCustomSelect(
+            "zs-tg-indicator-type-dropdown",
+            "zs-tg-indicator-type",
+          );
+
+          if (animSpeedSlider) {
+            animSpeedSlider.addEventListener("input", (e) => {
+              const val = parseInt(e.target.value, 10) || 0;
+              if (animSpeedInput) animSpeedInput.value = val;
+              const currentTypeInput =
+                this.modal.querySelector("#zs-anim-type");
+              const currentType = currentTypeInput
+                ? currentTypeInput.value
+                : "slide";
+              if (val === 0 && animTypeDropdown && animTypeDropdown.syncValue) {
+                animTypeDropdown.syncValue("none");
+              } else if (
+                val > 0 &&
+                currentType === "none" &&
+                animTypeDropdown &&
+                animTypeDropdown.syncValue
+              ) {
+                animTypeDropdown.syncValue("slide");
+              }
+              onAnimChange();
+            });
+          }
+
+          if (animSpeedInput) {
+            animSpeedInput.addEventListener("input", (e) => {
+              let val = parseInt(e.target.value, 10);
+              if (isNaN(val)) val = 0;
+              if (val < 0) val = 0;
+              if (val > 2000) val = 2000;
+              if (animSpeedSlider) animSpeedSlider.value = val;
+              const currentTypeInput =
+                this.modal.querySelector("#zs-anim-type");
+              const currentType = currentTypeInput
+                ? currentTypeInput.value
+                : "slide";
+              if (val === 0 && animTypeDropdown && animTypeDropdown.syncValue) {
+                animTypeDropdown.syncValue("none");
+              } else if (
+                val > 0 &&
+                currentType === "none" &&
+                animTypeDropdown &&
+                animTypeDropdown.syncValue
+              ) {
+                animTypeDropdown.syncValue("slide");
+              }
+              onAnimChange();
+            });
+          }
+
+          // Group Indicator toggle -> smoothly slides/shows Indicator Type row
+          const chevronToggle = this.modal.querySelector("#zs-tg-chevron");
+          const indicatorTypeRow = this.modal.querySelector(
+            "#zs-tg-indicator-type-row",
+          );
+          if (chevronToggle && indicatorTypeRow) {
+            chevronToggle.addEventListener("change", () => {
+              if (chevronToggle.checked) {
+                indicatorTypeRow.removeAttribute("data-hidden");
+              } else {
+                indicatorTypeRow.setAttribute("data-hidden", "true");
+              }
+            });
+          }
+
+          // Tab Groups Opacity Slider Live Sync
+          const opacitySlider = this.modal.querySelector("#zs-tg-opacity");
+          const opacityBadge = this.modal.querySelector("#zs-tg-opacity-badge");
+          if (opacitySlider) {
+            opacitySlider.addEventListener("input", (e) => {
+              const val = parseInt(e.target.value, 10) || 85;
+              if (opacityBadge) opacityBadge.textContent = `${val}%`;
+              document.documentElement.style.setProperty(
+                "--zentral-tabgroup-label-opacity",
+                (val / 100).toFixed(2),
+              );
+              document.documentElement.setAttribute(
+                "zentral-label-opacity-below-85",
+                val < 85 ? "true" : "false",
+              );
+            });
+          }
+
+          // Helper to auto-save all diagnostics options immediately on change
+          const saveDiagnosticsPrefsImmediately = () => {
+            if (loggerMasterToggle) {
+              Core.setPref(
+                Constants.Diagnostics.PREF_LOGGER_ENABLED,
+                loggerMasterToggle.checked,
+              );
+              Core.setPref(Constants.Diagnostics.PREF_LOGGER_CORE, true);
+            }
+            if (loggerFullToggle) {
+              Core.setPref(
+                Constants.Diagnostics.PREF_LOGGER_FULL,
+                loggerFullToggle.checked,
               );
             }
+            if (tabsToggle) {
+              Core.setPref(
+                Constants.Diagnostics.PREF_LOGGER_TABS,
+                tabsToggle.checked,
+              );
+            }
+            if (appsToggle) {
+              Core.setPref(
+                Constants.Diagnostics.PREF_LOGGER_APPS,
+                appsToggle.checked,
+              );
+            }
+            if (menusToggle) {
+              Core.setPref(
+                Constants.Diagnostics.PREF_LOGGER_MENUS,
+                menusToggle.checked,
+              );
+            }
+            if (layoutToggle) {
+              Core.setPref(
+                Constants.Diagnostics.PREF_LOGGER_LAYOUT,
+                layoutToggle.checked,
+              );
+            }
+            if (pathInput) {
+              Core.setPref(
+                Constants.Diagnostics.PREF_LOGGER_PATH,
+                (pathInput.value || "").trim(),
+              );
+            }
+          };
+
+          // Diagnostic Logging Master Toggle
+          const loggerMasterToggle = this.modal.querySelector(
+            "#zs-pref-logger-enabled",
+          );
+          if (loggerMasterToggle) {
+            loggerMasterToggle.addEventListener("change", () => {
+              this.updateLoggerUIState();
+              saveDiagnosticsPrefsImmediately();
+            });
           }
 
-          // 3. Fallback: If not submitted via worker, open pre-filled GitHub issue in new tab & copy logs to clipboard
-          if (!submitted) {
-            if (logContent) {
-              try {
-                const clipboardHelper = Cc[
-                  "@mozilla.org/widget/clipboardhelper;1"
-                ]?.getService(Ci.nsIClipboardHelper);
-                if (clipboardHelper) {
-                  clipboardHelper.copyString(sendLogContent);
-                } else if (navigator.clipboard?.writeText) {
-                  navigator.clipboard.writeText(sendLogContent);
+          // Diagnostic Logging Full Log Toggle & Modular Sub-Selections
+          const loggerFullToggle = this.modal.querySelector(
+            "#zs-pref-logger-full",
+          );
+          const tabsToggle = this.modal.querySelector("#zs-pref-logger-tabs");
+          const appsToggle = this.modal.querySelector("#zs-pref-logger-apps");
+          const menusToggle = this.modal.querySelector("#zs-pref-logger-menus");
+          const layoutToggle = this.modal.querySelector(
+            "#zs-pref-logger-layout",
+          );
+
+          if (loggerFullToggle) {
+            loggerFullToggle.addEventListener("change", () => {
+              if (!loggerFullToggle.checked) {
+                // When unchecking Full Log, reveal modules with optional ones unchecked by default
+                if (tabsToggle) tabsToggle.checked = false;
+                if (appsToggle) appsToggle.checked = false;
+                if (menusToggle) menusToggle.checked = false;
+                if (layoutToggle) layoutToggle.checked = false;
+              }
+              this.updateLoggerUIState();
+              saveDiagnosticsPrefsImmediately();
+            });
+          }
+
+          const optionalModuleToggles = [
+            tabsToggle,
+            appsToggle,
+            menusToggle,
+            layoutToggle,
+          ].filter(Boolean);
+          optionalModuleToggles.forEach((toggle) => {
+            toggle.addEventListener("change", () => {
+              const allChecked = optionalModuleToggles.every((t) => t.checked);
+              if (allChecked && loggerFullToggle) {
+                // If all optional modules get individually checked, switch back to Full Log mode
+                loggerFullToggle.checked = true;
+                this.updateLoggerUIState();
+              }
+              saveDiagnosticsPrefsImmediately();
+            });
+          });
+
+          const choosePathBtn = this.modal.querySelector("#zs-btn-choose-path");
+          const clearPathBtn = this.modal.querySelector("#zs-btn-clear-path");
+          const pathInput = this.modal.querySelector("#zs-pref-logger-path");
+
+          if (choosePathBtn) {
+            choosePathBtn.addEventListener("click", async () => {
+              const selectedFolder = await this.pickExportFolder();
+              if (selectedFolder) {
+                pathInput.value = selectedFolder;
+                this.updatePathUI(selectedFolder);
+                saveDiagnosticsPrefsImmediately();
+              }
+            });
+          }
+
+          if (clearPathBtn) {
+            clearPathBtn.addEventListener("click", () => {
+              pathInput.value = "";
+              this.updatePathUI("");
+              saveDiagnosticsPrefsImmediately();
+            });
+          }
+
+          const captureBtn = this.modal.querySelector("#zs-btn-capture-log");
+          if (captureBtn) {
+            captureBtn.addEventListener("click", () => {
+              saveDiagnosticsPrefsImmediately();
+              const loggerToggle = this.modal.querySelector(
+                "#zs-pref-logger-enabled",
+              );
+              const isEnabled = loggerToggle
+                ? loggerToggle.checked
+                : Core.getPref(
+                    Constants.Diagnostics.PREF_LOGGER_ENABLED,
+                    false,
+                  );
+
+              if (!isEnabled) {
+                captureBtn.textContent = "⚠️ Logging Disabled";
+                captureBtn.style.background = "#ef4444";
+                captureBtn.style.color = "#ffffff";
+                captureBtn.style.pointerEvents = "none";
+
+                try {
+                  const promptService =
+                    Services.prompt ||
+                    Cc["@mozilla.org/embedcomp/prompt-service;1"]?.getService(
+                      Ci.nsIPromptService,
+                    );
+                  if (promptService) {
+                    promptService.alert(
+                      window,
+                      "Zentral Diagnostics — Inactive",
+                      "Diagnostic Logging is currently disabled.\n\nPlease toggle 'Enable Diagnostic Logging' ON above and save changes before exporting logs.",
+                    );
+                  }
+                } catch (_) {}
+
+                setTimeout(() => {
+                  if (this.modal && captureBtn) {
+                    captureBtn.textContent = "Export";
+                    captureBtn.style.background = "var(--zen-primary-color)";
+                    captureBtn.style.pointerEvents = "auto";
+                  }
+                }, 2500);
+                return;
+              }
+
+              if (pathInput && pathInput.value) {
+                Core.setPref(
+                  Constants.Diagnostics.PREF_LOGGER_PATH,
+                  pathInput.value.trim(),
+                );
+              }
+              window.dispatchEvent(new CustomEvent("ZentralCaptureLog"));
+
+              const originalText = "Export";
+              const originalBg = "var(--zen-primary-color)";
+              captureBtn.textContent = "✓ Exported!";
+              captureBtn.style.background = "#10b981";
+              captureBtn.style.color = "#ffffff";
+              captureBtn.style.pointerEvents = "none";
+
+              setTimeout(() => {
+                if (this.modal && captureBtn) {
+                  captureBtn.textContent = originalText;
+                  captureBtn.style.background = originalBg;
+                  captureBtn.style.pointerEvents = "auto";
                 }
-              } catch (_) {}
-            }
-
-            let ghBody = `### 📝 Description\n${desc}\n\n`;
-            ghBody += `### 🖥️ Environment\n`;
-            ghBody += `- **Zentral Version:** ${systemInfo.zentralVersion}\n`;
-            ghBody += `- **Zen Build:** ${systemInfo.zenVersion}\n`;
-            ghBody += `- **OS / Platform:** ${systemInfo.platform}\n`;
-            ghBody += `- **Window / DPR:** ${systemInfo.windowSize} (DPR: ${systemInfo.dpr})\n\n`;
-            if (logContent) {
-              ghBody += `*(Diagnostic log copied to your clipboard — paste below if relevant)*\n\n`;
-            }
-
-            const ghUrl = `https://github.com/Michele501st/Zentral-Sine/issues/new?title=${encodeURIComponent(`[${category.toUpperCase()}] ${title}`)}&body=${encodeURIComponent(ghBody)}&labels=${encodeURIComponent(category)}`;
-
-            if (window.gBrowser?.addTab) {
-              window.gBrowser.addTab(ghUrl, {
-                triggeringPrincipal:
-                  Services.scriptSecurityManager.getSystemPrincipal(),
-              });
-            } else {
-              window.open(ghUrl, "_blank");
-            }
-
-            if (statusEl) {
-              statusEl.style.display = "inline";
-              statusEl.style.color = "#60a5fa";
-              statusEl.textContent = logContent
-                ? "✓ Opened in GitHub (Log copied to clipboard!)"
-                : "✓ Opened in GitHub!";
-            }
+              }, 2200);
+            });
           }
 
-          submitReportBtn.disabled = false;
-          submitReportBtn.style.opacity = "1";
-          submitReportBtn.style.pointerEvents = "auto";
-          submitReportBtn.innerHTML = origBtnHTML;
-        });
+          // -----------------------------------------------------------------------
+          // Issue Report Submission Engine
+          // -----------------------------------------------------------------------
+          this.setupCustomSelect(
+            "zs-report-category-dropdown",
+            "zs-report-category",
+          );
+
+          const submitReportBtn = this.modal.querySelector(
+            "#zs-btn-submit-report",
+          );
+          const titleInput = this.modal.querySelector("#zs-report-title");
+          const categoryInput = this.modal.querySelector("#zs-report-category");
+          const descInput = this.modal.querySelector("#zs-report-description");
+          const attachLogCheckbox = this.modal.querySelector(
+            "#zs-report-attach-log",
+          );
+          const statusEl = this.modal.querySelector("#zs-report-status");
+
+          if (submitReportBtn && titleInput && descInput) {
+            submitReportBtn.addEventListener("click", async () => {
+              saveDiagnosticsPrefsImmediately();
+              const title = titleInput.value.trim();
+              const desc = descInput.value.trim();
+              const category = categoryInput ? categoryInput.value : "bug";
+              const attachLogs = attachLogCheckbox
+                ? attachLogCheckbox.checked
+                : true;
+
+              if (!title) {
+                titleInput.focus();
+                titleInput.style.borderColor = "#ef4444";
+                setTimeout(() => {
+                  if (titleInput) titleInput.style.borderColor = "";
+                }, 2000);
+                return;
+              }
+              if (!desc) {
+                descInput.focus();
+                descInput.style.borderColor = "#ef4444";
+                setTimeout(() => {
+                  if (descInput) descInput.style.borderColor = "";
+                }, 2000);
+                return;
+              }
+
+              // Visual loading state
+              submitReportBtn.disabled = true;
+              submitReportBtn.style.opacity = "0.7";
+              submitReportBtn.style.pointerEvents = "none";
+              const origBtnHTML = submitReportBtn.innerHTML;
+              submitReportBtn.innerHTML = `<span>Submitting...</span>`;
+
+              if (statusEl) {
+                statusEl.style.display = "inline";
+                statusEl.style.color = "rgba(255, 255, 255, 0.6)";
+                statusEl.textContent = "Connecting to GitHub...";
+              }
+
+              // 1. Gather diagnostic logs & system metadata
+              let logContent = "";
+              if (attachLogs) {
+                if (window.ZentralLogger?.generateLogString) {
+                  logContent = window.ZentralLogger.generateLogString();
+                } else if (window.ZentralLogger?.entries) {
+                  logContent = window.ZentralLogger.entries.join("\n");
+                }
+              }
+
+              // Safety guard: GitHub limits issue bodies to 65,536 characters.
+              // Truncate logs if necessary, preserving the initial snapshot & most recent trace events.
+              let sendLogContent = logContent;
+              if (sendLogContent && sendLogContent.length > 50000) {
+                const head = sendLogContent.slice(0, 12000);
+                const tail = sendLogContent.slice(-36000);
+                sendLogContent = `${head}\n\n... [Log truncated: Preserved initial system snapshot & most recent events to fit GitHub's 65,536-character limit] ...\n\n${tail}`;
+              }
+
+              const systemInfo = {
+                zentralVersion: "v1.0.2",
+                zenVersion: navigator.userAgent,
+                platform: navigator.platform || "Desktop",
+                windowSize: `${window.innerWidth}x${window.innerHeight}`,
+                dpr: window.devicePixelRatio || 1,
+                sidebarMode:
+                  document.documentElement.getAttribute(
+                    "zen-sidebar-expanded",
+                  ) === "true"
+                    ? "Expanded"
+                    : "Compact",
+              };
+
+              // 2. Attempt background submission to Cloudflare Worker endpoint if configured
+              const endpointPref = Core.getPref(
+                Constants.Diagnostics.PREF_REPORT_ENDPOINT,
+              );
+              let endpoint = null;
+              try {
+                const candidate = new URL(endpointPref);
+                if (candidate.protocol === "https:") endpoint = candidate.href;
+              } catch (_) {}
+              let submitted = false;
+
+              if (endpoint) {
+                try {
+                  const resp = await fetch(endpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      title,
+                      description: desc,
+                      category,
+                      systemInfo,
+                      logs: sendLogContent,
+                    }),
+                  });
+
+                  const result = resp.status === 204 ? {} : await resp.json();
+                  if (resp.ok && result?.success) {
+                    submitted = true;
+                    if (statusEl) {
+                      statusEl.style.display = "inline";
+                      statusEl.style.color = "#10b981";
+                      statusEl.replaceChildren();
+                      const issueUrl = new URL(String(result.issueUrl || ""));
+                      if (
+                        issueUrl.protocol === "https:" &&
+                        issueUrl.hostname === "github.com"
+                      ) {
+                        const link = document.createElement("a");
+                        link.href = issueUrl.href;
+                        link.target = "_blank";
+                        link.rel = "noopener noreferrer";
+                        link.style.cssText =
+                          "color: #10b981; text-decoration: underline";
+                        link.textContent = `✓ Issue #${String(result.issueNumber).slice(0, 30)} created!`;
+                        statusEl.appendChild(link);
+                      } else {
+                        statusEl.textContent =
+                          "Issue created; open GitHub to view it.";
+                      }
+                    }
+                    titleInput.value = "";
+                    descInput.value = "";
+                  } else {
+                    console.warn(
+                      "[Zentral-Report] Worker returned error:",
+                      resp.status,
+                      result,
+                    );
+                  }
+                } catch (postErr) {
+                  console.warn(
+                    "[Zentral-Report] Worker submission failed, falling back to Web:",
+                    postErr,
+                  );
+                }
+              }
+
+              // 3. Fallback: If not submitted via worker, open pre-filled GitHub issue in new tab & copy logs to clipboard
+              if (!submitted) {
+                if (logContent) {
+                  try {
+                    const clipboardHelper = Cc[
+                      "@mozilla.org/widget/clipboardhelper;1"
+                    ]?.getService(Ci.nsIClipboardHelper);
+                    if (clipboardHelper) {
+                      clipboardHelper.copyString(sendLogContent);
+                    } else if (navigator.clipboard?.writeText) {
+                      navigator.clipboard.writeText(sendLogContent);
+                    }
+                  } catch (_) {}
+                }
+
+                let ghBody = `### 📝 Description\n${desc}\n\n`;
+                ghBody += `### 🖥️ Environment\n`;
+                ghBody += `- **Zentral Version:** ${systemInfo.zentralVersion}\n`;
+                ghBody += `- **Zen Build:** ${systemInfo.zenVersion}\n`;
+                ghBody += `- **OS / Platform:** ${systemInfo.platform}\n`;
+                ghBody += `- **Window / DPR:** ${systemInfo.windowSize} (DPR: ${systemInfo.dpr})\n\n`;
+                if (logContent) {
+                  ghBody += `*(Diagnostic log copied to your clipboard — paste below if relevant)*\n\n`;
+                }
+
+                const ghUrl = `https://github.com/Michele501st/Zentral-Sine/issues/new?title=${encodeURIComponent(`[${category.toUpperCase()}] ${title}`)}&body=${encodeURIComponent(ghBody)}&labels=${encodeURIComponent(category)}`;
+
+                if (window.gBrowser?.addTab) {
+                  window.gBrowser.addTab(ghUrl, {
+                    triggeringPrincipal:
+                      Services.scriptSecurityManager.getSystemPrincipal(),
+                  });
+                } else {
+                  window.open(ghUrl, "_blank");
+                }
+
+                if (statusEl) {
+                  statusEl.style.display = "inline";
+                  statusEl.style.color = "#60a5fa";
+                  statusEl.textContent = logContent
+                    ? "✓ Opened in GitHub (Log copied to clipboard!)"
+                    : "✓ Opened in GitHub!";
+                }
+              }
+
+              submitReportBtn.disabled = false;
+              submitReportBtn.style.opacity = "1";
+              submitReportBtn.style.pointerEvents = "auto";
+              submitReportBtn.innerHTML = origBtnHTML;
+            });
+          }
+
+          this.modal.addEventListener("mousedown", (e) => {
+            if (e.target === this.modal) this.close();
+          });
+
+          this.modal
+            .querySelector("#zs-ag-reset")
+            .addEventListener("click", () => {
+              const get = (id) => this.modal.querySelector("#" + id);
+              get("zs-ag-enabled").checked = true;
+              if (agStatus) {
+                agStatus.textContent = "Enabled";
+                agStatus.setAttribute("data-enabled", "true");
+              }
+              if (agContent) agContent.removeAttribute("data-disabled");
+
+              if (placementInput) placementInput.value = "sidebar";
+              placementBtns.forEach((b) =>
+                b.setAttribute(
+                  "data-active",
+                  b.dataset.placement === "sidebar" ? "true" : "false",
+                ),
+              );
+              if (agCol) agCol.setAttribute("data-placement", "sidebar");
+              if (matrixWrapper) matrixWrapper.removeAttribute("data-hidden");
+              if (get("zs-hide-utility-section"))
+                get("zs-hide-utility-section").checked = false;
+              const utilityRow = get("zs-utility-section-row");
+              if (utilityRow) utilityRow.removeAttribute("data-hidden");
+
+              this.updateMatrixUI(7, 3);
+              const animDropdown = this.modal.querySelector(
+                "#zs-anim-type-dropdown",
+              );
+              if (animDropdown && animDropdown.syncValue)
+                animDropdown.syncValue("slide");
+              else if (get("zs-anim-type")) get("zs-anim-type").value = "slide";
+
+              get("zs-anim-speed").value = 450;
+              if (get("zs-anim-speed-slider"))
+                get("zs-anim-speed-slider").value = 450;
+              if (get("zs-anim-speed-badge"))
+                get("zs-anim-speed-badge").textContent = "450 ms";
+              get("zs-max-apps").value = 21;
+              const instaPeekBtn =
+                this.modal.querySelector("#zs-insta-peek-btn");
+              if (instaPeekBtn && instaPeekBtn.syncValue)
+                instaPeekBtn.syncValue("Alt+Q");
+              else if (get("zs-insta-peek-shortcut"))
+                get("zs-insta-peek-shortcut").value = "Alt+Q";
+              this.updatePreviewDemo("slide", 450);
+            });
+
+          this.modal
+            .querySelector("#zs-tg-reset")
+            .addEventListener("click", () => {
+              const get = (id) => this.modal.querySelector("#" + id);
+              get("zs-tg-enabled").checked = true;
+              if (tgStatus) {
+                tgStatus.textContent = "Enabled";
+                tgStatus.setAttribute("data-enabled", "true");
+              }
+              if (tgContent) tgContent.removeAttribute("data-disabled");
+
+              get("zs-tg-collapse").checked = false;
+              get("zs-tg-thumbnails").checked = true;
+              get("zs-tg-chevron").checked = true;
+              if (indicatorTypeRow)
+                indicatorTypeRow.removeAttribute("data-hidden");
+
+              const tgDropdown = this.modal.querySelector(
+                "#zs-tg-indicator-type-dropdown",
+              );
+              if (tgDropdown && tgDropdown.syncValue)
+                tgDropdown.syncValue("circle");
+              else if (get("zs-tg-indicator-type"))
+                get("zs-tg-indicator-type").value = "circle";
+
+              get("zs-tg-opacity").value = 85;
+              if (get("zs-tg-opacity-badge"))
+                get("zs-tg-opacity-badge").textContent = "85%";
+              document.documentElement.style.setProperty(
+                "--zentral-tabgroup-label-opacity",
+                "0.85",
+              );
+              document.documentElement.setAttribute(
+                "zentral-label-opacity-below-85",
+                "false",
+              );
+              document.documentElement.setAttribute(
+                "zentral-indicator-type",
+                "circle",
+              );
+            });
+
+          this.populate();
+        }
       }
-
-      this.modal.addEventListener("mousedown", (e) => {
-        if (e.target === this.modal) this.close();
-      });
-
-      this.modal.querySelector("#zs-ag-reset").addEventListener("click", () => {
-        const get = (id) => this.modal.querySelector("#" + id);
-        get("zs-ag-enabled").checked = true;
-        if (agStatus) {
-          agStatus.textContent = "Enabled";
-          agStatus.setAttribute("data-enabled", "true");
-        }
-        if (agContent) agContent.removeAttribute("data-disabled");
-
-        if (placementInput) placementInput.value = "sidebar";
-        placementBtns.forEach((b) =>
-          b.setAttribute(
-            "data-active",
-            b.dataset.placement === "sidebar" ? "true" : "false",
-          ),
-        );
-        if (agCol) agCol.setAttribute("data-placement", "sidebar");
-        if (matrixWrapper) matrixWrapper.removeAttribute("data-hidden");
-        if (get("zs-hide-utility-section"))
-          get("zs-hide-utility-section").checked = false;
-        const utilityRow = get("zs-utility-section-row");
-        if (utilityRow) utilityRow.removeAttribute("data-hidden");
-
-        this.updateMatrixUI(7, 3);
-        const animDropdown = this.modal.querySelector("#zs-anim-type-dropdown");
-        if (animDropdown && animDropdown.syncValue)
-          animDropdown.syncValue("slide");
-        else if (get("zs-anim-type")) get("zs-anim-type").value = "slide";
-
-        get("zs-anim-speed").value = 450;
-        if (get("zs-anim-speed-slider"))
-          get("zs-anim-speed-slider").value = 450;
-        if (get("zs-anim-speed-badge"))
-          get("zs-anim-speed-badge").textContent = "450 ms";
-        get("zs-max-apps").value = 21;
-        const instaPeekBtn = this.modal.querySelector("#zs-insta-peek-btn");
-        if (instaPeekBtn && instaPeekBtn.syncValue)
-          instaPeekBtn.syncValue("Alt+Q");
-        else if (get("zs-insta-peek-shortcut"))
-          get("zs-insta-peek-shortcut").value = "Alt+Q";
-        this.updatePreviewDemo("slide", 450);
-      });
-
-      this.modal.querySelector("#zs-tg-reset").addEventListener("click", () => {
-        const get = (id) => this.modal.querySelector("#" + id);
-        get("zs-tg-enabled").checked = true;
-        if (tgStatus) {
-          tgStatus.textContent = "Enabled";
-          tgStatus.setAttribute("data-enabled", "true");
-        }
-        if (tgContent) tgContent.removeAttribute("data-disabled");
-
-        get("zs-tg-collapse").checked = false;
-        get("zs-tg-thumbnails").checked = true;
-        get("zs-tg-chevron").checked = true;
-        if (indicatorTypeRow) indicatorTypeRow.removeAttribute("data-hidden");
-
-        const tgDropdown = this.modal.querySelector(
-          "#zs-tg-indicator-type-dropdown",
-        );
-        if (tgDropdown && tgDropdown.syncValue) tgDropdown.syncValue("circle");
-        else if (get("zs-tg-indicator-type"))
-          get("zs-tg-indicator-type").value = "circle";
-
-        get("zs-tg-opacity").value = 85;
-        if (get("zs-tg-opacity-badge"))
-          get("zs-tg-opacity-badge").textContent = "85%";
-        document.documentElement.style.setProperty(
-          "--zentral-tabgroup-label-opacity",
-          "0.85",
-        );
-        document.documentElement.setAttribute(
-          "zentral-label-opacity-below-85",
-          "false",
-        );
-        document.documentElement.setAttribute(
-          "zentral-indicator-type",
-          "circle",
-        );
-      });
-
-      this.populate();
-    }
-  }
-return new ZentralSettings();
-});
+      return new ZentralSettings();
+    },
+  );
 })();

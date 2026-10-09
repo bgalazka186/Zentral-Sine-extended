@@ -58,13 +58,11 @@
   display: none !important;
 }
 
-
 /* Red styling for "Remove App" button to emphasize its destructive action */
 #zen-apps-sidebar-tile-context #zen-apps-sidebar-remove-item {
   color: #ff5555 !important;
   font-weight: 500 !important;
 }
-
 
 #zen-apps-sidebar-tile-context #zen-apps-sidebar-remove-item:hover,
 #zen-apps-sidebar-tile-context

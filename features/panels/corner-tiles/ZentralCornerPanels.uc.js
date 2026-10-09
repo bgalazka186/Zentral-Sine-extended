@@ -556,7 +556,10 @@
         record.loadedSource = record.app.url;
         let preloadStarted = false;
         ctx.retryPanelTask(browser, () => {
-          if (!preloadStarted) { preloadStarted = true; return false; }
+          if (!preloadStarted) {
+            preloadStarted = true;
+            return false;
+          }
           if (
             !record.tab.isConnected ||
             !browser.isConnected ||
@@ -869,7 +872,9 @@
         }
         pruneIsolationTiles();
         ctx.syncAppPanelBrowserActivity?.();
-        window.dispatchEvent(new CustomEvent("zentral-essential-tiles-changed"));
+        window.dispatchEvent(
+          new CustomEvent("zentral-essential-tiles-changed"),
+        );
       } finally {
         isSyncingTiles = false;
       }

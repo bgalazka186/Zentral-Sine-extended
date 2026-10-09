@@ -41,7 +41,6 @@
     box-shadow 0.15s ease !important;
 }
 
-
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
   .zen-app-tile
@@ -59,7 +58,6 @@
     opacity 0.2s ease !important;
 }
 
-
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
   .zen-app-tile[data-loaded="true"]
@@ -72,7 +70,6 @@
   opacity: 1 !important;
 }
 
-
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
   .zen-app-tile[data-loaded="true"]:hover
@@ -83,7 +80,6 @@
   svg {
   filter: saturate(128%) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
 }
-
 
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
@@ -108,7 +104,6 @@
   filter: saturate(35%) opacity(0.72) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) !important;
 }
 
-
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
   .zen-app-tile[data-loaded="false"]:hover
@@ -132,7 +127,6 @@
   filter: saturate(75%) opacity(0.95) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
 }
 
-
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
   .zen-app-tile:hover {
@@ -146,14 +140,12 @@
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2) !important;
 }
 
-
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
   .zen-app-add-btn
   svg {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) !important;
 }
-
 
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
@@ -162,13 +154,11 @@
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5)) !important;
 }
 
-
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
   .zen-app-tile:active {
   transform: scale(0.96) !important;
 }
-
 
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
@@ -190,7 +180,6 @@
     0 1px 3px rgba(0, 0, 0, 0.2) !important;
 }
 
-
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
   .zen-app-tile[data-active="true"]
@@ -205,7 +194,6 @@
         color-mix(in srgb, var(--zen-primary-color, #707ac2) 60%, transparent)
     ) !important;
 }
-
 
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
@@ -234,7 +222,6 @@
     opacity 0.15s ease !important;
 }
 
-
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
   .zen-app-add-btn:hover {
@@ -249,13 +236,11 @@
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2) !important;
 }
 
-
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
   .zen-app-add-btn:active {
   transform: scale(0.96) !important;
 }
-
 
 /* Default / Non-autohide Vertical Bar (Clean standard tile styling) */
 :root:not([zentral-apps-autohide="true"])[zentral-apps-placement="vertical-bar"]
@@ -279,7 +264,6 @@
   color: inherit !important;
 }
 
-
 :root:not([zentral-apps-autohide="true"])[zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
   .zen-app-tile:hover {
@@ -288,7 +272,6 @@
     color-mix(in srgb, currentColor 10%, transparent)
   ) !important;
 }
-
 
 :root:not([zentral-apps-autohide="true"])[zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
@@ -310,7 +293,6 @@
     0 1px 3px rgba(0, 0, 0, 0.2) !important;
 }
 
-
 :root:not([zentral-apps-autohide="true"])[zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
   .zen-app-tile[data-active="true"]
@@ -325,7 +307,6 @@
         color-mix(in srgb, var(--zen-primary-color, #707ac2) 60%, transparent)
     ) !important;
 }
-
 
 :root:not([zentral-apps-autohide="true"])[zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
@@ -352,7 +333,6 @@
     opacity 0.15s ease !important;
 }
 
-
 :root:not([zentral-apps-autohide="true"])[zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
   .zen-app-add-btn:hover {
@@ -365,7 +345,6 @@
   box-shadow: none !important;
 }
 
-
 #zentral-apps-vertical-bar .zen-apps-autohide-dots {
   display: none !important;
   visibility: hidden !important;
@@ -373,11 +352,9 @@
   pointer-events: none !important;
 }
 
-
 #zentral-apps-vertical-bar-trigger {
   display: none !important;
 }
-
 
 :root[zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar-trigger {
@@ -391,7 +368,6 @@
   background: transparent !important;
 }
 
-
 :root[zentral-apps-placement="vertical-bar"][zen-right-side="true"]
   #zentral-apps-vertical-bar-trigger,
 :root[zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
@@ -400,7 +376,6 @@
   right: auto !important;
 }
 
-
 :root[zentral-apps-placement="vertical-bar"]:not([zen-right-side="true"]):not(
     [zen-sidebar-right="true"]
   )
@@ -408,7 +383,6 @@
   right: 0 !important;
   left: auto !important;
 }
-
 
 /* Autohide Vertical Bar Inner Hover Extension (1/2 width = 24px) */
 .zen-app-vb-hover-zone {
@@ -421,13 +395,11 @@
   background: transparent !important;
 }
 
-
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar[data-revealed="true"]
   .zen-app-vb-hover-zone {
   pointer-events: auto !important;
 }
-
 
 :root[zentral-apps-placement="vertical-bar"][zen-right-side="true"]
   .zen-app-vb-hover-zone,
@@ -437,7 +409,6 @@
   left: auto !important;
 }
 
-
 :root[zentral-apps-placement="vertical-bar"]:not([zen-right-side="true"]):not(
     [zen-sidebar-right="true"]
   )
@@ -445,7 +416,6 @@
   left: -24px !important;
   right: auto !important;
 }
-
 
 #zen-app-panel-root[data-panel-side="right"] #zen-app-panel-pill {
   left: 0 !important;

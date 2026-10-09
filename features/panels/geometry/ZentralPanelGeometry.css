@@ -60,10 +60,14 @@
  * settings row, both write the same "bgalazka-all-sides-resize" attribute -
  * see note 16). */
 
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-all-sides-resize="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-all-sides-resize="true"]
   #zen-app-panel-root
   .zen-app-resize-strip-top,
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-all-sides-resize="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-all-sides-resize="true"]
   #zen-app-panel-root
   .zen-app-resize-strip-bottom {
   pointer-events: auto !important;
@@ -184,13 +188,19 @@
   left: -6px !important;
   right: auto !important;
 }
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-all-sides-resize="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-all-sides-resize="true"]
   #zen-app-panel-root
   .zen-app-resize-strip-outer,
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-all-sides-resize="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-all-sides-resize="true"]
   #zen-app-panel-root
   .zen-app-resize-strip-inner,
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-all-sides-resize="true"]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-all-sides-resize="true"]
   #zen-app-panel-root
   .zen-app-resize-corner {
   pointer-events: auto !important;
@@ -220,12 +230,17 @@
 /* The opt-in input shield explicitly enables pointer events on descendants.
  * During geometry gestures it must not override the JS resize suppression.
  * Scope this to the panel browser; ordinary tabs and resize handles stay native. */
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])[bgalazka-panel-input-shield="true"]:is(
-    [bgalazka-hresize-active], [bgalazka-vresize-active],
-    [bgalazka-panel-hpos-dragging], [bgalazka-panel-pos-dragging]
+:root[zentral-app-panel-open="true"]:not(
+    [bgalazka-hover-panel-hidden]
+  )[bgalazka-panel-input-shield="true"]:is(
+    [bgalazka-hresize-active],
+    [bgalazka-vresize-active],
+    [bgalazka-panel-hpos-dragging],
+    [bgalazka-panel-pos-dragging]
   )
   #zen-app-panel-root[open]:not([closing]):not([data-insta-peek="true"])
-  #zen-app-panel-slider browser {
+  #zen-app-panel-slider
+  browser {
   pointer-events: none !important;
 }
 

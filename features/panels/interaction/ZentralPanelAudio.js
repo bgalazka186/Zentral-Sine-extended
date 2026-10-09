@@ -28,7 +28,9 @@
  */
 (function () {
   "use strict";
-  window.ZentralModuleLoader.define("panels/ZentralPanelAudio", function ({ BGALAZKA_EXT_PREFS, ctx, getPref, parseSVG, registerCleanup }) {
+  window.ZentralModuleLoader.define(
+    "panels/ZentralPanelAudio",
+    function ({ BGALAZKA_EXT_PREFS, ctx, getPref, parseSVG, registerCleanup }) {
       const panelMediaListeners = new Map();
       const panelAudioSeen = new WeakSet();
       const mediaEvents = [
@@ -246,15 +248,35 @@
         ctx.retryPanelTask(panelActivityRetryKey, () => {
           ctx.syncAppPanelBrowserActivity();
           const root = document.getElementById("zen-app-panel-root");
-          if (!root?.hasAttribute("open") || root.hasAttribute("closing") ||
-              document.documentElement.hasAttribute("bgalazka-hover-panel-hidden")) return true;
-          return ctx.getAllAppBrowsers().every(browser =>
-            !browser.isConnected || browser.style.display === "none" ||
-            browser.hasAttribute("hidden") ||
-            (browser.browsingContext && browser.docShellIsActive &&
-              (!browser.isRemoteBrowser || browser.renderLayers)));
+          if (
+            !root?.hasAttribute("open") ||
+            root.hasAttribute("closing") ||
+            document.documentElement.hasAttribute("bgalazka-hover-panel-hidden")
+          )
+            return true;
+          return ctx
+            .getAllAppBrowsers()
+            .every(
+              (browser) =>
+                !browser.isConnected ||
+                browser.style.display === "none" ||
+                browser.hasAttribute("hidden") ||
+                (browser.browsingContext &&
+                  browser.docShellIsActive &&
+                  (!browser.isRemoteBrowser || browser.renderLayers)),
+            );
         });
       };
-return { ensureNativeAudioButton, mediaEvents, onAudioStarted, onAudioStopped, panelActivityRetryKey, panelMediaListeners, refreshPanelAudio, togglePanelAudio };
-});
+      return {
+        ensureNativeAudioButton,
+        mediaEvents,
+        onAudioStarted,
+        onAudioStopped,
+        panelActivityRetryKey,
+        panelMediaListeners,
+        refreshPanelAudio,
+        togglePanelAudio,
+      };
+    },
+  );
 })();

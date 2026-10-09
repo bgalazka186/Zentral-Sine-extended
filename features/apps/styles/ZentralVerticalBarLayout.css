@@ -23,7 +23,6 @@
   display: none !important;
 }
 
-
 /* Base style */
 :root[zentral-apps-placement="vertical-bar"] #zentral-apps-vertical-bar {
   min-height: 0 !important;
@@ -39,7 +38,6 @@
   user-select: none !important;
   border: none !important;
 }
-
 
 /* ==========================================================================
  * Mode A: Autohide DISABLED (Pinned / Docked into Frame)
@@ -79,7 +77,6 @@
     opacity 0.18s ease !important;
 }
 
-
 /* Outer margin matching Zen's element separation for exact visual symmetry */
 :root[zentral-apps-placement="vertical-bar"]:not(
     [zentral-apps-autohide="true"]
@@ -93,7 +90,6 @@
   margin-right: 0 !important;
 }
 
-
 :root[zentral-apps-placement="vertical-bar"]:not(
     [zentral-apps-autohide="true"]
   ):not([zen-right-side="true"]):not([zen-sidebar-right="true"])
@@ -102,13 +98,11 @@
   margin-left: 0 !important;
 }
 
-
 :root[zentral-apps-placement="vertical-bar"]:not([zentral-apps-autohide="true"])
   #zentral-apps-vertical-bar
   #zen-apps-sidebar-grid {
   padding: 0 !important;
 }
-
 
 /* ==========================================================================
  * Mode B: Autohide ENABLED (Compact Floating Panel)
@@ -139,13 +133,11 @@
   box-sizing: border-box !important;
 }
 
-
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
   #zen-apps-sidebar-grid {
   padding: 0 !important;
 }
-
 
 /* Zen Native Compact Toolbar Background Element (Inherits Zen's exact Compact Mode Sidebar theme & material) */
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
@@ -159,7 +151,6 @@
   border-radius: var(--zen-border-radius, 8px) !important;
 }
 
-
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
   #zentral-apps-vertical-bar-bg::before,
@@ -168,7 +159,6 @@
   #zentral-apps-vertical-bar-bg::after {
   border-radius: inherit !important;
 }
-
 
 /* When Vertical Bar is on Left (Sidebar on Right): anchor gradient to top-left edge */
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
@@ -186,7 +176,6 @@
   background-position: left top !important;
 }
 
-
 /* When Vertical Bar is on Right (Sidebar on Left): anchor gradient to top-right edge */
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
     [zen-right-side="true"]
@@ -201,7 +190,6 @@
   background-position: right top !important;
 }
 
-
 /* Soften film grain intensity to match Compact Sidebar visual density */
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar
@@ -209,7 +197,6 @@
   .zen-browser-grain {
   opacity: calc(var(--zen-grainy-background-opacity, 0.4) * 0.35) !important;
 }
-
 
 /* Autohide Mode B: Position on Left (Sidebar on Right) */
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
@@ -220,7 +207,6 @@
   right: auto !important;
 }
 
-
 /* Autohide Mode B: Position on Right (Sidebar on Left) */
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
     [zen-right-side="true"]
@@ -229,7 +215,6 @@
   right: 8px !important;
   left: auto !important;
 }
-
 
 /* Autohide Mode B: Idle/Collapsed State on Left */
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
@@ -246,7 +231,6 @@
   visibility: hidden !important;
 }
 
-
 /* Autohide Mode B: Idle/Collapsed State on Right */
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
     [zen-right-side="true"]
@@ -260,7 +244,6 @@
   visibility: hidden !important;
 }
 
-
 /* Autohide Mode B: Revealed State on Hover / Active Panel */
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]
   #zentral-apps-vertical-bar[data-revealed="true"],
@@ -271,7 +254,6 @@
   pointer-events: auto !important;
   visibility: visible !important;
 }
-
 
 #zen-app-panel-root {
   position: fixed;
@@ -292,7 +274,6 @@
   transition: none !important;
 }
 
-
 /* Floating App Panel Frame & Soft 1px Border (Softens boundary against webpage) */
 #zen-app-panel-root #zen-app-panel-clip {
   position: absolute !important;
@@ -301,7 +282,6 @@
   border-radius: var(--zen-border-radius, 8px) !important;
   pointer-events: none !important;
 }
-
 
 #zen-app-panel-root #zen-app-panel-slider {
   position: absolute !important;
@@ -324,10 +304,11 @@
   will-change: transform;
 }
 
-:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden]) #zen-app-panel-root #zen-app-panel-slider {
+:root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])
+  #zen-app-panel-root
+  #zen-app-panel-slider {
   pointer-events: auto !important;
 }
-
 
 #zentral-apps-vertical-bar #zen-apps-sidebar-grid {
   display: flex !important;
@@ -348,11 +329,9 @@
   box-sizing: border-box !important;
 }
 
-
 #zentral-apps-vertical-bar #zen-apps-sidebar-grid::-webkit-scrollbar {
   display: none !important;
 }
-
 
 #zentral-apps-vertical-bar #zen-apps-sidebar-grid .zen-apps-scroll-box {
   display: flex !important;
@@ -373,7 +352,6 @@
   margin: 0 !important;
 }
 
-
 #zentral-apps-vertical-bar-footer {
   display: flex !important;
   flex-direction: column !important;
@@ -387,7 +365,6 @@
   margin-top: auto !important;
   z-index: 10 !important;
 }
-
 
 #zentral-apps-vertical-bar .zen-app-tile,
 #zentral-apps-vertical-bar .zen-app-add-btn,
@@ -403,7 +380,6 @@
   flex-shrink: 0 !important;
   overflow: visible !important;
 }
-
 
 .zen-app-badge {
   position: absolute !important;
@@ -425,7 +401,6 @@
   box-sizing: border-box !important;
 }
 
-
 .zen-app-badge[data-dot="true"] {
   min-width: 8px !important;
   width: 8px !important;
@@ -436,7 +411,6 @@
   right: 2px !important;
   font-size: 0 !important;
 }
-
 
 #zentral-apps-vertical-bar .zen-app-vb-footer-btn svg {
   width: 18px !important;
