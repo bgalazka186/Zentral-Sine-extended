@@ -8590,5 +8590,89 @@
     "label": "Stabilize compact tab sidebar hover (experimental)",
     "type": "checkbox",
     "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px",
+    "label": "Compact sidebar edge tolerance (px)",
+    "type": "dropdown",
+    "defaultValue": 12,
+    "options": [
+      {
+        "label": "0 px",
+        "value": 0
+      },
+      {
+        "label": "4 px",
+        "value": 4
+      },
+      {
+        "label": "8 px",
+        "value": 8
+      },
+      {
+        "label": "12 px (default)",
+        "value": 12
+      },
+      {
+        "label": "16 px",
+        "value": 16
+      },
+      {
+        "label": "24 px",
+        "value": 24
+      },
+      {
+        "label": "32 px",
+        "value": 32
+      },
+      {
+        "label": "64 px",
+        "value": 64
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms",
+    "label": "Compact sidebar exit grace (ms)",
+    "type": "dropdown",
+    "defaultValue": 250,
+    "options": [
+      {
+        "label": "0 ms",
+        "value": 0
+      },
+      {
+        "label": "50 ms",
+        "value": 50
+      },
+      {
+        "label": "100 ms",
+        "value": 100
+      },
+      {
+        "label": "150 ms",
+        "value": 150
+      },
+      {
+        "label": "250 ms (default)",
+        "value": 250
+      },
+      {
+        "label": "400 ms",
+        "value": 400
+      },
+      {
+        "label": "500 ms",
+        "value": 500
+      },
+      {
+        "label": "1000 ms",
+        "value": 1000
+      },
+      {
+        "label": "2000 ms",
+        "value": 2000
+      }
+    ]
   }
 ]

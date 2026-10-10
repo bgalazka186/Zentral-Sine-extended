@@ -9,6 +9,8 @@
 (function () {
   "use strict";
   const PREF = "zen.workspace.zentral.experimental.compact_sidebar_hover";
+  const MARGIN_PREF = PREF + ".edge_margin_px";
+  const GRACE_PREF = PREF + ".exit_grace_ms";
   const Services =
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
@@ -20,8 +22,8 @@
         "Compact hover guard requires Zen's native compact manager",
       );
     // Tunables for edge wiggle tolerance.
-    const EDGE_MARGIN = 12; // px of tolerance around the visible bounds
-    const EXIT_GRACE = 250; // ms before a real exit is allowed to hide
+    let edgeMargin = 12; // px of tolerance around the visible bounds
+    let exitGrace = 250; // ms before a real exit is allowed to hide
     let active = true,
       inside = false,
       outside = false,
@@ -116,13 +118,13 @@
       const box = readBounds(sidebar);
       const wasOutside = outside;
       // On window re-entry, retain the pre-exit bounds for the first hit-test.
-      const ref = wasOutside && bounds ? bounds : box;
+      const ref = (wasOutside || leaving) && bounds ? bounds : box;
       // Margin only applies once the pointer was already inside/leaving, so it
       // never makes the sidebar easier to trigger from far away.
       const hit = contains(
         ref,
         event,
-        inside || leaving || wasOutside ? EDGE_MARGIN : 0,
+        inside || leaving || wasOutside ? edgeMargin : 0,
       );
       if (wasOutside) cancelTimer();
       outside = false;
@@ -135,7 +137,7 @@
         // Just crossed the edge: keep protecting for a short grace period.
         inside = false;
         leaving = true;
-        expire(Math.max(EXIT_GRACE, keepHoverDelay));
+        expire(Math.max(exitGrace, keepHoverDelay));
       } else if (!leaving) {
         bounds = null;
         if (blocked && timer === null) {
@@ -172,6 +174,28 @@
       window[method]("mouseover", onMove, true);
       document.documentElement[method]("mouseleave", onLeave, true);
     }
+    function refreshTunables() {
+      // Preference reads stay outside the pointer-event path. Updating sliders
+      // affects the next hit-test/exit without restarting an active grace timer.
+      edgeMargin = Math.max(
+        0,
+        Math.min(64, Services.prefs.getIntPref(MARGIN_PREF, 12)),
+      );
+      exitGrace = Math.max(
+        0,
+        Math.min(2000, Services.prefs.getIntPref(GRACE_PREF, 250)),
+      );
+      keepHoverDelay = Math.max(
+        0,
+        Math.min(
+          2000,
+          Services.prefs.getIntPref(
+            "zen.view.compact.sidebar-keep-hover.duration",
+            0,
+          ),
+        ),
+      );
+    }
     function refresh() {
       reset();
       configured =
@@ -183,16 +207,7 @@
           "zen.view.compact.show-sidebar-and-toolbar-on-hover",
           true,
         );
-      keepHoverDelay = Math.max(
-        0,
-        Math.min(
-          2000,
-          Services.prefs.getIntPref(
-            "zen.view.compact.sidebar-keep-hover.duration",
-            0,
-          ),
-        ),
-      );
+      refreshTunables();
       setMovementListeners(Boolean(configured));
     }
     function destroy() {
@@ -254,9 +269,22 @@
         "zen.view.compact",
         "zen.view.use-single-toolbar",
         "zen.tabs.vertical.right-side",
+        "zen.view.compact.show-sidebar-and-toolbar-on-hover",
+        "zen.view.compact.hide-tabbar",
       ]) {
         Services.prefs.addObserver(pref, observer);
         cleanups.push(() => Services.prefs.removeObserver(pref, observer));
+      }
+      const tunablesObserver = { observe: refreshTunables };
+      for (const pref of [
+        MARGIN_PREF,
+        GRACE_PREF,
+        "zen.view.compact.sidebar-keep-hover.duration",
+      ]) {
+        Services.prefs.addObserver(pref, tunablesObserver);
+        cleanups.push(() =>
+          Services.prefs.removeObserver(pref, tunablesObserver),
+        );
       }
       refresh();
       return destroy;

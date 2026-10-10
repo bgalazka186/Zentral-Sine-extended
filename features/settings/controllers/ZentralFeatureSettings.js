@@ -1265,6 +1265,47 @@
               pref: compactHoverPref,
               def: false,
             });
+            for (const [label, description, suffix, min, max, def, unit] of [
+              [
+                "Compact Sidebar Edge Tolerance",
+                "Tolerance around an already revealed sidebar. Default: 12 px. Applies immediately.",
+                ".edge_margin_px",
+                0,
+                64,
+                12,
+                " px",
+              ],
+              [
+                "Compact Sidebar Exit Grace",
+                "Protection after crossing the tolerated edge. Default: 250 ms. Zen's sidebar keep-hover delay still applies if longer. Applies to the next exit.",
+                ".exit_grace_ms",
+                0,
+                2000,
+                250,
+                " ms",
+              ],
+            ]) {
+              const pref = compactHoverPref + suffix;
+              const control = createSliderRow(
+                label,
+                description,
+                pref,
+                min,
+                max,
+                def,
+                unit,
+              );
+              content.appendChild(control.row);
+              panel._toggles.push({
+                input: control.input,
+                pref,
+                def,
+                isSelect: true,
+                onSync: (value) => {
+                  control.badge.textContent = value + unit;
+                },
+              });
+            }
 
             const tBackgroundTabDrag = createToggleRow(
               "Drag Tabs Without Activating or Loading Them",
