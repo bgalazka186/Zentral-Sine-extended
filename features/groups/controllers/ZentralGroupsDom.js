@@ -31,7 +31,8 @@
   "use strict";
   window.ZentralModuleLoader.define(
     "groups/ZentralGroupsDom",
-    function ({ Services, shared, runtime, access }) {
+    function ({ Services, shared, runtime, access, lifecycle }) {
+      const { setTimeout, clearTimeout, requestAnimationFrame, MutationObserver } = lifecycle;
       const {
         Constants,
         Core,
@@ -265,8 +266,8 @@
             } catch (_) {}
           }, 50);
 
-          input.addEventListener("keydown", (e) => this.renameGroupKeydown(e));
-          input.addEventListener("blur", (e) => this.renameGroupHalt(e));
+          lifecycle.listen(input, "keydown", (e) => this.renameGroupKeydown(e));
+          lifecycle.listen(input, "blur", (e) => this.renameGroupHalt(e));
         },
         renameGroupHalt(event, force = false) {
           if (access.state.isStartingRename && !force) return;
@@ -302,6 +303,7 @@
           ) {
             return;
           }
+          lifecycle.capturePresentation(group);
           group.classList.add("zentral-standard");
           group.setAttribute("zentral-group", "true");
           group.style.setProperty("border-radius", "6px", "important");
@@ -338,7 +340,7 @@
           // Bind click collapse toggle to ensure all groups (top-level and nested) collapse/expand on click
           if (!labelContainer._zentralToggleBound) {
             labelContainer._zentralToggleBound = true;
-            labelContainer.addEventListener("click", (e) => {
+            lifecycle.listen(labelContainer, "click", (e) => {
               if (
                 e.target.closest(".tab-close-button") ||
                 e.target.closest("#tab-label-input") ||
@@ -533,7 +535,7 @@
             // Labels are always full-width ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no hover expand/collapse needed.
 
             let hoverTimer = null;
-            labelContainer.addEventListener("mouseenter", () => {
+            lifecycle.listen(labelContainer, "mouseenter", () => {
               if (!Core.getPref(Constants.TabGroups.PREF_THUMBNAILS)) return;
               labelContainer.setAttribute("zentral-hover", "true");
               hoverTimer = setTimeout(() => {
@@ -574,7 +576,7 @@
                         row.setAttribute("data-unloaded", "true");
                       }
 
-                      row.addEventListener("click", (e) => {
+                      lifecycle.listen(row, "click", (e) => {
                         if (e.target.closest(".zentral-tooltip-close-btn"))
                           return;
                         e.preventDefault();
@@ -642,7 +644,7 @@
                           `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>`,
                         ),
                       );
-                      closeBtn.addEventListener("click", (e) => {
+                      lifecycle.listen(closeBtn, "click", (e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         if (window.gBrowser && tab) {
@@ -701,17 +703,17 @@
                 }
               }, 350);
             });
-            labelContainer.addEventListener("mouseleave", () => {
+            lifecycle.listen(labelContainer, "mouseleave", () => {
               labelContainer.removeAttribute("zentral-hover");
               if (hoverTimer) clearTimeout(hoverTimer);
               this.safeHideTooltip(350);
             });
-            labelContainer.addEventListener("mousedown", () => {
+            lifecycle.listen(labelContainer, "mousedown", () => {
               if (hoverTimer) clearTimeout(hoverTimer);
               const panel = document.getElementById("zentral-tabgroup-tooltip");
               if (panel && panel.hidePopup) panel.hidePopup();
             });
-            labelContainer.addEventListener("dblclick", (e) => {
+            lifecycle.listen(labelContainer, "dblclick", (e) => {
               if (
                 e.target.closest(".tab-close-button") ||
                 e.target.closest(".tab-group-icon")
@@ -748,7 +750,7 @@
             );
             labelContainer.appendChild(closeButton);
 
-            closeButton.addEventListener("click", (event) => {
+            lifecycle.listen(closeButton, "click", (event) => {
               event.stopPropagation();
               event.preventDefault();
               try {
@@ -832,7 +834,7 @@
         },
         scheduleBadgeUpdate() {
           if (access.badgeUpdateRAF) return;
-          access.badgeUpdateRAF = window.requestAnimationFrame(() => {
+          access.badgeUpdateRAF = requestAnimationFrame(() => {
             access.badgeUpdateRAF = null;
             this.updateAllSubGroupsBadges();
           });

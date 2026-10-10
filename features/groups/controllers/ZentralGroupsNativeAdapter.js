@@ -1,7 +1,7 @@
 /*
  * ZENTRAL FILE GUIDE - features/groups/controllers/ZentralGroupsNativeAdapter.js
  *
- * Purpose: Integrates native tab opening/addTab, tab drag guards, tabstrip observation and popup
+ * Purpose: Integrates native tab opening/addTab, group API hooks, tabstrip observation and popup
  *   suppression; filters Zen Library copies through a local compatibility switch.
  * Interaction / execution: Installed by ZentralTabGroups. Native events call Store/Dom/Menu peer methods;
  *   checks public Apps panel state to prevent inappropriate grouping. Library filtering is local to this
@@ -11,7 +11,7 @@
  *   collaborators.
  * Registration: groups/ZentralGroupsNativeAdapter
  * Loaded/created by: features/groups/ZentralTabGroups.uc.js
- * Returned factory API: hookAddTab; initTabDragSelectionGuard; isLibraryCopy; libraryCompatibilityEnabled;
+ * Returned factory API: hookAddTab; setupGroupNativeHooks; isLibraryCopy; libraryCompatibilityEnabled;
  *   queryLiveTabNodes; removeBuiltinTabGroupMenu; setupObserver; setupPopupSuppression; setupTabOpenHandler
  * Live owner accessors/callbacks: dragGuardCleanup; getSessionStore; groupContextMenuHandler;
  *   groupObservers; groupRightClickBlocker; isRestoring; origAddTab; popupShowingListener; processedGroups;
@@ -34,7 +34,8 @@
   "use strict";
   window.ZentralModuleLoader.define(
     "groups/ZentralGroupsNativeAdapter",
-    function ({ Services, shared, runtime, access }) {
+    function ({ Services, shared, runtime, access, lifecycle }) {
+      const { setTimeout, clearTimeout, requestAnimationFrame, MutationObserver } = lifecycle;
       const {
         Constants,
         Core,
@@ -98,9 +99,9 @@
               };
 
               forceUngroup();
-              window.setTimeout(forceUngroup, 0);
-              window.setTimeout(forceUngroup, 50);
-              window.setTimeout(forceUngroup, 150);
+              setTimeout(forceUngroup, 0);
+              setTimeout(forceUngroup, 50);
+              setTimeout(forceUngroup, 150);
               return;
             }
 
@@ -190,7 +191,7 @@
           };
 
           if (window.gBrowser?.tabContainer) {
-            window.gBrowser.tabContainer.addEventListener(
+            lifecycle.listen(window.gBrowser.tabContainer,
               "TabOpen",
               access.tabOpenListener,
             );
@@ -199,10 +200,12 @@
         hookAddTab() {
           if (!window.gBrowser || window.gBrowser._zentralAddTabHooked) return;
           window.gBrowser._zentralAddTabHooked = true;
-          access.origAddTab = window.gBrowser.addTab;
+          const original = window.gBrowser.addTab;
+          access.origAddTab = original;
           const self = this;
 
-          window.gBrowser.addTab = function (aURI, aParams = {}) {
+          const wrappedAddTab = function (aURI, aParams = {}) {
+            if (!lifecycle.active) return original.call(this, aURI, aParams);
             const isAppOpen =
               (typeof window.Zentral?.Apps?.isPanelOpen === "function" &&
                 window.Zentral.Apps.isPanelOpen()) ||
@@ -222,7 +225,7 @@
               aParams.insertRelatedAfterCurrent = false;
             }
 
-            const tab = access.origAddTab.call(this, aURI, aParams);
+            const tab = original.call(this, aURI, aParams);
 
             if (isAppOpen && tab) {
               tab._zentralForceUngroup = true;
@@ -246,13 +249,21 @@
                 } catch (_) {}
               };
               forceUngroup();
-              window.setTimeout(forceUngroup, 0);
-              window.setTimeout(forceUngroup, 50);
-              window.setTimeout(forceUngroup, 150);
+              setTimeout(forceUngroup, 0);
+              setTimeout(forceUngroup, 50);
+              setTimeout(forceUngroup, 150);
             }
 
             return tab;
           };
+          window.gBrowser.addTab = wrappedAddTab;
+          lifecycle.cleanup(() => {
+            if (window.gBrowser?.addTab === wrappedAddTab)
+              window.gBrowser.addTab = original;
+            delete window.gBrowser._zentralAddTabHooked;
+            for (const tab of window.gBrowser?.tabs || [])
+              delete tab._zentralForceUngroup;
+          });
         },
         setupObserver() {
           const observer = new MutationObserver((mutations) => {
@@ -272,7 +283,9 @@
                     const lc = g.querySelector(
                       ":scope > .tab-group-label-container",
                     );
-                    if (lc) lc.remove();
+                    if (lc && (g.hasAttribute("split-view-group") ||
+                      g.hasAttribute("zen-split-view") || g.hasAttribute("is-zen-split")))
+                      lifecycle.detach(lc);
                     groupsStructureChanged = true;
                   }
                 }
@@ -318,7 +331,7 @@
 
                   if (tag === "TAB-GROUP") {
                     groupsStructureChanged = true;
-                    window.requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
                       if (node.isConnected) {
                         const isSplit =
                           node.hasAttribute?.("split-view-group") ||
@@ -335,7 +348,7 @@
                           const lc = node.querySelector(
                             ":scope > .tab-group-label-container",
                           );
-                          if (lc) lc.remove();
+                          if (lc) lifecycle.detach(lc);
                         }
                       }
                     });
@@ -346,7 +359,7 @@
                   if (childGroups.length > 0) {
                     groupsStructureChanged = true;
                     childGroups.forEach((group) => {
-                      window.requestAnimationFrame(() => {
+                      requestAnimationFrame(() => {
                         if (group.isConnected) {
                           const gSplit =
                             group.hasAttribute?.("split-view-group") ||
@@ -363,7 +376,7 @@
                             const lc = group.querySelector(
                               ":scope > .tab-group-label-container",
                             );
-                            if (lc) lc.remove();
+                            if (lc) lifecycle.detach(lc);
                           }
                         }
                       });
@@ -469,17 +482,17 @@
                 event.stopPropagation();
               }
             };
-            window.addEventListener(
+            lifecycle.listen(window,
               "mousedown",
               access.groupRightClickBlocker,
               true,
             );
-            window.addEventListener(
+            lifecycle.listen(window,
               "mouseup",
               access.groupRightClickBlocker,
               true,
             );
-            window.addEventListener(
+            lifecycle.listen(window,
               "click",
               access.groupRightClickBlocker,
               true,
@@ -537,7 +550,7 @@
                 }
               }
             };
-            window.addEventListener(
+            lifecycle.listen(window,
               "contextmenu",
               access.groupContextMenuHandler,
               true,
@@ -565,12 +578,9 @@
                   target.hidePopup();
                 } catch (_) {}
               }
-              try {
-                target.remove();
-              } catch (_) {}
             }
           };
-          window.addEventListener(
+          lifecycle.listen(window,
             "popupshowing",
             access.popupShowingListener,
             true,
@@ -597,16 +607,10 @@
                   : [];
                 list.forEach((el) => {
                   if (typeof el.hidePopup === "function") el.hidePopup();
-                  try {
-                    el.remove();
-                  } catch (_) {}
                 });
                 const el = document.getElementById(sel.replace("#", ""));
                 if (el) {
                   if (typeof el.hidePopup === "function") el.hidePopup();
-                  try {
-                    el.remove();
-                  } catch (_) {}
                 }
               } catch (_) {}
             });
@@ -617,314 +621,23 @@
             );
           }
         },
-        initTabDragSelectionGuard() {
-          const tabContainer =
-            gBrowser?.tabContainer ||
-            document.getElementById("tabbrowser-tabs");
-          if (!tabContainer || access.tabDragGuardInitialized) return;
-          access.tabDragGuardInitialized = true;
-
-          let isGuardingTab = false;
-          let dragCandidateTab = null;
-          let startX = 0;
-          let startY = 0;
-
-          // Helper: resolve tab or split view primary tab
-          const resolveTab = (target) => {
-            if (!target || typeof target.closest !== "function") return null;
-            const tab = target.closest("tab, tabbrowser-tab, .tabbrowser-tab");
-            if (tab) return tab;
-            const splitGroup = target.closest(
-              "tab-group[split-view-group], tab-group[zen-split-view], tab-group[is-zen-split]",
-            );
-            if (splitGroup) {
-              return (
-                splitGroup.tabs?.[0] ||
-                splitGroup.querySelector("tab, tabbrowser-tab, .tabbrowser-tab")
-              );
-            }
-            return null;
-          };
-
-          // 1. Intercept mousedown on tabContainer to prevent Firefox tab.on_mousedown
-          //    from immediately selecting the tab before we know if it's a click or a drag.
-          const onMouseDown = (e) => {
-            if (e.button !== 0) return;
-            if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
-            if (
-              e.target?.closest?.(
-                ".tab-close-button, .tab-icon-sound, .tab-audio-button, .tab-pin-icon, .tab-reset-button",
-              )
-            )
-              return;
-
-            const tab = resolveTab(e.target);
-            if (!tab) return;
-
-            const currentActive = window.gBrowser?.selectedTab;
-            if (tab !== currentActive && !tab.multiselected) {
-              dragCandidateTab = tab;
-              isGuardingTab = true;
-              startX = e.clientX;
-              startY = e.clientY;
-
-              // Temporarily lock gBrowser.selectedTab and tabContainer.selectedItem
-              // so tab.on_mousedown does NOT switch the active tab on mousedown.
-              if (window.gBrowser) {
-                Object.defineProperty(window.gBrowser, "selectedTab", {
-                  get: () => currentActive,
-                  set: () => {},
-                  configurable: true,
-                });
-              }
-
-              if (tabContainer) {
-                Object.defineProperty(tabContainer, "selectedItem", {
-                  get: () => currentActive,
-                  set: () => {},
-                  configurable: true,
-                });
-              }
-            }
-          };
-
-          // 2. On mouseup: if distance < 6px (click), activate the candidate tab.
-          const onMouseUp = (e) => {
-            if (isGuardingTab) {
-              // Release temporary locks immediately
-              if (window.gBrowser) delete window.gBrowser.selectedTab;
-              if (tabContainer) delete tabContainer.selectedItem;
-              isGuardingTab = false;
-
-              if (dragCandidateTab && dragCandidateTab.isConnected) {
-                const moveDist = Math.hypot(
-                  e.clientX - startX,
-                  e.clientY - startY,
-                );
-                if (
-                  moveDist < 6 &&
-                  dragCandidateTab !== window.gBrowser?.selectedTab
-                ) {
-                  const targetTab = dragCandidateTab;
-                  dragCandidateTab = null;
-                  try {
-                    window.gBrowser.selectedTab = targetTab;
-                  } catch (_) {}
-                }
-              }
-            }
-            dragCandidateTab = null;
-          };
-
-          const clearGuard = () => {
-            if (isGuardingTab) {
-              if (window.gBrowser) delete window.gBrowser.selectedTab;
-              if (tabContainer) delete tabContainer.selectedItem;
-              isGuardingTab = false;
-            }
-            dragCandidateTab = null;
-          };
-
-          // 3. Prevent native HTML Drag & Drop from intercepting split-view splitter resizing
-          const onSplitterDragStart = (e) => {
-            if (
-              e.target?.closest?.(
-                ".zen-split-view-splitter, #zen-splitview-overlay, .zen-view-splitter-header-container:not(:has(toolbarbutton.zen-tab-rearrange-button))",
-              )
-            ) {
-              e.preventDefault();
-              e.stopPropagation();
-            }
-          };
-
-          const onSplitterMouseDown = (e) => {
-            if (
-              e.button === 0 &&
-              e.target?.closest?.(".zen-split-view-splitter")
-            ) {
-              e.preventDefault();
-            }
-          };
-
-          tabContainer.addEventListener("mousedown", onMouseDown, {
-            capture: true,
-          });
-          window.addEventListener("mouseup", onMouseUp, { capture: true });
-          window.addEventListener("dragend", clearGuard, { capture: true });
-          window.addEventListener("drop", clearGuard, { capture: true });
-          window.addEventListener("dragstart", onSplitterDragStart, {
-            capture: true,
-          });
-          window.addEventListener("mousedown", onSplitterMouseDown, {
-            capture: true,
-          });
-
-          // 4. Hook _getDragTarget across ZenDragAndDrop and TabDragAndDrop so split views drag as native tabs
-          const dndTargets = [
-            window.ZenDragAndDrop?.prototype,
-            tabContainer.tabDragAndDrop,
-            window.TabDragAndDrop?.prototype,
-          ].filter((t) => t && typeof t._getDragTarget === "function");
-
-          const origDragTargetMap = new Map();
-
-          dndTargets.forEach((target) => {
-            if (!origDragTargetMap.has(target)) {
-              const orig = target._getDragTarget;
-              origDragTargetMap.set(target, orig);
-              target._getDragTarget = function (event, options) {
-                const res = orig.call(this, event, options);
-                if (res) {
-                  const splitGroup =
-                    res.closest?.(
-                      "tab-group[split-view-group], tab-group[zen-split-view], tab-group[is-zen-split]",
-                    ) || res.group;
-                  if (
-                    splitGroup &&
-                    (splitGroup.hasAttribute?.("split-view-group") ||
-                      splitGroup.hasAttribute?.("zen-split-view"))
-                  ) {
-                    const primaryTab =
-                      splitGroup.tabs?.[0] ||
-                      splitGroup.querySelector?.(
-                        "tab, tabbrowser-tab, .tabbrowser-tab",
-                      );
-                    if (primaryTab) {
-                      return primaryTab;
-                    }
-                  }
-                }
-                return res;
-              };
-            }
-          });
-
-          // 5. Hook startTabDrag across ZenDragAndDrop and TabDragAndDrop
-          const targets = [
-            window.ZenDragAndDrop?.prototype,
-            tabContainer.tabDragAndDrop,
-            window.TabDragAndDrop?.prototype,
-          ].filter((t) => t && typeof t.startTabDrag === "function");
-
-          const origStartMap = new Map();
-
-          targets.forEach((target) => {
-            if (!origStartMap.has(target)) {
-              const orig = target.startTabDrag;
-              origStartMap.set(target, orig);
-              target.startTabDrag = function (event, tab, options = {}) {
-                // Release mousedown lock so startTabDrag can run cleanly
-                if (isGuardingTab) {
-                  if (window.gBrowser) delete window.gBrowser.selectedTab;
-                  if (tabContainer) delete tabContainer.selectedItem;
-                  isGuardingTab = false;
-                }
-
-                const currentActiveTab = window.gBrowser?.selectedTab;
-                // A tab or split view is dormant if it is not the currently active tab
-                const isDormant =
-                  tab && tab !== currentActiveTab && !tab.multiselected;
-
-                if (isDormant && window.gBrowser) {
-                  // Temporarily isolate selectedElements so Firefox only bundles the dragged tab/split view
-                  Object.defineProperty(window.gBrowser, "selectedElements", {
-                    get: () => [tab],
-                    configurable: true,
-                  });
-
-                  // Temporarily suppress selectedTab and selectedItem setters during startTabDrag
-                  Object.defineProperty(window.gBrowser, "selectedTab", {
-                    get: () => currentActiveTab,
-                    set: () => {},
-                    configurable: true,
-                  });
-
-                  if (tabContainer) {
-                    Object.defineProperty(tabContainer, "selectedItem", {
-                      get: () => currentActiveTab,
-                      set: () => {},
-                      configurable: true,
-                    });
-                  }
-
-                  try {
-                    return orig.call(this, event, tab, options);
-                  } catch (e) {
-                    if (Core.getPref(Constants.DEBUG_PREF))
-                      console.warn(
-                        "[Zentral] startTabDrag snapshot notice:",
-                        e,
-                      );
-                    return true;
-                  } finally {
-                    // Restore native prototype getters and setters immediately
-                    delete window.gBrowser.selectedElements;
-                    delete window.gBrowser.selectedTab;
-                    if (tabContainer) {
-                      delete tabContainer.selectedItem;
-                    }
-                  }
-                }
-
-                try {
-                  return orig.call(this, event, tab, options);
-                } catch (e) {
-                  if (Core.getPref(Constants.DEBUG_PREF))
-                    console.warn("[Zentral] startTabDrag fallback:", e);
-                  return true;
-                }
-              };
-            }
-          });
-
-          // 6. Implement Same-Window Tab Group & Split View Reordering in gBrowser.adoptTabGroup
-          let origAdoptTabGroup = null;
-          if (
-            window.gBrowser &&
-            typeof window.gBrowser.adoptTabGroup === "function"
-          ) {
-            origAdoptTabGroup = window.gBrowser.adoptTabGroup;
-            window.gBrowser.adoptTabGroup = function (group, options = {}) {
-              if (group && group.ownerDocument === document) {
-                let target = options.insertBefore;
-                if (
-                  !target &&
-                  options.elementIndex !== undefined &&
-                  tabContainer?.ariaFocusableItems
-                ) {
-                  target =
-                    tabContainer.ariaFocusableItems.at(options.elementIndex) ||
-                    null;
-                }
-                if (
-                  target &&
-                  target !== group &&
-                  target !== group.labelContainerElement &&
-                  !group.contains(target)
-                ) {
-                  target.before(group);
-                } else if (!target && tabContainer?.arrowScrollbox) {
-                  tabContainer.arrowScrollbox.appendChild(group);
-                }
-                return group;
-              }
-              return origAdoptTabGroup.call(this, group, options);
-            };
-          }
-
-          // 7. Intercept gZenViewSplitter.splitTabs to maintain dormant tab state during split creation
+        setupGroupNativeHooks() {
+          // Non-drag group policies only. Native tab dragging is left untouched.
           let origSplitTabs = null;
+          let wrappedSplitTabs = null;
           if (
             window.gZenViewSplitter &&
             typeof window.gZenViewSplitter.splitTabs === "function"
           ) {
             origSplitTabs = window.gZenViewSplitter.splitTabs;
-            window.gZenViewSplitter.splitTabs = function (
+            wrappedSplitTabs = function (
               tabs,
               gridType,
               initialIndex = 0,
               options = {},
             ) {
+              if (!lifecycle.active)
+                return origSplitTabs.call(this, tabs, gridType, initialIndex, options);
               const currentActiveTab = window.gBrowser?.selectedTab;
               const hasActiveTab =
                 Array.isArray(tabs) &&
@@ -942,17 +655,20 @@
                 options,
               );
             };
+            window.gZenViewSplitter.splitTabs = wrappedSplitTabs;
           }
 
           // 8. Filter split-view groups from gBrowser.getAllTabGroups so they never appear as "Unnamed group" in "Add Tab to Group" context menus
           let origGetAllTabGroups = null;
+          let wrappedGetAllTabGroups = null;
           if (
             window.gBrowser &&
             typeof window.gBrowser.getAllTabGroups === "function"
           ) {
             origGetAllTabGroups = window.gBrowser.getAllTabGroups;
-            window.gBrowser.getAllTabGroups = function (options) {
+            wrappedGetAllTabGroups = function (options) {
               const groups = origGetAllTabGroups.call(this, options);
+              if (!lifecycle.active) return groups;
               return groups.filter(
                 (g) =>
                   g &&
@@ -961,43 +677,19 @@
                   !g.hasAttribute?.("is-zen-split"),
               );
             };
+            window.gBrowser.getAllTabGroups = wrappedGetAllTabGroups;
           }
 
           access.dragGuardCleanup = () => {
-            tabContainer.removeEventListener("mousedown", onMouseDown, {
-              capture: true,
-            });
-            window.removeEventListener("mouseup", onMouseUp, { capture: true });
-            window.removeEventListener("dragend", clearGuard, {
-              capture: true,
-            });
-            window.removeEventListener("drop", clearGuard, { capture: true });
-            window.removeEventListener("dragstart", onSplitterDragStart, {
-              capture: true,
-            });
-            window.removeEventListener("mousedown", onSplitterMouseDown, {
-              capture: true,
-            });
-            clearGuard();
-            origDragTargetMap.forEach((orig, target) => {
-              target._getDragTarget = orig;
-            });
-            origDragTargetMap.clear();
-            origStartMap.forEach((orig, target) => {
-              target.startTabDrag = orig;
-            });
-            origStartMap.clear();
-            if (origAdoptTabGroup && window.gBrowser) {
-              window.gBrowser.adoptTabGroup = origAdoptTabGroup;
-            }
-            if (origSplitTabs && window.gZenViewSplitter) {
+            if (origSplitTabs && window.gZenViewSplitter?.splitTabs === wrappedSplitTabs) {
               window.gZenViewSplitter.splitTabs = origSplitTabs;
             }
-            if (origGetAllTabGroups && window.gBrowser) {
+            if (origGetAllTabGroups && window.gBrowser?.getAllTabGroups === wrappedGetAllTabGroups) {
               window.gBrowser.getAllTabGroups = origGetAllTabGroups;
             }
             access.tabDragGuardInitialized = false;
           };
+          lifecycle.cleanup(access.dragGuardCleanup);
         },
 
         // Responsibility: ZentralGroupsLibraryCompatibility

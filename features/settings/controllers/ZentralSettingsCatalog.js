@@ -86,6 +86,10 @@
         file: "features/tabs/startup/settings.json",
       },
       {
+        owner: "tab-drag",
+        file: "features/tabs/dragging/settings.json",
+      },
+      {
         owner: "tab-unload",
         file: "features/tabs/unloading/settings.json",
       },

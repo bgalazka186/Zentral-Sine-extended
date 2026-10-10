@@ -196,7 +196,7 @@
       availability.set(id, !!value);
       const row = records.get(id);
       if (!row) return;
-      if (!value && row.state === "registered") {
+      if (!value && ["registered", "active"].includes(row.state)) {
         row.state = "dormant";
         row.reason = "Base preference is off; enabling it starts this feature";
       } else if (value && row.state === "dormant") {
@@ -204,6 +204,7 @@
         row.reason = undefined;
         if (ready) activateReady();
       }
+      syncOwnerStyles(id);
       emit();
     },
     failFeature(id, error) {
@@ -1293,6 +1294,30 @@
     }
     return list;
   }
+  // Base-feature toggles own their sheets as well as their JavaScript hooks.
+  function syncOwnerStyles(id) {
+    for (const row of styles.values()) {
+      const owners = row.owners || (row.owner ? [row.owner] : []);
+      if (!owners.includes(id)) continue;
+      const available = owners.some((owner) =>
+        owner === "settings"
+          ? moduleLoader.has("settings-shell")
+          : availability.get(owner) !== false &&
+            ["registered", "active", "dormant"].includes(records.get(owner)?.state),
+      );
+      if (!available && row.state === "loaded") {
+        try {
+          window.windowUtils.removeSheet(row.uri, window.windowUtils.USER_SHEET);
+          row.state = "blocked";
+          row.reason = "Owner feature disabled";
+        } catch (error) {
+          console.warn("[Zentral] Could not remove owner stylesheet", row.id, error);
+        }
+      } else if (available && row.state === "blocked") {
+        loadCSS(row);
+      }
+    }
+  }
   async function loadCSS(spec) {
     if (stopped) return;
     const row = { ...spec, state: "loading" };
@@ -1303,9 +1328,8 @@
       !owners.some((id) =>
         id === "settings"
           ? moduleLoader.has("settings-shell")
-          : ["registered", "active", "dormant"].includes(
-              records.get(id)?.state,
-            ),
+          : availability.get(id) !== false &&
+            ["registered", "active", "dormant"].includes(records.get(id)?.state),
       )
     ) {
       row.state = "blocked";

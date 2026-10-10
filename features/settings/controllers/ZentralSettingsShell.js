@@ -1783,6 +1783,7 @@
             opacitySlider.addEventListener("input", (e) => {
               const val = parseInt(e.target.value, 10) || 85;
               if (opacityBadge) opacityBadge.textContent = `${val}%`;
+              if (!window.Zentral?.TabGroups?.enabled) return;
               document.documentElement.style.setProperty(
                 "--zentral-tabgroup-label-opacity",
                 (val / 100).toFixed(2),
@@ -2279,6 +2280,7 @@
               get("zs-tg-opacity").value = 85;
               if (get("zs-tg-opacity-badge"))
                 get("zs-tg-opacity-badge").textContent = "85%";
+              if (!window.Zentral?.TabGroups?.enabled) return;
               document.documentElement.style.setProperty(
                 "--zentral-tabgroup-label-opacity",
                 "0.85",

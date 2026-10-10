@@ -591,6 +591,12 @@
     "defaultValue": false
   },
   {
+    "property": "zen.workspace.zentral.panels.hover_edge_reveal",
+    "label": "Reveal Panels from the Hover Area",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "property": "zen.workspace.bgalazka.hover_reveal_delay_ms",
     "label": "Hidden Panel Reveal Delay (ms; fine adjustment in extension settings)",
     "type": "dropdown",
@@ -628,12 +634,12 @@
   },
   {
     "property": "zen.workspace.bgalazka.hover_reveal_width_px",
-    "label": "Hidden Panel Hover Area Width (px; fine adjustment in extension settings)",
+    "label": "Hidden Panel Hover Activation Width (px; independent of webpage push)",
     "type": "dropdown",
-    "defaultValue": 6,
+    "defaultValue": 1,
     "options": [
       {
-        "label": "1 px",
+        "label": "1 px (default)",
         "value": 1
       },
       {
@@ -641,7 +647,7 @@
         "value": 3
       },
       {
-        "label": "6 px (default)",
+        "label": "6 px",
         "value": 6
       },
       {
@@ -659,6 +665,170 @@
       {
         "label": "64 px",
         "value": 64
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.panels.hover_push_width_px",
+    "label": "Hidden Panel Webpage Push Width (px; independent of hover activation)",
+    "type": "dropdown",
+    "defaultValue": 0,
+    "options": [
+      {
+        "label": "0 px (default)",
+        "value": 0
+      },
+      {
+        "label": "1 px",
+        "value": 1
+      },
+      {
+        "label": "3 px",
+        "value": 3
+      },
+      {
+        "label": "6 px",
+        "value": 6
+      },
+      {
+        "label": "12 px",
+        "value": 12
+      },
+      {
+        "label": "24 px",
+        "value": 24
+      },
+      {
+        "label": "48 px",
+        "value": 48
+      },
+      {
+        "label": "64 px",
+        "value": 64
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.compatibility.panel_outside_window_tracking",
+    "label": "Reveal Panels When Leaving the Window",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "type": "text",
+    "label": "Reveal an already open autohidden panel when the cursor exits its docked window edge. Requires panel autohide. Preserves active native Zen tracking; unsupported systems use timed autohide."
+  },
+  {
+    "property": "zen.workspace.zentral.panels.outside_full_edge",
+    "label": "Trigger from the Entire Docked Window Edge",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.panels.outside_distance_px",
+    "label": "Panel Outside Tracking Distance (px; shared native sessions use Zen distance)",
+    "type": "dropdown",
+    "defaultValue": 250,
+    "options": [
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "100",
+        "value": 100
+      },
+      {
+        "label": "250",
+        "value": 250
+      },
+      {
+        "label": "500",
+        "value": 500
+      },
+      {
+        "label": "1000",
+        "value": 1000
+      },
+      {
+        "label": "2000",
+        "value": 2000
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.panels.outside_trigger_margin_px",
+    "label": "Window Edge Exit Tolerance (px)",
+    "type": "dropdown",
+    "defaultValue": 10,
+    "options": [
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "64",
+        "value": 64
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.panels.autohide_delay_ms",
+    "label": "Panel Autohide Delay (ms)",
+    "type": "dropdown",
+    "defaultValue": 400,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "100",
+        "value": 100
+      },
+      {
+        "label": "200",
+        "value": 200
+      },
+      {
+        "label": "400",
+        "value": 400
+      },
+      {
+        "label": "800",
+        "value": 800
+      },
+      {
+        "label": "1500",
+        "value": 1500
+      },
+      {
+        "label": "3000",
+        "value": 3000
+      },
+      {
+        "label": "5000",
+        "value": 5000
       }
     ]
   },
@@ -1308,6 +1478,12 @@
     "label": "Shortcut: Open Zentral Settings",
     "type": "string",
     "defaultValue": "Ctrl+Shift+Comma"
+  },
+  {
+    "property": "zen.workspace.zentral.tabs.background_drag",
+    "label": "Drag tabs without activating or loading them",
+    "type": "checkbox",
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.mmb_unload_normal_tabs",

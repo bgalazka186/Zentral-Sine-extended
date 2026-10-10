@@ -2992,7 +2992,7 @@
         const originalUpdateAll = tabGroups.updateAllSubGroupsBadges;
         let updatingBadges = false;
         tabGroups.updateAllSubGroupsBadges = function () {
-          if (updatingBadges || extensionDisposed) return;
+          if (!this.enabled || updatingBadges || extensionDisposed) return;
           updatingBadges = true;
           try {
             const groups = Array.from(

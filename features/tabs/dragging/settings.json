@@ -1,0 +1,22 @@
+{
+  "_documentation": {
+    "purpose": "Independent background tab sorting settings.",
+    "feature_source": "features/tabs/dragging/ZentralTabDrag.uc.js"
+  },
+  "owner": "tab-drag",
+  "schema": [
+    {
+      "property": "zen.workspace.zentral.tabs.background_drag",
+      "label": "Drag tabs without activating or loading them",
+      "type": "checkbox",
+      "defaultValue": true
+    }
+  ],
+  "settings": {
+    "zen.workspace.zentral.tabs.background_drag": {
+      "category": "tab-drag",
+      "section": "Background sorting",
+      "owner": "tab-drag"
+    }
+  }
+}

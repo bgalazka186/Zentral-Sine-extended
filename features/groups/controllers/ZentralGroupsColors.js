@@ -28,7 +28,8 @@
   "use strict";
   window.ZentralModuleLoader.define(
     "groups/ZentralGroupsColors",
-    function ({ Services, shared, runtime, access }) {
+    function ({ Services, shared, runtime, access, lifecycle }) {
+      const { setTimeout, clearTimeout, requestAnimationFrame, MutationObserver } = lifecycle;
       const {
         Constants,
         Core,
@@ -60,6 +61,7 @@
         },
         extractTabFaviconColor(tab) {
           return new Promise((resolve) => {
+            const token = lifecycle.generation;
             if (!tab) return resolve(null);
 
             let src = tab.getAttribute("image") || tab.image;
@@ -92,7 +94,12 @@
               }
             };
 
+            lifecycle.cleanup(() => {
+              img.onload = img.onerror = null;
+              finish(null);
+            });
             img.onload = () => {
+              if (!lifecycle.isCurrent(token)) return finish(null);
               try {
                 const canvas = document.createElement("canvas");
                 const w = img.naturalWidth || img.width || 16;
@@ -204,6 +211,7 @@
         },
         async applyAverageGroupColor(group, force = false) {
           if (!group || !group.isConnected) return;
+          const token = lifecycle.generation;
 
           if (!force) {
             const customColor = group.style.getPropertyValue(
@@ -243,8 +251,8 @@
             const retryDelays = [60, 150, 300, 500];
             let attempt = 0;
             while (tabs.length === 0 && attempt < retryDelays.length) {
-              await new Promise((r) => setTimeout(r, retryDelays[attempt++]));
-              if (!group.isConnected) return;
+              if (!(await lifecycle.sleep(retryDelays[attempt++]))) return;
+              if (!lifecycle.isCurrent(token) || !group.isConnected) return;
               tabs = this.getDirectTabs(group);
             }
 
@@ -253,6 +261,7 @@
             const colors = [];
             for (const tab of tabs) {
               const col = await this.extractTabFaviconColor(tab);
+              if (!lifecycle.isCurrent(token)) return;
               if (col) colors.push(col);
             }
 
@@ -286,6 +295,7 @@
                 const retryColors = [];
                 for (const tab of retryTabs) {
                   const col = await this.extractTabFaviconColor(tab);
+                  if (!lifecycle.isCurrent(token)) return;
                   if (col) retryColors.push(col);
                 }
                 if (retryColors.length > 0) {
@@ -304,7 +314,7 @@
               }, 750);
             }
           } finally {
-            group._zentralColoringInProgress = false;
+            if (lifecycle.isCurrent(token)) group._zentralColoringInProgress = false;
           }
         },
         checkAndApplyFirstTimeGroupColor(group) {
@@ -574,7 +584,7 @@
 
           // Palette swatches
           panel.querySelectorAll(".zentral-color-swatch").forEach((swatch) => {
-            swatch.addEventListener("click", () =>
+            lifecycle.listen(swatch, "click", () =>
               applyColor(swatch.dataset.color),
             );
           });
@@ -587,7 +597,7 @@
             "#zentral-tg-wheel-container",
           );
           const btnWheel = panel.querySelector("#zentral-tg-btn-wheel");
-          btnWheel.addEventListener("click", () => {
+          lifecycle.listen(btnWheel, "click", () => {
             if (wheelContainer.style.display === "none") {
               wheelContainer.style.display = "flex";
               paletteContainer.style.display = "none";
@@ -643,7 +653,7 @@
             ctx.fillRect(0, 0, satValCanvas.width, satValCanvas.height);
           };
 
-          hueCanvas.addEventListener("click", (e) => {
+          lifecycle.listen(hueCanvas, "click", (e) => {
             const rect = hueCanvas.getBoundingClientRect();
             currentHue = Math.min(
               360,
@@ -652,7 +662,7 @@
             drawSatVal();
           });
 
-          satValCanvas.addEventListener("click", (e) => {
+          lifecycle.listen(satValCanvas, "click", (e) => {
             const rect = satValCanvas.getBoundingClientRect();
             const x = Math.min(
               satValCanvas.width - 1,
@@ -678,10 +688,12 @@
           // Eyedropper API
           const btnPick = panel.querySelector("#zentral-tg-btn-pick");
           if (window.EyeDropper) {
-            btnPick.addEventListener("click", async () => {
+            lifecycle.listen(btnPick, "click", async () => {
               try {
+                const token = lifecycle.generation;
                 const eyeDropper = new EyeDropper();
                 const result = await eyeDropper.open();
+                if (!lifecycle.isCurrent(token)) return;
                 if (result && result.sRGBHex) applyColor(result.sRGBHex);
               } catch (_) {}
             });
@@ -690,9 +702,7 @@
           }
 
           // Auto Average Favicon Color
-          panel
-            .querySelector("#zentral-tg-btn-auto")
-            .addEventListener("click", () => {
+          lifecycle.listen(panel.querySelector("#zentral-tg-btn-auto"), "click", () => {
               if (panel._currentGroup && panel._currentGroup._useFaviconColor) {
                 panel._currentGroup._useFaviconColor();
               }
@@ -703,7 +713,7 @@
           let isDragging = false;
           let startX, startY;
 
-          handle.addEventListener("mousedown", (e) => {
+          lifecycle.listen(handle, "mousedown", (e) => {
             if (e.button !== 0) return;
             isDragging = true;
             startX = e.screenX;
@@ -733,22 +743,18 @@
             }
           };
           access.colorPickerDragCleanup?.();
-          window.addEventListener("mousemove", onColorPickerMove);
-          window.addEventListener("mouseup", onColorPickerUp);
+          lifecycle.listen(window, "mousemove", onColorPickerMove);
+          lifecycle.listen(window, "mouseup", onColorPickerUp);
           access.colorPickerDragCleanup = () => {
             window.removeEventListener("mousemove", onColorPickerMove);
             window.removeEventListener("mouseup", onColorPickerUp);
           };
 
-          panel
-            .querySelector("#zentral-tg-input-hex")
-            .addEventListener("input", (e) => {
+          lifecycle.listen(panel.querySelector("#zentral-tg-input-hex"), "input", (e) => {
               const val = e.target.value;
               if (/^#[0-9A-Fa-f]{6}$/.test(val)) applyColor(val);
             });
-          panel
-            .querySelector("#zentral-tg-input-rgb")
-            .addEventListener("change", (e) => {
+          lifecycle.listen(panel.querySelector("#zentral-tg-input-rgb"), "change", (e) => {
               const parts = e.target.value
                 .split(",")
                 .map((s) => parseInt(s.trim()));

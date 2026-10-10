@@ -18,7 +18,7 @@
  *   clearStoredColorData, loadSavedColors; features/groups/controllers/ZentralGroupsDom.js -> applyChevronPref,
  *   applyIndicatorTypePref, applyLabelOpacityPref, processExistingGroups, processGroup, safeHideTooltip;
  *   features/groups/controllers/ZentralGroupsMenus.js -> addFolderContextMenuItems, enhanceTabContextMenu;
- *   features/groups/controllers/ZentralGroupsNativeAdapter.js -> hookAddTab, initTabDragSelectionGuard, queryLiveTabNodes,
+ *   features/groups/controllers/ZentralGroupsNativeAdapter.js -> hookAddTab, setupGroupNativeHooks, queryLiveTabNodes,
  *   removeBuiltinTabGroupMenu, setupObserver, setupPopupSuppression, setupTabOpenHandler;
  *   features/groups/controllers/ZentralGroupsStore.js -> getWorkspaceForElement, loadTabGroupState, reconstructSavedGroups,
  *   saveTabGroupState, scheduleStateSave
@@ -56,6 +56,10 @@
     "features/groups/controllers/ZentralGroupsNativeAdapter.js",
     { owner: "tab-groups" },
   );
+  window.ZentralModuleLoader.load(
+    "features/groups/controllers/ZentralGroupsLifecycle.js",
+    { owner: "tab-groups" },
+  );
   ZentralRuntime.register({
     id: "tab-groups",
     init({ shared, runtime }) {
@@ -66,7 +70,11 @@
         SVG_STRINGS,
         WELL_KNOWN_SERVICES,
       } = shared;
+      const lifecycle = window.ZentralModuleLoader.create("groups/ZentralGroupsLifecycle");
+      const { setTimeout, clearTimeout, MutationObserver } = lifecycle;
       class ZentralTabGroups {
+        get enabled() { return lifecycle.active; }
+
         /** Compatibility protections share the existing experimental master switch. */
 
         /** @private Tabstrip MutationObserver */
@@ -157,7 +165,12 @@
          */
         destroy() {
           try {
+            if (!lifecycle.active) return;
             Core.log("ZentralTabGroups", "Destroying TabGroups module...");
+            // Save before stopping guarded methods; native groups remain intact.
+            this.saveTabGroupState();
+            this.renameGroupHalt(null, true);
+            lifecycle.stop();
 
             this.#colorPickerDragCleanup?.();
             this.#colorPickerDragCleanup = null;
@@ -243,10 +256,6 @@
               this.#tabOpenListener = null;
             }
             if (this.#origAddTab && window.gBrowser) {
-              try {
-                window.gBrowser.addTab = this.#origAddTab;
-                delete window.gBrowser._zentralAddTabHooked;
-              } catch (_) {}
               this.#origAddTab = null;
             }
             if (this.#groupContextMenuHandler) {
@@ -376,124 +385,21 @@
               "advanced-tab-groups-context-menu",
               "zentral-color-picker-panel",
               "zentral-group-color-picker",
-              "context_zenFolderUngroup_sep",
-              "context_zenFolderUngroup",
             ];
             idsToRemove.forEach((id) => {
               const el = document.getElementById(id);
               if (el) el.remove();
             });
 
-            // 4. Secure state persistence across restarts: prune deleted groups and capture live hierarchy
-            try {
-              this.saveTabGroupState();
-            } catch (_) {}
-            const allGroups = Array.from(
-              this.queryLiveTabNodes("tab-group:not([split-view-group])"),
-            );
-
-            // 5. Flatten groups cleanly into regular top-level tabs across their respective workspaces
-            const rootTabContainer =
-              (typeof gZenWorkspaces !== "undefined" &&
-                gZenWorkspaces.activeWorkspaceStrip) ||
-              gBrowser?.tabContainer?.arrowscrollbox ||
-              gBrowser?.tabContainer ||
-              document.getElementById("tabbrowser-tabs");
-
-            const sortedGroups = allGroups.slice().sort((a, b) => {
-              let depthA = 0,
-                currA = a;
-              while ((currA = currA.parentElement?.closest("tab-group")))
-                depthA++;
-              let depthB = 0,
-                currB = b;
-              while ((currB = currB.parentElement?.closest("tab-group")))
-                depthB++;
-              return depthB - depthA;
-            });
-
-            sortedGroups.forEach((group) => {
-              try {
-                const obs = this.#groupObservers.get(group);
-                if (obs) {
-                  obs.disconnect();
-                  this.#groupObservers.delete(group);
-                }
-
-                if (group.shadowRoot) {
-                  group.shadowRoot
-                    .querySelectorAll(".zentral-shadow-style")
-                    .forEach((s) => s.remove());
-                }
-
-                const wsId = this.getWorkspaceForElement(group);
-                const wsNormalSection =
-                  wsId &&
-                  window.gZenWorkspaces
-                    ?.workspaceElement(wsId)
-                    ?.querySelector(".zen-workspace-normal-tabs-section");
-                const parentContainer =
-                  group.parentNode && group.parentNode.isConnected
-                    ? group.parentNode
-                    : wsNormalSection || rootTabContainer;
-
-                const tabs = Array.from(
-                  group.querySelectorAll(
-                    "tab, tabbrowser-tab, .tabbrowser-tab",
-                  ),
-                ).filter((t) => t.closest("tab-group") === group);
-
-                // Move tabs directly before the group container in its workspace
-                tabs.forEach((tab) => {
-                  if (
-                    group.parentNode &&
-                    group.parentNode === parentContainer
-                  ) {
-                    try {
-                      parentContainer.insertBefore(tab, group);
-                    } catch (_) {
-                      try {
-                        parentContainer.appendChild(tab);
-                      } catch (_) {}
-                    }
-                  } else if (parentContainer) {
-                    try {
-                      parentContainer.appendChild(tab);
-                    } catch (_) {}
-                  }
-
-                  // Clear native grouping pointers so tabs display as regular flat tabs without indentations
-                  try {
-                    if (typeof gBrowser?.addTabToGroup === "function")
-                      gBrowser.addTabToGroup(tab, null);
-                  } catch (_) {}
-                  try {
-                    tab.group = null;
-                  } catch (_) {}
-                  try {
-                    tab.removeAttribute("group");
-                    tab.removeAttribute("zen-group");
-                  } catch (_) {}
-                  // Retain data-zentral-group-id, data-zentral-group-ws, and SessionStore for seamless restore on re-enable
-                });
-
-                // Cleanly remove the tab-group element so there are no empty gaps in the strip
-                try {
-                  group.remove();
-                } catch (_) {}
-              } catch (e) {
-                console.error(
-                  "[ZentralTabGroups] Error flattening group on destroy:",
-                  e,
-                );
-              }
-            });
+            // Native group containers, tab membership and saved state are retained.
+            this.#groupObservers = new WeakMap();
 
             // 6. Clean up root attributes
             document.documentElement.removeAttribute(
               "zentral-sidebar-collapsed",
             );
             document.documentElement.removeAttribute("zentral-show-chevron");
+            document.documentElement.removeAttribute("zentral-indicator-type");
             document.documentElement.removeAttribute(
               "zentral-label-opacity-below-85",
             );
@@ -546,6 +452,7 @@
               Services,
               shared,
               runtime,
+              lifecycle,
               access: {
                 getSessionStore: (...args) => owner.#getSessionStore(...args),
                 get isRestoring() {
@@ -569,6 +476,7 @@
               Services,
               shared,
               runtime,
+              lifecycle,
               access: {
                 get badgeUpdateRAF() {
                   return owner.#badgeUpdateRAF;
@@ -610,6 +518,7 @@
               Services,
               shared,
               runtime,
+              lifecycle,
               access: {
                 get folderMenuHandler() {
                   return owner.#folderMenuHandler;
@@ -639,6 +548,7 @@
               Services,
               shared,
               runtime,
+              lifecycle,
               access: {
                 get isRestoring() {
                   return owner.#isRestoring;
@@ -669,6 +579,7 @@
                 Services,
                 shared,
                 runtime,
+                lifecycle,
                 access: {
                   get dragGuardCleanup() {
                     return owner.#dragGuardCleanup;
@@ -748,6 +659,15 @@
             ),
           );
 
+          // External callers (settings/panels) cannot restart work while disabled.
+          for (const [name, method] of Object.entries(this)) {
+            if (typeof method !== "function") continue;
+            this[name] = function (...args) {
+              if (!lifecycle.active) return;
+              return method.apply(this, args);
+            };
+          }
+
           // Method bindings
           this.onTabGroupCreate = this.onTabGroupCreate.bind(this);
           this.renameGroupKeydown = this.renameGroupKeydown.bind(this);
@@ -806,6 +726,7 @@
             Core.log("ZentralTabGroups", "Tab Groups feature is disabled.");
             return;
           }
+          lifecycle.begin();
           this.#isRestoring = true;
           this.clearStoredColorData();
           this.loadSavedColors();
@@ -816,16 +737,16 @@
           this.addFolderContextMenuItems();
           this.removeBuiltinTabGroupMenu();
           this.enhanceTabContextMenu();
-          this.initTabDragSelectionGuard();
+          this.setupGroupNativeHooks();
           this.processExistingGroups();
           this.setupTabOpenHandler();
           this.hookAddTab();
-          document.addEventListener(
+          lifecycle.listen(document,
             "TabGroupCreate",
             this.onTabGroupCreate,
             true,
           );
-          document.addEventListener(
+          lifecycle.listen(document,
             "tabgroupcreated",
             this.onTabGroupCreate,
             true,
@@ -837,12 +758,12 @@
             if (group && !this.#isRestoring)
               this.checkAndApplyFirstTimeGroupColor(group);
           };
-          document.addEventListener(
+          lifecycle.listen(document,
             "TabGroupCreateByUser",
             this.#groupColorEventListener,
             true,
           );
-          document.addEventListener(
+          lifecycle.listen(document,
             "TabGroupUpdate",
             this.#groupColorEventListener,
             true,
@@ -916,15 +837,15 @@
               ).forEach((g) => this.processGroup(g));
             } catch (_) {}
           };
-          window.addEventListener(
+          lifecycle.listen(window,
             "zen-workspace-switched",
             this.#workspaceSwitchListener,
           );
-          window.addEventListener(
+          lifecycle.listen(window,
             "zen-workspace-changed",
             this.#workspaceSwitchListener,
           );
-          window.addEventListener(
+          lifecycle.listen(window,
             "zen-workspaces-change",
             this.#workspaceSwitchListener,
           );
@@ -989,25 +910,6 @@
             attributeFilter: ["zen-sidebar-collapsed", "zen-right-side"],
           });
 
-          // Clean up pref observer on window close to prevent ghost observers (H-03)
-          window.addEventListener(
-            "unload",
-            () => {
-              try {
-                Services.prefs.removeObserver(
-                  "zen.view.sidebar-expanded",
-                  updateSidebarAttr,
-                );
-                Services.prefs.removeObserver(
-                  "zen.view.use-single-toolbar",
-                  updateSidebarAttr,
-                );
-                this.#rootAttrObs?.disconnect();
-              } catch (_) {}
-            },
-            { once: true },
-          );
-
           // Tooltip injection (XUL panel with noautohide=true to avoid stealing click events)
           if (!document.getElementById("zentral-tabgroup-tooltip")) {
             const panel = document.createXULElement("panel");
@@ -1024,22 +926,22 @@
               }
             };
 
-            panel.addEventListener("mouseenter", cancelHideTimer);
-            panel.addEventListener("mouseleave", () =>
+            lifecycle.listen(panel, "mouseenter", cancelHideTimer);
+            lifecycle.listen(panel, "mouseleave", () =>
               this.safeHideTooltip(350),
             );
-            panel.addEventListener("mouseover", cancelHideTimer);
+            lifecycle.listen(panel, "mouseover", cancelHideTimer);
 
             const container = document.createElement("div");
             container.id = "zentral-tabgroup-tooltip-container";
             container.style.display = "flex";
             container.style.flexDirection = "column";
             container.style.overflowY = "auto";
-            container.addEventListener("mouseenter", cancelHideTimer);
-            container.addEventListener("mouseleave", () =>
+            lifecycle.listen(container, "mouseenter", cancelHideTimer);
+            lifecycle.listen(container, "mouseleave", () =>
               this.safeHideTooltip(350),
             );
-            container.addEventListener("mouseover", cancelHideTimer);
+            lifecycle.listen(container, "mouseover", cancelHideTimer);
             panel.appendChild(container);
 
             const popupset =
@@ -1305,7 +1207,6 @@
             instance.init();
             started = true;
           } else if (!on && started) {
-            instance.saveTabGroupState?.();
             instance.destroy();
             started = false;
           }

@@ -170,6 +170,12 @@
           "Independent tab startup controller; waits for session and workspace restoration. Owns its stylesheet.",
       },
       {
+        id: "tab-drag",
+        name: "Background tab dragging",
+        file: "features/tabs/dragging/ZentralTabDrag.uc.js",
+        description: "Independent native tab sorting without activation or waking sleeping tabs.",
+      },
+      {
         id: "tab-unload",
         name: "Middle-click tab unloading",
         file: "features/tabs/unloading/ZentralTabUnload.uc.js",

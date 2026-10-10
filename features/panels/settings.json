@@ -75,10 +75,50 @@
     },
     {
       "property": "zen.workspace.bgalazka.hover_reveal_width_px",
-      "label": "Hidden Panel Hover Area Width (px; fine adjustment in extension settings)",
+      "label": "Hidden Panel Hover Activation Width (px; independent of webpage push)",
       "type": "dropdown",
-      "defaultValue": 6,
+      "defaultValue": 1,
       "options": [
+        {
+          "label": "1 px (default)",
+          "value": 1
+        },
+        {
+          "label": "3 px",
+          "value": 3
+        },
+        {
+          "label": "6 px",
+          "value": 6
+        },
+        {
+          "label": "12 px",
+          "value": 12
+        },
+        {
+          "label": "24 px",
+          "value": 24
+        },
+        {
+          "label": "48 px",
+          "value": 48
+        },
+        {
+          "label": "64 px",
+          "value": 64
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.panels.hover_push_width_px",
+      "label": "Hidden Panel Webpage Push Width (px; independent of hover activation)",
+      "type": "dropdown",
+      "defaultValue": 0,
+      "options": [
+        {
+          "label": "0 px (default)",
+          "value": 0
+        },
         {
           "label": "1 px",
           "value": 1
@@ -88,7 +128,7 @@
           "value": 3
         },
         {
-          "label": "6 px (default)",
+          "label": "6 px",
           "value": 6
         },
         {
@@ -556,12 +596,12 @@
     },
     "zen.workspace.bgalazka.hover_reveal_delay_ms": {
       "category": "panel-hover",
-      "section": "Autohide & reveal target",
+      "section": "Hover-to-show element",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.hover_reveal_width_px": {
       "category": "panel-hover",
-      "section": "Autohide & reveal target",
+      "section": "Hover-to-show element",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.hide_hover_reveal_btn": {
@@ -777,6 +817,11 @@
     "zen.workspace.bgalazka.periodic_fallback_polling": {
       "category": "recovery",
       "section": "Bounded recovery & optional troubleshooting",
+      "owner": "panels"
+    },
+    "zen.workspace.zentral.panels.hover_push_width_px": {
+      "category": "panel-hover",
+      "section": "Hover-to-show element",
       "owner": "panels"
     }
   }

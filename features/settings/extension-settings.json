@@ -3971,6 +3971,132 @@
       "label": "Arc 2.0 tweak: apply compact sidebar color and opacity to Zen Library",
       "type": "checkbox",
       "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.compatibility.panel_outside_window_tracking",
+      "label": "Reveal Panels When Leaving the Window",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.panels.hover_edge_reveal",
+      "label": "Reveal Panels from the Hover Area",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.panels.outside_full_edge",
+      "label": "Trigger from the Entire Docked Window Edge",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.panels.outside_distance_px",
+      "label": "Panel Outside Tracking Distance (px; shared native sessions use Zen distance)",
+      "type": "dropdown",
+      "defaultValue": 250,
+      "options": [
+        {
+          "label": "1",
+          "value": 1
+        },
+        {
+          "label": "50",
+          "value": 50
+        },
+        {
+          "label": "100",
+          "value": 100
+        },
+        {
+          "label": "250",
+          "value": 250
+        },
+        {
+          "label": "500",
+          "value": 500
+        },
+        {
+          "label": "1000",
+          "value": 1000
+        },
+        {
+          "label": "2000",
+          "value": 2000
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.panels.outside_trigger_margin_px",
+      "label": "Window Edge Exit Tolerance (px)",
+      "type": "dropdown",
+      "defaultValue": 10,
+      "options": [
+        {
+          "label": "1",
+          "value": 1
+        },
+        {
+          "label": "5",
+          "value": 5
+        },
+        {
+          "label": "10",
+          "value": 10
+        },
+        {
+          "label": "20",
+          "value": 20
+        },
+        {
+          "label": "32",
+          "value": 32
+        },
+        {
+          "label": "64",
+          "value": 64
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.panels.autohide_delay_ms",
+      "label": "Panel Autohide Delay (ms)",
+      "type": "dropdown",
+      "defaultValue": 400,
+      "options": [
+        {
+          "label": "0",
+          "value": 0
+        },
+        {
+          "label": "100",
+          "value": 100
+        },
+        {
+          "label": "200",
+          "value": 200
+        },
+        {
+          "label": "400",
+          "value": 400
+        },
+        {
+          "label": "800",
+          "value": 800
+        },
+        {
+          "label": "1500",
+          "value": 1500
+        },
+        {
+          "label": "3000",
+          "value": 3000
+        },
+        {
+          "label": "5000",
+          "value": 5000
+        }
+      ]
     }
   ],
   "settings": {
@@ -4192,6 +4318,36 @@
     "zen.workspace.zentral.arc2.match_compact_library": {
       "category": "arc",
       "section": "Arc 2.0 theme integration",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.zentral.compatibility.panel_outside_window_tracking": {
+      "category": "panel-hover",
+      "section": "Outside-window reveal",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.zentral.panels.hover_edge_reveal": {
+      "category": "panel-hover",
+      "section": "Hover-to-show element",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.zentral.panels.outside_full_edge": {
+      "category": "panel-hover",
+      "section": "Outside-window reveal",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.zentral.panels.outside_distance_px": {
+      "category": "panel-hover",
+      "section": "Outside-window reveal",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.zentral.panels.outside_trigger_margin_px": {
+      "category": "panel-hover",
+      "section": "Outside-window reveal",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.zentral.panels.autohide_delay_ms": {
+      "category": "panel-hover",
+      "section": "Outside-window reveal",
       "owner": "extension-settings"
     }
   }

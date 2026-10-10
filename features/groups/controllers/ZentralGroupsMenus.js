@@ -29,7 +29,8 @@
   "use strict";
   window.ZentralModuleLoader.define(
     "groups/ZentralGroupsMenus",
-    function ({ Services, shared, runtime, access }) {
+    function ({ Services, shared, runtime, access, lifecycle }) {
+      const { setTimeout, clearTimeout, requestAnimationFrame, MutationObserver } = lifecycle;
       const {
         Constants,
         Core,
@@ -114,7 +115,7 @@
             }
 
             if (contextMenu) {
-              contextMenu.addEventListener("popupshowing", (e) => {
+              lifecycle.listen(contextMenu, "popupshowing", (e) => {
                 const trigger = contextMenu.triggerNode;
                 const grp =
                   trigger?.closest?.("tab-group:not([split-view-group])") ||
@@ -162,25 +163,19 @@
                 }
               };
 
-              contextMenu
-                .querySelector("#zentral-tg-item-set-color")
-                ?.addEventListener("command", (e) => {
+              lifecycle.listen(contextMenu.querySelector("#zentral-tg-item-set-color"), "command", (e) => {
                   e.stopPropagation();
                   openColorPicker();
                 });
 
-              contextMenu
-                .querySelector("#zentral-tg-item-auto-color")
-                ?.addEventListener("command", (e) => {
+              lifecycle.listen(contextMenu.querySelector("#zentral-tg-item-auto-color"), "command", (e) => {
                   e.stopPropagation();
                   if (access.state.contextMenuCurrentGroup?._useFaviconColor) {
                     access.state.contextMenuCurrentGroup._useFaviconColor();
                   }
                 });
 
-              contextMenu
-                .querySelector("#zentral-tg-item-rename")
-                ?.addEventListener("command", (e) => {
+              lifecycle.listen(contextMenu.querySelector("#zentral-tg-item-rename"), "command", (e) => {
                   e.stopPropagation();
                   if (access.state.contextMenuCurrentGroup) {
                     this.renameGroupStart(
@@ -190,9 +185,7 @@
                   }
                 });
 
-              contextMenu
-                .querySelector("#zentral-tg-item-ungroup")
-                ?.addEventListener("command", (e) => {
+              lifecycle.listen(contextMenu.querySelector("#zentral-tg-item-ungroup"), "command", (e) => {
                   e.stopPropagation();
                   const grp = access.state.contextMenuCurrentGroup;
                   if (grp) {
@@ -208,9 +201,7 @@
                   }
                 });
 
-              contextMenu
-                .querySelector("#zentral-tg-item-close")
-                ?.addEventListener("command", (e) => {
+              lifecycle.listen(contextMenu.querySelector("#zentral-tg-item-close"), "command", (e) => {
                   e.stopPropagation();
                   const grp = access.state.contextMenuCurrentGroup;
                   if (grp) {
@@ -302,7 +293,7 @@
                 const folder = folderMenu.triggerNode?.closest("zen-folder");
                 if (folder) this.convertFolderToGroup(folder);
               };
-              folderMenu.addEventListener("command", access.folderMenuHandler);
+              lifecycle.listen(folderMenu, "command", access.folderMenuHandler);
             }
           }, 1500);
         },
@@ -317,6 +308,7 @@
           // They are cleanly hidden via chrome.css instead.
           const handleGroupSubmenu = (popup) => {
             if (!popup) return;
+            lifecycle.captureMenu(popup);
 
             // 1. Query active tab groups in DOM order (top to bottom on tabstrip)
             const activeGroups = Array.from(
@@ -438,12 +430,12 @@
                 setTimeout(() => handleGroupSubmenu(popup), 0);
               }
             };
-            window.addEventListener(
+            lifecycle.listen(window,
               "popupshowing",
               this._tabContextSubmenuListener,
               true,
             );
-            window.addEventListener(
+            lifecycle.listen(window,
               "popupshown",
               this._tabContextSubmenuListener,
               true,
@@ -493,7 +485,7 @@
             );
             if (!labelContainer._zentralContextMenuBound) {
               labelContainer._zentralContextMenuBound = true;
-              labelContainer.addEventListener("contextmenu", (event) => {
+              lifecycle.listen(labelContainer, "contextmenu", (event) => {
                 if (event.target.closest("#tab-label-input")) return;
                 event.preventDefault();
                 event.stopPropagation();
@@ -525,11 +517,11 @@
           group.setAttribute("context", "zentral-tabgroup-context-menu");
 
           // Bind group specific actions for external callers
-          group._useFaviconColor = () => {
+          lifecycle.override(group, "_useFaviconColor", () => {
             this.applyAverageGroupColor(group, true);
-          };
+          });
 
-          group.ungroupTabs = () => {
+          lifecycle.override(group, "ungroupTabs", () => {
             try {
               const ss = access.getSessionStore();
               this.removeSavedColor(group.id);
@@ -629,7 +621,7 @@
             } catch (e) {
               console.error("[ZentralTabGroups] Error ungrouping tabs:", e);
             }
-          };
+          });
         },
         convertGroupToFolder(group) {
           if (!window.gZenFolders) return;

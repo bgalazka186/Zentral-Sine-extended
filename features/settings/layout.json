@@ -39,6 +39,17 @@
       ]
     },
     {
+      "id": "tab-drag",
+      "label": "Tab Dragging",
+      "group": "Apps & Tabs",
+      "owner": "tab-drag",
+      "sections": [
+        {
+          "label": "Background sorting"
+        }
+      ]
+    },
+    {
       "id": "tab-panels",
       "label": "Tab Panel Launchers",
       "group": "Apps & Tabs",
@@ -79,6 +90,12 @@
       "sections": [
         {
           "label": "Autohide & reveal target"
+        },
+        {
+          "label": "Hover-to-show element"
+        },
+        {
+          "label": "Outside-window reveal"
         }
       ]
     },
@@ -432,8 +449,15 @@
       "size": "18px"
     },
     "zen.workspace.bgalazka.hover_reveal_panel",
+    "zen.workspace.zentral.panels.hover_edge_reveal",
     "zen.workspace.bgalazka.hover_reveal_delay_ms",
     "zen.workspace.bgalazka.hover_reveal_width_px",
+    "zen.workspace.zentral.panels.hover_push_width_px",
+    "zen.workspace.zentral.compatibility.panel_outside_window_tracking",
+    "zen.workspace.zentral.panels.outside_full_edge",
+    "zen.workspace.zentral.panels.outside_distance_px",
+    "zen.workspace.zentral.panels.outside_trigger_margin_px",
+    "zen.workspace.zentral.panels.autohide_delay_ms",
     {
       "type": "text",
       "label": "**Panels · Dual, Triple & Super View**",
@@ -565,6 +589,7 @@
     "zen.workspace.bgalazka.keybind.zoom_out",
     "zen.workspace.bgalazka.keybind.zoom_reset",
     "zen.workspace.bgalazka.keybind.open_settings",
+    "zen.workspace.zentral.tabs.background_drag",
     "zen.workspace.bgalazka.mmb_unload_normal_tabs",
     {
       "type": "text",
