@@ -43,6 +43,12 @@
   window.ZentralModuleLoader.define("catalog", function () {
     const MANIFEST = [
       {
+        id: "compact-hover",
+        name: "Experimental compact sidebar hover",
+        file: "features/tabs/compact-hover/ZentralCompactHover.uc.js",
+        description: "Opt-in native compact sidebar hover continuity.",
+      },
+      {
         id: "logger",
         name: "Diagnostic logger",
         file: "features/diagnostics/ZentralLogger.uc.js",
@@ -173,7 +179,8 @@
         id: "tab-drag",
         name: "Background tab dragging",
         file: "features/tabs/dragging/ZentralTabDrag.uc.js",
-        description: "Independent native tab sorting without activation or waking sleeping tabs.",
+        description:
+          "Independent native tab sorting without activation or waking sleeping tabs.",
       },
       {
         id: "tab-unload",

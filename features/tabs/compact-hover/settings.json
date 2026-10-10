@@ -1,0 +1,22 @@
+{
+  "_documentation": {
+    "purpose": "Opt-in native compact sidebar hover continuity; 1500 ms window-exit grace.",
+    "feature_source": "features/tabs/compact-hover/ZentralCompactHover.uc.js"
+  },
+  "owner": "compact-hover",
+  "schema": [
+    {
+      "property": "zen.workspace.zentral.experimental.compact_sidebar_hover",
+      "label": "Stabilize compact tab sidebar hover (experimental)",
+      "type": "checkbox",
+      "defaultValue": false
+    }
+  ],
+  "settings": {
+    "zen.workspace.zentral.experimental.compact_sidebar_hover": {
+      "category": "experimental",
+      "section": "Native compact sidebar",
+      "owner": "compact-hover"
+    }
+  }
+}

@@ -348,7 +348,11 @@
               ctx.PREF_ICONS.HOVER_EYE,
             );
             content.appendChild(tHoverEdgeReveal.row);
-            panel._toggles.push({input: tHoverEdgeReveal.input, pref: "zen.workspace.zentral.panels.hover_edge_reveal", def: true});
+            panel._toggles.push({
+              input: tHoverEdgeReveal.input,
+              pref: "zen.workspace.zentral.panels.hover_edge_reveal",
+              def: true,
+            });
             const hoverRevealDelaySlider = createSliderRow(
               "Hidden Panel Reveal Delay",
               "Time the cursor must stay at the ledge before a hidden panel appears. 0 ms opens immediately; default is 160 ms.",
@@ -374,7 +378,10 @@
               "Hidden Panel Webpage Push Width",
               "Space reserved for the hover-to-show element beside the webpage. Default: 0 px (no push). Independent of activation width; ignored when the element is disabled.",
               "zen.workspace.zentral.panels.hover_push_width_px",
-              0, 64, 0, " px",
+              0,
+              64,
+              0,
+              " px",
             );
             content.appendChild(hoverPushWidthSlider.row);
             panel._toggles.push({
@@ -382,9 +389,12 @@
               pref: "zen.workspace.zentral.panels.hover_push_width_px",
               def: 0,
               isSelect: true,
-              onSync: (value) => { hoverPushWidthSlider.badge.textContent = value + " px"; },
+              onSync: (value) => {
+                hoverPushWidthSlider.badge.textContent = value + " px";
+              },
             });
-            const panelOutsidePref = "zen.workspace.zentral.compatibility.panel_outside_window_tracking";
+            const panelOutsidePref =
+              "zen.workspace.zentral.compatibility.panel_outside_window_tracking";
             const tPanelOutsideTracking = createToggleRow(
               "Reveal Panels When Leaving the Window",
               "Reveal an already open autohidden panel immediately when the cursor exits its docked side of the Zen window, then keep it visible near that edge. No prior hover of the reveal area is needed. Uses Zen's native tracking service where supported and preserves active native sidebar/toolbar tracking. Falls back to timed autohide if tracking is unavailable. Off by default; requires panel autohide.",
@@ -394,20 +404,71 @@
               ctx.PREF_ICONS.REFRESH,
             );
             content.appendChild(tPanelOutsideTracking.row);
-            panel._toggles.push({input: tPanelOutsideTracking.input, pref: panelOutsidePref, def: false});
+            panel._toggles.push({
+              input: tPanelOutsideTracking.input,
+              pref: panelOutsidePref,
+              def: false,
+            });
             const tOutsideFullEdge = createToggleRow(
               "Trigger from the Entire Docked Window Edge",
               "On: exiting anywhere along the panel's left/right window edge reveals it. Off: the exit must be within the panel's height. Does not trigger from the top, bottom, or opposite side.",
-              "zen.workspace.zentral.panels.outside_full_edge", null, true, ctx.PREF_ICONS.HOVER_EYE,
+              "zen.workspace.zentral.panels.outside_full_edge",
+              null,
+              true,
+              ctx.PREF_ICONS.HOVER_EYE,
             );
             content.appendChild(tOutsideFullEdge.row);
-            panel._toggles.push({input: tOutsideFullEdge.input, pref: "zen.workspace.zentral.panels.outside_full_edge", def: true});
-            for (const [label, description, pref, min, max, defaultValue, suffix] of [
-              ["Panel Outside Tracking Distance", "How far the pointer can move past the window edge before the panel autohides. Applies when Zentral owns the tracker; a shared native session uses Zen's distance. Does not change Zen's sidebar preferences.", "zen.workspace.zentral.panels.outside_distance_px", 1, 2000, 250, " px"],
-              ["Window Edge Exit Tolerance", "How close the exit event must be to the panel's window edge to trigger a reveal. Increase only if your system reports exits a few pixels away from the edge.", "zen.workspace.zentral.panels.outside_trigger_margin_px", 1, 64, 10, " px"],
-              ["Panel Autohide Delay", "Delay before a panel hides after leaving it or ending outside-window tracking. Does not delay the window-exit reveal; popup, typing, and resize holds still apply.", "zen.workspace.zentral.panels.autohide_delay_ms", 0, 5000, 400, " ms"],
+            panel._toggles.push({
+              input: tOutsideFullEdge.input,
+              pref: "zen.workspace.zentral.panels.outside_full_edge",
+              def: true,
+            });
+            for (const [
+              label,
+              description,
+              pref,
+              min,
+              max,
+              defaultValue,
+              suffix,
+            ] of [
+              [
+                "Panel Outside Tracking Distance",
+                "How far the pointer can move past the window edge before the panel autohides. Applies when Zentral owns the tracker; a shared native session uses Zen's distance. Does not change Zen's sidebar preferences.",
+                "zen.workspace.zentral.panels.outside_distance_px",
+                1,
+                2000,
+                250,
+                " px",
+              ],
+              [
+                "Window Edge Exit Tolerance",
+                "How close the exit event must be to the panel's window edge to trigger a reveal. Increase only if your system reports exits a few pixels away from the edge.",
+                "zen.workspace.zentral.panels.outside_trigger_margin_px",
+                1,
+                64,
+                10,
+                " px",
+              ],
+              [
+                "Panel Autohide Delay",
+                "Delay before a panel hides after leaving it or ending outside-window tracking. Does not delay the window-exit reveal; popup, typing, and resize holds still apply.",
+                "zen.workspace.zentral.panels.autohide_delay_ms",
+                0,
+                5000,
+                400,
+                " ms",
+              ],
             ]) {
-              const control = createSliderRow(label, description, pref, min, max, defaultValue, suffix);
+              const control = createSliderRow(
+                label,
+                description,
+                pref,
+                min,
+                max,
+                defaultValue,
+                suffix,
+              );
               content.appendChild(control.row);
             }
 
@@ -1188,11 +1249,30 @@
             keybindSubgroup.className =
               "zs-conditional-group zs-keybinds-group";
 
+            const compactHoverPref =
+              "zen.workspace.zentral.experimental.compact_sidebar_hover";
+            const tCompactHover = createToggleRow(
+              "Stabilize Compact Tab Sidebar Hover (Experimental)",
+              "Keep the native tab sidebar steady while moving within it or briefly leaving the window. Window-exit protection lasts up to 1.5 seconds; returning to page content uses the normal sidebar hide delay. Applies immediately. Off by default.",
+              compactHoverPref,
+              null,
+              false,
+              ctx.PREF_ICONS.TOOLBAR,
+            );
+            content.appendChild(tCompactHover.row);
+            panel._toggles.push({
+              input: tCompactHover.input,
+              pref: compactHoverPref,
+              def: false,
+            });
+
             const tBackgroundTabDrag = createToggleRow(
               "Drag Tabs Without Activating or Loading Them",
               "Keep the current tab active while sorting tabs, folders and split-view groups. Sleeping tabs stay asleep. Clicks and intentional split, copy or detach actions keep native behavior.",
               "zen.workspace.zentral.tabs.background_drag",
-              null, true, ctx.PREF_ICONS.TOOLBAR,
+              null,
+              true,
+              ctx.PREF_ICONS.TOOLBAR,
             );
             content.appendChild(tBackgroundTabDrag.row);
             panel._toggles.push({

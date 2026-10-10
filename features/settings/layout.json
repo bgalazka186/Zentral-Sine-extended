@@ -321,6 +321,17 @@
       ]
     },
     {
+      "id": "experimental",
+      "label": "Experimental",
+      "group": "Advanced",
+      "owner": "compact-hover",
+      "sections": [
+        {
+          "label": "Native compact sidebar"
+        }
+      ]
+    },
+    {
       "id": "compatibility",
       "label": "Browser & Add-on Compatibility",
       "group": "Advanced",
@@ -844,6 +855,12 @@
       "label": "**Advanced · Local Add-ons**",
       "size": "18px"
     },
-    "zen.workspace.zentral.addons"
+    "zen.workspace.zentral.addons",
+    {
+      "type": "text",
+      "label": "**Advanced · Experimental**",
+      "size": "18px"
+    },
+    "zen.workspace.zentral.experimental.compact_sidebar_hover"
   ]
 }

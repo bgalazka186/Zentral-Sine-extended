@@ -50,6 +50,10 @@
       throw new Error("Duplicate settings category");
     const descriptorFiles = [
       {
+        owner: "compact-hover",
+        file: "features/tabs/compact-hover/settings.json",
+      },
+      {
         owner: "apps",
         file: "features/apps/settings.json",
       },

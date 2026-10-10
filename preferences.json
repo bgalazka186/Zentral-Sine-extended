@@ -8579,5 +8579,16 @@
     "label": "Local add-on manifest (JSON; restart required)",
     "type": "string",
     "defaultValue": "[]"
+  },
+  {
+    "type": "text",
+    "label": "**Advanced \u00b7 Experimental**",
+    "size": "18px"
+  },
+  {
+    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover",
+    "label": "Stabilize compact tab sidebar hover (experimental)",
+    "type": "checkbox",
+    "defaultValue": false
   }
 ]
