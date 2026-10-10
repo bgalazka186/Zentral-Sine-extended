@@ -1,6 +1,10 @@
 /* Experimental native compact sidebar hover guard. No CSS or tracker ownership.
  * Preserve an existing hover during stale native leave callbacks, using the
  * last visible bounds rather than the animated/hidden sidebar hit-test.
+ *
+ * Edge hysteresis: a soft margin around the visible bounds plus a short
+ * "leaving" grace state keeps the sidebar open while the pointer wiggles
+ * across its edge.
  */
 (function () {
   "use strict";
@@ -15,9 +19,13 @@
       throw new Error(
         "Compact hover guard requires Zen's native compact manager",
       );
+    // Tunables for edge wiggle tolerance.
+    const EDGE_MARGIN = 12; // px of tolerance around the visible bounds
+    const EXIT_GRACE = 250; // ms before a real exit is allowed to hide
     let active = true,
       inside = false,
       outside = false,
+      leaving = false,
       bounds = null;
     let blocked = false,
       timer = null;
@@ -28,12 +36,12 @@
       boundsFrame = null;
     const cleanups = [];
     const enabled = () => active && configured && !manager._ignoreNextHover;
-    const contains = (box, event) =>
+    const contains = (box, event, m = 0) =>
       box &&
-      event.clientX >= box.left &&
-      event.clientX <= box.right &&
-      event.clientY >= box.top &&
-      event.clientY <= box.bottom;
+      event.clientX >= box.left - m &&
+      event.clientX <= box.right + m &&
+      event.clientY >= box.top - m &&
+      event.clientY <= box.bottom + m;
     function cancelTimer() {
       if (timer !== null) window.clearTimeout(timer);
       timer = null;
@@ -61,7 +69,7 @@
       cancelTimer();
       invalidateBounds();
       const hadBlocked = blocked;
-      inside = outside = blocked = false;
+      inside = outside = blocked = leaving = false;
       bounds = null;
       if (release && hadBlocked && manager.sidebar)
         manager._setElementExpandAttribute(manager.sidebar, false);
@@ -106,17 +114,29 @@
         return;
       }
       const box = readBounds(sidebar);
-      // On window re-entry, retain the pre-exit bounds for the first hit-test.
-      const hit = contains(outside && bounds ? bounds : box, event);
       const wasOutside = outside;
+      // On window re-entry, retain the pre-exit bounds for the first hit-test.
+      const ref = wasOutside && bounds ? bounds : box;
+      // Margin only applies once the pointer was already inside/leaving, so it
+      // never makes the sidebar easier to trigger from far away.
+      const hit = contains(
+        ref,
+        event,
+        inside || leaving || wasOutside ? EDGE_MARGIN : 0,
+      );
       if (wasOutside) cancelTimer();
       outside = false;
       if (hit) {
         inside = true;
+        leaving = false;
         bounds = box;
         cancelTimer();
-      } else {
+      } else if (inside) {
+        // Just crossed the edge: keep protecting for a short grace period.
         inside = false;
+        leaving = true;
+        expire(Math.max(EXIT_GRACE, keepHoverDelay));
+      } else if (!leaving) {
         bounds = null;
         if (blocked && timer === null) {
           // A vetoed native callback will not necessarily be scheduled again.
@@ -124,18 +144,20 @@
           expire(keepHoverDelay);
         }
       }
+      // else: leaving, grace timer already running; a return cancels it via hit.
     }
     function onLeave(event) {
       if (event.target !== document.documentElement || !event.isTrusted) return;
       if (
         !enabled() ||
-        !inside ||
+        !(inside || leaving) ||
         !manager.sidebar?.hasAttribute("zen-has-hover")
       ) {
         reset();
         return;
       }
       inside = false;
+      leaving = false;
       outside = true;
       // Bounded fallback on platforms without global mouse tracking. Native
       // tracker exit/deactivation can end this grace period earlier.
@@ -194,7 +216,7 @@
               if (
                 enabled() &&
                 element.hasAttribute(attr) &&
-                (inside || outside)
+                (inside || outside || leaving)
               ) {
                 blocked = true;
                 return;
