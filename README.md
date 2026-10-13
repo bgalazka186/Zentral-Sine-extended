@@ -97,7 +97,7 @@ These options are experimental and separate from the regular hover behavior. Ava
 - **Bug Reports:** **Do not open issues on the upstream Zentral repository for problems encountered while using this fork.** Please file all issues, bugs, and feature requests directly in this repository's Issues tab.
 - **License:** Licensed under [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/).
 
-> **Original Zentral documentation:** The **Overview and all sections below it** are retained from Zentral before this fork. Our additions are documented above. The inherited text is preserved as an upstream reference; its installation links, version references and repository layout may differ from this fork.
+> **Original Zentral documentation:** The **Overview and all sections below it** are retained from Zentral before this fork. My additions are documented above. The inherited text is preserved as an upstream reference; its installation links, version references and repository layout may differ from this fork.
 
 <p align="center">
   <img src="assets/Zentral%20Logo.png" alt="Zentral Logo" width="140" height="140" />
