@@ -1083,7 +1083,7 @@
   background-color: color-mix(
     in srgb,
     var(--zl-surface)
-      min(var(--zl-surface-opacity), var(--bg-opacity-unpinned, 92%)),
+      min(var(--zl-surface-opacity), var(--bg-opacity-unpinned, 100%)),
     transparent
   ) !important;
 }
@@ -1097,7 +1097,7 @@
   background-color: color-mix(
     in srgb,
     var(--zl-surface)
-      min(var(--zl-surface-opacity), var(--bg-opacity-pinned-focus, 85%)),
+      min(var(--zl-surface-opacity), var(--bg-opacity-pinned-focus, 95%)),
     transparent
   ) !important;
 }
@@ -1111,7 +1111,7 @@
   background-color: color-mix(
     in srgb,
     var(--zl-surface)
-      min(var(--zl-surface-opacity), var(--bg-opacity-pinned-blur, 45%)),
+      min(var(--zl-surface-opacity), var(--bg-opacity-pinned-blur, 90%)),
     transparent
   ) !important;
 }

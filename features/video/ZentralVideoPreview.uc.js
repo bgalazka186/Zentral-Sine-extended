@@ -3304,12 +3304,14 @@
           );
         }
         function nativePreviewDeferred() {
-          // Automatic can also exhaust its fallbacks while the on-page video
-          // blocks native cloning. A selected source alone is not a preview.
+          // Deferring native cloning must not hide the receiver before stream
+          // or frame fallbacks can run. Only the explicit suspension preference
+          // or strict native-only choice may stop rendering for source visibility.
           return (
             current?.data.kind === "video" &&
             sourceVisibilityBlocked &&
             !previewMode &&
+            (powerOn(SUSPEND_VISIBLE_PREF) || selectedModeOnly()) &&
             ["auto", "frame-native", "native"].includes(rendererChoice())
           );
         }

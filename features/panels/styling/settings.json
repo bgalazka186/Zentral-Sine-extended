@@ -17,7 +17,7 @@
       "property": "zen.workspace.bgalazka.opacity_unpinned",
       "label": "Whole-Panel Opacity: Unpinned (%)",
       "type": "dropdown",
-      "defaultValue": 92,
+      "defaultValue": 100,
       "options": [
         {
           "label": "10",
@@ -61,7 +61,7 @@
       "property": "zen.workspace.bgalazka.opacity_pinned_focus",
       "label": "Whole-Panel Opacity: Pinned and Focused (%)",
       "type": "dropdown",
-      "defaultValue": 85,
+      "defaultValue": 95,
       "options": [
         {
           "label": "10",
@@ -96,6 +96,10 @@
           "value": 92
         },
         {
+          "label": "95",
+          "value": 95
+        },
+        {
           "label": "100",
           "value": 100
         }
@@ -105,7 +109,7 @@
       "property": "zen.workspace.bgalazka.opacity_pinned_blur",
       "label": "Whole-Panel Opacity: Pinned and Unfocused (%)",
       "type": "dropdown",
-      "defaultValue": 45,
+      "defaultValue": 90,
       "options": [
         {
           "label": "10",

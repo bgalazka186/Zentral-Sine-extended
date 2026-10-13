@@ -592,31 +592,17 @@
   max-height: 16px !important;
 }
 
-/* Size the native folder artwork once. Do not separately scale its
- * pseudo-elements or nested images: live folders use layered artwork. */
+/* Scale the complete native artwork, including live-folder layers, without
+ * resizing its layout box or the folder row. Individual scale composes with
+ * Zen's own transforms rather than replacing them. Group-state indicators
+ * and their containers have separate sizing rules. */
 :root[bgalazka-density-icons="true"]
   #tabbrowser-tabs
   zen-folder
   > .tab-group-label-container
-  .tab-group-folder-icon,
-:root[bgalazka-density-icons="true"]
-  #tabbrowser-tabs
-  zen-folder
-  > .tab-group-label-container
-  .tab-group-icon-container,
-:root[bgalazka-density-icons="true"]
-  #tabbrowser-tabs
-  tab-group
-  > .tab-group-label-container
-  .tab-group-icon-container {
-  width: var(--bgalazka-look-folder-icon-size, 20px) !important;
-  height: var(--bgalazka-look-folder-icon-size, 20px) !important;
-  min-width: var(--bgalazka-look-folder-icon-size, 20px) !important;
-  min-height: var(--bgalazka-look-folder-icon-size, 20px) !important;
-  max-width: var(--bgalazka-look-folder-icon-size, 20px) !important;
-  max-height: var(--bgalazka-look-folder-icon-size, 20px) !important;
-  font-size: var(--bgalazka-look-folder-icon-size, 20px) !important;
-  line-height: 1 !important;
+  .tab-group-folder-icon {
+  scale: var(--bgalazka-look-folder-icon-scale, 1) !important;
+  transform-origin: center !important;
 }
 /* The indicator is a workspace section in current Zen; size its whole row,
  * including its native inline padding, instead of just its icon. */

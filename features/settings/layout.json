@@ -581,6 +581,7 @@
       "label": "Panel shortcuts & mouse actions",
       "size": "14px"
     },
+    "zen.workspace.bgalazka.mmb_unload_normal_tabs",
     "zen.workspace.bgalazka.keybinds_enabled",
     "zen.workspace.bgalazka.keybind.close_panel",
     "zen.workspace.bgalazka.keybind.back",
@@ -601,7 +602,6 @@
     "zen.workspace.bgalazka.keybind.zoom_reset",
     "zen.workspace.bgalazka.keybind.open_settings",
     "zen.workspace.zentral.tabs.background_drag",
-    "zen.workspace.bgalazka.mmb_unload_normal_tabs",
     {
       "type": "text",
       "label": "**Appearance · Theme & Colors**",
@@ -862,6 +862,9 @@
       "size": "18px"
     },
     "zen.workspace.zentral.experimental.compact_sidebar_hover",
+    "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal",
+    "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal.panels",
+    "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal.panels.only_when_not_pushing",
     "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px",
     "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms"
   ]

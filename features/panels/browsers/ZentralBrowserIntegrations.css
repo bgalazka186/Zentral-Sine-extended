@@ -79,8 +79,7 @@
 
 /* Host tabs may be pinned individually if Zen's folder API is unavailable. */
 :root[bgalazka-show-addon-host-folder="true"]
-  #tabbrowser-tabs
-  tab[bgalazka-addon-host-fallback="true"] {
+  :is(tab, .tabbrowser-tab)[bgalazka-addon-host="true"] {
   visibility: visible !important;
   opacity: 1 !important;
   pointer-events: auto !important;
@@ -179,8 +178,7 @@
 :root[bgalazka-addon-tab-id-bridge="true"]:not(
     [bgalazka-show-addon-host-folder="true"]
   )
-  #tabbrowser-tabs
-  tab[bgalazka-addon-host-fallback="true"] {
+  :is(tab, .tabbrowser-tab)[bgalazka-addon-host="true"] {
   min-height: 1px !important;
   height: 1px !important;
   max-height: 1px !important;
@@ -622,11 +620,11 @@
 }
 :root[bgalazka-translucency="true"][bgalazka-super-pin="true"]
   #bgalazka-super-panel:is(:hover, :focus-within) {
-  opacity: var(--bg-opacity-pinned-focus, 0.85) !important;
+  opacity: var(--bg-opacity-pinned-focus, 0.95) !important;
 }
 :root[bgalazka-translucency="true"][bgalazka-super-pin="true"]
   #bgalazka-super-panel:not(:hover):not(:focus-within) {
-  opacity: var(--bg-opacity-pinned-blur, 0.45) !important;
+  opacity: var(--bg-opacity-pinned-blur, 0.9) !important;
 }
 :root[bgalazka-triple-view="true"]
   #zen-app-panel-pill

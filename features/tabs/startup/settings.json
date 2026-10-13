@@ -11,7 +11,7 @@
       "property": "zen.workspace.zentral.startup.enabled",
       "label": "Enable Load at Startup in essential and pinned tab right-click menus",
       "type": "checkbox",
-      "defaultValue": false
+      "defaultValue": true
     }
   ],
   "settings": {

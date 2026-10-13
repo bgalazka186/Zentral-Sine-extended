@@ -264,7 +264,7 @@
               ctx.BGALAZKA_EXT_PREFS.OPACITY_UNPINNED,
               10,
               100,
-              92,
+              100,
               "%",
             );
             const s2 = createSliderRow(
@@ -273,7 +273,7 @@
               ctx.BGALAZKA_EXT_PREFS.OPACITY_PINNED_FOCUS,
               10,
               100,
-              85,
+              95,
               "%",
             );
             const s3 = createSliderRow(
@@ -282,7 +282,7 @@
               ctx.BGALAZKA_EXT_PREFS.OPACITY_PINNED_BLUR,
               10,
               100,
-              45,
+              90,
               "%",
             );
             slidersGroup.append(s1.row, s2.row, s3.row);
@@ -1053,10 +1053,10 @@
             content.appendChild(tZenInternetCss.row);
             const tShowTripleStyleRepair = createToggleRow(
               "Show Triple View Style Repair Button",
-              "Show the manual repair control at the end of the primary panel URL bar while Triple View is populated. Leave this off when the automatic document-generation styling fix is working normally.",
+              "Show the manual repair control at the end of the primary panel URL bar when Triple View is populated and Zen Internet CSS is enabled. Styling repair runs only when you click it.",
               ctx.BGALAZKA_EXT_PREFS.SHOW_TRIPLE_STYLE_REPAIR,
               null,
-              false,
+              true,
               ctx.PREF_ICONS.REPAIR_STYLE,
               () => ctx.updateWebToolbarState(),
             );
@@ -1218,7 +1218,7 @@
               "Adds Load at Startup to essential and pinned tab right-click menus. Choose each tab individually; only existing sleeping tabs are woken.",
               "zen.workspace.zentral.startup.enabled",
               null,
-              false,
+              true,
               ctx.PREF_ICONS.PIN,
               () => {},
             );
@@ -1253,17 +1253,92 @@
               "zen.workspace.zentral.experimental.compact_sidebar_hover";
             const tCompactHover = createToggleRow(
               "Stabilize Compact Tab Sidebar Hover (Experimental)",
-              "Keep the native tab sidebar steady while moving within it or briefly leaving the window. Window-exit protection lasts up to 1.5 seconds; returning to page content uses the normal sidebar hide delay. Applies immediately. Off by default.",
+              "Master switch for the compact sidebar hover guard and all window-entry enhancements below, including panels. Turn off to restore native sidebar methods and disable these enhancements immediately. Window-exit protection lasts up to 1.5 seconds. Off by default.",
               compactHoverPref,
               null,
               false,
               ctx.PREF_ICONS.TOOLBAR,
             );
             content.appendChild(tCompactHover.row);
+            const entryRevealPref = compactHoverPref + ".window_entry_reveal";
+            const tEntryReveal = createToggleRow(
+              "Reveal Compact Tab Sidebar on Window Entry (Experimental)",
+              "Reveal the tab sidebar when the cursor returns from outside through its side of the window, with 250 ms of return protection (or Zen’s longer keep-hover delay). Normal hover behavior is unchanged. Requires Stabilize Compact Tab Sidebar Hover. Applies immediately. Off by default.",
+              entryRevealPref,
+              null,
+              false,
+              ctx.PREF_ICONS.TOOLBAR,
+            );
+            content.appendChild(tEntryReveal.row);
+            const panelEntryPref = entryRevealPref + ".panels";
+            const tPanelEntry = createToggleRow(
+              "Apply Window Entry Reveal to Autohidden Panels",
+              "Reveal an already open Zentral panel when the cursor enters through its docked window edge, with the same brief return protection. Requires Window Entry Reveal and Autohide Panels. Existing hover areas stay unchanged. Off by default.",
+              panelEntryPref,
+              null,
+              false,
+              ctx.PREF_ICONS.HOVER_EYE,
+            );
+            content.appendChild(tPanelEntry.row);
+            const panelEntryOverlayPref = panelEntryPref + ".only_when_not_pushing";
+            const tPanelEntryOverlay = createToggleRow(
+              "Only Enhance Panels When Not Pushing the Webpage",
+              "Limit panel window-entry reveal and return protection to overlay mode. Automatically pause them while the panel pushes the webpage, including Triple View. Normal panel hover still works. On by default.",
+              panelEntryOverlayPref,
+              null,
+              true,
+              ctx.PREF_ICONS.HOVER_EYE,
+            );
+            content.appendChild(tPanelEntryOverlay.row);
+            const compactHoverSliders = [];
+            const syncEntryRevealAvailability = () => {
+              const disabled = !ctx.getPref(compactHoverPref, false);
+              tEntryReveal.input.disabled = disabled;
+              tEntryReveal.row.style.opacity = disabled ? "0.5" : "";
+              const panelDisabled = disabled || !ctx.getPref(entryRevealPref, false) ||
+                !ctx.getPref(ctx.BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false);
+              tPanelEntry.input.disabled = panelDisabled;
+              tPanelEntry.row.style.opacity = panelDisabled ? "0.5" : "";
+              const overlayDisabled = panelDisabled || !ctx.getPref(panelEntryPref, false);
+              tPanelEntryOverlay.input.disabled = overlayDisabled;
+              tPanelEntryOverlay.row.style.opacity = overlayDisabled ? "0.5" : "";
+              for (const control of compactHoverSliders) {
+                control.input.disabled = disabled;
+                control.row.style.opacity = disabled ? "0.5" : "";
+              }
+            };
+            tCompactHover.input.addEventListener(
+              "change",
+              syncEntryRevealAvailability,
+            );
+            tEntryReveal.input.addEventListener("change", syncEntryRevealAvailability);
+            tHoverReveal.input.addEventListener("change", syncEntryRevealAvailability);
+            tPanelEntry.input.addEventListener("change", syncEntryRevealAvailability);
+            syncEntryRevealAvailability();
+            panel._syncEntryAvailability = syncEntryRevealAvailability;
             panel._toggles.push({
               input: tCompactHover.input,
               pref: compactHoverPref,
               def: false,
+              onSync: syncEntryRevealAvailability,
+            });
+            panel._toggles.push({
+              input: tEntryReveal.input,
+              pref: entryRevealPref,
+              def: false,
+              onSync: syncEntryRevealAvailability,
+            });
+            panel._toggles.push({
+              input: tPanelEntry.input,
+              pref: panelEntryPref,
+              def: false,
+              onSync: syncEntryRevealAvailability,
+            });
+            panel._toggles.push({
+              input: tPanelEntryOverlay.input,
+              pref: panelEntryOverlayPref,
+              def: true,
+              onSync: syncEntryRevealAvailability,
             });
             for (const [label, description, suffix, min, max, def, unit] of [
               [
@@ -1296,6 +1371,7 @@
                 unit,
               );
               content.appendChild(control.row);
+              compactHoverSliders.push(control);
               panel._toggles.push({
                 input: control.input,
                 pref,
@@ -1306,6 +1382,17 @@
                 },
               });
             }
+            syncEntryRevealAvailability();
+
+            const tMmbUnloadNormalTabs = createToggleRow(
+              "Middle-Click Unloads Normal Tabs",
+              "Middle-click a loaded normal tab to unload it instead of closing it; middle-click an already unloaded normal tab to close it",
+              ctx.BGALAZKA_EXT_PREFS.MMB_UNLOAD_NORMAL_TABS,
+              null,
+              false,
+              ctx.PREF_ICONS.TOOLBAR,
+            );
+            content.appendChild(tMmbUnloadNormalTabs.row);
 
             const tBackgroundTabDrag = createToggleRow(
               "Drag Tabs Without Activating or Loading Them",
@@ -1321,16 +1408,6 @@
               pref: "zen.workspace.zentral.tabs.background_drag",
               def: true,
             });
-            const tMmbUnloadNormalTabs = createToggleRow(
-              "Middle-Click Unloads Normal Tabs",
-              "Middle-click a loaded normal tab to unload it instead of closing it; middle-click an already unloaded normal tab to close it",
-              ctx.BGALAZKA_EXT_PREFS.MMB_UNLOAD_NORMAL_TABS,
-              null,
-              false,
-              ctx.PREF_ICONS.TOOLBAR,
-            );
-            content.appendChild(tMmbUnloadNormalTabs.row);
-
             const tKeybindsEnabled = createToggleRow(
               "Enable Extension Keybinds",
               "Shortcuts only apply while the floating app panel is open and focused; click any binding below and press a new combination",
@@ -1563,7 +1640,7 @@
                   ctx.BGALAZKA_EXT_PREFS.OPACITY_PINNED_FOCUS,
                   ctx.BGALAZKA_EXT_PREFS.OPACITY_PINNED_BLUR,
                 ][index],
-                def: [92, 85, 45][index],
+                def: [100, 95, 90][index],
                 isSelect: true,
                 onSync: (v) => {
                   badge.textContent = v + "%";
@@ -1874,6 +1951,11 @@
                 def: false,
               },
               {
+                input: tabStartup.input,
+                pref: "zen.workspace.zentral.startup.enabled",
+                def: true,
+              },
+              {
                 input: smartSleep.input,
                 pref: ctx.BGALAZKA_EXT_PREFS.SMART_SLEEP,
                 def: false,
@@ -1896,7 +1978,7 @@
               {
                 input: tShowTripleStyleRepair.input,
                 pref: ctx.BGALAZKA_EXT_PREFS.SHOW_TRIPLE_STYLE_REPAIR,
-                def: false,
+                def: true,
                 onSync: () => ctx.updateWebToolbarState(),
               },
               {
@@ -1993,7 +2075,6 @@
             const recommendedExceptions = new Set([
               panelOutsidePref,
               ctx.BGALAZKA_EXT_PREFS.PERIODIC_FALLBACK_POLLING,
-              ctx.BGALAZKA_EXT_PREFS.SHOW_TRIPLE_STYLE_REPAIR,
               ctx.BGALAZKA_EXT_PREFS.EDGE_ATTACHED_PANELS,
               ctx.BGALAZKA_EXT_PREFS.WEB_TOOLBAR_TOP,
               ctx.BGALAZKA_EXT_PREFS.WEB_TOOLBAR_AUTOHIDE,
@@ -2093,8 +2174,8 @@
             keybindHeader.style.marginTop = "8px";
             keybindCategory.subContent.append(
               keybindHeader,
-              tBackgroundTabDrag.row,
               tMmbUnloadNormalTabs.row,
+              tBackgroundTabDrag.row,
               tKeybindsEnabled.row,
               keybindSubgroup,
             );
@@ -2364,7 +2445,7 @@
               choice.style.setProperty("--zs-theme-swatch", theme.swatch);
               choice.textContent = theme.name;
               choice.title =
-                "Apply " + theme.name + "; every value stays editable below";
+                "Apply " + theme.name + ". " + (theme.description || "") + " Every value stays editable below";
               choice.addEventListener("click", () => {
                 for (const [key, value] of Object.entries(LOOK_DEFAULTS)) {
                   // Theme swatches change colors and shapes, not the user's chosen
@@ -2388,13 +2469,7 @@
                     key === LOOK_PREFS.NEWTAB_HEIGHT
                   )
                     continue;
-                  if (
-                    key.startsWith("zen.workspace.bgalazka.look.") ||
-                    key === LOOK_PREFS.VIDEO_RADIUS
-                  )
-                    ctx.setPref(key, theme.values[key] ?? value);
-                  else if (Object.hasOwn(theme.values, key))
-                    ctx.setPref(key, theme.values[key]);
+                  ctx.setPref(key, theme.values[key] ?? value);
                 }
                 syncAppearanceAfterImport();
               });
@@ -2602,7 +2677,7 @@
             );
             addLookSlider(
               "Folder icon size",
-              "Folder and live-folder icons when Compact sidebar controls is on",
+              "Scale folder and live-folder artwork without changing row height; requires Compact sidebar controls",
               LOOK_PREFS.FOLDER_ICON_SIZE,
               12,
               28,
@@ -2962,6 +3037,7 @@
             });
           }
 
+          panel._syncEntryAvailability?.();
           panel._syncBacking?.();
           modal.querySelector("#zs-panel-extension-look")?._syncLook?.();
           applyLook();

@@ -853,6 +853,10 @@
     const addonHostByAppId = new Map();
     const addonHostByTab = new WeakMap();
     let addonHostFolder = null;
+    let addonFolderRepairTimer = null;
+    let addonFolderRepairAttempts = 0;
+    let repairingAddonFolder = false;
+    let addonFolderDisposed = false;
     let lastNonAddonHostTab = window.gBrowser?.selectedTab || null;
     let addonBridgeResetting = false;
     let addonHostSelectionGuardsInstalled = false;
@@ -943,8 +947,41 @@
       }, 0);
     }
 
+    // One bounded repair queue shared by all hosts. Startup may finish before
+    // Zen's folders/workspaces can accept tabs; never poll during normal use.
+    function scheduleAddonFolderRepair() {
+      if (!isAddonTabIdBridgeEnabled() || addonFolderDisposed || repairingAddonFolder || addonFolderRepairTimer !== null ||
+          addonFolderRepairAttempts >= 8 || !addonHostByAppId.size) return;
+      addonFolderRepairTimer = ctx.setTimeout(() => {
+        addonFolderRepairTimer = null;
+        if (addonFolderDisposed || !isAddonTabIdBridgeEnabled() || !addonHostByAppId.size) return;
+        addonFolderRepairAttempts++;
+        repairingAddonFolder = true;
+        let complete = true;
+        try {
+          for (const record of addonHostByAppId.values()) {
+            if (!record.tab?.isConnected || record.removing) continue;
+            if (!putAddonHostTabInFolder(record.tab)) { complete = false; break; }
+          }
+          ensureSafeSelectedTabForAddonHosts();
+        } finally {
+          repairingAddonFolder = false;
+        }
+        if (complete) addonFolderRepairAttempts = 0;
+        else scheduleAddonFolderRepair();
+      }, 500);
+    }
+    ctx.registerCleanup(() => {
+      addonFolderDisposed = true;
+      if (addonFolderRepairTimer !== null) ctx.clearTimeout(addonFolderRepairTimer);
+      addonFolderRepairTimer = null;
+    });
+
     function putAddonHostTabInFolder(tab) {
       if (!tab || !window.gBrowser) return null;
+      // Apply fallback ownership before invoking native code, so failed or late
+      // folder creation cannot expose this backing tab as an ordinary pin.
+      tab.setAttribute("bgalazka-addon-host-fallback", "true");
       let folder = findAddonHostFolder();
 
       try {
@@ -961,6 +998,7 @@
             tab.getAttribute?.("zen-workspace-id") ||
             window.gZenWorkspaces?.activeWorkspace ||
             undefined;
+          if (!tab.pinned) gBrowser.pinTab(tab);
           folder = window.gZenFolders.createFolder([tab], {
             id: ADDON_HOST_FOLDER_ID,
             label: ADDON_HOST_FOLDER_LABEL,
@@ -968,6 +1006,9 @@
             collapsed: true,
             workspaceId,
           });
+          if (!folder?.isConnected ||
+              !(folder.isZenFolder || folder.localName === "zen-folder"))
+            throw new Error("Zen folder creation did not return a connected folder");
           addonHostFolder = folder;
           tab.removeAttribute("bgalazka-addon-host-fallback");
           keepAddonHostFolderCollapsed(folder);
@@ -987,6 +1028,7 @@
         if (!tab.pinned) gBrowser.pinTab(tab);
         tab.setAttribute("bgalazka-addon-host-fallback", "true");
       } catch (_) {}
+      scheduleAddonFolderRepair();
       return null;
     }
 

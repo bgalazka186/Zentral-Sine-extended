@@ -253,19 +253,19 @@
     "property": "zen.workspace.bgalazka.appsbar_history",
     "label": "Apps Bar: Show History Button",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.appsbar_downloads",
     "label": "Apps Bar: Show Downloads Button",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.appsbar_bookmarks",
     "label": "Apps Bar: Show Bookmarks Button",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "type": "text",
@@ -1331,7 +1331,7 @@
     "property": "zen.workspace.zentral.startup.enabled",
     "label": "Enable Load at Startup in essential and pinned tab right-click menus",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "type": "text",
@@ -5474,7 +5474,7 @@
     "property": "zen.workspace.bgalazka.opacity_unpinned",
     "label": "Whole-Panel Opacity: Unpinned (%)",
     "type": "dropdown",
-    "defaultValue": 92,
+    "defaultValue": 100,
     "options": [
       {
         "label": "10",
@@ -5518,7 +5518,7 @@
     "property": "zen.workspace.bgalazka.opacity_pinned_focus",
     "label": "Whole-Panel Opacity: Pinned and Focused (%)",
     "type": "dropdown",
-    "defaultValue": 85,
+    "defaultValue": 95,
     "options": [
       {
         "label": "10",
@@ -5553,6 +5553,10 @@
         "value": 92
       },
       {
+        "label": "95",
+        "value": 95
+      },
+      {
         "label": "100",
         "value": 100
       }
@@ -5562,7 +5566,7 @@
     "property": "zen.workspace.bgalazka.opacity_pinned_blur",
     "label": "Whole-Panel Opacity: Pinned and Unfocused (%)",
     "type": "dropdown",
-    "defaultValue": 45,
+    "defaultValue": 90,
     "options": [
       {
         "label": "10",
@@ -8233,7 +8237,7 @@
     "property": "zen.workspace.bgalazka.show_triple_style_repair",
     "label": "Show Triple View style repair button",
     "type": "checkbox",
-    "defaultValue": false
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.bgalazka.panel_retry_limit",
@@ -8590,6 +8594,24 @@
     "label": "Stabilize compact tab sidebar hover (experimental)",
     "type": "checkbox",
     "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal",
+    "label": "Reveal compact tab sidebar on window entry (experimental)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal.panels",
+    "label": "Apply window entry reveal to autohidden panels",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal.panels.only_when_not_pushing",
+    "label": "Only enhance panels when not pushing the webpage",
+    "type": "checkbox",
+    "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px",

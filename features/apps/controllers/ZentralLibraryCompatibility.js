@@ -43,11 +43,7 @@
         libraryPanelGuardEnabled() {
           return (
             !this._destroyed &&
-            !!Core.getPref(Constants.Apps.PREF_ENABLED, true) &&
-            !Services.prefs.getBoolPref(
-              "zen.workspace.zentral.video_preview.disable_experimental_bridge",
-              true,
-            )
+            !!Core.getPref(Constants.Apps.PREF_ENABLED, true)
           );
         },
         closePanelsForLibrary() {
@@ -70,9 +66,12 @@
           if (!this.libraryPanelGuardEnabled()) return;
           const library = document.querySelector("zen-library[open]");
           if (!library || access.libraryYieldingToPanel) return;
+          // Without an opted-in native bridge, Library owns the space. The
+          // open-attribute observer closes any panel opened alongside it.
+          if (typeof access.libraryGuardAPI?.close !== "function") return;
           access.libraryYieldingToPanel = true;
           try {
-            access.libraryGuardAPI?.close();
+            access.libraryGuardAPI.close();
           } catch (error) {
             access.libraryYieldingToPanel = false;
             console.warn("[ZentralApps] Could not close Zen Library:", error);
@@ -91,25 +90,31 @@
           this.removeLibraryPanelGuard();
           if (!this.libraryPanelGuardEnabled()) return;
           try {
-            // This module is window-scoped, as in Zen's native command handler.
-            const { ZenLibrary } = ChromeUtils.importESModule(
-              "moz-src:///zen/library/ZenLibrary.mjs",
-              { global: "current" },
-            );
-            if (
-              typeof ZenLibrary?.animateProgress !== "function" ||
-              typeof ZenLibrary?.close !== "function"
-            )
-              return;
-            access.libraryGuardAPI = ZenLibrary;
-            const original = ZenLibrary.animateProgress;
-            const apps = this;
-            access.libraryGuardOriginalAnimation = original;
-            access.libraryGuardAnimation = function (target, ...args) {
-              if (target > 0) apps.closePanelsForLibrary();
-              return original.call(this, target, ...args);
-            };
-            ZenLibrary.animateProgress = access.libraryGuardAnimation;
+            // Native animation hooks are optional. DOM collision handling
+            // must remain active on default settings and unsupported Zen builds.
+            if (!Services.prefs.getBoolPref(
+              "zen.workspace.zentral.video_preview.disable_experimental_bridge", true,
+            )) {
+              try {
+                const { ZenLibrary } = ChromeUtils.importESModule(
+                  "moz-src:///zen/library/ZenLibrary.mjs", { global: "current" },
+                );
+                if (typeof ZenLibrary?.animateProgress === "function" &&
+                    typeof ZenLibrary?.close === "function") {
+                  access.libraryGuardAPI = ZenLibrary;
+                  const original = ZenLibrary.animateProgress;
+                  const apps = this;
+                  access.libraryGuardOriginalAnimation = original;
+                  access.libraryGuardAnimation = function (target, ...args) {
+                    if (target > 0) apps.closePanelsForLibrary();
+                    return original.call(this, target, ...args);
+                  };
+                  ZenLibrary.animateProgress = access.libraryGuardAnimation;
+                }
+              } catch (error) {
+                Core.log("ZentralApps", "Native Library animation hook unavailable:", error);
+              }
+            }
             access.libraryGuardStyle = document.createElement("style");
             access.libraryGuardStyle.id = "zentral-library-panel-guard";
             // Library keeps [open] throughout its spring closing animation.
@@ -166,8 +171,8 @@
           access.libraryGuardObserver?.disconnect();
           access.libraryGuardObserver = null;
           if (
-            access.libraryGuardAPI?.animateProgress ===
-            access.libraryGuardAnimation
+            access.libraryGuardAPI &&
+            access.libraryGuardAPI.animateProgress === access.libraryGuardAnimation
           ) {
             access.libraryGuardAPI.animateProgress =
               access.libraryGuardOriginalAnimation;

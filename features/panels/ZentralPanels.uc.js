@@ -375,17 +375,17 @@
         {
           pref: "zen.workspace.bgalazka.appsbar_history",
           attr: "bgalazka-appsbar-history",
-          defaultVal: false,
+          defaultVal: true,
         },
         {
           pref: "zen.workspace.bgalazka.appsbar_downloads",
           attr: "bgalazka-appsbar-downloads",
-          defaultVal: false,
+          defaultVal: true,
         },
         {
           pref: "zen.workspace.bgalazka.appsbar_bookmarks",
           attr: "bgalazka-appsbar-bookmarks",
-          defaultVal: false,
+          defaultVal: true,
         },
 
         {
@@ -459,6 +459,11 @@
       // linked pairs, shortcuts, private URLs, panel coordinates and viewport
       // dimensions out of this table. Existing saved preferences always win.
       const PROFILE_DEFAULTS = Object.freeze({
+        "zen.workspace.zentral.startup.enabled": true,
+        "zen.workspace.bgalazka.appsbar_history": true,
+        "zen.workspace.bgalazka.appsbar_downloads": true,
+        "zen.workspace.bgalazka.appsbar_bookmarks": true,
+        "zen.workspace.bgalazka.show_triple_style_repair": true,
         "zen.workspace.bgalazka.appsbar_library": true,
         "zen.workspace.bgalazka.triple_inward_toolbars": true,
         [EXT_PREFS.TRANSLUCENCY]: true,
@@ -590,15 +595,15 @@
         const root = document.documentElement;
         root.style.setProperty(
           "--bg-opacity-unpinned",
-          getPref(EXT_PREFS.OPACITY_UNPINNED, 92) + "%",
+          getPref(EXT_PREFS.OPACITY_UNPINNED, 100) + "%",
         );
         root.style.setProperty(
           "--bg-opacity-pinned-focus",
-          getPref(EXT_PREFS.OPACITY_PINNED_FOCUS, 85) + "%",
+          getPref(EXT_PREFS.OPACITY_PINNED_FOCUS, 95) + "%",
         );
         root.style.setProperty(
           "--bg-opacity-pinned-blur",
-          getPref(EXT_PREFS.OPACITY_PINNED_BLUR, 45) + "%",
+          getPref(EXT_PREFS.OPACITY_PINNED_BLUR, 90) + "%",
         );
         // Pill vertical offset, -50 to 50, 0 = centered. NOTE: EXT_PREFS.PILL_POSITION
         // is only merged in further below (once BGALAZKA_EXT_PREFS exists), so the

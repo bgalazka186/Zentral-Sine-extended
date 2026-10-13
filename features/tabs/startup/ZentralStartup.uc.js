@@ -52,7 +52,7 @@
     const queue = new Set();
     const attempted = new WeakSet();
     const cleanups = [];
-    const enabled = () => !stopped && Services.prefs.getBoolPref(PREF, false);
+    const enabled = () => !stopped && Services.prefs.getBoolPref(PREF, true);
     const listen = (target, type, handler, options) => {
       target.addEventListener(type, handler, options);
       cleanups.push(() => target.removeEventListener(type, handler, options));

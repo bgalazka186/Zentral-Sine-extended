@@ -11,26 +11,58 @@
 
 ### Extra Features:
 
-- **Dynamic Translucency:** sometimes a bit of transparency is nice, you can now control how much transparency your panel will have in normal pinned and pinned unfocused state.
-- **Opposite-Side Docking:** i wanted to have buttons for panels on normal sidebar, but in compact mode panel moved a bit too much, i decided having it on opposite side would be nice .
-- **Corner-Docked Tiles:** by default they taking bit space and if you are used to essentials, they not that intuitive (change order of your panels first i recommend making them match your essencials, then enable this option).
-  **^Also now open any tab as panel clicking on favicon^** toggleable in settings, i guess it will be uncompatyble with that one mod that moves unload button there for normal tabs (just use middle mouse button to unload)
-- **Push sites when pinned(Dual-View):** feature that been in Vivaldi for years, similar to split view but a bit worse (much more accessible for panels)
-- **Disable whatever elements you dont want from pill menu:** you dont need reload button? pill menu is to cluttered? just hide it
-- **Switch UserAgent to Mobile** easy to add feature that is avalible in vivaldi web panels, useless on most sites, it shines on Instagram
-- **Basic navigation features for panels** back/forward/url bar, things like that
-- **Vertical Resize and change vertical position** making it fully able to change position would require big change in core mod
-- **Drag panel and resize in 2D** 3D when??
-- **Keybinds adn disableing key press propagation** important if you want to close it with ESC button
-- **Firefox Containers and Clear Cache & Cookies of panels** i dont use it, heard people like it
-- **Better Addon support** including Workaround for Zen internet addon, still not everything might work
-- **Triple view and SuperPin** hold pin or dual view button in pill menu and then click other panel
-- **Video mini in sidebar** only Month ago Zenslop mod worked and i found it pretty nice, a lot of credit to them
-- **Few CSS tweaks to sidebar** super compact tabs and folders
+This fork has grown quite a bit beyond the original tweaks. Most extras can be configured in **Zentral Settings**; experimental options are marked separately.
 
-### Extra Bugfix:
+#### Panels, layout and navigation
 
--**Right click menu closing panel:** this one annoyed me a bit, now i can state that this extension maybe introduces bugs, but it patches some too,
+- **Dynamic translucency:** separate opacity levels for unpinned, pinned-and-focused, and pinned-but-unfocused panels, plus background blur and optional black backing for readability.
+- **Opposite-side docking and edge attachment:** keep launchers in the normal sidebar while opening panels on the other side, or attach panels to the adjacent bar/window edge.
+- **Move and resize panels:** drag panels in two dimensions, resize from multiple sides, and adjust horizontal offsets, vertical position, and top/bottom height. Still no 3D, sorry.
+- **Dual View, Triple View and SuperPin:** push the webpage aside with Dual View, use two panels in Triple View, or keep a separate movable second panel with SuperPin. Hold the Dual View or Pin button, then choose another panel. Triple View has its own webpage-push choice, divider, swap and close/unlink controls.
+- **Panel autohide:** keep an app loaded while hiding its panel until needed. Adjust the reveal delay, activation width and hide delay; choose whether the inside hover area should reveal it. The space reserved beside the webpage is controlled separately from the hover activation width.
+- **Pill menu customization:** hide individual buttons or the whole pill, adjust its position and opacity, or use a small idle indicator when the full menu is too much.
+- **Navigation, search and zoom in panels:** back/forward, reload, an editable URL/search bar, zoom controls, custom search templates and quick-switch search targets. Place the toolbar at the top or bottom, or show it only on hover.
+- **Load and open Zentral panels at startup:** in a panel launcher's context menu, **Load at Startup** loads its app in the background. The separate **Open at Startup** submenu selects a panel or an existing linked Triple View to open with Autohide; panel Autohide must be enabled. **Smart Sleep** delays automatic preloading rather than cancelling your startup selections.
+- **Panel audio controls:** optional audio indicators and quick mute controls, so a noisy panel does not need a full visit just to silence it.
+- **Firefox Containers and mobile mode:** choose a container or switch a panel's user agent to mobile. **Clear Panel Cache & Cookies** clears the configured site's cookies and caches within that container, so other tabs or panels sharing that site and container can be affected. Changing the user agent does not guarantee a mobile layout.
+
+#### Tabs and sidebar
+
+- **Panels on Essential tabs:** place corner launchers on Essentials, with optional hover-only tiles and notification badges. I still recommend arranging your panels to match your Essentials before enabling this.
+- **Open tabs as panels:** optional favicon launchers let you open a tab's page in a panel. Mods that put another action on the favicon may conflict with this.
+- **Drag without activating tabs:** reorder background tabs, folders and split-view groups while keeping the current tab active and sleeping tabs asleep. Normal clicks still select tabs.
+- **Middle-click to unload:** optionally unload a loaded normal tab instead of closing it. Middle-clicking an already unloaded tab keeps the normal close behavior.
+- **Optional native-tab startup loading:** a separate, opt-in **Load at Startup** item in Essential and pinned-tab context menus wakes selected sleeping browser tabs after session restoration. This is independent of the Zentral panel startup controls above.
+- **Sidebar density and appearance:** compact tabs and folders, adjustable row heights and spacing, Essentials sizing, icon sizes and smaller sidebar controls. Optional Arc 2.0 appearance tweaks cover the regular sidebar and Zen Library; RSS tweaks can hide empty live folders and compact their headers.
+
+#### Sidebar video
+
+- **Video preview and playback controls:** preview a page's video in the sidebar, select or pin a source, seek through playback, mirror supported captions, resize the preview, or switch to a compact card. The idea was inspired by Zenslop's video preview; credit to them.
+- **Native video cloning:** show the source video's decoded output directly in the sidebar using Firefox's native visual cloning, where supported. This preserves source quality without repeatedly capturing still images.
+- **Video frames and other renderers:** Video Frames builds the preview from repeated captures of the current video frame, with adjustable capture rate and resolution. Direct video streams, canvas streams and page snapshots provide other rendering or fallback choices.
+- **Renderer and performance choices:** automatic or selected preview methods, fallback options, capture size/rate controls and settings to reduce or suspend work while the preview/sidebar is hidden. Different sites and video sources can behave differently.
+
+#### Settings and compatibility
+
+- **Customizable settings interface:** choose Atelier or Classic styling and adjust colors, opacity, borders, corner radius, spacing and control styles.
+- **Settings backups:** import/export the look separately or back up all supported settings, so a setup is easier to keep and reuse.
+- **Shortcuts and input protection:** configurable panel shortcuts for closing, navigation, zoom and layout actions. Enabling these shortcuts also enables the input shield, which routes supported navigation inputs to the panel and guards against actions reaching the main tab. Disabling shortcuts does not automatically disable the shield.
+- **Add-on compatibility options:** optional real tab IDs for web panels, an inspection folder for their host tabs, and an experimental Zen Internet CSS workaround. These improve specific integrations; they do not make every add-on compatible.
+- **Optional feature management:** developer controls can disable optional modules and styles, with diagnostics available for troubleshooting. Core dependencies remain protected unless the explicit unsafe override is enabled.
+- **Changed mod files structure** now it should be easier for anyone who wants to get some parts of it and add to their own setup :D
+
+### Experimental Features (Advanced Settings):
+
+These options are experimental and separate from the regular hover behavior. Availability and reliability can depend on Zen and the pointer events it delivers.
+
+- **Outside-window panel reveal:** optionally reveal an already open autohidden panel when leaving through its docked window edge, with outside-pointer tracking where supported and timed hiding as a fallback.
+- **Compact tab sidebar hover stabilization:** under **Advanced → Experimental**, **Stabilize Compact Tab Sidebar Hover (Experimental)** is the master switch for the compact-sidebar hover enhancements and the optional return-reveal behavior below. Turn it off to disable this group if a browser update causes trouble.
+- **Reveal on return, with brief protection:** an optional enhancement reveals the tab sidebar when the cursor returns through its side of the window and briefly protects it from hiding during a quick out-and-back movement. It keeps the normal hover activation area unchanged, but cannot guarantee that every crossing will be detected.
+- **Matching panel behavior:** optionally apply return reveal to already open autohidden panels too. A separate restriction, enabled by default, limits this enhancement to panels that are not pushing the webpage. Both options depend on the master switch above; the separate outside-window panel reveal setting remains independent.
+
+### Extra Bug Fixes:
+
+- **Right-click menus closing panels:** fixes the original issue where opening a right-click menu closed the panel.
 
 ### Example setup [v2.0.9]
 
@@ -64,6 +96,8 @@
 - **Support the Original Dev:** If you enjoy Zentral, please support the original author via their Ko-fi / upstream channels linked in the settings menu.
 - **Bug Reports:** **Do not open issues on the upstream Zentral repository for problems encountered while using this fork.** Please file all issues, bugs, and feature requests directly in this repository's Issues tab.
 - **License:** Licensed under [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+> **Original Zentral documentation:** The **Overview and all sections below it** are retained from Zentral before this fork. My additions are documented above. The inherited text is preserved as an upstream reference; its installation links, version references and repository layout may differ from this fork.
 
 <p align="center">
   <img src="assets/Zentral%20Logo.png" alt="Zentral Logo" width="140" height="140" />

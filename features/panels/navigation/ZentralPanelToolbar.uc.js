@@ -964,7 +964,7 @@
 
       if (repairStyleBtn) {
         const showRepair =
-          ctx.getPref(ctx.BGALAZKA_EXT_PREFS.SHOW_TRIPLE_STYLE_REPAIR, false) &&
+          ctx.getPref(ctx.BGALAZKA_EXT_PREFS.SHOW_TRIPLE_STYLE_REPAIR, true) &&
           ctx.zenCssEnabled() &&
           document.documentElement.getAttribute("bgalazka-triple-view") ===
             "true" &&

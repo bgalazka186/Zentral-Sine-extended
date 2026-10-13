@@ -17,19 +17,19 @@
       "property": "zen.workspace.bgalazka.appsbar_history",
       "label": "Apps Bar: Show History Button",
       "type": "checkbox",
-      "defaultValue": false
+      "defaultValue": true
     },
     {
       "property": "zen.workspace.bgalazka.appsbar_downloads",
       "label": "Apps Bar: Show Downloads Button",
       "type": "checkbox",
-      "defaultValue": false
+      "defaultValue": true
     },
     {
       "property": "zen.workspace.bgalazka.appsbar_bookmarks",
       "label": "Apps Bar: Show Bookmarks Button",
       "type": "checkbox",
-      "defaultValue": false
+      "defaultValue": true
     },
     {
       "property": "zen.workspace.bgalazka.hover_reveal_panel",
@@ -463,7 +463,7 @@
       "property": "zen.workspace.bgalazka.show_triple_style_repair",
       "label": "Show Triple View style repair button",
       "type": "checkbox",
-      "defaultValue": false
+      "defaultValue": true
     },
     {
       "property": "zen.workspace.bgalazka.panel_retry_limit",

@@ -155,9 +155,9 @@
 
 /* CSS Variable Defaults for Settings-Controlled Translucency */
 :root {
-  --bg-opacity-unpinned: 92%;
-  --bg-opacity-pinned-focus: 85%;
-  --bg-opacity-pinned-blur: 45%;
+  --bg-opacity-unpinned: 100%;
+  --bg-opacity-pinned-focus: 95%;
+  --bg-opacity-pinned-blur: 90%;
   --bgalazka-pill-offset: 0%;
   --bgalazka-pill-peek-color: #4da6ff;
   --bgalazka-pill-peek-opacity: 90%;
@@ -295,10 +295,10 @@
   #zen-app-panel-slider {
   background-color: color-mix(
     in srgb,
-    var(--tabpanels-background-color, #1e1e24) var(--bg-opacity-unpinned, 92%),
+    var(--tabpanels-background-color, #1e1e24) var(--bg-opacity-unpinned, 100%),
     transparent
   ) !important;
-  opacity: var(--bg-opacity-unpinned, 0.92) !important;
+  opacity: var(--bg-opacity-unpinned, 1) !important;
 }
 
 /* Pinned + Hovered or Focused */
@@ -308,10 +308,10 @@
   background-color: color-mix(
     in srgb,
     var(--tabpanels-background-color, #1e1e24)
-      var(--bg-opacity-pinned-focus, 85%),
+      var(--bg-opacity-pinned-focus, 95%),
     transparent
   ) !important;
-  opacity: var(--bg-opacity-pinned-focus, 0.85) !important;
+  opacity: var(--bg-opacity-pinned-focus, 0.95) !important;
 }
 
 /* Pinned + Unfocused */
@@ -321,10 +321,10 @@
   background-color: color-mix(
     in srgb,
     var(--tabpanels-background-color, #1e1e24)
-      var(--bg-opacity-pinned-blur, 45%),
+      var(--bg-opacity-pinned-blur, 90%),
     transparent
   ) !important;
-  opacity: var(--bg-opacity-pinned-blur, 0.45) !important;
+  opacity: var(--bg-opacity-pinned-blur, 0.9) !important;
 }
 
 /* BUG FIX: this rule used to unconditionally force the pill to
