@@ -1280,7 +1280,8 @@
               ctx.PREF_ICONS.HOVER_EYE,
             );
             content.appendChild(tPanelEntry.row);
-            const panelEntryOverlayPref = panelEntryPref + ".only_when_not_pushing";
+            const panelEntryOverlayPref =
+              panelEntryPref + ".only_when_not_pushing";
             const tPanelEntryOverlay = createToggleRow(
               "Only Enhance Panels When Not Pushing the Webpage",
               "Limit panel window-entry reveal and return protection to overlay mode. Automatically pause them while the panel pushes the webpage, including Triple View. Normal panel hover still works. On by default.",
@@ -1295,13 +1296,18 @@
               const disabled = !ctx.getPref(compactHoverPref, false);
               tEntryReveal.input.disabled = disabled;
               tEntryReveal.row.style.opacity = disabled ? "0.5" : "";
-              const panelDisabled = disabled || !ctx.getPref(entryRevealPref, false) ||
+              const panelDisabled =
+                disabled ||
+                !ctx.getPref(entryRevealPref, false) ||
                 !ctx.getPref(ctx.BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false);
               tPanelEntry.input.disabled = panelDisabled;
               tPanelEntry.row.style.opacity = panelDisabled ? "0.5" : "";
-              const overlayDisabled = panelDisabled || !ctx.getPref(panelEntryPref, false);
+              const overlayDisabled =
+                panelDisabled || !ctx.getPref(panelEntryPref, false);
               tPanelEntryOverlay.input.disabled = overlayDisabled;
-              tPanelEntryOverlay.row.style.opacity = overlayDisabled ? "0.5" : "";
+              tPanelEntryOverlay.row.style.opacity = overlayDisabled
+                ? "0.5"
+                : "";
               for (const control of compactHoverSliders) {
                 control.input.disabled = disabled;
                 control.row.style.opacity = disabled ? "0.5" : "";
@@ -1311,9 +1317,18 @@
               "change",
               syncEntryRevealAvailability,
             );
-            tEntryReveal.input.addEventListener("change", syncEntryRevealAvailability);
-            tHoverReveal.input.addEventListener("change", syncEntryRevealAvailability);
-            tPanelEntry.input.addEventListener("change", syncEntryRevealAvailability);
+            tEntryReveal.input.addEventListener(
+              "change",
+              syncEntryRevealAvailability,
+            );
+            tHoverReveal.input.addEventListener(
+              "change",
+              syncEntryRevealAvailability,
+            );
+            tPanelEntry.input.addEventListener(
+              "change",
+              syncEntryRevealAvailability,
+            );
             syncEntryRevealAvailability();
             panel._syncEntryAvailability = syncEntryRevealAvailability;
             panel._toggles.push({
@@ -2445,7 +2460,11 @@
               choice.style.setProperty("--zs-theme-swatch", theme.swatch);
               choice.textContent = theme.name;
               choice.title =
-                "Apply " + theme.name + ". " + (theme.description || "") + " Every value stays editable below";
+                "Apply " +
+                theme.name +
+                ". " +
+                (theme.description || "") +
+                " Every value stays editable below";
               choice.addEventListener("click", () => {
                 for (const [key, value] of Object.entries(LOOK_DEFAULTS)) {
                   // Theme swatches change colors and shapes, not the user's chosen

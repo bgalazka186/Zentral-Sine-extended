@@ -138,9 +138,14 @@
       const crossedSide = right
         ? event.clientX >= windowBox.right - 10
         : event.clientX <= windowBox.left + 10;
-      if (!crossedSide || event.clientY <= windowBox.top + 10 ||
-          event.clientY >= windowBox.bottom - 10 ||
-          event.clientY < box.top || event.clientY > box.bottom) return;
+      if (
+        !crossedSide ||
+        event.clientY <= windowBox.top + 10 ||
+        event.clientY >= windowBox.bottom - 10 ||
+        event.clientY < box.top ||
+        event.clientY > box.bottom
+      )
+        return;
       exitAt = Date.now();
       exitWindowBox = windowBox;
       exitOnRight = right;
@@ -151,18 +156,28 @@
       // Root entry only: ordinary movement over sidebar controls never reveals.
       // Child mouseenter events are also captured here, so reject their targets.
       if (
-        (!fallback && event.target !== root) || !event.isTrusted || !entryListening ||
-        !enabled() || !sidebar || returning ||
-        (!fallback && event.relatedTarget && root.contains(event.relatedTarget)) ||
-        manager._isTabBeingDragged || manager._hasHoveredUrlbar ||
+        (!fallback && event.target !== root) ||
+        !event.isTrusted ||
+        !entryListening ||
+        !enabled() ||
+        !sidebar ||
+        returning ||
+        (!fallback &&
+          event.relatedTarget &&
+          root.contains(event.relatedTarget)) ||
+        manager._isTabBeingDragged ||
+        manager._hasHoveredUrlbar ||
         root.getAttribute("supress-primary-adjustment") === "true"
-      ) return;
+      )
+        return;
       const windowBox = window.windowUtils?.getBoundsWithoutFlushing
         ? window.windowUtils.getBoundsWithoutFlushing(root)
         : root.getBoundingClientRect();
       const box = readBounds(sidebar);
       const right = Boolean(manager.sidebarIsOnRight);
-      const recentExit = exitAt !== null && Date.now() - exitAt <= RECENT_EXIT_MS &&
+      const recentExit =
+        exitAt !== null &&
+        Date.now() - exitAt <= RECENT_EXIT_MS &&
         exitOnRight === right;
       clearEntryExit(); // One return attempt, never an inside hover trigger.
       const side = right ? "right" : "left";
@@ -177,8 +192,10 @@
           !(recentExit && matchingHalf)) ||
         event.clientY <= windowBox.top + 10 ||
         event.clientY >= windowBox.bottom - 10 ||
-        event.clientY < box.top || event.clientY > box.bottom
-      ) return;
+        event.clientY < box.top ||
+        event.clientY > box.bottom
+      )
+        return;
       cancelTimer();
       inside = outside = leaving = false;
       bounds = null;
@@ -194,32 +211,35 @@
       }
       // One bounded timeout per crossing; animation can finish before the
       // final hit-test. No polling, outside tracker, or repeated timer restarts.
-      returnTimer = window.setTimeout(() => {
-        returnTimer = null;
-        returning = false;
-        const point = returnPoint;
-        returnPoint = null;
-        if (!enabled() || !sidebar.hasAttribute("zen-has-hover")) {
-          reset();
-          return;
-        }
-        const visibleBox = readBounds(sidebar);
-        if (point && contains(visibleBox, point)) {
-          inside = true;
-          leaving = false;
-          bounds = visibleBox;
-        } else {
-          reset();
-        }
-      }, Math.max(RETURN_GRACE_MS, keepHoverDelay));
+      returnTimer = window.setTimeout(
+        () => {
+          returnTimer = null;
+          returning = false;
+          const point = returnPoint;
+          returnPoint = null;
+          if (!enabled() || !sidebar.hasAttribute("zen-has-hover")) {
+            reset();
+            return;
+          }
+          const visibleBox = readBounds(sidebar);
+          if (point && contains(visibleBox, point)) {
+            inside = true;
+            leaving = false;
+            bounds = visibleBox;
+          } else {
+            reset();
+          }
+        },
+        Math.max(RETURN_GRACE_MS, keepHoverDelay),
+      );
     }
     function setEntryListener(value) {
       if (entryListening === value) return;
       entryListening = value;
       if (!value) clearEntryExit();
-      document.documentElement[value ? "addEventListener" : "removeEventListener"](
-        "mouseenter", onWindowEnter, true,
-      );
+      document.documentElement[
+        value ? "addEventListener" : "removeEventListener"
+      ]("mouseenter", onWindowEnter, true);
     }
     function onMove(event) {
       if (!event.isTrusted) return;
@@ -346,8 +366,9 @@
       refreshTunables();
       setHooks(Boolean(configured));
       setMovementListeners(Boolean(configured));
-      setEntryListener(Boolean(configured) &&
-        Services.prefs.getBoolPref(ENTRY_PREF, false));
+      setEntryListener(
+        Boolean(configured) && Services.prefs.getBoolPref(ENTRY_PREF, false),
+      );
     }
     function destroy() {
       if (!active) return;
@@ -370,7 +391,8 @@
         (original) =>
           function (element, value, attr = "zen-has-hover") {
             if (
-              active && configured &&
+              active &&
+              configured &&
               element === this.sidebar &&
               value === false &&
               attr === "zen-has-hover"
@@ -405,16 +427,26 @@
         clearEntryExit();
         reset();
       };
-      for (const type of ["deactivate", "resize", "sizemodechange", "dragstart"]) {
+      for (const type of [
+        "deactivate",
+        "resize",
+        "sizemodechange",
+        "dragstart",
+      ]) {
         window.addEventListener(type, onReset, true);
-        hookCleanups.push(() => window.removeEventListener(type, onReset, true));
+        hookCleanups.push(() =>
+          window.removeEventListener(type, onReset, true),
+        );
       }
     }
     try {
       listen(window, "ZenCompactMode:Toggled", refresh);
       listen(window, "unload", destroy);
       const refreshPrefs = new Set([
-        PREF, ENTRY_PREF, "zen.view.compact", "zen.view.use-single-toolbar",
+        PREF,
+        ENTRY_PREF,
+        "zen.view.compact",
+        "zen.view.use-single-toolbar",
         "zen.tabs.vertical.right-side",
         "zen.view.compact.show-sidebar-and-toolbar-on-hover",
         "zen.view.compact.hide-tabbar",
@@ -427,7 +459,9 @@
         },
       };
       for (const pref of [
-        PREF, "zen.view.compact", "zen.view.use-single-toolbar",
+        PREF,
+        "zen.view.compact",
+        "zen.view.use-single-toolbar",
         "zen.tabs.vertical.right-side",
       ]) {
         Services.prefs.addObserver(pref, observer);
@@ -455,7 +489,10 @@
   // has finished initializing. Keep this wait local and bounded; Runtime must
   // not permanently fail an optional feature because its native host is late.
   function start() {
-    let stopped = false, timer = null, cleanup = null, attempts = 0;
+    let stopped = false,
+      timer = null,
+      cleanup = null,
+      attempts = 0;
     const MAX_ATTEMPTS = 24;
     function cancelWait() {
       if (timer !== null) window.clearTimeout(timer);
@@ -463,12 +500,16 @@
     }
     function tryAttach() {
       cancelWait();
-      if (stopped || cleanup || !Services.prefs.getBoolPref(PREF, false)) return;
+      if (stopped || cleanup || !Services.prefs.getBoolPref(PREF, false))
+        return;
       const manager = window.gZenCompactModeManager;
-      const ready = typeof manager?._setElementExpandAttribute === "function" &&
-        manager.sidebar && typeof manager.preference !== "undefined" &&
+      const ready =
+        typeof manager?._setElementExpandAttribute === "function" &&
+        manager.sidebar &&
+        typeof manager.preference !== "undefined" &&
         typeof manager.canHideSidebar !== "undefined" &&
-        (!Services.prefs.getBoolPref("zen.view.compact", false) || manager.preference);
+        (!Services.prefs.getBoolPref("zen.view.compact", false) ||
+          manager.preference);
       if (ready) {
         cleanup = attach();
         return;
@@ -476,7 +517,9 @@
       if (++attempts < MAX_ATTEMPTS) {
         timer = window.setTimeout(tryAttach, attempts < 4 ? 100 : 500);
       } else {
-        console.warn("[Zentral] Compact hover waiting stopped: native compact sidebar unavailable. Toggle the master setting to retry.");
+        console.warn(
+          "[Zentral] Compact hover waiting stopped: native compact sidebar unavailable. Toggle the master setting to retry.",
+        );
       }
     }
     const observer = {

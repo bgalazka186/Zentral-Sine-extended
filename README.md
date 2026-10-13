@@ -120,6 +120,8 @@ These options are experimental and separate from the regular hover behavior. Ava
 
 ---
 
+
+
 ## 📖 Overview
 
 **Zentral** unifies your favorite communication tools, web applications, and tabs into a cohesive, fluidly animated sidebar experience.
