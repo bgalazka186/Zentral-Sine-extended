@@ -11,6 +11,9 @@
   const PREF = "zen.workspace.zentral.experimental.compact_sidebar_hover";
   const MARGIN_PREF = PREF + ".edge_margin_px";
   const GRACE_PREF = PREF + ".exit_grace_ms";
+  const ENTRY_PREF = PREF + ".window_entry_reveal";
+  const RETURN_GRACE_MS = 250;
+  const RECENT_EXIT_MS = 1500;
   const Services =
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
@@ -34,9 +37,19 @@
     let configured = false,
       keepHoverDelay = 0,
       listening = false;
+    let entryListening = false,
+      entryRevealed = false,
+      returning = false,
+      returnTimer = null,
+      returnPoint = null;
+    let exitAt = null,
+      exitWindowBox = null,
+      exitOnRight = false;
     let frameBounds = null,
       boundsFrame = null;
     const cleanups = [];
+    const hookCleanups = [];
+    let hooksInstalled = false;
     const enabled = () => active && configured && !manager._ignoreNextHover;
     const contains = (box, event, m = 0) =>
       box &&
@@ -70,7 +83,12 @@
     function reset(release = true) {
       cancelTimer();
       invalidateBounds();
-      const hadBlocked = blocked;
+      if (returnTimer !== null) window.clearTimeout(returnTimer);
+      returnTimer = null;
+      returnPoint = null;
+      returning = false;
+      const hadBlocked = blocked || entryRevealed;
+      entryRevealed = false;
       inside = outside = blocked = leaving = false;
       bounds = null;
       if (release && hadBlocked && manager.sidebar)
@@ -94,7 +112,7 @@
         enumerable: own?.enumerable ?? true,
         value: wrapper,
       });
-      cleanups.push(() => {
+      hookCleanups.push(() => {
         if (manager[key] !== wrapper) return; // Another mod may wrap ours later.
         if (own) Object.defineProperty(manager, key, own);
         else delete manager[key];
@@ -104,10 +122,121 @@
       target.addEventListener(type, callback, true);
       cleanups.push(() => target.removeEventListener(type, callback, true));
     }
+    function clearEntryExit() {
+      exitAt = null;
+      exitWindowBox = null;
+    }
+    function rememberEntryExit(event) {
+      clearEntryExit();
+      if (!entryListening || !enabled() || !manager.sidebar) return;
+      const root = document.documentElement;
+      const windowBox = window.windowUtils?.getBoundsWithoutFlushing
+        ? window.windowUtils.getBoundsWithoutFlushing(root)
+        : root.getBoundingClientRect();
+      const box = readBounds(manager.sidebar);
+      const right = Boolean(manager.sidebarIsOnRight);
+      const crossedSide = right
+        ? event.clientX >= windowBox.right - 10
+        : event.clientX <= windowBox.left + 10;
+      if (!crossedSide || event.clientY <= windowBox.top + 10 ||
+          event.clientY >= windowBox.bottom - 10 ||
+          event.clientY < box.top || event.clientY > box.bottom) return;
+      exitAt = Date.now();
+      exitWindowBox = windowBox;
+      exitOnRight = right;
+    }
+    function onWindowEnter(event, fallback = false) {
+      const root = document.documentElement;
+      const sidebar = manager.sidebar;
+      // Root entry only: ordinary movement over sidebar controls never reveals.
+      // Child mouseenter events are also captured here, so reject their targets.
+      if (
+        (!fallback && event.target !== root) || !event.isTrusted || !entryListening ||
+        !enabled() || !sidebar || returning ||
+        (!fallback && event.relatedTarget && root.contains(event.relatedTarget)) ||
+        manager._isTabBeingDragged || manager._hasHoveredUrlbar ||
+        root.getAttribute("supress-primary-adjustment") === "true"
+      ) return;
+      const windowBox = window.windowUtils?.getBoundsWithoutFlushing
+        ? window.windowUtils.getBoundsWithoutFlushing(root)
+        : root.getBoundingClientRect();
+      const box = readBounds(sidebar);
+      const right = Boolean(manager.sidebarIsOnRight);
+      const recentExit = exitAt !== null && Date.now() - exitAt <= RECENT_EXIT_MS &&
+        exitOnRight === right;
+      clearEntryExit(); // One return attempt, never an inside hover trigger.
+      const side = right ? "right" : "left";
+      const matchingHalf = right
+        ? event.clientX >= (windowBox.left + windowBox.right) / 2
+        : event.clientX <= (windowBox.left + windowBox.right) / 2;
+      // A recent side exit explains a fast return whose first sample lands
+      // deeper inside. Otherwise retain the boundary-only trigger.
+      if (
+        !contains(windowBox, event) ||
+        (Math.abs(event.clientX - windowBox[side]) > 10 &&
+          !(recentExit && matchingHalf)) ||
+        event.clientY <= windowBox.top + 10 ||
+        event.clientY >= windowBox.bottom - 10 ||
+        event.clientY < box.top || event.clientY > box.bottom
+      ) return;
+      cancelTimer();
+      inside = outside = leaving = false;
+      bounds = null;
+      returning = true;
+      returnPoint = { clientX: event.clientX, clientY: event.clientY };
+      if (!sidebar.hasAttribute("zen-has-hover")) {
+        manager._setElementExpandAttribute(sidebar, true);
+        entryRevealed = sidebar.hasAttribute("zen-has-hover");
+      }
+      if (!sidebar.hasAttribute("zen-has-hover")) {
+        reset(false);
+        return;
+      }
+      // One bounded timeout per crossing; animation can finish before the
+      // final hit-test. No polling, outside tracker, or repeated timer restarts.
+      returnTimer = window.setTimeout(() => {
+        returnTimer = null;
+        returning = false;
+        const point = returnPoint;
+        returnPoint = null;
+        if (!enabled() || !sidebar.hasAttribute("zen-has-hover")) {
+          reset();
+          return;
+        }
+        const visibleBox = readBounds(sidebar);
+        if (point && contains(visibleBox, point)) {
+          inside = true;
+          leaving = false;
+          bounds = visibleBox;
+        } else {
+          reset();
+        }
+      }, Math.max(RETURN_GRACE_MS, keepHoverDelay));
+    }
+    function setEntryListener(value) {
+      if (entryListening === value) return;
+      entryListening = value;
+      if (!value) clearEntryExit();
+      document.documentElement[value ? "addEventListener" : "removeEventListener"](
+        "mouseenter", onWindowEnter, true,
+      );
+    }
     function onMove(event) {
       if (!event.isTrusted) return;
       if (!enabled()) {
         reset();
+        return;
+      }
+      // Reuse the existing guard listener: only a null check when not armed.
+      if (exitAt !== null && contains(exitWindowBox, event)) {
+        onWindowEnter(event, true);
+        clearEntryExit();
+      }
+      if (returning) {
+        // The bounded return timer owns protection while the sidebar animates.
+        // Update two numbers only; no layout reads or per-event allocation.
+        returnPoint.clientX = event.clientX;
+        returnPoint.clientY = event.clientY;
         return;
       }
       const sidebar = manager.sidebar;
@@ -150,14 +279,20 @@
     }
     function onLeave(event) {
       if (event.target !== document.documentElement || !event.isTrusted) return;
+      // Native visibility cleanup must not erase recent crossing evidence.
+      rememberEntryExit(event);
       if (
         !enabled() ||
-        !(inside || leaving) ||
+        !(inside || leaving || returning) ||
         !manager.sidebar?.hasAttribute("zen-has-hover")
       ) {
         reset();
         return;
       }
+      if (returnTimer !== null) window.clearTimeout(returnTimer);
+      returnTimer = null;
+      returnPoint = null;
+      returning = false;
       inside = false;
       leaving = false;
       outside = true;
@@ -197,6 +332,7 @@
       );
     }
     function refresh() {
+      clearEntryExit();
       reset();
       configured =
         active &&
@@ -208,22 +344,33 @@
           true,
         );
       refreshTunables();
+      setHooks(Boolean(configured));
       setMovementListeners(Boolean(configured));
+      setEntryListener(Boolean(configured) &&
+        Services.prefs.getBoolPref(ENTRY_PREF, false));
     }
     function destroy() {
       if (!active) return;
       active = false;
       setMovementListeners(false);
+      setEntryListener(false);
       reset();
+      setHooks(false);
       for (const cleanup of cleanups.reverse()) cleanup();
     }
-    try {
+    function setHooks(value) {
+      if (hooksInstalled === value) return;
+      hooksInstalled = value;
+      if (!value) {
+        for (const cleanup of hookCleanups.splice(0).reverse()) cleanup();
+        return;
+      }
       wrap(
         "_setElementExpandAttribute",
         (original) =>
           function (element, value, attr = "zen-has-hover") {
             if (
-              active &&
+              active && configured &&
               element === this.sidebar &&
               value === false &&
               attr === "zen-has-hover"
@@ -231,7 +378,7 @@
               if (
                 enabled() &&
                 element.hasAttribute(attr) &&
-                (inside || outside || leaving)
+                (inside || outside || leaving || returning)
               ) {
                 blocked = true;
                 return;
@@ -249,28 +396,39 @@
           key,
           (original) =>
             function (...args) {
-              if (active) reset();
+              if (active && configured) reset();
               return original.apply(this, args);
             },
         );
       }
-      for (const type of [
-        "deactivate",
-        "resize",
-        "sizemodechange",
-        "dragstart",
-      ])
-        listen(window, type, () => reset());
+      const onReset = () => {
+        clearEntryExit();
+        reset();
+      };
+      for (const type of ["deactivate", "resize", "sizemodechange", "dragstart"]) {
+        window.addEventListener(type, onReset, true);
+        hookCleanups.push(() => window.removeEventListener(type, onReset, true));
+      }
+    }
+    try {
       listen(window, "ZenCompactMode:Toggled", refresh);
       listen(window, "unload", destroy);
-      const observer = { observe: refresh };
-      for (const pref of [
-        PREF,
-        "zen.view.compact",
-        "zen.view.use-single-toolbar",
+      const refreshPrefs = new Set([
+        PREF, ENTRY_PREF, "zen.view.compact", "zen.view.use-single-toolbar",
         "zen.tabs.vertical.right-side",
         "zen.view.compact.show-sidebar-and-toolbar-on-hover",
         "zen.view.compact.hide-tabbar",
+      ]);
+      // Preference observers match prefixes. Ignore panel-only settings and
+      // sliders here, so changing them does not collapse a protected sidebar.
+      const observer = {
+        observe(subject, topic, pref) {
+          if (refreshPrefs.has(pref)) refresh();
+        },
+      };
+      for (const pref of [
+        PREF, "zen.view.compact", "zen.view.use-single-toolbar",
+        "zen.tabs.vertical.right-side",
       ]) {
         Services.prefs.addObserver(pref, observer);
         cleanups.push(() => Services.prefs.removeObserver(pref, observer));

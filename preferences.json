@@ -8592,6 +8592,24 @@
     "defaultValue": false
   },
   {
+    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal",
+    "label": "Reveal compact tab sidebar on window entry (experimental)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal.panels",
+    "label": "Apply window entry reveal to autohidden panels",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal.panels.only_when_not_pushing",
+    "label": "Only enhance panels when not pushing the webpage",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px",
     "label": "Compact sidebar edge tolerance (px)",
     "type": "dropdown",

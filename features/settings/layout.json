@@ -862,6 +862,9 @@
       "size": "18px"
     },
     "zen.workspace.zentral.experimental.compact_sidebar_hover",
+    "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal",
+    "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal.panels",
+    "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal.panels.only_when_not_pushing",
     "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px",
     "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms"
   ]

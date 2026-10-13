@@ -48,6 +48,7 @@
     }) {
       let hoverBoundRoot = null;
       let hoverHideTimer = null;
+      let panelEntryHeld = false;
       let hoverRevealFrame = null;
       let hoverRevealTimer = null;
       let hoverRevealSurface = null;
@@ -603,7 +604,7 @@
           !hoverPanelAvailable() ||
           !getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) ||
           hoverResizing ||
-          panelOutsideHeld || panelOutsidePending != null ||
+          panelEntryHeld || panelOutsideHeld || panelOutsidePending != null ||
           hoverMenuVisible() ||
           hoverRevealLedgeBounds ||
           isAppsBarHoverSurfaceHovered()
@@ -620,7 +621,7 @@
               hoverRevealLedgeBounds ||
               isAppsBarHoverSurfaceHovered() ||
               hoverResizing ||
-              panelOutsideHeld || panelOutsidePending != null ||
+              panelEntryHeld || panelOutsideHeld || panelOutsidePending != null ||
               hoverMenuVisible()
             )
               return;
@@ -979,6 +980,172 @@
         document.documentElement.removeAttribute("bgalazka-hover-panel-hidden");
         window.Zentral?.Apps?.syncPanelAutohideVisibility?.();
       });
+
+      // Optional outside -> inside entry reveal. Independent of the normal
+      // hover ledge: only temporary first-return listeners; no polling/tracker.
+      const compactHoverPref = "zen.workspace.zentral.experimental.compact_sidebar_hover";
+      const windowEntryPref = compactHoverPref + ".window_entry_reveal";
+      const panelEntryPref = windowEntryPref + ".panels";
+      const panelEntryOverlayPref = panelEntryPref + ".only_when_not_pushing";
+      let panelEntryAllowed = false;
+      let panelEntryOverlayOnly = true;
+      let panelEntryListening = false;
+      let panelEntryTimer = null;
+      let panelEntryGrace = 250;
+      let panelExitAt = null;
+      let panelExitBox = null;
+      let panelExitSide = null;
+      function clearPanelExit() {
+        if (panelExitAt === null) return;
+        panelExitAt = null;
+        panelExitBox = null;
+        panelExitSide = null;
+        window.removeEventListener("mouseover", onPanelFirstReturn, true);
+        window.removeEventListener("mousemove", onPanelFirstReturn, true);
+      }
+      function onPanelWindowLeave(event) {
+        if (!panelEntryListening || event.target !== document.documentElement ||
+            !event.isTrusted) return;
+        clearPanelExit();
+        const root = document.getElementById("zen-app-panel-root");
+        if (!root?.hasAttribute("open") || root.hasAttribute("closing") ||
+            hoverResizing || hoverMenuVisible()) return;
+        const windowBox = window.windowUtils?.getBoundsWithoutFlushing
+          ? window.windowUtils.getBoundsWithoutFlushing(document.documentElement)
+          : document.documentElement.getBoundingClientRect();
+        const box = window.windowUtils?.getBoundsWithoutFlushing
+          ? window.windowUtils.getBoundsWithoutFlushing(root)
+          : root.getBoundingClientRect();
+        const side = root.getAttribute("data-panel-side") ||
+          (window.Zentral?.Apps?.isPanelAttachedToRight?.() ? "right" : "left");
+        const crossedSide = side === "right"
+          ? event.clientX >= windowBox.right - 10
+          : event.clientX <= windowBox.left + 10;
+        if (!crossedSide || event.clientY <= windowBox.top + 10 ||
+            event.clientY >= windowBox.bottom - 10 ||
+            event.clientY < box.top || event.clientY > box.bottom) return;
+        panelExitAt = Date.now();
+        panelExitBox = windowBox;
+        panelExitSide = side;
+        window.addEventListener("mouseover", onPanelFirstReturn, true);
+        window.addEventListener("mousemove", onPanelFirstReturn, true);
+      }
+      function onPanelFirstReturn(event) {
+        if (!event.isTrusted || panelExitAt === null) return;
+        if (event.clientX < panelExitBox.left || event.clientX > panelExitBox.right ||
+            event.clientY < panelExitBox.top || event.clientY > panelExitBox.bottom) return;
+        onPanelWindowEntry(event, true);
+        clearPanelExit(); // Detach after the first return, successful or not.
+      }
+      function releasePanelEntry(scheduleHide = true) {
+        const held = panelEntryHeld;
+        if (panelEntryTimer !== null) clearTimeout(panelEntryTimer);
+        panelEntryTimer = null;
+        panelEntryHeld = false;
+        if (held && scheduleHide) onHoverRootLeave();
+      }
+      function onPanelWindowEntry(event, fallback = false) {
+        const windowRoot = document.documentElement;
+        if (!panelEntryListening ||
+            (panelEntryOverlayOnly && windowRoot.getAttribute("bgalazka-push-page") === "true") ||
+            (!fallback && event.target !== windowRoot) ||
+            !event.isTrusted ||
+            (!fallback && event.relatedTarget && windowRoot.contains(event.relatedTarget)) ||
+            hoverResizing || hoverMenuVisible() ||
+            window.gZenCompactModeManager?._isTabBeingDragged) return;
+        const root = document.getElementById("zen-app-panel-root");
+        if (!root?.hasAttribute("open") || root.hasAttribute("closing")) return;
+        const read = element => window.windowUtils?.getBoundsWithoutFlushing
+          ? window.windowUtils.getBoundsWithoutFlushing(element)
+          : element.getBoundingClientRect();
+        const windowBox = read(windowRoot);
+        const box = read(root);
+        const side = root.getAttribute("data-panel-side") ||
+          (window.Zentral?.Apps?.isPanelAttachedToRight?.() ? "right" : "left");
+        const recentExit = panelExitAt !== null && Date.now() - panelExitAt <= 1500 &&
+          panelExitSide === side;
+        clearPanelExit();
+        const matchingHalf = side === "right"
+          ? event.clientX >= (windowBox.left + windowBox.right) / 2
+          : event.clientX <= (windowBox.left + windowBox.right) / 2;
+        if (event.clientX < windowBox.left || event.clientX > windowBox.right ||
+            (Math.abs(event.clientX - windowBox[side]) > 10 && !(recentExit && matchingHalf)) ||
+            event.clientY <= windowBox.top + 10 ||
+            event.clientY >= windowBox.bottom - 10 ||
+            event.clientY < box.top || event.clientY > box.bottom) return;
+        releasePanelEntry(false);
+        clearHoverHide();
+        panelEntryHeld = true;
+        setHoverPanelHidden(false);
+        panelEntryTimer = setTimeout(() => {
+          panelEntryTimer = null;
+          panelEntryHeld = false;
+          // Existing hover, resize, typing and popup rules decide whether to
+          // hide, using the existing panel autohide delay.
+          onHoverRootLeave();
+        }, panelEntryGrace);
+      }
+      function syncPanelEntryListener() {
+        const enabled = panelEntryAllowed && (!panelEntryOverlayOnly ||
+          document.documentElement.getAttribute("bgalazka-push-page") !== "true");
+        if (panelEntryListening === enabled) return;
+        panelEntryListening = enabled;
+        if (!enabled) {
+          clearPanelExit();
+          releasePanelEntry();
+        }
+        const method = enabled ? "addEventListener" : "removeEventListener";
+        document.documentElement[method]("mouseenter", onPanelWindowEntry, true);
+        document.documentElement[method]("mouseleave", onPanelWindowLeave, true);
+        for (const type of ["blur", "deactivate", "resize", "sizemodechange", "dragstart"])
+          window[method](type, clearPanelEntry, true);
+      }
+      const pushStateObserver = new MutationObserver(syncPanelEntryListener);
+      function syncPanelWindowEntry() {
+        panelEntryAllowed = Boolean(getPref(compactHoverPref, false) &&
+          getPref(windowEntryPref, false) && getPref(panelEntryPref, false) &&
+          getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false));
+        panelEntryOverlayOnly = getPref(panelEntryOverlayPref, true);
+        panelEntryGrace = Math.max(250, Math.min(2000,
+          Number(getPref("zen.view.compact.sidebar-keep-hover.duration", 0)) || 0));
+        pushStateObserver.disconnect();
+        if (panelEntryAllowed && panelEntryOverlayOnly) {
+          // This resolved attribute already includes Triple View's push choice.
+          // Hidden panels keep their push mode, avoiding reveal/hide feedback.
+          pushStateObserver.observe(document.documentElement, {
+            attributes: true, attributeFilter: ["bgalazka-push-page"],
+          });
+        }
+        syncPanelEntryListener();
+      }
+      const entryPrefs = [compactHoverPref, BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL,
+        "zen.view.compact.sidebar-keep-hover.duration"];
+      const entrySettings = new Set([compactHoverPref, windowEntryPref, panelEntryPref,
+        panelEntryOverlayPref, BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL,
+        "zen.view.compact.sidebar-keep-hover.duration"]);
+      const entryObserver = {
+        observe(subject, topic, pref) {
+          if (entrySettings.has(pref)) syncPanelWindowEntry();
+        },
+      };
+      for (const pref of entryPrefs) Services.prefs.addObserver(pref, entryObserver);
+      const clearPanelEntry = () => {
+        clearPanelExit();
+        releasePanelEntry();
+      };
+      registerCleanup(() => {
+        panelEntryAllowed = false;
+        panelEntryListening = false;
+        pushStateObserver.disconnect();
+        clearPanelExit();
+        releasePanelEntry(false);
+        document.documentElement.removeEventListener("mouseenter", onPanelWindowEntry, true);
+        document.documentElement.removeEventListener("mouseleave", onPanelWindowLeave, true);
+        for (const pref of entryPrefs) Services.prefs.removeObserver(pref, entryObserver);
+        for (const type of ["blur", "deactivate", "resize", "sizemodechange", "dragstart"])
+          window.removeEventListener(type, clearPanelEntry, true);
+      });
+      syncPanelWindowEntry();
 
       return {
         clearHoverHide,

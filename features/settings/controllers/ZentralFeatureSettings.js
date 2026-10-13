@@ -1253,17 +1253,92 @@
               "zen.workspace.zentral.experimental.compact_sidebar_hover";
             const tCompactHover = createToggleRow(
               "Stabilize Compact Tab Sidebar Hover (Experimental)",
-              "Keep the native tab sidebar steady while moving within it or briefly leaving the window. Window-exit protection lasts up to 1.5 seconds; returning to page content uses the normal sidebar hide delay. Applies immediately. Off by default.",
+              "Master switch for the compact sidebar hover guard and all window-entry enhancements below, including panels. Turn off to restore native sidebar methods and disable these enhancements immediately. Window-exit protection lasts up to 1.5 seconds. Off by default.",
               compactHoverPref,
               null,
               false,
               ctx.PREF_ICONS.TOOLBAR,
             );
             content.appendChild(tCompactHover.row);
+            const entryRevealPref = compactHoverPref + ".window_entry_reveal";
+            const tEntryReveal = createToggleRow(
+              "Reveal Compact Tab Sidebar on Window Entry (Experimental)",
+              "Reveal the tab sidebar when the cursor returns from outside through its side of the window, with 250 ms of return protection (or Zen’s longer keep-hover delay). Normal hover behavior is unchanged. Requires Stabilize Compact Tab Sidebar Hover. Applies immediately. Off by default.",
+              entryRevealPref,
+              null,
+              false,
+              ctx.PREF_ICONS.TOOLBAR,
+            );
+            content.appendChild(tEntryReveal.row);
+            const panelEntryPref = entryRevealPref + ".panels";
+            const tPanelEntry = createToggleRow(
+              "Apply Window Entry Reveal to Autohidden Panels",
+              "Reveal an already open Zentral panel when the cursor enters through its docked window edge, with the same brief return protection. Requires Window Entry Reveal and Autohide Panels. Existing hover areas stay unchanged. Off by default.",
+              panelEntryPref,
+              null,
+              false,
+              ctx.PREF_ICONS.HOVER_EYE,
+            );
+            content.appendChild(tPanelEntry.row);
+            const panelEntryOverlayPref = panelEntryPref + ".only_when_not_pushing";
+            const tPanelEntryOverlay = createToggleRow(
+              "Only Enhance Panels When Not Pushing the Webpage",
+              "Limit panel window-entry reveal and return protection to overlay mode. Automatically pause them while the panel pushes the webpage, including Triple View. Normal panel hover still works. On by default.",
+              panelEntryOverlayPref,
+              null,
+              true,
+              ctx.PREF_ICONS.HOVER_EYE,
+            );
+            content.appendChild(tPanelEntryOverlay.row);
+            const compactHoverSliders = [];
+            const syncEntryRevealAvailability = () => {
+              const disabled = !ctx.getPref(compactHoverPref, false);
+              tEntryReveal.input.disabled = disabled;
+              tEntryReveal.row.style.opacity = disabled ? "0.5" : "";
+              const panelDisabled = disabled || !ctx.getPref(entryRevealPref, false) ||
+                !ctx.getPref(ctx.BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false);
+              tPanelEntry.input.disabled = panelDisabled;
+              tPanelEntry.row.style.opacity = panelDisabled ? "0.5" : "";
+              const overlayDisabled = panelDisabled || !ctx.getPref(panelEntryPref, false);
+              tPanelEntryOverlay.input.disabled = overlayDisabled;
+              tPanelEntryOverlay.row.style.opacity = overlayDisabled ? "0.5" : "";
+              for (const control of compactHoverSliders) {
+                control.input.disabled = disabled;
+                control.row.style.opacity = disabled ? "0.5" : "";
+              }
+            };
+            tCompactHover.input.addEventListener(
+              "change",
+              syncEntryRevealAvailability,
+            );
+            tEntryReveal.input.addEventListener("change", syncEntryRevealAvailability);
+            tHoverReveal.input.addEventListener("change", syncEntryRevealAvailability);
+            tPanelEntry.input.addEventListener("change", syncEntryRevealAvailability);
+            syncEntryRevealAvailability();
+            panel._syncEntryAvailability = syncEntryRevealAvailability;
             panel._toggles.push({
               input: tCompactHover.input,
               pref: compactHoverPref,
               def: false,
+              onSync: syncEntryRevealAvailability,
+            });
+            panel._toggles.push({
+              input: tEntryReveal.input,
+              pref: entryRevealPref,
+              def: false,
+              onSync: syncEntryRevealAvailability,
+            });
+            panel._toggles.push({
+              input: tPanelEntry.input,
+              pref: panelEntryPref,
+              def: false,
+              onSync: syncEntryRevealAvailability,
+            });
+            panel._toggles.push({
+              input: tPanelEntryOverlay.input,
+              pref: panelEntryOverlayPref,
+              def: true,
+              onSync: syncEntryRevealAvailability,
             });
             for (const [label, description, suffix, min, max, def, unit] of [
               [
@@ -1296,6 +1371,7 @@
                 unit,
               );
               content.appendChild(control.row);
+              compactHoverSliders.push(control);
               panel._toggles.push({
                 input: control.input,
                 pref,
@@ -1306,6 +1382,7 @@
                 },
               });
             }
+            syncEntryRevealAvailability();
 
             const tBackgroundTabDrag = createToggleRow(
               "Drag Tabs Without Activating or Loading Them",
@@ -2962,6 +3039,7 @@
             });
           }
 
+          panel._syncEntryAvailability?.();
           panel._syncBacking?.();
           modal.querySelector("#zs-panel-extension-look")?._syncLook?.();
           applyLook();
