@@ -29,7 +29,12 @@
   window.ZentralModuleLoader.define(
     "groups/ZentralGroupsColors",
     function ({ Services, shared, runtime, access, lifecycle }) {
-      const { setTimeout, clearTimeout, requestAnimationFrame, MutationObserver } = lifecycle;
+      const {
+        setTimeout,
+        clearTimeout,
+        requestAnimationFrame,
+        MutationObserver,
+      } = lifecycle;
       const {
         Constants,
         Core,
@@ -314,7 +319,8 @@
               }, 750);
             }
           } finally {
-            if (lifecycle.isCurrent(token)) group._zentralColoringInProgress = false;
+            if (lifecycle.isCurrent(token))
+              group._zentralColoringInProgress = false;
           }
         },
         checkAndApplyFirstTimeGroupColor(group) {
@@ -702,11 +708,15 @@
           }
 
           // Auto Average Favicon Color
-          lifecycle.listen(panel.querySelector("#zentral-tg-btn-auto"), "click", () => {
+          lifecycle.listen(
+            panel.querySelector("#zentral-tg-btn-auto"),
+            "click",
+            () => {
               if (panel._currentGroup && panel._currentGroup._useFaviconColor) {
                 panel._currentGroup._useFaviconColor();
               }
-            });
+            },
+          );
 
           // Draggable Color Picker Logic
           const handle = panel.querySelector("#zentral-tg-drag-handle");
@@ -750,11 +760,18 @@
             window.removeEventListener("mouseup", onColorPickerUp);
           };
 
-          lifecycle.listen(panel.querySelector("#zentral-tg-input-hex"), "input", (e) => {
+          lifecycle.listen(
+            panel.querySelector("#zentral-tg-input-hex"),
+            "input",
+            (e) => {
               const val = e.target.value;
               if (/^#[0-9A-Fa-f]{6}$/.test(val)) applyColor(val);
-            });
-          lifecycle.listen(panel.querySelector("#zentral-tg-input-rgb"), "change", (e) => {
+            },
+          );
+          lifecycle.listen(
+            panel.querySelector("#zentral-tg-input-rgb"),
+            "change",
+            (e) => {
               const parts = e.target.value
                 .split(",")
                 .map((s) => parseInt(s.trim()));
@@ -767,7 +784,8 @@
                     parts.map((n) => n.toString(16).padStart(2, "0")).join(""),
                 );
               }
-            });
+            },
+          );
 
           access.state.colorPickerPanel = panel;
           return panel;

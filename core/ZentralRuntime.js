@@ -1303,15 +1303,24 @@
         owner === "settings"
           ? moduleLoader.has("settings-shell")
           : availability.get(owner) !== false &&
-            ["registered", "active", "dormant"].includes(records.get(owner)?.state),
+            ["registered", "active", "dormant"].includes(
+              records.get(owner)?.state,
+            ),
       );
       if (!available && row.state === "loaded") {
         try {
-          window.windowUtils.removeSheet(row.uri, window.windowUtils.USER_SHEET);
+          window.windowUtils.removeSheet(
+            row.uri,
+            window.windowUtils.USER_SHEET,
+          );
           row.state = "blocked";
           row.reason = "Owner feature disabled";
         } catch (error) {
-          console.warn("[Zentral] Could not remove owner stylesheet", row.id, error);
+          console.warn(
+            "[Zentral] Could not remove owner stylesheet",
+            row.id,
+            error,
+          );
         }
       } else if (available && row.state === "blocked") {
         loadCSS(row);
@@ -1329,7 +1338,9 @@
         id === "settings"
           ? moduleLoader.has("settings-shell")
           : availability.get(id) !== false &&
-            ["registered", "active", "dormant"].includes(records.get(id)?.state),
+            ["registered", "active", "dormant"].includes(
+              records.get(id)?.state,
+            ),
       )
     ) {
       row.state = "blocked";

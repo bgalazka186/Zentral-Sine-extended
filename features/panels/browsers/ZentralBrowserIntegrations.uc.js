@@ -950,18 +950,33 @@
     // One bounded repair queue shared by all hosts. Startup may finish before
     // Zen's folders/workspaces can accept tabs; never poll during normal use.
     function scheduleAddonFolderRepair() {
-      if (!isAddonTabIdBridgeEnabled() || addonFolderDisposed || repairingAddonFolder || addonFolderRepairTimer !== null ||
-          addonFolderRepairAttempts >= 8 || !addonHostByAppId.size) return;
+      if (
+        !isAddonTabIdBridgeEnabled() ||
+        addonFolderDisposed ||
+        repairingAddonFolder ||
+        addonFolderRepairTimer !== null ||
+        addonFolderRepairAttempts >= 8 ||
+        !addonHostByAppId.size
+      )
+        return;
       addonFolderRepairTimer = ctx.setTimeout(() => {
         addonFolderRepairTimer = null;
-        if (addonFolderDisposed || !isAddonTabIdBridgeEnabled() || !addonHostByAppId.size) return;
+        if (
+          addonFolderDisposed ||
+          !isAddonTabIdBridgeEnabled() ||
+          !addonHostByAppId.size
+        )
+          return;
         addonFolderRepairAttempts++;
         repairingAddonFolder = true;
         let complete = true;
         try {
           for (const record of addonHostByAppId.values()) {
             if (!record.tab?.isConnected || record.removing) continue;
-            if (!putAddonHostTabInFolder(record.tab)) { complete = false; break; }
+            if (!putAddonHostTabInFolder(record.tab)) {
+              complete = false;
+              break;
+            }
           }
           ensureSafeSelectedTabForAddonHosts();
         } finally {
@@ -973,7 +988,8 @@
     }
     ctx.registerCleanup(() => {
       addonFolderDisposed = true;
-      if (addonFolderRepairTimer !== null) ctx.clearTimeout(addonFolderRepairTimer);
+      if (addonFolderRepairTimer !== null)
+        ctx.clearTimeout(addonFolderRepairTimer);
       addonFolderRepairTimer = null;
     });
 
@@ -1006,9 +1022,13 @@
             collapsed: true,
             workspaceId,
           });
-          if (!folder?.isConnected ||
-              !(folder.isZenFolder || folder.localName === "zen-folder"))
-            throw new Error("Zen folder creation did not return a connected folder");
+          if (
+            !folder?.isConnected ||
+            !(folder.isZenFolder || folder.localName === "zen-folder")
+          )
+            throw new Error(
+              "Zen folder creation did not return a connected folder",
+            );
           addonHostFolder = folder;
           tab.removeAttribute("bgalazka-addon-host-fallback");
           keepAddonHostFolderCollapsed(folder);

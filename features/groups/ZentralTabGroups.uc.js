@@ -70,10 +70,14 @@
         SVG_STRINGS,
         WELL_KNOWN_SERVICES,
       } = shared;
-      const lifecycle = window.ZentralModuleLoader.create("groups/ZentralGroupsLifecycle");
+      const lifecycle = window.ZentralModuleLoader.create(
+        "groups/ZentralGroupsLifecycle",
+      );
       const { setTimeout, clearTimeout, MutationObserver } = lifecycle;
       class ZentralTabGroups {
-        get enabled() { return lifecycle.active; }
+        get enabled() {
+          return lifecycle.active;
+        }
 
         /** Compatibility protections share the existing experimental master switch. */
 
@@ -741,12 +745,14 @@
           this.processExistingGroups();
           this.setupTabOpenHandler();
           this.hookAddTab();
-          lifecycle.listen(document,
+          lifecycle.listen(
+            document,
             "TabGroupCreate",
             this.onTabGroupCreate,
             true,
           );
-          lifecycle.listen(document,
+          lifecycle.listen(
+            document,
             "tabgroupcreated",
             this.onTabGroupCreate,
             true,
@@ -758,12 +764,14 @@
             if (group && !this.#isRestoring)
               this.checkAndApplyFirstTimeGroupColor(group);
           };
-          lifecycle.listen(document,
+          lifecycle.listen(
+            document,
             "TabGroupCreateByUser",
             this.#groupColorEventListener,
             true,
           );
-          lifecycle.listen(document,
+          lifecycle.listen(
+            document,
             "TabGroupUpdate",
             this.#groupColorEventListener,
             true,
@@ -837,15 +845,18 @@
               ).forEach((g) => this.processGroup(g));
             } catch (_) {}
           };
-          lifecycle.listen(window,
+          lifecycle.listen(
+            window,
             "zen-workspace-switched",
             this.#workspaceSwitchListener,
           );
-          lifecycle.listen(window,
+          lifecycle.listen(
+            window,
             "zen-workspace-changed",
             this.#workspaceSwitchListener,
           );
-          lifecycle.listen(window,
+          lifecycle.listen(
+            window,
             "zen-workspaces-change",
             this.#workspaceSwitchListener,
           );

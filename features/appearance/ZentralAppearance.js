@@ -168,10 +168,16 @@
     });
     // Presets only write values that also have individual controls below.
     const LOOK_THEMES = Object.freeze([
-      { name: "Default", description: "The original neutral Atelier look.", swatch: "#a5bec0", values: {} },
+      {
+        name: "Default",
+        description: "The original neutral Atelier look.",
+        swatch: "#a5bec0",
+        values: {},
+      },
       {
         name: "Graphite",
-        description: "Cool charcoal, quiet silver-blue accents, crisp outlines.",
+        description:
+          "Cool charcoal, quiet silver-blue accents, crisp outlines.",
         swatch: "#a9bfd7",
         values: {
           [LOOK_PREFS.CANVAS]: "#15191e",
@@ -241,7 +247,8 @@
       },
       {
         name: "Fern",
-        description: "Deep forest greens and pale sage, with softer filled controls.",
+        description:
+          "Deep forest greens and pale sage, with softer filled controls.",
         swatch: "#acd5ad",
         values: {
           [LOOK_PREFS.CANVAS]: "#111d17",
@@ -594,7 +601,10 @@
             : clamped + "px",
         );
         if (key === "FOLDER_ICON_SIZE")
-          root.style.setProperty("--bgalazka-look-folder-icon-scale", String(clamped / 20));
+          root.style.setProperty(
+            "--bgalazka-look-folder-icon-scale",
+            String(clamped / 20),
+          );
       }
     };
     // A visual preference error must not halt panel hooks or Settings loading.

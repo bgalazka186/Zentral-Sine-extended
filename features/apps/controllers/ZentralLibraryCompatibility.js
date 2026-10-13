@@ -92,15 +92,21 @@
           try {
             // Native animation hooks are optional. DOM collision handling
             // must remain active on default settings and unsupported Zen builds.
-            if (!Services.prefs.getBoolPref(
-              "zen.workspace.zentral.video_preview.disable_experimental_bridge", true,
-            )) {
+            if (
+              !Services.prefs.getBoolPref(
+                "zen.workspace.zentral.video_preview.disable_experimental_bridge",
+                true,
+              )
+            ) {
               try {
                 const { ZenLibrary } = ChromeUtils.importESModule(
-                  "moz-src:///zen/library/ZenLibrary.mjs", { global: "current" },
+                  "moz-src:///zen/library/ZenLibrary.mjs",
+                  { global: "current" },
                 );
-                if (typeof ZenLibrary?.animateProgress === "function" &&
-                    typeof ZenLibrary?.close === "function") {
+                if (
+                  typeof ZenLibrary?.animateProgress === "function" &&
+                  typeof ZenLibrary?.close === "function"
+                ) {
                   access.libraryGuardAPI = ZenLibrary;
                   const original = ZenLibrary.animateProgress;
                   const apps = this;
@@ -112,7 +118,11 @@
                   ZenLibrary.animateProgress = access.libraryGuardAnimation;
                 }
               } catch (error) {
-                Core.log("ZentralApps", "Native Library animation hook unavailable:", error);
+                Core.log(
+                  "ZentralApps",
+                  "Native Library animation hook unavailable:",
+                  error,
+                );
               }
             }
             access.libraryGuardStyle = document.createElement("style");
@@ -172,7 +182,8 @@
           access.libraryGuardObserver = null;
           if (
             access.libraryGuardAPI &&
-            access.libraryGuardAPI.animateProgress === access.libraryGuardAnimation
+            access.libraryGuardAPI.animateProgress ===
+              access.libraryGuardAnimation
           ) {
             access.libraryGuardAPI.animateProgress =
               access.libraryGuardOriginalAnimation;

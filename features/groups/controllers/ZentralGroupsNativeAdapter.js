@@ -35,7 +35,12 @@
   window.ZentralModuleLoader.define(
     "groups/ZentralGroupsNativeAdapter",
     function ({ Services, shared, runtime, access, lifecycle }) {
-      const { setTimeout, clearTimeout, requestAnimationFrame, MutationObserver } = lifecycle;
+      const {
+        setTimeout,
+        clearTimeout,
+        requestAnimationFrame,
+        MutationObserver,
+      } = lifecycle;
       const {
         Constants,
         Core,
@@ -191,7 +196,8 @@
           };
 
           if (window.gBrowser?.tabContainer) {
-            lifecycle.listen(window.gBrowser.tabContainer,
+            lifecycle.listen(
+              window.gBrowser.tabContainer,
               "TabOpen",
               access.tabOpenListener,
             );
@@ -283,8 +289,12 @@
                     const lc = g.querySelector(
                       ":scope > .tab-group-label-container",
                     );
-                    if (lc && (g.hasAttribute("split-view-group") ||
-                      g.hasAttribute("zen-split-view") || g.hasAttribute("is-zen-split")))
+                    if (
+                      lc &&
+                      (g.hasAttribute("split-view-group") ||
+                        g.hasAttribute("zen-split-view") ||
+                        g.hasAttribute("is-zen-split"))
+                    )
                       lifecycle.detach(lc);
                     groupsStructureChanged = true;
                   }
@@ -482,17 +492,20 @@
                 event.stopPropagation();
               }
             };
-            lifecycle.listen(window,
+            lifecycle.listen(
+              window,
               "mousedown",
               access.groupRightClickBlocker,
               true,
             );
-            lifecycle.listen(window,
+            lifecycle.listen(
+              window,
               "mouseup",
               access.groupRightClickBlocker,
               true,
             );
-            lifecycle.listen(window,
+            lifecycle.listen(
+              window,
               "click",
               access.groupRightClickBlocker,
               true,
@@ -550,7 +563,8 @@
                 }
               }
             };
-            lifecycle.listen(window,
+            lifecycle.listen(
+              window,
               "contextmenu",
               access.groupContextMenuHandler,
               true,
@@ -580,7 +594,8 @@
               }
             }
           };
-          lifecycle.listen(window,
+          lifecycle.listen(
+            window,
             "popupshowing",
             access.popupShowingListener,
             true,
@@ -637,7 +652,13 @@
               options = {},
             ) {
               if (!lifecycle.active)
-                return origSplitTabs.call(this, tabs, gridType, initialIndex, options);
+                return origSplitTabs.call(
+                  this,
+                  tabs,
+                  gridType,
+                  initialIndex,
+                  options,
+                );
               const currentActiveTab = window.gBrowser?.selectedTab;
               const hasActiveTab =
                 Array.isArray(tabs) &&
@@ -681,10 +702,16 @@
           }
 
           access.dragGuardCleanup = () => {
-            if (origSplitTabs && window.gZenViewSplitter?.splitTabs === wrappedSplitTabs) {
+            if (
+              origSplitTabs &&
+              window.gZenViewSplitter?.splitTabs === wrappedSplitTabs
+            ) {
               window.gZenViewSplitter.splitTabs = origSplitTabs;
             }
-            if (origGetAllTabGroups && window.gBrowser?.getAllTabGroups === wrappedGetAllTabGroups) {
+            if (
+              origGetAllTabGroups &&
+              window.gBrowser?.getAllTabGroups === wrappedGetAllTabGroups
+            ) {
               window.gBrowser.getAllTabGroups = origGetAllTabGroups;
             }
             access.tabDragGuardInitialized = false;

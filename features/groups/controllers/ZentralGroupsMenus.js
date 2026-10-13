@@ -30,7 +30,12 @@
   window.ZentralModuleLoader.define(
     "groups/ZentralGroupsMenus",
     function ({ Services, shared, runtime, access, lifecycle }) {
-      const { setTimeout, clearTimeout, requestAnimationFrame, MutationObserver } = lifecycle;
+      const {
+        setTimeout,
+        clearTimeout,
+        requestAnimationFrame,
+        MutationObserver,
+      } = lifecycle;
       const {
         Constants,
         Core,
@@ -163,19 +168,30 @@
                 }
               };
 
-              lifecycle.listen(contextMenu.querySelector("#zentral-tg-item-set-color"), "command", (e) => {
+              lifecycle.listen(
+                contextMenu.querySelector("#zentral-tg-item-set-color"),
+                "command",
+                (e) => {
                   e.stopPropagation();
                   openColorPicker();
-                });
+                },
+              );
 
-              lifecycle.listen(contextMenu.querySelector("#zentral-tg-item-auto-color"), "command", (e) => {
+              lifecycle.listen(
+                contextMenu.querySelector("#zentral-tg-item-auto-color"),
+                "command",
+                (e) => {
                   e.stopPropagation();
                   if (access.state.contextMenuCurrentGroup?._useFaviconColor) {
                     access.state.contextMenuCurrentGroup._useFaviconColor();
                   }
-                });
+                },
+              );
 
-              lifecycle.listen(contextMenu.querySelector("#zentral-tg-item-rename"), "command", (e) => {
+              lifecycle.listen(
+                contextMenu.querySelector("#zentral-tg-item-rename"),
+                "command",
+                (e) => {
                   e.stopPropagation();
                   if (access.state.contextMenuCurrentGroup) {
                     this.renameGroupStart(
@@ -183,9 +199,13 @@
                       true,
                     );
                   }
-                });
+                },
+              );
 
-              lifecycle.listen(contextMenu.querySelector("#zentral-tg-item-ungroup"), "command", (e) => {
+              lifecycle.listen(
+                contextMenu.querySelector("#zentral-tg-item-ungroup"),
+                "command",
+                (e) => {
                   e.stopPropagation();
                   const grp = access.state.contextMenuCurrentGroup;
                   if (grp) {
@@ -199,9 +219,13 @@
                     } catch (_) {}
                     this.scheduleStateSave();
                   }
-                });
+                },
+              );
 
-              lifecycle.listen(contextMenu.querySelector("#zentral-tg-item-close"), "command", (e) => {
+              lifecycle.listen(
+                contextMenu.querySelector("#zentral-tg-item-close"),
+                "command",
+                (e) => {
                   e.stopPropagation();
                   const grp = access.state.contextMenuCurrentGroup;
                   if (grp) {
@@ -253,7 +277,8 @@
                     } catch (_) {}
                     this.scheduleStateSave();
                   }
-                });
+                },
+              );
             }
           }
 
@@ -430,12 +455,14 @@
                 setTimeout(() => handleGroupSubmenu(popup), 0);
               }
             };
-            lifecycle.listen(window,
+            lifecycle.listen(
+              window,
               "popupshowing",
               this._tabContextSubmenuListener,
               true,
             );
-            lifecycle.listen(window,
+            lifecycle.listen(
+              window,
               "popupshown",
               this._tabContextSubmenuListener,
               true,

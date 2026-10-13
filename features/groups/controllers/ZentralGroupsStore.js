@@ -26,7 +26,12 @@
   window.ZentralModuleLoader.define(
     "groups/ZentralGroupsStore",
     function ({ Services, shared, runtime, access, lifecycle }) {
-      const { setTimeout, clearTimeout, requestAnimationFrame, MutationObserver } = lifecycle;
+      const {
+        setTimeout,
+        clearTimeout,
+        requestAnimationFrame,
+        MutationObserver,
+      } = lifecycle;
       const {
         Constants,
         Core,

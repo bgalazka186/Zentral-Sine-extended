@@ -6,13 +6,13 @@ Start at `Zentral.uc.js`. Starts the loader, publishes shared services, owns fea
 
 Send this folder for a change confined to its behavior. Include the specific outside collaborator below only if the issue crosses that interface. Each source header explains its callers, contracts and cleanup. Folder ownership does not make every internal controller optional or independently installable.
 
-| File | Responsibility |
-| --- | --- |
-| `Zentral.uc.js` | Canonical bootstrap. Resolves the install root from the executing script, creates the privileged source/resource loader, caches registrations and reads, and opens bootstrap diagnostics. |
-| `ZentralCatalog.js` | Data catalog of feature entrypoints, required/optional panel parts, context dependencies and ordered stylesheet ownership. |
-| `ZentralRuntime.js` | Owns per-window feature records, preparation/activation, availability, hooks, CSS registration, settings routing and native sidebar geometry tracking. |
-| `ZentralShared.js` | Shared preference constants, Core preference/logging utilities, SVG construction, icon strings and known service metadata. |
-| `settings.json` | Settings schema and category/section metadata owned by core. |
+| File                | Responsibility                                                                                                                                                                            |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Zentral.uc.js`     | Canonical bootstrap. Resolves the install root from the executing script, creates the privileged source/resource loader, caches registrations and reads, and opens bootstrap diagnostics. |
+| `ZentralCatalog.js` | Data catalog of feature entrypoints, required/optional panel parts, context dependencies and ordered stylesheet ownership.                                                                |
+| `ZentralRuntime.js` | Owns per-window feature records, preparation/activation, availability, hooks, CSS registration, settings routing and native sidebar geometry tracking.                                    |
+| `ZentralShared.js`  | Shared preference constants, Core preference/logging utilities, SVG construction, icon strings and known service metadata.                                                                |
+| `settings.json`     | Settings schema and category/section metadata owned by core.                                                                                                                              |
 
 ## Outside collaborators
 
@@ -64,7 +64,7 @@ Full installation uses root `theme.json` and `preferences.json`, plus `core/`; S
 
 ## Styles owned here
 
-| File | Responsibility |
-| --- | --- |
-| `ZentralNativeInteraction.css` | Disable page input while split views resize; keep native hidden tabs hidden. |
-| `ZentralSidebarSizing.css` | Expanded native sidebar width limits and collapsed width reset. Independent of Apps activation. |
+| File                           | Responsibility                                                                                  |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `ZentralNativeInteraction.css` | Disable page input while split views resize; keep native hidden tabs hidden.                    |
+| `ZentralSidebarSizing.css`     | Expanded native sidebar width limits and collapsed width reset. Independent of Apps activation. |
