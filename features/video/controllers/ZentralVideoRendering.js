@@ -197,6 +197,11 @@
         deps.nextRenderProbe = deps.nextHealthCheck = 0;
         deps.lastHealth = null;
         deps.canvas?.style.removeProperty("display");
+        // A strict method test must not show pixels left by another renderer.
+        if (deps.selectedModeOnly() && deps.canvas)
+          deps.canvas
+            .getContext("2d")
+            ?.clearRect(0, 0, deps.canvas.width, deps.canvas.height);
       }
       async function startLivePreview(
         source,
@@ -222,7 +227,7 @@
           throw new Error(
             "source-visible: Keep video on its page while visible",
           );
-        if (!deps.selectedModeOnly() || diagnostic)
+        if (!deps.selectedModeOnly())
           await seedExperimentFallback(source, generation);
         const global = source.context?.currentWindowGlobal;
         const sourceId = global?.innerWindowId;

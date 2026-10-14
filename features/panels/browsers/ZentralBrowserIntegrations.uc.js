@@ -854,7 +854,6 @@
     const addonHostByTab = new WeakMap();
     let addonHostFolder = null;
     let addonFolderRepairTimer = null;
-    let addonFolderRepairAttempts = 0;
     let repairingAddonFolder = false;
     let addonFolderDisposed = false;
     let lastNonAddonHostTab = window.gBrowser?.selectedTab || null;
@@ -947,15 +946,14 @@
       }, 0);
     }
 
-    // One bounded repair queue shared by all hosts. Startup may finish before
-    // Zen's folders/workspaces can accept tabs; never poll during normal use.
+    // Coalesce real lifecycle triggers. A failed placement remains hidden and
+    // can recover on the next readiness/action event; there is no timed retry loop.
     function scheduleAddonFolderRepair() {
       if (
         !isAddonTabIdBridgeEnabled() ||
         addonFolderDisposed ||
         repairingAddonFolder ||
         addonFolderRepairTimer !== null ||
-        addonFolderRepairAttempts >= 8 ||
         !addonHostByAppId.size
       )
         return;
@@ -967,30 +965,56 @@
           !addonHostByAppId.size
         )
           return;
-        addonFolderRepairAttempts++;
         repairingAddonFolder = true;
-        let complete = true;
         try {
           for (const record of addonHostByAppId.values()) {
-            if (!record.tab?.isConnected || record.removing) continue;
-            if (!putAddonHostTabInFolder(record.tab)) {
-              complete = false;
-              break;
-            }
+            if (
+              !record.tab?.isConnected ||
+              record.removing ||
+              !record.tab.hasAttribute("bgalazka-addon-host-fallback")
+            )
+              continue;
+            if (!putAddonHostTabInFolder(record.tab)) break;
           }
           ensureSafeSelectedTabForAddonHosts();
         } finally {
           repairingAddonFolder = false;
         }
-        if (complete) addonFolderRepairAttempts = 0;
-        else scheduleAddonFolderRepair();
-      }, 500);
+      }, 0);
     }
+    function repairAddonFolderOnEvent() {
+      if (
+        addonFolderDisposed ||
+        !isAddonTabIdBridgeEnabled() ||
+        !addonHostByAppId.size
+      )
+        return;
+      if (
+        [...addonHostByAppId.values()].some(
+          (record) =>
+            record.tab?.isConnected &&
+            record.tab.hasAttribute("bgalazka-addon-host-fallback"),
+        )
+      )
+        scheduleAddonFolderRepair();
+    }
+    const addonFolderEvents = [
+      "TabOpen",
+      "TabPinned",
+      "TabGroupCreate",
+      "zen-workspace-switched",
+      "activate",
+    ];
+    for (const type of addonFolderEvents)
+      window.addEventListener(type, repairAddonFolderOnEvent);
+    Promise.resolve(ZentralRuntime.nativeReady).then(repairAddonFolderOnEvent);
     ctx.registerCleanup(() => {
       addonFolderDisposed = true;
       if (addonFolderRepairTimer !== null)
         ctx.clearTimeout(addonFolderRepairTimer);
       addonFolderRepairTimer = null;
+      for (const type of addonFolderEvents)
+        window.removeEventListener(type, repairAddonFolderOnEvent);
     });
 
     function putAddonHostTabInFolder(tab) {

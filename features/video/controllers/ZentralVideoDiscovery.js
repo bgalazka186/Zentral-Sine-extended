@@ -477,15 +477,32 @@
         deps.methodState.direct = "working (document accessible)";
         return found;
       }
+      // stop() invalidates the generation before releasing content transports.
+      // Settled requests from that generation must not overwrite live diagnostics.
+      function discoveryRequestCurrent(generation) {
+        return (
+          !deps.disposed &&
+          (deps.enabled() || deps.testingAll) &&
+          generation === deps.scanGeneration
+        );
+      }
+      // Definite actor failures are document-scoped, not a recurring retry job.
+      // Weak ownership releases closed/navigated documents without cleanup work.
+      const failedActorGlobals = new WeakSet();
       async function inspectActor(item) {
+        const generation = deps.scanGeneration;
         if (!deps.ensureActor()) return [];
         const groups = await Promise.all(
           contexts(item.browser.browsingContext).map(async (context) => {
+            let global;
             try {
-              const global = context.currentWindowGlobal;
+              global = context.currentWindowGlobal;
+              if (!deps.testingAll && global && failedActorGlobals.has(global))
+                return [];
               const scheme = global?.documentURI?.scheme;
               if (
                 !global ||
+                global.isClosed ||
                 (scheme &&
                   !["http", "https", "file", "moz-extension"].includes(scheme))
               )
@@ -498,6 +515,13 @@
                 2500,
                 "actor reply",
               );
+              if (
+                !discoveryRequestCurrent(generation) ||
+                global !== context.currentWindowGlobal ||
+                global.isClosed
+              )
+                return [];
+              failedActorGlobals.delete(global);
               deps.methodState.actor = "working (content replied)";
               return (candidates || []).map((data) => ({
                 ...item,
@@ -506,7 +530,19 @@
                 data: { ...data, frameId: context.id },
               }));
             } catch (error) {
-              deps.methodError("actor", error);
+              if (
+                discoveryRequestCurrent(generation) &&
+                global &&
+                global === context.currentWindowGlobal &&
+                !global?.isClosed
+              ) {
+                // Obsolete/destroyed documents were excluded above. A rejected
+                // actor load/constructor/query is not helped by scanning again.
+                const message = String(error);
+                if (global && !/timed out|abort|cancel/i.test(message))
+                  failedActorGlobals.add(global);
+                deps.methodError("actor", error);
+              }
               return [];
             }
           }),
@@ -514,20 +550,35 @@
         return groups.flat();
       }
       async function inspectFrame(item) {
+        const generation = deps.scanGeneration;
+        let global;
         try {
+          global = item.browser.browsingContext?.currentWindowGlobal;
           const candidates = await deps.query(item.browser, "List", {
             requireAudio: deps.requireAudio(),
             cacheAudio: deps.featureOn(deps.AUDIO_CACHE_PREF),
           });
+          if (
+            !discoveryRequestCurrent(generation) ||
+            global !== item.browser.browsingContext?.currentWindowGlobal
+          )
+            return [];
           const frames = contexts(item.browser.browsingContext);
           return (candidates || []).flatMap((data) => {
             const context =
               frames.find((entry) => entry.id === data.frameId) ||
               (data.frameId ? null : item.browser.browsingContext);
+            const documentId = context?.currentWindowGlobal?.innerWindowId;
+            if (data.documentId && documentId && data.documentId !== documentId)
+              return [];
             return context ? [{ ...item, method: "frame", context, data }] : [];
           });
         } catch (error) {
-          deps.methodError("frame", error);
+          if (
+            discoveryRequestCurrent(generation) &&
+            global === item.browser.browsingContext?.currentWindowGlobal
+          )
+            deps.methodError("frame", error);
           return [];
         }
       }
@@ -548,7 +599,8 @@
             // automatic discovery, otherwise an audio-only panel blocks fallbacks.
             return found.filter((source) => source.data?.kind === "video");
           } catch (error) {
-            deps.methodError(method, error);
+            if (discoveryRequestCurrent(generation))
+              deps.methodError(method, error);
             return [];
           }
         };
@@ -880,8 +932,10 @@
           }
           deps.refreshCard();
         } catch (error) {
-          deps.recordError(error);
-          deps.refreshCard();
+          if (discoveryRequestCurrent(generation)) {
+            deps.recordError(error);
+            deps.refreshCard();
+          }
         } finally {
           if (scanToken === deps.activeScanToken) {
             deps.scanning = false;

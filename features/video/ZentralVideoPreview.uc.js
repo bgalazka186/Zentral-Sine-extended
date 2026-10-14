@@ -2985,7 +2985,7 @@
         // END GENERATED EXPERIMENTAL HELPERS
         const BUILD = "video-preview-2026-10-04-25-regression-fix";
 
-        const ACTOR = "ZentralVideoBridgeV12_" + EXPERIMENT_HELPER_ID;
+        const ACTOR = "ZentralVideoBridgeV12Resolved_" + EXPERIMENT_HELPER_ID;
         const CHANNEL =
           "ZentralVideoPreview:" + Math.random().toString(36).slice(2);
         const FRAME_URI =

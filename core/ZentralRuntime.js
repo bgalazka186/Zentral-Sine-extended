@@ -56,7 +56,9 @@
     disposers = [],
     availability = new Map();
   let ready = false,
-    stopped = false;
+    stopped = false,
+    activationReady = false,
+    startupStage = "waiting-browser";
   const hookListeners = new Map(),
     hookLast = new Map();
   const hooks = {
@@ -283,7 +285,9 @@
     snapshot() {
       return {
         version: VERSION,
-        ready,
+        ready: activationReady,
+        startupStage,
+        nativeReadinessWarnings: runtime.nativeReadinessWarnings || [],
         sources: moduleLoader.sources(),
         features: [...records.values()].map((r) => ({
           ...r,
@@ -302,6 +306,8 @@
     destroy() {
       if (stopped) return;
       stopped = true;
+      activationReady = false;
+      startupStage = "stopped";
       for (const dispose of disposers.splice(0).reverse()) {
         try {
           dispose();
@@ -1380,6 +1386,7 @@
   }
   // Resume features when an initially disabled base engine becomes available.
   function activateReady() {
+    if (!activationReady || stopped) return;
     // Topological startup with no timed retries. Independent features still start
     // when another feature is disabled, missing, throws, or has a dependency cycle.
     let progress = true;
@@ -1454,6 +1461,23 @@
               .join(", ") || "Dependency cycle";
       }
   }
+  async function waitForNativeStartup() {
+    let session = window.SessionStore;
+    if (!session) {
+      try { session = ChromeUtils.importESModule("resource:///modules/sessionstore/SessionStore.sys.mjs").SessionStore; }
+      catch (_) {} // Some Zen versions expose only the window service.
+    }
+    const results = await Promise.allSettled([
+      session?.promiseAllWindowsRestored,
+      window.gZenWorkspaces?.promiseInitialized,
+    ]);
+    runtime.nativeReadinessWarnings = results.filter(result => result.status === "rejected")
+      .map(result => String(result.reason));
+    for (const warning of runtime.nativeReadinessWarnings)
+      console.warn("[Zentral] Native startup readiness failed:", warning);
+    // Let native preference observers and deferred initialization finish this turn.
+    await new Promise(resolve => window.setTimeout(resolve, 0));
+  }
   async function boot() {
     if (ready || stopped) return;
     ready = true;
@@ -1489,6 +1513,7 @@
         })),
       ),
     ];
+    startupStage = "loading-sources";
     // First load declarations only. No feature initializes during this pass.
     for (const m of MANIFEST) {
       const r = records.get(m.id);
@@ -1502,14 +1527,22 @@
         fail(r, e);
       }
     }
+    startupStage = "loading-styles";
     // Apply only available owners, retaining the original relative sheet order.
     for (const spec of cssSpecs) {
       if (stopped) return;
       await loadCSS(spec);
     }
     if (stopped) return;
+    startupStage = "waiting-native-restoration";
+    runtime.nativeReady = waitForNativeStartup();
+    await runtime.nativeReady;
+    if (stopped) return;
+    activationReady = true;
+    startupStage = "activating-features";
     activateReady();
     installSidebarLayoutTracking();
+    startupStage = "ready";
     console.info("[Zentral] Framework startup complete", runtime.snapshot());
     emit();
   }
@@ -1524,9 +1557,11 @@
     observe(subject, topic) {
       if (subject === window && topic === "browser-delayed-startup-finished") {
         Services.obs.removeObserver(readyObserver, topic);
-        boot().catch((e) =>
-          console.error("[Zentral] Boot failed; settings remain available", e),
-        );
+        boot().catch((e) => {
+          startupStage = "failed";
+          console.error("[Zentral] Boot failed; settings remain available", e);
+          emit();
+        });
       }
     },
   };

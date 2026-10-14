@@ -34,29 +34,42 @@
         if (deps.actorAttempted) return deps.actorReady;
         deps.actorAttempted = true;
         try {
-          // Use the installed actor directly. A versioned resource alias keeps
-          // Gecko's module cache separate across helper updates without writing
-          // another copy into the profile's chrome directory.
-          const contentURI = deps.Services.io.newURI(
-            "features/video/content/",
+          // Resolve Sine's chrome package in the parent. Content processes may
+          // not have its custom chrome registration; the resource substitution
+          // must point at the installed file/JAR rather than another chrome URI.
+          let actorURI = deps.Services.io.newURI(
+            "features/video/content/ZentralVideoActor.sys.mjs",
             null,
             deps.Services.io.newURI(window.ZentralModuleLoader.rootURI),
           );
-          const actorFile = "ZentralVideoActor.sys.mjs";
-          deps.actorModuleURI = deps.Services.io.newURI(
-            actorFile + "?v=" + deps.EXPERIMENT_HELPER_ID,
-            null,
-            contentURI,
-          ).spec;
-          try {
-            const handler = deps.Services.io
-              .getProtocolHandler("resource")
-              .QueryInterface(Ci.nsIResProtocolHandler);
-            const alias =
-              "zentral-video-bridge-v12-" + deps.EXPERIMENT_HELPER_ID;
-            handler.setSubstitution(alias, contentURI);
-            deps.actorModuleURI = "resource://" + alias + "/" + actorFile;
-          } catch (_) {}
+          const handler = deps.Services.io
+            .getProtocolHandler("resource")
+            .QueryInterface(Ci.nsIResProtocolHandler);
+          const seen = new Set();
+          while (["chrome", "resource"].includes(actorURI.scheme)) {
+            if (seen.has(actorURI.spec))
+              throw new Error("Actor resource mapping contains a cycle");
+            seen.add(actorURI.spec);
+            if (actorURI.scheme === "chrome") {
+              actorURI = Components.classes[
+                "@mozilla.org/chrome/chrome-registry;1"
+              ]
+                .getService(Ci.nsIChromeRegistry)
+                .convertChromeURL(actorURI);
+            } else {
+              actorURI = deps.Services.io.newURI(handler.resolveURI(actorURI));
+            }
+          }
+          if (!["file", "jar"].includes(actorURI.scheme))
+            throw new Error(
+              "Actor resource must resolve to an installed file or JAR",
+            );
+          const contentURI = deps.Services.io.newURI("./", null, actorURI);
+          const alias =
+            "zentral-video-bridge-v12-resolved-" + deps.EXPERIMENT_HELPER_ID;
+          handler.setSubstitution(alias, contentURI);
+          deps.actorModuleURI =
+            "resource://" + alias + "/ZentralVideoActor.sys.mjs";
           try {
             // Gecko 154+ requires an explicit opt-in for ordinary web processes.
             // This actor only queries media / operates our own preview document;

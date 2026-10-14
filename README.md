@@ -15,7 +15,7 @@ This fork has grown quite a bit beyond the original tweaks. Most extras can be c
 
 #### Panels, layout and navigation
 
-- **Dynamic translucency:** separate opacity levels for unpinned, pinned-and-focused, and pinned-but-unfocused panels, plus background blur and optional black backing for readability.
+- **Dynamic translucency:** separate opacity levels for unpinned, pinned-and-focused, and pinned-but-unfocused panels, plus optional black backing for readability.
 - **Opposite-side docking and edge attachment:** keep launchers in the normal sidebar while opening panels on the other side, or attach panels to the adjacent bar/window edge.
 - **Move and resize panels:** drag panels in two dimensions, resize from multiple sides, and adjust horizontal offsets, vertical position, and top/bottom height. Still no 3D, sorry.
 - **Dual View, Triple View and SuperPin:** push the webpage aside with Dual View, use two panels in Triple View, or keep a separate movable second panel with SuperPin. Hold the Dual View or Pin button, then choose another panel. Triple View has its own webpage-push choice, divider, swap and close/unlink controls.

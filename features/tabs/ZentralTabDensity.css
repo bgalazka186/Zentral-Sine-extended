@@ -601,25 +601,16 @@
   zen-folder
   > .tab-group-label-container
   .tab-group-folder-icon {
-  scale: var(--bgalazka-look-folder-icon-scale, 1) !important;
+  scale: var(--bgalazka-artwork-scale, 1) !important;
   transform-origin: center !important;
 }
 /* The indicator is a workspace section in current Zen; size its whole row,
  * including its native inline padding, instead of just its icon. */
 :root[bgalazka-density-icons="true"]
   :is(#zen-current-workspace-indicator, .zen-current-workspace-indicator) {
-  min-height: max(
-    var(--bgalazka-look-workspace-height, 22px),
-    var(--bgalazka-look-workspace-icon-size, 16px)
-  ) !important;
-  height: max(
-    var(--bgalazka-look-workspace-height, 22px),
-    var(--bgalazka-look-workspace-icon-size, 16px)
-  ) !important;
-  max-height: max(
-    var(--bgalazka-look-workspace-height, 22px),
-    var(--bgalazka-look-workspace-icon-size, 16px)
-  ) !important;
+  min-height: var(--bgalazka-look-workspace-height, 22px) !important;
+  height: var(--bgalazka-look-workspace-height, 22px) !important;
+  max-height: var(--bgalazka-look-workspace-height, 22px) !important;
   box-sizing: border-box !important;
   padding-block: 0 !important;
   margin-block: var(--bgalazka-look-tabbar-row-gap, 0px) !important;
@@ -629,16 +620,8 @@
 :root[bgalazka-density-icons="true"]
   :is(#zen-current-workspace-indicator, .zen-current-workspace-indicator)
   :is(.zen-current-workspace-indicator-icon, image, img, svg) {
-  width: var(--bgalazka-look-workspace-icon-size, 16px) !important;
-  height: var(--bgalazka-look-workspace-icon-size, 16px) !important;
-  min-width: var(--bgalazka-look-workspace-icon-size, 16px) !important;
-  min-height: var(--bgalazka-look-workspace-icon-size, 16px) !important;
-  max-width: var(--bgalazka-look-workspace-icon-size, 16px) !important;
-  max-height: var(--bgalazka-look-workspace-icon-size, 16px) !important;
-  font-size: var(--bgalazka-look-workspace-icon-size, 16px) !important;
-  line-height: 1 !important;
-  padding: 0 !important;
-  margin-block: 0 !important;
+  scale: var(--bgalazka-artwork-scale, 1) !important;
+  transform-origin: center !important;
 }
 :root[bgalazka-density-icons="true"]
   :is(#zen-current-workspace-indicator, .zen-current-workspace-indicator)

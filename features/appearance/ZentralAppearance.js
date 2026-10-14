@@ -156,7 +156,6 @@
       [LOOK_GROUP_PREFS.SHOW_CHEVRON]: true,
       [LOOK_GROUP_PREFS.INDICATOR_TYPE]: "circle",
       [ctx.BGALAZKA_EXT_PREFS.TRANSLUCENCY]: true,
-      ["zen.workspace.bgalazka.blur_intensity"]: 0,
       [ctx.BGALAZKA_EXT_PREFS.PANEL_BLACK_OPACITY]: 0,
       [ctx.BGALAZKA_EXT_PREFS.OPACITY_UNPINNED]: 100,
       [ctx.BGALAZKA_EXT_PREFS.OPACITY_PINNED_FOCUS]: 95,
@@ -509,13 +508,106 @@
       [LOOK_PREFS.URLBAR_TOP_GAP]: [0, 16],
       [LOOK_PREFS.NEWTAB_HEIGHT]: [18, 36],
       [LOOK_GROUP_PREFS.LABEL_OPACITY]: [0, 100],
-      ["zen.workspace.bgalazka.blur_intensity"]: [0, 40],
       [ctx.BGALAZKA_EXT_PREFS.PANEL_BLACK_OPACITY]: [0, 100],
       [ctx.BGALAZKA_EXT_PREFS.OPACITY_UNPINNED]: [10, 100],
       [ctx.BGALAZKA_EXT_PREFS.OPACITY_PINNED_FOCUS]: [10, 100],
       [ctx.BGALAZKA_EXT_PREFS.OPACITY_PINNED_BLUR]: [10, 100],
       [ctx.BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_OPACITY]: [10, 100],
       [ctx.BGALAZKA_EXT_PREFS.PILL_BACKGROUND_OPACITY]: [10, 100],
+    });
+    // Measure the native artwork's untransformed box instead of assuming its
+    // baseline size. Updates are event-driven and coalesced into one frame.
+    const artworkSelector =
+      "zen-folder > .tab-group-label-container .tab-group-folder-icon, " +
+      ":is(#zen-current-workspace-indicator, .zen-current-workspace-indicator) " +
+      ":is(.zen-current-workspace-indicator-icon, image, img, svg)";
+    const artworkNodes = new Set();
+    let artworkFrame = null,
+      artworkDisposed = false;
+    const artworkResize =
+      typeof ResizeObserver === "function"
+        ? new ResizeObserver(() => queueArtworkScale())
+        : null;
+    function queueArtworkScale() {
+      if (artworkDisposed || artworkFrame !== null) return;
+      artworkFrame = window.requestAnimationFrame(syncArtworkScale);
+    }
+    function syncArtworkScale() {
+      artworkFrame = null;
+      const enabled = ctx.getPref(LOOK_PREFS.DENSITY_ICONS, false) === true;
+      for (const node of artworkNodes) {
+        if (!enabled || !node.isConnected) {
+          artworkResize?.unobserve(node);
+          node.style.removeProperty("--bgalazka-artwork-scale");
+          artworkNodes.delete(node);
+        }
+      }
+      if (!enabled || artworkDisposed) return;
+      for (const node of document.querySelectorAll(artworkSelector)) {
+        const folder = node.classList.contains("tab-group-folder-icon");
+        // Workspace wrappers can contain an image or SVG. Scale only one layer.
+        if (!folder && node.querySelector("image, img, svg")) {
+          artworkResize?.unobserve(node);
+          node.style.removeProperty("--bgalazka-artwork-scale");
+          artworkNodes.delete(node);
+          continue;
+        }
+        if (!artworkNodes.has(node)) {
+          artworkNodes.add(node);
+          artworkResize?.observe(node);
+        }
+        const nativeWidth =
+          parseFloat(window.getComputedStyle(node).width) || node.clientWidth;
+        if (!(nativeWidth > 0)) continue; // ResizeObserver retries when it becomes visible.
+        const key = folder
+          ? LOOK_PREFS.FOLDER_ICON_SIZE
+          : LOOK_PREFS.WORKSPACE_ICON_SIZE;
+        const [min, max] = LOOK_BOUNDS[key];
+        const requested = Number(ctx.getPref(key, LOOK_DEFAULTS[key]));
+        const size = Number.isFinite(requested)
+          ? Math.max(min, Math.min(max, requested))
+          : LOOK_DEFAULTS[key];
+        const scale = String(size / nativeWidth);
+        if (node.style.getPropertyValue("--bgalazka-artwork-scale") !== scale)
+          node.style.setProperty("--bgalazka-artwork-scale", scale);
+      }
+    }
+    const artworkObserver = new MutationObserver((records) => {
+      if (!ctx.getPref(LOOK_PREFS.DENSITY_ICONS, false)) return;
+      if (
+        records.some(
+          (record) =>
+            record.type === "attributes" ||
+            [...record.addedNodes, ...record.removedNodes].some(
+              (node) =>
+                node.matches?.(artworkSelector) ||
+                node.querySelector?.(artworkSelector),
+            ),
+        )
+      )
+        queueArtworkScale();
+    });
+    artworkObserver.observe(document.documentElement, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: [
+        "zen-compact-mode",
+        "zen-sidebar-collapsed",
+        "zen-sidebar-expanded",
+        "zen-right-side",
+        "zen-sidebar-right",
+      ],
+    });
+    ctx.registerCleanup(() => {
+      artworkDisposed = true;
+      if (artworkFrame !== null) window.cancelAnimationFrame(artworkFrame);
+      artworkFrame = null;
+      artworkObserver.disconnect();
+      artworkResize?.disconnect();
+      for (const node of artworkNodes)
+        node.style.removeProperty("--bgalazka-artwork-scale");
+      artworkNodes.clear();
     });
     const applyLook = () => {
       const root = document.documentElement;
@@ -600,12 +692,13 @@
             ? clamped + "%"
             : clamped + "px",
         );
-        if (key === "FOLDER_ICON_SIZE")
+        if (key === "CONTROL_SIZE")
           root.style.setProperty(
-            "--bgalazka-look-folder-icon-scale",
-            String(clamped / 20),
+            "--bgalazka-look-control-icon-size",
+            Math.max(12, clamped - 6) + "px",
           );
       }
+      queueArtworkScale();
     };
     // A visual preference error must not halt panel hooks or Settings loading.
     // Keep this optional startup path isolated from the rest of the extension.

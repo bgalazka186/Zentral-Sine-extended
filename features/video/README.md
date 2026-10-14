@@ -31,3 +31,9 @@ Send this folder for a change confined to its behavior. Include the specific out
 - `features/settings/controllers/ZentralSettingsShell.js (optional settings UI)`
 
 Full installation uses root `theme.json` and `preferences.json`, plus `core/`; Sine loads `core/Zentral.uc.js`; a stale main registration can forward through `JS/Zentral.uc.js`. Per-feature settings.json is metadata, not an activation script.
+
+## Actor loading and failure recovery
+
+The actor resource alias resolves the installed Sine chrome path to its file or JAR location before registration. A separate resolved actor identity avoids reusing an older failed module cache. Registration failures remain visible in video diagnostics.
+
+Definite actor query failures stop automatic actor discovery for that document. Navigation creates a fresh document and allows another attempt; explicitly running video diagnostics also retries. Timeouts and document-destruction cancellations do not disable the actor. This recovery adds no polling or retry timers. Requests from an obsolete scan or navigated document cannot publish sources or overwrite discovery diagnostics.

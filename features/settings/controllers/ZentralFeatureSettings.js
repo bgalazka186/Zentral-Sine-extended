@@ -2125,10 +2125,12 @@
               for (const input of modal.querySelectorAll(
                 '#zs-panel-video-cloning input[type="checkbox"]',
               )) {
-                const isHideOption = /hide/i.test(
-                  input.closest(".zs-row")?.textContent || "",
-                );
-                const wanted = recommended && !isHideOption;
+                // Use the control's declared default, not words in its label.
+                // Strict rendering, visible-source suspension and experiments
+                // must remain opt-in, including the inverted experiment switch.
+                if (input.dataset.recommendedValue === undefined) continue;
+                const wanted =
+                  recommended && input.dataset.recommendedValue === "true";
                 if (input.checked !== wanted) input.click();
               }
             };

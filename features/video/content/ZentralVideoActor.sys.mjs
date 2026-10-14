@@ -1287,3 +1287,7 @@ export class ZentralVideoBridgeChild extends JSWindowActorChild {
 }
 
 export { ZentralVideoBridgeChild as ZentralVideoBridgeV12_4a4f1a02e13063aaChild };
+
+// Fresh actor identity for the resolved resource mapping; retain the old export
+// for windows still running the previous copy during a hot reload.
+export { ZentralVideoBridgeChild as ZentralVideoBridgeV12Resolved_4a4f1a02e13063aaChild };

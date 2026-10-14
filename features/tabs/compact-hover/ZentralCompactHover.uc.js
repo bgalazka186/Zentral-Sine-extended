@@ -50,6 +50,7 @@
     const cleanups = [];
     const hookCleanups = [];
     let hooksInstalled = false;
+    let refreshFrame = null;
     const enabled = () => active && configured && !manager._ignoreNextHover;
     const contains = (box, event, m = 0) =>
       box &&
@@ -370,9 +371,21 @@
         Boolean(configured) && Services.prefs.getBoolPref(ENTRY_PREF, false),
       );
     }
+    function refreshAfterNative() {
+      refresh(); // Master-off remains immediate.
+      if (refreshFrame !== null) window.cancelAnimationFrame(refreshFrame);
+      refreshFrame = null;
+      if (!active || !Services.prefs.getBoolPref(PREF, false)) return;
+      refreshFrame = window.requestAnimationFrame(() => {
+        refreshFrame = null;
+        if (active) refresh();
+      });
+    }
     function destroy() {
       if (!active) return;
       active = false;
+      if (refreshFrame !== null) window.cancelAnimationFrame(refreshFrame);
+      refreshFrame = null;
       setMovementListeners(false);
       setEntryListener(false);
       reset();
@@ -440,7 +453,7 @@
       }
     }
     try {
-      listen(window, "ZenCompactMode:Toggled", refresh);
+      listen(window, "ZenCompactMode:Toggled", refreshAfterNative);
       listen(window, "unload", destroy);
       const refreshPrefs = new Set([
         PREF,
@@ -455,7 +468,7 @@
       // sliders here, so changing them does not collapse a protected sidebar.
       const observer = {
         observe(subject, topic, pref) {
-          if (refreshPrefs.has(pref)) refresh();
+          if (refreshPrefs.has(pref)) refreshAfterNative();
         },
       };
       for (const pref of [
@@ -478,71 +491,94 @@
           Services.prefs.removeObserver(pref, tunablesObserver),
         );
       }
-      refresh();
+      refreshAfterNative();
+      destroy.refresh = refreshAfterNative;
+      destroy.manager = manager;
       return destroy;
     } catch (error) {
       destroy();
       throw error;
     }
   }
-  // Delayed browser startup does not guarantee that Zen's compact manager
-  // has finished initializing. Keep this wait local and bounded; Runtime must
-  // not permanently fail an optional feature because its native host is late.
+  // Runtime waits for native restoration once. If Zen replaces or exposes its
+  // manager later, native lifecycle events retry attachment without polling.
   function start() {
     let stopped = false,
-      timer = null,
       cleanup = null,
-      attempts = 0;
-    const MAX_ATTEMPTS = 24;
-    function cancelWait() {
-      if (timer !== null) window.clearTimeout(timer);
-      timer = null;
-    }
-    function tryAttach() {
-      cancelWait();
-      if (stopped || cleanup || !Services.prefs.getBoolPref(PREF, false))
-        return;
+      task = null,
+      watching = false;
+    const root = document.documentElement;
+    function reconcile() {
+      task = null;
+      if (stopped || !Services.prefs.getBoolPref(PREF, false)) return;
       const manager = window.gZenCompactModeManager;
-      const ready =
-        typeof manager?._setElementExpandAttribute === "function" &&
-        manager.sidebar &&
-        typeof manager.preference !== "undefined" &&
-        typeof manager.canHideSidebar !== "undefined" &&
-        (!Services.prefs.getBoolPref("zen.view.compact", false) ||
-          manager.preference);
-      if (ready) {
-        cleanup = attach();
+      if (cleanup && cleanup.manager !== manager) {
+        cleanup();
+        cleanup = null;
+      }
+      if (cleanup) {
+        cleanup.refresh();
         return;
       }
-      if (++attempts < MAX_ATTEMPTS) {
-        timer = window.setTimeout(tryAttach, attempts < 4 ? 100 : 500);
-      } else {
-        console.warn(
-          "[Zentral] Compact hover waiting stopped: native compact sidebar unavailable. Toggle the master setting to retry.",
-        );
+      if (
+        typeof manager?._setElementExpandAttribute !== "function" ||
+        !manager.sidebar
+      )
+        return;
+      cleanup = attach();
+    }
+    function queueReconcile() {
+      if (stopped || !watching || task !== null) return;
+      task = window.setTimeout(reconcile, 0);
+    }
+    const hostObserver = new MutationObserver(queueReconcile);
+    const hostEvents = [
+      "ZenCompactMode:Toggled",
+      "activate",
+      "aftercustomization",
+    ];
+    function syncWatching() {
+      const value = !stopped && Services.prefs.getBoolPref(PREF, false);
+      if (watching !== value) {
+        watching = value;
+        const method = value ? "addEventListener" : "removeEventListener";
+        for (const type of hostEvents) window[method](type, queueReconcile);
+        hostObserver.disconnect();
+        if (value)
+          hostObserver.observe(root, {
+            attributes: true,
+            attributeFilter: [
+              "zen-compact-mode",
+              "zen-sidebar-collapsed",
+              "zen-right-side",
+              "zen-sidebar-right",
+            ],
+          });
       }
+      if (!value && task !== null) {
+        window.clearTimeout(task);
+        task = null;
+      }
+      if (value) reconcile();
     }
     const observer = {
       observe(subject, topic, pref) {
-        if (pref !== PREF) return;
-        cancelWait();
-        if (!Services.prefs.getBoolPref(PREF, false)) return;
-        attempts = 0;
-        tryAttach();
+        if (pref === PREF) syncWatching();
       },
     };
     function destroy() {
       if (stopped) return;
       stopped = true;
-      cancelWait();
+      syncWatching();
       cleanup?.();
+      cleanup = null;
       Services.prefs.removeObserver(PREF, observer);
       window.removeEventListener("unload", destroy);
     }
     Services.prefs.addObserver(PREF, observer);
     window.addEventListener("unload", destroy, { once: true });
     try {
-      tryAttach();
+      syncWatching();
     } catch (error) {
       destroy();
       throw error;

@@ -149,42 +149,7 @@
         }
       ]
     },
-    {
-      "property": "zen.workspace.bgalazka.blur_intensity",
-      "label": "Panel Background Blur (px)",
-      "type": "dropdown",
-      "defaultValue": 0,
-      "options": [
-        {
-          "label": "0",
-          "value": 0
-        },
-        {
-          "label": "5",
-          "value": 5
-        },
-        {
-          "label": "10",
-          "value": 10
-        },
-        {
-          "label": "15",
-          "value": 15
-        },
-        {
-          "label": "20",
-          "value": 20
-        },
-        {
-          "label": "30",
-          "value": 30
-        },
-        {
-          "label": "40",
-          "value": 40
-        }
-      ]
-    },
+
     {
       "property": "zen.workspace.bgalazka.zen_internet_panel_css",
       "label": "Use Zen Internet CSS in Web Panels (experimental)",
@@ -195,29 +160,25 @@
   "settings": {
     "zen.workspace.bgalazka.translucency": {
       "category": "panel-appearance",
-      "section": "Translucency & blur",
+      "section": "Translucency & backing",
       "owner": "panel-styles"
     },
     "zen.workspace.bgalazka.opacity_unpinned": {
       "category": "panel-appearance",
-      "section": "Translucency & blur",
+      "section": "Translucency & backing",
       "owner": "panel-styles"
     },
     "zen.workspace.bgalazka.opacity_pinned_focus": {
       "category": "panel-appearance",
-      "section": "Translucency & blur",
+      "section": "Translucency & backing",
       "owner": "panel-styles"
     },
     "zen.workspace.bgalazka.opacity_pinned_blur": {
       "category": "panel-appearance",
-      "section": "Translucency & blur",
+      "section": "Translucency & backing",
       "owner": "panel-styles"
     },
-    "zen.workspace.bgalazka.blur_intensity": {
-      "category": "panel-appearance",
-      "section": "Translucency & blur",
-      "owner": "panel-styles"
-    },
+
     "zen.workspace.bgalazka.zen_internet_panel_css": {
       "category": "compatibility",
       "section": "Browser hosts & website styles",

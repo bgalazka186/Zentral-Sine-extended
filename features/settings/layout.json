@@ -225,7 +225,7 @@
       "owner": "panel-styles",
       "sections": [
         {
-          "label": "Translucency & blur"
+          "label": "Translucency & backing"
         }
       ]
     },
@@ -668,7 +668,6 @@
     "zen.workspace.bgalazka.opacity_unpinned",
     "zen.workspace.bgalazka.opacity_pinned_focus",
     "zen.workspace.bgalazka.opacity_pinned_blur",
-    "zen.workspace.bgalazka.blur_intensity",
     {
       "type": "text",
       "label": "**Appearance · Panel Backing**",

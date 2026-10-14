@@ -55,7 +55,7 @@
     },
     {
       "property": "zen.workspace.zentral.video_preview.selected_mode_only",
-      "label": "Use only the selected method (disable fallback; ignored for Automatic)",
+      "label": "Use only the selected method (troubleshooting; no fallback; Automatic unchanged)",
       "type": "checkbox",
       "defaultValue": false
     },

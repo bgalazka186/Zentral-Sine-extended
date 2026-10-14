@@ -754,7 +754,9 @@
 :root[bgalazka-look="atelier"]
   #zentral-settings-modal
   :is(.zs-extension-preset-btn, .zs-reset-btn, .zs-look-action) {
-  background: var(--zl-button-fill) !important;
+  /* These actions can sit outside the themed subpanel on a native dark page.
+     Keep the foreground paired with its own surface even in outline mode. */
+  background: var(--zl-button-surface) !important;
   color: var(--zl-button-text) !important;
   border: var(--zl-button-edge) solid var(--zl-button-border-color) !important;
   border-radius: var(--zl-radius) !important;
@@ -848,7 +850,7 @@
   align-items: center;
   gap: 7px;
   color: var(--zl-text, #dce0e1);
-  background: var(--zl-button-fill, #2b2e31);
+  background: var(--zl-surface, #2b2e31);
   border: var(--zl-button-edge, 0px) solid
     var(--zl-button-border-color, #667073);
   border-radius: var(--zl-radius, 0px);
@@ -1168,4 +1170,35 @@
   ) !important;
   pointer-events: none !important;
   transition: transform 0.2s ease !important;
+}
+
+/* Size the glyph as well as its action button. Keep light themes legible. */
+:root[bgalazka-look="atelier"] #zen-app-panel-toolbar .zen-toolbar-btn svg,
+:root[bgalazka-look="atelier"]
+  #bgalazka-super-panel
+  .bgalazka-super-bar
+  button
+  svg,
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview
+  .zentral-video-preview-bar
+  button
+  svg {
+  width: var(--bgalazka-look-control-icon-size, 16px) !important;
+  height: var(--bgalazka-look-control-icon-size, 16px) !important;
+  flex: 0 0 var(--bgalazka-look-control-icon-size, 16px) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview
+  .zentral-video-preview-bar
+  button:not(.zentral-video-preview-compact)
+  svg {
+  fill: currentColor !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview
+  .zentral-video-preview-compact
+  svg {
+  fill: none !important;
+  stroke: currentColor !important;
 }

@@ -2,6 +2,12 @@
 
 Start at `Zentral.uc.js`. Starts the loader, publishes shared services, owns feature availability/cleanup and registers ordered owner-gated styles. Catalog names the feature entrypoints and the settings owner list.
 
+## Startup and diagnostics
+
+The runtime loads feature declarations and their owned styles before activating modules. All feature activation, including live enable requests during startup, waits for session restoration and Zen workspace initialization through one shared `nativeReady` promise. A final task lets native preference observers settle. Features still activate in dependency order, and an individual feature failure remains isolated.
+
+Developer status and copied reports expose `startupStage`, readiness warnings, feature failures and dependency blocks. Startup stages distinguish waiting for the browser, loading sources, loading styles, waiting for native restoration, activating features and ready. Closing the window cancels owned work; a completed readiness promise cannot reactivate a disposed runtime.
+
 ## Sharing this area for a review
 
 Send this folder for a change confined to its behavior. Include the specific outside collaborator below only if the issue crosses that interface. Each source header explains its callers, contracts and cleanup. Folder ownership does not make every internal controller optional or independently installable.

@@ -480,7 +480,6 @@
         "zen.workspace.bgalazka.pill_peek_dot_color": "#5e0002",
         "zen.workspace.bgalazka.pill_peek_dot_opacity": 31,
         "zen.workspace.bgalazka.pill_background_opacity": 48,
-        "zen.workspace.bgalazka.blur_intensity": 0,
         "zen.workspace.bgalazka.web_toolbar_enabled": true,
         "zen.workspace.bgalazka.web_toolbar_urlbar": true,
         "zen.workspace.bgalazka.web_toolbar_zoom": true,

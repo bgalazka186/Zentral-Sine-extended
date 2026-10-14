@@ -5606,42 +5606,7 @@
       }
     ]
   },
-  {
-    "property": "zen.workspace.bgalazka.blur_intensity",
-    "label": "Panel Background Blur (px)",
-    "type": "dropdown",
-    "defaultValue": 0,
-    "options": [
-      {
-        "label": "0",
-        "value": 0
-      },
-      {
-        "label": "5",
-        "value": 5
-      },
-      {
-        "label": "10",
-        "value": 10
-      },
-      {
-        "label": "15",
-        "value": 15
-      },
-      {
-        "label": "20",
-        "value": 20
-      },
-      {
-        "label": "30",
-        "value": 30
-      },
-      {
-        "label": "40",
-        "value": 40
-      }
-    ]
-  },
+
   {
     "type": "text",
     "label": "**Appearance \u00b7 Panel Backing**",
@@ -6602,7 +6567,7 @@
   },
   {
     "property": "zen.workspace.zentral.video_preview.selected_mode_only",
-    "label": "Use only the selected method (disable fallback; ignored for Automatic)",
+    "label": "Use only the selected method (troubleshooting; no fallback; Automatic unchanged)",
     "type": "checkbox",
     "defaultValue": false
   },

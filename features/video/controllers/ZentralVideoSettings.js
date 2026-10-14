@@ -244,6 +244,7 @@
           input = document.createElement("input");
           input.type = "checkbox";
           input.id = "zs-video-preview-enabled";
+          input.dataset.recommendedValue = "true";
           const slider = document.createElement("span");
           slider.className = "zs-slider";
           switchLabel.append(input, slider);
@@ -268,6 +269,7 @@
             text.textContent = label;
             const checkbox = document.createElement("input");
             checkbox.type = "checkbox";
+            checkbox.dataset.recommendedValue = String(Boolean(initial));
             const ids = new Map([
               [deps.STRICT_MODE_PREF, "selected-mode-only"],
               [deps.KEEP_VISIBLE_PREF, "keep-source-visible"],
@@ -332,6 +334,7 @@
           const experimentalCheckbox = document.createElement("input");
           experimentalCheckbox.type = "checkbox";
           experimentalCheckbox.id = "zs-video-preview-disable-experimental";
+          experimentalCheckbox.dataset.recommendedValue = "false";
           experimentalCheckbox.checked = !deps.experimentalBridgeDisabled();
           experimentalCheckbox.addEventListener("change", () =>
             deps.Services.prefs.setBoolPref(
@@ -348,6 +351,7 @@
           const legacyCapture = document.createElement("input");
           legacyCapture.type = "checkbox";
           legacyCapture.id = "zs-video-preview-legacy-capture";
+          legacyCapture.dataset.recommendedValue = "false";
           legacyCapture.checked = deps.Services.prefs.getBoolPref(
             deps.LEGACY_CAPTURE_PREF,
             false,
@@ -410,6 +414,7 @@
           const pauseCheck = document.createElement("input");
           pauseCheck.type = "checkbox";
           pauseCheck.id = "zs-video-preview-pause-compact";
+          pauseCheck.dataset.recommendedValue = "true";
           pauseCheck.checked = deps.pauseWhenCompactHidden();
           pauseCheck.addEventListener("change", () =>
             deps.Services.prefs.setBoolPref(
@@ -420,7 +425,7 @@
           pauseRow.append(pauseText, pauseCheck);
           content.appendChild(pauseRow);
           addToggle(
-            "Use selected mode only (no fallback)",
+            "Use selected method only (troubleshooting; no fallback)",
             deps.STRICT_MODE_PREF,
             false,
             () => {

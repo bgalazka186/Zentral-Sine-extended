@@ -147,6 +147,24 @@
               "line-height:1.5",
             ),
           );
+          const startup = runtime.snapshot();
+          body.append(
+            element(
+              "p",
+              "Startup stage: " +
+                (startup.startupStage || "unknown").replaceAll("-", " "),
+              "line-height:1.5",
+            ),
+          );
+          if (startup.nativeReadinessWarnings?.length)
+            body.append(
+              element(
+                "p",
+                "Native startup warnings: " +
+                  startup.nativeReadinessWarnings.join("; "),
+                "line-height:1.5",
+              ),
+            );
           const actions = element(
             "div",
             null,
