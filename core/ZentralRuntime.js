@@ -2014,6 +2014,10 @@
     const results = await Promise.allSettled([
       session?.promiseAllWindowsRestored,
       window.gZenWorkspaces?.promiseInitialized,
+      // ZenStartup initializes compact-mode mouse actions after the session and
+      // workspace promises settle. Await that final barrier before any feature
+      // snapshots native capabilities or installs wrappers/listeners.
+      window.gZenStartup?.promiseInitialized,
     ]);
     runtime.nativeReadinessWarnings = results
       .filter((result) => result.status === "rejected")

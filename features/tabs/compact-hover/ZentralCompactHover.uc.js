@@ -743,6 +743,9 @@
               "zen-sidebar-collapsed",
               "zen-right-side",
               "zen-sidebar-right",
+              // canHideSidebar also depends on Zen's late single-toolbar layout.
+              "zen-single-toolbar",
+              "zen-sidebar-expanded",
             ],
           });
       }

@@ -4,7 +4,7 @@ Start at `Zentral.uc.js`. Starts the loader, publishes shared services, owns fea
 
 ## Startup and diagnostics
 
-The runtime loads feature declarations and their owned styles before activating modules. All feature activation, including live enable requests during startup, waits for session restoration and Zen workspace initialization through one shared `nativeReady` promise. A final task lets native preference observers settle. Features still activate in dependency order, and an individual feature failure remains isolated.
+The runtime loads feature declarations and their owned styles before activating modules. All feature activation, including live enable requests during startup, waits for session restoration, Zen workspace initialization, and `gZenStartup.promiseInitialized` (when available) through one shared `nativeReady` promise. Zen’s final startup barrier initializes compact-mode mouse actions; activating against the earlier workspace promise alone can leave saved window-entry reveal inactive. A final task lets native preference observers settle. Features still activate in dependency order, and an individual feature failure remains isolated.
 
 Developer status and copied reports expose `startupStage`, readiness warnings, feature failures and dependency blocks. Startup stages distinguish waiting for the browser, loading sources, loading styles, waiting for native restoration, activating features and ready. Closing the window cancels owned work; a completed readiness promise cannot reactivate a disposed runtime.
 
