@@ -1996,6 +1996,42 @@
         return next;
       }
 
+      // Per-panel zoom belongs to the saved app (or its essential tab), not the
+      // site's native tab zoom. Changes are written only when the value differs.
+      ctx.panelZoomRestoring = new WeakSet();
+      ctx.panelZoomReady = new WeakSet();
+      ctx.persistPanelZoom = (browser, value = null) => {
+        if (!browser) return false;
+        try {
+          if (value === null) {
+            if (!ctx.panelZoomReady.has(browser)) return false;
+            value = ZoomManager.getZoomForBrowser(browser);
+          }
+          if (!Number.isFinite(value)) return false;
+          const zoom = Math.round(Math.max(0.3, Math.min(3, value)) * 100) / 100;
+          const essential = ctx.essentialPanels.get(browser._bgalazkaAppId);
+          if (essential) {
+            if (essential.app.zoom !== zoom) {
+              essential.app.zoom = zoom;
+              ctx.saveEssentialSettings(essential);
+            }
+            return true;
+          }
+          return window.Zentral?.Apps?.rememberPanelZoom?.(browser, zoom) || false;
+        } catch (_) { return false; }
+      };
+      ctx.restorePanelZoom = (browser) => {
+        if (!browser?.isConnected) return;
+        const zoom = ctx.essentialPanels.get(browser._bgalazkaAppId)?.app.zoom ??
+          window.Zentral?.Apps?.getPanelZoom?.(browser);
+        if (!Number.isFinite(zoom)) return; // Preserve native defaults for untouched panels.
+        try {
+          ctx.panelZoomRestoring.add(browser);
+          if (Math.abs(ZoomManager.getZoomForBrowser(browser) - zoom) > 0.001)
+            ZoomManager.setZoomForBrowser(browser, zoom);
+        } catch (_) {}
+        finally { ctx.panelZoomRestoring.delete(browser); } // Existing load/pageshow/state events retry once the host is ready.
+      };
       function stepActivePanelZoom(delta, browser = getKeyboardPanelBrowser()) {
         if (!browser) return false;
         try {
@@ -2003,6 +2039,7 @@
           const next =
             delta === 0 ? 1 : Math.max(0.3, Math.min(3, cur + delta));
           ZoomManager.setZoomForBrowser(browser, next);
+          ctx.persistPanelZoom(browser, next);
           ctx.updateWebToolbarState?.();
           return true;
         } catch (_) {
@@ -2338,7 +2375,7 @@
         const navigationListeners = new Map();
         const pruneNavigationListeners = (appId = null) => {
           navigationListeners.forEach(
-            ({ onNav, progressListener }, browser) => {
+            ({ onNav, onZoom, progressListener }, browser) => {
               if (
                 browser.isConnected &&
                 (!appId || browser._bgalazkaAppId !== appId)
@@ -2350,6 +2387,7 @@
                 "pageshow",
                 "DOMTitleChanged",
               ].forEach((type) => browser.removeEventListener(type, onNav));
+              browser.removeEventListener("FullZoomChange", onZoom, true);
               try {
                 browser.webProgress?.removeProgressListener(progressListener);
               } catch (_) {}
@@ -2466,6 +2504,7 @@
             if (result?.browser) {
               result.browser._bgalazkaAppId = app?.id || null;
               ctx.applyPanelContainerLoadContext(result.browser, userContextId);
+              if (result.isNew) ctx.restorePanelZoom(result.browser);
             }
             if (
               result?.browser &&
@@ -2502,7 +2541,20 @@
             // fallback in startWebToolbarPolling() above, since those don't
             // reliably fire these events).
             if (result?.browser && !navigationListeners.has(result.browser)) {
+              const onZoom = () => {
+                if (ctx.extensionDisposed || !result.browser.isConnected) return;
+                if (!ctx.panelZoomReady.has(result.browser) || ctx.panelZoomRestoring.has(result.browser) ||
+                    result.browser.webProgress?.isLoadingDocument) return;
+                ctx.persistPanelZoom(result.browser);
+                ctx.updateWebToolbarState();
+              };
+              result.browser.addEventListener("FullZoomChange", onZoom, true);
+              if (!result.isNew) ctx.panelZoomReady.add(result.browser);
               const onNav = (event) => {
+                if (event?.type === "XULFrameLoaderCreated") ctx.panelZoomReady.delete(result.browser);
+                if (["load", "pageshow", "XULFrameLoaderCreated"].includes(event?.type))
+                  ctx.restorePanelZoom(result.browser);
+                if (["load", "pageshow"].includes(event?.type)) ctx.panelZoomReady.add(result.browser);
                 // A process swap can revoke activation after openPanel's first
                 // retries. Reassert promptly on navigation instead of waiting
                 // for the periodic status check.
@@ -2531,6 +2583,11 @@
                 },
                 onStateChange(progress, request, stateFlags) {
                   if (progress && !progress.isTopLevel) return;
+                  if (stateFlags & Ci.nsIWebProgressListener.STATE_START) ctx.panelZoomReady.delete(result.browser);
+                  if (stateFlags & Ci.nsIWebProgressListener.STATE_STOP) {
+                    ctx.restorePanelZoom(result.browser);
+                    ctx.panelZoomReady.add(result.browser);
+                  }
                   if (
                     ctx.zenCssEnabled() &&
                     stateFlags & Ci.nsIWebProgressListener.STATE_STOP &&
@@ -2556,6 +2613,7 @@
               } catch (_) {}
               navigationListeners.set(result.browser, {
                 onNav,
+                onZoom,
                 progressListener,
               });
             }
@@ -2593,6 +2651,8 @@
         const origCloseApp = apps.closeApp?.bind(apps);
         if (origCloseApp) {
           apps.closeApp = function (appId, ...args) {
+            const browser = ctx.getAllAppBrowsers().find(b => b._bgalazkaAppId === appId);
+            if (browser) ctx.persistPanelZoom(browser);
             const host = ctx.removeAddonHostRecord(appId);
             if (host?.removalFailed) {
               if (ctx.getActiveAppBrowser() === host.browser) apps.closePanel();
@@ -2623,8 +2683,10 @@
         }
 
         registerCleanup(() => {
+          for (const browser of navigationListeners.keys())
+            if (browser.isConnected) ctx.persistPanelZoom(browser);
           navigationListeners.forEach(
-            ({ onNav, progressListener }, browser) => {
+            ({ onNav, onZoom, progressListener }, browser) => {
               try {
                 browser.webProgress?.removeProgressListener(progressListener);
               } catch (_) {}
@@ -2642,6 +2704,7 @@
                 "pageshow",
                 "DOMTitleChanged",
               ].forEach((type) => browser.removeEventListener(type, onNav));
+              browser.removeEventListener("FullZoomChange", onZoom, true);
             },
           );
           navigationListeners.clear();
@@ -2981,8 +3044,8 @@
       /* ==========================================================================
        * 5. SETTINGS MODAL DETECTION (NO OBSERVERS — see crash-guard note 4)
        * -----------------------------------------------------------------------
-       * Direct hook into ZentralSettings.open avoids subtree MutationObserver
-       * violations over tabstrip ancestors during session initialization.
+       * The runtime's ordered settings hook avoids subtree MutationObserver
+       * violations and keeps UI assembly independent of module activation order.
        * ========================================================================== */
       // Native updateAllSubGroupsBadges queried the groups once, then scanned that
       // entire array for EVERY group (quadratic). Bucket direct children once and
@@ -3029,24 +3092,11 @@
         if (settingsInstance._bgalazkaPatched) return true;
         settingsInstance._bgalazkaPatched = true;
 
-        const origOpen = settingsInstance.open?.bind(settingsInstance);
-        settingsInstance.open = function (...args) {
-          const result = origOpen?.(...args);
-          // Optional extension settings must never make the base modal unusable.
-          // A single failed row should be reported without aborting other hooks.
-          try {
-            ctx.injectSettingsUI?.();
-          } catch (error) {
-            console.error(
-              "[BgalazkaExtension] Extension settings failed:",
-              error,
-            );
-          }
-          return result;
-        };
-
+        const removeSettingsHook = window.ZentralRuntime.registerSettingsHook(
+          "extension-settings", 10, () => ctx.injectSettingsUI?.(),
+        );
         registerCleanup(() => {
-          if (origOpen) settingsInstance.open = origOpen;
+          removeSettingsHook();
           settingsInstance._bgalazkaPatched = false;
         });
 
@@ -3177,7 +3227,15 @@
         BGALAZKA_EXT_PREFS.ADDON_TAB_ID_BRIDGE,
         true,
       );
-      ctx.reconcileFeaturePreferences = () => {
+      ctx.reconcileFeaturePreferences = (key = null) => {
+        // Appearance and video own their live updates. A color/slider edit must
+        // not refresh panel hosts, tile browsers, toolbars or browser activity.
+        if (typeof key === "string" && key.startsWith("zen.workspace.bgalazka.look.")) {
+          if (key === EXT_PREFS.TABBAR_COMPACT)
+            document.documentElement.setAttribute("bgalazka-tabbar-compact", String(getPref(key, false)));
+          return;
+        }
+        if (typeof key === "string" && key.startsWith("zen.workspace.zentral.video_preview.")) return;
         if (featureSyncTimer != null) return;
         featureSyncTimer = setTimeout(() => {
           featureSyncTimer = null;
@@ -3230,7 +3288,7 @@
             ].includes(key)
           )
             ctx.cancelPanelRetries();
-          ctx.reconcileFeaturePreferences();
+          ctx.reconcileFeaturePreferences(key);
         },
       };
       Services.prefs.addObserver(

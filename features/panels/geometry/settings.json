@@ -206,23 +206,23 @@
       "owner": "geometry"
     },
     "zen.workspace.bgalazka.panel_horizontal_offset_px": {
-      "category": "panel-layout",
-      "section": "Docking, size & input",
+      "category": "density",
+      "section": "Panel size & position",
       "owner": "geometry"
     },
     "zen.workspace.bgalazka.panel_top_extra_px": {
-      "category": "panel-layout",
-      "section": "Docking, size & input",
+      "category": "density",
+      "section": "Panel size & position",
       "owner": "geometry"
     },
     "zen.workspace.bgalazka.panel_bottom_extra_px": {
-      "category": "panel-layout",
-      "section": "Docking, size & input",
+      "category": "density",
+      "section": "Panel size & position",
       "owner": "geometry"
     },
     "zen.workspace.bgalazka.panel_position_offset_px": {
-      "category": "panel-layout",
-      "section": "Docking, size & input",
+      "category": "density",
+      "section": "Panel size & position",
       "owner": "geometry"
     }
   }

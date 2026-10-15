@@ -1080,28 +1080,28 @@
   ],
   "settings": {
     "zen.workspace.bgalazka.web_toolbar_enabled": {
-      "category": "panel-toolbar",
-      "section": "Navigation & placement",
+      "category": "essentials",
+      "section": "Essential features",
       "owner": "panel-toolbar"
     },
     "zen.workspace.bgalazka.web_toolbar_autohide": {
-      "category": "panel-toolbar",
-      "section": "Navigation & placement",
+      "category": "theme-details",
+      "section": "Navigation toolbar",
       "owner": "panel-toolbar"
     },
     "zen.workspace.bgalazka.web_toolbar_top": {
-      "category": "panel-toolbar",
-      "section": "Navigation & placement",
+      "category": "theme-details",
+      "section": "Navigation toolbar",
       "owner": "panel-toolbar"
     },
     "zen.workspace.bgalazka.web_toolbar_urlbar": {
-      "category": "panel-toolbar",
-      "section": "Navigation & placement",
+      "category": "theme-details",
+      "section": "Navigation toolbar",
       "owner": "panel-toolbar"
     },
     "zen.workspace.bgalazka.web_toolbar_zoom": {
-      "category": "panel-toolbar",
-      "section": "Navigation & placement",
+      "category": "theme-details",
+      "section": "Navigation toolbar",
       "owner": "panel-toolbar"
     },
     "zen.workspace.bgalazka.web_toolbar_search_engine": {
@@ -1195,28 +1195,28 @@
       "owner": "panel-toolbar"
     },
     "zen.workspace.bgalazka.look.toolbar_opacity": {
-      "category": "toolbar-appearance",
-      "section": "Colors & transparency",
+      "category": "theme-details",
+      "section": "Navigation toolbar",
       "owner": "panel-toolbar"
     },
     "zen.workspace.bgalazka.look.address_opacity": {
-      "category": "toolbar-appearance",
-      "section": "Colors & transparency",
+      "category": "theme-details",
+      "section": "Navigation toolbar",
       "owner": "panel-toolbar"
     },
     "zen.workspace.bgalazka.look.toolbar_surface": {
-      "category": "toolbar-appearance",
-      "section": "Colors & transparency",
+      "category": "theme-details",
+      "section": "Navigation toolbar",
       "owner": "panel-toolbar"
     },
     "zen.workspace.bgalazka.look.toolbar_url": {
-      "category": "toolbar-appearance",
-      "section": "Colors & transparency",
+      "category": "theme-details",
+      "section": "Navigation toolbar",
       "owner": "panel-toolbar"
     },
     "zen.workspace.bgalazka.look.toolbar_border": {
-      "category": "toolbar-appearance",
-      "section": "Colors & transparency",
+      "category": "theme-details",
+      "section": "Navigation toolbar",
       "owner": "panel-toolbar"
     }
   }

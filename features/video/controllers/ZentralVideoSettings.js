@@ -25,17 +25,16 @@
  *   compactPaused; cropStates; current; diagnostics; discoveryChoice; discoveryLocks; discoveryWinner;
  *   enabled; ensureVideoDevCategory; ensureVideoTestControls; experimentalBridgeDisabled; fastCaptures;
  *   featureOn; fillWidth; fitPicture; framingChoice; heightPx; hideMutedDuplicates; nextStillCapture;
- *   originalSettingsOpen; paint; pauseWhenCompactHidden; pinnedSource; powerOn; previewAutoSelected;
+ *   settingsHookCleanup; paint; pauseWhenCompactHidden; pinnedSource; powerOn; previewAutoSelected;
  *   previewMode; previewVisible; radiusPx; refreshCaption; refreshCard; refreshMethodStatus;
  *   refreshPlaybackStatus; refreshSettingList; rendererChoice; rendererRetryCounts; requireAudio;
  *   resetRendering; runSourceExperiment; scan; scanIntervalMs; select; setAutoHeight; setCaption;
  *   settingsCategoryGuard; settingsInstance; slowCaptures; sources; unavailableBySource; updatePaintTimer;
- *   videoSettingFromMenu; visibilityCheckAt; widthPercent; wrappedSettingsOpen
+ *   videoSettingFromMenu; visibilityCheckAt; widthPercent
  * Contract fields assigned here: deps.adaptiveWidth; deps.current; deps.discoveryWinner; deps.fastCaptures;
- *   deps.heightPx; deps.nextStillCapture; deps.originalSettingsOpen; deps.pinnedSource;
+ *   deps.heightPx; deps.nextStillCapture; deps.settingsHookCleanup; deps.pinnedSource;
  *   deps.previewAutoSelected; deps.radiusPx; deps.settingsCategoryGuard; deps.settingsInstance;
- *   deps.slowCaptures; deps.videoSettingFromMenu; deps.visibilityCheckAt; deps.widthPercent;
- *   deps.wrappedSettingsOpen
+ *   deps.slowCaptures; deps.videoSettingFromMenu; deps.visibilityCheckAt; deps.widthPercent
  * Literal DOM event subscriptions: change; click; input
  *
  * Metadata dependency: Runtime.settingsOwnerAvailable prevents building Video pages after its descriptor fails.
@@ -62,7 +61,7 @@
         const own = (id) =>
           deps.ZentralRuntime.ensureSettingsCategory(modal, id);
         const playback = own("video-playback");
-        const appearance = own("video-appearance");
+        const appearance = { content: deps.ZentralRuntime.ensureSettingsSection(modal, "theme-details", "Sidebar video") };
         const keys = {
           width: deps.WIDTH_PREF,
           height: deps.HEIGHT_PREF,
@@ -128,14 +127,17 @@
           });
           row.dataset.videoSettings = "row";
           row.dataset.settingsOwner = "video";
-          const target = own(meta.category).content;
+          const target = deps.ZentralRuntime.ensureSettingsSection(modal, meta.category, meta.section);
           if (!target.contains(row)) target.appendChild(row);
         }
         const resetHeight = modal.querySelector(
           "#zs-video-preview-reset-height",
         );
-        if (resetHeight && resetHeight.parentElement !== appearance.content)
-          appearance.content.appendChild(resetHeight);
+        if (resetHeight) {
+          const size = deps.ZentralRuntime.ensureSettingsSection(modal, "density", "Video size");
+          if (resetHeight.parentElement !== size) size.appendChild(resetHeight);
+          resetHeight.dataset.videoSettingsOwned = "true";
+        }
         const experiments = own("video-experiments");
         const switchRow = modal
           .querySelector("#zs-video-preview-disable-experimental")
@@ -780,7 +782,7 @@
           list.id = "zs-video-preview-sources";
           list.size = 9;
           list.style.cssText =
-            "width:100%; min-height:180px; background:#15151d; color:inherit; border-radius:8px; padding:8px;";
+            "width:100%; min-height:180px; background:var(--zl-input,#15151d); color:inherit; border-radius:8px; padding:8px;";
           const actions = document.createElement("div");
           actions.style.cssText = "display:flex; gap:8px;";
           const preview = document.createElement("button");
@@ -1247,14 +1249,9 @@
         const instance = window.Zentral?.Settings;
         if (!instance || deps.settingsInstance) return;
         deps.settingsInstance = instance;
-        deps.originalSettingsOpen = instance.open;
-        deps.wrappedSettingsOpen = function (...args) {
-          const result = deps.originalSettingsOpen.apply(this, args);
-          injectSetting();
-          return result;
-        };
-        instance.open = deps.wrappedSettingsOpen;
-        injectSetting();
+        deps.settingsHookCleanup = deps.ZentralRuntime.registerSettingsHook(
+          "video-settings", 20, injectSetting,
+        );
       }
       return { organizeVideoSettings, injectSetting, hookSettings };
     },

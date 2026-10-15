@@ -290,28 +290,28 @@
   ],
   "settings": {
     "zen.workspace.apps.sidebar.enabled": {
-      "category": "apps",
-      "section": "Launcher grid & placement",
+      "category": "essentials",
+      "section": "Essential features",
       "owner": "apps"
     },
     "zen.workspace.apps.sidebar.apps_per_row": {
-      "category": "apps",
-      "section": "Launcher grid & placement",
+      "category": "density",
+      "section": "App grid",
       "owner": "apps"
     },
     "zen.workspace.apps.sidebar.max_rows": {
-      "category": "apps",
-      "section": "Launcher grid & placement",
+      "category": "density",
+      "section": "App grid",
       "owner": "apps"
     },
     "zen.workspace.apps.sidebar.max_apps": {
-      "category": "apps",
-      "section": "Launcher grid & placement",
+      "category": "density",
+      "section": "App grid",
       "owner": "apps"
     },
     "zen.workspace.apps.sidebar.hide_utility_section": {
-      "category": "apps",
-      "section": "Launcher grid & placement",
+      "category": "theme-details",
+      "section": "Tabs, folders & launchers",
       "owner": "apps"
     },
     "zen.workspace.apps.sidebar.autohide": {
@@ -320,23 +320,23 @@
       "owner": "apps"
     },
     "zen.workspace.apps.sidebar.placement": {
-      "category": "apps",
-      "section": "Launcher grid & placement",
+      "category": "density",
+      "section": "App grid",
       "owner": "apps"
     },
     "zen.workspace.apps.sidebar.width": {
-      "category": "apps",
-      "section": "Launcher grid & placement",
+      "category": "density",
+      "section": "Panel size & position",
       "owner": "apps"
     },
     "zen.workspace.apps.sidebar.animation_speed": {
-      "category": "apps",
-      "section": "Launcher grid & placement",
+      "category": "theme-details",
+      "section": "Panel position & motion",
       "owner": "apps"
     },
     "zen.workspace.apps.sidebar.animation_type": {
-      "category": "apps",
-      "section": "Launcher grid & placement",
+      "category": "theme-details",
+      "section": "Panel position & motion",
       "owner": "apps"
     },
     "zen.workspace.apps.sidebar.badge_poll_interval_ms": {

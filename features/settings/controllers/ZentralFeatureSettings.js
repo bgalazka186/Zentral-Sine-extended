@@ -67,6 +67,7 @@
       ZentralRuntime.registerPart("extension-settings", function* (ctx) {
         Object.defineProperties(ctx, {
           injectSettingsUI: { configurable: true, get: () => injectSettingsUI },
+          setLookPaletteMode: { configurable: true, get: () => setPaletteMode },
           syncSettingsAfterImport: {
             configurable: true,
             get: () => syncChangedSetting,
@@ -93,16 +94,20 @@
           { owner: "appearance" },
         );
         const {
+          applyThemeColors,
+          setPaletteMode,
           LOOK_GROUP_PREFS,
           LOOK_PREFS,
           LOOK_DEFAULTS,
           LOOK_THEMES,
+          LOOK_THEME_VARIANTS,
           LOOK_KEYS,
           LOOK_TRANSPARENCY_KEYS,
           LOOK_COLORS,
           LOOK_ENUMS,
           LOOK_BOUNDS,
           applyLook,
+          scheduleLook,
           syncChangedSetting,
           syncAppearanceAfterImport,
         } = window.ZentralModuleLoader.create("appearance", { ctx, Services });
@@ -2129,13 +2134,12 @@
                 // Strict rendering, visible-source suspension and experiments
                 // must remain opt-in, including the inverted experiment switch.
                 if (input.dataset.recommendedValue === undefined) continue;
-                const wanted =
-                  recommended && input.dataset.recommendedValue === "true";
+                const wanted = recommended && input.dataset.recommendedValue === "true";
                 if (input.checked !== wanted) input.click();
               }
             };
             for (const [label, recommended] of [
-              ["Recommended settings", true],
+              ["Enable common extension switches", true],
               ["Turn everything off", false],
             ]) {
               const button = document.createElement("button");
@@ -2316,15 +2320,17 @@
               lookCategory.subContent.appendChild(heading);
             };
             const lookControls = [];
+            lookCategory.subPanel._setPaletteMode = setPaletteMode;
             const ensureCustomLook = (key) => {
               if (
                 key !== LOOK_PREFS.STYLE &&
+                SETTINGS_ORGANIZATION.settings[key]?.category !== "density" &&
                 ctx.getPref(LOOK_PREFS.STYLE, "atelier") === "classic"
               ) {
                 ctx.setPref(LOOK_PREFS.STYLE, "atelier");
                 lookCategory.subPanel._syncLook?.();
               }
-              applyLook();
+              scheduleLook();
             };
             const addLookSelect = (label, description, key, options) => {
               const control = createSelectRow(
@@ -2337,7 +2343,12 @@
                 null,
                 () => ensureCustomLook(key),
               );
+              if (key === LOOK_PREFS.PALETTE_MODE) {
+                // Capture runs before the generic row commits its preference.
+                control.select.addEventListener("change", () => setPaletteMode(control.select.value), true);
+              }
               control.select.removeAttribute("style");
+              if (key === LOOK_PREFS.TEXT_MODE) control.row.dataset.paletteDetail = "true";
               lookCategory.subContent.append(control.row);
               lookControls.push({ input: control.select, key });
             };
@@ -2352,6 +2363,12 @@
                 ensureCustomLook(key),
               );
               lookCategory.subContent.append(control.row);
+              if (![LOOK_PREFS.PRIMARY, LOOK_PREFS.SECONDARY, LOOK_PREFS.WEB_SURFACE].includes(key))
+                control.row.dataset.paletteDetail = "true";
+              if (/TEXT|MUTED/.test(Object.keys(LOOK_PREFS).find(name => LOOK_PREFS[name] === key) || ""))
+                control.row.dataset.manualText = "true";
+              if ([LOOK_PREFS.PRIMARY, LOOK_PREFS.SECONDARY].includes(key))
+                control.row.dataset.paletteSimple = "true";
               lookControls.push({ input: control.input, key });
             };
             const addLookSlider = (
@@ -2393,6 +2410,8 @@
                 control.input.addEventListener("input", () =>
                   ensureCustomLook(key),
                 );
+              if (LOOK_TRANSPARENCY_KEYS.has(key) && key !== LOOK_PREFS.WEB_OPACITY)
+                control.row.dataset[key === LOOK_PREFS.PRIMARY_OPACITY ? "paletteSimple" : "paletteDetail"] = "true";
               lookCategory.subContent.append(control.row);
               lookControls.push({
                 input: control.input,
@@ -2413,6 +2432,7 @@
                 const value = ctx.getPref(key, LOOK_DEFAULTS[key]);
                 input.value = inverted ? 100 - value : value;
                 if (badge) badge.textContent = input.value + suffix;
+                if (key === LOOK_PREFS.CONTROL_STRENGTH) input.disabled = ctx.getPref(LOOK_PREFS.SOLID_CONTROLS, true) === false;
               }
             };
             lookCategory.subPanel._syncLook = syncLookControls;
@@ -2455,48 +2475,89 @@
             );
             const themeChoices = document.createElement("div");
             themeChoices.className = "zs-look-themes";
-            for (const theme of LOOK_THEMES) {
+            const createThemeChoice = (theme) => {
               const choice = document.createElement("button");
               choice.type = "button";
               choice.className = "zs-look-theme";
               choice.style.setProperty("--zs-theme-swatch", theme.swatch);
-              choice.textContent = theme.name;
+              const name = document.createElement("strong");
+              name.textContent = theme.name;
+              const description = document.createElement("span");
+              description.className = "zs-theme-description";
+              description.textContent = theme.description || "";
+              const preview = document.createElement("span");
+              preview.className = "zs-theme-preview";
+              preview.setAttribute("aria-hidden", "true");
+              preview.style.setProperty("--theme-canvas", theme.values[LOOK_PREFS.PRIMARY] ?? theme.values[LOOK_PREFS.CANVAS]);
+              preview.style.setProperty("--theme-accent", theme.swatch);
+              preview.style.setProperty("--theme-radius", (theme.values[LOOK_PREFS.RADIUS] ?? LOOK_DEFAULTS[LOOK_PREFS.RADIUS]) + "px");
+              choice.append(preview, name, description);
               choice.title =
                 "Apply " +
                 theme.name +
                 ". " +
                 (theme.description || "") +
-                " Every value stays editable below";
-              choice.addEventListener("click", () => {
-                for (const [key, value] of Object.entries(LOOK_DEFAULTS)) {
-                  // Theme swatches change colors and shapes, not the user's chosen
-                  // sidebar density. Reset Look defaults still turns it off.
-                  if (
-                    key === LOOK_PREFS.TABBAR_COMPACT ||
-                    key === LOOK_PREFS.TABBAR_ROW_HEIGHT ||
-                    key === LOOK_PREFS.TABBAR_ROW_GAP ||
-                    key === LOOK_PREFS.TABBAR_ICON_GAP ||
-                    key === LOOK_PREFS.DENSITY_ICONS ||
-                    key === LOOK_PREFS.DENSITY_NEWTAB ||
-                    key === LOOK_PREFS.DENSITY_URLBAR ||
-                    key === LOOK_PREFS.DENSITY_ESSENTIALS ||
-                    key === LOOK_PREFS.ESSENTIALS_HEIGHT ||
-                    key === LOOK_PREFS.TABBAR_SECTION_GAP ||
-                    key === LOOK_PREFS.FOLDER_ICON_SIZE ||
-                    key === LOOK_PREFS.WORKSPACE_ICON_SIZE ||
-                    key === LOOK_PREFS.WORKSPACE_HEIGHT ||
-                    key === LOOK_PREFS.BOTTOM_BAR_HEIGHT ||
-                    key === LOOK_PREFS.URLBAR_TOP_GAP ||
-                    key === LOOK_PREFS.NEWTAB_HEIGHT
-                  )
-                    continue;
-                  ctx.setPref(key, theme.values[key] ?? value);
-                }
-                syncAppearanceAfterImport();
-              });
-              themeChoices.append(choice);
+                " Applies colors, panel backing and decorative styles. Keeps density, size and behavior.";
+              choice.addEventListener("click", () => applyThemeColors(theme));
+              return choice;
+            };
+            for (const theme of LOOK_THEMES) {
+              const family = document.createElement("div");
+              family.className = "zs-theme-family";
+              const choice = createThemeChoice(theme);
+              family.append(choice);
+              const variants = LOOK_THEME_VARIANTS[theme.name] || [];
+              if (variants.length) {
+                // A native select keeps variations inside one theme card and
+                // works with keyboard navigation without a custom popup layer.
+                const label = document.createElement("label");
+                label.className = "zs-theme-variants";
+                const select = document.createElement("select");
+                select.className = "zs-select-input";
+                select.setAttribute("aria-label", theme.name + " variant");
+                const prompt = document.createElement("option");
+                prompt.value = "";
+                prompt.textContent = "Variants…";
+                prompt.disabled = true;
+                prompt.selected = true;
+                select.append(prompt);
+                const choices = [theme, ...variants];
+                choices.forEach((variant, index) => {
+                  const option = document.createElement("option");
+                  option.value = String(index);
+                  option.textContent = index === 0 ? "Original" : variant.name;
+                  select.append(option);
+                });
+                select.value = "";
+                select.addEventListener("change", () => {
+                  if (select.value === "") return;
+                  const selected = choices[Number(select.value)];
+                  if (selected) applyThemeColors(selected);
+                });
+                choice.addEventListener("click", () => { select.value = ""; });
+                label.append(select);
+                family.append(label);
+              }
+              themeChoices.append(family);
             }
             lookCategory.subContent.append(themeChoices);
+            const solidControls = createToggleRow("Keep controls readable", "Adjustable backing for toolbars, video controls and menus; web panels keep their own opacity", LOOK_PREFS.SOLID_CONTROLS, null, true, null, () => { applyLook(); syncLookControls(); });
+            lookCategory.subContent.append(solidControls.row);
+            panel._toggles.push({ input: solidControls.input, pref: LOOK_PREFS.SOLID_CONTROLS, def: true, onSync: syncLookControls });
+            addLookSlider("Readability strength", "0% adds no backing; 100% gives the strongest protection. Does not change panel opacity.", LOOK_PREFS.CONTROL_STRENGTH, 0, 100, "%");
+            syncLookControls();
+            addLookHeading("Color controls");
+            addLookSelect("Color controls", "Start with a theme and palette. Switching to Detailed copies the current look so you can refine each part.", LOOK_PREFS.PALETTE_MODE, [
+              { value: "simple", label: "Simple — linked palette" },
+              { value: "detailed", label: "Detailed — individual colors" },
+            ]);
+            addLookColor("Primary color", "UI surfaces, toolbars and video controls use related shades; web backing stays separate", LOOK_PREFS.PRIMARY);
+            addLookColor("Secondary color", "Highlights, borders, selection and URL-field focus", LOOK_PREFS.SECONDARY);
+            addLookSlider("Primary transparency", "Linked panel surfaces. Settings fields and actions retain a readable solid backing.", LOOK_PREFS.PRIMARY_OPACITY, 0, 100, "%");
+            addLookSelect("Text contrast", "Simple always chooses black or white. Detailed can use automatic contrast or your manual text colors.", LOOK_PREFS.TEXT_MODE, [
+              { value: "auto", label: "Automatic — readable text" },
+              { value: "manual", label: "Manual — individual text colors" },
+            ]);
             addLookHeading("Palette");
             addLookColor(
               "Canvas",
@@ -2524,6 +2585,29 @@
               "Descriptions and captions",
               LOOK_PREFS.MUTED,
             );
+            addLookHeading("Settings, menus and status colors");
+            addLookColor("Settings background", "Settings page and dialog background", LOOK_PREFS.SETTINGS_CANVAS);
+            addLookColor("Settings header and footer", "Title bar and bottom actions", LOOK_PREFS.SETTINGS_HEADER);
+            addLookColor("Settings navigation", "Category list background", LOOK_PREFS.SETTINGS_NAV);
+            addLookColor("Settings cards", "Rows, nested cards and diagnostic boxes", LOOK_PREFS.SETTINGS_CARD);
+            addLookColor("Settings text", "Manual text color when automatic contrast is off", LOOK_PREFS.SETTINGS_TEXT);
+            addLookColor("Settings secondary text", "Manual description color when automatic contrast is off", LOOK_PREFS.SETTINGS_MUTED);
+            addLookColor("Input background", "Settings fields, reports, selectors and keybind recorders", LOOK_PREFS.INPUT_SURFACE);
+            addLookColor("Input text", "Manual field text when automatic contrast is off", LOOK_PREFS.INPUT_TEXT);
+            addLookColor("Button hover background", "Hover and pressed control surfaces", LOOK_PREFS.BUTTON_HOVER);
+            addLookColor("Button hover text", "Manual hover text when automatic contrast is off", LOOK_PREFS.BUTTON_HOVER_TEXT);
+            addLookColor("Selected control background", "Active navigation, selected options and primary actions", LOOK_PREFS.SELECTED_SURFACE);
+            addLookColor("Selected control text", "Manual selected text when automatic contrast is off", LOOK_PREFS.SELECTED_TEXT);
+            addLookColor("Menu background", "App/group menus and custom dropdowns", LOOK_PREFS.POPUP_SURFACE);
+            addLookColor("Menu text", "Manual menu text when automatic contrast is off", LOOK_PREFS.POPUP_TEXT);
+            addLookColor("Success color", "Success and enabled-state indicators", LOOK_PREFS.SUCCESS);
+            addLookColor("Warning color", "Warnings and pending changes", LOOK_PREFS.WARNING);
+            addLookColor("Error and destructive-action color", "Errors, removal actions and recording indicators", LOOK_PREFS.DANGER);
+            addLookColor("Settings backdrop", "Dimmed layer behind the settings dialog", LOOK_PREFS.BACKDROP);
+            addLookSlider("Settings backdrop transparency", "The dialog stays readable while its surrounding backdrop changes", LOOK_PREFS.BACKDROP_OPACITY, 0, 100, "%");
+            addLookHeading("Web panel backing");
+            addLookColor("Web panel background", "Independent of the UI palette. Dark backing helps sites made transparent by Zen Internet.", LOOK_PREFS.WEB_SURFACE);
+            addLookSlider("Web panel background transparency", "0% is solid backing; 100% is fully transparent. Whole-panel opacity and the black-background toolbar button remain separate.", LOOK_PREFS.WEB_OPACITY, 0, 100, "%");
             addLookHeading("Transparency");
             const transparencyHelp = document.createElement("p");
             transparencyHelp.className = "zs-look-note";
@@ -2990,16 +3074,33 @@
             const resetLook = document.createElement("button");
             resetLook.type = "button";
             resetLook.className = "zs-look-action";
-            resetLook.textContent = "Reset Look defaults";
+            resetLook.textContent = "Reset colors";
             resetLook.addEventListener("click", () => {
-              if (!window.confirm("Reset all Look options to their defaults?"))
-                return;
-              for (const [key, value] of Object.entries(LOOK_DEFAULTS))
-                ctx.setPref(key, value);
-              syncAppearanceAfterImport();
+              if (window.confirm("Reset colors and UI transparency? Density, spacing, sizing and web-panel backing will be kept."))
+                applyThemeColors();
             });
-            lookCategory.subContent.append(resetLook);
-            addLookBackupControls(lookCategory.subContent);
+            const transfers = document.createElement("details");
+            transfers.className = "zs-look-transfer";
+            const transferSummary = document.createElement("summary");
+            transferSummary.textContent = "Import, export & reset colors";
+            transfers.append(transferSummary, resetLook);
+            addLookBackupControls(transfers, ["look"]);
+            const fullBackup = document.createElement("section");
+            fullBackup.className = "zs-full-backup";
+            addLookBackupControls(fullBackup, ["full"]);
+            const nextSteps = document.createElement("div");
+            nextSteps.className = "zs-look-actions";
+            for (const [label, category] of [["Choose a theme", "theme"], ["Layout & density", "density"], ["Panel behavior", "panel-layout"]]) {
+              const link = document.createElement("button");
+              link.type = "button";
+              link.className = "zs-look-action";
+              link.textContent = label;
+              link.addEventListener("click", () => selectSettingsCategory(modal, category));
+              nextSteps.appendChild(link);
+            }
+            fullBackup.appendChild(nextSteps);
+            lookCategory.subContent.append(fullBackup);
+            lookCategory.subContent.append(transfers);
 
             panel.appendChild(content);
             body.append(
@@ -3023,10 +3124,11 @@
                   '#zs-panel-bgalazka, .zs-extension-subpanel, #zs-tab-btn-bgalazka, [id^="zs-tab-btn-extension-"]',
                 )
                 .forEach((node) => node.remove());
+              for (const node of modal.querySelectorAll(".zs-full-backup, .zs-look-themes, .zs-look-transfer")) node.remove();
               for (const node of modal.querySelectorAll("[data-setting-key]")) {
                 const meta =
                   SETTINGS_ORGANIZATION.settings[node.dataset.settingKey];
-                if (meta && !["apps", "tab-groups"].includes(meta.owner))
+                if (meta && !["apps", "tab-groups", "video", "logger", "core"].includes(meta.owner))
                   node.remove();
               }
               for (const category of SETTINGS_ORGANIZATION.categories) {
@@ -3036,23 +3138,22 @@
                   )
                 )
                   continue;
-                modal
-                  .querySelector("#zs-panel-organized-" + category.id)
-                  ?.remove();
+                const sharedPanel = modal.querySelector("#zs-panel-organized-" + category.id);
+                if (sharedPanel?.querySelector("[data-setting-key]")) continue;
+                sharedPanel?.remove();
                 modal
                   .querySelector("#zs-tab-btn-organized-" + category.id)
                   ?.remove();
               }
-              if (wasActive) selectSettingsCategory(modal, "apps");
+              if (wasActive) selectSettingsCategory(modal, "essentials");
             });
           } else if (Array.isArray(panel._toggles)) {
             panel._toggles.forEach(({ input, pref, def, onSync, isSelect }) => {
-              if (isSelect) {
-                input.value = ctx.getPref(pref, def);
-              } else {
-                input.checked = ctx.getPref(pref, def);
-              }
-              if (typeof onSync === "function") {
+              const value = ctx.getPref(pref, def);
+              const changed = isSelect ? input.value !== String(value) : input.checked !== value;
+              if (isSelect) input.value = value;
+              else input.checked = value;
+              if (changed && typeof onSync === "function") {
                 onSync(isSelect ? input.value : input.checked);
               }
             });
@@ -3061,6 +3162,12 @@
           panel._syncEntryAvailability?.();
           panel._syncBacking?.();
           modal.querySelector("#zs-panel-extension-look")?._syncLook?.();
+          // Modern categories already own navigation. Reopening must not recreate
+          // legacy headings/tabs or trigger the full organizer again.
+          if (modal.querySelector(".zs-dialog")?.getAttribute("data-settings-organized") === "true") {
+            organizeNativeSettings(modal);
+            return;
+          }
           applyLook();
           const extensionCategories = [
             {

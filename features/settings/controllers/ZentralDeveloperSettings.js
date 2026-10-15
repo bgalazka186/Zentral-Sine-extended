@@ -65,13 +65,17 @@
         const b = element(
           "button",
           text,
-          "padding:7px 10px;border:1px solid #64748b;border-radius:7px;background:#253047;color:#fff;cursor:pointer",
+          "padding:7px 10px;border:1px solid #64748b;border-radius:7px;background:var(--zl-button-surface,#253047);color:var(--zl-button-text,#fff);cursor:pointer",
         );
         b.type = "button";
         b.addEventListener("click", fn);
         return b;
       }
       function setFeaturePref(key, value) {
+        if (key === "zen.workspace.bgalazka.look.palette_mode" && runtime.panelContext?.setLookPaletteMode) {
+          runtime.panelContext.setLookPaletteMode(value);
+          return;
+        }
         Core.setPref(key, value);
         runtime.panelContext?.syncSettingsAfterImport?.(key);
         const apps = window.Zentral?.Apps,
@@ -109,7 +113,7 @@
         manager = element(
           "div",
           null,
-          "position:fixed;inset:30px;z-index:2147483647;display:flex;flex-direction:column;gap:12px;background:#111827;color:#e5e7eb;padding:20px;border:1px solid #64748b;border-radius:14px;font:13px system-ui;box-shadow:0 12px 60px #000a;color-scheme:dark",
+          "position:fixed;inset:30px;z-index:2147483647;display:flex;flex-direction:column;gap:12px;background:var(--zl-popup,#111827);color:var(--zl-popup-text,#e5e7eb);padding:20px;border:1px solid #64748b;border-radius:14px;font:13px system-ui;box-shadow:0 12px 60px #000a;color-scheme:var(--zl-input-scheme,dark)",
         );
         manager.id = "zentral-control-center";
         manager.setAttribute("role", "dialog");
@@ -148,23 +152,9 @@
             ),
           );
           const startup = runtime.snapshot();
-          body.append(
-            element(
-              "p",
-              "Startup stage: " +
-                (startup.startupStage || "unknown").replaceAll("-", " "),
-              "line-height:1.5",
-            ),
-          );
+          body.append(element("p", "Startup stage: " + (startup.startupStage || "unknown").replaceAll("-", " "), "line-height:1.5"));
           if (startup.nativeReadinessWarnings?.length)
-            body.append(
-              element(
-                "p",
-                "Native startup warnings: " +
-                  startup.nativeReadinessWarnings.join("; "),
-                "line-height:1.5",
-              ),
-            );
+            body.append(element("p", "Native startup warnings: " + startup.nativeReadinessWarnings.join("; "), "line-height:1.5"));
           const actions = element(
             "div",
             null,
@@ -199,7 +189,7 @@
             element(
               "p",
               "Core: ACTIVE · Settings: built in · Sine entrypoint: core/Zentral.uc.js",
-              "color:#86efac",
+              "color:var(--zl-success,#86efac)",
             ),
           );
           for (const r of records.values()) {
@@ -230,7 +220,7 @@
             card.append(label);
             card.append(element("div", r.file || "Built into core"));
             if (r.state === "dormant")
-              card.append(element("div", r.reason, "color:#fcd34d"));
+              card.append(element("div", r.reason, "color:var(--zl-warning,#fcd34d)"));
             const requires = [...(r.requires || []), ...(r.sources || [])];
             card.append(
               element(
@@ -244,7 +234,7 @@
                         )
                         .join(", ")
                     : "browser only"),
-                "color:#cbd5e1",
+                "color:var(--zl-popup-text,#cbd5e1)",
               ),
             );
             if (r.contextDependencies?.length)
@@ -264,13 +254,13 @@
                 element(
                   "div",
                   "Used by: " + dependents.join(", "),
-                  "color:#fcd34d",
+                  "color:var(--zl-warning,#fcd34d)",
                 ),
               );
             card.append(element("div", r.description || ""));
             if (enabled(r.id) !== r.enabledAtStart)
               card.append(
-                element("div", "Change pending restart", "color:#fcd34d"),
+                element("div", "Change pending restart", "color:var(--zl-warning,#fcd34d)"),
               );
             if (r.error) {
               const details = element("details");
@@ -285,7 +275,7 @@
           const unsafeRow = element(
             "label",
             null,
-            "display:flex;gap:8px;padding:10px;color:#fcd34d",
+            "display:flex;gap:8px;padding:10px;color:var(--zl-warning,#fcd34d)",
           );
           const unsafeInput = element("input");
           unsafeInput.type = "checkbox";
@@ -452,7 +442,7 @@
                 element(
                   "div",
                   item.property,
-                  "font-size:11px;color:#94a3b8;overflow-wrap:anywhere",
+                  "font-size:11px;color:var(--zl-settings-muted,#94a3b8);overflow-wrap:anywhere",
                 ),
               );
               const context = runtime.panelContext;
@@ -572,9 +562,7 @@
         else developer();
       }
       // Attach a route to the independent manager even when an optional settings tab fails.
-      const originalOpen = Settings.open.bind(Settings);
-      Settings.open = function (...args) {
-        const result = originalOpen(...args);
+      disposers.push(runtime.registerSettingsHook("developer-settings", 30, () => {
         const modal = document.getElementById("zentral-settings-modal");
         if (modal && !modal.querySelector("#zentral-dev-open")) {
           const b = button("Developer & all settings", openManager);
@@ -582,9 +570,7 @@
           b.style.margin = "8px";
           (modal.querySelector(".zs-tab-bar") || modal).prepend(b);
         }
-        if (modal) organizeNativeSettings(modal);
-        return result;
-      };
+      }));
       const onKey = (e) => {
         if (
           e.ctrlKey &&

@@ -42,8 +42,7 @@
             null,
             deps.Services.io.newURI(window.ZentralModuleLoader.rootURI),
           );
-          const handler = deps.Services.io
-            .getProtocolHandler("resource")
+          const handler = deps.Services.io.getProtocolHandler("resource")
             .QueryInterface(Ci.nsIResProtocolHandler);
           const seen = new Set();
           while (["chrome", "resource"].includes(actorURI.scheme)) {
@@ -51,25 +50,18 @@
               throw new Error("Actor resource mapping contains a cycle");
             seen.add(actorURI.spec);
             if (actorURI.scheme === "chrome") {
-              actorURI = Components.classes[
-                "@mozilla.org/chrome/chrome-registry;1"
-              ]
-                .getService(Ci.nsIChromeRegistry)
-                .convertChromeURL(actorURI);
+              actorURI = Components.classes["@mozilla.org/chrome/chrome-registry;1"]
+                .getService(Ci.nsIChromeRegistry).convertChromeURL(actorURI);
             } else {
               actorURI = deps.Services.io.newURI(handler.resolveURI(actorURI));
             }
           }
           if (!["file", "jar"].includes(actorURI.scheme))
-            throw new Error(
-              "Actor resource must resolve to an installed file or JAR",
-            );
+            throw new Error("Actor resource must resolve to an installed file or JAR");
           const contentURI = deps.Services.io.newURI("./", null, actorURI);
-          const alias =
-            "zentral-video-bridge-v12-resolved-" + deps.EXPERIMENT_HELPER_ID;
+          const alias = "zentral-video-bridge-v12-resolved-" + deps.EXPERIMENT_HELPER_ID;
           handler.setSubstitution(alias, contentURI);
-          deps.actorModuleURI =
-            "resource://" + alias + "/ZentralVideoActor.sys.mjs";
+          deps.actorModuleURI = "resource://" + alias + "/ZentralVideoActor.sys.mjs";
           try {
             // Gecko 154+ requires an explicit opt-in for ordinary web processes.
             // This actor only queries media / operates our own preview document;

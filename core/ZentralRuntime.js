@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Zentral Core and Settings
 // @include chrome://browser/content/browser.xhtml
-// @version 2.1.18
+// @version 2.3.0
 // ==/UserScript==
 /*
  * ZENTRAL FILE GUIDE - core/ZentralRuntime.js
@@ -38,7 +38,7 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const VERSION = "2.1.18";
+  const VERSION = "2.3.0";
   // Sine installs this package under theme.json's id. Resolve from the
   // executing script so local folders and installed copies use their own files.
   // Keep this universal: never hard-code a mod id, folder name, or profile path.
@@ -288,6 +288,7 @@
         ready: activationReady,
         startupStage,
         nativeReadinessWarnings: runtime.nativeReadinessWarnings || [],
+        settingsLayout: runtime.settingsLayoutStatus || { stage: "not opened", failures: [] },
         sources: moduleLoader.sources(),
         features: [...records.values()].map((r) => ({
           ...r,
@@ -751,6 +752,13 @@
     return settingsModuleLoaded(settingsMetadata(item).owner);
   }
   function selectSettingsCategory(modal, target) {
+    // Seven shortcuts share their real preference; refresh only on navigation.
+    for (const row of modal.querySelectorAll("[data-shortcut-key]")) {
+      const item = SETTINGS_SCHEMA.find(item => item.property === row.dataset.shortcutKey);
+      if (item) syncSchemaSetting(item, row);
+    }
+    if (target === "theme-details" && document.documentElement.getAttribute("bgalazka-palette-mode") !== "detailed")
+      modal.querySelector("#zs-panel-extension-look")?._setPaletteMode?.("detailed");
     for (const button of modal.querySelectorAll(".zs-tab-btn"))
       button.setAttribute(
         "data-active",
@@ -762,6 +770,36 @@
         panel.dataset.settingsCategory === target ? "true" : "false",
       );
   }
+  const settingsIcons = Object.freeze({"home": "M3 10 12 3l9 7M5 9v12h14V9M9 21v-7h6v7", "palette": "M12 3a9 9 0 1 0 0 18h2a2 2 0 0 0 0-4h-1a2 2 0 0 1 0-4h4a4 4 0 0 0 4-4c0-3-4-6-9-6M7 8h.01M12 6h.01M6 13h.01", "sliders": "M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6", "layers": "m3 7 9-4 9 4-9 4-9-4Zm0 5 9 4 9-4M3 17l9 4 9-4", "text": "M4 5h16M12 5v15M8 20h8", "window": "M3 4h18v16H3zM3 9h18M6 6.5h.01M9 6.5h.01", "navigation": "m8 6-6 6 6 6M2 12h20M16 6l6 6-6 6", "video": "M3 5h18v14H3zM10 9l5 3-5 3z", "tabs": "M3 7h14v14H3zM7 3h14v14", "more": "M5 12h.01M12 12h.01M19 12h.01", "menu": "M4 6h16M4 12h16M4 18h16", "puzzle": "M3 3h6v3a3 3 0 1 0 6 0V3h6v6h-3a3 3 0 1 0 0 6h3v6H3z", "move": "M12 2v20M2 12h20m-14-6 4-4 4 4M6 8l-4 4 4 4m12-8 4 4-4 4m-10 2 4 4 4-4", "grid": "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z", "folder": "M3 6V4h7l2 3h9v13H3z", "rss": "M4 4a16 16 0 0 1 16 16M4 11a9 9 0 0 1 9 9M4 20h.01", "eye": "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12ZM9 12a3 3 0 1 0 6 0 3 3 0 1 0-6 0", "columns": "M3 4h18v16H3zM12 4v16", "search": "M10 3a7 7 0 1 0 0 14 7 7 0 1 0 0-14m5 12 6 6", "bell": "M5 17h14l-2-3V8a5 5 0 0 0-10 0v6zM10 21h4", "power": "M12 2v10M6 5a9 9 0 1 0 12 0", "keyboard": "M2 5h20v14H2zM5 9h.01M9 9h.01M13 9h.01M17 9h.01M5 13h.01M9 13h.01M13 13h.01M17 13h.01M8 16h8", "list": "M8 5h13M8 12h13M8 19h13M3 5h.01M3 12h.01M3 19h.01", "gauge": "M4 19a10 10 0 1 1 16 0M12 14l5-6M5 19h14", "refresh": "M20 8a9 9 0 1 0 0 8M20 3v5h-5", "flask": "M9 3h6M10 3v7L4 20h16l-6-10V3M7 15h10"});
+  function settingsIcon(name) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.classList.add("zs-category-icon");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", settingsIcons[name] || settingsIcons.sliders);
+    svg.appendChild(path);
+    return svg;
+  }
+  function ensureSettingsSection(modal, category, label) {
+    const content = ensureSettingsCategory(modal, category).content;
+    let segment = [...content.children].find(node => node.dataset.settingsSection === label);
+    if (!segment) {
+      const detailed = category === "theme-details";
+      segment = document.createElement(detailed ? "details" : "section");
+      segment.className = "zs-category-segment";
+      segment.dataset.settingsSection = label;
+      const definition = SETTINGS_ORGANIZATION.categories.find(item => item.id === category);
+      const section = definition?.sections.find(item => item.label === label);
+      const heading = document.createElement(detailed ? "summary" : "h4");
+      heading.append(settingsIcon(section?.icon || definition?.icon), document.createTextNode(label));
+      segment.appendChild(heading);
+      if (detailed && label === "Text & contrast") segment.open = true;
+      content.appendChild(segment);
+    }
+    return segment;
+  }
+  runtime.ensureSettingsSection = ensureSettingsSection;
   function ensureSettingsCategory(modal, id) {
     const definition = SETTINGS_ORGANIZATION.categories.find(
       (category) => category.id === id,
@@ -779,24 +817,39 @@
       heading.textContent = definition.label;
       const content = document.createElement("div");
       content.className = "zs-section-content zs-organized-content";
-      panel.append(heading, content);
+      panel.append(heading);
+      if (definition.description) {
+        const description = document.createElement("p");
+        description.className = "zs-category-description";
+        description.textContent = definition.description;
+        panel.append(description);
+      }
+      panel.append(content);
       modal.querySelector(".zs-body").appendChild(panel);
       const button = document.createElement("button");
       button.id = "zs-tab-btn-organized-" + id;
       button.type = "button";
       button.className = "zs-tab-btn";
       button.dataset.settingsCategory = id;
-      button.textContent = definition.label;
+      button.append(settingsIcon(definition.icon), document.createTextNode(definition.label));
       button.addEventListener("click", () => selectSettingsCategory(modal, id));
       modal.querySelector(".zs-tab-bar").appendChild(button);
       if (id !== "modules" && id !== "addons") {
         const all = document.createElement("button");
         all.type = "button";
         all.className = "zs-category-all-settings";
-        all.textContent = "All " + definition.label.toLowerCase() + " settings";
+        all.textContent = id === "theme" ? "Customize in Detailed appearance…" : id === "theme-details" ? "Return to Simple controls" : "All " + definition.label.toLowerCase() + " settings";
         all.title =
           "Open every setting in this category, including advanced values";
-        all.addEventListener("click", () => openManager(id));
+        all.addEventListener("click", () => {
+          if (id === "theme") {
+            modal.querySelector("#zs-panel-extension-look")?._setPaletteMode?.("detailed");
+            selectSettingsCategory(modal, "theme-details");
+          } else if (id === "theme-details") {
+            modal.querySelector("#zs-panel-extension-look")?._setPaletteMode?.("simple");
+            selectSettingsCategory(modal, "theme");
+          } else openManager(id);
+        });
         panel.appendChild(all);
       }
     }
@@ -812,6 +865,7 @@
   runtime.settingsOwnerAvailable = settingsOwnerAvailable;
   runtime.settingsMetadata = settingsMetadata;
   function settingsCategoryAvailable(category) {
+    if (!category) return false;
     return SETTINGS_SCHEMA.some(
       (item) =>
         settingsMetadata(item).category === category.id &&
@@ -828,12 +882,200 @@
       delete node.dataset.settingsUnavailable;
     }
   }
+  // Settings structure is stable between UI/feature changes. Reopening only
+  // refreshes schema controls; it does not move hundreds of live DOM nodes.
+  // Settings construction has one owner and a fixed order, independent of
+  // feature activation order. No module replaces another module's open hook.
+  const settingsOpenHooks = new Map();
+  let assemblingSettings = false;
+  runtime.registerSettingsHook = (id, order, build) => {
+    if (typeof build !== "function") throw new TypeError("Settings hook must be callable");
+    const hook = { order, build };
+    settingsOpenHooks.set(id, hook);
+    runtime.invalidateSettingsLayout?.();
+    const modal = document.getElementById("zentral-settings-modal");
+    if (!assemblingSettings && modal?.getAttribute("data-open") === "true")
+      assembleSettings(modal);
+    return () => {
+      if (settingsOpenHooks.get(id) === hook) {
+        settingsOpenHooks.delete(id);
+        runtime.invalidateSettingsLayout?.();
+      }
+    };
+  };
+  function assembleSettings(modal) {
+    if (!modal || assemblingSettings) return;
+    const failures = [];
+    runtime.settingsLayoutStatus = { stage: "building controls", failures };
+    assemblingSettings = true;
+    try {
+      for (const [id, hook] of [...settingsOpenHooks].sort((a, b) => a[1].order - b[1].order)) {
+        try { hook.build(); }
+        catch (error) {
+          failures.push({ owner: id, error: String(error) });
+          console.error("[Zentral] Settings controls failed:", id, error);
+        }
+      }
+    } finally {
+      assemblingSettings = false;
+    }
+    runtime.settingsLayoutStatus.stage = "arranging categories";
+    try {
+      organizeNativeSettings(modal);
+      runtime.settingsLayoutStatus.stage = failures.length ? "ready with fallback controls" : "ready";
+    } catch (error) {
+      runtime.settingsLayoutStatus.stage = "failed";
+      runtime.settingsLayoutStatus.error = String(error);
+      throw error;
+    }
+  }
+  disposers.push(() => settingsOpenHooks.clear());
+  const settingsLayouts = new WeakMap();
+  let settingsLayoutRevision = 0;
+  runtime.invalidateSettingsLayout = () => { settingsLayoutRevision++; };
+  function syncSchemaSetting(item, row) {
+    const input = row.querySelector("input, select");
+    if (!input || document.activeElement === input) return;
+    const value = Core.getPref(item.property, item.defaultValue);
+    if (input.type === "checkbox") {
+      if (input.checked !== value) input.checked = value;
+    } else {
+      if (item.type === "dropdown" && ![...input.options].some(option => option.value === String(value))) {
+        const option = document.createElement("option");
+        option.value = String(value); option.textContent = String(value) + " (current)";
+        input.appendChild(option);
+      }
+      if (input.value !== String(value)) input.value = value;
+    }
+  }
+  function createSchemaSetting(item, meta) {
+    const key = item.property;
+    const row = document.createElement("div");
+    row.className = "zs-row zs-schema-row";
+    row.dataset.settingKey = key;
+    row.dataset.settingsOwner = meta.owner;
+    row.dataset.schemaFallback = "true";
+    const label = document.createElement("label");
+    label.className = "zs-label";
+    label.textContent = item.label;
+    const input = document.createElement(item.type === "dropdown" ? "select" : "input");
+    input.id = "zs-schema-" + key.replace(/[^a-z0-9_-]/gi, "-");
+    label.htmlFor = input.id;
+    input.setAttribute("aria-label", item.label);
+    if (item.type === "dropdown") {
+      input.className = "zs-select-input";
+      for (const option of item.options || []) {
+        const el = document.createElement("option");
+        el.value = String(option.value); el.textContent = option.label;
+        input.appendChild(el);
+      }
+    } else {
+      input.type = item.type === "checkbox" ? "checkbox" : typeof item.defaultValue === "number" ? "number" : "text";
+      if (input.type !== "checkbox") input.className = "zs-text-input";
+    }
+    input.addEventListener("change", () => {
+      let value = input.type === "checkbox" ? input.checked : input.value;
+      if (typeof item.defaultValue === "number") value = Number(value);
+      const valid = (typeof value !== "number" || Number.isInteger(value)) &&
+        (!item.label.includes("#RRGGBB") || /^#[0-9a-fA-F]{6}$/.test(value));
+      input.setCustomValidity(valid ? "" : "Enter a valid value; the previous setting is still saved.");
+      if (!valid) { input.reportValidity?.(); return; }
+      if (key === "zen.workspace.bgalazka.look.palette_mode" && runtime.panelContext?.setLookPaletteMode)
+        runtime.panelContext.setLookPaletteMode(value);
+      else {
+        Core.setPref(key, value);
+        runtime.panelContext?.syncSettingsAfterImport?.(key);
+      }
+    });
+    row.appendChild(label);
+    if (item.type === "checkbox") {
+      const control = document.createElement("label");
+      control.className = "zs-switch";
+      const slider = document.createElement("span");
+      slider.className = "zs-slider";
+      control.append(input, slider);
+      row.appendChild(control);
+    } else row.appendChild(input);
+    return row;
+  }
+  function ensureSettingsCoverage(modal) {
+    const present = new Map([...modal.querySelectorAll("[data-setting-key]")].map(row => [row.dataset.settingKey, row]));
+    const fallbacks = [];
+    for (const item of SETTINGS_SCHEMA) {
+      const key = item.property, meta = settingsMetadata(item);
+      if (!key || !settingsItemAvailable(item) || ["modules", "addons"].includes(meta.category)) continue;
+      const old = present.get(key);
+      if (old && !old.dataset.schemaFallback) continue;
+      const row = old || createSchemaSetting(item, meta);
+      if (!old) {
+        const content = meta.category === "logging"
+          ? modal.querySelector("#zs-panel-diagnostics")
+          : ensureSettingsSection(modal, meta.category, meta.section);
+        content?.appendChild(row);
+      }
+      syncSchemaSetting(item, row);
+      fallbacks.push({ item, row });
+    }
+    return fallbacks;
+  }
+  function ensureFeatureShortcuts(modal) {
+    const destinations = {
+      "zen.workspace.apps.sidebar.enabled": ["apps", "Launcher grid & placement"],
+      "zen.workspace.tabgroups.enabled": ["tab-groups", "Group behavior & indicators"],
+      "zen.workspace.zentral.video_preview.enabled": ["video-playback", "Playback & captions"],
+      "zen.workspace.zentral.startup.enabled": ["startup", "Panel background loading"],
+      "zen.workspace.bgalazka.corner_tiles": ["tab-panels", "Launchers, loaded state & badges"],
+      "zen.workspace.bgalazka.web_toolbar_enabled": ["theme-details", "Navigation toolbar"],
+      "zen.workspace.bgalazka.mmb_unload_normal_tabs": ["shortcuts", "Panel shortcuts & mouse actions"],
+    };
+    const shortcuts = [];
+    const existing = new Map([...modal.querySelectorAll("[data-shortcut-key]")].map(row => [row.dataset.shortcutKey, row]));
+    for (const item of SETTINGS_SCHEMA) {
+      const destination = destinations[item.property];
+      if (!destination || !settingsItemAvailable(item)) continue;
+      // The catalog removes empty/failed owner sections. Optional shortcuts must
+      // not abort the entire settings layout when their destination is absent.
+      const category = SETTINGS_ORGANIZATION.categories.find(category => category.id === destination[0]);
+      if (!category?.sections.some(section => section.label === destination[1])) continue;
+      const meta = settingsMetadata(item);
+      let row = existing.get(item.property);
+      if (!row) {
+        row = createSchemaSetting(item, meta);
+        delete row.dataset.settingKey;
+        delete row.dataset.schemaFallback;
+        row.dataset.shortcutKey = item.property;
+        const input = row.querySelector("input");
+        input.id += "-shortcut";
+        row.querySelector("label").htmlFor = input.id;
+        input.addEventListener("change", () => {
+          for (const original of modal.querySelectorAll("[data-setting-key]"))
+            if (original.dataset.settingKey === item.property) syncSchemaSetting(item, original);
+        });
+      }
+      const section = ensureSettingsSection(modal, ...destination);
+      if (row.parentElement !== section) section.insertBefore(row, section.children[1] || null);
+      syncSchemaSetting(item, row);
+      shortcuts.push({ item, row });
+    }
+    return shortcuts;
+  }
+  function orderSettingsNodes(parent, nodes) {
+    const wanted = new Set(nodes);
+    const existing = [...parent.children].filter(node => wanted.has(node));
+    if (existing.length === nodes.length && existing.every((node, index) => node === nodes[index])) return;
+    for (const node of nodes) parent.appendChild(node);
+  }
   function organizeNativeSettings(modal) {
+    if (assemblingSettings) return;
     if (!modal?.querySelector(".zs-body")) return;
+    const layout = settingsLayouts.get(modal);
+    if (layout?.revision === settingsLayoutRevision && layout.schemaLength === SETTINGS_SCHEMA.length &&
+        layout.rowCount === modal.querySelectorAll("[data-setting-key]").length) {
+      for (const { item, row } of layout.fallbacks) syncSchemaSetting(item, row);
+      syncAppearanceNavigation(modal);
+      return;
+    }
     const bar = modal.querySelector(".zs-tab-bar");
-    modal
-      .querySelector(".zs-dialog")
-      ?.setAttribute("data-settings-organized", "true");
     // Existing controls are moved, preserving their handlers, recorder state,
     // live saves, and parent visibility rules. No preference values are rewritten.
     for (const [id, category] of [
@@ -895,6 +1137,23 @@
         target.content.appendChild(route);
       }
     }
+    for (const [id, key] of Object.entries({
+      "enabled": "zen.workspace.zentral.debug", "full": "zen.workspace.zentral.debug.full",
+      "core": "zen.workspace.zentral.debug.core", "tabs": "zen.workspace.zentral.debug.tabs",
+      "apps": "zen.workspace.zentral.debug.apps", "menus": "zen.workspace.zentral.debug.menus",
+      "layout": "zen.workspace.zentral.debug.layout", "path": "zen.workspace.zentral.logger.path",
+    })) {
+      const row = modal.querySelector("#zs-pref-logger-" + id)?.closest(".zs-row");
+      if (row) row.dataset.settingKey = key;
+    }
+    // A late feature UI replaces a temporary schema row without duplicate controls.
+    const videoKeys = new Set([...modal.querySelectorAll('[data-video-settings="row"][data-setting-key]')].map(row => row.dataset.settingKey));
+    for (const row of modal.querySelectorAll("[data-setting-key]"))
+      if (videoKeys.has(row.dataset.settingKey) && row.dataset.videoSettings !== "row") row.remove();
+    const realKeys = new Set([...modal.querySelectorAll("[data-setting-key]")]
+      .filter(row => !row.dataset.schemaFallback).map(row => row.dataset.settingKey));
+    for (const row of modal.querySelectorAll("[data-schema-fallback]"))
+      if (realKeys.has(row.dataset.settingKey)) row.remove();
     const seen = new Set();
     const units = new Set();
     for (const row of [...modal.querySelectorAll("[data-setting-key]")]) {
@@ -903,7 +1162,17 @@
         setSettingsUnavailable(row, true);
         continue;
       }
-      if (row.dataset.videoSettings === "row") continue;
+      const category = SETTINGS_ORGANIZATION.categories.find(category => category.id === meta.category);
+      if (!category?.sections.some(section => section.label === meta.section)) {
+        setSettingsUnavailable(row, true);
+        continue;
+      }
+      if (meta.category === "logging") continue;
+      if (row.dataset.videoSettings === "row") {
+        const segment = ensureSettingsSection(modal, meta.category, meta.section);
+        if (row.parentElement !== segment) segment.appendChild(row);
+        continue;
+      }
       // Video's complex controls are grouped by its own module. Its shared
       // appearance controls use the same category identity and lifecycle.
       if (seen.has(row.dataset.settingKey)) {
@@ -938,24 +1207,15 @@
       }
       if (units.has(unit)) continue;
       units.add(unit);
-      const content = ensureSettingsCategory(modal, meta.category).content;
-      let segment = [...content.children].find(
-        (node) => node.dataset.settingsSection === meta.section,
-      );
-      if (!segment) {
-        segment = document.createElement("section");
-        segment.className = "zs-category-segment";
-        segment.dataset.settingsSection = meta.section;
-        const heading = document.createElement("h4");
-        heading.textContent = meta.section;
-        segment.appendChild(heading);
-        content.appendChild(segment);
-      }
+      const segment = ensureSettingsSection(modal, meta.category, meta.section);
       if (unit.parentElement !== segment) segment.appendChild(unit);
     }
+    const fallbacks = ensureSettingsCoverage(modal);
+    fallbacks.push(...ensureFeatureShortcuts(modal));
     // Non-setting actions and explanatory status remain next to their controls.
     for (const [selector, category] of [
-      [".zs-look-themes, .zs-look-actions, .zs-look-action", "theme"],
+      [".zs-look-themes, .zs-look-transfer", "theme"],
+      [".zs-full-backup", "essentials"],
       [".zs-extension-presets", "recovery"],
       ["#zs-addon-host-inspection", "compatibility"],
     ]) {
@@ -964,8 +1224,11 @@
       );
       if (target)
         for (const node of [...modal.querySelectorAll(selector)])
-          if (node.parentElement !== target && !target.contains(node))
-            target.appendChild(node);
+          if (node.classList.contains("zs-full-backup") || (category === "theme" && node.classList.contains("zs-look-themes"))) {
+            if (target.firstChild !== node) target.insertBefore(node, target.firstChild);
+          } else if (category === "theme" && node.classList.contains("zs-look-transfer")) {
+            if (target.lastChild !== node) target.appendChild(node);
+          } else if (node.parentElement !== target && !target.contains(node)) target.appendChild(node);
     }
     // Only retire the old extension pages once their controls were built.
     for (const button of modal.querySelectorAll(
@@ -985,12 +1248,19 @@
       panel.setAttribute("data-active", "false");
     const logs = modal.querySelector('.zs-tab-btn[data-tab="diagnostics"]');
     if (logs) {
-      logs.textContent = "Logs & Diagnostics";
+      logs.replaceChildren(settingsIcon("list"), document.createTextNode("Logs & Diagnostics"));
       logs.dataset.settingsCategory = "logging";
       logs.hidden = !settingsModuleLoaded("logger");
     }
     const logPanel = modal.querySelector("#zs-panel-diagnostics");
     if (logPanel) logPanel.dataset.settingsCategory = "logging";
+    const ranks = new Map(SETTINGS_SCHEMA.map((item, index) => [item.property, index]));
+    const rankCache = new WeakMap();
+    const rank = node => {
+      if (!rankCache.has(node)) rankCache.set(node, Math.min(
+        ...[node, ...node.querySelectorAll("[data-setting-key]")].map(row => ranks.get(row.dataset.settingKey) ?? Infinity)));
+      return rankCache.get(node);
+    };
     for (const category of SETTINGS_ORGANIZATION.categories) {
       const target = modal.querySelector("#zs-panel-organized-" + category.id);
       const button = modal.querySelector(
@@ -1008,15 +1278,6 @@
       const sectionOrder = new Map(
         category.sections.map((section, index) => [section.label, index]),
       );
-      const ranks = new Map(
-        SETTINGS_SCHEMA.map((item, index) => [item.property, index]),
-      );
-      const rank = (node) =>
-        Math.min(
-          ...[node, ...node.querySelectorAll("[data-setting-key]")].map(
-            (row) => ranks.get(row.dataset.settingKey) ?? Infinity,
-          ),
-        );
       const content = target.querySelector(".zs-organized-content");
       for (const segment of content.querySelectorAll(".zs-category-segment")) {
         const definition = category.sections.find(
@@ -1026,20 +1287,20 @@
           settingsItemAvailable({ property }),
         );
         // Move whole units so conditional groups and their event handlers remain intact.
-        for (const unit of [...segment.children]
-          .filter((node) => node.localName !== "h4")
-          .sort((a, b) => rank(a) - rank(b)))
-          segment.appendChild(unit);
+        orderSettingsNodes(segment, [...segment.children]
+          .filter((node) => !["h4", "summary"].includes(node.localName))
+          .sort((a, b) => rank(a) - rank(b)));
       }
       const sections = [...content.children].filter((node) =>
         node.classList.contains("zs-category-segment"),
       );
-      for (const segment of sections.sort(
-        (a, b) =>
-          (sectionOrder.get(a.dataset.settingsSection) ?? Infinity) -
-          (sectionOrder.get(b.dataset.settingsSection) ?? Infinity),
-      ))
-        content.appendChild(segment);
+      orderSettingsNodes(content, sections.sort((a, b) =>
+        (sectionOrder.get(a.dataset.settingsSection) ?? Infinity) -
+        (sectionOrder.get(b.dataset.settingsSection) ?? Infinity)));
+      if (category.id === "theme") {
+        const transfer = content.querySelector(".zs-look-transfer");
+        if (transfer && content.lastChild !== transfer) content.appendChild(transfer);
+      }
     }
     for (const heading of bar.querySelectorAll(".zs-category-heading"))
       heading.remove();
@@ -1071,12 +1332,17 @@
         true,
       );
     }
+    if (!modal.dataset.settingsStarted) {
+      modal.dataset.settingsStarted = "true";
+      selectSettingsCategory(modal, "essentials");
+    }
     if (!modal.querySelector('.zs-tab-btn[data-active="true"]:not([hidden])')) {
       const first = bar.querySelector(
         ".zs-tab-btn[data-settings-category]:not([hidden])",
       );
       if (first) selectSettingsCategory(modal, first.dataset.settingsCategory);
     }
+    syncAppearanceNavigation(modal);
     if (!bar.querySelector("#zs-settings-search")) {
       const search = document.createElement("input");
       search.id = "zs-settings-search";
@@ -1122,12 +1388,16 @@
             const category = modal.querySelector(
               "#zs-panel-organized-" + meta.category,
             );
+            if (meta.category === "theme-details")
+              modal.querySelector("#zs-panel-extension-look")?._setPaletteMode?.("detailed");
             if (
               row &&
               category &&
               !row.closest('[data-hidden="true"], [hidden]')
             ) {
               selectSettingsCategory(modal, meta.category);
+              for (let parent = row.parentElement; parent && parent !== modal; parent = parent.parentElement)
+                if (parent.localName === "details") parent.open = true;
               row.scrollIntoView({ block: "center" });
               const control = row.querySelector("input, select, button");
               control?.focus();
@@ -1140,11 +1410,30 @@
       });
       bar.prepend(search, results);
     }
+    settingsLayouts.set(modal, {
+      revision: settingsLayoutRevision, schemaLength: SETTINGS_SCHEMA.length,
+      rowCount: modal.querySelectorAll("[data-setting-key]").length, fallbacks,
+    });
+    // Commit only after navigation, shortcuts and every category are ready.
+    modal.querySelector(".zs-dialog")?.setAttribute("data-settings-organized", "true");
   }
+  function syncAppearanceNavigation(modal = document.getElementById("zentral-settings-modal")) {
+    if (!modal) return;
+    const detailed = document.documentElement.getAttribute("bgalazka-palette-mode") === "detailed";
+    const button = modal.querySelector('#zs-tab-btn-organized-theme-details');
+    if (button) {
+      const hidden = !detailed || !settingsCategoryAvailable(SETTINGS_ORGANIZATION.categories.find(c => c.id === "theme-details"));
+      if (button.hidden !== hidden) button.hidden = hidden;
+    }
+    if (!detailed && modal.querySelector('#zs-panel-organized-theme-details[data-active="true"]'))
+      selectSettingsCategory(modal, "theme");
+  }
+  runtime.syncAppearanceNavigation = syncAppearanceNavigation;
   runtime.organizeSettings = organizeNativeSettings;
   const refreshSettingsCategories = () => {
+    settingsLayoutRevision++;
     const modal = document.getElementById("zentral-settings-modal");
-    if (modal) organizeNativeSettings(modal);
+    if (modal?.getAttribute("data-open") === "true") organizeNativeSettings(modal);
   };
   window.addEventListener("zentral-runtime-change", refreshSettingsCategories);
   disposers.push(() =>
@@ -1186,6 +1475,12 @@
     open: () => moduleLoader.showDiagnostics(),
     destroy() {},
     close() {},
+  };
+  const openNativeSettings = Settings.open.bind(Settings);
+  Settings.open = function (...args) {
+    const result = openNativeSettings(...args);
+    assembleSettings(document.getElementById("zentral-settings-modal"));
+    return result;
   };
   disposers.push(() => Settings.destroy());
   window.Zentral = { Core, Settings };

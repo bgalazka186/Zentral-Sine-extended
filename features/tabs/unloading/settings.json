@@ -16,8 +16,8 @@
   ],
   "settings": {
     "zen.workspace.bgalazka.mmb_unload_normal_tabs": {
-      "category": "shortcuts",
-      "section": "Panel shortcuts & mouse actions",
+      "category": "essentials",
+      "section": "Essential features",
       "owner": "tab-unload"
     }
   }

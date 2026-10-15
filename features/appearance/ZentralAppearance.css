@@ -528,7 +528,7 @@
 :root[bgalazka-look="atelier"] #bgalazka-super-panel {
   background: color-mix(
     in srgb,
-    var(--zl-surface) var(--zl-surface-opacity),
+    var(--zl-web-surface) var(--zl-web-opacity),
     transparent
   ) !important;
   color: var(--zl-text) !important;
@@ -1084,8 +1084,7 @@
   #zen-app-panel-slider {
   background-color: color-mix(
     in srgb,
-    var(--zl-surface)
-      min(var(--zl-surface-opacity), var(--bg-opacity-unpinned, 100%)),
+    var(--zl-web-surface) var(--zl-web-opacity),
     transparent
   ) !important;
 }
@@ -1098,8 +1097,7 @@
   #zen-app-panel-slider {
   background-color: color-mix(
     in srgb,
-    var(--zl-surface)
-      min(var(--zl-surface-opacity), var(--bg-opacity-pinned-focus, 95%)),
+    var(--zl-web-surface) var(--zl-web-opacity),
     transparent
   ) !important;
 }
@@ -1112,8 +1110,7 @@
   #zen-app-panel-slider {
   background-color: color-mix(
     in srgb,
-    var(--zl-surface)
-      min(var(--zl-surface-opacity), var(--bg-opacity-pinned-blur, 90%)),
+    var(--zl-web-surface) var(--zl-web-opacity),
     transparent
   ) !important;
 }
@@ -1144,7 +1141,7 @@
   opacity: 1 !important;
   background-color: color-mix(
     in srgb,
-    var(--zl-surface) var(--zl-surface-opacity),
+    var(--zl-web-surface) var(--zl-web-opacity),
     transparent
   ) !important;
 }
@@ -1201,4 +1198,1067 @@
   svg {
   fill: none !important;
   stroke: currentColor !important;
+}
+
+/* Complete UI palette. These selectors affect Zentral chrome, never web pages. */
+:root[bgalazka-look="atelier"] {
+  --zl-settings-canvas: var(--bgalazka-look-settings-canvas);
+  --zl-settings-header: var(--bgalazka-look-settings-header);
+  --zl-settings-nav: var(--bgalazka-look-settings-nav);
+  --zl-settings-card: var(--bgalazka-look-settings-card);
+  --zl-settings-text: var(--bgalazka-look-settings-text);
+  --zl-settings-muted: var(--bgalazka-look-settings-muted);
+  --zl-input: var(--bgalazka-look-input-surface);
+  --zl-input-text: var(--bgalazka-look-input-text);
+  --zl-hover: var(--bgalazka-look-button-hover);
+  --zl-hover-text: var(--bgalazka-look-button-hover-text);
+  --zl-selected: var(--bgalazka-look-selected-surface);
+  --zl-selected-text: var(--bgalazka-look-selected-text);
+  --zl-popup: var(--bgalazka-look-popup-surface);
+  --zl-popup-text: var(--bgalazka-look-popup-text);
+  --zl-web-surface: var(--bgalazka-look-web-surface);
+  --zl-web-opacity: var(--bgalazka-look-web-opacity);
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-dialog,
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-body,
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-tab-panel {
+  background: var(--zl-settings-canvas) !important;
+  color: var(--zl-settings-text) !important;
+  border-color: var(--zl-button-border-color) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-header, .zs-footer) {
+  background: var(--zl-settings-header) !important;
+  color: var(--zl-settings-header-text) !important;
+  border-color: var(--zl-button-border-color) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-title, .zs-donation-note) {
+  color: var(--zl-settings-header-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-tab-bar {
+  background: var(--zl-settings-nav) !important;
+  color: var(--zl-settings-nav-text) !important;
+  border-color: var(--zl-button-border-color) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-tab-btn {
+  color: var(--zl-settings-nav-muted) !important;
+  background: transparent !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-tab-btn:hover {
+  color: var(--zl-hover-text) !important;
+  background: var(--zl-hover) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-tab-btn[data-active="true"] {
+  background: var(--zl-selected) !important;
+  color: var(--zl-selected-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-category-heading, .zs-nav-heading) {
+  color: var(--zl-nav-accent) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(
+    h3,
+    h4,
+    .zs-section-title,
+    .zs-category-segment > h4,
+    .zs-matrix-title,
+    .zs-look-eyebrow
+  ) {
+  color: var(--zl-settings-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-sublabel, .zs-look-note, .zs-look-intro p, .zs-anim-preview-hint) {
+  color: var(--zl-settings-muted) !important;
+  opacity: 1 !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(
+    .zs-row,
+    .zs-card,
+    .zs-matrix-wrapper,
+    .zs-conditional-group,
+    .zs-shortcut-recorder,
+    .zs-placement-group
+  ) {
+  background: var(--zl-settings-card) !important;
+  color: var(--zl-settings-card-text) !important;
+  border-color: var(--zl-button-border-color) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-row
+  .zs-label {
+  color: var(--zl-settings-card-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-row
+  .zs-sublabel {
+  color: var(--zl-settings-card-muted) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(
+    button,
+    .zs-look-theme,
+    .zs-backup-btn,
+    .zs-category-all-settings,
+    .zs-custom-select-trigger,
+    .zs-shortcut-btn
+  ):not(.zs-tab-btn):not(.zs-close-btn):not(.zs-btn-save):not(
+    [data-active="true"]
+  ):not([data-selected="true"]) {
+  background: var(--zl-button-surface) !important;
+  color: var(--zl-button-text) !important;
+  border-color: var(--zl-button-border-color) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(
+    button,
+    .zs-look-theme,
+    .zs-backup-btn,
+    .zs-category-all-settings,
+    .zs-custom-select-trigger,
+    .zs-shortcut-btn
+  ):not(.zs-tab-btn):not(.zs-close-btn):not(.zs-btn-save):not(
+    [data-active="true"]
+  ):not([data-selected="true"]):hover:not(:disabled) {
+  background: var(--zl-hover) !important;
+  color: var(--zl-hover-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(
+    .zs-btn-save,
+    .zs-matrix-cell[data-selected="true"],
+    .zs-placement-btn[data-active="true"],
+    .zs-custom-select-option[data-selected="true"]
+  ) {
+  background: var(--zl-selected) !important;
+  color: var(--zl-selected-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-close-btn, .zs-close-btn:hover) {
+  color: var(--zl-settings-header-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(
+    input:not([type="checkbox"]):not([type="range"]):not([type="color"]),
+    textarea,
+    select,
+    .zs-h-val,
+    .zs-keybind-input
+  ) {
+  background: var(--zl-input) !important;
+  color: var(--zl-input-text) !important;
+  border-color: var(--zl-button-border-color) !important;
+  color-scheme: var(--zl-input-scheme, dark);
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(input, textarea)::placeholder {
+  color: var(--zl-input-text) !important;
+  opacity: 0.7 !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-mono-badge, .zs-matrix-badge, .zs-version-badge, kbd) {
+  background: var(--zl-input) !important;
+  color: var(--zl-input-text) !important;
+  border-color: var(--zl-button-border-color) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(
+    .zs-placement-svg-box,
+    .zs-placement-content-preview,
+    .zs-anim-preview-box,
+    .zs-matrix-grid
+  ) {
+  background: var(--zl-settings-canvas) !important;
+  border-color: var(--zl-button-border-color) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-placement-sidebar-body, .zs-anim-preview-sidebar, .zs-matrix-cell) {
+  background: var(--zl-settings-card) !important;
+  color: var(--zl-settings-card-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-placement-label, .zs-shortcut-label) {
+  color: inherit !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(
+    .zs-anim-preview-panel,
+    .zs-placement-appbox-indicator,
+    .zs-placement-bar-indicator
+  ) {
+  background: var(--zl-selected) !important;
+  color: var(--zl-selected-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-range-slider, input[type="range"]) {
+  accent-color: var(--zl-focus) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-slider {
+  background: var(--zl-input) !important;
+  border-color: var(--zl-button-border-color) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  input:checked
+  + .zs-slider {
+  background: var(--zl-selected) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-slider::before {
+  background: var(--zl-input-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  input:checked
+  + .zs-slider::before {
+  background: var(--zl-selected-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(
+    button,
+    input,
+    textarea,
+    select,
+    .zs-custom-select-trigger
+  ):focus-visible {
+  outline: 2px solid var(--zl-focus) !important;
+  outline-offset: 2px !important;
+}
+:root[bgalazka-look="atelier"]
+  :is(.zs-custom-select-menu, #zentral-control-center) {
+  background: var(--zl-popup) !important;
+  color: var(--zl-popup-text) !important;
+  border-color: var(--zl-button-border-color) !important;
+}
+:root[bgalazka-look="atelier"] .zs-custom-select-option {
+  color: var(--zl-popup-text) !important;
+  background: transparent !important;
+}
+:root[bgalazka-look="atelier"] .zs-custom-select-option:hover,
+:root[bgalazka-look="atelier"] .zs-custom-select-option[data-selected="true"] {
+  background: var(--zl-selected) !important;
+  color: var(--zl-selected-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-control-center
+  :is(button, input, select, textarea) {
+  background: var(--zl-button-surface) !important;
+  color: var(--zl-button-text) !important;
+  border-color: var(--zl-button-border-color) !important;
+}
+:root[bgalazka-look="atelier"]
+  :is(#zen-apps-sidebar-tile-context, #zentral-tabgroup-context-menu) {
+  --panel-background: color-mix(
+    in srgb,
+    var(--zl-popup) var(--zl-popup-opacity),
+    transparent
+  );
+  --panel-color: var(--zl-popup-text);
+  --panel-border-color: var(--zl-button-border-color);
+  --arrowpanel-background: color-mix(
+    in srgb,
+    var(--zl-popup) var(--zl-popup-opacity),
+    transparent
+  );
+  --arrowpanel-color: var(--zl-popup-text);
+}
+:root[bgalazka-look="atelier"]
+  :is(#zentral-tabgroup-tooltip-container, .zentral-tg-cp-box) {
+  background: color-mix(
+    in srgb,
+    var(--zl-popup) var(--zl-popup-opacity),
+    transparent
+  ) !important;
+  color: var(--zl-popup-text) !important;
+  border-color: var(--zl-button-border-color) !important;
+}
+:root[bgalazka-look="atelier"]
+  :is(.zentral-tooltip-title, .zentral-tooltip-domain) {
+  color: var(--zl-popup-text) !important;
+}
+:root[bgalazka-look="atelier"] :is(.zentral-tg-input, #tab-label-input) {
+  background: var(--zl-input) !important;
+  color: var(--zl-input-text) !important;
+  border-color: var(--zl-button-border-color) !important;
+}
+:root[bgalazka-look="atelier"] .zentral-tg-btn {
+  background: var(--zl-button-surface) !important;
+  color: var(--zl-button-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  :is(.zentral-tg-btn:hover, .zentral-tooltip-row:hover) {
+  background: var(--zl-hover) !important;
+  color: var(--zl-hover-text) !important;
+}
+:root[bgalazka-look="atelier"] .zentral-tooltip-row[data-active="true"] {
+  background: var(--zl-selected) !important;
+  color: var(--zl-selected-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  .zentral-tooltip-row[data-active="true"]
+  :is(.zentral-tooltip-title, .zentral-tooltip-domain) {
+  color: var(--zl-selected-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  :is(
+    #zen-apps-sidebar-remove-item,
+    #zentral-tg-item-close,
+    .zentral-tooltip-close-btn
+  ) {
+  color: var(--zl-danger-popup) !important;
+}
+:root[bgalazka-look="atelier"]
+  :is(#zen-app-panel-toolbar, .bgalazka-super-bar) {
+  color: var(--zl-toolbar-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  :is(#zen-app-panel-toolbar .zen-toolbar-urlbar, .bgalazka-super-bar input) {
+  color: var(--zl-toolbar-url-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  :is(#zen-app-panel-toolbar .zen-toolbar-btn, .bgalazka-super-bar button) {
+  color: var(--zl-toolbar-action-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  :is(
+    #zen-app-panel-toolbar .zen-toolbar-btn,
+    .bgalazka-super-bar button
+  ):hover {
+  background: var(--zl-hover) !important;
+  color: var(--zl-hover-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview
+  .zentral-video-preview-bar
+  button {
+  color: var(--zl-video-control-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview
+  .zentral-video-preview-bar
+  button:hover {
+  background: var(--zl-hover) !important;
+  color: var(--zl-hover-text) !important;
+}
+:root[bgalazka-look="atelier"][bgalazka-look-video-selection="filled"]
+  #zentral-video-preview
+  .zentral-video-preview-source[aria-selected="true"] {
+  color: var(--zl-video-selected-text) !important;
+  background: color-mix(
+    in srgb,
+    var(--zl-video-selected) 20%,
+    var(--zl-video-canvas)
+  ) !important;
+}
+/* Simple mode shows only linked color controls; shape/layout remain editable. */
+:root[bgalazka-look="atelier"][bgalazka-palette-mode="simple"]
+  #zentral-settings-modal#zentral-settings-modal
+  [data-palette-detail],
+:root[bgalazka-look="atelier"][bgalazka-palette-mode="detailed"]
+  #zentral-settings-modal#zentral-settings-modal
+  [data-palette-simple],
+:root[bgalazka-look="atelier"][bgalazka-text-mode="auto"]
+  #zentral-settings-modal#zentral-settings-modal
+  [data-manual-text] {
+  display: none !important;
+}
+/* The black-backing button affects web content, preserving themed chrome. */
+:root[bgalazka-look="atelier"][bgalazka-force-panel-black="true"] {
+  --zl-web-surface: #000000;
+  --zl-web-opacity: var(--bgalazka-panel-black-opacity, 100%);
+}
+
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-row {
+  background: var(--zl-settings-row) !important;
+  color: var(--zl-settings-row-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-row
+  .zs-label {
+  color: var(--zl-settings-row-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-row
+  .zs-sublabel {
+  color: var(--zl-settings-row-muted) !important;
+}
+:root[bgalazka-look="atelier"] #zen-app-panel-pill {
+  background: color-mix(
+    in srgb,
+    var(--zl-popup) var(--bgalazka-pill-background-opacity, 48%),
+    transparent
+  ) !important;
+  color: var(--zl-popup-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-pill
+  :is(.zen-app-btn, .zen-app-grabber) {
+  background: var(--zl-button-surface) !important;
+  color: var(--zl-button-text) !important;
+}
+:root[bgalazka-look="atelier"] #zen-app-panel-pill .zen-app-btn:hover {
+  background: var(--zl-hover) !important;
+  color: var(--zl-hover-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-pill
+  :is(
+    .zen-app-btn[data-pinned="true"],
+    .zen-app-hover-reveal-btn[data-active="true"]
+  ) {
+  background: var(--zl-selected) !important;
+  color: var(--zl-selected-text) !important;
+}
+:root[bgalazka-look="atelier"] #zen-app-panel-pill .zen-app-close-btn,
+:root[bgalazka-look="atelier"] #zen-app-panel-pill .zen-app-close-btn svg {
+  color: var(--zl-danger-popup) !important;
+  stroke: currentColor !important;
+}
+:root[bgalazka-look="atelier"] .zen-app-badge {
+  background: var(--zl-danger) !important;
+  color: var(--zl-danger-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-field-error {
+  color: var(--zl-danger) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-toggle-status {
+  color: var(--zl-settings-muted) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-toggle-status[data-enabled="true"] {
+  color: var(--zl-success) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-shortcut-btn[data-recording="true"] {
+  background: var(--zl-danger) !important;
+  color: var(--zl-danger-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  #zs-btn-capture-log[data-ui-status="danger"] {
+  background: var(--zl-danger) !important;
+  color: var(--zl-danger-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  #zs-btn-capture-log[data-ui-status="success"] {
+  background: var(--zl-success) !important;
+  color: var(--zl-success-text) !important;
+}
+:root[bgalazka-look="atelier"] #zentral-settings-modal#zentral-settings-modal {
+  background: color-mix(
+    in srgb,
+    var(--bgalazka-look-backdrop) var(--bgalazka-look-backdrop-opacity),
+    transparent
+  ) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-body, .zs-tab-bar, .zs-tab-panel, textarea) {
+  scrollbar-color: var(--zl-button-border-color) var(--zl-settings-canvas);
+}
+
+:root[bgalazka-look="atelier"] #zentral-control-center {
+  --zl-success: var(--zl-success-popup);
+  --zl-warning: var(--zl-warning-popup);
+  --zl-danger: var(--zl-danger-popup);
+  --zl-success-text: var(--zl-success-popup-text);
+  --zl-warning-text: var(--zl-warning-popup-text);
+  --zl-danger-text: var(--zl-danger-popup-text);
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-range-slider, input[type="range"])::-moz-range-track {
+  background: var(--zl-input) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-range-slider, input[type="range"])::-moz-range-progress {
+  background: var(--zl-focus) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-range-slider, input[type="range"])::-moz-range-thumb {
+  background: var(--zl-input-text) !important;
+  border-color: var(--zl-input) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-range-slider, input[type="range"])::-webkit-slider-thumb {
+  background: var(--zl-input-text) !important;
+  border-color: var(--zl-input) !important;
+}
+
+/* Paint our action faces instead of native dark-system button artwork. */
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-look-action, .zs-look-theme, .zs-category-all-settings) {
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-image: none !important;
+  background-color: var(--zl-button-surface) !important;
+  color: var(--zl-button-text) !important;
+  text-shadow: none !important;
+  filter: none !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-look-action, .zs-look-theme, .zs-category-all-settings):hover:not(
+    :disabled
+  ) {
+  background-color: var(--zl-hover) !important;
+  color: var(--zl-hover-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-look-transfer {
+  margin-block: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--zl-button-border-color);
+  background: var(--zl-settings-card);
+  color: var(--zl-settings-card-text);
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  .zs-look-transfer
+  > summary {
+  color: var(--zl-settings-card-text);
+  cursor: pointer;
+  font-weight: 600;
+}
+#zentral-settings-modal .zs-look-transfer:not([open]) > :not(summary) {
+  display: none !important;
+}
+:root[bgalazka-look="atelier"][bgalazka-palette-mode="simple"]
+  #zentral-settings-modal
+  .zs-tab-btn[data-settings-category="theme-details"] {
+  display: none !important;
+}
+/* Transparent frames retain solid local controls without sampling web content. */
+:root[bgalazka-look="atelier"][bgalazka-solid-controls="true"]
+  :is(
+    #zen-app-panel-toolbar .zen-toolbar-btn,
+    #zen-app-panel-toolbar .zen-toolbar-zoom-label,
+    #bgalazka-super-panel .bgalazka-super-bar button,
+    #zentral-video-preview .zentral-video-preview-bar button
+  ) {
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background: color-mix(
+    in srgb,
+    var(--zl-button-surface) var(--zl-readable-video-opacity),
+    transparent
+  ) !important;
+  color: var(--zl-video-control-text) !important;
+  text-shadow: none !important;
+  opacity: 1 !important;
+}
+:root[bgalazka-look="atelier"][bgalazka-solid-controls="true"]
+  :is(
+    #zen-app-panel-toolbar .zen-toolbar-urlbar,
+    #bgalazka-super-panel .bgalazka-second-url
+  ) {
+  background: color-mix(
+    in srgb,
+    var(--zl-toolbar-url) var(--zl-readable-address-opacity),
+    transparent
+  ) !important;
+  color: var(--zl-toolbar-url-text) !important;
+}
+:root[bgalazka-look="atelier"][bgalazka-solid-controls="true"]
+  :is(
+    .zs-custom-select-menu,
+    .zentral-tg-cp-box,
+    #zentral-tabgroup-tooltip-container
+  ) {
+  background: color-mix(
+    in srgb,
+    var(--zl-popup) var(--zl-readable-popup-opacity),
+    transparent
+  ) !important;
+  color: var(--zl-popup-text) !important;
+}
+:root[bgalazka-look="atelier"][bgalazka-solid-controls="true"]
+  :is(#zen-apps-sidebar-tile-context, #zentral-tabgroup-context-menu) {
+  --panel-background: color-mix(
+    in srgb,
+    var(--zl-popup) var(--zl-readable-popup-opacity),
+    transparent
+  );
+  --arrowpanel-background: color-mix(
+    in srgb,
+    var(--zl-popup) var(--zl-readable-popup-opacity),
+    transparent
+  );
+}
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-pill
+  .zen-app-hover-reveal-btn[data-active="true"]
+  svg,
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-pill
+  .zen-app-btn:is(
+    [data-pinned="true"],
+    [data-active="true"],
+    [data-hold-active="true"]
+  )
+  svg {
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-pill
+  .zen-app-hover-reveal-btn[data-active="true"]
+  svg {
+  fill: none !important;
+}
+
+/* Outline eye artwork must never inherit the solid icon fill. */
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-pill
+  .zen-app-hover-reveal-btn
+  svg,
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-pill
+  .zen-app-hover-reveal-btn
+  svg
+  :is(path, circle) {
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 1.8 !important;
+  opacity: 1 !important;
+}
+/* Toolbar actions share the bar's backing instead of opaque individual boxes. */
+:root[bgalazka-look="atelier"][bgalazka-solid-controls="true"]
+  :is(
+    #zen-app-panel-toolbar .zen-toolbar-btn,
+    #zen-app-panel-toolbar .zen-toolbar-zoom-label,
+    #bgalazka-super-panel .bgalazka-super-bar button,
+    #bgalazka-super-panel .bgalazka-second-zoom-label
+  ) {
+  background: color-mix(
+    in srgb,
+    var(--zl-button-surface) var(--zl-readable-action-opacity),
+    transparent
+  ) !important;
+  color: var(--zl-toolbar-action-text) !important;
+}
+:root[bgalazka-look="atelier"][bgalazka-solid-controls="true"]
+  :is(
+    #zen-app-panel-toolbar .zen-toolbar-btn,
+    #bgalazka-super-panel .bgalazka-super-bar button
+  ):hover:not(:disabled) {
+  background: var(--zl-hover) !important;
+  color: var(--zl-hover-text) !important;
+}
+
+/* Settings navigation and progressive appearance controls. */
+#zentral-settings-modal#zentral-settings-modal .zs-category-icon {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: middle;
+}
+#zentral-settings-modal#zentral-settings-modal
+  .zs-tab-btn[data-settings-category] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: start;
+}
+#zentral-settings-modal#zentral-settings-modal .zs-tab-btn[hidden],
+#zentral-settings-modal#zentral-settings-modal .zs-category-segment[hidden] {
+  display: none !important;
+}
+#zentral-settings-modal#zentral-settings-modal .zs-category-description {
+  margin: 0 12px 16px;
+  line-height: 1.5;
+  color: var(--zl-settings-muted, #b8bdc5);
+}
+#zentral-settings-modal#zentral-settings-modal
+  .zs-category-segment
+  > :is(h4, summary) {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--zl-settings-text, #eeeeee);
+}
+#zentral-settings-modal#zentral-settings-modal details.zs-category-segment {
+  border: 1px solid var(--zl-button-border-color, #555555);
+  border-radius: var(--zl-radius, 6px);
+  margin: 8px 0;
+}
+#zentral-settings-modal#zentral-settings-modal
+  details.zs-category-segment
+  > summary {
+  padding: 12px;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 600;
+}
+#zentral-settings-modal#zentral-settings-modal
+  details.zs-category-segment
+  > summary::after {
+  content: "+";
+  margin-inline-start: auto;
+}
+#zentral-settings-modal#zentral-settings-modal
+  details.zs-category-segment[open]
+  > summary::after {
+  content: "−";
+}
+#zentral-settings-modal#zentral-settings-modal
+  details.zs-category-segment:not([open])
+  > :not(summary) {
+  display: none !important;
+}
+#zentral-settings-modal#zentral-settings-modal .zs-full-backup {
+  margin: 0 0 18px;
+  padding: 14px;
+  border: 1px solid var(--zl-button-border-color, #555555);
+  border-radius: var(--zl-radius, 6px);
+  background: var(--zl-settings-card, #222222);
+  color: var(--zl-settings-card-text, #eeeeee);
+}
+#zentral-settings-modal#zentral-settings-modal .zs-look-themes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  gap: 10px;
+  margin: 4px 0 20px;
+}
+#zentral-settings-modal#zentral-settings-modal .zs-look-theme {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  text-align: start;
+  gap: 8px;
+  padding: 10px;
+  min-width: 0;
+}
+#zentral-settings-modal#zentral-settings-modal .zs-look-theme::before {
+  display: none;
+}
+#zentral-settings-modal#zentral-settings-modal .zs-theme-family {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+#zentral-settings-modal#zentral-settings-modal
+  .zs-theme-family
+  > .zs-look-theme {
+  width: 100%;
+  flex: 1;
+  justify-content: flex-start;
+  box-sizing: border-box;
+}
+#zentral-settings-modal#zentral-settings-modal .zs-theme-variants {
+  display: block;
+  padding-inline: 10px;
+  font-size: 11px;
+  color: inherit;
+}
+#zentral-settings-modal#zentral-settings-modal
+  .zs-theme-variants
+  > .zs-select-input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 30px;
+  padding: 4px 6px;
+  box-sizing: border-box;
+  font-size: 11px;
+}
+#zentral-settings-modal#zentral-settings-modal .zs-theme-description {
+  font-size: 11px;
+  line-height: 1.45;
+  color: inherit !important;
+}
+#zentral-settings-modal#zentral-settings-modal .zs-theme-preview {
+  display: block;
+  height: 42px;
+  border: 1px solid var(--theme-accent);
+  border-radius: min(var(--theme-radius), 10px);
+  background: var(--theme-canvas);
+  position: relative;
+  overflow: hidden;
+}
+#zentral-settings-modal#zentral-settings-modal .zs-theme-preview::before {
+  content: "";
+  position: absolute;
+  inset: 7px 8px auto;
+  height: 5px;
+  border-radius: inherit;
+  background: var(--theme-accent);
+}
+#zentral-settings-modal#zentral-settings-modal .zs-theme-preview::after {
+  content: "";
+  position: absolute;
+  inset: 18px 8px 7px;
+  border: 1px solid var(--theme-accent);
+  border-radius: inherit;
+}
+#zentral-settings-modal#zentral-settings-modal
+  .zs-schema-row
+  > :is(input, select) {
+  max-width: 45%;
+  min-width: 0;
+}
+#zentral-settings-modal#zentral-settings-modal input:disabled {
+  cursor: not-allowed;
+}
+
+/* Essential switches are a compact feature list, not a second settings index. */
+#zentral-settings-modal#zentral-settings-modal
+  #zs-panel-organized-essentials
+  .zs-row {
+  min-height: 42px;
+  padding: 8px 12px;
+}
+#zentral-settings-modal#zentral-settings-modal
+  #zs-panel-organized-essentials
+  .zs-row
+  .zs-sublabel {
+  display: none !important;
+}
+#zentral-settings-modal#zentral-settings-modal .zs-schema-row > .zs-switch {
+  flex: 0 0 auto;
+  max-width: none;
+}
+#zentral-settings-modal#zentral-settings-modal
+  .zs-switch
+  input:focus-visible
+  + .zs-slider {
+  outline: 2px solid var(--zl-focus, currentColor) !important;
+  outline-offset: 3px;
+}
+
+/* Paint readable chrome locally. Sidebar integrations can otherwise leave
+ * inherited dark text on a transparent surface or a dark toolbar strip. */
+:root[bgalazka-look="atelier"] #zentral-video-preview#zentral-video-preview {
+  background: color-mix(
+    in srgb,
+    var(--zl-video-canvas)
+      var(--zl-readable-video-canvas-opacity, var(--zl-video-opacity)),
+    transparent
+  ) !important;
+  color: var(--zl-video-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview#zentral-video-preview
+  :is(
+    .zentral-video-preview-caption,
+    .zentral-video-preview-capabilities,
+    .zentral-video-preview-sources,
+    .zentral-video-preview-source
+  ) {
+  color: var(--zl-video-muted) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview#zentral-video-preview
+  .zentral-video-preview-source[aria-selected="true"] {
+  color: var(--zl-video-text) !important;
+}
+:root[bgalazka-look="atelier"] #zen-app-panel-toolbar#zen-app-panel-toolbar,
+:root[bgalazka-look="atelier"]
+  #bgalazka-super-panel#bgalazka-super-panel
+  .bgalazka-super-bar {
+  background: color-mix(
+    in srgb,
+    var(--zl-toolbar-surface)
+      var(--zl-readable-toolbar-opacity, var(--zl-toolbar-opacity)),
+    transparent
+  ) !important;
+  color: var(--zl-toolbar-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-toolbar#zen-app-panel-toolbar
+  .zen-toolbar-urlbar,
+:root[bgalazka-look="atelier"]
+  #bgalazka-super-panel#bgalazka-super-panel
+  .bgalazka-second-url {
+  background: color-mix(
+    in srgb,
+    var(--zl-toolbar-url)
+      var(--zl-readable-address-opacity, var(--zl-address-opacity)),
+    transparent
+  ) !important;
+  color: var(--zl-toolbar-url-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-toolbar#zen-app-panel-toolbar
+  :is(.zen-toolbar-btn, .zen-toolbar-zoom-label),
+:root[bgalazka-look="atelier"]
+  #bgalazka-super-panel#bgalazka-super-panel
+  .bgalazka-super-bar
+  :is(button, .bgalazka-second-zoom-label) {
+  color: var(--zl-toolbar-action-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-toolbar#zen-app-panel-toolbar
+  .zen-toolbar-btn:hover:not(:disabled),
+:root[bgalazka-look="atelier"]
+  #bgalazka-super-panel#bgalazka-super-panel
+  .bgalazka-super-bar
+  button:hover:not(:disabled) {
+  color: var(--zl-hover-text) !important;
+}
+:root[bgalazka-look="atelier"][bgalazka-look-video-selection="filled"]
+  #zentral-video-preview#zentral-video-preview
+  .zentral-video-preview-source[aria-selected="true"] {
+  color: var(--zl-video-selected-text) !important;
+}
+
+/* URL fields follow Primary; focus, caret, selection and borders follow Accent. */
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-toolbar#zen-app-panel-toolbar
+  .zen-toolbar-urlbar,
+:root[bgalazka-look="atelier"]
+  #bgalazka-super-panel#bgalazka-super-panel
+  .bgalazka-second-url {
+  border-color: var(--zl-url-border) !important;
+  caret-color: var(--zl-toolbar-focus) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-toolbar#zen-app-panel-toolbar
+  .zen-toolbar-urlbar:focus,
+:root[bgalazka-look="atelier"]
+  #bgalazka-super-panel#bgalazka-super-panel
+  .bgalazka-second-url:focus {
+  border-color: var(--zl-toolbar-focus) !important;
+  outline: 2px solid var(--zl-toolbar-focus) !important;
+  outline-offset: 1px !important;
+}
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-toolbar#zen-app-panel-toolbar
+  .zen-toolbar-urlbar::selection,
+:root[bgalazka-look="atelier"]
+  #bgalazka-super-panel#bgalazka-super-panel
+  .bgalazka-second-url::selection {
+  background: var(--zl-selected) !important;
+  color: var(--zl-selected-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  :is(
+    .zen-toolbar-urlbar-drag-handle:hover,
+    .bgalazka-second-grip:hover,
+    .zentral-utility-slot.zentral-utility-slot-dragover
+  ) {
+  background: color-mix(in srgb, var(--zl-accent) 20%, transparent) !important;
+  outline-color: var(--zl-accent) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-toolbar#zen-app-panel-toolbar
+  .bgalazka-panel-black-btn[data-active="true"] {
+  background: color-mix(
+    in srgb,
+    var(--zl-selected) 24%,
+    transparent
+  ) !important;
+  outline-color: var(--zl-toolbar-focus) !important;
+}
+/* Muted text already has a contrast-adjusted color; do not fade it a second time. */
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview#zentral-video-preview
+  :is(
+    .zentral-video-preview-caption,
+    .zentral-video-preview-capabilities,
+    .zentral-video-preview-source
+  ) {
+  opacity: 1 !important;
+}
+:root[bgalazka-look="atelier"]
+  :is(#zen-apps-sidebar-tile-context, #zentral-tabgroup-context-menu)
+  menuitem[_moz-menuactive="true"]:not([disabled="true"]) {
+  background: var(--zl-selected) !important;
+  color: var(--zl-selected-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  :is(
+    #zen-apps-sidebar-tile-context #zen-apps-sidebar-remove-item,
+    #zentral-tabgroup-context-menu #zentral-tg-item-close
+  ) {
+  color: var(--zl-danger-popup) !important;
+}
+:root[bgalazka-look="atelier"]
+  :is(
+    #zen-apps-sidebar-tile-context #zen-apps-sidebar-remove-item,
+    #zentral-tabgroup-context-menu #zentral-tg-item-close
+  ):is(:hover, [_moz-menuactive="true"]) {
+  background: var(--zl-danger-popup) !important;
+  color: var(--zl-danger-popup-text) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  :is(.zs-sublabel, .zs-mono-badge, .zs-version-badge, .zs-h-val) {
+  opacity: 1 !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview#zentral-video-preview
+  .zentral-video-preview-bar
+  button:not(:disabled),
+:root[bgalazka-look="atelier"]
+  #zen-app-panel-toolbar#zen-app-panel-toolbar
+  .zen-toolbar-btn:not(:disabled),
+:root[bgalazka-look="atelier"]
+  #bgalazka-super-panel#bgalazka-super-panel
+  .bgalazka-super-bar
+  button:not(:disabled) {
+  opacity: 1 !important;
 }

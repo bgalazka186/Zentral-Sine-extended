@@ -570,23 +570,23 @@
   ],
   "settings": {
     "zen.workspace.bgalazka.appsbar_library": {
-      "category": "app-tools",
-      "section": "Browser shortcuts",
+      "category": "theme-details",
+      "section": "Tabs, folders & launchers",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.appsbar_history": {
-      "category": "app-tools",
-      "section": "Browser shortcuts",
+      "category": "theme-details",
+      "section": "Tabs, folders & launchers",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.appsbar_downloads": {
-      "category": "app-tools",
-      "section": "Browser shortcuts",
+      "category": "theme-details",
+      "section": "Tabs, folders & launchers",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.appsbar_bookmarks": {
-      "category": "app-tools",
-      "section": "Browser shortcuts",
+      "category": "theme-details",
+      "section": "Tabs, folders & launchers",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.hover_reveal_panel": {
@@ -605,73 +605,73 @@
       "owner": "panels"
     },
     "zen.workspace.bgalazka.hide_hover_reveal_btn": {
-      "category": "pill",
-      "section": "Visibility, buttons & mini pill",
+      "category": "theme-details",
+      "section": "Floating pill",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.hide_pill": {
-      "category": "pill",
-      "section": "Visibility, buttons & mini pill",
+      "category": "theme-details",
+      "section": "Floating pill",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.pill_position": {
-      "category": "pill",
-      "section": "Visibility, buttons & mini pill",
+      "category": "theme-details",
+      "section": "Floating pill",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.pill_peek_dot": {
-      "category": "pill",
-      "section": "Visibility, buttons & mini pill",
+      "category": "theme-details",
+      "section": "Floating pill",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.pill_peek_dot_color": {
-      "category": "pill",
-      "section": "Visibility, buttons & mini pill",
+      "category": "theme-details",
+      "section": "Floating pill",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.pill_peek_dot_opacity": {
-      "category": "pill",
-      "section": "Visibility, buttons & mini pill",
+      "category": "theme-details",
+      "section": "Floating pill",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.pill_background_opacity": {
-      "category": "pill",
-      "section": "Visibility, buttons & mini pill",
+      "category": "theme-details",
+      "section": "Floating pill",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.hide_dual_view": {
-      "category": "pill",
-      "section": "Visibility, buttons & mini pill",
+      "category": "theme-details",
+      "section": "Floating pill",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.hide_all_sides_resize_btn": {
-      "category": "pill",
-      "section": "Visibility, buttons & mini pill",
+      "category": "theme-details",
+      "section": "Floating pill",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.hide_pin": {
-      "category": "pill",
-      "section": "Visibility, buttons & mini pill",
+      "category": "theme-details",
+      "section": "Floating pill",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.hide_expand": {
-      "category": "pill",
-      "section": "Visibility, buttons & mini pill",
+      "category": "theme-details",
+      "section": "Floating pill",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.hide_grabber": {
-      "category": "pill",
-      "section": "Visibility, buttons & mini pill",
+      "category": "theme-details",
+      "section": "Floating pill",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.hide_refresh": {
-      "category": "pill",
-      "section": "Visibility, buttons & mini pill",
+      "category": "theme-details",
+      "section": "Floating pill",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.hide_close": {
-      "category": "pill",
-      "section": "Visibility, buttons & mini pill",
+      "category": "theme-details",
+      "section": "Floating pill",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.audio_indicator": {
@@ -780,18 +780,18 @@
       "owner": "panels"
     },
     "zen.workspace.bgalazka.panel_black_opacity": {
-      "category": "panel-backing",
-      "section": "Black backing & cycle levels",
+      "category": "theme-details",
+      "section": "Panel surfaces & transparency",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.panel_black_steps": {
-      "category": "panel-backing",
-      "section": "Black backing & cycle levels",
+      "category": "theme-details",
+      "section": "Panel surfaces & transparency",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.force_panel_black": {
-      "category": "panel-backing",
-      "section": "Black backing & cycle levels",
+      "category": "theme-details",
+      "section": "Panel surfaces & transparency",
       "owner": "panels"
     },
     "zen.workspace.bgalazka.show_triple_style_repair": {

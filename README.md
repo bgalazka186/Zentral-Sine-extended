@@ -15,13 +15,14 @@ This fork has grown quite a bit beyond the original tweaks. Most extras can be c
 
 #### Panels, layout and navigation
 
+- **Appearance and linked colors:** five starting styles: Default, Paper, Transparent, rounded Tide and outlined Blueprint. Pick a theme, adjust the Simple palette, then switch to Detailed to fine-tune a copy of the current look. Themes set colors, web backing and decoration; Layout & density stays independent. Transparent starts with 90–95% transparent surfaces and low readability strength. Its variant dropdown offers Original and Crimson Glass; the latter adds near-black navy, crimson accents and minimal backing, based on the saved custom look. Existing profiles keep their saved settings until you choose a preset. Full settings import/export is at the top of settings, alongside Restore defaults and Apply recommended settings. Recommended uses the bundled custom configuration, including its appearance and layout, without personal URLs, paths, local registrations or screen-specific offsets; both presets preserve saved apps, groups and panel assignments. Restart after changing behavior or module settings. Settings controls are assembled in a fixed order before categories are arranged; missing optional sections cannot interrupt the window.
 - **Dynamic translucency:** separate opacity levels for unpinned, pinned-and-focused, and pinned-but-unfocused panels, plus optional black backing for readability.
 - **Opposite-side docking and edge attachment:** keep launchers in the normal sidebar while opening panels on the other side, or attach panels to the adjacent bar/window edge.
 - **Move and resize panels:** drag panels in two dimensions, resize from multiple sides, and adjust horizontal offsets, vertical position, and top/bottom height. Still no 3D, sorry.
 - **Dual View, Triple View and SuperPin:** push the webpage aside with Dual View, use two panels in Triple View, or keep a separate movable second panel with SuperPin. Hold the Dual View or Pin button, then choose another panel. Triple View has its own webpage-push choice, divider, swap and close/unlink controls.
 - **Panel autohide:** keep an app loaded while hiding its panel until needed. Adjust the reveal delay, activation width and hide delay; choose whether the inside hover area should reveal it. The space reserved beside the webpage is controlled separately from the hover activation width.
 - **Pill menu customization:** hide individual buttons or the whole pill, adjust its position and opacity, or use a small idle indicator when the full menu is too much.
-- **Navigation, search and zoom in panels:** back/forward, reload, an editable URL/search bar, zoom controls, custom search templates and quick-switch search targets. Place the toolbar at the top or bottom, or show it only on hover.
+- **Navigation, search and zoom in panels:** back/forward, reload, an editable URL/search bar, zoom controls, custom search templates and quick-switch search targets. Place the toolbar at the top or bottom, or show it only on hover. Panel zoom is saved per panel, including essential-linked panels, and restored after restart.
 - **Load and open Zentral panels at startup:** in a panel launcher's context menu, **Load at Startup** loads its app in the background. The separate **Open at Startup** submenu selects a panel or an existing linked Triple View to open with Autohide; panel Autohide must be enabled. **Smart Sleep** delays automatic preloading rather than cancelling your startup selections.
 - **Panel audio controls:** optional audio indicators and quick mute controls, so a noisy panel does not need a full visit just to silence it.
 - **Firefox Containers and mobile mode:** choose a container or switch a panel's user agent to mobile. **Clear Panel Cache & Cookies** clears the configured site's cookies and caches within that container, so other tabs or panels sharing that site and container can be affected. Changing the user agent does not guarantee a mobile layout.
@@ -64,7 +65,7 @@ These options are experimental and separate from the regular hover behavior. Ava
 
 - **Right-click menus closing panels:** fixes the original issue where opening a right-click menu closed the panel.
 
-### Example setup [v2.0.9]
+### Example setup
 
 <p align="center">
   <img src="assets/panelsinterface.png" alt="example" />
@@ -111,7 +112,7 @@ These options are experimental and separate from the regular hover behavior. Ava
 </p>
 
 <p align="center">
-  <a href="theme.json"><img src="https://img.shields.io/badge/Version-v1.0.2-4A72FF.svg?style=flat-square" alt="Version"></a>
+  <a href="theme.json"><img src="https://img.shields.io/badge/Version-v2.3.0-4A72FF.svg?style=flat-square" alt="Version"></a>
   <a href="https://zen-browser.app/"><img src="https://img.shields.io/badge/Zen_Browser-Compatible-9B51E0.svg?style=flat-square" alt="Zen Browser"></a>
   <a href="theme.json"><img src="https://img.shields.io/badge/Sine_Engine-Native_Mod-00C853.svg?style=flat-square" alt="Sine Engine"></a>
   <a href="https://ko-fi.com/michele501st"><img src="https://img.shields.io/badge/Support-Ko--fi-FF5E5B.svg?style=flat-square&logo=ko-fi&logoColor=white" alt="Support on Ko-fi"></a>

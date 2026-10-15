@@ -503,28 +503,15 @@
   // Runtime waits for native restoration once. If Zen replaces or exposes its
   // manager later, native lifecycle events retry attachment without polling.
   function start() {
-    let stopped = false,
-      cleanup = null,
-      task = null,
-      watching = false;
+    let stopped = false, cleanup = null, task = null, watching = false;
     const root = document.documentElement;
     function reconcile() {
       task = null;
       if (stopped || !Services.prefs.getBoolPref(PREF, false)) return;
       const manager = window.gZenCompactModeManager;
-      if (cleanup && cleanup.manager !== manager) {
-        cleanup();
-        cleanup = null;
-      }
-      if (cleanup) {
-        cleanup.refresh();
-        return;
-      }
-      if (
-        typeof manager?._setElementExpandAttribute !== "function" ||
-        !manager.sidebar
-      )
-        return;
+      if (cleanup && cleanup.manager !== manager) { cleanup(); cleanup = null; }
+      if (cleanup) { cleanup.refresh(); return; }
+      if (typeof manager?._setElementExpandAttribute !== "function" || !manager.sidebar) return;
       cleanup = attach();
     }
     function queueReconcile() {
@@ -532,11 +519,7 @@
       task = window.setTimeout(reconcile, 0);
     }
     const hostObserver = new MutationObserver(queueReconcile);
-    const hostEvents = [
-      "ZenCompactMode:Toggled",
-      "activate",
-      "aftercustomization",
-    ];
+    const hostEvents = ["ZenCompactMode:Toggled", "activate", "aftercustomization"];
     function syncWatching() {
       const value = !stopped && Services.prefs.getBoolPref(PREF, false);
       if (watching !== value) {
@@ -544,45 +527,25 @@
         const method = value ? "addEventListener" : "removeEventListener";
         for (const type of hostEvents) window[method](type, queueReconcile);
         hostObserver.disconnect();
-        if (value)
-          hostObserver.observe(root, {
-            attributes: true,
-            attributeFilter: [
-              "zen-compact-mode",
-              "zen-sidebar-collapsed",
-              "zen-right-side",
-              "zen-sidebar-right",
-            ],
-          });
+        if (value) hostObserver.observe(root, { attributes: true, attributeFilter: [
+          "zen-compact-mode", "zen-sidebar-collapsed", "zen-right-side", "zen-sidebar-right",
+        ] });
       }
-      if (!value && task !== null) {
-        window.clearTimeout(task);
-        task = null;
-      }
+      if (!value && task !== null) { window.clearTimeout(task); task = null; }
       if (value) reconcile();
     }
-    const observer = {
-      observe(subject, topic, pref) {
-        if (pref === PREF) syncWatching();
-      },
-    };
+    const observer = { observe(subject, topic, pref) { if (pref === PREF) syncWatching(); } };
     function destroy() {
       if (stopped) return;
       stopped = true;
       syncWatching();
-      cleanup?.();
-      cleanup = null;
+      cleanup?.(); cleanup = null;
       Services.prefs.removeObserver(PREF, observer);
       window.removeEventListener("unload", destroy);
     }
     Services.prefs.addObserver(PREF, observer);
     window.addEventListener("unload", destroy, { once: true });
-    try {
-      syncWatching();
-    } catch (error) {
-      destroy();
-      throw error;
-    }
+    try { syncWatching(); } catch (error) { destroy(); throw error; }
     return destroy;
   }
   window.ZentralRuntime.register({ id: "compact-hover", init: start });

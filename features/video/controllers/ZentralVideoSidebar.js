@@ -115,7 +115,7 @@
           deps.previewModeNotice = document.createElement("div");
           deps.previewModeNotice.setAttribute("role", "status");
           deps.previewModeNotice.style.cssText =
-            "position:absolute;inset:0;z-index:5;background:#111;color:white;padding:12px;align-items:center;justify-content:center;text-align:center;font:12px sans-serif;pointer-events:none";
+            "position:absolute;inset:0;z-index:5;background:var(--zl-video-canvas,#111);color:var(--zl-video-text,white);padding:12px;align-items:center;justify-content:center;text-align:center;font:12px sans-serif;pointer-events:none";
           deps.previewModeNotice.hidden = true;
           deps.picture.appendChild(deps.previewModeNotice);
           deps.pictureObserver = new ResizeObserver(() => {
@@ -343,7 +343,7 @@
             "flex:1 999 auto!important;min-width:0!important;overflow:hidden!important;white-space:nowrap!important;text-overflow:ellipsis!important";
           for (const button of bar.querySelectorAll("button")) {
             button.style.cssText =
-              "position:static!important;inset:auto!important;transform:none!important;float:none!important;box-sizing:border-box!important;flex:0 1 26px!important;width:26px!important;min-width:18px!important;max-width:26px!important;height:26px!important;min-height:26px!important;max-height:26px!important;margin:0!important;padding:0!important;overflow:hidden!important;align-items:center!important;justify-content:center!important;color:white!important";
+              "position:static!important;inset:auto!important;transform:none!important;float:none!important;box-sizing:border-box!important;flex:0 1 26px!important;width:26px!important;min-width:18px!important;max-width:26px!important;height:26px!important;min-height:26px!important;max-height:26px!important;margin:0!important;padding:0!important;overflow:hidden!important;align-items:center!important;justify-content:center!important;color:var(--zl-video-control-text,white)!important";
           }
           deps.box._nextButton = next;
           deps.box._openButton = open;
@@ -393,7 +393,7 @@
         svg.setAttribute("viewBox", "0 0 24 24");
         svg.setAttribute("aria-hidden", "true");
         svg.style.cssText =
-          "display:block!important;width:16px!important;height:16px!important;flex:0 0 16px!important;position:static!important;pointer-events:none!important";
+          "display:block!important;width:var(--bgalazka-look-control-icon-size,16px)!important;height:var(--bgalazka-look-control-icon-size,16px)!important;flex:0 0 var(--bgalazka-look-control-icon-size,16px)!important;position:static!important;pointer-events:none!important";
         const path = document.createElementNS(ns, "path");
         const paths = {
           pin: "M16 9V4l1-1V2H7v1l1 1v5c0 1.66-1.34 3-3 3v2h6v7l1 1 1-1v-7h6v-2c-1.66 0-3-1.34-3-3z",
@@ -404,8 +404,8 @@
         path.setAttribute("d", paths[kind]);
         path.style.cssText =
           kind === "pin"
-            ? "fill:white!important;stroke:none!important"
-            : "fill:none!important;stroke:white!important;stroke-width:2!important;stroke-linecap:round!important;stroke-linejoin:round!important";
+            ? "fill:currentColor!important;stroke:none!important"
+            : "fill:none!important;stroke:currentColor!important;stroke-width:2!important;stroke-linecap:round!important;stroke-linejoin:round!important";
         svg.appendChild(path);
         button.replaceChildren(svg);
       }

@@ -205,8 +205,8 @@
         const select = document.createElement("select");
         select.className = "zs-select-input";
         select.style.cssText = `
-      background: #18181b !important;
-      color: #ffffff !important;
+      background: var(--zl-input, #18181b) !important;
+      color: var(--zl-input-text, #ffffff) !important;
       border: 1px solid rgba(255, 255, 255, 0.15) !important;
       border-radius: 8px !important;
       padding: 4px 10px !important;
@@ -434,7 +434,7 @@
         input.addEventListener("input", () => {
           badge.textContent = input.value + suffix;
           ctx.setPref(prefKey, toPreference(parseInt(input.value, 10)));
-          if (typeof ctx.updateCSSVars === "function") {
+          if (!prefKey.startsWith("zen.workspace.bgalazka.look.") && typeof ctx.updateCSSVars === "function") {
             ctx.updateCSSVars();
           }
         });
@@ -488,7 +488,7 @@
 
         input.addEventListener("input", () => {
           ctx.setPref(prefKey, input.value);
-          ctx.updateCSSVars();
+          if (!prefKey.startsWith("zen.workspace.bgalazka.look.")) ctx.updateCSSVars();
         });
 
         row.appendChild(leftBox);

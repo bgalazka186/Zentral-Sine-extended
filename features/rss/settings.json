@@ -27,8 +27,8 @@
       "owner": "rss"
     },
     "zen.workspace.bgalazka.rss.compact_headers": {
-      "category": "rss",
-      "section": "Live-folder display",
+      "category": "theme-details",
+      "section": "Tabs, folders & launchers",
       "owner": "rss"
     }
   }

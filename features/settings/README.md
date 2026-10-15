@@ -52,3 +52,23 @@ Full installation uses root `theme.json` and `preferences.json`, plus `core/`; S
 | File                                   | Responsibility                                                   |
 | -------------------------------------- | ---------------------------------------------------------------- |
 | `styles/ZentralSettingsFoundation.css` | Shared settings modal, app editor and base control presentation. |
+
+## Settings flow
+
+1. **Start here:** full settings export/import, links to setup pages, and seven essential switches (Apps/panels, video, tab groups, panel toolbar, Essential-tab panels, startup loading and middle-click unloading).
+2. **Simple appearance:** five style presets, primary/secondary palette, transparency, button style and adjustable readability backing.
+3. **Detailed appearance:** visible only in Detailed mode. Switching from Simple first copies the resolved palette. Collapsible sections cover text, panels, controls, settings, toolbars, pill, video, launcher decoration, menus and compatibility styling.
+4. **Layout & density:** always available, independent of both palette modes and presets. Covers tab/folder density, icon sizes, app grid, controls and panel/video dimensions.
+5. Feature behavior, integrations, advanced recovery/module tools and experiments follow; diagnostics is last.
+
+The public preferences schema and owner descriptors expose the same 308 settings, including every independently switchable module/CSS group. Runtime fills missing native controls from that schema and replaces temporary rows when a feature supplies its specialized UI. Protected module switches still use the module manager.
+
+Themes write an explicit set of color and decorative preferences, never density, panel dimensions, shortcuts or feature behavior. Selecting one starts in Simple mode. Default shares the canonical reset defaults. Reset colors leaves layout, decoration and web backing alone. Look backups include appearance and layout; full backups include feature preferences too.
+
+Search opens Detailed before focusing an individual appearance control and expands its section. Shared pages keep their own identity when video or optional settings components unload. UI synchronization is event-driven; disabled artwork scaling does not observe the browser subtree.
+
+Settings structure is cached per modal and feature/schema revision. Reopening only syncs existing schema fields; feature UI arriving later invalidates the cache. Hidden settings do not rebuild on runtime notifications. Schema booleans use the same switch markup as native controls, never text-field classes. Appearance edits are coalesced per animation frame and do not schedule panel-wide host/tile/browser maintenance. Black web backing preserves toolbar and URL-field theme colors.
+
+Readability strength also reinforces the toolbar strip and sidebar-video card, not only buttons and URL fields. Their foreground colors are computed against the same effective backing. Paper explicitly starts those surfaces at 100% opacity; light Simple palettes derive pale fields instead of gray fields. Transparent keeps low strength and approximately 90–95% transparent chrome. These surfaces paint locally to prevent inherited sidebar styling from separating their text and backing.
+
+Primary propagates to both panel toolbars/URL surfaces, video, menus and settings in Simple mode. Secondary supplies borders, focus/caret/selection, source highlights and active indicators. URL focus no longer uses Zen's unrelated browser accent. Destructive menu actions use the configured Danger color; their foreground follows the displayed, contrast-adjusted color. Muted text is not faded again after contrast correction. Detailed mode retains a snapshot of these derived roles.

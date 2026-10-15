@@ -900,6 +900,7 @@
           const next =
             delta === 0 ? 1 : Math.max(0.3, Math.min(3, cur + delta));
           ZoomManager.setZoomForBrowser(b, next);
+          ctx.persistPanelZoom?.(b, next);
           zoomLabel.textContent = Math.round(next * 100) + "%";
         } catch (_) {}
       };

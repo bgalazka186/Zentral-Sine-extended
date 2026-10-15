@@ -46,52 +46,28 @@
             !!Core.getPref(Constants.Apps.PREF_ENABLED, true)
           );
         },
-        libraryPanelCollision(
-          library = document.querySelector("zen-library[open]"),
-          opening = false,
-        ) {
-          const root =
-            access.dom.root || document.getElementById("zen-app-panel-root");
+        libraryPanelCollision(library = document.querySelector("zen-library[open]"), opening = false) {
+          const root = access.dom.root || document.getElementById("zen-app-panel-root");
           let collision = false;
-          if (
-            root?.hasAttribute("open") &&
-            !root.hasAttribute("closing") &&
-            (opening || library?.hasAttribute("open"))
-          ) {
-            const panelRight =
-              root.getAttribute("data-panel-side") === "right" ||
-              (!root.getAttribute("data-panel-side") &&
-                this.isPanelAttachedToRight?.());
-            let libraryRight =
-              document.documentElement.getAttribute("zen-right-side") ===
-                "true" ||
-              document.documentElement.getAttribute("zen-sidebar-right") ===
-                "true";
+          if (root?.hasAttribute("open") && !root.hasAttribute("closing") &&
+              (opening || library?.hasAttribute("open"))) {
+            const panelRight = root.getAttribute("data-panel-side") === "right" ||
+              (!root.getAttribute("data-panel-side") && this.isPanelAttachedToRight?.());
+            let libraryRight = document.documentElement.getAttribute("zen-right-side") === "true" ||
+              document.documentElement.getAttribute("zen-sidebar-right") === "true";
             // Prefer the visible library pane to its potentially full-window host.
-            const pane =
-              library?.querySelector?.(
-                "#zen-library-panel, #zen-library-side",
-              ) ||
-              document.getElementById("zen-library-panel") ||
-              library;
+            const pane = library?.querySelector?.("#zen-library-panel, #zen-library-side") ||
+              document.getElementById("zen-library-panel") || library;
             const rect = pane?.getBoundingClientRect?.();
             if (rect?.width > 0 && rect.width < window.innerWidth * 0.8)
-              libraryRight =
-                rect.left + rect.width / 2 >= window.innerWidth / 2;
+              libraryRight = rect.left + rect.width / 2 >= window.innerWidth / 2;
             collision = Boolean(panelRight) === libraryRight;
           }
-          document.documentElement.toggleAttribute(
-            "zentral-library-panel-conflict",
-            collision,
-          );
+          document.documentElement.toggleAttribute("zentral-library-panel-conflict", collision);
           return collision;
         },
         closePanelsForLibrary(library, opening = false) {
-          if (
-            !this.libraryPanelGuardEnabled() ||
-            !this.libraryPanelCollision(library, opening)
-          )
-            return;
+          if (!this.libraryPanelGuardEnabled() || !this.libraryPanelCollision(library, opening)) return;
           access.libraryYieldingToPanel = false;
           this.closePanel();
           // Finish the existing close animation before Library takes the space.
@@ -109,12 +85,7 @@
         closeLibraryForPanel() {
           if (!this.libraryPanelGuardEnabled()) return;
           const library = document.querySelector("zen-library[open]");
-          if (
-            !library ||
-            access.libraryYieldingToPanel ||
-            !this.libraryPanelCollision(library)
-          )
-            return;
+          if (!library || access.libraryYieldingToPanel || !this.libraryPanelCollision(library)) return;
           // Without an opted-in native bridge, Library owns the space. The
           // open-attribute observer closes any panel opened alongside it.
           if (typeof access.libraryGuardAPI?.close !== "function") {
@@ -164,11 +135,7 @@
                   const apps = this;
                   access.libraryGuardOriginalAnimation = original;
                   access.libraryGuardAnimation = function (target, ...args) {
-                    if (target > 0)
-                      apps.closePanelsForLibrary(
-                        document.querySelector("zen-library"),
-                        true,
-                      );
+                    if (target > 0) apps.closePanelsForLibrary(document.querySelector("zen-library"), true);
                     return original.call(this, target, ...args);
                   };
                   ZenLibrary.animateProgress = access.libraryGuardAnimation;
@@ -197,9 +164,7 @@
                 ) {
                   if (!record.target.hasAttribute("open")) {
                     access.libraryYieldingToPanel = false;
-                    document.documentElement.removeAttribute(
-                      "zentral-library-panel-conflict",
-                    );
+                    document.documentElement.removeAttribute("zentral-library-panel-conflict");
                   } else if (!access.libraryYieldingToPanel) {
                     this.closePanelsForLibrary();
                   }
@@ -210,14 +175,8 @@
                   !record.target.hasAttribute("closing")
                 ) {
                   this.closeLibraryForPanel();
-                } else if (
-                  record.type === "attributes" &&
-                  [
-                    "data-panel-side",
-                    "zen-right-side",
-                    "zen-sidebar-right",
-                  ].includes(record.attributeName)
-                ) {
+                } else if (record.type === "attributes" &&
+                    ["data-panel-side", "zen-right-side", "zen-sidebar-right"].includes(record.attributeName)) {
                   const library = document.querySelector("zen-library[open]");
                   if (library) this.closePanelsForLibrary(library);
                 } else if (
@@ -236,12 +195,7 @@
               subtree: true,
               childList: true,
               attributes: true,
-              attributeFilter: [
-                "open",
-                "data-panel-side",
-                "zen-right-side",
-                "zen-sidebar-right",
-              ],
+              attributeFilter: ["open", "data-panel-side", "zen-right-side", "zen-sidebar-right"],
             });
             // If enabled while both are visible, Library owns the space.
             if (document.querySelector("zen-library[open]"))
@@ -268,9 +222,7 @@
           access.libraryGuardStyle?.remove();
           access.libraryGuardStyle = null;
           access.libraryYieldingToPanel = false;
-          document.documentElement.removeAttribute(
-            "zentral-library-panel-conflict",
-          );
+          document.documentElement.removeAttribute("zentral-library-panel-conflict");
         },
         destroyLibraryPanelGuard() {
           this.removeLibraryPanelGuard();

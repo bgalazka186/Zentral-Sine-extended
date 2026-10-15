@@ -20,6 +20,7 @@
    QUICK PANEL BACKGROUND OVERRIDE + PRIMARY TOOLBAR REPAIR CONTROLS
    --------------------------------------------------------------------------
    JS toggles bgalazka-force-panel-black from the primary web-panel toolbar.
+   Web-content backing only; toolbar and URL colors keep their theme.
    This is intentionally an override only: user Look/translucency preferences
    remain untouched underneath and reappear immediately when the toggle is off.
    ========================================================================== */
@@ -32,16 +33,10 @@
   #zen-app-panel-slider,
 :root[bgalazka-force-panel-black="true"]
   #zen-app-panel-root
-  #zen-app-panel-toolbar,
-:root[bgalazka-force-panel-black="true"]
-  #zen-app-panel-root
   #zen-app-panel-slider
   > browser,
 :root[bgalazka-force-panel-black="true"] #bgalazka-super-panel,
-:root[bgalazka-force-panel-black="true"] #bgalazka-super-panel > browser,
-:root[bgalazka-force-panel-black="true"]
-  #bgalazka-super-panel
-  .bgalazka-super-bar {
+:root[bgalazka-force-panel-black="true"] #bgalazka-super-panel > browser {
   --tabpanels-background-color: color-mix(
     in srgb,
     #000000 var(--bgalazka-panel-black-opacity, 100%),

@@ -16,8 +16,8 @@
   ],
   "settings": {
     "zen.workspace.zentral.startup.enabled": {
-      "category": "startup",
-      "section": "Selected tabs",
+      "category": "essentials",
+      "section": "Essential features",
       "owner": "startup"
     }
   }

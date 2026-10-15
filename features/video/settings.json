@@ -1631,8 +1631,8 @@
   ],
   "settings": {
     "zen.workspace.zentral.video_preview.enabled": {
-      "category": "video-playback",
-      "section": "Playback & captions",
+      "category": "essentials",
+      "section": "Essential features",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.renderer": {
@@ -1681,113 +1681,113 @@
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.fit_width": {
-      "category": "video-appearance",
-      "section": "Card layout & controls",
+      "category": "density",
+      "section": "Video size",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.width_percent": {
-      "category": "video-appearance",
-      "section": "Card layout & controls",
+      "category": "density",
+      "section": "Video size",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.height_px": {
-      "category": "video-appearance",
-      "section": "Card layout & controls",
+      "category": "density",
+      "section": "Video size",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.radius_px": {
-      "category": "video-appearance",
-      "section": "Card layout & controls",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.framing": {
-      "category": "video-appearance",
-      "section": "Card layout & controls",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.hide_button": {
-      "category": "video-appearance",
-      "section": "Card layout & controls",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.auto_height_button": {
-      "category": "video-appearance",
-      "section": "Card layout & controls",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.video_hidden": {
-      "category": "video-appearance",
-      "section": "Card layout & controls",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.pin_source_button": {
-      "category": "video-appearance",
-      "section": "Card layout & controls",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.compact_card_button": {
-      "category": "video-appearance",
-      "section": "Card layout & controls",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.compact_card": {
-      "category": "video-appearance",
-      "section": "Card layout & controls",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_opacity": {
-      "category": "video-appearance",
-      "section": "Colors & source list",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_control_opacity": {
-      "category": "video-appearance",
-      "section": "Colors & source list",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_canvas": {
-      "category": "video-appearance",
-      "section": "Colors & source list",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_control": {
-      "category": "video-appearance",
-      "section": "Colors & source list",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_text": {
-      "category": "video-appearance",
-      "section": "Colors & source list",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_muted": {
-      "category": "video-appearance",
-      "section": "Colors & source list",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_selected": {
-      "category": "video-appearance",
-      "section": "Colors & source list",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_border": {
-      "category": "video-appearance",
-      "section": "Colors & source list",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_padding": {
-      "category": "video-appearance",
-      "section": "Colors & source list",
+      "category": "density",
+      "section": "Control sizing",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_row_height": {
-      "category": "video-appearance",
-      "section": "Colors & source list",
+      "category": "density",
+      "section": "Control sizing",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_source_style": {
-      "category": "video-appearance",
-      "section": "Colors & source list",
+      "category": "theme-details",
+      "section": "Sidebar video",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.pause_when_compact_hidden": {

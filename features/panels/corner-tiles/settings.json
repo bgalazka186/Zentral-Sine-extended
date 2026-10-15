@@ -46,8 +46,8 @@
   ],
   "settings": {
     "zen.workspace.bgalazka.corner_tiles": {
-      "category": "tab-panels",
-      "section": "Launchers, loaded state & badges",
+      "category": "essentials",
+      "section": "Essential features",
       "owner": "corner-panels"
     },
     "zen.workspace.bgalazka.all_tab_panels": {
@@ -56,23 +56,23 @@
       "owner": "corner-panels"
     },
     "zen.workspace.bgalazka.hover_corner_tiles": {
-      "category": "tab-panels",
-      "section": "Launchers, loaded state & badges",
+      "category": "theme-details",
+      "section": "Tabs, folders & launchers",
       "owner": "corner-panels"
     },
     "zen.workspace.bgalazka.tab_isolation": {
-      "category": "tab-panels",
-      "section": "Launchers, loaded state & badges",
+      "category": "theme-details",
+      "section": "Tabs, folders & launchers",
       "owner": "corner-panels"
     },
     "zen.workspace.bgalazka.hide_corner_badges": {
-      "category": "tab-panels",
-      "section": "Launchers, loaded state & badges",
+      "category": "theme-details",
+      "section": "Tabs, folders & launchers",
       "owner": "corner-panels"
     },
     "zen.workspace.bgalazka.hide_unattached_app_controls": {
-      "category": "tab-panels",
-      "section": "Launchers, loaded state & badges",
+      "category": "theme-details",
+      "section": "Tabs, folders & launchers",
       "owner": "corner-panels"
     }
   }

@@ -949,72 +949,35 @@
     // Coalesce real lifecycle triggers. A failed placement remains hidden and
     // can recover on the next readiness/action event; there is no timed retry loop.
     function scheduleAddonFolderRepair() {
-      if (
-        !isAddonTabIdBridgeEnabled() ||
-        addonFolderDisposed ||
-        repairingAddonFolder ||
-        addonFolderRepairTimer !== null ||
-        !addonHostByAppId.size
-      )
-        return;
+      if (!isAddonTabIdBridgeEnabled() || addonFolderDisposed || repairingAddonFolder ||
+          addonFolderRepairTimer !== null || !addonHostByAppId.size) return;
       addonFolderRepairTimer = ctx.setTimeout(() => {
         addonFolderRepairTimer = null;
-        if (
-          addonFolderDisposed ||
-          !isAddonTabIdBridgeEnabled() ||
-          !addonHostByAppId.size
-        )
-          return;
+        if (addonFolderDisposed || !isAddonTabIdBridgeEnabled() || !addonHostByAppId.size) return;
         repairingAddonFolder = true;
         try {
           for (const record of addonHostByAppId.values()) {
-            if (
-              !record.tab?.isConnected ||
-              record.removing ||
-              !record.tab.hasAttribute("bgalazka-addon-host-fallback")
-            )
-              continue;
+            if (!record.tab?.isConnected || record.removing ||
+                !record.tab.hasAttribute("bgalazka-addon-host-fallback")) continue;
             if (!putAddonHostTabInFolder(record.tab)) break;
           }
           ensureSafeSelectedTabForAddonHosts();
-        } finally {
-          repairingAddonFolder = false;
-        }
+        } finally { repairingAddonFolder = false; }
       }, 0);
     }
     function repairAddonFolderOnEvent() {
-      if (
-        addonFolderDisposed ||
-        !isAddonTabIdBridgeEnabled() ||
-        !addonHostByAppId.size
-      )
-        return;
-      if (
-        [...addonHostByAppId.values()].some(
-          (record) =>
-            record.tab?.isConnected &&
-            record.tab.hasAttribute("bgalazka-addon-host-fallback"),
-        )
-      )
-        scheduleAddonFolderRepair();
+      if (addonFolderDisposed || !isAddonTabIdBridgeEnabled() || !addonHostByAppId.size) return;
+      if ([...addonHostByAppId.values()].some(record => record.tab?.isConnected &&
+          record.tab.hasAttribute("bgalazka-addon-host-fallback"))) scheduleAddonFolderRepair();
     }
-    const addonFolderEvents = [
-      "TabOpen",
-      "TabPinned",
-      "TabGroupCreate",
-      "zen-workspace-switched",
-      "activate",
-    ];
-    for (const type of addonFolderEvents)
-      window.addEventListener(type, repairAddonFolderOnEvent);
+    const addonFolderEvents = ["TabOpen", "TabPinned", "TabGroupCreate", "zen-workspace-switched", "activate"];
+    for (const type of addonFolderEvents) window.addEventListener(type, repairAddonFolderOnEvent);
     Promise.resolve(ZentralRuntime.nativeReady).then(repairAddonFolderOnEvent);
     ctx.registerCleanup(() => {
       addonFolderDisposed = true;
-      if (addonFolderRepairTimer !== null)
-        ctx.clearTimeout(addonFolderRepairTimer);
+      if (addonFolderRepairTimer !== null) ctx.clearTimeout(addonFolderRepairTimer);
       addonFolderRepairTimer = null;
-      for (const type of addonFolderEvents)
-        window.removeEventListener(type, repairAddonFolderOnEvent);
+      for (const type of addonFolderEvents) window.removeEventListener(type, repairAddonFolderOnEvent);
     });
 
     function putAddonHostTabInFolder(tab) {

@@ -199,9 +199,7 @@
         deps.canvas?.style.removeProperty("display");
         // A strict method test must not show pixels left by another renderer.
         if (deps.selectedModeOnly() && deps.canvas)
-          deps.canvas
-            .getContext("2d")
-            ?.clearRect(0, 0, deps.canvas.width, deps.canvas.height);
+          deps.canvas.getContext("2d")?.clearRect(0, 0, deps.canvas.width, deps.canvas.height);
       }
       async function startLivePreview(
         source,

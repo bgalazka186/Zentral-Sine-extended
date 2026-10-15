@@ -50,18 +50,18 @@
       "owner": "secondary-views"
     },
     "zen.workspace.bgalazka.secondary_toolbar_swap": {
-      "category": "multi-view",
-      "section": "Page push & secondary controls",
+      "category": "theme-details",
+      "section": "Navigation toolbar",
       "owner": "secondary-views"
     },
     "zen.workspace.bgalazka.secondary_toolbar_close": {
-      "category": "multi-view",
-      "section": "Page push & secondary controls",
+      "category": "theme-details",
+      "section": "Navigation toolbar",
       "owner": "secondary-views"
     },
     "zen.workspace.bgalazka.triple_inward_toolbars": {
-      "category": "multi-view",
-      "section": "Page push & secondary controls",
+      "category": "theme-details",
+      "section": "Navigation toolbar",
       "owner": "secondary-views"
     }
   }

@@ -73,6 +73,7 @@
                           Math.min(10000, a.width),
                         )
                       : undefined,
+                  zoom: Number.isFinite(a.zoom) ? Math.max(0.3, Math.min(3, a.zoom)) : undefined,
                   preload: a.preload === true,
                   workspaceId:
                     typeof a.workspaceId === "string" &&
@@ -89,12 +90,13 @@
         saveApps() {
           try {
             const clean = access.state.apps.map(
-              ({ id, url, title, icon, width, preload, workspaceId }) => ({
+              ({ id, url, title, icon, width, zoom, preload, workspaceId }) => ({
                 id,
                 url,
                 title,
                 icon,
                 width,
+                zoom,
                 preload: !!preload,
                 workspaceId,
               }),
@@ -103,6 +105,21 @@
           } catch (e) {
             console.warn("[ZentralApps] Failed to save apps pref:", e);
           }
+        },
+        getPanelZoom(browser) {
+          if (!browser) return undefined;
+          const app = access.state.apps.find(app =>
+            app.id === browser?._bgalazkaAppId || access.state.appBrowsers.get(app.id) === browser);
+          return app?.zoom;
+        },
+        rememberPanelZoom(browser, value) {
+          if (!browser) return false;
+          const app = access.state.apps.find(app =>
+            app.id === browser?._bgalazkaAppId || access.state.appBrowsers.get(app.id) === browser);
+          if (!app || !Number.isFinite(value)) return false;
+          const zoom = Math.round(Math.max(0.3, Math.min(3, value)) * 100) / 100;
+          if (app.zoom !== zoom) { app.zoom = zoom; this.saveApps(); }
+          return true;
         },
         loadUtilityOrder() {
           // LOW-02: UTILITY_SLOTS_COUNT is always 4 (defined constant); || 4 fallback was dead code.

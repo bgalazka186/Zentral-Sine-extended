@@ -514,6 +514,7 @@
         mobileUa: !!record.mobileUa,
         userContextId: record.userContextId,
         width: record.app.width,
+        zoom: record.app.zoom,
       };
       essentialSettingsCache.set(record.tab, value);
       try {
@@ -758,6 +759,7 @@
                 ? savedId
                 : essentialIdPrefix + ++nextEssentialId;
             const app = {
+              zoom: Number.isFinite(settings.zoom) ? Math.max(0.3, Math.min(3, settings.zoom)) : undefined,
               preload: settings.preload === true,
               width:
                 Number.isFinite(settings.width) && settings.width > 0

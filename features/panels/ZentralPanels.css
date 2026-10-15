@@ -57,7 +57,7 @@
  * 9. PANEL OPACITY: Web pages inside <browser> render opaque backgrounds. Applying only background-color to
  *    the slider is invisible behind the page canvas. Real transparency requires setting CSS `opacity` on
  *    #zen-app-panel-slider itself.
- * 10. NATIVE FEATURE PARITY (v1.0.2): the base mod now natively sets data-loaded="true"/"false" on tiles
+ * 10. NATIVE FEATURE PARITY (upstream): the base mod now natively sets data-loaded="true"/"false" on tiles
  *     (in renderGrid/getOrCreateAppBrowser/closeApp, searched via a document-wide querySelectorAll so it stays
  *     correct even after we move a tile into an essential tab's corner) and natively handles middle-click
  *     unload on the tile itself (mousedown+auxclick, stopPropagation). We must NOT reimplement either of

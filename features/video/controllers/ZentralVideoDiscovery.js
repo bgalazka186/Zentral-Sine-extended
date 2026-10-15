@@ -480,11 +480,8 @@
       // stop() invalidates the generation before releasing content transports.
       // Settled requests from that generation must not overwrite live diagnostics.
       function discoveryRequestCurrent(generation) {
-        return (
-          !deps.disposed &&
-          (deps.enabled() || deps.testingAll) &&
-          generation === deps.scanGeneration
-        );
+        return !deps.disposed && (deps.enabled() || deps.testingAll) &&
+          generation === deps.scanGeneration;
       }
       // Definite actor failures are document-scoped, not a recurring retry job.
       // Weak ownership releases closed/navigated documents without cleanup work.
@@ -497,12 +494,10 @@
             let global;
             try {
               global = context.currentWindowGlobal;
-              if (!deps.testingAll && global && failedActorGlobals.has(global))
-                return [];
+              if (!deps.testingAll && global && failedActorGlobals.has(global)) return [];
               const scheme = global?.documentURI?.scheme;
               if (
-                !global ||
-                global.isClosed ||
+                !global || global.isClosed ||
                 (scheme &&
                   !["http", "https", "file", "moz-extension"].includes(scheme))
               )
@@ -515,12 +510,8 @@
                 2500,
                 "actor reply",
               );
-              if (
-                !discoveryRequestCurrent(generation) ||
-                global !== context.currentWindowGlobal ||
-                global.isClosed
-              )
-                return [];
+              if (!discoveryRequestCurrent(generation) ||
+                  global !== context.currentWindowGlobal || global.isClosed) return [];
               failedActorGlobals.delete(global);
               deps.methodState.actor = "working (content replied)";
               return (candidates || []).map((data) => ({
@@ -530,12 +521,8 @@
                 data: { ...data, frameId: context.id },
               }));
             } catch (error) {
-              if (
-                discoveryRequestCurrent(generation) &&
-                global &&
-                global === context.currentWindowGlobal &&
-                !global?.isClosed
-              ) {
+              if (discoveryRequestCurrent(generation) && global &&
+                  global === context.currentWindowGlobal && !global?.isClosed) {
                 // Obsolete/destroyed documents were excluded above. A rejected
                 // actor load/constructor/query is not helped by scanning again.
                 const message = String(error);
@@ -558,26 +545,20 @@
             requireAudio: deps.requireAudio(),
             cacheAudio: deps.featureOn(deps.AUDIO_CACHE_PREF),
           });
-          if (
-            !discoveryRequestCurrent(generation) ||
-            global !== item.browser.browsingContext?.currentWindowGlobal
-          )
-            return [];
+          if (!discoveryRequestCurrent(generation) ||
+              global !== item.browser.browsingContext?.currentWindowGlobal) return [];
           const frames = contexts(item.browser.browsingContext);
           return (candidates || []).flatMap((data) => {
             const context =
               frames.find((entry) => entry.id === data.frameId) ||
               (data.frameId ? null : item.browser.browsingContext);
             const documentId = context?.currentWindowGlobal?.innerWindowId;
-            if (data.documentId && documentId && data.documentId !== documentId)
-              return [];
+            if (data.documentId && documentId && data.documentId !== documentId) return [];
             return context ? [{ ...item, method: "frame", context, data }] : [];
           });
         } catch (error) {
-          if (
-            discoveryRequestCurrent(generation) &&
-            global === item.browser.browsingContext?.currentWindowGlobal
-          )
+          if (discoveryRequestCurrent(generation) &&
+              global === item.browser.browsingContext?.currentWindowGlobal)
             deps.methodError("frame", error);
           return [];
         }

@@ -461,6 +461,7 @@
             const current = ZoomManager.getZoomForBrowser(browser);
             const next = step ? Math.max(0.3, Math.min(3, current + step)) : 1;
             ZoomManager.setZoomForBrowser(browser, next);
+            ctx.persistPanelZoom?.(browser, next);
             zoomText.textContent = Math.round(next * 100) + "%";
           } catch (_) {}
         }

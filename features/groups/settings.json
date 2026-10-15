@@ -78,8 +78,8 @@
   ],
   "settings": {
     "zen.workspace.tabgroups.enabled": {
-      "category": "tab-groups",
-      "section": "Group behavior & indicators",
+      "category": "essentials",
+      "section": "Essential features",
       "owner": "tab-groups"
     },
     "zen.workspace.tabgroups.collapse_on_launch": {
@@ -88,13 +88,13 @@
       "owner": "tab-groups"
     },
     "zen.workspace.tabgroups.show_chevron": {
-      "category": "tab-groups",
-      "section": "Group behavior & indicators",
+      "category": "theme-details",
+      "section": "Tabs, folders & launchers",
       "owner": "tab-groups"
     },
     "zen.workspace.tabgroups.indicator_type": {
-      "category": "tab-groups",
-      "section": "Group behavior & indicators",
+      "category": "theme-details",
+      "section": "Tabs, folders & launchers",
       "owner": "tab-groups"
     },
     "zen.workspace.tabgroups.thumbnails": {
@@ -103,8 +103,8 @@
       "owner": "tab-groups"
     },
     "zen.workspace.tabgroups.label_opacity": {
-      "category": "tab-groups",
-      "section": "Group behavior & indicators",
+      "category": "theme-details",
+      "section": "Tabs, folders & launchers",
       "owner": "tab-groups"
     }
   }

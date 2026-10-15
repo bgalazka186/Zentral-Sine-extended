@@ -149,7 +149,6 @@
         }
       ]
     },
-
     {
       "property": "zen.workspace.bgalazka.zen_internet_panel_css",
       "label": "Use Zen Internet CSS in Web Panels (experimental)",
@@ -159,26 +158,25 @@
   ],
   "settings": {
     "zen.workspace.bgalazka.translucency": {
-      "category": "panel-appearance",
-      "section": "Translucency & backing",
+      "category": "theme-details",
+      "section": "Panel surfaces & transparency",
       "owner": "panel-styles"
     },
     "zen.workspace.bgalazka.opacity_unpinned": {
-      "category": "panel-appearance",
-      "section": "Translucency & backing",
+      "category": "theme-details",
+      "section": "Panel surfaces & transparency",
       "owner": "panel-styles"
     },
     "zen.workspace.bgalazka.opacity_pinned_focus": {
-      "category": "panel-appearance",
-      "section": "Translucency & backing",
+      "category": "theme-details",
+      "section": "Panel surfaces & transparency",
       "owner": "panel-styles"
     },
     "zen.workspace.bgalazka.opacity_pinned_blur": {
-      "category": "panel-appearance",
-      "section": "Translucency & backing",
+      "category": "theme-details",
+      "section": "Panel surfaces & transparency",
       "owner": "panel-styles"
     },
-
     "zen.workspace.bgalazka.zen_internet_panel_css": {
       "category": "compatibility",
       "section": "Browser hosts & website styles",

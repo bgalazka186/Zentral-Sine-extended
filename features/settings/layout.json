@@ -1,53 +1,138 @@
 {
   "_documentation": {
-    "purpose": "Category/section definitions and original setting order; data only, no feature activation.",
+    "purpose": "Category/section definitions and curated setting order; data only, no feature activation.",
     "consumer": "features/settings/controllers/ZentralSettingsCatalog.js; each owner descriptor supplies setting metadata.",
-    "contract": "categories and order preserve the original arrays; public preferences.json remains the Sine schema."
+    "contract": "Every owner setting must map to a declared category and section; preferences.json mirrors the schema in this order."
   },
   "categories": [
     {
+      "id": "essentials",
+      "label": "Start here",
+      "group": "Getting started",
+      "owner": "core",
+      "icon": "home",
+      "description": "Turn the main features on or off, back up your setup, then adjust appearance or layout.",
+      "sections": [
+        {
+          "label": "Essential features",
+          "icon": "sliders"
+        }
+      ]
+    },
+    {
+      "id": "theme",
+      "label": "Simple appearance",
+      "group": "Appearance",
+      "owner": "extension-settings",
+      "icon": "palette",
+      "description": "Choose a starting style, adjust its palette, then open Detailed appearance. Themes start in Simple mode and change colors, backing and decoration; layout stays yours.",
+      "sections": [
+        {
+          "label": "Palette",
+          "icon": "palette"
+        },
+        {
+          "label": "Readability & buttons",
+          "icon": "text"
+        }
+      ]
+    },
+    {
+      "id": "theme-details",
+      "label": "Detailed appearance",
+      "group": "Appearance",
+      "owner": "extension-settings",
+      "icon": "sliders",
+      "detailed": true,
+      "description": "Your current Simple palette is copied here when you switch. Adjust each area independently; changes save as you go.",
+      "sections": [
+        {
+          "label": "Text & contrast",
+          "icon": "text"
+        },
+        {
+          "label": "Panel surfaces & transparency",
+          "icon": "layers"
+        },
+        {
+          "label": "Panel position & motion",
+          "icon": "move"
+        },
+        {
+          "label": "Shape & controls",
+          "icon": "sliders"
+        },
+        {
+          "label": "Settings window",
+          "icon": "window"
+        },
+        {
+          "label": "Navigation toolbar",
+          "icon": "navigation"
+        },
+        {
+          "label": "Floating pill",
+          "icon": "more"
+        },
+        {
+          "label": "Sidebar video",
+          "icon": "video"
+        },
+        {
+          "label": "Tabs, folders & launchers",
+          "icon": "tabs"
+        },
+        {
+          "label": "Menus & feedback",
+          "icon": "menu"
+        },
+        {
+          "label": "Compatibility styling",
+          "icon": "puzzle"
+        }
+      ]
+    },
+    {
+      "id": "density",
+      "label": "Layout & density",
+      "group": "Layout",
+      "owner": "extension-settings",
+      "icon": "move",
+      "description": "Sizing and spacing work in both appearance modes. Themes never change these values.",
+      "sections": [
+        {
+          "label": "Tabs & folders",
+          "icon": "tabs"
+        },
+        {
+          "label": "App grid",
+          "icon": "grid"
+        },
+        {
+          "label": "Control sizing",
+          "icon": "sliders"
+        },
+        {
+          "label": "Panel size & position",
+          "icon": "window"
+        },
+        {
+          "label": "Video size",
+          "icon": "video"
+        }
+      ]
+    },
+    {
       "id": "apps",
-      "label": "Apps & Launchers",
+      "label": "Apps behavior",
       "group": "Apps & Tabs",
       "owner": "apps",
       "sections": [
         {
           "label": "Launcher grid & placement"
         }
-      ]
-    },
-    {
-      "id": "app-tools",
-      "label": "App Bar Tools",
-      "group": "Apps & Tabs",
-      "owner": "panels",
-      "sections": [
-        {
-          "label": "Browser shortcuts"
-        }
-      ]
-    },
-    {
-      "id": "tab-groups",
-      "label": "Tab Groups",
-      "group": "Apps & Tabs",
-      "owner": "tab-groups",
-      "sections": [
-        {
-          "label": "Group behavior & indicators"
-        }
-      ]
-    },
-    {
-      "id": "tab-drag",
-      "label": "Tab Dragging",
-      "group": "Apps & Tabs",
-      "owner": "tab-drag",
-      "sections": [
-        {
-          "label": "Background sorting"
-        }
-      ]
+      ],
+      "icon": "grid"
     },
     {
       "id": "tab-panels",
@@ -58,7 +143,32 @@
         {
           "label": "Launchers, loaded state & badges"
         }
-      ]
+      ],
+      "icon": "tabs"
+    },
+    {
+      "id": "tab-groups",
+      "label": "Tab Groups",
+      "group": "Apps & Tabs",
+      "owner": "tab-groups",
+      "sections": [
+        {
+          "label": "Group behavior & indicators"
+        }
+      ],
+      "icon": "folder"
+    },
+    {
+      "id": "tab-drag",
+      "label": "Tab Dragging",
+      "group": "Apps & Tabs",
+      "owner": "tab-drag",
+      "sections": [
+        {
+          "label": "Background sorting"
+        }
+      ],
+      "icon": "move"
     },
     {
       "id": "rss",
@@ -69,7 +179,8 @@
         {
           "label": "Live-folder display"
         }
-      ]
+      ],
+      "icon": "rss"
     },
     {
       "id": "panel-layout",
@@ -80,7 +191,8 @@
         {
           "label": "Docking, size & input"
         }
-      ]
+      ],
+      "icon": "window"
     },
     {
       "id": "panel-hover",
@@ -97,7 +209,8 @@
         {
           "label": "Outside-window reveal"
         }
-      ]
+      ],
+      "icon": "eye"
     },
     {
       "id": "multi-view",
@@ -108,7 +221,8 @@
         {
           "label": "Page push & secondary controls"
         }
-      ]
+      ],
+      "icon": "columns"
     },
     {
       "id": "panel-toolbar",
@@ -119,7 +233,8 @@
         {
           "label": "Navigation & placement"
         }
-      ]
+      ],
+      "icon": "navigation"
     },
     {
       "id": "search",
@@ -130,18 +245,8 @@
         {
           "label": "Search engines & quick switch"
         }
-      ]
-    },
-    {
-      "id": "pill",
-      "label": "Floating Pill",
-      "group": "Panels",
-      "owner": "panels",
-      "sections": [
-        {
-          "label": "Visibility, buttons & mini pill"
-        }
-      ]
+      ],
+      "icon": "search"
     },
     {
       "id": "notifications",
@@ -155,7 +260,8 @@
         {
           "label": "Notification refresh"
         }
-      ]
+      ],
+      "icon": "bell"
     },
     {
       "id": "startup",
@@ -169,7 +275,8 @@
         {
           "label": "Panel background loading"
         }
-      ]
+      ],
+      "icon": "power"
     },
     {
       "id": "shortcuts",
@@ -183,84 +290,8 @@
         {
           "label": "Panel shortcuts & mouse actions"
         }
-      ]
-    },
-    {
-      "id": "theme",
-      "label": "Theme & Colors",
-      "group": "Appearance",
-      "owner": "extension-settings",
-      "sections": [
-        {
-          "label": "Palette, transparency & shape"
-        }
-      ]
-    },
-    {
-      "id": "interface",
-      "label": "Buttons & Controls",
-      "group": "Appearance",
-      "owner": "extension-settings",
-      "sections": [
-        {
-          "label": "Buttons, app tiles & selection rows"
-        }
-      ]
-    },
-    {
-      "id": "tab-density",
-      "label": "Tabbar & Sidebar Density",
-      "group": "Appearance",
-      "owner": "extension-settings",
-      "sections": [
-        {
-          "label": "Sidebar sizing & spacing"
-        }
-      ]
-    },
-    {
-      "id": "panel-appearance",
-      "label": "Panel Appearance",
-      "group": "Appearance",
-      "owner": "panel-styles",
-      "sections": [
-        {
-          "label": "Translucency & backing"
-        }
-      ]
-    },
-    {
-      "id": "panel-backing",
-      "label": "Panel Backing",
-      "group": "Appearance",
-      "owner": "panels",
-      "sections": [
-        {
-          "label": "Black backing & cycle levels"
-        }
-      ]
-    },
-    {
-      "id": "toolbar-appearance",
-      "label": "Toolbar Appearance",
-      "group": "Appearance",
-      "owner": "panel-toolbar",
-      "sections": [
-        {
-          "label": "Colors & transparency"
-        }
-      ]
-    },
-    {
-      "id": "arc",
-      "label": "Arc Compatibility",
-      "group": "Appearance",
-      "owner": "extension-settings",
-      "sections": [
-        {
-          "label": "Arc 2.0 theme integration"
-        }
-      ]
+      ],
+      "icon": "keyboard"
     },
     {
       "id": "video-playback",
@@ -271,7 +302,8 @@
         {
           "label": "Playback & captions"
         }
-      ]
+      ],
+      "icon": "video"
     },
     {
       "id": "video-sources",
@@ -282,21 +314,8 @@
         {
           "label": "Discovery & source selection"
         }
-      ]
-    },
-    {
-      "id": "video-appearance",
-      "label": "Video Appearance",
-      "group": "Video",
-      "owner": "video",
-      "sections": [
-        {
-          "label": "Card layout & controls"
-        },
-        {
-          "label": "Colors & source list"
-        }
-      ]
+      ],
+      "icon": "list"
     },
     {
       "id": "video-performance",
@@ -307,40 +326,20 @@
         {
           "label": "Capture & background work"
         }
-      ]
-    },
-    {
-      "id": "video-experiments",
-      "label": "Video Experiments",
-      "group": "Video",
-      "owner": "video",
-      "sections": [
-        {
-          "label": "Experimental methods & tests"
-        }
-      ]
-    },
-    {
-      "id": "experimental",
-      "label": "Experimental",
-      "group": "Advanced",
-      "owner": "compact-hover",
-      "sections": [
-        {
-          "label": "Native compact sidebar"
-        }
-      ]
+      ],
+      "icon": "gauge"
     },
     {
       "id": "compatibility",
       "label": "Browser & Add-on Compatibility",
-      "group": "Advanced",
+      "group": "Integrations",
       "owner": "browser-integrations",
       "sections": [
         {
           "label": "Browser hosts & website styles"
         }
-      ]
+      ],
+      "icon": "puzzle"
     },
     {
       "id": "recovery",
@@ -351,18 +350,8 @@
         {
           "label": "Bounded recovery & optional troubleshooting"
         }
-      ]
-    },
-    {
-      "id": "logging",
-      "label": "Logs & Diagnostics",
-      "group": "Advanced",
-      "owner": "logger",
-      "sections": [
-        {
-          "label": "Capture & reports"
-        }
-      ]
+      ],
+      "icon": "refresh"
     },
     {
       "id": "modules",
@@ -373,7 +362,8 @@
         {
           "label": "File loading"
         }
-      ]
+      ],
+      "icon": "layers"
     },
     {
       "id": "addons",
@@ -384,86 +374,360 @@
         {
           "label": "Local registrations"
         }
-      ]
+      ],
+      "icon": "puzzle"
+    },
+    {
+      "id": "experimental",
+      "label": "Experimental",
+      "group": "Advanced",
+      "owner": "compact-hover",
+      "sections": [
+        {
+          "label": "Native compact sidebar"
+        }
+      ],
+      "icon": "flask"
+    },
+    {
+      "id": "video-experiments",
+      "label": "Video Experiments",
+      "group": "Advanced",
+      "owner": "video",
+      "sections": [
+        {
+          "label": "Experimental methods & tests"
+        }
+      ],
+      "icon": "flask"
+    },
+    {
+      "id": "logging",
+      "label": "Logs & Diagnostics",
+      "group": "Diagnostics",
+      "owner": "logger",
+      "sections": [
+        {
+          "label": "Capture & reports"
+        }
+      ],
+      "icon": "list"
     }
   ],
   "order": [
     {
       "type": "text",
-      "label": "**Apps & Tabs · Apps & Launchers**",
+      "label": "**Start here · Essential features**",
       "size": "18px"
     },
+    "zen.workspace.bgalazka.mmb_unload_normal_tabs",
     "zen.workspace.apps.sidebar.enabled",
-    "zen.workspace.apps.sidebar.apps_per_row",
-    "zen.workspace.apps.sidebar.max_rows",
-    "zen.workspace.apps.sidebar.max_apps",
-    "zen.workspace.apps.sidebar.hide_utility_section",
-    "zen.workspace.apps.sidebar.autohide",
-    "zen.workspace.apps.sidebar.placement",
-    "zen.workspace.apps.sidebar.width",
+    "zen.workspace.zentral.video_preview.enabled",
+    "zen.workspace.tabgroups.enabled",
+    "zen.workspace.bgalazka.web_toolbar_enabled",
+    "zen.workspace.bgalazka.corner_tiles",
+    "zen.workspace.zentral.startup.enabled",
+    {
+      "type": "text",
+      "label": "**Simple appearance · Palette**",
+      "size": "18px"
+    },
+    "zen.workspace.bgalazka.look.style",
+    "zen.workspace.bgalazka.look.palette_mode",
+    "zen.workspace.bgalazka.look.primary",
+    "zen.workspace.bgalazka.look.secondary",
+    "zen.workspace.bgalazka.look.primary_opacity",
+    {
+      "type": "text",
+      "label": "**Simple appearance · Readability & buttons**",
+      "size": "18px"
+    },
+    "zen.workspace.bgalazka.look.solid_controls",
+    "zen.workspace.bgalazka.look.control_strength",
+    "zen.workspace.bgalazka.look.button_style",
+    {
+      "type": "text",
+      "label": "**Detailed appearance · Text & contrast**",
+      "size": "18px"
+    },
+    "zen.workspace.bgalazka.look.text_mode",
+    "zen.workspace.bgalazka.look.text",
+    "zen.workspace.bgalazka.look.muted",
+    {
+      "type": "text",
+      "label": "**Detailed appearance · Panel surfaces & transparency**",
+      "size": "18px"
+    },
+    "zen.workspace.bgalazka.look.web_surface",
+    "zen.workspace.bgalazka.look.web_opacity",
+    "zen.workspace.bgalazka.look.backdrop",
+    "zen.workspace.bgalazka.look.backdrop_opacity",
+    "zen.workspace.bgalazka.look.canvas",
+    "zen.workspace.bgalazka.look.surface",
+    "zen.workspace.bgalazka.look.raised",
+    "zen.workspace.bgalazka.look.surface_opacity",
+    "zen.workspace.bgalazka.look.raised_opacity",
+    "zen.workspace.bgalazka.translucency",
+    "zen.workspace.bgalazka.opacity_unpinned",
+    "zen.workspace.bgalazka.opacity_pinned_focus",
+    "zen.workspace.bgalazka.opacity_pinned_blur",
+    "zen.workspace.bgalazka.panel_black_opacity",
+    "zen.workspace.bgalazka.panel_black_steps",
+    "zen.workspace.bgalazka.force_panel_black",
+    {
+      "type": "text",
+      "label": "**Detailed appearance · Panel position & motion**",
+      "size": "18px"
+    },
     "zen.workspace.apps.sidebar.animation_speed",
     "zen.workspace.apps.sidebar.animation_type",
     {
       "type": "text",
-      "label": "**Apps & Tabs · App Bar Tools**",
+      "label": "**Detailed appearance · Shape & controls**",
       "size": "18px"
     },
+    "zen.workspace.bgalazka.look.button_hover",
+    "zen.workspace.bgalazka.look.button_hover_text",
+    "zen.workspace.bgalazka.look.selected_surface",
+    "zen.workspace.bgalazka.look.selected_text",
+    "zen.workspace.bgalazka.look.accent",
+    "zen.workspace.bgalazka.look.radius",
+    "zen.workspace.bgalazka.look.depth",
+    "zen.workspace.bgalazka.look.panel_border",
+    "zen.workspace.bgalazka.look.button_opacity",
+    "zen.workspace.bgalazka.look.button_surface",
+    "zen.workspace.bgalazka.look.button_text",
+    "zen.workspace.bgalazka.look.button_border_color",
+    "zen.workspace.bgalazka.look.button_border",
+    {
+      "type": "text",
+      "label": "**Detailed appearance · Settings window**",
+      "size": "18px"
+    },
+    "zen.workspace.bgalazka.look.settings_canvas",
+    "zen.workspace.bgalazka.look.settings_header",
+    "zen.workspace.bgalazka.look.settings_nav",
+    "zen.workspace.bgalazka.look.settings_card",
+    "zen.workspace.bgalazka.look.settings_text",
+    "zen.workspace.bgalazka.look.settings_muted",
+    "zen.workspace.bgalazka.look.input_surface",
+    "zen.workspace.bgalazka.look.input_text",
+    "zen.workspace.bgalazka.look.row_style",
+    "zen.workspace.bgalazka.look.row_rule",
+    {
+      "type": "text",
+      "label": "**Detailed appearance · Navigation toolbar**",
+      "size": "18px"
+    },
+    "zen.workspace.bgalazka.secondary_toolbar_swap",
+    "zen.workspace.bgalazka.secondary_toolbar_close",
+    "zen.workspace.bgalazka.triple_inward_toolbars",
+    "zen.workspace.bgalazka.web_toolbar_autohide",
+    "zen.workspace.bgalazka.web_toolbar_top",
+    "zen.workspace.bgalazka.web_toolbar_urlbar",
+    "zen.workspace.bgalazka.web_toolbar_zoom",
+    "zen.workspace.bgalazka.look.toolbar_opacity",
+    "zen.workspace.bgalazka.look.address_opacity",
+    "zen.workspace.bgalazka.look.toolbar_surface",
+    "zen.workspace.bgalazka.look.toolbar_url",
+    "zen.workspace.bgalazka.look.toolbar_border",
+    {
+      "type": "text",
+      "label": "**Detailed appearance · Floating pill**",
+      "size": "18px"
+    },
+    "zen.workspace.bgalazka.hide_hover_reveal_btn",
+    "zen.workspace.bgalazka.hide_pill",
+    "zen.workspace.bgalazka.pill_position",
+    "zen.workspace.bgalazka.pill_peek_dot",
+    "zen.workspace.bgalazka.pill_peek_dot_color",
+    "zen.workspace.bgalazka.pill_peek_dot_opacity",
+    "zen.workspace.bgalazka.pill_background_opacity",
+    "zen.workspace.bgalazka.hide_dual_view",
+    "zen.workspace.bgalazka.hide_all_sides_resize_btn",
+    "zen.workspace.bgalazka.hide_pin",
+    "zen.workspace.bgalazka.hide_expand",
+    "zen.workspace.bgalazka.hide_grabber",
+    "zen.workspace.bgalazka.hide_refresh",
+    "zen.workspace.bgalazka.hide_close",
+    {
+      "type": "text",
+      "label": "**Detailed appearance · Sidebar video**",
+      "size": "18px"
+    },
+    "zen.workspace.zentral.video_preview.radius_px",
+    "zen.workspace.zentral.video_preview.framing",
+    "zen.workspace.zentral.video_preview.hide_button",
+    "zen.workspace.zentral.video_preview.auto_height_button",
+    "zen.workspace.zentral.video_preview.video_hidden",
+    "zen.workspace.zentral.video_preview.pin_source_button",
+    "zen.workspace.zentral.video_preview.compact_card_button",
+    "zen.workspace.zentral.video_preview.compact_card",
+    "zen.workspace.bgalazka.look.video_opacity",
+    "zen.workspace.bgalazka.look.video_control_opacity",
+    "zen.workspace.bgalazka.look.video_canvas",
+    "zen.workspace.bgalazka.look.video_control",
+    "zen.workspace.bgalazka.look.video_text",
+    "zen.workspace.bgalazka.look.video_muted",
+    "zen.workspace.bgalazka.look.video_selected",
+    "zen.workspace.bgalazka.look.video_border",
+    "zen.workspace.bgalazka.look.video_source_style",
+    {
+      "type": "text",
+      "label": "**Detailed appearance · Tabs, folders & launchers**",
+      "size": "18px"
+    },
+    "zen.workspace.apps.sidebar.hide_utility_section",
     "zen.workspace.bgalazka.appsbar_library",
     "zen.workspace.bgalazka.appsbar_history",
     "zen.workspace.bgalazka.appsbar_downloads",
     "zen.workspace.bgalazka.appsbar_bookmarks",
-    {
-      "type": "text",
-      "label": "**Apps & Tabs · Tab Groups**",
-      "size": "18px"
-    },
-    "zen.workspace.tabgroups.enabled",
-    "zen.workspace.tabgroups.collapse_on_launch",
     "zen.workspace.tabgroups.show_chevron",
     "zen.workspace.tabgroups.indicator_type",
-    "zen.workspace.tabgroups.thumbnails",
     "zen.workspace.tabgroups.label_opacity",
-    {
-      "type": "text",
-      "label": "**Apps & Tabs · Tab Panel Launchers**",
-      "size": "18px"
-    },
-    "zen.workspace.bgalazka.corner_tiles",
-    "zen.workspace.bgalazka.all_tab_panels",
     "zen.workspace.bgalazka.hover_corner_tiles",
     "zen.workspace.bgalazka.tab_isolation",
     "zen.workspace.bgalazka.hide_corner_badges",
     "zen.workspace.bgalazka.hide_unattached_app_controls",
-    {
-      "type": "text",
-      "label": "**Apps & Tabs · RSS Folders**",
-      "size": "18px"
-    },
-    "zen.workspace.bgalazka.rss.hide_empty",
     "zen.workspace.bgalazka.rss.compact_headers",
+    "zen.workspace.bgalazka.look.tile_opacity",
+    "zen.workspace.bgalazka.look.tile_style",
     {
       "type": "text",
-      "label": "**Panels · Panel Layout**",
+      "label": "**Detailed appearance · Menus & feedback**",
       "size": "18px"
     },
-    "zen.workspace.bgalazka.opposite_docking",
-    "zen.workspace.bgalazka.edge_attached_panels",
-    "zen.workspace.bgalazka.all_sides_resize",
-    "zen.workspace.bgalazka.panel_input_shield",
+    "zen.workspace.bgalazka.look.popup_surface",
+    "zen.workspace.bgalazka.look.popup_text",
+    "zen.workspace.bgalazka.look.success",
+    "zen.workspace.bgalazka.look.warning",
+    "zen.workspace.bgalazka.look.danger",
+    "zen.workspace.bgalazka.look.popup_opacity",
+    {
+      "type": "text",
+      "label": "**Detailed appearance · Compatibility styling**",
+      "size": "18px"
+    },
+    "zen.workspace.zentral.arc2.match_compact_sidebar",
+    "zen.workspace.zentral.arc2.match_compact_library",
+    {
+      "type": "text",
+      "label": "**Layout & density · Tabs & folders**",
+      "size": "18px"
+    },
+    "zen.workspace.bgalazka.look.density_urlbar",
+    "zen.workspace.bgalazka.look.density_essentials",
+    "zen.workspace.bgalazka.look.compact_tabbar",
+    "zen.workspace.bgalazka.look.density_icons",
+    "zen.workspace.bgalazka.look.density_newtab",
+    "zen.workspace.bgalazka.look.essentials_height",
+    "zen.workspace.bgalazka.look.tabbar_section_gap",
+    "zen.workspace.bgalazka.look.folder_icon_size",
+    "zen.workspace.bgalazka.look.workspace_icon_size",
+    "zen.workspace.bgalazka.look.workspace_height",
+    "zen.workspace.bgalazka.look.bottom_bar_height",
+    "zen.workspace.bgalazka.look.urlbar_top_gap",
+    "zen.workspace.bgalazka.look.newtab_height",
+    "zen.workspace.bgalazka.look.tabbar_row_height",
+    "zen.workspace.bgalazka.look.tabbar_row_gap",
+    "zen.workspace.bgalazka.look.tabbar_icon_gap",
+    {
+      "type": "text",
+      "label": "**Layout & density · App grid**",
+      "size": "18px"
+    },
+    "zen.workspace.apps.sidebar.apps_per_row",
+    "zen.workspace.apps.sidebar.max_rows",
+    "zen.workspace.apps.sidebar.max_apps",
+    "zen.workspace.apps.sidebar.placement",
+    {
+      "type": "text",
+      "label": "**Layout & density · Control sizing**",
+      "size": "18px"
+    },
+    "zen.workspace.bgalazka.look.spacing",
+    "zen.workspace.bgalazka.look.row_padding",
+    "zen.workspace.bgalazka.look.control_size",
+    "zen.workspace.bgalazka.look.video_padding",
+    "zen.workspace.bgalazka.look.video_row_height",
+    {
+      "type": "text",
+      "label": "**Layout & density · Panel size & position**",
+      "size": "18px"
+    },
+    "zen.workspace.apps.sidebar.width",
     "zen.workspace.bgalazka.panel_horizontal_offset_px",
     "zen.workspace.bgalazka.panel_top_extra_px",
     "zen.workspace.bgalazka.panel_bottom_extra_px",
     "zen.workspace.bgalazka.panel_position_offset_px",
     {
       "type": "text",
-      "label": "**Panels · Hover Reveal**",
+      "label": "**Layout & density · Video size**",
+      "size": "18px"
+    },
+    "zen.workspace.zentral.video_preview.fit_width",
+    "zen.workspace.zentral.video_preview.width_percent",
+    "zen.workspace.zentral.video_preview.height_px",
+    {
+      "type": "text",
+      "label": "**Apps behavior · Launcher grid & placement**",
+      "size": "18px"
+    },
+    "zen.workspace.apps.sidebar.autohide",
+    {
+      "type": "text",
+      "label": "**Tab Panel Launchers · Launchers, loaded state & badges**",
+      "size": "18px"
+    },
+    "zen.workspace.bgalazka.all_tab_panels",
+    {
+      "type": "text",
+      "label": "**Tab Groups · Group behavior & indicators**",
+      "size": "18px"
+    },
+    "zen.workspace.tabgroups.collapse_on_launch",
+    "zen.workspace.tabgroups.thumbnails",
+    {
+      "type": "text",
+      "label": "**Tab Dragging · Background sorting**",
+      "size": "18px"
+    },
+    "zen.workspace.zentral.tabs.background_drag",
+    {
+      "type": "text",
+      "label": "**RSS Folders · Live-folder display**",
+      "size": "18px"
+    },
+    "zen.workspace.bgalazka.rss.hide_empty",
+    {
+      "type": "text",
+      "label": "**Panel Layout · Docking, size & input**",
+      "size": "18px"
+    },
+    "zen.workspace.bgalazka.opposite_docking",
+    "zen.workspace.bgalazka.edge_attached_panels",
+    "zen.workspace.bgalazka.all_sides_resize",
+    "zen.workspace.bgalazka.panel_input_shield",
+    {
+      "type": "text",
+      "label": "**Hover Reveal · Autohide & reveal target**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.hover_reveal_panel",
+    {
+      "type": "text",
+      "label": "**Hover Reveal · Hover-to-show element**",
+      "size": "18px"
+    },
     "zen.workspace.zentral.panels.hover_edge_reveal",
     "zen.workspace.bgalazka.hover_reveal_delay_ms",
     "zen.workspace.bgalazka.hover_reveal_width_px",
     "zen.workspace.zentral.panels.hover_push_width_px",
+    {
+      "type": "text",
+      "label": "**Hover Reveal · Outside-window reveal**",
+      "size": "18px"
+    },
     "zen.workspace.zentral.compatibility.panel_outside_window_tracking",
     "zen.workspace.zentral.panels.outside_full_edge",
     "zen.workspace.zentral.panels.outside_distance_px",
@@ -471,27 +735,14 @@
     "zen.workspace.zentral.panels.autohide_delay_ms",
     {
       "type": "text",
-      "label": "**Panels · Dual, Triple & Super View**",
+      "label": "**Dual, Triple & Super View · Page push & secondary controls**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.push_page",
     "zen.workspace.bgalazka.triple_push_page",
-    "zen.workspace.bgalazka.secondary_toolbar_swap",
-    "zen.workspace.bgalazka.secondary_toolbar_close",
-    "zen.workspace.bgalazka.triple_inward_toolbars",
     {
       "type": "text",
-      "label": "**Panels · Navigation Toolbar**",
-      "size": "18px"
-    },
-    "zen.workspace.bgalazka.web_toolbar_enabled",
-    "zen.workspace.bgalazka.web_toolbar_autohide",
-    "zen.workspace.bgalazka.web_toolbar_top",
-    "zen.workspace.bgalazka.web_toolbar_urlbar",
-    "zen.workspace.bgalazka.web_toolbar_zoom",
-    {
-      "type": "text",
-      "label": "**Panels · Search Engines**",
+      "label": "**Search Engines · Search engines & quick switch**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.web_toolbar_search_engine",
@@ -514,74 +765,33 @@
     "zen.workspace.bgalazka.web_toolbar_quickswitch_target.github",
     {
       "type": "text",
-      "label": "**Panels · Floating Pill**",
+      "label": "**Notifications & Audio · Audio indicator & mute**",
       "size": "18px"
-    },
-    "zen.workspace.bgalazka.hide_hover_reveal_btn",
-    "zen.workspace.bgalazka.hide_pill",
-    "zen.workspace.bgalazka.pill_position",
-    "zen.workspace.bgalazka.pill_peek_dot",
-    "zen.workspace.bgalazka.pill_peek_dot_color",
-    "zen.workspace.bgalazka.pill_peek_dot_opacity",
-    "zen.workspace.bgalazka.pill_background_opacity",
-    "zen.workspace.bgalazka.hide_dual_view",
-    "zen.workspace.bgalazka.hide_all_sides_resize_btn",
-    "zen.workspace.bgalazka.hide_pin",
-    "zen.workspace.bgalazka.hide_expand",
-    "zen.workspace.bgalazka.hide_grabber",
-    "zen.workspace.bgalazka.hide_refresh",
-    "zen.workspace.bgalazka.hide_close",
-    {
-      "type": "text",
-      "label": "**Panels · Notifications & Audio**",
-      "size": "18px"
-    },
-    {
-      "type": "text",
-      "label": "Audio indicator & mute",
-      "size": "14px"
     },
     "zen.workspace.bgalazka.audio_indicator",
     {
       "type": "text",
-      "label": "Notification refresh",
-      "size": "14px"
+      "label": "**Notifications & Audio · Notification refresh**",
+      "size": "18px"
     },
     "zen.workspace.apps.sidebar.badge_poll_interval_ms",
     {
       "type": "text",
-      "label": "**Panels · Startup & Background**",
+      "label": "**Startup & Background · Panel background loading**",
       "size": "18px"
-    },
-    {
-      "type": "text",
-      "label": "Selected tabs",
-      "size": "14px"
-    },
-    "zen.workspace.zentral.startup.enabled",
-    {
-      "type": "text",
-      "label": "Panel background loading",
-      "size": "14px"
     },
     "zen.workspace.bgalazka.smart_sleep",
     {
       "type": "text",
-      "label": "**Panels · Keyboard & Mouse**",
+      "label": "**Keyboard & Mouse · Insta Peek**",
       "size": "18px"
-    },
-    {
-      "type": "text",
-      "label": "Insta Peek",
-      "size": "14px"
     },
     "zen.workspace.apps.insta_peek.shortcut",
     {
       "type": "text",
-      "label": "Panel shortcuts & mouse actions",
-      "size": "14px"
+      "label": "**Keyboard & Mouse · Panel shortcuts & mouse actions**",
+      "size": "18px"
     },
-    "zen.workspace.bgalazka.mmb_unload_normal_tabs",
     "zen.workspace.bgalazka.keybinds_enabled",
     "zen.workspace.bgalazka.keybind.close_panel",
     "zen.workspace.bgalazka.keybind.back",
@@ -601,111 +811,18 @@
     "zen.workspace.bgalazka.keybind.zoom_out",
     "zen.workspace.bgalazka.keybind.zoom_reset",
     "zen.workspace.bgalazka.keybind.open_settings",
-    "zen.workspace.zentral.tabs.background_drag",
     {
       "type": "text",
-      "label": "**Appearance · Theme & Colors**",
+      "label": "**Video Playback · Playback & captions**",
       "size": "18px"
     },
-    "zen.workspace.bgalazka.look.style",
-    "zen.workspace.bgalazka.look.canvas",
-    "zen.workspace.bgalazka.look.surface",
-    "zen.workspace.bgalazka.look.raised",
-    "zen.workspace.bgalazka.look.accent",
-    "zen.workspace.bgalazka.look.text",
-    "zen.workspace.bgalazka.look.muted",
-    "zen.workspace.bgalazka.look.surface_opacity",
-    "zen.workspace.bgalazka.look.raised_opacity",
-    "zen.workspace.bgalazka.look.popup_opacity",
-    "zen.workspace.bgalazka.look.radius",
-    "zen.workspace.bgalazka.look.depth",
-    "zen.workspace.bgalazka.look.spacing",
-    "zen.workspace.bgalazka.look.panel_border",
-    {
-      "type": "text",
-      "label": "**Appearance · Buttons & Controls**",
-      "size": "18px"
-    },
-    "zen.workspace.bgalazka.look.button_opacity",
-    "zen.workspace.bgalazka.look.tile_opacity",
-    "zen.workspace.bgalazka.look.button_style",
-    "zen.workspace.bgalazka.look.button_surface",
-    "zen.workspace.bgalazka.look.button_text",
-    "zen.workspace.bgalazka.look.button_border_color",
-    "zen.workspace.bgalazka.look.button_border",
-    "zen.workspace.bgalazka.look.control_size",
-    "zen.workspace.bgalazka.look.tile_style",
-    "zen.workspace.bgalazka.look.row_style",
-    "zen.workspace.bgalazka.look.row_padding",
-    "zen.workspace.bgalazka.look.row_rule",
-    {
-      "type": "text",
-      "label": "**Appearance · Tabbar & Sidebar Density**",
-      "size": "18px"
-    },
-    "zen.workspace.bgalazka.look.density_icons",
-    "zen.workspace.bgalazka.look.density_newtab",
-    "zen.workspace.bgalazka.look.density_urlbar",
-    "zen.workspace.bgalazka.look.density_essentials",
-    "zen.workspace.bgalazka.look.essentials_height",
-    "zen.workspace.bgalazka.look.tabbar_section_gap",
-    "zen.workspace.bgalazka.look.folder_icon_size",
-    "zen.workspace.bgalazka.look.workspace_icon_size",
-    "zen.workspace.bgalazka.look.workspace_height",
-    "zen.workspace.bgalazka.look.bottom_bar_height",
-    "zen.workspace.bgalazka.look.urlbar_top_gap",
-    "zen.workspace.bgalazka.look.newtab_height",
-    "zen.workspace.bgalazka.look.compact_tabbar",
-    "zen.workspace.bgalazka.look.tabbar_row_height",
-    "zen.workspace.bgalazka.look.tabbar_row_gap",
-    "zen.workspace.bgalazka.look.tabbar_icon_gap",
-    {
-      "type": "text",
-      "label": "**Appearance · Panel Appearance**",
-      "size": "18px"
-    },
-    "zen.workspace.bgalazka.translucency",
-    "zen.workspace.bgalazka.opacity_unpinned",
-    "zen.workspace.bgalazka.opacity_pinned_focus",
-    "zen.workspace.bgalazka.opacity_pinned_blur",
-    {
-      "type": "text",
-      "label": "**Appearance · Panel Backing**",
-      "size": "18px"
-    },
-    "zen.workspace.bgalazka.panel_black_opacity",
-    "zen.workspace.bgalazka.panel_black_steps",
-    "zen.workspace.bgalazka.force_panel_black",
-    {
-      "type": "text",
-      "label": "**Appearance · Toolbar Appearance**",
-      "size": "18px"
-    },
-    "zen.workspace.bgalazka.look.toolbar_opacity",
-    "zen.workspace.bgalazka.look.address_opacity",
-    "zen.workspace.bgalazka.look.toolbar_surface",
-    "zen.workspace.bgalazka.look.toolbar_url",
-    "zen.workspace.bgalazka.look.toolbar_border",
-    {
-      "type": "text",
-      "label": "**Appearance · Arc Compatibility**",
-      "size": "18px"
-    },
-    "zen.workspace.zentral.arc2.match_compact_sidebar",
-    "zen.workspace.zentral.arc2.match_compact_library",
-    {
-      "type": "text",
-      "label": "**Video · Video Playback**",
-      "size": "18px"
-    },
-    "zen.workspace.zentral.video_preview.enabled",
     "zen.workspace.zentral.video_preview.renderer",
     "zen.workspace.zentral.video_preview.selected_mode_only",
     "zen.workspace.zentral.video_preview.keep_source_visible",
     "zen.workspace.zentral.video_preview.youtube_captions",
     {
       "type": "text",
-      "label": "**Video · Video Sources**",
+      "label": "**Video Sources · Discovery & source selection**",
       "size": "18px"
     },
     "zen.workspace.zentral.video_preview.auto_show_video",
@@ -715,44 +832,7 @@
     "zen.workspace.zentral.video_preview.pinned_discovery_only",
     {
       "type": "text",
-      "label": "**Video · Video Appearance**",
-      "size": "18px"
-    },
-    {
-      "type": "text",
-      "label": "Card layout & controls",
-      "size": "14px"
-    },
-    "zen.workspace.zentral.video_preview.fit_width",
-    "zen.workspace.zentral.video_preview.width_percent",
-    "zen.workspace.zentral.video_preview.height_px",
-    "zen.workspace.zentral.video_preview.radius_px",
-    "zen.workspace.zentral.video_preview.framing",
-    "zen.workspace.zentral.video_preview.hide_button",
-    "zen.workspace.zentral.video_preview.auto_height_button",
-    "zen.workspace.zentral.video_preview.video_hidden",
-    "zen.workspace.zentral.video_preview.pin_source_button",
-    "zen.workspace.zentral.video_preview.compact_card_button",
-    "zen.workspace.zentral.video_preview.compact_card",
-    {
-      "type": "text",
-      "label": "Colors & source list",
-      "size": "14px"
-    },
-    "zen.workspace.bgalazka.look.video_opacity",
-    "zen.workspace.bgalazka.look.video_control_opacity",
-    "zen.workspace.bgalazka.look.video_canvas",
-    "zen.workspace.bgalazka.look.video_control",
-    "zen.workspace.bgalazka.look.video_text",
-    "zen.workspace.bgalazka.look.video_muted",
-    "zen.workspace.bgalazka.look.video_selected",
-    "zen.workspace.bgalazka.look.video_border",
-    "zen.workspace.bgalazka.look.video_padding",
-    "zen.workspace.bgalazka.look.video_row_height",
-    "zen.workspace.bgalazka.look.video_source_style",
-    {
-      "type": "text",
-      "label": "**Video · Video Performance**",
+      "label": "**Video Performance · Capture & background work**",
       "size": "18px"
     },
     "zen.workspace.zentral.video_preview.pause_when_compact_hidden",
@@ -777,16 +857,7 @@
     "zen.workspace.zentral.video_preview.suspend_when_source_visible",
     {
       "type": "text",
-      "label": "**Video · Video Experiments**",
-      "size": "18px"
-    },
-    "zen.workspace.zentral.video_preview.disable_experimental_bridge",
-    "zen.workspace.zentral.video_preview.experimental_legacy_capture",
-    "zen.workspace.zentral.video_preview.binary_frames",
-    "zen.workspace.zentral.video_preview.performance_diagnostics",
-    {
-      "type": "text",
-      "label": "**Advanced · Browser & Add-on Compatibility**",
+      "label": "**Browser & Add-on Compatibility · Browser hosts & website styles**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.addon_tab_id_bridge",
@@ -794,7 +865,7 @@
     "zen.workspace.bgalazka.show_addon_host_folder",
     {
       "type": "text",
-      "label": "**Advanced · Panel Recovery**",
+      "label": "**Panel Recovery · Bounded recovery & optional troubleshooting**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.show_triple_style_repair",
@@ -804,21 +875,7 @@
     "zen.workspace.bgalazka.periodic_fallback_polling",
     {
       "type": "text",
-      "label": "**Advanced · Logs & Diagnostics**",
-      "size": "18px"
-    },
-    "zen.workspace.zentral.debug",
-    "zen.workspace.zentral.debug.full",
-    "zen.workspace.zentral.debug.core",
-    "zen.workspace.zentral.debug.tabs",
-    "zen.workspace.zentral.debug.apps",
-    "zen.workspace.zentral.debug.menus",
-    "zen.workspace.zentral.debug.layout",
-    "zen.workspace.zentral.report_endpoint",
-    "zentral.logger.path",
-    {
-      "type": "text",
-      "label": "**Advanced · Modules & CSS Files**",
+      "label": "**Modules & CSS Files · File loading**",
       "size": "18px"
     },
     "zen.workspace.zentral.modules.video.enabled",
@@ -849,15 +906,17 @@
     "zen.workspace.zentral.modules.css.TabDensity.enabled",
     "zen.workspace.zentral.modules.css.PanelBackground.enabled",
     "zen.workspace.zentral.modules.allow_unsafe_core_disable",
+    "zen.workspace.zentral.modules.compact-hover.enabled",
+    "zen.workspace.zentral.modules.tab-drag.enabled",
     {
       "type": "text",
-      "label": "**Advanced · Local Add-ons**",
+      "label": "**Local Add-ons · Local registrations**",
       "size": "18px"
     },
     "zen.workspace.zentral.addons",
     {
       "type": "text",
-      "label": "**Advanced · Experimental**",
+      "label": "**Experimental · Native compact sidebar**",
       "size": "18px"
     },
     "zen.workspace.zentral.experimental.compact_sidebar_hover",
@@ -865,6 +924,29 @@
     "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal.panels",
     "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal.panels.only_when_not_pushing",
     "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px",
-    "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms"
+    "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms",
+    {
+      "type": "text",
+      "label": "**Video Experiments · Experimental methods & tests**",
+      "size": "18px"
+    },
+    "zen.workspace.zentral.video_preview.disable_experimental_bridge",
+    "zen.workspace.zentral.video_preview.experimental_legacy_capture",
+    "zen.workspace.zentral.video_preview.binary_frames",
+    "zen.workspace.zentral.video_preview.performance_diagnostics",
+    {
+      "type": "text",
+      "label": "**Logs & Diagnostics · Capture & reports**",
+      "size": "18px"
+    },
+    "zen.workspace.zentral.debug",
+    "zen.workspace.zentral.debug.full",
+    "zen.workspace.zentral.debug.core",
+    "zen.workspace.zentral.debug.tabs",
+    "zen.workspace.zentral.debug.apps",
+    "zen.workspace.zentral.debug.menus",
+    "zen.workspace.zentral.debug.layout",
+    "zen.workspace.zentral.report_endpoint",
+    "zentral.logger.path"
   ]
 }

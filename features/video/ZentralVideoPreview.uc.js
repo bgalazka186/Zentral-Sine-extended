@@ -888,11 +888,11 @@
                   set nextStillCapture(value) {
                     nextStillCapture = value;
                   },
-                  get originalSettingsOpen() {
-                    return originalSettingsOpen;
+                  get settingsHookCleanup() {
+                    return settingsHookCleanup;
                   },
-                  set originalSettingsOpen(value) {
-                    originalSettingsOpen = value;
+                  set settingsHookCleanup(value) {
+                    settingsHookCleanup = value;
                   },
                   get paint() {
                     return paint;
@@ -1022,12 +1022,6 @@
                   },
                   set widthPercent(value) {
                     widthPercent = value;
-                  },
-                  get wrappedSettingsOpen() {
-                    return wrappedSettingsOpen;
-                  },
-                  set wrappedSettingsOpen(value) {
-                    wrappedSettingsOpen = value;
                   },
                 },
                 { optional: true },
@@ -3154,8 +3148,7 @@
         let compactMountTimer = null;
         let scanGeneration = 0;
         let settingsInstance = null;
-        let originalSettingsOpen = null;
-        let wrappedSettingsOpen = null;
+        let settingsHookCleanup = null;
         let settingsCategoryGuard = null;
         const diagnostics = {
           phase: "waiting for startup",
@@ -3727,11 +3720,8 @@
           ])
             gBrowser.tabContainer.removeEventListener(type, onTab);
           window.removeEventListener("unload", destroy);
-          if (
-            settingsInstance?.open === wrappedSettingsOpen &&
-            window.BgalazkaExtensionInitialized !== false
-          )
-            settingsInstance.open = originalSettingsOpen;
+          settingsHookCleanup?.();
+          settingsHookCleanup = null;
           const category = document.getElementById("zs-tab-btn-video-cloning");
           category?.parentElement?.removeEventListener(
             "click",
@@ -3740,6 +3730,9 @@
           );
           category?.remove();
           document.getElementById("zs-panel-video-cloning")?.remove();
+          // Video controls can live in shared Appearance/Layout sections now.
+          // Remove only video-owned nodes, leaving those shared pages intact.
+          for (const node of document.querySelectorAll("#zentral-settings-modal [data-video-settings], #zentral-settings-modal [data-video-settings-owned]")) node.remove();
           for (const id of [
             "video-playback",
             "video-sources",

@@ -24,6 +24,479 @@
       ]
     },
     {
+      "property": "zen.workspace.bgalazka.look.palette_mode",
+      "label": "Color controls",
+      "type": "dropdown",
+      "defaultValue": "simple",
+      "options": [
+        {
+          "label": "Simple — linked primary and secondary colors",
+          "value": "simple"
+        },
+        {
+          "label": "Detailed — individual surfaces and colors",
+          "value": "detailed"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.text_mode",
+      "label": "Text contrast",
+      "type": "dropdown",
+      "defaultValue": "auto",
+      "options": [
+        {
+          "label": "Automatic — black or white for each surface",
+          "value": "auto"
+        },
+        {
+          "label": "Manual — use individual text colors",
+          "value": "manual"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.primary_opacity",
+      "label": "Linked primary transparency",
+      "type": "dropdown",
+      "defaultValue": 100,
+      "options": [
+        {
+          "label": "100% transparent",
+          "value": 0
+        },
+        {
+          "label": "90% transparent",
+          "value": 10
+        },
+        {
+          "label": "80% transparent",
+          "value": 20
+        },
+        {
+          "label": "70% transparent",
+          "value": 30
+        },
+        {
+          "label": "60% transparent",
+          "value": 40
+        },
+        {
+          "label": "50% transparent",
+          "value": 50
+        },
+        {
+          "label": "40% transparent",
+          "value": 60
+        },
+        {
+          "label": "30% transparent",
+          "value": 70
+        },
+        {
+          "label": "20% transparent",
+          "value": 80
+        },
+        {
+          "label": "10% transparent",
+          "value": 90
+        },
+        {
+          "label": "0% transparent",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.primary",
+      "label": "Primary color (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#17191b",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.secondary",
+      "label": "Secondary color (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#a5bec0",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.settings_canvas",
+      "label": "Settings background (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#17191b",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.settings_header",
+      "label": "Settings header and footer (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#202224",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.settings_nav",
+      "label": "Settings navigation (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#202224",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.settings_card",
+      "label": "Settings cards (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#202224",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.settings_text",
+      "label": "Settings text (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#dce0e1",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.settings_muted",
+      "label": "Settings secondary text (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#a4aaad",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.input_surface",
+      "label": "Input background (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#292c2e",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.input_text",
+      "label": "Input text (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#dce0e1",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.button_hover",
+      "label": "Button hover background (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#2b2e31",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.button_hover_text",
+      "label": "Button hover text (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#dce0e1",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.selected_surface",
+      "label": "Selected control background (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#48616a",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.selected_text",
+      "label": "Selected control text (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#ffffff",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.popup_surface",
+      "label": "Menu background (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#202224",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.popup_text",
+      "label": "Menu text (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#dce0e1",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.success",
+      "label": "Success color (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#86efac",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.warning",
+      "label": "Warning color (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#fcd34d",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.danger",
+      "label": "Error and destructive-action color (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#ff6b6b",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.web_surface",
+      "label": "Web panel background color (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#202224",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.web_opacity",
+      "label": "Web panel background transparency (independent of whole-panel opacity)",
+      "type": "dropdown",
+      "defaultValue": 100,
+      "options": [
+        {
+          "label": "100% transparent",
+          "value": 0
+        },
+        {
+          "label": "90% transparent",
+          "value": 10
+        },
+        {
+          "label": "80% transparent",
+          "value": 20
+        },
+        {
+          "label": "70% transparent",
+          "value": 30
+        },
+        {
+          "label": "60% transparent",
+          "value": 40
+        },
+        {
+          "label": "50% transparent",
+          "value": 50
+        },
+        {
+          "label": "40% transparent",
+          "value": 60
+        },
+        {
+          "label": "30% transparent",
+          "value": 70
+        },
+        {
+          "label": "20% transparent",
+          "value": 80
+        },
+        {
+          "label": "10% transparent",
+          "value": 90
+        },
+        {
+          "label": "0% transparent",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.backdrop",
+      "label": "Settings backdrop color (six-digit #RRGGBB)",
+      "type": "string",
+      "defaultValue": "#000000",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.backdrop_opacity",
+      "label": "Settings backdrop transparency",
+      "type": "dropdown",
+      "defaultValue": 75,
+      "options": [
+        {
+          "label": "100% transparent",
+          "value": 0
+        },
+        {
+          "label": "95% transparent",
+          "value": 5
+        },
+        {
+          "label": "90% transparent",
+          "value": 10
+        },
+        {
+          "label": "85% transparent",
+          "value": 15
+        },
+        {
+          "label": "80% transparent",
+          "value": 20
+        },
+        {
+          "label": "75% transparent",
+          "value": 25
+        },
+        {
+          "label": "70% transparent",
+          "value": 30
+        },
+        {
+          "label": "65% transparent",
+          "value": 35
+        },
+        {
+          "label": "60% transparent",
+          "value": 40
+        },
+        {
+          "label": "55% transparent",
+          "value": 45
+        },
+        {
+          "label": "50% transparent",
+          "value": 50
+        },
+        {
+          "label": "45% transparent",
+          "value": 55
+        },
+        {
+          "label": "40% transparent",
+          "value": 60
+        },
+        {
+          "label": "35% transparent",
+          "value": 65
+        },
+        {
+          "label": "30% transparent",
+          "value": 70
+        },
+        {
+          "label": "25% transparent",
+          "value": 75
+        },
+        {
+          "label": "20% transparent",
+          "value": 80
+        },
+        {
+          "label": "15% transparent",
+          "value": 85
+        },
+        {
+          "label": "10% transparent",
+          "value": 90
+        },
+        {
+          "label": "5% transparent",
+          "value": 95
+        },
+        {
+          "label": "0% transparent",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.solid_controls",
+      "label": "Keep controls readable on transparent panels",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.bgalazka.look.control_strength",
+      "label": "Keep controls readable: strength",
+      "type": "dropdown",
+      "defaultValue": 100,
+      "options": [
+        {
+          "label": "0% strength",
+          "value": 0
+        },
+        {
+          "label": "5% strength",
+          "value": 5
+        },
+        {
+          "label": "10% strength",
+          "value": 10
+        },
+        {
+          "label": "15% strength",
+          "value": 15
+        },
+        {
+          "label": "20% strength",
+          "value": 20
+        },
+        {
+          "label": "25% strength",
+          "value": 25
+        },
+        {
+          "label": "30% strength",
+          "value": 30
+        },
+        {
+          "label": "35% strength",
+          "value": 35
+        },
+        {
+          "label": "40% strength",
+          "value": 40
+        },
+        {
+          "label": "45% strength",
+          "value": 45
+        },
+        {
+          "label": "50% strength",
+          "value": 50
+        },
+        {
+          "label": "55% strength",
+          "value": 55
+        },
+        {
+          "label": "60% strength",
+          "value": 60
+        },
+        {
+          "label": "65% strength",
+          "value": 65
+        },
+        {
+          "label": "70% strength",
+          "value": 70
+        },
+        {
+          "label": "75% strength",
+          "value": 75
+        },
+        {
+          "label": "80% strength",
+          "value": 80
+        },
+        {
+          "label": "85% strength",
+          "value": 85
+        },
+        {
+          "label": "90% strength",
+          "value": 90
+        },
+        {
+          "label": "95% strength",
+          "value": 95
+        },
+        {
+          "label": "100% strength",
+          "value": 100
+        }
+      ]
+    },
+    {
       "property": "zen.workspace.bgalazka.look.canvas",
       "label": "Outer panel canvas (six-digit #RRGGBB)",
       "type": "string",
@@ -4102,222 +4575,357 @@
   "settings": {
     "zen.workspace.bgalazka.look.style": {
       "category": "theme",
-      "section": "Palette, transparency & shape",
+      "section": "Palette",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.palette_mode": {
+      "category": "theme",
+      "section": "Palette",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.text_mode": {
+      "category": "theme-details",
+      "section": "Text & contrast",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.primary_opacity": {
+      "category": "theme",
+      "section": "Palette",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.primary": {
+      "category": "theme",
+      "section": "Palette",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.secondary": {
+      "category": "theme",
+      "section": "Palette",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.settings_canvas": {
+      "category": "theme-details",
+      "section": "Settings window",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.settings_header": {
+      "category": "theme-details",
+      "section": "Settings window",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.settings_nav": {
+      "category": "theme-details",
+      "section": "Settings window",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.settings_card": {
+      "category": "theme-details",
+      "section": "Settings window",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.settings_text": {
+      "category": "theme-details",
+      "section": "Settings window",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.settings_muted": {
+      "category": "theme-details",
+      "section": "Settings window",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.input_surface": {
+      "category": "theme-details",
+      "section": "Settings window",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.input_text": {
+      "category": "theme-details",
+      "section": "Settings window",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.button_hover": {
+      "category": "theme-details",
+      "section": "Shape & controls",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.button_hover_text": {
+      "category": "theme-details",
+      "section": "Shape & controls",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.selected_surface": {
+      "category": "theme-details",
+      "section": "Shape & controls",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.selected_text": {
+      "category": "theme-details",
+      "section": "Shape & controls",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.popup_surface": {
+      "category": "theme-details",
+      "section": "Menus & feedback",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.popup_text": {
+      "category": "theme-details",
+      "section": "Menus & feedback",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.success": {
+      "category": "theme-details",
+      "section": "Menus & feedback",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.warning": {
+      "category": "theme-details",
+      "section": "Menus & feedback",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.danger": {
+      "category": "theme-details",
+      "section": "Menus & feedback",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.web_surface": {
+      "category": "theme-details",
+      "section": "Panel surfaces & transparency",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.web_opacity": {
+      "category": "theme-details",
+      "section": "Panel surfaces & transparency",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.backdrop": {
+      "category": "theme-details",
+      "section": "Panel surfaces & transparency",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.backdrop_opacity": {
+      "category": "theme-details",
+      "section": "Panel surfaces & transparency",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.solid_controls": {
+      "category": "theme",
+      "section": "Readability & buttons",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.canvas": {
-      "category": "theme",
-      "section": "Palette, transparency & shape",
+      "category": "theme-details",
+      "section": "Panel surfaces & transparency",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.surface": {
-      "category": "theme",
-      "section": "Palette, transparency & shape",
+      "category": "theme-details",
+      "section": "Panel surfaces & transparency",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.raised": {
-      "category": "theme",
-      "section": "Palette, transparency & shape",
+      "category": "theme-details",
+      "section": "Panel surfaces & transparency",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.accent": {
-      "category": "theme",
-      "section": "Palette, transparency & shape",
+      "category": "theme-details",
+      "section": "Shape & controls",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.text": {
-      "category": "theme",
-      "section": "Palette, transparency & shape",
+      "category": "theme-details",
+      "section": "Text & contrast",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.muted": {
-      "category": "theme",
-      "section": "Palette, transparency & shape",
+      "category": "theme-details",
+      "section": "Text & contrast",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.surface_opacity": {
-      "category": "theme",
-      "section": "Palette, transparency & shape",
+      "category": "theme-details",
+      "section": "Panel surfaces & transparency",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.raised_opacity": {
-      "category": "theme",
-      "section": "Palette, transparency & shape",
+      "category": "theme-details",
+      "section": "Panel surfaces & transparency",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.popup_opacity": {
-      "category": "theme",
-      "section": "Palette, transparency & shape",
+      "category": "theme-details",
+      "section": "Menus & feedback",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.radius": {
-      "category": "theme",
-      "section": "Palette, transparency & shape",
+      "category": "theme-details",
+      "section": "Shape & controls",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.depth": {
-      "category": "theme",
-      "section": "Palette, transparency & shape",
+      "category": "theme-details",
+      "section": "Shape & controls",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.spacing": {
-      "category": "theme",
-      "section": "Palette, transparency & shape",
+      "category": "density",
+      "section": "Control sizing",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.panel_border": {
-      "category": "theme",
-      "section": "Palette, transparency & shape",
+      "category": "theme-details",
+      "section": "Shape & controls",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.button_opacity": {
-      "category": "interface",
-      "section": "Buttons, app tiles & selection rows",
+      "category": "theme-details",
+      "section": "Shape & controls",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.tile_opacity": {
-      "category": "interface",
-      "section": "Buttons, app tiles & selection rows",
+      "category": "theme-details",
+      "section": "Tabs, folders & launchers",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.button_style": {
-      "category": "interface",
-      "section": "Buttons, app tiles & selection rows",
+      "category": "theme",
+      "section": "Readability & buttons",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.button_surface": {
-      "category": "interface",
-      "section": "Buttons, app tiles & selection rows",
+      "category": "theme-details",
+      "section": "Shape & controls",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.button_text": {
-      "category": "interface",
-      "section": "Buttons, app tiles & selection rows",
+      "category": "theme-details",
+      "section": "Shape & controls",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.button_border_color": {
-      "category": "interface",
-      "section": "Buttons, app tiles & selection rows",
+      "category": "theme-details",
+      "section": "Shape & controls",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.button_border": {
-      "category": "interface",
-      "section": "Buttons, app tiles & selection rows",
+      "category": "theme-details",
+      "section": "Shape & controls",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.control_size": {
-      "category": "interface",
-      "section": "Buttons, app tiles & selection rows",
+      "category": "density",
+      "section": "Control sizing",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.tile_style": {
-      "category": "interface",
-      "section": "Buttons, app tiles & selection rows",
+      "category": "theme-details",
+      "section": "Tabs, folders & launchers",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.row_style": {
-      "category": "interface",
-      "section": "Buttons, app tiles & selection rows",
+      "category": "theme-details",
+      "section": "Settings window",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.row_padding": {
-      "category": "interface",
-      "section": "Buttons, app tiles & selection rows",
+      "category": "density",
+      "section": "Control sizing",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.row_rule": {
-      "category": "interface",
-      "section": "Buttons, app tiles & selection rows",
+      "category": "theme-details",
+      "section": "Settings window",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.density_icons": {
-      "category": "tab-density",
-      "section": "Sidebar sizing & spacing",
+      "category": "density",
+      "section": "Tabs & folders",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.density_newtab": {
-      "category": "tab-density",
-      "section": "Sidebar sizing & spacing",
+      "category": "density",
+      "section": "Tabs & folders",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.density_urlbar": {
-      "category": "tab-density",
-      "section": "Sidebar sizing & spacing",
+      "category": "density",
+      "section": "Tabs & folders",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.density_essentials": {
-      "category": "tab-density",
-      "section": "Sidebar sizing & spacing",
+      "category": "density",
+      "section": "Tabs & folders",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.essentials_height": {
-      "category": "tab-density",
-      "section": "Sidebar sizing & spacing",
+      "category": "density",
+      "section": "Tabs & folders",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.tabbar_section_gap": {
-      "category": "tab-density",
-      "section": "Sidebar sizing & spacing",
+      "category": "density",
+      "section": "Tabs & folders",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.folder_icon_size": {
-      "category": "tab-density",
-      "section": "Sidebar sizing & spacing",
+      "category": "density",
+      "section": "Tabs & folders",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.workspace_icon_size": {
-      "category": "tab-density",
-      "section": "Sidebar sizing & spacing",
+      "category": "density",
+      "section": "Tabs & folders",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.workspace_height": {
-      "category": "tab-density",
-      "section": "Sidebar sizing & spacing",
+      "category": "density",
+      "section": "Tabs & folders",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.bottom_bar_height": {
-      "category": "tab-density",
-      "section": "Sidebar sizing & spacing",
+      "category": "density",
+      "section": "Tabs & folders",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.urlbar_top_gap": {
-      "category": "tab-density",
-      "section": "Sidebar sizing & spacing",
+      "category": "density",
+      "section": "Tabs & folders",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.newtab_height": {
-      "category": "tab-density",
-      "section": "Sidebar sizing & spacing",
+      "category": "density",
+      "section": "Tabs & folders",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.compact_tabbar": {
-      "category": "tab-density",
-      "section": "Sidebar sizing & spacing",
+      "category": "density",
+      "section": "Tabs & folders",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.tabbar_row_height": {
-      "category": "tab-density",
-      "section": "Sidebar sizing & spacing",
+      "category": "density",
+      "section": "Tabs & folders",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.tabbar_row_gap": {
-      "category": "tab-density",
-      "section": "Sidebar sizing & spacing",
+      "category": "density",
+      "section": "Tabs & folders",
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.tabbar_icon_gap": {
-      "category": "tab-density",
-      "section": "Sidebar sizing & spacing",
+      "category": "density",
+      "section": "Tabs & folders",
       "owner": "extension-settings"
     },
     "zen.workspace.zentral.arc2.match_compact_sidebar": {
-      "category": "arc",
-      "section": "Arc 2.0 theme integration",
+      "category": "theme-details",
+      "section": "Compatibility styling",
       "owner": "extension-settings"
     },
     "zen.workspace.zentral.arc2.match_compact_library": {
-      "category": "arc",
-      "section": "Arc 2.0 theme integration",
+      "category": "theme-details",
+      "section": "Compatibility styling",
       "owner": "extension-settings"
     },
     "zen.workspace.zentral.compatibility.panel_outside_window_tracking": {
@@ -4348,6 +4956,11 @@
     "zen.workspace.zentral.panels.autohide_delay_ms": {
       "category": "panel-hover",
       "section": "Outside-window reveal",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.control_strength": {
+      "category": "theme",
+      "section": "Readability & buttons",
       "owner": "extension-settings"
     }
   }

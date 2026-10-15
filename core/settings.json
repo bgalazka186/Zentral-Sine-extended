@@ -180,6 +180,18 @@
       "label": "Local add-on manifest (JSON; restart required)",
       "type": "string",
       "defaultValue": "[]"
+    },
+    {
+      "property": "zen.workspace.zentral.modules.compact-hover.enabled",
+      "label": "Load Experimental compact sidebar hover (restart required)",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.tab-drag.enabled",
+      "label": "Load Background tab dragging (restart required)",
+      "type": "checkbox",
+      "defaultValue": true
     }
   ],
   "settings": {
@@ -326,6 +338,16 @@
     "zen.workspace.zentral.addons": {
       "category": "addons",
       "section": "Local registrations",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.compact-hover.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.tab-drag.enabled": {
+      "category": "modules",
+      "section": "File loading",
       "owner": "core"
     }
   }

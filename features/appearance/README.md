@@ -1,18 +1,22 @@
-# Look application and validation
+# Appearance
 
-Start at `ZentralAppearance.js`. Exports look defaults/themes/validation and applies root attributes/CSS variables. The local stylesheet consumes them; shared FeatureSettings supplies UI and Backup supplies optional import/export.
+The shared palette styles Zentral settings (including header, navigation, footer, backup actions, reports and field states), panel toolbars and pill controls, sidebar video controls, app/group menus, tooltips and diagnostics. Website content and brand artwork keep their own colors.
 
-## Sharing this area for a review
+## Simple and detailed colors
 
-Send this folder for a change confined to its behavior. Include the specific outside collaborator below only if the issue crosses that interface. Each source header explains its callers, contracts and cleanup. Folder ownership does not make every internal controller optional or independently installable.
+Settings → Appearance → Theme & Colors → Color controls offers:
 
-| File                    | Responsibility                                                                                                                   |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `ZentralAppearance.css` | Theme/look variables, colors and opacity rules driven by Appearance settings/root attributes.                                    |
-| `ZentralAppearance.js`  | Look preference definitions/themes, color/bounds validation and root attribute/CSS-variable synchronization after edits/imports. |
+- **Simple:** primary color, secondary color and primary transparency. Related surfaces are derived from the primary color; each text/surface pair automatically uses the higher-contrast black or white. Descriptions, highlights and semantic indicators are adjusted for readable contrast. Shape and layout settings remain independent.
+- **Detailed:** independent settings shell, input, hover, selected-action, menu, status and backdrop colors, alongside the existing panel and video palette. Automatic text contrast can be changed to Manual to expose individual text colors. Switching between modes never overwrites the saved detailed palette.
 
-## Outside collaborators
+All eight presets include the new color roles. Applying a preset preserves the chosen Simple/Detailed mode and sidebar density. Existing profiles seed missing new roles from their current palette once; selecting Paper also selects a dark web-content backing.
 
-- `features/panels/ZentralPanels.uc.js`
+## Web panel backing
 
-Full installation uses root `theme.json` and `preferences.json`, plus `core/`; Sine loads `core/Zentral.uc.js`; a stale main registration can forward through `JS/Zentral.uc.js`. Per-feature settings.json is metadata, not an activation script.
+The web panel background color and transparency are separate from UI palette colors, whole-panel opacity, and the existing black-background toolbar button. Background transparency supports 0% (solid) through 100% (fully transparent). This is useful for Zen Internet's transparent website elements, which may retain light text even when the surrounding UI uses Paper. The black-background button continues to override the backing at its selected strength.
+
+The chosen surface colors determine automatic text contrast. Fully transparent surfaces can reveal an arbitrary page or wallpaper; that underlying content is not sampled continuously. Settings actions and fields retain solid contrastable surfaces.
+
+## Performance
+
+Palette math runs only on appearance changes. Preference bursts from presets/imports coalesce into one scheduled update, and direct updates cancel queued duplicates. Static scoped CSS applies the result; there is no color polling, per-frame sampling or recurring DOM scan. Artwork sizing retains its existing coalesced resize/mutation handling.

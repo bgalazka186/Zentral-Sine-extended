@@ -940,7 +940,7 @@
         <div class="zs-header">
           <div class="zs-title-group">
             <h2 class="zs-title">Zentral Settings</h2>
-            <span class="zs-version-badge">v1.0.2</span>
+            <span class="zs-version-badge">v2.3.0</span>
           </div>
           <div class="zs-header-actions">
             <button id="zs-kofi-btn" class="zs-kofi-btn" title="Support Zentral on Ko-fi (ko-fi.com/michele501st)">
@@ -1244,7 +1244,7 @@
 
                 <!-- Modular Selections Container (Revealed when Full Log is unchecked) -->
                 <div id="zs-logger-modules-container" class="zs-modules-subgroup" data-hidden="true">
-                  <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.45); margin-bottom: 2px;">
+                  <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--zl-settings-muted,rgba(255,255,255,0.45)); margin-bottom: 2px;">
                     Active Log Modules
                   </div>
 
@@ -1935,7 +1935,8 @@
 
               if (!isEnabled) {
                 captureBtn.textContent = "⚠️ Logging Disabled";
-                captureBtn.style.background = "#ef4444";
+                captureBtn.dataset.uiStatus = "danger";
+                captureBtn.style.background = "var(--zl-danger,#ef4444)";
                 captureBtn.style.color = "#ffffff";
                 captureBtn.style.pointerEvents = "none";
 
@@ -1957,6 +1958,7 @@
                 setTimeout(() => {
                   if (this.modal && captureBtn) {
                     captureBtn.textContent = "Export";
+                    delete captureBtn.dataset.uiStatus;
                     captureBtn.style.background = "var(--zen-primary-color)";
                     captureBtn.style.pointerEvents = "auto";
                   }
@@ -1975,13 +1977,15 @@
               const originalText = "Export";
               const originalBg = "var(--zen-primary-color)";
               captureBtn.textContent = "✓ Exported!";
-              captureBtn.style.background = "#10b981";
+              captureBtn.dataset.uiStatus = "success";
+              captureBtn.style.background = "var(--zl-success,#10b981)";
               captureBtn.style.color = "#ffffff";
               captureBtn.style.pointerEvents = "none";
 
               setTimeout(() => {
                 if (this.modal && captureBtn) {
                   captureBtn.textContent = originalText;
+                  delete captureBtn.dataset.uiStatus;
                   captureBtn.style.background = originalBg;
                   captureBtn.style.pointerEvents = "auto";
                 }
@@ -2044,7 +2048,7 @@
 
               if (statusEl) {
                 statusEl.style.display = "inline";
-                statusEl.style.color = "rgba(255, 255, 255, 0.6)";
+                statusEl.style.color = "var(--zl-settings-muted,rgba(255, 255, 255, 0.6))";
                 statusEl.textContent = "Connecting to GitHub...";
               }
 
@@ -2068,7 +2072,7 @@
               }
 
               const systemInfo = {
-                zentralVersion: "v1.0.2",
+                zentralVersion: "v2.3.0",
                 zenVersion: navigator.userAgent,
                 platform: navigator.platform || "Desktop",
                 windowSize: `${window.innerWidth}x${window.innerHeight}`,
@@ -2111,7 +2115,7 @@
                     submitted = true;
                     if (statusEl) {
                       statusEl.style.display = "inline";
-                      statusEl.style.color = "#10b981";
+                      statusEl.style.color = "var(--zl-success,#10b981)";
                       statusEl.replaceChildren();
                       const issueUrl = new URL(String(result.issueUrl || ""));
                       if (
@@ -2123,7 +2127,7 @@
                         link.target = "_blank";
                         link.rel = "noopener noreferrer";
                         link.style.cssText =
-                          "color: #10b981; text-decoration: underline";
+                          "color: var(--zl-success,#10b981); text-decoration: underline";
                         link.textContent = `✓ Issue #${String(result.issueNumber).slice(0, 30)} created!`;
                         statusEl.appendChild(link);
                       } else {
@@ -2186,7 +2190,7 @@
 
                 if (statusEl) {
                   statusEl.style.display = "inline";
-                  statusEl.style.color = "#60a5fa";
+                  statusEl.style.color = "var(--zl-focus,#60a5fa)";
                   statusEl.textContent = logContent
                     ? "✓ Opened in GitHub (Log copied to clipboard!)"
                     : "✓ Opened in GitHub!";
