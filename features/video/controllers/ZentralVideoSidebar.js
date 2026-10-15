@@ -338,12 +338,17 @@
             bar,
           );
           bar.style.cssText =
-            "display:flex!important;flex:0 0 auto!important;flex-wrap:nowrap!important;align-items:center!important;gap:2px!important;width:100%!important;min-width:0!important;height:auto!important;max-height:none!important;box-sizing:border-box!important;overflow:hidden!important";
+            "display:flex!important;flex:0 0 auto!important;flex-wrap:nowrap!important;align-items:center!important;gap:0!important;width:100%!important;min-width:0!important;height:auto!important;max-height:none!important;box-sizing:border-box!important;overflow:hidden!important";
           deps.caption.style.cssText =
-            "flex:1 999 auto!important;min-width:0!important;overflow:hidden!important;white-space:nowrap!important;text-overflow:ellipsis!important";
+            "flex:1 999 0px!important;min-width:0!important;overflow:hidden!important;white-space:nowrap!important;text-overflow:ellipsis!important";
           for (const button of bar.querySelectorAll("button")) {
             button.style.cssText =
-              "position:static!important;inset:auto!important;transform:none!important;float:none!important;box-sizing:border-box!important;flex:0 1 26px!important;width:26px!important;min-width:18px!important;max-width:26px!important;height:26px!important;min-height:26px!important;max-height:26px!important;margin:0!important;padding:0!important;overflow:hidden!important;align-items:center!important;justify-content:center!important;color:var(--zl-video-control-text,white)!important";
+              "position:static!important;inset:auto!important;transform:none!important;float:none!important;box-sizing:border-box!important;flex:0 1 26px!important;width:26px!important;min-width:0!important;max-width:26px!important;height:26px!important;min-height:26px!important;max-height:26px!important;margin:0!important;padding:0!important;overflow:hidden!important;align-items:center!important;justify-content:center!important;color:var(--zl-video-control-text,white)!important";
+          }
+          for (const icon of bar.querySelectorAll("button svg")) {
+            icon.style.setProperty("max-width", "100%", "important");
+            icon.style.setProperty("min-width", "0", "important");
+            icon.style.setProperty("flex-shrink", "1", "important");
           }
           deps.box._nextButton = next;
           deps.box._openButton = open;
@@ -393,7 +398,7 @@
         svg.setAttribute("viewBox", "0 0 24 24");
         svg.setAttribute("aria-hidden", "true");
         svg.style.cssText =
-          "display:block!important;width:var(--bgalazka-look-control-icon-size,16px)!important;height:var(--bgalazka-look-control-icon-size,16px)!important;flex:0 0 var(--bgalazka-look-control-icon-size,16px)!important;position:static!important;pointer-events:none!important";
+          "display:block!important;width:var(--bgalazka-look-control-icon-size,16px)!important;height:var(--bgalazka-look-control-icon-size,16px)!important;flex:0 1 var(--bgalazka-look-control-icon-size,16px)!important;max-width:100%!important;min-width:0!important;position:static!important;pointer-events:none!important";
         const path = document.createElementNS(ns, "path");
         const paths = {
           pin: "M16 9V4l1-1V2H7v1l1 1v5c0 1.66-1.34 3-3 3v2h6v7l1 1 1-1v-7h6v-2c-1.66 0-3-1.34-3-3z",

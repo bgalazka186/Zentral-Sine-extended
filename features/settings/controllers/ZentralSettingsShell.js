@@ -940,7 +940,7 @@
         <div class="zs-header">
           <div class="zs-title-group">
             <h2 class="zs-title">Zentral Settings</h2>
-            <span class="zs-version-badge">v2.3.0</span>
+            <span class="zs-version-badge">v2.3.1</span>
           </div>
           <div class="zs-header-actions">
             <button id="zs-kofi-btn" class="zs-kofi-btn" title="Support Zentral on Ko-fi (ko-fi.com/michele501st)">
@@ -2072,7 +2072,7 @@
               }
 
               const systemInfo = {
-                zentralVersion: "v2.3.0",
+                zentralVersion: "v2.3.1",
                 zenVersion: navigator.userAgent,
                 platform: navigator.platform || "Desktop",
                 windowSize: `${window.innerWidth}x${window.innerHeight}`,

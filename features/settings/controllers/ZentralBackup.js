@@ -62,25 +62,30 @@
         ctx.PROFILE_DEFAULTS[key] ??
         window.Zentral?.Core?.defaultPrefs?.[key] ??
         backupSchema().get(key)?.defaultValue;
+      const nativeBrowserKey = (key) =>
+        window.ZentralRuntime?.nativeBrowserSettingsKeys?.has(key) === true;
       const fullBackupKeys = () =>
-        new Set([
-          ...baseBackupKeys(),
-          ...backupSchema().keys(),
-          ...Object.keys(ctx.PROFILE_DEFAULTS),
-          ...Services.prefs.getChildList("zen.workspace.bgalazka."),
-          ...Services.prefs.getChildList(
-            "zen.workspace.zentral.video_preview.",
-          ),
-          ...Services.prefs.getChildList("zen.workspace.zentral.modules."),
-          ...LOOK_KEYS,
-        ]);
+        new Set(
+          [
+            ...baseBackupKeys(),
+            ...backupSchema().keys(),
+            ...Object.keys(ctx.PROFILE_DEFAULTS),
+            ...Services.prefs.getChildList("zen.workspace.bgalazka."),
+            ...Services.prefs.getChildList(
+              "zen.workspace.zentral.video_preview.",
+            ),
+            ...Services.prefs.getChildList("zen.workspace.zentral.modules."),
+            ...LOOK_KEYS,
+          ].filter((key) => !nativeBrowserKey(key)),
+        );
       const ownedBackupKey = (key) =>
-        LOOK_KEYS.has(key) ||
-        Object.hasOwn(window.Zentral?.Core?.defaultPrefs || {}, key) ||
-        backupSchema().has(key) ||
-        key.startsWith("zen.workspace.bgalazka.") ||
-        key.startsWith("zen.workspace.zentral.video_preview.") ||
-        /^zen\.workspace\.zentral\.modules\.[\w.-]+\.enabled$/.test(key);
+        !nativeBrowserKey(key) &&
+        (LOOK_KEYS.has(key) ||
+          Object.hasOwn(window.Zentral?.Core?.defaultPrefs || {}, key) ||
+          backupSchema().has(key) ||
+          key.startsWith("zen.workspace.bgalazka.") ||
+          key.startsWith("zen.workspace.zentral.video_preview.") ||
+          /^zen\.workspace\.zentral\.modules\.[\w.-]+\.enabled$/.test(key));
       async function chooseBackupFile(mode, title, defaultName) {
         const picker = Cc["@mozilla.org/filepicker;1"].createInstance(
           Ci.nsIFilePicker,
@@ -339,19 +344,31 @@
         "zen.workspace.bgalazka.web_toolbar_quickswitch_custom_2",
         "zen.workspace.bgalazka.web_toolbar_quickswitch_custom_3",
         "zen.workspace.bgalazka.web_toolbar_quickswitch_custom_4",
-        "zen.workspace.bgalazka.web_toolbar_quickswitch_custom_5"
+        "zen.workspace.bgalazka.web_toolbar_quickswitch_custom_5",
       ]);
       function applySettingsPreset(kind) {
         if (!["default", "recommended"].includes(kind))
           throw new Error("Unknown settings preset");
-        const label = kind === "default" ? "Restore defaults" : "Apply recommended settings";
-        if (!window.confirm(label + "? This replaces your configuration, including appearance, layout and shortcuts. Saved apps, groups and panel assignments stay yours. Export first if you want a backup. Restart Zen afterwards."))
+        const label =
+          kind === "default"
+            ? "Restore defaults"
+            : "Apply recommended settings";
+        if (
+          !window.confirm(
+            label +
+              "? This replaces your configuration, including appearance, layout and shortcuts. Saved apps, groups and panel assignments stay yours. Export first if you want a backup. Restart Zen afterwards.",
+          )
+        )
           return false;
         let data;
         if (kind === "recommended") {
           // Read only on request. No startup work, polling or cached profile data.
-          data = JSON.parse(window.ZentralModuleLoader.readText(
-            "features/settings/recommended.json", "settings-backup"));
+          data = JSON.parse(
+            window.ZentralModuleLoader.readText(
+              "features/settings/recommended.json",
+              "settings-backup",
+            ),
+          );
         } else {
           const prefs = {};
           for (const key of fullBackupKeys()) {
@@ -359,24 +376,38 @@
             const value = backupDefault(key);
             if (value !== undefined) prefs[key] = value;
           }
-          data = { format: "zentral-settings", version: 1, scope: "full", prefs };
+          data = {
+            format: "zentral-settings",
+            version: 1,
+            scope: "full",
+            prefs,
+          };
         }
         // Defense in depth: a later preset edit cannot replace saved identities.
-        data = { ...data, prefs: Object.fromEntries(Object.entries(data.prefs || {})
-          .filter(([key]) => !presetStateKeys.has(key) &&
-            (kind !== "recommended" || !recommendedPrivateKeys.has(key)))) };
+        data = {
+          ...data,
+          prefs: Object.fromEntries(
+            Object.entries(data.prefs || {}).filter(
+              ([key]) =>
+                !nativeBrowserKey(key) &&
+                !presetStateKeys.has(key) &&
+                (kind !== "recommended" || !recommendedPrivateKeys.has(key)),
+            ),
+          ),
+        };
         return applyBackupData(data, "full");
       }
       function addLookBackupControls(container, scopes = ["look", "full"]) {
         const heading = document.createElement("h4");
         heading.className = "zs-look-heading";
-        heading.textContent = scopes.includes("full") ? "Back up & restore all settings" : "Save & share appearance";
+        heading.textContent = scopes.includes("full")
+          ? "Back up & restore all settings"
+          : "Save & share appearance";
         const note = document.createElement("p");
         note.className = "zs-look-note";
-        note.textContent =
-          scopes.includes("full")
-            ? "Export your Zentral settings before experimenting. Import merges the values from your backup. Default restores built-in settings; Recommended applies the bundled custom configuration. Both keep saved apps, groups and panel assignments. Restart Zen after changing behavior or module settings."
-            : "Save appearance and layout settings to a file, or import a saved look without changing feature behavior.";
+        note.textContent = scopes.includes("full")
+          ? "Export your Zentral settings before experimenting. Import merges the values from your backup. Default restores built-in settings; Recommended applies the bundled custom configuration. Both keep saved apps, groups and panel assignments. Restart Zen after changing behavior or module settings."
+          : "Save appearance and layout settings to a file, or import a saved look without changing feature behavior.";
         const actions = document.createElement("div");
         actions.className = "zs-look-actions";
         for (const [label, action, scope] of [
@@ -385,7 +416,11 @@
           ["Export all settings", exportBackup, "full"],
           ["Import all settings", importBackup, "full"],
           ["Restore defaults", () => applySettingsPreset("default"), "full"],
-          ["Apply recommended settings", () => applySettingsPreset("recommended"), "full"],
+          [
+            "Apply recommended settings",
+            () => applySettingsPreset("recommended"),
+            "full",
+          ],
         ]) {
           if (!scopes.includes(scope)) continue;
           const button = document.createElement("button");
@@ -395,7 +430,14 @@
           button.addEventListener("click", async () => {
             button.disabled = true;
             try {
-              if (await action(scope)) window.alert(label + " complete." + (scope === "full" && action !== exportBackup ? " Restart Zen to finish applying behavior and module settings." : ""));
+              if (await action(scope))
+                window.alert(
+                  label +
+                    " complete." +
+                    (scope === "full" && action !== exportBackup
+                      ? " Restart Zen to finish applying behavior and module settings."
+                      : ""),
+                );
             } catch (error) {
               console.error("[Zentral] Settings transfer failed:", error);
               window.alert(label + " failed: " + error.message);
@@ -413,7 +455,12 @@
        * live folder can still contain Zen's restoration placeholder; only tabs
        * explicitly marked as placeholders may be ignored. No tabstrip subtree observer: that
        * pattern can crash Gecko during pinning (architecture note 4). */
-      return { addLookBackupControls, exportBackup, importBackup, applySettingsPreset };
+      return {
+        addLookBackupControls,
+        exportBackup,
+        importBackup,
+        applySettingsPreset,
+      };
     },
   );
 })();

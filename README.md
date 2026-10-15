@@ -52,11 +52,16 @@ This fork has grown quite a bit beyond the original tweaks. Most extras can be c
 - **Optional feature management:** developer controls can disable optional modules and styles, with diagnostics available for troubleshooting. Core dependencies remain protected unless the explicit unsafe override is enabled.
 - **Changed mod files structure** now it should be easier for anyone who wants to get some parts of it and add to their own setup :D
 
+### Native Browser Settings:
+
+A separate category exposes selected native Zen / Firefox preferences for borders, fullscreen fades, compact-sidebar behavior, layout, the address bar and workspaces. These controls read the current browser value and only write when edited. Each has a **Reset to browser default** button. Zentral defaults, Recommended settings and import/export exclude these preferences. **Uninstalling Zentral leaves these browser settings unchanged.** Unsupported preferences stay disabled rather than being created.
+
 ### Experimental Features (Advanced Settings):
 
 These options are experimental and separate from the regular hover behavior. Availability and reliability can depend on Zen and the pointer events it delivers.
 
 - **Outside-window panel reveal:** optionally reveal an already open autohidden panel when leaving through its docked window edge, with outside-pointer tracking where supported and timed hiding as a fallback.
+- **Startup sidebar expand/restore:** after a configurable delay (0–60 seconds, default 0), temporarily widens Zen’s native sidebar and updates its width attribute with the same native resize notification used by its divider, holds it for a configurable time (default 100 ms), then restores its prior styles/width attribute and sends the resize notification again. Runs once per window; skips when there is not enough room to widen it. This can briefly be visible but does not resize the browser window or change saved width preferences. Off by default, enabled by **Apply recommended settings**. Target width, extra expansion, hold time and verification-frame delay are configurable; defaults are 400 px, +100 px, 100 ms and 2 frames. Diagnostics report whether expansion actually occurred.
 - **Compact tab sidebar hover stabilization:** under **Advanced → Experimental**, **Stabilize Compact Tab Sidebar Hover (Experimental)** is the master switch for the compact-sidebar hover enhancements and the optional return-reveal behavior below. Turn it off to disable this group if a browser update causes trouble.
 - **Reveal on return, with brief protection:** an optional enhancement reveals the tab sidebar when the cursor returns through its side of the window and briefly protects it from hiding during a quick out-and-back movement. It keeps the normal hover activation area unchanged, but cannot guarantee that every crossing will be detected.
 - **Matching panel behavior:** optionally apply return reveal to already open autohidden panels too. A separate restriction, enabled by default, limits this enhancement to panels that are not pushing the webpage. Both options depend on the master switch above; the separate outside-window panel reveal setting remains independent.
@@ -112,7 +117,7 @@ These options are experimental and separate from the regular hover behavior. Ava
 </p>
 
 <p align="center">
-  <a href="theme.json"><img src="https://img.shields.io/badge/Version-v2.3.0-4A72FF.svg?style=flat-square" alt="Version"></a>
+  <a href="theme.json"><img src="https://img.shields.io/badge/Version-v2.3.1-4A72FF.svg?style=flat-square" alt="Version"></a>
   <a href="https://zen-browser.app/"><img src="https://img.shields.io/badge/Zen_Browser-Compatible-9B51E0.svg?style=flat-square" alt="Zen Browser"></a>
   <a href="theme.json"><img src="https://img.shields.io/badge/Sine_Engine-Native_Mod-00C853.svg?style=flat-square" alt="Sine Engine"></a>
   <a href="https://ko-fi.com/michele501st"><img src="https://img.shields.io/badge/Support-Ko--fi-FF5E5B.svg?style=flat-square&logo=ko-fi&logoColor=white" alt="Support on Ko-fi"></a>

@@ -3683,17 +3683,10 @@
         };
         const onVisibilityWake = (event) => {
           if (event?.type === "scroll") {
-            if (
-              disposed ||
-              !enabled() ||
-              compactPaused ||
-              !current ||
-              videoHidden
-            )
+            if (disposed || !enabled() || compactPaused || !current || videoHidden)
               return;
             if (visibilityWakeFrame === null)
-              visibilityWakeFrame =
-                window.requestAnimationFrame(runVisibilityWake);
+              visibilityWakeFrame = window.requestAnimationFrame(runVisibilityWake);
             return;
           }
           if (visibilityWakeFrame !== null)
@@ -3758,10 +3751,7 @@
           document.getElementById("zs-panel-video-cloning")?.remove();
           // Video controls can live in shared Appearance/Layout sections now.
           // Remove only video-owned nodes, leaving those shared pages intact.
-          for (const node of document.querySelectorAll(
-            "#zentral-settings-modal [data-video-settings], #zentral-settings-modal [data-video-settings-owned]",
-          ))
-            node.remove();
+          for (const node of document.querySelectorAll("#zentral-settings-modal [data-video-settings], #zentral-settings-modal [data-video-settings-owned]")) node.remove();
           for (const id of [
             "video-playback",
             "video-sources",

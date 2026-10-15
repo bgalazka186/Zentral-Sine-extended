@@ -194,7 +194,7 @@
               );
             }).map((item) => item.property),
           }))
-          .filter((section) => section.properties.length),
+          .filter((section) => category.external || section.properties.length),
       }))
       .filter((category) => category.sections.length);
     return {

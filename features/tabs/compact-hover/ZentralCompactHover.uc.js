@@ -12,6 +12,8 @@
   const MARGIN_PREF = PREF + ".edge_margin_px";
   const GRACE_PREF = PREF + ".exit_grace_ms";
   const ENTRY_PREF = PREF + ".window_entry_reveal";
+  const REPAIR_PREF =
+    "zen.workspace.zentral.experimental.sidebar_startup_recalculate";
   const RETURN_GRACE_MS = 250;
   const RECENT_EXIT_MS = 1500;
   const Services =
@@ -524,6 +526,179 @@
       task = null,
       watching = false;
     const root = document.documentElement;
+    let repairFrame = null,
+      repairTimer = null,
+      restoreTimer = null,
+      repairDone = false,
+      restoreRepair = null;
+    const repairStatus = (stage) => {
+      window.ZentralRuntime.sidebarLayoutRepair = { stage };
+    };
+    function cancelRepair() {
+      if (repairTimer !== null) window.clearTimeout(repairTimer);
+      repairTimer = null;
+      if (repairFrame !== null) window.cancelAnimationFrame(repairFrame);
+      repairFrame = null;
+      if (restoreTimer !== null) window.clearTimeout(restoreTimer);
+      restoreTimer = null;
+      const restore = restoreRepair;
+      restoreRepair = null;
+      restore?.();
+    }
+    function syncRepair() {
+      if (stopped || !Services.prefs.getBoolPref(REPAIR_PREF, false)) {
+        cancelRepair();
+        repairStatus(stopped ? "stopped" : "disabled");
+        return;
+      }
+      if (repairDone || repairFrame !== null || repairTimer !== null) return;
+      const delay =
+        Math.max(
+          0,
+          Math.min(
+            60,
+            Services.prefs.getIntPref(REPAIR_PREF + ".delay_seconds", 0),
+          ),
+        ) * 1000;
+      repairStatus(
+        "scheduled: waiting " + delay + " ms before sidebar expansion",
+      );
+      repairTimer = window.setTimeout(() => {
+        repairTimer = null;
+        if (stopped || !Services.prefs.getBoolPref(REPAIR_PREF, false)) return;
+        const sidebar =
+          document.getElementById("navigator-toolbox") ||
+          window.gZenCompactModeManager?.sidebar;
+        const width = sidebar?.isConnected
+          ? sidebar.getBoundingClientRect().width
+          : 0;
+        const tune = (suffix, fallback, min, max) =>
+          Math.max(
+            min,
+            Math.min(
+              max,
+              Services.prefs.getIntPref(REPAIR_PREF + "." + suffix, fallback),
+            ),
+          );
+        const targetWidth = tune("target_width_px", 400, 200, 2000);
+        const extraWidth = tune("extra_width_px", 100, 50, 1200);
+        const holdMs = tune("hold_ms", 100, 50, 5000);
+        const verificationFrames = tune("verification_frames", 2, 1, 10);
+        const expanded = Math.floor(
+          Math.min(
+            window.innerWidth - 40,
+            Math.max(targetWidth, width + extraWidth),
+          ),
+        );
+        if (!sidebar?.style || !(width > 0) || expanded <= width + 32) {
+          repairDone = true;
+          repairStatus(
+            "skipped: sidebar unavailable or insufficient room to expand",
+          );
+          return;
+        }
+        const value = expanded + "px",
+          snapshots = [];
+        const hadWidthAttribute = sidebar.hasAttribute("width");
+        const previousWidthAttribute = sidebar.getAttribute("width");
+        let expansionObserved = false;
+        const notifyNativeResize = () => {
+          // ZenCustomizableUI.#initSidebarResizer updates width + its native
+          // attribute, then dispatches this event. CSS expansion alone does not
+          // run the same workspace/toolbar calculations as dragging the divider.
+          sidebar.getBoundingClientRect(); // Make the new width measurable now.
+          window.dispatchEvent(new window.Event("resize"));
+        };
+        const change = (node, key, temporary) => {
+          const previous = node.style.getPropertyValue(key),
+            priority = node.style.getPropertyPriority(key);
+          snapshots.push({ node, key, temporary, previous, priority });
+          node.style.setProperty(key, temporary, "important");
+        };
+        const finish = () => {
+          if (repairFrame !== null) window.cancelAnimationFrame(repairFrame);
+          repairFrame = null;
+          if (restoreTimer !== null) window.clearTimeout(restoreTimer);
+          restoreTimer = null;
+          const restore = restoreRepair;
+          restoreRepair = null;
+          restore?.();
+        };
+        restoreRepair = () => {
+          repairDone = true;
+          if (!expansionObserved && sidebar.isConnected)
+            expansionObserved =
+              sidebar.getBoundingClientRect().width > width + 32;
+          // Native/user changes made during the refresh win over our snapshot.
+          for (const {
+            node,
+            key,
+            temporary,
+            previous,
+            priority,
+          } of snapshots.reverse()) {
+            if (
+              node.style.getPropertyValue(key) !== temporary ||
+              node.style.getPropertyPriority(key) !== "important"
+            )
+              continue;
+            if (previous) node.style.setProperty(key, previous, priority);
+            else node.style.removeProperty(key);
+          }
+          if (sidebar.getAttribute("width") === value) {
+            if (hadWidthAttribute)
+              sidebar.setAttribute("width", previousWidthAttribute);
+            else sidebar.removeAttribute("width");
+          }
+          if (!stopped && sidebar.isConnected) notifyNativeResize();
+          repairStatus(
+            expansionObserved
+              ? "completed: native sidebar resize cycle and previous width restored"
+              : "not applied: browser styles prevented sidebar expansion",
+          );
+        };
+        try {
+          // Match Zen's manual setWidth path, retaining temporary constraints
+          // only to provide enough space for the configured expansion.
+          change(sidebar, "--zen-sidebar-width", value);
+          change(sidebar, "width", value);
+          // Expansion cannot hit the current minimum. Only lift a maximum
+          // when necessary; avoid extra constraint writes for the small default.
+          const maxWidth = parseFloat(
+            sidebar.style.getPropertyValue("max-width"),
+          );
+          if (!Number.isFinite(maxWidth) || maxWidth < expanded)
+            change(sidebar, "max-width", value);
+          sidebar.setAttribute("width", value);
+          notifyNativeResize();
+          const verifyExpansion = (remaining) => {
+            repairFrame = window.requestAnimationFrame(() => {
+              if (remaining > 1) {
+                verifyExpansion(remaining - 1);
+                return;
+              }
+              repairFrame = null;
+              const measured = sidebar.getBoundingClientRect().width;
+              expansionObserved = measured > width + 32;
+              if (!expansionObserved) {
+                finish();
+                repairStatus(
+                  "not applied: browser styles prevented sidebar expansion",
+                );
+              }
+            });
+          };
+          verifyExpansion(verificationFrames);
+          // One bounded hold allows native overflow work to settle at the wide
+          // size. Also restores when animation frames are suspended. No polling.
+          restoreTimer = window.setTimeout(finish, holdMs);
+        } catch (error) {
+          finish();
+          repairStatus("sidebar expansion failed: " + error);
+        }
+      }, delay);
+    }
+
     function reconcile() {
       task = null;
       if (stopped || !Services.prefs.getBoolPref(PREF, false)) return;
@@ -580,21 +755,31 @@
     const observer = {
       observe(subject, topic, pref) {
         if (pref === PREF) syncWatching();
+        if (pref === REPAIR_PREF) syncRepair();
+        if (pref === REPAIR_PREF + ".delay_seconds" && repairTimer !== null) {
+          window.clearTimeout(repairTimer);
+          repairTimer = null;
+          syncRepair();
+        }
       },
     };
     function destroy() {
       if (stopped) return;
       stopped = true;
+      cancelRepair();
       syncWatching();
       cleanup?.();
       cleanup = null;
       Services.prefs.removeObserver(PREF, observer);
+      Services.prefs.removeObserver(REPAIR_PREF, observer);
       window.removeEventListener("unload", destroy);
     }
     Services.prefs.addObserver(PREF, observer);
+    Services.prefs.addObserver(REPAIR_PREF, observer);
     window.addEventListener("unload", destroy, { once: true });
     try {
       syncWatching();
+      syncRepair();
     } catch (error) {
       destroy();
       throw error;

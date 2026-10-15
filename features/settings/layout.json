@@ -412,6 +412,35 @@
         }
       ],
       "icon": "list"
+    },
+    {
+      "id": "native-browser",
+      "label": "Native Browser Settings",
+      "group": "Browser preferences",
+      "owner": "core",
+      "external": true,
+      "icon": "sliders",
+      "description": "Direct Zen / Firefox preferences. Excluded from Zentral presets and backups; changes remain after uninstalling Zentral.",
+      "sections": [
+        {
+          "label": "Borders"
+        },
+        {
+          "label": "Fullscreen"
+        },
+        {
+          "label": "Compact sidebar"
+        },
+        {
+          "label": "Layout"
+        },
+        {
+          "label": "Address bar"
+        },
+        {
+          "label": "Tabs & workspaces"
+        }
+      ]
     }
   ],
   "order": [
@@ -919,6 +948,12 @@
       "label": "**Experimental · Native compact sidebar**",
       "size": "18px"
     },
+    "zen.workspace.zentral.experimental.sidebar_startup_recalculate",
+    "zen.workspace.zentral.experimental.sidebar_startup_recalculate.delay_seconds",
+    "zen.workspace.zentral.experimental.sidebar_startup_recalculate.target_width_px",
+    "zen.workspace.zentral.experimental.sidebar_startup_recalculate.extra_width_px",
+    "zen.workspace.zentral.experimental.sidebar_startup_recalculate.hold_ms",
+    "zen.workspace.zentral.experimental.sidebar_startup_recalculate.verification_frames",
     "zen.workspace.zentral.experimental.compact_sidebar_hover",
     "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal",
     "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal.panels",

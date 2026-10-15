@@ -1254,6 +1254,134 @@
             keybindSubgroup.className =
               "zs-conditional-group zs-keybinds-group";
 
+            const tStartupRecalculate = createToggleRow(
+              "Expand and Restore Sidebar After Startup (Experimental)",
+              "Once after startup, briefly widens Zen’s sidebar and sends its native resize notifications, then restores the previous width. Helps icons stuck in overflow; may briefly be visible. Size and timing are adjustable below. Off by default; on in Recommended settings. Restart Zen to repeat.",
+              "zen.workspace.zentral.experimental.sidebar_startup_recalculate",
+              null,
+              false,
+              ctx.PREF_ICONS.TOOLBAR,
+            );
+            content.appendChild(tStartupRecalculate.row);
+            const startupDelayPref =
+              "zen.workspace.zentral.experimental.sidebar_startup_recalculate.delay_seconds";
+            const startupDelay = createSliderRow(
+              "Sidebar Layout Refresh Delay",
+              "Wait after native startup restoration. Default: 0 s. Changing a pending delay restarts it; after completion, changes apply to the next window.",
+              startupDelayPref,
+              0,
+              60,
+              0,
+              " s",
+            );
+            content.appendChild(startupDelay.row);
+            const startupControls = [startupDelay];
+            for (const [
+              suffix,
+              label,
+              description,
+              min,
+              max,
+              def,
+              step,
+              unit,
+            ] of [
+              [
+                "target_width_px",
+                "Sidebar expansion target width (px)",
+                "Minimum temporary width, capped by window space. Default: 400 px.",
+                200,
+                2000,
+                400,
+                50,
+                " px",
+              ],
+              [
+                "extra_width_px",
+                "Sidebar expansion extra width (px)",
+                "Extra width added to the current sidebar. Uses this result or the target width, whichever is larger. Default: 100 px.",
+                50,
+                1200,
+                100,
+                50,
+                " px",
+              ],
+              [
+                "hold_ms",
+                "Sidebar expansion hold time (ms)",
+                "Time before restoring the original width. Increase only if needed. Default: 100 ms.",
+                50,
+                5000,
+                100,
+                50,
+                " ms",
+              ],
+              [
+                "verification_frames",
+                "Sidebar expansion verification frames",
+                "Frames before checking expansion. Does not extend the hold time. Default: 2 frames.",
+                1,
+                10,
+                2,
+                1,
+                " frames",
+              ],
+            ]) {
+              const pref =
+                "zen.workspace.zentral.experimental.sidebar_startup_recalculate." +
+                suffix;
+              const control = createSliderRow(
+                label,
+                description,
+                pref,
+                min,
+                max,
+                def,
+                unit,
+              );
+              control.input.step = String(step);
+              content.appendChild(control.row);
+              startupControls.push(control);
+              panel._toggles.push({
+                input: control.input,
+                pref,
+                def,
+                isSelect: true,
+                onSync: (value) => {
+                  control.badge.textContent = value + unit;
+                },
+              });
+            }
+            const syncStartupDelay = () => {
+              const disabled = !ctx.getPref(
+                "zen.workspace.zentral.experimental.sidebar_startup_recalculate",
+                false,
+              );
+              for (const control of startupControls) {
+                control.input.disabled = disabled;
+                control.row.style.opacity = disabled ? "0.5" : "";
+              }
+            };
+            tStartupRecalculate.input.addEventListener(
+              "change",
+              syncStartupDelay,
+            );
+            panel._toggles.push({
+              input: tStartupRecalculate.input,
+              pref: "zen.workspace.zentral.experimental.sidebar_startup_recalculate",
+              def: false,
+              onSync: syncStartupDelay,
+            });
+            panel._toggles.push({
+              input: startupDelay.input,
+              pref: startupDelayPref,
+              def: 0,
+              isSelect: true,
+              onSync: (value) => {
+                startupDelay.badge.textContent = value + " s";
+              },
+            });
+            syncStartupDelay();
             const compactHoverPref =
               "zen.workspace.zentral.experimental.compact_sidebar_hover";
             const tCompactHover = createToggleRow(
@@ -1264,6 +1392,12 @@
               false,
               ctx.PREF_ICONS.TOOLBAR,
             );
+            // Keep the separator on the row so category organization moves it
+            // together with the independent hover experiment.
+            tCompactHover.row.style.borderTop =
+              "1px solid color-mix(in srgb, currentColor 35%, transparent)";
+            tCompactHover.row.style.marginTop = "16px";
+            tCompactHover.row.style.paddingTop = "18px";
             content.appendChild(tCompactHover.row);
             const entryRevealPref = compactHoverPref + ".window_entry_reveal";
             const tEntryReveal = createToggleRow(

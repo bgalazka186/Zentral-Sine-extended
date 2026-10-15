@@ -159,7 +159,7 @@
   justify-content: center !important;
   flex: 0 1 26px !important;
   width: 26px !important;
-  min-width: 18px !important;
+  min-width: 0 !important;
   max-width: 26px !important;
   padding: 0 !important;
   margin: 0 !important;
@@ -328,4 +328,29 @@
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
+}
+
+/* USER_SHEET !important rules outrank inline author styles. Keep toolbar sizing
+   here so appearance presets cannot restore a fixed min-content width. */
+#zentral-video-preview#zentral-video-preview .zentral-video-preview-bar {
+  gap: 0 !important;
+  min-width: 0 !important;
+}
+#zentral-video-preview#zentral-video-preview .zentral-video-preview-bar > button {
+  flex: 0 1 26px !important;
+  width: 26px !important;
+  min-width: 0 !important;
+  max-width: 26px !important;
+  min-inline-size: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+#zentral-video-preview#zentral-video-preview .zentral-video-preview-caption {
+  flex: 1 999 0px !important;
+  min-width: 0 !important;
+}
+#zentral-video-preview#zentral-video-preview .zentral-video-preview-bar > button svg {
+  flex: 0 1 var(--bgalazka-look-control-icon-size, 16px) !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
 }

@@ -301,6 +301,12 @@
     "zen.workspace.zentral.video_preview.performance_diagnostics": false,
     "zen.workspace.bgalazka.multi_panel_mode": "floating",
     "zen.workspace.bgalazka.blur_intensity": 0,
-    "zen.workspace.bgalazka.zen_internet_workaround": false
+    "zen.workspace.bgalazka.zen_internet_workaround": false,
+    "zen.workspace.zentral.experimental.sidebar_startup_recalculate": true,
+    "zen.workspace.zentral.experimental.sidebar_startup_recalculate.delay_seconds": 0,
+    "zen.workspace.zentral.experimental.sidebar_startup_recalculate.target_width_px": 400,
+    "zen.workspace.zentral.experimental.sidebar_startup_recalculate.extra_width_px": 100,
+    "zen.workspace.zentral.experimental.sidebar_startup_recalculate.hold_ms": 100,
+    "zen.workspace.zentral.experimental.sidebar_startup_recalculate.verification_frames": 2
   }
 }
