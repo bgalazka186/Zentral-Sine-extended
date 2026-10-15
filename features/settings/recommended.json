@@ -307,6 +307,11 @@
     "zen.workspace.zentral.experimental.sidebar_startup_recalculate.target_width_px": 400,
     "zen.workspace.zentral.experimental.sidebar_startup_recalculate.extra_width_px": 100,
     "zen.workspace.zentral.experimental.sidebar_startup_recalculate.hold_ms": 100,
-    "zen.workspace.zentral.experimental.sidebar_startup_recalculate.verification_frames": 2
+    "zen.workspace.zentral.experimental.sidebar_startup_recalculate.verification_frames": 2,
+    "zen.workspace.zentral.experimental.library_resize": true,
+    "zen.workspace.zentral.experimental.library_resize.minimum_content_width_px": 200,
+    "zen.workspace.zentral.modules.library-resize.enabled": true,
+    "zen.workspace.zentral.experimental.library_resize.animate_content": false,
+    "zen.workspace.zentral.experimental.library_resize.mode": "overlay"
   }
 }

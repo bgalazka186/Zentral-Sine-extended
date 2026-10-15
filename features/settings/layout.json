@@ -385,6 +385,9 @@
       "sections": [
         {
           "label": "Native compact sidebar"
+        },
+        {
+          "label": "Library layout"
         }
       ],
       "icon": "flask"
@@ -935,6 +938,7 @@
     "zen.workspace.zentral.modules.css.TabDensity.enabled",
     "zen.workspace.zentral.modules.css.PanelBackground.enabled",
     "zen.workspace.zentral.modules.allow_unsafe_core_disable",
+    "zen.workspace.zentral.modules.library-resize.enabled",
     "zen.workspace.zentral.modules.compact-hover.enabled",
     "zen.workspace.zentral.modules.tab-drag.enabled",
     {
@@ -960,6 +964,15 @@
     "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal.panels.only_when_not_pushing",
     "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px",
     "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms",
+    {
+      "type": "text",
+      "label": "**Experimental · Library layout**",
+      "size": "18px"
+    },
+    "zen.workspace.zentral.experimental.library_resize",
+    "zen.workspace.zentral.experimental.library_resize.mode",
+    "zen.workspace.zentral.experimental.library_resize.minimum_content_width_px",
+    "zen.workspace.zentral.experimental.library_resize.animate_content",
     {
       "type": "text",
       "label": "**Video Experiments · Experimental methods & tests**",

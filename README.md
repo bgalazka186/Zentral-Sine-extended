@@ -65,6 +65,7 @@ These options are experimental and separate from the regular hover behavior. Ava
 - **Compact tab sidebar hover stabilization:** under **Advanced → Experimental**, **Stabilize Compact Tab Sidebar Hover (Experimental)** is the master switch for the compact-sidebar hover enhancements and the optional return-reveal behavior below. Turn it off to disable this group if a browser update causes trouble.
 - **Reveal on return, with brief protection:** an optional enhancement reveals the tab sidebar when the cursor returns through its side of the window and briefly protects it from hiding during a quick out-and-back movement. It keeps the normal hover activation area unchanged, but cannot guarantee that every crossing will be detected.
 - **Matching panel behavior:** optionally apply return reveal to already open autohidden panels too. A separate restriction, enabled by default, limits this enhancement to panels that are not pushing the webpage. Both options depend on the master switch above; the separate outside-window panel reveal setting remains independent.
+- **Make Library behave more like zentral panels** it was pushing my window controls out of accesable area
 
 ### Extra Bug Fixes:
 
@@ -117,7 +118,7 @@ These options are experimental and separate from the regular hover behavior. Ava
 </p>
 
 <p align="center">
-  <a href="theme.json"><img src="https://img.shields.io/badge/Version-v2.3.1-4A72FF.svg?style=flat-square" alt="Version"></a>
+  <a href="theme.json"><img src="https://img.shields.io/badge/Version-v2.3.2-4A72FF.svg?style=flat-square" alt="Version"></a>
   <a href="https://zen-browser.app/"><img src="https://img.shields.io/badge/Zen_Browser-Compatible-9B51E0.svg?style=flat-square" alt="Zen Browser"></a>
   <a href="theme.json"><img src="https://img.shields.io/badge/Sine_Engine-Native_Mod-00C853.svg?style=flat-square" alt="Sine Engine"></a>
   <a href="https://ko-fi.com/michele501st"><img src="https://img.shields.io/badge/Support-Ko--fi-FF5E5B.svg?style=flat-square&logo=ko-fi&logoColor=white" alt="Support on Ko-fi"></a>

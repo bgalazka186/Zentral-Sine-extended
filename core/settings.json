@@ -192,6 +192,12 @@
       "label": "Load Background tab dragging (restart required)",
       "type": "checkbox",
       "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.library-resize.enabled",
+      "label": "Load Library panel behavior (restart required)",
+      "type": "checkbox",
+      "defaultValue": true
     }
   ],
   "settings": {
@@ -346,6 +352,11 @@
       "owner": "core"
     },
     "zen.workspace.zentral.modules.tab-drag.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.library-resize.enabled": {
       "category": "modules",
       "section": "File loading",
       "owner": "core"

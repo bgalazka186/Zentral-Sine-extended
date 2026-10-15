@@ -49,6 +49,7 @@
     if (definitions.size !== layout.categories.length)
       throw new Error("Duplicate settings category");
     const descriptorFiles = [
+      { owner: "library-resize", file: "features/library/settings.json" },
       {
         owner: "compact-hover",
         file: "features/tabs/compact-hover/settings.json",

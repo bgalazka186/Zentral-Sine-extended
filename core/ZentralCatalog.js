@@ -43,6 +43,12 @@
   window.ZentralModuleLoader.define("catalog", function () {
     const MANIFEST = [
       {
+        id: "library-resize",
+        name: "Experimental Library panel behavior",
+        file: "features/library/ZentralLibraryResize.uc.js",
+        description: "Opt-in Library overlay or webpage resizing below top controls, without translating browser UI.",
+      },
+      {
         id: "compact-hover",
         name: "Experimental compact sidebar hover",
         file: "features/tabs/compact-hover/ZentralCompactHover.uc.js",
