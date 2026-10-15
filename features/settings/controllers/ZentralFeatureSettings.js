@@ -2134,7 +2134,8 @@
                 // Strict rendering, visible-source suspension and experiments
                 // must remain opt-in, including the inverted experiment switch.
                 if (input.dataset.recommendedValue === undefined) continue;
-                const wanted = recommended && input.dataset.recommendedValue === "true";
+                const wanted =
+                  recommended && input.dataset.recommendedValue === "true";
                 if (input.checked !== wanted) input.click();
               }
             };
@@ -2345,10 +2346,15 @@
               );
               if (key === LOOK_PREFS.PALETTE_MODE) {
                 // Capture runs before the generic row commits its preference.
-                control.select.addEventListener("change", () => setPaletteMode(control.select.value), true);
+                control.select.addEventListener(
+                  "change",
+                  () => setPaletteMode(control.select.value),
+                  true,
+                );
               }
               control.select.removeAttribute("style");
-              if (key === LOOK_PREFS.TEXT_MODE) control.row.dataset.paletteDetail = "true";
+              if (key === LOOK_PREFS.TEXT_MODE)
+                control.row.dataset.paletteDetail = "true";
               lookCategory.subContent.append(control.row);
               lookControls.push({ input: control.select, key });
             };
@@ -2363,9 +2369,21 @@
                 ensureCustomLook(key),
               );
               lookCategory.subContent.append(control.row);
-              if (![LOOK_PREFS.PRIMARY, LOOK_PREFS.SECONDARY, LOOK_PREFS.WEB_SURFACE].includes(key))
+              if (
+                ![
+                  LOOK_PREFS.PRIMARY,
+                  LOOK_PREFS.SECONDARY,
+                  LOOK_PREFS.WEB_SURFACE,
+                ].includes(key)
+              )
                 control.row.dataset.paletteDetail = "true";
-              if (/TEXT|MUTED/.test(Object.keys(LOOK_PREFS).find(name => LOOK_PREFS[name] === key) || ""))
+              if (
+                /TEXT|MUTED/.test(
+                  Object.keys(LOOK_PREFS).find(
+                    (name) => LOOK_PREFS[name] === key,
+                  ) || "",
+                )
+              )
                 control.row.dataset.manualText = "true";
               if ([LOOK_PREFS.PRIMARY, LOOK_PREFS.SECONDARY].includes(key))
                 control.row.dataset.paletteSimple = "true";
@@ -2410,8 +2428,15 @@
                 control.input.addEventListener("input", () =>
                   ensureCustomLook(key),
                 );
-              if (LOOK_TRANSPARENCY_KEYS.has(key) && key !== LOOK_PREFS.WEB_OPACITY)
-                control.row.dataset[key === LOOK_PREFS.PRIMARY_OPACITY ? "paletteSimple" : "paletteDetail"] = "true";
+              if (
+                LOOK_TRANSPARENCY_KEYS.has(key) &&
+                key !== LOOK_PREFS.WEB_OPACITY
+              )
+                control.row.dataset[
+                  key === LOOK_PREFS.PRIMARY_OPACITY
+                    ? "paletteSimple"
+                    : "paletteDetail"
+                ] = "true";
               lookCategory.subContent.append(control.row);
               lookControls.push({
                 input: control.input,
@@ -2432,7 +2457,9 @@
                 const value = ctx.getPref(key, LOOK_DEFAULTS[key]);
                 input.value = inverted ? 100 - value : value;
                 if (badge) badge.textContent = input.value + suffix;
-                if (key === LOOK_PREFS.CONTROL_STRENGTH) input.disabled = ctx.getPref(LOOK_PREFS.SOLID_CONTROLS, true) === false;
+                if (key === LOOK_PREFS.CONTROL_STRENGTH)
+                  input.disabled =
+                    ctx.getPref(LOOK_PREFS.SOLID_CONTROLS, true) === false;
               }
             };
             lookCategory.subPanel._syncLook = syncLookControls;
@@ -2488,9 +2515,17 @@
               const preview = document.createElement("span");
               preview.className = "zs-theme-preview";
               preview.setAttribute("aria-hidden", "true");
-              preview.style.setProperty("--theme-canvas", theme.values[LOOK_PREFS.PRIMARY] ?? theme.values[LOOK_PREFS.CANVAS]);
+              preview.style.setProperty(
+                "--theme-canvas",
+                theme.values[LOOK_PREFS.PRIMARY] ??
+                  theme.values[LOOK_PREFS.CANVAS],
+              );
               preview.style.setProperty("--theme-accent", theme.swatch);
-              preview.style.setProperty("--theme-radius", (theme.values[LOOK_PREFS.RADIUS] ?? LOOK_DEFAULTS[LOOK_PREFS.RADIUS]) + "px");
+              preview.style.setProperty(
+                "--theme-radius",
+                (theme.values[LOOK_PREFS.RADIUS] ??
+                  LOOK_DEFAULTS[LOOK_PREFS.RADIUS]) + "px",
+              );
               choice.append(preview, name, description);
               choice.title =
                 "Apply " +
@@ -2534,30 +2569,80 @@
                   const selected = choices[Number(select.value)];
                   if (selected) applyThemeColors(selected);
                 });
-                choice.addEventListener("click", () => { select.value = ""; });
+                choice.addEventListener("click", () => {
+                  select.value = "";
+                });
                 label.append(select);
                 family.append(label);
               }
               themeChoices.append(family);
             }
             lookCategory.subContent.append(themeChoices);
-            const solidControls = createToggleRow("Keep controls readable", "Adjustable backing for toolbars, video controls and menus; web panels keep their own opacity", LOOK_PREFS.SOLID_CONTROLS, null, true, null, () => { applyLook(); syncLookControls(); });
+            const solidControls = createToggleRow(
+              "Keep controls readable",
+              "Adjustable backing for toolbars, video controls and custom dropdowns; right-click menus use browser styling",
+              LOOK_PREFS.SOLID_CONTROLS,
+              null,
+              true,
+              null,
+              () => {
+                applyLook();
+                syncLookControls();
+              },
+            );
             lookCategory.subContent.append(solidControls.row);
-            panel._toggles.push({ input: solidControls.input, pref: LOOK_PREFS.SOLID_CONTROLS, def: true, onSync: syncLookControls });
-            addLookSlider("Readability strength", "0% adds no backing; 100% gives the strongest protection. Does not change panel opacity.", LOOK_PREFS.CONTROL_STRENGTH, 0, 100, "%");
+            panel._toggles.push({
+              input: solidControls.input,
+              pref: LOOK_PREFS.SOLID_CONTROLS,
+              def: true,
+              onSync: syncLookControls,
+            });
+            addLookSlider(
+              "Readability strength",
+              "0% adds no backing; 100% gives the strongest protection. Does not change panel opacity.",
+              LOOK_PREFS.CONTROL_STRENGTH,
+              0,
+              100,
+              "%",
+            );
             syncLookControls();
             addLookHeading("Color controls");
-            addLookSelect("Color controls", "Start with a theme and palette. Switching to Detailed copies the current look so you can refine each part.", LOOK_PREFS.PALETTE_MODE, [
-              { value: "simple", label: "Simple — linked palette" },
-              { value: "detailed", label: "Detailed — individual colors" },
-            ]);
-            addLookColor("Primary color", "UI surfaces, toolbars and video controls use related shades; web backing stays separate", LOOK_PREFS.PRIMARY);
-            addLookColor("Secondary color", "Highlights, borders, selection and URL-field focus", LOOK_PREFS.SECONDARY);
-            addLookSlider("Primary transparency", "Linked panel surfaces. Settings fields and actions retain a readable solid backing.", LOOK_PREFS.PRIMARY_OPACITY, 0, 100, "%");
-            addLookSelect("Text contrast", "Simple always chooses black or white. Detailed can use automatic contrast or your manual text colors.", LOOK_PREFS.TEXT_MODE, [
-              { value: "auto", label: "Automatic — readable text" },
-              { value: "manual", label: "Manual — individual text colors" },
-            ]);
+            addLookSelect(
+              "Color controls",
+              "Start with a theme and palette. Switching to Detailed copies the current look so you can refine each part.",
+              LOOK_PREFS.PALETTE_MODE,
+              [
+                { value: "simple", label: "Simple — linked palette" },
+                { value: "detailed", label: "Detailed — individual colors" },
+              ],
+            );
+            addLookColor(
+              "Primary color",
+              "UI surfaces, toolbars and video controls use related shades; web backing stays separate",
+              LOOK_PREFS.PRIMARY,
+            );
+            addLookColor(
+              "Secondary color",
+              "Highlights, borders, selection and URL-field focus",
+              LOOK_PREFS.SECONDARY,
+            );
+            addLookSlider(
+              "Primary transparency",
+              "Linked panel surfaces. Settings fields and actions retain a readable solid backing.",
+              LOOK_PREFS.PRIMARY_OPACITY,
+              0,
+              100,
+              "%",
+            );
+            addLookSelect(
+              "Text contrast",
+              "Simple always chooses black or white. Detailed can use automatic contrast or your manual text colors.",
+              LOOK_PREFS.TEXT_MODE,
+              [
+                { value: "auto", label: "Automatic — readable text" },
+                { value: "manual", label: "Manual — individual text colors" },
+              ],
+            );
             addLookHeading("Palette");
             addLookColor(
               "Canvas",
@@ -2586,28 +2671,118 @@
               LOOK_PREFS.MUTED,
             );
             addLookHeading("Settings, menus and status colors");
-            addLookColor("Settings background", "Settings page and dialog background", LOOK_PREFS.SETTINGS_CANVAS);
-            addLookColor("Settings header and footer", "Title bar and bottom actions", LOOK_PREFS.SETTINGS_HEADER);
-            addLookColor("Settings navigation", "Category list background", LOOK_PREFS.SETTINGS_NAV);
-            addLookColor("Settings cards", "Rows, nested cards and diagnostic boxes", LOOK_PREFS.SETTINGS_CARD);
-            addLookColor("Settings text", "Manual text color when automatic contrast is off", LOOK_PREFS.SETTINGS_TEXT);
-            addLookColor("Settings secondary text", "Manual description color when automatic contrast is off", LOOK_PREFS.SETTINGS_MUTED);
-            addLookColor("Input background", "Settings fields, reports, selectors and keybind recorders", LOOK_PREFS.INPUT_SURFACE);
-            addLookColor("Input text", "Manual field text when automatic contrast is off", LOOK_PREFS.INPUT_TEXT);
-            addLookColor("Button hover background", "Hover and pressed control surfaces", LOOK_PREFS.BUTTON_HOVER);
-            addLookColor("Button hover text", "Manual hover text when automatic contrast is off", LOOK_PREFS.BUTTON_HOVER_TEXT);
-            addLookColor("Selected control background", "Active navigation, selected options and primary actions", LOOK_PREFS.SELECTED_SURFACE);
-            addLookColor("Selected control text", "Manual selected text when automatic contrast is off", LOOK_PREFS.SELECTED_TEXT);
-            addLookColor("Menu background", "App/group menus and custom dropdowns", LOOK_PREFS.POPUP_SURFACE);
-            addLookColor("Menu text", "Manual menu text when automatic contrast is off", LOOK_PREFS.POPUP_TEXT);
-            addLookColor("Success color", "Success and enabled-state indicators", LOOK_PREFS.SUCCESS);
-            addLookColor("Warning color", "Warnings and pending changes", LOOK_PREFS.WARNING);
-            addLookColor("Error and destructive-action color", "Errors, removal actions and recording indicators", LOOK_PREFS.DANGER);
-            addLookColor("Settings backdrop", "Dimmed layer behind the settings dialog", LOOK_PREFS.BACKDROP);
-            addLookSlider("Settings backdrop transparency", "The dialog stays readable while its surrounding backdrop changes", LOOK_PREFS.BACKDROP_OPACITY, 0, 100, "%");
+            addLookColor(
+              "Settings background",
+              "Settings page and dialog background",
+              LOOK_PREFS.SETTINGS_CANVAS,
+            );
+            addLookColor(
+              "Settings header and footer",
+              "Title bar and bottom actions",
+              LOOK_PREFS.SETTINGS_HEADER,
+            );
+            addLookColor(
+              "Settings navigation",
+              "Category list background",
+              LOOK_PREFS.SETTINGS_NAV,
+            );
+            addLookColor(
+              "Settings cards",
+              "Rows, nested cards and diagnostic boxes",
+              LOOK_PREFS.SETTINGS_CARD,
+            );
+            addLookColor(
+              "Settings text",
+              "Manual text color when automatic contrast is off",
+              LOOK_PREFS.SETTINGS_TEXT,
+            );
+            addLookColor(
+              "Settings secondary text",
+              "Manual description color when automatic contrast is off",
+              LOOK_PREFS.SETTINGS_MUTED,
+            );
+            addLookColor(
+              "Input background",
+              "Settings fields, reports, selectors and keybind recorders",
+              LOOK_PREFS.INPUT_SURFACE,
+            );
+            addLookColor(
+              "Input text",
+              "Manual field text when automatic contrast is off",
+              LOOK_PREFS.INPUT_TEXT,
+            );
+            addLookColor(
+              "Button hover background",
+              "Hover and pressed control surfaces",
+              LOOK_PREFS.BUTTON_HOVER,
+            );
+            addLookColor(
+              "Button hover text",
+              "Manual hover text when automatic contrast is off",
+              LOOK_PREFS.BUTTON_HOVER_TEXT,
+            );
+            addLookColor(
+              "Selected control background",
+              "Active navigation, selected options and primary actions",
+              LOOK_PREFS.SELECTED_SURFACE,
+            );
+            addLookColor(
+              "Selected control text",
+              "Manual selected text when automatic contrast is off",
+              LOOK_PREFS.SELECTED_TEXT,
+            );
+            addLookColor(
+              "Menu background",
+              "Custom dropdowns and group tooltips; right-click menus use browser styling",
+              LOOK_PREFS.POPUP_SURFACE,
+            );
+            addLookColor(
+              "Menu text",
+              "Manual custom-dropdown and tooltip text when automatic contrast is off",
+              LOOK_PREFS.POPUP_TEXT,
+            );
+            addLookColor(
+              "Success color",
+              "Success and enabled-state indicators",
+              LOOK_PREFS.SUCCESS,
+            );
+            addLookColor(
+              "Warning color",
+              "Warnings and pending changes",
+              LOOK_PREFS.WARNING,
+            );
+            addLookColor(
+              "Error and destructive-action color",
+              "Errors, removal actions and recording indicators",
+              LOOK_PREFS.DANGER,
+            );
+            addLookColor(
+              "Settings backdrop",
+              "Dimmed layer behind the settings dialog",
+              LOOK_PREFS.BACKDROP,
+            );
+            addLookSlider(
+              "Settings backdrop transparency",
+              "The dialog stays readable while its surrounding backdrop changes",
+              LOOK_PREFS.BACKDROP_OPACITY,
+              0,
+              100,
+              "%",
+            );
             addLookHeading("Web panel backing");
-            addLookColor("Web panel background", "Independent of the UI palette. Dark backing helps sites made transparent by Zen Internet.", LOOK_PREFS.WEB_SURFACE);
-            addLookSlider("Web panel background transparency", "0% is solid backing; 100% is fully transparent. Whole-panel opacity and the black-background toolbar button remain separate.", LOOK_PREFS.WEB_OPACITY, 0, 100, "%");
+            addLookColor(
+              "Web panel background",
+              "Independent of the UI palette. Dark backing helps sites made transparent by Zen Internet.",
+              LOOK_PREFS.WEB_SURFACE,
+            );
+            addLookSlider(
+              "Web panel background transparency",
+              "0% is solid backing; 100% is fully transparent. Whole-panel opacity and the black-background toolbar button remain separate.",
+              LOOK_PREFS.WEB_OPACITY,
+              0,
+              100,
+              "%",
+            );
             addLookHeading("Transparency");
             const transparencyHelp = document.createElement("p");
             transparencyHelp.className = "zs-look-note";
@@ -3076,7 +3251,11 @@
             resetLook.className = "zs-look-action";
             resetLook.textContent = "Reset colors";
             resetLook.addEventListener("click", () => {
-              if (window.confirm("Reset colors and UI transparency? Density, spacing, sizing and web-panel backing will be kept."))
+              if (
+                window.confirm(
+                  "Reset colors and UI transparency? Density, spacing, sizing and web-panel backing will be kept.",
+                )
+              )
                 applyThemeColors();
             });
             const transfers = document.createElement("details");
@@ -3090,12 +3269,18 @@
             addLookBackupControls(fullBackup, ["full"]);
             const nextSteps = document.createElement("div");
             nextSteps.className = "zs-look-actions";
-            for (const [label, category] of [["Choose a theme", "theme"], ["Layout & density", "density"], ["Panel behavior", "panel-layout"]]) {
+            for (const [label, category] of [
+              ["Choose a theme", "theme"],
+              ["Layout & density", "density"],
+              ["Panel behavior", "panel-layout"],
+            ]) {
               const link = document.createElement("button");
               link.type = "button";
               link.className = "zs-look-action";
               link.textContent = label;
-              link.addEventListener("click", () => selectSettingsCategory(modal, category));
+              link.addEventListener("click", () =>
+                selectSettingsCategory(modal, category),
+              );
               nextSteps.appendChild(link);
             }
             fullBackup.appendChild(nextSteps);
@@ -3124,11 +3309,19 @@
                   '#zs-panel-bgalazka, .zs-extension-subpanel, #zs-tab-btn-bgalazka, [id^="zs-tab-btn-extension-"]',
                 )
                 .forEach((node) => node.remove());
-              for (const node of modal.querySelectorAll(".zs-full-backup, .zs-look-themes, .zs-look-transfer")) node.remove();
+              for (const node of modal.querySelectorAll(
+                ".zs-full-backup, .zs-look-themes, .zs-look-transfer",
+              ))
+                node.remove();
               for (const node of modal.querySelectorAll("[data-setting-key]")) {
                 const meta =
                   SETTINGS_ORGANIZATION.settings[node.dataset.settingKey];
-                if (meta && !["apps", "tab-groups", "video", "logger", "core"].includes(meta.owner))
+                if (
+                  meta &&
+                  !["apps", "tab-groups", "video", "logger", "core"].includes(
+                    meta.owner,
+                  )
+                )
                   node.remove();
               }
               for (const category of SETTINGS_ORGANIZATION.categories) {
@@ -3138,7 +3331,9 @@
                   )
                 )
                   continue;
-                const sharedPanel = modal.querySelector("#zs-panel-organized-" + category.id);
+                const sharedPanel = modal.querySelector(
+                  "#zs-panel-organized-" + category.id,
+                );
                 if (sharedPanel?.querySelector("[data-setting-key]")) continue;
                 sharedPanel?.remove();
                 modal
@@ -3150,7 +3345,9 @@
           } else if (Array.isArray(panel._toggles)) {
             panel._toggles.forEach(({ input, pref, def, onSync, isSelect }) => {
               const value = ctx.getPref(pref, def);
-              const changed = isSelect ? input.value !== String(value) : input.checked !== value;
+              const changed = isSelect
+                ? input.value !== String(value)
+                : input.checked !== value;
               if (isSelect) input.value = value;
               else input.checked = value;
               if (changed && typeof onSync === "function") {
@@ -3164,7 +3361,11 @@
           modal.querySelector("#zs-panel-extension-look")?._syncLook?.();
           // Modern categories already own navigation. Reopening must not recreate
           // legacy headings/tabs or trigger the full organizer again.
-          if (modal.querySelector(".zs-dialog")?.getAttribute("data-settings-organized") === "true") {
+          if (
+            modal
+              .querySelector(".zs-dialog")
+              ?.getAttribute("data-settings-organized") === "true"
+          ) {
             organizeNativeSettings(modal);
             return;
           }

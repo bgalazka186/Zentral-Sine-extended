@@ -1486,22 +1486,8 @@
   color: var(--zl-button-text) !important;
   border-color: var(--zl-button-border-color) !important;
 }
-:root[bgalazka-look="atelier"]
-  :is(#zen-apps-sidebar-tile-context, #zentral-tabgroup-context-menu) {
-  --panel-background: color-mix(
-    in srgb,
-    var(--zl-popup) var(--zl-popup-opacity),
-    transparent
-  );
-  --panel-color: var(--zl-popup-text);
-  --panel-border-color: var(--zl-button-border-color);
-  --arrowpanel-background: color-mix(
-    in srgb,
-    var(--zl-popup) var(--zl-popup-opacity),
-    transparent
-  );
-  --arrowpanel-color: var(--zl-popup-text);
-}
+/* Native right-click menus use the browser skin, including other mods.
+ * The popup palette below only styles our custom tooltips and dropdowns. */
 :root[bgalazka-look="atelier"]
   :is(#zentral-tabgroup-tooltip-container, .zentral-tg-cp-box) {
   background: color-mix(
@@ -1539,12 +1525,7 @@
   :is(.zentral-tooltip-title, .zentral-tooltip-domain) {
   color: var(--zl-selected-text) !important;
 }
-:root[bgalazka-look="atelier"]
-  :is(
-    #zen-apps-sidebar-remove-item,
-    #zentral-tg-item-close,
-    .zentral-tooltip-close-btn
-  ) {
+:root[bgalazka-look="atelier"] .zentral-tooltip-close-btn {
   color: var(--zl-danger-popup) !important;
 }
 :root[bgalazka-look="atelier"]
@@ -1827,19 +1808,6 @@
     transparent
   ) !important;
   color: var(--zl-popup-text) !important;
-}
-:root[bgalazka-look="atelier"][bgalazka-solid-controls="true"]
-  :is(#zen-apps-sidebar-tile-context, #zentral-tabgroup-context-menu) {
-  --panel-background: color-mix(
-    in srgb,
-    var(--zl-popup) var(--zl-readable-popup-opacity),
-    transparent
-  );
-  --arrowpanel-background: color-mix(
-    in srgb,
-    var(--zl-popup) var(--zl-readable-popup-opacity),
-    transparent
-  );
 }
 :root[bgalazka-look="atelier"]
   #zen-app-panel-pill
@@ -2222,27 +2190,6 @@
     .zentral-video-preview-source
   ) {
   opacity: 1 !important;
-}
-:root[bgalazka-look="atelier"]
-  :is(#zen-apps-sidebar-tile-context, #zentral-tabgroup-context-menu)
-  menuitem[_moz-menuactive="true"]:not([disabled="true"]) {
-  background: var(--zl-selected) !important;
-  color: var(--zl-selected-text) !important;
-}
-:root[bgalazka-look="atelier"]
-  :is(
-    #zen-apps-sidebar-tile-context #zen-apps-sidebar-remove-item,
-    #zentral-tabgroup-context-menu #zentral-tg-item-close
-  ) {
-  color: var(--zl-danger-popup) !important;
-}
-:root[bgalazka-look="atelier"]
-  :is(
-    #zen-apps-sidebar-tile-context #zen-apps-sidebar-remove-item,
-    #zentral-tabgroup-context-menu #zentral-tg-item-close
-  ):is(:hover, [_moz-menuactive="true"]) {
-  background: var(--zl-danger-popup) !important;
-  color: var(--zl-danger-popup-text) !important;
 }
 :root[bgalazka-look="atelier"]
   #zentral-settings-modal#zentral-settings-modal
