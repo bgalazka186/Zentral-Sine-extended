@@ -431,70 +431,49 @@
              * whenever Zen's own JS rewrites the element's style attribute.
              */
             const enforceRestingStyles = () => {
-              labelContainer.style.setProperty(
-                "border-radius",
-                "8px",
-                "important",
-              );
-              labelContainer.style.setProperty(
-                "aspect-ratio",
-                "auto",
-                "important",
-              );
-              labelContainer.style.setProperty(
-                "align-self",
-                "stretch",
-                "important",
-              );
-              labelContainer.style.setProperty("width", "100%", "important");
-              labelContainer.style.setProperty(
-                "min-width",
-                "100%",
-                "important",
-              );
-              labelContainer.style.setProperty(
-                "max-width",
-                "100%",
-                "important",
-              );
-              labelContainer.style.setProperty(
+              const setStyle = (node, name, value, priority = "") => {
+                if (
+                  node.style.getPropertyValue(name) !== value ||
+                  node.style.getPropertyPriority(name) !== priority
+                )
+                  node.style.setProperty(name, value, priority);
+              };
+              setStyle(labelContainer, "border-radius", "8px", "important");
+              setStyle(labelContainer, "aspect-ratio", "auto", "important");
+              setStyle(labelContainer, "align-self", "stretch", "important");
+              setStyle(labelContainer, "width", "100%", "important");
+              setStyle(labelContainer, "min-width", "100%", "important");
+              setStyle(labelContainer, "max-width", "100%", "important");
+              setStyle(
+                labelContainer,
                 "height",
                 "var(--tab-min-height, 36px)",
                 "important",
               );
-              labelContainer.style.setProperty(
+              setStyle(
+                labelContainer,
                 "min-height",
                 "var(--tab-min-height, 36px)",
                 "important",
               );
-              labelContainer.style.setProperty(
+              setStyle(
+                labelContainer,
                 "max-height",
                 "var(--tab-min-height, 36px)",
                 "important",
               );
-              labelContainer.style.setProperty(
-                "box-sizing",
-                "border-box",
-                "important",
-              );
-              labelContainer.style.setProperty("display", "flex", "important");
-              labelContainer.style.setProperty(
-                "flex-direction",
-                "row",
-                "important",
-              );
-              labelContainer.style.setProperty(
-                "align-items",
-                "center",
-                "important",
-              );
-              labelContainer.style.setProperty("padding", "0", "important");
+              setStyle(labelContainer, "box-sizing", "border-box", "important");
+              setStyle(labelContainer, "display", "flex", "important");
+              setStyle(labelContainer, "flex-direction", "row", "important");
+              setStyle(labelContainer, "align-items", "center", "important");
+              setStyle(labelContainer, "padding", "0", "important");
               // Sync chevron icon visibility with the pref to prevent CSS vs inline-style conflict (H-05)
               const iconEl = labelContainer.querySelector(".tab-group-icon");
               if (iconEl) {
                 const showChevron =
                   Core.getPref(Constants.TabGroups.PREF_SHOW_CHEVRON) !== false;
-                iconEl.style.setProperty(
+                setStyle(
+                  iconEl,
                   "display",
                   showChevron ? "inline-flex" : "none",
                   "important",
@@ -527,8 +506,16 @@
             const styleWatcher = new MutationObserver(() => {
               if (_styleGuard || _isHovered) return;
               _styleGuard = true;
-              enforceRestingStyles();
-              _styleGuard = false;
+              styleWatcher.disconnect();
+              try {
+                enforceRestingStyles();
+              } finally {
+                _styleGuard = false;
+                styleWatcher.observe(labelContainer, {
+                  attributes: true,
+                  attributeFilter: ["style"],
+                });
+              }
             });
             styleWatcher.observe(labelContainer, {
               attributes: true,

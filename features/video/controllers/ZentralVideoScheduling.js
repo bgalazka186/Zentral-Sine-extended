@@ -141,8 +141,15 @@
         ++deps.scanGeneration; // Ignore replies from a scan started before hiding.
         clearTimeout(deps.discoveryWakeTimer);
         deps.discoveryWakeTimer = null;
-        deps.dirtyBrowsers.clear();
-        deps.discoveryCache.clear();
+        // Retain bounded, document/age-validated discovery metadata. The active
+        // source must be inspected again; other tabs can reuse their normal TTL.
+        if (deps.compactResumeSource?.browser)
+          deps.dirtyBrowsers.add(deps.compactResumeSource.browser);
+        // Frame-script media IDs belong to the bridge we release below. Never
+        // reuse those IDs after reloading its content script.
+        for (const [browser, cached] of deps.discoveryCache)
+          if (cached.sources.some((source) => source.method === "frame"))
+            deps.discoveryCache.delete(browser);
         deps.queuedDiscovery = deps.queuedFullScan = false;
         clearTimeout(deps.compactMountTimer);
         deps.compactMountTimer = null;

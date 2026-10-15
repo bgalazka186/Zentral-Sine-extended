@@ -3674,10 +3674,33 @@
         };
         compactTabs.addEventListener("pointerenter", onCompactEnter);
         compactTabs.addEventListener("pointerleave", onCompactLeave);
-        const onVisibilityWake = (event) => {
-          if (event?.type !== "scroll") mount();
+        let visibilityWakeFrame = null;
+        const runVisibilityWake = () => {
+          visibilityWakeFrame = null;
+          if (disposed || !enabled() || compactPaused || !current) return;
           suspendHiddenReceiver();
           wakePaint();
+        };
+        const onVisibilityWake = (event) => {
+          if (event?.type === "scroll") {
+            if (
+              disposed ||
+              !enabled() ||
+              compactPaused ||
+              !current ||
+              videoHidden
+            )
+              return;
+            if (visibilityWakeFrame === null)
+              visibilityWakeFrame =
+                window.requestAnimationFrame(runVisibilityWake);
+            return;
+          }
+          if (visibilityWakeFrame !== null)
+            window.cancelAnimationFrame(visibilityWakeFrame);
+          visibilityWakeFrame = null;
+          mount();
+          runVisibilityWake();
         };
         window.addEventListener("sizemodechange", onVisibilityWake);
         window.addEventListener("resize", onVisibilityWake);
@@ -3687,6 +3710,9 @@
           if (disposed) return;
           cancelResize();
           disposed = true;
+          if (visibilityWakeFrame !== null)
+            window.cancelAnimationFrame(visibilityWakeFrame);
+          visibilityWakeFrame = null;
           changedVideoPrefs.clear();
           Services.prefs.removeObserver(videoSettingsBranch, onVideoSetting);
           compactObserver.disconnect();
@@ -3732,7 +3758,10 @@
           document.getElementById("zs-panel-video-cloning")?.remove();
           // Video controls can live in shared Appearance/Layout sections now.
           // Remove only video-owned nodes, leaving those shared pages intact.
-          for (const node of document.querySelectorAll("#zentral-settings-modal [data-video-settings], #zentral-settings-modal [data-video-settings-owned]")) node.remove();
+          for (const node of document.querySelectorAll(
+            "#zentral-settings-modal [data-video-settings], #zentral-settings-modal [data-video-settings-owned]",
+          ))
+            node.remove();
           for (const id of [
             "video-playback",
             "video-sources",

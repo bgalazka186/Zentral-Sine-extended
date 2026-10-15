@@ -1043,7 +1043,7 @@
           const toolboxEl = document.getElementById("navigator-toolbox");
           if (toolboxEl) {
             this.#toolboxThemeObserver = new window.MutationObserver(() => {
-              this.syncVerticalBarTheme();
+              this._debouncedSyncTheme();
             });
             this.#toolboxThemeObserver.observe(toolboxEl, {
               attributes: true,

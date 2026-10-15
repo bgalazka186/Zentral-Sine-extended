@@ -1648,6 +1648,15 @@
           const vb = access.dom.verticalBar;
           if (!vb) return;
 
+          const setStyle = (node, name, value) => {
+            const text = String(value);
+            if (node.style.getPropertyValue(name) !== text)
+              node.style.setProperty(name, text);
+          };
+          const setAttribute = (node, name, value) => {
+            if (node.getAttribute(name) !== value)
+              node.setAttribute(name, value);
+          };
           const isAutohide =
             Core.getPref(Constants.Apps.PREF_AUTOHIDE, false) === true;
           let bgEl = vb.querySelector("#zentral-apps-vertical-bar-bg");
@@ -1663,17 +1672,14 @@
           }
 
           if (!isAutohide) {
-            if (bgEl) bgEl.style.display = "none";
+            if (bgEl) setStyle(bgEl, "display", "none");
             vb.style.removeProperty("--zen-theme-gradient-override");
             return;
           }
-          if (bgEl) bgEl.style.display = "flex";
+          if (bgEl) setStyle(bgEl, "display", "flex");
 
           const isRight = this.isVerticalBarOnRight();
-          bgEl.style.setProperty(
-            "--zentral-vb-side",
-            isRight ? "right" : "left",
-          );
+          setStyle(bgEl, "--zentral-vb-side", isRight ? "right" : "left");
 
           const zenTb = document.getElementById("zen-toolbar-background");
           const zenBb = document.getElementById("zen-browser-background");
@@ -1702,32 +1708,27 @@
               tbGrad !== "none" &&
               !tbGrad.startsWith("light-dark")
             ) {
-              bgEl.style.setProperty(
-                "--zen-main-browser-background-toolbar",
-                tbGrad,
-              );
+              setStyle(bgEl, "--zen-main-browser-background-toolbar", tbGrad);
             }
             if (
               tbOldGrad &&
               tbOldGrad !== "none" &&
               !tbOldGrad.startsWith("light-dark")
             ) {
-              bgEl.style.setProperty(
+              setStyle(
+                bgEl,
                 "--zen-main-browser-background-toolbar-old",
                 tbOldGrad,
               );
             }
             if (grainOpacity)
-              bgEl.style.setProperty(
-                "--zen-grainy-background-opacity",
-                grainOpacity,
-              );
+              setStyle(bgEl, "--zen-grainy-background-opacity", grainOpacity);
             if (bgOpacity)
-              bgEl.style.setProperty("--zen-background-opacity", bgOpacity);
+              setStyle(bgEl, "--zen-background-opacity", bgOpacity);
 
             const showGrain = zenTb.getAttribute("zen-show-grainy-background");
             if (showGrain) {
-              bgEl.setAttribute("zen-show-grainy-background", showGrain);
+              setAttribute(bgEl, "zen-show-grainy-background", showGrain);
             }
           }
 
@@ -1757,32 +1758,27 @@
               !bbGrad.startsWith("light-dark")
             ) {
               tbGrad = bbGrad;
-              bgEl.style.setProperty(
-                "--zen-main-browser-background-toolbar",
-                bbGrad,
-              );
+              setStyle(bgEl, "--zen-main-browser-background-toolbar", bbGrad);
             }
             if (
               bbOldGrad &&
               bbOldGrad !== "none" &&
               !bbOldGrad.startsWith("light-dark")
             ) {
-              bgEl.style.setProperty(
+              setStyle(
+                bgEl,
                 "--zen-main-browser-background-toolbar-old",
                 bbOldGrad,
               );
             }
             if (grainOpacity)
-              bgEl.style.setProperty(
-                "--zen-grainy-background-opacity",
-                grainOpacity,
-              );
+              setStyle(bgEl, "--zen-grainy-background-opacity", grainOpacity);
             if (bgOpacity)
-              bgEl.style.setProperty("--zen-background-opacity", bgOpacity);
+              setStyle(bgEl, "--zen-background-opacity", bgOpacity);
 
             const showGrain = zenBb.getAttribute("zen-show-grainy-background");
             if (showGrain) {
-              bgEl.setAttribute("zen-show-grainy-background", showGrain);
+              setAttribute(bgEl, "zen-show-grainy-background", showGrain);
             }
           }
 
@@ -1806,17 +1802,20 @@
                     );
                   if (grad) {
                     tbGrad = grad;
-                    bgEl.style.setProperty(
+                    setStyle(
+                      bgEl,
                       "--zen-main-browser-background-toolbar",
                       grad,
                     );
                   }
                   if (theme.texture !== undefined) {
-                    bgEl.style.setProperty(
+                    setStyle(
+                      bgEl,
                       "--zen-grainy-background-opacity",
                       theme.texture,
                     );
-                    bgEl.setAttribute(
+                    setAttribute(
+                      bgEl,
                       "zen-show-grainy-background",
                       theme.texture > 0 ? "true" : "false",
                     );

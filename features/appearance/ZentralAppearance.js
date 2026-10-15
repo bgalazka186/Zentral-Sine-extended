@@ -222,185 +222,217 @@
       [LOOK_GROUP_PREFS.LABEL_OPACITY]: 85,
     });
     // Presets only write values that also have individual controls below.
-    const LOOK_THEMES = Object.freeze([
-      {
-        name: "Default",
-        description: "Quiet graphite, flat controls and minimal decoration.",
-        swatch: "#a5bec0",
-        values: {},
-      },
-      {
-        name: "Tide",
-        description: "Rounded cards, soft depth and sea-glass highlights.",
-        swatch: "#7dd5de",
-        values: {
-          [LOOK_PREFS.RADIUS]: 14,
-          [LOOK_PREFS.DEPTH]: 22,
-          [LOOK_PREFS.BUTTON_STYLE]: "filled",
-          [LOOK_PREFS.TILE_STYLE]: "soft",
-          [LOOK_PREFS.ROW_STYLE]: "cards",
-          [LOOK_PREFS.VIDEO_RADIUS]: 12,
-          [LOOK_PREFS.VIDEO_SOURCE_STYLE]: "filled",
-          [LOOK_PREFS.CANVAS]: "#101c28",
-          [LOOK_PREFS.SURFACE]: "#192a3c",
-          [LOOK_PREFS.RAISED]: "#243c50",
-          [LOOK_PREFS.ACCENT]: "#7dd5de",
-          [LOOK_PREFS.TEXT]: "#e8f3f8",
-          [LOOK_PREFS.MUTED]: "#adc6d5",
-          [LOOK_PREFS.TOOLBAR_SURFACE]: "#192a3c",
-          [LOOK_PREFS.TOOLBAR_URL]: "#213747",
-          [LOOK_PREFS.BUTTON_SURFACE]: "#294957",
-          [LOOK_PREFS.BUTTON_TEXT]: "#e8f3f8",
-          [LOOK_PREFS.BUTTON_BORDER_COLOR]: "#7dd5de",
-          [LOOK_PREFS.VIDEO_CANVAS]: "#101c28",
-          [LOOK_PREFS.VIDEO_CONTROL]: "#294957",
-          [LOOK_PREFS.VIDEO_TEXT]: "#e8f3f8",
-          [LOOK_PREFS.VIDEO_MUTED]: "#adc6d5",
-          [LOOK_PREFS.VIDEO_SELECTED]: "#7dd5de",
+    const LOOK_THEMES = Object.freeze(
+      [
+        {
+          name: "Default",
+          description: "Quiet graphite, flat controls and minimal decoration.",
+          swatch: "#a5bec0",
+          values: {},
         },
-      },
-      {
-        name: "Transparent",
-        description: "A light frame with 90–95% transparent panel surfaces.",
-        swatch: "#ffffff",
-        values: {
-          [LOOK_PREFS.CONTROL_STRENGTH]: 5,
-          [LOOK_PREFS.CANVAS]: "#000000",
-          [LOOK_PREFS.SURFACE]: "#000000",
-          [LOOK_PREFS.RAISED]: "#000000",
-          [LOOK_PREFS.ACCENT]: "#ffffff",
-          [LOOK_PREFS.TEXT]: "#ffffff",
-          [LOOK_PREFS.MUTED]: "#d0d0d0",
-          [LOOK_PREFS.TOOLBAR_SURFACE]: "#000000",
-          [LOOK_PREFS.TOOLBAR_URL]: "#000000",
-          [LOOK_PREFS.BUTTON_SURFACE]: "#000000",
-          [LOOK_PREFS.BUTTON_TEXT]: "#ffffff",
-          [LOOK_PREFS.BUTTON_BORDER_COLOR]: "#ffffff",
-          [LOOK_PREFS.VIDEO_CANVAS]: "#000000",
-          [LOOK_PREFS.VIDEO_CONTROL]: "#000000",
-          [LOOK_PREFS.VIDEO_TEXT]: "#ffffff",
-          [LOOK_PREFS.VIDEO_MUTED]: "#d0d0d0",
-          [LOOK_PREFS.VIDEO_SELECTED]: "#ffffff",
-          [LOOK_PREFS.SURFACE_OPACITY]: 5,
-          [LOOK_PREFS.RAISED_OPACITY]: 5,
-          [LOOK_PREFS.TOOLBAR_OPACITY]: 5,
-          [LOOK_PREFS.ADDRESS_OPACITY]: 5,
-          [LOOK_PREFS.BUTTON_OPACITY]: 5,
-          [LOOK_PREFS.TILE_OPACITY]: 5,
-          [LOOK_PREFS.VIDEO_OPACITY]: 5,
-          [LOOK_PREFS.VIDEO_CONTROL_OPACITY]: 5,
-          [LOOK_PREFS.POPUP_OPACITY]: 10,
+        {
+          name: "Tide",
+          description: "Rounded cards, soft depth and sea-glass highlights.",
+          swatch: "#7dd5de",
+          values: {
+            [LOOK_PREFS.RADIUS]: 14,
+            [LOOK_PREFS.DEPTH]: 22,
+            [LOOK_PREFS.BUTTON_STYLE]: "filled",
+            [LOOK_PREFS.TILE_STYLE]: "soft",
+            [LOOK_PREFS.ROW_STYLE]: "cards",
+            [LOOK_PREFS.VIDEO_RADIUS]: 12,
+            [LOOK_PREFS.VIDEO_SOURCE_STYLE]: "filled",
+            [LOOK_PREFS.CANVAS]: "#101c28",
+            [LOOK_PREFS.SURFACE]: "#192a3c",
+            [LOOK_PREFS.RAISED]: "#243c50",
+            [LOOK_PREFS.ACCENT]: "#7dd5de",
+            [LOOK_PREFS.TEXT]: "#e8f3f8",
+            [LOOK_PREFS.MUTED]: "#adc6d5",
+            [LOOK_PREFS.TOOLBAR_SURFACE]: "#192a3c",
+            [LOOK_PREFS.TOOLBAR_URL]: "#213747",
+            [LOOK_PREFS.BUTTON_SURFACE]: "#294957",
+            [LOOK_PREFS.BUTTON_TEXT]: "#e8f3f8",
+            [LOOK_PREFS.BUTTON_BORDER_COLOR]: "#7dd5de",
+            [LOOK_PREFS.VIDEO_CANVAS]: "#101c28",
+            [LOOK_PREFS.VIDEO_CONTROL]: "#294957",
+            [LOOK_PREFS.VIDEO_TEXT]: "#e8f3f8",
+            [LOOK_PREFS.VIDEO_MUTED]: "#adc6d5",
+            [LOOK_PREFS.VIDEO_SELECTED]: "#7dd5de",
+          },
         },
-      },
-      {
-        name: "Paper",
-        description: "Warm ivory, dark ink and restrained olive accents.",
-        swatch: "#486454",
-        values: {
-          [LOOK_PREFS.CONTROL_STRENGTH]: 100,
-          [LOOK_PREFS.SURFACE_OPACITY]: 100,
-          [LOOK_PREFS.TOOLBAR_OPACITY]: 100,
-          [LOOK_PREFS.ADDRESS_OPACITY]: 100,
-          [LOOK_PREFS.VIDEO_OPACITY]: 100,
-          [LOOK_PREFS.VIDEO_CONTROL_OPACITY]: 100,
-          [LOOK_PREFS.CANVAS]: "#e9e5dc",
-          [LOOK_PREFS.SURFACE]: "#f7f3eb",
-          [LOOK_PREFS.RAISED]: "#ded8cc",
-          [LOOK_PREFS.ACCENT]: "#486454",
-          [LOOK_PREFS.TEXT]: "#252c27",
-          [LOOK_PREFS.MUTED]: "#58655b",
-          [LOOK_PREFS.TOOLBAR_SURFACE]: "#f7f3eb",
-          [LOOK_PREFS.TOOLBAR_URL]: "#ebe5d9",
-          [LOOK_PREFS.BUTTON_SURFACE]: "#ddd8cb",
-          [LOOK_PREFS.BUTTON_TEXT]: "#252c27",
-          [LOOK_PREFS.BUTTON_BORDER_COLOR]: "#486454",
-          [LOOK_PREFS.VIDEO_CANVAS]: "#e9e5dc",
-          [LOOK_PREFS.VIDEO_CONTROL]: "#ddd8cb",
-          [LOOK_PREFS.VIDEO_TEXT]: "#252c27",
-          [LOOK_PREFS.VIDEO_MUTED]: "#58655b",
-          [LOOK_PREFS.VIDEO_SELECTED]: "#486454",
+        {
+          name: "Transparent",
+          description: "A light frame with 90–95% transparent panel surfaces.",
+          swatch: "#ffffff",
+          values: {
+            [LOOK_PREFS.CONTROL_STRENGTH]: 5,
+            [LOOK_PREFS.CANVAS]: "#000000",
+            [LOOK_PREFS.SURFACE]: "#000000",
+            [LOOK_PREFS.RAISED]: "#000000",
+            [LOOK_PREFS.ACCENT]: "#ffffff",
+            [LOOK_PREFS.TEXT]: "#ffffff",
+            [LOOK_PREFS.MUTED]: "#d0d0d0",
+            [LOOK_PREFS.TOOLBAR_SURFACE]: "#000000",
+            [LOOK_PREFS.TOOLBAR_URL]: "#000000",
+            [LOOK_PREFS.BUTTON_SURFACE]: "#000000",
+            [LOOK_PREFS.BUTTON_TEXT]: "#ffffff",
+            [LOOK_PREFS.BUTTON_BORDER_COLOR]: "#ffffff",
+            [LOOK_PREFS.VIDEO_CANVAS]: "#000000",
+            [LOOK_PREFS.VIDEO_CONTROL]: "#000000",
+            [LOOK_PREFS.VIDEO_TEXT]: "#ffffff",
+            [LOOK_PREFS.VIDEO_MUTED]: "#d0d0d0",
+            [LOOK_PREFS.VIDEO_SELECTED]: "#ffffff",
+            [LOOK_PREFS.SURFACE_OPACITY]: 5,
+            [LOOK_PREFS.RAISED_OPACITY]: 5,
+            [LOOK_PREFS.TOOLBAR_OPACITY]: 5,
+            [LOOK_PREFS.ADDRESS_OPACITY]: 5,
+            [LOOK_PREFS.BUTTON_OPACITY]: 5,
+            [LOOK_PREFS.TILE_OPACITY]: 5,
+            [LOOK_PREFS.VIDEO_OPACITY]: 5,
+            [LOOK_PREFS.VIDEO_CONTROL_OPACITY]: 5,
+            [LOOK_PREFS.POPUP_OPACITY]: 10,
+          },
         },
-      },
-      {
-        name: "Blueprint",
-        description: "Crisp outlines, squared corners and precise blue accents.",
-        swatch: "#8cb9f5",
-        values: {
-          [LOOK_PREFS.CANVAS]: "#111c2c",
-          [LOOK_PREFS.SURFACE]: "#19283b",
-          [LOOK_PREFS.RAISED]: "#24364d",
-          [LOOK_PREFS.ACCENT]: "#8cb9f5",
-          [LOOK_PREFS.TEXT]: "#e4edf9",
-          [LOOK_PREFS.MUTED]: "#adbed5",
-          [LOOK_PREFS.TOOLBAR_SURFACE]: "#19283b",
-          [LOOK_PREFS.TOOLBAR_URL]: "#24364d",
-          [LOOK_PREFS.BUTTON_SURFACE]: "#19283b",
-          [LOOK_PREFS.BUTTON_TEXT]: "#e4edf9",
-          [LOOK_PREFS.BUTTON_BORDER_COLOR]: "#8cb9f5",
-          [LOOK_PREFS.RADIUS]: 2,
-          [LOOK_PREFS.PANEL_BORDER]: 1,
-          [LOOK_PREFS.TOOLBAR_BORDER]: 1,
-          [LOOK_PREFS.BUTTON_BORDER]: 1,
-          [LOOK_PREFS.BUTTON_STYLE]: "outline",
-          [LOOK_PREFS.TILE_STYLE]: "soft",
-          [LOOK_PREFS.ROW_STYLE]: "lines",
-          [LOOK_PREFS.ROW_RULE]: 1,
-          [LOOK_PREFS.VIDEO_RADIUS]: 2,
-          [LOOK_PREFS.VIDEO_BORDER]: 1,
-          [LOOK_PREFS.VIDEO_CANVAS]: "#111c2c",
-          [LOOK_PREFS.VIDEO_CONTROL]: "#19283b",
-          [LOOK_PREFS.VIDEO_TEXT]: "#e4edf9",
-          [LOOK_PREFS.VIDEO_MUTED]: "#adbed5",
-          [LOOK_PREFS.VIDEO_SELECTED]: "#8cb9f5",
+        {
+          name: "Paper",
+          description: "Warm ivory, dark ink and restrained olive accents.",
+          swatch: "#486454",
+          values: {
+            [LOOK_PREFS.CONTROL_STRENGTH]: 100,
+            [LOOK_PREFS.SURFACE_OPACITY]: 100,
+            [LOOK_PREFS.TOOLBAR_OPACITY]: 100,
+            [LOOK_PREFS.ADDRESS_OPACITY]: 100,
+            [LOOK_PREFS.VIDEO_OPACITY]: 100,
+            [LOOK_PREFS.VIDEO_CONTROL_OPACITY]: 100,
+            [LOOK_PREFS.CANVAS]: "#e9e5dc",
+            [LOOK_PREFS.SURFACE]: "#f7f3eb",
+            [LOOK_PREFS.RAISED]: "#ded8cc",
+            [LOOK_PREFS.ACCENT]: "#486454",
+            [LOOK_PREFS.TEXT]: "#252c27",
+            [LOOK_PREFS.MUTED]: "#58655b",
+            [LOOK_PREFS.TOOLBAR_SURFACE]: "#f7f3eb",
+            [LOOK_PREFS.TOOLBAR_URL]: "#ebe5d9",
+            [LOOK_PREFS.BUTTON_SURFACE]: "#ddd8cb",
+            [LOOK_PREFS.BUTTON_TEXT]: "#252c27",
+            [LOOK_PREFS.BUTTON_BORDER_COLOR]: "#486454",
+            [LOOK_PREFS.VIDEO_CANVAS]: "#e9e5dc",
+            [LOOK_PREFS.VIDEO_CONTROL]: "#ddd8cb",
+            [LOOK_PREFS.VIDEO_TEXT]: "#252c27",
+            [LOOK_PREFS.VIDEO_MUTED]: "#58655b",
+            [LOOK_PREFS.VIDEO_SELECTED]: "#486454",
+          },
         },
-      },
-    ].map(completeTheme).sort((a, b) =>
-      ["Default", "Paper", "Transparent", "Tide", "Blueprint"].indexOf(a.name) -
-      ["Default", "Paper", "Transparent", "Tide", "Blueprint"].indexOf(b.name)));
+        {
+          name: "Blueprint",
+          description:
+            "Crisp outlines, squared corners and precise blue accents.",
+          swatch: "#8cb9f5",
+          values: {
+            [LOOK_PREFS.CANVAS]: "#111c2c",
+            [LOOK_PREFS.SURFACE]: "#19283b",
+            [LOOK_PREFS.RAISED]: "#24364d",
+            [LOOK_PREFS.ACCENT]: "#8cb9f5",
+            [LOOK_PREFS.TEXT]: "#e4edf9",
+            [LOOK_PREFS.MUTED]: "#adbed5",
+            [LOOK_PREFS.TOOLBAR_SURFACE]: "#19283b",
+            [LOOK_PREFS.TOOLBAR_URL]: "#24364d",
+            [LOOK_PREFS.BUTTON_SURFACE]: "#19283b",
+            [LOOK_PREFS.BUTTON_TEXT]: "#e4edf9",
+            [LOOK_PREFS.BUTTON_BORDER_COLOR]: "#8cb9f5",
+            [LOOK_PREFS.RADIUS]: 2,
+            [LOOK_PREFS.PANEL_BORDER]: 1,
+            [LOOK_PREFS.TOOLBAR_BORDER]: 1,
+            [LOOK_PREFS.BUTTON_BORDER]: 1,
+            [LOOK_PREFS.BUTTON_STYLE]: "outline",
+            [LOOK_PREFS.TILE_STYLE]: "soft",
+            [LOOK_PREFS.ROW_STYLE]: "lines",
+            [LOOK_PREFS.ROW_RULE]: 1,
+            [LOOK_PREFS.VIDEO_RADIUS]: 2,
+            [LOOK_PREFS.VIDEO_BORDER]: 1,
+            [LOOK_PREFS.VIDEO_CANVAS]: "#111c2c",
+            [LOOK_PREFS.VIDEO_CONTROL]: "#19283b",
+            [LOOK_PREFS.VIDEO_TEXT]: "#e4edf9",
+            [LOOK_PREFS.VIDEO_MUTED]: "#adbed5",
+            [LOOK_PREFS.VIDEO_SELECTED]: "#8cb9f5",
+          },
+        },
+      ]
+        .map(completeTheme)
+        .sort(
+          (a, b) =>
+            ["Default", "Paper", "Transparent", "Tide", "Blueprint"].indexOf(
+              a.name,
+            ) -
+            ["Default", "Paper", "Transparent", "Tide", "Blueprint"].indexOf(
+              b.name,
+            ),
+        ),
+    );
     // Decorative styles belong to a theme; density, dimensions and behavior do not.
-    const themeStyleKeys = new Set(["RADIUS", "DEPTH", "PANEL_BORDER", "TOOLBAR_BORDER",
-      "BUTTON_BORDER", "BUTTON_STYLE", "TILE_STYLE", "ROW_STYLE", "ROW_RULE",
-      "VIDEO_RADIUS", "VIDEO_BORDER", "VIDEO_SOURCE_STYLE"].map(name => LOOK_PREFS[name]));
+    const themeStyleKeys = new Set(
+      [
+        "RADIUS",
+        "DEPTH",
+        "PANEL_BORDER",
+        "TOOLBAR_BORDER",
+        "BUTTON_BORDER",
+        "BUTTON_STYLE",
+        "TILE_STYLE",
+        "ROW_STYLE",
+        "ROW_RULE",
+        "VIDEO_RADIUS",
+        "VIDEO_BORDER",
+        "VIDEO_SOURCE_STYLE",
+      ].map((name) => LOOK_PREFS[name]),
+    );
     function completeTheme(theme) {
-      if (theme.name === "Default") return Object.freeze({ ...theme, values: LOOK_DEFAULTS });
-      const value = key => {
+      if (theme.name === "Default")
+        return Object.freeze({ ...theme, values: LOOK_DEFAULTS });
+      const value = (key) => {
         const fallback = LOOK_DEFAULTS[LOOK_PREFS[key]];
         const candidate = theme.values[LOOK_PREFS[key]] ?? fallback;
         if (typeof fallback === "string" && fallback.startsWith("#"))
           return /^#[0-9a-fA-F]{6}$/.test(candidate) ? candidate : fallback;
-        return typeof fallback === "number" && !Number.isFinite(candidate) ? fallback : candidate;
+        return typeof fallback === "number" && !Number.isFinite(candidate)
+          ? fallback
+          : candidate;
       };
-      const canvas = value("CANVAS"), surface = value("SURFACE"), raised = value("RAISED");
+      const canvas = value("CANVAS"),
+        surface = value("SURFACE"),
+        raised = value("RAISED");
       const light = luminance(canvas) > 0.45;
-      return Object.freeze({ ...theme, values: Object.freeze({
-        ...theme.values,
-        [LOOK_PREFS.BACKDROP]: mix(canvas, "#000000", 0.85),
-        [LOOK_PREFS.BACKDROP_OPACITY]: 75,
-        [LOOK_PREFS.WEB_SURFACE]: light ? "#000000" : surface,
-        [LOOK_PREFS.WEB_OPACITY]: light ? 70 : value("SURFACE_OPACITY"),
-        [LOOK_PREFS.PALETTE_MODE]: "simple",
-        [LOOK_PREFS.TEXT_MODE]: "auto",
-        [LOOK_PREFS.PRIMARY]: canvas,
-        [LOOK_PREFS.SECONDARY]: value("ACCENT"),
-        [LOOK_PREFS.PRIMARY_OPACITY]: value("SURFACE_OPACITY"),
-        [LOOK_PREFS.SETTINGS_CANVAS]: canvas,
-        [LOOK_PREFS.SETTINGS_HEADER]: surface,
-        [LOOK_PREFS.SETTINGS_NAV]: surface,
-        [LOOK_PREFS.SETTINGS_CARD]: surface,
-        [LOOK_PREFS.SETTINGS_TEXT]: value("TEXT"),
-        [LOOK_PREFS.SETTINGS_MUTED]: value("MUTED"),
-        [LOOK_PREFS.INPUT_SURFACE]: raised,
-        [LOOK_PREFS.INPUT_TEXT]: value("TEXT"),
-        [LOOK_PREFS.BUTTON_HOVER]: raised,
-        [LOOK_PREFS.BUTTON_HOVER_TEXT]: value("TEXT"),
-        [LOOK_PREFS.SELECTED_SURFACE]: value("ACCENT"),
-        [LOOK_PREFS.SELECTED_TEXT]: contrastText(value("ACCENT")),
-        [LOOK_PREFS.POPUP_SURFACE]: surface,
-        [LOOK_PREFS.POPUP_TEXT]: value("TEXT"),
-        [LOOK_PREFS.SUCCESS]: light ? "#17633b" : "#86efac",
-        [LOOK_PREFS.WARNING]: light ? "#755100" : "#fcd34d",
-        [LOOK_PREFS.DANGER]: light ? "#a32232" : "#ff6b6b",
-      }) });
+      return Object.freeze({
+        ...theme,
+        values: Object.freeze({
+          ...theme.values,
+          [LOOK_PREFS.BACKDROP]: mix(canvas, "#000000", 0.85),
+          [LOOK_PREFS.BACKDROP_OPACITY]: 75,
+          [LOOK_PREFS.WEB_SURFACE]: light ? "#000000" : surface,
+          [LOOK_PREFS.WEB_OPACITY]: light ? 70 : value("SURFACE_OPACITY"),
+          [LOOK_PREFS.PALETTE_MODE]: "simple",
+          [LOOK_PREFS.TEXT_MODE]: "auto",
+          [LOOK_PREFS.PRIMARY]: canvas,
+          [LOOK_PREFS.SECONDARY]: value("ACCENT"),
+          [LOOK_PREFS.PRIMARY_OPACITY]: value("SURFACE_OPACITY"),
+          [LOOK_PREFS.SETTINGS_CANVAS]: canvas,
+          [LOOK_PREFS.SETTINGS_HEADER]: surface,
+          [LOOK_PREFS.SETTINGS_NAV]: surface,
+          [LOOK_PREFS.SETTINGS_CARD]: surface,
+          [LOOK_PREFS.SETTINGS_TEXT]: value("TEXT"),
+          [LOOK_PREFS.SETTINGS_MUTED]: value("MUTED"),
+          [LOOK_PREFS.INPUT_SURFACE]: raised,
+          [LOOK_PREFS.INPUT_TEXT]: value("TEXT"),
+          [LOOK_PREFS.BUTTON_HOVER]: raised,
+          [LOOK_PREFS.BUTTON_HOVER_TEXT]: value("TEXT"),
+          [LOOK_PREFS.SELECTED_SURFACE]: value("ACCENT"),
+          [LOOK_PREFS.SELECTED_TEXT]: contrastText(value("ACCENT")),
+          [LOOK_PREFS.POPUP_SURFACE]: surface,
+          [LOOK_PREFS.POPUP_TEXT]: value("TEXT"),
+          [LOOK_PREFS.SUCCESS]: light ? "#17633b" : "#86efac",
+          [LOOK_PREFS.WARNING]: light ? "#755100" : "#fcd34d",
+          [LOOK_PREFS.DANGER]: light ? "#a32232" : "#ff6b6b",
+        }),
+      });
     }
     const LOOK_KEYS = new Set(Object.keys(LOOK_DEFAULTS));
     const LOOK_TRANSPARENCY_KEYS = new Set([
@@ -519,26 +551,42 @@
       [ctx.BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_OPACITY]: [10, 100],
       [ctx.BGALAZKA_EXT_PREFS.PILL_BACKGROUND_OPACITY]: [10, 100],
     });
-    function rgb(hex) { return [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)); }
+    function rgb(hex) {
+      return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    }
     function mix(a, b, fraction) {
-      const x = rgb(a), y = rgb(b);
-      return "#" + x.map((v, i) => Math.round(v + (y[i] - v) * fraction)
-        .toString(16).padStart(2, "0")).join("");
+      const x = rgb(a),
+        y = rgb(b);
+      return (
+        "#" +
+        x
+          .map((v, i) =>
+            Math.round(v + (y[i] - v) * fraction)
+              .toString(16)
+              .padStart(2, "0"),
+          )
+          .join("")
+      );
     }
     function luminance(hex) {
       return rgb(hex).reduce((sum, v, i) => {
         v /= 255;
-        return sum + [0.2126, 0.7152, 0.0722][i] *
-          (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+        return (
+          sum +
+          [0.2126, 0.7152, 0.0722][i] *
+            (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+        );
       }, 0);
     }
     function contrast(a, b) {
-      const x = luminance(a), y = luminance(b);
+      const x = luminance(a),
+        y = luminance(b);
       return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
     }
     function contrastText(background) {
       return contrast("#000000", background) >= contrast("#ffffff", background)
-        ? "#000000" : "#ffffff";
+        ? "#000000"
+        : "#ffffff";
     }
     function readableColor(preferred, background, minimum = 4.5) {
       if (contrast(preferred, background) >= minimum) return preferred;
@@ -550,11 +598,20 @@
       }
       return target;
     }
-    function resolvePalette(get = key => ctx.getPref(key, LOOK_DEFAULTS[key])) {
-      const colors = Object.fromEntries(LOOK_COLORS.map(key => {
-        const value = get(LOOK_PREFS[key]);
-        return [key, /^#[0-9a-fA-F]{6}$/.test(value) ? value : LOOK_DEFAULTS[LOOK_PREFS[key]]];
-      }));
+    function resolvePalette(
+      get = (key) => ctx.getPref(key, LOOK_DEFAULTS[key]),
+    ) {
+      const colors = Object.fromEntries(
+        LOOK_COLORS.map((key) => {
+          const value = get(LOOK_PREFS[key]);
+          return [
+            key,
+            /^#[0-9a-fA-F]{6}$/.test(value)
+              ? value
+              : LOOK_DEFAULTS[LOOK_PREFS[key]],
+          ];
+        }),
+      );
       const simple = get(LOOK_PREFS.PALETTE_MODE) === "simple";
       const automatic = simple || get(LOOK_PREFS.TEXT_MODE) !== "manual";
       if (simple) {
@@ -566,140 +623,225 @@
         const raised = mix(primary, "#ffffff", light ? 0.6 : 0.09);
         Object.assign(colors, {
           BACKDROP: mix(primary, "#000000", 0.85),
-          CANVAS: primary, SURFACE: card, RAISED: raised, ACCENT: colors.SECONDARY,
-          TOOLBAR_SURFACE: light ? card : primary, TOOLBAR_URL: raised,
-          BUTTON_SURFACE: mix(primary, "#000000", 0.12), BUTTON_HOVER: raised,
+          CANVAS: primary,
+          SURFACE: card,
+          RAISED: raised,
+          ACCENT: colors.SECONDARY,
+          TOOLBAR_SURFACE: light ? card : primary,
+          TOOLBAR_URL: raised,
+          BUTTON_SURFACE: mix(primary, "#000000", 0.12),
+          BUTTON_HOVER: raised,
           BUTTON_BORDER_COLOR: mix(raised, colors.SECONDARY, 0.35),
-          VIDEO_CANVAS: primary, VIDEO_CONTROL: card, VIDEO_SELECTED: colors.SECONDARY,
-          SETTINGS_CANVAS: primary, SETTINGS_HEADER: card, SETTINGS_NAV: card,
-          SETTINGS_CARD: card, INPUT_SURFACE: raised, SELECTED_SURFACE: colors.SECONDARY,
+          VIDEO_CANVAS: primary,
+          VIDEO_CONTROL: card,
+          VIDEO_SELECTED: colors.SECONDARY,
+          SETTINGS_CANVAS: primary,
+          SETTINGS_HEADER: card,
+          SETTINGS_NAV: card,
+          SETTINGS_CARD: card,
+          INPUT_SURFACE: raised,
+          SELECTED_SURFACE: colors.SECONDARY,
           POPUP_SURFACE: card,
         });
         colors.SUCCESS = light ? "#17633b" : "#86efac";
         colors.WARNING = light ? "#755100" : "#fcd34d";
         colors.DANGER = light ? "#a32232" : "#ff6b6b";
       }
-      const textFor = (background, manual) => automatic ? contrastText(background) : manual;
+      const textFor = (background, manual) =>
+        automatic ? contrastText(background) : manual;
       colors.TEXT = textFor(colors.SURFACE, colors.TEXT);
-      colors.MUTED = automatic ? readableColor(mix(colors.TEXT, colors.SURFACE, 0.3), colors.SURFACE) : colors.MUTED;
+      colors.MUTED = automatic
+        ? readableColor(mix(colors.TEXT, colors.SURFACE, 0.3), colors.SURFACE)
+        : colors.MUTED;
       colors.BUTTON_TEXT = textFor(colors.BUTTON_SURFACE, colors.BUTTON_TEXT);
-      colors.BUTTON_HOVER_TEXT = textFor(colors.BUTTON_HOVER, colors.BUTTON_HOVER_TEXT);
+      colors.BUTTON_HOVER_TEXT = textFor(
+        colors.BUTTON_HOVER,
+        colors.BUTTON_HOVER_TEXT,
+      );
       colors.VIDEO_TEXT = textFor(colors.VIDEO_CANVAS, colors.VIDEO_TEXT);
-      colors.VIDEO_MUTED = automatic ? readableColor(mix(colors.VIDEO_TEXT, colors.VIDEO_CANVAS, 0.3), colors.VIDEO_CANVAS) : colors.VIDEO_MUTED;
-      colors.SETTINGS_TEXT = textFor(colors.SETTINGS_CANVAS, colors.SETTINGS_TEXT);
-      colors.SETTINGS_MUTED = automatic ? readableColor(mix(colors.SETTINGS_TEXT, colors.SETTINGS_CANVAS, 0.3), colors.SETTINGS_CANVAS) : colors.SETTINGS_MUTED;
+      colors.VIDEO_MUTED = automatic
+        ? readableColor(
+            mix(colors.VIDEO_TEXT, colors.VIDEO_CANVAS, 0.3),
+            colors.VIDEO_CANVAS,
+          )
+        : colors.VIDEO_MUTED;
+      colors.SETTINGS_TEXT = textFor(
+        colors.SETTINGS_CANVAS,
+        colors.SETTINGS_TEXT,
+      );
+      colors.SETTINGS_MUTED = automatic
+        ? readableColor(
+            mix(colors.SETTINGS_TEXT, colors.SETTINGS_CANVAS, 0.3),
+            colors.SETTINGS_CANVAS,
+          )
+        : colors.SETTINGS_MUTED;
       colors.INPUT_TEXT = textFor(colors.INPUT_SURFACE, colors.INPUT_TEXT);
-      colors.SELECTED_TEXT = textFor(colors.SELECTED_SURFACE, colors.SELECTED_TEXT);
+      colors.SELECTED_TEXT = textFor(
+        colors.SELECTED_SURFACE,
+        colors.SELECTED_TEXT,
+      );
       colors.POPUP_TEXT = textFor(colors.POPUP_SURFACE, colors.POPUP_TEXT);
       return { colors, simple, automatic, contrastText, textFor };
     }
     // Preserve customized legacy palettes. Migration only seeds new, unset
     // preferences once; it never rewrites an existing user value.
-    const hasUserLook = key => Services.prefs.prefHasUserValue?.(LOOK_PREFS[key]) === true;
-    const legacyPalette = ["CANVAS", "SURFACE", "RAISED", "ACCENT", "TEXT", "MUTED",
-      "TOOLBAR_SURFACE", "TOOLBAR_URL", "BUTTON_SURFACE", "BUTTON_TEXT",
-      "VIDEO_CANVAS", "VIDEO_CONTROL", "VIDEO_TEXT", "VIDEO_MUTED"];
+    const hasUserLook = (key) =>
+      Services.prefs.prefHasUserValue?.(LOOK_PREFS[key]) === true;
+    const legacyPalette = [
+      "CANVAS",
+      "SURFACE",
+      "RAISED",
+      "ACCENT",
+      "TEXT",
+      "MUTED",
+      "TOOLBAR_SURFACE",
+      "TOOLBAR_URL",
+      "BUTTON_SURFACE",
+      "BUTTON_TEXT",
+      "VIDEO_CANVAS",
+      "VIDEO_CONTROL",
+      "VIDEO_TEXT",
+      "VIDEO_MUTED",
+    ];
     const customizedLegacyPalette = legacyPalette.some(hasUserLook);
     if (ctx.setPref && customizedLegacyPalette) {
-      const current = completeTheme({ values: Object.fromEntries(Object.entries(LOOK_PREFS)
-        .map(([, key]) => [key, ctx.getPref(key, LOOK_DEFAULTS[key])])) }).values;
-      const added = ["BACKDROP", "BACKDROP_OPACITY", "PRIMARY", "SECONDARY", "PRIMARY_OPACITY", "WEB_SURFACE", "WEB_OPACITY",
-        "SETTINGS_CANVAS", "SETTINGS_HEADER", "SETTINGS_NAV", "SETTINGS_CARD", "SETTINGS_TEXT",
-        "SETTINGS_MUTED", "INPUT_SURFACE", "INPUT_TEXT", "BUTTON_HOVER", "BUTTON_HOVER_TEXT",
-        "SELECTED_SURFACE", "SELECTED_TEXT", "POPUP_SURFACE", "POPUP_TEXT", "SUCCESS", "WARNING", "DANGER"];
+      const current = completeTheme({
+        values: Object.fromEntries(
+          Object.entries(LOOK_PREFS).map(([, key]) => [
+            key,
+            ctx.getPref(key, LOOK_DEFAULTS[key]),
+          ]),
+        ),
+      }).values;
+      const added = [
+        "BACKDROP",
+        "BACKDROP_OPACITY",
+        "PRIMARY",
+        "SECONDARY",
+        "PRIMARY_OPACITY",
+        "WEB_SURFACE",
+        "WEB_OPACITY",
+        "SETTINGS_CANVAS",
+        "SETTINGS_HEADER",
+        "SETTINGS_NAV",
+        "SETTINGS_CARD",
+        "SETTINGS_TEXT",
+        "SETTINGS_MUTED",
+        "INPUT_SURFACE",
+        "INPUT_TEXT",
+        "BUTTON_HOVER",
+        "BUTTON_HOVER_TEXT",
+        "SELECTED_SURFACE",
+        "SELECTED_TEXT",
+        "POPUP_SURFACE",
+        "POPUP_TEXT",
+        "SUCCESS",
+        "WARNING",
+        "DANGER",
+      ];
       for (const key of added)
-        if (!Services.prefs.prefHasUserValue(LOOK_PREFS[key])) ctx.setPref(LOOK_PREFS[key], current[LOOK_PREFS[key]]);
+        if (!Services.prefs.prefHasUserValue(LOOK_PREFS[key]))
+          ctx.setPref(LOOK_PREFS[key], current[LOOK_PREFS[key]]);
     }
     const themeColorKeys = new Set([
-      ...LOOK_COLORS.map(key => LOOK_PREFS[key]),
-      ...[...LOOK_TRANSPARENCY_KEYS].filter(key => key !== LOOK_PREFS.WEB_OPACITY),
-      LOOK_PREFS.STYLE, LOOK_PREFS.TEXT_MODE, LOOK_PREFS.SOLID_CONTROLS, LOOK_PREFS.CONTROL_STRENGTH, LOOK_PREFS.WEB_OPACITY,
+      ...LOOK_COLORS.map((key) => LOOK_PREFS[key]),
+      ...[...LOOK_TRANSPARENCY_KEYS].filter(
+        (key) => key !== LOOK_PREFS.WEB_OPACITY,
+      ),
+      LOOK_PREFS.STYLE,
+      LOOK_PREFS.TEXT_MODE,
+      LOOK_PREFS.SOLID_CONTROLS,
+      LOOK_PREFS.CONTROL_STRENGTH,
+      LOOK_PREFS.WEB_OPACITY,
     ]);
     // Saved transparent variation: appearance only, never exported density or behavior.
     const LOOK_THEME_VARIANTS = Object.freeze({
-      Transparent: Object.freeze([Object.freeze({
-        name: "Crimson Glass",
-        description: "Near-black navy, crimson accents and barely-there glass.",
-        swatch: "#d50025",
-        values: Object.freeze({
-          "zen.workspace.bgalazka.look.solid_controls": true,
-          "zen.workspace.bgalazka.look.control_strength": 5,
-          "zen.workspace.bgalazka.look.style": "atelier",
-          "zen.workspace.bgalazka.look.palette_mode": "simple",
-          "zen.workspace.bgalazka.look.text_mode": "auto",
-          "zen.workspace.bgalazka.look.primary_opacity": 0,
-          "zen.workspace.bgalazka.look.primary": "#000511",
-          "zen.workspace.bgalazka.look.secondary": "#d50025",
-          "zen.workspace.bgalazka.look.settings_canvas": "#000000",
-          "zen.workspace.bgalazka.look.settings_header": "#000000",
-          "zen.workspace.bgalazka.look.settings_nav": "#000000",
-          "zen.workspace.bgalazka.look.settings_card": "#000000",
-          "zen.workspace.bgalazka.look.settings_text": "#ffffff",
-          "zen.workspace.bgalazka.look.settings_muted": "#d0d0d0",
-          "zen.workspace.bgalazka.look.input_surface": "#000000",
-          "zen.workspace.bgalazka.look.input_text": "#ffffff",
-          "zen.workspace.bgalazka.look.button_hover": "#000000",
-          "zen.workspace.bgalazka.look.button_hover_text": "#ffffff",
-          "zen.workspace.bgalazka.look.selected_surface": "#ffffff",
-          "zen.workspace.bgalazka.look.selected_text": "#000000",
-          "zen.workspace.bgalazka.look.popup_surface": "#000000",
-          "zen.workspace.bgalazka.look.popup_text": "#ffffff",
-          "zen.workspace.bgalazka.look.success": "#86efac",
-          "zen.workspace.bgalazka.look.warning": "#fcd34d",
-          "zen.workspace.bgalazka.look.danger": "#ff6b6b",
-          "zen.workspace.bgalazka.look.web_surface": "#000000",
-          "zen.workspace.bgalazka.look.web_opacity": 5,
-          "zen.workspace.bgalazka.look.backdrop": "#000000",
-          "zen.workspace.bgalazka.look.backdrop_opacity": 75,
-          "zen.workspace.bgalazka.look.canvas": "#000000",
-          "zen.workspace.bgalazka.look.surface": "#000000",
-          "zen.workspace.bgalazka.look.raised": "#000000",
-          "zen.workspace.bgalazka.look.accent": "#ffffff",
-          "zen.workspace.bgalazka.look.text": "#ffffff",
-          "zen.workspace.bgalazka.look.muted": "#d0d0d0",
-          "zen.workspace.bgalazka.look.surface_opacity": 5,
-          "zen.workspace.bgalazka.look.raised_opacity": 5,
-          "zen.workspace.bgalazka.look.toolbar_opacity": 5,
-          "zen.workspace.bgalazka.look.address_opacity": 5,
-          "zen.workspace.bgalazka.look.button_opacity": 5,
-          "zen.workspace.bgalazka.look.tile_opacity": 5,
-          "zen.workspace.bgalazka.look.video_opacity": 5,
-          "zen.workspace.bgalazka.look.video_control_opacity": 5,
-          "zen.workspace.bgalazka.look.popup_opacity": 10,
-          "zen.workspace.bgalazka.look.radius": 0,
-          "zen.workspace.bgalazka.look.depth": 0,
-          "zen.workspace.zentral.video_preview.radius_px": 0,
-          "zen.workspace.bgalazka.look.panel_border": 1,
-          "zen.workspace.bgalazka.look.toolbar_surface": "#000000",
-          "zen.workspace.bgalazka.look.toolbar_url": "#000000",
-          "zen.workspace.bgalazka.look.toolbar_border": 1,
-          "zen.workspace.bgalazka.look.button_style": "outline",
-          "zen.workspace.bgalazka.look.button_surface": "#000000",
-          "zen.workspace.bgalazka.look.button_text": "#ffffff",
-          "zen.workspace.bgalazka.look.button_border_color": "#ffffff",
-          "zen.workspace.bgalazka.look.button_border": 0,
-          "zen.workspace.bgalazka.look.tile_style": "bare",
-          "zen.workspace.bgalazka.look.row_style": "lines",
-          "zen.workspace.bgalazka.look.row_rule": 0,
-          "zen.workspace.bgalazka.look.video_canvas": "#000000",
-          "zen.workspace.bgalazka.look.video_control": "#000000",
-          "zen.workspace.bgalazka.look.video_text": "#ffffff",
-          "zen.workspace.bgalazka.look.video_muted": "#d0d0d0",
-          "zen.workspace.bgalazka.look.video_selected": "#ffffff",
-          "zen.workspace.bgalazka.look.video_border": 0,
-          "zen.workspace.bgalazka.look.video_source_style": "line"
+      Transparent: Object.freeze([
+        Object.freeze({
+          name: "Crimson Glass",
+          description:
+            "Near-black navy, crimson accents and barely-there glass.",
+          swatch: "#d50025",
+          values: Object.freeze({
+            "zen.workspace.bgalazka.look.solid_controls": true,
+            "zen.workspace.bgalazka.look.control_strength": 5,
+            "zen.workspace.bgalazka.look.style": "atelier",
+            "zen.workspace.bgalazka.look.palette_mode": "simple",
+            "zen.workspace.bgalazka.look.text_mode": "auto",
+            "zen.workspace.bgalazka.look.primary_opacity": 0,
+            "zen.workspace.bgalazka.look.primary": "#000511",
+            "zen.workspace.bgalazka.look.secondary": "#d50025",
+            "zen.workspace.bgalazka.look.settings_canvas": "#000000",
+            "zen.workspace.bgalazka.look.settings_header": "#000000",
+            "zen.workspace.bgalazka.look.settings_nav": "#000000",
+            "zen.workspace.bgalazka.look.settings_card": "#000000",
+            "zen.workspace.bgalazka.look.settings_text": "#ffffff",
+            "zen.workspace.bgalazka.look.settings_muted": "#d0d0d0",
+            "zen.workspace.bgalazka.look.input_surface": "#000000",
+            "zen.workspace.bgalazka.look.input_text": "#ffffff",
+            "zen.workspace.bgalazka.look.button_hover": "#000000",
+            "zen.workspace.bgalazka.look.button_hover_text": "#ffffff",
+            "zen.workspace.bgalazka.look.selected_surface": "#ffffff",
+            "zen.workspace.bgalazka.look.selected_text": "#000000",
+            "zen.workspace.bgalazka.look.popup_surface": "#000000",
+            "zen.workspace.bgalazka.look.popup_text": "#ffffff",
+            "zen.workspace.bgalazka.look.success": "#86efac",
+            "zen.workspace.bgalazka.look.warning": "#fcd34d",
+            "zen.workspace.bgalazka.look.danger": "#ff6b6b",
+            "zen.workspace.bgalazka.look.web_surface": "#000000",
+            "zen.workspace.bgalazka.look.web_opacity": 5,
+            "zen.workspace.bgalazka.look.backdrop": "#000000",
+            "zen.workspace.bgalazka.look.backdrop_opacity": 75,
+            "zen.workspace.bgalazka.look.canvas": "#000000",
+            "zen.workspace.bgalazka.look.surface": "#000000",
+            "zen.workspace.bgalazka.look.raised": "#000000",
+            "zen.workspace.bgalazka.look.accent": "#ffffff",
+            "zen.workspace.bgalazka.look.text": "#ffffff",
+            "zen.workspace.bgalazka.look.muted": "#d0d0d0",
+            "zen.workspace.bgalazka.look.surface_opacity": 5,
+            "zen.workspace.bgalazka.look.raised_opacity": 5,
+            "zen.workspace.bgalazka.look.toolbar_opacity": 5,
+            "zen.workspace.bgalazka.look.address_opacity": 5,
+            "zen.workspace.bgalazka.look.button_opacity": 5,
+            "zen.workspace.bgalazka.look.tile_opacity": 5,
+            "zen.workspace.bgalazka.look.video_opacity": 5,
+            "zen.workspace.bgalazka.look.video_control_opacity": 5,
+            "zen.workspace.bgalazka.look.popup_opacity": 10,
+            "zen.workspace.bgalazka.look.radius": 0,
+            "zen.workspace.bgalazka.look.depth": 0,
+            "zen.workspace.zentral.video_preview.radius_px": 0,
+            "zen.workspace.bgalazka.look.panel_border": 1,
+            "zen.workspace.bgalazka.look.toolbar_surface": "#000000",
+            "zen.workspace.bgalazka.look.toolbar_url": "#000000",
+            "zen.workspace.bgalazka.look.toolbar_border": 1,
+            "zen.workspace.bgalazka.look.button_style": "outline",
+            "zen.workspace.bgalazka.look.button_surface": "#000000",
+            "zen.workspace.bgalazka.look.button_text": "#ffffff",
+            "zen.workspace.bgalazka.look.button_border_color": "#ffffff",
+            "zen.workspace.bgalazka.look.button_border": 0,
+            "zen.workspace.bgalazka.look.tile_style": "bare",
+            "zen.workspace.bgalazka.look.row_style": "lines",
+            "zen.workspace.bgalazka.look.row_rule": 0,
+            "zen.workspace.bgalazka.look.video_canvas": "#000000",
+            "zen.workspace.bgalazka.look.video_control": "#000000",
+            "zen.workspace.bgalazka.look.video_text": "#ffffff",
+            "zen.workspace.bgalazka.look.video_muted": "#d0d0d0",
+            "zen.workspace.bgalazka.look.video_selected": "#ffffff",
+            "zen.workspace.bgalazka.look.video_border": 0,
+            "zen.workspace.bgalazka.look.video_source_style": "line",
+          }),
+          extraAppearance: Object.freeze({
+            "zen.workspace.bgalazka.translucency": true,
+            "zen.workspace.bgalazka.panel_black_opacity": 20,
+            "zen.workspace.bgalazka.opacity_unpinned": 100,
+            "zen.workspace.bgalazka.opacity_pinned_focus": 95,
+            "zen.workspace.bgalazka.opacity_pinned_blur": 90,
+            "zen.workspace.bgalazka.pill_peek_dot_color": "#5e0002",
+            "zen.workspace.bgalazka.pill_peek_dot_opacity": 31,
+            "zen.workspace.bgalazka.pill_background_opacity": 55,
+          }),
         }),
-        extraAppearance: Object.freeze({
-          "zen.workspace.bgalazka.translucency": true,
-          "zen.workspace.bgalazka.panel_black_opacity": 20,
-          "zen.workspace.bgalazka.opacity_unpinned": 100,
-          "zen.workspace.bgalazka.opacity_pinned_focus": 95,
-          "zen.workspace.bgalazka.opacity_pinned_blur": 90,
-          "zen.workspace.bgalazka.pill_peek_dot_color": "#5e0002",
-          "zen.workspace.bgalazka.pill_peek_dot_opacity": 31,
-          "zen.workspace.bgalazka.pill_background_opacity": 55
-        })
-      })])
+      ]),
     });
     const themeExtraAppearanceKeys = Object.freeze([
       "zen.workspace.bgalazka.translucency",
@@ -709,7 +851,7 @@
       "zen.workspace.bgalazka.opacity_pinned_blur",
       "zen.workspace.bgalazka.pill_peek_dot_color",
       "zen.workspace.bgalazka.pill_peek_dot_opacity",
-      "zen.workspace.bgalazka.pill_background_opacity"
+      "zen.workspace.bgalazka.pill_background_opacity",
     ]);
     function applyThemeColors(theme = null) {
       const changedKeys = [];
@@ -721,7 +863,15 @@
       };
       for (const key of themeColorKeys) {
         // Reset colors does not alter backing or the user's strength choice.
-        if (!theme && [LOOK_PREFS.WEB_SURFACE, LOOK_PREFS.WEB_OPACITY, LOOK_PREFS.CONTROL_STRENGTH].includes(key)) continue;
+        if (
+          !theme &&
+          [
+            LOOK_PREFS.WEB_SURFACE,
+            LOOK_PREFS.WEB_OPACITY,
+            LOOK_PREFS.CONTROL_STRENGTH,
+          ].includes(key)
+        )
+          continue;
         const value = theme?.values[key] ?? LOOK_DEFAULTS[key];
         write(key, value);
       }
@@ -731,7 +881,10 @@
           write(key, value);
         }
         for (const key of themeExtraAppearanceKeys)
-          if (theme.extraAppearance && Object.hasOwn(theme.extraAppearance, key))
+          if (
+            theme.extraAppearance &&
+            Object.hasOwn(theme.extraAppearance, key)
+          )
             write(key, theme.extraAppearance[key]);
         // A preset is a fresh linked starting point. Detailed is an explicit next step.
         write(LOOK_PREFS.PALETTE_MODE, "simple");
@@ -741,13 +894,30 @@
     if (ctx.setPref) {
       // Simple is the fresh-profile default; Detailed preserves old saved colors.
       if (!hasUserLook("PALETTE_MODE"))
-        ctx.setPref(LOOK_PREFS.PALETTE_MODE, customizedLegacyPalette ? "detailed" : "simple");
-      if (customizedLegacyPalette && !hasUserLook("TEXT_MODE") &&
-          ["TEXT", "MUTED", "BUTTON_TEXT", "VIDEO_TEXT", "VIDEO_MUTED"].some(hasUserLook))
+        ctx.setPref(
+          LOOK_PREFS.PALETTE_MODE,
+          customizedLegacyPalette ? "detailed" : "simple",
+        );
+      if (
+        customizedLegacyPalette &&
+        !hasUserLook("TEXT_MODE") &&
+        ["TEXT", "MUTED", "BUTTON_TEXT", "VIDEO_TEXT", "VIDEO_MUTED"].some(
+          hasUserLook,
+        )
+      )
         ctx.setPref(LOOK_PREFS.TEXT_MODE, "manual");
-      if (customizedLegacyPalette && !hasUserLook("SOLID_CONTROLS") &&
-          ["BUTTON_OPACITY", "ADDRESS_OPACITY", "POPUP_OPACITY", "VIDEO_CONTROL_OPACITY"]
-            .some(key => hasUserLook(key) && ctx.getPref(LOOK_PREFS[key], 100) < 100))
+      if (
+        customizedLegacyPalette &&
+        !hasUserLook("SOLID_CONTROLS") &&
+        [
+          "BUTTON_OPACITY",
+          "ADDRESS_OPACITY",
+          "POPUP_OPACITY",
+          "VIDEO_CONTROL_OPACITY",
+        ].some(
+          (key) => hasUserLook(key) && ctx.getPref(LOOK_PREFS[key], 100) < 100,
+        )
+      )
         ctx.setPref(LOOK_PREFS.SOLID_CONTROLS, false);
     }
     // An explicit Simple -> Detailed transition materializes the rendered
@@ -755,7 +925,10 @@
     function setPaletteMode(mode) {
       if (!LOOK_ENUMS[LOOK_PREFS.PALETTE_MODE].includes(mode)) return;
       const changedKeys = [];
-      if (mode === "detailed" && ctx.getPref(LOOK_PREFS.PALETTE_MODE, "simple") === "simple") {
+      if (
+        mode === "detailed" &&
+        ctx.getPref(LOOK_PREFS.PALETTE_MODE, "simple") === "simple"
+      ) {
         const palette = resolvePalette();
         const write = (key, value) => {
           if (ctx.getPref(key, LOOK_DEFAULTS[key]) !== value) {
@@ -763,10 +936,23 @@
             changedKeys.push(key);
           }
         };
-        for (const [name, value] of Object.entries(palette.colors)) write(LOOK_PREFS[name], value);
+        for (const [name, value] of Object.entries(palette.colors))
+          write(LOOK_PREFS[name], value);
         const raw = Number(ctx.getPref(LOOK_PREFS.PRIMARY_OPACITY, 100));
-        const opacity = Number.isFinite(raw) ? Math.max(0, Math.min(100, raw)) : 100;
-        for (const name of ["SURFACE", "RAISED", "TOOLBAR", "ADDRESS", "BUTTON", "TILE", "VIDEO", "VIDEO_CONTROL", "POPUP"])
+        const opacity = Number.isFinite(raw)
+          ? Math.max(0, Math.min(100, raw))
+          : 100;
+        for (const name of [
+          "SURFACE",
+          "RAISED",
+          "TOOLBAR",
+          "ADDRESS",
+          "BUTTON",
+          "TILE",
+          "VIDEO",
+          "VIDEO_CONTROL",
+          "POPUP",
+        ])
           write(LOOK_PREFS[name + "_OPACITY"], opacity);
         write(LOOK_PREFS.BACKDROP_OPACITY, Math.round(opacity * 0.75));
         write(LOOK_PREFS.TEXT_MODE, "auto");
@@ -779,14 +965,20 @@
     }
     // Measure the native artwork's untransformed box instead of assuming its
     // baseline size. Updates are event-driven and coalesced into one frame.
-    const artworkSelector = "zen-folder > .tab-group-label-container .tab-group-folder-icon, " +
+    const artworkSelector =
+      "zen-folder > .tab-group-label-container .tab-group-folder-icon, " +
       ":is(#zen-current-workspace-indicator, .zen-current-workspace-indicator) " +
       ":is(.zen-current-workspace-indicator-icon, image, img, svg)";
     const artworkNodes = new Set();
-    let artworkFrame = null, artworkDisposed = false;
-    const artworkResize = typeof ResizeObserver === "function"
-      ? new ResizeObserver(() => queueArtworkScale()) : null;
-    function queueArtworkScale() {
+    let artworkFrame = null,
+      artworkDisposed = false,
+      artworkNeedsDiscovery = true;
+    const artworkResize =
+      typeof ResizeObserver === "function"
+        ? new ResizeObserver(() => queueArtworkScale())
+        : null;
+    function queueArtworkScale(discover = false) {
+      artworkNeedsDiscovery ||= discover;
       if (artworkDisposed || artworkFrame !== null) return;
       artworkFrame = window.requestAnimationFrame(syncArtworkScale);
     }
@@ -801,7 +993,26 @@
         }
       }
       if (!enabled || artworkDisposed) return;
-      for (const node of document.querySelectorAll(artworkSelector)) {
+      const candidates = artworkNeedsDiscovery
+        ? document.querySelectorAll(artworkSelector)
+        : [...artworkNodes];
+      artworkNeedsDiscovery = false;
+      const writes = [];
+      const sizes = new Map();
+      for (const key of [
+        LOOK_PREFS.FOLDER_ICON_SIZE,
+        LOOK_PREFS.WORKSPACE_ICON_SIZE,
+      ]) {
+        const [min, max] = LOOK_BOUNDS[key];
+        const requested = Number(ctx.getPref(key, LOOK_DEFAULTS[key]));
+        sizes.set(
+          key,
+          Number.isFinite(requested)
+            ? Math.max(min, Math.min(max, requested))
+            : LOOK_DEFAULTS[key],
+        );
+      }
+      for (const node of candidates) {
         const folder = node.classList.contains("tab-group-folder-icon");
         // Workspace wrappers can contain an image or SVG. Scale only one layer.
         if (!folder && node.querySelector("image, img, svg")) {
@@ -810,52 +1021,89 @@
           artworkNodes.delete(node);
           continue;
         }
-        if (!artworkNodes.has(node)) { artworkNodes.add(node); artworkResize?.observe(node); }
-        const nativeWidth = parseFloat(window.getComputedStyle(node).width) || node.clientWidth;
+        if (!artworkNodes.has(node)) {
+          artworkNodes.add(node);
+          artworkResize?.observe(node);
+        }
+        const nativeWidth =
+          parseFloat(window.getComputedStyle(node).width) || node.clientWidth;
         if (!(nativeWidth > 0)) continue; // ResizeObserver retries when it becomes visible.
-        const key = folder ? LOOK_PREFS.FOLDER_ICON_SIZE : LOOK_PREFS.WORKSPACE_ICON_SIZE;
-        const [min, max] = LOOK_BOUNDS[key];
-        const requested = Number(ctx.getPref(key, LOOK_DEFAULTS[key]));
-        const size = Number.isFinite(requested) ? Math.max(min, Math.min(max, requested)) : LOOK_DEFAULTS[key];
-        const scale = String(size / nativeWidth);
+        const key = folder
+          ? LOOK_PREFS.FOLDER_ICON_SIZE
+          : LOOK_PREFS.WORKSPACE_ICON_SIZE;
+        const scale = String(sizes.get(key) / nativeWidth);
         if (node.style.getPropertyValue("--bgalazka-artwork-scale") !== scale)
-          node.style.setProperty("--bgalazka-artwork-scale", scale);
+          writes.push([node, scale]);
       }
+      // Finish measurements before changing styles to avoid repeated layout flushes.
+      for (const [node, scale] of writes)
+        node.style.setProperty("--bgalazka-artwork-scale", scale);
     }
     const artworkObserver = new MutationObserver((records) => {
       if (!ctx.getPref(LOOK_PREFS.DENSITY_ICONS, false)) return;
-      if (records.some(record => record.type === "attributes" ||
-          [...record.addedNodes, ...record.removedNodes].some(node =>
-            node.matches?.(artworkSelector) || node.querySelector?.(artworkSelector))))
-        queueArtworkScale();
+      if (
+        records.some(
+          (record) =>
+            record.type === "attributes" ||
+            [...record.addedNodes, ...record.removedNodes].some(
+              (node) =>
+                node.matches?.(artworkSelector) ||
+                node.querySelector?.(artworkSelector),
+            ),
+        )
+      )
+        queueArtworkScale(true);
     });
+    const artworkLayoutObserver = new MutationObserver(() =>
+      queueArtworkScale(),
+    );
     let artworkWatching = false;
     function syncArtworkObservation() {
       const enabled = ctx.getPref(LOOK_PREFS.DENSITY_ICONS, false) === true;
       if (enabled && !artworkWatching) {
+        // Keep child discovery rooted above native sidebar replacements, while
+        // attribute observation stays on the root itself.
         artworkObserver.observe(document.documentElement, {
-          subtree: true, childList: true, attributes: true,
-          attributeFilter: ["zen-compact-mode", "zen-sidebar-collapsed", "zen-sidebar-expanded", "zen-right-side", "zen-sidebar-right"],
+          subtree: true,
+          childList: true,
+        });
+        artworkLayoutObserver.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: [
+            "zen-compact-mode",
+            "zen-sidebar-collapsed",
+            "zen-sidebar-expanded",
+            "zen-right-side",
+            "zen-sidebar-right",
+          ],
         });
         artworkWatching = true;
       } else if (!enabled && artworkWatching) {
         artworkObserver.disconnect();
+        artworkLayoutObserver.disconnect();
         artworkWatching = false;
       }
-      if (enabled || artworkNodes.size) queueArtworkScale();
+      if (enabled || artworkNodes.size) queueArtworkScale(true);
     }
     ctx.registerCleanup(() => {
       artworkDisposed = true;
       if (artworkFrame !== null) window.cancelAnimationFrame(artworkFrame);
       artworkFrame = null;
-      artworkObserver.disconnect(); artworkResize?.disconnect();
-      for (const node of artworkNodes) node.style.removeProperty("--bgalazka-artwork-scale");
+      artworkObserver.disconnect();
+      artworkLayoutObserver.disconnect();
+      artworkResize?.disconnect();
+      for (const node of artworkNodes)
+        node.style.removeProperty("--bgalazka-artwork-scale");
       artworkNodes.clear();
     });
-    let lookFrame = null, lookDisposed = false;
+    let lookFrame = null,
+      lookDisposed = false;
     const scheduleLook = () => {
       if (lookDisposed || lookFrame !== null) return;
-      lookFrame = window.requestAnimationFrame(() => { lookFrame = null; applyLook(); });
+      lookFrame = window.requestAnimationFrame(() => {
+        lookFrame = null;
+        applyLook();
+      });
     };
     ctx.registerCleanup(() => {
       lookDisposed = true;
@@ -894,87 +1142,221 @@
           LOOK_ENUMS[pref].includes(value) ? value : LOOK_DEFAULTS[pref],
         );
       }
-      const solidControls = ctx.getPref(LOOK_PREFS.SOLID_CONTROLS, true) !== false;
+      const solidControls =
+        ctx.getPref(LOOK_PREFS.SOLID_CONTROLS, true) !== false;
       const rawStrength = Number(ctx.getPref(LOOK_PREFS.CONTROL_STRENGTH, 100));
-      const strength = solidControls ? (Number.isFinite(rawStrength) ? Math.max(0, Math.min(100, rawStrength)) : 100) / 100 : 0;
-      root.setAttribute("bgalazka-solid-controls", String(solidControls && strength > 0));
+      const strength = solidControls
+        ? (Number.isFinite(rawStrength)
+            ? Math.max(0, Math.min(100, rawStrength))
+            : 100) / 100
+        : 0;
+      root.setAttribute(
+        "bgalazka-solid-controls",
+        String(solidControls && strength > 0),
+      );
       const palette = resolvePalette();
       const previousMode = root.getAttribute("bgalazka-palette-mode");
-      root.setAttribute("bgalazka-palette-mode", palette.simple ? "simple" : "detailed");
+      root.setAttribute(
+        "bgalazka-palette-mode",
+        palette.simple ? "simple" : "detailed",
+      );
       if (previousMode !== root.getAttribute("bgalazka-palette-mode"))
         window.ZentralRuntime?.syncAppearanceNavigation?.();
-      root.setAttribute("bgalazka-text-mode", palette.automatic ? "auto" : "manual");
+      root.setAttribute(
+        "bgalazka-text-mode",
+        palette.automatic ? "auto" : "manual",
+      );
       for (const [key, value] of Object.entries(palette.colors)) {
-        root.style.setProperty("--bgalazka-look-" + key.toLowerCase().replaceAll("_", "-"), value);
+        root.style.setProperty(
+          "--bgalazka-look-" + key.toLowerCase().replaceAll("_", "-"),
+          value,
+        );
       }
       // Each distinct surface gets its own contrast pair, including hover states.
       const pairs = {
-        "settings-header": "SETTINGS_HEADER", "settings-nav": "SETTINGS_NAV",
-        "settings-card": "SETTINGS_CARD", "toolbar": "TOOLBAR_SURFACE",
+        "settings-header": "SETTINGS_HEADER",
+        "settings-nav": "SETTINGS_NAV",
+        "settings-card": "SETTINGS_CARD",
+        toolbar: "TOOLBAR_SURFACE",
         "toolbar-action": "BUTTON_SURFACE",
-        "toolbar-url": "TOOLBAR_URL", "video-control": "VIDEO_CONTROL",
-        "canvas": "CANVAS", "surface": "SURFACE", "raised": "RAISED",
+        "toolbar-url": "TOOLBAR_URL",
+        "video-control": "VIDEO_CONTROL",
+        canvas: "CANVAS",
+        surface: "SURFACE",
+        raised: "RAISED",
       };
-      const opacityFor = key => {
-        const value = Number(ctx.getPref(palette.simple ? LOOK_PREFS.PRIMARY_OPACITY : LOOK_PREFS[key], LOOK_DEFAULTS[LOOK_PREFS[key]]));
-        return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) / 100 : 1;
+      const opacityFor = (key) => {
+        const value = Number(
+          ctx.getPref(
+            palette.simple ? LOOK_PREFS.PRIMARY_OPACITY : LOOK_PREFS[key],
+            LOOK_DEFAULTS[LOOK_PREFS[key]],
+          ),
+        );
+        return Number.isFinite(value)
+          ? Math.max(0, Math.min(100, value)) / 100
+          : 1;
       };
-      const reinforcedOpacity = key => opacityFor(key) + (1 - opacityFor(key)) * strength;
+      const reinforcedOpacity = (key) =>
+        opacityFor(key) + (1 - opacityFor(key)) * strength;
       const toolbarOpacity = reinforcedOpacity("TOOLBAR_OPACITY");
       const videoCanvasOpacity = reinforcedOpacity("VIDEO_OPACITY");
       const addressOpacity = reinforcedOpacity("ADDRESS_OPACITY");
       const videoOpacity = reinforcedOpacity("VIDEO_CONTROL_OPACITY");
-      const filledButtons = ctx.getPref(LOOK_PREFS.BUTTON_STYLE, "outline") === "filled";
-      const actionOpacity = filledButtons ? reinforcedOpacity("BUTTON_OPACITY") : 0;
-      root.style.setProperty("--zl-readable-toolbar-opacity", toolbarOpacity * 100 + "%");
-      root.style.setProperty("--zl-readable-video-canvas-opacity", videoCanvasOpacity * 100 + "%");
-      root.style.setProperty("--zl-readable-action-opacity", actionOpacity * 100 + "%");
-      root.style.setProperty("--zl-readable-address-opacity", addressOpacity * 100 + "%");
-      root.style.setProperty("--zl-readable-video-opacity", (filledButtons ? videoOpacity : 0) * 100 + "%");
-      root.style.setProperty("--zl-readable-popup-opacity", reinforcedOpacity("POPUP_OPACITY") * 100 + "%");
-      const webSurface = Number(ctx.getPref("zen.workspace.bgalazka.panel_black_opacity", 0)) > 0 ? "#000000" : palette.colors.WEB_SURFACE;
-      const toolbarBackground = mix(webSurface, palette.colors.TOOLBAR_SURFACE, toolbarOpacity);
-      const urlBackground = mix(toolbarBackground, palette.colors.TOOLBAR_URL, addressOpacity);
-      root.style.setProperty("--zl-toolbar-focus", readableColor(palette.colors.ACCENT, urlBackground, 3));
-      root.style.setProperty("--zl-url-border", palette.colors.BUTTON_BORDER_COLOR);
-      const videoControlBackground = mix(palette.colors.VIDEO_CANVAS, palette.colors.VIDEO_CONTROL, opacityFor("VIDEO_CONTROL_OPACITY"));
+      const filledButtons =
+        ctx.getPref(LOOK_PREFS.BUTTON_STYLE, "outline") === "filled";
+      const actionOpacity = filledButtons
+        ? reinforcedOpacity("BUTTON_OPACITY")
+        : 0;
+      root.style.setProperty(
+        "--zl-readable-toolbar-opacity",
+        toolbarOpacity * 100 + "%",
+      );
+      root.style.setProperty(
+        "--zl-readable-video-canvas-opacity",
+        videoCanvasOpacity * 100 + "%",
+      );
+      root.style.setProperty(
+        "--zl-readable-action-opacity",
+        actionOpacity * 100 + "%",
+      );
+      root.style.setProperty(
+        "--zl-readable-address-opacity",
+        addressOpacity * 100 + "%",
+      );
+      root.style.setProperty(
+        "--zl-readable-video-opacity",
+        (filledButtons ? videoOpacity : 0) * 100 + "%",
+      );
+      root.style.setProperty(
+        "--zl-readable-popup-opacity",
+        reinforcedOpacity("POPUP_OPACITY") * 100 + "%",
+      );
+      const webSurface =
+        Number(ctx.getPref("zen.workspace.bgalazka.panel_black_opacity", 0)) > 0
+          ? "#000000"
+          : palette.colors.WEB_SURFACE;
+      const toolbarBackground = mix(
+        webSurface,
+        palette.colors.TOOLBAR_SURFACE,
+        toolbarOpacity,
+      );
+      const urlBackground = mix(
+        toolbarBackground,
+        palette.colors.TOOLBAR_URL,
+        addressOpacity,
+      );
+      root.style.setProperty(
+        "--zl-toolbar-focus",
+        readableColor(palette.colors.ACCENT, urlBackground, 3),
+      );
+      root.style.setProperty(
+        "--zl-url-border",
+        palette.colors.BUTTON_BORDER_COLOR,
+      );
+      const videoControlBackground = mix(
+        palette.colors.VIDEO_CANVAS,
+        palette.colors.VIDEO_CONTROL,
+        opacityFor("VIDEO_CONTROL_OPACITY"),
+      );
       for (const [name, key] of Object.entries(pairs)) {
         let background = palette.colors[key];
-        let manual = name.startsWith("settings-") ? palette.colors.SETTINGS_TEXT : palette.colors.TEXT;
+        let manual = name.startsWith("settings-")
+          ? palette.colors.SETTINGS_TEXT
+          : palette.colors.TEXT;
         if (name === "toolbar") background = toolbarBackground;
         if (name === "toolbar-url") {
-          background = mix(toolbarBackground, palette.colors.TOOLBAR_URL, addressOpacity);
+          background = mix(
+            toolbarBackground,
+            palette.colors.TOOLBAR_URL,
+            addressOpacity,
+          );
           manual = palette.colors.BUTTON_TEXT;
         }
         if (name === "toolbar-action") {
-          background = mix(toolbarBackground, palette.colors.BUTTON_SURFACE, actionOpacity);
+          background = mix(
+            toolbarBackground,
+            palette.colors.BUTTON_SURFACE,
+            actionOpacity,
+          );
           manual = palette.colors.BUTTON_TEXT;
         }
-        if (name === "video-control") { background = strength > 0 && filledButtons ? mix(palette.colors.VIDEO_CANVAS, palette.colors.BUTTON_SURFACE, videoOpacity) : videoControlBackground; manual = palette.colors.VIDEO_TEXT; }
+        if (name === "video-control") {
+          background =
+            strength > 0 && filledButtons
+              ? mix(
+                  palette.colors.VIDEO_CANVAS,
+                  palette.colors.BUTTON_SURFACE,
+                  videoOpacity,
+                )
+              : videoControlBackground;
+          manual = palette.colors.VIDEO_TEXT;
+        }
         const text = palette.textFor(background, manual);
         root.style.setProperty("--zl-" + name + "-text", text);
-        root.style.setProperty("--zl-" + name + "-muted", palette.automatic
-          ? readableColor(mix(text, background, 0.3), background) : palette.colors.MUTED);
+        root.style.setProperty(
+          "--zl-" + name + "-muted",
+          palette.automatic
+            ? readableColor(mix(text, background, 0.3), background)
+            : palette.colors.MUTED,
+        );
       }
       for (const role of ["SUCCESS", "WARNING", "DANGER"]) {
         const name = role.toLowerCase();
-        const settingColor = palette.automatic ? readableColor(palette.colors[role], palette.colors.SETTINGS_CANVAS) : palette.colors[role];
-        const popupColor = palette.automatic ? readableColor(palette.colors[role], palette.colors.POPUP_SURFACE) : palette.colors[role];
+        const settingColor = palette.automatic
+          ? readableColor(palette.colors[role], palette.colors.SETTINGS_CANVAS)
+          : palette.colors[role];
+        const popupColor = palette.automatic
+          ? readableColor(palette.colors[role], palette.colors.POPUP_SURFACE)
+          : palette.colors[role];
         root.style.setProperty("--zl-" + name, settingColor);
         root.style.setProperty("--zl-" + name + "-popup", popupColor);
-        root.style.setProperty("--zl-" + name + "-text", contrastText(settingColor));
-        root.style.setProperty("--zl-" + name + "-popup-text", contrastText(popupColor));
+        root.style.setProperty(
+          "--zl-" + name + "-text",
+          contrastText(settingColor),
+        );
+        root.style.setProperty(
+          "--zl-" + name + "-popup-text",
+          contrastText(popupColor),
+        );
       }
-      root.style.setProperty("--zl-video-selected-text", palette.textFor(mix(palette.colors.VIDEO_CANVAS, palette.colors.VIDEO_SELECTED, 0.2), palette.colors.VIDEO_TEXT));
-      const rowKey = ctx.getPref(LOOK_PREFS.ROW_STYLE, "lines") === "cards" ? "SETTINGS_CARD" : "SETTINGS_CANVAS";
+      root.style.setProperty(
+        "--zl-video-selected-text",
+        palette.textFor(
+          mix(palette.colors.VIDEO_CANVAS, palette.colors.VIDEO_SELECTED, 0.2),
+          palette.colors.VIDEO_TEXT,
+        ),
+      );
+      const rowKey =
+        ctx.getPref(LOOK_PREFS.ROW_STYLE, "lines") === "cards"
+          ? "SETTINGS_CARD"
+          : "SETTINGS_CANVAS";
       const rowBackground = palette.colors[rowKey];
-      const rowText = palette.textFor(rowBackground, palette.colors.SETTINGS_TEXT);
+      const rowText = palette.textFor(
+        rowBackground,
+        palette.colors.SETTINGS_TEXT,
+      );
       root.style.setProperty("--zl-settings-row", rowBackground);
       root.style.setProperty("--zl-settings-row-text", rowText);
-      root.style.setProperty("--zl-settings-row-muted", palette.automatic ? readableColor(mix(rowText, rowBackground, 0.3), rowBackground) : palette.colors.SETTINGS_MUTED);
-      root.style.setProperty("--zl-input-scheme", contrastText(palette.colors.INPUT_SURFACE) === "#000000" ? "light" : "dark");
-      root.style.setProperty("--zl-focus", readableColor(palette.colors.ACCENT, palette.colors.SETTINGS_CANVAS, 3));
-      root.style.setProperty("--zl-nav-accent", readableColor(palette.colors.ACCENT, palette.colors.SETTINGS_NAV));
+      root.style.setProperty(
+        "--zl-settings-row-muted",
+        palette.automatic
+          ? readableColor(mix(rowText, rowBackground, 0.3), rowBackground)
+          : palette.colors.SETTINGS_MUTED,
+      );
+      root.style.setProperty(
+        "--zl-input-scheme",
+        contrastText(palette.colors.INPUT_SURFACE) === "#000000"
+          ? "light"
+          : "dark",
+      );
+      root.style.setProperty(
+        "--zl-focus",
+        readableColor(palette.colors.ACCENT, palette.colors.SETTINGS_CANVAS, 3),
+      );
+      root.style.setProperty(
+        "--zl-nav-accent",
+        readableColor(palette.colors.ACCENT, palette.colors.SETTINGS_NAV),
+      );
       for (const key of [
         "PRIMARY_OPACITY",
         "BACKDROP_OPACITY",
@@ -1026,21 +1408,64 @@
             : clamped + "px",
         );
         if (key === "CONTROL_SIZE")
-          root.style.setProperty("--bgalazka-look-control-icon-size", Math.max(12, clamped - 6) + "px");
+          root.style.setProperty(
+            "--bgalazka-look-control-icon-size",
+            Math.max(12, clamped - 6) + "px",
+          );
       }
       if (palette.simple) {
         const value = Number(ctx.getPref(LOOK_PREFS.PRIMARY_OPACITY, 100));
-        const opacity = Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 100;
-        root.style.setProperty("--bgalazka-look-backdrop-opacity", Math.round(opacity * 0.75) + "%");
-        for (const key of ["surface", "raised", "toolbar", "address", "button", "tile", "video", "video-control", "popup"])
-          root.style.setProperty("--bgalazka-look-" + key + "-opacity", opacity + "%");
+        const opacity = Number.isFinite(value)
+          ? Math.max(0, Math.min(100, value))
+          : 100;
+        root.style.setProperty(
+          "--bgalazka-look-backdrop-opacity",
+          Math.round(opacity * 0.75) + "%",
+        );
+        for (const key of [
+          "surface",
+          "raised",
+          "toolbar",
+          "address",
+          "button",
+          "tile",
+          "video",
+          "video-control",
+          "popup",
+        ])
+          root.style.setProperty(
+            "--bgalazka-look-" + key + "-opacity",
+            opacity + "%",
+          );
       }
       if (root.getAttribute("bgalazka-look") !== "atelier") {
         for (const name of Object.keys(pairs)) {
           root.style.removeProperty("--zl-" + name + "-text");
           root.style.removeProperty("--zl-" + name + "-muted");
         }
-        for (const name of ["success", "warning", "danger", "focus", "nav-accent", "input-scheme", "danger-popup", "success-popup", "warning-popup", "danger-text", "success-text", "settings-row", "settings-row-text", "settings-row-muted", "video-selected-text", "toolbar-focus", "url-border", "warning-text", "success-popup-text", "warning-popup-text", "danger-popup-text"])
+        for (const name of [
+          "success",
+          "warning",
+          "danger",
+          "focus",
+          "nav-accent",
+          "input-scheme",
+          "danger-popup",
+          "success-popup",
+          "warning-popup",
+          "danger-text",
+          "success-text",
+          "settings-row",
+          "settings-row-text",
+          "settings-row-muted",
+          "video-selected-text",
+          "toolbar-focus",
+          "url-border",
+          "warning-text",
+          "success-popup-text",
+          "warning-popup-text",
+          "danger-popup-text",
+        ])
           root.style.removeProperty("--zl-" + name);
       }
       syncArtworkObservation();
@@ -1056,8 +1481,16 @@
           scheduleLook,
         ),
       );
-      Services.prefs.addObserver("zen.workspace.bgalazka.panel_black_opacity", scheduleLook);
-      ctx.registerCleanup(() => Services.prefs.removeObserver("zen.workspace.bgalazka.panel_black_opacity", scheduleLook));
+      Services.prefs.addObserver(
+        "zen.workspace.bgalazka.panel_black_opacity",
+        scheduleLook,
+      );
+      ctx.registerCleanup(() =>
+        Services.prefs.removeObserver(
+          "zen.workspace.bgalazka.panel_black_opacity",
+          scheduleLook,
+        ),
+      );
       Services.prefs.addObserver(LOOK_PREFS.VIDEO_RADIUS, scheduleLook);
       ctx.registerCleanup(() =>
         Services.prefs.removeObserver(LOOK_PREFS.VIDEO_RADIUS, scheduleLook),
@@ -1076,7 +1509,10 @@
       if (lookChanged) applyLook();
       if (
         !keys ||
-        keys.some((key) => key.startsWith("zen.workspace.bgalazka.") && !LOOK_KEYS.has(key))
+        keys.some(
+          (key) =>
+            key.startsWith("zen.workspace.bgalazka.") && !LOOK_KEYS.has(key),
+        )
       ) {
         ctx.updateCSSVars();
         ctx.applyAttributes();
@@ -1115,8 +1551,13 @@
     }
 
     return {
-      applyThemeColors, themeColorKeys, themeStyleKeys, setPaletteMode,
-      resolvePalette, contrast, contrastText,
+      applyThemeColors,
+      themeColorKeys,
+      themeStyleKeys,
+      setPaletteMode,
+      resolvePalette,
+      contrast,
+      contrastText,
       LOOK_GROUP_PREFS,
       LOOK_PREFS,
       LOOK_DEFAULTS,
