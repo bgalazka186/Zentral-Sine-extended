@@ -119,6 +119,7 @@
     try {
       const oldState = this.__zentralZenCSSState;
       oldState?.headObserver?.disconnect();
+      oldState?.rootObserver?.disconnect();
       oldState?.nativeObserver?.disconnect();
       oldState?.style?.remove?.();
     } catch (_) {}
@@ -128,6 +129,7 @@
     const clearState = () => {
       try {
         state?.headObserver?.disconnect();
+        state?.rootObserver?.disconnect();
         state?.nativeObserver?.disconnect();
         state?.style?.remove?.();
       } catch (_) {}
@@ -138,17 +140,18 @@
     const ensureState = doc => {
       if (state?.doc === doc) return state;
       clearState();
-      state = { doc, css: "", native: null, style: null, head: null };
+      const current = { doc, css: "", native: null, style: null, head: null };
+      state = current;
       this.__zentralZenCSSState = state;
 
       const updateNative = () => {
         const native = doc.getElementById("zeninternet-styles");
-        if (native === state.native) return false;
-        state.nativeObserver?.disconnect();
-        state.native = native;
+        if (native === current.native) return false;
+        current.nativeObserver?.disconnect();
+        current.native = native;
         if (native) {
-          state.nativeObserver = new doc.defaultView.MutationObserver(sync);
-          state.nativeObserver.observe(native, {
+          current.nativeObserver = new doc.defaultView.MutationObserver(sync);
+          current.nativeObserver.observe(native, {
             childList: true,
             subtree: true,
             characterData: true,
@@ -159,48 +162,57 @@
 
       const watchHead = () => {
         const head = doc.head || doc.documentElement;
-        if (head === state.head) return false;
-        state.headObserver?.disconnect();
-        state.head = head;
+        if (head === current.head) return false;
+        current.headObserver?.disconnect();
+        current.head = head;
         if (!head) return true;
-        state.headObserver = new doc.defaultView.MutationObserver(mutations => {
+        current.headObserver = new doc.defaultView.MutationObserver(mutations => {
+          if (state !== current) return;
           const nativeChanged = updateNative();
-          if (nativeChanged || (state.css && state.style && !state.style.isConnected))
+          if (nativeChanged || (current.css && current.style && !current.style.isConnected))
             sync();
-          if (!state.style?.textContent) return;
+          if (!current.style?.textContent) return;
           const addedCss = mutations.some(({ addedNodes }) =>
-            Array.from(addedNodes).some(node => node !== state.style &&
-              node !== state.native && node.nodeType === 1 &&
+            Array.from(addedNodes).some(node => node !== current.style &&
+              node !== current.native && node.nodeType === 1 &&
               (node.localName === "style" ||
                (node.localName === "link" && /stylesheet/i.test(node.rel)))));
-          if (addedCss && state.head?.lastChild !== state.style)
-            state.head?.appendChild(state.style);
+          if (addedCss && current.head?.lastChild !== current.style)
+            current.head?.appendChild(current.style);
         });
-        state.headObserver.observe(head, { childList: true });
+        current.headObserver.observe(head, { childList: true });
         return true;
       };
 
       const sync = () => {
-        if (!state || state.doc !== doc) return;
+        if (state !== current) return;
         watchHead();
         updateNative();
-        let style = state.style || doc.getElementById(styleId);
-        if (!style && state.css) {
+        let style = current.style || doc.getElementById(styleId);
+        if (!style && current.css) {
           style = doc.createElement("style");
           style.id = styleId;
         }
-        state.style = style;
+        current.style = style;
         if (!style) return;
-        const nativeCss = state.native?.textContent || "";
-        const expected = String(state.css || "").trim();
-        const desired = expected && !nativeCss.includes(expected) ? state.css : "";
+        const nativeCss = current.native?.textContent || "";
+        const expected = String(current.css || "").trim();
+        const desired = expected && !nativeCss.includes(expected) ? current.css : "";
         if (style.textContent !== desired) style.textContent = desired;
-        if (desired && style.parentNode !== state.head)
-          state.head?.appendChild(style);
+        if (desired && style.parentNode !== current.head)
+          current.head?.appendChild(style);
       };
-      state.sync = sync;
+      current.sync = sync;
       watchHead();
-      return state;
+      // A client-rendered site can replace <head> after our acknowledgement.
+      // Observe only direct html children, never the application's subtree.
+      current.rootObserver = new doc.defaultView.MutationObserver(() => {
+        if (state === current && (doc.head || doc.documentElement) !== current.head)
+          sync();
+      });
+      if (doc.documentElement)
+        current.rootObserver.observe(doc.documentElement, { childList: true });
+      return current;
     };
 
     const announce = reason => {
@@ -219,7 +231,16 @@
         const doc = content.document;
         const windowId = currentInnerWindowId();
         if (!doc || !windowId || Number(data.windowId) !== windowId) return;
-        if (normalizedUrl(doc.URL) !== normalizedUrl(data.url)) return;
+        if (normalizedUrl(doc.URL) !== normalizedUrl(data.url)) {
+          // Rules are selected by hostname. A same-document Messenger route
+          // change during the async storage read must not discard valid CSS.
+          let sameOrigin = false;
+          try { sameOrigin = new URL(doc.URL).origin === new URL(data.url).origin; } catch (_) {}
+          if (!sameOrigin) {
+            announce("location");
+            return;
+          }
+        }
         if (data.reset) clearState();
         const current = ensureState(doc);
         current.css = typeof data.css === "string" ? data.css : "";
@@ -284,6 +305,11 @@
     const zenCssFirstLoads = new WeakMap();
     let zenCssSource = null;
     let zenCssSourcePromise = null;
+    let zenCssStoragePromise = null;
+    let zenCssRevision = 0;
+    let zenCssLifetime = 0;
+    let zenCssDisposed = false;
+    let zenCssManagement = null;
     let zenCssStorage = null;
     let zenCssExtension = null;
     let zenCssBackend = null;
@@ -299,7 +325,60 @@
     ];
 
     function zenCssEnabled() {
-      return ctx.getPref(ctx.BGALAZKA_EXT_PREFS.ZEN_INTERNET_PANEL_CSS, false);
+      return (
+        !zenCssDisposed &&
+        ctx.getPref(ctx.BGALAZKA_EXT_PREFS.ZEN_INTERNET_PANEL_CSS, false)
+      );
+    }
+
+    // Invalidating pending work must also invalidate its eventual cache write.
+    function invalidateZenCssSource() {
+      zenCssRevision++;
+      zenCssSource = null;
+      zenCssSourcePromise = null;
+    }
+
+    function resetZenCssStorage() {
+      zenCssLifetime++;
+      invalidateZenCssSource();
+      zenCssStoragePromise = null;
+      if (zenCssBackend)
+        zenCssBackend.removeOnChangedListener(
+          ZEN_CSS_EXTENSION_ID,
+          zenCssStorageChanged,
+        );
+      zenCssBackend = null;
+      zenCssExtension = null;
+      zenCssStorage = null;
+    }
+
+    function onZenCssExtensionReady(_event, extension) {
+      if (extension?.id !== ZEN_CSS_EXTENSION_ID || !zenCssEnabled()) return;
+      resetZenCssStorage();
+      refreshZenInternetPanelCss();
+    }
+
+    function watchZenCssExtension(enabled) {
+      if (!enabled) {
+        zenCssManagement?.off("ready", onZenCssExtensionReady);
+        zenCssManagement = null;
+        return;
+      }
+      if (zenCssManagement) return;
+      try {
+        // Subscribe before checking the active extension; late startup and
+        // add-on reload use the same path, without timers or polling.
+        const { Management } = ChromeUtils.importESModule(
+          "resource://gre/modules/Extension.sys.mjs",
+        );
+        Management.on("ready", onZenCssExtensionReady);
+        zenCssManagement = Management;
+      } catch (error) {
+        console.warn(
+          "[Zentral] Zen Internet readiness listener unavailable",
+          error,
+        );
+      }
     }
 
     function zenCssStorageChanged(changes) {
@@ -311,7 +390,8 @@
         )
       )
         return;
-      zenCssSource = null;
+      if (!zenCssEnabled()) return;
+      invalidateZenCssSource();
       if (zenCssChangeTimer) ctx.clearTimeout(zenCssChangeTimer);
       zenCssChangeTimer = ctx.setTimeout(() => {
         zenCssChangeTimer = null;
@@ -336,40 +416,52 @@
         );
         zenCssBackend = null;
       }
-      const { ExtensionStorageIDB } = ChromeUtils.importESModule(
-        "resource://gre/modules/ExtensionStorageIDB.sys.mjs",
-      );
-      const selected = await ExtensionStorageIDB.selectBackend({ extension });
-      if (!zenCssEnabled()) return null;
-      let storage;
-      if (selected.backendEnabled) {
-        const db = await ExtensionStorageIDB.open(
-          ExtensionStorageIDB.getStoragePrincipal(extension),
-          extension.hasPermission("unlimitedStorage"),
+      if (zenCssStoragePromise) return zenCssStoragePromise;
+      const lifetime = zenCssLifetime;
+      const current = () => zenCssEnabled() && lifetime === zenCssLifetime;
+      const pending = (async () => {
+        const { ExtensionStorageIDB } = ChromeUtils.importESModule(
+          "resource://gre/modules/ExtensionStorageIDB.sys.mjs",
         );
-        if (!zenCssEnabled()) return null;
-        storage = { get: (keys) => db.get(keys) };
-        zenCssBackend = ExtensionStorageIDB;
-      } else {
-        const { ExtensionStorage } = ChromeUtils.importESModule(
-          "resource://gre/modules/ExtensionStorage.sys.mjs",
+        const selected = await ExtensionStorageIDB.selectBackend({ extension });
+        if (!current()) return null;
+        let storage, backend;
+        if (selected.backendEnabled) {
+          const db = await ExtensionStorageIDB.open(
+            ExtensionStorageIDB.getStoragePrincipal(extension),
+            extension.hasPermission("unlimitedStorage"),
+          );
+          if (!current()) return null;
+          storage = { get: (keys) => db.get(keys) };
+          backend = ExtensionStorageIDB;
+        } else {
+          const { ExtensionStorage } = ChromeUtils.importESModule(
+            "resource://gre/modules/ExtensionStorage.sys.mjs",
+          );
+          storage = {
+            get: (keys) => ExtensionStorage.get(ZEN_CSS_EXTENSION_ID, keys),
+          };
+          backend = ExtensionStorage;
+        }
+        backend.addOnChangedListener(
+          ZEN_CSS_EXTENSION_ID,
+          zenCssStorageChanged,
         );
-        storage = {
-          get: (keys) => ExtensionStorage.get(ZEN_CSS_EXTENSION_ID, keys),
-        };
-        zenCssBackend = ExtensionStorage;
+        zenCssBackend = backend;
+        zenCssExtension = extension;
+        zenCssStorage = storage;
+        return storage;
+      })();
+      zenCssStoragePromise = pending;
+      try {
+        return await pending;
+      } finally {
+        if (zenCssStoragePromise === pending) zenCssStoragePromise = null;
       }
-      zenCssBackend.addOnChangedListener(
-        ZEN_CSS_EXTENSION_ID,
-        zenCssStorageChanged,
-      );
-      zenCssExtension = extension;
-      zenCssStorage = storage;
-      zenCssSource = null;
-      return storage;
     }
 
     async function readZenCssSource() {
+      if (!zenCssEnabled()) return null;
       if (
         zenCssSource &&
         Date.now() - zenCssSource.readAt <
@@ -377,17 +469,21 @@
       )
         return zenCssSource;
       if (zenCssSourcePromise) return zenCssSourcePromise;
-      zenCssSourcePromise = (async () => {
+      const revision = zenCssRevision;
+      const pending = (async () => {
         const storage = await getZenCssStorage();
-        if (!storage) return null;
+        if (!storage || revision !== zenCssRevision || !zenCssEnabled())
+          return null;
         const values = await storage.get(ZEN_CSS_KEYS);
+        if (revision !== zenCssRevision || !zenCssEnabled()) return null;
         zenCssSource = { ...values, readAt: Date.now() };
         return zenCssSource;
       })();
+      zenCssSourcePromise = pending;
       try {
-        return await zenCssSourcePromise;
+        return await pending;
       } finally {
-        zenCssSourcePromise = null;
+        if (zenCssSourcePromise === pending) zenCssSourcePromise = null;
       }
     }
 
@@ -664,14 +760,18 @@
         sendZenCss(browser, "", url, { reset, targetWindowId: windowId });
         return;
       }
+      const revision = zenCssRevision;
       try {
         const source = await readZenCssSource();
+        // Not ready is not an empty theme. The extension-ready event retries.
+        if (!source || revision !== zenCssRevision) return;
         const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
-        const css = source ? await buildZenCss(host, source) : "";
+        const css = await buildZenCss(host, source);
         if (
           browser.isConnected &&
           currentZenCssInnerWindowId(browser) === windowId &&
           zenCssUpdateVersions.get(browser) === version &&
+          zenCssRevision === revision &&
           zenCssEnabled()
         )
           sendZenCss(browser, css, url, {
@@ -724,7 +824,7 @@
       force = false,
     ) {
       if (!zenCssEnabled()) return;
-      if (force) zenCssSource = null;
+      if (force) invalidateZenCssSource();
       for (const browser of browsers) {
         if (!browser?.isConnected) continue;
         attachZenInternetPanelBrowser(browser);
@@ -743,7 +843,7 @@
         // Treat the button as an explicit FrameLoader/remoteness recovery, not
         // merely a CSS resend. Reinstall every visible browser's bridge on the
         // message manager that exists RIGHT NOW.
-        zenCssSource = null;
+        invalidateZenCssSource();
         for (const browser of visible) {
           attachZenInternetPanelBrowser(browser);
           requestZenCssDocument(browser, { reset: true });
@@ -787,6 +887,10 @@
       { clearContent = false } = {},
     ) {
       if (!browser) return;
+      zenCssUpdateVersions.set(
+        browser,
+        (zenCssUpdateVersions.get(browser) || 0) + 1,
+      );
       cancelZenCssFirstLoad(browser);
       const onRemoteness = browser._bgalazkaZenCssRemotenessHandler;
       if (onRemoteness) {
@@ -853,8 +957,10 @@
     }
 
     function setZenInternetPanelCssEnabled(enabled) {
+      if (zenCssDisposed) return;
+      watchZenCssExtension(enabled);
+      resetZenCssStorage();
       if (enabled) {
-        zenCssSource = null;
         refreshZenInternetPanelCss();
         return;
       }
@@ -874,30 +980,21 @@
         ctx.clearTimeout(zenCssChangeTimer);
         zenCssChangeTimer = null;
       }
-      if (zenCssBackend) {
-        zenCssBackend.removeOnChangedListener(
-          ZEN_CSS_EXTENSION_ID,
-          zenCssStorageChanged,
-        );
-        zenCssBackend = null;
-      }
-      zenCssStorage = null;
-      zenCssExtension = null;
-      zenCssSource = null;
     }
 
     ctx.registerCleanup(() => {
+      zenCssDisposed = true;
+      watchZenCssExtension(false);
+      resetZenCssStorage();
       if (zenCssChangeTimer) ctx.clearTimeout(zenCssChangeTimer);
       for (const browser of getAllAppBrowsers()) {
         cancelZenCssFirstLoad(browser);
         detachZenInternetPanelBrowser(browser, { clearContent: true });
       }
-      if (zenCssBackend)
-        zenCssBackend.removeOnChangedListener(
-          ZEN_CSS_EXTENSION_ID,
-          zenCssStorageChanged,
-        );
     });
-    if (zenCssEnabled()) ctx.setTimeout(refreshZenInternetPanelCss, 500);
+    if (zenCssEnabled()) {
+      watchZenCssExtension(true);
+      refreshZenInternetPanelCss();
+    }
   });
 })();

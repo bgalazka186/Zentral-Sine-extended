@@ -311,7 +311,8 @@
     let nextPreloadAt = 0;
     const pendingPreloads = new Set();
     function scheduleEssentialPreload(record) {
-      record.preloadAttempted = true;
+      if (record.preloadPending) return;
+      record.preloadPending = true;
       const now = Date.now(),
         delay = Math.max(
           ctx.getPref(ctx.EXT_PREFS.SMART_SLEEP, true) ? 5000 : 0,
@@ -320,23 +321,29 @@
       nextPreloadAt = now + delay + 1500;
       const timer = ctx.setTimeout(() => {
         pendingPreloads.delete(timer);
-        if (
-          !record.tab.isConnected ||
-          !record.app.preload ||
-          essentialPanels.get(record.app.id) !== record ||
-          !window.Zentral?.Core?.getPref(
-            "zen.workspace.apps.sidebar.enabled",
-            true,
-          )
-        ) {
-          record.preloadAttempted = false;
-          return;
-        }
-        try {
-          loadEssentialInBackground(record);
-        } catch (error) {
-          console.warn("[Zentral] Essential preload failed", error);
-        }
+        ctx.retryPanelTask(record, () => {
+          record.preloadPending = false;
+          if (
+            !record.tab.isConnected ||
+            !record.app.preload ||
+            essentialPanels.get(record.app.id) !== record ||
+            !window.Zentral?.Core?.getPref(
+              "zen.workspace.apps.sidebar.enabled",
+              true,
+            )
+          ) {
+            record.preloadAttempted = false;
+            return true;
+          }
+          try {
+            record.preloadAttempted = loadEssentialInBackground(record) === true;
+            return record.preloadAttempted;
+          } catch (error) {
+            record.preloadAttempted = false;
+            console.warn("[Zentral] Essential preload failed", error);
+            return false;
+          }
+        });
       }, delay);
       pendingPreloads.add(timer);
     }

@@ -3448,20 +3448,23 @@
         let startupFinished = false;
         let startupReady = false;
         let startupCancelled = false;
+        let startupAttempted = false;
         const openSavedPanel = () => {
           const selection = readStartupPanel();
           const apps = window.Zentral?.Apps;
           const root = document.getElementById("zen-app-panel-root");
-          if (!selection || !apps?.openPanel || root?.hasAttribute("open"))
-            return true;
+          if (!selection) return true;
+          // An already open panel belongs to the user; never replace it.
+          if (!startupAttempted && root?.hasAttribute("open")) return true;
+          if (!apps?.openPanel || !root) return false;
           if (!startupAutohideAvailable()) return true;
           const app = startupApp(selection.id);
           if (!app) return false;
           if (
             selection.mode === "triple" &&
-            (!ctx.linkedPairFor(selection.id) || !ctx.openStartupSinglePanel)
-          )
-            return true;
+            !ctx.linkedPairFor(selection.id)
+          ) return true;
+          if (selection.mode === "triple" && !ctx.openStartupSinglePanel) return false;
           try {
             if (selection.mode === "triple") {
               // Take the exact launcher path used by a manual tile click. The
@@ -3473,6 +3476,7 @@
                   node.isConnected && node.dataset.appId === selection.id,
               );
               if (!tile) return false;
+              startupAttempted = true;
               tile.click();
               if (
                 document.documentElement.getAttribute(
@@ -3482,15 +3486,21 @@
                 console.warn(
                   "[Zentral] Startup tile click did not enter Triple View",
                 );
-              setTimeout(onHoverRootLeave, 1200);
             } else {
+              startupAttempted = true;
               (ctx.openStartupSinglePanel || apps.openPanel.bind(apps))(app);
-              setTimeout(onHoverRootLeave, 1200);
             }
           } catch (error) {
             console.warn("[Zentral] Could not open startup panel", error);
+            return false;
           }
-          return true;
+          const opened = root.hasAttribute("open") &&
+            ctx.getAllAppBrowsers().some(browser =>
+              browser.isConnected && browser._bgalazkaAppId === selection.id) &&
+            (selection.mode !== "triple" ||
+              document.documentElement.getAttribute("bgalazka-triple-view") === "true");
+          if (opened) setTimeout(onHoverRootLeave, 1200);
+          return opened;
         };
         const tryStartupPanel = () => {
           if (startupFinished || startupCancelled || extensionDisposed)
@@ -3504,9 +3514,11 @@
           return finished;
         };
         const onRestore = () => {
-          tryStartupPanel();
+          if (startupReady && !startupFinished && !startupCancelled)
+            ctx.retryPanelTask("startup-panel", tryStartupPanel);
         };
         const stopWatchingStartup = () => {
+          ctx.cancelPanelRetry("startup-panel");
           window.removeEventListener("SSTabRestored", onRestore);
           window.removeEventListener(
             "zentral-essential-tiles-changed",
@@ -3525,26 +3537,7 @@
         // for actual readiness, independently of optional repair settings.
         (async () => {
           try {
-            let store = window.SessionStore;
-            if (!store) {
-              for (const uri of [
-                "resource:///modules/sessionstore/SessionStore.sys.mjs",
-                "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs",
-              ]) {
-                try {
-                  store = ChromeUtils.importESModule(uri).SessionStore;
-                  if (store) break;
-                } catch (_) {}
-              }
-            }
-            if (!store?.promiseAllWindowsRestored)
-              throw new Error("SessionStore readiness is unavailable");
-            await store.promiseAllWindowsRestored;
-            if (
-              window.gZenWorkspaces?.workspaceEnabled &&
-              !window.gZenWorkspaces.privateWindowOrDisabled
-            )
-              await window.gZenWorkspaces.promiseInitialized;
+            await ZentralRuntime.nativeReady;
             if (startupCancelled || extensionDisposed) return;
             startupReady = true;
             ctx.requestTileSync(0);
