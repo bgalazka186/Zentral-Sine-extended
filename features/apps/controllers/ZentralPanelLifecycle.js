@@ -45,6 +45,8 @@
         SVG_STRINGS,
         WELL_KNOWN_SERVICES,
       } = shared;
+      let preloadGeneration = 0, preloadWaitTimer = null, finishPreloadWait = null;
+      const navigationRequested = new WeakMap();
       return {
         // Responsibility: ZentralPanelHost
         getOrCreateAppBrowser(app) {
@@ -81,71 +83,86 @@
           this.ensureBadgeSyncLoop();
           return { browser: b, isNew: true };
         },
+        // Only requested navigation is remembered. A failed first load must
+        // remain retryable when the connected browser is reused by a click.
+        loadAppBrowser(app, browser, isNew = false) {
+          const blank = !browser.currentURI?.spec || browser.currentURI.spec === "about:blank";
+          const previous = navigationRequested.get(browser);
+          if (!isNew && (!blank || browser.webProgress?.isLoadingDocument ||
+              (previous && previous.url === app.url && Date.now() - previous.at < 1500))) return true;
+          const uri = Services.io.newURI(app.url);
+          const options = {
+            triggeringPrincipal: Services.scriptSecurityManager.createContentPrincipal(uri, {}),
+          };
+          if (typeof browser.fixupAndLoadURIString === "function")
+            browser.fixupAndLoadURIString(app.url, options);
+          else browser.loadURI(uri, options);
+          navigationRequested.set(browser, { url: app.url, at: Date.now() });
+          return true;
+        },
+        cancelAutomaticPreloads() {
+          preloadGeneration++;
+          if (this._preloadTimer != null) clearTimeout(this._preloadTimer);
+          this._preloadTimer = null;
+          if (preloadWaitTimer != null) clearTimeout(preloadWaitTimer);
+          preloadWaitTimer = null;
+          const finish = finishPreloadWait;
+          finishPreloadWait = null;
+          finish?.();
+        },
         async preloadAppsSequence() {
-          if (!Core.getPref(Constants.Apps.PREF_ENABLED, true)) return;
-          const preloadedApps = access.state.apps.filter(
-            (a) => a.preload === true,
-          );
-          for (const app of preloadedApps) {
-            if (
-              this._destroyed ||
-              !Core.getPref(Constants.Apps.PREF_ENABLED, true)
-            )
-              break;
-            if (!access.state.apps.includes(app) || !app.preload) continue;
-            const { browser, isNew } = this.getOrCreateAppBrowser(app);
-            if (isNew) {
-              // Preloading must never make an unselected browser look active.
-              browser.style.display = "none";
-              try {
-                browser.docShellIsActive = true;
-                if (browser.isRemoteBrowser) browser.renderLayers = false;
-              } catch (_) {}
-              try {
-                const uri = Services.io.newURI(app.url);
-                if (typeof browser.fixupAndLoadURIString === "function") {
-                  browser.fixupAndLoadURIString(app.url, {
-                    triggeringPrincipal:
-                      Services.scriptSecurityManager.createContentPrincipal(
-                        uri,
-                        {},
-                      ),
-                  });
-                } else {
-                  browser.loadURI(uri, {
-                    triggeringPrincipal:
-                      Services.scriptSecurityManager.createContentPrincipal(
-                        uri,
-                        {},
-                      ),
-                  });
-                }
-              } catch (e) {
-                console.error("[ZentralApps] Preload failed:", e);
+          this.cancelAutomaticPreloads();
+          const generation = preloadGeneration;
+          const enabled = () => !this._destroyed && generation === preloadGeneration &&
+            Core.getPref(Constants.Apps.PREF_ENABLED, true);
+          if (!enabled()) return;
+          const queue = access.state.apps.filter(app => app.preload === true)
+            .map(app => ({ id: app.id, attempt: 0 }));
+          while (queue.length && enabled()) {
+            const { id, attempt } = queue.shift();
+            // Preference edits rebuild app objects; resolve the live ID rather
+            // than dropping every remaining app from an old array snapshot.
+            const app = access.state.apps.find(item => item.id === id && item.preload === true);
+            if (!app) continue;
+            try {
+              const { browser, isNew } = this.getOrCreateAppBrowser(app);
+              if (access.state.activeAppId !== app.id) {
+                browser.style.display = "none";
+                try {
+                  browser.docShellIsActive = true;
+                  if (browser.isRemoteBrowser) browser.renderLayers = false;
+                } catch (_) {}
               }
+              this.loadAppBrowser(app, browser, isNew);
+              // A cold hidden host may accept navigation before its frame
+              // loader is usable. Verify once after the stagger, never poll.
+              if (!attempt && (!browser.currentURI?.spec || browser.currentURI.spec === "about:blank") &&
+                  !browser.webProgress?.isLoadingDocument && app.url !== "about:blank")
+                queue.push({ id, attempt: 1 });
+            } catch (error) {
+              console.error("[ZentralApps] Preload failed:", app.id, error);
+              if (!attempt) queue.push({ id, attempt: 1 });
             }
-            // Stagger preloads by 1.5 seconds to minimize main thread blocking
-            await new Promise((r) => setTimeout(r, 1500));
+            if (queue.length && enabled()) await new Promise(resolve => {
+              finishPreloadWait = resolve;
+              preloadWaitTimer = setTimeout(() => {
+                preloadWaitTimer = null;
+                finishPreloadWait = null;
+                resolve();
+              }, 1500);
+            });
           }
-          if (
-            !this._destroyed &&
-            access.state.appBrowsers &&
-            access.state.appBrowsers.size > 0
-          ) {
+          if (enabled() && access.state.appBrowsers.size > 0)
             this.ensureBadgeSyncLoop();
-          }
         },
         scheduleAutomaticPreloads() {
-          if (this._preloadTimer) clearTimeout(this._preloadTimer);
-          this._preloadTimer = setTimeout(
-            () => {
-              this._preloadTimer = null;
-              if (!this._destroyed) this.preloadAppsSequence();
-            },
-            Core.getPref("zen.workspace.bgalazka.smart_sleep", true)
-              ? 5000
-              : 2000,
-          );
+          this.cancelAutomaticPreloads();
+          if (this._destroyed || !Core.getPref(Constants.Apps.PREF_ENABLED, true)) return;
+          this._preloadTimer = setTimeout(() => {
+            this._preloadTimer = null;
+            this.preloadAppsSequence().catch(error =>
+              console.error("[ZentralApps] Preload sequence failed:", error));
+          }, Core.getPref("zen.workspace.bgalazka.smart_sleep", true) ? 5000 : 2000);
         },
         isAppPreloadEnabled(id) {
           return (
@@ -263,33 +280,10 @@
             if (!isPanelOpen) {
               browser.style.display = "none";
             }
-            if (isNew) {
-              try {
-                const uri = Services.io.newURI(app.url);
-                if (typeof browser.fixupAndLoadURIString === "function") {
-                  browser.fixupAndLoadURIString(app.url, {
-                    triggeringPrincipal:
-                      Services.scriptSecurityManager.createContentPrincipal(
-                        uri,
-                        {},
-                      ),
-                  });
-                } else {
-                  browser.loadURI(uri, {
-                    triggeringPrincipal:
-                      Services.scriptSecurityManager.createContentPrincipal(
-                        uri,
-                        {},
-                      ),
-                  });
-                }
-              } catch (e) {
-                console.error(
-                  "[ZentralApps] Failed to load app in background:",
-                  appId,
-                  e,
-                );
-              }
+            try {
+              this.loadAppBrowser(app, browser, isNew);
+            } catch (error) {
+              console.error("[ZentralApps] Failed to load app in background:", appId, error);
             }
           }
         },
@@ -387,29 +381,10 @@
               b.style.display = id === app.id ? "" : "none";
           }
 
-          if (isNew) {
-            try {
-              const uri = Services.io.newURI(app.url);
-              if (typeof browser.fixupAndLoadURIString === "function") {
-                browser.fixupAndLoadURIString(app.url, {
-                  triggeringPrincipal:
-                    Services.scriptSecurityManager.createContentPrincipal(
-                      uri,
-                      {},
-                    ),
-                });
-              } else {
-                browser.loadURI(uri, {
-                  triggeringPrincipal:
-                    Services.scriptSecurityManager.createContentPrincipal(
-                      uri,
-                      {},
-                    ),
-                });
-              }
-            } catch (e) {
-              console.error("[ZentralApps] Failed to load URL:", e);
-            }
+          try {
+            this.loadAppBrowser(app, browser, isNew);
+          } catch (error) {
+            console.error("[ZentralApps] Failed to load URL:", error);
           }
 
           access.dom.panel.getBoundingClientRect(); // Reflow

@@ -145,10 +145,7 @@
               clearTimeout(this.#state.utilityCollapseTimer);
               this.#state.utilityCollapseTimer = null;
             }
-            if (this._preloadTimer) {
-              clearTimeout(this._preloadTimer);
-              this._preloadTimer = null;
-            }
+            this.cancelAutomaticPreloads();
             if (this._openPanelRAF) {
               cancelAnimationFrame(this._openPanelRAF);
               this._openPanelRAF = null;
@@ -682,8 +679,7 @@
             for (const id of [...this.#state.appBrowsers.keys()])
               this.closeApp(id);
             this.stopPositionTracking();
-            if (this._preloadTimer) clearTimeout(this._preloadTimer);
-            this._preloadTimer = null;
+            this.cancelAutomaticPreloads();
             this.stopBadgeSyncLoop();
           } else {
             this.loadApps();
@@ -1012,7 +1008,8 @@
                 m.attributeName === "zen-sidebar-collapsed" ||
                 m.attributeName === "zen-compact-mode" ||
                 m.attributeName === "zen-sidebar-expanded" ||
-                m.attributeName === "zen-sidebar-hidden"
+                m.attributeName === "zen-sidebar-hidden" ||
+                m.attributeName === "zen-has-bookmarks"
               ) {
                 Core.log(
                   "ZentralApps",
@@ -1037,6 +1034,7 @@
               "zen-compact-mode",
               "zen-sidebar-expanded",
               "zen-sidebar-hidden",
+              "zen-has-bookmarks",
             ],
           });
 
@@ -1080,6 +1078,14 @@
                 [el, "animationend", onThemeAnimation],
               );
             });
+          }
+
+          // Native 1.23.3b layout notifications and toolbar visibility can
+          // change the usable launcher host without changing a watched pref.
+          const onNativeLayout = () => this.scheduleRepositionGrid(0);
+          for (const type of ["ZenCompactMode:LayoutUpdate", "toolbarvisibilitychange", "aftercustomization"]) {
+            window.addEventListener(type, onNativeLayout);
+            this.#toolbarBgListeners.push([window, type, onNativeLayout]);
           }
 
           this.#layoutObserver = (subject, topic, data) => {

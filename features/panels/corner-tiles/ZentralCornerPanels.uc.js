@@ -321,6 +321,7 @@
       nextPreloadAt = now + delay + 1500;
       const timer = ctx.setTimeout(() => {
         pendingPreloads.delete(timer);
+        record.preloadTimer = null;
         ctx.retryPanelTask(record, () => {
           record.preloadPending = false;
           if (
@@ -336,7 +337,7 @@
             return true;
           }
           try {
-            record.preloadAttempted = loadEssentialInBackground(record) === true;
+            record.preloadAttempted = loadEssentialInBackground(record, true) === true;
             return record.preloadAttempted;
           } catch (error) {
             record.preloadAttempted = false;
@@ -345,6 +346,7 @@
           }
         });
       }, delay);
+      record.preloadTimer = timer;
       pendingPreloads.add(timer);
     }
     ctx.registerCleanup(() => {
@@ -537,8 +539,11 @@
         );
       }
     }
-    function loadEssentialInBackground(record) {
+    function loadEssentialInBackground(record, automatic = false) {
       const apps = window.Zentral?.Apps;
+      if (!record.tab.isConnected || record.tab.closing || (automatic && !record.app.preload) ||
+          essentialPanels.get(record.app.id) !== record ||
+          !window.Zentral?.Core?.getPref("zen.workspace.apps.sidebar.enabled", true)) return true;
       if (
         !apps?.getOrCreateAppBrowser ||
         !document.getElementById("zen-app-panel-slider")
@@ -547,7 +552,7 @@
       const { browser, isNew } = apps.getOrCreateAppBrowser(record.app) || {};
       if (!browser) return false;
       if (isNew || browser.currentURI?.spec === "about:blank") {
-        browser.style.display = "none";
+        if (ctx.getActiveAppBrowser() !== browser) browser.style.display = "none";
         // This opt-in preload is meant to receive site notifications even
         // before the Essential tab itself is selected or restored.
         try {
@@ -569,7 +574,9 @@
             return false;
           }
           if (
-            !record.tab.isConnected ||
+            !record.tab.isConnected || record.tab.closing || (automatic && !record.app.preload) ||
+            essentialPanels.get(record.app.id) !== record ||
+            !window.Zentral?.Core?.getPref("zen.workspace.apps.sidebar.enabled", true) ||
             !browser.isConnected ||
             browser.currentURI?.spec !== "about:blank" ||
             browser.webProgress?.isLoadingDocument
@@ -639,6 +646,9 @@
     }
 
     function getEssentialSource(tab) {
+      // Inspect restored history instead of touching a sleeping native browser.
+      if (!tab.linkedPanel || tab.hasAttribute("pending") || tab.hasAttribute("discarded") ||
+          (tab.hasAttribute("zen-dormant") && tab.getAttribute("zen-dormant") !== "false")) return null;
       const url = tab.linkedBrowser?.currentURI?.spec;
       return url && /^(https?|about):/i.test(url) && url !== "about:blank"
         ? url
@@ -692,6 +702,13 @@
       );
     }
     function releaseTabPanelLauncher(record) {
+      ctx.cancelPanelRetry(record);
+      if (record.preloadTimer != null) {
+        ctx.clearTimeout(record.preloadTimer);
+        pendingPreloads.delete(record.preloadTimer);
+        record.preloadTimer = null;
+      }
+      record.preloadPending = false;
       record.tile?.remove();
       record.iconHost?.classList.remove("bgalazka-panel-icon-host");
       record.tab.removeAttribute("bgalazka-tab-panel-launcher");
@@ -703,13 +720,14 @@
       try {
         const enabled = ctx.getPref(ctx.EXT_PREFS.CORNER_TILES, false);
         const allTabs = ctx.getPref(ctx.EXT_PREFS.ALL_TAB_PANELS, false);
+        const storedTabs = new Set(window.gZenWorkspaces?.allStoredTabs ?? window.gBrowser?.tabs ?? []);
         const targets = new Set(
           (enabled || allTabs) &&
             window.Zentral?.Core?.getPref(
               "zen.workspace.apps.sidebar.enabled",
               true,
             )
-            ? [...(window.gBrowser?.tabs || [])].filter(
+            ? [...storedTabs].filter(
                 (tab) =>
                   tab.isConnected &&
                   !tab.closing &&
@@ -726,7 +744,7 @@
           if (targets.has(record.tab)) continue;
           const removed =
             record.tab.closing ||
-            !(window.gBrowser?.tabs || []).includes(record.tab) ||
+            !storedTabs.has(record.tab) ||
             (record.wasEssential && !isEssentialPanelTab(record.tab));
           try {
             if (!removed || !promoteEssentialPanel(record))
@@ -743,6 +761,7 @@
           essentialTabRecords.delete(record.tab);
           essentialPanels.delete(id);
         }
+        if (!essentialPanels.size) nextPreloadAt = Date.now();
         const browsers = new Map(
           ctx.getAllAppBrowsers().map((b) => [b._bgalazkaAppId, b]),
         );
@@ -788,10 +807,7 @@
                 Number.isInteger(settings.userContextId) &&
                 settings.userContextId >= 0
                   ? settings.userContextId
-                  : Number(
-                      tab.getAttribute("usercontextid") ||
-                        tab.linkedBrowser?.getAttribute("usercontextid"),
-                    ) || 0,
+                  : Number(tab.getAttribute("usercontextid")) || 0,
             };
             essentialTabRecords.set(tab, record);
             essentialPanels.set(app.id, record);

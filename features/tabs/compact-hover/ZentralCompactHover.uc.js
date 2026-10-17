@@ -1,26 +1,77 @@
-/* Experimental native compact sidebar hover guard. No CSS or tracker ownership.
- * Preserve an existing hover during stale native leave callbacks, using the
- * last visible bounds rather than the animated/hidden sidebar hit-test.
- *
- * Edge hysteresis: a soft margin around the visible bounds plus a short
- * "leaving" grace state keeps the sidebar open while the pointer wiggles
- * across its edge.
- */
+/* Optional window-entry reveal. Native sidebar hover remains untouched. */
 (function () {
   "use strict";
   const PREF = "zen.workspace.zentral.experimental.compact_sidebar_hover";
-  const MARGIN_PREF = PREF + ".edge_margin_px";
-  const GRACE_PREF = PREF + ".exit_grace_ms";
-  const ENTRY_PREF = PREF + ".window_entry_reveal";
-  const REPAIR_PREF =
-    "zen.workspace.zentral.experimental.sidebar_startup_recalculate";
-  const RETURN_GRACE_MS = 250;
-  const RECENT_EXIT_MS = 1500;
-  const Services =
-    globalThis.Services ||
-    ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
-      .Services;
-  function attach() {
+  const MARGIN_PREF=PREF+".edge_margin_px", GRACE_PREF=PREF+".exit_grace_ms";
+  const RETURN_GRACE_MS=250, RECENT_EXIT_MS=1500;
+  const ENTRY_PREF = "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal";
+  const REPAIR_PREF = "zen.workspace.zentral.experimental.sidebar_startup_recalculate";
+  const Services = globalThis.Services || ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
+  function attachEntry() {
+    const manager = window.gZenCompactModeManager;
+    const root = document.documentElement;
+    let timer = null, point = null, owned = false, exitAt = null, rightAtExit = false;
+    const enabled = () => Services.prefs.getBoolPref(ENTRY_PREF, false) && manager.preference &&
+      manager.canHideSidebar && !manager._ignoreNextHover &&
+      Services.prefs.getBoolPref("zen.view.compact.show-sidebar-and-toolbar-on-hover", true);
+    const bounds = node => window.windowUtils?.getBoundsWithoutFlushing?.(node) || node.getBoundingClientRect();
+    const inside = (box,p) => p && p.clientX >= box.left && p.clientX <= box.right && p.clientY >= box.top && p.clientY <= box.bottom;
+    function release() {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = null; point = null; exitAt = null;
+      const hide = owned; owned = false;
+      if (hide) manager._setElementExpandAttribute(manager.sidebar, false);
+    }
+    function enter(event, fallback = false) {
+      if ((!fallback && event.target !== root) || !event.isTrusted || !enabled() || timer !== null ||
+          manager._isTabBeingDragged || manager._hasHoveredUrlbar ||
+          root.getAttribute("supress-primary-adjustment") === "true" ||
+          (!fallback && event.relatedTarget && root.contains(event.relatedTarget))) return;
+      const box = bounds(root), sidebar = manager.sidebar, side = bounds(sidebar), right = !!manager.sidebarIsOnRight;
+      const recent = exitAt !== null && Date.now() - exitAt <= 1500 && rightAtExit === right;
+      exitAt = null;
+      if (!inside(box,event) || event.clientY <= box.top+10 || event.clientY >= box.bottom-10 ||
+          event.clientY < side.top || event.clientY > side.bottom ||
+          (Math.abs(event.clientX-(right?box.right:box.left))>10 &&
+           !(recent && (right?event.clientX>=(box.left+box.right)/2:event.clientX<=(box.left+box.right)/2)))) return;
+      manager.clearFlashTimeout?.("has-hover"+sidebar.id);
+      const frame = manager._removeHoverFrames?.[sidebar.id];
+      if (frame != null) window.cancelAnimationFrame(frame);
+      owned = !sidebar.hasAttribute("zen-has-hover");
+      if (owned) manager._setElementExpandAttribute(sidebar,true);
+      point = {clientX:event.clientX,clientY:event.clientY};
+      timer = window.setTimeout(() => {
+        timer=null;
+        const hide = owned && !inside(bounds(sidebar),point);
+        owned=false;point=null;
+        if (hide) manager._setElementExpandAttribute(sidebar,false);
+      },250);
+    }
+    function move(event) {
+      if (!event.isTrusted) return;
+      if (exitAt !== null && inside(bounds(root),event)) enter(event,true);
+      if (point) {point.clientX=event.clientX;point.clientY=event.clientY;}
+    }
+    function leave(event) {
+      if (event.target !== root || !event.isTrusted || !enabled()) return;
+      const box=bounds(root),right=!!manager.sidebarIsOnRight;
+      exitAt=(right?event.clientX>=box.right-10:event.clientX<=box.left+10)?Date.now():null;
+      rightAtExit=right;
+    }
+    root.addEventListener("mouseenter",enter,true);
+    root.addEventListener("mouseleave",leave,true);
+    window.addEventListener("mousemove",move,true);
+    const resets=["deactivate","resize","sizemodechange","dragstart"];
+    for(const type of resets)window.addEventListener(type,release,true);
+    const destroy=()=>{
+      release();root.removeEventListener("mouseenter",enter,true);root.removeEventListener("mouseleave",leave,true);
+      window.removeEventListener("mousemove",move,true);
+      for(const type of resets)window.removeEventListener(type,release,true);
+    };
+    destroy.manager=manager;destroy.refresh=release;
+    return destroy;
+  }
+  function attachStabilizer() {
     const manager = window.gZenCompactModeManager;
     if (typeof manager?._setElementExpandAttribute !== "function")
       throw new Error(
@@ -201,6 +252,12 @@
         event.clientY > box.bottom
       )
         return;
+      // Zen 1.23.3b skips onEnter cleanup when we already set zen-has-hover.
+      // A real return supersedes hide work scheduled for the previous exit.
+      manager.clearFlashTimeout?.("has-hover" + sidebar.id);
+      const removeFrame = manager._removeHoverFrames?.[sidebar.id];
+      if (removeFrame != null) window.cancelAnimationFrame(removeFrame);
+      invalidateBounds();
       cancelTimer();
       inside = outside = leaving = false;
       bounds = null;
@@ -367,8 +424,7 @@
           true,
         ),
       );
-      const nextEntry =
-        nextConfigured && Services.prefs.getBoolPref(ENTRY_PREF, false);
+      const nextEntry = false; // Window entry is controlled independently.
       const nextRight = Boolean(manager.sidebarIsOnRight);
       // Window activation may follow the crossing event. Rechecking an unchanged
       // setup must preserve both the recorded exit and the brief return guard.
@@ -440,6 +496,10 @@
               // again later or retain stale geometry for the next reveal.
               reset(false);
             }
+            // Native hover now expands synchronously, potentially in the same
+            // frame as a hidden-sidebar measurement from a crossing event.
+            if (active && configured && element === this.sidebar && value && attr === "zen-has-hover" &&
+                !element.hasAttribute(attr)) invalidateBounds();
             return original.call(this, element, value, attr);
           },
       );
@@ -449,7 +509,10 @@
           key,
           (original) =>
             function (...args) {
-              if (active && configured) reset();
+              // A tracker for the toolbar (or no tracker) owns no sidebar state.
+              if (active && configured &&
+                  (key === "_clearAllHoverStates" ||
+                   this._outsideTrackedElement === this.sidebar)) reset();
               return original.apply(this, args);
             },
         );
@@ -472,6 +535,7 @@
     }
     try {
       listen(window, "ZenCompactMode:Toggled", refreshAfterNative);
+      listen(window, "ZenCompactMode:LayoutUpdate", refreshAfterNative);
       listen(window, "unload", destroy);
       const refreshPrefs = new Set([
         PREF,
@@ -518,8 +582,15 @@
       throw error;
     }
   }
-  // Runtime waits for native restoration once. If Zen replaces or exposes its
-  // manager later, native lifecycle events retry attachment without polling.
+  function attach() {
+    const guardOn=Services.prefs.getBoolPref(PREF,false), entryOn=Services.prefs.getBoolPref(ENTRY_PREF,false);
+    const guard=guardOn?attachStabilizer():null, entry=entryOn?attachEntry():null;
+    const destroy=()=>{entry?.();guard?.();};
+    destroy.manager=window.gZenCompactModeManager;
+    destroy.guardOn=guardOn;destroy.entryOn=entryOn;
+    destroy.refresh=()=>{guard?.refresh();};
+    return destroy;
+  }
   function start() {
     let stopped = false,
       cleanup = null,
@@ -701,9 +772,11 @@
 
     function reconcile() {
       task = null;
-      if (stopped || !Services.prefs.getBoolPref(PREF, false)) return;
+      if (stopped || !(Services.prefs.getBoolPref(ENTRY_PREF, false) || Services.prefs.getBoolPref(PREF,false))) return;
       const manager = window.gZenCompactModeManager;
-      if (cleanup && cleanup.manager !== manager) {
+      if (cleanup && (cleanup.manager !== manager ||
+          cleanup.guardOn !== Services.prefs.getBoolPref(PREF,false) ||
+          cleanup.entryOn !== Services.prefs.getBoolPref(ENTRY_PREF,false))) {
         cleanup();
         cleanup = null;
       }
@@ -725,11 +798,12 @@
     const hostObserver = new MutationObserver(queueReconcile);
     const hostEvents = [
       "ZenCompactMode:Toggled",
+      "ZenCompactMode:LayoutUpdate",
       "activate",
       "aftercustomization",
     ];
     function syncWatching() {
-      const value = !stopped && Services.prefs.getBoolPref(PREF, false);
+      const value = !stopped && (Services.prefs.getBoolPref(ENTRY_PREF, false) || Services.prefs.getBoolPref(PREF,false));
       if (watching !== value) {
         watching = value;
         const method = value ? "addEventListener" : "removeEventListener";
@@ -753,11 +827,15 @@
         window.clearTimeout(task);
         task = null;
       }
+      if (!value && cleanup) {
+        cleanup();
+        cleanup = null;
+      }
       if (value) reconcile();
     }
     const observer = {
       observe(subject, topic, pref) {
-        if (pref === PREF) syncWatching();
+        if (pref === ENTRY_PREF || pref === PREF) syncWatching();
         if (pref === REPAIR_PREF) syncRepair();
         if (pref === REPAIR_PREF + ".delay_seconds" && repairTimer !== null) {
           window.clearTimeout(repairTimer);
@@ -773,10 +851,12 @@
       syncWatching();
       cleanup?.();
       cleanup = null;
+      Services.prefs.removeObserver(ENTRY_PREF, observer);
       Services.prefs.removeObserver(PREF, observer);
       Services.prefs.removeObserver(REPAIR_PREF, observer);
       window.removeEventListener("unload", destroy);
     }
+    Services.prefs.addObserver(ENTRY_PREF, observer);
     Services.prefs.addObserver(PREF, observer);
     Services.prefs.addObserver(REPAIR_PREF, observer);
     window.addEventListener("unload", destroy, { once: true });

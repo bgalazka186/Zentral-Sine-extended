@@ -48,7 +48,7 @@
       if (path.some(node => node === library ||
           ["navigator-toolbox", "sidebar-box", "PersonalToolbar", "nav-bar", "zen-library-button"]
             .includes(node?.id) ||
-          ["menupopup", "panel"].includes(node?.localName) ||
+          ["menupopup", "panel", "panel-list"].includes(node?.localName) ||
           node?.getAttribute?.("command") === "cmd_zenToggleLibrary" ||
           (typeof node?.id === "string" && node.id.includes("sine")))) return;
       if (library.contains?.(event.target)) return;
@@ -57,7 +57,10 @@
     function onEscape(event) {
       if (event.key !== "Escape" || event.isComposing || event.defaultPrevented) return;
       const path = event.composedPath?.() || [event.target];
-      if (path.some(node => ["menupopup", "panel"].includes(node?.localName))) return;
+      // Native Library owns Escape within its contents, including editing and
+      // section search. Its new opening-focus path must get the key first.
+      if (path.some(node => node === library ||
+          ["menupopup", "panel", "panel-list"].includes(node?.localName))) return;
       if (closeNativeLibrary()) {
         event.preventDefault();
         event.stopPropagation();
@@ -102,7 +105,7 @@
         "zen-sidebar-expanded", "zen-single-toolbar", "zen-compact-mode", "sizemode", "inFullscreen"] });
       if (sidebar) {
         observer.observe(sidebar, { attributes: true, attributeFilter: ["zen-has-hover",
-          "zen-compact-mode-active", "has-popup-menu", "flash-popup", "hidden"] });
+          "zen-compact-mode-active", "has-popup-menu", "flash-popup", "zen-user-show", "hidden"] });
         sizes.observe(sidebar, { box: "border-box" });
       }
       sizes.observe(library, { box: "border-box" });
@@ -133,9 +136,9 @@
       const right = root.getAttribute("zen-right-side") === "true" ||
         root.getAttribute("zen-sidebar-right") === "true";
       const canHideSidebar = root.getAttribute("zen-compact-mode") === "true" &&
-        (window.gZenCompactMode?.canHideSidebar ?? true);
+        (window.gZenCompactModeManager?.canHideSidebar ?? true);
       const sidebarVisible = !!sidebar && !sidebar.hidden && (!canHideSidebar ||
-        ["zen-has-hover", "zen-compact-mode-active", "has-popup-menu", "flash-popup"]
+        ["zen-has-hover", "zen-compact-mode-active", "has-popup-menu", "flash-popup", "zen-user-show"]
           .some(attribute => sidebar.hasAttribute(attribute)));
       // Cancel Library's toolbox animation only for a genuinely visible
       // sidebar; never force a hidden compact sidebar back onto the screen.
@@ -193,6 +196,7 @@
       library = tabbox = sidebar = null; headers = []; bound = false;
       clear(); style?.remove(); style = null;
       window.removeEventListener("resize", schedule);
+      window.removeEventListener("ZenCompactMode:LayoutUpdate", schedule);
     }
     function sync() {
       if (disposed) return;
@@ -231,6 +235,7 @@
           }`;
         root.appendChild(style);
         window.addEventListener("resize", schedule);
+        window.addEventListener("ZenCompactMode:LayoutUpdate", schedule);
         bind();
       }
       schedule();

@@ -19,8 +19,7 @@
       .Services;
   const PREF = "zen.workspace.zentral.tabs.background_drag";
 
-  function start() {
-    if (window.ZentralTabDrag) return window.ZentralTabDrag.destroy;
+  function attach() {
     const browser = window.gBrowser;
     const strip = browser?.tabContainer;
     const dnd = strip?.tabDragAndDrop;
@@ -314,6 +313,33 @@
       destroy();
       throw error;
     }
+  }
+  // Keep only the preference subscription alive while disabled. Native
+  // selection descriptors, drag handlers and PageThumbs are then untouched.
+  function start() {
+    if (window.ZentralTabDrag) return window.ZentralTabDrag.destroy;
+    let stopped = false, cleanup = null;
+    function sync() {
+      const enabled = !stopped && Services.prefs.getBoolPref(PREF, true);
+      if (!enabled && cleanup) {
+        cleanup();
+        cleanup = null;
+      } else if (enabled && !cleanup) cleanup = attach();
+      if (!stopped) window.ZentralTabDrag = { destroy };
+    }
+    function destroy() {
+      if (stopped) return;
+      stopped = true;
+      sync();
+      Services.prefs.removeObserver(PREF, observer);
+      window.removeEventListener("unload", destroy);
+      if (window.ZentralTabDrag?.destroy === destroy) delete window.ZentralTabDrag;
+    }
+    const observer = { observe: sync };
+    Services.prefs.addObserver(PREF, observer);
+    window.addEventListener("unload", destroy, { once: true });
+    try { sync(); } catch (error) { destroy(); throw error; }
+    return destroy;
   }
   if (window.ZentralRuntime) {
     window.ZentralRuntime.register({ id: "tab-drag", init: start });

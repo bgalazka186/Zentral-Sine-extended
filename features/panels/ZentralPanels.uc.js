@@ -1212,8 +1212,7 @@
               (el) =>
                 el &&
                 el.nodeType === 1 &&
-                (el.tagName === "menupopup" ||
-                  el.tagName === "panel" ||
+                (["menupopup", "panel", "panel-list"].includes(el.localName) ||
                   el.id === "mainPopupSet" ||
                   el.id === "contentAreaContextMenu"),
             );
@@ -2733,7 +2732,7 @@
           ctx.addonHostFolder = folder;
           ctx.keepAddonHostFolderCollapsed(folder);
         }
-        for (const tab of [...(window.gBrowser?.tabs || [])]) {
+        for (const tab of [...(window.gZenWorkspaces?.allStoredTabs ?? window.gBrowser?.tabs ?? [])]) {
           if (ctx.addonHostByTab.get(tab)) continue;
           if (
             tab.hasAttribute("bgalazka-addon-host") ||
@@ -3449,11 +3448,12 @@
         let startupReady = false;
         let startupCancelled = false;
         let startupAttempted = false;
+        let startupOpening = false;
         const openSavedPanel = () => {
           const selection = readStartupPanel();
           const apps = window.Zentral?.Apps;
           const root = document.getElementById("zen-app-panel-root");
-          if (!selection) return true;
+          if (!selection || !getPref("zen.workspace.apps.sidebar.enabled", true)) return true;
           // An already open panel belongs to the user; never replace it.
           if (!startupAttempted && root?.hasAttribute("open")) return true;
           if (!apps?.openPanel || !root) return false;
@@ -3467,24 +3467,21 @@
           if (selection.mode === "triple" && !ctx.openStartupSinglePanel) return false;
           try {
             if (selection.mode === "triple") {
-              // Take the exact launcher path used by a manual tile click. The
-              // linked-pair wrapper then opens both panels in their saved order.
-              const tile = [
-                ...document.querySelectorAll(".zen-app-tile[data-app-id]"),
-              ].find(
-                (node) =>
-                  node.isConnected && node.dataset.appId === selection.id,
-              );
-              if (!tile) return false;
+              // Use the panel API rather than a toggle-only tile click:
+              // a retry must not close a partially opened startup panel.
+              const alreadyOpened = root.hasAttribute("open") &&
+                document.documentElement.getAttribute("bgalazka-triple-view") === "true" &&
+                ctx.getAllAppBrowsers().some(browser =>
+                  browser.isConnected && browser._bgalazkaAppId === selection.id);
               startupAttempted = true;
-              tile.click();
+              if (!alreadyOpened) apps.openPanel(app);
               if (
                 document.documentElement.getAttribute(
                   "bgalazka-triple-view",
                 ) !== "true"
               )
                 console.warn(
-                  "[Zentral] Startup tile click did not enter Triple View",
+                  "[Zentral] Startup panel did not enter Triple View",
                 );
             } else {
               startupAttempted = true;
@@ -3506,15 +3503,21 @@
           if (startupFinished || startupCancelled || extensionDisposed)
             return true;
           if (!startupReady) return false;
-          const finished = openSavedPanel();
-          if (finished) {
-            startupFinished = true;
-            stopWatchingStartup();
+          if (startupOpening) return false;
+          startupOpening = true;
+          try {
+            const finished = openSavedPanel();
+            if (finished) {
+              startupFinished = true;
+              stopWatchingStartup();
+            }
+            return finished;
+          } finally {
+            startupOpening = false;
           }
-          return finished;
         };
         const onRestore = () => {
-          if (startupReady && !startupFinished && !startupCancelled)
+          if (startupReady && !startupOpening && !startupFinished && !startupCancelled)
             ctx.retryPanelTask("startup-panel", tryStartupPanel);
         };
         const stopWatchingStartup = () => {
@@ -3567,10 +3570,15 @@
           });
         window.BgalazkaExtensionInitialized = false;
       };
-      if (typeof window.addUnloadListener === "function") {
-        window.addUnloadListener(performBgalazkaUnload);
-      } else if (typeof UC_API !== "undefined" && UC_API.addUnloadListener) {
-        UC_API.addUnloadListener(performBgalazkaUnload);
+      if (typeof window.ZentralRuntime?.registerHostUnload === "function")
+        window.ZentralRuntime.registerHostUnload(performBgalazkaUnload);
+      else {
+        try {
+          if (typeof window.addUnloadListener === "function") window.addUnloadListener(performBgalazkaUnload);
+          else if (typeof UC_API !== "undefined" && typeof UC_API.addUnloadListener === "function") UC_API.addUnloadListener(performBgalazkaUnload);
+        } catch (error) {
+          console.warn("[Zentral] Optional loader hook unavailable; native cleanup remains active", error);
+        }
       }
       window.addEventListener("unload", performBgalazkaUnload, { once: true });
 

@@ -152,25 +152,23 @@
       if (contextualIdentityImportAttempted) return null;
       contextualIdentityImportAttempted = true;
 
-      try {
-        const mod = ChromeUtils.importESModule(
-          "resource://gre/modules/ContextualIdentityService.sys.mjs",
-        );
-        ContextualIdentityService = mod?.ContextualIdentityService || null;
-      } catch (_) {}
-
-      // A lazy ES-module getter uses the same Gecko module but is a useful
-      // second path in Zen/userChrome environments where the eager import above
-      // was attempted before the module was ready.
-      if (!ContextualIdentityService) {
+      // Firefox moved this service to the source-module namespace. Keep the
+      // legacy path for older Zen releases before using the profile fallback.
+      for (const uri of [
+        "moz-src:///toolkit/components/contextualidentity/ContextualIdentityService.sys.mjs",
+        "resource://gre/modules/ContextualIdentityService.sys.mjs",
+      ]) {
         try {
-          const lazy = {};
-          ChromeUtils.defineESModuleGetters(lazy, {
-            ContextualIdentityService:
-              "resource://gre/modules/ContextualIdentityService.sys.mjs",
-          });
-          ContextualIdentityService = lazy.ContextualIdentityService || null;
+          ContextualIdentityService = ChromeUtils.importESModule(uri)?.ContextualIdentityService || null;
         } catch (_) {}
+        if (!ContextualIdentityService) {
+          try {
+            const lazy = {};
+            ChromeUtils.defineESModuleGetters(lazy, { ContextualIdentityService: uri });
+            ContextualIdentityService = lazy.ContextualIdentityService || null;
+          } catch (_) {}
+        }
+        if (ContextualIdentityService) break;
       }
 
       if (!ContextualIdentityService)
@@ -375,7 +373,7 @@
       // because ContextualIdentityService's metadata layer is unhealthy.
       const ids = new Set();
       try {
-        for (const tab of window.gBrowser?.tabs || []) {
+        for (const tab of window.gZenWorkspaces?.allStoredTabs ?? window.gBrowser?.tabs ?? []) {
           const id = normalizeUserContextId(
             tab?.getAttribute?.("usercontextid"),
           );

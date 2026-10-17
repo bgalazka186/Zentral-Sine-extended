@@ -70,11 +70,16 @@
       }
       throw new Error("SessionStore is unavailable");
     }
-    function eligible(tab) {
+    function allNativeTabs() {
+      // gBrowser.tabs is the current space's strip. Zen keeps the other
+      // spaces' live tabs in separate containers, exposed by allStoredTabs.
+      return window.gZenWorkspaces?.allStoredTabs ?? window.gBrowser?.tabs ?? [];
+    }
+    function eligible(tab, knownTabs = null) {
       return !!(
         tab?.isConnected &&
         !tab.closing &&
-        Array.from(window.gBrowser?.tabs || []).includes(tab) &&
+        (knownTabs || new Set(allNativeTabs())).has(tab) &&
         (tab.pinned ||
           (tab.hasAttribute("zen-essential") &&
             tab.getAttribute("zen-essential") !== "false")) &&
@@ -144,8 +149,9 @@
     }
     function scan() {
       if (!ready || !enabled()) return;
-      for (const tab of window.gBrowser.tabs) {
-        if (eligible(tab) && selected(tab) && !attempted.has(tab))
+      const tabs = new Set(allNativeTabs());
+      for (const tab of tabs) {
+        if (eligible(tab, tabs) && selected(tab) && !attempted.has(tab))
           queue.add(tab);
       }
       if (queue.size && timer === null) timer = window.setTimeout(pump, 0);
@@ -245,8 +251,16 @@
     }
     window.ZentralStartup = { destroy };
     listen(window, "unload", destroy, { once: true });
-    if (typeof window.addUnloadListener === "function")
-      window.addUnloadListener(destroy);
+    if (typeof window.ZentralRuntime?.registerHostUnload === "function")
+      window.ZentralRuntime.registerHostUnload(destroy);
+    else {
+      try {
+        if (typeof window.addUnloadListener === "function") window.addUnloadListener(destroy);
+        else if (typeof UC_API !== "undefined" && typeof UC_API.addUnloadListener === "function") UC_API.addUnloadListener(destroy);
+      } catch (error) {
+        console.warn("[Zentral] Optional loader hook unavailable; native cleanup remains active", error);
+      }
+    }
     listen(window, "popupshowing", onPopup);
     listen(window, "TabClose", (event) => {
       queue.delete(event.target);

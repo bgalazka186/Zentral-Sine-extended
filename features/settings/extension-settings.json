@@ -3,7 +3,8 @@
     "purpose": "Settings schema and category/section metadata owned by extension-settings.",
     "consumer": "features/settings/controllers/ZentralSettingsCatalog.js reads schema/settings; Runtime filters availability, UI controllers render controls.",
     "feature_source": "features/settings/controllers/ZentralFeatureSettings.js",
-    "contract": "This object is data only. Missing descriptor hides owner settings; it does not start or unload the feature. Keep property/defaultValue and category IDs synchronized with preferences.json and features/settings/layout.json."
+    "contract": "This object is data only. Missing descriptor hides owner settings; it does not start or unload the feature. Keep property/defaultValue and category IDs synchronized with preferences.json and features/settings/layout.json.",
+    "compatibility": "Temporary Arc menu-opacity experiment retired; native theme styling owns menus. Zentral loader resilience remains independent."
   },
   "owner": "extension-settings",
   "schema": [

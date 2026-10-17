@@ -1382,27 +1382,18 @@
               },
             });
             syncStartupDelay();
-            const compactHoverPref =
-              "zen.workspace.zentral.experimental.compact_sidebar_hover";
-            const tCompactHover = createToggleRow(
+            const compactHoverPref = "zen.workspace.zentral.experimental.compact_sidebar_hover";
+            const stabilize = createToggleRow(
               "Stabilize Compact Tab Sidebar Hover (Experimental)",
-              "Master switch for the compact sidebar hover guard and all window-entry enhancements below, including panels. Turn off to restore native sidebar methods and disable these enhancements immediately. Window-exit protection lasts up to 1.5 seconds. Off by default.",
-              compactHoverPref,
-              null,
-              false,
-              ctx.PREF_ICONS.TOOLBAR,
+              "Prevent repeated native hide/show while the pointer remains over the sidebar. Independent of window-entry reveal. Off by default.",
+              compactHoverPref, null, false, ctx.PREF_ICONS.TOOLBAR,
             );
-            // Keep the separator on the row so category organization moves it
-            // together with the independent hover experiment.
-            tCompactHover.row.style.borderTop =
-              "1px solid color-mix(in srgb, currentColor 35%, transparent)";
-            tCompactHover.row.style.marginTop = "16px";
-            tCompactHover.row.style.paddingTop = "18px";
-            content.appendChild(tCompactHover.row);
+            content.appendChild(stabilize.row);
+            panel._toggles.push({ input: stabilize.input, pref: compactHoverPref, def: false });
             const entryRevealPref = compactHoverPref + ".window_entry_reveal";
             const tEntryReveal = createToggleRow(
               "Reveal Compact Tab Sidebar on Window Entry (Experimental)",
-              "Reveal the tab sidebar when the cursor returns from outside through its side of the window, with 250 ms of return protection (or Zen’s longer keep-hover delay). Normal hover behavior is unchanged. Requires Stabilize Compact Tab Sidebar Hover. Applies immediately. Off by default.",
+              "Request sidebar reveal when the cursor returns from outside through its side of the window. Native hover and hide behavior remain in control. Independent toggle; applies immediately. Off by default.",
               entryRevealPref,
               null,
               false,
@@ -1430,13 +1421,8 @@
               ctx.PREF_ICONS.HOVER_EYE,
             );
             content.appendChild(tPanelEntryOverlay.row);
-            const compactHoverSliders = [];
             const syncEntryRevealAvailability = () => {
-              const disabled = !ctx.getPref(compactHoverPref, false);
-              tEntryReveal.input.disabled = disabled;
-              tEntryReveal.row.style.opacity = disabled ? "0.5" : "";
               const panelDisabled =
-                disabled ||
                 !ctx.getPref(entryRevealPref, false) ||
                 !ctx.getPref(ctx.BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false);
               tPanelEntry.input.disabled = panelDisabled;
@@ -1447,15 +1433,7 @@
               tPanelEntryOverlay.row.style.opacity = overlayDisabled
                 ? "0.5"
                 : "";
-              for (const control of compactHoverSliders) {
-                control.input.disabled = disabled;
-                control.row.style.opacity = disabled ? "0.5" : "";
-              }
             };
-            tCompactHover.input.addEventListener(
-              "change",
-              syncEntryRevealAvailability,
-            );
             tEntryReveal.input.addEventListener(
               "change",
               syncEntryRevealAvailability,
@@ -1470,12 +1448,6 @@
             );
             syncEntryRevealAvailability();
             panel._syncEntryAvailability = syncEntryRevealAvailability;
-            panel._toggles.push({
-              input: tCompactHover.input,
-              pref: compactHoverPref,
-              def: false,
-              onSync: syncEntryRevealAvailability,
-            });
             panel._toggles.push({
               input: tEntryReveal.input,
               pref: entryRevealPref,
@@ -1494,48 +1466,6 @@
               def: true,
               onSync: syncEntryRevealAvailability,
             });
-            for (const [label, description, suffix, min, max, def, unit] of [
-              [
-                "Compact Sidebar Edge Tolerance",
-                "Tolerance around an already revealed sidebar. Default: 12 px. Applies immediately.",
-                ".edge_margin_px",
-                0,
-                64,
-                12,
-                " px",
-              ],
-              [
-                "Compact Sidebar Exit Grace",
-                "Protection after crossing the tolerated edge. Default: 250 ms. Zen's sidebar keep-hover delay still applies if longer. Applies to the next exit.",
-                ".exit_grace_ms",
-                0,
-                2000,
-                250,
-                " ms",
-              ],
-            ]) {
-              const pref = compactHoverPref + suffix;
-              const control = createSliderRow(
-                label,
-                description,
-                pref,
-                min,
-                max,
-                def,
-                unit,
-              );
-              content.appendChild(control.row);
-              compactHoverSliders.push(control);
-              panel._toggles.push({
-                input: control.input,
-                pref,
-                def,
-                isSelect: true,
-                onSync: (value) => {
-                  control.badge.textContent = value + unit;
-                },
-              });
-            }
             syncEntryRevealAvailability();
 
             const tMmbUnloadNormalTabs = createToggleRow(

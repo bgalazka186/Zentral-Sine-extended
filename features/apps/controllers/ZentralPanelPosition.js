@@ -418,12 +418,8 @@
         updateWidthVar(px) {
           if (this.isPanelDockedToAppsBar())
             px = Math.max(1, Math.min(px, this.getAppsBarPanelMaxWidth()));
-          if (access.state.activeAppId && !access.state.isExpanded) {
-            const app = access.state.apps.find(
-              (a) => a.id === access.state.activeAppId,
-            );
-            if (app) app.width = px;
-          }
+          // Layout clamps affect the displayed width only. saveWidth() owns
+          // persistence after an intentional user resize.
           access.state.panelWidthPx = px;
           if (access.dom.root)
             access.dom.root.style.width = Math.round(px) + "px";

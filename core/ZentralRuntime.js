@@ -108,6 +108,27 @@
       Services.prefs.setIntPref(key, Math.round(value));
     else Services.prefs.setStringPref(key, String(value));
   };
+  let hostUnloadWarning = false;
+  function registerHostUnload(callback) {
+    // Host hooks are optional. Native unload and Runtime.destroy already own
+    // teardown; a faulty loader API must not abort feature initialization.
+    try {
+      if (typeof window.addUnloadListener === "function") {
+        window.addUnloadListener(callback);
+        return true;
+      }
+      if (typeof UC_API !== "undefined" && typeof UC_API.addUnloadListener === "function") {
+        UC_API.addUnloadListener(callback);
+        return true;
+      }
+    } catch (error) {
+      if (!hostUnloadWarning) {
+        hostUnloadWarning = true;
+        console.warn("[Zentral] Optional loader unload hook failed; native cleanup remains active", error);
+      }
+    }
+    return false;
+  }
   const arcSidebarPref = "zen.workspace.zentral.arc2.match_compact_sidebar";
   const arcLibraryPref = "zen.workspace.zentral.arc2.match_compact_library";
   const arcLibraryAttribute = "zentral-arc2-library";
@@ -131,6 +152,7 @@
     if (sidebarActive || libraryActive)
       ui.style.setProperty(arcSidebarColorProperty, color);
     else ui.style.removeProperty(arcSidebarColorProperty);
+
   };
   const arcSidebarObserver = { observe: syncArcSidebar };
   syncArcSidebar();
@@ -191,6 +213,7 @@
     version: VERSION,
     rootURI: ROOT,
     hooks,
+    registerHostUnload,
     services: { platform: Services },
     shared: null,
     panelContext: null,
@@ -2135,6 +2158,5 @@
   const onWindowUnload = () => runtime.destroy();
   window.addEventListener("unload", onWindowUnload, { once: true });
   disposers.push(() => window.removeEventListener("unload", onWindowUnload));
-  if (typeof window.addUnloadListener === "function")
-    window.addUnloadListener(() => runtime.destroy());
+  registerHostUnload(() => runtime.destroy());
 })();

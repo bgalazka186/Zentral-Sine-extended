@@ -3819,10 +3819,16 @@
         hookSettings();
         syncCompactVisibility();
         window.addEventListener("unload", destroy, { once: true });
-        if (typeof window.addUnloadListener === "function")
-          window.addUnloadListener(destroy);
-        else if (typeof UC_API !== "undefined" && UC_API.addUnloadListener)
-          UC_API.addUnloadListener(destroy);
+        if (typeof window.ZentralRuntime?.registerHostUnload === "function")
+          window.ZentralRuntime.registerHostUnload(destroy);
+        else {
+          try {
+            if (typeof window.addUnloadListener === "function") window.addUnloadListener(destroy);
+            else if (typeof UC_API !== "undefined" && typeof UC_API.addUnloadListener === "function") UC_API.addUnloadListener(destroy);
+          } catch (error) {
+            console.warn("[Zentral] Optional loader hook unavailable; native cleanup remains active", error);
+          }
+        }
         if (
           typeof gBrowserInit !== "undefined" &&
           !gBrowserInit.delayedStartupFinished

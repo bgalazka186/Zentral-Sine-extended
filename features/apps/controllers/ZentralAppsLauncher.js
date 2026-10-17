@@ -306,7 +306,9 @@
                   return;
                 if (e.deltaY !== 0 || e.deltaX !== 0) {
                   e.preventDefault();
-                  const delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
+                  const rtl = window.getComputedStyle(scrollBox).direction === "rtl";
+                  const delta = e.deltaY !== 0
+                    ? e.deltaY * (rtl ? -1 : 1) : e.deltaX;
                   scrollBox.scrollLeft += delta * 8;
                   this.updateScrollMask();
                 }
@@ -1162,11 +1164,14 @@
           const isOverflowing =
             scrollBox.scrollWidth > scrollBox.clientWidth + 2;
 
-          const sl = scrollBox.scrollLeft;
-          const maxScroll = scrollBox.scrollWidth - scrollBox.clientWidth;
-
-          const hasLeft = isOverflowing && sl > 2;
-          const hasRight = isOverflowing && maxScroll - sl > 2;
+          const maxScroll = Math.max(0, scrollBox.scrollWidth - scrollBox.clientWidth);
+          // Gecko uses [-maxScroll, 0] in RTL. Normalize to physical distance
+          // from the left, retaining fractional positions and the 2px tolerance.
+          const rtl = window.getComputedStyle(scrollBox).direction === "rtl";
+          const fromLeft = Math.max(0, Math.min(maxScroll,
+            rtl ? maxScroll + scrollBox.scrollLeft : scrollBox.scrollLeft));
+          const hasLeft = isOverflowing && fromLeft > 2;
+          const hasRight = isOverflowing && maxScroll - fromLeft > 2;
           const dist = "28px";
 
           let mask = "none";
@@ -1191,6 +1196,10 @@
             );
             const isVerticalBar = placement === "vertical-bar";
             const shouldUseToolbar = this.isPhysicallySidebarCollapsed();
+            // Layout changes need not rebuild tiles. Do not carry the expanded
+            // sidebar's RTL ordering into the horizontal toolbar after a toggle.
+            grid.style.direction = isVerticalBar || shouldUseToolbar || this.isSidebarRight()
+              ? "ltr" : "rtl";
 
             document.documentElement.setAttribute(
               "zentral-apps-placement",
@@ -1275,7 +1284,16 @@
                   "repositionGrid: Collapsed/Compact mode → grid placed in toolbar.",
                 );
 
-                if (bookmarksContainer && bookmarksContainer.parentNode) {
+                const bookmarksToolbar = bookmarksContainer?.closest?.("toolbar") ||
+                  bookmarksContainer?.parentNode;
+                const bookmarksStyle = bookmarksToolbar && window.getComputedStyle(bookmarksToolbar);
+                const visibleBookmarks = bookmarksToolbar && !bookmarksToolbar.hidden &&
+                  !bookmarksToolbar.collapsed && bookmarksToolbar.getAttribute("collapsed") !== "true" &&
+                  bookmarksStyle.display !== "none" &&
+                  !["hidden", "collapse"].includes(bookmarksStyle.visibility);
+                // A hidden bookmarks toolbar still exists in the DOM. Putting
+                // launchers inside it makes every app disappear with that bar.
+                if (visibleBookmarks && bookmarksContainer?.parentNode) {
                   const targetParent = bookmarksContainer.parentNode;
                   if (
                     grid.parentNode !== targetParent ||
@@ -1290,8 +1308,10 @@
                   const targetBtn =
                     document.getElementById("unified-extensions-button") ||
                     document.getElementById("PanelUI-button");
-                  if (targetBtn && targetBtn.parentNode) {
-                    if (grid.nextSibling !== targetBtn)
+                  // Native customization/overflow can park this button in a
+                  // different (hidden) container. Anchor only in our chosen host.
+                  if (targetBtn?.parentNode === topToolbar) {
+                    if (grid.parentNode !== topToolbar || grid.nextSibling !== targetBtn)
                       targetBtn.parentNode.insertBefore(grid, targetBtn);
                   } else if (grid.parentNode !== topToolbar) {
                     topToolbar.appendChild(grid);

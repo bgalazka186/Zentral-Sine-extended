@@ -980,12 +980,6 @@
       ]
     },
     {
-      "property": "zen.workspace.zentral.experimental.compact_sidebar_hover",
-      "label": "Stabilize compact tab sidebar hover (experimental)",
-      "type": "checkbox",
-      "defaultValue": false
-    },
-    {
       "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal",
       "label": "Reveal compact tab sidebar on window entry (experimental)",
       "type": "checkbox",
@@ -1002,6 +996,12 @@
       "label": "Only enhance panels when not pushing the webpage",
       "type": "checkbox",
       "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.experimental.compact_sidebar_hover",
+      "label": "Stabilize compact tab sidebar hover (experimental)",
+      "type": "checkbox",
+      "defaultValue": false
     },
     {
       "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px",
@@ -1089,21 +1089,6 @@
     }
   ],
   "settings": {
-    "zen.workspace.zentral.experimental.compact_sidebar_hover": {
-      "category": "experimental",
-      "section": "Native compact sidebar",
-      "owner": "compact-hover"
-    },
-    "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px": {
-      "category": "experimental",
-      "section": "Native compact sidebar",
-      "owner": "compact-hover"
-    },
-    "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms": {
-      "category": "experimental",
-      "section": "Native compact sidebar",
-      "owner": "compact-hover"
-    },
     "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal": {
       "category": "experimental",
       "section": "Native compact sidebar",
@@ -1145,6 +1130,21 @@
       "owner": "compact-hover"
     },
     "zen.workspace.zentral.experimental.sidebar_startup_recalculate.verification_frames": {
+      "category": "experimental",
+      "section": "Native compact sidebar",
+      "owner": "compact-hover"
+    },
+    "zen.workspace.zentral.experimental.compact_sidebar_hover": {
+      "category": "experimental",
+      "section": "Native compact sidebar",
+      "owner": "compact-hover"
+    },
+    "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px": {
+      "category": "experimental",
+      "section": "Native compact sidebar",
+      "owner": "compact-hover"
+    },
+    "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms": {
       "category": "experimental",
       "section": "Native compact sidebar",
       "owner": "compact-hover"

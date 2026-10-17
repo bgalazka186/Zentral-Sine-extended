@@ -952,7 +952,7 @@
           document.documentElement.hasAttribute(
             "bgalazka-hover-panel-hidden",
           ) ||
-          !["menupopup", "panel"].includes(event.target?.localName)
+          !["menupopup", "panel", "panel-list"].includes(event.target?.localName)
         )
           return;
         hoverOpenPopups.add(event.target);
@@ -1271,7 +1271,6 @@
       const pushStateObserver = new MutationObserver(syncPanelEntryListener);
       function syncPanelWindowEntry() {
         panelEntryAllowed = Boolean(
-          getPref(compactHoverPref, false) &&
           getPref(windowEntryPref, false) &&
           getPref(panelEntryPref, false) &&
           getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false),
@@ -1298,12 +1297,11 @@
         syncPanelEntryListener();
       }
       const entryPrefs = [
-        compactHoverPref,
+        windowEntryPref,
         BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL,
         "zen.view.compact.sidebar-keep-hover.duration",
       ];
       const entrySettings = new Set([
-        compactHoverPref,
         windowEntryPref,
         panelEntryPref,
         panelEntryOverlayPref,

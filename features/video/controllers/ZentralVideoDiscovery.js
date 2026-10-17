@@ -565,6 +565,11 @@
       }
       async function inspectBrowser(item) {
         if (!item.browser?.browsingContext || item.tab?.closing) return [];
+        const currentGlobal = item.browser.browsingContext.currentWindowGlobal;
+        const scheme = currentGlobal?.documentURI?.scheme;
+        if (!item.browser.isConnected || !currentGlobal || currentGlobal.isClosed ||
+            item.browser.currentURI?.spec === "about:blank" ||
+            (scheme && !["http", "https", "file", "moz-extension"].includes(scheme))) return [];
         const generation = deps.scanGeneration;
         deps.diagnostics.inspected++;
         const choice = deps.discoveryChoice();
@@ -661,8 +666,12 @@
         const generation = ++deps.scanGeneration;
         try {
           deps.mount();
-          const items = Array.from(gBrowser.tabs)
-            .filter((tab) => !tab.closing)
+          // Native tabs lists are space-local. Retain loaded sources in other
+          // spaces (including a pinned/current preview) without waking lazy tabs.
+          const items = Array.from(window.gZenWorkspaces?.allStoredTabs ?? gBrowser.tabs)
+            .filter((tab) => tab.isConnected && !tab.closing && tab.linkedPanel &&
+              !tab.hasAttribute("pending") && !tab.hasAttribute("discarded") &&
+              !(tab.hasAttribute("zen-dormant") && tab.getAttribute("zen-dormant") !== "false"))
             .map((tab) => ({
               tab,
               browser: tab.linkedBrowser,

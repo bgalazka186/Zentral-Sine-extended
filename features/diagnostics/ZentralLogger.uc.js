@@ -1597,8 +1597,16 @@
           delete window.ZenzeiLogger;
           delete window.ZenTabPeekLogger;
         };
-        if (typeof window.addUnloadListener === "function")
-          window.addUnloadListener(onLoggerUnload);
+        if (typeof window.ZentralRuntime?.registerHostUnload === "function")
+          window.ZentralRuntime.registerHostUnload(onLoggerUnload);
+        else {
+          try {
+            if (typeof window.addUnloadListener === "function") window.addUnloadListener(onLoggerUnload);
+            else if (typeof UC_API !== "undefined" && typeof UC_API.addUnloadListener === "function") UC_API.addUnloadListener(onLoggerUnload);
+          } catch (error) {
+            console.warn("[Zentral] Optional loader hook unavailable; native cleanup remains active", error);
+          }
+        }
         window.addEventListener("unload", onLoggerUnload, { once: true });
         cleanupObservers.push(() =>
           window.removeEventListener("unload", onLoggerUnload),
