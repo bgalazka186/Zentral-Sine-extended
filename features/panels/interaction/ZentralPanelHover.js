@@ -952,7 +952,9 @@
           document.documentElement.hasAttribute(
             "bgalazka-hover-panel-hidden",
           ) ||
-          !["menupopup", "panel", "panel-list"].includes(event.target?.localName)
+          !["menupopup", "panel", "panel-list"].includes(
+            event.target?.localName,
+          )
         )
           return;
         hoverOpenPopups.add(event.target);
@@ -1236,6 +1238,10 @@
           onHoverRootLeave();
         }, panelEntryGrace);
       }
+      function onPanelNativeWindowEntry(event) {
+        if (event.isTrusted && !event.relatedTarget)
+          onPanelWindowEntry(event, true);
+      }
       function syncPanelEntryListener() {
         const enabled =
           panelEntryAllowed &&
@@ -1249,6 +1255,7 @@
           releasePanelEntry();
         }
         const method = enabled ? "addEventListener" : "removeEventListener";
+        window[method]("mouseover", onPanelNativeWindowEntry, true);
         document.documentElement[method](
           "mouseenter",
           onPanelWindowEntry,
@@ -1322,6 +1329,7 @@
       registerCleanup(() => {
         panelEntryAllowed = false;
         panelEntryListening = false;
+        window.removeEventListener("mouseover", onPanelNativeWindowEntry, true);
         pushStateObserver.disconnect();
         clearPanelExit();
         releasePanelEntry(false);

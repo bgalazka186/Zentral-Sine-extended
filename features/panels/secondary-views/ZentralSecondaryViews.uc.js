@@ -248,6 +248,47 @@
           state.dividerHandle.style.height = `${line.height + 6}px`;
         });
       }
+      // Resume can leave secondary geometry/activity stale without a resize.
+      // Coalesce native lifecycle signals; one delayed pass covers restored layout.
+      let resumeFrame = null;
+      let resumeTimer = null;
+      const secondaryResumeVisible = () =>
+        !!state.mode &&
+        state.second?.isConnected &&
+        isOpen() &&
+        document.visibilityState !== "hidden" &&
+        !ui.hasAttribute("bgalazka-hover-panel-hidden");
+      const queueSecondaryResumeFrame = () => {
+        if (resumeFrame !== null || !secondaryResumeVisible()) return;
+        resumeFrame = requestAnimationFrame(() => {
+          resumeFrame = null;
+          if (!secondaryResumeVisible()) return;
+          fitSecondaryBrowsers();
+          ctx.requestPanelActivity();
+        });
+      };
+      const resumeSecondaryView = () => {
+        if (!secondaryResumeVisible()) return;
+        queueSecondaryResumeFrame();
+        if (resumeTimer === null)
+          resumeTimer = ctx.setTimeout(() => {
+            resumeTimer = null;
+            queueSecondaryResumeFrame();
+          }, 250);
+      };
+      window.addEventListener("activate", resumeSecondaryView);
+      window.addEventListener("sizemodechange", resumeSecondaryView);
+      document.addEventListener("visibilitychange", resumeSecondaryView);
+      Services.obs.addObserver(resumeSecondaryView, "wake_notification");
+      ctx.registerCleanup(() => {
+        window.removeEventListener("activate", resumeSecondaryView);
+        window.removeEventListener("sizemodechange", resumeSecondaryView);
+        document.removeEventListener("visibilitychange", resumeSecondaryView);
+        Services.obs.removeObserver(resumeSecondaryView, "wake_notification");
+        if (resumeFrame !== null) cancelAnimationFrame(resumeFrame);
+        if (resumeTimer !== null) ctx.clearTimeout(resumeTimer);
+        resumeFrame = resumeTimer = null;
+      });
       function discardSecond() {
         state.geometryObserver?.disconnect();
         state.geometryObserver = null;

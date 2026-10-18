@@ -2,76 +2,139 @@
 (function () {
   "use strict";
   const PREF = "zen.workspace.zentral.experimental.compact_sidebar_hover";
-  const MARGIN_PREF=PREF+".edge_margin_px", GRACE_PREF=PREF+".exit_grace_ms";
-  const RETURN_GRACE_MS=250, RECENT_EXIT_MS=1500;
-  const ENTRY_PREF = "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal";
-  const REPAIR_PREF = "zen.workspace.zentral.experimental.sidebar_startup_recalculate";
-  const Services = globalThis.Services || ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
+  const MARGIN_PREF = PREF + ".edge_margin_px",
+    GRACE_PREF = PREF + ".exit_grace_ms";
+  const RETURN_GRACE_MS = 250,
+    RECENT_EXIT_MS = 1500;
+  const ENTRY_PREF =
+    "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal";
+  const REPAIR_PREF =
+    "zen.workspace.zentral.experimental.sidebar_startup_recalculate";
+  const Services =
+    globalThis.Services ||
+    ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
+      .Services;
   function attachEntry() {
     const manager = window.gZenCompactModeManager;
     const root = document.documentElement;
-    let timer = null, point = null, owned = false, exitAt = null, rightAtExit = false;
-    const enabled = () => Services.prefs.getBoolPref(ENTRY_PREF, false) && manager.preference &&
-      manager.canHideSidebar && !manager._ignoreNextHover &&
-      Services.prefs.getBoolPref("zen.view.compact.show-sidebar-and-toolbar-on-hover", true);
-    const bounds = node => window.windowUtils?.getBoundsWithoutFlushing?.(node) || node.getBoundingClientRect();
-    const inside = (box,p) => p && p.clientX >= box.left && p.clientX <= box.right && p.clientY >= box.top && p.clientY <= box.bottom;
+    let timer = null,
+      point = null,
+      owned = false,
+      exitAt = null,
+      rightAtExit = false;
+    const enabled = () =>
+      Services.prefs.getBoolPref(ENTRY_PREF, false) &&
+      manager.preference &&
+      manager.canHideSidebar &&
+      !manager._ignoreNextHover &&
+      Services.prefs.getBoolPref(
+        "zen.view.compact.show-sidebar-and-toolbar-on-hover",
+        true,
+      );
+    const bounds = (node) =>
+      window.windowUtils?.getBoundsWithoutFlushing?.(node) ||
+      node.getBoundingClientRect();
+    const inside = (box, p) =>
+      p &&
+      p.clientX >= box.left &&
+      p.clientX <= box.right &&
+      p.clientY >= box.top &&
+      p.clientY <= box.bottom;
     function release() {
       if (timer !== null) window.clearTimeout(timer);
-      timer = null; point = null; exitAt = null;
-      const hide = owned; owned = false;
+      timer = null;
+      point = null;
+      exitAt = null;
+      const hide = owned;
+      owned = false;
       if (hide) manager._setElementExpandAttribute(manager.sidebar, false);
     }
     function enter(event, fallback = false) {
-      if ((!fallback && event.target !== root) || !event.isTrusted || !enabled() || timer !== null ||
-          manager._isTabBeingDragged || manager._hasHoveredUrlbar ||
-          root.getAttribute("supress-primary-adjustment") === "true" ||
-          (!fallback && event.relatedTarget && root.contains(event.relatedTarget))) return;
-      const box = bounds(root), sidebar = manager.sidebar, side = bounds(sidebar), right = !!manager.sidebarIsOnRight;
-      const recent = exitAt !== null && Date.now() - exitAt <= 1500 && rightAtExit === right;
+      if (
+        (!fallback && event.target !== root) ||
+        !event.isTrusted ||
+        !enabled() ||
+        timer !== null ||
+        manager._isTabBeingDragged ||
+        manager._hasHoveredUrlbar ||
+        root.getAttribute("supress-primary-adjustment") === "true" ||
+        (!fallback && event.relatedTarget && root.contains(event.relatedTarget))
+      )
+        return;
+      const box = bounds(root),
+        sidebar = manager.sidebar,
+        side = bounds(sidebar),
+        right = !!manager.sidebarIsOnRight;
+      const recent =
+        exitAt !== null && Date.now() - exitAt <= 1500 && rightAtExit === right;
       exitAt = null;
-      if (!inside(box,event) || event.clientY <= box.top+10 || event.clientY >= box.bottom-10 ||
-          event.clientY < side.top || event.clientY > side.bottom ||
-          (Math.abs(event.clientX-(right?box.right:box.left))>10 &&
-           !(recent && (right?event.clientX>=(box.left+box.right)/2:event.clientX<=(box.left+box.right)/2)))) return;
-      manager.clearFlashTimeout?.("has-hover"+sidebar.id);
+      if (
+        !inside(box, event) ||
+        event.clientY <= box.top + 10 ||
+        event.clientY >= box.bottom - 10 ||
+        event.clientY < side.top ||
+        event.clientY > side.bottom ||
+        (Math.abs(event.clientX - (right ? box.right : box.left)) > 10 &&
+          !(
+            recent &&
+            (right
+              ? event.clientX >= (box.left + box.right) / 2
+              : event.clientX <= (box.left + box.right) / 2)
+          ))
+      )
+        return;
+      manager.clearFlashTimeout?.("has-hover" + sidebar.id);
       const frame = manager._removeHoverFrames?.[sidebar.id];
       if (frame != null) window.cancelAnimationFrame(frame);
       owned = !sidebar.hasAttribute("zen-has-hover");
-      if (owned) manager._setElementExpandAttribute(sidebar,true);
-      point = {clientX:event.clientX,clientY:event.clientY};
+      if (owned) manager._setElementExpandAttribute(sidebar, true);
+      point = { clientX: event.clientX, clientY: event.clientY };
       timer = window.setTimeout(() => {
-        timer=null;
-        const hide = owned && !inside(bounds(sidebar),point);
-        owned=false;point=null;
-        if (hide) manager._setElementExpandAttribute(sidebar,false);
-      },250);
+        timer = null;
+        const hide = owned && !inside(bounds(sidebar), point);
+        owned = false;
+        point = null;
+        if (hide) manager._setElementExpandAttribute(sidebar, false);
+      }, 250);
     }
     function move(event) {
       if (!event.isTrusted) return;
-      if (exitAt !== null && inside(bounds(root),event)) enter(event,true);
-      if (point) {point.clientX=event.clientX;point.clientY=event.clientY;}
+      if (exitAt !== null && inside(bounds(root), event)) enter(event, true);
+      if (point) {
+        point.clientX = event.clientX;
+        point.clientY = event.clientY;
+      }
     }
     function leave(event) {
       if (event.target !== root || !event.isTrusted || !enabled()) return;
-      const box=bounds(root),right=!!manager.sidebarIsOnRight;
-      exitAt=(right?event.clientX>=box.right-10:event.clientX<=box.left+10)?Date.now():null;
-      rightAtExit=right;
+      const box = bounds(root),
+        right = !!manager.sidebarIsOnRight;
+      exitAt = (
+        right ? event.clientX >= box.right - 10 : event.clientX <= box.left + 10
+      )
+        ? Date.now()
+        : null;
+      rightAtExit = right;
     }
-    root.addEventListener("mouseenter",enter,true);
-    root.addEventListener("mouseleave",leave,true);
-    window.addEventListener("mousemove",move,true);
-    const resets=["deactivate","resize","sizemodechange","dragstart"];
-    for(const type of resets)window.addEventListener(type,release,true);
-    const destroy=()=>{
-      release();root.removeEventListener("mouseenter",enter,true);root.removeEventListener("mouseleave",leave,true);
-      window.removeEventListener("mousemove",move,true);
-      for(const type of resets)window.removeEventListener(type,release,true);
+    root.addEventListener("mouseenter", enter, true);
+    root.addEventListener("mouseleave", leave, true);
+    window.addEventListener("mousemove", move, true);
+    const resets = ["deactivate", "resize", "sizemodechange", "dragstart"];
+    for (const type of resets) window.addEventListener(type, release, true);
+    const destroy = () => {
+      release();
+      root.removeEventListener("mouseenter", enter, true);
+      root.removeEventListener("mouseleave", leave, true);
+      window.removeEventListener("mousemove", move, true);
+      for (const type of resets)
+        window.removeEventListener(type, release, true);
     };
-    destroy.manager=manager;destroy.refresh=release;
+    destroy.manager = manager;
+    destroy.refresh = release;
+    destroy.prime = (event) => enter(event, true);
     return destroy;
   }
-  function attachStabilizer() {
+  function attachStabilizer(onHooksChanged) {
     const manager = window.gZenCompactModeManager;
     if (typeof manager?._setElementExpandAttribute !== "function")
       throw new Error(
@@ -102,6 +165,9 @@
       boundsFrame = null;
     const cleanups = [];
     const hookCleanups = [];
+    const hookRecords = [];
+    const hooksCurrent = () =>
+      hookRecords.every(({ key, wrapper }) => manager[key] === wrapper);
     let hooksInstalled = false;
     let refreshFrame = null;
     let configuredSidebar = null,
@@ -168,6 +234,7 @@
         enumerable: own?.enumerable ?? true,
         value: wrapper,
       });
+      hookRecords.push({ key, wrapper });
       hookCleanups.push(() => {
         if (manager[key] !== wrapper) return; // Another mod may wrap ours later.
         if (own) Object.defineProperty(manager, key, own);
@@ -305,6 +372,10 @@
     }
     function onMove(event) {
       if (!event.isTrusted) return;
+      if (hooksInstalled && !hooksCurrent()) {
+        onHooksChanged?.(event);
+        return;
+      }
       if (!enabled()) {
         reset();
         return;
@@ -455,14 +526,14 @@
         if (active) refresh();
       });
     }
-    function destroy() {
+    function destroy(releaseOwned = true) {
       if (!active) return;
       active = false;
       if (refreshFrame !== null) window.cancelAnimationFrame(refreshFrame);
       refreshFrame = null;
       setMovementListeners(false);
       setEntryListener(false);
-      reset();
+      reset(releaseOwned);
       setHooks(false);
       for (const cleanup of cleanups.reverse()) cleanup();
     }
@@ -471,6 +542,7 @@
       hooksInstalled = value;
       if (!value) {
         for (const cleanup of hookCleanups.splice(0).reverse()) cleanup();
+        hookRecords.length = 0;
         return;
       }
       wrap(
@@ -498,8 +570,15 @@
             }
             // Native hover now expands synchronously, potentially in the same
             // frame as a hidden-sidebar measurement from a crossing event.
-            if (active && configured && element === this.sidebar && value && attr === "zen-has-hover" &&
-                !element.hasAttribute(attr)) invalidateBounds();
+            if (
+              active &&
+              configured &&
+              element === this.sidebar &&
+              value &&
+              attr === "zen-has-hover" &&
+              !element.hasAttribute(attr)
+            )
+              invalidateBounds();
             return original.call(this, element, value, attr);
           },
       );
@@ -510,9 +589,13 @@
           (original) =>
             function (...args) {
               // A tracker for the toolbar (or no tracker) owns no sidebar state.
-              if (active && configured &&
-                  (key === "_clearAllHoverStates" ||
-                   this._outsideTrackedElement === this.sidebar)) reset();
+              if (
+                active &&
+                configured &&
+                (key === "_clearAllHoverStates" ||
+                  this._outsideTrackedElement === this.sidebar)
+              )
+                reset();
               return original.apply(this, args);
             },
         );
@@ -576,19 +659,34 @@
       refreshAfterNative();
       destroy.refresh = refreshAfterNative;
       destroy.manager = manager;
+      destroy.hooksCurrent = hooksCurrent;
+      destroy.prime = onMove;
       return destroy;
     } catch (error) {
       destroy();
       throw error;
     }
   }
-  function attach() {
-    const guardOn=Services.prefs.getBoolPref(PREF,false), entryOn=Services.prefs.getBoolPref(ENTRY_PREF,false);
-    const guard=guardOn?attachStabilizer():null, entry=entryOn?attachEntry():null;
-    const destroy=()=>{entry?.();guard?.();};
-    destroy.manager=window.gZenCompactModeManager;
-    destroy.guardOn=guardOn;destroy.entryOn=entryOn;
-    destroy.refresh=()=>{guard?.refresh();};
+  function attach(onHooksChanged) {
+    const guardOn = Services.prefs.getBoolPref(PREF, false),
+      entryOn = Services.prefs.getBoolPref(ENTRY_PREF, false);
+    const guard = guardOn ? attachStabilizer(onHooksChanged) : null,
+      entry = entryOn ? attachEntry() : null;
+    const destroy = (releaseOwned = true) => {
+      entry?.();
+      guard?.(releaseOwned);
+    };
+    destroy.manager = window.gZenCompactModeManager;
+    destroy.guardOn = guardOn;
+    destroy.entryOn = entryOn;
+    destroy.refresh = () => {
+      guard?.refresh();
+    };
+    destroy.needsReattach = () => guard && !guard.hooksCurrent();
+    destroy.prime = (event) => {
+      guard?.prime(event);
+      entry?.prime(event);
+    };
     return destroy;
   }
   function start() {
@@ -596,6 +694,29 @@
       cleanup = null,
       task = null,
       watching = false;
+    let startupProbe = null,
+      probeIndex = 0,
+      lastPointer = null;
+    const probeDelays = [50, 150, 500, 1500, 4000];
+    function cancelStartupProbe() {
+      if (startupProbe !== null) window.clearTimeout(startupProbe);
+      startupProbe = null;
+    }
+    function probeStartup() {
+      if (
+        stopped ||
+        !watching ||
+        startupProbe !== null ||
+        probeIndex >= probeDelays.length
+      )
+        return;
+      startupProbe = window.setTimeout(() => {
+        startupProbe = null;
+        if (stopped || !watching) return;
+        reconcile();
+        probeStartup();
+      }, probeDelays[probeIndex++]);
+    }
     const root = document.documentElement;
     let repairFrame = null,
       repairTimer = null,
@@ -772,16 +893,40 @@
 
     function reconcile() {
       task = null;
-      if (stopped || !(Services.prefs.getBoolPref(ENTRY_PREF, false) || Services.prefs.getBoolPref(PREF,false))) return;
+      if (
+        stopped ||
+        !(
+          Services.prefs.getBoolPref(ENTRY_PREF, false) ||
+          Services.prefs.getBoolPref(PREF, false)
+        )
+      )
+        return;
+      if (lastPointer && Date.now() - lastPointer.at > 250) lastPointer = null;
       const manager = window.gZenCompactModeManager;
-      if (cleanup && (cleanup.manager !== manager ||
-          cleanup.guardOn !== Services.prefs.getBoolPref(PREF,false) ||
-          cleanup.entryOn !== Services.prefs.getBoolPref(ENTRY_PREF,false))) {
-        cleanup();
+      const hooksChanged = cleanup?.needsReattach();
+      if (
+        cleanup &&
+        (hooksChanged ||
+          cleanup.manager !== manager ||
+          cleanup.guardOn !== Services.prefs.getBoolPref(PREF, false) ||
+          cleanup.entryOn !== Services.prefs.getBoolPref(ENTRY_PREF, false))
+      ) {
+        // A late initializer or another mod may replace methods on the SAME
+        // manager. Retire the old guard without hiding the live sidebar.
+        const preserveHover =
+          hooksChanged &&
+          cleanup.manager === manager &&
+          cleanup.guardOn === Services.prefs.getBoolPref(PREF, false) &&
+          cleanup.entryOn === Services.prefs.getBoolPref(ENTRY_PREF, false);
+        cleanup(!preserveHover);
         cleanup = null;
       }
       if (cleanup) {
         cleanup.refresh();
+        if (lastPointer) {
+          cleanup.prime(lastPointer);
+          lastPointer = null;
+        }
         return;
       }
       if (
@@ -789,11 +934,34 @@
         !manager.sidebar
       )
         return;
-      cleanup = attach();
+      cleanup = attach(queueReconcile);
+      if (lastPointer) {
+        cleanup.prime(lastPointer);
+        lastPointer = null;
+      }
     }
-    function queueReconcile() {
+    function queueReconcile(event) {
+      if (event?.isTrusted && Number.isFinite(event.clientX))
+        lastPointer = {
+          isTrusted: true,
+          clientX: event.clientX,
+          clientY: event.clientY,
+          at: Date.now(),
+        };
       if (stopped || !watching || task !== null) return;
       task = window.setTimeout(reconcile, 0);
+    }
+    // Native window entry may target a chrome child instead of the root.
+    // Also recheck late/replaced native managers on an actual entry, even after
+    // bounded startup probes have ended. No work on internal mouse transitions.
+    function onWindowEntry(event) {
+      if (
+        !event.isTrusted ||
+        event.relatedTarget ||
+        !Services.prefs.getBoolPref(ENTRY_PREF, false)
+      )
+        return;
+      queueReconcile(event);
     }
     const hostObserver = new MutationObserver(queueReconcile);
     const hostEvents = [
@@ -803,11 +971,18 @@
       "aftercustomization",
     ];
     function syncWatching() {
-      const value = !stopped && (Services.prefs.getBoolPref(ENTRY_PREF, false) || Services.prefs.getBoolPref(PREF,false));
+      const value =
+        !stopped &&
+        (Services.prefs.getBoolPref(ENTRY_PREF, false) ||
+          Services.prefs.getBoolPref(PREF, false));
       if (watching !== value) {
         watching = value;
+        cancelStartupProbe();
+        probeIndex = 0;
+        if (!value) lastPointer = null;
         const method = value ? "addEventListener" : "removeEventListener";
         for (const type of hostEvents) window[method](type, queueReconcile);
+        window[method]("mouseover", onWindowEntry, true);
         hostObserver.disconnect();
         if (value)
           hostObserver.observe(root, {
@@ -831,7 +1006,10 @@
         cleanup();
         cleanup = null;
       }
-      if (value) reconcile();
+      if (value) {
+        reconcile();
+        probeStartup();
+      }
     }
     const observer = {
       observe(subject, topic, pref) {

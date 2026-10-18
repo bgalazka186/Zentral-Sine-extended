@@ -1382,14 +1382,74 @@
               },
             });
             syncStartupDelay();
-            const compactHoverPref = "zen.workspace.zentral.experimental.compact_sidebar_hover";
+            const compactHoverPref =
+              "zen.workspace.zentral.experimental.compact_sidebar_hover";
             const stabilize = createToggleRow(
               "Stabilize Compact Tab Sidebar Hover (Experimental)",
               "Prevent repeated native hide/show while the pointer remains over the sidebar. Independent of window-entry reveal. Off by default.",
-              compactHoverPref, null, false, ctx.PREF_ICONS.TOOLBAR,
+              compactHoverPref,
+              null,
+              false,
+              ctx.PREF_ICONS.TOOLBAR,
             );
             content.appendChild(stabilize.row);
-            panel._toggles.push({ input: stabilize.input, pref: compactHoverPref, def: false });
+            const hoverSliders = [];
+            const syncHoverSliders = () => {
+              const disabled = !ctx.getPref(compactHoverPref, false);
+              for (const control of hoverSliders) {
+                control.input.disabled = disabled;
+                control.row.style.opacity = disabled ? "0.5" : "";
+              }
+            };
+            stabilize.input.addEventListener("change", syncHoverSliders);
+            panel._toggles.push({
+              input: stabilize.input,
+              pref: compactHoverPref,
+              def: false,
+              onSync: syncHoverSliders,
+            });
+            for (const [label, description, suffix, max, def, unit] of [
+              [
+                "Compact Sidebar Edge Tolerance",
+                "Tolerance around an already revealed sidebar.",
+                ".edge_margin_px",
+                64,
+                12,
+                " px",
+              ],
+              [
+                "Compact Sidebar Exit Grace",
+                "Delay before allowing the sidebar to hide after leaving its edge.",
+                ".exit_grace_ms",
+                2000,
+                250,
+                " ms",
+              ],
+            ]) {
+              const pref = compactHoverPref + suffix;
+              const control = createSliderRow(
+                label,
+                description,
+                pref,
+                0,
+                max,
+                def,
+                unit,
+              );
+              control.input.step = 1;
+              hoverSliders.push(control);
+              content.appendChild(control.row);
+              panel._toggles.push({
+                input: control.input,
+                pref,
+                def,
+                isSelect: true,
+                onSync: (value) => {
+                  control.badge.textContent = value + unit;
+                },
+              });
+            }
+            syncHoverSliders();
             const entryRevealPref = compactHoverPref + ".window_entry_reveal";
             const tEntryReveal = createToggleRow(
               "Reveal Compact Tab Sidebar on Window Entry (Experimental)",
