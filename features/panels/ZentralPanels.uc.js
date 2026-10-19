@@ -77,6 +77,10 @@
   ZentralRuntime.register({
     id: "panels",
     init() {
+      // Cleanup ownership must exist BEFORE publishing lazy ctx getters or
+      // preparing parts: preparation rollback may need it immediately.
+      const cleanupFns = [];
+      const registerCleanup = (fn) => cleanupFns.push(fn);
       const ctx = {};
       ZentralRuntime.panelContext = ctx;
       Object.defineProperties(ctx, {
@@ -151,7 +155,7 @@
         togglePanelAudio: { configurable: true, get: () => togglePanelAudio },
         updateCSSVars: { configurable: true, get: () => updateCSSVars },
       });
-      ZentralRuntime.prepareParts(ctx);
+      ZentralRuntime.prepareParts(ctx, cleanupFns);
 
       /* NOTE 26 - PANEL INPUT SHIELD: configurable `panel_input_shield` keeps the open
        * panel as a pointer hit-test barrier and scopes DOM/native Back/Forward
@@ -160,8 +164,6 @@
       if (window.BgalazkaExtensionInitialized) return;
       window.BgalazkaExtensionInitialized = true;
 
-      const cleanupFns = [];
-      const registerCleanup = (fn) => cleanupFns.push(fn);
       let extensionDisposed = false;
       // Scope every extension timer to this instance. Delayed UI work must not
       // resurrect controls or operate on a new mod instance after hot unload.
@@ -2007,7 +2009,8 @@
             value = ZoomManager.getZoomForBrowser(browser);
           }
           if (!Number.isFinite(value)) return false;
-          const zoom = Math.round(Math.max(0.3, Math.min(3, value)) * 100) / 100;
+          const zoom =
+            Math.round(Math.max(0.3, Math.min(3, value)) * 100) / 100;
           const essential = ctx.essentialPanels.get(browser._bgalazkaAppId);
           if (essential) {
             if (essential.app.zoom !== zoom) {
@@ -2016,20 +2019,27 @@
             }
             return true;
           }
-          return window.Zentral?.Apps?.rememberPanelZoom?.(browser, zoom) || false;
-        } catch (_) { return false; }
+          return (
+            window.Zentral?.Apps?.rememberPanelZoom?.(browser, zoom) || false
+          );
+        } catch (_) {
+          return false;
+        }
       };
       ctx.restorePanelZoom = (browser) => {
         if (!browser?.isConnected) return;
-        const zoom = ctx.essentialPanels.get(browser._bgalazkaAppId)?.app.zoom ??
+        const zoom =
+          ctx.essentialPanels.get(browser._bgalazkaAppId)?.app.zoom ??
           window.Zentral?.Apps?.getPanelZoom?.(browser);
         if (!Number.isFinite(zoom)) return; // Preserve native defaults for untouched panels.
         try {
           ctx.panelZoomRestoring.add(browser);
           if (Math.abs(ZoomManager.getZoomForBrowser(browser) - zoom) > 0.001)
             ZoomManager.setZoomForBrowser(browser, zoom);
-        } catch (_) {}
-        finally { ctx.panelZoomRestoring.delete(browser); } // Existing load/pageshow/state events retry once the host is ready.
+        } catch (_) {
+        } finally {
+          ctx.panelZoomRestoring.delete(browser);
+        } // Existing load/pageshow/state events retry once the host is ready.
       };
       function stepActivePanelZoom(delta, browser = getKeyboardPanelBrowser()) {
         if (!browser) return false;
@@ -2541,19 +2551,30 @@
             // reliably fire these events).
             if (result?.browser && !navigationListeners.has(result.browser)) {
               const onZoom = () => {
-                if (ctx.extensionDisposed || !result.browser.isConnected) return;
-                if (!ctx.panelZoomReady.has(result.browser) || ctx.panelZoomRestoring.has(result.browser) ||
-                    result.browser.webProgress?.isLoadingDocument) return;
+                if (ctx.extensionDisposed || !result.browser.isConnected)
+                  return;
+                if (
+                  !ctx.panelZoomReady.has(result.browser) ||
+                  ctx.panelZoomRestoring.has(result.browser) ||
+                  result.browser.webProgress?.isLoadingDocument
+                )
+                  return;
                 ctx.persistPanelZoom(result.browser);
                 ctx.updateWebToolbarState();
               };
               result.browser.addEventListener("FullZoomChange", onZoom, true);
               if (!result.isNew) ctx.panelZoomReady.add(result.browser);
               const onNav = (event) => {
-                if (event?.type === "XULFrameLoaderCreated") ctx.panelZoomReady.delete(result.browser);
-                if (["load", "pageshow", "XULFrameLoaderCreated"].includes(event?.type))
+                if (event?.type === "XULFrameLoaderCreated")
+                  ctx.panelZoomReady.delete(result.browser);
+                if (
+                  ["load", "pageshow", "XULFrameLoaderCreated"].includes(
+                    event?.type,
+                  )
+                )
                   ctx.restorePanelZoom(result.browser);
-                if (["load", "pageshow"].includes(event?.type)) ctx.panelZoomReady.add(result.browser);
+                if (["load", "pageshow"].includes(event?.type))
+                  ctx.panelZoomReady.add(result.browser);
                 // A process swap can revoke activation after openPanel's first
                 // retries. Reassert promptly on navigation instead of waiting
                 // for the periodic status check.
@@ -2582,7 +2603,8 @@
                 },
                 onStateChange(progress, request, stateFlags) {
                   if (progress && !progress.isTopLevel) return;
-                  if (stateFlags & Ci.nsIWebProgressListener.STATE_START) ctx.panelZoomReady.delete(result.browser);
+                  if (stateFlags & Ci.nsIWebProgressListener.STATE_START)
+                    ctx.panelZoomReady.delete(result.browser);
                   if (stateFlags & Ci.nsIWebProgressListener.STATE_STOP) {
                     ctx.restorePanelZoom(result.browser);
                     ctx.panelZoomReady.add(result.browser);
@@ -2650,7 +2672,9 @@
         const origCloseApp = apps.closeApp?.bind(apps);
         if (origCloseApp) {
           apps.closeApp = function (appId, ...args) {
-            const browser = ctx.getAllAppBrowsers().find(b => b._bgalazkaAppId === appId);
+            const browser = ctx
+              .getAllAppBrowsers()
+              .find((b) => b._bgalazkaAppId === appId);
             if (browser) ctx.persistPanelZoom(browser);
             const host = ctx.removeAddonHostRecord(appId);
             if (host?.removalFailed) {
@@ -2732,7 +2756,11 @@
           ctx.addonHostFolder = folder;
           ctx.keepAddonHostFolderCollapsed(folder);
         }
-        for (const tab of [...(window.gZenWorkspaces?.allStoredTabs ?? window.gBrowser?.tabs ?? [])]) {
+        for (const tab of [
+          ...(window.gZenWorkspaces?.allStoredTabs ??
+            window.gBrowser?.tabs ??
+            []),
+        ]) {
           if (ctx.addonHostByTab.get(tab)) continue;
           if (
             tab.hasAttribute("bgalazka-addon-host") ||
@@ -3092,7 +3120,9 @@
         settingsInstance._bgalazkaPatched = true;
 
         const removeSettingsHook = window.ZentralRuntime.registerSettingsHook(
-          "extension-settings", 10, () => ctx.injectSettingsUI?.(),
+          "extension-settings",
+          10,
+          () => ctx.injectSettingsUI?.(),
         );
         registerCleanup(() => {
           removeSettingsHook();
@@ -3229,12 +3259,22 @@
       ctx.reconcileFeaturePreferences = (key = null) => {
         // Appearance and video own their live updates. A color/slider edit must
         // not refresh panel hosts, tile browsers, toolbars or browser activity.
-        if (typeof key === "string" && key.startsWith("zen.workspace.bgalazka.look.")) {
+        if (
+          typeof key === "string" &&
+          key.startsWith("zen.workspace.bgalazka.look.")
+        ) {
           if (key === EXT_PREFS.TABBAR_COMPACT)
-            document.documentElement.setAttribute("bgalazka-tabbar-compact", String(getPref(key, false)));
+            document.documentElement.setAttribute(
+              "bgalazka-tabbar-compact",
+              String(getPref(key, false)),
+            );
           return;
         }
-        if (typeof key === "string" && key.startsWith("zen.workspace.zentral.video_preview.")) return;
+        if (
+          typeof key === "string" &&
+          key.startsWith("zen.workspace.zentral.video_preview.")
+        )
+          return;
         if (featureSyncTimer != null) return;
         featureSyncTimer = setTimeout(() => {
           featureSyncTimer = null;
@@ -3453,26 +3493,37 @@
           const selection = readStartupPanel();
           const apps = window.Zentral?.Apps;
           const root = document.getElementById("zen-app-panel-root");
-          if (!selection || !getPref("zen.workspace.apps.sidebar.enabled", true)) return true;
+          if (
+            !selection ||
+            !getPref("zen.workspace.apps.sidebar.enabled", true)
+          )
+            return true;
           // An already open panel belongs to the user; never replace it.
           if (!startupAttempted && root?.hasAttribute("open")) return true;
           if (!apps?.openPanel || !root) return false;
           if (!startupAutohideAvailable()) return true;
           const app = startupApp(selection.id);
           if (!app) return false;
-          if (
-            selection.mode === "triple" &&
-            !ctx.linkedPairFor(selection.id)
-          ) return true;
-          if (selection.mode === "triple" && !ctx.openStartupSinglePanel) return false;
+          if (selection.mode === "triple" && !ctx.linkedPairFor(selection.id))
+            return true;
+          if (selection.mode === "triple" && !ctx.openStartupSinglePanel)
+            return false;
           try {
             if (selection.mode === "triple") {
               // Use the panel API rather than a toggle-only tile click:
               // a retry must not close a partially opened startup panel.
-              const alreadyOpened = root.hasAttribute("open") &&
-                document.documentElement.getAttribute("bgalazka-triple-view") === "true" &&
-                ctx.getAllAppBrowsers().some(browser =>
-                  browser.isConnected && browser._bgalazkaAppId === selection.id);
+              const alreadyOpened =
+                root.hasAttribute("open") &&
+                document.documentElement.getAttribute(
+                  "bgalazka-triple-view",
+                ) === "true" &&
+                ctx
+                  .getAllAppBrowsers()
+                  .some(
+                    (browser) =>
+                      browser.isConnected &&
+                      browser._bgalazkaAppId === selection.id,
+                  );
               startupAttempted = true;
               if (!alreadyOpened) apps.openPanel(app);
               if (
@@ -3491,11 +3542,18 @@
             console.warn("[Zentral] Could not open startup panel", error);
             return false;
           }
-          const opened = root.hasAttribute("open") &&
-            ctx.getAllAppBrowsers().some(browser =>
-              browser.isConnected && browser._bgalazkaAppId === selection.id) &&
+          const opened =
+            root.hasAttribute("open") &&
+            ctx
+              .getAllAppBrowsers()
+              .some(
+                (browser) =>
+                  browser.isConnected &&
+                  browser._bgalazkaAppId === selection.id,
+              ) &&
             (selection.mode !== "triple" ||
-              document.documentElement.getAttribute("bgalazka-triple-view") === "true");
+              document.documentElement.getAttribute("bgalazka-triple-view") ===
+                "true");
           if (opened) setTimeout(onHoverRootLeave, 1200);
           return opened;
         };
@@ -3517,7 +3575,12 @@
           }
         };
         const onRestore = () => {
-          if (startupReady && !startupOpening && !startupFinished && !startupCancelled)
+          if (
+            startupReady &&
+            !startupOpening &&
+            !startupFinished &&
+            !startupCancelled
+          )
             ctx.retryPanelTask("startup-panel", tryStartupPanel);
         };
         const stopWatchingStartup = () => {
@@ -3574,10 +3637,18 @@
         window.ZentralRuntime.registerHostUnload(performBgalazkaUnload);
       else {
         try {
-          if (typeof window.addUnloadListener === "function") window.addUnloadListener(performBgalazkaUnload);
-          else if (typeof UC_API !== "undefined" && typeof UC_API.addUnloadListener === "function") UC_API.addUnloadListener(performBgalazkaUnload);
+          if (typeof window.addUnloadListener === "function")
+            window.addUnloadListener(performBgalazkaUnload);
+          else if (
+            typeof UC_API !== "undefined" &&
+            typeof UC_API.addUnloadListener === "function"
+          )
+            UC_API.addUnloadListener(performBgalazkaUnload);
         } catch (error) {
-          console.warn("[Zentral] Optional loader hook unavailable; native cleanup remains active", error);
+          console.warn(
+            "[Zentral] Optional loader hook unavailable; native cleanup remains active",
+            error,
+          );
         }
       }
       window.addEventListener("unload", performBgalazkaUnload, { once: true });

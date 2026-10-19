@@ -134,6 +134,11 @@
     destroy.prime = (event) => enter(event, true);
     return destroy;
   }
+  // TEMPORARY NATIVE WORKAROUND BOUNDARY: this function owns stabilization
+  // only. attachEntry and start's sidebar startup repair are independent.
+  // Retire this adapter + its own settings/call sites, not the compact-hover
+  // catalog owner. Keep preference keys stable if restoring it in the future.
+  // See this folder's README.md, "Retiring/restoring stabilization safely".
   function attachStabilizer(onHooksChanged) {
     const manager = window.gZenCompactModeManager;
     if (typeof manager?._setElementExpandAttribute !== "function")
@@ -151,6 +156,7 @@
     let blocked = false,
       timer = null;
     let configured = false,
+      hoverAllowed = true,
       keepHoverDelay = 0,
       listening = false;
     let entryListening = false,
@@ -225,7 +231,12 @@
     }
     function wrap(key, create) {
       const original = manager[key];
-      if (typeof original !== "function") return;
+      if (typeof original !== "function") {
+        // Optional native cleanup methods can appear after initialization too.
+        // Track absence so the readiness check notices that contract change.
+        hookRecords.push({ key, wrapper: original });
+        return;
+      }
       const own = Object.getOwnPropertyDescriptor(manager, key);
       const wrapper = create(original);
       Object.defineProperty(manager, key, {
@@ -372,7 +383,10 @@
     }
     function onMove(event) {
       if (!event.isTrusted) return;
-      if (hooksInstalled && !hooksCurrent()) {
+      if (
+        window.gZenCompactModeManager !== manager ||
+        (hooksInstalled && !hooksCurrent())
+      ) {
         onHooksChanged?.(event);
         return;
       }
@@ -461,6 +475,9 @@
       // Capture re-entry before Zen's once-only document mousemove callback.
       window[method]("mouseover", onMove, true);
       document.documentElement[method]("mouseleave", onLeave, true);
+      // The outer readiness adapter must learn when native prerequisites change
+      // after its bounded probes, without running another permanent timer.
+      if (active) onHooksChanged?.();
     }
     function refreshTunables() {
       // Preference reads stay outside the pointer-event path. Updating sliders
@@ -485,15 +502,17 @@
       );
     }
     function refresh() {
+      const previousHoverAllowed = hoverAllowed;
+      hoverAllowed = Services.prefs.getBoolPref(
+        "zen.view.compact.show-sidebar-and-toolbar-on-hover",
+        true,
+      );
       const nextConfigured = Boolean(
         active &&
         Services.prefs.getBoolPref(PREF, false) &&
         manager.preference &&
         manager.canHideSidebar &&
-        Services.prefs.getBoolPref(
-          "zen.view.compact.show-sidebar-and-toolbar-on-hover",
-          true,
-        ),
+        hoverAllowed,
       );
       const nextEntry = false; // Window entry is controlled independently.
       const nextRight = Boolean(manager.sidebarIsOnRight);
@@ -515,6 +534,7 @@
       setHooks(configured);
       setMovementListeners(configured);
       setEntryListener(nextEntry);
+      if (active && previousHoverAllowed !== hoverAllowed) onHooksChanged?.();
     }
     function refreshAfterNative() {
       refresh(); // Master-off remains immediate.
@@ -660,6 +680,7 @@
       destroy.refresh = refreshAfterNative;
       destroy.manager = manager;
       destroy.hooksCurrent = hooksCurrent;
+      destroy.awaitingNative = () => !configured && hoverAllowed;
       destroy.prime = onMove;
       return destroy;
     } catch (error) {
@@ -683,6 +704,7 @@
       guard?.refresh();
     };
     destroy.needsReattach = () => guard && !guard.hooksCurrent();
+    destroy.guardAwaitingNative = () => guard?.awaitingNative() ?? false;
     destroy.prime = (event) => {
       guard?.prime(event);
       entry?.prime(event);
@@ -697,6 +719,39 @@
     let startupProbe = null,
       probeIndex = 0,
       lastPointer = null;
+    let readinessListening = false;
+    // A missing/initially unavailable native manager can outlive the startup
+    // probe window. Listen only while waiting; the healthy guard already owns
+    // pointer events and detects manager/method replacement itself.
+    function syncReadinessMovement() {
+      const value =
+        !stopped &&
+        watching &&
+        Services.prefs.getBoolPref(PREF, false) &&
+        Services.prefs.getBoolPref(
+          "zen.view.compact.show-sidebar-and-toolbar-on-hover",
+          true,
+        ) &&
+        (!cleanup || cleanup.guardAwaitingNative());
+      if (readinessListening === value) return;
+      readinessListening = value;
+      const method = value ? "addEventListener" : "removeEventListener";
+      window[method]("mousemove", onReadinessMovement, true);
+      window[method]("mouseover", onReadinessMovement, true);
+    }
+    function onReadinessMovement(event) {
+      if (!event.isTrusted) return;
+      const manager = window.gZenCompactModeManager;
+      // No geometry, allocation, preference reads or timers while unavailable.
+      if (
+        !manager?.preference ||
+        !manager.canHideSidebar ||
+        !manager.sidebar ||
+        typeof manager._setElementExpandAttribute !== "function"
+      )
+        return;
+      queueReconcile(event);
+    }
     const probeDelays = [50, 150, 500, 1500, 4000];
     function cancelStartupProbe() {
       if (startupProbe !== null) window.clearTimeout(startupProbe);
@@ -893,51 +948,56 @@
 
     function reconcile() {
       task = null;
-      if (
-        stopped ||
-        !(
-          Services.prefs.getBoolPref(ENTRY_PREF, false) ||
-          Services.prefs.getBoolPref(PREF, false)
+      try {
+        if (
+          stopped ||
+          !(
+            Services.prefs.getBoolPref(ENTRY_PREF, false) ||
+            Services.prefs.getBoolPref(PREF, false)
+          )
         )
-      )
-        return;
-      if (lastPointer && Date.now() - lastPointer.at > 250) lastPointer = null;
-      const manager = window.gZenCompactModeManager;
-      const hooksChanged = cleanup?.needsReattach();
-      if (
-        cleanup &&
-        (hooksChanged ||
-          cleanup.manager !== manager ||
-          cleanup.guardOn !== Services.prefs.getBoolPref(PREF, false) ||
-          cleanup.entryOn !== Services.prefs.getBoolPref(ENTRY_PREF, false))
-      ) {
-        // A late initializer or another mod may replace methods on the SAME
-        // manager. Retire the old guard without hiding the live sidebar.
-        const preserveHover =
-          hooksChanged &&
-          cleanup.manager === manager &&
-          cleanup.guardOn === Services.prefs.getBoolPref(PREF, false) &&
-          cleanup.entryOn === Services.prefs.getBoolPref(ENTRY_PREF, false);
-        cleanup(!preserveHover);
-        cleanup = null;
-      }
-      if (cleanup) {
-        cleanup.refresh();
+          return;
+        if (lastPointer && Date.now() - lastPointer.at > 250)
+          lastPointer = null;
+        const manager = window.gZenCompactModeManager;
+        const hooksChanged = cleanup?.needsReattach();
+        if (
+          cleanup &&
+          (hooksChanged ||
+            cleanup.manager !== manager ||
+            cleanup.guardOn !== Services.prefs.getBoolPref(PREF, false) ||
+            cleanup.entryOn !== Services.prefs.getBoolPref(ENTRY_PREF, false))
+        ) {
+          // A late initializer or another mod may replace methods on the SAME
+          // manager. Retire the old guard without hiding the live sidebar.
+          const preserveHover =
+            hooksChanged &&
+            cleanup.manager === manager &&
+            cleanup.guardOn === Services.prefs.getBoolPref(PREF, false) &&
+            cleanup.entryOn === Services.prefs.getBoolPref(ENTRY_PREF, false);
+          cleanup(!preserveHover);
+          cleanup = null;
+        }
+        if (cleanup) {
+          cleanup.refresh();
+          if (lastPointer) {
+            cleanup.prime(lastPointer);
+            lastPointer = null;
+          }
+          return;
+        }
+        if (
+          typeof manager?._setElementExpandAttribute !== "function" ||
+          !manager.sidebar
+        )
+          return;
+        cleanup = attach(queueReconcile);
         if (lastPointer) {
           cleanup.prime(lastPointer);
           lastPointer = null;
         }
-        return;
-      }
-      if (
-        typeof manager?._setElementExpandAttribute !== "function" ||
-        !manager.sidebar
-      )
-        return;
-      cleanup = attach(queueReconcile);
-      if (lastPointer) {
-        cleanup.prime(lastPointer);
-        lastPointer = null;
+      } finally {
+        syncReadinessMovement();
       }
     }
     function queueReconcile(event) {
@@ -1009,7 +1069,7 @@
       if (value) {
         reconcile();
         probeStartup();
-      }
+      } else syncReadinessMovement();
     }
     const observer = {
       observe(subject, topic, pref) {

@@ -63,7 +63,7 @@
     }
   }
   (function () {
-    function start() {
+    function start({ lifecycle } = {}) {
       const cleanups = [];
       const registerCleanup = (fn) => cleanups.push(fn);
       const getPref = (key, fallback) =>
@@ -74,7 +74,10 @@
       };
       const rssMarkedFolders = new Set();
       let rssScanTimer = null;
-      let rssObserver = null;
+      let rssObserver = null,
+        rssObservedContainer = null,
+        nativeBinding = null;
+      let disposed = false;
       const rssEnabled = () =>
         getPref(EXT_PREFS.RSS_HIDE_EMPTY, false) ||
         getPref(EXT_PREFS.RSS_COMPACT_HEADERS, false);
@@ -153,6 +156,7 @@
         }
       }
       function syncRssFolderDisplay() {
+        if (disposed) return;
         const enabled = rssEnabled();
         document.documentElement.toggleAttribute(
           "bgalazka-rss-hide-empty",
@@ -166,20 +170,28 @@
           if (rssScanTimer !== null) clearTimeout(rssScanTimer);
           rssScanTimer = null;
           rssObserver?.disconnect();
-          rssObserver = null;
+          rssObserver = rssObservedContainer = null;
           clearRssMarks();
           return;
         }
+        const container = window.gBrowser?.tabContainer;
+        if (rssObserver && rssObservedContainer !== container) {
+          rssObserver.disconnect();
+          rssObserver = rssObservedContainer = null;
+          if (rssScanTimer !== null) clearTimeout(rssScanTimer);
+          rssScanTimer = null;
+        }
         safeScanRssFolders();
-        if (!rssObserver && gBrowser.tabContainer) {
+        if (!rssObserver && container) {
+          rssObservedContainer = container;
           rssObserver = new MutationObserver(() => {
-            if (rssScanTimer !== null) return;
+            if (disposed || !rssEnabled() || rssScanTimer !== null) return;
             rssScanTimer = setTimeout(() => {
               rssScanTimer = null;
               safeScanRssFolders();
             }, 100);
           });
-          rssObserver.observe(gBrowser.tabContainer, {
+          rssObserver.observe(container, {
             childList: true,
             subtree: true,
             attributes: true,
@@ -195,7 +207,32 @@
             ],
           });
         }
+        nativeBinding?.check();
       }
+      // An enabled RSS setting must recover a late/replaced native tab strip.
+      // Core owns bounded probes and lifecycle events; no permanent scan loop.
+      if (lifecycle)
+        nativeBinding = lifecycle.watchNative({
+          name: "rss-tab-strip",
+          prefs: [EXT_PREFS.RSS_HIDE_EMPTY, EXT_PREFS.RSS_COMPACT_HEADERS],
+          enabled: rssEnabled,
+          resolve: () => window.gBrowser?.tabContainer || null,
+          events: ["activate", "aftercustomization", "TabOpen"],
+          attach(container, child) {
+            child.own(() => {
+              if (rssObservedContainer !== container) return;
+              rssObserver?.disconnect();
+              rssObserver = rssObservedContainer = null;
+              if (rssScanTimer !== null) clearTimeout(rssScanTimer);
+              rssScanTimer = null;
+            });
+            syncRssFolderDisplay();
+            return {
+              isCurrent: () =>
+                rssObservedContainer === container && !!rssObserver,
+            };
+          },
+        });
       for (const pref of [
         EXT_PREFS.RSS_HIDE_EMPTY,
         EXT_PREFS.RSS_COMPACT_HEADERS,
@@ -228,7 +265,15 @@
       const api = {
         refresh: syncRssFolderDisplay,
         destroy() {
-          cleanups.reverse().forEach((fn) => fn());
+          if (disposed) return;
+          disposed = true;
+          nativeBinding?.destroy();
+          if (window.ZentralRuntime?.services.rss === api)
+            delete window.ZentralRuntime.services.rss;
+          cleanups
+            .splice(0)
+            .reverse()
+            .forEach((fn) => fn());
         },
       };
       if (window.ZentralRuntime) ZentralRuntime.services.rss = api;

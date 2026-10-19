@@ -19,7 +19,7 @@
       .Services;
   const PREF = "zen.workspace.zentral.tabs.background_drag";
 
-  function attach() {
+  function attach(nativeTarget, scope) {
     const browser = window.gBrowser;
     const strip = browser?.tabContainer;
     const dnd = strip?.tabDragAndDrop;
@@ -38,7 +38,8 @@
     let dragDepth = 0,
       dragItem = null,
       dropCleanupTimer = null;
-    const cleanups = [];
+    const cleanups = [],
+      nativeHooks = [];
     const enabled = () => active && Services.prefs.getBoolPref(PREF, true);
     const isTab = (node) => browser.isTab(node);
     const groupOf = (node) => node?.group || node?.closest?.("tab-group");
@@ -95,6 +96,9 @@
       if (own && !own.configurable)
         throw new Error("Native property is not configurable: " + key);
       Object.defineProperty(object, key, next);
+      // PageThumbs is shared across windows; another window wrapping it is
+      // expected. Per-window browser/drag descriptors must remain ours.
+      if (object !== thumbs) nativeHooks.push({ object, key, next });
       cleanups.push(() => {
         const current = Object.getOwnPropertyDescriptor(object, key);
         if (
@@ -216,10 +220,17 @@
       if (!active) return;
       active = false;
       clearGesture();
-      for (const cleanup of cleanups.splice(0).reverse()) cleanup();
+      for (const cleanup of cleanups.splice(0).reverse()) {
+        try {
+          cleanup();
+        } catch (error) {
+          console.warn("[Zentral tab-drag] Cleanup", error);
+        }
+      }
       if (window.ZentralTabDrag?.destroy === destroy)
         delete window.ZentralTabDrag;
     }
+    scope.own(destroy); // Roll back even if a later native accessor is not ready.
     try {
       wrapSelection(browser, "selectedTab");
       wrapSelection(strip, "selectedItem");
@@ -307,59 +318,71 @@
       listen(window, "unload", destroy);
       Services.prefs.addObserver(PREF, clearGesture);
       cleanups.push(() => Services.prefs.removeObserver(PREF, clearGesture));
-      window.ZentralTabDrag = { destroy };
+      destroy.isCurrent = () =>
+        window.gBrowser === browser &&
+        browser.tabContainer === strip &&
+        strip.tabDragAndDrop === dnd &&
+        nativeHooks.every(({ object, key, next }) => {
+          const current = Object.getOwnPropertyDescriptor(object, key);
+          return (
+            current?.value === next.value &&
+            current?.get === next.get &&
+            current?.set === next.set
+          );
+        });
+      // A synchronous recovery during capture must protect this first press,
+      // because a listener added during dispatch need not see the current event.
+      destroy.onReadyEvent = (event) => {
+        if (event?.type === "mousedown") onMouseDown(event);
+      };
       return destroy;
     } catch (error) {
       destroy();
       throw error;
     }
   }
-  // Keep only the preference subscription alive while disabled. Native
-  // selection descriptors, drag handlers and PageThumbs are then untouched.
-  function start() {
-    if (window.ZentralTabDrag) return window.ZentralTabDrag.destroy;
-    let stopped = false, cleanup = null;
-    function sync() {
-      const enabled = !stopped && Services.prefs.getBoolPref(PREF, true);
-      if (!enabled && cleanup) {
-        cleanup();
-        cleanup = null;
-      } else if (enabled && !cleanup) cleanup = attach();
-      if (!stopped) window.ZentralTabDrag = { destroy };
-    }
-    function destroy() {
-      if (stopped) return;
-      stopped = true;
-      sync();
-      Services.prefs.removeObserver(PREF, observer);
-      window.removeEventListener("unload", destroy);
-      if (window.ZentralTabDrag?.destroy === destroy) delete window.ZentralTabDrag;
-    }
-    const observer = { observe: sync };
-    Services.prefs.addObserver(PREF, observer);
-    window.addEventListener("unload", destroy, { once: true });
-    try { sync(); } catch (error) { destroy(); throw error; }
+  // Core owns retries, preference subscriptions and cancellation. The feature
+  // supplies only native capability checks and behavior; no second boot path.
+  function start({ lifecycle }) {
+    const destroy = () => lifecycle.destroy();
+    window.ZentralTabDrag = { destroy };
+    lifecycle.own(() => {
+      if (window.ZentralTabDrag?.destroy === destroy)
+        delete window.ZentralTabDrag;
+    });
+    lifecycle.listen(window, "unload", destroy, { once: true });
+    lifecycle.watchNative({
+      name: "background-tab-drag",
+      prefs: [PREF],
+      enabled: () => Services.prefs.getBoolPref(PREF, true),
+      resolve: () => {
+        const browser = window.gBrowser,
+          strip = browser?.tabContainer;
+        return typeof browser?.isTab === "function" &&
+          typeof strip?.tabDragAndDrop?.startTabDrag === "function"
+          ? strip.tabDragAndDrop
+          : null;
+      },
+      attach,
+      events: [
+        "activate",
+        "aftercustomization",
+        "ZenCompactMode:LayoutUpdate",
+        {
+          type: "mousedown",
+          capture: true,
+          synchronous: true,
+          filter: (event) =>
+            event.isTrusted &&
+            event.button === 0 &&
+            !!window.gBrowser?.tabContainer?.contains(event.target),
+        },
+      ],
+      topics: ["wake_notification"],
+    });
     return destroy;
   }
-  if (window.ZentralRuntime) {
-    window.ZentralRuntime.register({ id: "tab-drag", init: start });
-  } else if (window.gBrowserInit?.delayedStartupFinished) {
-    start();
-  } else {
-    const observer = {
-      observe(subject) {
-        if (subject !== window) return;
-        Services.obs.removeObserver(
-          observer,
-          "browser-delayed-startup-finished",
-        );
-        window.removeEventListener("unload", cancel);
-        start();
-      },
-    };
-    const cancel = () =>
-      Services.obs.removeObserver(observer, "browser-delayed-startup-finished");
-    Services.obs.addObserver(observer, "browser-delayed-startup-finished");
-    window.addEventListener("unload", cancel, { once: true });
-  }
+  // Only the canonical core entrypoint loads this registration. Installing
+  // individual feature scripts in Sine creates competing lifecycle owners.
+  window.ZentralRuntime.register({ id: "tab-drag", init: start });
 })();

@@ -41,12 +41,24 @@
 (function () {
   "use strict";
   window.ZentralModuleLoader.define("catalog", function () {
+    // STARTUP CONTRACT FOR FUTURE FEATURES / AI:
+    // One unique id and one registration-only source per feature. `requires`
+    // names ACTIVE services, not file order. `sources` names prepared panel
+    // parts; optional:true means absence/failure must not break the coordinator.
+    // `contextDependencies` documents the panel context; it is NOT an activation
+    // graph (those references can be circular). Do not sort by this field.
+    // Put behavior and preference checks in the feature's init/lifecycle scope,
+    // never here. Add owned CSS/settings metadata with the same id. Removing an
+    // optional feature also removes its catalog/CSS/settings entries and callers;
+    // removing a required service must update its dependents explicitly.
+    // See core/README.md before changing registration or startup ordering.
     const MANIFEST = [
       {
         id: "library-resize",
         name: "Experimental Library panel behavior",
         file: "features/library/ZentralLibraryResize.uc.js",
-        description: "Opt-in Library overlay or webpage resizing below top controls, without translating browser UI.",
+        description:
+          "Opt-in Library overlay or webpage resizing below top controls, without translating browser UI.",
       },
       {
         id: "compact-hover",

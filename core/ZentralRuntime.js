@@ -59,6 +59,10 @@
     stopped = false,
     activationReady = false,
     startupStage = "waiting-browser";
+  let resolveStop;
+  const stopSignal = new Promise((resolve) => {
+    resolveStop = resolve;
+  });
   const hookListeners = new Map(),
     hookLast = new Map();
   const hooks = {
@@ -117,14 +121,20 @@
         window.addUnloadListener(callback);
         return true;
       }
-      if (typeof UC_API !== "undefined" && typeof UC_API.addUnloadListener === "function") {
+      if (
+        typeof UC_API !== "undefined" &&
+        typeof UC_API.addUnloadListener === "function"
+      ) {
         UC_API.addUnloadListener(callback);
         return true;
       }
     } catch (error) {
       if (!hostUnloadWarning) {
         hostUnloadWarning = true;
-        console.warn("[Zentral] Optional loader unload hook failed; native cleanup remains active", error);
+        console.warn(
+          "[Zentral] Optional loader unload hook failed; native cleanup remains active",
+          error,
+        );
       }
     }
     return false;
@@ -152,7 +162,6 @@
     if (sidebarActive || libraryActive)
       ui.style.setProperty(arcSidebarColorProperty, color);
     else ui.style.removeProperty(arcSidebarColorProperty);
-
   };
   const arcSidebarObserver = { observe: syncArcSidebar };
   syncArcSidebar();
@@ -209,6 +218,263 @@
     console.error(`[Zentral/${r.id}]`, error);
     emit();
   };
+  // CORE LIFECYCLE CONTRACT (for future contributors/AI): keep this generic.
+  // Features declare dependencies in the catalog and register synchronously.
+  // init receives one owned scope; register cleanup BEFORE fallible/async work.
+  // Use watchNative for optional/lazy browser APIs, not another startup loop.
+  // resolve must be read-only and return a stable identity or null. attach must
+  // register rollback in its child scope and return {destroy,isCurrent} (or a
+  // disposer with those properties). Never retry an unrolled-back initializer.
+  // All callbacks must respect scope.active; a disposed generation cannot revive.
+  // Feature prefs, DOM selectors, native patches and visual behavior stay outside
+  // core. See core/README.md for adding/removing modules and testing the contract.
+  function createFeatureScope(owner) {
+    let active = true;
+    const cleanups = new Set(),
+      timers = new Set(),
+      frames = new Set();
+    const bindings = new Map();
+    const report = (error) => console.warn("[Zentral lifecycle]", owner, error);
+    const scope = {
+      get active() {
+        return active && !stopped;
+      },
+      bindings,
+      own(dispose) {
+        if (typeof dispose !== "function")
+          throw new TypeError("Cleanup must be a function");
+        let owned = true;
+        const release = () => {
+          if (!owned) return;
+          owned = false;
+          cleanups.delete(release);
+          try {
+            dispose();
+          } catch (error) {
+            report(error);
+          }
+        };
+        if (scope.active) cleanups.add(release);
+        else release();
+        return release;
+      },
+      listen(target, type, callback, options) {
+        if (!scope.active) return () => {};
+        const guarded = (...args) => {
+          if (scope.active) callback.apply(target, args);
+        };
+        target.addEventListener(type, guarded, options);
+        return scope.own(() =>
+          target.removeEventListener(type, guarded, options),
+        );
+      },
+      observe(topic, callback) {
+        if (!scope.active) return () => {};
+        const observer = {
+          observe(...args) {
+            if (scope.active) callback(...args);
+          },
+        };
+        Services.obs.addObserver(observer, topic);
+        return scope.own(() => Services.obs.removeObserver(observer, topic));
+      },
+      preference(prefix, callback) {
+        if (!scope.active) return () => {};
+        const observer = {
+          observe(...args) {
+            if (scope.active) callback(...args);
+          },
+        };
+        Services.prefs.addObserver(prefix, observer);
+        return scope.own(() => Services.prefs.removeObserver(prefix, observer));
+      },
+      setTimeout(callback, delay = 0) {
+        if (!scope.active) return null;
+        const id = window.setTimeout(() => {
+          timers.delete(id);
+          if (scope.active) callback();
+        }, delay);
+        timers.add(id);
+        return id;
+      },
+      clearTimeout(id) {
+        window.clearTimeout(id);
+        timers.delete(id);
+      },
+      requestAnimationFrame(callback) {
+        if (!scope.active) return null;
+        const id = window.requestAnimationFrame((time) => {
+          frames.delete(id);
+          if (scope.active) callback(time);
+        });
+        frames.add(id);
+        return id;
+      },
+      cancelAnimationFrame(id) {
+        window.cancelAnimationFrame(id);
+        frames.delete(id);
+      },
+      destroy() {
+        if (!active) return;
+        active = false;
+        for (const id of timers) window.clearTimeout(id);
+        for (const id of frames) window.cancelAnimationFrame(id);
+        timers.clear();
+        frames.clear();
+        for (const release of [...cleanups].reverse()) release();
+      },
+      watchNative(spec) {
+        const name = spec.name || "native";
+        if (bindings.has(name))
+          throw new Error("Duplicate native binding: " + name);
+        const status = { state: "disabled", attempts: 0 };
+        bindings.set(name, status);
+        let listening = false,
+          disposed = false,
+          busy = false;
+        let target = null,
+          installed = null,
+          attachment = null;
+        let scheduled = null,
+          retry = null,
+          retryIndex = 0;
+        let lastError = null;
+        const listeners = [];
+        const delays = [50, 150, 500, 1500, 4000];
+        const allowed = () =>
+          scope.active && !disposed && (!spec.enabled || spec.enabled());
+        function cancelWork() {
+          scope.clearTimeout(scheduled);
+          scope.clearTimeout(retry);
+          scheduled = retry = null;
+        }
+        function detach() {
+          attachment?.destroy();
+          attachment = installed = target = null;
+        }
+        function scheduleRetry() {
+          if (!allowed() || retry !== null || retryIndex >= delays.length)
+            return;
+          retry = scope.setTimeout(() => {
+            retry = null;
+            check();
+            scheduleRetry();
+          }, delays[retryIndex++]);
+        }
+        function check(event) {
+          if (!allowed() || busy) return;
+          busy = true;
+          try {
+            const next = spec.resolve();
+            if (
+              attachment &&
+              next === target &&
+              installed?.isCurrent?.() !== false
+            )
+              return;
+            detach();
+            if (!next) {
+              status.state = "waiting-native";
+              return;
+            }
+            target = next;
+            const attempt = (attachment = createFeatureScope(
+              owner + "/" + name,
+            ));
+            status.attempts++;
+            installed = spec.attach(next, attempt);
+            const result = installed;
+            if (result && typeof result.then === "function") {
+              Promise.resolve(result).then((late) => {
+                if (typeof late === "function") attempt.own(late);
+                else if (late?.destroy) attempt.own(() => late.destroy());
+              }, report);
+              throw new Error("Native attachment must be synchronous");
+            }
+            if (typeof result === "function") attempt.own(result);
+            else if (result?.destroy) attempt.own(() => result.destroy());
+            if (!allowed()) {
+              detach();
+              return;
+            }
+            status.state = "active";
+            delete status.error;
+            lastError = null;
+            installed?.onReadyEvent?.(event);
+          } catch (error) {
+            detach();
+            status.state = "waiting-native";
+            status.error = String(error);
+            if (lastError !== status.error) {
+              lastError = status.error;
+              report(error);
+            }
+          } finally {
+            busy = false;
+          }
+        }
+        function queue(event) {
+          if (!allowed() || scheduled !== null) return;
+          scheduled = scope.setTimeout(() => {
+            scheduled = null;
+            check(event);
+          });
+        }
+        function sync() {
+          const on = allowed();
+          if (on !== listening) {
+            listening = on;
+            cancelWork();
+            retryIndex = 0;
+            for (const release of listeners.splice(0)) release();
+            if (on) {
+              for (const item of spec.events || []) {
+                const event = typeof item === "string" ? { type: item } : item;
+                listeners.push(
+                  scope.listen(
+                    event.target || window,
+                    event.type,
+                    (value) => {
+                      if (event.filter && !event.filter(value)) return;
+                      if (event.synchronous) check(value);
+                      else queue(value);
+                    },
+                    event.capture || false,
+                  ),
+                );
+              }
+              for (const topic of spec.topics || [])
+                listeners.push(scope.observe(topic, () => queue()));
+            }
+          }
+          if (!on) {
+            detach();
+            status.state = "disabled";
+            delete status.error;
+            return;
+          }
+          check();
+          scheduleRetry();
+        }
+        const prefs = (spec.prefs || []).map((pref) =>
+          scope.preference(pref, sync),
+        );
+        const destroy = scope.own(() => {
+          disposed = true;
+          cancelWork();
+          for (const release of listeners.splice(0)) release();
+          for (const release of prefs) release();
+          detach();
+          status.state = "stopped";
+        });
+        sync();
+        return { check, refresh: queue, destroy, status };
+      },
+    };
+    return scope;
+  }
+  // END CORE LIFECYCLE CONTRACT
+  const featureScopes = new Map();
   const runtime = (window.ZentralRuntime = {
     version: VERSION,
     rootURI: ROOT,
@@ -259,15 +525,54 @@
         throw new Error("Duplicate feature: " + id);
       parts.set(id, { factory, iterator: null });
     },
-    prepareParts(ctx) {
+    prepareParts(
+      ctx,
+      preparationCleanups = Object.getOwnPropertyDescriptor(ctx, "cleanupFns")
+        ?.value,
+    ) {
       for (const m of MANIFEST.filter((m) => m.part && enabled(m.id))) {
         const p = parts.get(m.id);
         if (!p) {
           if (m.optional) continue;
           throw new Error("Missing panel source: " + m.id);
         }
-        p.iterator = p.factory(ctx);
-        p.iterator.next();
+        if (p.iterator) continue;
+        // Preparation runs before many coordinator bindings exist. Inspecting
+        // property DESCRIPTORS is safe; invoking a lazy ctx getter is not.
+        // Coordinators pass their already-created cleanup array explicitly.
+        const cleanups = preparationCleanups,
+          before = cleanups?.length || 0;
+        const descriptors = Object.getOwnPropertyDescriptors(ctx);
+        try {
+          p.iterator = p.factory(ctx);
+          p.iterator.next();
+        } catch (error) {
+          const row = records.get(m.id);
+          if (row) fail(row, error);
+          try {
+            p.iterator?.return();
+          } catch (_) {}
+          p.iterator = null;
+          for (const dispose of cleanups?.splice(before).reverse() || []) {
+            try {
+              dispose();
+            } catch (_) {}
+          }
+          if (!m.optional) throw error;
+          // Optional preparation must only publish reversible ctx properties.
+          for (const key of Reflect.ownKeys(ctx)) {
+            if (
+              !Object.hasOwn(descriptors, key) &&
+              Object.getOwnPropertyDescriptor(ctx, key)?.configurable
+            )
+              delete ctx[key];
+          }
+          for (const key of Reflect.ownKeys(descriptors)) {
+            try {
+              Object.defineProperty(ctx, key, descriptors[key]);
+            } catch (_) {}
+          }
+        }
       }
     },
     runPart(id) {
@@ -277,6 +582,8 @@
         if (r) r.state = "disabled";
         return;
       }
+      if (r?.state === "active" || r?.state === "initializing") return;
+      if (r?.state === "failed" && optional) return;
       const p = parts.get(id);
       if (!p?.iterator) {
         if (optional) {
@@ -291,6 +598,7 @@
       const cleanup = runtime.panelContext?.cleanupFns;
       const before = cleanup?.length ?? 0;
       try {
+        if (r) r.state = "initializing";
         p.iterator.next();
         if (r) r.state = "active";
       } catch (e) {
@@ -322,6 +630,9 @@
         features: [...records.values()].map((r) => ({
           ...r,
           nextEnabled: enabled(r.id),
+          nativeBindings: Object.fromEntries(
+            featureScopes.get(r.id)?.bindings || [],
+          ),
         })),
         css: [...styles.values()].map((r) => ({
           ...r,
@@ -336,6 +647,7 @@
     destroy() {
       if (stopped) return;
       stopped = true;
+      resolveStop();
       activationReady = false;
       startupStage = "stopped";
       for (const dispose of disposers.splice(0).reverse()) {
@@ -1873,7 +2185,7 @@
         owner === "settings"
           ? moduleLoader.has("settings-shell")
           : availability.get(owner) !== false &&
-            ["registered", "active", "dormant"].includes(
+            ["registered", "initializing", "active", "dormant"].includes(
               records.get(owner)?.state,
             ),
       );
@@ -1908,7 +2220,7 @@
         id === "settings"
           ? moduleLoader.has("settings-shell")
           : availability.get(id) !== false &&
-            ["registered", "active", "dormant"].includes(
+            ["registered", "initializing", "active", "dormant"].includes(
               records.get(id)?.state,
             ),
       )
@@ -1949,106 +2261,172 @@
     }
   }
   // Resume features when an initially disabled base engine becomes available.
+  let activating = false,
+    activationRequested = false;
   function activateReady() {
     if (!activationReady || stopped) return;
-    // Topological startup with no timed retries. Independent features still start
-    // when another feature is disabled, missing, throws, or has a dependency cycle.
-    let progress = true;
-    while (progress) {
-      progress = false;
-      for (const m of MANIFEST) {
-        const r = records.get(m.id);
-        if (m.part || !["registered", "blocked"].includes(r.state)) continue;
-        const deps = m.requires || [],
-          sourceDeps = m.sources || [];
-        if (deps.some((id) => records.get(id)?.state !== "active")) continue;
-        if (
-          sourceDeps.some(
-            (id) =>
-              !MANIFEST.find((part) => part.id === id)?.optional &&
-              !["registered", "active", "blocked"].includes(
-                records.get(id)?.state,
-              ),
+    if (activating) {
+      activationRequested = true;
+      return;
+    }
+    activating = true;
+    try {
+      // Topological startup with no timed retries. Independent features still start
+      // when another feature is disabled, missing, throws, or has a dependency cycle.
+      let progress = true;
+      while (progress) {
+        progress = false;
+        activationRequested = false;
+        for (const m of MANIFEST) {
+          const r = records.get(m.id);
+          if (m.part || !["registered", "blocked"].includes(r.state)) continue;
+          const deps = m.requires || [],
+            sourceDeps = m.sources || [];
+          if (deps.some((id) => records.get(id)?.state !== "active")) continue;
+          if (
+            sourceDeps.some(
+              (id) =>
+                !MANIFEST.find((part) => part.id === id)?.optional &&
+                !["registered", "active", "blocked"].includes(
+                  records.get(id)?.state,
+                ),
+            )
           )
-        )
-          continue;
-        try {
-          const cleanup = definitions.get(m.id).init({
-            shared: runtime.shared,
-            services: runtime.services,
-            runtime,
-          });
-          if (cleanup && typeof cleanup.then === "function")
-            throw new Error(
-              "init must be synchronous; use browser-ready events within a feature",
-            );
-          if (typeof cleanup === "function") disposers.push(cleanup);
-          else if (cleanup) {
-            runtime.services[m.id] = cleanup;
-            if (typeof cleanup.destroy === "function")
-              disposers.push(() => cleanup.destroy());
-          }
-          if (r.state === "failed") continue;
-          r.state = availability.get(m.id) === false ? "dormant" : "active";
-          r.reason = undefined;
-        } catch (e) {
-          fail(r, e);
-          if (m.id === "panels") {
-            try {
-              runtime.panelContext?.cleanupFns
-                ?.splice(0)
-                .reverse()
-                .forEach((fn) => {
-                  try {
-                    fn();
-                  } catch (_) {}
-                });
-            } catch (_) {}
-            window.BgalazkaExtensionInitialized = false;
-            for (const p of MANIFEST.filter((x) => x.part)) {
-              const pr = records.get(p.id);
-              if (pr.state === "active") pr.state = "stopped";
+            continue;
+          r.state = "initializing";
+          const lifecycle = createFeatureScope(m.id);
+          featureScopes.set(m.id, lifecycle);
+          disposers.push(() => lifecycle.destroy());
+          try {
+            const cleanup = definitions.get(m.id).init({
+              lifecycle,
+              shared: runtime.shared,
+              services: runtime.services,
+              runtime,
+            });
+            if (cleanup && typeof cleanup.then === "function") {
+              Promise.resolve(cleanup).then(
+                (late) => {
+                  if (typeof late === "function") lifecycle.own(late);
+                  else if (late?.destroy) lifecycle.own(() => late.destroy());
+                },
+                (error) =>
+                  console.warn("[Zentral] Rejected async init", m.id, error),
+              );
+              throw new Error(
+                "init must be synchronous; use lifecycle.watchNative within a feature",
+              );
+            }
+            if (typeof cleanup === "function") lifecycle.own(cleanup);
+            else if (cleanup) {
+              runtime.services[m.id] = cleanup;
+              lifecycle.own(() => {
+                if (runtime.services[m.id] === cleanup)
+                  delete runtime.services[m.id];
+                cleanup.destroy?.();
+              });
+            }
+            if (stopped) {
+              lifecycle.destroy();
+              r.state = "stopped";
+              return;
+            }
+            if (r.state === "failed") {
+              lifecycle.destroy();
+              continue;
+            }
+            r.state = availability.get(m.id) === false ? "dormant" : "active";
+            r.reason = undefined;
+          } catch (e) {
+            lifecycle.destroy();
+            fail(r, e);
+            if (m.id === "panels") {
+              try {
+                runtime.panelContext?.cleanupFns
+                  ?.splice(0)
+                  .reverse()
+                  .forEach((fn) => {
+                    try {
+                      fn();
+                    } catch (_) {}
+                  });
+              } catch (_) {}
+              window.BgalazkaExtensionInitialized = false;
+              for (const p of MANIFEST.filter((x) => x.part)) {
+                const pr = records.get(p.id);
+                if (pr.state === "active") pr.state = "stopped";
+              }
             }
           }
+          progress = true;
+          emit();
         }
-        progress = true;
-        emit();
+        progress ||= activationRequested;
       }
+      for (const r of records.values())
+        if (r.state === "registered" || r.state === "blocked") {
+          r.state = "blocked";
+          r.reason = r.part
+            ? "Panel coordinator did not start"
+            : [...(r.requires || []), ...(r.sources || [])]
+                .filter((id) => records.get(id)?.state !== "active")
+                .join(", ") || "Dependency cycle";
+        }
+    } finally {
+      activating = false;
+      if (!stopped) for (const id of records.keys()) syncOwnerStyles(id);
     }
-    for (const r of records.values())
-      if (r.state === "registered" || r.state === "blocked") {
-        r.state = "blocked";
-        r.reason = r.part
-          ? "Panel coordinator did not start"
-          : [...(r.requires || []), ...(r.sources || [])]
-              .filter((id) => records.get(id)?.state !== "active")
-              .join(", ") || "Dependency cycle";
-      }
   }
   async function waitForNativeStartup() {
+    const seen = new Set();
+    const warnings = (runtime.nativeReadinessWarnings = []);
     let session = window.SessionStore;
     if (!session) {
       try {
         session = ChromeUtils.importESModule(
           "resource:///modules/sessionstore/SessionStore.sys.mjs",
         ).SessionStore;
-      } catch (_) {} // Some Zen versions expose only the window service.
+      } catch (_) {}
     }
-    const results = await Promise.allSettled([
-      session?.promiseAllWindowsRestored,
-      window.gZenWorkspaces?.promiseInitialized,
-      // ZenStartup initializes compact-mode mouse actions after the session and
-      // workspace promises settle. Await that final barrier before any feature
-      // snapshots native capabilities or installs wrappers/listeners.
-      window.gZenStartup?.promiseInitialized,
-    ]);
-    runtime.nativeReadinessWarnings = results
-      .filter((result) => result.status === "rejected")
-      .map((result) => String(result.reason));
-    for (const warning of runtime.nativeReadinessWarnings)
+    // Resolve live native services again AFTER each barrier: restoration can
+    // create/replace the workspace/startup manager while we await its predecessor.
+    // Never cache an absent promise as permanent readiness, nor await our own
+    // startup from feature init. Feature-specific late APIs use watchNative.
+    for (let round = 0; round < 4 && !stopped; round++) {
+      const pending = [];
+      for (const read of [
+        () => (window.SessionStore || session)?.promiseAllWindowsRestored,
+        () => window.gZenWorkspaces?.promiseInitialized,
+        () => window.gZenStartup?.promiseInitialized,
+      ]) {
+        try {
+          const promise = read();
+          if (promise?.then && !seen.has(promise)) {
+            seen.add(promise);
+            pending.push(promise);
+          }
+        } catch (error) {
+          warnings.push(String(error));
+        }
+      }
+      if (round && !pending.length) break;
+      const results = await Promise.race([
+        Promise.allSettled(pending),
+        stopSignal.then(() => []),
+      ]);
+      if (stopped) return;
+      for (const result of results)
+        if (result.status === "rejected") warnings.push(String(result.reason));
+      await new Promise((resolve) => {
+        const timer = window.setTimeout(resolve, 0);
+        disposers.push(() => {
+          window.clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+    for (const warning of warnings)
       console.warn("[Zentral] Native startup readiness failed:", warning);
-    // Let native preference observers and deferred initialization finish this turn.
-    await new Promise((resolve) => window.setTimeout(resolve, 0));
   }
   async function boot() {
     if (ready || stopped) return;
@@ -2092,12 +2470,18 @@
       if (!r.enabledAtStart) continue;
       try {
         if (m.file) moduleLoader.load(m.file, { owner: m.id });
-        if (!definitions.has(m.id) && !parts.has(m.id))
-          throw new Error("Source did not register " + m.id);
-        r.state = "registered";
+        r.state = "loaded";
       } catch (e) {
         fail(r, e);
       }
+    }
+    // Validate only after the declaration pass: a coordinator can register
+    // built-in parts listed earlier in the catalog. No init runs during load.
+    for (const m of MANIFEST) {
+      const row = records.get(m.id);
+      if (row.state !== "loaded") continue;
+      if (definitions.has(m.id) || parts.has(m.id)) row.state = "registered";
+      else fail(row, new Error("Source did not register " + m.id));
     }
     startupStage = "loading-styles";
     // Apply only available owners, retaining the original relative sheet order.

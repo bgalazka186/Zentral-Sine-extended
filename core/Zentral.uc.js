@@ -21,6 +21,11 @@
  */
 (function () {
   "use strict";
+  // Single per-window entrypoint. Sine must load THIS script only, never each
+  // feature. This loader reads declarations; Runtime owns readiness, dependency
+  // activation and disposal. Do not add feature timers or native API probes here.
+  // Add modules through the catalog and init({ lifecycle }) contract documented
+  // in core/README.md; keeping one owner prevents duplicate hooks on reload.
   if (window.ZentralModuleLoader || window.ZentralRuntime) return;
   const Services =
     globalThis.Services ||
