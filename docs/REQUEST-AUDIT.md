@@ -1,3 +1,5 @@
+> Current follow-up: [Video preview repair](VIDEO-PREVIEW-REPAIR.md). Its tested changes and limitations supersede the earlier enlarged-video description below.
+
 # Request audit — Extended 3.0.0, original Zentral reference 1.1.0
 
 Reviewed the requests visible in this conversation, the supplied Claude transcript, the original upgrade handoff and the current source. **Implemented** means the code path exists; it does not mean live Zen behavior was verified. The source-level checks cannot establish real remote-browser input, website caption timing, compositor behavior or every combination of companion mods.

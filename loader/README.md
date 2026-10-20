@@ -120,3 +120,11 @@ Full installation uses root `theme.json` and `preferences.json`, plus `loader/`;
 | ------------------------------ | ----------------------------------------------------------------------------------------------- |
 | `ZentralNativeInteraction.css` | Disable page input while split views resize; keep native hidden tabs hidden.                    |
 | `ZentralSidebarSizing.css`     | Expanded native sidebar width limits and collapsed width reset. Independent of Apps activation. |
+
+## Evaluation, construction and activation
+
+`ZentralModuleLoader.report()` separates `sources` (evaluation/resource loading), `components` (successful or failed factory construction, with construction counts), and the runtime snapshot (feature activation/native binding state). Evaluation alone never proves a feature is usable. A failed script loses only its own partial registrations; successfully evaluated nested sources remain registered. A failed factory is not returned by `require` after failure. Optional callers must request optional load **and** construction, then implement a fallback; setting only one optional flag is insufficient.
+
+Features may register `verify({ runtime, shared, services })`, a synchronous postcondition returning exactly true. The runtime calls it after owning the initializer's cleanup and before activation; failure destroys that feature scope and blocks dependents. Records expose `initialized` and `verified` separately. Video verifies that its diagnostic and destroy APIs were published. This is not proof of real native video presentation: native bindings, renderer diagnostics and live checks remain separate.
+
+The video standalone bootstrap mirrors source/construction contracts. Keep both implementations aligned when changing the loader. The uploaded original reference was restored against the pinned manifest; never add guide headers or run formatters inside `zentral/upstream/1.1.0`.

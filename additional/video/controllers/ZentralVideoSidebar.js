@@ -74,36 +74,94 @@
       .Services;
   window.ZentralModuleLoader.load(
     "additional/video/controllers/ZentralVideoCaptionLayout.js",
-    { owner: "video" },
+    { owner: "video", optional: true },
   );
   window.ZentralModuleLoader.load(
     "additional/video/controllers/ZentralVideoEnlarge.js",
-    { owner: "video" },
+    { owner: "video", optional: true },
   );
   window.ZentralModuleLoader.define(
     "video/ZentralVideoSidebar",
     function (deps) {
       const captionLayout = window.ZentralModuleLoader.create(
         "video/caption-layout",
-      );
-      let lastEnlargedState = false;
-      const enlarged = window.ZentralModuleLoader.create("video/enlarge", {
-        Services,
-        onLayout: () => {
-          const nowEnlarged = enlarged.isOpen();
-          if (nowEnlarged !== lastEnlargedState) {
-            lastEnlargedState = nowEnlarged;
-            refreshCard();
-          }
-          captionLayout.invalidate(deps.captionNode);
-          wakePaint();
+        undefined,
+        { optional: true },
+      ) || {
+        visiblePref: "zen.workspace.zentral.video_preview.captions_visible",
+        apply() {},
+        invalidate() {},
+        isActive: () => false,
+        sync({ captionNode }) {
+          if (captionNode) captionNode.hidden = true;
         },
-        onReturn: () =>
-          window.dispatchEvent(new Event("zentral-video-enlarge-return")),
-      });
-      let finishResize = null;
-      function cancelResize() {
-        enlarged.destroy();
+      };
+      let lastEnlargedState = false;
+      const enlarged = window.ZentralModuleLoader.create(
+        "video/enlarge",
+        {
+          onControls: () => syncProgressState(),
+          onWindowResize: (active) => {
+            if (active) {
+              deps.updatePaintTimer(false);
+              resetProgressSync();
+            } else {
+              captionLayout.invalidate(deps.captionNode);
+              captionLayout.sync({
+                box: deps.box,
+                captionNode: deps.captionNode,
+                text: deps.captionText,
+                active: captionLayout.isActive(deps),
+              });
+              if (deps.featureOn(deps.DISPLAY_CAP_PREF))
+                deps.nextStillCapture = 0;
+              wakePaint();
+              syncProgressState();
+            }
+          },
+          canOpen: () =>
+            !!deps.previewMode &&
+            !!deps.current?.browser?.isConnected &&
+            !deps.nativePreviewDeferred() &&
+            deps.previewVisible(),
+          getRatio: () => {
+            const d = deps.current?.data;
+            return (
+              (d?.displayWidth || d?.width || 16) /
+              (d?.displayHeight || d?.height || 9)
+            );
+          },
+          Services,
+          onLayout: () => {
+            const nowEnlarged = enlarged.isOpen();
+            if (nowEnlarged !== lastEnlargedState) {
+              lastEnlargedState = nowEnlarged;
+              refreshCard();
+            }
+            captionLayout.invalidate(deps.captionNode);
+            wakePaint();
+            syncProgressState();
+          },
+          onReturn: () =>
+            window.dispatchEvent(new Event("zentral-video-enlarge-return")),
+        },
+        { optional: true },
+      ) || {
+        isOpen: () => false,
+        mount() {},
+        sync() {},
+        close() {},
+        destroy() {},
+      };
+      let finishResize = null,
+        seeking = false,
+        progressTimer = null;
+      function cancelResize(destroy = false) {
+        if (destroy) {
+          enlarged.destroy();
+          clearTimeout(progressTimer);
+          progressTimer = null;
+        }
         finishResize?.({ cancel: true });
       }
       function mount() {
@@ -135,6 +193,8 @@
           deps.box = document.createElement("div");
           deps.box.id = "zentral-video-preview";
           deps.box.hidden = true;
+          // Restart cheap progress state queries only when controls are shown.
+          deps.box.addEventListener("focusin", syncProgressState);
           deps.box.setAttribute("aria-label", "Playing video preview");
           deps.picture = document.createElement("div");
           deps.picture.className = "zentral-video-preview-picture";
@@ -151,6 +211,7 @@
           deps.previewModeNotice.hidden = true;
           deps.picture.appendChild(deps.previewModeNotice);
           deps.pictureObserver = new ResizeObserver(() => {
+            if (deps.box?.hasAttribute("data-window-resizing")) return;
             captionLayout.invalidate(deps.captionNode);
             if (deps.featureOn(deps.DISPLAY_CAP_PREF))
               deps.nextStillCapture = 0;
@@ -187,9 +248,19 @@
           deps.seekBar.max = "1000";
           deps.seekBar.value = "0";
           deps.seekBar.title = "Seek video or audio";
+          deps.seekBar.setAttribute("aria-label", "Seek video or audio");
+          for (const type of ["pointerdown", "keydown"])
+            deps.seekBar.addEventListener(type, () => {
+              seeking = true;
+            });
+          for (const type of ["pointerup", "pointercancel", "keyup", "blur"])
+            deps.seekBar.addEventListener(type, () => {
+              seeking = false;
+            });
           deps.seekBar.addEventListener("change", () => {
+            seeking = false;
             const duration = deps.current?.data?.duration;
-            if (duration)
+            if (Number.isFinite(duration) && duration > 0)
               control("seek", (Number(deps.seekBar.value) / 1000) * duration);
           });
           const next = document.createElement("button");
@@ -685,7 +756,6 @@
         deps.sourceList.hidden = !deps.sources.length;
         deps.picture.hidden =
           deps.current?.data.kind !== "video" || deps.videoHidden;
-        enlarged.sync();
         const hasVideo = deps.current?.data.kind === "video";
         const hideButton = deps.box._hideButton;
         hideButton.hidden =
@@ -783,7 +853,9 @@
           subsButton.toggleAttribute("data-captions-active", captionsOn);
         }
         {
-          const canSeek = !!deps.current?.data.duration;
+          const canSeek =
+            Number.isFinite(deps.current?.data.duration) &&
+            deps.current.data.duration > 0;
           deps.box._skipBackButton.hidden =
             !deps.current ||
             (!isEnlarged &&
@@ -793,7 +865,10 @@
             (!isEnlarged &&
               (!canSeek || !deps.featureOn(deps.SKIP_FORWARD_BUTTON_PREF)));
         }
-        deps.seekBar.hidden = !deps.current?.data.duration;
+        deps.seekBar.hidden = !(
+          Number.isFinite(deps.current?.data.duration) &&
+          deps.current.data.duration > 0
+        );
         deps.controlBar.hidden = false;
         deps.box._nextButton.hidden =
           !deps.current ||
@@ -829,6 +904,7 @@
           deps.muteButton.hidden =
             !isEnlarged && !deps.featureOn(deps.MUTE_BUTTON_PREF);
         }
+        enlarged.sync();
         refreshPlaybackStatus();
         refreshSettingList();
         syncProgressState();
@@ -887,6 +963,8 @@
       function progressVisible() {
         return (
           !deps.disposed &&
+          !deps.box?.hasAttribute("data-temporary-hidden") &&
+          !deps.box?.hasAttribute("data-window-resizing") &&
           deps.enabled() &&
           !deps.compactPaused &&
           !!deps.scanTimer &&
@@ -896,10 +974,17 @@
           !!deps.seekBar?.isConnected &&
           !deps.seekBar.hidden &&
           deps.previewVisible() &&
-          !deps.hiddenByLayout(deps.seekBar)
+          !deps.hiddenByLayout(deps.seekBar) &&
+          (!deps.box?.hasAttribute("data-enlarged") ||
+            !deps.box.hasAttribute("data-hover-controls") ||
+            deps.box.hasAttribute("data-controls-visible") ||
+            deps.controlBar?.matches(":focus-within") ||
+            document.activeElement === deps.seekBar)
         );
       }
       function resetProgressSync() {
+        clearTimeout(progressTimer);
+        progressTimer = null;
         deps.progressSourceKey = "";
         deps.progressNextAt = 0;
         ++deps.progressEpoch;
@@ -907,7 +992,7 @@
       function updateSeekProgress(data) {
         if (
           !progressVisible() ||
-          document.activeElement === deps.seekBar ||
+          seeking ||
           !Number.isFinite(data.currentTime) ||
           !Number.isFinite(data.duration) ||
           data.duration <= 0
@@ -929,14 +1014,14 @@
           resetProgressSync();
           deps.progressSourceKey = key;
         }
-        // Live health IPC already supplies fresh source time. Do not query it
-        // twice. Still modes use the existing mount/event schedule, not a timer.
-        if (
-          deps.LIVE_MODES.includes(deps.previewMode) ||
-          deps.progressBusy ||
-          Date.now() < deps.progressNextAt
-        )
-          return;
+        // Poll only the cheap playback state while a seek control is visible.
+        // Health results share the same deadline; no discovery or pixel capture.
+        if (!progressTimer)
+          progressTimer = setTimeout(() => {
+            progressTimer = null;
+            syncProgressState();
+          }, deps.PROGRESS_REFRESH_MS);
+        if (deps.progressBusy || Date.now() < deps.progressNextAt) return;
         refreshProgress();
       }
       function updateProgressFromHealth(source, state) {
@@ -951,11 +1036,7 @@
           resetProgressSync();
           deps.progressSourceKey = key;
         }
-        if (
-          Date.now() < deps.progressNextAt ||
-          document.activeElement === deps.seekBar
-        )
-          return;
+        if (Date.now() < deps.progressNextAt || seeking) return;
         deps.current.data.currentTime = state.time;
         updateSeekProgress(deps.current.data);
         deps.progressNextAt =
@@ -976,7 +1057,7 @@
         try {
           // Existing Control handlers return state for this read-only action.
           // No full discovery, pixel capture or source playback change is needed.
-          if (document.activeElement === deps.seekBar) return;
+          if (seeking) return;
           const payload = {
             frameId: source.data.frameId,
             id: source.data.id,
@@ -995,7 +1076,7 @@
                     1500,
                     "progress state",
                   )
-                : directControl(source.element, "state", payload);
+                : directControl(source.element, "state", undefined, payload);
           if (
             epoch !== deps.progressEpoch ||
             !deps.sameSource(source, deps.current) ||
@@ -1024,7 +1105,9 @@
         deps.picture.hidden = data.kind !== "video" || deps.videoHidden;
         deps.playButton.textContent = data.paused ? "▶" : "❚❚";
         deps.muteButton.textContent = data.muted ? "🔇" : "♪";
-        deps.seekBar.hidden = !data.duration;
+        deps.seekBar.hidden = !(
+          Number.isFinite(data.duration) && data.duration > 0
+        );
         updateSeekProgress(data);
         syncProgressState();
       }
@@ -1084,6 +1167,13 @@
         }
       }
       function refreshMethodStatus() {
+        if (
+          enlarged.isOpen() &&
+          !deps.previewMode &&
+          !deps.renderBusy &&
+          deps.previewTransitionReason
+        )
+          enlarged.close();
         const node = document.getElementById("zs-video-preview-bridges");
         if (node)
           node.textContent =
@@ -1123,6 +1213,11 @@
               .join("\n");
       }
       function refreshPlaybackStatus() {
+        if (
+          enlarged.isOpen() &&
+          (!deps.current?.browser?.isConnected || deps.nativePreviewDeferred())
+        )
+          enlarged.close();
         const choice = deps.rendererChoice(),
           strict = deps.selectedModeOnly();
         // Keep this distinct from [hidden], which mount/selection/scan also

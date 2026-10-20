@@ -10286,6 +10286,58 @@
     "defaultValue": true
   },
   {
+    "property": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px",
+    "label": "Default enlarged preview bottom clearance (px)",
+    "type": "dropdown",
+    "defaultValue": 64,
+    "options": [
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "128",
+        "value": 128
+      },
+      {
+        "label": "192",
+        "value": 192
+      },
+      {
+        "label": "240",
+        "value": 240
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_keep_aspect",
+    "label": "Keep video proportions when resizing enlarged preview",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_hover_controls",
+    "label": "Show enlarged controls on bottom-edge hover",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "property": "zen.workspace.zentral.video_preview.enlarged_width",
     "label": "Remembered enlarged video width (px)",
     "type": "string",
@@ -10464,8 +10516,14 @@
     "defaultValue": true
   },
   {
+    "property": "zen.workspace.zentral.video_preview.enlarged_remember_position",
+    "label": "Remember enlarged preview position (otherwise open at sidebar bottom corner)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
     "property": "zen.workspace.zentral.video_preview.enlarged_position",
-    "label": "Remembered enlarged position (clear to reset to sidebar corner)",
+    "label": "Remembered enlarged position (used only when Remember position is enabled)",
     "type": "string",
     "defaultValue": ""
   },

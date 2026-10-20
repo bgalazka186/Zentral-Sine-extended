@@ -320,6 +320,30 @@
         content.document.querySelector(".html5-video-player") ||
         content.document.querySelector(".ytp-caption-window-container");
       if (root) {
+        // Watch structural replacements on the player; expensive text/attribute
+        // observation is confined to caption surfaces and the subtitles toggle.
+        const observed = new WeakSet();
+        const bindCaptionTargets = () => {
+          for (const node of root.querySelectorAll(
+            ".ytp-caption-window-container,.ytp-subtitles-button",
+          )) {
+            if (observed.has(node)) continue;
+            observed.add(node);
+            captionObserver.observe(node, {
+              childList: true,
+              characterData: true,
+              subtree: true,
+              attributes: true,
+              attributeFilter: [
+                "class",
+                "style",
+                "hidden",
+                "aria-hidden",
+                "aria-pressed",
+              ],
+            });
+          }
+        };
         captionObserver = new content.MutationObserver((records) => {
           const selector =
             ".ytp-caption-window-container,.caption-window,.ytp-caption-segment,.ytp-subtitles-button";
@@ -341,22 +365,13 @@
                   ...(record.removedNodes || []),
                 ].some(relevant),
             )
-          )
+          ) {
+            bindCaptionTargets();
             onCaptionChange();
+          }
         });
-        captionObserver.observe(root, {
-          childList: true,
-          characterData: true,
-          subtree: true,
-          attributes: true,
-          attributeFilter: [
-            "class",
-            "style",
-            "hidden",
-            "aria-hidden",
-            "aria-pressed",
-          ],
-        });
+        captionObserver.observe(root, { childList: true, subtree: true });
+        bindCaptionTargets();
       }
     }
     onCaptionChange();

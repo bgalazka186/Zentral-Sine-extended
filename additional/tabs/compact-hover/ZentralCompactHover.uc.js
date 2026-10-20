@@ -866,23 +866,20 @@
           );
           return;
         }
-        const value = expanded + "px",
-          snapshots = [];
-        const hadWidthAttribute = sidebar.hasAttribute("width");
-        const previousWidthAttribute = sidebar.getAttribute("width");
+        // Width/style are persisted by Zen. Keep the startup repair entirely
+        // in a transient stylesheet, never in native persisted attributes.
+        const value = expanded + "px";
+        const marker = "data-zentral-sidebar-layout-repair";
+        const style = document.createElementNS(
+          "http://www.w3.org/1999/xhtml",
+          "style",
+        );
+        const previousMarker = sidebar.getAttribute(marker);
+        style.textContent = `[${marker}="active"] { width:${value} !important; max-width:${value} !important; --zen-sidebar-width:${value} !important; }`;
         let expansionObserved = false;
         const notifyNativeResize = () => {
-          // ZenCustomizableUI.#initSidebarResizer updates width + its native
-          // attribute, then dispatches this event. CSS expansion alone does not
-          // run the same workspace/toolbar calculations as dragging the divider.
-          sidebar.getBoundingClientRect(); // Make the new width measurable now.
+          sidebar.getBoundingClientRect();
           window.dispatchEvent(new window.Event("resize"));
-        };
-        const change = (node, key, temporary) => {
-          const previous = node.style.getPropertyValue(key),
-            priority = node.style.getPropertyPriority(key);
-          snapshots.push({ node, key, temporary, previous, priority });
-          node.style.setProperty(key, temporary, "important");
         };
         const finish = () => {
           if (repairFrame !== null) window.cancelAnimationFrame(repairFrame);
@@ -893,53 +890,32 @@
           restoreRepair = null;
           restore?.();
         };
+        const onManualResize = (event) => {
+          if (event.target?.closest?.("#zen-sidebar-splitter")) finish();
+        };
         restoreRepair = () => {
           repairDone = true;
           window.removeEventListener("MozAfterPaint", onRepairReady);
+          window.removeEventListener("pointerdown", onManualResize, true);
           if (!expansionObserved && sidebar.isConnected)
             expansionObserved =
               sidebar.getBoundingClientRect().width > width + 32;
-          // Native/user changes made during the refresh win over our snapshot.
-          for (const {
-            node,
-            key,
-            temporary,
-            previous,
-            priority,
-          } of snapshots.reverse()) {
-            if (
-              node.style.getPropertyValue(key) !== temporary ||
-              node.style.getPropertyPriority(key) !== "important"
-            )
-              continue;
-            if (previous) node.style.setProperty(key, previous, priority);
-            else node.style.removeProperty(key);
-          }
-          if (sidebar.getAttribute("width") === value) {
-            if (hadWidthAttribute)
-              sidebar.setAttribute("width", previousWidthAttribute);
-            else sidebar.removeAttribute("width");
+          style.remove();
+          if (sidebar.getAttribute(marker) === "active") {
+            if (previousMarker === null) sidebar.removeAttribute(marker);
+            else sidebar.setAttribute(marker, previousMarker);
           }
           if (!stopped && sidebar.isConnected) notifyNativeResize();
           repairStatus(
             expansionObserved
-              ? "completed: native sidebar resize cycle and previous width restored"
+              ? "completed: transient sidebar layout repair; persisted width untouched"
               : "not applied: browser styles prevented sidebar expansion",
           );
         };
         try {
-          // Match Zen's manual setWidth path, retaining temporary constraints
-          // only to provide enough space for the configured expansion.
-          change(sidebar, "--zen-sidebar-width", value);
-          change(sidebar, "width", value);
-          // Expansion cannot hit the current minimum. Only lift a maximum
-          // when necessary; avoid extra constraint writes for the small default.
-          const maxWidth = parseFloat(
-            sidebar.style.getPropertyValue("max-width"),
-          );
-          if (!Number.isFinite(maxWidth) || maxWidth < expanded)
-            change(sidebar, "max-width", value);
-          sidebar.setAttribute("width", value);
+          document.documentElement.append(style);
+          sidebar.setAttribute(marker, "active");
+          window.addEventListener("pointerdown", onManualResize, true);
           notifyNativeResize();
           const verifyExpansion = (remaining) => {
             repairFrame = window.requestAnimationFrame(() => {
@@ -948,19 +924,12 @@
                 return;
               }
               repairFrame = null;
-              const measured = sidebar.getBoundingClientRect().width;
-              expansionObserved = measured > width + 32;
-              if (!expansionObserved) {
-                finish();
-                repairStatus(
-                  "not applied: browser styles prevented sidebar expansion",
-                );
-              }
+              expansionObserved =
+                sidebar.getBoundingClientRect().width > width + 32;
+              if (!expansionObserved) finish();
             });
           };
           verifyExpansion(verificationFrames);
-          // One bounded hold allows native overflow work to settle at the wide
-          // size. Also restores when animation frames are suspended. No polling.
           restoreTimer = window.setTimeout(finish, holdMs);
         } catch (error) {
           finish();

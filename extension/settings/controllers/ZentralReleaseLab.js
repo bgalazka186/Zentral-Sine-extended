@@ -62,7 +62,22 @@
               origin.category +
               " / " +
               origin.section;
-            target.append(row);
+            const groupId =
+              "zs-release-group-" +
+              (origin.category + "-" + origin.section).replace(
+                /[^a-z0-9_-]/gi,
+                "-",
+              );
+            let group = target.querySelector("#" + groupId);
+            if (!group) {
+              group = document.createElement("section");
+              group.id = groupId;
+              const heading = document.createElement("h4");
+              heading.textContent = origin.category + " · " + origin.section;
+              group.append(heading);
+              target.append(group);
+            }
+            group.append(row);
           }
           const compat = modal.querySelector(
             "#zs-panel-organized-compatibility .zs-organized-content",
@@ -70,7 +85,7 @@
           note(
             compat,
             "zentral-companion-notes",
-            "I recommend Arc 2.0 for the Arc appearance options. I use oom333 Tab Groups with Zentral Groups disabled. Select the external-groups switch when using that mod. Library resizing and ZenLibraryTweaks can both own Library geometry; select only one layout owner.",
+            "I recommend Arc 2.0 for the Arc appearance options. I use oom333 Tab Groups with Zentral Groups disabled. The external-groups switch is optional when Zentral Groups is disabled. External Library layout is likewise optional while Extended Library resizing is off; enable it only to pause conflicting geometry hooks.",
             [
               ["Arc 2.0", "https://github.com/YashjitPal/Arc-2.0"],
               ["Tab Groups", "https://github.com/oom333/zen-tab-groups"],

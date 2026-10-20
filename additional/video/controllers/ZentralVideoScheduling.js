@@ -46,7 +46,12 @@
       function updatePaintTimer(active = true) {
         clearTimeout(deps.frameTimer);
         deps.frameTimer = null;
-        if (!deps.scanTimer || deps.renderBusy) return;
+        if (
+          !deps.scanTimer ||
+          deps.renderBusy ||
+          deps.box?.hasAttribute("data-window-resizing")
+        )
+          return;
         if (
           (!active ||
             !deps.current ||

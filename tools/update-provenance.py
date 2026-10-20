@@ -9,7 +9,12 @@ def patch(left,right):
  for name in sorted(left.keys()|right.keys()):
   a=left.get(name,'');b=right.get(name,'')
   if a==b:continue
-  out.extend(difflib.unified_diff(a.splitlines(True),b.splitlines(True),fromfile='a/'+name if name in left else '/dev/null',tofile='b/'+name if name in right else '/dev/null'))
+  for line in difflib.unified_diff(a.splitlines(True),b.splitlines(True),fromfile='a/'+name if name in left else '/dev/null',tofile='b/'+name if name in right else '/dev/null'):
+   out.append(line)
+   # difflib does not emit Git's missing-final-newline marker. Without it,
+   # the next file header joins the preceding line and corrupts the patch.
+   if not line.endswith('\n'):
+    out.append('\n\\ No newline at end of file\n')
  return ''.join(out)
 def sources(folder):return {str(p.relative_to(folder)):p.read_text() for p in folder.rglob('*') if p.is_file() and p.suffix in ['.js','.mjs','.css','.json']}
 def main():

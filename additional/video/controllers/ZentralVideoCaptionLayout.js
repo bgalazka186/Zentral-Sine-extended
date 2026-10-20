@@ -75,7 +75,13 @@
       const lines =
         Number(box.style.getPropertyValue("--zentral-caption-max-lines")) || 4;
       const mode = box.getAttribute("data-caption-overflow") || "fit";
-      const signature = JSON.stringify([text, size, lines, mode]);
+      const signature = JSON.stringify([
+        text,
+        size,
+        lines,
+        mode,
+        node.clientWidth || box.clientWidth,
+      ]);
       if (cache.get(node) === signature) return;
       cache.set(node, signature);
       const width = Math.max(
@@ -179,7 +185,12 @@
         if (captionNode.hidden !== hidden) captionNode.hidden = hidden;
         captionNode.toggleAttribute("data-empty", false);
       }
-      this.fitText(box, captionNode, text);
+      if (active && hasText) this.fitText(box, captionNode, text);
+      else {
+        const body = captionNode.querySelector(".zentral-caption-text");
+        if (body) body.textContent = "";
+        cache.delete(captionNode);
+      }
     },
   };
   window.ZentralModuleLoader.define("video/caption-layout", () => layout);

@@ -685,7 +685,8 @@
           rect.bottom > 0 &&
           rect.left < window.innerWidth &&
           rect.top < window.innerHeight &&
-          getComputedStyle(deps.box).visibility !== "hidden"
+          (deps.box.hasAttribute("data-temporary-hidden") ||
+            getComputedStyle(deps.box).visibility !== "hidden")
         );
       }
       function detectContentRect(bitmap, source) {
@@ -803,6 +804,7 @@
           !deps.enabled() ||
           deps.compactPaused ||
           deps.renderBusy ||
+          deps.box?.hasAttribute("data-window-resizing") ||
           deps.testingAll
         )
           return;
@@ -874,6 +876,7 @@
             deps.lastHealth = null;
             deps.clearCaptionWatch();
             deps.setCaption("");
+            deps.closeEnlarged?.();
             deps.previewTransitionReason =
               "Source video is visible; native cloning deferred";
             deps.nextRenderProbe = deps.visibilityCheckAt;
@@ -894,6 +897,7 @@
               ?.clearRect(0, 0, deps.canvas.width, deps.canvas.height);
             deps.clearCaptionWatch();
             deps.setCaption("");
+            deps.closeEnlarged?.();
             deps.previewTransitionReason =
               "Power saving: original video is visible";
             deps.nextRenderProbe = deps.visibilityCheckAt;
@@ -977,6 +981,9 @@
             source,
           );
           if (!modes.length) {
+            deps.previewTransitionReason ||=
+              "No capture method is currently available";
+            deps.closeEnlarged?.();
             deps.failedRenderers.clear();
             deps.nextRenderProbe = Date.now() + deps.POLL_MS;
             return;
@@ -1103,6 +1110,7 @@
               bitmap?.close?.();
             }
           }
+          if (!deps.previewMode) deps.closeEnlarged?.();
           if (deps.RENDER_MODES.every((mode) => deps.failedRenderers.has(mode)))
             deps.failedRenderers.clear();
           deps.nextRenderProbe = Date.now() + deps.POLL_MS;

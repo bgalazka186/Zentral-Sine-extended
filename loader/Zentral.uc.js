@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Zentral modular entrypoint
 // @include chrome://browser/content/browser.xhtml
-// @version 3.0.0
+// @version 3.0.1
 // ==/UserScript==
 /*
  * ZENTRAL FILE GUIDE - loader/Zentral.uc.js
@@ -39,7 +39,8 @@
   const definitions = new Map(),
     files = new Map(),
     textCache = new Map(),
-    sourceById = new Map();
+    sourceById = new Map(),
+    components = new Map();
   let loadingSource = null,
     destroyed = false,
     netUtil = null;
@@ -76,11 +77,17 @@
       files.set(path, row);
       const previousSource = loadingSource;
       loadingSource = path;
+      const priorDefinitions = new Set(definitions.keys());
       try {
         Services.scriptloader.loadSubScript(rootURI + path, window, "UTF-8");
         row.state = "loaded";
         return true;
       } catch (error) {
+        for (const id of definitions.keys())
+          if (!priorDefinitions.has(id) && sourceById.get(id) === path) {
+            definitions.delete(id);
+            sourceById.delete(id);
+          }
         row.state = "failed";
         row.error = String(error) + (error?.stack ? "\n" + error.stack : "");
         console.error("[Zentral source]", path, error);
@@ -154,8 +161,18 @@
     create(id, args, { optional = false } = {}) {
       const file = sourceById.get(id);
       try {
-        return this.require(id)(args);
+        const factory = this.require(id);
+        if (typeof factory !== "function")
+          throw new Error("Invalid factory: " + id);
+        const value = factory(args);
+        const component = components.get(id) || { id, file, constructions: 0 };
+        component.state = "initialized";
+        component.constructions++;
+        delete component.error;
+        components.set(id, component);
+        return value;
       } catch (error) {
+        components.set(id, { id, file, state: "failed", error: String(error) });
         const row = file && files.get(file);
         if (row) {
           row.state = "failed";
@@ -169,7 +186,10 @@
       }
     },
     require(id) {
-      if (!definitions.has(id))
+      if (
+        !definitions.has(id) ||
+        files.get(sourceById.get(id))?.state === "failed"
+      )
         throw new Error("Component did not register: " + id);
       return definitions.get(id);
     },
@@ -179,6 +199,7 @@
     report() {
       return {
         sources: this.sources(),
+        components: [...components.values()].map((row) => ({ ...row })),
         runtime: window.ZentralRuntime?.snapshot?.() || null,
       };
     },
@@ -205,6 +226,7 @@
       window.removeEventListener("unload", onUnload);
       document.getElementById("zentral-bootstrap-diagnostics")?.remove();
       definitions.clear();
+      components.clear();
       files.clear();
       textCache.clear();
       sourceById.clear();

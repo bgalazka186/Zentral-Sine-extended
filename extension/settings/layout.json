@@ -21,7 +21,7 @@
     },
     {
       "id": "release-lab",
-      "label": "New settings · 3.0+",
+      "label": "New settings \u00b7 3.0+",
       "group": "Advanced",
       "owner": "core",
       "icon": "sliders",
@@ -482,7 +482,7 @@
   "order": [
     {
       "type": "text",
-      "label": "**Start here · Essential features**",
+      "label": "**Start here \u00b7 Essential features**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.mmb_unload_normal_tabs",
@@ -494,7 +494,7 @@
     "zen.workspace.zentral.startup.enabled",
     {
       "type": "text",
-      "label": "**Simple appearance · Palette**",
+      "label": "**Simple appearance \u00b7 Palette**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.look.style",
@@ -504,7 +504,7 @@
     "zen.workspace.bgalazka.look.primary_opacity",
     {
       "type": "text",
-      "label": "**Simple appearance · Readability & buttons**",
+      "label": "**Simple appearance \u00b7 Readability & buttons**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.look.solid_controls",
@@ -512,7 +512,7 @@
     "zen.workspace.bgalazka.look.button_style",
     {
       "type": "text",
-      "label": "**Detailed appearance · Text & contrast**",
+      "label": "**Detailed appearance \u00b7 Text & contrast**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.look.text_mode",
@@ -520,7 +520,7 @@
     "zen.workspace.bgalazka.look.muted",
     {
       "type": "text",
-      "label": "**Detailed appearance · Panel surfaces & transparency**",
+      "label": "**Detailed appearance \u00b7 Panel surfaces & transparency**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.look.web_surface",
@@ -541,14 +541,14 @@
     "zen.workspace.bgalazka.force_panel_black",
     {
       "type": "text",
-      "label": "**Detailed appearance · Panel position & motion**",
+      "label": "**Detailed appearance \u00b7 Panel position & motion**",
       "size": "18px"
     },
     "zen.workspace.apps.sidebar.animation_speed",
     "zen.workspace.apps.sidebar.animation_type",
     {
       "type": "text",
-      "label": "**Detailed appearance · Shape & controls**",
+      "label": "**Detailed appearance \u00b7 Shape & controls**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.look.button_hover",
@@ -566,7 +566,7 @@
     "zen.workspace.bgalazka.look.button_border",
     {
       "type": "text",
-      "label": "**Detailed appearance · Settings window**",
+      "label": "**Detailed appearance \u00b7 Settings window**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.look.settings_canvas",
@@ -581,7 +581,7 @@
     "zen.workspace.bgalazka.look.row_rule",
     {
       "type": "text",
-      "label": "**Detailed appearance · Navigation toolbar**",
+      "label": "**Detailed appearance \u00b7 Navigation toolbar**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.secondary_toolbar_swap",
@@ -598,7 +598,7 @@
     "zen.workspace.bgalazka.look.toolbar_border",
     {
       "type": "text",
-      "label": "**Detailed appearance · Floating pill**",
+      "label": "**Detailed appearance \u00b7 Floating pill**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.hide_hover_reveal_btn",
@@ -617,7 +617,7 @@
     "zen.workspace.bgalazka.hide_close",
     {
       "type": "text",
-      "label": "**Detailed appearance · Sidebar video**",
+      "label": "**Detailed appearance \u00b7 Sidebar video**",
       "size": "18px"
     },
     "zen.workspace.zentral.video_preview.radius_px",
@@ -647,7 +647,7 @@
     "zen.workspace.bgalazka.look.video_source_style",
     {
       "type": "text",
-      "label": "**Detailed appearance · Tabs, folders & launchers**",
+      "label": "**Detailed appearance \u00b7 Tabs, folders & launchers**",
       "size": "18px"
     },
     "zen.workspace.apps.sidebar.hide_utility_section",
@@ -667,7 +667,7 @@
     "zen.workspace.bgalazka.look.tile_style",
     {
       "type": "text",
-      "label": "**Detailed appearance · Menus & feedback**",
+      "label": "**Detailed appearance \u00b7 Menus & feedback**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.look.popup_surface",
@@ -678,14 +678,14 @@
     "zen.workspace.bgalazka.look.popup_opacity",
     {
       "type": "text",
-      "label": "**Detailed appearance · Compatibility styling**",
+      "label": "**Detailed appearance \u00b7 Compatibility styling**",
       "size": "18px"
     },
     "zen.workspace.zentral.arc2.match_compact_sidebar",
     "zen.workspace.zentral.arc2.match_compact_library",
     {
       "type": "text",
-      "label": "**Layout & density · Tabs & folders**",
+      "label": "**Layout & density \u00b7 Tabs & folders**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.look.density_urlbar",
@@ -706,7 +706,7 @@
     "zen.workspace.bgalazka.look.tabbar_icon_gap",
     {
       "type": "text",
-      "label": "**Layout & density · App grid**",
+      "label": "**Layout & density \u00b7 App grid**",
       "size": "18px"
     },
     "zen.workspace.apps.sidebar.apps_per_row",
@@ -715,7 +715,7 @@
     "zen.workspace.apps.sidebar.placement",
     {
       "type": "text",
-      "label": "**Layout & density · Control sizing**",
+      "label": "**Layout & density \u00b7 Control sizing**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.look.spacing",
@@ -725,7 +725,7 @@
     "zen.workspace.bgalazka.look.video_row_height",
     {
       "type": "text",
-      "label": "**Layout & density · Panel size & position**",
+      "label": "**Layout & density \u00b7 Panel size & position**",
       "size": "18px"
     },
     "zen.workspace.apps.sidebar.width",
@@ -735,7 +735,7 @@
     "zen.workspace.bgalazka.panel_position_offset_px",
     {
       "type": "text",
-      "label": "**Layout & density · Video size**",
+      "label": "**Layout & density \u00b7 Video size**",
       "size": "18px"
     },
     "zen.workspace.zentral.video_preview.fit_width",
@@ -743,38 +743,38 @@
     "zen.workspace.zentral.video_preview.height_px",
     {
       "type": "text",
-      "label": "**Apps behavior · Launcher grid & placement**",
+      "label": "**Apps behavior \u00b7 Launcher grid & placement**",
       "size": "18px"
     },
     "zen.workspace.apps.sidebar.autohide",
     {
       "type": "text",
-      "label": "**Tab Panel Launchers · Launchers, loaded state & badges**",
+      "label": "**Tab Panel Launchers \u00b7 Launchers, loaded state & badges**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.all_tab_panels",
     {
       "type": "text",
-      "label": "**Tab Groups · Group behavior & indicators**",
+      "label": "**Tab Groups \u00b7 Group behavior & indicators**",
       "size": "18px"
     },
     "zen.workspace.tabgroups.collapse_on_launch",
     "zen.workspace.tabgroups.thumbnails",
     {
       "type": "text",
-      "label": "**Tab Dragging · Background sorting**",
+      "label": "**Tab Dragging \u00b7 Background sorting**",
       "size": "18px"
     },
     "zen.workspace.zentral.tabs.background_drag",
     {
       "type": "text",
-      "label": "**RSS Folders · Live-folder display**",
+      "label": "**RSS Folders \u00b7 Live-folder display**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.rss.hide_empty",
     {
       "type": "text",
-      "label": "**Panel Layout · Docking, size & input**",
+      "label": "**Panel Layout \u00b7 Docking, size & input**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.opposite_docking",
@@ -783,13 +783,13 @@
     "zen.workspace.bgalazka.panel_input_shield",
     {
       "type": "text",
-      "label": "**Hover Reveal · Autohide & reveal target**",
+      "label": "**Hover Reveal \u00b7 Autohide & reveal target**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.hover_reveal_panel",
     {
       "type": "text",
-      "label": "**Hover Reveal · Hover-to-show element**",
+      "label": "**Hover Reveal \u00b7 Hover-to-show element**",
       "size": "18px"
     },
     "zen.workspace.zentral.panels.hover_edge_reveal",
@@ -798,7 +798,7 @@
     "zen.workspace.zentral.panels.hover_push_width_px",
     {
       "type": "text",
-      "label": "**Hover Reveal · Outside-window reveal**",
+      "label": "**Hover Reveal \u00b7 Outside-window reveal**",
       "size": "18px"
     },
     "zen.workspace.zentral.compatibility.panel_outside_window_tracking",
@@ -808,14 +808,14 @@
     "zen.workspace.zentral.panels.autohide_delay_ms",
     {
       "type": "text",
-      "label": "**Dual, Triple & Super View · Page push & secondary controls**",
+      "label": "**Dual, Triple & Super View \u00b7 Page push & secondary controls**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.push_page",
     "zen.workspace.bgalazka.triple_push_page",
     {
       "type": "text",
-      "label": "**Search Engines · Search engines & quick switch**",
+      "label": "**Search Engines \u00b7 Search engines & quick switch**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.web_toolbar_search_engine",
@@ -838,31 +838,31 @@
     "zen.workspace.bgalazka.web_toolbar_quickswitch_target.github",
     {
       "type": "text",
-      "label": "**Notifications & Audio · Audio indicator & mute**",
+      "label": "**Notifications & Audio \u00b7 Audio indicator & mute**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.audio_indicator",
     {
       "type": "text",
-      "label": "**Notifications & Audio · Notification refresh**",
+      "label": "**Notifications & Audio \u00b7 Notification refresh**",
       "size": "18px"
     },
     "zen.workspace.apps.sidebar.badge_poll_interval_ms",
     {
       "type": "text",
-      "label": "**Startup & Background · Panel background loading**",
+      "label": "**Startup & Background \u00b7 Panel background loading**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.smart_sleep",
     {
       "type": "text",
-      "label": "**Keyboard & Mouse · Insta Peek**",
+      "label": "**Keyboard & Mouse \u00b7 Insta Peek**",
       "size": "18px"
     },
     "zen.workspace.apps.insta_peek.shortcut",
     {
       "type": "text",
-      "label": "**Keyboard & Mouse · Panel shortcuts & mouse actions**",
+      "label": "**Keyboard & Mouse \u00b7 Panel shortcuts & mouse actions**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.keybinds_enabled",
@@ -886,7 +886,7 @@
     "zen.workspace.bgalazka.keybind.open_settings",
     {
       "type": "text",
-      "label": "**Video Playback · Playback & captions**",
+      "label": "**Video Playback \u00b7 Playback & captions**",
       "size": "18px"
     },
     "zen.workspace.zentral.video_preview.renderer",
@@ -894,7 +894,7 @@
     "zen.workspace.zentral.video_preview.keep_source_visible",
     {
       "type": "text",
-      "label": "**Video Sources · Discovery & source selection**",
+      "label": "**Video Sources \u00b7 Discovery & source selection**",
       "size": "18px"
     },
     "zen.workspace.zentral.video_preview.auto_show_video",
@@ -904,7 +904,7 @@
     "zen.workspace.zentral.video_preview.pinned_discovery_only",
     {
       "type": "text",
-      "label": "**Video Performance · Capture & background work**",
+      "label": "**Video Performance \u00b7 Capture & background work**",
       "size": "18px"
     },
     "zen.workspace.zentral.video_preview.pause_when_compact_hidden",
@@ -926,7 +926,7 @@
     "zen.workspace.zentral.video_preview.suspend_when_source_visible",
     {
       "type": "text",
-      "label": "**Browser & Add-on Compatibility · Browser hosts & website styles**",
+      "label": "**Browser & Add-on Compatibility \u00b7 Browser hosts & website styles**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.addon_tab_id_bridge",
@@ -934,7 +934,7 @@
     "zen.workspace.bgalazka.show_addon_host_folder",
     {
       "type": "text",
-      "label": "**Panel Recovery · Bounded recovery & optional troubleshooting**",
+      "label": "**Panel Recovery \u00b7 Bounded recovery & optional troubleshooting**",
       "size": "18px"
     },
     "zen.workspace.bgalazka.show_triple_style_repair",
@@ -944,7 +944,7 @@
     "zen.workspace.bgalazka.periodic_fallback_polling",
     {
       "type": "text",
-      "label": "**Modules & CSS Files · File loading**",
+      "label": "**Modules & CSS Files \u00b7 File loading**",
       "size": "18px"
     },
     "zen.workspace.zentral.modules.video.enabled",
@@ -980,13 +980,13 @@
     "zen.workspace.zentral.modules.tab-drag.enabled",
     {
       "type": "text",
-      "label": "**Local Add-ons · Local registrations**",
+      "label": "**Local Add-ons \u00b7 Local registrations**",
       "size": "18px"
     },
     "zen.workspace.zentral.addons",
     {
       "type": "text",
-      "label": "**Experimental · Native compact sidebar**",
+      "label": "**Experimental \u00b7 Native compact sidebar**",
       "size": "18px"
     },
     "zen.workspace.zentral.experimental.sidebar_startup_recalculate",
@@ -1003,7 +1003,7 @@
     "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal.panels.only_when_not_pushing",
     {
       "type": "text",
-      "label": "**Experimental · Library layout**",
+      "label": "**Experimental \u00b7 Library layout**",
       "size": "18px"
     },
     "zen.workspace.zentral.experimental.library_resize",
@@ -1012,7 +1012,7 @@
     "zen.workspace.zentral.experimental.library_resize.animate_content",
     {
       "type": "text",
-      "label": "**Video Experiments · Experimental methods & tests**",
+      "label": "**Video Experiments \u00b7 Experimental methods & tests**",
       "size": "18px"
     },
     "zen.workspace.zentral.video_preview.disable_experimental_bridge",
@@ -1021,7 +1021,7 @@
     "zen.workspace.zentral.video_preview.performance_diagnostics",
     {
       "type": "text",
-      "label": "**Logs & Diagnostics · Capture & reports**",
+      "label": "**Logs & Diagnostics \u00b7 Capture & reports**",
       "size": "18px"
     },
     "zen.workspace.zentral.debug",
@@ -1035,15 +1035,18 @@
     "zentral.logger.path",
     {
       "type": "text",
-      "label": "**Video Playback · Enlarged preview**",
+      "label": "**Video Playback \u00b7 Enlarged preview**",
       "size": "18px"
     },
     "zen.workspace.zentral.video_preview.double_click_enlarge",
+    "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px",
+    "zen.workspace.zentral.video_preview.enlarged_keep_aspect",
+    "zen.workspace.zentral.video_preview.enlarged_hover_controls",
     "zen.workspace.zentral.video_preview.enlarged_width",
     "zen.workspace.zentral.video_preview.enlarged_height",
     {
       "type": "text",
-      "label": "**Video subtitles · Subtitle display**",
+      "label": "**Video subtitles \u00b7 Subtitle display**",
       "size": "18px"
     },
     "zen.workspace.zentral.video_preview.youtube_captions",
@@ -1054,12 +1057,13 @@
     "zen.workspace.zentral.video_preview.caption_overflow",
     {
       "type": "text",
-      "label": "**Video subtitles · Subtitle updates**",
+      "label": "**Video subtitles \u00b7 Subtitle updates**",
       "size": "18px"
     },
     "zen.workspace.zentral.video_preview.caption_poll_ms",
     "zen.workspace.zentral.video_preview.caption_events",
     "zen.workspace.zentral.video_preview.slow_caption_recovery",
+    "zen.workspace.zentral.video_preview.enlarged_remember_position",
     "zen.workspace.zentral.video_preview.enlarged_position",
     "zen.workspace.zentral.hybrid.hide_detach_button"
   ]

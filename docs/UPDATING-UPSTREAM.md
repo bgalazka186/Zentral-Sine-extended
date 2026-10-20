@@ -1,6 +1,6 @@
 # Updating the hybrid base after Zentral 1.1.0
 
-The package version is Extended 3.0.0. The pinned original version and commit are in `UPSTREAM.json`. Keep these separate. A new Extended release does not imply every upstream source file is identical to that release.
+The package version is Extended 3.0.1. The pinned original version and commit are in `UPSTREAM.json`. Keep these separate. A new Extended release does not imply every upstream source file is identical to that release.
 
 1. Keep a working package and settings backup. Work on a review branch; retain all uncommitted user changes.
 2. Run `python3 tools/update-provenance.py --check`. If the pristine reference hashes differ, recover the original snapshot before trusting a diff.
@@ -34,3 +34,13 @@ When code changes after this build, regenerate its provenance and preferences. D
 For the October repair, start with `REPAIR-HANDOFF-3.0.0.md` and the B001/B015 additions. The active base remains an adapted/extracted Extended implementation; do not mistake the archived original reference for an additional live module. The settings testing view mirrors real keys and must not register duplicate schemas.
 
 The `extended-input-to-3.0.0.patch` file is the historical initial migration artifact, not an up-to-date deployable patch after subsequent repairs. Use the current adapted-base diff, actual feature sources and the repair file manifest when comparing a repaired installation.
+
+## Follow-up video / loader repair
+
+See [VIDEO-PREVIEW-REPAIR.md](VIDEO-PREVIEW-REPAIR.md). The upstream pin remains 1.1.0 at the same commit. Five archived reference files in the uploaded tree had diverged from their advertised hashes; they were restored from that exact commit, and the adapted-base patch was regenerated. Do not format or annotate the archived snapshot. Put commentary in this directory instead.
+
+Keep new preview behavior in `additional/video/controllers/`; use the existing transport and capture owner rather than adding a second stream. Optional helpers must use both optional load and optional construction, with a safe caller fallback. Required-helper failures may disable the video feature; the runtime owns cleanup and keeps unrelated features independent. Source diagnostics distinguish evaluation from controller construction; an active feature has completed its synchronous initializer. The optional `verify` postcondition must return true before activation, and failures destroy the feature scope. Video currently uses this check; other features retain their existing activation and availability contracts.
+
+A changed-files ZIP overlays the exact uploaded package, with repository-relative paths. It is not a standalone installation. Rebuild `preferences.json` after modifying owner schemas or layout. Keep the New settings mirrors on the same keys, group them by original section, and never put profile data in documentation or fixtures.
+
+The generator now emits Git missing-final-newline markers. After regeneration, apply the patch to a throwaway pristine snapshot and compare the resulting adapted sources; checking only that a generated patch file matches itself will not detect malformed patch syntax. The follow-up patch passed this application and byte-comparison check.

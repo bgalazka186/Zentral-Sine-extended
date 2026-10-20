@@ -90,7 +90,8 @@
     const definitions = new Map(),
       files = new Map(),
       textCache = new Map(),
-      sourceById = new Map();
+      sourceById = new Map(),
+      components = new Map();
     let loadingSource = null,
       netUtil = null;
     const safePath = (path) =>
@@ -106,10 +107,12 @@
       },
       load(path, { optional = false, owner = "core" } = {}) {
         if (
+          path.startsWith("zentral/upstream/") ||
           !safePath(path) ||
           !/^(?:JS|CSS|settings|loader|zentral|extension|additional)\//.test(
             path,
-          )
+          ) ||
+          !/\.(?:js|mjs)$/.test(path)
         )
           throw new Error("Unsafe module path: " + path);
         const existing = files.get(path);
@@ -124,13 +127,19 @@
         files.set(path, row);
         const previousSource = loadingSource;
         loadingSource = path;
+        const priorDefinitions = new Set(definitions.keys());
         try {
           Services.scriptloader.loadSubScript(rootURI + path, window, "UTF-8");
           row.state = "loaded";
           return true;
         } catch (error) {
+          for (const id of definitions.keys())
+            if (!priorDefinitions.has(id) && sourceById.get(id) === path) {
+              definitions.delete(id);
+              sourceById.delete(id);
+            }
           row.state = "failed";
-          row.error = String(error?.stack || error);
+          row.error = String(error) + (error?.stack ? "\n" + error.stack : "");
           console.error("[Zentral source]", path, error);
           window.dispatchEvent(new CustomEvent("zentral-runtime-change"));
           if (!optional) throw error;
@@ -193,14 +202,34 @@
       create(id, args, { optional = false } = {}) {
         const file = sourceById.get(id);
         try {
-          return this.require(id)(args);
+          const factory = this.require(id);
+          if (typeof factory !== "function")
+            throw new Error("Invalid factory: " + id);
+          const value = factory(args);
+          const component = components.get(id) || {
+            id,
+            file,
+            constructions: 0,
+          };
+          component.state = "initialized";
+          component.constructions++;
+          delete component.error;
+          components.set(id, component);
+          return value;
         } catch (error) {
+          components.set(id, {
+            id,
+            file,
+            state: "failed",
+            error: String(error),
+          });
           const row = file && files.get(file);
           if (row) {
             row.state = "failed";
             row.phase = "factory";
             row.component = id;
-            row.error = String(error?.stack || error);
+            row.error =
+              String(error) + (error?.stack ? "\n" + error.stack : "");
           }
           console.error("[Zentral component]", file || id, error);
           if (!optional) throw error;
@@ -208,7 +237,10 @@
         }
       },
       require(id) {
-        if (!definitions.has(id))
+        if (
+          !definitions.has(id) ||
+          files.get(sourceById.get(id))?.state === "failed"
+        )
           throw new Error("Component did not register: " + id);
         return definitions.get(id);
       },
@@ -219,6 +251,7 @@
       report() {
         return {
           sources: this.sources(),
+          components: [...components.values()].map((row) => ({ ...row })),
           runtime: window.ZentralRuntime?.snapshot?.() || null,
         };
       },
@@ -240,6 +273,7 @@
       },
       destroy() {
         definitions.clear();
+        components.clear();
         files.clear();
         textCache.clear();
         sourceById.clear();
@@ -3007,7 +3041,8 @@
             ) &&
             !videoHidden &&
             !compactPaused &&
-            window.ZentralModuleLoader?.has("video/ZentralVideoCaptions")
+            window.ZentralModuleLoader?.has("video/ZentralVideoCaptions") &&
+            window.ZentralModuleLoader?.has("video/caption-layout")
               ? setInterval(refreshCaption, captionIntervalMs())
               : null;
         }
@@ -3202,7 +3237,7 @@
         let playButton = null;
         let muteButton = null;
         let seekBar = null;
-        const PROGRESS_REFRESH_MS = 30000;
+        const PROGRESS_REFRESH_MS = 1000;
         let progressBusy = false;
         let progressEpoch = 0,
           progressSourceKey = "",
@@ -3393,7 +3428,8 @@
             (liveBridgeEnabled() &&
               Services.prefs.getBoolPref(KEEP_VISIBLE_PREF, true) &&
               (choice === "auto" ||
-                ["frame-native", "native"].includes(choice)))
+                ["frame-native", "native"].includes(choice) ||
+                ["frame-native", "native"].includes(previewMode)))
           );
         }
         function renderCandidates(choice, active, blocked, source) {
@@ -3769,6 +3805,10 @@
           wakePaint();
         };
         const onVisibilityWake = (event) => {
+          // The enlarged controller coalesces window geometry and owns its final
+          // refresh; avoid a second mount/visibility/capture pass per resize event.
+          if (event?.type === "resize" && box?.hasAttribute("data-enlarged"))
+            return;
           if (event?.type === "zentral-video-enlarge-return")
             syncCompactVisibility();
           if (event?.type === "scroll") {
@@ -3801,7 +3841,7 @@
         window.addEventListener("scroll", onVisibilityWake, true);
         function destroy() {
           if (disposed) return;
-          cancelResize();
+          cancelResize(true);
           disposed = true;
           if (visibilityWakeFrame !== null)
             window.cancelAnimationFrame(visibilityWakeFrame);
@@ -3958,7 +3998,13 @@
       return () => window.ZentralVideoPreview?.destroy?.();
     };
     if (window.ZentralRuntime)
-      ZentralRuntime.register({ id: "video", init: start });
+      ZentralRuntime.register({
+        id: "video",
+        init: start,
+        verify: () =>
+          typeof window.ZentralVideoPreview?.destroy === "function" &&
+          typeof window.ZentralVideoPreview?.diagnostics === "function",
+      });
     else standaloneReady(start);
   })();
 })();

@@ -338,6 +338,9 @@
       // portable recommendations. Preserve the recipient's values if a future
       // preset accidentally includes them.
       const recommendedPrivateKeys = new Set([
+        "zen.workspace.zentral.video_preview.enlarged_position",
+        "zen.workspace.zentral.video_preview.enlarged_width",
+        "zen.workspace.zentral.video_preview.enlarged_height",
         "zentral.logger.path",
         "zen.workspace.zentral.report_endpoint",
         "zen.workspace.zentral.addons",

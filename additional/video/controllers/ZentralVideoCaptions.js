@@ -30,6 +30,11 @@
   window.ZentralModuleLoader.define(
     "video/ZentralVideoCaptions",
     function (deps) {
+      const layout = window.ZentralModuleLoader.create(
+        "video/caption-layout",
+        undefined,
+        { optional: true },
+      );
       function setCaption(text) {
         if (deps.captionText === text && deps.captionNode?.textContent === text)
           return;
@@ -38,12 +43,14 @@
           .replace(/\s+/g, " ")
           .trim();
         deps.captionText = text;
+        if (deps.box?.hasAttribute("data-window-resizing")) return;
         if (deps.captionNode) {
           // The below-video caption surface is intentionally outside picture.
           // Updating text must not schedule a sidebar reflow on every word.
-          const layout = window.ZentralModuleLoader.create(
-            "video/caption-layout",
-          );
+          if (!layout) {
+            deps.captionNode.hidden = true;
+            return;
+          }
           layout.sync({
             box: deps.box,
             captionNode: deps.captionNode,
@@ -67,7 +74,12 @@
             .catch(() => {});
       }
       async function refreshCaption() {
+        if (!layout) {
+          clearCaptionWatch();
+          return;
+        }
         const source = deps.current;
+        if (deps.box?.hasAttribute("data-window-resizing")) return;
         if (
           !deps.featureOn(deps.CAPTIONS_PREF) ||
           !Services.prefs.getBoolPref(

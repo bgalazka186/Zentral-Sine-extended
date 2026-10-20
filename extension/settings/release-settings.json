@@ -44,6 +44,10 @@
     "zen.workspace.zentral.video_preview.enlarged_width",
     "zen.workspace.zentral.video_preview.enlarged_height",
     "zen.workspace.zentral.video_preview.enlarged_position",
-    "zen.workspace.zentral.hybrid.hide_detach_button"
+    "zen.workspace.zentral.hybrid.hide_detach_button",
+    "zen.workspace.zentral.video_preview.enlarged_keep_aspect",
+    "zen.workspace.zentral.video_preview.enlarged_hover_controls",
+    "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px",
+    "zen.workspace.zentral.video_preview.enlarged_remember_position"
   ]
 }

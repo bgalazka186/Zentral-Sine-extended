@@ -718,3 +718,100 @@
   > button:is([title="Next detected source"], [title="Open source tab"]) {
   display: none !important;
 }
+
+/* Keep native receiver focus/hit testing from swallowing the first gesture. */
+#zentral-video-preview#zentral-video-preview[data-enlarged]
+  .zentral-video-preview-player {
+  pointer-events: none !important;
+}
+#zentral-video-preview#zentral-video-preview .zentral-video-enlarge-hit {
+  pointer-events: auto !important;
+  user-select: none !important;
+}
+/* Insta Peek keeps renderer and geometry alive while pointer input reaches
+   the workspace/page underneath, including through the popover top layer. */
+#zentral-video-preview#zentral-video-preview#zentral-video-preview[data-enlarged][data-temporary-hidden],
+#zentral-video-preview#zentral-video-preview#zentral-video-preview[data-enlarged][data-temporary-hidden]
+  *,
+:root[zentral-insta-peek="true"]
+  #zentral-video-preview#zentral-video-preview#zentral-video-preview[data-enlarged],
+:root[zentral-insta-peek="true"]
+  #zentral-video-preview#zentral-video-preview#zentral-video-preview[data-enlarged]
+  * {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Enlarged input and positioning must win over sidebar/appearance transforms.
+   The picture is a stacking context: hit layer below controls, grips above it. */
+#zentral-video-preview#zentral-video-preview[data-enlarged] {
+  transform: none !important;
+  translate: none !important;
+  animation: none !important;
+  transition: none !important;
+  margin-inline: 0 !important;
+  margin-block: 0 !important;
+  right: auto !important;
+  bottom: auto !important;
+}
+#zentral-video-preview#zentral-video-preview[data-enlarged]
+  .zentral-video-preview-picture {
+  isolation: isolate !important;
+}
+#zentral-video-preview#zentral-video-preview .zentral-video-enlarge-hit {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 10 !important;
+  touch-action: none !important;
+}
+#zentral-video-preview#zentral-video-preview[data-enlarged]
+  .zentral-video-preview-player {
+  z-index: 0 !important;
+  -moz-user-focus: ignore !important;
+}
+#zentral-video-preview .zentral-video-enlarge-controls {
+  display: contents;
+}
+#zentral-video-preview#zentral-video-preview[data-enlarged]
+  .zentral-video-enlarge-controls {
+  position: absolute !important;
+  display: flex !important;
+  flex-direction: column !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  z-index: 20 !important;
+  padding: 5px 6px 8px !important;
+  box-sizing: border-box !important;
+  background: rgb(0 0 0 / 40%) !important;
+  color: white !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+#zentral-video-preview#zentral-video-preview#zentral-video-preview[data-enlarged]
+  .zentral-video-enlarge-controls
+  :is(.zentral-video-preview-bar, .zentral-video-preview-seek) {
+  position: relative !important;
+  background: transparent !important;
+  margin: 0 !important;
+  width: 100% !important;
+  flex: 0 0 auto !important;
+}
+#zentral-video-preview#zentral-video-preview[data-enlarged][data-hover-controls]:not(
+    [data-controls-visible]
+  ):not([data-source-menu])
+  .zentral-video-enlarge-controls:not(:focus-within) {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+#zentral-video-preview#zentral-video-preview[data-enlarged][data-hover-controls]:not(
+    [data-controls-visible]
+  ):not([data-source-menu])
+  .zentral-video-enlarge-controls:not(:focus-within)
+  * {
+  pointer-events: none !important;
+}
+#zentral-video-preview#zentral-video-preview[data-enlarged]
+  .zentral-video-enlarge-resize {
+  z-index: 40 !important;
+}

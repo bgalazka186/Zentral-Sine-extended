@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Zentral Core and Settings
 // @include chrome://browser/content/browser.xhtml
-// @version 3.0.0
+// @version 3.0.1
 // ==/UserScript==
 /*
  * ZENTRAL FILE GUIDE - loader/ZentralRuntime.js
@@ -38,7 +38,7 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const VERSION = "3.0.0";
+  const VERSION = "3.0.1";
   // Sine installs this package under theme.json's id. Resolve from the
   // executing script so local folders and installed copies use their own files.
   // Keep this universal: never hard-code a mod id, folder name, or profile path.
@@ -2387,6 +2387,18 @@
               lifecycle.destroy();
               continue;
             }
+            const verify = definitions.get(m.id).verify;
+            if (
+              verify &&
+              verify({
+                runtime,
+                shared: runtime.shared,
+                services: runtime.services,
+              }) !== true
+            )
+              throw new Error("Initialization postcondition failed: " + m.id);
+            r.initialized = true;
+            r.verified = !!verify;
             r.state = availability.get(m.id) === false ? "dormant" : "active";
             r.reason = undefined;
           } catch (e) {
