@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/Zentral%20Logo.png" alt="Zentral Extended" width="140" height="140" />
+  <img src="assets/ZentralLogo.png" alt="Zentral Extended" width="140" height="140" />
 </p>
 
 <h1 align="center">Zentral Extended</h1>
