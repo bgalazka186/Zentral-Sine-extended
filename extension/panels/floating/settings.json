@@ -1,0 +1,234 @@
+{
+  "owner": "panel-enhancements",
+  "schema": [
+    {
+      "property": "zen.workspace.zentral.hybrid.geometry_mode",
+      "label": "Panel geometry engine",
+      "type": "dropdown",
+      "defaultValue": "hybrid",
+      "options": [
+        {
+          "label": "Hybrid: persistent per-app movement and docking",
+          "value": "hybrid"
+        },
+        {
+          "label": "Classic Extended: legacy shared offsets",
+          "value": "extended"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.hybrid.allow_overflow",
+      "label": "Allow panels partly outside the window (keep controls reachable)",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.hybrid.position_scope",
+      "label": "Remember panel placement for",
+      "type": "dropdown",
+      "defaultValue": "app",
+      "options": [
+        {
+          "label": "Each app",
+          "value": "app"
+        },
+        {
+          "label": "Each app in each workspace",
+          "value": "workspace"
+        },
+        {
+          "label": "All apps together",
+          "value": "global"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.hybrid.snap_enabled",
+      "label": "Show edge docking previews while moving panels",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.hybrid.dock_push_px",
+      "label": "Docking distance (px; snap near edge when overflow is allowed)",
+      "type": "dropdown",
+      "defaultValue": 15,
+      "options": [
+        {
+          "label": "8",
+          "value": 8
+        },
+        {
+          "label": "15",
+          "value": 15
+        },
+        {
+          "label": "24",
+          "value": 24
+        },
+        {
+          "label": "40",
+          "value": 40
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.hybrid.dock_gap",
+      "label": "Gap between docked panels and edge (px)",
+      "type": "dropdown",
+      "defaultValue": 0,
+      "options": [
+        {
+          "label": "0",
+          "value": 0
+        },
+        {
+          "label": "4",
+          "value": 4
+        },
+        {
+          "label": "8",
+          "value": 8
+        },
+        {
+          "label": "12",
+          "value": 12
+        },
+        {
+          "label": "16",
+          "value": 16
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.hybrid.pill_layout",
+      "label": "Pill layout",
+      "type": "dropdown",
+      "defaultValue": "upstream",
+      "options": [
+        {
+          "label": "Upstream: separate close box",
+          "value": "upstream"
+        },
+        {
+          "label": "Classic Extended: single pill",
+          "value": "extended"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.hybrid.panel_url_shortcut",
+      "label": "Ctrl/Cmd+L focuses panel URL only while panel has focus",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.hybrid.navigation_mode",
+      "label": "Panel address entry behavior",
+      "type": "dropdown",
+      "defaultValue": "extended-search",
+      "options": [
+        {
+          "label": "Extended: addresses and configured search",
+          "value": "extended-search"
+        },
+        {
+          "label": "Upstream style: addresses only",
+          "value": "address-only"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.hybrid.detached_height_percent",
+      "label": "Height when detaching from an edge (%)",
+      "type": "dropdown",
+      "defaultValue": 78,
+      "options": [
+        {
+          "label": "60",
+          "value": 60
+        },
+        {
+          "label": "72",
+          "value": 72
+        },
+        {
+          "label": "78",
+          "value": 78
+        },
+        {
+          "label": "85",
+          "value": 85
+        },
+        {
+          "label": "100",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.hybrid.hide_detach_button",
+      "label": "Hide Detach / Attach pill button",
+      "type": "checkbox",
+      "defaultValue": false
+    }
+  ],
+  "settings": {
+    "zen.workspace.zentral.hybrid.geometry_mode": {
+      "category": "panel-layout",
+      "section": "Docking, size & input",
+      "owner": "panel-enhancements"
+    },
+    "zen.workspace.zentral.hybrid.allow_overflow": {
+      "category": "panel-layout",
+      "section": "Docking, size & input",
+      "owner": "panel-enhancements"
+    },
+    "zen.workspace.zentral.hybrid.position_scope": {
+      "category": "panel-layout",
+      "section": "Docking, size & input",
+      "owner": "panel-enhancements"
+    },
+    "zen.workspace.zentral.hybrid.snap_enabled": {
+      "category": "panel-layout",
+      "section": "Docking, size & input",
+      "owner": "panel-enhancements"
+    },
+    "zen.workspace.zentral.hybrid.dock_gap": {
+      "category": "panel-layout",
+      "section": "Docking, size & input",
+      "owner": "panel-enhancements"
+    },
+    "zen.workspace.zentral.hybrid.pill_layout": {
+      "category": "theme-details",
+      "section": "Floating pill",
+      "owner": "panel-enhancements"
+    },
+    "zen.workspace.zentral.hybrid.panel_url_shortcut": {
+      "category": "shortcuts",
+      "section": "Panel shortcuts & mouse actions",
+      "owner": "panel-enhancements"
+    },
+    "zen.workspace.zentral.hybrid.navigation_mode": {
+      "category": "panel-toolbar",
+      "section": "Navigation & placement",
+      "owner": "panel-enhancements"
+    },
+    "zen.workspace.zentral.hybrid.detached_height_percent": {
+      "category": "panel-layout",
+      "section": "Docking, size & input",
+      "owner": "panel-enhancements"
+    },
+    "zen.workspace.zentral.hybrid.dock_push_px": {
+      "category": "panel-layout",
+      "section": "Docking, size & input",
+      "owner": "panel-enhancements"
+    },
+    "zen.workspace.zentral.hybrid.hide_detach_button": {
+      "category": "theme-details",
+      "section": "Floating pill",
+      "owner": "panel-enhancements"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+/*
+ * ZENTRAL FILE GUIDE - loader/ZentralNativeInteraction.css
+ * Purpose: Keep native hidden tabs hidden.
+ * Loaded by: loader/ZentralRuntime.js via loader/ZentralCatalog.js at USER_SHEET origin.
+ * Activation: legacy zen.workspace.zentral.modules.css.Base.enabled switch; owners core (always available).
+ * Interactions: feature controllers apply the selectors/attributes below; this file owns presentation only.
+ * Cleanup: Runtime unregisters this sheet; do not change stylesheet origin or cascade order.
+ * Dependencies: Catalog defines order/owner gating.
+ * Collaborators: loader/ZentralRuntime.js; loader/ZentralCatalog.js
+ * DOM IDs: #tabbrowser-tabpanels; #tabbrowser-tabs
+ * Attributes: hidden; zen-split-resizing
+ */
+/* Native tab hiding only; native split dragging/resizing is not intercepted. */
+#tabbrowser-tabs :is(tab, .tabbrowser-tab)[hidden] {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  visibility: hidden !important;
+}
+
+/* Native context-menu colors are owned by Zen and the installed theme. */

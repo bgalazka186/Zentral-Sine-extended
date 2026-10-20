@@ -1,0 +1,58 @@
+/*
+ * ZENTRAL FILE GUIDE - zentral/apps/styles/ZentralAutohideIndicators.css
+ * Purpose: Eye icon state for vertical-bar and utility autohide buttons.
+ * Loaded by: loader/ZentralRuntime.js via loader/ZentralCatalog.js at USER_SHEET origin.
+ * Activation: legacy zen.workspace.zentral.modules.css.Base.enabled switch; owners apps, settings.
+ * Interactions: feature controllers apply the selectors/attributes below; this file owns presentation only.
+ * Cleanup: Runtime unregisters this sheet; do not change stylesheet origin or cascade order.
+ * Dependencies: Catalog defines order/owner gating.
+ * Collaborators: loader/ZentralRuntime.js; loader/ZentralCatalog.js; zentral/apps/ZentralApps.uc.js;
+ * zentral/apps/controllers/ZentralAppsLauncher.js; zentral/apps/controllers/ZentralAppsInteractions.js;
+ * extension/settings/controllers/ZentralSettingsShell.js
+ * DOM IDs: #zentral-apps-vb-autohide-btn; #zentral-utility-autohide-btn
+ * Attributes: zentral-apps-autohide
+ */
+:root[zentral-apps-autohide="true"] #zentral-apps-vb-autohide-btn .zs-eye-open {
+  display: none !important;
+}
+
+:root[zentral-apps-autohide="true"]
+  #zentral-apps-vb-autohide-btn
+  .zs-eye-closed {
+  display: block !important;
+}
+
+:root:not([zentral-apps-autohide="true"])
+  #zentral-apps-vb-autohide-btn
+  .zs-eye-open {
+  display: block !important;
+}
+
+:root:not([zentral-apps-autohide="true"])
+  #zentral-apps-vb-autohide-btn
+  .zs-eye-closed {
+  display: none !important;
+}
+
+/* Eye open/closed visibility for utility autohide button */
+:root[zentral-apps-autohide="true"] #zentral-utility-autohide-btn .zs-eye-open {
+  display: none !important;
+}
+
+:root[zentral-apps-autohide="true"]
+  #zentral-utility-autohide-btn
+  .zs-eye-closed {
+  display: block !important;
+}
+
+:root:not([zentral-apps-autohide="true"])
+  #zentral-utility-autohide-btn
+  .zs-eye-open {
+  display: block !important;
+}
+
+:root:not([zentral-apps-autohide="true"])
+  #zentral-utility-autohide-btn
+  .zs-eye-closed {
+  display: none !important;
+}

@@ -1,0 +1,817 @@
+{
+  "extended_version": "3.0.0",
+  "upstream_reference": "1.1.0",
+  "package": "Complete current mod after all delivered repairs and recommendation wording updates",
+  "installation": "Place the enclosed zentral folder at chrome/sine-mods/zentral; follow INSTALL.md; earlier patches are not required",
+  "manifest_self_entry": "This manifest is included but omitted from its own hashes",
+  "files": [
+    {
+      "path": ".github/FUNDING.yml",
+      "sha256": "95bb2efe1e633ca4b72e9055d26e815421365f6cdcee3e873079ec340f62366d"
+    },
+    {
+      "path": ".github/README.md",
+      "sha256": "8913de00dfa580426bed561bcb684753ba06334c5c241fb671fd6663bf6e499f"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "198a8ba4ce45b401f1f36caa8cb6d5d719c8021dc29d4006b840dec98d3fd099"
+    },
+    {
+      "path": "INSTALL.md",
+      "sha256": "4444abf4477156174007f236a211c1cc35a7b2348c2fd8fc7631e8d819b09abd"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "c5d0a685f8f9483713c2a2c037f68bb3e8afcca7a1572257b1d1d5012f4f42c1"
+    },
+    {
+      "path": "README.md",
+      "sha256": "62c21d0f1c998d7dbc0daece3eb05a4502ce70447ba9a578315dbef354bc5ab8"
+    },
+    {
+      "path": "UPSTREAM.json",
+      "sha256": "291d091166cd74738c09c6f54345b2b3fdfaf78b811db8a8ba6d14902108c456"
+    },
+    {
+      "path": "additional/README.md",
+      "sha256": "85e9a46c318da6dec75fc2be136c5dec79ed31a268c8fbf45b6128d3e03d5ba3"
+    },
+    {
+      "path": "additional/diagnostics/README.md",
+      "sha256": "21302ef357e79ca6796881fe4896c9de7f34501fa906eae0568e3a3a482925c5"
+    },
+    {
+      "path": "additional/diagnostics/ZentralLogger.uc.js",
+      "sha256": "94d8273d6104c820346949d837aae4ab517db22e02c3c29dd1c9ba35ae417608"
+    },
+    {
+      "path": "additional/diagnostics/settings.json",
+      "sha256": "9b94063c3bfece36f57b99e7e656001a879f266e873fe6a48e34dd9538c4d100"
+    },
+    {
+      "path": "additional/library/README.md",
+      "sha256": "1d34ae342e3a676003545045c8e2cd11eca34ce1b125c9a259642f6e31de2689"
+    },
+    {
+      "path": "additional/library/ZentralLibraryResize.uc.js",
+      "sha256": "485e4afc3b7b7dfa4586f72637b9fc50549c0d965f67d12903bd848fbce8ef07"
+    },
+    {
+      "path": "additional/library/settings.json",
+      "sha256": "71272ada4104206c8d718b1b1812a978a032494a99353e0d3390791f59d1e869"
+    },
+    {
+      "path": "additional/rss/README.md",
+      "sha256": "a5719ea12d0d4f1fedd0cd8807e1afdca867a4aea827100496953cc30bcd8257"
+    },
+    {
+      "path": "additional/rss/ZentralRssDisplay.css",
+      "sha256": "e0df8b10195d07fa1bbe585b1675cdf0abad86e8f01da0ef9e628c3890a4770f"
+    },
+    {
+      "path": "additional/rss/ZentralRssDisplay.uc.js",
+      "sha256": "10404981679089c7b6a3ed70a80bb282e46b3c5c6f0b01795946ca492d4091aa"
+    },
+    {
+      "path": "additional/rss/settings.json",
+      "sha256": "894a248370036e39f788a4f6fd68981fb02b57a00803e17b92724aaf851c77ee"
+    },
+    {
+      "path": "additional/tabs/README.md",
+      "sha256": "e29e6a9b8c4821eaa5dce6e31d29eff3067fa77a6c4397010da6c96eb9cd1292"
+    },
+    {
+      "path": "additional/tabs/ZentralTabDensity.css",
+      "sha256": "f44d37e1791aa24b929face5118094501cefd5559ad854f53ef4d8f941c232bd"
+    },
+    {
+      "path": "additional/tabs/compact-hover/README.md",
+      "sha256": "8e2fe27f7bcc4bd113c9da1a332a3e150b39d66134d204615e38e4b9216f9917"
+    },
+    {
+      "path": "additional/tabs/compact-hover/ZentralCompactHover.uc.js",
+      "sha256": "a175a415d0169e76387de4cd8a4b46c389391595eda82af16036a561f712da7f"
+    },
+    {
+      "path": "additional/tabs/compact-hover/settings.json",
+      "sha256": "2647986e06050d4725b29ad1a8d0b2f670bf63e76334c0810e77e5a6870baf22"
+    },
+    {
+      "path": "additional/tabs/dragging/README.md",
+      "sha256": "6bcc16069dc3229a0838bcaad901775dce9002c197f7a271f59e3cf7084ec630"
+    },
+    {
+      "path": "additional/tabs/dragging/ZentralTabDrag.uc.js",
+      "sha256": "d92a8b5a94e13b64d0ae3bca670a3beaf91c2d83215b9212441a0538436b809c"
+    },
+    {
+      "path": "additional/tabs/dragging/settings.json",
+      "sha256": "c35a97553a8967b0683c9cdde2e2b8a195575c1a8cd8071cc345b30aad9c52fc"
+    },
+    {
+      "path": "additional/tabs/startup/README.md",
+      "sha256": "0c4df0b93a0d81f4c31ab890a5b7eca7f12f6872384725611d8e77e9ed78c944"
+    },
+    {
+      "path": "additional/tabs/startup/ZentralStartup.css",
+      "sha256": "e15cc1e627966935a31df5b3ab107eab4c6af8d8eb4bdb9cea699b72de5cf8e4"
+    },
+    {
+      "path": "additional/tabs/startup/ZentralStartup.uc.js",
+      "sha256": "570d09db46457444862cc048da85b7415a644650a23d38648d498e81958ad2ad"
+    },
+    {
+      "path": "additional/tabs/startup/settings.json",
+      "sha256": "709a818979b40a9d6f13a3662256f48199cc9a87b595bd64f2990e4525c0e22a"
+    },
+    {
+      "path": "additional/tabs/unloading/README.md",
+      "sha256": "d6ca33367442e92668866ffbac9f153358bdd4d206f9aab5b616ba4f759eab88"
+    },
+    {
+      "path": "additional/tabs/unloading/ZentralTabUnload.uc.js",
+      "sha256": "bcef430cba7846ea1c29e4ce20ea157f64d68d3d6ddea766b4f93f29d8fba068"
+    },
+    {
+      "path": "additional/tabs/unloading/settings.json",
+      "sha256": "8b41807ef6d06d9f24d89e2c04f296fc585cc738a1b0ac4b539b9b1c77076ae5"
+    },
+    {
+      "path": "additional/theme/README.md",
+      "sha256": "cdf65d1b0c9d37f14f5dabca3e6e8f951cfa4ba0c227bb2315a803065e27cc81"
+    },
+    {
+      "path": "additional/theme/ZentralAdaptiveTheme.css",
+      "sha256": "60bc5a19527099a51111c3835a1d04505ee828b5d0cc4f28e7638855b9e54fca"
+    },
+    {
+      "path": "additional/theme/ZentralThemePolicy.js",
+      "sha256": "59921f64738c0db2eb3ec6b5947ab85d03620ade433a8d04318a7ecfda239e1d"
+    },
+    {
+      "path": "additional/theme/ZentralThemeService.js",
+      "sha256": "5ce44aabb880b55be815c9cba1d9b6a9bec9a60f56bf784f52d4c44b653c2efb"
+    },
+    {
+      "path": "additional/theme/theme-settings.json",
+      "sha256": "e0fa2e4469120f1a759617a0c87e55afc9a36ee146677fcf8c7291d07acdcc23"
+    },
+    {
+      "path": "additional/video/README.md",
+      "sha256": "81f3fff7e271b5dd03a012b375079f37197da3e8e4282826aad9d18daa1a144a"
+    },
+    {
+      "path": "additional/video/ZentralVideoPreview.css",
+      "sha256": "e1bb66c200a5a31be716f9ee4ebb7bc69e351ff10e86e714225d70819dfaaa81"
+    },
+    {
+      "path": "additional/video/ZentralVideoPreview.uc.js",
+      "sha256": "e93437dff0b507a72cfa51c001c374cb33cb56f5ed762edcddf1f244bf60b4e2"
+    },
+    {
+      "path": "additional/video/content/README.md",
+      "sha256": "94107556d05dd8278936514e50de3149336517f60f7ea8b1368641b5ece17606"
+    },
+    {
+      "path": "additional/video/content/ZentralVideoActor.sys.mjs",
+      "sha256": "b39d7996ca328cee06ab2027536c85d9c2e3ce5e7e53146232835d106efe57a4"
+    },
+    {
+      "path": "additional/video/content/ZentralVideoBasicFrame.js",
+      "sha256": "8bd9219c0c8b5e51be72ba126f079f2efe34e18acec1ebd9ae0aa67f1b802b16"
+    },
+    {
+      "path": "additional/video/content/ZentralVideoFrame.js",
+      "sha256": "469d7fca0cd287bd12bfa2db353fb702f7861838b6d7ea9e46acba7d845a05dc"
+    },
+    {
+      "path": "additional/video/controllers/README.md",
+      "sha256": "a810ae0fb98dd5ee56aceaef0b563e8a5dbc38c37bad1df2548561c7d332f45f"
+    },
+    {
+      "path": "additional/video/controllers/ZentralVideoCaptionLayout.js",
+      "sha256": "2a0f61f422c43df27d3c887c6c3fb35681f386bbf34e912e444c1e68a93f3585"
+    },
+    {
+      "path": "additional/video/controllers/ZentralVideoCaptions.js",
+      "sha256": "67071d259a764e47c9125f4952ce0052d919b8ec84dbce92d71341d75b161544"
+    },
+    {
+      "path": "additional/video/controllers/ZentralVideoDiagnostics.js",
+      "sha256": "2b4a74dbccc92880aac58753cff022f52b1d914e0260877a2c73cdef31f88a56"
+    },
+    {
+      "path": "additional/video/controllers/ZentralVideoDiscovery.js",
+      "sha256": "8198ccdf63e2e44aa1bd9eaa06f1e33ae69216e0032f8fa5f312c0be0e3954aa"
+    },
+    {
+      "path": "additional/video/controllers/ZentralVideoEnlarge.js",
+      "sha256": "a5516f93b57af2908a0a92a3afb33a106c88bf8a6b86a39831a5c573069dd066"
+    },
+    {
+      "path": "additional/video/controllers/ZentralVideoRendering.js",
+      "sha256": "d4747ff7bdd88167a3f33d48ff9ac991dff351462deb06ef7d7068225c996328"
+    },
+    {
+      "path": "additional/video/controllers/ZentralVideoScheduling.js",
+      "sha256": "e6fd878607134830c568c3db6dcc335312733c7dc0c78979cc6a080071f93bac"
+    },
+    {
+      "path": "additional/video/controllers/ZentralVideoSettings.js",
+      "sha256": "6aaf9bfcc9aac6b724639c7c4a9b97b4d15afc1625bfa4d700915886933ed8fa"
+    },
+    {
+      "path": "additional/video/controllers/ZentralVideoSidebar.js",
+      "sha256": "54287b8f74e6663780e356c868fb8c16b087aa574455c9eca4b3404d06374291"
+    },
+    {
+      "path": "additional/video/controllers/ZentralVideoTransport.js",
+      "sha256": "d26182f7d0e811802dbe6949e62a28955078746cbe2533dfaeb14ba07a1b4ddc"
+    },
+    {
+      "path": "additional/video/settings.json",
+      "sha256": "219ca21164a0975d641606ccf4c7a0feca32aeb22768b85f4de0a105233fd572"
+    },
+    {
+      "path": "assets/App Bar AH.png",
+      "sha256": "b8e2612e291d499587124c5486800bf62957b2857b7a99cd5515c7aa5b80a02f"
+    },
+    {
+      "path": "assets/App Bar.png",
+      "sha256": "d3c6683d5393257e98a6ff35eb5f69178d5851e1e6b4a6187f1bce1525051269"
+    },
+    {
+      "path": "assets/Apps.png",
+      "sha256": "9f97926e443937809518c19ade2563590f2516e4c50aba71225c6dda9a488b29"
+    },
+    {
+      "path": "assets/Groups.png",
+      "sha256": "6828a34a7dcc77f7d5c2b99324890fde6d6fb536a755eac8baa421e7309c3f90"
+    },
+    {
+      "path": "assets/README.md",
+      "sha256": "234cc375f0e5fcb1171fd724ad5098f73c309e75a0a6d21f5359782227346083"
+    },
+    {
+      "path": "assets/Settings.png",
+      "sha256": "444bb6b3db615eeff404fff2afdb6295370d75e6f050d7d3610276fbe9808233"
+    },
+    {
+      "path": "assets/Zentral Logo.png",
+      "sha256": "02eb1d9142194f61147c633c2ba8729600029f9f4a1de4bba926fa58cb84e2ae"
+    },
+    {
+      "path": "assets/Zentral Logo.svg",
+      "sha256": "f0f925346dce8b174f021a67b742813b9aef505fa7d309725d1db562e0504f35"
+    },
+    {
+      "path": "assets/Zentral.png",
+      "sha256": "9d9205a5aae81af089b2a70bb7b02f693c34e7edd7e557bf0d572e464cba37e4"
+    },
+    {
+      "path": "assets/compacttabsandvideointerface.png",
+      "sha256": "a03f4ded80ce481143685202464fcb05125e5280f8610f9917615fb17f80c7d3"
+    },
+    {
+      "path": "assets/panelsinterface.png",
+      "sha256": "bc76e3c154bac717bb3be8eace10860d1f0cba97c81cec1e805556e83a739996"
+    },
+    {
+      "path": "assets/support_me_on_kofi_red.svg",
+      "sha256": "b02cae672dd795ece27c8e33b7de3bc40936c0b98b30004257309282a947909c"
+    },
+    {
+      "path": "docs/BASE-PATCHES.md",
+      "sha256": "31ba0380549dc350bd992cf0b64917dea2011faee2997f6a74b1f3208ca61287"
+    },
+    {
+      "path": "docs/README.md",
+      "sha256": "8fe95aa8dcecd516575a63db1c8b7480945605191d1c3f6365ec55f22f5fb8c2"
+    },
+    {
+      "path": "docs/REPAIR-HANDOFF-3.0.0.md",
+      "sha256": "cae156d896137fc884f1e13be60595f71c3488cf867442606ea07e3f8a8cb610"
+    },
+    {
+      "path": "docs/REQUEST-AUDIT.md",
+      "sha256": "ae45642a276ae6f9b5a9d147464309fe435493046915773a939b29dd22185523"
+    },
+    {
+      "path": "docs/UPDATING-UPSTREAM.md",
+      "sha256": "dcb2250bafe4b5176adef87309980db8be29060a0a351077e534a2a171d4d0dd"
+    },
+    {
+      "path": "docs/UPSTREAM-MAP.json",
+      "sha256": "9b893a865a3b63fa31e3da14698f44b6cefbc628a5b05220af560795343af33d"
+    },
+    {
+      "path": "extension/README.md",
+      "sha256": "c5e0cfc69e4cc378989777971fafd57e2214cfc808d6a4af0aa2ee0bf03e87b9"
+    },
+    {
+      "path": "extension/appearance/README.md",
+      "sha256": "b04f4f2c4dc660215c500292be554d12d713edc503c376fd9ba511ff2f0e3813"
+    },
+    {
+      "path": "extension/appearance/ZentralAppearance.css",
+      "sha256": "aa0cddd510c11c4316f7739deb306427b2401582d61184e0c578d71795cd1dd7"
+    },
+    {
+      "path": "extension/appearance/ZentralAppearance.js",
+      "sha256": "b5a7a25389a1d4f6f6341993b129248fff15fc1b4174169b1994c88034461712"
+    },
+    {
+      "path": "extension/panels/README.md",
+      "sha256": "f64d63b427b239e347c664cff8a77a118b6e78a83cd30205c54144db0d0f548f"
+    },
+    {
+      "path": "extension/panels/ZentralPanels.css",
+      "sha256": "72907ef0918b41aeea2c37e34fb34cf6fd0ff871856d4d77bde9b5ca94df6978"
+    },
+    {
+      "path": "extension/panels/ZentralPanels.uc.js",
+      "sha256": "f95b1197a274eb18216ee68a9fb543673084d0d86efe2d8587a72f960020ed57"
+    },
+    {
+      "path": "extension/panels/browsers/README.md",
+      "sha256": "0bd57b061a6074c261328c2d7f12379b8543f0bd7859e75a629f4c4fbc877c36"
+    },
+    {
+      "path": "extension/panels/browsers/ZentralBrowserIntegrations.css",
+      "sha256": "5f500eedc134ebd7f71f8c3f1f2150c5063f6d45b70c05a9d208774c4f50272a"
+    },
+    {
+      "path": "extension/panels/browsers/ZentralBrowserIntegrations.uc.js",
+      "sha256": "e1af3299d70101625dd7b19b3f4ea685c9a31f1261d6c85ca519f6f88ee843bb"
+    },
+    {
+      "path": "extension/panels/browsers/settings.json",
+      "sha256": "c7f24d24d206110d3b6bd8cddb88a8e09d415dbd6a6321d70bf7f44f1760c7fc"
+    },
+    {
+      "path": "extension/panels/corner-tiles/README.md",
+      "sha256": "0bb8d6db2a4e1e5ecc5a881825d98205805ee91a88db3876c58cc631ffe92d85"
+    },
+    {
+      "path": "extension/panels/corner-tiles/ZentralCornerPanels.css",
+      "sha256": "f0e6d96c69c7a973a6f506ca1c80df13c38d75da0a56a81e94e4f281916f6743"
+    },
+    {
+      "path": "extension/panels/corner-tiles/ZentralCornerPanels.uc.js",
+      "sha256": "d7a6e9f870bbb123aa74192086f6e632c2b8fb77268162c59dca5537fc8a6b31"
+    },
+    {
+      "path": "extension/panels/corner-tiles/settings.json",
+      "sha256": "4a508cb006b289cea41a71a833fcf6041d907626e1e8935fca2db98f509b7bc8"
+    },
+    {
+      "path": "extension/panels/floating/README.md",
+      "sha256": "ada23a6115522630835b5c2321194bbf0f8a9ababb35f913d23fbe7f249d4889"
+    },
+    {
+      "path": "extension/panels/floating/ZentralFloatingPanels.css",
+      "sha256": "d28e112ed0051306691d6366e76754d991fdeb1f79b79cc2e84a0a39bed72bb9"
+    },
+    {
+      "path": "extension/panels/floating/ZentralPanelEnhancements.js",
+      "sha256": "254f606d34586f6d6d517b212ad5d865b54b93619fefab44ed77f30e7c139465"
+    },
+    {
+      "path": "extension/panels/floating/ZentralPillActions.js",
+      "sha256": "bc355ec71f6650d690816b145bdf5c26f7205900504e941adefb5d128042708e"
+    },
+    {
+      "path": "extension/panels/floating/settings.json",
+      "sha256": "a63bca9821f2afd627d25c879539c3f3f112283ed51727da3d39c22ba970138f"
+    },
+    {
+      "path": "extension/panels/geometry/README.md",
+      "sha256": "4df3e789ea1b26e589b5bc81e1bfc0c6568dd68d947967c5772cc4e3b089b5fd"
+    },
+    {
+      "path": "extension/panels/geometry/ZentralPanelGeometry.css",
+      "sha256": "09536a7d3d7c3436bb59a434d3cf6898f5bdca8e9ba5a84638ccfd842d615f52"
+    },
+    {
+      "path": "extension/panels/geometry/ZentralPanelGeometry.uc.js",
+      "sha256": "dfa14a55d510de12bc4b50e5d41ee38b7d74c7ed2db6d46241e93b9b204a66c7"
+    },
+    {
+      "path": "extension/panels/geometry/settings.json",
+      "sha256": "621848242fea8b6547d11f9366c973a149ab63334e249a5871777583b7507a2f"
+    },
+    {
+      "path": "extension/panels/interaction/README.md",
+      "sha256": "165a78ab8ca003c2867a7d82cef120c110662e6ed249f368ffd3914e99789602"
+    },
+    {
+      "path": "extension/panels/interaction/ZentralPanelAudio.js",
+      "sha256": "0dbfe8db01fbc19d1a5483b1d8f89cdb79e0793223b93b8da4094bfb98258098"
+    },
+    {
+      "path": "extension/panels/interaction/ZentralPanelHover.js",
+      "sha256": "ba15ef2899899f50674eff04d7e5c2bfd6831814673673bcf152fd1e58eef733"
+    },
+    {
+      "path": "extension/panels/interaction/ZentralPanelInput.js",
+      "sha256": "e097e1b94df7e0090ddf30f0383c965f95d3973866e5383c11766c09305ef941"
+    },
+    {
+      "path": "extension/panels/interaction/ZentralPanelPopupRouting.js",
+      "sha256": "1380d7774ac7fbdf7a1c0df685d39bfa5bf7240464b586c617ec6c270654b66c"
+    },
+    {
+      "path": "extension/panels/navigation/README.md",
+      "sha256": "c372d7bde9bcd8c5db024f3c91698fdd100d00c2d86ceffa63450ba6e440ae8d"
+    },
+    {
+      "path": "extension/panels/navigation/ZentralPanelToolbar.uc.js",
+      "sha256": "c8561e2cc1d7c150f73f15d8ba98ca81d3f816bdd4d813e713cccca51f513f18"
+    },
+    {
+      "path": "extension/panels/navigation/settings.json",
+      "sha256": "c0b14a48d43a5bd69343cebc0ffc0a5ab05ee4eef2b646216e486c5b1a30d621"
+    },
+    {
+      "path": "extension/panels/navigation/styles/README.md",
+      "sha256": "c67afed0bafd4c2aba064206436d7d733fabd96c6e74261f0dfa4461216fd479"
+    },
+    {
+      "path": "extension/panels/navigation/styles/ZentralPanelBackground.css",
+      "sha256": "ad6fafbdce7371d46f0d8c18c8089f6030f1d61f9d34b61ffd06e28b3ca4c07c"
+    },
+    {
+      "path": "extension/panels/navigation/styles/ZentralPanelToolbar.css",
+      "sha256": "4509fc2eee694b24c7a4a7f0aa228c048691903032f22c5f45e270d7662eda93"
+    },
+    {
+      "path": "extension/panels/secondary-views/README.md",
+      "sha256": "78378379a3c12caa499f21c2eeb5df80f7239e58f2cad72172bb6057bc9eeae0"
+    },
+    {
+      "path": "extension/panels/secondary-views/ZentralSecondaryViews.uc.js",
+      "sha256": "6341c2186b7610ea9bb77bd4ffb554469ce632bbb7e8d641632c4c545acc5772"
+    },
+    {
+      "path": "extension/panels/secondary-views/settings.json",
+      "sha256": "f7c68ae23e040a89f803acb9bb357d0220bcf1c6fb8289589713b5c64ed015dd"
+    },
+    {
+      "path": "extension/panels/settings.json",
+      "sha256": "88fde9c46ff34caa841d822c3b1d3625ed9c781af07efe6146b1ba8a21b89cec"
+    },
+    {
+      "path": "extension/panels/styling/README.md",
+      "sha256": "c7360d7f3a07ffa1e1b2d88f64127677e64eb1f96d562a85ffa48263ab81d756"
+    },
+    {
+      "path": "extension/panels/styling/ZentralPanelStyles.uc.js",
+      "sha256": "c6b7c311a1d7b302b4a54a0bc2413a528c5e6175ab28b078b6a36eaf63a0e7f2"
+    },
+    {
+      "path": "extension/panels/styling/settings.json",
+      "sha256": "3d5b8078c3ffa5bc077c67621e3a99b3e14781e0bd2d9f45ce0a0beab8d8009c"
+    },
+    {
+      "path": "extension/settings/README.md",
+      "sha256": "b8a43e8ed4e5143e7296ef334d9a6875a7f17d09e1a8721f21e7cccafcb57f4c"
+    },
+    {
+      "path": "extension/settings/controllers/README.md",
+      "sha256": "065290ee1f4af92404b1a27190ef19f80dc5af057ae4390c9bddfa95b59629cb"
+    },
+    {
+      "path": "extension/settings/controllers/ZentralBackup.js",
+      "sha256": "9d4c0ed0f6dfa70b991113f92fbd9fe5f833afa8b93577f1dc6952a5ea2d2a41"
+    },
+    {
+      "path": "extension/settings/controllers/ZentralDeveloperSettings.js",
+      "sha256": "6bd41cf7fbce8b941d790889bf5e955539a87711a3d0137b6a8429d814830975"
+    },
+    {
+      "path": "extension/settings/controllers/ZentralFeatureSettings.js",
+      "sha256": "d8c445398939471ee992f7d7045e0f787989c612c8b9fe134baf96e73f7039a9"
+    },
+    {
+      "path": "extension/settings/controllers/ZentralNativeBrowserSettings.js",
+      "sha256": "2ddd05ea2d692bae6ce2c3e831176b74a26dd80791dacb9d126684383a2cb8d4"
+    },
+    {
+      "path": "extension/settings/controllers/ZentralReleaseLab.js",
+      "sha256": "dd29c73996cf7a9e510920131e0047a5770a7765cd2dc05f3a85dffcd721493d"
+    },
+    {
+      "path": "extension/settings/controllers/ZentralSettingsCatalog.js",
+      "sha256": "3b16901e923e241d88e3f6c0351386587914800e01ff1da3722c1999dadae5d2"
+    },
+    {
+      "path": "extension/settings/controllers/ZentralSettingsRows.js",
+      "sha256": "c9ce20c64b8e3ad10b322e623f23d80626fefda0cac014a18903ae04888865cb"
+    },
+    {
+      "path": "extension/settings/controllers/ZentralSettingsShell.js",
+      "sha256": "b5210b2b60755756ef0ef82fb72ec548aa5b13c624e1e45e7150a089992eebb7"
+    },
+    {
+      "path": "extension/settings/extension-settings.json",
+      "sha256": "7e2fff80e5b38a0734faad657aeadb93405d7fc9d405e9b6f37349299c47471a"
+    },
+    {
+      "path": "extension/settings/layout.json",
+      "sha256": "b7342236fad448c46b7204e8872d088593b888ec797a729788338f8dbb23ed9d"
+    },
+    {
+      "path": "extension/settings/recommended.json",
+      "sha256": "7a90c2bfe97db9054a90b603c6afcd8920ddd1865bebf6e6f139b3d2b6455ac4"
+    },
+    {
+      "path": "extension/settings/release-settings.json",
+      "sha256": "d9748b2f6b16a21c6992779a24a5cdbc0e21f30c1326d9309b441d8381479eb1"
+    },
+    {
+      "path": "extension/settings/styles/README.md",
+      "sha256": "78a0ce98e4a2681c1526938cde098e2939a95dd61a566d866706cc63fe603351"
+    },
+    {
+      "path": "extension/settings/styles/ZentralControls.css",
+      "sha256": "1f5e7aef16148a1950331e7ec15ed6a07c11bea0ce9cb6dd1ddfc2625d3cf493"
+    },
+    {
+      "path": "extension/settings/styles/ZentralSettings.css",
+      "sha256": "c2622549eedfadf286c1ee4046e960320b9a2dc882cdc55b6d899cc25924230e"
+    },
+    {
+      "path": "extension/settings/styles/ZentralSettingsFoundation.css",
+      "sha256": "162b4e2e2ae17a14b9dde638860cc94cf41179a7d5c750e6b3ca9a94313bde7e"
+    },
+    {
+      "path": "extension/settings/styles/ZentralSettingsInjected.css",
+      "sha256": "22014283e2e92d3d78f876cb257283998889ce37f28399f351a8dfe4e6556559"
+    },
+    {
+      "path": "loader/README.md",
+      "sha256": "a34b6e04458bf7dd1dd338aac584cb0ca58be53786bf3356345399b884d7fa55"
+    },
+    {
+      "path": "loader/Zentral.uc.js",
+      "sha256": "e64aaa425969d2df96be15f5f269fb2e42d791d56e9f03b0e4c37ca4306581fa"
+    },
+    {
+      "path": "loader/ZentralCatalog.js",
+      "sha256": "c54177db4dded6b5223940108631b8f72eec91836c43a367a0ac062204916a5d"
+    },
+    {
+      "path": "loader/ZentralNativeInteraction.css",
+      "sha256": "69916173b629350c7de17917d4309445e3a1fd98a29328c37c272ece1780304e"
+    },
+    {
+      "path": "loader/ZentralRuntime.js",
+      "sha256": "aa34fcf6dd5445e87364c72f3e7d64e9235fa852a5e921b2fcab43297881e7d7"
+    },
+    {
+      "path": "loader/ZentralShared.js",
+      "sha256": "304d3d41124f472290f4d30c8f9bdf97eb53efc93b9768860a4e8c6353332bce"
+    },
+    {
+      "path": "loader/settings.json",
+      "sha256": "e1633c55e41ed032459b8f41e07d638c7c1c48f5a2f18da82a3ab29226ef4eaa"
+    },
+    {
+      "path": "patches/1.1.0-to-adapted-base.patch",
+      "sha256": "19a881f7f6d5d04f025d5737c37cd9ada15212dc845ea0a4f0ebd1faf0d93dbe"
+    },
+    {
+      "path": "patches/README.md",
+      "sha256": "d26529ca7cb1e19ce1ff269ebe259fb6bc386ea5c2bb49a82d124e7d3621bb2c"
+    },
+    {
+      "path": "patches/extended-input-to-3.0.0.patch",
+      "sha256": "f63bab3f88d9adda7accfb937bdf3f61cc6185e20d528f521d06796093e9026f"
+    },
+    {
+      "path": "patches/upstream-1.0.2-to-1.1.0.patch",
+      "sha256": "b282203bbcfa6e68ca9fae99972d10ee61191cc22f842b3fccb801c59d24e0ce"
+    },
+    {
+      "path": "preferences.json",
+      "sha256": "6d155494385a635e5900ec0d03cb7e1188d7e35c4db9cc9b46d9254e14f454e9"
+    },
+    {
+      "path": "theme.json",
+      "sha256": "c918b3c38016910ee4dd2f1737e0b3af280018f01582ab2fd04654b30564ccc2"
+    },
+    {
+      "path": "tools/README.md",
+      "sha256": "bbf92844865c8c44ab61f45e8cf001ad6b04efed2406d4e9f1a1a4559771d004"
+    },
+    {
+      "path": "tools/build-preferences.cjs",
+      "sha256": "dc4a30b13e068e5e2b6b5b69c8df468a0338404a3f5f924358157464796911ea"
+    },
+    {
+      "path": "tools/update-provenance.py",
+      "sha256": "baf197dfc358a5468ba6a5ca02ea8486634d2d46a070a3d50292aa6a4cd06a92"
+    },
+    {
+      "path": "zentral/README.md",
+      "sha256": "bb102054f84d4ded53f697040080fbc6af33ffe59e1d2d0aac6a0f768b757935"
+    },
+    {
+      "path": "zentral/apps/README.md",
+      "sha256": "5dd618c20ee933e23a2622e6ccb31cd33e713396c6005423ac0e78ba17dd5b9d"
+    },
+    {
+      "path": "zentral/apps/ZentralApps.uc.js",
+      "sha256": "3b4a506726b77465190d465f6c892a02e63cb9a380b7c544b3fdb4e3e229a758"
+    },
+    {
+      "path": "zentral/apps/controllers/README.md",
+      "sha256": "6d5ab0bdbc4ab7a58fd3b9faa5de59409d7d870d813dfcb1646e4d59459d3686"
+    },
+    {
+      "path": "zentral/apps/controllers/ZentralAppModel.js",
+      "sha256": "5cccd17d5958908d5940d12b1ec4fcf5ec0ee695cf5626cee7a1ff9f96b22873"
+    },
+    {
+      "path": "zentral/apps/controllers/ZentralAppNotifications.js",
+      "sha256": "af77a991ea96345d1a1c57d014b9c78cb669ef6e59b39fb369f1be1cfad05768"
+    },
+    {
+      "path": "zentral/apps/controllers/ZentralAppsInteractions.js",
+      "sha256": "954fcf7a55babaa62ba545c5d6825bf0d84d65311f112e6fed9d33667625e4f0"
+    },
+    {
+      "path": "zentral/apps/controllers/ZentralAppsLauncher.js",
+      "sha256": "97264e56e7579ef9e003d1ced522d7be439b0ab88e28c5c7a25a8ca514ce8832"
+    },
+    {
+      "path": "zentral/apps/controllers/ZentralLibraryCompatibility.js",
+      "sha256": "dac7a95350cb4bbc7967aea1efb1438ea11164f450ec538f2bba29a4f6a693ec"
+    },
+    {
+      "path": "zentral/apps/controllers/ZentralPanelLifecycle.js",
+      "sha256": "c5697276fea6b633717cda8bb450790eca3bf44559ba5d2ec095cb359880118b"
+    },
+    {
+      "path": "zentral/apps/controllers/ZentralPanelPosition.js",
+      "sha256": "cf500b9ce0f90fc7c171d2f78a90f0c522bc70aa9ede3fa92a185198b3f01d61"
+    },
+    {
+      "path": "zentral/apps/settings.json",
+      "sha256": "ccca658420fbb6135a55850ffccba974abe5bba9ce9a4683ee12bf82d8aae240"
+    },
+    {
+      "path": "zentral/apps/styles/README.md",
+      "sha256": "9b6c3f0988a89598ec89f510c57f8860ac170dee201939ffc6f678a50b19b037"
+    },
+    {
+      "path": "zentral/apps/styles/ZentralAppMenus.css",
+      "sha256": "6a6a02a46694b4b525b48b8bfe350f65a146d93dca9a2b4714f4d1840af93814"
+    },
+    {
+      "path": "zentral/apps/styles/ZentralAppTiles.css",
+      "sha256": "73f3f5d5325b6eb702c9bd00f0e400903d05363462c427b8de8588a8e7074a54"
+    },
+    {
+      "path": "zentral/apps/styles/ZentralAppsInjected.css",
+      "sha256": "dde648949d7c5bed50dd12a2d5ada939036e532d0ee1e9ff64314290267ac4eb"
+    },
+    {
+      "path": "zentral/apps/styles/ZentralAutohideIndicators.css",
+      "sha256": "06b6be04dd94982655e3d6c383b4c6e931caaaf4b2c67231fb05b3c167f05b71"
+    },
+    {
+      "path": "zentral/apps/styles/ZentralLauncherAutohide.css",
+      "sha256": "4a8b32b44fbc5d0a282273a1527bd2073b168bca800474afc016994eeebd9900"
+    },
+    {
+      "path": "zentral/apps/styles/ZentralUtilityControls.css",
+      "sha256": "8bcdf1ec985d1d2f3866f65812d2aa57ffcfd7154628d655c2e5d17f8d20ec6a"
+    },
+    {
+      "path": "zentral/apps/styles/ZentralUtilityPlacement.css",
+      "sha256": "f926dba1d6441da14fdc597058e222e40250f768412d11cad3236cbf4494aa20"
+    },
+    {
+      "path": "zentral/apps/styles/ZentralVerticalBarLayout.css",
+      "sha256": "926a90dc237794e106ca19d81743dfc8863b87abdc5dd044d26a2f32b07632ed"
+    },
+    {
+      "path": "zentral/apps/styles/ZentralVerticalBarPresentation.css",
+      "sha256": "aecd0abf460c9c61d9457126a367d7f10a4cd77f94a8a38d06db60329a931a50"
+    },
+    {
+      "path": "zentral/compatibility/README.md",
+      "sha256": "f4e88bb46c1f8abe3ee6b5aef29d6efdc20f4782ecac252a78579375b54588bd"
+    },
+    {
+      "path": "zentral/compatibility/ZentralBaseBridge.js",
+      "sha256": "64c1ac4d42d3d9f3e0d0879b3992494e0dd780a520cee86862f39bd97cb300f7"
+    },
+    {
+      "path": "zentral/geometry/README.md",
+      "sha256": "5edcf93d562a11606fad4b9433bacddefdf0aa647af790cfdabe9cb975688c0a"
+    },
+    {
+      "path": "zentral/geometry/ZentralPanelMath.js",
+      "sha256": "5cdd4fd609e46549338a2326365a3430a2ccd37431ec3c5be1a4b33e9928ed6b"
+    },
+    {
+      "path": "zentral/groups/README.md",
+      "sha256": "f37d683ef5de7933c942d6f1eaa7b726447ebf10181d0cd1fb2e903554ff0835"
+    },
+    {
+      "path": "zentral/groups/ZentralTabGroups.uc.js",
+      "sha256": "c44d7e925e51cc68224eb0ca005dcef8b015ba28d91f064a1419884d95ecdf09"
+    },
+    {
+      "path": "zentral/groups/controllers/README.md",
+      "sha256": "bd30d33f64c365238ccef4cd29ace807d9a1506e4f51e87a6aa2023bff9236c8"
+    },
+    {
+      "path": "zentral/groups/controllers/ZentralGroupsColors.js",
+      "sha256": "84ab3e597a72f555d6a5fffd2543b11e9b267c61d88f7b0cbb12087a2e783e99"
+    },
+    {
+      "path": "zentral/groups/controllers/ZentralGroupsDom.js",
+      "sha256": "b72e425517a5179f771a5bded6b2a22148a5b60108c9aca4280c5610e3b23db5"
+    },
+    {
+      "path": "zentral/groups/controllers/ZentralGroupsLifecycle.js",
+      "sha256": "2f16f873f28f6d69b11e62d0ad7ebcc985931f995776cf8c2fae7102d64a3910"
+    },
+    {
+      "path": "zentral/groups/controllers/ZentralGroupsMenus.js",
+      "sha256": "d76401f25cb10edc485a1be58e98e1084674e36e365c2af4cc3ca8a5a0acd458"
+    },
+    {
+      "path": "zentral/groups/controllers/ZentralGroupsNativeAdapter.js",
+      "sha256": "26a60cb5e5e1a685b35ad46d6190a73adf236aa941bb39e7372ab41855e9039b"
+    },
+    {
+      "path": "zentral/groups/controllers/ZentralGroupsStore.js",
+      "sha256": "f63e70852ea5fb17a5e96c4f9c16102bf54b0fa3b26abec9f06e0f47034c493e"
+    },
+    {
+      "path": "zentral/groups/settings.json",
+      "sha256": "66e7c6203713806d10b24593fc5b5a62d1ad9dade4d710d896e8c36cbb7add1d"
+    },
+    {
+      "path": "zentral/groups/styles/README.md",
+      "sha256": "1c460df17d49c8bb63fc193920c45b1d064dee8b5e95a082ca8e7ea4893a6c14"
+    },
+    {
+      "path": "zentral/groups/styles/ZentralGroupMenus.css",
+      "sha256": "a63e5749e4dd8d32a52683fa1989bf5aa72a5cbc9dd6a6a287f5886b09838944"
+    },
+    {
+      "path": "zentral/groups/styles/ZentralGroupPresentation.css",
+      "sha256": "6d3185b6aa8d79b95b06c4d4441c15d039d788848636203543d09a8eacc1fa4e"
+    },
+    {
+      "path": "zentral/groups/styles/ZentralGroupStructure.css",
+      "sha256": "ebc2b135fee57fb2a4d4bb47b093e9aa6234d46daca7befa4c9b5b24b4a03ead"
+    },
+    {
+      "path": "zentral/groups/styles/ZentralGroupsInjected.css",
+      "sha256": "e32689c78ab1913b47d1c6120b9d296bf760ce301e9e2e9dc6e57cdbe846d910"
+    },
+    {
+      "path": "zentral/upstream/1.1.0/JS/Zentral.uc.js",
+      "sha256": "40f1bb040d368e6e598c65f8f3890228150a95fee4d090f620e576eeb9f1a691"
+    },
+    {
+      "path": "zentral/upstream/1.1.0/JS/zentral_logger.uc.js",
+      "sha256": "82bc0f84dce365dac45d8fcfe857960ececd6cf95c66bff280104431bbf32240"
+    },
+    {
+      "path": "zentral/upstream/1.1.0/JS/zentral_panel_geometry.uc.js",
+      "sha256": "ff41bc77425c27de4b2904031616b9401ea0f0ed2fe28e8707adea895ed3ac7b"
+    },
+    {
+      "path": "zentral/upstream/1.1.0/LICENSE",
+      "sha256": "99c2743c0543773382758d4f055c13cbb383251db1505f2098168ca46a0bfe28"
+    },
+    {
+      "path": "zentral/upstream/1.1.0/README.md",
+      "sha256": "d35725160999e50d1dc5b4dd750f4274c74be5c1b1d526aaf65d54bee20eea41"
+    },
+    {
+      "path": "zentral/upstream/1.1.0/chrome.css",
+      "sha256": "610badd3b17be2ae57d4fbaa2cbe02bb3118d1ee0fc0f84939c0bde989ae7ce7"
+    },
+    {
+      "path": "zentral/upstream/1.1.0/preferences.json",
+      "sha256": "977e67e25d11f6984c016a004599a0f18f25fe54209519a4ea1c7988ae25cd10"
+    },
+    {
+      "path": "zentral/upstream/1.1.0/theme.json",
+      "sha256": "3626b5d7661091eae3f36ef04317015d58bfb14b22a9ca45eae260dcbd2dfa6c"
+    },
+    {
+      "path": "zentral/upstream/README.md",
+      "sha256": "623e7c6dbd6145620eb25097978b22fc7644eb95f7b27dd7e1eded680908144c"
+    }
+  ]
+}

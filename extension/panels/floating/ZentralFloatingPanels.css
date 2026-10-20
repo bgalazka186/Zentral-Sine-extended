@@ -1,0 +1,335 @@
+/* U110-FLOAT/PILL: owned by panel-enhancements. Hidden/closing/native input
+ * policies remain in their original owner. Triple View stays inside one root. */
+#zen-app-panel-root#zen-app-panel-root[data-hybrid-placement="true"],
+#bgalazka-super-panel#bgalazka-super-panel[data-hybrid-placement="true"] {
+  position: fixed !important;
+  left: var(--hybrid-x) !important;
+  top: var(--hybrid-y) !important;
+  width: var(--hybrid-w) !important;
+  height: var(--hybrid-h) !important;
+  right: auto !important;
+  bottom: auto !important;
+  margin: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+#zen-app-panel-root#zen-app-panel-root[data-hybrid-placement="true"]
+  #zen-app-panel-clip,
+#zen-app-panel-root#zen-app-panel-root[data-hybrid-placement="true"]
+  #zen-app-panel-slider {
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+#zen-app-panel-root#zen-app-panel-root[data-floating="true"][open]:not(
+    [closing]
+  )
+  #zen-app-panel-slider {
+  transform: none !important;
+}
+#zen-app-panel-root#zen-app-panel-root[data-hybrid-placement="true"]
+  #zen-app-panel-pill {
+  left: var(--hybrid-pill-inset) !important;
+  right: auto !important;
+  top: var(--hybrid-pill-y) !important;
+  transform: translateY(-50%) scale(var(--hybrid-pill-scale, 1)) !important;
+  transform-origin: var(--hybrid-pill-origin, right center) !important;
+  max-height: calc(100vh - 40px) !important;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+#zen-app-panel-root#zen-app-panel-root[data-floating="true"] {
+  filter: drop-shadow(0 8px 18px #0004);
+}
+#zen-app-panel-pill#zen-app-panel-pill[data-upstream-layout] {
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  gap: 4px !important;
+}
+.zentral-pill-actions,
+.zentral-pill-close-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 3px;
+  border-radius: 14px;
+  background: var(--zl-popup, var(--zen-colors-tertiary, #25252c));
+  color: inherit;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  box-shadow: 0 4px 12px #0003;
+}
+.zentral-pill-close-box:empty,
+.zentral-pill-close-box[hidden] {
+  display: none !important;
+}
+.zentral-hybrid-control svg {
+  width: var(--zentral-tile-icon, 18px);
+  height: var(--zentral-tile-icon, 18px);
+  pointer-events: none;
+}
+.zentral-hybrid-move {
+  cursor: move !important;
+  touch-action: none;
+  font-size: 20px !important;
+}
+.zentral-hybrid-control[aria-pressed="true"] {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #707ac2) 35%,
+    transparent
+  );
+}
+.zentral-hybrid-control[data-save-result="saved"] {
+  color: #39b66b !important;
+}
+.zentral-hybrid-control[data-save-result="failed"] {
+  color: #e66d6d !important;
+}
+.zen-toolbar-reload-btn[data-loading="true"] svg,
+.zentral-secondary-reload[data-loading="true"] svg {
+  display: none;
+}
+.zen-toolbar-reload-btn[data-loading="true"]::after,
+.zentral-secondary-reload[data-loading="true"]::after {
+  content: "■";
+  font-size: 12px;
+  color: currentColor;
+}
+.zentral-toolbar-save svg {
+  width: 15px !important;
+  height: 15px !important;
+}
+#zentral-dock-ghost {
+  position: fixed;
+  display: none;
+  pointer-events: none;
+  z-index: 2147483638;
+  box-sizing: border-box;
+  border: 2px dashed var(--zen-primary-color, #8495ef);
+  border-radius: var(--zen-border-radius, 10px);
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #8495ef) 20%,
+    transparent
+  );
+}
+#zentral-panel-drag-shield {
+  position: fixed;
+  inset: 0;
+  display: none;
+  background: transparent;
+  z-index: 2147483640;
+  cursor: move;
+  touch-action: none;
+}
+#zentral-dock-ghost[data-active="true"],
+#zentral-panel-drag-shield[data-active="true"] {
+  display: block;
+}
+:root[zentral-geometry-dragging] {
+  user-select: none;
+}
+/* Preserve existing native hidden and hover-hidden input suppression. */
+:root[bgalazka-hover-panel-hidden] #zen-app-panel-root .zentral-hybrid-control {
+  pointer-events: none !important;
+}
+:root[zentral-contrast-policy="high"] #zen-app-panel-pill .zentral-pill-actions,
+:root[zentral-contrast-policy="high"]
+  #zen-app-panel-pill
+  .zentral-pill-close-box {
+  background: var(--zentral-adaptive-bg) !important;
+  color: var(--zentral-adaptive-fg) !important;
+}
+
+/* Detached mode exposes all eight handles; the legacy setting continues to
+   control whether all-sides resizing is enabled while docked. */
+:root:not([bgalazka-hover-panel-hidden])
+  #zen-app-panel-root#zen-app-panel-root[data-floating="true"][open]:not(
+    [closing]
+  )
+  :is(
+    .zen-app-resize-strip-top,
+    .zen-app-resize-strip-bottom,
+    .zen-app-resize-strip-inner,
+    .zen-app-resize-strip-outer,
+    .zen-app-resize-corner
+  ) {
+  pointer-events: auto !important;
+}
+
+/* Own the hybrid position without overriding idle-mini behavior. These rules
+   deliberately outrank legacy side transforms, for either docking side. */
+#zen-app-panel-root#zen-app-panel-root[data-hybrid-placement]
+  #zen-app-panel-pill {
+  --hybrid-pill-scale: 1;
+  width: 40px !important;
+  box-sizing: border-box;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease !important;
+}
+/* Expanded styling always follows the selected skin. Mini color is scoped
+   ONLY to idle mini mode, including the split action/close surfaces. */
+#zen-app-panel-root#zen-app-panel-root[data-hybrid-placement]
+  #zen-app-panel-pill {
+  background: transparent !important;
+  color: var(--zl-popup-text, var(--zen-colors-tertiary-text, #fff)) !important;
+}
+#zen-app-panel-root#zen-app-panel-root[data-hybrid-placement]
+  #zen-app-panel-pill:not([data-upstream-layout]),
+#zen-app-panel-root#zen-app-panel-root[data-hybrid-placement]
+  #zen-app-panel-pill
+  :is(.zentral-pill-actions, .zentral-pill-close-box) {
+  background: color-mix(
+    in srgb,
+    var(--zl-popup, var(--zen-colors-tertiary, #25252c))
+      var(--bgalazka-pill-background-opacity, 90%),
+    transparent
+  ) !important;
+}
+:root[bgalazka-pill-peek-dot="true"]:not([zentral-geometry-dragging])
+  #zen-app-panel-root#zen-app-panel-root[data-hybrid-placement]:not(
+    :has(.zen-app-hover-zone:hover, .zen-app-resize-strip:hover)
+  )
+  #zen-app-panel-pill:not(:hover, :focus-within) {
+  --hybrid-pill-scale: 0.22;
+  opacity: var(--bgalazka-pill-peek-opacity, 90%) !important;
+  background: var(--bgalazka-pill-peek-color, #4da6ff) !important;
+  border-radius: 14px !important;
+}
+:root[bgalazka-pill-peek-dot="true"]:not([zentral-geometry-dragging])
+  #zen-app-panel-root#zen-app-panel-root[data-hybrid-placement]:not(
+    :has(.zen-app-hover-zone:hover, .zen-app-resize-strip:hover)
+  )
+  #zen-app-panel-pill:not(:hover, :focus-within)
+  :is(.zentral-pill-actions, .zentral-pill-close-box) {
+  background: var(--bgalazka-pill-peek-color, #4da6ff) !important;
+}
+:root
+  #zen-app-panel-root#zen-app-panel-root[data-hybrid-placement]
+  #zen-app-panel-pill:is(:hover, :focus-within),
+:root
+  #zen-app-panel-root#zen-app-panel-root[data-hybrid-placement]:has(
+    .zen-app-hover-zone:hover,
+    .zen-app-resize-strip:hover
+  )
+  #zen-app-panel-pill,
+:root[zentral-geometry-dragging]
+  #zen-app-panel-root#zen-app-panel-root[data-hybrid-placement]
+  #zen-app-panel-pill {
+  --hybrid-pill-scale: 1;
+  opacity: 1 !important;
+}
+#zen-app-panel-root#zen-app-panel-root[data-hybrid-placement]
+  #zen-app-panel-pill
+  :is(.zen-app-btn, .zen-app-grabber)
+  svg {
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  min-height: 18px !important;
+  flex: 0 0 18px !important;
+}
+/* Align the invisible reveal target with the relocated outside pill. */
+#zen-app-panel-root#zen-app-panel-root[data-hybrid-placement]
+  .zen-app-hover-zone {
+  left: var(--hybrid-pill-inset) !important;
+  right: auto !important;
+  width: 40px !important;
+  top: var(--hybrid-pill-y) !important;
+  bottom: auto !important;
+  transform: translateY(-50%) !important;
+  max-height: calc(100vh - 40px) !important;
+}
+
+/* User-visible incompatibility marker: the saved setting is retained, while
+   this action is unavailable for the current detached host. */
+#zen-app-panel-root#zen-app-panel-root
+  #zen-app-panel-pill
+  .zentral-unavailable {
+  position: relative !important;
+  opacity: 0.65;
+}
+#zen-app-panel-root#zen-app-panel-root
+  #zen-app-panel-pill
+  .zentral-disabled-mark {
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: 22px !important;
+  height: 22px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 27px/1 sans-serif !important;
+  color: #ff5a5a !important;
+  text-shadow: 0 1px 2px #000;
+  pointer-events: none !important;
+}
+#zen-app-panel-root#zen-app-panel-root
+  #zen-app-panel-pill
+  .zentral-disabled-mark[hidden] {
+  display: none !important;
+}
+#zen-app-panel-pill [data-long-press="pending"] {
+  outline: 2px solid var(--zen-primary-color, #8495ef) !important;
+  outline-offset: 1px;
+}
+:root[zentral-geometry-dragging] #zentral-dock-ghost {
+  z-index: 2147483642;
+}
+
+/* Only the optional tools scroll. Terminal controls never cover their siblings. */
+#bgalazka-super-panel#bgalazka-super-panel .bgalazka-super-bar {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  flex: 0 0 32px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+}
+#bgalazka-super-panel#bgalazka-super-panel .bgalazka-second-url {
+  min-width: 40px !important;
+  flex: 1 1 40px !important;
+  width: 0 !important;
+}
+#bgalazka-super-panel#bgalazka-super-panel .zentral-secondary-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+#bgalazka-super-panel#bgalazka-super-panel
+  .bgalazka-super-bar
+  :is(.bgalazka-second-close, .zentral-toolbar-save) {
+  position: static !important;
+  flex: 0 0 22px !important;
+  min-width: 22px !important;
+  max-width: 22px !important;
+  margin: 0 !important;
+}
+
+/* The lower Triple toolbar moves/docks its combined host through the same
+   placement owner as the upper toolbar. Super Pin keeps its separate host. */
+#zen-app-panel-root#zen-app-panel-root[data-hybrid-placement]
+  .bgalazka-second-grip {
+  cursor: move !important;
+}
+
+#zen-app-panel-root#zen-app-panel-root
+  #zen-app-panel-pill
+  .zen-app-btn[hidden] {
+  display: none !important;
+}

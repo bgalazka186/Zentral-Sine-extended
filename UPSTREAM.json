@@ -1,0 +1,28 @@
+{
+  "extended_version": "3.0.0",
+  "upstream_version": "1.1.0",
+  "repository": "https://github.com/Michele501st/Zentral-Sine",
+  "commit": "0e18990c0bfa2563d22de8f5d04135da186ef1b0",
+  "previous_reference": "0d93b79552878a94478f1b1d8933548151fca830",
+  "extended_input_commit": "3e96d2e68faf7338374a28a9dc1c460d007016bb",
+  "bridge_contract": 1,
+  "runtime_note": "Pristine snapshot is never loaded; adapted base preserves Extended controllers and selectively integrates the documented 1.1.0 behaviors.",
+  "reference_sha256": {
+    "theme.json": "3626b5d7661091eae3f36ef04317015d58bfb14b22a9ca45eae260dcbd2dfa6c",
+    "README.md": "d35725160999e50d1dc5b4dd750f4274c74be5c1b1d526aaf65d54bee20eea41",
+    "preferences.json": "977e67e25d11f6984c016a004599a0f18f25fe54209519a4ea1c7988ae25cd10",
+    "LICENSE": "99c2743c0543773382758d4f055c13cbb383251db1505f2098168ca46a0bfe28",
+    "chrome.css": "610badd3b17be2ae57d4fbaa2cbe02bb3118d1ee0fc0f84939c0bde989ae7ce7",
+    "JS/zentral_panel_geometry.uc.js": "ff41bc77425c27de4b2904031616b9401ea0f0ed2fe28e8707adea895ed3ac7b",
+    "JS/Zentral.uc.js": "40f1bb040d368e6e598c65f8f3890228150a95fee4d090f620e576eeb9f1a691",
+    "JS/zentral_logger.uc.js": "82bc0f84dce365dac45d8fcfe857960ececd6cf95c66bff280104431bbf32240"
+  },
+  "inspiration": {
+    "subtitle_surface": {
+      "repository": "https://github.com/Firebolt9907/Zenslop",
+      "commit": "b5ce39ede14a09c0095aa822ea380cbca8d236f0",
+      "implementation": "Independent caption-band implementation; no Zenslop source copied or executed."
+    }
+  },
+  "distribution_note": "GitHub package: upstream test files omitted; retained upstream source files remain unmodified."
+}

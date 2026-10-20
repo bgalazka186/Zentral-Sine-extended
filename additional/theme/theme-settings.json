@@ -1,0 +1,65 @@
+{
+  "owner": "theme-service",
+  "schema": [
+    {
+      "property": "zen.workspace.zentral.theme.policy",
+      "label": "Panel controls and tooltip light/dark source",
+      "type": "dropdown",
+      "defaultValue": "browser",
+      "options": [
+        {
+          "label": "Browser interface",
+          "value": "browser"
+        },
+        {
+          "label": "Website appearance preference",
+          "value": "content"
+        },
+        {
+          "label": "Operating system",
+          "value": "system"
+        },
+        {
+          "label": "Always light",
+          "value": "light"
+        },
+        {
+          "label": "Always dark",
+          "value": "dark"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.theme.contrast",
+      "label": "Tooltip and control contrast",
+      "type": "dropdown",
+      "defaultValue": "adaptive",
+      "options": [
+        {
+          "label": "Adaptive readable tooltips; keep custom controls",
+          "value": "adaptive"
+        },
+        {
+          "label": "High contrast tooltips and controls",
+          "value": "high"
+        },
+        {
+          "label": "Keep all Extended custom appearance",
+          "value": "custom"
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "zen.workspace.zentral.theme.policy": {
+      "category": "theme",
+      "section": "Readability & buttons",
+      "owner": "theme-service"
+    },
+    "zen.workspace.zentral.theme.contrast": {
+      "category": "theme",
+      "section": "Readability & buttons",
+      "owner": "theme-service"
+    }
+  }
+}

@@ -3736,7 +3736,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.hide_all_sides_resize_btn",
-    "label": "Hide All-Sides Resize Button",
+    "label": "Hide Move / Resize Button",
     "type": "checkbox",
     "defaultValue": false
   },
@@ -3828,6 +3828,30 @@
     ]
   },
   {
+    "property": "zen.workspace.zentral.video_preview.play_button",
+    "label": "Show play/pause button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.mute_button",
+    "label": "Show mute/unmute button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.next_source_button",
+    "label": "Show next source button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.open_tab_button",
+    "label": "Show open source tab button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "property": "zen.workspace.zentral.video_preview.hide_button",
     "label": "Show hide/show video button",
     "type": "checkbox",
@@ -3836,6 +3860,30 @@
   {
     "property": "zen.workspace.zentral.video_preview.auto_height_button",
     "label": "Show Auto height button after resizing",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.framing_button",
+    "label": "Show framing button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.skip_back_button",
+    "label": "Show -10 s (back) button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.skip_forward_button",
+    "label": "Show +10 s (forward) button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.subtitles_button",
+    "label": "Show subtitles button",
     "type": "checkbox",
     "defaultValue": true
   },
@@ -8291,12 +8339,6 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.zentral.video_preview.youtube_captions",
-    "label": "Mirror captions (text tracks and YouTube)",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
     "type": "text",
     "label": "**Video Sources · Discovery & source selection**",
     "size": "18px"
@@ -8473,34 +8515,6 @@
     ]
   },
   {
-    "property": "zen.workspace.zentral.video_preview.caption_poll_ms",
-    "label": "Caption recovery interval (slower = delayed recovery from missed events)",
-    "type": "dropdown",
-    "defaultValue": 750,
-    "options": [
-      {
-        "label": "250 ms",
-        "value": 250
-      },
-      {
-        "label": "500 ms",
-        "value": 500
-      },
-      {
-        "label": "750 ms",
-        "value": 750
-      },
-      {
-        "label": "1500 ms",
-        "value": 1500
-      },
-      {
-        "label": "3000 ms",
-        "value": 3000
-      }
-    ]
-  },
-  {
     "property": "zen.workspace.zentral.video_preview.canvas_stream_width_px",
     "label": "Canvas stream width (smaller = less detail and drawing work)",
     "type": "dropdown",
@@ -8593,12 +8607,6 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.zentral.video_preview.caption_events",
-    "label": "Use caption change events when available",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
     "property": "zen.workspace.zentral.video_preview.suspend_hidden_preview",
     "label": "Suspend receivers while hidden/minimized (brief restart on reveal)",
     "type": "checkbox",
@@ -8613,12 +8621,6 @@
   {
     "property": "zen.workspace.zentral.video_preview.slow_health_checks",
     "label": "Slow steady-state health checks (10–15 second failure detection)",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.slow_caption_recovery",
-    "label": "Use caption events with 3 second recovery polling (missed cues recover later)",
     "type": "checkbox",
     "defaultValue": true
   },
@@ -8783,7 +8785,7 @@
   },
   {
     "property": "zen.workspace.zentral.modules.css.VideoPreview.enabled",
-    "label": "Load features/video/ZentralVideoPreview.css",
+    "label": "Load additional/video/ZentralVideoPreview.css",
     "type": "checkbox",
     "defaultValue": true
   },
@@ -8873,67 +8875,67 @@
   },
   {
     "property": "zen.workspace.zentral.modules.css.Panels.enabled",
-    "label": "Load features/panels/ZentralPanels.css",
+    "label": "Load extension/panels/ZentralPanels.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.CornerPanels.enabled",
-    "label": "Load features/panels/corner-tiles/ZentralCornerPanels.css",
+    "label": "Load extension/panels/corner-tiles/ZentralCornerPanels.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.Controls.enabled",
-    "label": "Load features/settings/styles/ZentralControls.css",
+    "label": "Load extension/settings/styles/ZentralControls.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.PanelToolbar.enabled",
-    "label": "Load features/panels/navigation/styles/ZentralPanelToolbar.css",
+    "label": "Load extension/panels/navigation/styles/ZentralPanelToolbar.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.PanelGeometry.enabled",
-    "label": "Load features/panels/geometry/ZentralPanelGeometry.css",
+    "label": "Load extension/panels/geometry/ZentralPanelGeometry.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.Settings.enabled",
-    "label": "Load features/settings/styles/ZentralSettings.css",
+    "label": "Load extension/settings/styles/ZentralSettings.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.BrowserIntegrations.enabled",
-    "label": "Load features/panels/browsers/ZentralBrowserIntegrations.css",
+    "label": "Load extension/panels/browsers/ZentralBrowserIntegrations.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.Appearance.enabled",
-    "label": "Load features/appearance/ZentralAppearance.css",
+    "label": "Load extension/appearance/ZentralAppearance.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.RssDisplay.enabled",
-    "label": "Load features/rss/ZentralRssDisplay.css",
+    "label": "Load additional/rss/ZentralRssDisplay.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.TabDensity.enabled",
-    "label": "Load features/tabs/ZentralTabDensity.css",
+    "label": "Load additional/tabs/ZentralTabDensity.css",
     "type": "checkbox",
     "defaultValue": true
   },
   {
     "property": "zen.workspace.zentral.modules.css.PanelBackground.enabled",
-    "label": "Load features/panels/navigation/styles/ZentralPanelBackground.css",
+    "label": "Load extension/panels/navigation/styles/ZentralPanelBackground.css",
     "type": "checkbox",
     "defaultValue": true
   },
@@ -9952,6 +9954,96 @@
     ]
   },
   {
+    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover",
+    "label": "Stabilize compact tab sidebar hover (experimental)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px",
+    "label": "Compact sidebar edge tolerance (px)",
+    "type": "dropdown",
+    "defaultValue": 12,
+    "options": [
+      {
+        "label": "0 px",
+        "value": 0
+      },
+      {
+        "label": "4 px",
+        "value": 4
+      },
+      {
+        "label": "8 px",
+        "value": 8
+      },
+      {
+        "label": "12 px (default)",
+        "value": 12
+      },
+      {
+        "label": "16 px",
+        "value": 16
+      },
+      {
+        "label": "24 px",
+        "value": 24
+      },
+      {
+        "label": "32 px",
+        "value": 32
+      },
+      {
+        "label": "64 px",
+        "value": 64
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms",
+    "label": "Compact sidebar exit grace (ms)",
+    "type": "dropdown",
+    "defaultValue": 250,
+    "options": [
+      {
+        "label": "0 ms",
+        "value": 0
+      },
+      {
+        "label": "50 ms",
+        "value": 50
+      },
+      {
+        "label": "100 ms",
+        "value": 100
+      },
+      {
+        "label": "150 ms",
+        "value": 150
+      },
+      {
+        "label": "250 ms (default)",
+        "value": 250
+      },
+      {
+        "label": "400 ms",
+        "value": 400
+      },
+      {
+        "label": "500 ms",
+        "value": 500
+      },
+      {
+        "label": "1000 ms",
+        "value": 1000
+      },
+      {
+        "label": "2000 ms",
+        "value": 2000
+      }
+    ]
+  },
+  {
     "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal",
     "label": "Reveal compact tab sidebar on window entry (experimental)",
     "type": "checkbox",
@@ -10183,92 +10275,435 @@
     "defaultValue": ""
   },
   {
-    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover",
-    "label": "Stabilize compact tab sidebar hover (experimental)",
-    "type": "checkbox",
-    "defaultValue": false
+    "type": "text",
+    "label": "**Video Playback · Enlarged preview**",
+    "size": "18px"
   },
   {
-    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px",
-    "label": "Compact sidebar edge tolerance (px)",
+    "property": "zen.workspace.zentral.video_preview.double_click_enlarge",
+    "label": "Double-click video to enlarge temporarily",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_width",
+    "label": "Remembered enlarged video width (px)",
+    "type": "string",
+    "defaultValue": 1280
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_height",
+    "label": "Remembered enlarged video height (px)",
+    "type": "string",
+    "defaultValue": 720
+  },
+  {
+    "type": "text",
+    "label": "**Video subtitles · Subtitle display**",
+    "size": "18px"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.youtube_captions",
+    "label": "Mirror captions (text tracks and YouTube)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_placement",
+    "label": "Subtitle placement",
     "type": "dropdown",
-    "defaultValue": 12,
+    "defaultValue": "below",
     "options": [
       {
-        "label": "0 px",
-        "value": 0
+        "label": "Below the video (separate subtitle area)",
+        "value": "below"
       },
       {
-        "label": "4 px",
-        "value": 4
-      },
-      {
-        "label": "8 px",
-        "value": 8
-      },
-      {
-        "label": "12 px (default)",
-        "value": 12
-      },
-      {
-        "label": "16 px",
-        "value": 16
-      },
-      {
-        "label": "24 px",
-        "value": 24
-      },
-      {
-        "label": "32 px",
-        "value": 32
-      },
-      {
-        "label": "64 px",
-        "value": 64
+        "label": "Over the video (classic overlay)",
+        "value": "overlay"
       }
     ]
   },
   {
-    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms",
-    "label": "Compact sidebar exit grace (ms)",
+    "property": "zen.workspace.zentral.video_preview.caption_font_size",
+    "label": "Subtitle text size (px)",
     "type": "dropdown",
-    "defaultValue": 250,
+    "defaultValue": 12,
     "options": [
       {
-        "label": "0 ms",
-        "value": 0
+        "label": "10",
+        "value": 10
       },
       {
-        "label": "50 ms",
-        "value": 50
+        "label": "12",
+        "value": 12
       },
       {
-        "label": "100 ms",
-        "value": 100
+        "label": "14",
+        "value": 14
       },
       {
-        "label": "150 ms",
-        "value": 150
+        "label": "16",
+        "value": 16
       },
       {
-        "label": "250 ms (default)",
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "28",
+        "value": 28
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_max_lines",
+    "label": "Maximum subtitle lines",
+    "type": "dropdown",
+    "defaultValue": 4,
+    "options": [
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "8",
+        "value": 8
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.captions_visible",
+    "label": "Show subtitles (same switch as the video toolbar)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_overflow",
+    "label": "Long subtitle behavior",
+    "type": "dropdown",
+    "defaultValue": "fit",
+    "options": [
+      {
+        "label": "Fit text; ellipsis only when necessary",
+        "value": "fit"
+      },
+      {
+        "label": "Keep selected font size; scroll full text",
+        "value": "scroll"
+      }
+    ]
+  },
+  {
+    "type": "text",
+    "label": "**Video subtitles · Subtitle updates**",
+    "size": "18px"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_poll_ms",
+    "label": "Caption recovery interval (slower = delayed recovery from missed events)",
+    "type": "dropdown",
+    "defaultValue": 750,
+    "options": [
+      {
+        "label": "250 ms",
         "value": 250
-      },
-      {
-        "label": "400 ms",
-        "value": 400
       },
       {
         "label": "500 ms",
         "value": 500
       },
       {
-        "label": "1000 ms",
-        "value": 1000
+        "label": "750 ms",
+        "value": 750
       },
       {
-        "label": "2000 ms",
-        "value": 2000
+        "label": "1500 ms",
+        "value": 1500
+      },
+      {
+        "label": "3000 ms",
+        "value": 3000
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_events",
+    "label": "Use caption change events when available",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.slow_caption_recovery",
+    "label": "Throttle caption-watch rebinding (selected recovery interval is unchanged)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_position",
+    "label": "Remembered enlarged position (clear to reset to sidebar corner)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.hide_detach_button",
+    "label": "Hide Detach / Attach pill button",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.compat.external_tab_groups",
+    "label": "Use external Tab Groups: pause Zentral group hooks",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.compat.external_library_layout",
+    "label": "Use external Library layout: pause Extended Library geometry",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.compat.keep_launcher_in_sidebar",
+    "label": "Keep native app launchers in the sidebar (no automatic top-toolbar move)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.geometry_mode",
+    "label": "Panel geometry engine",
+    "type": "dropdown",
+    "defaultValue": "hybrid",
+    "options": [
+      {
+        "label": "Hybrid: persistent per-app movement and docking",
+        "value": "hybrid"
+      },
+      {
+        "label": "Classic Extended: legacy shared offsets",
+        "value": "extended"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.allow_overflow",
+    "label": "Allow panels partly outside the window (keep controls reachable)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.position_scope",
+    "label": "Remember panel placement for",
+    "type": "dropdown",
+    "defaultValue": "app",
+    "options": [
+      {
+        "label": "Each app",
+        "value": "app"
+      },
+      {
+        "label": "Each app in each workspace",
+        "value": "workspace"
+      },
+      {
+        "label": "All apps together",
+        "value": "global"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.snap_enabled",
+    "label": "Show edge docking previews while moving panels",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.dock_push_px",
+    "label": "Docking distance (px; snap near edge when overflow is allowed)",
+    "type": "dropdown",
+    "defaultValue": 15,
+    "options": [
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "40",
+        "value": 40
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.dock_gap",
+    "label": "Gap between docked panels and edge (px)",
+    "type": "dropdown",
+    "defaultValue": 0,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "16",
+        "value": 16
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.pill_layout",
+    "label": "Pill layout",
+    "type": "dropdown",
+    "defaultValue": "upstream",
+    "options": [
+      {
+        "label": "Upstream: separate close box",
+        "value": "upstream"
+      },
+      {
+        "label": "Classic Extended: single pill",
+        "value": "extended"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.panel_url_shortcut",
+    "label": "Ctrl/Cmd+L focuses panel URL only while panel has focus",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.navigation_mode",
+    "label": "Panel address entry behavior",
+    "type": "dropdown",
+    "defaultValue": "extended-search",
+    "options": [
+      {
+        "label": "Extended: addresses and configured search",
+        "value": "extended-search"
+      },
+      {
+        "label": "Upstream style: addresses only",
+        "value": "address-only"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.detached_height_percent",
+    "label": "Height when detaching from an edge (%)",
+    "type": "dropdown",
+    "defaultValue": 78,
+    "options": [
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.theme.policy",
+    "label": "Panel controls and tooltip light/dark source",
+    "type": "dropdown",
+    "defaultValue": "browser",
+    "options": [
+      {
+        "label": "Browser interface",
+        "value": "browser"
+      },
+      {
+        "label": "Website appearance preference",
+        "value": "content"
+      },
+      {
+        "label": "Operating system",
+        "value": "system"
+      },
+      {
+        "label": "Always light",
+        "value": "light"
+      },
+      {
+        "label": "Always dark",
+        "value": "dark"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.theme.contrast",
+    "label": "Tooltip and control contrast",
+    "type": "dropdown",
+    "defaultValue": "adaptive",
+    "options": [
+      {
+        "label": "Adaptive readable tooltips; keep custom controls",
+        "value": "adaptive"
+      },
+      {
+        "label": "High contrast tooltips and controls",
+        "value": "high"
+      },
+      {
+        "label": "Keep all Extended custom appearance",
+        "value": "custom"
       }
     ]
   }

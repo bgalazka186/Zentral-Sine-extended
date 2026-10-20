@@ -1,3 +1,42 @@
+# Zentral Extended 3.0.0
+
+Hybrid integration with original **Zentral 1.1.0**, pinned to `0e18990c0bfa2563d22de8f5d04135da186ef1b0`. Extended preserves its own browser/startup/feature work and adopts the original changes through a documented base and compatibility bridge.
+
+See [the repair handoff](docs/REPAIR-HANDOFF-3.0.0.md) for geometry/caption/startup repairs, compatibility findings and the architecture audit. New/revised settings are mirrored in **New settings · 3.0+**.
+
+Read [INSTALL.md](INSTALL.md) for installation and [the upstream update guide](docs/UPDATING-UPSTREAM.md) before changing the base.
+
+| Tree                          | Responsibility                                                                                |
+| ----------------------------- | --------------------------------------------------------------------------------------------- |
+| `loader/`                     | Single Sine entrypoint, native readiness, dependency activation, shared services and cleanup. |
+| `zentral/`                    | Adapted Apps/Groups base, pure math, compatibility bridge and untouched original reference.   |
+| `extension/`                  | Extended panels, toolbars, geometry policy, secondary views, appearance and settings UI.      |
+| `additional/`                 | Independent video, subtitles, RSS, tab tools, Library behavior, theme and diagnostics.        |
+| `docs/`, `patches/`, `tools/` | Ownership/update notes, reproducible diffs and settings generation.                           |
+
+One package; one Sine registration: `loader/Zentral.uc.js`. Do not also enable original Zentral. Every component folder has nearby documentation and source ownership headers.
+
+New options include persistent per-app placement, detachable panels and snapping, optional overflow, Reset position, separate close-box/classic pill layouts, Reload/Stop, saved start URLs, mobile-UA access, focus-scoped URL shortcuts and light/dark/contrast policy. Triple View moves as one host; Super Pin has independent placement. Classic Extended geometry remains selectable.
+
+Double-click the preview image for a temporary enlarged view: default 1280×720 video area, bottom corner on the sidebar side, remembered size/position, drag anywhere on video and resize any edge/corner. Return and Fullscreen are in its bottom bar. See [the request audit](docs/REQUEST-AUDIT.md) for remaining gaps and verification limits.
+
+Subtitles now default to a band below the video, inspired by [Zenslop](https://github.com/Firebolt9907/Zenslop). Overlay, text size and line count remain selectable. Caption extraction and video capture continue to use Extended's existing engine.
+
+I recommend and use [Tab Groups by oom333](https://github.com/oom333/zen-tab-groups), with Zentral Groups disabled. Zentral Groups remains available; the Compatibility section can pause its hooks. An external Library-layout switch similarly pauses Extended's experimental Library geometry.
+
+| Companion mod observed in the supplied archive | Version               |
+| ---------------------------------------------- | --------------------- |
+| Arc 2.0                                        | 3.4                   |
+| Transparent Zen                                | 1.17.16               |
+| Customize Font Size                            | 1.0.0                 |
+| Tab Groups (oom333)                            | 1.5.0                 |
+| Zen Folder Tree Connectors                     | 2.1                   |
+| ZenLibraryTweaks                               | 1.5.1 for Zen 1.23.3b |
+
+Better CtrlTab is also on my list; a complete versioned manifest was not identified in the supplied archive. These are source inventory observations, not live compatibility test results. Other mods are not required or altered.
+
+---
+
 <p align="center">
   <b>This is my personal AI slop extended version of Zentral if you dont need any of those tweaks its better that you will use Michele501st/Zentral-Sine </b>
   <br>
@@ -87,18 +126,20 @@ These options are experimental and separate from the regular hover behavior. Ava
 
 - **Whatever i will want for myself:** if you want to add something/ have proposition give Michele501st (they know what they are doing way more then me) details, if the proposition seems more like something for this extension then main mod, i will be glad to see what i can do
 
-- **Other mods i do use and there propably never be an issue with it:**
+- **Mods I use (configuration list, not a compatibility guarantee):**
   - Arc 2.0
   - Better CtrlTab
   - Customize Font Size
   - Transparent Zen
   - Zen Folder Tree Connectors
+  - Tab Groups by oom333 (I recommend and use it; Zentral Groups disabled in my setup)
+  - ZenLibraryTweaks
 
 ---
 
 ## ⚖️ Attribution, Upstream Credits & Disclaimer
 
-- **Original Creator & Project:** This project is an independent fork and extension of **[Zentral](https://github.com/zen-browser)** for Zen Browser, originally developed under the **CC BY-NC-SA 4.0** license. All original code, branding, and core architecture belong to the original author.
+- **Original Creator & Project:** This project is an independent fork and extension of **[Zentral](https://github.com/Michele501st/Zentral-Sine)** for Zen Browser, originally developed under the **CC BY-NC-SA 4.0** license. All original code, branding, and core architecture belong to the original author.
 - **Modifications:** This repository introduces experimental modifications (the _Bgalazka Extension_ layer) including opposite-side docking overrides, corner-docked essential tab tiles, and custom translucency profiles.
 - **Support the Original Dev:** If you enjoy Zentral, please support the original author via their Ko-fi / upstream channels linked in the settings menu.
 - **Bug Reports:** **Do not open issues on the upstream Zentral repository for problems encountered while using this fork.** Please file all issues, bugs, and feature requests directly in this repository's Issues tab.
@@ -118,7 +159,7 @@ These options are experimental and separate from the regular hover behavior. Ava
 </p>
 
 <p align="center">
-  <a href="theme.json"><img src="https://img.shields.io/badge/Version-v2.3.2-4A72FF.svg?style=flat-square" alt="Version"></a>
+  <a href="theme.json"><img src="https://img.shields.io/badge/Version-v3.0.0-4A72FF.svg?style=flat-square" alt="Version"></a>
   <a href="https://zen-browser.app/"><img src="https://img.shields.io/badge/Zen_Browser-Compatible-9B51E0.svg?style=flat-square" alt="Zen Browser"></a>
   <a href="theme.json"><img src="https://img.shields.io/badge/Sine_Engine-Native_Mod-00C853.svg?style=flat-square" alt="Sine Engine"></a>
   <a href="https://ko-fi.com/michele501st"><img src="https://img.shields.io/badge/Support-Ko--fi-FF5E5B.svg?style=flat-square&logo=ko-fi&logoColor=white" alt="Support on Ko-fi"></a>
@@ -258,10 +299,10 @@ Zentral includes a telemetry and diagnostics subsystem:
 1. In Zen Browser, navigate to **Settings** (<kbd>Ctrl</kbd> + <kbd>,</kbd>) → **Sine Mods**.
 2. Paste the repository URL:
    ```text
-   https://github.com/Michele501st/Zentral-Sine
+   https://github.com/bgalazka186/Zentral-Sine-extended
    ```
 3. Click the **Install** button.
-4. Sine will automatically download, validate, and activate Zentral instantly!
+4. Restart Zen and verify Extended 3.0.0 is enabled. For a changed-files ZIP, follow INSTALL.md and retain the rest of your existing folder.
 
 ---
 
@@ -287,7 +328,7 @@ Zentral includes a telemetry and diagnostics subsystem:
 2. Inside the profile, create or navigate to `chrome/sine-mods/`.
 3. Clone or extract this repository into a folder named `zentral`:
    ```bash
-   git clone https://github.com/Michele501st/Zentral-Sine.git "<profile-directory>/chrome/sine-mods/zentral"
+   git clone https://github.com/bgalazka186/Zentral-Sine-extended.git "<profile-directory>/chrome/sine-mods/zentral"
    ```
 4. Open Zen Browser and enable **Zentral** in your Sine Mod manager.
 

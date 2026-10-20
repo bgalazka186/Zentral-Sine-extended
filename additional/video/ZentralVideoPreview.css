@@ -1,0 +1,720 @@
+/*
+ * ZENTRAL FILE GUIDE - additional/video/ZentralVideoPreview.css
+ *
+ * Purpose: Video card/receiver/controls/captions/sidebar sizing and display states.
+ * Interaction / execution: Registered in original relative order at USER_SHEET origin by Runtime (Startup
+ *   owns its startup stylesheet); owner gating stays in Catalog.
+ * Ownership / failure: Selectors/attributes/CSS variables are the interface; do not change stylesheet
+ *   origin, regroup nonadjacent Base rules, or weaken closing/hidden input rules. Owner removes injected
+ *   styles or Runtime removes registered sheets at teardown.
+ * Direct source consumers: loader/ZentralCatalog.js
+ * Local interface selectors (subset by prefix): #zentral-settings-modal; #zentral-video-preview;
+ *   .zentral-video-preview-auto; .zentral-video-preview-bar; .zentral-video-preview-capabilities;
+ *   .zentral-video-preview-caption; .zentral-video-preview-compact; .zentral-video-preview-hide;
+ *   .zentral-video-preview-picture; .zentral-video-preview-pin; .zentral-video-preview-player;
+ *   .zentral-video-preview-resize; .zentral-video-preview-seek; .zentral-video-preview-source;
+ *   .zentral-video-preview-sources; .zentral-video-preview-subtitles
+ * Attribute selectors used: aria-pressed; aria-selected; data-compact-card; data-native-deferred; data-settings-owner; hidden;
+ *   title
+ *
+ * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
+ * contracts from this source, not a promise that every collaborator is enabled at runtime.
+ */
+/* Independent sidebar video preview. The card is a real flex child adjacent
+   to Zen's playback controls, so it reserves room rather than covering tabs. */
+#zentral-video-preview {
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex: 0 0 auto !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  contain: inline-size !important;
+  align-self: stretch !important;
+  padding: 4px !important;
+  overflow: hidden !important;
+  border-radius: var(--zvp-radius, 8px) !important;
+  background: color-mix(
+    in srgb,
+    var(--zen-colors-tertiary, #222) 85%,
+    black
+  ) !important;
+  color: var(--zen-colors-text, #fff) !important;
+}
+#zentral-video-preview[hidden] {
+  display: none !important;
+}
+#zentral-video-preview .zentral-video-preview-picture {
+  position: relative !important;
+  display: flex !important;
+  width: var(--zvp-width, 100%) !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: var(--zvp-height, auto) !important;
+  aspect-ratio: var(--zvp-ratio, 16 / 9) !important;
+  flex: 0 0 auto !important;
+  align-self: center !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  border-radius: var(--zvp-radius, 8px) !important;
+  background: #000 !important;
+}
+#zentral-video-preview .zentral-video-preview-player {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  border: 0 !important;
+}
+#zentral-video-preview canvas {
+  position: absolute !important;
+  inset: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: var(--zvp-object-fit, cover) !important;
+}
+#zentral-video-preview .zentral-video-preview-bar {
+  display: flex !important;
+  flex: 0 0 auto !important;
+  min-height: 27px !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 2px !important;
+  min-width: 0 !important;
+}
+#zentral-video-preview .zentral-video-preview-caption {
+  flex: 1 999 auto !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+  font-size: 11px !important;
+}
+#zentral-video-preview button {
+  flex: 0 0 25px !important;
+  height: 23px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: color-mix(in srgb, currentColor 14%, transparent) !important;
+  color: inherit !important;
+  cursor: pointer !important;
+}
+#zentral-video-preview button[hidden] {
+  display: none !important;
+}
+/* The native scrollbox keeps its own scroll and shrinks when the preview grows. */
+:where(#vertical-tabs, #zen-sidebar)
+  :has(> #zentral-video-preview)
+  :is(#tabbrowser-tabs, .zen-workspace-tabs-section) {
+  min-height: 0 !important;
+}
+
+/* Waiting for native cloning removes only the empty picture, keeping the
+   playback controls and source selector available. */
+#zentral-video-preview[data-native-deferred] .zentral-video-preview-picture,
+#zentral-video-preview[data-native-deferred] .zentral-video-preview-resize,
+#zentral-video-preview .zentral-video-preview-picture[hidden],
+#zentral-video-preview .zentral-video-preview-seek[hidden],
+#zentral-video-preview .zentral-video-preview-resize[hidden] {
+  display: none !important;
+}
+#zentral-video-preview .zentral-video-preview-subtitles {
+  position: absolute !important;
+  z-index: 3 !important;
+  inset-inline: 5px !important;
+  bottom: 6px !important;
+  max-height: 4.1em !important;
+  overflow: hidden !important;
+  padding: 4px 7px !important;
+  border-radius: 5px !important;
+  background: rgb(0 0 0 / 78%) !important;
+  color: #fff !important;
+  font:
+    600 12px/1.35 system-ui,
+    sans-serif !important;
+  text-align: center !important;
+  overflow-wrap: anywhere !important;
+  pointer-events: none !important;
+}
+#zentral-video-preview .zentral-video-preview-subtitles[hidden] {
+  display: none !important;
+}
+#zentral-video-preview .zentral-video-preview-auto {
+  font-size: 10px !important;
+}
+#zentral-video-preview .zentral-video-preview-bar > button {
+  box-sizing: border-box !important;
+  position: static !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 1 26px !important;
+  min-width: 0 !important;
+  max-width: 26px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+}
+#zentral-video-preview .zentral-video-preview-bar > button[hidden] {
+  display: none !important;
+}
+#zentral-video-preview .zentral-video-preview-bar svg {
+  display: block !important;
+  flex: 0 0 16px !important;
+  width: 16px !important;
+  height: 16px !important;
+  fill: #fff !important;
+}
+#zentral-video-preview .zentral-video-preview-compact svg {
+  fill: none !important;
+  stroke: #fff !important;
+  stroke-width: 2 !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+}
+#zentral-video-preview .zentral-video-preview-pin[aria-pressed="true"] {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #9a86e8) 45%,
+    transparent
+  ) !important;
+}
+#zentral-video-preview[data-compact-card] .zentral-video-preview-sources,
+#zentral-video-preview[data-compact-card] .zentral-video-preview-capabilities,
+#zentral-video-preview[data-compact-card] .zentral-video-preview-seek,
+#zentral-video-preview[data-compact-card] .zentral-video-preview-resize,
+#zentral-video-preview[data-compact-card] .zentral-video-preview-skip,
+#zentral-video-preview[data-compact-card]
+  .zentral-video-preview-bar
+  > button[title="Next detected source"],
+#zentral-video-preview[data-compact-card]
+  .zentral-video-preview-bar
+  > button[title="Open source tab"] {
+  display: none !important;
+}
+#zentral-video-preview .zentral-video-preview-hide[aria-pressed="true"] {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #9a86e8) 45%,
+    transparent
+  ) !important;
+}
+#zentral-video-preview .zentral-video-preview-seek {
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  height: 12px !important;
+  margin: 3px 0 0 !important;
+  accent-color: var(--zen-primary-color, #9a86e8) !important;
+}
+#zentral-video-preview .zentral-video-preview-sources {
+  display: block !important;
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  max-height: 66px !important;
+  margin-bottom: 4px !important;
+  border: 0 !important;
+  border-radius: 7px !important;
+  background: color-mix(in srgb, currentColor 10%, transparent) !important;
+  color: inherit !important;
+  font: inherit !important;
+  font-size: 10px !important;
+}
+#zentral-video-preview .zentral-video-preview-sources[hidden] {
+  display: none !important;
+}
+#zentral-video-preview .zentral-video-preview-bar[hidden] {
+  display: none !important;
+}
+
+/* Contain intrinsic widths from source labels, canvas and remote browser.
+   Compact mode can now use Zen's normal sidebar width without our card
+   contributing a larger min-content width during the mode transition. */
+#zentral-video-preview > * {
+  box-sizing: border-box !important;
+  min-inline-size: 0 !important;
+  max-inline-size: 100% !important;
+}
+#zentral-video-preview .zentral-video-preview-resize {
+  flex: 0 0 6px !important;
+  height: 6px !important;
+  cursor: ns-resize !important;
+  touch-action: none !important;
+  -moz-window-dragging: no-drag !important;
+  background: transparent !important;
+}
+#zentral-video-preview .zentral-video-preview-resize:hover {
+  background: color-mix(in srgb, currentColor 25%, transparent) !important;
+}
+
+/* Source buttons stay inside the sidebar; native popup menus close Zen's
+   compact hover strip before their option receives a click. */
+#zentral-video-preview .zentral-video-preview-sources {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  max-height: min(112px, 16vh) !important;
+  scrollbar-width: thin !important;
+}
+#zentral-video-preview .zentral-video-preview-source {
+  display: block !important;
+  width: 100% !important;
+  height: 23px !important;
+  margin: 0 !important;
+  padding: 2px 6px !important;
+  text-align: start !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+  border-radius: 4px !important;
+}
+#zentral-video-preview .zentral-video-preview-source[aria-selected="true"] {
+  background: color-mix(
+    in srgb,
+    var(--zen-primary-color, #9a86e8) 45%,
+    transparent
+  ) !important;
+}
+#zentral-video-preview .zentral-video-preview-capabilities {
+  display: block !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+  font-size: 9px !important;
+  opacity: 0.7 !important;
+}
+#zentral-video-preview .zentral-video-preview-capabilities:empty {
+  display: none !important;
+}
+
+/* During live-mode verification, keep the last successful canvas picture
+   above the new browser until actual content is confirmed. */
+#zentral-video-preview canvas {
+  z-index: 2 !important;
+}
+#zentral-video-preview .zentral-video-preview-player {
+  z-index: 1 !important;
+}
+
+#zentral-settings-modal [data-settings-owner="video"] .zvp-settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 9px;
+  min-width: 0;
+}
+#zentral-settings-modal [data-settings-owner="video"] .zvp-settings-group > h4 {
+  margin: 0;
+  font-size: 13px;
+}
+#zentral-settings-modal [data-settings-owner="video"] .zvp-settings-group > p {
+  margin: 0 0 4px;
+  font-size: 11px;
+  opacity: 0.72;
+}
+
+/* Keep all controls on one line while the title yields the available width. */
+#zentral-video-preview .zentral-video-preview-bar > button:not([hidden]) {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Enlarged-only controls (source menu, -10/+10, return, fullscreen) must
+   stay out of the sidebar card. The generic bar-button rules above outweigh
+   the older single-ID hide rules, so re-hide them with matching strength
+   whenever the preview is NOT enlarged. */
+#zentral-video-preview#zentral-video-preview:not([data-enlarged])
+  .zentral-video-large-only,
+#zentral-video-preview#zentral-video-preview:not([data-enlarged])
+  :is(
+    .zentral-video-enlarge-back,
+    .zentral-video-enlarge-fullscreen,
+    .zentral-video-enlarge-resize
+  ) {
+  display: none !important;
+}
+
+/* USER_SHEET !important rules outrank inline author styles. Keep toolbar sizing
+   here so appearance presets cannot restore a fixed min-content width. */
+#zentral-video-preview#zentral-video-preview .zentral-video-preview-bar {
+  gap: 0 !important;
+  min-width: 0 !important;
+}
+#zentral-video-preview#zentral-video-preview
+  .zentral-video-preview-bar
+  > button {
+  flex: 0 1 26px !important;
+  min-width: 0 !important;
+  max-width: 26px !important;
+  min-inline-size: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+#zentral-video-preview#zentral-video-preview .zentral-video-preview-caption {
+  flex: 1 999 0px !important;
+  min-width: 0 !important;
+}
+#zentral-video-preview#zentral-video-preview
+  .zentral-video-preview-bar
+  > button
+  svg {
+  flex: 0 1 var(--bgalazka-look-control-icon-size, 16px) !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+/* Separate subtitle band: occupies card space below the image, never paints
+   over video pixels. Empty/disabled/hidden captions reserve no space. */
+#zentral-video-preview#zentral-video-preview .zentral-video-preview-subtitles {
+  font-size: var(--zentral-caption-font-size, 12px) !important;
+  max-height: calc(
+    var(--zentral-caption-max-lines, 4) * 1.35em + 8px
+  ) !important;
+  white-space: pre-line !important;
+}
+/* Reserved caption band (Zenslop-style): the band always occupies exactly
+   --zentral-caption-max-lines lines while captions are active, so the card height
+   is constant whether a cue is showing or not. Text is centered vertically,
+   clipped to the band and never grows it. Empty cues fade out instead of
+   collapsing. Only turning captions off (toolbar button / setting) or hiding the
+   video releases the space. */
+#zentral-video-preview#zentral-video-preview[data-caption-placement="below"]
+  > .zentral-video-preview-subtitles {
+  position: relative !important;
+  inset: auto !important;
+  bottom: auto !important;
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 5px 0 2px !important;
+  padding: 6px 9px !important;
+  border-radius: 6px !important;
+  background: var(--zl-video-caption-bg, rgb(0 0 0 / 85%)) !important;
+  color: #fff !important;
+  line-height: 1.35 !important;
+  text-wrap: balance;
+  height: calc(var(--zentral-caption-max-lines, 4) * 1.35em + 12px) !important;
+  min-height: calc(
+    var(--zentral-caption-max-lines, 4) * 1.35em + 12px
+  ) !important;
+  max-height: calc(
+    var(--zentral-caption-max-lines, 4) * 1.35em + 12px
+  ) !important;
+  overflow: hidden !important;
+  transition: opacity 0.15s ease !important;
+  contain: layout paint !important;
+}
+#zentral-video-preview#zentral-video-preview[data-caption-placement="below"]
+  > .zentral-video-preview-subtitles[data-empty] {
+  opacity: 0.35 !important;
+}
+#zentral-video-preview#zentral-video-preview[data-caption-placement="below"]
+  > .zentral-video-preview-subtitles[hidden] {
+  display: none !important;
+}
+#zentral-video-preview .zentral-video-preview-subs[data-captions-active] {
+  background: color-mix(in srgb, currentColor 30%, transparent) !important;
+}
+
+/* A stable band with real line clamping: never show half of a third line.
+   The inner text alone fits/shrinks; the band's reserved height stays fixed. */
+#zentral-video-preview#zentral-video-preview[data-caption-placement="below"]
+  > .zentral-video-preview-subtitles {
+  display: flex !important;
+  opacity: 1 !important;
+  color: #fff !important;
+  text-wrap: wrap !important;
+  align-items: center !important;
+}
+#zentral-video-preview#zentral-video-preview
+  .zentral-video-preview-subtitles
+  .zentral-caption-text {
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: var(--zentral-caption-max-lines, 4);
+  overflow: hidden !important;
+  color: #fff !important;
+  opacity: 1 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 2px #000;
+  text-align: center;
+  width: 100%;
+}
+#zentral-video-preview#zentral-video-preview[data-caption-overflow="scroll"]
+  .zentral-video-preview-subtitles {
+  overflow: auto !important;
+  align-items: flex-start !important;
+}
+#zentral-video-preview#zentral-video-preview[data-caption-overflow="scroll"]
+  .zentral-caption-text {
+  display: block !important;
+  overflow: visible !important;
+}
+
+#zentral-video-preview#zentral-video-preview
+  .zentral-video-preview-subtitles
+  .zentral-caption-text {
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+  flex: 0 1 100% !important;
+  max-height: calc(
+    var(--zentral-caption-max-lines, 4) *
+      var(--zentral-caption-line-height, 16.2px)
+  ) !important;
+  text-wrap: wrap !important;
+  font-weight: 600 !important;
+}
+#zentral-video-preview#zentral-video-preview[data-caption-overflow="scroll"]
+  .zentral-caption-text {
+  max-height: none !important;
+}
+
+/* Own only the temporary enlarged state. Keep the live renderer in the same
+   DOM parent: popover top layer escapes compact-sidebar transforms/clipping. */
+#zentral-video-preview .zentral-video-enlarge-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: transparent;
+}
+#zentral-video-preview .zentral-video-enlarge-hit[hidden] {
+  display: none !important;
+}
+#zentral-video-preview
+  :is(
+    .zentral-video-enlarge-back,
+    .zentral-video-enlarge-fullscreen,
+    .zentral-video-enlarge-resize
+  ) {
+  display: none !important;
+}
+#zentral-video-preview#zentral-video-preview[data-enlarged] {
+  position: fixed !important;
+  inset: auto !important;
+  left: var(--zentral-enlarge-x) !important;
+  top: var(--zentral-enlarge-y) !important;
+  width: var(--zentral-enlarge-w) !important;
+  height: var(--zentral-enlarge-h) !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  contain: none !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  z-index: 2147483643 !important;
+  border: 1px solid var(--zen-primary-color, #8495ef) !important;
+  box-shadow: 0 12px 50px #0008 !important;
+}
+#zentral-video-preview[data-enlarged]::backdrop {
+  background: transparent;
+  pointer-events: none;
+}
+#zentral-video-preview#zentral-video-preview[data-enlarged]
+  .zentral-video-preview-picture {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  height: 0 !important;
+  aspect-ratio: auto !important;
+  min-height: 0 !important;
+}
+#zentral-video-preview#zentral-video-preview[data-enlarged]
+  :is(canvas, .zentral-video-preview-player) {
+  object-fit: contain !important;
+}
+#zentral-video-preview[data-enlarged] .zentral-video-preview-bar {
+  order: 20;
+  flex: 0 0 auto !important;
+}
+#zentral-video-preview[data-enlarged]
+  :is(.zentral-video-enlarge-back, .zentral-video-enlarge-fullscreen) {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+}
+#zentral-video-preview
+  :is(.zentral-video-enlarge-back, .zentral-video-enlarge-fullscreen)
+  svg {
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+#zentral-video-preview[data-enlarged] .zentral-video-enlarge-hit {
+  cursor: grab;
+  touch-action: none;
+}
+#zentral-video-preview[data-enlarged] .zentral-video-enlarge-hit:active {
+  cursor: grabbing;
+}
+#zentral-video-preview[data-enlarged]:not([data-enlarged-fullscreen])
+  .zentral-video-enlarge-resize {
+  display: block !important;
+  position: absolute;
+  z-index: 9;
+  touch-action: none;
+}
+#zentral-video-preview .zentral-video-enlarge-resize[data-edge="n"] {
+  top: 0;
+  left: 14px;
+  right: 14px;
+  height: 7px;
+  cursor: ns-resize;
+}
+#zentral-video-preview .zentral-video-enlarge-resize[data-edge="s"] {
+  bottom: 0;
+  left: 14px;
+  right: 14px;
+  height: 7px;
+  cursor: ns-resize;
+}
+#zentral-video-preview .zentral-video-enlarge-resize[data-edge="w"] {
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 7px;
+  cursor: ew-resize;
+}
+#zentral-video-preview .zentral-video-enlarge-resize[data-edge="e"] {
+  right: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 7px;
+  cursor: ew-resize;
+}
+#zentral-video-preview .zentral-video-enlarge-resize[data-edge="nw"] {
+  left: 0;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+}
+#zentral-video-preview .zentral-video-enlarge-resize[data-edge="ne"] {
+  right: 0;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nesw-resize;
+}
+#zentral-video-preview .zentral-video-enlarge-resize[data-edge="sw"] {
+  left: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nesw-resize;
+}
+#zentral-video-preview .zentral-video-enlarge-resize[data-edge="se"] {
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+}
+#zentral-video-preview[data-enlarged-fullscreen] {
+  border-radius: 0 !important;
+  border: 0 !important;
+}
+#zentral-video-preview[data-enlarged]
+  :is(
+    .zentral-video-preview-sources,
+    .zentral-video-preview-capabilities,
+    .zentral-video-preview-resize
+  ) {
+  display: none !important;
+}
+
+#zentral-video-preview#zentral-video-preview[data-caption-overflow="scroll"]
+  .zentral-video-preview-subtitles {
+  pointer-events: auto !important;
+  z-index: 7 !important;
+}
+#zentral-video-preview#zentral-video-preview[data-enlarged]
+  .zentral-video-preview-seek:not([hidden]) {
+  display: block !important;
+}
+#zentral-video-preview#zentral-video-preview[data-enlarged]
+  .zentral-video-preview-bar
+  > button:not([hidden]) {
+  display: inline-flex !important;
+}
+
+/* Big preview: every control stays visible, but the bar wraps instead of
+   colliding. Buttons keep their fixed size (no shrinking, so icons never
+   crush); the title keeps a readable share of the row and wraps below the
+   buttons when space runs out. */
+#zentral-video-preview#zentral-video-preview[data-enlarged]
+  .zentral-video-preview-bar {
+  flex-wrap: wrap !important;
+  align-content: flex-start !important;
+  gap: 4px !important;
+  padding: 2px 4px 6px !important;
+}
+#zentral-video-preview#zentral-video-preview[data-enlarged]
+  .zentral-video-preview-bar
+  > button {
+  flex: 0 1 26px !important;
+}
+#zentral-video-preview#zentral-video-preview[data-enlarged]
+  .zentral-video-preview-caption {
+  flex: 1 1 110px !important;
+  min-width: 0 !important;
+}
+
+/* Enlarged-only controls. Reuse the live selector as an upward-opening menu. */
+#zentral-video-preview .zentral-video-large-only {
+  display: none !important;
+}
+#zentral-video-preview#zentral-video-preview[data-enlarged][data-source-menu]
+  .zentral-video-preview-sources:not([hidden]) {
+  display: flex !important;
+  flex-direction: column !important;
+  position: absolute !important;
+  bottom: 40px !important;
+  left: 8px !important;
+  right: 8px !important;
+  max-height: min(50vh, 320px) !important;
+  overflow: auto !important;
+  z-index: 12 !important;
+  padding: 6px !important;
+  border-radius: 8px !important;
+  background: var(--zl-popup, #25252c) !important;
+  color: white !important;
+  box-shadow: 0 4px 20px #0008 !important;
+}
+#zentral-video-preview[data-enlarged][data-source-menu]
+  .zentral-video-preview-source {
+  width: 100% !important;
+  flex: 0 0 auto !important;
+  text-align: start !important;
+}
+
+/* Button visibility toggles. Appearance presets (e.g. the Atelier look) force
+   `display:inline-flex !important` on every card button with a selector that
+   outranks the plain [hidden] rules above, so a "hidden" button stayed visible
+   and the Show/Hide toggles appeared to do nothing. The doubled ID wins over
+   those preset rules; it applies only while the button is actually hidden by
+   its preference, enlarged-only state, or compact card. */
+#zentral-video-preview#zentral-video-preview button[hidden],
+#zentral-video-preview#zentral-video-preview
+  .zentral-video-preview-bar
+  > button[hidden],
+#zentral-video-preview#zentral-video-preview[data-compact-card]
+  .zentral-video-preview-bar
+  > button:is([title="Next detected source"], [title="Open source tab"]) {
+  display: none !important;
+}

@@ -1,0 +1,60 @@
+/* U110-THEME: readable theme fallbacks; high contrast is explicit opt-in.
+ * Existing Extended Look palettes retain ownership in "custom" policy. */
+:root[zentral-effective-theme="light"] {
+  --zentral-adaptive-bg: #ffffff;
+  --zentral-adaptive-fg: #18181b;
+  --zentral-adaptive-muted: #52525b;
+  --zentral-adaptive-border: #0003;
+}
+:root[zentral-effective-theme="dark"] {
+  --zentral-adaptive-bg: #1e1e22;
+  --zentral-adaptive-fg: #fbfbfe;
+  --zentral-adaptive-muted: #c4c4cc;
+  --zentral-adaptive-border: #fff4;
+}
+:root[zentral-effective-theme="light"] #zentral-tabgroup-tooltip {
+  color-scheme: light;
+}
+:root[zentral-effective-theme="dark"] #zentral-tabgroup-tooltip {
+  color-scheme: dark;
+}
+:root:not([zentral-contrast-policy="custom"])
+  #zentral-tabgroup-tooltip-container {
+  background: var(--zentral-adaptive-bg) !important;
+  color: var(--zentral-adaptive-fg) !important;
+  border: 1px solid var(--zentral-adaptive-border) !important;
+  box-shadow: 0 12px 28px #0003 !important;
+}
+:root:not([zentral-contrast-policy="custom"])
+  #zentral-tabgroup-tooltip
+  .zentral-tooltip-title {
+  color: var(--zentral-adaptive-fg) !important;
+}
+:root:not([zentral-contrast-policy="custom"])
+  #zentral-tabgroup-tooltip
+  .zentral-tooltip-domain {
+  color: var(--zentral-adaptive-muted) !important;
+  opacity: 1 !important;
+}
+:root:not([zentral-contrast-policy="custom"])
+  #zentral-tabgroup-tooltip
+  .zentral-tooltip-row:hover {
+  background: color-mix(
+    in srgb,
+    var(--zentral-adaptive-fg) 10%,
+    transparent
+  ) !important;
+}
+:root[zentral-contrast-policy="high"] #zen-app-panel-pill,
+:root[zentral-contrast-policy="high"] #zen-app-panel-toolbar,
+:root[zentral-contrast-policy="high"] .bgalazka-super-bar {
+  background: var(--zentral-adaptive-bg) !important;
+  color: var(--zentral-adaptive-fg) !important;
+  border: 1px solid var(--zentral-adaptive-border) !important;
+  backdrop-filter: none !important;
+}
+:root[zentral-contrast-policy="high"] #zen-app-panel-pill button,
+:root[zentral-contrast-policy="high"] #zen-app-panel-toolbar button,
+:root[zentral-contrast-policy="high"] .bgalazka-super-bar button {
+  color: var(--zentral-adaptive-fg) !important;
+}
