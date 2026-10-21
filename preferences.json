@@ -8059,10 +8059,75 @@
     "defaultValue": false
   },
   {
+    "type": "text",
+    "label": "**RSS Folders · Reader card**",
+    "size": "18px"
+  },
+  {
     "property": "zen.workspace.bgalazka.rss.reader_card",
     "label": "Reader card for RSS articles",
     "type": "checkbox",
     "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_background",
+    "label": "Reader card background color (empty follows the theme)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_text",
+    "label": "Reader card text color (empty follows the theme)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_url",
+    "label": "Reader card link color (empty follows the theme)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_button_background",
+    "label": "Reader card button background color (empty follows the theme)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_button_text",
+    "label": "Reader card button text color (empty follows the theme)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_width",
+    "label": "Reader card width (px)",
+    "type": "input",
+    "defaultValue": 340
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_max_height",
+    "label": "Reader card maximum height (% of the window)",
+    "type": "input",
+    "defaultValue": 60
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_radius",
+    "label": "Reader card corner radius (px)",
+    "type": "input",
+    "defaultValue": 10
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_opacity",
+    "label": "Reader card background opacity (%)",
+    "type": "input",
+    "defaultValue": 100
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_font_size",
+    "label": "Reader card text size (px)",
+    "type": "input",
+    "defaultValue": 13
   },
   {
     "type": "text",

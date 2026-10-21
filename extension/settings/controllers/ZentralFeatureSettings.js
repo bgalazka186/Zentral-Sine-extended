@@ -2407,12 +2407,163 @@
               null,
               syncRssFolderDisplay,
             );
+            // Reader card appearance. Colors stay empty until the user picks
+            // one, so the card keeps following the active Look palette.
+            const rssThemeColor = (variable, fallback) => {
+              const value = getComputedStyle(document.documentElement)
+                .getPropertyValue(variable)
+                .trim();
+              return /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
+            };
+            const rssCardColorRow = (
+              labelText,
+              sublabelText,
+              prefKey,
+              themeVariable,
+              fallback,
+            ) => {
+              const row = document.createElement("div");
+              row.className = "zs-row";
+              row.dataset.settingKey = prefKey;
+              const leftBox = document.createElement("div");
+              leftBox.style.display = "flex";
+              leftBox.style.flexDirection = "column";
+              const labelContainer = document.createElement("div");
+              labelContainer.className = "zs-label-container";
+              const label = document.createElement("span");
+              label.className = "zs-label";
+              label.textContent = labelText;
+              const sublabel = document.createElement("span");
+              sublabel.className = "zs-sublabel";
+              sublabel.textContent = sublabelText;
+              labelContainer.append(label, sublabel);
+              leftBox.appendChild(labelContainer);
+              const controls = document.createElement("div");
+              controls.style.display = "flex";
+              controls.style.alignItems = "center";
+              controls.style.gap = "8px";
+              const input = document.createElement("input");
+              input.type = "color";
+              input.style.cssText =
+                "width:36px;height:26px;padding:0;border:1px solid rgba(255,255,255,0.15);border-radius:8px;background:transparent;cursor:pointer;";
+              const themeValue = rssThemeColor(themeVariable, fallback);
+              const stored = ctx.getPref(prefKey, "");
+              input.value = /^#[0-9a-fA-F]{6}$/.test(stored)
+                ? stored
+                : themeValue;
+              const write = (value) => {
+                ctx.setPref(prefKey, value);
+                input.value = value || themeValue;
+              };
+              input.addEventListener("input", () => write(input.value));
+              const reset = document.createElement("button");
+              reset.type = "button";
+              reset.className = "zs-reset-btn";
+              reset.style.cssText =
+                "margin:0;padding:4px 10px;font-size:11.5px;align-self:center;";
+              reset.textContent = "Theme";
+              reset.title = "Follow the current theme color";
+              reset.addEventListener("click", () => write(""));
+              controls.append(input, reset);
+              row.append(leftBox, controls);
+              return row;
+            };
+            const rssCardBackground = rssCardColorRow(
+              "Card background color",
+              "Leave this on Theme to follow the current palette.",
+              ctx.EXT_PREFS.RSS_CARD_BACKGROUND,
+              "--zl-popup",
+              "#202224",
+            );
+            const rssCardText = rssCardColorRow(
+              "Card text color",
+              "Leave this on Theme to follow the current palette.",
+              ctx.EXT_PREFS.RSS_CARD_TEXT,
+              "--zl-popup-text",
+              "#dce0e1",
+            );
+            const rssCardUrl = rssCardColorRow(
+              "Card link color",
+              "Color of the article URL under the text.",
+              ctx.EXT_PREFS.RSS_CARD_URL,
+              "--zl-muted",
+              "#a4aaad",
+            );
+            const rssCardButtonBackground = rssCardColorRow(
+              "Button background color",
+              "Open, Dismiss and Dismiss all share one background.",
+              ctx.EXT_PREFS.RSS_CARD_BUTTON_BACKGROUND,
+              "--zl-raised",
+              "#2b2e31",
+            );
+            const rssCardButtonText = rssCardColorRow(
+              "Button text color",
+              "Leave this on Theme to follow the current palette.",
+              ctx.EXT_PREFS.RSS_CARD_BUTTON_TEXT,
+              "--zl-button-text",
+              "#d4d8d9",
+            );
+            const rssCardWidth = createSliderRow(
+              "Card width",
+              "Horizontal size of the hover card.",
+              ctx.EXT_PREFS.RSS_CARD_WIDTH,
+              240,
+              560,
+              340,
+              " px",
+            );
+            const rssCardMaxHeight = createSliderRow(
+              "Card maximum height",
+              "Share of the window height the card may use. Longer articles scroll inside it.",
+              ctx.EXT_PREFS.RSS_CARD_MAX_HEIGHT,
+              20,
+              90,
+              60,
+              " %",
+            );
+            const rssCardRadius = createSliderRow(
+              "Card corner radius",
+              "Rounds the card corners. 0 px keeps square corners.",
+              ctx.EXT_PREFS.RSS_CARD_RADIUS,
+              0,
+              24,
+              10,
+              " px",
+            );
+            const rssCardOpacity = createSliderRow(
+              "Card background opacity",
+              "Only the backing becomes transparent. The text always stays readable.",
+              ctx.EXT_PREFS.RSS_CARD_OPACITY,
+              10,
+              100,
+              100,
+              " %",
+            );
+            const rssCardFontSize = createSliderRow(
+              "Card text size",
+              "Base size for the article text, the URL and the buttons.",
+              ctx.EXT_PREFS.RSS_CARD_FONT_SIZE,
+              10,
+              20,
+              13,
+              " px",
+            );
             rssCategory.subContent.append(
               rssHeader,
               rssNote,
               rssHideEmpty.row,
               rssCompact.row,
               rssReader.row,
+              rssCardBackground,
+              rssCardText,
+              rssCardUrl,
+              rssCardButtonBackground,
+              rssCardButtonText,
+              rssCardWidth.row,
+              rssCardMaxHeight.row,
+              rssCardRadius.row,
+              rssCardOpacity.row,
+              rssCardFontSize.row,
             );
             panel._toggles.push(
               {

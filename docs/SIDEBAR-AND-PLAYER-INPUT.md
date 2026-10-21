@@ -1,4 +1,4 @@
-# Sidebar and player input — Extended 3.0.1
+# Sidebar and player input — Extended 3.0.2
 
 Core reference: Zentral 1.1.0. Apply this changed-files package over the preceding assembled 3.0.1 files and restart Zen.
 
@@ -39,6 +39,14 @@ Video buttons reuse Appearance's button style, border width/color, size, video f
 Big Preview uses the selected video-control color for its hover backing. New `zen.workspace.bgalazka.look.video_overlay_opacity` defaults to 40%, independently of Simple palette opacity and button fills. It appears in Appearance → Sidebar video (Detailed palette), the appearance opacity controls, and New Settings. Starting themes reset this value to 40%; Recommended explicitly sets 40%, preserving its plain borderless buttons and automatic contrast. Palette colors already have individual controls. Theme text is paired with the painted fill; enlarged icons use a small contrasting shadow over moving pixels. Seek controls use the palette accent adjusted for visibility and a matching light/dark native scheme.
 
 Automatic contrast checks modeled theme surfaces. Deliberately transparent or manual custom colors can still reduce contrast over arbitrary video pixels; increase overlay opacity or choose filled controls when desired. No per-frame video sampling or new resize polling was introduced.
+
+## RSS reader card appearance
+
+The RSS hover card is painted through CSS custom properties instead of inline colors. The stylesheet keeps the theme fallback: the card background and text use the Look popup surface and text, the link uses the muted color, and Classic falls back to the native panel tokens. A color preference is written only when a value is really picked; an unset or invalid value removes the property and the theme wins again.
+
+New settings under RSS Folders → Reader card: `card_background`, `card_text`, `card_url`, `card_button_background`, `card_button_text`, `card_width`, `card_max_height`, `card_radius`, `card_opacity` and `card_font_size`. The five colors are empty by default, so the card follows the palette; the size values keep their documented defaults. Each new key has a grouped New Settings copy, and Recommended keeps the card on the current theme.
+
+Size and opacity are clamped when the card is painted, and the stylesheet keeps a minimum width and a readable text color, so an extreme value can never produce the earlier transparent sliver. Only the backing becomes transparent; the article text stays opaque.
 
 ## Validation
 

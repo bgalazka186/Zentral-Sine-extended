@@ -1,6 +1,6 @@
 # docs
 
-Owner and local file guide for Extended 3.0.1. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.0.2. Original Zentral reference: 1.1.0.
 
 | File                   | Responsibility                         |
 | ---------------------- | -------------------------------------- |
@@ -16,4 +16,4 @@ Entrypoints and dependencies are declared in `loader/ZentralCatalog.js`. Load re
 
 `VIDEO-PREVIEW-FOLLOWUP.md` supersedes the first video repair where live feedback exposed regressions. Its ZIP is an incremental overlay on the preceding changed-files package.
 
-[Sidebar, player input and appearance audit](SIDEBAR-AND-PLAYER-INPUT.md) documents the 3.0.1 follow-up, settings and validation limits.
+[Sidebar, player input and appearance audit](SIDEBAR-AND-PLAYER-INPUT.md) documents the 3.0.2 follow-up, settings and validation limits.

@@ -1,6 +1,6 @@
 # Updating the hybrid base after Zentral 1.1.0
 
-The package version is Extended 3.0.1. The pinned original version and commit are in `UPSTREAM.json`. Keep these separate. A new Extended release does not imply every upstream source file is identical to that release.
+The package version is Extended 3.0.2. The pinned original version and commit are in `UPSTREAM.json`. Keep these separate. A new Extended release does not imply every upstream source file is identical to that release.
 
 1. Keep a working package and settings backup. Work on a review branch; retain all uncommitted user changes.
 2. Run `python3 tools/update-provenance.py --check`. If the pristine reference hashes differ, recover the original snapshot before trusting a diff.

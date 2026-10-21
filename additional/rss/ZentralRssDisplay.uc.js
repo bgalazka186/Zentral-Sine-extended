@@ -68,11 +68,56 @@
       const registerCleanup = (fn) => cleanups.push(fn);
       const getPref = (key, fallback) =>
         Services.prefs.getBoolPref(key, fallback);
+      // Colors are optional overrides: an unset (or invalid) value keeps the
+      // theme token that the stylesheet falls back to.
+      const getStringPref = (key, fallback) => {
+        try {
+          if (!Services.prefs.prefHasUserValue(key)) return fallback;
+          return Services.prefs.getStringPref(key);
+        } catch (_) {
+          return fallback;
+        }
+      };
+      const getNumberPref = (key, fallback) => {
+        try {
+          if (!Services.prefs.prefHasUserValue(key)) return fallback;
+          return Services.prefs.getIntPref(key);
+        } catch (_) {
+          return fallback;
+        }
+      };
       const EXT_PREFS = {
         RSS_HIDE_EMPTY: "zen.workspace.bgalazka.rss.hide_empty",
         RSS_COMPACT_HEADERS: "zen.workspace.bgalazka.rss.compact_headers",
         RSS_READER_CARD: "zen.workspace.bgalazka.rss.reader_card",
+        RSS_CARD_BACKGROUND: "zen.workspace.bgalazka.rss.card_background",
+        RSS_CARD_TEXT: "zen.workspace.bgalazka.rss.card_text",
+        RSS_CARD_URL: "zen.workspace.bgalazka.rss.card_url",
+        RSS_CARD_BUTTON_BACKGROUND:
+          "zen.workspace.bgalazka.rss.card_button_background",
+        RSS_CARD_BUTTON_TEXT: "zen.workspace.bgalazka.rss.card_button_text",
+        RSS_CARD_WIDTH: "zen.workspace.bgalazka.rss.card_width",
+        RSS_CARD_MAX_HEIGHT: "zen.workspace.bgalazka.rss.card_max_height",
+        RSS_CARD_RADIUS: "zen.workspace.bgalazka.rss.card_radius",
+        RSS_CARD_OPACITY: "zen.workspace.bgalazka.rss.card_opacity",
+        RSS_CARD_FONT_SIZE: "zen.workspace.bgalazka.rss.card_font_size",
       };
+      // Card size and opacity are bounded so a bad value can never collapse the
+      // card into an unreadable sliver.
+      const CARD_LIMITS = Object.freeze({
+        width: [240, 560],
+        maxHeight: [20, 90],
+        radius: [0, 24],
+        opacity: [10, 100],
+        fontSize: [10, 20],
+      });
+      const CARD_DEFAULTS = Object.freeze({
+        width: 340,
+        maxHeight: 60,
+        radius: 10,
+        opacity: 100,
+        fontSize: 13,
+      });
       const rssMarkedFolders = new Set();
       let rssScanTimer = null;
       let rssObserver = null,
@@ -185,6 +230,61 @@
         clearTimeout(hideTimer);
         hideTimer = null;
       };
+      const cardNumber = (key, name) => {
+        const [min, max] = CARD_LIMITS[name];
+        const raw = Number(getNumberPref(key, CARD_DEFAULTS[name]));
+        if (!Number.isFinite(raw)) return CARD_DEFAULTS[name];
+        return Math.max(min, Math.min(max, Math.round(raw)));
+      };
+      const cardColor = (key) => {
+        const value = getStringPref(key, "");
+        return /^#[0-9a-fA-F]{6}$/.test(value) ? value : "";
+      };
+      // Appearance lives in CSS custom properties so the stylesheet keeps
+      // ownership of the theme fallback. Only a real user override is written
+      // here; an unset preference removes the property and the theme wins.
+      let cardStyleKey = "";
+      function applyCardStyle() {
+        if (!card) return;
+        const values = [
+          ["--rss-card-bg", cardColor(EXT_PREFS.RSS_CARD_BACKGROUND)],
+          ["--rss-card-text", cardColor(EXT_PREFS.RSS_CARD_TEXT)],
+          ["--rss-card-url", cardColor(EXT_PREFS.RSS_CARD_URL)],
+          [
+            "--rss-card-button-bg",
+            cardColor(EXT_PREFS.RSS_CARD_BUTTON_BACKGROUND),
+          ],
+          ["--rss-card-button-text", cardColor(EXT_PREFS.RSS_CARD_BUTTON_TEXT)],
+          [
+            "--rss-card-width",
+            cardNumber(EXT_PREFS.RSS_CARD_WIDTH, "width") + "px",
+          ],
+          [
+            "--rss-card-max-height",
+            cardNumber(EXT_PREFS.RSS_CARD_MAX_HEIGHT, "maxHeight") + "%",
+          ],
+          [
+            "--rss-card-radius",
+            cardNumber(EXT_PREFS.RSS_CARD_RADIUS, "radius") + "px",
+          ],
+          [
+            "--rss-card-opacity",
+            cardNumber(EXT_PREFS.RSS_CARD_OPACITY, "opacity") + "%",
+          ],
+          [
+            "--rss-card-font-size",
+            cardNumber(EXT_PREFS.RSS_CARD_FONT_SIZE, "fontSize") + "px",
+          ],
+        ];
+        const key = values.map(([name, value]) => name + ":" + value).join("|");
+        if (key === cardStyleKey) return;
+        cardStyleKey = key;
+        const style = card.style;
+        for (const [name, value] of values) {
+          if (value) style.setProperty(name, value);
+          else style.removeProperty(name);
+        }
+      }
       function hideCard(delay = 0) {
         cancelHide();
         hideTimer = setTimeout(() => {
@@ -226,6 +326,8 @@
           }
         });
         document.documentElement.appendChild(card);
+        cardStyleKey = "";
+        applyCardStyle();
         registerCleanup(() => card?.remove());
         return card;
       }
@@ -285,6 +387,9 @@
       };
       function syncReader() {
         const container = window.gBrowser?.tabContainer;
+        // Appearance preferences reach the card through the same refresh path
+        // as the folder state, so a change applies without a restart.
+        applyCardStyle();
         if (readerOn() && container && !readerBound) {
           readerBound = true;
           container.addEventListener("mouseover", onOver);
@@ -387,6 +492,16 @@
         EXT_PREFS.RSS_HIDE_EMPTY,
         EXT_PREFS.RSS_COMPACT_HEADERS,
         EXT_PREFS.RSS_READER_CARD,
+        EXT_PREFS.RSS_CARD_BACKGROUND,
+        EXT_PREFS.RSS_CARD_TEXT,
+        EXT_PREFS.RSS_CARD_URL,
+        EXT_PREFS.RSS_CARD_BUTTON_BACKGROUND,
+        EXT_PREFS.RSS_CARD_BUTTON_TEXT,
+        EXT_PREFS.RSS_CARD_WIDTH,
+        EXT_PREFS.RSS_CARD_MAX_HEIGHT,
+        EXT_PREFS.RSS_CARD_RADIUS,
+        EXT_PREFS.RSS_CARD_OPACITY,
+        EXT_PREFS.RSS_CARD_FONT_SIZE,
       ]) {
         try {
           Services.prefs.addObserver(pref, syncRssFolderDisplay);

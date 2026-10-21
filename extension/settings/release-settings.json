@@ -53,6 +53,17 @@
     "zen.workspace.zentral.video_preview.enlarged_click_toggle",
     "zen.workspace.bgalazka.look.video_overlay_opacity",
     "zen.workspace.bgalazka.look.video_controls_wrap",
-    "zen.workspace.bgalazka.look.video_controls_gap"
+    "zen.workspace.bgalazka.look.video_controls_gap",
+    "zen.workspace.bgalazka.rss.reader_card",
+    "zen.workspace.bgalazka.rss.card_background",
+    "zen.workspace.bgalazka.rss.card_text",
+    "zen.workspace.bgalazka.rss.card_url",
+    "zen.workspace.bgalazka.rss.card_button_background",
+    "zen.workspace.bgalazka.rss.card_button_text",
+    "zen.workspace.bgalazka.rss.card_width",
+    "zen.workspace.bgalazka.rss.card_max_height",
+    "zen.workspace.bgalazka.rss.card_radius",
+    "zen.workspace.bgalazka.rss.card_opacity",
+    "zen.workspace.bgalazka.rss.card_font_size"
   ]
 }

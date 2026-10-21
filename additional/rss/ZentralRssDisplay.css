@@ -13,6 +13,9 @@
  *   .zs-sublabel
  * Attribute selectors used: bgalazka-rss-compact-headers; bgalazka-rss-empty; bgalazka-rss-hide-empty;
  *   bgalazka-rss-live-folder
+ * Reader card custom properties: --rss-card-bg; --rss-card-button-bg; --rss-card-button-text;
+ *   --rss-card-font-size; --rss-card-max-height; --rss-card-opacity; --rss-card-radius; --rss-card-text;
+ *   --rss-card-url; --rss-card-width
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
  * contracts from this source, not a promise that every collaborator is enabled at runtime.
@@ -79,38 +82,64 @@
   line-height: 1.35 !important;
 }
 
-/* Reader card (bgalazka.rss.reader_card): created by the JS only when enabled. */
+/* Reader card (bgalazka.rss.reader_card): created by the JS only when enabled.
+ * Appearance lives in custom properties. The stylesheet owns the theme
+ * fallback, so an unset preference keeps the current Look palette and Classic
+ * falls back to the native panel tokens. The JS only writes a property when
+ * the user picked a real value. */
 #bgalazka-rss-card {
+  --rss-card-bg: var(--zl-popup, var(--arrowpanel-background, #1f1f24));
+  --rss-card-text: var(--zl-popup-text, var(--arrowpanel-color, #eee));
+  --rss-card-url: var(--zl-muted, #a4aaad);
+  --rss-card-button-bg: transparent;
+  --rss-card-button-text: var(--rss-card-text);
+  --rss-card-width: 340px;
+  --rss-card-max-height: 60%;
+  --rss-card-radius: 10px;
+  --rss-card-opacity: 100%;
+  --rss-card-font-size: 13px;
   position: fixed;
   z-index: 2147483000;
   box-sizing: border-box;
-  width: 340px;
-  max-height: 60vh;
+  width: var(--rss-card-width);
+  min-width: 200px;
+  max-width: calc(100vw - 16px);
+  max-height: var(--rss-card-max-height);
   overflow-y: auto;
   padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--arrowpanel-background, #1f1f24);
-  color: var(--arrowpanel-color, #eee);
-  border: 1px solid var(--arrowpanel-border-color, #444);
+  border-radius: var(--rss-card-radius);
+  background: color-mix(
+    in srgb,
+    var(--rss-card-bg) var(--rss-card-opacity),
+    transparent
+  );
+  color: var(--rss-card-text);
+  border: 1px solid
+    var(--zl-button-border-color, var(--arrowpanel-border-color, #444));
   box-shadow: 0 6px 24px #0008;
-  font: 13px/1.45 system-ui, sans-serif;
+  font-family: system-ui, sans-serif;
+  font-size: var(--rss-card-font-size);
+  line-height: 1.45;
 }
 #bgalazka-rss-card[hidden] {
   display: none !important;
 }
 #bgalazka-rss-card .rc-folder {
-  font-size: 11px;
-  opacity: 0.6;
+  font-size: calc(var(--rss-card-font-size) - 2px);
+  color: var(--rss-card-url);
+  opacity: 0.85;
   margin-bottom: 4px;
 }
 #bgalazka-rss-card .rc-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  color: var(--rss-card-text);
 }
 #bgalazka-rss-card .rc-url {
   margin-top: 6px;
-  font-size: 11px;
-  opacity: 0.55;
+  font-size: calc(var(--rss-card-font-size) - 2px);
+  color: var(--rss-card-url);
+  opacity: 0.8;
   overflow-wrap: anywhere;
 }
 #bgalazka-rss-card .rc-actions {
@@ -122,11 +151,17 @@
   flex: 1;
   padding: 4px 6px;
   border-radius: 6px;
-  border: 1px solid var(--arrowpanel-border-color, #555);
-  background: transparent;
-  color: inherit;
+  border: 1px solid
+    var(--zl-button-border-color, var(--arrowpanel-border-color, #555));
+  background: var(--rss-card-button-bg);
+  color: var(--rss-card-button-text);
   cursor: pointer;
 }
 #bgalazka-rss-card button:hover {
-  background: #ffffff1c;
+  background: color-mix(
+    in srgb,
+    var(--rss-card-button-bg) 70%,
+    var(--rss-card-text) 30%
+  );
+  color: var(--rss-card-button-text);
 }

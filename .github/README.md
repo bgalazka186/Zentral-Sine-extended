@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <strong>Extended 3.0.1</strong> · Based on <strong>Zentral 1.1.0</strong> · Requires <strong>Sine</strong>
+  <strong>Extended 3.0.2</strong> · Based on <strong>Zentral 1.1.0</strong> · Requires <strong>Sine</strong>
 </p>
 
 Zentral Extended builds on [Zentral by Michele501st](https://github.com/Michele501st/Zentral-Sine), adding flexible panel layouts, sidebar integrations, video previews and appearance controls.
@@ -40,6 +40,7 @@ Keep your everyday sites close, arrange panels around your browsing, and choose 
 - **Native-tab startup loading:** opt-in loading for Essential and pinned browser tabs, separate from panel preloading.
 - **Sidebar density:** adjust row heights, spacing, Essentials sizing, icons and smaller controls.
 - **Optional integrations:** additional behavior for Arc 2.0, Zen Library and RSS live folders.
+- **RSS reader card:** hover a live-folder article to read it in a card with Open, Dismiss and Dismiss all. The card follows the current theme, and its colors, size, radius, transparency and text size are adjustable.
 
 ### Sidebar video and Big Preview
 
@@ -146,7 +147,7 @@ Compatibility depends on the versions and configuration of the installed mods. A
 
 ## Updates and architecture
 
-Extended 3.0.1 uses Zentral 1.1.0 as its core reference.
+Extended 3.0.2 uses Zentral 1.1.0 as its core reference.
 
 Original-derived code, Extended integrations and independent features are kept in separate areas:
 

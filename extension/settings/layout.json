@@ -192,6 +192,9 @@
       "sections": [
         {
           "label": "Live-folder display"
+        },
+        {
+          "label": "Reader card"
         }
       ],
       "icon": "rss"
@@ -775,6 +778,22 @@
       "size": "18px"
     },
     "zen.workspace.bgalazka.rss.hide_empty",
+    {
+      "type": "text",
+      "label": "**RSS Folders · Reader card**",
+      "size": "18px"
+    },
+    "zen.workspace.bgalazka.rss.reader_card",
+    "zen.workspace.bgalazka.rss.card_background",
+    "zen.workspace.bgalazka.rss.card_text",
+    "zen.workspace.bgalazka.rss.card_url",
+    "zen.workspace.bgalazka.rss.card_button_background",
+    "zen.workspace.bgalazka.rss.card_button_text",
+    "zen.workspace.bgalazka.rss.card_width",
+    "zen.workspace.bgalazka.rss.card_max_height",
+    "zen.workspace.bgalazka.rss.card_radius",
+    "zen.workspace.bgalazka.rss.card_opacity",
+    "zen.workspace.bgalazka.rss.card_font_size",
     {
       "type": "text",
       "label": "**Panel Layout · Docking, size & input**",
