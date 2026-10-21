@@ -18,3 +18,4 @@ notes.md
 node_modules/
 *.building
 *.atomic
+.kilo/
