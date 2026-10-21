@@ -1,6 +1,6 @@
 {
   "_documentation": {
-    "purpose": "Opt-in native compact sidebar hover continuity; 1500 ms window-exit grace.",
+    "purpose": "Opt-in extra edge tolerance and close grace for the compact tab sidebar. Zen 1.23.4b already prevents the sidebar from hiding while the pointer is over it (upstream gh-15995 / PR #16001); this switch only adds tolerance around an already-visible sidebar and a short grace before it may close, plus the 1500 ms window-exit grace. Off by default.",
     "feature_source": "additional/tabs/compact-hover/ZentralCompactHover.uc.js"
   },
   "owner": "compact-hover",
@@ -999,7 +999,7 @@
     },
     {
       "property": "zen.workspace.zentral.experimental.compact_sidebar_hover",
-      "label": "Stabilize compact tab sidebar hover (experimental)",
+      "label": "Keep compact tab sidebar open near its edge (experimental)",
       "type": "checkbox",
       "defaultValue": false
     },

@@ -4,17 +4,27 @@ This catalog owner currently contains three independent behaviors:
 
 | Behavior                             | Owner / preference                                                                       | Dependencies                                                               |
 | ------------------------------------ | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Temporary native hover stabilization | `attachStabilizer`; `zen.workspace.zentral.experimental.compact_sidebar_hover`           | Native compact sidebar hover                                               |
+| Extra sidebar edge tolerance (opt-in) | `attachStabilizer`; `zen.workspace.zentral.experimental.compact_sidebar_hover`           | Native compact sidebar hover                                               |
 | Optional reveal on window entry      | `attachEntry`; the above prefix + `.window_entry_reveal`                                 | Native compact sidebar hover; does **not** require stabilization           |
 | Startup sidebar layout recalculation | `start` / `syncRepair`; `zen.workspace.zentral.experimental.sidebar_startup_recalculate` | Its own setting; does **not** require stabilization or window-entry reveal |
 
 Panel entry reveal is owned separately by `extension/panels/interaction/ZentralPanelHover.js`. It requires window-entry reveal, its `.panels` preference, and Autohide Panels. It does **not** require stabilization. The `.panels.only_when_not_pushing` restriction pauses enhancement while the effective `bgalazka-push-page` state is true, including Triple View; ordinary panel autohide remains available.
 
-## Stabilization
+## Extra sidebar edge tolerance (opt-in)
 
-**Stabilize Compact Tab Sidebar Hover (Experimental)** defaults to off. It prevents delayed native hide callbacks from closing a visible sidebar while the pointer remains inside it. Edge tolerance (0–64 px, default 12) protects an already visible sidebar, without enlarging the hidden reveal area. Exit grace (0–2000 ms, default 250) is bounded by Zen's keep-hover delay. Native tracker cleanup, deactivation, resizing and drag start release protection. A side-window exit has a bounded 1500 ms grace.
+**Keep compact tab sidebar open near its edge (experimental)** defaults to off. Zen 1.23.4b fixed the original native "sidebar hides while the mouse is still over it" bug (upstream gh-15995 / PR #16001), so this switch is no longer a workaround for that bug. It is an opt-in extra-tolerance layer over native behaviour: edge tolerance (0–64 px, default 12) protects an already visible sidebar, without enlarging the hidden reveal area, and exit grace (0–2000 ms, default 250) is bounded by Zen's keep-hover delay. Native tracker cleanup, deactivation, resizing and drag start release still apply. A side-window exit has a bounded 1500 ms grace.
 
-Disabling stabilization restores exact owned method descriptors and removes its listeners/timers. A newer third-party wrapper is preserved; any old Zentral wrapper captured by it becomes inert. The saved sliders and independent entry choices are retained. Disabling stabilization must never disable entry reveal or startup recalculation.
+Disabling this feature restores exact owned method descriptors and removes its listeners/timers. A newer third-party wrapper is preserved; any old Zentral wrapper captured by it becomes inert. The saved sliders and independent entry choices are retained. Disabling it must never disable entry reveal or startup recalculation.
+
+### Zen 1.23.4b baseline
+
+Zen 1.23.4b (BuildID 20261020090730, SourceStamp 541ee55) contains `zen-browser/desktop` PR #16001 / commit `b20e548` "gh-15995: Fix compact sidebar collapsing during hover", in `src/zen/compact-mode/ZenCompactMode.mjs`. It changes three things in the native hover flow:
+
+1. `onEnter` now always calls `this.clearFlashTimeout("has-hover" + target.id)` **before** the "already expanded" early return.
+2. the `pendingEnter` callback bails on `!isHovering` for any event type.
+3. the deferred `onLeave` collapse bails when `isHovering || target.matches(":hover")`.
+
+Native now handles "pointer still over the sidebar" itself and adds its own keep-hover duration and (Windows/macOS) outside-window tracking. This feature's remaining value over native is edge tolerance, exit grace and the 1500 ms window-exit grace.
 
 ## Window-entry reveal
 
@@ -36,9 +46,11 @@ No permanent polling, global mouse-tracker service or document subtree observer 
 
 `attachStabilizer` owns native method wrappers and stabilization state. `attachEntry` owns entry-specific reveal state. `start` owns combined readiness events/probes and the independent startup layout repair. Do not move the workaround into core: core owns generic scheduling/lifecycle, while this adapter owns Zen-specific behavior.
 
-## Retiring/restoring stabilization safely
+## Retiring/restoring edge tolerance safely
 
-Keep stabilization in this patch. An upstream fix should first be tested with stabilization **off**, while keeping entry reveal and startup recalculation independently selectable. Do not automatically disable it based only on a Zen version number; validate cold startup, fast edge crossings, page-content exit, both sidebar sides, compact-mode changes, sleep/wake and third-party themes. Check that off means native methods are unchanged.
+Keep this feature in this patch. An upstream fix should first be tested with it **off**, while keeping entry reveal and startup recalculation independently selectable. Do not automatically disable it based only on a Zen version number; validate cold startup, fast edge crossings, page-content exit, both sidebar sides, compact-mode changes, sleep/wake and third-party themes. Check that off means native methods are unchanged.
+
+Zen 1.23.4b already fixes the native collapse-while-hovering bug, so the remaining choice is product-level: keep this as an opt-in edge-tolerance feature or retire it entirely. The retirement procedure below still applies.
 
 When it is confirmed unnecessary:
 

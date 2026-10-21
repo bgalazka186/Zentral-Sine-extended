@@ -1385,8 +1385,8 @@
             const compactHoverPref =
               "zen.workspace.zentral.experimental.compact_sidebar_hover";
             const stabilize = createToggleRow(
-              "Stabilize Compact Tab Sidebar Hover (Experimental)",
-              "Prevent repeated native hide/show while the pointer remains over the sidebar. Independent of window-entry reveal. Off by default.",
+              "Keep Compact Tab Sidebar Open Near Its Edge (Experimental)",
+              "Zen 1.23.4b fixed the native \"sidebar hides while the mouse is still over it\" bug (gh-15995). This switch only adds extra edge tolerance around an already-visible sidebar and a short grace before the sidebar may close after the pointer leaves its edge. Independent of window-entry reveal. Off by default.",
               compactHoverPref,
               null,
               false,
@@ -1411,7 +1411,7 @@
             for (const [label, description, suffix, max, def, unit] of [
               [
                 "Compact Sidebar Edge Tolerance",
-                "Tolerance around an already revealed sidebar.",
+                "Tolerance around an already-visible sidebar; how far outside its edge the pointer may move before the sidebar is allowed to hide.",
                 ".edge_margin_px",
                 64,
                 12,
@@ -1419,7 +1419,7 @@
               ],
               [
                 "Compact Sidebar Exit Grace",
-                "Delay before allowing the sidebar to hide after leaving its edge.",
+                "Grace before the sidebar may close after the pointer leaves its edge; bounded by Zen's keep-hover delay.",
                 ".exit_grace_ms",
                 2000,
                 250,

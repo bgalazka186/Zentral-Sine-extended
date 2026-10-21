@@ -134,11 +134,15 @@
     destroy.prime = (event) => enter(event, true);
     return destroy;
   }
-  // TEMPORARY NATIVE WORKAROUND BOUNDARY: this function owns stabilization
-  // only. attachEntry and start's sidebar startup repair are independent.
-  // Retire this adapter + its own settings/call sites, not the compact-hover
-  // catalog owner. Keep preference keys stable if restoring it in the future.
-  // See this folder's README.md, "Retiring/restoring stabilization safely".
+  // OPT-IN EXTRA-TOLERANCE LAYER BOUNDARY: this function owns edge tolerance
+  // and exit-grace stabilization only. attachEntry and start's sidebar startup
+  // repair are independent. Zen >= 1.23.4b fixed the original native collapse bug
+  // (upstream gh-15995 / PR #16001), so this guard is no longer a workaround:
+  // it adds tolerance around an already-visible sidebar and a short grace before
+  // the sidebar may close. Retire this adapter + its own settings/call sites,
+  // not the compact-hover catalog owner. Keep preference keys stable if the
+  // feature is ever retired; the retirement procedure in this folder's README
+  // still applies.
   function attachStabilizer(onHooksChanged) {
     const manager = window.gZenCompactModeManager;
     if (typeof manager?._setElementExpandAttribute !== "function")
@@ -330,8 +334,9 @@
         event.clientY > box.bottom
       )
         return;
-      // Zen 1.23.3b skips onEnter cleanup when we already set zen-has-hover.
-      // A real return supersedes hide work scheduled for the previous exit.
+      // Zen 1.23.4b clears the flash timeout natively on a sidebar re-enter, but
+      // the pointer is re-entering the WINDOW here, outside the sidebar element,
+      // so no native onEnter runs. This cleanup is still required for that case.
       manager.clearFlashTimeout?.("has-hover" + sidebar.id);
       const removeFrame = manager._removeHoverFrames?.[sidebar.id];
       if (removeFrame != null) window.cancelAnimationFrame(removeFrame);
@@ -582,6 +587,12 @@
                 (inside || outside || leaving || returning)
               ) {
                 blocked = true;
+                // Native _setElementExpandAttribute(el, false) also stops
+                // Zen's outside-window mouse tracking when el is the tracked
+                // element. Mirror that side effect so the veto does not leave a
+                // stale outside tracker attached to a held-open sidebar.
+                if (this._outsideTrackedElement === element)
+                  this._stopTrackingMouseOutsideWindow?.();
                 return;
               }
               // A native hide already fulfilled any pending release. Do not hide

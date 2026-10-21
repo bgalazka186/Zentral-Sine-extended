@@ -320,7 +320,7 @@
     "zen.workspace.zentral.experimental.library_resize.mode": "overlay",
     "zen.workspace.zentral.compat.external_library_layout": false,
     "zen.workspace.zentral.compat.external_tab_groups": false,
-    "zen.workspace.zentral.experimental.compact_sidebar_hover": true,
+    "zen.workspace.zentral.experimental.compact_sidebar_hover": false,
     "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px": 12,
     "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms": 250,
     "zen.workspace.zentral.hybrid.allow_overflow": false,

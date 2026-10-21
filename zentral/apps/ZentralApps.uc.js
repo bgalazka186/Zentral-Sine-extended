@@ -1151,7 +1151,7 @@
             });
           }
 
-          // Native 1.23.3b layout notifications and toolbar visibility can
+          // Native Zen layout notifications and toolbar visibility can
           // change the usable launcher host without changing a watched pref.
           const onNativeLayout = () => this.scheduleRepositionGrid(0);
           for (const type of [

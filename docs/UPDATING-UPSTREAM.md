@@ -35,6 +35,20 @@ For the October repair, start with `REPAIR-HANDOFF-3.0.0.md` and the B001/B015 a
 
 The `extended-input-to-3.0.0.patch` file is the historical initial migration artifact, not an up-to-date deployable patch after subsequent repairs. Use the current adapted-base diff, actual feature sources and the repair file manifest when comparing a repaired installation.
 
+## Zen browser release checks
+
+A Zen browser update is separate from the Extended upstream pin. When Zen ships a new release, run this checklist before declaring the mod compatible. A Zen patch can rename private members, move modules or change event names without touching the Extended base.
+
+1. **Zen version + build.** Record the new `application.ini` Version, BuildID and SourceStamp. Compare against the last validated baseline (see `docs/ZEN-1.23.4b-COMPAT.md` for the current one).
+2. **Compact-mode member contract.** The compact-hover guard wraps Zen's private `gZenCompactModeManager` API. Verify every member the mod touches still exists with an unchanged contract: `_setElementExpandAttribute(element, value, attr = "zen-has-hover")`, `_collapseTrackedElement()`, `_clearAllHoverStates()`, `clearFlashTimeout(id)`, `_removeHoverFrames`, `_outsideTrackedElement`, `_stopTrackingMouseOutsideWindow()`, `canHideSidebar`, `sidebar`, `sidebarIsOnRight`, `preference`, `_ignoreNextHover`, `_hasHoveredUrlbar`, `_isTabBeingDragged`. If any is renamed or removed, the guard needs a shim or the feature must be retired.
+3. **Folder / tab-group event names.** Group code listens for native folder/group animation completion events (e.g. `ZenFolderAnimationFinished` → `TabGroupAnimationComplete` in 1.23.4b). Recheck every listener against the current `src/zen/folders/` source.
+4. **Media controller module path.** The video feature anchors on the DOM id `zen-media-controls-toolbar` and does not import the media controller module, but the module itself moved (`ZenMediaController.mjs` → `.sys.mjs`, ES-module class, `#sharingCard` → `#sharingCardForBrowser(browser)`, `window.gZenMediaController` removed). Recheck the anchor id and any future import path.
+5. **Library CSS tokens.** The Library resize feature positions `zen-library` and does not override badge/gradient colors, but library CSS tokens changed (`currentColor` → `--border-color`, hover selectors relaxed). Recheck any geometry or color override.
+6. **Boosts / zap-bar attributes.** New `<zen-zap-bar>` elements set `zen-zapping` on `.browserSidebarContainer` (+2px outline). The mod does not hook that attribute; confirm no geometry change and that the outline remains cosmetic.
+7. **Session / space-routing APIs.** `ZenSessionManager.sys.mjs` (`__isNewZenWindow`) and `ZenSpaceRoutingManager.sys.mjs` (`routeStartupTab`, `getStartupUserContextId`) are unused by the mod. Recheck if a future feature adopts them.
+8. **Never change `UPSTREAM.json.upstream_version` for a Zen update.** `upstream_version: 1.1.0` is the *Zentral* pin, not the Zen version. A Zen update does not change the Extended base, so do not bump the pin, regenerate the adapted-base patch or refresh the upstream snapshot for it. Record the Zen baseline in a compat doc instead.
+9. **Re-scope, don't silently retire.** If a Zen fix removes the bug a feature worked around, re-scope the feature (opt-in tolerance, off by default, out of the Recommended preset) rather than retiring it in a silent patch. Keep preference keys stable.
+
 ## Follow-up video / loader repair
 
 See [VIDEO-PREVIEW-REPAIR.md](VIDEO-PREVIEW-REPAIR.md). The upstream pin remains 1.1.0 at the same commit. Five archived reference files in the uploaded tree had diverged from their advertised hashes; they were restored from that exact commit, and the adapted-base patch was regenerated. Do not format or annotate the archived snapshot. Put commentary in this directory instead.

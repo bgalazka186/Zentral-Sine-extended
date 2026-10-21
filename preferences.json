@@ -10488,7 +10488,7 @@
   },
   {
     "property": "zen.workspace.zentral.experimental.compact_sidebar_hover",
-    "label": "Stabilize compact tab sidebar hover (experimental)",
+    "label": "Keep compact tab sidebar open near its edge (experimental)",
     "type": "checkbox",
     "defaultValue": false
   },

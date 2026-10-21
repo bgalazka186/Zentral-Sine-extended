@@ -42,7 +42,7 @@ Turning captions off stops the caption polling timer, disconnects frame observer
 
 ## Companion mods and log findings
 
-Installed source inventory: Arc 2.0 3.4, Transparent Zen 1.17.16, Customize Font Size 1.0.0, oom333 Tab Groups 1.5.0, Folder Tree Connectors 2.1 and ZenLibraryTweaks 1.5.1 for Zen 1.23.3b. No companion files were edited. Recommendation links are included near Arc/group settings and in Compatibility.
+Installed source inventory: Arc 2.0 3.4, Transparent Zen 1.17.16, Customize Font Size 1.0.0, oom333 Tab Groups 1.5.0, Folder Tree Connectors 2.1 and ZenLibraryTweaks 1.5.1 for Zen 1.23.3b. No companion files were edited. Recommendation links are included near Arc/group settings and in Compatibility. **Zen baseline is now 1.23.4b** (BuildID 20261020090730, SourceStamp 541ee55); see `docs/ZEN-1.23.4b-COMPAT.md`. The 1.23.3b inventory above is retained as the historical baseline for this repair.
 
 - **Groups:** two group implementations can both mutate the same native groups. Your Zentral Groups preference is already disabled. Leave it disabled when using oom333 groups; the existing external-groups compatibility switch remains available. No group data is deleted.
 - **Library:** ZenLibraryTweaks and Extended's experimental Library geometry can compete for the same dimensions. Use the existing external-Library layout switch when you want the companion/native layout to own sizing.
