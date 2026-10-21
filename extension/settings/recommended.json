@@ -333,6 +333,11 @@
     "zen.workspace.zentral.video_preview.enlarged_keep_aspect": true,
     "zen.workspace.zentral.video_preview.enlarged_hover_controls": true,
     "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px": 64,
-    "zen.workspace.zentral.video_preview.enlarged_remember_position": false
+    "zen.workspace.zentral.video_preview.enlarged_remember_position": false,
+    "zen.workspace.zentral.video_preview.enlarged_keyboard_controls": true,
+    "zen.workspace.zentral.video_preview.enlarged_click_toggle": true,
+    "zen.workspace.bgalazka.look.video_overlay_opacity": 40,
+    "zen.workspace.bgalazka.look.video_controls_wrap": false,
+    "zen.workspace.bgalazka.look.video_controls_gap": 1
   }
 }

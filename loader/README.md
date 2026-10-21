@@ -128,3 +128,9 @@ Full installation uses root `theme.json` and `preferences.json`, plus `loader/`;
 Features may register `verify({ runtime, shared, services })`, a synchronous postcondition returning exactly true. The runtime calls it after owning the initializer's cleanup and before activation; failure destroys that feature scope and blocks dependents. Records expose `initialized` and `verified` separately. Video verifies that its diagnostic and destroy APIs were published. This is not proof of real native video presentation: native bindings, renderer diagnostics and live checks remain separate.
 
 The video standalone bootstrap mirrors source/construction contracts. Keep both implementations aligned when changing the loader. The uploaded original reference was restored against the pinned manifest; never add guide headers or run formatters inside `zentral/upstream/1.1.0`.
+
+### Native sidebar geometry and divider
+
+Runtime exposes `nativeSidebarElement()`, `nativeSidebarRect()`, `nativeSidebarSide()` and `sidebarSafeBounds()` so feature controllers share viewport-clipped measurements and boolean side flags. Width is measured in CSS pixels; early startup does not require tabs to have been reparented. A wide vertical toolbox is valid. Native interaction CSS protects the existing divider's hit target and content-facing edge; Zen retains its pointer and persistence handlers.
+
+`window.ZentralRuntime.nativeSidebarDiagnostics()` reports measurements and whether the divider's midpoint hits the native element. It runs on demand, without continuous hit testing. See `docs/SIDEBAR-AND-PLAYER-INPUT.md` for the live validation boundary.

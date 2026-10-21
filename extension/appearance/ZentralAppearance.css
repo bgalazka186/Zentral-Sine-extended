@@ -2209,3 +2209,53 @@
   button:not(:disabled) {
   opacity: 1 !important;
 }
+
+/* Video buttons share the URL toolbar appearance controls. Match contrast to
+ * the actual fill; never force borders or a solid local background. */
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview#zentral-video-preview
+  .zentral-video-preview-bar
+  > button {
+  background: var(--zl-video-button-fill) !important;
+  color: var(--zl-video-button-text) !important;
+  border: var(--zl-button-edge) solid var(--zl-button-border-color) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview#zentral-video-preview[data-enlarged]
+  .zentral-video-preview-bar
+  > button,
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview#zentral-video-preview[data-enlarged]
+  .zentral-video-preview-caption {
+  color: var(--zl-video-overlay-text) !important;
+  text-shadow: 0 1px 2px var(--zl-video-icon-outline) !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview#zentral-video-preview[data-enlarged]
+  .zentral-video-preview-bar
+  > button
+  svg {
+  filter: drop-shadow(0 1px 1px var(--zl-video-icon-outline));
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview#zentral-video-preview
+  .zentral-video-preview-bar
+  > button:hover:not(:disabled) {
+  background: var(--zl-hover) !important;
+  color: var(--zl-hover-text) !important;
+  text-shadow: none !important;
+}
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview#zentral-video-preview
+  .zentral-video-preview-bar
+  > button:hover:not(:disabled)
+  svg {
+  filter: none;
+}
+
+:root[bgalazka-look="atelier"]
+  #zentral-video-preview#zentral-video-preview
+  .zentral-video-preview-seek {
+  accent-color: var(--zl-video-progress) !important;
+  color-scheme: var(--zl-video-scheme) !important;
+}

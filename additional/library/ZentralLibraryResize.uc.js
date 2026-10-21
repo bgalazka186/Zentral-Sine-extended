@@ -255,8 +255,11 @@
         library.offsetParent || library.parentNode
       )?.getBoundingClientRect?.();
       const right =
-        root.getAttribute("zen-right-side") === "true" ||
-        root.getAttribute("zen-sidebar-right") === "true";
+        window.ZentralRuntime?.nativeSidebarSide?.() === "right" ||
+        (root.hasAttribute("zen-right-side") &&
+          root.getAttribute("zen-right-side") !== "false") ||
+        (root.hasAttribute("zen-sidebar-right") &&
+          root.getAttribute("zen-sidebar-right") !== "false");
       const canHideSidebar =
         root.getAttribute("zen-compact-mode") === "true" &&
         (window.gZenCompactModeManager?.canHideSidebar ?? true);
@@ -398,7 +401,7 @@
             min-width: 0 !important;
             max-width: calc(100% - var(${VARS[5]}, 0px)) !important;
           }
-          :root[${ATTR}]:is([zen-right-side="true"], [zen-sidebar-right="true"]) zen-library {
+          :root[${ATTR}]:is([zentral-native-sidebar-side="right"], [zen-right-side]:not([zen-right-side="false"]), [zen-sidebar-right]:not([zen-sidebar-right="false"])) zen-library {
             right: var(${VARS[5]}, 0px) !important; left: auto !important;
           }
           :root[${ATTR}] #tabbrowser-tabbox {

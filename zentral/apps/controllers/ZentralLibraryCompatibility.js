@@ -65,10 +65,12 @@
               (!root.getAttribute("data-panel-side") &&
                 this.isPanelAttachedToRight?.());
             let libraryRight =
-              document.documentElement.getAttribute("zen-right-side") ===
-                "true" ||
-              document.documentElement.getAttribute("zen-sidebar-right") ===
-                "true";
+              window.ZentralRuntime?.nativeSidebarSide?.() === "right" ||
+              ["zen-right-side", "zen-sidebar-right"].some(
+                (key) =>
+                  document.documentElement.hasAttribute(key) &&
+                  document.documentElement.getAttribute(key) !== "false",
+              );
             // Prefer the visible library pane to its potentially full-window host.
             const pane =
               library?.querySelector?.(

@@ -2231,6 +2231,7 @@
               LOOK_PREFS.DENSITY_ESSENTIALS,
               ctx.EXT_PREFS.RSS_HIDE_EMPTY,
               ctx.EXT_PREFS.RSS_COMPACT_HEADERS,
+              ctx.EXT_PREFS.RSS_READER_CARD,
             ]);
             const applyPreset = (recommended) => {
               const message = recommended
@@ -2397,11 +2398,21 @@
               null,
               syncRssFolderDisplay,
             );
+            const rssReader = createToggleRow(
+              "Reader card for RSS articles",
+              "Hovering an article shows its full text in a card beside the sidebar with Open, Dismiss and Dismiss-all buttons. Middle-click dismisses and the next article appears under the pointer right away. Replaces the native tooltip for live-folder items only.",
+              ctx.EXT_PREFS.RSS_READER_CARD,
+              null,
+              false,
+              null,
+              syncRssFolderDisplay,
+            );
             rssCategory.subContent.append(
               rssHeader,
               rssNote,
               rssHideEmpty.row,
               rssCompact.row,
+              rssReader.row,
             );
             panel._toggles.push(
               {
@@ -2412,6 +2423,11 @@
               {
                 input: rssCompact.input,
                 pref: ctx.EXT_PREFS.RSS_COMPACT_HEADERS,
+                def: false,
+              },
+              {
+                input: rssReader.input,
+                pref: ctx.EXT_PREFS.RSS_READER_CARD,
                 def: false,
               },
             );
@@ -2973,6 +2989,14 @@
               "Video controls",
               "Filled video buttons and selected source highlight",
               LOOK_PREFS.VIDEO_CONTROL_OPACITY,
+              0,
+              100,
+              "%",
+            );
+            addLookSlider(
+              "Big Preview overlay",
+              "Hover controls backing; independent of button fills and Simple palette opacity",
+              LOOK_PREFS.VIDEO_OVERLAY_OPACITY,
               0,
               100,
               "%",

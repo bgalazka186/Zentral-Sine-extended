@@ -23383,7 +23383,7 @@
 +})();
 --- /dev/null
 +++ b/zentral/apps/controllers/ZentralLibraryCompatibility.js
-@@ -0,0 +1,357 @@
+@@ -0,0 +1,355 @@
 +/* Extended 3.0.0 adapted-base/bridge owner. Original reference: Zentral 1.1.0.
 + * See docs/BASE-PATCHES.md, docs/UPSTREAM-MAP.json and UPSTREAM.json before updating. */
 +/*
@@ -23450,11 +23450,9 @@
 +              root.getAttribute("data-panel-side") === "right" ||
 +              (!root.getAttribute("data-panel-side") &&
 +                this.isPanelAttachedToRight?.());
-+            let libraryRight =
-+              document.documentElement.getAttribute("zen-right-side") ===
-+                "true" ||
-+              document.documentElement.getAttribute("zen-sidebar-right") ===
-+                "true";
++            let libraryRight = window.ZentralRuntime?.nativeSidebarSide?.() === "right" ||
++              ["zen-right-side", "zen-sidebar-right"].some((key) =>
++                document.documentElement.hasAttribute(key) && document.documentElement.getAttribute(key) !== "false");
 +            // Prefer the visible library pane to its potentially full-window host.
 +            const pane =
 +              library?.querySelector?.(
@@ -24393,7 +24391,7 @@
 +})();
 --- /dev/null
 +++ b/zentral/apps/controllers/ZentralPanelPosition.js
-@@ -0,0 +1,656 @@
+@@ -0,0 +1,640 @@
 +/* Extended 3.0.0 adapted-base/bridge owner. Original reference: Zentral 1.1.0.
 + * See docs/BASE-PATCHES.md, docs/UPSTREAM-MAP.json and UPSTREAM.json before updating. */
 +/*
@@ -24441,26 +24439,10 @@
 +      } = shared;
 +      return {
 +        isSidebarRight() {
-+          // 1. Direct Zen root attributes
-+          if (
-+            document.documentElement.getAttribute("zen-right-side") === "true"
-+          )
-+            return true;
-+          if (
-+            document.documentElement.getAttribute("zen-sidebar-right") ===
-+            "true"
-+          )
-+            return true;
-+          if (
-+            document.documentElement.getAttribute("zen-right-side") === "false"
-+          )
-+            return false;
-+          if (
-+            document.documentElement.getAttribute("zen-sidebar-right") ===
-+            "false"
-+          )
-+            return false;
-+
++          if (typeof runtime.nativeSidebarSide === "function") return runtime.nativeSidebarSide() === "right";
++          for (const key of ["zen-right-side", "zen-sidebar-right"])
++            if (document.documentElement.hasAttribute(key))
++              return document.documentElement.getAttribute(key) !== "false";
 +          // 2. Physical DOM measurement of the sidebar container
 +          const sidebarBox =
 +            window.ZentralRuntime?.nativeSidebarElement?.() ||
@@ -26781,7 +26763,7 @@
 +  gap: 2px;
 +  width: auto;
 +  align-items: center;
-+  -moz-window-dragging: no;
++  -moz-window-dragging: no-drag;
 +  position: relative;
 +  flex-shrink: 1 !important;
 +  min-width: 0 !important;
@@ -26797,7 +26779,7 @@
 +  width: max-content;
 +  max-width: calc(10 * 38px + 9 * 4px) !important;
 +  scroll-behavior: smooth;
-+  -moz-window-dragging: no;
++  -moz-window-dragging: no-drag;
 +  flex-shrink: 1 !important;
 +}
 +#zen-apps-sidebar-grid.zen-apps-horizontal
@@ -27104,11 +27086,11 @@
 +  opacity: 0 !important;
 +  pointer-events: none !important;
 +}
-+:root[zen-right-side="true"] #zen-app-panel-pill {
++:root[zen-right-side]:not([zen-right-side="false"]) #zen-app-panel-pill {
 +  left: 0;
 +  transform: translate(-50%, -50%);
 +}
-+:root:not([zen-right-side="true"]) #zen-app-panel-pill {
++:root:not([zen-right-side]:not([zen-right-side="false"])) #zen-app-panel-pill {
 +  right: 0;
 +  transform: translate(50%, -50%);
 +}
@@ -27135,11 +27117,11 @@
 +#zen-app-panel-root[open] .zen-app-hover-zone {
 +  pointer-events: auto;
 +}
-+:root[zen-right-side="true"] .zen-app-hover-zone {
++:root[zen-right-side]:not([zen-right-side="false"]) .zen-app-hover-zone {
 +  left: -22px;
 +  right: auto;
 +}
-+:root:not([zen-right-side="true"]) .zen-app-hover-zone {
++:root:not([zen-right-side]:not([zen-right-side="false"])) .zen-app-hover-zone {
 +  right: -22px;
 +  left: auto;
 +}
@@ -27254,11 +27236,11 @@
 +#zen-app-panel-root[open] .zen-app-resize-strip {
 +  pointer-events: auto;
 +}
-+:root[zen-right-side="true"] .zen-app-resize-strip {
++:root[zen-right-side]:not([zen-right-side="false"]) .zen-app-resize-strip {
 +  left: -5px;
 +  right: auto;
 +}
-+:root:not([zen-right-side="true"]) .zen-app-resize-strip {
++:root:not([zen-right-side]:not([zen-right-side="false"])) .zen-app-resize-strip {
 +  right: -5px;
 +  left: auto;
 +}
@@ -27337,11 +27319,11 @@
 +/* Outer margin matching Zen's element separation for exact visual symmetry */
 +:root[zentral-apps-placement="vertical-bar"]:not(
 +    [zentral-apps-autohide="true"]
-+  )[zen-right-side="true"]
++  )[zen-right-side]:not([zen-right-side="false"])
 +  #zentral-apps-vertical-bar,
 +:root[zentral-apps-placement="vertical-bar"]:not(
 +    [zentral-apps-autohide="true"]
-+  )[zen-sidebar-right="true"]
++  )[zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  #zentral-apps-vertical-bar {
 +  margin-left: var(--zen-element-separation, 6px) !important;
 +  margin-right: 0 !important;
@@ -27349,7 +27331,7 @@
 +
 +:root[zentral-apps-placement="vertical-bar"]:not(
 +    [zentral-apps-autohide="true"]
-+  ):not([zen-right-side="true"]):not([zen-sidebar-right="true"])
++  ):not([zen-right-side]:not([zen-right-side="false"])):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
 +  #zentral-apps-vertical-bar {
 +  margin-right: var(--zen-element-separation, 6px) !important;
 +  margin-left: 0 !important;
@@ -27443,9 +27425,9 @@
 +}
 +
 +/* Autohide Mode B: Position on Left (Sidebar on Right) */
-+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
++:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side]:not([zen-right-side="false"])
 +  #zentral-apps-vertical-bar,
-+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
++:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  #zentral-apps-vertical-bar {
 +  left: 8px !important;
 +  right: auto !important;
@@ -27453,19 +27435,19 @@
 +
 +/* Autohide Mode B: Position on Right (Sidebar on Left) */
 +:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
-+    [zen-right-side="true"]
-+  ):not([zen-sidebar-right="true"])
++    [zen-right-side]:not([zen-right-side="false"])
++  ):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
 +  #zentral-apps-vertical-bar {
 +  right: 8px !important;
 +  left: auto !important;
 +}
 +
 +/* Autohide Mode B: Idle/Collapsed State on Left */
-+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
++:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side]:not([zen-right-side="false"])
 +  #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
 +    [zentral-app-panel-open="true"]
 +  ),
-+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
++:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
 +    [zentral-app-panel-open="true"]
 +  ) {
@@ -27477,8 +27459,8 @@
 +
 +/* Autohide Mode B: Idle/Collapsed State on Right */
 +:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
-+    [zen-right-side="true"]
-+  ):not([zen-sidebar-right="true"])
++    [zen-right-side]:not([zen-right-side="false"])
++  ):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
 +  #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
 +    [zentral-app-panel-open="true"]
 +  ) {
@@ -27946,16 +27928,16 @@
 +  background: transparent !important;
 +}
 +
-+:root[zentral-apps-placement="vertical-bar"][zen-right-side="true"]
++:root[zentral-apps-placement="vertical-bar"][zen-right-side]:not([zen-right-side="false"])
 +  #zentral-apps-vertical-bar-trigger,
-+:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
++:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  #zentral-apps-vertical-bar-trigger {
 +  left: 0 !important;
 +  right: auto !important;
 +}
 +
-+:root[zentral-apps-placement="vertical-bar"]:not([zen-right-side="true"]):not(
-+    [zen-sidebar-right="true"]
++:root[zentral-apps-placement="vertical-bar"]:not([zen-right-side]:not([zen-right-side="false"])):not(
++    [zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  )
 +  #zentral-apps-vertical-bar-trigger {
 +  right: 0 !important;
@@ -27979,16 +27961,16 @@
 +  pointer-events: auto !important;
 +}
 +
-+:root[zentral-apps-placement="vertical-bar"][zen-right-side="true"]
++:root[zentral-apps-placement="vertical-bar"][zen-right-side]:not([zen-right-side="false"])
 +  .zen-app-vb-hover-zone,
-+:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
++:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  .zen-app-vb-hover-zone {
 +  right: -24px !important;
 +  left: auto !important;
 +}
 +
-+:root[zentral-apps-placement="vertical-bar"]:not([zen-right-side="true"]):not(
-+    [zen-sidebar-right="true"]
++:root[zentral-apps-placement="vertical-bar"]:not([zen-right-side]:not([zen-right-side="false"])):not(
++    [zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  )
 +  .zen-app-vb-hover-zone {
 +  left: -24px !important;
@@ -29186,11 +29168,11 @@
 +/* Outer margin matching Zen's element separation for exact visual symmetry */
 +:root[zentral-apps-placement="vertical-bar"]:not(
 +    [zentral-apps-autohide="true"]
-+  )[zen-right-side="true"]
++  )[zen-right-side]:not([zen-right-side="false"])
 +  #zentral-apps-vertical-bar,
 +:root[zentral-apps-placement="vertical-bar"]:not(
 +    [zentral-apps-autohide="true"]
-+  )[zen-sidebar-right="true"]
++  )[zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  #zentral-apps-vertical-bar {
 +  margin-left: var(--zen-element-separation, 8px) !important;
 +  margin-right: 0 !important;
@@ -29198,7 +29180,7 @@
 +
 +:root[zentral-apps-placement="vertical-bar"]:not(
 +    [zentral-apps-autohide="true"]
-+  ):not([zen-right-side="true"]):not([zen-sidebar-right="true"])
++  ):not([zen-right-side]:not([zen-right-side="false"])):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
 +  #zentral-apps-vertical-bar {
 +  margin-right: var(--zen-element-separation, 8px) !important;
 +  margin-left: 0 !important;
@@ -29267,16 +29249,16 @@
 +}
 +
 +/* When Vertical Bar is on Left (Sidebar on Right): anchor gradient to top-left edge */
-+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
++:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side]:not([zen-right-side="false"])
 +  #zentral-apps-vertical-bar
 +  #zentral-apps-vertical-bar-bg::before,
-+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
++:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side]:not([zen-right-side="false"])
 +  #zentral-apps-vertical-bar
 +  #zentral-apps-vertical-bar-bg::after,
-+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
++:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  #zentral-apps-vertical-bar
 +  #zentral-apps-vertical-bar-bg::before,
-+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
++:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  #zentral-apps-vertical-bar
 +  #zentral-apps-vertical-bar-bg::after {
 +  background-position: left top !important;
@@ -29284,13 +29266,13 @@
 +
 +/* When Vertical Bar is on Right (Sidebar on Left): anchor gradient to top-right edge */
 +:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
-+    [zen-right-side="true"]
-+  ):not([zen-sidebar-right="true"])
++    [zen-right-side]:not([zen-right-side="false"])
++  ):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
 +  #zentral-apps-vertical-bar
 +  #zentral-apps-vertical-bar-bg::before,
 +:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
-+    [zen-right-side="true"]
-+  ):not([zen-sidebar-right="true"])
++    [zen-right-side]:not([zen-right-side="false"])
++  ):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
 +  #zentral-apps-vertical-bar
 +  #zentral-apps-vertical-bar-bg::after {
 +  background-position: right top !important;
@@ -29305,9 +29287,9 @@
 +}
 +
 +/* Autohide Mode B: Position on Left (Sidebar on Right) */
-+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
++:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side]:not([zen-right-side="false"])
 +  #zentral-apps-vertical-bar,
-+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
++:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  #zentral-apps-vertical-bar {
 +  left: 8px !important;
 +  right: auto !important;
@@ -29315,19 +29297,19 @@
 +
 +/* Autohide Mode B: Position on Right (Sidebar on Left) */
 +:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
-+    [zen-right-side="true"]
-+  ):not([zen-sidebar-right="true"])
++    [zen-right-side]:not([zen-right-side="false"])
++  ):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
 +  #zentral-apps-vertical-bar {
 +  right: 8px !important;
 +  left: auto !important;
 +}
 +
 +/* Autohide Mode B: Idle/Collapsed State on Left */
-+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
++:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side]:not([zen-right-side="false"])
 +  #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
 +    [zentral-app-panel-open="true"]
 +  ),
-+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
++:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
 +    [zentral-app-panel-open="true"]
 +  ) {
@@ -29339,8 +29321,8 @@
 +
 +/* Autohide Mode B: Idle/Collapsed State on Right */
 +:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
-+    [zen-right-side="true"]
-+  ):not([zen-sidebar-right="true"])
++    [zen-right-side]:not([zen-right-side="false"])
++  ):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
 +  #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
 +    [zentral-app-panel-open="true"]
 +  ) {
@@ -29896,16 +29878,16 @@
 +  background: transparent !important;
 +}
 +
-+:root[zentral-apps-placement="vertical-bar"][zen-right-side="true"]
++:root[zentral-apps-placement="vertical-bar"][zen-right-side]:not([zen-right-side="false"])
 +  #zentral-apps-vertical-bar-trigger,
-+:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
++:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  #zentral-apps-vertical-bar-trigger {
 +  left: 0 !important;
 +  right: auto !important;
 +}
 +
-+:root[zentral-apps-placement="vertical-bar"]:not([zen-right-side="true"]):not(
-+    [zen-sidebar-right="true"]
++:root[zentral-apps-placement="vertical-bar"]:not([zen-right-side]:not([zen-right-side="false"])):not(
++    [zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  )
 +  #zentral-apps-vertical-bar-trigger {
 +  right: 0 !important;
@@ -29929,16 +29911,16 @@
 +  pointer-events: auto !important;
 +}
 +
-+:root[zentral-apps-placement="vertical-bar"][zen-right-side="true"]
++:root[zentral-apps-placement="vertical-bar"][zen-right-side]:not([zen-right-side="false"])
 +  .zen-app-vb-hover-zone,
-+:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
++:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  .zen-app-vb-hover-zone {
 +  right: -24px !important;
 +  left: auto !important;
 +}
 +
-+:root[zentral-apps-placement="vertical-bar"]:not([zen-right-side="true"]):not(
-+    [zen-sidebar-right="true"]
++:root[zentral-apps-placement="vertical-bar"]:not([zen-right-side]:not([zen-right-side="false"])):not(
++    [zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  )
 +  .zen-app-vb-hover-zone {
 +  left: -24px !important;
@@ -36274,17 +36256,17 @@
 +}
 +
 +/* Right Sidebar Mode (Sidebar on Right side of screen -> Outer edge is on RIGHT, content on LEFT) */
-+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
++:is(html[zen-sidebar-right]:not([zen-sidebar-right="false"]), html[zen-right-side]:not([zen-right-side="false"]))
 +  tab-group.zentral-standard
 +  > .tab-group-label-container {
 +  justify-content: flex-start !important;
 +}
 +
-+html[zen-sidebar-right="true"]
++html[zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  tab-group.zentral-standard
 +  > .tab-group-label-container
 +  .zentral-tab-title-wrapper,
-+html[zen-right-side="true"]
++html[zen-right-side]:not([zen-right-side="false"])
 +  tab-group.zentral-standard
 +  > .tab-group-label-container
 +  .zentral-tab-title-wrapper {
@@ -36296,7 +36278,7 @@
 +  min-width: 100% !important;
 +}
 +
-+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
++:is(html[zen-sidebar-right]:not([zen-sidebar-right="false"]), html[zen-right-side]:not([zen-right-side="false"]))
 +  :is(
 +    tab-group.zentral-standard tab-group.zentral-standard,
 +    tab-group.zentral-standard[depth],
@@ -36310,10 +36292,10 @@
 +  min-width: calc(100% - 8px) !important;
 +}
 +
-+html[zen-sidebar-right="true"]
++html[zen-sidebar-right]:not([zen-sidebar-right="false"])
 +  tab-group.zentral-standard
 +  > .tab-group-label-container::before,
-+html[zen-right-side="true"]
++html[zen-right-side]:not([zen-right-side="false"])
 +  tab-group.zentral-standard
 +  > .tab-group-label-container::before {
 +  display: none !important;
@@ -36332,7 +36314,7 @@
 +  border-radius: 8px !important;
 +}
 +
-+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
++:is(html[zen-sidebar-right]:not([zen-sidebar-right="false"]), html[zen-right-side]:not([zen-right-side="false"]))
 +  tab-group.zentral-standard
 +  > .tab-group-label-container:is(:hover, :has(tab:hover))
 +  .zentral-tab-title-wrapper {
@@ -36351,8 +36333,8 @@
 +}
 +
 +html[zentral-label-opacity-below-85="true"]:is(
-+    [zen-sidebar-right="true"],
-+    [zen-right-side="true"]
++    [zen-sidebar-right]:not([zen-sidebar-right="false"]),
++    [zen-right-side]:not([zen-right-side="false"])
 +  )
 +  tab-group.zentral-standard
 +  > .tab-group-label-container:is(:hover, :has(tab:hover))
@@ -36392,7 +36374,7 @@
 +}
 +
 +/* Right Sidebar: Indicator is order 1 (closest to left / webpage content), Text is order 2 */
-+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
++:is(html[zen-sidebar-right]:not([zen-sidebar-right="false"]), html[zen-right-side]:not([zen-right-side="false"]))
 +  #tabbrowser-tabs
 +  tab-group
 +  > .tab-group-label-container
@@ -36425,7 +36407,7 @@
 +}
 +
 +/* Right Sidebar: Place badge at the far right edge (opposite from left-aligned name) */
-+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
++:is(html[zen-sidebar-right]:not([zen-sidebar-right="false"]), html[zen-right-side]:not([zen-right-side="false"]))
 +  #tabbrowser-tabs
 +  tab-group
 +  > .tab-group-label-container
@@ -36477,11 +36459,11 @@
 +}
 +
 +/* Right Sidebar: Order 1 (closer to left / webpage content) */
-+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
++:is(html[zen-sidebar-right]:not([zen-sidebar-right="false"]), html[zen-right-side]:not([zen-right-side="false"]))
 +  #tabbrowser-tabs
 +  tab-group
 +  .tab-group-icon-container,
-+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
++:is(html[zen-sidebar-right]:not([zen-sidebar-right="false"]), html[zen-right-side]:not([zen-right-side="false"]))
 +  #tabbrowser-tabs
 +  tab-group[collapsed]
 +  .tab-group-icon-container {
@@ -36765,14 +36747,14 @@
 +}
 +
 +/* Right Sidebar Mode Overrides (Outer edge is on the RIGHT, webpage content on LEFT) */
-+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
++:is(html[zen-sidebar-right]:not([zen-sidebar-right="false"]), html[zen-right-side]:not([zen-right-side="false"]))
 +  tab-group.zentral-standard
 +  tab-group.zentral-standard {
 +  margin-left: 8px !important;
 +  margin-right: 0 !important;
 +}
 +
-+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
++:is(html[zen-sidebar-right]:not([zen-sidebar-right="false"]), html[zen-right-side]:not([zen-right-side="false"]))
 +  tab-group.zentral-standard
 +  tab-group.zentral-standard
 +  .tab-group-container {
@@ -36782,7 +36764,7 @@
 +  margin-inline-end: 0 !important;
 +}
 +
-+:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
++:is(html[zen-sidebar-right]:not([zen-sidebar-right="false"]), html[zen-right-side]:not([zen-right-side="false"]))
 +  tab-group.zentral-standard
 +  tab-group.zentral-standard
 +  .tab-group-container::after {

@@ -1,6 +1,6 @@
 # additional/video/controllers
 
-Owner and local file guide for Extended 3.0.0. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.0.1. Original Zentral reference: 1.1.0.
 
 | File                           | Responsibility                                                                                      |
 | ------------------------------ | --------------------------------------------------------------------------------------------------- |
@@ -26,3 +26,7 @@ An enlarged card bypasses only compact-sidebar suspension. Window minimization, 
 Caption entrypoint dependencies MUST include live `box` and `Services` accessors. setCaption writes through the shared layout immediately; it must never wait for refreshCard. Recovery uses one repeating scheduler, not a new interval after each async request. An older poll cannot overwrite newer event text. Fit mode verifies actual inner text height, then clamps at the selected line limit. Scroll mode must have pointer events enabled.
 
 Enlarged preview: the bottom-bar source button opens the existing source selector upward. Back/forward buttons seek ±10 seconds from the live media time through all direct, frame and actor transports, clamped to the video duration. Returning closes the menu.
+
+`ZentralVideoPlayerInput.js` is an optional `video/player-input` module mounted by Enlarge. It owns focused playback keys and delayed image clicks through the existing source-identity-checked control transport. Missing or failed input mounting leaves preview layout and drag available. Close, blur, pointer press, double-click and disposal cancel pending clicks; a changed source cannot receive an earlier click.
+
+See [sidebar and player input notes](../../../docs/SIDEBAR-AND-PLAYER-INPUT.md) for keyboard scope, appearance ownership and validation limits.

@@ -80,11 +80,11 @@
 /* Outer margin matching Zen's element separation for exact visual symmetry */
 :root[zentral-apps-placement="vertical-bar"]:not(
     [zentral-apps-autohide="true"]
-  )[zen-right-side="true"]
+  )[zen-right-side]:not([zen-right-side="false"])
   #zentral-apps-vertical-bar,
 :root[zentral-apps-placement="vertical-bar"]:not(
     [zentral-apps-autohide="true"]
-  )[zen-sidebar-right="true"]
+  )[zen-sidebar-right]:not([zen-sidebar-right="false"])
   #zentral-apps-vertical-bar {
   margin-left: var(--zen-element-separation, 8px) !important;
   margin-right: 0 !important;
@@ -92,7 +92,9 @@
 
 :root[zentral-apps-placement="vertical-bar"]:not(
     [zentral-apps-autohide="true"]
-  ):not([zen-right-side="true"]):not([zen-sidebar-right="true"])
+  ):not([zen-right-side]:not([zen-right-side="false"])):not(
+    [zen-sidebar-right]:not([zen-sidebar-right="false"])
+  )
   #zentral-apps-vertical-bar {
   margin-right: var(--zen-element-separation, 8px) !important;
   margin-left: 0 !important;
@@ -161,16 +163,24 @@
 }
 
 /* When Vertical Bar is on Left (Sidebar on Right): anchor gradient to top-left edge */
-:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side]:not(
+    [zen-right-side="false"]
+  )
   #zentral-apps-vertical-bar
   #zentral-apps-vertical-bar-bg::before,
-:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side]:not(
+    [zen-right-side="false"]
+  )
   #zentral-apps-vertical-bar
   #zentral-apps-vertical-bar-bg::after,
-:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not(
+    [zen-sidebar-right="false"]
+  )
   #zentral-apps-vertical-bar
   #zentral-apps-vertical-bar-bg::before,
-:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not(
+    [zen-sidebar-right="false"]
+  )
   #zentral-apps-vertical-bar
   #zentral-apps-vertical-bar-bg::after {
   background-position: left top !important;
@@ -178,13 +188,13 @@
 
 /* When Vertical Bar is on Right (Sidebar on Left): anchor gradient to top-right edge */
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
-    [zen-right-side="true"]
-  ):not([zen-sidebar-right="true"])
+    [zen-right-side]:not([zen-right-side="false"])
+  ):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
   #zentral-apps-vertical-bar
   #zentral-apps-vertical-bar-bg::before,
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
-    [zen-right-side="true"]
-  ):not([zen-sidebar-right="true"])
+    [zen-right-side]:not([zen-right-side="false"])
+  ):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
   #zentral-apps-vertical-bar
   #zentral-apps-vertical-bar-bg::after {
   background-position: right top !important;
@@ -199,9 +209,13 @@
 }
 
 /* Autohide Mode B: Position on Left (Sidebar on Right) */
-:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side]:not(
+    [zen-right-side="false"]
+  )
   #zentral-apps-vertical-bar,
-:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not(
+    [zen-sidebar-right="false"]
+  )
   #zentral-apps-vertical-bar {
   left: 8px !important;
   right: auto !important;
@@ -209,19 +223,23 @@
 
 /* Autohide Mode B: Position on Right (Sidebar on Left) */
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
-    [zen-right-side="true"]
-  ):not([zen-sidebar-right="true"])
+    [zen-right-side]:not([zen-right-side="false"])
+  ):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
   #zentral-apps-vertical-bar {
   right: 8px !important;
   left: auto !important;
 }
 
 /* Autohide Mode B: Idle/Collapsed State on Left */
-:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side]:not(
+    [zen-right-side="false"]
+  )
   #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
     [zentral-app-panel-open="true"]
   ),
-:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not(
+    [zen-sidebar-right="false"]
+  )
   #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
     [zentral-app-panel-open="true"]
   ) {
@@ -233,8 +251,8 @@
 
 /* Autohide Mode B: Idle/Collapsed State on Right */
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
-    [zen-right-side="true"]
-  ):not([zen-sidebar-right="true"])
+    [zen-right-side]:not([zen-right-side="false"])
+  ):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
   #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
     [zentral-app-panel-open="true"]
   ) {

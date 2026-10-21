@@ -71,6 +71,7 @@
       const EXT_PREFS = {
         RSS_HIDE_EMPTY: "zen.workspace.bgalazka.rss.hide_empty",
         RSS_COMPACT_HEADERS: "zen.workspace.bgalazka.rss.compact_headers",
+        RSS_READER_CARD: "zen.workspace.bgalazka.rss.reader_card",
       };
       const rssMarkedFolders = new Set();
       let rssScanTimer = null;
@@ -78,6 +79,7 @@
         rssObservedContainer = null,
         nativeBinding = null;
       let disposed = false;
+      const readerOn = () => getPref(EXT_PREFS.RSS_READER_CARD, false);
       const rssEnabled = () =>
         getPref(EXT_PREFS.RSS_HIDE_EMPTY, false) ||
         getPref(EXT_PREFS.RSS_COMPACT_HEADERS, false);
@@ -155,8 +157,152 @@
           clearRssMarks();
         }
       }
+
+      // ---- Reader card -------------------------------------------------
+      // Own hover card for live-folder articles. Replaces the native tab
+      // tooltip (only for those tabs) and re-targets the item under the
+      // pointer after a dismiss, so no extra mouse movement is needed.
+      let card = null,
+        cardTab = null,
+        hideTimer = null,
+        lastXY = null,
+        readerBound = false;
+      const itemTab = (el) => {
+        const tab = el?.closest?.("tab, .tabbrowser-tab");
+        if (!tab) return null;
+        if (tab.hasAttribute("zen-live-folder-item-id")) return tab;
+        const folder = tab.closest("zen-folder");
+        return folder && isNativeLiveFolder(folder) ? tab : null;
+      };
+      const tabUrl = (tab) => {
+        try {
+          return tab.linkedBrowser?.currentURI?.spec || "";
+        } catch (_) {
+          return "";
+        }
+      };
+      const cancelHide = () => {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+      };
+      function hideCard(delay = 0) {
+        cancelHide();
+        hideTimer = setTimeout(() => {
+          hideTimer = null;
+          if (card) card.hidden = true;
+          cardTab = null;
+        }, delay);
+      }
+      function ensureCard() {
+        if (card) return card;
+        card = document.createElement("div");
+        card.id = "bgalazka-rss-card";
+        card.hidden = true;
+        card.innerHTML =
+          '<div class="rc-folder"></div><div class="rc-text"></div>' +
+          '<div class="rc-url"></div><div class="rc-actions">' +
+          '<button data-a="open">Open</button>' +
+          '<button data-a="dismiss">Dismiss</button>' +
+          '<button data-a="all">Dismiss all</button></div>';
+        card.addEventListener("mouseenter", cancelHide);
+        card.addEventListener("mouseleave", () => hideCard(250));
+        card.addEventListener("click", (e) => {
+          const a = e.target.closest("button")?.dataset.a;
+          if (!a || !cardTab) return;
+          const tab = cardTab;
+          if (a === "open") {
+            gBrowser.selectedTab = tab;
+            hideCard();
+          } else if (a === "dismiss") dismiss(tab, false);
+          else if (a === "all") {
+            const folder = tab.closest("zen-folder");
+            const tabs = folder
+              ? [...folder.querySelectorAll("tab, .tabbrowser-tab")].filter(
+                  (t) => itemTab(t) && !t.hasAttribute("zen-empty-tab"),
+                )
+              : [tab];
+            hideCard();
+            tabs.forEach((t) => gBrowser.removeTab(t, { animate: false }));
+          }
+        });
+        document.documentElement.appendChild(card);
+        registerCleanup(() => card?.remove());
+        return card;
+      }
+      function showCard(tab) {
+        const c = ensureCard();
+        cancelHide();
+        cardTab = tab;
+        const folder = tab.closest("zen-folder");
+        c.querySelector(".rc-folder").textContent =
+          folder?.label || folder?.getAttribute("label") || "";
+        c.querySelector(".rc-text").textContent =
+          tab.label || tab.getAttribute("label") || "";
+        const url = tabUrl(tab);
+        c.querySelector(".rc-url").textContent = url;
+        c.hidden = false;
+        const side = document.getElementById("navigator-toolbox");
+        const sr = side?.getBoundingClientRect();
+        const tr = tab.getBoundingClientRect();
+        const w = c.offsetWidth,
+          h = c.offsetHeight;
+        const onRight = sr && sr.left > window.innerWidth / 2;
+        c.style.left =
+          Math.max(4, onRight ? tr.left - w - 6 : tr.right + 6) + "px";
+        c.style.top =
+          Math.max(4, Math.min(tr.top, window.innerHeight - h - 4)) + "px";
+      }
+      function dismiss(tab, viaPointer) {
+        gBrowser.removeTab(tab, { animate: false });
+        hideCard();
+        // Layout shifts under a still pointer: re-target after it settles.
+        setTimeout(() => {
+          if (!lastXY || !readerOn()) return;
+          const next = itemTab(document.elementFromPoint(...lastXY));
+          if (next) showCard(next);
+        }, 60);
+      }
+      const onOver = (e) => {
+        if (!readerOn()) return;
+        lastXY = [e.clientX, e.clientY];
+        const tab = itemTab(e.target);
+        if (tab) showCard(tab);
+        else if (card && !card.hidden && !card.contains(e.target))
+          hideCard(250);
+      };
+      const onMove = (e) => (lastXY = [e.clientX, e.clientY]);
+      const onAux = (e) => {
+        if (e.button !== 1 || !readerOn()) return;
+        const tab = itemTab(e.target);
+        if (!tab) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dismiss(tab, true);
+      };
+      const onPopup = (e) => {
+        if (!readerOn() || e.target.id !== "tabbrowser-tab-tooltip") return;
+        if (itemTab(e.target.triggerNode)) e.preventDefault();
+      };
+      function syncReader() {
+        const container = window.gBrowser?.tabContainer;
+        if (readerOn() && container && !readerBound) {
+          readerBound = true;
+          container.addEventListener("mouseover", onOver);
+          container.addEventListener("mousemove", onMove);
+          container.addEventListener("auxclick", onAux, true);
+          container.addEventListener("mouseleave", () => hideCard(250));
+          window.addEventListener("popupshowing", onPopup, true);
+          registerCleanup(() => {
+            container.removeEventListener("mouseover", onOver);
+            container.removeEventListener("mousemove", onMove);
+            container.removeEventListener("auxclick", onAux, true);
+            window.removeEventListener("popupshowing", onPopup, true);
+          });
+        } else if (!readerOn()) hideCard();
+      }
       function syncRssFolderDisplay() {
         if (disposed) return;
+        syncReader();
         const enabled = rssEnabled();
         document.documentElement.toggleAttribute(
           "bgalazka-rss-hide-empty",
@@ -214,8 +360,12 @@
       if (lifecycle)
         nativeBinding = lifecycle.watchNative({
           name: "rss-tab-strip",
-          prefs: [EXT_PREFS.RSS_HIDE_EMPTY, EXT_PREFS.RSS_COMPACT_HEADERS],
-          enabled: rssEnabled,
+          prefs: [
+            EXT_PREFS.RSS_HIDE_EMPTY,
+            EXT_PREFS.RSS_COMPACT_HEADERS,
+            EXT_PREFS.RSS_READER_CARD,
+          ],
+          enabled: () => rssEnabled() || readerOn(),
           resolve: () => window.gBrowser?.tabContainer || null,
           events: ["activate", "aftercustomization", "TabOpen"],
           attach(container, child) {
@@ -236,6 +386,7 @@
       for (const pref of [
         EXT_PREFS.RSS_HIDE_EMPTY,
         EXT_PREFS.RSS_COMPACT_HEADERS,
+        EXT_PREFS.RSS_READER_CARD,
       ]) {
         try {
           Services.prefs.addObserver(pref, syncRssFolderDisplay);

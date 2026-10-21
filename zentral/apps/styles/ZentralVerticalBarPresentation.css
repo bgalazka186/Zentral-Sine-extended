@@ -368,17 +368,21 @@
   background: transparent !important;
 }
 
-:root[zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+:root[zentral-apps-placement="vertical-bar"][zen-right-side]:not(
+    [zen-right-side="false"]
+  )
   #zentral-apps-vertical-bar-trigger,
-:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not(
+    [zen-sidebar-right="false"]
+  )
   #zentral-apps-vertical-bar-trigger {
   left: 0 !important;
   right: auto !important;
 }
 
-:root[zentral-apps-placement="vertical-bar"]:not([zen-right-side="true"]):not(
-    [zen-sidebar-right="true"]
-  )
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [zen-right-side]:not([zen-right-side="false"])
+  ):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
   #zentral-apps-vertical-bar-trigger {
   right: 0 !important;
   left: auto !important;
@@ -401,17 +405,21 @@
   pointer-events: auto !important;
 }
 
-:root[zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+:root[zentral-apps-placement="vertical-bar"][zen-right-side]:not(
+    [zen-right-side="false"]
+  )
   .zen-app-vb-hover-zone,
-:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not(
+    [zen-sidebar-right="false"]
+  )
   .zen-app-vb-hover-zone {
   right: -24px !important;
   left: auto !important;
 }
 
-:root[zentral-apps-placement="vertical-bar"]:not([zen-right-side="true"]):not(
-    [zen-sidebar-right="true"]
-  )
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [zen-right-side]:not([zen-right-side="false"])
+  ):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
   .zen-app-vb-hover-zone {
   left: -24px !important;
   right: auto !important;

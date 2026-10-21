@@ -1,60 +1,186 @@
 {
   "extended_version": "3.0.1",
   "upstream_reference": "1.1.0",
-  "package": "Version bump only: changed files relative to the latest assembled Extended package",
-  "installation": "Apply over the preceding video follow-up and README update, replacing matching files; restart Zen.",
-  "changes": "Updates package/runtime versions, settings badge and diagnostic version, README and current package documentation. Historical version labels and original upstream snapshot are preserved.",
-  "manifest_self_entry": "This manifest is included but omitted from its own hashes",
+  "package": "Sidebar, player input and theme appearance follow-up: changed files only",
+  "requires": "The preceding assembled Extended 3.0.1 package, including the video follow-up and README update",
+  "installation": "Replace matching paths in the mod root, then restart Zen. Existing preferences are retained; appearance changes do not automatically apply Recommended.",
+  "change_notes": "docs/SIDEBAR-AND-PLAYER-INPUT.md",
+  "manifest_self_entry": "Included but omitted from its own hashes",
   "files": [
     {
-      "path": "INSTALL.md",
-      "sha256": "5fdb8e9bacfb94c8e1a70b0dda9d6325bb62cf52eb40e265549d64509725f03b",
-      "size_bytes": 1768
-    },
-    {
       "path": "README.md",
-      "sha256": "79991ba27a529eb5ce3b4b07a09817fc1e675b05ed232e555607ac690eb7037f",
-      "size_bytes": 12849
+      "sha256": "1e4568683257adb63389f5a2d830fb139bdf67d70831a4da4dae80d29c352940",
+      "size_bytes": 13264
     },
     {
-      "path": "UPSTREAM.json",
-      "sha256": "01b646471be23bb81309e8fc5e0b5cad676b44eaea42b28dd4df01acb38ed2da",
-      "size_bytes": 1670
+      "path": "additional/library/ZentralLibraryResize.uc.js",
+      "sha256": "fb5561fbbcf38a2abb70095087208044caaa67634e065542febd84224fc7d789",
+      "size_bytes": 17295
     },
     {
-      "path": "additional/diagnostics/ZentralLogger.uc.js",
-      "sha256": "a8c75ce9f9496f2b901c411bedcad7613248152d1ab7ad714a1adbbc5c33574c",
-      "size_bytes": 64935
+      "path": "additional/video/ZentralVideoPreview.css",
+      "sha256": "36f8955a2ea0dbc2663d86555e77c325220ef6da43b823ccba7d565754acb34c",
+      "size_bytes": 28715
+    },
+    {
+      "path": "additional/video/content/ZentralVideoActor.sys.mjs",
+      "sha256": "e8e69c5b03820571a319f4a4192e5ef571538d760addefb079ff18c52237d10e",
+      "size_bytes": 46579
+    },
+    {
+      "path": "additional/video/content/ZentralVideoBasicFrame.js",
+      "sha256": "441add633eb539dde6660070a541a8f31c29cef8e1476a9546ca9b02f2ce1450",
+      "size_bytes": 28837
+    },
+    {
+      "path": "additional/video/content/ZentralVideoFrame.js",
+      "sha256": "f343c1c9a2a105834309788fd94a1e101627ddf7b405a4a7c4c205129a633e2f",
+      "size_bytes": 53547
+    },
+    {
+      "path": "additional/video/controllers/README.md",
+      "sha256": "01456a6f4ba9b729283764ab539fafacb2c48a0d19210c5e03cd9d3f34e641f2",
+      "size_bytes": 5082
+    },
+    {
+      "path": "additional/video/controllers/ZentralVideoEnlarge.js",
+      "sha256": "62cbb06667f1a6a86318c42c91b57dac99f14040aab2cf0b20faf8a704225dfd",
+      "size_bytes": 26730
+    },
+    {
+      "path": "additional/video/controllers/ZentralVideoPlayerInput.js",
+      "sha256": "952698c420b1442c9f5ebd43b8c1891023122e5e6ae53a36583fc73c839d6390",
+      "size_bytes": 4909
+    },
+    {
+      "path": "additional/video/controllers/ZentralVideoSidebar.js",
+      "sha256": "4531d02d9669f656d125ba86492058a932ab0c5b6527824e4c0f22ee5c06eea9",
+      "size_bytes": 59041
+    },
+    {
+      "path": "additional/video/settings.json",
+      "sha256": "db2c2e6610e6453171730ee615d45d79fe108c4c52f9ec9c680d8a5ef39f214d",
+      "size_bytes": 61264
+    },
+    {
+      "path": "docs/BASE-PATCHES.md",
+      "sha256": "f3ae9832c84760e2e21541634de347e96ca63ddfd85c2bb653633b80d9988bc5",
+      "size_bytes": 15364
     },
     {
       "path": "docs/README.md",
-      "sha256": "c1aa57d29f4d830ad6e8263911b53935afa0e014c676059c770df078b3469687",
-      "size_bytes": 1284
+      "sha256": "3fd50e67b18faebffe4084308d5ec89f787bb91dfb66b6a2db4a6f9a6d75b43d",
+      "size_bytes": 1422
     },
     {
-      "path": "docs/UPDATING-UPSTREAM.md",
-      "sha256": "bcedc0d3c5686241805c28a89ec1c10861e9ee9746d09ec615764b4f4998f42a",
-      "size_bytes": 6714
+      "path": "docs/SIDEBAR-AND-PLAYER-INPUT.md",
+      "sha256": "03bbd45c21444be8008595aa264a2c49349e1d88c085b4587705496f06ecf371",
+      "size_bytes": 5228
+    },
+    {
+      "path": "extension/appearance/README.md",
+      "sha256": "88cbd754362887213db71ac53b5192c1466eefb8a6c87386f6293ba5d9b6712c",
+      "size_bytes": 3145
+    },
+    {
+      "path": "extension/appearance/ZentralAppearance.css",
+      "sha256": "54db66cf580a66bb66dbbbe709cfae7f5450de51d1cdcd88d8f2e5adfad6bc8c",
+      "size_bytes": 75789
+    },
+    {
+      "path": "extension/appearance/ZentralAppearance.js",
+      "sha256": "b00ce11a1fa257d733f40aca278589aa730492037c0589efab0701b2bc0c25cb",
+      "size_bytes": 63849
+    },
+    {
+      "path": "extension/panels/ZentralPanels.uc.js",
+      "sha256": "5b41bcc5b054dc2b9d1f1bf000bd50fd7817d744921a33e5da9193def4a1d38f",
+      "size_bytes": 174322
+    },
+    {
+      "path": "extension/panels/geometry/ZentralPanelGeometry.css",
+      "sha256": "80f4812079c4eb45d4ef487474daf8a2375d42811bb3474f67057f8fbefbec35",
+      "size_bytes": 10815
+    },
+    {
+      "path": "extension/settings/controllers/ZentralFeatureSettings.js",
+      "sha256": "6a0d9704b66da080c7596818554acfb07cf3d747e070db1975664f80e383802f",
+      "size_bytes": 152806
     },
     {
       "path": "extension/settings/controllers/ZentralSettingsShell.js",
-      "sha256": "e21c54e8c4b6f390b19d7af8c2fc1d4091f79daca412386a9938762229147c76",
-      "size_bytes": 119510
+      "sha256": "e7f0836e68b0349fb292d092e07e42ec9c37602e35386891237165422b0d1dad",
+      "size_bytes": 120074
     },
     {
-      "path": "loader/Zentral.uc.js",
-      "sha256": "66b40422979e099b4684cf24cc1f3343a171c6c71a792be3250221e3ea8ff17b",
-      "size_bytes": 9854
+      "path": "extension/settings/layout.json",
+      "sha256": "84a4b81875442a63b1dcd1188ba6559ec1fb4e12ab2ab7b52d2b7dec1f2dbcfd",
+      "size_bytes": 35669
+    },
+    {
+      "path": "extension/settings/recommended.json",
+      "sha256": "1cee678b7c17c206b5d9590933ec321b066189b6da4757f5e78b14b582c01886",
+      "size_bytes": 20412
+    },
+    {
+      "path": "extension/settings/release-settings.json",
+      "sha256": "d4c4721868b734f4d13e60e4c5dceb2c0dfd23ac308b41bb2860f97f62c44d9f",
+      "size_bytes": 3276
+    },
+    {
+      "path": "loader/README.md",
+      "sha256": "2b7bd89f1e08d9a46e0259138c4520f3b30603c8df25dc2d96e2aba316284484",
+      "size_bytes": 15912
+    },
+    {
+      "path": "loader/ZentralNativeInteraction.css",
+      "sha256": "0ec8fd82a34d83a3cb882f87b6b29f6b29c0a9d4452559da86527ba9ca6e18f6",
+      "size_bytes": 1974
     },
     {
       "path": "loader/ZentralRuntime.js",
-      "sha256": "def5e221b7105018b756d16f9fa3f8bd844bc50c4934d1ad3821ff61c4bbb847",
-      "size_bytes": 92563
+      "sha256": "2f9a8ff3b2b547087b3f3ac361d4a75203f92d2bcce0d8d7a9daf939e256bdb6",
+      "size_bytes": 94960
     },
     {
-      "path": "theme.json",
-      "sha256": "1e81a235b1174d559a5193ff0baf9039404f67e7da27937d74f9ae67251c25eb",
-      "size_bytes": 716
+      "path": "patches/1.1.0-to-adapted-base.patch",
+      "sha256": "dc57a918e3b36a1292fa4f44537253e941a9b948dcec95a4ad664c49b647feb9",
+      "size_bytes": 1556594
+    },
+    {
+      "path": "preferences.json",
+      "sha256": "b01c07e6cc3b1da87e61366edb5a2ecd8e721909a100e6524d8d37396d871c4e",
+      "size_bytes": 205706
+    },
+    {
+      "path": "zentral/apps/controllers/ZentralLibraryCompatibility.js",
+      "sha256": "e55bdaf7b661d91a027f1d9f5d28b5e19cd75f6da586e88988325f270e6e8782",
+      "size_bytes": 15133
+    },
+    {
+      "path": "zentral/apps/controllers/ZentralPanelPosition.js",
+      "sha256": "e400ef6925256096d3475acb0a3d9e700bc4962deec79e0817cb83fb785cdaf0",
+      "size_bytes": 25310
+    },
+    {
+      "path": "zentral/apps/styles/ZentralAppsInjected.css",
+      "sha256": "a841b5d311bb2113b3f6edbeea00ec88fe9d5de5d76b907aed9c3144e56ccfa4",
+      "size_bytes": 72058
+    },
+    {
+      "path": "zentral/apps/styles/ZentralVerticalBarLayout.css",
+      "sha256": "5ca5a92d0afe7eb0e3e5f860d77e3a25a7a3c5c0d102f80b62f06381534f2b6e",
+      "size_bytes": 15581
+    },
+    {
+      "path": "zentral/apps/styles/ZentralVerticalBarPresentation.css",
+      "sha256": "b931e40aee66f46c8145a783fb00e99d2c70b3d6f076c03b4833d20a1c42957f",
+      "size_bytes": 14833
+    },
+    {
+      "path": "zentral/groups/styles/ZentralGroupPresentation.css",
+      "sha256": "13c499faac34cc005ad6ab3c39b31121b7148cf4f66158a8d2c582ba681f93c3",
+      "size_bytes": 34941
     }
   ]
 }

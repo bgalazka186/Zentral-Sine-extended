@@ -18,10 +18,21 @@
       "label": "Compact RSS Live-Folder Headers",
       "type": "checkbox",
       "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.bgalazka.rss.reader_card",
+      "label": "Reader card for RSS articles",
+      "type": "checkbox",
+      "defaultValue": false
     }
   ],
   "settings": {
     "zen.workspace.bgalazka.rss.hide_empty": {
+      "category": "rss",
+      "section": "Live-folder display",
+      "owner": "rss"
+    },
+    "zen.workspace.bgalazka.rss.reader_card": {
       "category": "rss",
       "section": "Live-folder display",
       "owner": "rss"

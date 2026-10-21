@@ -624,6 +624,7 @@
           stage: "not opened",
           failures: [],
         },
+        nativeSidebar: runtime.nativeSidebarDiagnostics?.() || null,
         sidebarLayoutRepair: runtime.sidebarLayoutRepair || {
           stage: "not started",
         },
@@ -682,76 +683,104 @@
     function nativeSidebarElement() {
       const tabs = window.gBrowser?.tabContainer;
       const candidates = [
+        window.gNavToolbox,
         document.getElementById("navigator-toolbox"),
         document.getElementById("sidebar-container"),
         document.getElementById("vertical-tabs"),
-        document.getElementById("sidebar-box"),
         tabs,
       ];
-      return (
-        candidates.find(
-          (el) =>
-            el?.isConnected &&
-            (el === tabs || el.contains(tabs)) &&
-            el.getBoundingClientRect().width < window.innerWidth * 0.65,
-        ) ||
-        tabs ||
-        null
-      );
+      for (const node of new Set(candidates)) {
+        if (!node?.isConnected) continue;
+        const style = window.getComputedStyle(node);
+        if (style.display === "none" || style.visibility === "collapse")
+          continue;
+        const r = node.getBoundingClientRect();
+        // Wide sidebars are valid. Only reject absent or full-window hosts;
+        // tab containment can be incomplete during native startup/reparenting.
+        const verticalNative =
+          (node === window.gNavToolbox || node.id === "navigator-toolbox") &&
+          r.height > window.innerHeight / 2;
+        if (
+          [r.width, r.height, r.left, r.right, r.top, r.bottom].every(
+            Number.isFinite,
+          ) &&
+          r.width > 0 &&
+          (verticalNative || r.width < window.innerWidth - 1) &&
+          r.height > 0
+        )
+          return node;
+      }
+      return null;
     }
     function nativeSidebarRect() {
-      const el = nativeSidebarElement();
-      return (
-        el?.getBoundingClientRect() || {
-          left: 0,
-          right: 0,
-          top: 0,
-          bottom: 0,
-          width: 0,
-          height: 0,
-        }
-      );
+      const r = nativeSidebarElement()?.getBoundingClientRect();
+      if (!r)
+        return { left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 };
+      const left = Math.max(0, Math.min(window.innerWidth, r.left));
+      const right = Math.max(left, Math.min(window.innerWidth, r.right));
+      const top = Math.max(0, Math.min(window.innerHeight, r.top));
+      const bottom = Math.max(top, Math.min(window.innerHeight, r.bottom));
+      return {
+        left,
+        right,
+        top,
+        bottom,
+        width: right - left,
+        height: bottom - top,
+      };
+    }
+    function nativeSidebarSide() {
+      const ui = document.documentElement;
+      for (const key of ["zen-right-side", "zen-sidebar-right"])
+        if (ui.hasAttribute(key))
+          return ui.getAttribute(key) === "false" ? "left" : "right";
+      if (getPref("zen.tabs.vertical.right-side", false)) return "right";
+      const r = nativeSidebarRect();
+      return r.width && r.left + r.width / 2 > window.innerWidth / 2
+        ? "right"
+        : "left";
     }
     function sidebarSafeBounds() {
       let left = 0,
         right = window.innerWidth;
       const native = nativeSidebarElement();
-      const nodes = new Set([native, document.getElementById("sidebar-box")]);
-      const ui = document.documentElement;
-      const onRight =
-        ui.getAttribute("zen-right-side") === "true" ||
-        ui.getAttribute("zen-sidebar-right") === "true";
+      const nodes = new Set([
+        native,
+        document.getElementById("sidebar-box"),
+        document.getElementById("zen-sidebar-splitter"),
+      ]);
+      const ui = document.documentElement,
+        onRight = nativeSidebarSide() === "right";
       if (ui.getAttribute("zen-compact-mode") === "true") {
-        // Preserve the native 8px reveal bezel even when a panel's exterior
-        // resize grip extends 14px beyond its box.
         if (onRight) right -= 22;
         else left += 22;
       }
       for (const node of nodes) {
         if (!node?.isConnected) continue;
         const style = window.getComputedStyle(node),
-          rect = node.getBoundingClientRect();
+          r = node.getBoundingClientRect();
         if (
           style.display === "none" ||
           style.visibility === "hidden" ||
-          style.opacity === "0" ||
-          rect.width <= 0 ||
-          rect.width >= window.innerWidth * 0.65 ||
-          rect.height <= 0 ||
-          rect.right <= 0 ||
-          rect.left >= window.innerWidth
+          style.visibility === "collapse" ||
+          (node.id !== "zen-sidebar-splitter" && style.opacity === "0") ||
+          r.width <= 0 ||
+          (node !== native && r.width >= window.innerWidth - 1) ||
+          r.height <= 0 ||
+          r.right <= 0 ||
+          r.left >= window.innerWidth
         )
           continue;
-        if (rect.left + rect.width / 2 < window.innerWidth / 2)
-          left = Math.max(left, rect.right);
-        else right = Math.min(right, rect.left);
+        const belongsRight =
+          node === native || node.id === "zen-sidebar-splitter"
+            ? onRight
+            : r.left + r.width / 2 >= window.innerWidth / 2;
+        if (belongsRight) right = Math.min(right, r.left);
+        else left = Math.max(left, r.right);
       }
-      return {
-        left: Math.max(0, Math.min(left, window.innerWidth)),
-        right: Math.max(left, Math.min(right, window.innerWidth)),
-        top: 0,
-        bottom: window.innerHeight,
-      };
+      left = Math.max(0, Math.min(left, window.innerWidth));
+      right = Math.max(left, Math.min(right, window.innerWidth));
+      return { left, right, top: 0, bottom: window.innerHeight };
     }
     function setLayoutStyle(node, name, value) {
       if (node.style.getPropertyValue(name) !== value)
@@ -798,6 +827,42 @@
     }
     runtime.nativeSidebarElement = nativeSidebarElement;
     runtime.nativeSidebarRect = nativeSidebarRect;
+    runtime.nativeSidebarSide = nativeSidebarSide;
+    runtime.nativeSidebarDiagnostics = () => {
+      try {
+        const divider = document.getElementById("zen-sidebar-splitter");
+        const r = divider?.getBoundingClientRect(),
+          style = divider && window.getComputedStyle(divider);
+        const target =
+          r && r.width > 0 && r.height > 0
+            ? document.elementFromPoint(
+                Math.max(
+                  0,
+                  Math.min(window.innerWidth - 1, r.left + r.width / 2),
+                ),
+                Math.max(
+                  0,
+                  Math.min(window.innerHeight - 1, r.top + r.height / 2),
+                ),
+              )
+            : null;
+        return {
+          side: nativeSidebarSide(),
+          rect: nativeSidebarRect(),
+          bounds: sidebarSafeBounds(),
+          divider: {
+            present: !!divider?.isConnected,
+            width: r?.width || 0,
+            height: r?.height || 0,
+            pointerEvents: style?.pointerEvents,
+            display: style?.display,
+            hit: target === divider || !!divider?.contains(target),
+          },
+        };
+      } catch (error) {
+        return { error: String(error) };
+      }
+    };
     runtime.sidebarSafeBounds = sidebarSafeBounds;
     runtime.constrainPanelToSidebar = constrainPanelToSidebar;
     function installSidebarLayoutTracking() {
@@ -853,6 +918,9 @@
         if (disposed) return;
         const bounds = sidebarSafeBounds(),
           ui = document.documentElement;
+        const side = nativeSidebarSide();
+        if (ui.getAttribute("zentral-native-sidebar-side") !== side)
+          ui.setAttribute("zentral-native-sidebar-side", side);
         if (ui.getAttribute("zentral-safe-layout") !== "true")
           ui.setAttribute("zentral-safe-layout", "true");
         setLayoutStyle(
@@ -1010,6 +1078,7 @@
         for (const name of ["--zentral-safe-left", "--zentral-safe-right"])
           document.documentElement.style.removeProperty(name);
         document.documentElement.removeAttribute("zentral-safe-layout");
+        document.documentElement.removeAttribute("zentral-native-sidebar-side");
       });
     }
 

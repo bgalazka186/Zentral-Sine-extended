@@ -790,7 +790,7 @@
   gap: 2px;
   width: auto;
   align-items: center;
-  -moz-window-dragging: no;
+  -moz-window-dragging: no-drag;
   position: relative;
   flex-shrink: 1 !important;
   min-width: 0 !important;
@@ -806,7 +806,7 @@
   width: max-content;
   max-width: calc(10 * 38px + 9 * 4px) !important;
   scroll-behavior: smooth;
-  -moz-window-dragging: no;
+  -moz-window-dragging: no-drag;
   flex-shrink: 1 !important;
 }
 #zen-apps-sidebar-grid.zen-apps-horizontal
@@ -1113,11 +1113,11 @@
   opacity: 0 !important;
   pointer-events: none !important;
 }
-:root[zen-right-side="true"] #zen-app-panel-pill {
+:root[zen-right-side]:not([zen-right-side="false"]) #zen-app-panel-pill {
   left: 0;
   transform: translate(-50%, -50%);
 }
-:root:not([zen-right-side="true"]) #zen-app-panel-pill {
+:root:not([zen-right-side]:not([zen-right-side="false"])) #zen-app-panel-pill {
   right: 0;
   transform: translate(50%, -50%);
 }
@@ -1144,11 +1144,11 @@
 #zen-app-panel-root[open] .zen-app-hover-zone {
   pointer-events: auto;
 }
-:root[zen-right-side="true"] .zen-app-hover-zone {
+:root[zen-right-side]:not([zen-right-side="false"]) .zen-app-hover-zone {
   left: -22px;
   right: auto;
 }
-:root:not([zen-right-side="true"]) .zen-app-hover-zone {
+:root:not([zen-right-side]:not([zen-right-side="false"])) .zen-app-hover-zone {
   right: -22px;
   left: auto;
 }
@@ -1263,11 +1263,12 @@
 #zen-app-panel-root[open] .zen-app-resize-strip {
   pointer-events: auto;
 }
-:root[zen-right-side="true"] .zen-app-resize-strip {
+:root[zen-right-side]:not([zen-right-side="false"]) .zen-app-resize-strip {
   left: -5px;
   right: auto;
 }
-:root:not([zen-right-side="true"]) .zen-app-resize-strip {
+:root:not([zen-right-side]:not([zen-right-side="false"]))
+  .zen-app-resize-strip {
   right: -5px;
   left: auto;
 }
@@ -1346,11 +1347,11 @@
 /* Outer margin matching Zen's element separation for exact visual symmetry */
 :root[zentral-apps-placement="vertical-bar"]:not(
     [zentral-apps-autohide="true"]
-  )[zen-right-side="true"]
+  )[zen-right-side]:not([zen-right-side="false"])
   #zentral-apps-vertical-bar,
 :root[zentral-apps-placement="vertical-bar"]:not(
     [zentral-apps-autohide="true"]
-  )[zen-sidebar-right="true"]
+  )[zen-sidebar-right]:not([zen-sidebar-right="false"])
   #zentral-apps-vertical-bar {
   margin-left: var(--zen-element-separation, 6px) !important;
   margin-right: 0 !important;
@@ -1358,7 +1359,9 @@
 
 :root[zentral-apps-placement="vertical-bar"]:not(
     [zentral-apps-autohide="true"]
-  ):not([zen-right-side="true"]):not([zen-sidebar-right="true"])
+  ):not([zen-right-side]:not([zen-right-side="false"])):not(
+    [zen-sidebar-right]:not([zen-sidebar-right="false"])
+  )
   #zentral-apps-vertical-bar {
   margin-right: var(--zen-element-separation, 6px) !important;
   margin-left: 0 !important;
@@ -1452,9 +1455,13 @@
 }
 
 /* Autohide Mode B: Position on Left (Sidebar on Right) */
-:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side]:not(
+    [zen-right-side="false"]
+  )
   #zentral-apps-vertical-bar,
-:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not(
+    [zen-sidebar-right="false"]
+  )
   #zentral-apps-vertical-bar {
   left: 8px !important;
   right: auto !important;
@@ -1462,19 +1469,23 @@
 
 /* Autohide Mode B: Position on Right (Sidebar on Left) */
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
-    [zen-right-side="true"]
-  ):not([zen-sidebar-right="true"])
+    [zen-right-side]:not([zen-right-side="false"])
+  ):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
   #zentral-apps-vertical-bar {
   right: 8px !important;
   left: auto !important;
 }
 
 /* Autohide Mode B: Idle/Collapsed State on Left */
-:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-right-side]:not(
+    [zen-right-side="false"]
+  )
   #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
     [zentral-app-panel-open="true"]
   ),
-:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not(
+    [zen-sidebar-right="false"]
+  )
   #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
     [zentral-app-panel-open="true"]
   ) {
@@ -1486,8 +1497,8 @@
 
 /* Autohide Mode B: Idle/Collapsed State on Right */
 :root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"]:not(
-    [zen-right-side="true"]
-  ):not([zen-sidebar-right="true"])
+    [zen-right-side]:not([zen-right-side="false"])
+  ):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
   #zentral-apps-vertical-bar:not([data-revealed="true"]):not(
     [zentral-app-panel-open="true"]
   ) {
@@ -1955,17 +1966,21 @@
   background: transparent !important;
 }
 
-:root[zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+:root[zentral-apps-placement="vertical-bar"][zen-right-side]:not(
+    [zen-right-side="false"]
+  )
   #zentral-apps-vertical-bar-trigger,
-:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not(
+    [zen-sidebar-right="false"]
+  )
   #zentral-apps-vertical-bar-trigger {
   left: 0 !important;
   right: auto !important;
 }
 
-:root[zentral-apps-placement="vertical-bar"]:not([zen-right-side="true"]):not(
-    [zen-sidebar-right="true"]
-  )
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [zen-right-side]:not([zen-right-side="false"])
+  ):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
   #zentral-apps-vertical-bar-trigger {
   right: 0 !important;
   left: auto !important;
@@ -1988,17 +2003,21 @@
   pointer-events: auto !important;
 }
 
-:root[zentral-apps-placement="vertical-bar"][zen-right-side="true"]
+:root[zentral-apps-placement="vertical-bar"][zen-right-side]:not(
+    [zen-right-side="false"]
+  )
   .zen-app-vb-hover-zone,
-:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right="true"]
+:root[zentral-apps-placement="vertical-bar"][zen-sidebar-right]:not(
+    [zen-sidebar-right="false"]
+  )
   .zen-app-vb-hover-zone {
   right: -24px !important;
   left: auto !important;
 }
 
-:root[zentral-apps-placement="vertical-bar"]:not([zen-right-side="true"]):not(
-    [zen-sidebar-right="true"]
-  )
+:root[zentral-apps-placement="vertical-bar"]:not(
+    [zen-right-side]:not([zen-right-side="false"])
+  ):not([zen-sidebar-right]:not([zen-sidebar-right="false"]))
   .zen-app-vb-hover-zone {
   left: -24px !important;
   right: auto !important;

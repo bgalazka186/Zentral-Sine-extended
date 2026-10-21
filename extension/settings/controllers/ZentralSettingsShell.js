@@ -84,6 +84,23 @@
         updatePosition() {
           if (!this.modal) return;
           try {
+            const bounds = window.ZentralRuntime?.sidebarSafeBounds?.();
+            if (
+              bounds &&
+              Number.isFinite(bounds.left) &&
+              Number.isFinite(bounds.right) &&
+              bounds.right > bounds.left
+            ) {
+              this.modal.style.left = Math.round(bounds.left) + "px";
+              this.modal.style.right =
+                Math.max(0, Math.round(window.innerWidth - bounds.right)) +
+                "px";
+              this.modal.style.top = "0px";
+              this.modal.style.bottom = "0px";
+              this.modal.style.width =
+                Math.round(bounds.right - bounds.left) + "px";
+              return;
+            }
             const sidebar =
               document.getElementById("sidebar-box") ||
               document.getElementById("sidebar-container") ||
@@ -105,11 +122,11 @@
             if (sidebar && !isSidebarCollapsed) {
               const sRect = sidebar.getBoundingClientRect();
               const isRight =
-                document.documentElement.getAttribute("zen-sidebar-right") ===
-                  "true" ||
-                document.documentElement.getAttribute("zen-right-side") ===
-                  "true" ||
-                sRect.left > window.innerWidth / 2;
+                ["zen-sidebar-right", "zen-right-side"].some(
+                  (key) =>
+                    document.documentElement.hasAttribute(key) &&
+                    document.documentElement.getAttribute(key) !== "false",
+                ) || sRect.left > window.innerWidth / 2;
 
               if (sRect.width > 20 && sRect.width < window.innerWidth) {
                 if (isRight) {

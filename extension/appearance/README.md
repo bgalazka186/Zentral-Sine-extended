@@ -20,3 +20,9 @@ The chosen surface colors determine automatic text contrast. Fully transparent s
 ## Performance
 
 Palette math runs only on appearance changes. Preference bursts from presets/imports coalesce into one scheduled update, and direct updates cancel queued duplicates. Static scoped CSS applies the result; there is no color polling, per-frame sampling or recurring DOM scan. Artwork sizing retains its existing coalesced resize/mutation handling.
+
+## Video control appearance
+
+Sidebar and Big Preview buttons follow the shared button style, border, size, hover pair and video fill/text controls. Plain and outline styles retain transparent resting fills. Automatic text contrast uses the effective button surface; Manual retains the chosen icon color. Big Preview adds a small icon shadow over video pixels without adding a forced border or solid button fill.
+
+Big Preview overlay opacity defaults to 40% and is separate from both video-button opacity and Simple palette opacity. Its color follows the video-control palette. The new slider and its New Settings copy are owned by Video; starting themes and Recommended set 40%. See [input and appearance notes](../../docs/SIDEBAR-AND-PLAYER-INPUT.md).

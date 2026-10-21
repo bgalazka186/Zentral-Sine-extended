@@ -48,6 +48,11 @@
     "zen.workspace.zentral.video_preview.enlarged_keep_aspect",
     "zen.workspace.zentral.video_preview.enlarged_hover_controls",
     "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px",
-    "zen.workspace.zentral.video_preview.enlarged_remember_position"
+    "zen.workspace.zentral.video_preview.enlarged_remember_position",
+    "zen.workspace.zentral.video_preview.enlarged_keyboard_controls",
+    "zen.workspace.zentral.video_preview.enlarged_click_toggle",
+    "zen.workspace.bgalazka.look.video_overlay_opacity",
+    "zen.workspace.bgalazka.look.video_controls_wrap",
+    "zen.workspace.bgalazka.look.video_controls_gap"
   ]
 }

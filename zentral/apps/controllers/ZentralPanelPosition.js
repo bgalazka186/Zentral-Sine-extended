@@ -45,26 +45,11 @@
       } = shared;
       return {
         isSidebarRight() {
-          // 1. Direct Zen root attributes
-          if (
-            document.documentElement.getAttribute("zen-right-side") === "true"
-          )
-            return true;
-          if (
-            document.documentElement.getAttribute("zen-sidebar-right") ===
-            "true"
-          )
-            return true;
-          if (
-            document.documentElement.getAttribute("zen-right-side") === "false"
-          )
-            return false;
-          if (
-            document.documentElement.getAttribute("zen-sidebar-right") ===
-            "false"
-          )
-            return false;
-
+          if (typeof runtime.nativeSidebarSide === "function")
+            return runtime.nativeSidebarSide() === "right";
+          for (const key of ["zen-right-side", "zen-sidebar-right"])
+            if (document.documentElement.hasAttribute(key))
+              return document.documentElement.getAttribute(key) !== "false";
           // 2. Physical DOM measurement of the sidebar container
           const sidebarBox =
             window.ZentralRuntime?.nativeSidebarElement?.() ||

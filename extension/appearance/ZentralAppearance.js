@@ -32,6 +32,8 @@
     // Appearance belongs to its own preference namespace, so a Look-only file
     // cannot accidentally change panel placement, shortcuts, or browsing data.
     const LOOK_PREFS = Object.freeze({
+      VIDEO_CONTROLS_WRAP: "zen.workspace.bgalazka.look.video_controls_wrap",
+      VIDEO_CONTROLS_GAP: "zen.workspace.bgalazka.look.video_controls_gap",
       CONTROL_STRENGTH: "zen.workspace.bgalazka.look.control_strength",
       SOLID_CONTROLS: "zen.workspace.bgalazka.look.solid_controls",
       STYLE: "zen.workspace.bgalazka.look.style",
@@ -74,6 +76,8 @@
       BUTTON_OPACITY: "zen.workspace.bgalazka.look.button_opacity",
       TILE_OPACITY: "zen.workspace.bgalazka.look.tile_opacity",
       VIDEO_OPACITY: "zen.workspace.bgalazka.look.video_opacity",
+      VIDEO_OVERLAY_OPACITY:
+        "zen.workspace.bgalazka.look.video_overlay_opacity",
       VIDEO_CONTROL_OPACITY:
         "zen.workspace.bgalazka.look.video_control_opacity",
       POPUP_OPACITY: "zen.workspace.bgalazka.look.popup_opacity",
@@ -122,6 +126,8 @@
       NEWTAB_HEIGHT: "zen.workspace.bgalazka.look.newtab_height",
     });
     const LOOK_DEFAULTS = Object.freeze({
+      [LOOK_PREFS.VIDEO_CONTROLS_WRAP]: false,
+      [LOOK_PREFS.VIDEO_CONTROLS_GAP]: 1,
       [LOOK_PREFS.SOLID_CONTROLS]: true,
       [LOOK_PREFS.CONTROL_STRENGTH]: 100,
       [LOOK_PREFS.STYLE]: "atelier",
@@ -164,6 +170,7 @@
       [LOOK_PREFS.BUTTON_OPACITY]: 100,
       [LOOK_PREFS.TILE_OPACITY]: 100,
       [LOOK_PREFS.VIDEO_OPACITY]: 100,
+      [LOOK_PREFS.VIDEO_OVERLAY_OPACITY]: 40,
       [LOOK_PREFS.VIDEO_CONTROL_OPACITY]: 100,
       [LOOK_PREFS.POPUP_OPACITY]: 100,
       [LOOK_PREFS.RADIUS]: 0,
@@ -446,6 +453,7 @@
       LOOK_PREFS.BUTTON_OPACITY,
       LOOK_PREFS.TILE_OPACITY,
       LOOK_PREFS.VIDEO_OPACITY,
+      LOOK_PREFS.VIDEO_OVERLAY_OPACITY,
       LOOK_PREFS.VIDEO_CONTROL_OPACITY,
       LOOK_PREFS.POPUP_OPACITY,
     ]);
@@ -503,6 +511,7 @@
       [LOOK_GROUP_PREFS.INDICATOR_TYPE]: ["circle", "chevron"],
     });
     const LOOK_BOUNDS = Object.freeze({
+      [LOOK_PREFS.VIDEO_CONTROLS_GAP]: [0, 8],
       ...Object.fromEntries(
         [
           LOOK_PREFS.PRIMARY_OPACITY,
@@ -515,6 +524,7 @@
           LOOK_PREFS.BUTTON_OPACITY,
           LOOK_PREFS.TILE_OPACITY,
           LOOK_PREFS.VIDEO_OPACITY,
+          LOOK_PREFS.VIDEO_OVERLAY_OPACITY,
           LOOK_PREFS.VIDEO_CONTROL_OPACITY,
           LOOK_PREFS.POPUP_OPACITY,
         ].map((key) => [key, [0, 100]]),
@@ -744,6 +754,8 @@
           ctx.setPref(LOOK_PREFS[key], current[LOOK_PREFS[key]]);
     }
     const themeColorKeys = new Set([
+      LOOK_PREFS.VIDEO_CONTROLS_WRAP,
+      LOOK_PREFS.VIDEO_CONTROLS_GAP,
       ...LOOK_COLORS.map((key) => LOOK_PREFS[key]),
       ...[...LOOK_TRANSPARENCY_KEYS].filter(
         (key) => key !== LOOK_PREFS.WEB_OPACITY,
@@ -1111,6 +1123,27 @@
       lookFrame = null;
     });
     const applyLook = () => {
+      {
+        const style = document.documentElement.style;
+        const wrap = ctx.getPref(
+          LOOK_PREFS.VIDEO_CONTROLS_WRAP, false
+        ) === true;
+        const rawGap = Number(ctx.getPref(
+          LOOK_PREFS.VIDEO_CONTROLS_GAP, 1
+        ));
+        const gap = Number.isFinite(rawGap)
+          ? Math.max(0, Math.min(8, rawGap))
+          : 1;
+
+        style.setProperty(
+          "--zentral-sidebar-video-wrap",
+          wrap ? "wrap" : "nowrap"
+        );
+        style.setProperty(
+          "--zentral-sidebar-video-gap",
+          gap + "px"
+        );
+      }
       if (lookDisposed) return;
       if (lookFrame !== null) window.cancelAnimationFrame(lookFrame);
       lookFrame = null;
@@ -1258,6 +1291,62 @@
         palette.colors.VIDEO_CONTROL,
         opacityFor("VIDEO_CONTROL_OPACITY"),
       );
+      // Pair glyphs with the surface actually painted by the active button style.
+      // Video pixels are deliberately never sampled during resize or playback.
+      const overlayRaw = Number(
+        ctx.getPref(LOOK_PREFS.VIDEO_OVERLAY_OPACITY, 40),
+      );
+      const overlayOpacity = Number.isFinite(overlayRaw)
+        ? Math.max(0, Math.min(100, overlayRaw)) / 100
+        : 0.4;
+      const buttonColor =
+        strength > 0
+          ? palette.colors.BUTTON_SURFACE
+          : palette.colors.VIDEO_CONTROL;
+      const buttonOpacity = filledButtons ? videoOpacity : 0;
+      const overlayBackground = mix(
+        palette.colors.VIDEO_CANVAS,
+        palette.colors.VIDEO_CONTROL,
+        overlayOpacity,
+      );
+      root.style.setProperty(
+        "--zl-video-button-fill",
+        `color-mix(in srgb, ${buttonColor} ${buttonOpacity * 100}%, transparent)`,
+      );
+      root.style.setProperty(
+        "--zl-video-button-text",
+        palette.textFor(
+          mix(palette.colors.VIDEO_CANVAS, buttonColor, buttonOpacity),
+          palette.colors.VIDEO_TEXT,
+        ),
+      );
+      root.style.setProperty(
+        "--zl-video-overlay-text",
+        palette.textFor(
+          mix(overlayBackground, buttonColor, buttonOpacity),
+          palette.colors.VIDEO_TEXT,
+        ),
+      );
+      root.style.setProperty(
+        "--zl-video-progress",
+        readableColor(
+          palette.colors.VIDEO_SELECTED,
+          palette.colors.VIDEO_CANVAS,
+          3,
+        ),
+      );
+      root.style.setProperty(
+        "--zl-video-scheme",
+        contrastText(palette.colors.VIDEO_CANVAS) === "#000000"
+          ? "light"
+          : "dark",
+      );
+      root.style.setProperty(
+        "--zl-video-icon-outline",
+        contrastText(palette.colors.VIDEO_CONTROL) === "#000000"
+          ? "#fff"
+          : "#000",
+      );
       for (const [name, key] of Object.entries(pairs)) {
         let background = palette.colors[key];
         let manual = name.startsWith("settings-")
@@ -1392,6 +1481,7 @@
         "TILE_OPACITY",
         "VIDEO_OPACITY",
         "VIDEO_CONTROL_OPACITY",
+        "VIDEO_OVERLAY_OPACITY",
         "POPUP_OPACITY",
       ]) {
         const pref = LOOK_PREFS[key];

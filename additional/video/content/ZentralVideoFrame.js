@@ -1328,6 +1328,36 @@
       case "mute":
         media.muted = !media.muted;
         break;
+      case "volumeRelative":
+        if (Number.isFinite(value)) {
+          media.volume = Math.max(
+            0,
+            Math.min(1, media.volume + Math.max(-1, Math.min(1, value))),
+          );
+          if (value > 0) media.muted = false;
+        }
+        break;
+      case "rateRelative":
+        if (Number.isFinite(value))
+          media.playbackRate = Math.max(
+            0.25,
+            Math.min(4, media.playbackRate + Math.max(-1, Math.min(1, value))),
+          );
+        break;
+      case "seekFraction":
+        if (
+          Number.isFinite(value) &&
+          Number.isFinite(media.duration) &&
+          media.duration > 0
+        )
+          media.currentTime = Math.max(
+            0,
+            Math.min(
+              media.duration - 0.01,
+              media.duration * Math.max(0, Math.min(1, value)),
+            ),
+          );
+        break;
       case "seekRelative":
         if (Number.isFinite(value) && Number.isFinite(media.duration))
           media.currentTime = Math.max(
@@ -1345,6 +1375,8 @@
       muted: media.muted,
       currentTime: media.currentTime,
       duration: Number.isFinite(media.duration) ? media.duration : 0,
+      volume: media.volume,
+      playbackRate: media.playbackRate,
     };
   }
 

@@ -7,6 +7,10 @@
  */
 (function () {
   "use strict";
+  window.ZentralModuleLoader.load(
+    "additional/video/controllers/ZentralVideoPlayerInput.js",
+    { owner: "video", optional: true },
+  );
   window.ZentralModuleLoader.define(
     "video/enlarge",
     ({
@@ -17,6 +21,8 @@
       canOpen,
       onControls,
       onWindowResize,
+      control,
+      getSourceKey,
     }) => {
       const P = "zen.workspace.zentral.video_preview.",
         listeners = [],
@@ -45,6 +51,22 @@
         controls = null,
         seek = null,
         suppressUntil = 0;
+      let playerInput = window.ZentralModuleLoader.create(
+        "video/player-input",
+        {
+          Services,
+          getBox: () => box,
+          getPicture: () => picture,
+          isOpen: () => opened,
+          isPeeking: () => peeking,
+          isSuppressed: () => !!drag?.moved || Date.now() < suppressUntil,
+          control,
+          getSourceKey,
+          fullscreen: toggleFullscreen,
+          close,
+        },
+        { optional: true },
+      );
       let trim = { w: 10, h: 45 };
       const listen = (node, type, fn, options) => {
         node.addEventListener(type, fn, options);
@@ -266,6 +288,7 @@
       }
       function close() {
         if (!opened) return;
+        playerInput?.cancel?.();
         cancelWindowResize();
         finish({ type: "pointercancel" });
         endPeek();
@@ -699,6 +722,23 @@
             },
             true,
           );
+          try {
+            playerInput?.mount?.();
+          } catch (error) {
+            try {
+              playerInput?.destroy?.();
+            } catch (_) {}
+            playerInput = null;
+            window.ZentralModuleLoader.fail?.(
+              "additional/video/controllers/ZentralVideoPlayerInput.js",
+              error,
+              "mount",
+            );
+            console.warn(
+              "[Zentral video] Optional player input unavailable",
+              error,
+            );
+          }
           listen(window, "blur", endPeek);
           listen(window, "resize", windowResize);
           listen(window, "sizemodechange", () => {
@@ -753,6 +793,7 @@
         destroy() {
           destroyed = true;
           close();
+          playerInput?.destroy?.();
           for (const off of listeners.splice(0)) off();
           hit?.remove();
           back?.remove();

@@ -148,27 +148,33 @@
 }
 
 /* Native fallback: sidebar on the right means the outer/content edge is left. */
-:root[zen-right-side="true"] #zen-app-panel-root .zen-app-resize-strip-inner,
-:root[zen-right-side="true"] #zen-app-panel-root .zen-app-resize-corner-inner,
-:root:not([zen-right-side="true"])
+:root[zen-right-side]:not([zen-right-side="false"])
+  #zen-app-panel-root
+  .zen-app-resize-strip-inner,
+:root[zen-right-side]:not([zen-right-side="false"])
+  #zen-app-panel-root
+  .zen-app-resize-corner-inner,
+:root:not([zen-right-side]:not([zen-right-side="false"]))
   #zen-app-panel-root
   .zen-app-resize-strip-outer,
-:root:not([zen-right-side="true"])
+:root:not([zen-right-side]:not([zen-right-side="false"]))
   #zen-app-panel-root
   :is(.zen-app-resize-corner-top-outer, .zen-app-resize-corner-bottom-outer) {
   right: -6px !important;
   left: auto !important;
 }
-:root[zen-right-side="true"]
+:root[zen-right-side]:not([zen-right-side="false"])
   #zen-app-panel-root
   :is(.zen-app-resize-corner-top-outer, .zen-app-resize-corner-bottom-outer),
-:root:not([zen-right-side="true"])
+:root:not([zen-right-side]:not([zen-right-side="false"]))
   #zen-app-panel-root
   .zen-app-resize-strip-inner,
-:root:not([zen-right-side="true"])
+:root:not([zen-right-side]:not([zen-right-side="false"]))
   #zen-app-panel-root
   .zen-app-resize-corner-inner,
-:root[zen-right-side="true"] #zen-app-panel-root .zen-app-resize-strip-outer {
+:root[zen-right-side]:not([zen-right-side="false"])
+  #zen-app-panel-root
+  .zen-app-resize-strip-outer {
   left: -6px !important;
   right: auto !important;
 }

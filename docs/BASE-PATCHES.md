@@ -72,3 +72,7 @@ Node DOM fixtures verify behavior and contracts, not native remote-XUL composito
 ## Repair integration
 
 Read `REPAIR-HANDOFF-3.0.0.md` before changing B001/B015 or geometry ownership. B001 controls is an additive contract-v1 capability; callers must tolerate missing controls when diagnosing mixed/partial installations. B015 is optional: returning null preserves native fallback behavior. Do not put feature preferences, hold timers or launcher rebuilding into the API method. Source/API changes are recorded by the regenerated adapted-base diff.
+
+## Extended 3.0.1 sidebar/input audit
+
+Original-derived Apps and Groups styles now accept boolean native sidebar flags, including an empty attribute, while respecting explicit `"false"`. PanelPosition and LibraryCompatibility use the shared runtime side resolver. Two inherited `-moz-window-dragging: no` values in AppsInjected are corrected to `no-drag`. These are adapted-base changes recorded in the regenerated patch; keep the pristine upstream snapshot unchanged. Native divider protection, measurement and input/appearance additions live outside the original-derived tree.

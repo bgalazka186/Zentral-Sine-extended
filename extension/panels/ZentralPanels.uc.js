@@ -337,6 +337,7 @@
 
         RSS_HIDE_EMPTY: "zen.workspace.bgalazka.rss.hide_empty",
         RSS_COMPACT_HEADERS: "zen.workspace.bgalazka.rss.compact_headers",
+        RSS_READER_CARD: "zen.workspace.bgalazka.rss.reader_card",
         TABBAR_COMPACT: "zen.workspace.bgalazka.look.compact_tabbar",
         TABBAR_ROW_HEIGHT: "zen.workspace.bgalazka.look.tabbar_row_height",
         TABBAR_ROW_GAP: "zen.workspace.bgalazka.look.tabbar_row_gap",
@@ -2210,6 +2211,12 @@
 
       const extensionKeybindHandler = (e) => {
         if (e.defaultPrevented || e.repeat) return;
+        if (
+          document.activeElement?.closest?.(
+            "#zentral-video-preview[data-enlarged]",
+          )
+        )
+          return;
         if (!getPref(BGALAZKA_EXT_PREFS.KEYBINDS_ENABLED, false)) return;
         if (!panelOwnsKeyboardEvent(e)) return;
         if (isEditableKeybindTarget(e.target)) return;

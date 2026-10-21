@@ -13,3 +13,7 @@ Send this folder for a change confined to its behavior. Include the specific out
 | `settings.json`           | Settings schema and category/section metadata owned by rss.                                    |
 
 Full installation uses root `theme.json` and `preferences.json`, plus `loader/`; Sine loads `loader/Zentral.uc.js`; a stale main registration can forward through `JS/Zentral.uc.js`. Per-feature settings.json is metadata, not an activation script.
+
+## Reader card
+
+Pref `zen.workspace.bgalazka.rss.reader_card` (default off). Hovering a live-folder article shows a card with the full text, URL and Open / Dismiss / Dismiss all buttons. Middle-click dismisses and the card re-targets the article now under the pointer. The native tab tooltip is suppressed for live-folder items only. Live-folder items are detected via `zen-live-folder-item-id` or a native live-folder parent.

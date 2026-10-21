@@ -15,3 +15,5 @@ Entrypoints and dependencies are declared in `loader/ZentralCatalog.js`. Load re
 `VIDEO-PREVIEW-REPAIR.md` records the current changed-files overlay, enlarged-player/resize fixes, portable recommendation policy, settings and verification limits. `REPAIR-FILES.json` lists the changed overlay files and hashes relative to the uploaded tree.
 
 `VIDEO-PREVIEW-FOLLOWUP.md` supersedes the first video repair where live feedback exposed regressions. Its ZIP is an incremental overlay on the preceding changed-files package.
+
+[Sidebar, player input and appearance audit](SIDEBAR-AND-PLAYER-INPUT.md) documents the 3.0.1 follow-up, settings and validation limits.

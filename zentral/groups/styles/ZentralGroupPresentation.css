@@ -142,17 +142,20 @@ panel#zentral-group-color-picker,
 }
 
 /* Right Sidebar Mode (Sidebar on Right side of screen -> Outer edge is on RIGHT, content on LEFT) */
-:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+:is(
+    html[zen-sidebar-right]:not([zen-sidebar-right="false"]),
+    html[zen-right-side]:not([zen-right-side="false"])
+  )
   tab-group.zentral-standard
   > .tab-group-label-container {
   justify-content: flex-start !important;
 }
 
-html[zen-sidebar-right="true"]
+html[zen-sidebar-right]:not([zen-sidebar-right="false"])
   tab-group.zentral-standard
   > .tab-group-label-container
   .zentral-tab-title-wrapper,
-html[zen-right-side="true"]
+html[zen-right-side]:not([zen-right-side="false"])
   tab-group.zentral-standard
   > .tab-group-label-container
   .zentral-tab-title-wrapper {
@@ -164,7 +167,10 @@ html[zen-right-side="true"]
   min-width: 100% !important;
 }
 
-:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+:is(
+    html[zen-sidebar-right]:not([zen-sidebar-right="false"]),
+    html[zen-right-side]:not([zen-right-side="false"])
+  )
   :is(
     tab-group.zentral-standard tab-group.zentral-standard,
     tab-group.zentral-standard[depth],
@@ -178,10 +184,10 @@ html[zen-right-side="true"]
   min-width: calc(100% - 8px) !important;
 }
 
-html[zen-sidebar-right="true"]
+html[zen-sidebar-right]:not([zen-sidebar-right="false"])
   tab-group.zentral-standard
   > .tab-group-label-container::before,
-html[zen-right-side="true"]
+html[zen-right-side]:not([zen-right-side="false"])
   tab-group.zentral-standard
   > .tab-group-label-container::before {
   display: none !important;
@@ -200,7 +206,10 @@ tab-group.zentral-standard
   border-radius: 8px !important;
 }
 
-:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+:is(
+    html[zen-sidebar-right]:not([zen-sidebar-right="false"]),
+    html[zen-right-side]:not([zen-right-side="false"])
+  )
   tab-group.zentral-standard
   > .tab-group-label-container:is(:hover, :has(tab:hover))
   .zentral-tab-title-wrapper {
@@ -219,8 +228,8 @@ html[zentral-label-opacity-below-85="true"]
 }
 
 html[zentral-label-opacity-below-85="true"]:is(
-    [zen-sidebar-right="true"],
-    [zen-right-side="true"]
+    [zen-sidebar-right]:not([zen-sidebar-right="false"]),
+    [zen-right-side]:not([zen-right-side="false"])
   )
   tab-group.zentral-standard
   > .tab-group-label-container:is(:hover, :has(tab:hover))
@@ -260,7 +269,10 @@ tab-group.zentral-standard > .tab-group-label-container .tab-group-label {
 }
 
 /* Right Sidebar: Indicator is order 1 (closest to left / webpage content), Text is order 2 */
-:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+:is(
+    html[zen-sidebar-right]:not([zen-sidebar-right="false"]),
+    html[zen-right-side]:not([zen-right-side="false"])
+  )
   #tabbrowser-tabs
   tab-group
   > .tab-group-label-container
@@ -293,7 +305,10 @@ tab-group.zentral-standard > .tab-group-label-container .tab-group-label {
 }
 
 /* Right Sidebar: Place badge at the far right edge (opposite from left-aligned name) */
-:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+:is(
+    html[zen-sidebar-right]:not([zen-sidebar-right="false"]),
+    html[zen-right-side]:not([zen-right-side="false"])
+  )
   #tabbrowser-tabs
   tab-group
   > .tab-group-label-container
@@ -345,11 +360,17 @@ tab-group[collapsed="true"][data-has-subgroups]
 }
 
 /* Right Sidebar: Order 1 (closer to left / webpage content) */
-:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+:is(
+    html[zen-sidebar-right]:not([zen-sidebar-right="false"]),
+    html[zen-right-side]:not([zen-right-side="false"])
+  )
   #tabbrowser-tabs
   tab-group
   .tab-group-icon-container,
-:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+:is(
+    html[zen-sidebar-right]:not([zen-sidebar-right="false"]),
+    html[zen-right-side]:not([zen-right-side="false"])
+  )
   #tabbrowser-tabs
   tab-group[collapsed]
   .tab-group-icon-container {
@@ -633,14 +654,20 @@ tab-group.zentral-standard
 }
 
 /* Right Sidebar Mode Overrides (Outer edge is on the RIGHT, webpage content on LEFT) */
-:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+:is(
+    html[zen-sidebar-right]:not([zen-sidebar-right="false"]),
+    html[zen-right-side]:not([zen-right-side="false"])
+  )
   tab-group.zentral-standard
   tab-group.zentral-standard {
   margin-left: 8px !important;
   margin-right: 0 !important;
 }
 
-:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+:is(
+    html[zen-sidebar-right]:not([zen-sidebar-right="false"]),
+    html[zen-right-side]:not([zen-right-side="false"])
+  )
   tab-group.zentral-standard
   tab-group.zentral-standard
   .tab-group-container {
@@ -650,7 +677,10 @@ tab-group.zentral-standard
   margin-inline-end: 0 !important;
 }
 
-:is(html[zen-sidebar-right="true"], html[zen-right-side="true"])
+:is(
+    html[zen-sidebar-right]:not([zen-sidebar-right="false"]),
+    html[zen-right-side]:not([zen-right-side="false"])
+  )
   tab-group.zentral-standard
   tab-group.zentral-standard
   .tab-group-container::after {

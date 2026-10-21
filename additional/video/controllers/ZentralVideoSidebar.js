@@ -100,6 +100,9 @@
       const enlarged = window.ZentralModuleLoader.create(
         "video/enlarge",
         {
+          getSourceKey: () =>
+            deps.current ? deps.sourceKey(deps.current) : "",
+          control: (action, value) => control(action, value),
           onControls: () => syncProgressState(),
           onWindowResize: (active) => {
             if (active) {
@@ -558,6 +561,11 @@
           "display:block!important;width:var(--bgalazka-look-control-icon-size,16px)!important;height:var(--bgalazka-look-control-icon-size,16px)!important;flex:0 1 var(--bgalazka-look-control-icon-size,16px)!important;max-width:100%!important;min-width:0!important;position:static!important;pointer-events:none!important";
         const path = document.createElementNS(ns, "path");
         const paths = {
+          play: "M8 5v14l11-7z",
+          pause: "M8 5v14M16 5v14",
+          volume:
+            "M3 10v4h4l5 4V6l-5 4H3M16 8a6 6 0 0 1 0 8M19 5a10 10 0 0 1 0 14",
+          muted: "M3 10v4h4l5 4V6l-5 4H3M16 9l6 6M22 9l-6 6",
           pin: "M16 9V4l1-1V2H7v1l1 1v5c0 1.66-1.34 3-3 3v2h6v7l1 1 1-1v-7h6v-2c-1.66 0-3-1.34-3-3z",
           compact: "M3 3l6 6m0-5v5H4M21 21l-6-6m0 5v-5h5",
           expand: "M9 9 3 3m0 5V3h5m7 12 6 6m-5 0h5v-5",
@@ -569,7 +577,7 @@
         };
         path.setAttribute("d", paths[kind]);
         path.style.cssText =
-          kind === "pin"
+          kind === "pin" || kind === "play"
             ? "fill:currentColor!important;stroke:none!important"
             : "fill:none!important;stroke:currentColor!important;stroke-width:2!important;stroke-linecap:round!important;stroke-linejoin:round!important";
         svg.appendChild(path);
@@ -943,7 +951,31 @@
           value += media.currentTime;
           action = "seek";
         }
-        if (action === "toggle") {
+        if (action === "volumeRelative" && Number.isFinite(value)) {
+          media.volume = Math.max(
+            0,
+            Math.min(1, media.volume + Math.max(-1, Math.min(1, value))),
+          );
+          if (value > 0) media.muted = false;
+        } else if (action === "rateRelative" && Number.isFinite(value)) {
+          media.playbackRate = Math.max(
+            0.25,
+            Math.min(4, media.playbackRate + Math.max(-1, Math.min(1, value))),
+          );
+        } else if (
+          action === "seekFraction" &&
+          Number.isFinite(value) &&
+          Number.isFinite(media.duration) &&
+          media.duration > 0
+        ) {
+          media.currentTime = Math.max(
+            0,
+            Math.min(
+              media.duration - 0.01,
+              media.duration * Math.max(0, Math.min(1, value)),
+            ),
+          );
+        } else if (action === "toggle") {
           if (media.paused) media.play().catch(() => {});
           else media.pause();
         } else if (action === "mute") media.muted = !media.muted;
@@ -958,6 +990,8 @@
           muted: media.muted,
           currentTime: media.currentTime,
           duration: Number.isFinite(media.duration) ? media.duration : 0,
+          volume: media.volume,
+          playbackRate: media.playbackRate,
         };
       }
       function progressVisible() {
@@ -1103,8 +1137,19 @@
         const data = deps.current.data;
         fitPicture();
         deps.picture.hidden = data.kind !== "video" || deps.videoHidden;
-        deps.playButton.textContent = data.paused ? "▶" : "❚❚";
-        deps.muteButton.textContent = data.muted ? "🔇" : "♪";
+        setButtonIcon(deps.playButton, data.paused ? "play" : "pause");
+        setButtonIcon(deps.muteButton, data.muted ? "muted" : "volume");
+        deps.playButton.setAttribute(
+          "aria-label",
+          data.paused ? "Play" : "Pause",
+        );
+        deps.playButton.title = data.paused ? "Play" : "Pause";
+        deps.muteButton.setAttribute(
+          "aria-label",
+          data.muted ? "Unmute" : "Mute",
+        );
+        deps.muteButton.title = data.muted ? "Unmute" : "Mute";
+        deps.muteButton.setAttribute("aria-pressed", String(!!data.muted));
         deps.seekBar.hidden = !(
           Number.isFinite(data.duration) && data.duration > 0
         );

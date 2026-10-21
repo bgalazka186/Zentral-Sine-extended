@@ -62,8 +62,9 @@ The video preview was inspired by **[Zenslop](https://github.com/Firebolt9907/Ze
 
 - **Sidebar playback:** choose or pin a video source from tabs or panels, play/pause, mute, seek, resize the preview or use a compact card.
 - **Big Preview:** double-click the video to enlarge it, drag it around and resize from any edge or corner. Double-click again, use Return, or press Escape to go back. Fullscreen is available too.
+- **Playback input:** click the image once to play/pause. With Big Preview focused, use Space/K, M, F, J/L and the arrow keys for playback, mute, fullscreen, seeking and volume. Double-click still returns to the sidebar. Keyboard and image-click controls can be disabled separately.
 - **Video proportions:** keep the video's aspect ratio while resizing, or turn the lock off. Size is remembered; position remembering is optional. By default, the player opens at the sidebar's bottom corner with room for workspace buttons.
-- **Hover controls:** playback controls and the progress bar appear over the bottom of the video, with a semi-transparent black background for readability.
+- **Hover controls:** playback controls and the progress bar appear over the bottom of the video. Buttons follow your Appearance palette, style, borders and opacity; the hover overlay has its own opacity setting. Automatic contrast chooses readable icon colors for the selected surfaces.
 - **Insta Peek:** hold **Alt+Q** to temporarily hide the enlarged player and interact with what is underneath. It shares the existing configurable panel shortcut.
 - **Subtitles:** mirror supported captions below the image or as an overlay, with adjustable text size, line count and overflow behavior. A subtitle band below the image adds its own space.
 - **Capture choices:** native visual cloning where supported, video frames, streams, canvas streams and page snapshots. Automatic fallback and source-page protection are configurable.

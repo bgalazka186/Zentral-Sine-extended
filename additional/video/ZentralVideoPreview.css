@@ -446,6 +446,7 @@
   display: -webkit-box !important;
   -webkit-box-orient: vertical !important;
   -webkit-line-clamp: var(--zentral-caption-max-lines, 4);
+  line-clamp: var(--zentral-caption-max-lines, 4);
   overflow: hidden !important;
   color: #fff !important;
   opacity: 1 !important;
@@ -783,7 +784,12 @@
   z-index: 20 !important;
   padding: 5px 6px 8px !important;
   box-sizing: border-box !important;
-  background: rgb(0 0 0 / 40%) !important;
+  background: color-mix(
+    in srgb,
+    var(--zl-video-control, #000)
+      var(--bgalazka-look-video-overlay-opacity, 40%),
+    transparent
+  ) !important;
   color: white !important;
   opacity: 1 !important;
   pointer-events: auto !important;
@@ -814,4 +820,85 @@
 #zentral-video-preview#zentral-video-preview[data-enlarged]
   .zentral-video-enlarge-resize {
   z-index: 40 !important;
+}
+
+/* Layout guards do not override appearance colors, borders or control size. */
+#zentral-video-preview#zentral-video-preview .zentral-video-preview-bar {
+  flex-wrap: wrap !important;
+  overflow: visible !important;
+}
+#zentral-video-preview .zentral-video-preview-bar > button {
+  -moz-window-dragging: no-drag !important;
+  text-shadow: none !important;
+}
+#zentral-video-preview .zentral-video-preview-bar > button svg {
+  color: inherit !important;
+  opacity: 1 !important;
+}
+#zentral-video-preview .zentral-video-preview-bar > button:focus-visible,
+#zentral-video-preview .zentral-video-preview-seek:focus-visible {
+  outline: 2px solid var(--zl-focus, #ffdf70) !important;
+  outline-offset: 1px !important;
+}
+#zentral-video-preview .zentral-video-preview-seek {
+  accent-color: var(
+    --zl-video-progress,
+    var(--zl-video-selected, #63c7ff)
+  ) !important;
+  color-scheme: var(--zl-video-scheme, dark) !important;
+}
+/* Sidebar controls: change nowrap to wrap to allow a second row. */
+#zentral-video-preview:not([data-enlarged]) {
+  --zvp-sidebar-controls-wrap: nowrap;
+}
+
+#zentral-video-preview#zentral-video-preview#zentral-video-preview:not(
+    [data-enlarged]
+  )
+  .zentral-video-preview-bar {
+  flex-wrap: var(--zvp-sidebar-controls-wrap, nowrap) !important;
+  justify-content: flex-start !important;
+  gap: 1px !important;
+}
+
+#zentral-video-preview#zentral-video-preview#zentral-video-preview:not(
+    [data-enlarged]
+  )
+  .zentral-video-preview-bar
+  > button {
+  flex: 0 1 var(--zl-control-size, 22px) !important;
+  width: var(--zl-control-size, 22px) !important;
+  min-width: 18px !important;
+  margin-inline: 0 !important;
+  padding-inline: 0 !important;
+}
+
+#zentral-video-preview#zentral-video-preview#zentral-video-preview:not(
+    [data-enlarged]
+  )
+  .zentral-video-preview-caption {
+  flex: 0 999 auto !important;
+}
+
+
+/* ZENTRAL SIDEBAR CONTROL SETTINGS */
+#zentral-video-preview#zentral-video-preview#zentral-video-preview#zentral-video-preview:not([data-enlarged])
+  .zentral-video-preview-bar {
+  flex-wrap: var(--zentral-sidebar-video-wrap, nowrap) !important;
+  justify-content: flex-start !important;
+  gap: var(--zentral-sidebar-video-gap, 1px) !important;
+}
+
+#zentral-video-preview#zentral-video-preview#zentral-video-preview#zentral-video-preview:not([data-enlarged])
+  .zentral-video-preview-bar > button {
+  flex: 0 1 var(--zl-control-size, 22px) !important;
+  width: var(--zl-control-size, 22px) !important;
+  min-width: 18px !important;
+  margin-inline: 0 !important;
+  padding-inline: 0 !important;
+}
+
+#zentral-video-preview#zentral-video-preview#zentral-video-preview#zentral-video-preview:not([data-enlarged])
+  .zentral-video-preview-caption {
+  flex: 0 999 auto !important;
 }
