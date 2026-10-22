@@ -30,6 +30,7 @@
       LOOK_DEFAULTS,
       LOOK_KEYS,
       LOOK_COLORS,
+      LOOK_OPTIONAL_COLORS,
       LOOK_ENUMS,
       LOOK_BOUNDS,
       LOOK_GROUP_PREFS,
@@ -55,6 +56,7 @@
       };
       const backupColorKeys = new Set([
         ...LOOK_COLORS.map((name) => LOOK_PREFS[name]),
+        ...LOOK_OPTIONAL_COLORS,
         ctx.BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_COLOR,
       ]);
       const backupDefault = (key) =>
@@ -242,9 +244,14 @@
             throw new Error("Preference integer out of range: " + key);
           if (LOOK_KEYS.has(key)) {
             const expected = LOOK_DEFAULTS[key];
+            // Optional colors may be empty: that means "follow the theme".
+            const optionalColor =
+              LOOK_OPTIONAL_COLORS.has(key) && value === "";
             if (
               typeof value !== typeof expected ||
-              (backupColorKeys.has(key) && !/^#[0-9a-fA-F]{6}$/.test(value)) ||
+              (backupColorKeys.has(key) &&
+                !/^#[0-9a-fA-F]{6}$/.test(value) &&
+                !optionalColor) ||
               (LOOK_ENUMS[key] && !LOOK_ENUMS[key].includes(value)) ||
               (LOOK_BOUNDS[key] &&
                 (value < LOOK_BOUNDS[key][0] || value > LOOK_BOUNDS[key][1]))

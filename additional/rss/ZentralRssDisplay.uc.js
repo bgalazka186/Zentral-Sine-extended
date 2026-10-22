@@ -6,6 +6,10 @@
  *   waits for native browser readiness. No Apps/panel suite dependency.
  * Ownership / failure: Owns RSS observer/listener cleanup and its stylesheet. Preserve event-driven refresh
  *   rather than reinstalling a permanent folder repair scan.
+ * Reader card: The card's appearance is owned by the Look custom properties written by
+ *   extension/appearance/ZentralAppearance.js. This file owns the behavior switches
+ *   (zen.workspace.bgalazka.rss.card_*): hover and hide delay, side, visible parts,
+ *   middle-click dismiss, pointer re-target, dismiss-all confirmation and tooltip replacement.
  * Registration: rss
  * Loaded/created by: loader/ZentralCatalog.js
  * Literal DOM event subscriptions: unload
@@ -90,33 +94,27 @@
         RSS_HIDE_EMPTY: "zen.workspace.bgalazka.rss.hide_empty",
         RSS_COMPACT_HEADERS: "zen.workspace.bgalazka.rss.compact_headers",
         RSS_READER_CARD: "zen.workspace.bgalazka.rss.reader_card",
-        RSS_CARD_BACKGROUND: "zen.workspace.bgalazka.rss.card_background",
-        RSS_CARD_TEXT: "zen.workspace.bgalazka.rss.card_text",
-        RSS_CARD_URL: "zen.workspace.bgalazka.rss.card_url",
-        RSS_CARD_BUTTON_BACKGROUND:
-          "zen.workspace.bgalazka.rss.card_button_background",
-        RSS_CARD_BUTTON_TEXT: "zen.workspace.bgalazka.rss.card_button_text",
-        RSS_CARD_WIDTH: "zen.workspace.bgalazka.rss.card_width",
-        RSS_CARD_MAX_HEIGHT: "zen.workspace.bgalazka.rss.card_max_height",
-        RSS_CARD_RADIUS: "zen.workspace.bgalazka.rss.card_radius",
-        RSS_CARD_OPACITY: "zen.workspace.bgalazka.rss.card_opacity",
-        RSS_CARD_FONT_SIZE: "zen.workspace.bgalazka.rss.card_font_size",
+        RSS_CARD_HOVER_DELAY: "zen.workspace.bgalazka.rss.card_hover_delay",
+        RSS_CARD_HIDE_DELAY: "zen.workspace.bgalazka.rss.card_hide_delay",
+        RSS_CARD_SIDE: "zen.workspace.bgalazka.rss.card_side",
+        RSS_CARD_SHOW_FOLDER: "zen.workspace.bgalazka.rss.card_show_folder",
+        RSS_CARD_SHOW_URL: "zen.workspace.bgalazka.rss.card_show_url",
+        RSS_CARD_SHOW_BUTTONS: "zen.workspace.bgalazka.rss.card_show_buttons",
+        RSS_CARD_MMB_DISMISS: "zen.workspace.bgalazka.rss.card_mmb_dismiss",
+        RSS_CARD_RETARGET: "zen.workspace.bgalazka.rss.card_retarget",
+        RSS_CARD_CONFIRM_ALL: "zen.workspace.bgalazka.rss.card_confirm_all",
+        RSS_CARD_REPLACE_TOOLTIP:
+          "zen.workspace.bgalazka.rss.card_replace_tooltip",
       };
-      // Card size and opacity are bounded so a bad value can never collapse the
-      // card into an unreadable sliver.
-      const CARD_LIMITS = Object.freeze({
-        width: [240, 560],
-        maxHeight: [20, 90],
-        radius: [0, 24],
-        opacity: [10, 100],
-        fontSize: [10, 20],
+      // Behavior delays are bounded so a stray value can never make the card
+      // unusable. The card's look lives in the Look custom properties.
+      const CARD_DELAY_LIMITS = Object.freeze({
+        hover: [0, 2000],
+        hide: [0, 5000],
       });
-      const CARD_DEFAULTS = Object.freeze({
-        width: 340,
-        maxHeight: 60,
-        radius: 10,
-        opacity: 100,
-        fontSize: 13,
+      const CARD_DELAY_DEFAULTS = Object.freeze({
+        hover: 0,
+        hide: 250,
       });
       const rssMarkedFolders = new Set();
       let rssScanTimer = null;
@@ -205,11 +203,13 @@
 
       // ---- Reader card -------------------------------------------------
       // Own hover card for live-folder articles. Replaces the native tab
-      // tooltip (only for those tabs) and re-targets the item under the
-      // pointer after a dismiss, so no extra mouse movement is needed.
+      // tooltip (only for those tabs) and continues with the next article
+      // after a dismiss, so no extra mouse movement is needed.
       let card = null,
         cardTab = null,
         hideTimer = null,
+        showTimer = null,
+        showTab = null,
         lastXY = null,
         readerBound = false;
       const itemTab = (el) => {
@@ -230,68 +230,66 @@
         clearTimeout(hideTimer);
         hideTimer = null;
       };
-      const cardNumber = (key, name) => {
-        const [min, max] = CARD_LIMITS[name];
-        const raw = Number(getNumberPref(key, CARD_DEFAULTS[name]));
-        if (!Number.isFinite(raw)) return CARD_DEFAULTS[name];
+      const cancelShow = () => {
+        clearTimeout(showTimer);
+        showTimer = null;
+        showTab = null;
+      };
+      const cardDelay = (name, key) => {
+        const [min, max] = CARD_DELAY_LIMITS[name];
+        const raw = Number(getNumberPref(key, CARD_DELAY_DEFAULTS[name]));
+        if (!Number.isFinite(raw)) return CARD_DELAY_DEFAULTS[name];
         return Math.max(min, Math.min(max, Math.round(raw)));
       };
-      const cardColor = (key) => {
-        const value = getStringPref(key, "");
-        return /^#[0-9a-fA-F]{6}$/.test(value) ? value : "";
+      const hoverDelay = () =>
+        cardDelay("hover", EXT_PREFS.RSS_CARD_HOVER_DELAY);
+      const hideDelay = () => cardDelay("hide", EXT_PREFS.RSS_CARD_HIDE_DELAY);
+      const readerSide = () => {
+        const value = getStringPref(EXT_PREFS.RSS_CARD_SIDE, "auto");
+        return ["auto", "left", "right"].includes(value) ? value : "auto";
       };
-      // Appearance lives in CSS custom properties so the stylesheet keeps
-      // ownership of the theme fallback. Only a real user override is written
-      // here; an unset preference removes the property and the theme wins.
-      let cardStyleKey = "";
-      function applyCardStyle() {
+      // The distance to the sidebar follows the Look gap value.
+      const cardGap = () => {
+        const value = parseFloat(
+          getComputedStyle(document.documentElement)
+            .getPropertyValue("--bgalazka-look-rss-card-gap"),
+        );
+        return Number.isFinite(value)
+          ? Math.max(0, Math.min(32, value))
+          : 6;
+      };
+      // The card's look is owned by the Look custom properties on the root
+      // element. Only the behavior switches are applied here.
+      function applyCardParts() {
         if (!card) return;
-        const values = [
-          ["--rss-card-bg", cardColor(EXT_PREFS.RSS_CARD_BACKGROUND)],
-          ["--rss-card-text", cardColor(EXT_PREFS.RSS_CARD_TEXT)],
-          ["--rss-card-url", cardColor(EXT_PREFS.RSS_CARD_URL)],
-          [
-            "--rss-card-button-bg",
-            cardColor(EXT_PREFS.RSS_CARD_BUTTON_BACKGROUND),
-          ],
-          ["--rss-card-button-text", cardColor(EXT_PREFS.RSS_CARD_BUTTON_TEXT)],
-          [
-            "--rss-card-width",
-            cardNumber(EXT_PREFS.RSS_CARD_WIDTH, "width") + "px",
-          ],
-          [
-            "--rss-card-max-height",
-            cardNumber(EXT_PREFS.RSS_CARD_MAX_HEIGHT, "maxHeight") + "%",
-          ],
-          [
-            "--rss-card-radius",
-            cardNumber(EXT_PREFS.RSS_CARD_RADIUS, "radius") + "px",
-          ],
-          [
-            "--rss-card-opacity",
-            cardNumber(EXT_PREFS.RSS_CARD_OPACITY, "opacity") + "%",
-          ],
-          [
-            "--rss-card-font-size",
-            cardNumber(EXT_PREFS.RSS_CARD_FONT_SIZE, "fontSize") + "px",
-          ],
-        ];
-        const key = values.map(([name, value]) => name + ":" + value).join("|");
-        if (key === cardStyleKey) return;
-        cardStyleKey = key;
-        const style = card.style;
-        for (const [name, value] of values) {
-          if (value) style.setProperty(name, value);
-          else style.removeProperty(name);
-        }
+        card.querySelector(".rc-folder").hidden = !getPref(
+          EXT_PREFS.RSS_CARD_SHOW_FOLDER,
+          true,
+        );
+        card.querySelector(".rc-url").hidden = !getPref(
+          EXT_PREFS.RSS_CARD_SHOW_URL,
+          true,
+        );
+        card.querySelector(".rc-actions").hidden = !getPref(
+          EXT_PREFS.RSS_CARD_SHOW_BUTTONS,
+          true,
+        );
+        card.dataset.side = readerSide();
+      }
+      // A behavior change only restyles the open card; it never triggers a
+      // folder refresh.
+      function applyCardStyle() {
+        applyCardParts();
+        if (card && cardTab && !card.hidden) showCard(cardTab);
       }
       function hideCard(delay = 0) {
+        cancelShow();
         cancelHide();
         hideTimer = setTimeout(() => {
           hideTimer = null;
           if (card) card.hidden = true;
           cardTab = null;
-        }, delay);
+        }, Math.max(0, delay));
       }
       function ensureCard() {
         if (card) return card;
@@ -305,7 +303,7 @@
           '<button data-a="dismiss">Dismiss</button>' +
           '<button data-a="all">Dismiss all</button></div>';
         card.addEventListener("mouseenter", cancelHide);
-        card.addEventListener("mouseleave", () => hideCard(250));
+        card.addEventListener("mouseleave", () => hideCard(hideDelay()));
         card.addEventListener("click", (e) => {
           const a = e.target.closest("button")?.dataset.a;
           if (!a || !cardTab) return;
@@ -321,19 +319,41 @@
                   (t) => itemTab(t) && !t.hasAttribute("zen-empty-tab"),
                 )
               : [tab];
+            if (
+              getPref(EXT_PREFS.RSS_CARD_CONFIRM_ALL, false) &&
+              !window.confirm(
+                "Dismiss all " +
+                  tabs.length +
+                  " article" +
+                  (tabs.length === 1 ? "" : "s") +
+                  " in this folder?",
+              )
+            )
+              return;
             hideCard();
             tabs.forEach((t) => gBrowser.removeTab(t, { animate: false }));
           }
         });
         document.documentElement.appendChild(card);
-        cardStyleKey = "";
-        applyCardStyle();
+        applyCardParts();
         registerCleanup(() => card?.remove());
         return card;
       }
+      // The article that follows the dismissed one inside the same folder.
+      function nextArticle(folder, tab) {
+        if (!folder) return null;
+        const items = [
+          ...folder.querySelectorAll("tab, .tabbrowser-tab"),
+        ].filter((item) => itemTab(item) && !item.hasAttribute("zen-empty-tab"));
+        const index = items.indexOf(tab);
+        if (index < 0) return items[0] || null;
+        return items[index + 1] || items[index - 1] || null;
+      }
       function showCard(tab) {
+        if (!tab) return;
         const c = ensureCard();
         cancelHide();
+        cancelShow();
         cardTab = tab;
         const folder = tab.closest("zen-folder");
         c.querySelector(".rc-folder").textContent =
@@ -342,6 +362,7 @@
           tab.label || tab.getAttribute("label") || "";
         const url = tabUrl(tab);
         c.querySelector(".rc-url").textContent = url;
+        applyCardParts();
         c.hidden = false;
         const side = document.getElementById("navigator-toolbox");
         const sr = side?.getBoundingClientRect();
@@ -349,32 +370,81 @@
         const w = c.offsetWidth,
           h = c.offsetHeight;
         const onRight = sr && sr.left > window.innerWidth / 2;
+        const sidePref = readerSide();
+        const placeLeft =
+          sidePref === "left" ? true : sidePref === "right" ? false : onRight;
+        const gap = cardGap();
+        let left = placeLeft ? tr.left - w - gap : tr.right + gap;
+        // Fall back to the other side when the chosen one has no room.
+        if (left < 4) {
+          const flipped = tr.right + gap;
+          if (flipped + w <= window.innerWidth - 4) left = flipped;
+        }
         c.style.left =
-          Math.max(4, onRight ? tr.left - w - 6 : tr.right + 6) + "px";
+          Math.max(4, Math.min(left, window.innerWidth - w - 4)) + "px";
         c.style.top =
           Math.max(4, Math.min(tr.top, window.innerHeight - h - 4)) + "px";
       }
+      // A dismiss never hides the card first: it continues with the next
+      // article, so the reader sees no flash of a closed card.
       function dismiss(tab, viaPointer) {
+        if (!tab) return;
+        const folder = tab.closest("zen-folder");
+        const next = nextArticle(folder, tab);
         gBrowser.removeTab(tab, { animate: false });
+        if (
+          viaPointer &&
+          getPref(EXT_PREFS.RSS_CARD_RETARGET, true) &&
+          lastXY
+        ) {
+          // The list shifts under a still pointer: re-target the item that
+          // moved under it. The card stays open while that happens.
+          window.requestAnimationFrame(() => {
+            if (!readerOn()) return;
+            const under = itemTab(document.elementFromPoint(...lastXY));
+            if (under) showCard(under);
+            else if (next?.isConnected) showCard(next);
+            else hideCard();
+          });
+          return;
+        }
+        if (next) {
+          showCard(next);
+          return;
+        }
         hideCard();
-        // Layout shifts under a still pointer: re-target after it settles.
-        setTimeout(() => {
-          if (!lastXY || !readerOn()) return;
-          const next = itemTab(document.elementFromPoint(...lastXY));
-          if (next) showCard(next);
-        }, 60);
       }
       const onOver = (e) => {
         if (!readerOn()) return;
         lastXY = [e.clientX, e.clientY];
         const tab = itemTab(e.target);
-        if (tab) showCard(tab);
-        else if (card && !card.hidden && !card.contains(e.target))
-          hideCard(250);
+        if (tab) {
+          scheduleShow(tab);
+          return;
+        }
+        if (card && !card.hidden && !card.contains(e.target))
+          hideCard(hideDelay());
+      };
+      const scheduleShow = (tab) => {
+        const delay = hoverDelay();
+        if (delay <= 0) {
+          cancelShow();
+          showCard(tab);
+          return;
+        }
+        if (showTimer !== null && showTab === tab) return;
+        cancelShow();
+        showTab = tab;
+        showTimer = setTimeout(() => {
+          showTimer = null;
+          showTab = null;
+          if (readerOn()) showCard(tab);
+        }, delay);
       };
       const onMove = (e) => (lastXY = [e.clientX, e.clientY]);
       const onAux = (e) => {
         if (e.button !== 1 || !readerOn()) return;
+        if (!getPref(EXT_PREFS.RSS_CARD_MMB_DISMISS, true)) return;
         const tab = itemTab(e.target);
         if (!tab) return;
         e.preventDefault();
@@ -383,8 +453,17 @@
       };
       const onPopup = (e) => {
         if (!readerOn() || e.target.id !== "tabbrowser-tab-tooltip") return;
+        if (!getPref(EXT_PREFS.RSS_CARD_REPLACE_TOOLTIP, true)) return;
         if (itemTab(e.target.triggerNode)) e.preventDefault();
       };
+      const onKeyDown = (e) => {
+        if (e.key !== "Escape" || !readerOn()) return;
+        if (!card || card.hidden) return;
+        e.preventDefault();
+        e.stopPropagation();
+        hideCard();
+      };
+      const onContainerLeave = () => hideCard(hideDelay());
       function syncReader() {
         const container = window.gBrowser?.tabContainer;
         // Appearance preferences reach the card through the same refresh path
@@ -395,13 +474,16 @@
           container.addEventListener("mouseover", onOver);
           container.addEventListener("mousemove", onMove);
           container.addEventListener("auxclick", onAux, true);
-          container.addEventListener("mouseleave", () => hideCard(250));
+          container.addEventListener("mouseleave", onContainerLeave);
           window.addEventListener("popupshowing", onPopup, true);
+          window.addEventListener("keydown", onKeyDown);
           registerCleanup(() => {
             container.removeEventListener("mouseover", onOver);
             container.removeEventListener("mousemove", onMove);
             container.removeEventListener("auxclick", onAux, true);
+            container.removeEventListener("mouseleave", onContainerLeave);
             window.removeEventListener("popupshowing", onPopup, true);
+            window.removeEventListener("keydown", onKeyDown);
           });
         } else if (!readerOn()) hideCard();
       }
@@ -492,16 +574,6 @@
         EXT_PREFS.RSS_HIDE_EMPTY,
         EXT_PREFS.RSS_COMPACT_HEADERS,
         EXT_PREFS.RSS_READER_CARD,
-        EXT_PREFS.RSS_CARD_BACKGROUND,
-        EXT_PREFS.RSS_CARD_TEXT,
-        EXT_PREFS.RSS_CARD_URL,
-        EXT_PREFS.RSS_CARD_BUTTON_BACKGROUND,
-        EXT_PREFS.RSS_CARD_BUTTON_TEXT,
-        EXT_PREFS.RSS_CARD_WIDTH,
-        EXT_PREFS.RSS_CARD_MAX_HEIGHT,
-        EXT_PREFS.RSS_CARD_RADIUS,
-        EXT_PREFS.RSS_CARD_OPACITY,
-        EXT_PREFS.RSS_CARD_FONT_SIZE,
       ]) {
         try {
           Services.prefs.addObserver(pref, syncRssFolderDisplay);
@@ -513,6 +585,38 @@
         } catch (error) {
           console.warn(
             "[BgalazkaExtension] RSS pref observer unavailable:",
+            error,
+          );
+        }
+      }
+      // Reader card behavior uses its own light observer: a behavior change
+      // restyles the open card and never rescans the feed folders.
+      const onReaderBehaviorChanged = () => {
+        applyCardStyle();
+        syncReader();
+      };
+      for (const pref of [
+        EXT_PREFS.RSS_CARD_HOVER_DELAY,
+        EXT_PREFS.RSS_CARD_HIDE_DELAY,
+        EXT_PREFS.RSS_CARD_SIDE,
+        EXT_PREFS.RSS_CARD_SHOW_FOLDER,
+        EXT_PREFS.RSS_CARD_SHOW_URL,
+        EXT_PREFS.RSS_CARD_SHOW_BUTTONS,
+        EXT_PREFS.RSS_CARD_MMB_DISMISS,
+        EXT_PREFS.RSS_CARD_RETARGET,
+        EXT_PREFS.RSS_CARD_CONFIRM_ALL,
+        EXT_PREFS.RSS_CARD_REPLACE_TOOLTIP,
+      ]) {
+        try {
+          Services.prefs.addObserver(pref, onReaderBehaviorChanged);
+          registerCleanup(() => {
+            try {
+              Services.prefs.removeObserver(pref, onReaderBehaviorChanged);
+            } catch (_) {}
+          });
+        } catch (error) {
+          console.warn(
+            "[BgalazkaExtension] RSS card pref observer unavailable:",
             error,
           );
         }

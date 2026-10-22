@@ -10,8 +10,8 @@
  * Registration: appearance
  * Loaded/created by: extension/settings/controllers/ZentralFeatureSettings.js
  * Returned factory API: LOOK_BOUNDS; LOOK_COLORS; LOOK_DEFAULTS; LOOK_ENUMS; LOOK_GROUP_PREFS; LOOK_KEYS;
- *   LOOK_PREFS; LOOK_THEMES; LOOK_TRANSPARENCY_KEYS; applyLook; syncAppearanceAfterImport;
- *   syncChangedSetting
+ *   LOOK_OPTIONAL_COLORS; LOOK_PREFS; LOOK_THEMES; LOOK_TRANSPARENCY_KEYS; applyLook;
+ *   syncAppearanceAfterImport; syncChangedSetting
  * Shared ctx symbols used: BGALAZKA_EXT_PREFS; EXT_PREFS; applyAttributes; getPref;
  *   reconcileFeaturePreferences; registerCleanup; updateCSSVars
  * Cross-file calls / ctx suppliers: extension/panels/ZentralPanels.uc.js -> ctx.BGALAZKA_EXT_PREFS, ctx.EXT_PREFS,
@@ -124,6 +124,26 @@
       BOTTOM_BAR_HEIGHT: "zen.workspace.bgalazka.look.bottom_bar_height",
       URLBAR_TOP_GAP: "zen.workspace.bgalazka.look.urlbar_top_gap",
       NEWTAB_HEIGHT: "zen.workspace.bgalazka.look.newtab_height",
+      RSS_CARD_WIDTH: "zen.workspace.bgalazka.look.rss_card_width",
+      RSS_CARD_MAX_HEIGHT: "zen.workspace.bgalazka.look.rss_card_max_height",
+      RSS_CARD_FONT_SIZE: "zen.workspace.bgalazka.look.rss_card_font_size",
+      RSS_CARD_LINE_HEIGHT: "zen.workspace.bgalazka.look.rss_card_line_height",
+      RSS_CARD_PADDING: "zen.workspace.bgalazka.look.rss_card_padding",
+      RSS_CARD_RADIUS: "zen.workspace.bgalazka.look.rss_card_radius",
+      RSS_CARD_BORDER: "zen.workspace.bgalazka.look.rss_card_border",
+      RSS_CARD_OPACITY: "zen.workspace.bgalazka.look.rss_card_opacity",
+      RSS_CARD_BUTTON_RADIUS:
+        "zen.workspace.bgalazka.look.rss_card_button_radius",
+      RSS_CARD_GAP: "zen.workspace.bgalazka.look.rss_card_gap",
+      RSS_CARD_SHADOW: "zen.workspace.bgalazka.look.rss_card_shadow",
+      RSS_CARD_FONT: "zen.workspace.bgalazka.look.rss_card_font",
+      RSS_CARD_BACKGROUND: "zen.workspace.bgalazka.look.rss_card_background",
+      RSS_CARD_TEXT: "zen.workspace.bgalazka.look.rss_card_text",
+      RSS_CARD_URL: "zen.workspace.bgalazka.look.rss_card_url",
+      RSS_CARD_BORDER_COLOR: "zen.workspace.bgalazka.look.rss_card_border_color",
+      RSS_CARD_BUTTON_BACKGROUND:
+        "zen.workspace.bgalazka.look.rss_card_button_background",
+      RSS_CARD_BUTTON_TEXT: "zen.workspace.bgalazka.look.rss_card_button_text",
     });
     const LOOK_DEFAULTS = Object.freeze({
       [LOOK_PREFS.VIDEO_CONTROLS_WRAP]: false,
@@ -192,6 +212,24 @@
       [LOOK_PREFS.BOTTOM_BAR_HEIGHT]: 24,
       [LOOK_PREFS.URLBAR_TOP_GAP]: 0,
       [LOOK_PREFS.NEWTAB_HEIGHT]: 20,
+      [LOOK_PREFS.RSS_CARD_WIDTH]: 340,
+      [LOOK_PREFS.RSS_CARD_MAX_HEIGHT]: 60,
+      [LOOK_PREFS.RSS_CARD_FONT_SIZE]: 13,
+      [LOOK_PREFS.RSS_CARD_LINE_HEIGHT]: 145,
+      [LOOK_PREFS.RSS_CARD_PADDING]: 12,
+      [LOOK_PREFS.RSS_CARD_RADIUS]: 10,
+      [LOOK_PREFS.RSS_CARD_BORDER]: 1,
+      [LOOK_PREFS.RSS_CARD_OPACITY]: 100,
+      [LOOK_PREFS.RSS_CARD_BUTTON_RADIUS]: 6,
+      [LOOK_PREFS.RSS_CARD_GAP]: 6,
+      [LOOK_PREFS.RSS_CARD_SHADOW]: "soft",
+      [LOOK_PREFS.RSS_CARD_FONT]: "system",
+      [LOOK_PREFS.RSS_CARD_BACKGROUND]: "",
+      [LOOK_PREFS.RSS_CARD_TEXT]: "",
+      [LOOK_PREFS.RSS_CARD_URL]: "",
+      [LOOK_PREFS.RSS_CARD_BORDER_COLOR]: "",
+      [LOOK_PREFS.RSS_CARD_BUTTON_BACKGROUND]: "",
+      [LOOK_PREFS.RSS_CARD_BUTTON_TEXT]: "",
       [LOOK_PREFS.VIDEO_RADIUS]: 0,
       [LOOK_PREFS.PANEL_BORDER]: 1,
       [LOOK_PREFS.TOOLBAR_SURFACE]: "#202224",
@@ -508,7 +546,47 @@
       [LOOK_PREFS.TILE_STYLE]: ["bare", "soft"],
       [LOOK_PREFS.ROW_STYLE]: ["lines", "cards"],
       [LOOK_PREFS.VIDEO_SOURCE_STYLE]: ["line", "filled"],
+      [LOOK_PREFS.RSS_CARD_SHADOW]: ["none", "soft", "strong"],
+      [LOOK_PREFS.RSS_CARD_FONT]: ["system", "serif", "mono"],
       [LOOK_GROUP_PREFS.INDICATOR_TYPE]: ["circle", "chevron"],
+    });
+    // Optional colors accept an empty value: the card then follows the theme
+    // token instead of a hard-coded color. Import validation must allow it.
+    const RSS_CARD_COLOR_NAMES = Object.freeze([
+      "BACKGROUND",
+      "TEXT",
+      "URL",
+      "BORDER_COLOR",
+      "BUTTON_BACKGROUND",
+      "BUTTON_TEXT",
+    ]);
+    const LOOK_OPTIONAL_COLORS = new Set(
+      RSS_CARD_COLOR_NAMES.map((name) => LOOK_PREFS["RSS_CARD_" + name]),
+    );
+    // The reader card is painted from root custom properties only. The
+    // stylesheet keeps the theme fallback, so an unset preference removes the
+    // property and the active Look palette wins again.
+    const RSS_CARD_UNITS = Object.freeze({
+      WIDTH: "px",
+      MAX_HEIGHT: "%",
+      FONT_SIZE: "px",
+      LINE_HEIGHT: "ratio",
+      PADDING: "px",
+      RADIUS: "px",
+      BORDER: "px",
+      OPACITY: "%",
+      BUTTON_RADIUS: "px",
+      GAP: "px",
+    });
+    const RSS_CARD_SHADOWS = Object.freeze({
+      none: "none",
+      soft: "0 6px 24px #0008",
+      strong: "0 12px 36px #000c",
+    });
+    const RSS_CARD_FONTS = Object.freeze({
+      system: "system-ui, -apple-system, 'Segoe UI', sans-serif",
+      serif: "Georgia, 'Times New Roman', serif",
+      mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
     });
     const LOOK_BOUNDS = Object.freeze({
       [LOOK_PREFS.VIDEO_CONTROLS_GAP]: [0, 8],
@@ -553,6 +631,16 @@
       [LOOK_PREFS.BOTTOM_BAR_HEIGHT]: [20, 40],
       [LOOK_PREFS.URLBAR_TOP_GAP]: [0, 16],
       [LOOK_PREFS.NEWTAB_HEIGHT]: [18, 36],
+      [LOOK_PREFS.RSS_CARD_WIDTH]: [240, 560],
+      [LOOK_PREFS.RSS_CARD_MAX_HEIGHT]: [20, 90],
+      [LOOK_PREFS.RSS_CARD_FONT_SIZE]: [10, 20],
+      [LOOK_PREFS.RSS_CARD_LINE_HEIGHT]: [110, 200],
+      [LOOK_PREFS.RSS_CARD_PADDING]: [6, 24],
+      [LOOK_PREFS.RSS_CARD_RADIUS]: [0, 24],
+      [LOOK_PREFS.RSS_CARD_BORDER]: [0, 3],
+      [LOOK_PREFS.RSS_CARD_OPACITY]: [10, 100],
+      [LOOK_PREFS.RSS_CARD_BUTTON_RADIUS]: [0, 16],
+      [LOOK_PREFS.RSS_CARD_GAP]: [0, 32],
       [LOOK_GROUP_PREFS.LABEL_OPACITY]: [0, 100],
       [ctx.BGALAZKA_EXT_PREFS.PANEL_BLACK_OPACITY]: [0, 100],
       [ctx.BGALAZKA_EXT_PREFS.OPACITY_UNPINNED]: [10, 100],
@@ -1503,6 +1591,42 @@
             Math.max(12, clamped - 6) + "px",
           );
       }
+      // Reader card: numbers, optional colors and enum choices become root
+      // custom properties. Nothing is written for an empty color, so the
+      // stylesheet falls back to the current theme token.
+      for (const [name, unit] of Object.entries(RSS_CARD_UNITS)) {
+        const pref = LOOK_PREFS["RSS_CARD_" + name];
+        const [min, max] = LOOK_BOUNDS[pref];
+        const raw = Number(ctx.getPref(pref, LOOK_DEFAULTS[pref]));
+        const value = Number.isFinite(raw)
+          ? Math.max(min, Math.min(max, Math.round(raw)))
+          : LOOK_DEFAULTS[pref];
+        root.style.setProperty(
+          "--bgalazka-look-rss-card-" +
+            name.toLowerCase().replaceAll("_", "-"),
+          unit === "ratio" ? String(value / 100) : value + unit,
+        );
+      }
+      for (const name of RSS_CARD_COLOR_NAMES) {
+        const pref = LOOK_PREFS["RSS_CARD_" + name];
+        const value = String(ctx.getPref(pref, "") || "").trim();
+        const property =
+          "--bgalazka-look-rss-card-" + name.toLowerCase().replaceAll("_", "-");
+        if (/^#[0-9a-fA-F]{6}$/.test(value))
+          root.style.setProperty(property, value);
+        else root.style.removeProperty(property);
+      }
+      for (const [name, table] of [
+        ["SHADOW", RSS_CARD_SHADOWS],
+        ["FONT", RSS_CARD_FONTS],
+      ]) {
+        const pref = LOOK_PREFS["RSS_CARD_" + name];
+        const value = ctx.getPref(pref, LOOK_DEFAULTS[pref]);
+        root.style.setProperty(
+          "--bgalazka-look-rss-card-" + name.toLowerCase(),
+          table[value] || table[LOOK_DEFAULTS[pref]],
+        );
+      }
       if (palette.simple) {
         const value = Number(ctx.getPref(LOOK_PREFS.PRIMARY_OPACITY, 100));
         const opacity = Number.isFinite(value)
@@ -1636,8 +1760,9 @@
         else input.checked = value;
         onSync?.(value);
       });
-      if (lookChanged)
-        document.getElementById("zs-panel-extension-look")?._syncLook?.();
+      // The Look panel also mirrors the reader-card switch, so its rows are
+      // refreshed after every import, not only after a Look value changed.
+      document.getElementById("zs-panel-extension-look")?._syncLook?.();
     }
 
     return {
@@ -1656,6 +1781,7 @@
       LOOK_KEYS,
       LOOK_TRANSPARENCY_KEYS,
       LOOK_COLORS,
+      LOOK_OPTIONAL_COLORS,
       LOOK_ENUMS,
       LOOK_BOUNDS,
       applyLook,

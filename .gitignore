@@ -13,8 +13,17 @@ Desktop.ini
 .vscode/
 .idea/
 
+# Local documentation & reference artifacts (not needed to run the mod)
+docs/
+patches/
+tools/
+zentral/upstream/
+
 # Local notes
 notes.md
 node_modules/
 *.building
 *.atomic
+
+# Agent workspace
+.kilo/

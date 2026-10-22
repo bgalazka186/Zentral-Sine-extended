@@ -104,6 +104,7 @@
           LOOK_KEYS,
           LOOK_TRANSPARENCY_KEYS,
           LOOK_COLORS,
+          LOOK_OPTIONAL_COLORS,
           LOOK_ENUMS,
           LOOK_BOUNDS,
           applyLook,
@@ -126,6 +127,7 @@
                 LOOK_DEFAULTS,
                 LOOK_KEYS,
                 LOOK_COLORS,
+                LOOK_OPTIONAL_COLORS,
                 LOOK_ENUMS,
                 LOOK_BOUNDS,
                 LOOK_GROUP_PREFS,
@@ -2232,6 +2234,16 @@
               ctx.EXT_PREFS.RSS_HIDE_EMPTY,
               ctx.EXT_PREFS.RSS_COMPACT_HEADERS,
               ctx.EXT_PREFS.RSS_READER_CARD,
+              ctx.EXT_PREFS.RSS_CARD_HOVER_DELAY,
+              ctx.EXT_PREFS.RSS_CARD_HIDE_DELAY,
+              ctx.EXT_PREFS.RSS_CARD_SIDE,
+              ctx.EXT_PREFS.RSS_CARD_SHOW_FOLDER,
+              ctx.EXT_PREFS.RSS_CARD_SHOW_URL,
+              ctx.EXT_PREFS.RSS_CARD_SHOW_BUTTONS,
+              ctx.EXT_PREFS.RSS_CARD_MMB_DISMISS,
+              ctx.EXT_PREFS.RSS_CARD_RETARGET,
+              ctx.EXT_PREFS.RSS_CARD_CONFIRM_ALL,
+              ctx.EXT_PREFS.RSS_CARD_REPLACE_TOOLTIP,
             ]);
             const applyPreset = (recommended) => {
               const message = recommended
@@ -2405,148 +2417,95 @@
               null,
               false,
               null,
-              syncRssFolderDisplay,
+              () => {
+                syncRssFolderDisplay();
+                // The card appearance lives in the Look panel: its rows follow
+                // the reader switch so the options cannot be edited blind.
+                document
+                  .getElementById("zs-panel-extension-look")
+                  ?._syncLook?.();
+              },
             );
-            // Reader card appearance. Colors stay empty until the user picks
-            // one, so the card keeps following the active Look palette.
-            const rssThemeColor = (variable, fallback) => {
-              const value = getComputedStyle(document.documentElement)
-                .getPropertyValue(variable)
-                .trim();
-              return /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
-            };
-            const rssCardColorRow = (
-              labelText,
-              sublabelText,
-              prefKey,
-              themeVariable,
-              fallback,
-            ) => {
-              const row = document.createElement("div");
-              row.className = "zs-row";
-              row.dataset.settingKey = prefKey;
-              const leftBox = document.createElement("div");
-              leftBox.style.display = "flex";
-              leftBox.style.flexDirection = "column";
-              const labelContainer = document.createElement("div");
-              labelContainer.className = "zs-label-container";
-              const label = document.createElement("span");
-              label.className = "zs-label";
-              label.textContent = labelText;
-              const sublabel = document.createElement("span");
-              sublabel.className = "zs-sublabel";
-              sublabel.textContent = sublabelText;
-              labelContainer.append(label, sublabel);
-              leftBox.appendChild(labelContainer);
-              const controls = document.createElement("div");
-              controls.style.display = "flex";
-              controls.style.alignItems = "center";
-              controls.style.gap = "8px";
-              const input = document.createElement("input");
-              input.type = "color";
-              input.style.cssText =
-                "width:36px;height:26px;padding:0;border:1px solid rgba(255,255,255,0.15);border-radius:8px;background:transparent;cursor:pointer;";
-              const themeValue = rssThemeColor(themeVariable, fallback);
-              const stored = ctx.getPref(prefKey, "");
-              input.value = /^#[0-9a-fA-F]{6}$/.test(stored)
-                ? stored
-                : themeValue;
-              const write = (value) => {
-                ctx.setPref(prefKey, value);
-                input.value = value || themeValue;
-              };
-              input.addEventListener("input", () => write(input.value));
-              const reset = document.createElement("button");
-              reset.type = "button";
-              reset.className = "zs-reset-btn";
-              reset.style.cssText =
-                "margin:0;padding:4px 10px;font-size:11.5px;align-self:center;";
-              reset.textContent = "Theme";
-              reset.title = "Follow the current theme color";
-              reset.addEventListener("click", () => write(""));
-              controls.append(input, reset);
-              row.append(leftBox, controls);
-              return row;
-            };
-            const rssCardBackground = rssCardColorRow(
-              "Card background color",
-              "Leave this on Theme to follow the current palette.",
-              ctx.EXT_PREFS.RSS_CARD_BACKGROUND,
-              "--zl-popup",
-              "#202224",
-            );
-            const rssCardText = rssCardColorRow(
-              "Card text color",
-              "Leave this on Theme to follow the current palette.",
-              ctx.EXT_PREFS.RSS_CARD_TEXT,
-              "--zl-popup-text",
-              "#dce0e1",
-            );
-            const rssCardUrl = rssCardColorRow(
-              "Card link color",
-              "Color of the article URL under the text.",
-              ctx.EXT_PREFS.RSS_CARD_URL,
-              "--zl-muted",
-              "#a4aaad",
-            );
-            const rssCardButtonBackground = rssCardColorRow(
-              "Button background color",
-              "Open, Dismiss and Dismiss all share one background.",
-              ctx.EXT_PREFS.RSS_CARD_BUTTON_BACKGROUND,
-              "--zl-raised",
-              "#2b2e31",
-            );
-            const rssCardButtonText = rssCardColorRow(
-              "Button text color",
-              "Leave this on Theme to follow the current palette.",
-              ctx.EXT_PREFS.RSS_CARD_BUTTON_TEXT,
-              "--zl-button-text",
-              "#d4d8d9",
-            );
-            const rssCardWidth = createSliderRow(
-              "Card width",
-              "Horizontal size of the hover card.",
-              ctx.EXT_PREFS.RSS_CARD_WIDTH,
-              240,
-              560,
-              340,
-              " px",
-            );
-            const rssCardMaxHeight = createSliderRow(
-              "Card maximum height",
-              "Share of the window height the card may use. Longer articles scroll inside it.",
-              ctx.EXT_PREFS.RSS_CARD_MAX_HEIGHT,
-              20,
-              90,
-              60,
-              " %",
-            );
-            const rssCardRadius = createSliderRow(
-              "Card corner radius",
-              "Rounds the card corners. 0 px keeps square corners.",
-              ctx.EXT_PREFS.RSS_CARD_RADIUS,
+            // Reader card behavior. The card's look belongs to the Look panel;
+            // these switches only change how the card behaves.
+            const rssCardHoverDelay = createSliderRow(
+              "Card hover delay",
+              "Wait before the card opens. 0 ms opens it immediately.",
+              ctx.EXT_PREFS.RSS_CARD_HOVER_DELAY,
               0,
-              24,
-              10,
-              " px",
+              1000,
+              0,
+              " ms",
             );
-            const rssCardOpacity = createSliderRow(
-              "Card background opacity",
-              "Only the backing becomes transparent. The text always stays readable.",
-              ctx.EXT_PREFS.RSS_CARD_OPACITY,
-              10,
-              100,
-              100,
-              " %",
+            const rssCardHideDelay = createSliderRow(
+              "Card hide delay",
+              "Wait before the card closes after the pointer leaves it.",
+              ctx.EXT_PREFS.RSS_CARD_HIDE_DELAY,
+              0,
+              2000,
+              250,
+              " ms",
             );
-            const rssCardFontSize = createSliderRow(
-              "Card text size",
-              "Base size for the article text, the URL and the buttons.",
-              ctx.EXT_PREFS.RSS_CARD_FONT_SIZE,
-              10,
-              20,
-              13,
-              " px",
+            const rssCardSide = createSelectRow(
+              "Card side",
+              "Auto keeps the card beside the sidebar. Left and Right pin it to that side of the article.",
+              ctx.EXT_PREFS.RSS_CARD_SIDE,
+              [
+                { value: "auto", label: "Auto" },
+                { value: "left", label: "Left" },
+                { value: "right", label: "Right" },
+              ],
+              "auto",
+              null,
+            );
+            const rssCardShowFolder = createToggleRow(
+              "Show the folder name",
+              "Display the live-folder name above the article text.",
+              ctx.EXT_PREFS.RSS_CARD_SHOW_FOLDER,
+              null,
+              true,
+            );
+            const rssCardShowUrl = createToggleRow(
+              "Show the article URL",
+              "Display the article address under the text.",
+              ctx.EXT_PREFS.RSS_CARD_SHOW_URL,
+              null,
+              true,
+            );
+            const rssCardShowButtons = createToggleRow(
+              "Show the action buttons",
+              "Display Open, Dismiss and Dismiss all.",
+              ctx.EXT_PREFS.RSS_CARD_SHOW_BUTTONS,
+              null,
+              true,
+            );
+            const rssCardMmbDismiss = createToggleRow(
+              "Middle-click dismisses",
+              "Middle-clicking an article closes it instead of opening a new tab.",
+              ctx.EXT_PREFS.RSS_CARD_MMB_DISMISS,
+              null,
+              true,
+            );
+            const rssCardRetarget = createToggleRow(
+              "Follow the pointer after a dismiss",
+              "The next article opens under the pointer without moving the mouse.",
+              ctx.EXT_PREFS.RSS_CARD_RETARGET,
+              null,
+              true,
+            );
+            const rssCardConfirmAll = createToggleRow(
+              "Confirm before dismissing all",
+              "Ask before every article in the folder is closed at once.",
+              ctx.EXT_PREFS.RSS_CARD_CONFIRM_ALL,
+              null,
+              false,
+            );
+            const rssCardReplaceTooltip = createToggleRow(
+              "Replace the native tooltip",
+              "Hide Zen's own article tooltip while the reader card is on.",
+              ctx.EXT_PREFS.RSS_CARD_REPLACE_TOOLTIP,
+              null,
+              true,
             );
             rssCategory.subContent.append(
               rssHeader,
@@ -2554,16 +2513,16 @@
               rssHideEmpty.row,
               rssCompact.row,
               rssReader.row,
-              rssCardBackground,
-              rssCardText,
-              rssCardUrl,
-              rssCardButtonBackground,
-              rssCardButtonText,
-              rssCardWidth.row,
-              rssCardMaxHeight.row,
-              rssCardRadius.row,
-              rssCardOpacity.row,
-              rssCardFontSize.row,
+              rssCardHoverDelay.row,
+              rssCardHideDelay.row,
+              rssCardSide.row,
+              rssCardShowFolder.row,
+              rssCardShowUrl.row,
+              rssCardShowButtons.row,
+              rssCardMmbDismiss.row,
+              rssCardRetarget.row,
+              rssCardConfirmAll.row,
+              rssCardReplaceTooltip.row,
             );
             panel._toggles.push(
               {
@@ -2580,6 +2539,65 @@
                 input: rssReader.input,
                 pref: ctx.EXT_PREFS.RSS_READER_CARD,
                 def: false,
+              },
+              {
+                input: rssCardHoverDelay.input,
+                pref: ctx.EXT_PREFS.RSS_CARD_HOVER_DELAY,
+                def: 0,
+                isSelect: true,
+                onSync: (value) => {
+                  rssCardHoverDelay.badge.textContent = value + " ms";
+                },
+              },
+              {
+                input: rssCardHideDelay.input,
+                pref: ctx.EXT_PREFS.RSS_CARD_HIDE_DELAY,
+                def: 250,
+                isSelect: true,
+                onSync: (value) => {
+                  rssCardHideDelay.badge.textContent = value + " ms";
+                },
+              },
+              {
+                input: rssCardSide.select,
+                pref: ctx.EXT_PREFS.RSS_CARD_SIDE,
+                def: "auto",
+                isSelect: true,
+              },
+              {
+                input: rssCardShowFolder.input,
+                pref: ctx.EXT_PREFS.RSS_CARD_SHOW_FOLDER,
+                def: true,
+              },
+              {
+                input: rssCardShowUrl.input,
+                pref: ctx.EXT_PREFS.RSS_CARD_SHOW_URL,
+                def: true,
+              },
+              {
+                input: rssCardShowButtons.input,
+                pref: ctx.EXT_PREFS.RSS_CARD_SHOW_BUTTONS,
+                def: true,
+              },
+              {
+                input: rssCardMmbDismiss.input,
+                pref: ctx.EXT_PREFS.RSS_CARD_MMB_DISMISS,
+                def: true,
+              },
+              {
+                input: rssCardRetarget.input,
+                pref: ctx.EXT_PREFS.RSS_CARD_RETARGET,
+                def: true,
+              },
+              {
+                input: rssCardConfirmAll.input,
+                pref: ctx.EXT_PREFS.RSS_CARD_CONFIRM_ALL,
+                def: false,
+              },
+              {
+                input: rssCardReplaceTooltip.input,
+                pref: ctx.EXT_PREFS.RSS_CARD_REPLACE_TOOLTIP,
+                def: true,
               },
             );
 
@@ -2612,6 +2630,53 @@
               lookCategory.subContent.appendChild(heading);
             };
             const lookControls = [];
+            // Density and reader-card controls apply in Classic as well: they
+            // must not switch the user's other Look choices to Custom.
+            const lookKeepsClassicStyle = new Set([
+              LOOK_PREFS.TABBAR_ROW_HEIGHT,
+              LOOK_PREFS.TABBAR_ROW_GAP,
+              LOOK_PREFS.TABBAR_ICON_GAP,
+              LOOK_PREFS.ESSENTIALS_HEIGHT,
+              LOOK_PREFS.TABBAR_SECTION_GAP,
+              LOOK_PREFS.FOLDER_ICON_SIZE,
+              LOOK_PREFS.WORKSPACE_ICON_SIZE,
+              LOOK_PREFS.WORKSPACE_HEIGHT,
+              LOOK_PREFS.BOTTOM_BAR_HEIGHT,
+              LOOK_PREFS.URLBAR_TOP_GAP,
+              LOOK_PREFS.NEWTAB_HEIGHT,
+              LOOK_PREFS.RSS_CARD_WIDTH,
+              LOOK_PREFS.RSS_CARD_MAX_HEIGHT,
+              LOOK_PREFS.RSS_CARD_FONT_SIZE,
+              LOOK_PREFS.RSS_CARD_LINE_HEIGHT,
+              LOOK_PREFS.RSS_CARD_PADDING,
+              LOOK_PREFS.RSS_CARD_RADIUS,
+              LOOK_PREFS.RSS_CARD_BORDER,
+              LOOK_PREFS.RSS_CARD_OPACITY,
+              LOOK_PREFS.RSS_CARD_BUTTON_RADIUS,
+              LOOK_PREFS.RSS_CARD_GAP,
+              LOOK_PREFS.RSS_CARD_SHADOW,
+              LOOK_PREFS.RSS_CARD_FONT,
+            ]);
+            // Reader-card appearance rows. They are disabled while the reader
+            // card is off, so nobody edits options that cannot be seen.
+            const rssCardLookRows = [];
+            const syncRssCardLookRows = () => {
+              const disabled = !ctx.getPref(
+                ctx.EXT_PREFS.RSS_READER_CARD,
+                false,
+              );
+              for (const { row, input, key, themeValue } of rssCardLookRows) {
+                input.disabled = disabled;
+                for (const control of row.querySelectorAll("button"))
+                  control.disabled = disabled;
+                row.style.opacity = disabled ? "0.5" : "";
+                if (!key) continue;
+                const value = ctx.getPref(key, "");
+                input.value = /^#[0-9a-fA-F]{6}$/.test(value)
+                  ? value
+                  : themeValue;
+              }
+            };
             lookCategory.subPanel._setPaletteMode = setPaletteMode;
             const ensureCustomLook = (key) => {
               if (
@@ -2633,7 +2698,9 @@
                 LOOK_DEFAULTS[key],
                 null,
                 null,
-                () => ensureCustomLook(key),
+                lookKeepsClassicStyle.has(key)
+                  ? null
+                  : () => ensureCustomLook(key),
               );
               if (key === LOOK_PREFS.PALETTE_MODE) {
                 // Capture runs before the generic row commits its preference.
@@ -2648,6 +2715,7 @@
                 control.row.dataset.paletteDetail = "true";
               lookCategory.subContent.append(control.row);
               lookControls.push({ input: control.select, key });
+              return control;
             };
             const addLookColor = (label, description, key) => {
               const control = createColorRow(
@@ -2679,6 +2747,7 @@
               if ([LOOK_PREFS.PRIMARY, LOOK_PREFS.SECONDARY].includes(key))
                 control.row.dataset.paletteSimple = "true";
               lookControls.push({ input: control.input, key });
+              return control;
             };
             const addLookSlider = (
               label,
@@ -2703,19 +2772,7 @@
               );
               // Density controls apply in Classic as well; changing them must not
               // switch the user's other Look choices to Custom.
-              if (
-                key !== LOOK_PREFS.TABBAR_ROW_HEIGHT &&
-                key !== LOOK_PREFS.TABBAR_ROW_GAP &&
-                key !== LOOK_PREFS.TABBAR_ICON_GAP &&
-                key !== LOOK_PREFS.ESSENTIALS_HEIGHT &&
-                key !== LOOK_PREFS.TABBAR_SECTION_GAP &&
-                key !== LOOK_PREFS.FOLDER_ICON_SIZE &&
-                key !== LOOK_PREFS.WORKSPACE_ICON_SIZE &&
-                key !== LOOK_PREFS.WORKSPACE_HEIGHT &&
-                key !== LOOK_PREFS.BOTTOM_BAR_HEIGHT &&
-                key !== LOOK_PREFS.URLBAR_TOP_GAP &&
-                key !== LOOK_PREFS.NEWTAB_HEIGHT
-              )
+              if (!lookKeepsClassicStyle.has(key))
                 control.input.addEventListener("input", () =>
                   ensureCustomLook(key),
                 );
@@ -2736,6 +2793,7 @@
                 key,
                 inverted,
               });
+              return control;
             };
             const syncLookControls = () => {
               for (const {
@@ -2752,6 +2810,7 @@
                   input.disabled =
                     ctx.getPref(LOOK_PREFS.SOLID_CONTROLS, true) === false;
               }
+              syncRssCardLookRows();
             };
             lookCategory.subPanel._syncLook = syncLookControls;
             addLookHeading("Arc 2.0");
@@ -3491,6 +3550,254 @@
                 { value: "filled", label: "Filled" },
               ],
             );
+            addLookHeading("RSS reader card");
+            const rssCardLookNote = document.createElement("p");
+            rssCardLookNote.className = "zs-look-note";
+            rssCardLookNote.textContent =
+              "Appearance of the RSS reader card. These rows stay disabled while the reader card is off in RSS Folders.";
+            lookCategory.subContent.append(rssCardLookNote);
+            const rssCardLookSlider = (
+              label,
+              description,
+              key,
+              min,
+              max,
+              suffix,
+            ) => {
+              const control = addLookSlider(
+                label,
+                description,
+                key,
+                min,
+                max,
+                suffix,
+              );
+              rssCardLookRows.push({ row: control.row, input: control.input });
+              return control;
+            };
+            const rssCardLookSelect = (label, description, key, options) => {
+              const control = addLookSelect(
+                label,
+                description,
+                key,
+                options,
+              );
+              rssCardLookRows.push({
+                row: control.row,
+                input: control.select,
+              });
+              return control;
+            };
+            // Optional colors: an empty value keeps the theme token, so the
+            // card follows the active palette until a color is picked.
+            const addLookOptionalColor = (
+              label,
+              description,
+              key,
+              themeVariable,
+              fallback,
+            ) => {
+              const row = document.createElement("div");
+              row.className = "zs-row";
+              row.dataset.settingKey = key;
+              const leftBox = document.createElement("div");
+              leftBox.style.display = "flex";
+              leftBox.style.flexDirection = "column";
+              const labelContainer = document.createElement("div");
+              labelContainer.className = "zs-label-container";
+              const labelElement = document.createElement("span");
+              labelElement.className = "zs-label";
+              labelElement.textContent = label;
+              const sublabel = document.createElement("span");
+              sublabel.className = "zs-sublabel";
+              sublabel.textContent = description;
+              labelContainer.append(labelElement, sublabel);
+              leftBox.appendChild(labelContainer);
+              const controls = document.createElement("div");
+              controls.style.display = "flex";
+              controls.style.alignItems = "center";
+              controls.style.gap = "8px";
+              const input = document.createElement("input");
+              input.type = "color";
+              input.style.cssText =
+                "width:36px;height:26px;padding:0;border:1px solid rgba(255,255,255,0.15);border-radius:8px;background:transparent;cursor:pointer;";
+              const themeValue = () => {
+                const value = getComputedStyle(document.documentElement)
+                  .getPropertyValue(themeVariable)
+                  .trim();
+                return /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
+              };
+              const stored = ctx.getPref(key, "");
+              input.value = /^#[0-9a-fA-F]{6}$/.test(stored)
+                ? stored
+                : themeValue();
+              const write = (value) => {
+                ctx.setPref(key, value);
+                input.value = value || themeValue();
+              };
+              input.addEventListener("input", () => write(input.value));
+              const reset = document.createElement("button");
+              reset.type = "button";
+              reset.className = "zs-reset-btn";
+              reset.style.cssText =
+                "margin:0;padding:4px 10px;font-size:11.5px;align-self:center;";
+              reset.textContent = "Theme";
+              reset.title = "Follow the current theme color";
+              reset.addEventListener("click", () => write(""));
+              controls.append(input, reset);
+              row.append(leftBox, controls);
+              lookCategory.subContent.append(row);
+              rssCardLookRows.push({
+                row,
+                input,
+                key,
+                themeValue: themeValue(),
+              });
+              return row;
+            };
+            rssCardLookSlider(
+              "Card width",
+              "Horizontal size of the hover card.",
+              LOOK_PREFS.RSS_CARD_WIDTH,
+              240,
+              560,
+              " px",
+            );
+            rssCardLookSlider(
+              "Card maximum height",
+              "Share of the window height the card may use. Longer articles scroll inside it.",
+              LOOK_PREFS.RSS_CARD_MAX_HEIGHT,
+              20,
+              90,
+              " %",
+            );
+            rssCardLookSlider(
+              "Card text size",
+              "Base size for the article text, the URL and the buttons.",
+              LOOK_PREFS.RSS_CARD_FONT_SIZE,
+              10,
+              20,
+              " px",
+            );
+            rssCardLookSlider(
+              "Card line height",
+              "Line spacing as a share of the text size.",
+              LOOK_PREFS.RSS_CARD_LINE_HEIGHT,
+              110,
+              200,
+              " %",
+            );
+            rssCardLookSlider(
+              "Card padding",
+              "Space between the card edge and its text.",
+              LOOK_PREFS.RSS_CARD_PADDING,
+              6,
+              24,
+              " px",
+            );
+            rssCardLookSlider(
+              "Card corner radius",
+              "Rounds the card corners. 0 px keeps square corners.",
+              LOOK_PREFS.RSS_CARD_RADIUS,
+              0,
+              24,
+              " px",
+            );
+            rssCardLookSlider(
+              "Card border width",
+              "0 px removes the card outline.",
+              LOOK_PREFS.RSS_CARD_BORDER,
+              0,
+              3,
+              " px",
+            );
+            rssCardLookSlider(
+              "Card background opacity",
+              "Only the backing becomes transparent. The text always stays readable.",
+              LOOK_PREFS.RSS_CARD_OPACITY,
+              10,
+              100,
+              " %",
+            );
+            rssCardLookSlider(
+              "Button corner radius",
+              "Rounds the Open, Dismiss and Dismiss all buttons.",
+              LOOK_PREFS.RSS_CARD_BUTTON_RADIUS,
+              0,
+              16,
+              " px",
+            );
+            rssCardLookSlider(
+              "Card gap",
+              "Space between the buttons and the distance to the sidebar.",
+              LOOK_PREFS.RSS_CARD_GAP,
+              0,
+              32,
+              " px",
+            );
+            rssCardLookSelect(
+              "Card shadow",
+              "Depth of the shadow behind the card.",
+              LOOK_PREFS.RSS_CARD_SHADOW,
+              [
+                { value: "none", label: "None" },
+                { value: "soft", label: "Soft" },
+                { value: "strong", label: "Strong" },
+              ],
+            );
+            rssCardLookSelect(
+              "Card font",
+              "Typeface used for the article text.",
+              LOOK_PREFS.RSS_CARD_FONT,
+              [
+                { value: "system", label: "System" },
+                { value: "serif", label: "Serif" },
+                { value: "mono", label: "Monospace" },
+              ],
+            );
+            addLookOptionalColor(
+              "Card background color",
+              "Leave this on Theme to follow the current palette.",
+              LOOK_PREFS.RSS_CARD_BACKGROUND,
+              "--zl-popup",
+              "#202224",
+            );
+            addLookOptionalColor(
+              "Card text color",
+              "Leave this on Theme to follow the current palette.",
+              LOOK_PREFS.RSS_CARD_TEXT,
+              "--zl-popup-text",
+              "#dce0e1",
+            );
+            addLookOptionalColor(
+              "Card link color",
+              "Color of the article URL under the text.",
+              LOOK_PREFS.RSS_CARD_URL,
+              "--zl-muted",
+              "#a4aaad",
+            );
+            addLookOptionalColor(
+              "Card border color",
+              "Outline color around the card.",
+              LOOK_PREFS.RSS_CARD_BORDER_COLOR,
+              "--zl-button-border-color",
+              "#292929",
+            );
+            addLookOptionalColor(
+              "Button background color",
+              "Open, Dismiss and Dismiss all share one background.",
+              LOOK_PREFS.RSS_CARD_BUTTON_BACKGROUND,
+              "--zl-raised",
+              "#2b2e31",
+            );
+            addLookOptionalColor(
+              "Button text color",
+              "Leave this on Theme to follow the current palette.",
+              LOOK_PREFS.RSS_CARD_BUTTON_TEXT,
+              "--zl-button-text",
+              "#d4d8d9",
+            );
+            syncRssCardLookRows();
             addLookHeading("Existing appearance");
             lookCategory.subContent.append(
               aestheticHeader,

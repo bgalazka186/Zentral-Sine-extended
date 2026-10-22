@@ -103,6 +103,10 @@
         {
           "label": "Compatibility styling",
           "icon": "puzzle"
+        },
+        {
+          "label": "RSS reader card",
+          "icon": "rss"
         }
       ]
     },
@@ -691,6 +695,29 @@
     "zen.workspace.zentral.arc2.match_compact_library",
     {
       "type": "text",
+      "label": "**Detailed appearance · RSS reader card**",
+      "size": "18px"
+    },
+    "zen.workspace.bgalazka.look.rss_card_width",
+    "zen.workspace.bgalazka.look.rss_card_max_height",
+    "zen.workspace.bgalazka.look.rss_card_font_size",
+    "zen.workspace.bgalazka.look.rss_card_line_height",
+    "zen.workspace.bgalazka.look.rss_card_padding",
+    "zen.workspace.bgalazka.look.rss_card_radius",
+    "zen.workspace.bgalazka.look.rss_card_border",
+    "zen.workspace.bgalazka.look.rss_card_opacity",
+    "zen.workspace.bgalazka.look.rss_card_button_radius",
+    "zen.workspace.bgalazka.look.rss_card_gap",
+    "zen.workspace.bgalazka.look.rss_card_shadow",
+    "zen.workspace.bgalazka.look.rss_card_font",
+    "zen.workspace.bgalazka.look.rss_card_background",
+    "zen.workspace.bgalazka.look.rss_card_text",
+    "zen.workspace.bgalazka.look.rss_card_url",
+    "zen.workspace.bgalazka.look.rss_card_border_color",
+    "zen.workspace.bgalazka.look.rss_card_button_background",
+    "zen.workspace.bgalazka.look.rss_card_button_text",
+    {
+      "type": "text",
       "label": "**Layout & density · Tabs & folders**",
       "size": "18px"
     },
@@ -784,16 +811,16 @@
       "size": "18px"
     },
     "zen.workspace.bgalazka.rss.reader_card",
-    "zen.workspace.bgalazka.rss.card_background",
-    "zen.workspace.bgalazka.rss.card_text",
-    "zen.workspace.bgalazka.rss.card_url",
-    "zen.workspace.bgalazka.rss.card_button_background",
-    "zen.workspace.bgalazka.rss.card_button_text",
-    "zen.workspace.bgalazka.rss.card_width",
-    "zen.workspace.bgalazka.rss.card_max_height",
-    "zen.workspace.bgalazka.rss.card_radius",
-    "zen.workspace.bgalazka.rss.card_opacity",
-    "zen.workspace.bgalazka.rss.card_font_size",
+    "zen.workspace.bgalazka.rss.card_hover_delay",
+    "zen.workspace.bgalazka.rss.card_hide_delay",
+    "zen.workspace.bgalazka.rss.card_side",
+    "zen.workspace.bgalazka.rss.card_show_folder",
+    "zen.workspace.bgalazka.rss.card_show_url",
+    "zen.workspace.bgalazka.rss.card_show_buttons",
+    "zen.workspace.bgalazka.rss.card_mmb_dismiss",
+    "zen.workspace.bgalazka.rss.card_retarget",
+    "zen.workspace.bgalazka.rss.card_confirm_all",
+    "zen.workspace.bgalazka.rss.card_replace_tooltip",
     {
       "type": "text",
       "label": "**Panel Layout · Docking, size & input**",

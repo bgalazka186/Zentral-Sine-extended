@@ -21,6 +21,10 @@ The chosen surface colors determine automatic text contrast. Fully transparent s
 
 Palette math runs only on appearance changes. Preference bursts from presets/imports coalesce into one scheduled update, and direct updates cancel queued duplicates. Static scoped CSS applies the result; there is no color polling, per-frame sampling or recurring DOM scan. Artwork sizing retains its existing coalesced resize/mutation handling.
 
+## Reader card appearance
+
+The RSS reader card is painted from root custom properties written here: `--bgalazka-look-rss-card-*` for size, padding, radius, border, opacity, gap, shadow, font and the optional colors. The stylesheet in `additional/rss/ZentralRssDisplay.css` owns the theme fallback, so an unset color keeps the active palette and Classic keeps the native panel tokens. The card's behavior belongs to the RSS owner; this owner only writes the properties.
+
 ## Video control appearance
 
 Sidebar and Big Preview buttons follow the shared button style, border, size, hover pair and video fill/text controls. Plain and outline styles retain transparent resting fills. Automatic text contrast uses the effective button surface; Manual retains the chosen icon color. Big Preview adds a small icon shadow over video pixels without adding a forced border or solid button fill.
