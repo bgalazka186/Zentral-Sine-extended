@@ -1,0 +1,122 @@
+[
+  {
+    "property": "zen.workspace.zentral.experimental.library_resize",
+    "label": "Make Library behave more like Zentral panel (experimental)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.experimental.library_resize.mode",
+    "label": "Library layout mode",
+    "type": "dropdown",
+    "defaultValue": "resize",
+    "options": [
+      {
+        "label": "Resize webpage",
+        "value": "resize"
+      },
+      {
+        "label": "Overlay webpage",
+        "value": "overlay"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.experimental.library_resize.minimum_content_width_px",
+    "label": "Minimum webpage width (px; may overlap Library in narrow windows)",
+    "type": "dropdown",
+    "defaultValue": 200,
+    "options": [
+      {
+        "label": "0 px",
+        "value": 0
+      },
+      {
+        "label": "50 px",
+        "value": 50
+      },
+      {
+        "label": "100 px",
+        "value": 100
+      },
+      {
+        "label": "150 px",
+        "value": 150
+      },
+      {
+        "label": "200 px",
+        "value": 200
+      },
+      {
+        "label": "250 px",
+        "value": 250
+      },
+      {
+        "label": "300 px",
+        "value": 300
+      },
+      {
+        "label": "350 px",
+        "value": 350
+      },
+      {
+        "label": "400 px",
+        "value": 400
+      },
+      {
+        "label": "450 px",
+        "value": 450
+      },
+      {
+        "label": "500 px",
+        "value": 500
+      },
+      {
+        "label": "550 px",
+        "value": 550
+      },
+      {
+        "label": "600 px",
+        "value": 600
+      },
+      {
+        "label": "650 px",
+        "value": 650
+      },
+      {
+        "label": "700 px",
+        "value": 700
+      },
+      {
+        "label": "750 px",
+        "value": 750
+      },
+      {
+        "label": "800 px",
+        "value": 800
+      },
+      {
+        "label": "850 px",
+        "value": 850
+      },
+      {
+        "label": "900 px",
+        "value": 900
+      },
+      {
+        "label": "950 px",
+        "value": 950
+      },
+      {
+        "label": "1000 px",
+        "value": 1000
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.experimental.library_resize.animate_content",
+    "label": "Resize webpage continuously during Library animation (more page layout work)",
+    "type": "checkbox",
+    "defaultValue": false
+  }
+]

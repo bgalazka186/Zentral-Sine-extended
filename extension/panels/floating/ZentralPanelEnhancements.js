@@ -153,12 +153,28 @@
           host.role === "primary" &&
           host.layout.mode === "docked" &&
           ui.getAttribute("bgalazka-push-page") === "true";
+        // A pushing host spans the full window height, but on the side that
+        // holds the native sidebar it must start at the sidebar's content edge.
+        // Page push only reserves space inside the content box, so docking at
+        // the viewport edge covered the tab bar and left a sidebar-wide hole.
+        let pushLeft = 0,
+          pushRight = window.innerWidth;
+        if (pushing) {
+          const safe = runtime.sidebarSafeBounds?.();
+          const pushSide = host.layout.customSide
+            ? host.layout.side
+            : defaultSide();
+          if (safe) {
+            if (pushSide === "left") pushLeft = Math.max(0, safe.left || 0);
+            else pushRight = Math.min(window.innerWidth, safe.right || pushRight);
+          }
+        }
         const box = pushing
           ? {
-              left: 0,
-              top: 0,
-              width: window.innerWidth,
-              height: window.innerHeight,
+              left: pushLeft,
+              top: area().top,
+              width: Math.max(1, pushRight - pushLeft),
+              height: Math.max(1, window.innerHeight - area().top),
             }
           : area();
         let r = bounded(

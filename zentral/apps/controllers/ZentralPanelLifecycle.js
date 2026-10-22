@@ -601,20 +601,9 @@
             if (this.isPlacementVerticalBar()) {
               fullWidth = this.getAppsBarPanelMaxWidth();
             } else if (gBrowser?.tabContainer) {
-              const tcRect = gBrowser.tabContainer.getBoundingClientRect();
-              if (this.isPanelAttachedToRight()) {
-                const targetRight = Math.max(
-                  gap,
-                  Math.round(window.innerWidth - tcRect.left) + gap,
-                );
-                fullWidth = window.innerWidth - targetRight - gap;
-              } else {
-                const targetLeft = Math.max(
-                  gap,
-                  Math.round(tcRect.right) + gap,
-                );
-                fullWidth = window.innerWidth - targetLeft - gap;
-              }
+              // Same element and gap positionPanel() uses; the tab strip's own
+              // rect excludes the toolbox padding and mis-sized the panel.
+              fullWidth = this.getSidebarDockedMaxWidth();
             }
             if (!this.isPlacementVerticalBar())
               fullWidth = Math.max(Constants.Apps.MIN_WIDTH_PX, fullWidth);

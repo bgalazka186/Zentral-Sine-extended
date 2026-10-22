@@ -12,3 +12,7 @@ The shared loader can activate these while Apps/Groups are unavailable or disabl
 | `theme/`       | Light/dark policy and readable tooltips/control colors; no Zentral base imports.                   |
 
 “Independent” means independent of the Apps/Groups base, not that every file is a standalone Sine script. Keep a feature's controllers, styles and metadata together and use its documented entrypoint. Video also retains its existing specialized standalone loader path. Source failures are isolated by the shared runtime; a missing base feature must not block this tree.
+
+## Standalone install through Sine
+
+Modules with a `standalone.json` can be installed on their own by pasting their folder URL into Sine (currently `library/`). The full pack always takes precedence if both are installed. Generated files are produced by `node tools/build-standalone.cjs`; see `docs/SINE-MODULAR-INSTALL.md`.

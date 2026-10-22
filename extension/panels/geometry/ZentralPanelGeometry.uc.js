@@ -795,9 +795,13 @@
               apps.isPlacementVerticalBar?.()
               ? ctx.computeOppositeDockingSafeMaxWidth()
               : Math.max(280, Math.round(window.innerWidth * 0.8)),
+            // Stop at the native sidebar's content edge, not the window edge,
+            // so the panel's sidebar-facing edge cannot be dragged across it.
             physicalEdge === "left"
-              ? rootRect.right
-              : window.innerWidth - rootRect.left,
+              ? rootRect.right -
+                  (window.ZentralRuntime?.sidebarSafeBounds?.().left || 0)
+              : (window.ZentralRuntime?.sidebarSafeBounds?.().right ??
+                  window.innerWidth) - rootRect.left,
           ),
         ),
       };

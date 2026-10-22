@@ -3458,8 +3458,6 @@
           return null;
         }
       };
-      const startupAutohideAvailable = () =>
-        getPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, false) === true;
       const onStartupMenu = (event) => {
         const popup = event.target;
         if (popup.id !== "zen-apps-sidebar-tile-context") return;
@@ -3508,10 +3506,12 @@
         const id = popup.dataset.activeAppId;
         menu.hidden = !id;
         if (!id) return;
-        const autohideReady = startupAutohideAvailable();
+        // Autohide is forced ON whenever a startup panel is selected, so the
+        // requirement message is always hidden and startup items are never
+        // disabled for that reason.
         menu.querySelector(
           "#zen-apps-sidebar-open-startup-requirement",
-        ).hidden = autohideReady;
+        ).hidden = true;
         const selected = readStartupPanel();
         for (const item of menu.querySelectorAll(
           "menuitem[data-startup-mode]",
@@ -3525,19 +3525,13 @@
           else item.removeAttribute("checked");
           const unavailable =
             mode !== "off" &&
-            (!autohideReady ||
-              (mode === "triple" &&
-                (!ctx.linkedPairFor(id) || !ctx.openStartupSinglePanel)));
+            mode === "triple" &&
+            (!ctx.linkedPairFor(id) || !ctx.openStartupSinglePanel);
           item.disabled = !!unavailable;
           if (unavailable) item.setAttribute("disabled", "true");
           else item.removeAttribute("disabled");
           if (unavailable)
-            item.setAttribute(
-              "tooltiptext",
-              !autohideReady
-                ? "Enable panel Autohide in Zentral Settings first"
-                : "Link this panel in Triple View first",
-            );
+            item.setAttribute("tooltiptext", "Link this panel in Triple View first");
           else item.removeAttribute("tooltiptext");
         }
       };
@@ -3555,6 +3549,11 @@
         let startupCancelled = false;
         let startupAttempted = false;
         let startupOpening = false;
+        // A configured startup panel always opens with panel autohide (hover-to-
+        // appear) turned ON, regardless of the current hover pref. This is set
+        // once at startup so a remembered selection keeps autohide on every
+        // restart until the user turns the feature off or picks another app.
+        setPref(BGALAZKA_EXT_PREFS.HOVER_REVEAL_PANEL, true);
         const openSavedPanel = () => {
           const selection = readStartupPanel();
           const apps = window.Zentral?.Apps;
@@ -3567,7 +3566,6 @@
           // An already open panel belongs to the user; never replace it.
           if (!startupAttempted && root?.hasAttribute("open")) return true;
           if (!apps?.openPanel || !root) return false;
-          if (!startupAutohideAvailable()) return true;
           const app = startupApp(selection.id);
           if (!app) return false;
           if (selection.mode === "triple" && !ctx.linkedPairFor(selection.id))

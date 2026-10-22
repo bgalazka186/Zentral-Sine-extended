@@ -12,7 +12,7 @@
  *   Apps.destroy() stops tracking. Never add permanent global mouse-movement measurement for hidden panels.
  * Registration: apps/ZentralPanelPosition
  * Loaded/created by: zentral/apps/ZentralApps.uc.js
- * Returned factory API: getAppsBarPanelBounds; getAppsBarPanelMaxWidth; isCollapsedLayoutMode;
+ * Returned factory API: getAppsBarPanelBounds; getAppsBarPanelMaxWidth; getSidebarDockedMaxWidth; isCollapsedLayoutMode;
  *   isCollapsedSidebar; isPanelAttachedToRight; isPanelDockedToAppsBar; isPhysicallySidebarCollapsed;
  *   isPlacementVerticalBar; isSidebarRight; isVerticalBarOnRight; loadWidth; onDrag; onStopDrag;
  *   positionPanel; prepareResize; saveWidth; scheduleRepositionGrid; startPositionTracking; startResize;
@@ -403,7 +403,7 @@
           return Math.max(1, Math.floor(right - left - 44));
         },
         updateWidthVar(px) {
-          if (this.isPanelDockedToAppsBar())
+          if (this.isPlacementVerticalBar())
             px = Math.max(1, Math.min(px, this.getAppsBarPanelMaxWidth()));
           // Layout clamps affect the displayed width only. saveWidth() owns
           // persistence after an intentional user resize.
@@ -447,7 +447,7 @@
           let panelLeft = 0;
           let panelRight = window.innerWidth;
 
-          if (this.isPanelDockedToAppsBar()) {
+          if (this.isPlacementVerticalBar()) {
             const isVbRight = this.isVerticalBarOnRight();
             const bounds = this.getAppsBarPanelBounds();
             // These properties are consumed only by Apps Bar CSS overrides.
@@ -563,6 +563,34 @@
           }
           window.ZentralRuntime?.constrainPanelToSidebar?.(root);
         },
+        // Width between the panel's docked anchor and the far window edge.
+        // Mirrors positionPanel() (same element, same side gap) so expand and
+        // drag clamps can never disagree with where the panel is actually
+        // placed. With the sidebar on the panel's own side, the old flat
+        // window-width ratio let the panel run past the opposite edge.
+        getSidebarDockedMaxWidth() {
+          const gap = 12;
+          const sidebarEl =
+            window.ZentralRuntime?.nativeSidebarElement?.() ||
+            gBrowser?.tabContainer;
+          const rect = sidebarEl?.getBoundingClientRect();
+          const hasRect = rect && rect.width > 0 && rect.height > 0;
+          const collapsed =
+            this.isCollapsedSidebar() ||
+            (hasRect && rect.width <= Constants.Apps.COLLAPSED_WIDTH_THRESHOLD);
+          const sideGap = collapsed ? 7 : gap;
+          let anchor;
+          if (this.isPanelAttachedToRight()) {
+            anchor = hasRect ? Math.round(window.innerWidth - rect.left) : 0;
+          } else {
+            anchor = hasRect ? Math.round(rect.right) : 0;
+          }
+          anchor = Math.max(gap, anchor + sideGap);
+          return Math.max(
+            Constants.Apps.MIN_WIDTH_PX,
+            window.innerWidth - anchor - gap,
+          );
+        },
         loadWidth() {
           let width = Core.getPref(Constants.Apps.PREF_WIDTH);
           return Math.max(
@@ -612,10 +640,12 @@
           let newW = this.isPanelAttachedToRight()
             ? this._startW - diff
             : this._startW + diff;
-          newW = Math.max(
-            Constants.Apps.MIN_WIDTH_PX,
-            Math.min(newW, window.innerWidth * Constants.Apps.MAX_WIDTH_RATIO),
-          );
+          let limit = window.innerWidth * Constants.Apps.MAX_WIDTH_RATIO;
+          if (this.isPlacementVerticalBar())
+            limit = Math.min(limit, this.getAppsBarPanelMaxWidth());
+          else
+            limit = Math.min(limit, this.getSidebarDockedMaxWidth());
+          newW = Math.max(Constants.Apps.MIN_WIDTH_PX, Math.min(newW, limit));
           this.updateWidthVar(newW);
         },
         onStopDrag() {

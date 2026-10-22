@@ -255,7 +255,7 @@
         library.offsetParent || library.parentNode
       )?.getBoundingClientRect?.();
       const right =
-        window.ZentralRuntime?.nativeSidebarSide?.() === "right" ||
+        (window.ZentralRuntime || window.__zentralStandaloneRuntime)?.nativeSidebarSide?.() === "right" ||
         (root.hasAttribute("zen-right-side") &&
           root.getAttribute("zen-right-side") !== "false") ||
         (root.hasAttribute("zen-sidebar-right") &&
@@ -419,7 +419,7 @@
       }
       schedule();
     }
-    const runtime = window.ZentralRuntime;
+    const runtime = (window.ZentralRuntime || window.__zentralStandaloneRuntime);
     const unregisterSettings = runtime.registerSettingsHook?.(
       "library-resize",
       24,
@@ -461,5 +461,5 @@
       stop();
     };
   }
-  window.ZentralRuntime.register({ id: "library-resize", init: start });
+  (window.ZentralRuntime || window.__zentralStandaloneRuntime).register({ id: "library-resize", init: start });
 })();

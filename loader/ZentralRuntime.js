@@ -778,6 +778,34 @@
         if (belongsRight) right = Math.min(right, r.left);
         else left = Math.max(left, r.right);
       }
+      // Reserve space for the Zentral apps bar (second sidebar) so panels
+      // never overlap it, no matter whether the bar is in autohide mode.
+      // The bar sits on the side opposite the native sidebar.
+      const barIsOnRight = nativeSidebarSide() !== "right";
+      const appsBar = document.getElementById("zentral-apps-vertical-bar");
+      if (appsBar?.isConnected) {
+        const barStyle = window.getComputedStyle(appsBar);
+        const autohide =
+          document.documentElement.getAttribute("zentral-apps-autohide") ===
+          "true";
+        let barInset = 0;
+        if (autohide) {
+          const offsetWidth = appsBar.offsetWidth || 44;
+          const inset =
+            parseFloat(barStyle[barIsOnRight ? "right" : "left"]) || 8;
+          barInset = offsetWidth + Math.max(0, inset);
+        } else {
+          const rect = appsBar.getBoundingClientRect();
+          if (rect.width > 0)
+            barInset = barIsOnRight
+              ? window.innerWidth - rect.left
+              : rect.right;
+        }
+        if (Number.isFinite(barInset) && barInset > 0) {
+          if (barIsOnRight) right = Math.min(right, window.innerWidth - barInset);
+          else left = Math.max(left, barInset);
+        }
+      }
       left = Math.max(0, Math.min(left, window.innerWidth));
       right = Math.max(left, Math.min(right, window.innerWidth));
       return { left, right, top: 0, bottom: window.innerHeight };
@@ -813,7 +841,18 @@
         min,
         bounds.right - width - (side === "left" ? 44 : 0),
       );
-      const left = Math.max(min, Math.min(max, requested));
+      // Edge-attached panels are flush with their docked safe edge. The inline
+      // left/right still carries the normal 12px sidebar gap, which these
+      // variables would otherwise re-apply as a visible seam.
+      const edgeAttached =
+        document.documentElement.getAttribute(
+          "bgalazka-edge-attached-panels",
+        ) === "true";
+      const flush = side === "right" ? bounds.right - width : bounds.left;
+      const left = Math.max(
+        min,
+        Math.min(max, edgeAttached ? flush : requested),
+      );
       setLayoutStyle(
         panel,
         "--zentral-safe-panel-left",
@@ -2414,6 +2453,14 @@
             )
           )
             continue;
+          // The full pack owns every feature. A separately installed standalone
+          // copy (additional/<module> via Sine) must release its hooks first so
+          // native Library/tab code is never hooked twice.
+          try {
+            window.__zentralStandalone?.[m.id]?.dispose?.();
+          } catch (error) {
+            console.warn("[Zentral] standalone copy cleanup", m.id, error);
+          }
           r.state = "initializing";
           const lifecycle = createFeatureScope(m.id);
           featureScopes.set(m.id, lifecycle);
