@@ -334,7 +334,7 @@
         if (edge.style.width !== width) edge.style.width = width;
         const rect = box.getBoundingClientRect();
         const apps = window.Zentral?.Apps;
-        if (apps?.isPanelDockedToAppsBar?.()) {
+        if (apps?.isPlacementVerticalBar?.()) {
           const bounds = apps.getAppsBarPanelBounds();
           // When both surfaces hide, return the reveal target to the bezel.
           // A target left floating inside the page steals clicks there.
@@ -349,38 +349,10 @@
         } else {
           const panel = document.getElementById("zen-app-panel-root");
           const onRight = panel?.getAttribute("data-panel-side") === "right";
-          const ui = document.documentElement;
-          const atViewportEdge =
-            ui.getAttribute("bgalazka-opposite-docking") === "true" &&
-            !apps?.isPlacementVerticalBar?.();
-          let inset = 0;
-          if (!atViewportEdge) {
-            const sidebar =
-              window.ZentralRuntime?.nativeSidebarElement?.() ||
-              window.gBrowser?.tabContainer;
-            const sidebarRect = sidebar?.getBoundingClientRect();
-            if (sidebarRect?.width > 0)
-              inset = onRight
-                ? window.innerWidth - sidebarRect.left
-                : sidebarRect.right;
-          }
-          // Follow the native bar's content-facing edge, including compact or
-          // temporarily collapsed layouts. Never keep a stale opposite-side inset.
-          inset = Math.max(0, Math.min(window.innerWidth - revealWidth, inset));
+          // Reveal edge always anchors to the window edge; the sidebar never pushes it.
+          const inset = 0;
           edge.style.left = onRight ? "auto" : inset + "px";
           edge.style.right = onRight ? inset + "px" : "auto";
-        }
-        const safe = window.ZentralRuntime?.sidebarSafeBounds?.();
-        if (safe) {
-          if (edge.style.left !== "auto")
-            edge.style.left =
-              Math.max(safe.left, parseFloat(edge.style.left) || 0) + "px";
-          if (edge.style.right !== "auto")
-            edge.style.right =
-              Math.max(
-                window.innerWidth - safe.right,
-                parseFloat(edge.style.right) || 0,
-              ) + "px";
         }
         edge.style.top = `${Math.max(0, rect.top)}px`;
         edge.style.height = `${Math.max(0, Math.min(window.innerHeight, rect.bottom) - Math.max(0, rect.top))}px`;
@@ -630,6 +602,18 @@
             ?.matches(":hover")
         );
       }
+      function isSidebarHoverSurfaceHovered() {
+        // Zen sets zen-has-hover on the sidebar even when it is retracted in
+        // compact mode, so check that first (same approach as ZentralLibraryResize).
+        const sidebar = window.ZentralRuntime?.nativeSidebarElement?.();
+        if (sidebar?.hasAttribute("zen-has-hover")) return true;
+        // Fall back to direct :hover for non-compact / visible sidebars.
+        return !!(
+          document.getElementById("sidebar-box")?.matches(":hover") ||
+          document.getElementById("sidebar-container")?.matches(":hover") ||
+          document.getElementById("vertical-tabs")?.matches(":hover")
+        );
+      }
       function appsBarHoverSurface(event) {
         const launcher = activeHoverLauncher(event);
         if (launcher) return launcher;
@@ -678,7 +662,7 @@
         clearHoverReveal();
         clearHoverHide();
       };
-      const onHoverRootLeave = () => {
+      const onHoverRootLeave = (event) => {
         clearHoverReveal();
         clearHoverHide();
         if (
@@ -690,9 +674,18 @@
           panelOutsidePending != null ||
           hoverMenuVisible() ||
           hoverRevealLedgeBounds ||
-          isAppsBarHoverSurfaceHovered()
+          isAppsBarHoverSurfaceHovered() ||
+          isSidebarHoverSurfaceHovered()
         )
           return;
+        // Leaving the panel toward the sidebar keeps the panel open; the
+        // sidebar hover surface is a continuous hover session with the panel.
+        if (event?.relatedTarget) {
+          const sidebar = event.relatedTarget.closest?.(
+            "#sidebar-box, #sidebar-container, #vertical-tabs, #sidebar",
+          );
+          if (sidebar) return;
+        }
         hoverHideTimer = setTimeout(
           () => {
             hoverHideTimer = null;
@@ -703,6 +696,7 @@
               edge?.matches(":hover") ||
               hoverRevealLedgeBounds ||
               isAppsBarHoverSurfaceHovered() ||
+              isSidebarHoverSurfaceHovered() ||
               hoverResizing ||
               panelEntryHeld ||
               panelOutsideHeld ||

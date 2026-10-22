@@ -881,8 +881,6 @@
             if (origPositionPanel) origPositionPanel();
             if (
               root &&
-              document.documentElement.getAttribute("bgalazka-push-page") ===
-                "true" &&
               (root.style.top !== oldTop || root.style.bottom !== oldBottom)
             )
               ctx.applyVerticalResizeExtras(root);
@@ -960,12 +958,7 @@
           for (const [key, value] of Object.entries(geometry)) {
             if (root.style[key] !== value) root.style[key] = value;
           }
-          if (
-            verticalChanged &&
-            document.documentElement.getAttribute("bgalazka-push-page") ===
-              "true"
-          )
-            ctx.applyVerticalResizeExtras(root);
+          if (verticalChanged) ctx.applyVerticalResizeExtras(root);
           if (root.getAttribute("data-panel-side") !== side)
             root.setAttribute("data-panel-side", side);
           if (sideChanged) ctx.applyHorizontalPanelOffset(root);

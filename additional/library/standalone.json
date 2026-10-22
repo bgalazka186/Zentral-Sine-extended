@@ -3,7 +3,7 @@
   "themeId": "zentral-library-resize",
   "name": "Zentral Library Resize",
   "description": "Make Zen's Library behave more like the Zentral panel: overlay or resize the webpage beside the sidebar. Standalone part of Zentral Extended.",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "entry": "ZentralLibraryResize.uc.js",
   "output": "ZentralLibraryResize.standalone.uc.js",
   "settings": "settings.json",

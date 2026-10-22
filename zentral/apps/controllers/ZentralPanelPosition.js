@@ -433,8 +433,14 @@
             }
           }
 
+          const compactVisible =
+            document.documentElement.getAttribute("zen-compact-mode") ===
+              "true" &&
+            document.documentElement.getAttribute(
+              "zen-compact-sidebar-visible",
+            ) === "true";
           const isCollapsed =
-            this.isCollapsedSidebar() ||
+            (!compactVisible && this.isCollapsedSidebar()) ||
             (sidebarRect.width > 0 &&
               sidebarRect.width <= Constants.Apps.COLLAPSED_WIDTH_THRESHOLD);
           const sideGap = isCollapsed ? 7 : gap;
@@ -493,17 +499,19 @@
               );
             }
             if (this.isPanelAttachedToRight()) {
-              targetRight = Math.max(
-                gap,
-                Math.round(window.innerWidth - sidebarRect.left) + sideGap,
-              );
+              targetRight = isCollapsed
+                ? 0
+                : Math.max(
+                    gap,
+                    Math.round(window.innerWidth - sidebarRect.left) +
+                      sideGap,
+                  );
               panelRight = window.innerWidth - targetRight;
               panelLeft = panelRight - panelWidth;
             } else {
-              targetLeft = Math.max(
-                gap,
-                Math.round(sidebarRect.right) + sideGap,
-              );
+              targetLeft = isCollapsed
+                ? 0
+                : Math.max(gap, Math.round(sidebarRect.right) + sideGap);
               panelLeft = targetLeft;
               panelRight = panelLeft + panelWidth;
             }

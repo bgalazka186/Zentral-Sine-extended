@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Zentral Core and Settings
 // @include chrome://browser/content/browser.xhtml
-// @version 3.0.2
+// @version 3.0.3
 // ==/UserScript==
 /*
  * ZENTRAL FILE GUIDE - loader/ZentralRuntime.js
@@ -38,7 +38,7 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const VERSION = "3.0.2";
+  const VERSION = "3.0.3";
   // Sine installs this package under theme.json's id. Resolve from the
   // executing script so local folders and installed copies use their own files.
   // Keep this universal: never hard-code a mod id, folder name, or profile path.
@@ -751,7 +751,10 @@
       ]);
       const ui = document.documentElement,
         onRight = nativeSidebarSide() === "right";
-      if (ui.getAttribute("zen-compact-mode") === "true") {
+      if (
+        ui.getAttribute("zen-compact-mode") === "true" &&
+        ui.getAttribute("zen-compact-sidebar-visible") === "true"
+      ) {
         if (onRight) right -= 22;
         else left += 22;
       }
