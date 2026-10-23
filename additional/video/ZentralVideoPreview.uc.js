@@ -282,7 +282,8 @@
       },
     });
   }
-  const ZentralRuntime = window.ZentralRuntime;
+  const ZentralRuntime =
+    window.ZentralRuntime || window.__zentralStandaloneRuntime;
   if (!ZentralRuntime)
     window.addEventListener(
       "unload",
@@ -333,6 +334,7 @@
   }
   (function () {
     const start = () => {
+      try {
       (function initZentralVideoPreview() {
         window.ZentralModuleLoader.load(
           "additional/video/controllers/ZentralVideoTransport.js",
@@ -3966,8 +3968,8 @@
         hookSettings();
         syncCompactVisibility();
         window.addEventListener("unload", destroy, { once: true });
-        if (typeof window.ZentralRuntime?.registerHostUnload === "function")
-          window.ZentralRuntime.registerHostUnload(destroy);
+        if (typeof ZentralRuntime?.registerHostUnload === "function")
+          ZentralRuntime.registerHostUnload(destroy);
         else {
           try {
             if (typeof window.addUnloadListener === "function")
@@ -3995,9 +3997,17 @@
           }, "browser-delayed-startup-finished");
         else standaloneReady(start);
       })();
+      } catch (error) {
+        // A failed start must not leave the listeners and observers of a
+        // half-built preview behind (destroy exists once the API is published).
+        try {
+          window.ZentralVideoPreview?.destroy?.();
+        } catch (_) {}
+        throw error;
+      }
       return () => window.ZentralVideoPreview?.destroy?.();
     };
-    if (window.ZentralRuntime)
+    if (ZentralRuntime)
       ZentralRuntime.register({
         id: "video",
         init: start,

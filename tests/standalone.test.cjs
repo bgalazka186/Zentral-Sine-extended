@@ -80,7 +80,7 @@ function makeEnv({ fullRuntime = null, prefs = {} } = {}) {
         if (i >= 0) obsObservers.splice(i, 1);
       },
     },
-    io: { newURI: () => ({ spec: "x" }) },
+    io: new Proxy({ newURI: (spec, _c, base) => { let href = String(spec); try { href = new URL(String(spec), base?.spec).href; } catch (_) {} return { spec: href, scheme: href.split(":")[0] }; } }, { get: (t, p) => (p in t ? t[p] : ghost("io." + String(p))) }),
   };
   const docRoot = {
     hasAttribute: (k) => attrs.has(k),
@@ -161,8 +161,13 @@ function makeEnv({ fullRuntime = null, prefs = {} } = {}) {
     document,
     Services,
     console: { warn: (...a) => warnings.push(a), error: (...a) => warnings.push(a), log() {}, debug() {}, info() {} },
-    ChromeUtils: { importESModule: () => ({ Services }) },
-    Components: ghost("Components"),
+    ChromeUtils: new Proxy({ importESModule: () => ({ Services }) }, { get: (t, p) => (p in t ? t[p] : ghost("ChromeUtils." + String(p))) }),
+    Components: new Proxy({ stack: { filename: "chrome://sine/content/zentral-video-preview/ZentralVideoPreview.standalone.uc.js" } }, { get: (t, p) => (p in t ? t[p] : ghost("Components." + String(p))) }),
+    Ci: ghost("Ci"),
+    Cc: ghost("Cc"),
+    Cu: ghost("Cu"),
+    setInterval: (f, ms) => window.setTimeout(f, ms),
+    clearInterval: (t) => window.clearTimeout(t),
     UC_API: undefined,
     setTimeout: window.setTimeout,
     clearTimeout: window.clearTimeout,
@@ -185,6 +190,10 @@ function makeEnv({ fullRuntime = null, prefs = {} } = {}) {
   });
   ctx.globalThis = ctx;
   ctx.Services = Services;
+  // In a real browser window these are globals as well as window properties, and
+  // sources use both spellings.
+  for (const name of ["gBrowser", "gBrowserInit", "gZenWorkspaces", "gZenStartup", "gZenCompactModeManager", "SessionStore", "windowUtils", "CSS"])
+    ctx[name] = window[name];
   const net = () => ({
     // One-shot "unload" listeners die with the window; they are not leaks.
     listeners: listeners.filter((l) => l[0] !== "unload").length,
@@ -232,14 +241,15 @@ const baseline = (env) => {
           return entry;
         });
       });
-      // Every pref the module owns or borrows ships, each identical to its source entry.
+      // Every pref the module owns or borrows ships (minus the explicit, reasoned
+      // exclusions), each identical to its source entry.
+      const excluded = new Set(m.excludePrefs?.properties || []);
+      const expected = [...schema, ...borrowed].filter((p) => !excluded.has(p.property));
       const shipped = prefs.filter((p) => p.property);
-      assert.deepEqual(
-        shipped.map((p) => p.property).sort(),
-        [...schema, ...borrowed].map((p) => p.property).sort(),
-      );
-      for (const entry of [...schema, ...borrowed])
+      assert.deepEqual(shipped.map((p) => p.property).sort(), expected.map((p) => p.property).sort());
+      for (const entry of expected)
         assert.deepEqual(shipped.find((p) => p.property === entry.property), entry);
+      if (excluded.size) assert.ok(m.excludePrefs.reason.length > 20, "exclusions carry a reason");
     });
 
     await test(`${label}: starts, then every listener/observer/timer is released on dispose`, async () => {
@@ -438,6 +448,105 @@ const baseline = (env) => {
     };
     assert.match(run2('const A = "zen.workspace.zentral.compat.external_library_layout";'), /borrowedSettings/);
     assert.match(run2('const A = "zen.view.compact.nonexistent";'), /externalPrefs/);
+  });
+
+  // ---- Video (multi-file module with an embedded loader) --------------------
+  const videoMod = manifests.find((x) => x.m.id === "video");
+  const videoEnv = async (prefs = {}) => {
+    const env = makeEnv({ prefs });
+    run(env, bundleOf(videoMod));
+    await tick(60);
+    return env;
+  };
+  const videoEntry = fs.readFileSync(path.join(videoMod.dir, videoMod.m.entry), "utf8");
+
+  await test("video: uses a private loader and never occupies the full pack's loader name", async () => {
+    const env = await videoEnv();
+    assert.ok(env.window.__zentralVideoLoader, "private loader published");
+    assert.equal(env.window.ZentralModuleLoader, undefined, "loader/Zentral.uc.js would refuse to start if this were set");
+    assert.ok(!/window\.ZentralModuleLoader[.?(]/.test(bundleOf(videoMod).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")), "no code path names the full loader");
+    env.window.__zentralStandalone.video.dispose();
+    assert.equal(env.window.__zentralVideoLoader, undefined, "loader released on dispose");
+    assert.equal(env.window.ZentralVideoPreview, undefined, "public API removed");
+  });
+
+  await test("video: every embedded controller loads and every component the entry creates is defined", async () => {
+    const env = await videoEnv();
+    const loader = env.window.__zentralVideoLoader;
+    const rows = loader.sources();
+    for (const file of videoMod.m.include) {
+      const row = rows.find((r) => r.file === "additional/video/" + file);
+      assert.equal(row?.state, "loaded", file);
+    }
+    const created = [...videoEntry.matchAll(/\.create\(\s*"(video\/[A-Za-z-]+|video\/[A-Za-z]+)"/g)].map((x) => x[1]);
+    const optionalAbsent = new Set(["video/ZentralVideoDiagnostics", "video/ZentralVideoSettings"]);
+    for (const id of new Set(created)) {
+      if (optionalAbsent.has(id)) assert.equal(loader.has(id), false, id + " must be absent (full-pack UI only)");
+      else assert.equal(loader.has(id), true, id + " not defined");
+    }
+    assert.ok(loader.report().components.every((c) => c.state === "initialized"), "no component failed to construct");
+  });
+
+  await test("video: loader contract - optional misses return false, required misses and unsafe paths throw, text is the real file", async () => {
+    const env = await videoEnv();
+    const loader = env.window.__zentralVideoLoader;
+    assert.equal(loader.load("additional/video/controllers/ZentralVideoSettings.js", { optional: true }), false);
+    assert.throws(() => loader.load("additional/video/controllers/ZentralVideoSettings.js"), /unavailable/);
+    assert.throws(() => loader.load("additional/video/../../evil.js"), /Unsafe/);
+    assert.throws(() => loader.load("loader/ZentralRuntime.js"), /Unsafe/);
+    assert.throws(() => loader.readText("additional/video/content/Other.js"), /unavailable/);
+    for (const file of videoMod.m.texts)
+      assert.equal(loader.readText("additional/video/" + file), fs.readFileSync(path.join(videoMod.dir, file), "utf8"));
+    assert.throws(() => loader.require("video/ZentralVideoNope"), /did not register/);
+  });
+
+  await test("video: the window actor resolves next to the installed script, and ships as a real file", async () => {
+    const env = await videoEnv();
+    assert.equal(env.window.__zentralVideoLoader.rootURI, "chrome://sine/content/zentral-video-preview/");
+    const bundle = bundleOf(videoMod);
+    assert.ok(bundle.includes('"content/ZentralVideoActor.sys.mjs"') && !/newURI\(\s*"additional\/video\/content\/ZentralVideoActor/.test(bundle));
+    for (const asset of videoMod.m.assets) assert.ok(fs.existsSync(path.join(videoMod.dir, asset)), asset + " must ship in the folder");
+    // The full pack keeps its original path.
+    assert.ok(fs.readFileSync(path.join(videoMod.dir, "controllers/ZentralVideoTransport.js"), "utf8").includes('"additional/video/content/ZentralVideoActor.sys.mjs"'));
+    assert.ok(!videoEntry.includes("__zentralVideoLoader"), "source keeps the full pack's loader name");
+  });
+
+  await test("video: sidebar control prefs reach the stylesheet's variables, bounded, live, and are removed on dispose", async () => {
+    const wrap = "zen.workspace.bgalazka.look.video_controls_wrap",
+      gap = "zen.workspace.bgalazka.look.video_controls_gap",
+      overlay = "zen.workspace.bgalazka.look.video_overlay_opacity";
+    const vars = (env) => ({
+      wrap: env.docRoot.style.getPropertyValue("--zentral-sidebar-video-wrap"),
+      gap: env.docRoot.style.getPropertyValue("--zentral-sidebar-video-gap"),
+      overlay: env.docRoot.style.getPropertyValue("--bgalazka-look-video-overlay-opacity"),
+    });
+    let env = await videoEnv();
+    assert.deepEqual(vars(env), { wrap: "nowrap", gap: "1px", overlay: "40%" }, "defaults match the full pack");
+    env = await videoEnv({ [wrap]: true, [gap]: 99, [overlay]: -5 });
+    assert.deepEqual(vars(env), { wrap: "wrap", gap: "8px", overlay: "0%" }, "same bounds as the Appearance controller");
+    env.prefs[gap] = 3;
+    env.prefs[overlay] = 70;
+    env.firePref(gap);
+    assert.deepEqual(vars(env), { wrap: "wrap", gap: "3px", overlay: "70%" });
+    env.window.__zentralStandalone.video.dispose();
+    assert.deepEqual(vars(env), { wrap: "", gap: "", overlay: "" });
+  });
+
+  await test("video: a start-up failure leaves nothing behind (handle, loader, API)", async () => {
+    const env = makeEnv();
+    // Fail late, right after the preview has published window.ZentralVideoPreview.
+    const origAdd = env.window.addEventListener.bind(env.window);
+    env.window.addEventListener = (type, fn, opts) => {
+      if (type === "unload") throw new Error("boom");
+      return origAdd(type, fn, opts);
+    };
+    try {
+      run(env, bundleOf(videoMod));
+    } catch (_) {}
+    await tick(60);
+    assert.equal(env.window.__zentralStandalone?.video, undefined, "handle released");
+    assert.equal(env.window.__zentralVideoLoader, undefined, "private loader destroyed");
+    assert.equal(env.window.ZentralVideoPreview, undefined, "half-built API removed");
   });
 
   await test("sidebar helpers and lifecycle scope are verbatim runtime copies", () => {

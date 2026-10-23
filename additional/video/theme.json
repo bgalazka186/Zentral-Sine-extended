@@ -1,0 +1,31 @@
+{
+  "id": "zentral-video-preview",
+  "name": "Zentral Sidebar Video Preview",
+  "description": "Video preview card in Zen's sidebar: pick a playing video from any tab, see it live, control playback, captions and a temporary enlarged view. Standalone part of Zentral Extended.",
+  "homepage": "https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/video",
+  "supportsUnload": true,
+  "style": {
+    "chrome": "ZentralVideoPreview.css",
+    "content": ""
+  },
+  "scripts": {
+    "ZentralVideoPreview.standalone.uc.js": {
+      "include": [
+        "chrome://browser/content/browser.xhtml"
+      ],
+      "loadOrder": 2
+    }
+  },
+  "author": "bgalazka186",
+  "version": "3.0.2",
+  "preferences": "preferences.json",
+  "tags": [
+    "video",
+    "sidebar",
+    "zen"
+  ],
+  "fork": [
+    "zen"
+  ],
+  "readme": "https://raw.githubusercontent.com/bgalazka186/Zentral-Sine-extended/main/additional/video/README.md"
+}
