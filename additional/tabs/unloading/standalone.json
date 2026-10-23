@@ -1,0 +1,14 @@
+{
+  "id": "tab-unload",
+  "themeId": "zentral-tab-unload",
+  "name": "Zentral Tab Unload",
+  "description": "Middle-click a loaded tab to unload it instead of closing it. Standalone part of Zentral Extended.",
+  "version": "3.0.2",
+  "entry": "ZentralTabUnload.uc.js",
+  "output": "ZentralTabUnload.standalone.uc.js",
+  "settings": "settings.json",
+  "tags": [
+    "tabs",
+    "zen"
+  ]
+}

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Zentral Core and Settings
 // @include chrome://browser/content/browser.xhtml
-// @version 3.0.3
+// @version 3.0.2
 // ==/UserScript==
 /*
  * ZENTRAL FILE GUIDE - loader/ZentralRuntime.js
@@ -38,7 +38,7 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const VERSION = "3.0.3";
+  const VERSION = "3.0.2";
   // Sine installs this package under theme.json's id. Resolve from the
   // executing script so local folders and installed copies use their own files.
   // Keep this universal: never hard-code a mod id, folder name, or profile path.
@@ -140,8 +140,10 @@
     return false;
   }
   const arcSidebarPref = "zen.workspace.zentral.arc2.match_compact_sidebar";
+  // The Library background (Arc 2.0 match and custom color) is owned by
+  // additional/library/ZentralLibraryResize.uc.js so it also works when that
+  // module is installed alone. The pref name stays here only for the settings UI.
   const arcLibraryPref = "zen.workspace.zentral.arc2.match_compact_library";
-  const arcLibraryAttribute = "zentral-arc2-library";
   const arcSidebarColorPref = "arc-compact-sidebar-bg";
   const arcSidebarAttribute = "zentral-arc2-regular-sidebar";
   const arcSidebarColorProperty = "--zentral-arc2-sidebar-background";
@@ -156,11 +158,8 @@
     const color = getPref(arcSidebarColorPref, "");
     const validColor = typeof color === "string" && color.trim() !== "";
     const sidebarActive = getPref(arcSidebarPref, false) === true && validColor;
-    const libraryActive = getPref(arcLibraryPref, false) === true && validColor;
     ui.toggleAttribute(arcSidebarAttribute, sidebarActive);
-    ui.toggleAttribute(arcLibraryAttribute, libraryActive);
-    if (sidebarActive || libraryActive)
-      ui.style.setProperty(arcSidebarColorProperty, color);
+    if (sidebarActive) ui.style.setProperty(arcSidebarColorProperty, color);
     else ui.style.removeProperty(arcSidebarColorProperty);
   };
   const arcSidebarObserver = { observe: syncArcSidebar };
@@ -170,16 +169,13 @@
       once: true,
     });
   Services.prefs.addObserver(arcSidebarPref, arcSidebarObserver);
-  Services.prefs.addObserver(arcLibraryPref, arcSidebarObserver);
   Services.prefs.addObserver(arcSidebarColorPref, arcSidebarObserver);
   disposers.push(() => {
     Services.prefs.removeObserver(arcSidebarPref, arcSidebarObserver);
-    Services.prefs.removeObserver(arcLibraryPref, arcSidebarObserver);
     Services.prefs.removeObserver(arcSidebarColorPref, arcSidebarObserver);
     document.removeEventListener("DOMContentLoaded", syncArcSidebar);
     const ui = document.documentElement;
     ui?.removeAttribute(arcSidebarAttribute);
-    ui?.removeAttribute(arcLibraryAttribute);
     ui?.style.removeProperty(arcSidebarColorProperty);
   });
   const unsafeCorePref =
@@ -751,10 +747,7 @@
       ]);
       const ui = document.documentElement,
         onRight = nativeSidebarSide() === "right";
-      if (
-        ui.getAttribute("zen-compact-mode") === "true" &&
-        ui.getAttribute("zen-compact-sidebar-visible") === "true"
-      ) {
+      if (ui.getAttribute("zen-compact-mode") === "true") {
         if (onRight) right -= 22;
         else left += 22;
       }
@@ -780,34 +773,6 @@
             : r.left + r.width / 2 >= window.innerWidth / 2;
         if (belongsRight) right = Math.min(right, r.left);
         else left = Math.max(left, r.right);
-      }
-      // Reserve space for the Zentral apps bar (second sidebar) so panels
-      // never overlap it, no matter whether the bar is in autohide mode.
-      // The bar sits on the side opposite the native sidebar.
-      const barIsOnRight = nativeSidebarSide() !== "right";
-      const appsBar = document.getElementById("zentral-apps-vertical-bar");
-      if (appsBar?.isConnected) {
-        const barStyle = window.getComputedStyle(appsBar);
-        const autohide =
-          document.documentElement.getAttribute("zentral-apps-autohide") ===
-          "true";
-        let barInset = 0;
-        if (autohide) {
-          const offsetWidth = appsBar.offsetWidth || 44;
-          const inset =
-            parseFloat(barStyle[barIsOnRight ? "right" : "left"]) || 8;
-          barInset = offsetWidth + Math.max(0, inset);
-        } else {
-          const rect = appsBar.getBoundingClientRect();
-          if (rect.width > 0)
-            barInset = barIsOnRight
-              ? window.innerWidth - rect.left
-              : rect.right;
-        }
-        if (Number.isFinite(barInset) && barInset > 0) {
-          if (barIsOnRight) right = Math.min(right, window.innerWidth - barInset);
-          else left = Math.max(left, barInset);
-        }
       }
       left = Math.max(0, Math.min(left, window.innerWidth));
       right = Math.max(left, Math.min(right, window.innerWidth));

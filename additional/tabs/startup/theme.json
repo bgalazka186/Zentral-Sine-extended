@@ -1,0 +1,30 @@
+{
+  "id": "zentral-startup",
+  "name": "Zentral Load Tab at Startup",
+  "description": "Adds a tab context-menu item to load a tab at startup. Standalone part of Zentral Extended.",
+  "homepage": "https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/tabs/startup",
+  "supportsUnload": true,
+  "style": {
+    "chrome": "ZentralStartup.css",
+    "content": ""
+  },
+  "scripts": {
+    "ZentralStartup.standalone.uc.js": {
+      "include": [
+        "chrome://browser/content/browser.xhtml"
+      ],
+      "loadOrder": 2
+    }
+  },
+  "author": "bgalazka186",
+  "version": "3.0.2",
+  "preferences": "preferences.json",
+  "tags": [
+    "tabs",
+    "zen"
+  ],
+  "fork": [
+    "zen"
+  ],
+  "readme": "https://raw.githubusercontent.com/bgalazka186/Zentral-Sine-extended/main/additional/tabs/startup/README.md"
+}

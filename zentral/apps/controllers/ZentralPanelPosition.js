@@ -403,7 +403,7 @@
           return Math.max(1, Math.floor(right - left - 44));
         },
         updateWidthVar(px) {
-          if (this.isPlacementVerticalBar())
+          if (this.isPanelDockedToAppsBar())
             px = Math.max(1, Math.min(px, this.getAppsBarPanelMaxWidth()));
           // Layout clamps affect the displayed width only. saveWidth() owns
           // persistence after an intentional user resize.
@@ -433,14 +433,8 @@
             }
           }
 
-          const compactVisible =
-            document.documentElement.getAttribute("zen-compact-mode") ===
-              "true" &&
-            document.documentElement.getAttribute(
-              "zen-compact-sidebar-visible",
-            ) === "true";
           const isCollapsed =
-            (!compactVisible && this.isCollapsedSidebar()) ||
+            this.isCollapsedSidebar() ||
             (sidebarRect.width > 0 &&
               sidebarRect.width <= Constants.Apps.COLLAPSED_WIDTH_THRESHOLD);
           const sideGap = isCollapsed ? 7 : gap;
@@ -453,7 +447,7 @@
           let panelLeft = 0;
           let panelRight = window.innerWidth;
 
-          if (this.isPlacementVerticalBar()) {
+          if (this.isPanelDockedToAppsBar()) {
             const isVbRight = this.isVerticalBarOnRight();
             const bounds = this.getAppsBarPanelBounds();
             // These properties are consumed only by Apps Bar CSS overrides.
@@ -499,19 +493,17 @@
               );
             }
             if (this.isPanelAttachedToRight()) {
-              targetRight = isCollapsed
-                ? 0
-                : Math.max(
-                    gap,
-                    Math.round(window.innerWidth - sidebarRect.left) +
-                      sideGap,
-                  );
+              targetRight = Math.max(
+                gap,
+                Math.round(window.innerWidth - sidebarRect.left) + sideGap,
+              );
               panelRight = window.innerWidth - targetRight;
               panelLeft = panelRight - panelWidth;
             } else {
-              targetLeft = isCollapsed
-                ? 0
-                : Math.max(gap, Math.round(sidebarRect.right) + sideGap);
+              targetLeft = Math.max(
+                gap,
+                Math.round(sidebarRect.right) + sideGap,
+              );
               panelLeft = targetLeft;
               panelRight = panelLeft + panelWidth;
             }
@@ -649,9 +641,7 @@
             ? this._startW - diff
             : this._startW + diff;
           let limit = window.innerWidth * Constants.Apps.MAX_WIDTH_RATIO;
-          if (this.isPlacementVerticalBar())
-            limit = Math.min(limit, this.getAppsBarPanelMaxWidth());
-          else
+          if (!this.isPlacementVerticalBar())
             limit = Math.min(limit, this.getSidebarDockedMaxWidth());
           newW = Math.max(Constants.Apps.MIN_WIDTH_PX, Math.min(newW, limit));
           this.updateWidthVar(newW);

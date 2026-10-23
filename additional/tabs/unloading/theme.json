@@ -1,0 +1,30 @@
+{
+  "id": "zentral-tab-unload",
+  "name": "Zentral Tab Unload",
+  "description": "Middle-click a loaded tab to unload it instead of closing it. Standalone part of Zentral Extended.",
+  "homepage": "https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/tabs/unloading",
+  "supportsUnload": true,
+  "style": {
+    "chrome": "",
+    "content": ""
+  },
+  "scripts": {
+    "ZentralTabUnload.standalone.uc.js": {
+      "include": [
+        "chrome://browser/content/browser.xhtml"
+      ],
+      "loadOrder": 2
+    }
+  },
+  "author": "bgalazka186",
+  "version": "3.0.2",
+  "preferences": "preferences.json",
+  "tags": [
+    "tabs",
+    "zen"
+  ],
+  "fork": [
+    "zen"
+  ],
+  "readme": "https://raw.githubusercontent.com/bgalazka186/Zentral-Sine-extended/main/additional/tabs/unloading/README.md"
+}

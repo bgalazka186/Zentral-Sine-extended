@@ -384,5 +384,8 @@
   }
   // Only the canonical core entrypoint loads this registration. Installing
   // individual feature scripts in Sine creates competing lifecycle owners.
-  window.ZentralRuntime.register({ id: "tab-drag", init: start });
+  (window.ZentralRuntime || window.__zentralStandaloneRuntime).register({
+    id: "tab-drag",
+    init: start,
+  });
 })();

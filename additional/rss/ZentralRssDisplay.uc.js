@@ -23,7 +23,7 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const ZentralRuntime = window.ZentralRuntime;
+  const ZentralRuntime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
 
   function standaloneReady(start) {
     let started = false;
@@ -384,7 +384,6 @@
           Math.max(4, Math.min(left, window.innerWidth - w - 4)) + "px";
         c.style.top =
           Math.max(4, Math.min(tr.top, window.innerHeight - h - 4)) + "px";
-        c.style.zIndex = "2147483647";
       }
       // A dismiss never hides the card first: it continues with the next
       // article, so the reader sees no flash of a closed card.
@@ -651,7 +650,7 @@
       window.addEventListener("unload", () => api.destroy(), { once: true });
       return () => api.destroy();
     }
-    if (window.ZentralRuntime)
+    if (ZentralRuntime)
       ZentralRuntime.register({ id: "rss", init: start });
     else standaloneReady(start);
   })();

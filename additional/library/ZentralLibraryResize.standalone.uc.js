@@ -12,10 +12,13 @@
  * tools/build-standalone.cjs prepends this to a module to produce a bundle that
  * Sine can install on its own (…/additional/<module> folder URL).
  *
- * It provides ONLY what standalone modules use: register, registerSettingsHook,
- * ensureSettingsSection, registerHostUnload and the native sidebar helpers.
- * The sidebar helpers are not written here: the build copies them verbatim from
- * loader/ZentralRuntime.js at the sidebar-functions marker below, so they cannot drift.
+ * It provides ONLY what standalone modules use: register (with the same owned
+ * lifecycle scope the full runtime hands to init), registerSettingsHook,
+ * ensureSettingsSection, registerHostUnload, the native sidebar helpers and the
+ * two status slots compact-hover writes. The sidebar helpers and the lifecycle
+ * scope (createFeatureScope, including watchNative) are not written here: the
+ * build copies them verbatim from loader/ZentralRuntime.js at the markers below,
+ * so they cannot drift.
  *
  * Coexistence (full pack always wins, either load order):
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
@@ -47,6 +50,7 @@ const __zentralShim = (function () {
     } catch (_) {}
     return fallback;
   }
+  let stopped = false;
   function nativeSidebarElement() {
       const tabs = window.gBrowser?.tabContainer;
       const candidates = [
@@ -107,7 +111,251 @@ function nativeSidebarSide() {
         ? "right"
         : "left";
     }
-  let stopped = false;
+  function createFeatureScope(owner) {
+    let active = true;
+    const cleanups = new Set(),
+      timers = new Set(),
+      frames = new Set();
+    const bindings = new Map();
+    const report = (error) => console.warn("[Zentral lifecycle]", owner, error);
+    const scope = {
+      get active() {
+        return active && !stopped;
+      },
+      bindings,
+      own(dispose) {
+        if (typeof dispose !== "function")
+          throw new TypeError("Cleanup must be a function");
+        let owned = true;
+        const release = () => {
+          if (!owned) return;
+          owned = false;
+          cleanups.delete(release);
+          try {
+            dispose();
+          } catch (error) {
+            report(error);
+          }
+        };
+        if (scope.active) cleanups.add(release);
+        else release();
+        return release;
+      },
+      listen(target, type, callback, options) {
+        if (!scope.active) return () => {};
+        const guarded = (...args) => {
+          if (scope.active) callback.apply(target, args);
+        };
+        target.addEventListener(type, guarded, options);
+        return scope.own(() =>
+          target.removeEventListener(type, guarded, options),
+        );
+      },
+      observe(topic, callback) {
+        if (!scope.active) return () => {};
+        const observer = {
+          observe(...args) {
+            if (scope.active) callback(...args);
+          },
+        };
+        Services.obs.addObserver(observer, topic);
+        return scope.own(() => Services.obs.removeObserver(observer, topic));
+      },
+      preference(prefix, callback) {
+        if (!scope.active) return () => {};
+        const observer = {
+          observe(...args) {
+            if (scope.active) callback(...args);
+          },
+        };
+        Services.prefs.addObserver(prefix, observer);
+        return scope.own(() => Services.prefs.removeObserver(prefix, observer));
+      },
+      setTimeout(callback, delay = 0) {
+        if (!scope.active) return null;
+        const id = window.setTimeout(() => {
+          timers.delete(id);
+          if (scope.active) callback();
+        }, delay);
+        timers.add(id);
+        return id;
+      },
+      clearTimeout(id) {
+        window.clearTimeout(id);
+        timers.delete(id);
+      },
+      requestAnimationFrame(callback) {
+        if (!scope.active) return null;
+        const id = window.requestAnimationFrame((time) => {
+          frames.delete(id);
+          if (scope.active) callback(time);
+        });
+        frames.add(id);
+        return id;
+      },
+      cancelAnimationFrame(id) {
+        window.cancelAnimationFrame(id);
+        frames.delete(id);
+      },
+      destroy() {
+        if (!active) return;
+        active = false;
+        for (const id of timers) window.clearTimeout(id);
+        for (const id of frames) window.cancelAnimationFrame(id);
+        timers.clear();
+        frames.clear();
+        for (const release of [...cleanups].reverse()) release();
+      },
+      watchNative(spec) {
+        const name = spec.name || "native";
+        if (bindings.has(name))
+          throw new Error("Duplicate native binding: " + name);
+        const status = { state: "disabled", attempts: 0 };
+        bindings.set(name, status);
+        let listening = false,
+          disposed = false,
+          busy = false;
+        let target = null,
+          installed = null,
+          attachment = null;
+        let scheduled = null,
+          retry = null,
+          retryIndex = 0;
+        let lastError = null;
+        const listeners = [];
+        const delays = [50, 150, 500, 1500, 4000];
+        const allowed = () =>
+          scope.active && !disposed && (!spec.enabled || spec.enabled());
+        function cancelWork() {
+          scope.clearTimeout(scheduled);
+          scope.clearTimeout(retry);
+          scheduled = retry = null;
+        }
+        function detach() {
+          attachment?.destroy();
+          attachment = installed = target = null;
+        }
+        function scheduleRetry() {
+          if (!allowed() || retry !== null || retryIndex >= delays.length)
+            return;
+          retry = scope.setTimeout(() => {
+            retry = null;
+            check();
+            scheduleRetry();
+          }, delays[retryIndex++]);
+        }
+        function check(event) {
+          if (!allowed() || busy) return;
+          busy = true;
+          try {
+            const next = spec.resolve();
+            if (
+              attachment &&
+              next === target &&
+              installed?.isCurrent?.() !== false
+            )
+              return;
+            detach();
+            if (!next) {
+              status.state = "waiting-native";
+              return;
+            }
+            target = next;
+            const attempt = (attachment = createFeatureScope(
+              owner + "/" + name,
+            ));
+            status.attempts++;
+            installed = spec.attach(next, attempt);
+            const result = installed;
+            if (result && typeof result.then === "function") {
+              Promise.resolve(result).then((late) => {
+                if (typeof late === "function") attempt.own(late);
+                else if (late?.destroy) attempt.own(() => late.destroy());
+              }, report);
+              throw new Error("Native attachment must be synchronous");
+            }
+            if (typeof result === "function") attempt.own(result);
+            else if (result?.destroy) attempt.own(() => result.destroy());
+            if (!allowed()) {
+              detach();
+              return;
+            }
+            status.state = "active";
+            delete status.error;
+            lastError = null;
+            installed?.onReadyEvent?.(event);
+          } catch (error) {
+            detach();
+            status.state = "waiting-native";
+            status.error = String(error);
+            if (lastError !== status.error) {
+              lastError = status.error;
+              report(error);
+            }
+          } finally {
+            busy = false;
+          }
+        }
+        function queue(event) {
+          if (!allowed() || scheduled !== null) return;
+          scheduled = scope.setTimeout(() => {
+            scheduled = null;
+            check(event);
+          });
+        }
+        function sync() {
+          const on = allowed();
+          if (on !== listening) {
+            listening = on;
+            cancelWork();
+            retryIndex = 0;
+            for (const release of listeners.splice(0)) release();
+            if (on) {
+              for (const item of spec.events || []) {
+                const event = typeof item === "string" ? { type: item } : item;
+                listeners.push(
+                  scope.listen(
+                    event.target || window,
+                    event.type,
+                    (value) => {
+                      if (event.filter && !event.filter(value)) return;
+                      if (event.synchronous) check(value);
+                      else queue(value);
+                    },
+                    event.capture || false,
+                  ),
+                );
+              }
+              for (const topic of spec.topics || [])
+                listeners.push(scope.observe(topic, () => queue()));
+            }
+          }
+          if (!on) {
+            detach();
+            status.state = "disabled";
+            delete status.error;
+            return;
+          }
+          check();
+          scheduleRetry();
+        }
+        const prefs = (spec.prefs || []).map((pref) =>
+          scope.preference(pref, sync),
+        );
+        const destroy = scope.own(() => {
+          disposed = true;
+          cancelWork();
+          for (const release of listeners.splice(0)) release();
+          for (const release of prefs) release();
+          detach();
+          status.state = "stopped";
+        });
+        sync();
+        return { check, refresh: queue, destroy, status };
+      },
+    };
+    return scope;
+  }
   const unloadHandlers = new Set();
   window.addEventListener(
     "unload",
@@ -156,6 +404,8 @@ function nativeSidebarSide() {
     nativeSidebarElement,
     nativeSidebarRect,
     nativeSidebarSide,
+    sidebarLayoutRepair: null,
+    compactHoverStatus: null,
     registerSettingsHook: () => () => {},
     ensureSettingsSection: () => null,
     registerHostUnload(fn) {
@@ -171,7 +421,9 @@ function nativeSidebarSide() {
       try {
         features[def.id]?.dispose?.();
       } catch (_) {}
+      const lifecycle = createFeatureScope(def.id);
       let cleanup = null,
+        initialized = false,
         disposed = false;
       const handle = (features[def.id] = {
         version: __ZENTRAL_STANDALONE_VERSION__,
@@ -180,7 +432,7 @@ function nativeSidebarSide() {
           disposed = true;
           unloadHandlers.delete(handle.dispose);
           if (features[def.id] === handle) delete features[def.id];
-          const fn = cleanup;
+          const fn = initialized ? (cleanup ?? def.dispose) : null;
           cleanup = null;
           try {
             if (typeof fn === "function") fn();
@@ -188,6 +440,7 @@ function nativeSidebarSide() {
           } catch (error) {
             console.warn("[Zentral standalone] cleanup", def.id, error);
           }
+          lifecycle.destroy();
         },
       });
       unloadHandlers.add(handle.dispose);
@@ -199,12 +452,15 @@ function nativeSidebarSide() {
           return;
         }
         try {
-          const result = def.init({ runtime: shim });
+          initialized = true;
+          const result = def.init({ lifecycle, runtime: shim });
+          if (result && typeof result.then === "function")
+            throw new Error("init must be synchronous");
           if (disposed) {
             // Disposed during init: release what init just created.
-            handle.dispose();
-            if (typeof result === "function") result();
-            else result?.destroy?.();
+            const late = result ?? def.dispose;
+            if (typeof late === "function") late();
+            else late?.destroy?.();
             return;
           }
           cleanup = result;
@@ -219,10 +475,15 @@ function nativeSidebarSide() {
   return shim;
 })();
 
-/* Experimental native Library layout. Activated by the shared native startup
- * barrier; no private Zen imports, prototype patches, polling or native prefs.
- * Disabled: only our preference observer remains. Enabled: observe Library's
- * own animation/style and border-box sizes, coalescing work to one frame.
+/* Native Zen Library: experimental layout plus background color.
+ * Layout: activated by the shared native startup barrier; no private Zen
+ * imports, prototype patches or polling. Disabled: only our preference observer
+ * remains. Enabled: observe Library's own animation/style and border-box sizes,
+ * coalescing work to one frame.
+ * Background: independent of the layout switch. A custom color, or the Arc 2.0
+ * mod's compact sidebar color (read from its "arc-compact-sidebar-bg" pref),
+ * paints the Library panel; a valid custom color wins, Arc is used only if its
+ * pref exists, otherwise Zen's own background is untouched.
  */
 (function () {
   "use strict";
@@ -233,6 +494,16 @@ function nativeSidebarSide() {
   const PREF = "zen.workspace.zentral.experimental.library_resize";
   const COMPAT_PREF = "zen.workspace.zentral.compat.external_library_layout";
   const ATTR = "zentral-library-resize-active";
+  // Library background. Owned here (not in the runtime or Appearance.css) so the
+  // module is complete when installed alone through Sine.
+  const BG_ARC_PREF = "zen.workspace.zentral.arc2.match_compact_library";
+  const BG_ARC_COLOR_PREF = "arc-compact-sidebar-bg"; // written by the Arc 2.0 mod
+  const BG_CUSTOM_PREF = "zen.workspace.zentral.library.custom_background";
+  const BG_COLOR_PREF = BG_CUSTOM_PREF + ".color";
+  const BG_OPACITY_PREF = BG_CUSTOM_PREF + ".opacity";
+  const BG_ATTR = "zentral-library-background";
+  const BG_VAR = "--zentral-library-background";
+  const BG_STYLE_ID = "zentral-library-background-style";
   const VARS = [
     "--zentral-library-space-left",
     "--zentral-library-space-right",
@@ -241,6 +512,129 @@ function nativeSidebarSide() {
     "--zentral-library-top",
     "--zentral-library-side-inset",
   ];
+  // Pure: decide which Library background applies. Priority is explicit choice
+  // first: a valid custom color beats Arc 2.0 matching; Arc 2.0 matching applies
+  // only when Arc's color pref exists; otherwise Zen's own background stays.
+  // Arc stores color and alpha together (rgba/8-digit hex), so its value is used
+  // as-is; opacity on the element would also fade text and icons.
+  function resolveLibraryBackground(input, supportsColor) {
+    const valid = (value) =>
+      typeof value === "string" &&
+      value.trim() !== "" &&
+      (typeof supportsColor !== "function" || supportsColor(value.trim()));
+    if (input.customEnabled && valid(input.customColor)) {
+      const color = input.customColor.trim();
+      const pct = Math.max(0, Math.min(100, Math.round(Number(input.opacity))));
+      const mixed =
+        Number.isFinite(pct) && pct < 100
+          ? `color-mix(in srgb, ${color} ${pct}%, transparent)`
+          : color;
+      return {
+        source: "custom",
+        value: valid(mixed) ? mixed : color,
+      };
+    }
+    if (input.arcEnabled && valid(input.arcColor))
+      return { source: "arc2", value: input.arcColor.trim() };
+    return { source: null, value: "" };
+  }
+
+  function startBackground() {
+    const root = document.documentElement;
+    let style = null,
+      disposed = false;
+    const read = (key, fallback) => {
+      try {
+        // nsIPrefBranch types: STRING 32, INT 64, BOOL 128. Only a stored
+        // value counts; an unset pref falls back, as in the runtime.
+        switch (Services.prefs.getPrefType(key)) {
+          case 128:
+            return Services.prefs.getBoolPref(key);
+          case 64:
+            return Services.prefs.getIntPref(key);
+          case 32:
+            return Services.prefs.getStringPref(key);
+        }
+      } catch (_) {}
+      return fallback;
+    };
+    const supportsColor = (value) => {
+      try {
+        return window.CSS?.supports
+          ? window.CSS.supports("color", value)
+          : true;
+      } catch (_) {
+        return true;
+      }
+    };
+    function clear() {
+      root.removeAttribute(BG_ATTR);
+      root.style.removeProperty(BG_VAR);
+      style?.remove();
+      style = null;
+    }
+    function apply() {
+      if (disposed || !root) return;
+      const result = resolveLibraryBackground(
+        {
+          customEnabled: read(BG_CUSTOM_PREF, false) === true,
+          customColor: read(BG_COLOR_PREF, ""),
+          opacity: read(BG_OPACITY_PREF, 100),
+          arcEnabled: read(BG_ARC_PREF, false) === true,
+          arcColor: read(BG_ARC_COLOR_PREF, ""),
+        },
+        supportsColor,
+      );
+      if (!result.source) {
+        clear();
+        return;
+      }
+      if (!style) {
+        style = document.createElement("style");
+        style.id = BG_STYLE_ID;
+        // Zen 1.23 Library renders into the browser document. Paint its full
+        // panel once and keep its host and columns transparent so native
+        // surfaces neither hide nor double the color. Every rule is scoped to
+        // the root attribute, so removing it restores Zen exactly.
+        style.textContent = `
+          :root[${BG_ATTR}] #zen-library-panel {
+            background: var(${BG_VAR}) !important;
+          }
+          :root[${BG_ATTR}] zen-library,
+          :root[${BG_ATTR}] #zen-library-side,
+          :root[${BG_ATTR}] #zen-library-content {
+            background: transparent !important;
+          }`;
+        root.appendChild(style);
+      }
+      if (root.getAttribute(BG_ATTR) !== result.source)
+        root.setAttribute(BG_ATTR, result.source);
+      if (root.style.getPropertyValue(BG_VAR) !== result.value)
+        root.style.setProperty(BG_VAR, result.value);
+    }
+    const observer = { observe: apply };
+    const keys = [
+      BG_ARC_PREF,
+      BG_ARC_COLOR_PREF,
+      BG_CUSTOM_PREF,
+      BG_COLOR_PREF,
+      BG_OPACITY_PREF,
+    ];
+    for (const key of keys) Services.prefs.addObserver(key, observer);
+    try {
+      apply();
+    } catch (error) {
+      for (const key of keys) Services.prefs.removeObserver(key, observer);
+      clear();
+      throw error;
+    }
+    return () => {
+      disposed = true;
+      for (const key of keys) Services.prefs.removeObserver(key, observer);
+      clear();
+    };
+  }
+
   function start() {
     const root = document.documentElement;
     let disposed = false,
@@ -682,7 +1076,26 @@ function nativeSidebarSide() {
       stop();
     };
   }
-  (window.ZentralRuntime || window.__zentralStandaloneRuntime).register({ id: "library-resize", init: start });
+  // Layout and background are independent features of one module: the
+  // background must not depend on the experimental layout switch.
+  function startAll() {
+    const stopLayout = start();
+    let stopBackground;
+    try {
+      stopBackground = startBackground();
+    } catch (error) {
+      stopLayout();
+      throw error;
+    }
+    return () => {
+      stopBackground();
+      stopLayout();
+    };
+  }
+  (window.ZentralRuntime || window.__zentralStandaloneRuntime).register({
+    id: "library-resize",
+    init: startAll,
+  });
 })();
 
 })();

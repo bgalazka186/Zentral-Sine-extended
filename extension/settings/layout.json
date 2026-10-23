@@ -693,6 +693,9 @@
     },
     "zen.workspace.zentral.arc2.match_compact_sidebar",
     "zen.workspace.zentral.arc2.match_compact_library",
+    "zen.workspace.zentral.library.custom_background",
+    "zen.workspace.zentral.library.custom_background.color",
+    "zen.workspace.zentral.library.custom_background.opacity",
     {
       "type": "text",
       "label": "**Detailed appearance · RSS reader card**",

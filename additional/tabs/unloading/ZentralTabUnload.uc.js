@@ -20,7 +20,7 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const ZentralRuntime = window.ZentralRuntime;
+  const ZentralRuntime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
 
   function standaloneReady(start) {
     let started = false;
@@ -283,7 +283,7 @@
       window.addEventListener("unload", destroy, { once: true });
       return destroy;
     }
-    if (window.ZentralRuntime)
+    if (ZentralRuntime)
       ZentralRuntime.register({ id: "tab-unload", init: start });
     else standaloneReady(start);
   })();

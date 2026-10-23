@@ -29,7 +29,7 @@
  *   bgalazka-panel-pinned; bgalazka-panel-side; bgalazka-push-page; bgalazka-tab-isolation;
  *   bgalazka-tab-panel-launcher; bgalazka-translucency; bgalazka-triple-view; bgalazka-webtoolbar; class;
  *   data-active; data-hold-active; data-loaded; data-panel-side; data-pinned; data-tab-loaded; hidden; id;
- *   open; pending; type; zen-compact-mode; zen-essential; zentral-arc2-library;
+ *   open; pending; type; zen-compact-mode; zen-essential;
  *   zentral-arc2-regular-sidebar; zentral-insta-peek
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
@@ -45,19 +45,9 @@
   background: var(--zentral-arc2-sidebar-background) !important;
 }
 
-/* Zen 1.23 Library renders into the browser document (createRenderRoot=this).
- * Paint its full panel once, using Arc's saved alpha as-is. Transparent host
- * and immediate columns prevent native surfaces obscuring or doubling it.
- * Scope every override to the opt-in root attribute so disabling restores Zen.
- */
-:root[zentral-arc2-library] #zen-library-panel {
-  background: var(--zentral-arc2-sidebar-background) !important;
-}
-:root[zentral-arc2-library] zen-library,
-:root[zentral-arc2-library] #zen-library-side,
-:root[zentral-arc2-library] #zen-library-content {
-  background: transparent !important;
-}
+/* The Zen Library background (Arc 2.0 match or a custom color) is painted by
+ * additional/library/ZentralLibraryResize.uc.js, which injects its own rules, so
+ * it works when that module is installed alone through Sine. */
 
 #zentral-settings-modal .zs-tab-bar {
   flex-wrap: wrap !important;

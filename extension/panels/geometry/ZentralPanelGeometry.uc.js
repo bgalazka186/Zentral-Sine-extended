@@ -605,25 +605,7 @@
         : getPositionOffset();
       // Positive posOffset moves the complete panel upward: the top margin
       // decreases while the bottom margin increases by the same amount.
-      // Navbar clearance: clamp marginTop so the panel cannot pull up over
-      // the topbar/navbar, regardless of dualview/push-page setting.
-      const navbar = document.getElementById("zen-appcontent-navbar-wrapper");
-      let navbarBottom = 0;
-      if (navbar) {
-        const style = window.getComputedStyle(navbar);
-        if (
-          style.display !== "none" &&
-          style.visibility !== "hidden" &&
-          parseFloat(style.opacity || "1") > 0.1
-        ) {
-          navbarBottom = Math.round(navbar.getBoundingClientRect().bottom);
-        }
-      }
-      const nativeTop = parseFloat(root.style.top) || 12;
-      const maxMarginTop = Math.max(0, nativeTop - navbarBottom);
-      const marginTop = Math.round(
-        Math.min(resizeTop - posOffset, maxMarginTop),
-      ) + "px";
+      const marginTop = Math.round(resizeTop - posOffset) + "px";
       const marginBottom = Math.round(resizeBottom + posOffset) + "px";
       if (root.style.marginTop !== marginTop) root.style.marginTop = marginTop;
       if (root.style.marginBottom !== marginBottom)

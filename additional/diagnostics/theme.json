@@ -1,0 +1,30 @@
+{
+  "id": "zentral-logger",
+  "name": "Zentral Logger",
+  "description": "Diagnostic logger with Alt+L export for Zentral and Zen layout issues. Standalone part of Zentral Extended.",
+  "homepage": "https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/diagnostics",
+  "supportsUnload": true,
+  "style": {
+    "chrome": "",
+    "content": ""
+  },
+  "scripts": {
+    "ZentralLogger.standalone.uc.js": {
+      "include": [
+        "chrome://browser/content/browser.xhtml"
+      ],
+      "loadOrder": 2
+    }
+  },
+  "author": "bgalazka186",
+  "version": "3.0.2",
+  "preferences": "preferences.json",
+  "tags": [
+    "diagnostics",
+    "zen"
+  ],
+  "fork": [
+    "zen"
+  ],
+  "readme": "https://raw.githubusercontent.com/bgalazka186/Zentral-Sine-extended/main/additional/diagnostics/README.md"
+}

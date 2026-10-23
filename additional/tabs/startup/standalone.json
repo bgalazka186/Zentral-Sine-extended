@@ -1,0 +1,18 @@
+{
+  "id": "startup",
+  "themeId": "zentral-startup",
+  "name": "Zentral Load Tab at Startup",
+  "description": "Adds a tab context-menu item to load a tab at startup. Standalone part of Zentral Extended.",
+  "version": "3.0.2",
+  "entry": "ZentralStartup.uc.js",
+  "output": "ZentralStartup.standalone.uc.js",
+  "settings": "settings.json",
+  "css": "ZentralStartup.css",
+  "fullPackOnly": [
+    "rootURI"
+  ],
+  "tags": [
+    "tabs",
+    "zen"
+  ]
+}

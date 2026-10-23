@@ -1,0 +1,22 @@
+{
+  "id": "compact-hover",
+  "themeId": "zentral-compact-hover",
+  "name": "Zentral Compact Sidebar Hover",
+  "description": "Compact-mode sidebar hover reveal and startup width recalculation for Zen. Standalone part of Zentral Extended.",
+  "version": "3.0.2",
+  "entry": "ZentralCompactHover.uc.js",
+  "output": "ZentralCompactHover.standalone.uc.js",
+  "settings": "settings.json",
+  "tags": [
+    "sidebar",
+    "zen"
+  ],
+  "externalPrefs": [
+    "zen.view.compact.show-sidebar-and-toolbar-on-hover",
+    "zen.view.compact.sidebar-keep-hover.duration",
+    "zen.view.compact",
+    "zen.view.use-single-toolbar",
+    "zen.tabs.vertical.right-side",
+    "zen.view.compact.hide-tabbar"
+  ]
+}

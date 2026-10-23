@@ -172,9 +172,9 @@
         const box = pushing
           ? {
               left: pushLeft,
-              top: area().top,
+              top: 0,
               width: Math.max(1, pushRight - pushLeft),
-              height: Math.max(1, window.innerHeight - area().top),
+              height: window.innerHeight,
             }
           : area();
         let r = bounded(

@@ -1,0 +1,30 @@
+{
+  "id": "zentral-compact-hover",
+  "name": "Zentral Compact Sidebar Hover",
+  "description": "Compact-mode sidebar hover reveal and startup width recalculation for Zen. Standalone part of Zentral Extended.",
+  "homepage": "https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/tabs/compact-hover",
+  "supportsUnload": true,
+  "style": {
+    "chrome": "",
+    "content": ""
+  },
+  "scripts": {
+    "ZentralCompactHover.standalone.uc.js": {
+      "include": [
+        "chrome://browser/content/browser.xhtml"
+      ],
+      "loadOrder": 2
+    }
+  },
+  "author": "bgalazka186",
+  "version": "3.0.2",
+  "preferences": "preferences.json",
+  "tags": [
+    "sidebar",
+    "zen"
+  ],
+  "fork": [
+    "zen"
+  ],
+  "readme": "https://raw.githubusercontent.com/bgalazka186/Zentral-Sine-extended/main/additional/tabs/compact-hover/README.md"
+}

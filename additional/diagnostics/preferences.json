@@ -1,0 +1,56 @@
+[
+  {
+    "property": "zen.workspace.zentral.debug",
+    "label": "Enable Diagnostic Logging in Console Buffer",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.debug.full",
+    "label": "Capture Full Diagnostic Log (All Modules)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.debug.core",
+    "label": "Core Engine & Gecko Errors (Always On)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.debug.tabs",
+    "label": "Tab Groups & Drag-and-Drop Tracing",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.debug.apps",
+    "label": "Apps Sidebar & Panels Tracing",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.debug.menus",
+    "label": "Context Menus & Popups Tracing",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.debug.layout",
+    "label": "Layout Inspector & CSS Computed Styles Snapshot",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.report_endpoint",
+    "label": "Base Mod Issue Report Endpoint (not for extension issues)",
+    "type": "string",
+    "defaultValue": "https://zentral-issue-reporter.michele-pierini.workers.dev/"
+  },
+  {
+    "property": "zentral.logger.path",
+    "label": "Base Mod Diagnostic Log Folder (absolute path)",
+    "type": "string",
+    "defaultValue": ""
+  }
+]

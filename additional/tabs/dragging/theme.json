@@ -1,0 +1,30 @@
+{
+  "id": "zentral-tab-drag",
+  "name": "Zentral Background Tab Drag",
+  "description": "Drag background tabs without selecting them first. Standalone part of Zentral Extended.",
+  "homepage": "https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/tabs/dragging",
+  "supportsUnload": true,
+  "style": {
+    "chrome": "",
+    "content": ""
+  },
+  "scripts": {
+    "ZentralTabDrag.standalone.uc.js": {
+      "include": [
+        "chrome://browser/content/browser.xhtml"
+      ],
+      "loadOrder": 2
+    }
+  },
+  "author": "bgalazka186",
+  "version": "3.0.2",
+  "preferences": "preferences.json",
+  "tags": [
+    "tabs",
+    "zen"
+  ],
+  "fork": [
+    "zen"
+  ],
+  "readme": "https://raw.githubusercontent.com/bgalazka186/Zentral-Sine-extended/main/additional/tabs/dragging/README.md"
+}

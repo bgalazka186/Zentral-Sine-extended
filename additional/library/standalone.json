@@ -2,10 +2,52 @@
   "id": "library-resize",
   "themeId": "zentral-library-resize",
   "name": "Zentral Library Resize",
-  "description": "Make Zen's Library behave more like the Zentral panel: overlay or resize the webpage beside the sidebar. Standalone part of Zentral Extended.",
+  "description": "Zen Library layout (overlay or resize the webpage) and background color (match Arc 2.0 or a custom color). Standalone part of Zentral Extended.",
   "version": "3.0.3",
   "entry": "ZentralLibraryResize.uc.js",
   "output": "ZentralLibraryResize.standalone.uc.js",
   "settings": "settings.json",
-  "tags": ["library", "sidebar", "zen"]
+  "tags": [
+    "library",
+    "sidebar",
+    "zen"
+  ],
+  "externalPrefs": [
+    "arc-compact-sidebar-bg"
+  ],
+  "borrowedSettings": [
+    {
+      "from": "extension/settings/extension-settings.json",
+      "properties": [
+        "zen.workspace.zentral.arc2.match_compact_library"
+      ]
+    },
+    {
+      "from": "loader/settings.json",
+      "properties": [
+        "zen.workspace.zentral.compat.external_library_layout"
+      ]
+    }
+  ],
+  "preferenceOrder": [
+    {
+      "type": "text",
+      "label": "**Library layout**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.experimental.library_resize",
+    "zen.workspace.zentral.experimental.library_resize.mode",
+    "zen.workspace.zentral.experimental.library_resize.minimum_content_width_px",
+    "zen.workspace.zentral.experimental.library_resize.animate_content",
+    "zen.workspace.zentral.compat.external_library_layout",
+    {
+      "type": "text",
+      "label": "**Library background**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.arc2.match_compact_library",
+    "zen.workspace.zentral.library.custom_background",
+    "zen.workspace.zentral.library.custom_background.color",
+    "zen.workspace.zentral.library.custom_background.opacity"
+  ]
 }
