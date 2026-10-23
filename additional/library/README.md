@@ -44,6 +44,23 @@ mode ignores animation-only style changes. No website document is observed.
 Version: 3.0.0. This needs visual testing in Zen, including left/right
 sidebar, compact mode, opposite-side panels and narrow windows.
 
+## Library background
+
+The module also paints the Zen Library background, independently of the layout switch. It works the same in the full pack and when installed alone.
+
+| Option | What it does |
+| --- | --- |
+| Arc 2.0 tweak: apply compact sidebar color and opacity to Zen Library (`zen.workspace.zentral.arc2.match_compact_library`) | Copies the compact sidebar color and alpha that the **Arc 2.0** mod stores in its `arc-compact-sidebar-bg` setting, live. Needs Arc 2.0; if that setting does not exist, nothing is painted. |
+| Use a custom Zen Library background color (`zen.workspace.zentral.library.custom_background`) | Turns on your own color. Works without Arc 2.0. |
+| Custom Library background color (`...custom_background.color`) | Any CSS color: `#1e1e24`, `#1e1e24cc`, `rgba(30, 30, 36, 0.85)`, `hsl(...)`. An invalid value is ignored. |
+| Custom Library background opacity (`...custom_background.opacity`) | 100% to 30%; multiplies any alpha already in the color. |
+
+Priority: a valid custom color wins over Arc 2.0 matching; Arc 2.0 matching applies only when its color exists; otherwise Zen's own Library background is untouched. Turning everything off removes the attribute (`zentral-library-background`), the variable (`--zentral-library-background`) and the injected style, restoring Zen exactly.
+
+Sine's preferences have no color picker, so the color is a text field.
+
+Also shipped in the standalone package so it is complete on its own: the "Use external Library layout" compatibility switch (pauses this module's Library geometry for ZenLibraryTweaks-style mods).
+
 ## Install only this feature (standalone, via Sine)
 
 In Sine, install from this folder URL:
@@ -52,7 +69,7 @@ In Sine, install from this folder URL:
 
 Requirements: Sine 2.3+, and Sine's setting for JavaScript from unofficial sources (`sine.allow-unsafe-js`) enabled; without it Sine downloads the mod but never runs the script. Restart Zen after the first install. Sine pulls later updates from this repository (the folder's `theme.json` version is bumped on every change).
 
-Settings appear in Sine's preferences for this mod: Library layout, mode, minimum width and animation.
+Settings appear in Sine's preferences for this mod: Library layout (mode, minimum width, animation, external-layout switch) and Library background (Arc 2.0 match, custom color, opacity).
 
 Using the full pack instead? Paste the repository root URL. If both are installed, the full pack owns the feature and the standalone copy releases itself, so nothing is hooked twice. Both use the same preference keys, so settings carry over.
 

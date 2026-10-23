@@ -1,5 +1,10 @@
 [
   {
+    "type": "text",
+    "label": "**Library layout**",
+    "size": "16px"
+  },
+  {
     "property": "zen.workspace.zentral.experimental.library_resize",
     "label": "Make Library behave more like Zentral panel (experimental)",
     "type": "checkbox",
@@ -118,5 +123,82 @@
     "label": "Resize webpage continuously during Library animation (more page layout work)",
     "type": "checkbox",
     "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.compat.external_library_layout",
+    "label": "Use external Library layout: pause Extended Library geometry",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "type": "text",
+    "label": "**Library background**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.arc2.match_compact_library",
+    "label": "Arc 2.0 tweak: apply compact sidebar color and opacity to Zen Library",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.library.custom_background",
+    "label": "Use a custom Zen Library background color (overrides Arc 2.0 matching)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.library.custom_background.color",
+    "label": "Custom Library background color (CSS color, e.g. #1e1e24, #1e1e24cc or rgba(30, 30, 36, 0.85))",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.library.custom_background.opacity",
+    "label": "Custom Library background opacity (multiplies any alpha already in the color)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "100%",
+        "value": 100
+      },
+      {
+        "label": "95%",
+        "value": 95
+      },
+      {
+        "label": "90%",
+        "value": 90
+      },
+      {
+        "label": "85%",
+        "value": 85
+      },
+      {
+        "label": "80%",
+        "value": 80
+      },
+      {
+        "label": "70%",
+        "value": 70
+      },
+      {
+        "label": "60%",
+        "value": 60
+      },
+      {
+        "label": "50%",
+        "value": 50
+      },
+      {
+        "label": "40%",
+        "value": 40
+      },
+      {
+        "label": "30%",
+        "value": 30
+      }
+    ]
   }
 ]

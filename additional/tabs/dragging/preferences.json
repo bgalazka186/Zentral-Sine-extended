@@ -1,0 +1,8 @@
+[
+  {
+    "property": "zen.workspace.zentral.tabs.background_drag",
+    "label": "Drag tabs without activating or loading them",
+    "type": "checkbox",
+    "defaultValue": true
+  }
+]

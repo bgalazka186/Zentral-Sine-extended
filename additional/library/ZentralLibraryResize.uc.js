@@ -1,7 +1,12 @@
-/* Experimental native Library layout. Activated by the shared native startup
- * barrier; no private Zen imports, prototype patches, polling or native prefs.
- * Disabled: only our preference observer remains. Enabled: observe Library's
- * own animation/style and border-box sizes, coalescing work to one frame.
+/* Native Zen Library: experimental layout plus background color.
+ * Layout: activated by the shared native startup barrier; no private Zen
+ * imports, prototype patches or polling. Disabled: only our preference observer
+ * remains. Enabled: observe Library's own animation/style and border-box sizes,
+ * coalescing work to one frame.
+ * Background: independent of the layout switch. A custom color, or the Arc 2.0
+ * mod's compact sidebar color (read from its "arc-compact-sidebar-bg" pref),
+ * paints the Library panel; a valid custom color wins, Arc is used only if its
+ * pref exists, otherwise Zen's own background is untouched.
  */
 (function () {
   "use strict";
@@ -12,6 +17,16 @@
   const PREF = "zen.workspace.zentral.experimental.library_resize";
   const COMPAT_PREF = "zen.workspace.zentral.compat.external_library_layout";
   const ATTR = "zentral-library-resize-active";
+  // Library background. Owned here (not in the runtime or Appearance.css) so the
+  // module is complete when installed alone through Sine.
+  const BG_ARC_PREF = "zen.workspace.zentral.arc2.match_compact_library";
+  const BG_ARC_COLOR_PREF = "arc-compact-sidebar-bg"; // written by the Arc 2.0 mod
+  const BG_CUSTOM_PREF = "zen.workspace.zentral.library.custom_background";
+  const BG_COLOR_PREF = BG_CUSTOM_PREF + ".color";
+  const BG_OPACITY_PREF = BG_CUSTOM_PREF + ".opacity";
+  const BG_ATTR = "zentral-library-background";
+  const BG_VAR = "--zentral-library-background";
+  const BG_STYLE_ID = "zentral-library-background-style";
   const VARS = [
     "--zentral-library-space-left",
     "--zentral-library-space-right",
@@ -20,6 +35,129 @@
     "--zentral-library-top",
     "--zentral-library-side-inset",
   ];
+  // Pure: decide which Library background applies. Priority is explicit choice
+  // first: a valid custom color beats Arc 2.0 matching; Arc 2.0 matching applies
+  // only when Arc's color pref exists; otherwise Zen's own background stays.
+  // Arc stores color and alpha together (rgba/8-digit hex), so its value is used
+  // as-is; opacity on the element would also fade text and icons.
+  function resolveLibraryBackground(input, supportsColor) {
+    const valid = (value) =>
+      typeof value === "string" &&
+      value.trim() !== "" &&
+      (typeof supportsColor !== "function" || supportsColor(value.trim()));
+    if (input.customEnabled && valid(input.customColor)) {
+      const color = input.customColor.trim();
+      const pct = Math.max(0, Math.min(100, Math.round(Number(input.opacity))));
+      const mixed =
+        Number.isFinite(pct) && pct < 100
+          ? `color-mix(in srgb, ${color} ${pct}%, transparent)`
+          : color;
+      return {
+        source: "custom",
+        value: valid(mixed) ? mixed : color,
+      };
+    }
+    if (input.arcEnabled && valid(input.arcColor))
+      return { source: "arc2", value: input.arcColor.trim() };
+    return { source: null, value: "" };
+  }
+
+  function startBackground() {
+    const root = document.documentElement;
+    let style = null,
+      disposed = false;
+    const read = (key, fallback) => {
+      try {
+        // nsIPrefBranch types: STRING 32, INT 64, BOOL 128. Only a stored
+        // value counts; an unset pref falls back, as in the runtime.
+        switch (Services.prefs.getPrefType(key)) {
+          case 128:
+            return Services.prefs.getBoolPref(key);
+          case 64:
+            return Services.prefs.getIntPref(key);
+          case 32:
+            return Services.prefs.getStringPref(key);
+        }
+      } catch (_) {}
+      return fallback;
+    };
+    const supportsColor = (value) => {
+      try {
+        return window.CSS?.supports
+          ? window.CSS.supports("color", value)
+          : true;
+      } catch (_) {
+        return true;
+      }
+    };
+    function clear() {
+      root.removeAttribute(BG_ATTR);
+      root.style.removeProperty(BG_VAR);
+      style?.remove();
+      style = null;
+    }
+    function apply() {
+      if (disposed || !root) return;
+      const result = resolveLibraryBackground(
+        {
+          customEnabled: read(BG_CUSTOM_PREF, false) === true,
+          customColor: read(BG_COLOR_PREF, ""),
+          opacity: read(BG_OPACITY_PREF, 100),
+          arcEnabled: read(BG_ARC_PREF, false) === true,
+          arcColor: read(BG_ARC_COLOR_PREF, ""),
+        },
+        supportsColor,
+      );
+      if (!result.source) {
+        clear();
+        return;
+      }
+      if (!style) {
+        style = document.createElement("style");
+        style.id = BG_STYLE_ID;
+        // Zen 1.23 Library renders into the browser document. Paint its full
+        // panel once and keep its host and columns transparent so native
+        // surfaces neither hide nor double the color. Every rule is scoped to
+        // the root attribute, so removing it restores Zen exactly.
+        style.textContent = `
+          :root[${BG_ATTR}] #zen-library-panel {
+            background: var(${BG_VAR}) !important;
+          }
+          :root[${BG_ATTR}] zen-library,
+          :root[${BG_ATTR}] #zen-library-side,
+          :root[${BG_ATTR}] #zen-library-content {
+            background: transparent !important;
+          }`;
+        root.appendChild(style);
+      }
+      if (root.getAttribute(BG_ATTR) !== result.source)
+        root.setAttribute(BG_ATTR, result.source);
+      if (root.style.getPropertyValue(BG_VAR) !== result.value)
+        root.style.setProperty(BG_VAR, result.value);
+    }
+    const observer = { observe: apply };
+    const keys = [
+      BG_ARC_PREF,
+      BG_ARC_COLOR_PREF,
+      BG_CUSTOM_PREF,
+      BG_COLOR_PREF,
+      BG_OPACITY_PREF,
+    ];
+    for (const key of keys) Services.prefs.addObserver(key, observer);
+    try {
+      apply();
+    } catch (error) {
+      for (const key of keys) Services.prefs.removeObserver(key, observer);
+      clear();
+      throw error;
+    }
+    return () => {
+      disposed = true;
+      for (const key of keys) Services.prefs.removeObserver(key, observer);
+      clear();
+    };
+  }
+
   function start() {
     const root = document.documentElement;
     let disposed = false,
@@ -461,5 +599,24 @@
       stop();
     };
   }
-  (window.ZentralRuntime || window.__zentralStandaloneRuntime).register({ id: "library-resize", init: start });
+  // Layout and background are independent features of one module: the
+  // background must not depend on the experimental layout switch.
+  function startAll() {
+    const stopLayout = start();
+    let stopBackground;
+    try {
+      stopBackground = startBackground();
+    } catch (error) {
+      stopLayout();
+      throw error;
+    }
+    return () => {
+      stopBackground();
+      stopLayout();
+    };
+  }
+  (window.ZentralRuntime || window.__zentralStandaloneRuntime).register({
+    id: "library-resize",
+    init: startAll,
+  });
 })();

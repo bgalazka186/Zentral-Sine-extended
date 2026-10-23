@@ -2,10 +2,13 @@
  * tools/build-standalone.cjs prepends this to a module to produce a bundle that
  * Sine can install on its own (…/additional/<module> folder URL).
  *
- * It provides ONLY what standalone modules use: register, registerSettingsHook,
- * ensureSettingsSection, registerHostUnload and the native sidebar helpers.
- * The sidebar helpers are not written here: the build copies them verbatim from
- * loader/ZentralRuntime.js at the sidebar-functions marker below, so they cannot drift.
+ * It provides ONLY what standalone modules use: register (with the same owned
+ * lifecycle scope the full runtime hands to init), registerSettingsHook,
+ * ensureSettingsSection, registerHostUnload, the native sidebar helpers and the
+ * two status slots compact-hover writes. The sidebar helpers and the lifecycle
+ * scope (createFeatureScope, including watchNative) are not written here: the
+ * build copies them verbatim from loader/ZentralRuntime.js at the markers below,
+ * so they cannot drift.
  *
  * Coexistence (full pack always wins, either load order):
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
@@ -37,8 +40,9 @@ const __zentralShim = (function () {
     } catch (_) {}
     return fallback;
   }
-  /*__SIDEBAR_FUNCTIONS__*/
   let stopped = false;
+  /*__SIDEBAR_FUNCTIONS__*/
+  /*__SCOPE_FUNCTIONS__*/
   const unloadHandlers = new Set();
   window.addEventListener(
     "unload",
@@ -87,6 +91,8 @@ const __zentralShim = (function () {
     nativeSidebarElement,
     nativeSidebarRect,
     nativeSidebarSide,
+    sidebarLayoutRepair: null,
+    compactHoverStatus: null,
     registerSettingsHook: () => () => {},
     ensureSettingsSection: () => null,
     registerHostUnload(fn) {
@@ -102,7 +108,9 @@ const __zentralShim = (function () {
       try {
         features[def.id]?.dispose?.();
       } catch (_) {}
+      const lifecycle = createFeatureScope(def.id);
       let cleanup = null,
+        initialized = false,
         disposed = false;
       const handle = (features[def.id] = {
         version: __ZENTRAL_STANDALONE_VERSION__,
@@ -111,7 +119,7 @@ const __zentralShim = (function () {
           disposed = true;
           unloadHandlers.delete(handle.dispose);
           if (features[def.id] === handle) delete features[def.id];
-          const fn = cleanup;
+          const fn = initialized ? (cleanup ?? def.dispose) : null;
           cleanup = null;
           try {
             if (typeof fn === "function") fn();
@@ -119,6 +127,7 @@ const __zentralShim = (function () {
           } catch (error) {
             console.warn("[Zentral standalone] cleanup", def.id, error);
           }
+          lifecycle.destroy();
         },
       });
       unloadHandlers.add(handle.dispose);
@@ -130,12 +139,15 @@ const __zentralShim = (function () {
           return;
         }
         try {
-          const result = def.init({ runtime: shim });
+          initialized = true;
+          const result = def.init({ lifecycle, runtime: shim });
+          if (result && typeof result.then === "function")
+            throw new Error("init must be synchronous");
           if (disposed) {
             // Disposed during init: release what init just created.
-            handle.dispose();
-            if (typeof result === "function") result();
-            else result?.destroy?.();
+            const late = result ?? def.dispose;
+            if (typeof late === "function") late();
+            else late?.destroy?.();
             return;
           }
           cleanup = result;

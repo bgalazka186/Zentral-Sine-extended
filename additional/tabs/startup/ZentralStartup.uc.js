@@ -253,8 +253,9 @@
     }
     window.ZentralStartup = { destroy };
     listen(window, "unload", destroy, { once: true });
-    if (typeof window.ZentralRuntime?.registerHostUnload === "function")
-      window.ZentralRuntime.registerHostUnload(destroy);
+    const hostRuntime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
+    if (typeof hostRuntime?.registerHostUnload === "function")
+      hostRuntime.registerHostUnload(destroy);
     else {
       try {
         if (typeof window.addUnloadListener === "function")
@@ -294,14 +295,21 @@
       ),
     );
     // Use this installation's package root; CSS failure cannot block logic.
-    try {
-      sheet = Services.io.newURI(
-        ROOT + "additional/tabs/startup/ZentralStartup.css",
-      );
-      window.windowUtils.loadSheet(sheet, window.windowUtils.USER_SHEET);
-    } catch (error) {
-      sheet = null;
-      console.warn("[ZentralStartup] Stylesheet unavailable", error);
+    // Installed alone through Sine, the mod's own chrome stylesheet carries
+    // these rules (every rule is gated by the root attribute set above).
+    const sheetProvidedBySine =
+      !window.ZentralRuntime &&
+      window.__zentralStandaloneRuntime?.standalone === true;
+    if (!sheetProvidedBySine) {
+      try {
+        sheet = Services.io.newURI(
+          ROOT + "additional/tabs/startup/ZentralStartup.css",
+        );
+        window.windowUtils.loadSheet(sheet, window.windowUtils.USER_SHEET);
+      } catch (error) {
+        sheet = null;
+        console.warn("[ZentralStartup] Stylesheet unavailable", error);
+      }
     }
     updatePreference();
     if (
@@ -311,8 +319,9 @@
       start();
     return destroy;
   }
-  if (window.ZentralRuntime) {
-    window.ZentralRuntime.register({ id: "startup", init: initialize });
+  const hostRuntime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
+  if (hostRuntime) {
+    hostRuntime.register({ id: "startup", init: initialize });
   } else {
     initialize();
   }

@@ -1,0 +1,8 @@
+[
+  {
+    "property": "zen.workspace.bgalazka.mmb_unload_normal_tabs",
+    "label": "Middle-click unloads normal tabs",
+    "type": "checkbox",
+    "defaultValue": false
+  }
+]

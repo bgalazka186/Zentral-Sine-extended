@@ -1,0 +1,94 @@
+[
+  {
+    "property": "zen.workspace.bgalazka.rss.hide_empty",
+    "label": "Hide Empty RSS Live Folders",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.compact_headers",
+    "label": "Compact RSS Live-Folder Headers",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.reader_card",
+    "label": "Reader card for RSS articles",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_hover_delay",
+    "label": "Reader card hover delay (ms)",
+    "type": "input",
+    "defaultValue": 0
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_hide_delay",
+    "label": "Reader card hide delay (ms)",
+    "type": "input",
+    "defaultValue": 250
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_side",
+    "label": "Reader card side",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Auto — beside the sidebar",
+        "value": "auto"
+      },
+      {
+        "label": "Left — always left of the article",
+        "value": "left"
+      },
+      {
+        "label": "Right — always right of the article",
+        "value": "right"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_show_folder",
+    "label": "Reader card shows the folder name",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_show_url",
+    "label": "Reader card shows the article URL",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_show_buttons",
+    "label": "Reader card shows the action buttons",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_mmb_dismiss",
+    "label": "Middle-click dismisses an article",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_retarget",
+    "label": "Reader card follows the pointer after a dismiss",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_confirm_all",
+    "label": "Ask before dismissing every article in a folder",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.bgalazka.rss.card_replace_tooltip",
+    "label": "Reader card replaces the native article tooltip",
+    "type": "checkbox",
+    "defaultValue": true
+  }
+]

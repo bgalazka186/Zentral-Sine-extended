@@ -1,0 +1,18 @@
+{
+  "id": "rss",
+  "themeId": "zentral-rss-display",
+  "name": "Zentral RSS Display",
+  "description": "Cleaner display and reader card for Zen live-folder RSS items. Standalone part of Zentral Extended.",
+  "version": "3.0.2",
+  "entry": "ZentralRssDisplay.uc.js",
+  "output": "ZentralRssDisplay.standalone.uc.js",
+  "settings": "settings.json",
+  "css": "ZentralRssDisplay.css",
+  "fullPackOnly": [
+    "services"
+  ],
+  "tags": [
+    "rss",
+    "zen"
+  ]
+}

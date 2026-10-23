@@ -23,15 +23,19 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const ZentralRuntime = window.ZentralRuntime;
+  const ZentralRuntime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
   ZentralRuntime.register({
     id: "logger",
+    // Used by the standalone shim; the full runtime ignores unknown fields.
+    dispose() {
+      window._zentralLoggerCleanup?.();
+    },
     init() {
       // ==UserScript==
       // @name         Zentral-Logger
       // @description  Comprehensive diagnostic logger for Zentral (Apps Grid, Tab Groups, Settings & Layout Renderings).
       // @author       Michele Pierini
-      // @version      v3.0.3
+      // @version      v3.0.2
       // @include      main
       // ==/UserScript==
 
@@ -1597,8 +1601,8 @@
           delete window.ZenzeiLogger;
           delete window.ZenTabPeekLogger;
         };
-        if (typeof window.ZentralRuntime?.registerHostUnload === "function")
-          window.ZentralRuntime.registerHostUnload(onLoggerUnload);
+        if (typeof ZentralRuntime?.registerHostUnload === "function")
+          ZentralRuntime.registerHostUnload(onLoggerUnload);
         else {
           try {
             if (typeof window.addUnloadListener === "function")
@@ -1639,7 +1643,7 @@
 
         ZentralLogger.log(
           "Zentral-Logger",
-          "Zentral-Logger v3.0.3 initialized with clean format & deduplication. Press Alt+L to export logs.",
+          "Zentral-Logger v3.0.2 initialized with clean format & deduplication. Press Alt+L to export logs.",
         );
       })();
     },

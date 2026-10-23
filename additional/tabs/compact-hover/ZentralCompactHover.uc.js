@@ -730,6 +730,7 @@
     };
     return destroy;
   }
+  const ZentralRuntime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
   function start() {
     let stopped = false,
       cleanup = null,
@@ -801,7 +802,7 @@
       repairDone = false,
       restoreRepair = null;
     const repairStatus = (stage) => {
-      window.ZentralRuntime.sidebarLayoutRepair = { stage };
+      ZentralRuntime.sidebarLayoutRepair = { stage };
     };
     function cancelRepair() {
       if (repairTimer !== null) window.clearTimeout(repairTimer);
@@ -950,7 +951,7 @@
     }
 
     const hoverStatus = (stage, error = null) => {
-      window.ZentralRuntime.compactHoverStatus = {
+      ZentralRuntime.compactHoverStatus = {
         stage,
         ...(error ? { error: String(error) } : {}),
       };
@@ -1137,5 +1138,5 @@
     }
     return destroy;
   }
-  window.ZentralRuntime.register({ id: "compact-hover", init: start });
+  ZentralRuntime.register({ id: "compact-hover", init: start });
 })();

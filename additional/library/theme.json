@@ -1,7 +1,7 @@
 {
   "id": "zentral-library-resize",
   "name": "Zentral Library Resize",
-  "description": "Make Zen's Library behave more like the Zentral panel: overlay or resize the webpage beside the sidebar. Standalone part of Zentral Extended.",
+  "description": "Zen Library layout (overlay or resize the webpage) and background color (match Arc 2.0 or a custom color). Standalone part of Zentral Extended.",
   "homepage": "https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/library",
   "supportsUnload": true,
   "style": {
