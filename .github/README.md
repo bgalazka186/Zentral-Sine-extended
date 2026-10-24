@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-   <strong>Extended 3.1.0</strong> · Based on <strong>Zentral 1.1.0</strong> · Requires <strong>Sine</strong>
+   <strong>Extended 3.1.1</strong> · Based on <strong>Zentral 1.1.0</strong> · Requires <strong>Sine</strong>
 </p>
 
 Zentral Extended builds on [Zentral by Michele501st](https://github.com/Michele501st/Zentral-Sine). The Zentral 1.1.0 base provides the core Apps grid, floating side panels, tab groups, color picker, diagnostics and settings UI. Extended adds flexible panel layouts, sidebar integrations, video previews and appearance controls on top of that foundation.
@@ -268,7 +268,7 @@ Compatibility depends on the versions and configuration of the installed mods. A
 
 ## Updates and architecture
 
-Extended 3.1.0 uses Zentral 1.1.0 as its core reference.
+Extended 3.1.1 uses Zentral 1.1.0 as its core reference.
 
 Original-derived code, Extended integrations and independent features are kept in separate areas:
 
