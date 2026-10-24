@@ -3188,30 +3188,6 @@
               "%",
             );
             addLookSlider(
-              "Video backdrop",
-              "Video preview frame, without fading the picture",
-              LOOK_PREFS.VIDEO_OPACITY,
-              0,
-              100,
-              "%",
-            );
-            addLookSlider(
-              "Video controls",
-              "Filled video buttons and selected source highlight",
-              LOOK_PREFS.VIDEO_CONTROL_OPACITY,
-              0,
-              100,
-              "%",
-            );
-            addLookSlider(
-              "Big Preview overlay",
-              "Hover controls backing; independent of button fills and Simple palette opacity",
-              LOOK_PREFS.VIDEO_OVERLAY_OPACITY,
-              0,
-              100,
-              "%",
-            );
-            addLookSlider(
               "Group popup",
               "Tab group control popup background",
               LOOK_PREFS.POPUP_OPACITY,
@@ -3490,65 +3466,6 @@
               0,
               3,
               " px",
-            );
-            addLookHeading("Sidebar video");
-            addLookColor(
-              "Video surface",
-              "Backdrop around the picture",
-              LOOK_PREFS.VIDEO_CANVAS,
-            );
-            addLookColor(
-              "Video control fill",
-              "Fill used by the Filled button style",
-              LOOK_PREFS.VIDEO_CONTROL,
-            );
-            addLookColor(
-              "Video text",
-              "Source and action labels",
-              LOOK_PREFS.VIDEO_TEXT,
-            );
-            addLookColor(
-              "Video muted text",
-              "Caption and source details",
-              LOOK_PREFS.VIDEO_MUTED,
-            );
-            addLookColor(
-              "Selected source",
-              "Small selection marker or filled highlight",
-              LOOK_PREFS.VIDEO_SELECTED,
-            );
-            addLookSlider(
-              "Video border",
-              "0 removes the card and picture outline",
-              LOOK_PREFS.VIDEO_BORDER,
-              0,
-              3,
-              " px",
-            );
-            addLookSlider(
-              "Video padding",
-              "Space around the media and controls",
-              LOOK_PREFS.VIDEO_PADDING,
-              0,
-              16,
-              " px",
-            );
-            addLookSlider(
-              "Source row height",
-              "Height of each source in the list",
-              LOOK_PREFS.VIDEO_ROW_HEIGHT,
-              22,
-              36,
-              " px",
-            );
-            addLookSelect(
-              "Source selection",
-              "Line or filled highlight, without a box border",
-              LOOK_PREFS.VIDEO_SOURCE_STYLE,
-              [
-                { value: "line", label: "Line" },
-                { value: "filled", label: "Filled" },
-              ],
             );
             addLookHeading("RSS reader card");
             const rssCardLookNote = document.createElement("p");

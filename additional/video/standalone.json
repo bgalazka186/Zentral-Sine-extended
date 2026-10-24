@@ -37,22 +37,6 @@
       "to": "content/ZentralVideoActor.sys.mjs"
     }
   ],
-  "excludePrefs": {
-    "reason": "These Look prefs only take effect inside the full pack's Atelier look (colors, padding, border, row height, source style, opacities); the standalone card uses its own stylesheet defaults.",
-    "properties": [
-      "zen.workspace.bgalazka.look.video_opacity",
-      "zen.workspace.bgalazka.look.video_control_opacity",
-      "zen.workspace.bgalazka.look.video_canvas",
-      "zen.workspace.bgalazka.look.video_control",
-      "zen.workspace.bgalazka.look.video_text",
-      "zen.workspace.bgalazka.look.video_muted",
-      "zen.workspace.bgalazka.look.video_selected",
-      "zen.workspace.bgalazka.look.video_border",
-      "zen.workspace.bgalazka.look.video_padding",
-      "zen.workspace.bgalazka.look.video_row_height",
-      "zen.workspace.bgalazka.look.video_source_style"
-    ]
-  },
   "tags": [
     "video",
     "sidebar",

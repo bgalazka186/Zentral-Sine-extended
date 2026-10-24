@@ -27,6 +27,10 @@ The RSS reader card is painted from root custom properties written here: `--bgal
 
 ## Video control appearance
 
+The video look settings (`zen.workspace.bgalazka.look.video_*`) are owned by Video and live in **Settings → Video → Appearance & layout** (category `video-appearance`, declared in `extension/settings/layout.json` and `additional/video/settings.json`). They moved out of Appearance so that the standalone video mod, which only reads `additional/` paths and never the `extension-settings` categories, shows and applies them too. The preference names did not change, so existing profiles, backups and `recommended.json` keep working.
+
+In the full pack this owner still paints them: the `bgalazka-look-video-selection` attribute and `--bgalazka-look-video-*` / `--zl-video-*` properties are written here, and `ZentralVideoSettings.js` builds the rows. Standalone has no Appearance owner, so `additional/video/standalone/ZentralVideoControlsLook.js` writes `--zvl-*` properties and the `zentral-video-source-style` attribute that `ZentralVideoPreview.css` reads. In standalone a value equal to its default sets nothing, so the card keeps following the Zen theme until a value is changed.
+
 Sidebar and Big Preview buttons follow the shared button style, border, size, hover pair and video fill/text controls. Plain and outline styles retain transparent resting fills. Automatic text contrast uses the effective button surface; Manual retains the chosen icon color. Big Preview adds a small icon shadow over video pixels without adding a forced border or solid button fill.
 
-Big Preview overlay opacity defaults to 40% and is separate from both video-button opacity and Simple palette opacity. Its color follows the video-control palette. The new slider and its New Settings copy are owned by Video; starting themes and Recommended set 40%. See [input and appearance notes](../../docs/SIDEBAR-AND-PLAYER-INPUT.md).
+Big Preview overlay opacity defaults to 40% and is separate from both video-button opacity and Simple palette opacity. Its color follows the video-control palette. See [input and appearance notes](../../docs/SIDEBAR-AND-PLAYER-INPUT.md).

@@ -330,6 +330,115 @@
       "defaultValue": false
     },
     {
+      "property": "zen.workspace.zentral.video_preview.button_style",
+      "label": "Toolbar button style under the video (standalone)",
+      "type": "dropdown",
+      "defaultValue": "plain",
+      "options": [
+        {
+          "label": "Plain (icons only)",
+          "value": "plain"
+        },
+        {
+          "label": "Outline",
+          "value": "outline"
+        },
+        {
+          "label": "Filled",
+          "value": "filled"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.video_preview.button_size_px",
+      "label": "Toolbar button size (standalone)",
+      "type": "dropdown",
+      "defaultValue": 26,
+      "options": [
+        {
+          "label": "18 px",
+          "value": 18
+        },
+        {
+          "label": "20 px",
+          "value": 20
+        },
+        {
+          "label": "22 px",
+          "value": 22
+        },
+        {
+          "label": "24 px",
+          "value": 24
+        },
+        {
+          "label": "26 px",
+          "value": 26
+        },
+        {
+          "label": "28 px",
+          "value": 28
+        },
+        {
+          "label": "32 px",
+          "value": 32
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.video_preview.button_radius_px",
+      "label": "Toolbar button corner radius (px, standalone mod)",
+      "type": "dropdown",
+      "defaultValue": 4,
+      "options": [
+        {
+          "label": "0",
+          "value": 0
+        },
+        {
+          "label": "2",
+          "value": 2
+        },
+        {
+          "label": "4",
+          "value": 4
+        },
+        {
+          "label": "6",
+          "value": 6
+        },
+        {
+          "label": "8",
+          "value": 8
+        },
+        {
+          "label": "12",
+          "value": 12
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.video_preview.button_icon_color",
+      "label": "Toolbar button icon color (standalone)",
+      "type": "string",
+      "defaultValue": "",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.zentral.video_preview.button_fill_color",
+      "label": "Toolbar button fill color (standalone)",
+      "type": "string",
+      "defaultValue": "",
+      "border": "value"
+    },
+    {
+      "property": "zen.workspace.zentral.video_preview.button_border_color",
+      "label": "Toolbar button border color (standalone)",
+      "type": "string",
+      "defaultValue": "",
+      "border": "value"
+    },
+    {
       "property": "zen.workspace.bgalazka.look.video_opacity",
       "label": "Video preview canvas opacity (%)",
       "type": "dropdown",
@@ -2395,153 +2504,153 @@
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.fit_width": {
-      "category": "density",
-      "section": "Video size",
+      "category": "video-appearance",
+      "section": "Size & shape",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.width_percent": {
-      "category": "density",
-      "section": "Video size",
+      "category": "video-appearance",
+      "section": "Size & shape",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.height_px": {
-      "category": "density",
-      "section": "Video size",
+      "category": "video-appearance",
+      "section": "Size & shape",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.radius_px": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Size & shape",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.framing": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Size & shape",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.play_button": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.mute_button": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.next_source_button": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.open_tab_button": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.hide_button": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.auto_height_button": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.framing_button": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.skip_back_button": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.skip_forward_button": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.subtitles_button": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.video_hidden": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.pin_source_button": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.compact_card_button": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.compact_card": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_opacity": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Colors & backing",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_control_opacity": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Colors & backing",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_canvas": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Colors & backing",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_control": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Colors & backing",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_text": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Colors & backing",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_muted": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Colors & backing",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_selected": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Colors & backing",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_border": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Colors & backing",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_padding": {
-      "category": "density",
-      "section": "Control sizing",
+      "category": "video-appearance",
+      "section": "Controls & overlay",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_row_height": {
-      "category": "density",
-      "section": "Control sizing",
+      "category": "video-appearance",
+      "section": "Controls & overlay",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_source_style": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Colors & backing",
       "owner": "video"
     },
     "zen.workspace.zentral.video_preview.pause_when_compact_hidden": {
@@ -2740,18 +2849,48 @@
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_overlay_opacity": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Controls & overlay",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_controls_wrap": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Controls & overlay",
       "owner": "video"
     },
     "zen.workspace.bgalazka.look.video_controls_gap": {
-      "category": "theme-details",
-      "section": "Sidebar video",
+      "category": "video-appearance",
+      "section": "Controls & overlay",
+      "owner": "video"
+    },
+    "zen.workspace.zentral.video_preview.button_style": {
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
+      "owner": "video"
+    },
+    "zen.workspace.zentral.video_preview.button_radius_px": {
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
+      "owner": "video"
+    },
+    "zen.workspace.zentral.video_preview.button_icon_color": {
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
+      "owner": "video"
+    },
+    "zen.workspace.zentral.video_preview.button_fill_color": {
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
+      "owner": "video"
+    },
+    "zen.workspace.zentral.video_preview.button_border_color": {
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
+      "owner": "video"
+    },
+    "zen.workspace.zentral.video_preview.button_size_px": {
+      "category": "video-appearance",
+      "section": "Toolbar buttons",
       "owner": "video"
     }
   }

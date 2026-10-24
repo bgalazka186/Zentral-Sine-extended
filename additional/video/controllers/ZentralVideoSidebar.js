@@ -501,7 +501,7 @@
             "flex:1 999 0px!important;min-width:0!important;overflow:hidden!important;white-space:nowrap!important;text-overflow:ellipsis!important";
           for (const button of bar.querySelectorAll("button")) {
             button.style.cssText =
-              "position:static!important;inset:auto!important;transform:none!important;float:none!important;box-sizing:border-box!important;flex:0 1 26px!important;width:26px!important;min-width:0!important;max-width:26px!important;height:26px!important;min-height:26px!important;max-height:26px!important;margin:0!important;padding:0!important;overflow:hidden!important;align-items:center!important;justify-content:center!important;color:var(--zl-video-control-text,white)!important";
+              "position:static!important;inset:auto!important;transform:none!important;float:none!important;box-sizing:border-box!important;flex:0 1 var(--zl-video-button-size,26px)!important;width:var(--zl-video-button-size,26px)!important;min-width:0!important;max-width:var(--zl-video-button-size,26px)!important;height:var(--zl-video-button-size,26px)!important;min-height:var(--zl-video-button-size,26px)!important;max-height:var(--zl-video-button-size,26px)!important;margin:0!important;padding:0!important;overflow:hidden!important;align-items:center!important;justify-content:center!important;color:var(--zl-video-control-text,white)!important";
           }
           for (const icon of bar.querySelectorAll("button svg")) {
             icon.style.setProperty("max-width", "100%", "important");

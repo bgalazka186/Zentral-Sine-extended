@@ -1,9 +1,17 @@
 [
   {
+    "type": "separator",
+    "label": "Start here · Essential features"
+  },
+  {
     "property": "zen.workspace.zentral.video_preview.enabled",
     "label": "Sidebar Video Preview",
     "type": "checkbox",
     "defaultValue": true
+  },
+  {
+    "type": "separator",
+    "label": "Video Playback · Playback & captions"
   },
   {
     "property": "zen.workspace.zentral.video_preview.renderer",
@@ -58,10 +66,8 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.zentral.video_preview.youtube_captions",
-    "label": "Mirror captions (text tracks and YouTube)",
-    "type": "checkbox",
-    "defaultValue": true
+    "type": "separator",
+    "label": "Video Sources · Discovery & source selection"
   },
   {
     "property": "zen.workspace.zentral.video_preview.auto_show_video",
@@ -110,6 +116,548 @@
     "label": "Limit periodic discovery to a valid pinned source (Refresh finds others)",
     "type": "checkbox",
     "defaultValue": true
+  },
+  {
+    "type": "separator",
+    "label": "Video Performance · Capture & background work"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.pause_when_compact_hidden",
+    "label": "Pause Preview Capture While Compact Sidebar Is Hidden",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.capture_width_px",
+    "label": "Capture Detail: Video Frames and Page Snapshots (px)",
+    "type": "dropdown",
+    "defaultValue": 480,
+    "options": [
+      {
+        "label": "160 px",
+        "value": 160
+      },
+      {
+        "label": "240 px",
+        "value": 240
+      },
+      {
+        "label": "320 px",
+        "value": 320
+      },
+      {
+        "label": "480 px",
+        "value": 480
+      },
+      {
+        "label": "640 px",
+        "value": 640
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.capture_rate_tenths",
+    "label": "Still-Frame Capture Rate (higher rates use more CPU)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "0.1 frames/s",
+        "value": 1
+      },
+      {
+        "label": "0.2 frames/s",
+        "value": 2
+      },
+      {
+        "label": "0.5 frames/s",
+        "value": 5
+      },
+      {
+        "label": "1 frames/s",
+        "value": 10
+      },
+      {
+        "label": "2 frames/s",
+        "value": 20
+      },
+      {
+        "label": "5 frames/s",
+        "value": 50
+      },
+      {
+        "label": "10 frames/s — default",
+        "value": 100
+      },
+      {
+        "label": "15 frames/s",
+        "value": 150
+      },
+      {
+        "label": "24 frames/s",
+        "value": 240
+      },
+      {
+        "label": "30 frames/s",
+        "value": 300
+      },
+      {
+        "label": "60 frames/s",
+        "value": 600
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.scan_interval_ms",
+    "label": "Source discovery interval (slower = less polling; events can still scan)",
+    "type": "dropdown",
+    "defaultValue": 5000,
+    "options": [
+      {
+        "label": "5 s · default",
+        "value": 5000
+      },
+      {
+        "label": "15 s",
+        "value": 15000
+      },
+      {
+        "label": "30 s",
+        "value": 30000
+      },
+      {
+        "label": "60 s · lazy",
+        "value": 60000
+      },
+      {
+        "label": "2 min · very lazy",
+        "value": 120000
+      },
+      {
+        "label": "Events and manual refresh only",
+        "value": 0
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.canvas_stream_width_px",
+    "label": "Canvas stream width (smaller = less detail and drawing work)",
+    "type": "dropdown",
+    "defaultValue": 640,
+    "options": [
+      {
+        "label": "160 px",
+        "value": 160
+      },
+      {
+        "label": "240 px",
+        "value": 240
+      },
+      {
+        "label": "320 px",
+        "value": 320
+      },
+      {
+        "label": "480 px",
+        "value": 480
+      },
+      {
+        "label": "640 px",
+        "value": 640
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.canvas_stream_fps",
+    "label": "Canvas stream FPS (lower = less smooth video and drawing work)",
+    "type": "dropdown",
+    "defaultValue": 30,
+    "options": [
+      {
+        "label": "5 FPS",
+        "value": 5
+      },
+      {
+        "label": "10 FPS",
+        "value": 10
+      },
+      {
+        "label": "15 FPS",
+        "value": 15
+      },
+      {
+        "label": "24 FPS",
+        "value": 24
+      },
+      {
+        "label": "30 FPS",
+        "value": 30
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.display_capture_cap",
+    "label": "Limit still capture to displayed size",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.adaptive_detail",
+    "label": "Adapt still capture detail under load",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.frame_aware_capture",
+    "label": "Skip duplicate decoded frames",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.stop_idle_timer",
+    "label": "Stop paint timer when preview is not visible",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.audio_probe_cache",
+    "label": "Cache audio-track checks for 30 seconds",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.media_event_hints",
+    "label": "Refresh sources on media events",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.suspend_hidden_preview",
+    "label": "Suspend receivers while hidden/minimized (brief restart on reveal)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.light_frame_monitoring",
+    "label": "Sample frame telemetry every 2 seconds (full telemetry in tests)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.slow_health_checks",
+    "label": "Slow steady-state health checks (10–15 second failure detection)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.renderer_retry_backoff",
+    "label": "Back off repeated renderer failures up to 5 minutes",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.suspend_when_source_visible",
+    "label": "Suspend sidebar video while original is visible (instead of stream fallback)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "type": "separator",
+    "label": "Video Experiments · Experimental methods & tests"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.disable_experimental_bridge",
+    "label": "Disable experimental video options and tests (normal playback remains available)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.experimental_legacy_capture",
+    "label": "Allow legacy stream capture (requires experiments; may affect source audio)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.binary_frames",
+    "label": "Transfer raw frames (fall back to JPEG)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.performance_diagnostics",
+    "label": "Show performance diagnostics",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "type": "separator",
+    "label": "Video Playback · Enlarged preview"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.double_click_enlarge",
+    "label": "Double-click video to enlarge temporarily",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_keyboard_controls",
+    "label": "Enable focused Big Preview keyboard controls",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_click_toggle",
+    "label": "Click the enlarged video to play/pause",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px",
+    "label": "Default enlarged preview bottom clearance (px)",
+    "type": "dropdown",
+    "defaultValue": 64,
+    "options": [
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "128",
+        "value": 128
+      },
+      {
+        "label": "192",
+        "value": 192
+      },
+      {
+        "label": "240",
+        "value": 240
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_keep_aspect",
+    "label": "Keep video proportions when resizing enlarged preview",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_hover_controls",
+    "label": "Show enlarged controls on bottom-edge hover",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_width",
+    "label": "Remembered enlarged video width (px)",
+    "type": "string",
+    "defaultValue": 1280
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_height",
+    "label": "Remembered enlarged video height (px)",
+    "type": "string",
+    "defaultValue": 720
+  },
+  {
+    "type": "separator",
+    "label": "Video subtitles · Subtitle display"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.youtube_captions",
+    "label": "Mirror captions (text tracks and YouTube)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_placement",
+    "label": "Subtitle placement",
+    "type": "dropdown",
+    "defaultValue": "below",
+    "options": [
+      {
+        "label": "Below the video (separate subtitle area)",
+        "value": "below"
+      },
+      {
+        "label": "Over the video (classic overlay)",
+        "value": "overlay"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_font_size",
+    "label": "Subtitle text size (px)",
+    "type": "dropdown",
+    "defaultValue": 12,
+    "options": [
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "28",
+        "value": 28
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_max_lines",
+    "label": "Maximum subtitle lines",
+    "type": "dropdown",
+    "defaultValue": 4,
+    "options": [
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "8",
+        "value": 8
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.captions_visible",
+    "label": "Show subtitles (same switch as the video toolbar)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_overflow",
+    "label": "Long subtitle behavior",
+    "type": "dropdown",
+    "defaultValue": "fit",
+    "options": [
+      {
+        "label": "Fit text; ellipsis only when necessary",
+        "value": "fit"
+      },
+      {
+        "label": "Keep selected font size; scroll full text",
+        "value": "scroll"
+      }
+    ]
+  },
+  {
+    "type": "separator",
+    "label": "Video subtitles · Subtitle updates"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_poll_ms",
+    "label": "Caption recovery interval (slower = delayed recovery from missed events)",
+    "type": "dropdown",
+    "defaultValue": 750,
+    "options": [
+      {
+        "label": "250 ms",
+        "value": 250
+      },
+      {
+        "label": "500 ms",
+        "value": 500
+      },
+      {
+        "label": "750 ms",
+        "value": 750
+      },
+      {
+        "label": "1500 ms",
+        "value": 1500
+      },
+      {
+        "label": "3000 ms",
+        "value": 3000
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_events",
+    "label": "Use caption change events when available",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.slow_caption_recovery",
+    "label": "Throttle caption-watch rebinding (selected recovery interval is unchanged)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "type": "separator",
+    "label": "Video Playback · Enlarged preview"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_remember_position",
+    "label": "Remember enlarged preview position (otherwise open at sidebar bottom corner)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_position",
+    "label": "Remembered enlarged position (used only when Remember position is enabled)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "type": "separator",
+    "label": "Appearance & layout · Size & shape"
   },
   {
     "property": "zen.workspace.zentral.video_preview.fit_width",
@@ -238,6 +786,10 @@
     ]
   },
   {
+    "type": "separator",
+    "label": "Appearance & layout · Toolbar buttons"
+  },
+  {
     "property": "zen.workspace.zentral.video_preview.play_button",
     "label": "Show play/pause button",
     "type": "checkbox",
@@ -298,12 +850,6 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.zentral.video_preview.video_hidden",
-    "label": "Video preview: video hidden",
-    "type": "checkbox",
-    "defaultValue": false
-  },
-  {
     "property": "zen.workspace.zentral.video_preview.pin_source_button",
     "label": "Show pin source button",
     "type": "checkbox",
@@ -316,10 +862,1032 @@
     "defaultValue": true
   },
   {
+    "property": "zen.workspace.zentral.video_preview.video_hidden",
+    "label": "Video preview: video hidden",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
     "property": "zen.workspace.zentral.video_preview.compact_card",
     "label": "Video preview: compact card",
     "type": "checkbox",
     "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.button_style",
+    "label": "Toolbar button style under the video (standalone)",
+    "type": "dropdown",
+    "defaultValue": "plain",
+    "options": [
+      {
+        "label": "Plain (icons only)",
+        "value": "plain"
+      },
+      {
+        "label": "Outline",
+        "value": "outline"
+      },
+      {
+        "label": "Filled",
+        "value": "filled"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.button_size_px",
+    "label": "Toolbar button size (standalone)",
+    "type": "dropdown",
+    "defaultValue": 26,
+    "options": [
+      {
+        "label": "18 px",
+        "value": 18
+      },
+      {
+        "label": "20 px",
+        "value": 20
+      },
+      {
+        "label": "22 px",
+        "value": 22
+      },
+      {
+        "label": "24 px",
+        "value": 24
+      },
+      {
+        "label": "26 px",
+        "value": 26
+      },
+      {
+        "label": "28 px",
+        "value": 28
+      },
+      {
+        "label": "32 px",
+        "value": 32
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.button_radius_px",
+    "label": "Toolbar button corner radius (px, standalone mod)",
+    "type": "dropdown",
+    "defaultValue": 4,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "12",
+        "value": 12
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.button_icon_color",
+    "label": "Toolbar button icon color (standalone)",
+    "type": "string",
+    "defaultValue": "",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.button_fill_color",
+    "label": "Toolbar button fill color (standalone)",
+    "type": "string",
+    "defaultValue": "",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.button_border_color",
+    "label": "Toolbar button border color (standalone)",
+    "type": "string",
+    "defaultValue": "",
+    "border": "value"
+  },
+  {
+    "type": "separator",
+    "label": "Appearance & layout · Colors & backing"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_opacity",
+    "label": "Video preview canvas opacity (%)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      },
+      {
+        "label": "37",
+        "value": 37
+      },
+      {
+        "label": "38",
+        "value": 38
+      },
+      {
+        "label": "39",
+        "value": 39
+      },
+      {
+        "label": "40",
+        "value": 40
+      },
+      {
+        "label": "41",
+        "value": 41
+      },
+      {
+        "label": "42",
+        "value": 42
+      },
+      {
+        "label": "43",
+        "value": 43
+      },
+      {
+        "label": "44",
+        "value": 44
+      },
+      {
+        "label": "45",
+        "value": 45
+      },
+      {
+        "label": "46",
+        "value": 46
+      },
+      {
+        "label": "47",
+        "value": 47
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "49",
+        "value": 49
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "51",
+        "value": 51
+      },
+      {
+        "label": "52",
+        "value": 52
+      },
+      {
+        "label": "53",
+        "value": 53
+      },
+      {
+        "label": "54",
+        "value": 54
+      },
+      {
+        "label": "55",
+        "value": 55
+      },
+      {
+        "label": "56",
+        "value": 56
+      },
+      {
+        "label": "57",
+        "value": 57
+      },
+      {
+        "label": "58",
+        "value": 58
+      },
+      {
+        "label": "59",
+        "value": 59
+      },
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "61",
+        "value": 61
+      },
+      {
+        "label": "62",
+        "value": 62
+      },
+      {
+        "label": "63",
+        "value": 63
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "65",
+        "value": 65
+      },
+      {
+        "label": "66",
+        "value": 66
+      },
+      {
+        "label": "67",
+        "value": 67
+      },
+      {
+        "label": "68",
+        "value": 68
+      },
+      {
+        "label": "69",
+        "value": 69
+      },
+      {
+        "label": "70",
+        "value": 70
+      },
+      {
+        "label": "71",
+        "value": 71
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "73",
+        "value": 73
+      },
+      {
+        "label": "74",
+        "value": 74
+      },
+      {
+        "label": "75",
+        "value": 75
+      },
+      {
+        "label": "76",
+        "value": 76
+      },
+      {
+        "label": "77",
+        "value": 77
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "79",
+        "value": 79
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "81",
+        "value": 81
+      },
+      {
+        "label": "82",
+        "value": 82
+      },
+      {
+        "label": "83",
+        "value": 83
+      },
+      {
+        "label": "84",
+        "value": 84
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "86",
+        "value": 86
+      },
+      {
+        "label": "87",
+        "value": 87
+      },
+      {
+        "label": "88",
+        "value": 88
+      },
+      {
+        "label": "89",
+        "value": 89
+      },
+      {
+        "label": "90",
+        "value": 90
+      },
+      {
+        "label": "91",
+        "value": 91
+      },
+      {
+        "label": "92",
+        "value": 92
+      },
+      {
+        "label": "93",
+        "value": 93
+      },
+      {
+        "label": "94",
+        "value": 94
+      },
+      {
+        "label": "95",
+        "value": 95
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "97",
+        "value": 97
+      },
+      {
+        "label": "98",
+        "value": 98
+      },
+      {
+        "label": "99",
+        "value": 99
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_control_opacity",
+    "label": "Video control strip opacity (%)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      },
+      {
+        "label": "37",
+        "value": 37
+      },
+      {
+        "label": "38",
+        "value": 38
+      },
+      {
+        "label": "39",
+        "value": 39
+      },
+      {
+        "label": "40",
+        "value": 40
+      },
+      {
+        "label": "41",
+        "value": 41
+      },
+      {
+        "label": "42",
+        "value": 42
+      },
+      {
+        "label": "43",
+        "value": 43
+      },
+      {
+        "label": "44",
+        "value": 44
+      },
+      {
+        "label": "45",
+        "value": 45
+      },
+      {
+        "label": "46",
+        "value": 46
+      },
+      {
+        "label": "47",
+        "value": 47
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "49",
+        "value": 49
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "51",
+        "value": 51
+      },
+      {
+        "label": "52",
+        "value": 52
+      },
+      {
+        "label": "53",
+        "value": 53
+      },
+      {
+        "label": "54",
+        "value": 54
+      },
+      {
+        "label": "55",
+        "value": 55
+      },
+      {
+        "label": "56",
+        "value": 56
+      },
+      {
+        "label": "57",
+        "value": 57
+      },
+      {
+        "label": "58",
+        "value": 58
+      },
+      {
+        "label": "59",
+        "value": 59
+      },
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "61",
+        "value": 61
+      },
+      {
+        "label": "62",
+        "value": 62
+      },
+      {
+        "label": "63",
+        "value": 63
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "65",
+        "value": 65
+      },
+      {
+        "label": "66",
+        "value": 66
+      },
+      {
+        "label": "67",
+        "value": 67
+      },
+      {
+        "label": "68",
+        "value": 68
+      },
+      {
+        "label": "69",
+        "value": 69
+      },
+      {
+        "label": "70",
+        "value": 70
+      },
+      {
+        "label": "71",
+        "value": 71
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "73",
+        "value": 73
+      },
+      {
+        "label": "74",
+        "value": 74
+      },
+      {
+        "label": "75",
+        "value": 75
+      },
+      {
+        "label": "76",
+        "value": 76
+      },
+      {
+        "label": "77",
+        "value": 77
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "79",
+        "value": 79
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "81",
+        "value": 81
+      },
+      {
+        "label": "82",
+        "value": 82
+      },
+      {
+        "label": "83",
+        "value": 83
+      },
+      {
+        "label": "84",
+        "value": 84
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "86",
+        "value": 86
+      },
+      {
+        "label": "87",
+        "value": 87
+      },
+      {
+        "label": "88",
+        "value": 88
+      },
+      {
+        "label": "89",
+        "value": 89
+      },
+      {
+        "label": "90",
+        "value": 90
+      },
+      {
+        "label": "91",
+        "value": 91
+      },
+      {
+        "label": "92",
+        "value": 92
+      },
+      {
+        "label": "93",
+        "value": 93
+      },
+      {
+        "label": "94",
+        "value": 94
+      },
+      {
+        "label": "95",
+        "value": 95
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "97",
+        "value": 97
+      },
+      {
+        "label": "98",
+        "value": 98
+      },
+      {
+        "label": "99",
+        "value": 99
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_canvas",
+    "label": "Video canvas background (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#0a0a0a",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_control",
+    "label": "Video controls background (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#000000",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_text",
+    "label": "Video primary text and icons (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#d8d8d8",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_muted",
+    "label": "Video secondary text (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#838383",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_selected",
+    "label": "Selected video source highlight (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#7d0000",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_border",
+    "label": "Video control border width (px; 0 = none)",
+    "type": "dropdown",
+    "defaultValue": 0,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_source_style",
+    "label": "Video source selection style",
+    "type": "dropdown",
+    "defaultValue": "line",
+    "options": [
+      {
+        "label": "Underline",
+        "value": "line"
+      },
+      {
+        "label": "Filled highlight",
+        "value": "filled"
+      }
+    ]
+  },
+  {
+    "type": "separator",
+    "label": "Appearance & layout · Controls & overlay"
   },
   {
     "property": "zen.workspace.bgalazka.look.video_controls_wrap",
@@ -784,367 +2352,15 @@
     ]
   },
   {
-    "property": "zen.workspace.zentral.video_preview.pause_when_compact_hidden",
-    "label": "Pause Preview Capture While Compact Sidebar Is Hidden",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.capture_width_px",
-    "label": "Capture Detail: Video Frames and Page Snapshots (px)",
+    "property": "zen.workspace.bgalazka.look.video_padding",
+    "label": "Video control padding (px)",
     "type": "dropdown",
-    "defaultValue": 480,
+    "defaultValue": 0,
     "options": [
       {
-        "label": "160 px",
-        "value": 160
-      },
-      {
-        "label": "240 px",
-        "value": 240
-      },
-      {
-        "label": "320 px",
-        "value": 320
-      },
-      {
-        "label": "480 px",
-        "value": 480
-      },
-      {
-        "label": "640 px",
-        "value": 640
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.capture_rate_tenths",
-    "label": "Still-Frame Capture Rate (higher rates use more CPU)",
-    "type": "dropdown",
-    "defaultValue": 100,
-    "options": [
-      {
-        "label": "0.1 frames/s",
-        "value": 1
-      },
-      {
-        "label": "0.2 frames/s",
-        "value": 2
-      },
-      {
-        "label": "0.5 frames/s",
-        "value": 5
-      },
-      {
-        "label": "1 frames/s",
-        "value": 10
-      },
-      {
-        "label": "2 frames/s",
-        "value": 20
-      },
-      {
-        "label": "5 frames/s",
-        "value": 50
-      },
-      {
-        "label": "10 frames/s — default",
-        "value": 100
-      },
-      {
-        "label": "15 frames/s",
-        "value": 150
-      },
-      {
-        "label": "24 frames/s",
-        "value": 240
-      },
-      {
-        "label": "30 frames/s",
-        "value": 300
-      },
-      {
-        "label": "60 frames/s",
-        "value": 600
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.scan_interval_ms",
-    "label": "Source discovery interval (slower = less polling; events can still scan)",
-    "type": "dropdown",
-    "defaultValue": 5000,
-    "options": [
-      {
-        "label": "5 s · default",
-        "value": 5000
-      },
-      {
-        "label": "15 s",
-        "value": 15000
-      },
-      {
-        "label": "30 s",
-        "value": 30000
-      },
-      {
-        "label": "60 s · lazy",
-        "value": 60000
-      },
-      {
-        "label": "2 min · very lazy",
-        "value": 120000
-      },
-      {
-        "label": "Events and manual refresh only",
+        "label": "0",
         "value": 0
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.caption_poll_ms",
-    "label": "Caption recovery interval (slower = delayed recovery from missed events)",
-    "type": "dropdown",
-    "defaultValue": 750,
-    "options": [
-      {
-        "label": "250 ms",
-        "value": 250
       },
-      {
-        "label": "500 ms",
-        "value": 500
-      },
-      {
-        "label": "750 ms",
-        "value": 750
-      },
-      {
-        "label": "1500 ms",
-        "value": 1500
-      },
-      {
-        "label": "3000 ms",
-        "value": 3000
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.canvas_stream_width_px",
-    "label": "Canvas stream width (smaller = less detail and drawing work)",
-    "type": "dropdown",
-    "defaultValue": 640,
-    "options": [
-      {
-        "label": "160 px",
-        "value": 160
-      },
-      {
-        "label": "240 px",
-        "value": 240
-      },
-      {
-        "label": "320 px",
-        "value": 320
-      },
-      {
-        "label": "480 px",
-        "value": 480
-      },
-      {
-        "label": "640 px",
-        "value": 640
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.canvas_stream_fps",
-    "label": "Canvas stream FPS (lower = less smooth video and drawing work)",
-    "type": "dropdown",
-    "defaultValue": 30,
-    "options": [
-      {
-        "label": "5 FPS",
-        "value": 5
-      },
-      {
-        "label": "10 FPS",
-        "value": 10
-      },
-      {
-        "label": "15 FPS",
-        "value": 15
-      },
-      {
-        "label": "24 FPS",
-        "value": 24
-      },
-      {
-        "label": "30 FPS",
-        "value": 30
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.display_capture_cap",
-    "label": "Limit still capture to displayed size",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.adaptive_detail",
-    "label": "Adapt still capture detail under load",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.frame_aware_capture",
-    "label": "Skip duplicate decoded frames",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.stop_idle_timer",
-    "label": "Stop paint timer when preview is not visible",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.audio_probe_cache",
-    "label": "Cache audio-track checks for 30 seconds",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.media_event_hints",
-    "label": "Refresh sources on media events",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.caption_events",
-    "label": "Use caption change events when available",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.suspend_hidden_preview",
-    "label": "Suspend receivers while hidden/minimized (brief restart on reveal)",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.light_frame_monitoring",
-    "label": "Sample frame telemetry every 2 seconds (full telemetry in tests)",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.slow_health_checks",
-    "label": "Slow steady-state health checks (10–15 second failure detection)",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.slow_caption_recovery",
-    "label": "Throttle caption-watch rebinding (selected recovery interval is unchanged)",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.renderer_retry_backoff",
-    "label": "Back off repeated renderer failures up to 5 minutes",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.suspend_when_source_visible",
-    "label": "Suspend sidebar video while original is visible (instead of stream fallback)",
-    "type": "checkbox",
-    "defaultValue": false
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.disable_experimental_bridge",
-    "label": "Disable experimental video options and tests (normal playback remains available)",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.experimental_legacy_capture",
-    "label": "Allow legacy stream capture (requires experiments; may affect source audio)",
-    "type": "checkbox",
-    "defaultValue": false
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.binary_frames",
-    "label": "Transfer raw frames (fall back to JPEG)",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.performance_diagnostics",
-    "label": "Show performance diagnostics",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.caption_placement",
-    "label": "Subtitle placement",
-    "type": "dropdown",
-    "defaultValue": "below",
-    "options": [
-      {
-        "label": "Below the video (separate subtitle area)",
-        "value": "below"
-      },
-      {
-        "label": "Over the video (classic overlay)",
-        "value": "overlay"
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.caption_font_size",
-    "label": "Subtitle text size (px)",
-    "type": "dropdown",
-    "defaultValue": 12,
-    "options": [
-      {
-        "label": "10",
-        "value": 10
-      },
-      {
-        "label": "12",
-        "value": 12
-      },
-      {
-        "label": "14",
-        "value": 14
-      },
-      {
-        "label": "16",
-        "value": 16
-      },
-      {
-        "label": "18",
-        "value": 18
-      },
-      {
-        "label": "22",
-        "value": 22
-      },
-      {
-        "label": "28",
-        "value": 28
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.caption_max_lines",
-    "label": "Maximum subtitle lines",
-    "type": "dropdown",
-    "defaultValue": 4,
-    "options": [
       {
         "label": "1",
         "value": 1
@@ -1170,126 +2386,118 @@
         "value": 6
       },
       {
-        "label": "8",
-        "value": 8
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.captions_visible",
-    "label": "Show subtitles (same switch as the video toolbar)",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.caption_overflow",
-    "label": "Long subtitle behavior",
-    "type": "dropdown",
-    "defaultValue": "fit",
-    "options": [
-      {
-        "label": "Fit text; ellipsis only when necessary",
-        "value": "fit"
+        "label": "7",
+        "value": 7
       },
       {
-        "label": "Keep selected font size; scroll full text",
-        "value": "scroll"
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.double_click_enlarge",
-    "label": "Double-click video to enlarge temporarily",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.enlarged_width",
-    "label": "Remembered enlarged video width (px)",
-    "type": "string",
-    "defaultValue": 1280
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.enlarged_height",
-    "label": "Remembered enlarged video height (px)",
-    "type": "string",
-    "defaultValue": 720
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.enlarged_position",
-    "label": "Remembered enlarged position (used only when Remember position is enabled)",
-    "type": "string",
-    "defaultValue": ""
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.enlarged_keep_aspect",
-    "label": "Keep video proportions when resizing enlarged preview",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.enlarged_hover_controls",
-    "label": "Show enlarged controls on bottom-edge hover",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px",
-    "label": "Default enlarged preview bottom clearance (px)",
-    "type": "dropdown",
-    "defaultValue": 64,
-    "options": [
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
       {
         "label": "12",
         "value": 12
       },
       {
-        "label": "48",
-        "value": 48
+        "label": "13",
+        "value": 13
       },
       {
-        "label": "64",
-        "value": 64
+        "label": "14",
+        "value": 14
       },
       {
-        "label": "80",
-        "value": 80
+        "label": "15",
+        "value": 15
       },
       {
-        "label": "96",
-        "value": 96
-      },
-      {
-        "label": "128",
-        "value": 128
-      },
-      {
-        "label": "192",
-        "value": 192
-      },
-      {
-        "label": "240",
-        "value": 240
+        "label": "16",
+        "value": 16
       }
     ]
   },
   {
-    "property": "zen.workspace.zentral.video_preview.enlarged_remember_position",
-    "label": "Remember enlarged preview position (otherwise open at sidebar bottom corner)",
-    "type": "checkbox",
-    "defaultValue": false
+    "property": "zen.workspace.bgalazka.look.video_row_height",
+    "label": "Video source row height (px)",
+    "type": "dropdown",
+    "defaultValue": 22,
+    "options": [
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      }
+    ]
   },
   {
-    "property": "zen.workspace.zentral.video_preview.enlarged_keyboard_controls",
-    "label": "Enable focused Big Preview keyboard controls",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.enlarged_click_toggle",
-    "label": "Click the enlarged video to play/pause",
-    "type": "checkbox",
-    "defaultValue": true
+    "type": "separator",
+    "label": "Shared"
   },
   {
     "property": "zen.workspace.apps.insta_peek.shortcut",

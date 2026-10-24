@@ -10,6 +10,7 @@
  * Registration: video/ZentralVideoSettings
  * Loaded/created by: additional/video/ZentralVideoPreview.uc.js; loader/ZentralRuntime.js
  * Returned factory API: hookSettings; injectSetting; organizeVideoSettings
+ * Video appearance rows (Look video_* prefs) are built here, in category video-appearance.
  * Injected deps state/callbacks used: ADAPTIVE_DETAIL_PREF; AUDIO_CACHE_PREF; AUTO_HEIGHT_BUTTON_PREF;
  *   AUTO_SHOW_PREF; BINARY_FRAMES_PREF; CANVAS_STREAM_FPS_PREF; CANVAS_STREAM_WIDTH_PREF; CAPTIONS_PREF;
  *   CAPTION_EVENTS_PREF; CAPTION_INTERVALS; CAPTION_POLL_PREF; CAPTION_RECOVERY_PREF; CAPTURE_RATES;
@@ -61,13 +62,15 @@
         const own = (id) =>
           deps.ZentralRuntime.ensureSettingsCategory(modal, id);
         const playback = own("video-playback");
-        const appearance = {
-          content: deps.ZentralRuntime.ensureSettingsSection(
+        // Appearance controls are Video-owned (category "video-appearance") so
+        // standalone mode, which only reads additional/ paths, can show them.
+        own("video-appearance");
+        const appearanceSection = (label) =>
+          deps.ZentralRuntime.ensureSettingsSection(
             modal,
-            "theme-details",
-            "Sidebar video",
-          ),
-        };
+            "video-appearance",
+            label,
+          );
         const keys = {
           width: deps.WIDTH_PREF,
           height: deps.HEIGHT_PREF,
@@ -96,42 +99,19 @@
         const enable = modal.querySelector("#zs-video-preview-row");
         if (enable && enable.parentElement !== playback.content)
           playback.content.prepend(enable);
-        const appearanceIds = [
-          "fit-width",
-          "play-button",
-          "mute-button",
-          "next-source-button",
-          "open-tab-button",
-          "hide-button",
-          "auto-height-button",
-          "framing-button",
-          "skip-back-button",
-          "skip-forward-button",
-          "subtitles-button",
-          "pin-button",
-          "compact-button",
-        ];
-        for (const id of appearanceIds) {
-          const row = modal
-            .querySelector("#zs-video-preview-" + id)
-            ?.closest(".zs-row");
-          if (row && row.parentElement !== appearance.content)
-            appearance.content.appendChild(row);
-        }
-        for (const id of ["width", "height", "radius"]) {
-          const control = modal.querySelector("#zs-video-preview-" + id);
-          const row = control?.closest(".zs-row");
-          if (row && row.parentElement !== appearance.content)
-            appearance.content.appendChild(row);
-        }
+        // Button toggles, size and shape rows are placed by the metadata loop
+        // below (category/section come from additional/video/settings.json).
+        addVideoLookRows(modal);
         for (const row of [...modal.querySelectorAll("[data-setting-key]")]) {
           if (
             !row.dataset.settingKey.startsWith(
               "zen.workspace.zentral.video_preview.",
-            )
+            ) &&
+            row.dataset.videoLook !== "true"
           )
             continue;
           if (
+            row.dataset.videoLook !== "true" &&
             !row.querySelector('[id^="zs-video-preview-"]') &&
             row.id !== "zs-video-preview-row"
           )
@@ -152,11 +132,7 @@
           "#zs-video-preview-reset-height",
         );
         if (resetHeight) {
-          const size = deps.ZentralRuntime.ensureSettingsSection(
-            modal,
-            "density",
-            "Video size",
-          );
+          const size = appearanceSection("Size & shape");
           if (resetHeight.parentElement !== size) size.appendChild(resetHeight);
           resetHeight.dataset.videoSettingsOwned = "true";
         }
@@ -171,6 +147,140 @@
         originalPanel.setAttribute("data-active", "false");
         originalPanel.dataset.videoOrganized = "true";
         deps.ZentralRuntime.organizeSettings?.(modal);
+      }
+      // Video look rows (colors, opacity, padding...). Written straight to the
+      // shared preferences, so they work with or without the Appearance owner;
+      // the full pack's Appearance controller (or the standalone look script)
+      // reacts to the preference change.
+      const LOOK_PREFIX = "zen.workspace.bgalazka.look.";
+      const LOOK_STYLE_PREF = LOOK_PREFIX + "style";
+      // [pref suffix, label, hint, type, default, min, max, unit | options]
+      const VIDEO_LOOK_ROWS = [
+        ["video_opacity", "Video backdrop", "Video preview frame, without fading the picture", "range", 100, 0, 100, "%"],
+        ["video_control_opacity", "Video controls", "Filled video buttons and selected source highlight", "range", 100, 0, 100, "%"],
+        ["video_canvas", "Video surface", "Backdrop around the picture", "color", "#0a0a0a"],
+        ["video_control", "Video control fill", "Fill behind video buttons and the Big Preview overlay", "color", "#000000"],
+        ["video_text", "Video text", "Source and action labels", "color", "#d8d8d8"],
+        ["video_muted", "Video muted text", "Caption and source details", "color", "#838383"],
+        ["video_selected", "Selected source", "Small selection marker or filled highlight", "color", "#7d0000"],
+        ["video_border", "Video border", "0 removes the card and picture outline", "range", 0, 0, 3, " px"],
+        ["video_source_style", "Source selection", "Line or filled highlight, without a box border", "select", "line", [["line", "Line"], ["filled", "Filled"]]],
+        ["video_controls_wrap", "Second row of controls", "Allow sidebar video controls on a second row", "toggle", false],
+        ["video_controls_gap", "Control spacing", "Space between sidebar video controls", "range", 1, 0, 8, " px"],
+        ["video_overlay_opacity", "Big Preview overlay", "Hover controls backing; independent of control fill opacity", "range", 40, 0, 100, "%"],
+        ["video_padding", "Video padding", "Space around the media and controls", "range", 0, 0, 16, " px"],
+        ["video_row_height", "Source row height", "Height of each source in the list", "range", 22, 22, 36, " px"],
+      ];
+      // These two never switched Classic to the custom look (density behavior).
+      const LOOK_KEEPS_CLASSIC = new Set(["video_padding", "video_row_height"]);
+      function videoLookValue(pref, fallback) {
+        const prefs = deps.Services.prefs;
+        try {
+          switch (prefs.getPrefType(pref)) {
+            case 128:
+              return prefs.getBoolPref(pref);
+            case 64:
+              return prefs.getIntPref(pref);
+            case 32:
+              return prefs.getStringPref(pref);
+          }
+        } catch (_) {}
+        return fallback;
+      }
+      function writeVideoLook(pref, value) {
+        const prefs = deps.Services.prefs;
+        if (typeof value === "boolean") prefs.setBoolPref(pref, value);
+        else if (typeof value === "number") prefs.setIntPref(pref, value);
+        else prefs.setStringPref(pref, value);
+      }
+      function addVideoLookRows(modal) {
+        if (modal.querySelector('[data-video-look="true"]')) return;
+        for (const [name, label, hint, type, fallback, a, b, c] of VIDEO_LOOK_ROWS) {
+          const pref = LOOK_PREFIX + name;
+          const meta = deps.ZentralRuntime.settingsMetadata({ property: pref });
+          if (!meta?.category || !meta?.section) continue;
+          const row = document.createElement("div");
+          row.className = "zs-row";
+          row.dataset.settingKey = pref;
+          row.dataset.videoLook = "true";
+          row.dataset.videoSettings = "row";
+          row.dataset.settingsOwner = "video";
+          const labels = document.createElement("div");
+          labels.className = "zs-label-container";
+          const title = document.createElement("span");
+          title.className = "zs-label";
+          title.textContent = label;
+          const sub = document.createElement("span");
+          sub.className = "zs-sublabel";
+          sub.textContent = hint;
+          labels.append(title, sub);
+          let input;
+          let badge = null;
+          const commit = (value) => {
+            // Same rule Appearance used: a custom look choice leaves Classic.
+            if (
+              !LOOK_KEEPS_CLASSIC.has(name) &&
+              videoLookValue(LOOK_STYLE_PREF, "atelier") === "classic"
+            )
+              deps.Services.prefs.setStringPref(LOOK_STYLE_PREF, "atelier");
+            writeVideoLook(pref, value);
+          };
+          if (type === "range") {
+            input = document.createElement("input");
+            input.type = "range";
+            input.min = String(a);
+            input.max = String(b);
+            badge = document.createElement("span");
+            badge.style.cssText = "min-width:46px;text-align:right";
+            input.addEventListener("input", () => {
+              badge.textContent = input.value + c;
+            });
+            input.addEventListener("change", () => commit(Number(input.value)));
+            row.append(labels, input, badge);
+          } else if (type === "color") {
+            input = document.createElement("input");
+            input.type = "color";
+            input.addEventListener("change", () => commit(input.value));
+            row.append(labels, input);
+          } else if (type === "select") {
+            input = document.createElement("select");
+            for (const [value, text] of a) {
+              const option = document.createElement("option");
+              option.value = value;
+              option.textContent = text;
+              input.appendChild(option);
+            }
+            input.addEventListener("change", () => commit(input.value));
+            row.append(labels, input);
+          } else {
+            input = document.createElement("input");
+            input.type = "checkbox";
+            input.addEventListener("change", () => commit(input.checked));
+            row.append(labels, input);
+          }
+          input.dataset.videoLookPref = pref;
+          input.dataset.recommendedValue = String(fallback);
+          input.id = "zs-video-look-" + name.replace(/_/g, "-");
+          const target = deps.ZentralRuntime.ensureSettingsSection(
+            modal,
+            meta.category,
+            meta.section,
+          );
+          target.appendChild(row);
+        }
+      }
+      function syncVideoLookRows(modal) {
+        for (const [name, , , type, fallback, , , unit] of VIDEO_LOOK_ROWS) {
+          const input = modal.querySelector(
+            "#zs-video-look-" + name.replace(/_/g, "-"),
+          );
+          if (!input) continue;
+          const value = videoLookValue(LOOK_PREFIX + name, fallback);
+          if (type === "toggle") input.checked = value === true;
+          else input.value = String(value);
+          if (type === "range" && input.nextElementSibling)
+            input.nextElementSibling.textContent = input.value + unit;
+        }
       }
       function injectSetting() {
         const modal = document.getElementById("zentral-settings-modal");
@@ -1184,6 +1294,7 @@
               advanced.appendChild(content.querySelector("#" + id));
         }
         organizeVideoSettings(modal, content, category, panel);
+        syncVideoLookRows(modal);
         const advanced = modal.querySelector("#zs-video-preview-advanced");
         if (advanced) {
           advanced.hidden = deps.experimentalBridgeDisabled();
