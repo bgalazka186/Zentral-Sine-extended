@@ -527,6 +527,8 @@ const baseline = (env) => {
     env.prefs[gap] = 3;
     env.prefs[overlay] = 70;
     env.firePref(gap);
+    // The look script coalesces a burst of pref writes into one microtask.
+    await Promise.resolve();
     assert.deepEqual(vars(env), { wrap: "wrap", gap: "3px", overlay: "70%" });
     env.window.__zentralStandalone.video.dispose();
     assert.deepEqual(vars(env), { wrap: "", gap: "", overlay: "" });

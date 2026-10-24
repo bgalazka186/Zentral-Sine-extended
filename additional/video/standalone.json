@@ -3,7 +3,7 @@
   "themeId": "zentral-video-preview",
   "name": "Zentral Sidebar Video Preview",
   "description": "Video preview card in Zen's sidebar: pick a playing video from any tab, see it live, control playback, captions and a temporary enlarged view. Standalone part of Zentral Extended.",
-  "version": "3.1.0",
+  "version": "3.1.2",
   "entry": "ZentralVideoPreview.uc.js",
   "output": "ZentralVideoPreview.standalone.uc.js",
   "settings": "settings.json",
@@ -57,5 +57,152 @@
     "zen.tabs.vertical.right-side",
     "zen.workspace.bgalazka.panel_retry_limit",
     "ui.mouse.double_click_interval"
+  ],
+  "preferenceOrder": [
+    {
+      "type": "separator",
+      "label": "Start here · Essential features"
+    },
+    "zen.workspace.zentral.video_preview.enabled",
+    {
+      "type": "separator",
+      "label": "Video Playback · Playback & captions"
+    },
+    "zen.workspace.zentral.video_preview.renderer",
+    "zen.workspace.zentral.video_preview.selected_mode_only",
+    "zen.workspace.zentral.video_preview.keep_source_visible",
+    {
+      "type": "separator",
+      "label": "Video Sources · Discovery & source selection"
+    },
+    "zen.workspace.zentral.video_preview.auto_show_video",
+    "zen.workspace.zentral.video_preview.require_audio",
+    "zen.workspace.zentral.video_preview.hide_muted_duplicates",
+    "zen.workspace.zentral.video_preview.discovery",
+    "zen.workspace.zentral.video_preview.pinned_discovery_only",
+    {
+      "type": "separator",
+      "label": "Video Performance · Capture & background work"
+    },
+    "zen.workspace.zentral.video_preview.pause_when_compact_hidden",
+    "zen.workspace.zentral.video_preview.capture_width_px",
+    "zen.workspace.zentral.video_preview.capture_rate_tenths",
+    "zen.workspace.zentral.video_preview.scan_interval_ms",
+    "zen.workspace.zentral.video_preview.canvas_stream_width_px",
+    "zen.workspace.zentral.video_preview.canvas_stream_fps",
+    "zen.workspace.zentral.video_preview.display_capture_cap",
+    "zen.workspace.zentral.video_preview.adaptive_detail",
+    "zen.workspace.zentral.video_preview.frame_aware_capture",
+    "zen.workspace.zentral.video_preview.stop_idle_timer",
+    "zen.workspace.zentral.video_preview.audio_probe_cache",
+    "zen.workspace.zentral.video_preview.media_event_hints",
+    "zen.workspace.zentral.video_preview.suspend_hidden_preview",
+    "zen.workspace.zentral.video_preview.light_frame_monitoring",
+    "zen.workspace.zentral.video_preview.slow_health_checks",
+    "zen.workspace.zentral.video_preview.renderer_retry_backoff",
+    "zen.workspace.zentral.video_preview.suspend_when_source_visible",
+    {
+      "type": "separator",
+      "label": "Video Experiments · Experimental methods & tests"
+    },
+    "zen.workspace.zentral.video_preview.disable_experimental_bridge",
+    "zen.workspace.zentral.video_preview.experimental_legacy_capture",
+    "zen.workspace.zentral.video_preview.binary_frames",
+    "zen.workspace.zentral.video_preview.performance_diagnostics",
+    {
+      "type": "separator",
+      "label": "Video Playback · Enlarged preview"
+    },
+    "zen.workspace.zentral.video_preview.double_click_enlarge",
+    "zen.workspace.zentral.video_preview.enlarged_keyboard_controls",
+    "zen.workspace.zentral.video_preview.enlarged_click_toggle",
+    "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px",
+    "zen.workspace.zentral.video_preview.enlarged_keep_aspect",
+    "zen.workspace.zentral.video_preview.enlarged_hover_controls",
+    "zen.workspace.zentral.video_preview.enlarged_width",
+    "zen.workspace.zentral.video_preview.enlarged_height",
+    {
+      "type": "separator",
+      "label": "Video subtitles · Subtitle display"
+    },
+    "zen.workspace.zentral.video_preview.youtube_captions",
+    "zen.workspace.zentral.video_preview.caption_placement",
+    "zen.workspace.zentral.video_preview.caption_font_size",
+    "zen.workspace.zentral.video_preview.caption_max_lines",
+    "zen.workspace.zentral.video_preview.captions_visible",
+    "zen.workspace.zentral.video_preview.caption_overflow",
+    {
+      "type": "separator",
+      "label": "Video subtitles · Subtitle updates"
+    },
+    "zen.workspace.zentral.video_preview.caption_poll_ms",
+    "zen.workspace.zentral.video_preview.caption_events",
+    "zen.workspace.zentral.video_preview.slow_caption_recovery",
+    {
+      "type": "separator",
+      "label": "Video Playback · Enlarged preview"
+    },
+    "zen.workspace.zentral.video_preview.enlarged_remember_position",
+    "zen.workspace.zentral.video_preview.enlarged_position",
+    {
+      "type": "separator",
+      "label": "Appearance & layout · Size & shape"
+    },
+    "zen.workspace.zentral.video_preview.fit_width",
+    "zen.workspace.zentral.video_preview.width_percent",
+    "zen.workspace.zentral.video_preview.height_px",
+    "zen.workspace.zentral.video_preview.radius_px",
+    "zen.workspace.zentral.video_preview.framing",
+    {
+      "type": "separator",
+      "label": "Appearance & layout · Toolbar buttons"
+    },
+    "zen.workspace.zentral.video_preview.play_button",
+    "zen.workspace.zentral.video_preview.mute_button",
+    "zen.workspace.zentral.video_preview.next_source_button",
+    "zen.workspace.zentral.video_preview.open_tab_button",
+    "zen.workspace.zentral.video_preview.hide_button",
+    "zen.workspace.zentral.video_preview.auto_height_button",
+    "zen.workspace.zentral.video_preview.framing_button",
+    "zen.workspace.zentral.video_preview.skip_back_button",
+    "zen.workspace.zentral.video_preview.skip_forward_button",
+    "zen.workspace.zentral.video_preview.subtitles_button",
+    "zen.workspace.zentral.video_preview.pin_source_button",
+    "zen.workspace.zentral.video_preview.compact_card_button",
+    "zen.workspace.zentral.video_preview.video_hidden",
+    "zen.workspace.zentral.video_preview.compact_card",
+    "zen.workspace.zentral.video_preview.button_style",
+    "zen.workspace.zentral.video_preview.button_size_px",
+    "zen.workspace.zentral.video_preview.button_radius_px",
+    "zen.workspace.zentral.video_preview.button_icon_color",
+    "zen.workspace.zentral.video_preview.button_fill_color",
+    "zen.workspace.zentral.video_preview.button_border_color",
+    {
+      "type": "separator",
+      "label": "Appearance & layout · Colors & backing"
+    },
+    "zen.workspace.bgalazka.look.video_opacity",
+    "zen.workspace.bgalazka.look.video_control_opacity",
+    "zen.workspace.bgalazka.look.video_canvas",
+    "zen.workspace.bgalazka.look.video_control",
+    "zen.workspace.bgalazka.look.video_text",
+    "zen.workspace.bgalazka.look.video_muted",
+    "zen.workspace.bgalazka.look.video_selected",
+    "zen.workspace.bgalazka.look.video_border",
+    "zen.workspace.bgalazka.look.video_source_style",
+    {
+      "type": "separator",
+      "label": "Appearance & layout · Controls & overlay"
+    },
+    "zen.workspace.bgalazka.look.video_controls_wrap",
+    "zen.workspace.bgalazka.look.video_controls_gap",
+    "zen.workspace.bgalazka.look.video_overlay_opacity",
+    "zen.workspace.bgalazka.look.video_padding",
+    "zen.workspace.bgalazka.look.video_row_height",
+    {
+      "type": "separator",
+      "label": "Shared"
+    },
+    "zen.workspace.apps.insta_peek.shortcut"
   ]
 }

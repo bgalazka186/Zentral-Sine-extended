@@ -44,21 +44,31 @@ const __zentralShim = (function () {
   /*__SIDEBAR_FUNCTIONS__*/
   /*__SCOPE_FUNCTIONS__*/
   const unloadHandlers = new Set();
-  window.addEventListener(
-    "unload",
-    () => {
-      stopped = true;
-      for (const handler of [...unloadHandlers]) {
-        try {
-          handler();
-        } catch (error) {
-          console.warn("[Zentral standalone] unload cleanup", error);
-        }
+  const runUnload = () => {
+    stopped = true;
+    for (const handler of [...unloadHandlers]) {
+      try {
+        handler();
+      } catch (error) {
+        console.warn("[Zentral standalone] unload cleanup", error);
       }
-      unloadHandlers.clear();
-    },
-    { once: true },
-  );
+    }
+    unloadHandlers.clear();
+  };
+  window.addEventListener("unload", runUnload, { once: true });
+  // Disabling the mod in Sine while the window stays open: the loader's own
+  // unload hook (the one the full pack uses) must stop the feature too.
+  try {
+    if (typeof window.addUnloadListener === "function")
+      window.addUnloadListener(runUnload);
+    else if (
+      typeof UC_API !== "undefined" &&
+      typeof UC_API.addUnloadListener === "function"
+    )
+      UC_API.addUnloadListener(runUnload);
+  } catch (error) {
+    console.warn("[Zentral standalone] loader unload hook unavailable", error);
+  }
   // Same barrier the full runtime uses: session restore, Zen workspaces and
   // Zen startup. Native promises are re-read after each await because Zen can
   // replace them during restoration. Bounded, never polls.

@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Video Preview
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.0
+// @version 3.1.2
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,9 +25,9 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.0.
+ * Placeholders replaced by the build: 3.1.2.
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.0";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.2";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -6454,6 +6454,15 @@ const optHex = (key) => {
   return HEX.test(v) ? v : "";
 };
 const mix = (a, pct, b) => `color-mix(in srgb, ${a} ${pct}%, ${b})`;
+const lum = (h) => {
+  const c = [1, 3, 5].map((i) => {
+    const v = parseInt(h.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+};
+// Same idea as Appearance's contrastText: black on light surfaces, white on dark.
+const contrast = (h) => (lum(h) > 0.179 ? "#000000" : "#ffffff");
 const owned = new Set();
 const set = (name, value) => {
   owned.add(name);
@@ -6501,6 +6510,13 @@ function apply() {
   set("--zl-video-padding", num(P + "video_padding", 0, 0, 16) + "px");
   set("--zl-video-row-height", num(P + "video_row_height", 22, 22, 36) + "px");
   set("--zl-video-radius", "0px");
+  // Derived values the full pack's Appearance owner also writes.
+  const canvas = hex(P + "video_canvas", "#0a0a0a");
+  const selected = hex(P + "video_selected", "#7d0000");
+  set("--zl-video-progress", lum(selected) < 0.1 && lum(canvas) < 0.1 ? text : selected);
+  set("--zl-video-scheme", contrast(canvas) === "#000000" ? "light" : "dark");
+  set("--zl-video-icon-outline", contrast(control) === "#000000" ? "#fff" : "#000");
+  set("--zl-video-overlay-text", text);
   const size = num(VP + "button_size_px", 26, 18, 32) + "px";
   set("--zl-control-size", size);
   set("--zl-video-button-size", size);
