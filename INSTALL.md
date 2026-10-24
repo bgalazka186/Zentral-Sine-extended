@@ -1,4 +1,4 @@
-# Installing Zentral Extended 3.0.3 — complete package
+# Installing Zentral Extended 3.1.0 — complete package
 
 Original Zentral reference: **1.1.0**. This archive contains the complete current mod, including all delivered fixes, the updated enlarged-video controls, overflow docking, recommendation wording and documentation. Earlier patch ZIPs are not required.
 

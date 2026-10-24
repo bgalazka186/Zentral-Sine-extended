@@ -3,7 +3,7 @@
   "themeId": "zentral-logger",
   "name": "Zentral Logger",
   "description": "Diagnostic logger with Alt+L export for Zentral and Zen layout issues. Standalone part of Zentral Extended.",
-  "version": "3.0.2",
+  "version": "3.1.0",
   "entry": "ZentralLogger.uc.js",
   "output": "ZentralLogger.standalone.uc.js",
   "settings": "settings.json",

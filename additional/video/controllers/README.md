@@ -1,6 +1,6 @@
 # additional/video/controllers
 
-Owner and local file guide for Extended 3.0.2. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.1.0. Original Zentral reference: 1.1.0.
 
 | File                           | Responsibility                                                                                      |
 | ------------------------------ | --------------------------------------------------------------------------------------------------- |

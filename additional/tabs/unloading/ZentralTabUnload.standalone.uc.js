@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Tab Unload
 // @include chrome://browser/content/browser.xhtml
-// @version 3.0.2
+// @version 3.1.0
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,9 +24,9 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.0.2.
+ * Placeholders replaced by the build: 3.1.0.
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.0.2";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.0";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
