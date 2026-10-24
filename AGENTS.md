@@ -14,7 +14,10 @@ Files to update per standalone module (`additional/<module>/`):
 
 Also update:
 - `loader/ZentralRuntime.js` — `// @version` and `const VERSION`
-- Any `README.md`/`INSTALL.md`/`docs/*.md` that cite the old version
+- `INSTALL.md` heading (one version per release), the version badge and the "Extended X.Y.Z uses Zentral…" line in `.github/README.md`
+- Any other `README.md`/`docs/*.md` that cite the old version
+
+After a bump, run `node tools/build-standalone.cjs` (regenerates the bundles and lock files; do not hand-edit the lock files' versions) and `node tools/build-preferences.cjs` (keeps the root `preferences.json` in step with the schema), then `node tools/build-standalone.cjs --check` and `node tests/standalone.test.cjs`. After changing settings placement, run `node tools/organize-layout-order.cjs` before building preferences.
 
 Never leave a standalone module at an older version than the main mod. Verify with `grep 3.0.2` (or whatever the prior version was) after a bump to confirm zero stale references remain.
 

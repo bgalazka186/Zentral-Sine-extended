@@ -4,15 +4,15 @@ Owner and local file guide for Extended 3.0.0. Original Zentral reference: 1.1.0
 
 | File                               | Responsibility                         |
 | ---------------------------------- | -------------------------------------- |
-| `App Bar AH.png`                   | Local documentation/reference artifact |
-| `App Bar.png`                      | Local documentation/reference artifact |
-| `Apps.png`                         | Local documentation/reference artifact |
-| `Groups.png`                       | Local documentation/reference artifact |
+| `App Bar AH.jpg`                   | Local documentation/reference artifact |
+| `App Bar.jpg`                      | Local documentation/reference artifact |
+| `Apps.jpg`                         | Local documentation/reference artifact |
+| `Groups.jpg`                       | Local documentation/reference artifact |
 | `Settings.png`                     | Local documentation/reference artifact |
 | `Zentral Logo.png`                 | Local documentation/reference artifact |
 | `Zentral Logo.svg`                 | Local documentation/reference artifact |
-| `Zentral.png`                      | Local documentation/reference artifact |
-| `compacttabsandvideointerface.png` | Local documentation/reference artifact |
+| `Zentral.jpg`                      | Local documentation/reference artifact |
+| `compacttabsandvideointerface.jpg` | Local documentation/reference artifact |
 | `panelsinterface.png`              | Local documentation/reference artifact |
 | `support_me_on_kofi_red.svg`       | Local documentation/reference artifact |
 

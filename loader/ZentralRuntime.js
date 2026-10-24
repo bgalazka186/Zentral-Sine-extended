@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Zentral Core and Settings
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.1
+// @version 3.1.2
 // ==/UserScript==
 /*
  * ZENTRAL FILE GUIDE - loader/ZentralRuntime.js
@@ -38,7 +38,7 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const VERSION = "3.1.1";
+  const VERSION = "3.1.2";
   // Sine installs this package under theme.json's id. Resolve from the
   // executing script so local folders and installed copies use their own files.
   // Keep this universal: never hard-code a mod id, folder name, or profile path.
@@ -1229,7 +1229,7 @@
     return settingsModuleLoaded(settingsMetadata(item).owner);
   }
   function selectSettingsCategory(modal, target) {
-    // Seven shortcuts share their real preference; refresh only on navigation.
+    // Feature shortcuts share their real preference; refresh only on navigation.
     for (const row of modal.querySelectorAll("[data-shortcut-key]")) {
       const item = SETTINGS_SCHEMA.find(
         (item) => item.property === row.dataset.shortcutKey,
@@ -1604,7 +1604,15 @@
     return fallbacks;
   }
   function ensureFeatureShortcuts(modal) {
+    // Each entry maps a preference to the section that receives a copy of its
+    // row. The row edits the same preference as the original, so no new key or
+    // second owner exists. Start here receives copies of the main switches and
+    // of "Hide Unattached App Controls" (hides the empty standalone apps box).
     const destinations = {
+      "zen.workspace.bgalazka.hide_unattached_app_controls": [
+        "essentials",
+        "Essential features",
+      ],
       "zen.workspace.apps.sidebar.enabled": [
         "apps",
         "Launcher grid & placement",
@@ -1670,8 +1678,12 @@
         });
       }
       const section = ensureSettingsSection(modal, ...destination);
-      if (row.parentElement !== section)
-        section.insertBefore(row, section.children[1] || null);
+      if (row.parentElement !== section) {
+        // Start here keeps its copy after the main switches; other sections
+        // show their shortcut first, directly under the heading.
+        if (destination[0] === "essentials") section.appendChild(row);
+        else section.insertBefore(row, section.children[1] || null);
+      }
       syncSchemaSetting(item, row);
       shortcuts.push({ item, row });
     }

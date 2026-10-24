@@ -3,7 +3,7 @@
   "themeId": "zentral-tab-drag",
   "name": "Zentral Background Tab Drag",
   "description": "Drag background tabs without selecting them first. Standalone part of Zentral Extended.",
-  "version": "3.1.1",
+  "version": "3.1.2",
   "entry": "ZentralTabDrag.uc.js",
   "output": "ZentralTabDrag.standalone.uc.js",
   "settings": "settings.json",

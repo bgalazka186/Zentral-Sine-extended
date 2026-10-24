@@ -15,9 +15,9 @@
     }
   },
   "author": "bgalazka186",
-  "version": "3.1.1",
+  "version": "3.1.2",
   "preferences": "preferences.json",
   "tags": ["apps", "tabs", "sidebar", "groups"],
   "fork": ["zen"],
-  "readme": "https://raw.githubusercontent.com/bgalazka186/Zentral-Sine-extended/main/README.md"
+  "readme": "https://raw.githubusercontent.com/bgalazka186/Zentral-Sine-extended/main/.github/README.md"
 }

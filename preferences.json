@@ -1,8 +1,13 @@
 [
   {
     "type": "text",
+    "label": "**Getting started**",
+    "size": "22px"
+  },
+  {
+    "type": "text",
     "label": "**Start here · Essential features**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.mmb_unload_normal_tabs",
@@ -48,8 +53,13 @@
   },
   {
     "type": "text",
+    "label": "**Appearance**",
+    "size": "22px"
+  },
+  {
+    "type": "text",
     "label": "**Simple appearance · Palette**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.look.style",
@@ -152,7 +162,7 @@
   {
     "type": "text",
     "label": "**Simple appearance · Readability & buttons**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.look.solid_controls",
@@ -273,9 +283,57 @@
     ]
   },
   {
+    "property": "zen.workspace.zentral.theme.policy",
+    "label": "Panel controls and tooltip light/dark source",
+    "type": "dropdown",
+    "defaultValue": "browser",
+    "options": [
+      {
+        "label": "Browser interface",
+        "value": "browser"
+      },
+      {
+        "label": "Website appearance preference",
+        "value": "content"
+      },
+      {
+        "label": "Operating system",
+        "value": "system"
+      },
+      {
+        "label": "Always light",
+        "value": "light"
+      },
+      {
+        "label": "Always dark",
+        "value": "dark"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.theme.contrast",
+    "label": "Tooltip and control contrast",
+    "type": "dropdown",
+    "defaultValue": "adaptive",
+    "options": [
+      {
+        "label": "Adaptive readable tooltips; keep custom controls",
+        "value": "adaptive"
+      },
+      {
+        "label": "High contrast tooltips and controls",
+        "value": "high"
+      },
+      {
+        "label": "Keep all Extended custom appearance",
+        "value": "custom"
+      }
+    ]
+  },
+  {
     "type": "text",
     "label": "**Detailed appearance · Text & contrast**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.look.text_mode",
@@ -310,7 +368,7 @@
   {
     "type": "text",
     "label": "**Detailed appearance · Panel surfaces & transparency**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.look.web_surface",
@@ -1478,7 +1536,7 @@
   {
     "type": "text",
     "label": "**Detailed appearance · Panel position & motion**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.apps.sidebar.animation_speed",
@@ -1547,7 +1605,7 @@
   {
     "type": "text",
     "label": "**Detailed appearance · Shape & controls**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.look.button_hover",
@@ -2596,7 +2654,7 @@
   {
     "type": "text",
     "label": "**Detailed appearance · Settings window**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.look.settings_canvas",
@@ -2693,7 +2751,7 @@
   {
     "type": "text",
     "label": "**Detailed appearance · Navigation toolbar**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.secondary_toolbar_swap",
@@ -3602,7 +3660,7 @@
   {
     "type": "text",
     "label": "**Detailed appearance · Floating pill**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.hide_hover_reveal_btn",
@@ -3771,1511 +3829,31 @@
     "defaultValue": false
   },
   {
-    "type": "text",
-    "label": "**Detailed appearance · Sidebar video**",
-    "size": "18px"
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.radius_px",
-    "label": "Preview Corner Radius (px)",
-    "type": "dropdown",
-    "defaultValue": 0,
-    "options": [
-      {
-        "label": "0",
-        "value": 0
-      },
-      {
-        "label": "4",
-        "value": 4
-      },
-      {
-        "label": "8",
-        "value": 8
-      },
-      {
-        "label": "12",
-        "value": 12
-      },
-      {
-        "label": "16",
-        "value": 16
-      },
-      {
-        "label": "24",
-        "value": 24
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.framing",
-    "label": "Video Framing",
-    "type": "dropdown",
-    "defaultValue": "auto",
-    "options": [
-      {
-        "label": "auto",
-        "value": "auto"
-      },
-      {
-        "label": "contain",
-        "value": "contain"
-      },
-      {
-        "label": "cover",
-        "value": "cover"
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.play_button",
-    "label": "Show play/pause button",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.mute_button",
-    "label": "Show mute/unmute button",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.next_source_button",
-    "label": "Show next source button",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.open_tab_button",
-    "label": "Show open source tab button",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.hide_button",
-    "label": "Show hide/show video button",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.auto_height_button",
-    "label": "Show Auto height button after resizing",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.framing_button",
-    "label": "Show framing button",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.skip_back_button",
-    "label": "Show -10 s (back) button",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.skip_forward_button",
-    "label": "Show +10 s (forward) button",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.subtitles_button",
-    "label": "Show subtitles button",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.video_hidden",
-    "label": "Video preview: video hidden",
+    "property": "zen.workspace.zentral.hybrid.hide_detach_button",
+    "label": "Hide Detach / Attach pill button",
     "type": "checkbox",
     "defaultValue": false
   },
   {
-    "property": "zen.workspace.zentral.video_preview.pin_source_button",
-    "label": "Show pin source button",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.compact_card_button",
-    "label": "Show compact card button",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.compact_card",
-    "label": "Video preview: compact card",
-    "type": "checkbox",
-    "defaultValue": false
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.video_opacity",
-    "label": "Video preview canvas opacity (%)",
+    "property": "zen.workspace.zentral.hybrid.pill_layout",
+    "label": "Pill layout",
     "type": "dropdown",
-    "defaultValue": 100,
+    "defaultValue": "upstream",
     "options": [
       {
-        "label": "0",
-        "value": 0
+        "label": "Upstream: separate close box",
+        "value": "upstream"
       },
       {
-        "label": "1",
-        "value": 1
-      },
-      {
-        "label": "2",
-        "value": 2
-      },
-      {
-        "label": "3",
-        "value": 3
-      },
-      {
-        "label": "4",
-        "value": 4
-      },
-      {
-        "label": "5",
-        "value": 5
-      },
-      {
-        "label": "6",
-        "value": 6
-      },
-      {
-        "label": "7",
-        "value": 7
-      },
-      {
-        "label": "8",
-        "value": 8
-      },
-      {
-        "label": "9",
-        "value": 9
-      },
-      {
-        "label": "10",
-        "value": 10
-      },
-      {
-        "label": "11",
-        "value": 11
-      },
-      {
-        "label": "12",
-        "value": 12
-      },
-      {
-        "label": "13",
-        "value": 13
-      },
-      {
-        "label": "14",
-        "value": 14
-      },
-      {
-        "label": "15",
-        "value": 15
-      },
-      {
-        "label": "16",
-        "value": 16
-      },
-      {
-        "label": "17",
-        "value": 17
-      },
-      {
-        "label": "18",
-        "value": 18
-      },
-      {
-        "label": "19",
-        "value": 19
-      },
-      {
-        "label": "20",
-        "value": 20
-      },
-      {
-        "label": "21",
-        "value": 21
-      },
-      {
-        "label": "22",
-        "value": 22
-      },
-      {
-        "label": "23",
-        "value": 23
-      },
-      {
-        "label": "24",
-        "value": 24
-      },
-      {
-        "label": "25",
-        "value": 25
-      },
-      {
-        "label": "26",
-        "value": 26
-      },
-      {
-        "label": "27",
-        "value": 27
-      },
-      {
-        "label": "28",
-        "value": 28
-      },
-      {
-        "label": "29",
-        "value": 29
-      },
-      {
-        "label": "30",
-        "value": 30
-      },
-      {
-        "label": "31",
-        "value": 31
-      },
-      {
-        "label": "32",
-        "value": 32
-      },
-      {
-        "label": "33",
-        "value": 33
-      },
-      {
-        "label": "34",
-        "value": 34
-      },
-      {
-        "label": "35",
-        "value": 35
-      },
-      {
-        "label": "36",
-        "value": 36
-      },
-      {
-        "label": "37",
-        "value": 37
-      },
-      {
-        "label": "38",
-        "value": 38
-      },
-      {
-        "label": "39",
-        "value": 39
-      },
-      {
-        "label": "40",
-        "value": 40
-      },
-      {
-        "label": "41",
-        "value": 41
-      },
-      {
-        "label": "42",
-        "value": 42
-      },
-      {
-        "label": "43",
-        "value": 43
-      },
-      {
-        "label": "44",
-        "value": 44
-      },
-      {
-        "label": "45",
-        "value": 45
-      },
-      {
-        "label": "46",
-        "value": 46
-      },
-      {
-        "label": "47",
-        "value": 47
-      },
-      {
-        "label": "48",
-        "value": 48
-      },
-      {
-        "label": "49",
-        "value": 49
-      },
-      {
-        "label": "50",
-        "value": 50
-      },
-      {
-        "label": "51",
-        "value": 51
-      },
-      {
-        "label": "52",
-        "value": 52
-      },
-      {
-        "label": "53",
-        "value": 53
-      },
-      {
-        "label": "54",
-        "value": 54
-      },
-      {
-        "label": "55",
-        "value": 55
-      },
-      {
-        "label": "56",
-        "value": 56
-      },
-      {
-        "label": "57",
-        "value": 57
-      },
-      {
-        "label": "58",
-        "value": 58
-      },
-      {
-        "label": "59",
-        "value": 59
-      },
-      {
-        "label": "60",
-        "value": 60
-      },
-      {
-        "label": "61",
-        "value": 61
-      },
-      {
-        "label": "62",
-        "value": 62
-      },
-      {
-        "label": "63",
-        "value": 63
-      },
-      {
-        "label": "64",
-        "value": 64
-      },
-      {
-        "label": "65",
-        "value": 65
-      },
-      {
-        "label": "66",
-        "value": 66
-      },
-      {
-        "label": "67",
-        "value": 67
-      },
-      {
-        "label": "68",
-        "value": 68
-      },
-      {
-        "label": "69",
-        "value": 69
-      },
-      {
-        "label": "70",
-        "value": 70
-      },
-      {
-        "label": "71",
-        "value": 71
-      },
-      {
-        "label": "72",
-        "value": 72
-      },
-      {
-        "label": "73",
-        "value": 73
-      },
-      {
-        "label": "74",
-        "value": 74
-      },
-      {
-        "label": "75",
-        "value": 75
-      },
-      {
-        "label": "76",
-        "value": 76
-      },
-      {
-        "label": "77",
-        "value": 77
-      },
-      {
-        "label": "78",
-        "value": 78
-      },
-      {
-        "label": "79",
-        "value": 79
-      },
-      {
-        "label": "80",
-        "value": 80
-      },
-      {
-        "label": "81",
-        "value": 81
-      },
-      {
-        "label": "82",
-        "value": 82
-      },
-      {
-        "label": "83",
-        "value": 83
-      },
-      {
-        "label": "84",
-        "value": 84
-      },
-      {
-        "label": "85",
-        "value": 85
-      },
-      {
-        "label": "86",
-        "value": 86
-      },
-      {
-        "label": "87",
-        "value": 87
-      },
-      {
-        "label": "88",
-        "value": 88
-      },
-      {
-        "label": "89",
-        "value": 89
-      },
-      {
-        "label": "90",
-        "value": 90
-      },
-      {
-        "label": "91",
-        "value": 91
-      },
-      {
-        "label": "92",
-        "value": 92
-      },
-      {
-        "label": "93",
-        "value": 93
-      },
-      {
-        "label": "94",
-        "value": 94
-      },
-      {
-        "label": "95",
-        "value": 95
-      },
-      {
-        "label": "96",
-        "value": 96
-      },
-      {
-        "label": "97",
-        "value": 97
-      },
-      {
-        "label": "98",
-        "value": 98
-      },
-      {
-        "label": "99",
-        "value": 99
-      },
-      {
-        "label": "100",
-        "value": 100
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.video_control_opacity",
-    "label": "Video control strip opacity (%)",
-    "type": "dropdown",
-    "defaultValue": 100,
-    "options": [
-      {
-        "label": "0",
-        "value": 0
-      },
-      {
-        "label": "1",
-        "value": 1
-      },
-      {
-        "label": "2",
-        "value": 2
-      },
-      {
-        "label": "3",
-        "value": 3
-      },
-      {
-        "label": "4",
-        "value": 4
-      },
-      {
-        "label": "5",
-        "value": 5
-      },
-      {
-        "label": "6",
-        "value": 6
-      },
-      {
-        "label": "7",
-        "value": 7
-      },
-      {
-        "label": "8",
-        "value": 8
-      },
-      {
-        "label": "9",
-        "value": 9
-      },
-      {
-        "label": "10",
-        "value": 10
-      },
-      {
-        "label": "11",
-        "value": 11
-      },
-      {
-        "label": "12",
-        "value": 12
-      },
-      {
-        "label": "13",
-        "value": 13
-      },
-      {
-        "label": "14",
-        "value": 14
-      },
-      {
-        "label": "15",
-        "value": 15
-      },
-      {
-        "label": "16",
-        "value": 16
-      },
-      {
-        "label": "17",
-        "value": 17
-      },
-      {
-        "label": "18",
-        "value": 18
-      },
-      {
-        "label": "19",
-        "value": 19
-      },
-      {
-        "label": "20",
-        "value": 20
-      },
-      {
-        "label": "21",
-        "value": 21
-      },
-      {
-        "label": "22",
-        "value": 22
-      },
-      {
-        "label": "23",
-        "value": 23
-      },
-      {
-        "label": "24",
-        "value": 24
-      },
-      {
-        "label": "25",
-        "value": 25
-      },
-      {
-        "label": "26",
-        "value": 26
-      },
-      {
-        "label": "27",
-        "value": 27
-      },
-      {
-        "label": "28",
-        "value": 28
-      },
-      {
-        "label": "29",
-        "value": 29
-      },
-      {
-        "label": "30",
-        "value": 30
-      },
-      {
-        "label": "31",
-        "value": 31
-      },
-      {
-        "label": "32",
-        "value": 32
-      },
-      {
-        "label": "33",
-        "value": 33
-      },
-      {
-        "label": "34",
-        "value": 34
-      },
-      {
-        "label": "35",
-        "value": 35
-      },
-      {
-        "label": "36",
-        "value": 36
-      },
-      {
-        "label": "37",
-        "value": 37
-      },
-      {
-        "label": "38",
-        "value": 38
-      },
-      {
-        "label": "39",
-        "value": 39
-      },
-      {
-        "label": "40",
-        "value": 40
-      },
-      {
-        "label": "41",
-        "value": 41
-      },
-      {
-        "label": "42",
-        "value": 42
-      },
-      {
-        "label": "43",
-        "value": 43
-      },
-      {
-        "label": "44",
-        "value": 44
-      },
-      {
-        "label": "45",
-        "value": 45
-      },
-      {
-        "label": "46",
-        "value": 46
-      },
-      {
-        "label": "47",
-        "value": 47
-      },
-      {
-        "label": "48",
-        "value": 48
-      },
-      {
-        "label": "49",
-        "value": 49
-      },
-      {
-        "label": "50",
-        "value": 50
-      },
-      {
-        "label": "51",
-        "value": 51
-      },
-      {
-        "label": "52",
-        "value": 52
-      },
-      {
-        "label": "53",
-        "value": 53
-      },
-      {
-        "label": "54",
-        "value": 54
-      },
-      {
-        "label": "55",
-        "value": 55
-      },
-      {
-        "label": "56",
-        "value": 56
-      },
-      {
-        "label": "57",
-        "value": 57
-      },
-      {
-        "label": "58",
-        "value": 58
-      },
-      {
-        "label": "59",
-        "value": 59
-      },
-      {
-        "label": "60",
-        "value": 60
-      },
-      {
-        "label": "61",
-        "value": 61
-      },
-      {
-        "label": "62",
-        "value": 62
-      },
-      {
-        "label": "63",
-        "value": 63
-      },
-      {
-        "label": "64",
-        "value": 64
-      },
-      {
-        "label": "65",
-        "value": 65
-      },
-      {
-        "label": "66",
-        "value": 66
-      },
-      {
-        "label": "67",
-        "value": 67
-      },
-      {
-        "label": "68",
-        "value": 68
-      },
-      {
-        "label": "69",
-        "value": 69
-      },
-      {
-        "label": "70",
-        "value": 70
-      },
-      {
-        "label": "71",
-        "value": 71
-      },
-      {
-        "label": "72",
-        "value": 72
-      },
-      {
-        "label": "73",
-        "value": 73
-      },
-      {
-        "label": "74",
-        "value": 74
-      },
-      {
-        "label": "75",
-        "value": 75
-      },
-      {
-        "label": "76",
-        "value": 76
-      },
-      {
-        "label": "77",
-        "value": 77
-      },
-      {
-        "label": "78",
-        "value": 78
-      },
-      {
-        "label": "79",
-        "value": 79
-      },
-      {
-        "label": "80",
-        "value": 80
-      },
-      {
-        "label": "81",
-        "value": 81
-      },
-      {
-        "label": "82",
-        "value": 82
-      },
-      {
-        "label": "83",
-        "value": 83
-      },
-      {
-        "label": "84",
-        "value": 84
-      },
-      {
-        "label": "85",
-        "value": 85
-      },
-      {
-        "label": "86",
-        "value": 86
-      },
-      {
-        "label": "87",
-        "value": 87
-      },
-      {
-        "label": "88",
-        "value": 88
-      },
-      {
-        "label": "89",
-        "value": 89
-      },
-      {
-        "label": "90",
-        "value": 90
-      },
-      {
-        "label": "91",
-        "value": 91
-      },
-      {
-        "label": "92",
-        "value": 92
-      },
-      {
-        "label": "93",
-        "value": 93
-      },
-      {
-        "label": "94",
-        "value": 94
-      },
-      {
-        "label": "95",
-        "value": 95
-      },
-      {
-        "label": "96",
-        "value": 96
-      },
-      {
-        "label": "97",
-        "value": 97
-      },
-      {
-        "label": "98",
-        "value": 98
-      },
-      {
-        "label": "99",
-        "value": 99
-      },
-      {
-        "label": "100",
-        "value": 100
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.video_controls_wrap",
-    "label": "Allow sidebar video controls on a second row",
-    "type": "checkbox",
-    "defaultValue": false
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.video_controls_gap",
-    "label": "Sidebar video control spacing (px)",
-    "type": "dropdown",
-    "defaultValue": 1,
-    "options": [
-      {
-        "label": "0",
-        "value": 0
-      },
-      {
-        "label": "1",
-        "value": 1
-      },
-      {
-        "label": "2",
-        "value": 2
-      },
-      {
-        "label": "3",
-        "value": 3
-      },
-      {
-        "label": "4",
-        "value": 4
-      },
-      {
-        "label": "5",
-        "value": 5
-      },
-      {
-        "label": "6",
-        "value": 6
-      },
-      {
-        "label": "7",
-        "value": 7
-      },
-      {
-        "label": "8",
-        "value": 8
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.video_overlay_opacity",
-    "label": "Big Preview hover overlay opacity (%)",
-    "type": "dropdown",
-    "defaultValue": 40,
-    "options": [
-      {
-        "label": "0",
-        "value": 0
-      },
-      {
-        "label": "1",
-        "value": 1
-      },
-      {
-        "label": "2",
-        "value": 2
-      },
-      {
-        "label": "3",
-        "value": 3
-      },
-      {
-        "label": "4",
-        "value": 4
-      },
-      {
-        "label": "5",
-        "value": 5
-      },
-      {
-        "label": "6",
-        "value": 6
-      },
-      {
-        "label": "7",
-        "value": 7
-      },
-      {
-        "label": "8",
-        "value": 8
-      },
-      {
-        "label": "9",
-        "value": 9
-      },
-      {
-        "label": "10",
-        "value": 10
-      },
-      {
-        "label": "11",
-        "value": 11
-      },
-      {
-        "label": "12",
-        "value": 12
-      },
-      {
-        "label": "13",
-        "value": 13
-      },
-      {
-        "label": "14",
-        "value": 14
-      },
-      {
-        "label": "15",
-        "value": 15
-      },
-      {
-        "label": "16",
-        "value": 16
-      },
-      {
-        "label": "17",
-        "value": 17
-      },
-      {
-        "label": "18",
-        "value": 18
-      },
-      {
-        "label": "19",
-        "value": 19
-      },
-      {
-        "label": "20",
-        "value": 20
-      },
-      {
-        "label": "21",
-        "value": 21
-      },
-      {
-        "label": "22",
-        "value": 22
-      },
-      {
-        "label": "23",
-        "value": 23
-      },
-      {
-        "label": "24",
-        "value": 24
-      },
-      {
-        "label": "25",
-        "value": 25
-      },
-      {
-        "label": "26",
-        "value": 26
-      },
-      {
-        "label": "27",
-        "value": 27
-      },
-      {
-        "label": "28",
-        "value": 28
-      },
-      {
-        "label": "29",
-        "value": 29
-      },
-      {
-        "label": "30",
-        "value": 30
-      },
-      {
-        "label": "31",
-        "value": 31
-      },
-      {
-        "label": "32",
-        "value": 32
-      },
-      {
-        "label": "33",
-        "value": 33
-      },
-      {
-        "label": "34",
-        "value": 34
-      },
-      {
-        "label": "35",
-        "value": 35
-      },
-      {
-        "label": "36",
-        "value": 36
-      },
-      {
-        "label": "37",
-        "value": 37
-      },
-      {
-        "label": "38",
-        "value": 38
-      },
-      {
-        "label": "39",
-        "value": 39
-      },
-      {
-        "label": "40",
-        "value": 40
-      },
-      {
-        "label": "41",
-        "value": 41
-      },
-      {
-        "label": "42",
-        "value": 42
-      },
-      {
-        "label": "43",
-        "value": 43
-      },
-      {
-        "label": "44",
-        "value": 44
-      },
-      {
-        "label": "45",
-        "value": 45
-      },
-      {
-        "label": "46",
-        "value": 46
-      },
-      {
-        "label": "47",
-        "value": 47
-      },
-      {
-        "label": "48",
-        "value": 48
-      },
-      {
-        "label": "49",
-        "value": 49
-      },
-      {
-        "label": "50",
-        "value": 50
-      },
-      {
-        "label": "51",
-        "value": 51
-      },
-      {
-        "label": "52",
-        "value": 52
-      },
-      {
-        "label": "53",
-        "value": 53
-      },
-      {
-        "label": "54",
-        "value": 54
-      },
-      {
-        "label": "55",
-        "value": 55
-      },
-      {
-        "label": "56",
-        "value": 56
-      },
-      {
-        "label": "57",
-        "value": 57
-      },
-      {
-        "label": "58",
-        "value": 58
-      },
-      {
-        "label": "59",
-        "value": 59
-      },
-      {
-        "label": "60",
-        "value": 60
-      },
-      {
-        "label": "61",
-        "value": 61
-      },
-      {
-        "label": "62",
-        "value": 62
-      },
-      {
-        "label": "63",
-        "value": 63
-      },
-      {
-        "label": "64",
-        "value": 64
-      },
-      {
-        "label": "65",
-        "value": 65
-      },
-      {
-        "label": "66",
-        "value": 66
-      },
-      {
-        "label": "67",
-        "value": 67
-      },
-      {
-        "label": "68",
-        "value": 68
-      },
-      {
-        "label": "69",
-        "value": 69
-      },
-      {
-        "label": "70",
-        "value": 70
-      },
-      {
-        "label": "71",
-        "value": 71
-      },
-      {
-        "label": "72",
-        "value": 72
-      },
-      {
-        "label": "73",
-        "value": 73
-      },
-      {
-        "label": "74",
-        "value": 74
-      },
-      {
-        "label": "75",
-        "value": 75
-      },
-      {
-        "label": "76",
-        "value": 76
-      },
-      {
-        "label": "77",
-        "value": 77
-      },
-      {
-        "label": "78",
-        "value": 78
-      },
-      {
-        "label": "79",
-        "value": 79
-      },
-      {
-        "label": "80",
-        "value": 80
-      },
-      {
-        "label": "81",
-        "value": 81
-      },
-      {
-        "label": "82",
-        "value": 82
-      },
-      {
-        "label": "83",
-        "value": 83
-      },
-      {
-        "label": "84",
-        "value": 84
-      },
-      {
-        "label": "85",
-        "value": 85
-      },
-      {
-        "label": "86",
-        "value": 86
-      },
-      {
-        "label": "87",
-        "value": 87
-      },
-      {
-        "label": "88",
-        "value": 88
-      },
-      {
-        "label": "89",
-        "value": 89
-      },
-      {
-        "label": "90",
-        "value": 90
-      },
-      {
-        "label": "91",
-        "value": 91
-      },
-      {
-        "label": "92",
-        "value": 92
-      },
-      {
-        "label": "93",
-        "value": 93
-      },
-      {
-        "label": "94",
-        "value": 94
-      },
-      {
-        "label": "95",
-        "value": 95
-      },
-      {
-        "label": "96",
-        "value": 96
-      },
-      {
-        "label": "97",
-        "value": 97
-      },
-      {
-        "label": "98",
-        "value": 98
-      },
-      {
-        "label": "99",
-        "value": 99
-      },
-      {
-        "label": "100",
-        "value": 100
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.video_canvas",
-    "label": "Video canvas background (six-digit #RRGGBB)",
-    "type": "string",
-    "defaultValue": "#0a0a0a",
-    "border": "value"
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.video_control",
-    "label": "Video controls background (six-digit #RRGGBB)",
-    "type": "string",
-    "defaultValue": "#000000",
-    "border": "value"
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.video_text",
-    "label": "Video primary text and icons (six-digit #RRGGBB)",
-    "type": "string",
-    "defaultValue": "#d8d8d8",
-    "border": "value"
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.video_muted",
-    "label": "Video secondary text (six-digit #RRGGBB)",
-    "type": "string",
-    "defaultValue": "#838383",
-    "border": "value"
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.video_selected",
-    "label": "Selected video source highlight (six-digit #RRGGBB)",
-    "type": "string",
-    "defaultValue": "#7d0000",
-    "border": "value"
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.video_border",
-    "label": "Video control border width (px; 0 = none)",
-    "type": "dropdown",
-    "defaultValue": 0,
-    "options": [
-      {
-        "label": "0",
-        "value": 0
-      },
-      {
-        "label": "1",
-        "value": 1
-      },
-      {
-        "label": "2",
-        "value": 2
-      },
-      {
-        "label": "3",
-        "value": 3
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.video_source_style",
-    "label": "Video source selection style",
-    "type": "dropdown",
-    "defaultValue": "line",
-    "options": [
-      {
-        "label": "Underline",
-        "value": "line"
-      },
-      {
-        "label": "Filled highlight",
-        "value": "filled"
+        "label": "Classic Extended: single pill",
+        "value": "extended"
       }
     ]
   },
   {
     "type": "text",
     "label": "**Detailed appearance · Tabs, folders & launchers**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.apps.sidebar.hide_utility_section",
@@ -5818,7 +4396,7 @@
   {
     "type": "text",
     "label": "**Detailed appearance · Menus & feedback**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.look.popup_surface",
@@ -6270,7 +4848,7 @@
   {
     "type": "text",
     "label": "**Detailed appearance · Compatibility styling**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.zentral.arc2.match_compact_sidebar",
@@ -6347,7 +4925,7 @@
   {
     "type": "text",
     "label": "**Detailed appearance · RSS reader card**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_width",
@@ -6487,8 +5065,13 @@
   },
   {
     "type": "text",
+    "label": "**Layout**",
+    "size": "22px"
+  },
+  {
+    "type": "text",
     "label": "**Layout & density · Tabs & folders**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.look.density_urlbar",
@@ -7495,7 +6078,7 @@
   {
     "type": "text",
     "label": "**Layout & density · App grid**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.apps.sidebar.apps_per_row",
@@ -7620,7 +6203,7 @@
   {
     "type": "text",
     "label": "**Layout & density · Control sizing**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.look.spacing",
@@ -7787,153 +6370,9 @@
     ]
   },
   {
-    "property": "zen.workspace.bgalazka.look.video_padding",
-    "label": "Video control padding (px)",
-    "type": "dropdown",
-    "defaultValue": 0,
-    "options": [
-      {
-        "label": "0",
-        "value": 0
-      },
-      {
-        "label": "1",
-        "value": 1
-      },
-      {
-        "label": "2",
-        "value": 2
-      },
-      {
-        "label": "3",
-        "value": 3
-      },
-      {
-        "label": "4",
-        "value": 4
-      },
-      {
-        "label": "5",
-        "value": 5
-      },
-      {
-        "label": "6",
-        "value": 6
-      },
-      {
-        "label": "7",
-        "value": 7
-      },
-      {
-        "label": "8",
-        "value": 8
-      },
-      {
-        "label": "9",
-        "value": 9
-      },
-      {
-        "label": "10",
-        "value": 10
-      },
-      {
-        "label": "11",
-        "value": 11
-      },
-      {
-        "label": "12",
-        "value": 12
-      },
-      {
-        "label": "13",
-        "value": 13
-      },
-      {
-        "label": "14",
-        "value": 14
-      },
-      {
-        "label": "15",
-        "value": 15
-      },
-      {
-        "label": "16",
-        "value": 16
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.video_row_height",
-    "label": "Video source row height (px)",
-    "type": "dropdown",
-    "defaultValue": 22,
-    "options": [
-      {
-        "label": "22",
-        "value": 22
-      },
-      {
-        "label": "23",
-        "value": 23
-      },
-      {
-        "label": "24",
-        "value": 24
-      },
-      {
-        "label": "25",
-        "value": 25
-      },
-      {
-        "label": "26",
-        "value": 26
-      },
-      {
-        "label": "27",
-        "value": 27
-      },
-      {
-        "label": "28",
-        "value": 28
-      },
-      {
-        "label": "29",
-        "value": 29
-      },
-      {
-        "label": "30",
-        "value": 30
-      },
-      {
-        "label": "31",
-        "value": 31
-      },
-      {
-        "label": "32",
-        "value": 32
-      },
-      {
-        "label": "33",
-        "value": 33
-      },
-      {
-        "label": "34",
-        "value": 34
-      },
-      {
-        "label": "35",
-        "value": 35
-      },
-      {
-        "label": "36",
-        "value": 36
-      }
-    ]
-  },
-  {
     "type": "text",
     "label": "**Layout & density · Panel size & position**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.apps.sidebar.width",
@@ -8121,87 +6560,13 @@
   },
   {
     "type": "text",
-    "label": "**Layout & density · Video size**",
-    "size": "18px"
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.fit_width",
-    "label": "Fill Available Sidebar Width",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.width_percent",
-    "label": "Preview Width (%) when Fill Width is Off",
-    "type": "dropdown",
-    "defaultValue": 100,
-    "options": [
-      {
-        "label": "35",
-        "value": 35
-      },
-      {
-        "label": "50",
-        "value": 50
-      },
-      {
-        "label": "65",
-        "value": 65
-      },
-      {
-        "label": "75",
-        "value": 75
-      },
-      {
-        "label": "85",
-        "value": 85
-      },
-      {
-        "label": "100",
-        "value": 100
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.height_px",
-    "label": "Preview Height (px; 0 = auto)",
-    "type": "dropdown",
-    "defaultValue": 0,
-    "options": [
-      {
-        "label": "0",
-        "value": 0
-      },
-      {
-        "label": "150",
-        "value": 150
-      },
-      {
-        "label": "230",
-        "value": 230
-      },
-      {
-        "label": "320",
-        "value": 320
-      },
-      {
-        "label": "480",
-        "value": 480
-      },
-      {
-        "label": "640",
-        "value": 640
-      },
-      {
-        "label": "800",
-        "value": 800
-      }
-    ]
+    "label": "**Apps & Tabs**",
+    "size": "22px"
   },
   {
     "type": "text",
     "label": "**Apps behavior · Launcher grid & placement**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.apps.sidebar.autohide",
@@ -8212,7 +6577,7 @@
   {
     "type": "text",
     "label": "**Tab Panel Launchers · Launchers, loaded state & badges**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.all_tab_panels",
@@ -8223,7 +6588,7 @@
   {
     "type": "text",
     "label": "**Tab Groups · Group behavior & indicators**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.tabgroups.collapse_on_launch",
@@ -8240,7 +6605,7 @@
   {
     "type": "text",
     "label": "**Tab Dragging · Background sorting**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.zentral.tabs.background_drag",
@@ -8251,7 +6616,7 @@
   {
     "type": "text",
     "label": "**RSS Folders · Live-folder display**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.rss.hide_empty",
@@ -8262,7 +6627,7 @@
   {
     "type": "text",
     "label": "**RSS Folders · Reader card**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.rss.reader_card",
@@ -8346,8 +6711,13 @@
   },
   {
     "type": "text",
+    "label": "**Panels**",
+    "size": "22px"
+  },
+  {
+    "type": "text",
     "label": "**Panel Layout · Docking, size & input**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.opposite_docking",
@@ -8374,9 +6744,137 @@
     "defaultValue": true
   },
   {
+    "property": "zen.workspace.zentral.hybrid.geometry_mode",
+    "label": "Panel geometry engine",
+    "type": "dropdown",
+    "defaultValue": "hybrid",
+    "options": [
+      {
+        "label": "Hybrid: persistent per-app movement and docking",
+        "value": "hybrid"
+      },
+      {
+        "label": "Classic Extended: legacy shared offsets",
+        "value": "extended"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.allow_overflow",
+    "label": "Allow panels partly outside the window (keep controls reachable)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.position_scope",
+    "label": "Remember panel placement for",
+    "type": "dropdown",
+    "defaultValue": "app",
+    "options": [
+      {
+        "label": "Each app",
+        "value": "app"
+      },
+      {
+        "label": "Each app in each workspace",
+        "value": "workspace"
+      },
+      {
+        "label": "All apps together",
+        "value": "global"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.snap_enabled",
+    "label": "Show edge docking previews while moving panels",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.dock_push_px",
+    "label": "Docking distance (px; snap near edge when overflow is allowed)",
+    "type": "dropdown",
+    "defaultValue": 15,
+    "options": [
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "40",
+        "value": 40
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.dock_gap",
+    "label": "Gap between docked panels and edge (px)",
+    "type": "dropdown",
+    "defaultValue": 0,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "16",
+        "value": 16
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.detached_height_percent",
+    "label": "Height when detaching from an edge (%)",
+    "type": "dropdown",
+    "defaultValue": 78,
+    "options": [
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
     "type": "text",
     "label": "**Hover Reveal · Autohide & reveal target**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.hover_reveal_panel",
@@ -8387,7 +6885,7 @@
   {
     "type": "text",
     "label": "**Hover Reveal · Hover-to-show element**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.zentral.panels.hover_edge_reveal",
@@ -8510,7 +7008,7 @@
   {
     "type": "text",
     "label": "**Hover Reveal · Outside-window reveal**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.zentral.compatibility.panel_outside_window_tracking",
@@ -8635,7 +7133,7 @@
   {
     "type": "text",
     "label": "**Dual, Triple & Super View · Page push & secondary controls**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.push_page",
@@ -8651,8 +7149,29 @@
   },
   {
     "type": "text",
+    "label": "**Navigation Toolbar · Navigation & placement**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.hybrid.navigation_mode",
+    "label": "Panel address entry behavior",
+    "type": "dropdown",
+    "defaultValue": "extended-search",
+    "options": [
+      {
+        "label": "Extended: addresses and configured search",
+        "value": "extended-search"
+      },
+      {
+        "label": "Upstream style: addresses only",
+        "value": "address-only"
+      }
+    ]
+  },
+  {
+    "type": "text",
     "label": "**Search Engines · Search engines & quick switch**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.web_toolbar_search_engine",
@@ -8835,7 +7354,7 @@
   {
     "type": "text",
     "label": "**Notifications & Audio · Audio indicator & mute**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.audio_indicator",
@@ -8846,7 +7365,7 @@
   {
     "type": "text",
     "label": "**Notifications & Audio · Notification refresh**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.apps.sidebar.badge_poll_interval_ms",
@@ -8891,7 +7410,7 @@
   {
     "type": "text",
     "label": "**Startup & Background · Panel background loading**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.smart_sleep",
@@ -8902,7 +7421,7 @@
   {
     "type": "text",
     "label": "**Keyboard & Mouse · Insta Peek**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.apps.insta_peek.shortcut",
@@ -8913,7 +7432,7 @@
   {
     "type": "text",
     "label": "**Keyboard & Mouse · Panel shortcuts & mouse actions**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.keybinds_enabled",
@@ -9030,9 +7549,20 @@
     "defaultValue": "Ctrl+Shift+Comma"
   },
   {
+    "property": "zen.workspace.zentral.hybrid.panel_url_shortcut",
+    "label": "Ctrl/Cmd+L focuses panel URL only while panel has focus",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "type": "text",
+    "label": "**Video**",
+    "size": "22px"
+  },
+  {
     "type": "text",
     "label": "**Video Playback · Playback & captions**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.zentral.video_preview.renderer",
@@ -9088,8 +7618,2117 @@
   },
   {
     "type": "text",
+    "label": "**Video Playback · Enlarged preview**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.double_click_enlarge",
+    "label": "Double-click video to enlarge temporarily",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_keyboard_controls",
+    "label": "Enable focused Big Preview keyboard controls",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_click_toggle",
+    "label": "Click the enlarged video to play/pause",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px",
+    "label": "Default enlarged preview bottom clearance (px)",
+    "type": "dropdown",
+    "defaultValue": 64,
+    "options": [
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "128",
+        "value": 128
+      },
+      {
+        "label": "192",
+        "value": 192
+      },
+      {
+        "label": "240",
+        "value": 240
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_keep_aspect",
+    "label": "Keep video proportions when resizing enlarged preview",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_hover_controls",
+    "label": "Show enlarged controls on bottom-edge hover",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_width",
+    "label": "Remembered enlarged video width (px)",
+    "type": "string",
+    "defaultValue": 1280
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_height",
+    "label": "Remembered enlarged video height (px)",
+    "type": "string",
+    "defaultValue": 720
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_remember_position",
+    "label": "Remember enlarged preview position (otherwise open at sidebar bottom corner)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.enlarged_position",
+    "label": "Remembered enlarged position (used only when Remember position is enabled)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "type": "text",
+    "label": "**Appearance & layout · Size & shape**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.fit_width",
+    "label": "Fill Available Sidebar Width",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.width_percent",
+    "label": "Preview Width (%) when Fill Width is Off",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "65",
+        "value": 65
+      },
+      {
+        "label": "75",
+        "value": 75
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.height_px",
+    "label": "Preview Height (px; 0 = auto)",
+    "type": "dropdown",
+    "defaultValue": 0,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "150",
+        "value": 150
+      },
+      {
+        "label": "230",
+        "value": 230
+      },
+      {
+        "label": "320",
+        "value": 320
+      },
+      {
+        "label": "480",
+        "value": 480
+      },
+      {
+        "label": "640",
+        "value": 640
+      },
+      {
+        "label": "800",
+        "value": 800
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.radius_px",
+    "label": "Preview Corner Radius (px)",
+    "type": "dropdown",
+    "defaultValue": 0,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "24",
+        "value": 24
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.framing",
+    "label": "Video Framing",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "auto",
+        "value": "auto"
+      },
+      {
+        "label": "contain",
+        "value": "contain"
+      },
+      {
+        "label": "cover",
+        "value": "cover"
+      }
+    ]
+  },
+  {
+    "type": "text",
+    "label": "**Appearance & layout · Toolbar buttons**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.play_button",
+    "label": "Show play/pause button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.mute_button",
+    "label": "Show mute/unmute button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.next_source_button",
+    "label": "Show next source button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.open_tab_button",
+    "label": "Show open source tab button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.hide_button",
+    "label": "Show hide/show video button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.auto_height_button",
+    "label": "Show Auto height button after resizing",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.framing_button",
+    "label": "Show framing button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.skip_back_button",
+    "label": "Show -10 s (back) button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.skip_forward_button",
+    "label": "Show +10 s (forward) button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.subtitles_button",
+    "label": "Show subtitles button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.pin_source_button",
+    "label": "Show pin source button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.compact_card_button",
+    "label": "Show compact card button",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.video_hidden",
+    "label": "Video preview: video hidden",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.compact_card",
+    "label": "Video preview: compact card",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.button_style",
+    "label": "Toolbar button style under the video (standalone)",
+    "type": "dropdown",
+    "defaultValue": "plain",
+    "options": [
+      {
+        "label": "Plain (icons only)",
+        "value": "plain"
+      },
+      {
+        "label": "Outline",
+        "value": "outline"
+      },
+      {
+        "label": "Filled",
+        "value": "filled"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.button_size_px",
+    "label": "Toolbar button size (standalone)",
+    "type": "dropdown",
+    "defaultValue": 26,
+    "options": [
+      {
+        "label": "18 px",
+        "value": 18
+      },
+      {
+        "label": "20 px",
+        "value": 20
+      },
+      {
+        "label": "22 px",
+        "value": 22
+      },
+      {
+        "label": "24 px",
+        "value": 24
+      },
+      {
+        "label": "26 px",
+        "value": 26
+      },
+      {
+        "label": "28 px",
+        "value": 28
+      },
+      {
+        "label": "32 px",
+        "value": 32
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.button_radius_px",
+    "label": "Toolbar button corner radius (px, standalone mod)",
+    "type": "dropdown",
+    "defaultValue": 4,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "12",
+        "value": 12
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.button_icon_color",
+    "label": "Toolbar button icon color (standalone)",
+    "type": "string",
+    "defaultValue": "",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.button_fill_color",
+    "label": "Toolbar button fill color (standalone)",
+    "type": "string",
+    "defaultValue": "",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.button_border_color",
+    "label": "Toolbar button border color (standalone)",
+    "type": "string",
+    "defaultValue": "",
+    "border": "value"
+  },
+  {
+    "type": "text",
+    "label": "**Appearance & layout · Colors & backing**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_opacity",
+    "label": "Video preview canvas opacity (%)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      },
+      {
+        "label": "37",
+        "value": 37
+      },
+      {
+        "label": "38",
+        "value": 38
+      },
+      {
+        "label": "39",
+        "value": 39
+      },
+      {
+        "label": "40",
+        "value": 40
+      },
+      {
+        "label": "41",
+        "value": 41
+      },
+      {
+        "label": "42",
+        "value": 42
+      },
+      {
+        "label": "43",
+        "value": 43
+      },
+      {
+        "label": "44",
+        "value": 44
+      },
+      {
+        "label": "45",
+        "value": 45
+      },
+      {
+        "label": "46",
+        "value": 46
+      },
+      {
+        "label": "47",
+        "value": 47
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "49",
+        "value": 49
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "51",
+        "value": 51
+      },
+      {
+        "label": "52",
+        "value": 52
+      },
+      {
+        "label": "53",
+        "value": 53
+      },
+      {
+        "label": "54",
+        "value": 54
+      },
+      {
+        "label": "55",
+        "value": 55
+      },
+      {
+        "label": "56",
+        "value": 56
+      },
+      {
+        "label": "57",
+        "value": 57
+      },
+      {
+        "label": "58",
+        "value": 58
+      },
+      {
+        "label": "59",
+        "value": 59
+      },
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "61",
+        "value": 61
+      },
+      {
+        "label": "62",
+        "value": 62
+      },
+      {
+        "label": "63",
+        "value": 63
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "65",
+        "value": 65
+      },
+      {
+        "label": "66",
+        "value": 66
+      },
+      {
+        "label": "67",
+        "value": 67
+      },
+      {
+        "label": "68",
+        "value": 68
+      },
+      {
+        "label": "69",
+        "value": 69
+      },
+      {
+        "label": "70",
+        "value": 70
+      },
+      {
+        "label": "71",
+        "value": 71
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "73",
+        "value": 73
+      },
+      {
+        "label": "74",
+        "value": 74
+      },
+      {
+        "label": "75",
+        "value": 75
+      },
+      {
+        "label": "76",
+        "value": 76
+      },
+      {
+        "label": "77",
+        "value": 77
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "79",
+        "value": 79
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "81",
+        "value": 81
+      },
+      {
+        "label": "82",
+        "value": 82
+      },
+      {
+        "label": "83",
+        "value": 83
+      },
+      {
+        "label": "84",
+        "value": 84
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "86",
+        "value": 86
+      },
+      {
+        "label": "87",
+        "value": 87
+      },
+      {
+        "label": "88",
+        "value": 88
+      },
+      {
+        "label": "89",
+        "value": 89
+      },
+      {
+        "label": "90",
+        "value": 90
+      },
+      {
+        "label": "91",
+        "value": 91
+      },
+      {
+        "label": "92",
+        "value": 92
+      },
+      {
+        "label": "93",
+        "value": 93
+      },
+      {
+        "label": "94",
+        "value": 94
+      },
+      {
+        "label": "95",
+        "value": 95
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "97",
+        "value": 97
+      },
+      {
+        "label": "98",
+        "value": 98
+      },
+      {
+        "label": "99",
+        "value": 99
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_control_opacity",
+    "label": "Video control strip opacity (%)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      },
+      {
+        "label": "37",
+        "value": 37
+      },
+      {
+        "label": "38",
+        "value": 38
+      },
+      {
+        "label": "39",
+        "value": 39
+      },
+      {
+        "label": "40",
+        "value": 40
+      },
+      {
+        "label": "41",
+        "value": 41
+      },
+      {
+        "label": "42",
+        "value": 42
+      },
+      {
+        "label": "43",
+        "value": 43
+      },
+      {
+        "label": "44",
+        "value": 44
+      },
+      {
+        "label": "45",
+        "value": 45
+      },
+      {
+        "label": "46",
+        "value": 46
+      },
+      {
+        "label": "47",
+        "value": 47
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "49",
+        "value": 49
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "51",
+        "value": 51
+      },
+      {
+        "label": "52",
+        "value": 52
+      },
+      {
+        "label": "53",
+        "value": 53
+      },
+      {
+        "label": "54",
+        "value": 54
+      },
+      {
+        "label": "55",
+        "value": 55
+      },
+      {
+        "label": "56",
+        "value": 56
+      },
+      {
+        "label": "57",
+        "value": 57
+      },
+      {
+        "label": "58",
+        "value": 58
+      },
+      {
+        "label": "59",
+        "value": 59
+      },
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "61",
+        "value": 61
+      },
+      {
+        "label": "62",
+        "value": 62
+      },
+      {
+        "label": "63",
+        "value": 63
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "65",
+        "value": 65
+      },
+      {
+        "label": "66",
+        "value": 66
+      },
+      {
+        "label": "67",
+        "value": 67
+      },
+      {
+        "label": "68",
+        "value": 68
+      },
+      {
+        "label": "69",
+        "value": 69
+      },
+      {
+        "label": "70",
+        "value": 70
+      },
+      {
+        "label": "71",
+        "value": 71
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "73",
+        "value": 73
+      },
+      {
+        "label": "74",
+        "value": 74
+      },
+      {
+        "label": "75",
+        "value": 75
+      },
+      {
+        "label": "76",
+        "value": 76
+      },
+      {
+        "label": "77",
+        "value": 77
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "79",
+        "value": 79
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "81",
+        "value": 81
+      },
+      {
+        "label": "82",
+        "value": 82
+      },
+      {
+        "label": "83",
+        "value": 83
+      },
+      {
+        "label": "84",
+        "value": 84
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "86",
+        "value": 86
+      },
+      {
+        "label": "87",
+        "value": 87
+      },
+      {
+        "label": "88",
+        "value": 88
+      },
+      {
+        "label": "89",
+        "value": 89
+      },
+      {
+        "label": "90",
+        "value": 90
+      },
+      {
+        "label": "91",
+        "value": 91
+      },
+      {
+        "label": "92",
+        "value": 92
+      },
+      {
+        "label": "93",
+        "value": 93
+      },
+      {
+        "label": "94",
+        "value": 94
+      },
+      {
+        "label": "95",
+        "value": 95
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "97",
+        "value": 97
+      },
+      {
+        "label": "98",
+        "value": 98
+      },
+      {
+        "label": "99",
+        "value": 99
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_canvas",
+    "label": "Video canvas background (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#0a0a0a",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_control",
+    "label": "Video controls background (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#000000",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_text",
+    "label": "Video primary text and icons (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#d8d8d8",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_muted",
+    "label": "Video secondary text (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#838383",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_selected",
+    "label": "Selected video source highlight (six-digit #RRGGBB)",
+    "type": "string",
+    "defaultValue": "#7d0000",
+    "border": "value"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_border",
+    "label": "Video control border width (px; 0 = none)",
+    "type": "dropdown",
+    "defaultValue": 0,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_source_style",
+    "label": "Video source selection style",
+    "type": "dropdown",
+    "defaultValue": "line",
+    "options": [
+      {
+        "label": "Underline",
+        "value": "line"
+      },
+      {
+        "label": "Filled highlight",
+        "value": "filled"
+      }
+    ]
+  },
+  {
+    "type": "text",
+    "label": "**Appearance & layout · Controls & overlay**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_controls_wrap",
+    "label": "Allow sidebar video controls on a second row",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_controls_gap",
+    "label": "Sidebar video control spacing (px)",
+    "type": "dropdown",
+    "defaultValue": 1,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_overlay_opacity",
+    "label": "Big Preview hover overlay opacity (%)",
+    "type": "dropdown",
+    "defaultValue": 40,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "17",
+        "value": 17
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "19",
+        "value": 19
+      },
+      {
+        "label": "20",
+        "value": 20
+      },
+      {
+        "label": "21",
+        "value": 21
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      },
+      {
+        "label": "37",
+        "value": 37
+      },
+      {
+        "label": "38",
+        "value": 38
+      },
+      {
+        "label": "39",
+        "value": 39
+      },
+      {
+        "label": "40",
+        "value": 40
+      },
+      {
+        "label": "41",
+        "value": 41
+      },
+      {
+        "label": "42",
+        "value": 42
+      },
+      {
+        "label": "43",
+        "value": 43
+      },
+      {
+        "label": "44",
+        "value": 44
+      },
+      {
+        "label": "45",
+        "value": 45
+      },
+      {
+        "label": "46",
+        "value": 46
+      },
+      {
+        "label": "47",
+        "value": 47
+      },
+      {
+        "label": "48",
+        "value": 48
+      },
+      {
+        "label": "49",
+        "value": 49
+      },
+      {
+        "label": "50",
+        "value": 50
+      },
+      {
+        "label": "51",
+        "value": 51
+      },
+      {
+        "label": "52",
+        "value": 52
+      },
+      {
+        "label": "53",
+        "value": 53
+      },
+      {
+        "label": "54",
+        "value": 54
+      },
+      {
+        "label": "55",
+        "value": 55
+      },
+      {
+        "label": "56",
+        "value": 56
+      },
+      {
+        "label": "57",
+        "value": 57
+      },
+      {
+        "label": "58",
+        "value": 58
+      },
+      {
+        "label": "59",
+        "value": 59
+      },
+      {
+        "label": "60",
+        "value": 60
+      },
+      {
+        "label": "61",
+        "value": 61
+      },
+      {
+        "label": "62",
+        "value": 62
+      },
+      {
+        "label": "63",
+        "value": 63
+      },
+      {
+        "label": "64",
+        "value": 64
+      },
+      {
+        "label": "65",
+        "value": 65
+      },
+      {
+        "label": "66",
+        "value": 66
+      },
+      {
+        "label": "67",
+        "value": 67
+      },
+      {
+        "label": "68",
+        "value": 68
+      },
+      {
+        "label": "69",
+        "value": 69
+      },
+      {
+        "label": "70",
+        "value": 70
+      },
+      {
+        "label": "71",
+        "value": 71
+      },
+      {
+        "label": "72",
+        "value": 72
+      },
+      {
+        "label": "73",
+        "value": 73
+      },
+      {
+        "label": "74",
+        "value": 74
+      },
+      {
+        "label": "75",
+        "value": 75
+      },
+      {
+        "label": "76",
+        "value": 76
+      },
+      {
+        "label": "77",
+        "value": 77
+      },
+      {
+        "label": "78",
+        "value": 78
+      },
+      {
+        "label": "79",
+        "value": 79
+      },
+      {
+        "label": "80",
+        "value": 80
+      },
+      {
+        "label": "81",
+        "value": 81
+      },
+      {
+        "label": "82",
+        "value": 82
+      },
+      {
+        "label": "83",
+        "value": 83
+      },
+      {
+        "label": "84",
+        "value": 84
+      },
+      {
+        "label": "85",
+        "value": 85
+      },
+      {
+        "label": "86",
+        "value": 86
+      },
+      {
+        "label": "87",
+        "value": 87
+      },
+      {
+        "label": "88",
+        "value": 88
+      },
+      {
+        "label": "89",
+        "value": 89
+      },
+      {
+        "label": "90",
+        "value": 90
+      },
+      {
+        "label": "91",
+        "value": 91
+      },
+      {
+        "label": "92",
+        "value": 92
+      },
+      {
+        "label": "93",
+        "value": 93
+      },
+      {
+        "label": "94",
+        "value": 94
+      },
+      {
+        "label": "95",
+        "value": 95
+      },
+      {
+        "label": "96",
+        "value": 96
+      },
+      {
+        "label": "97",
+        "value": 97
+      },
+      {
+        "label": "98",
+        "value": 98
+      },
+      {
+        "label": "99",
+        "value": 99
+      },
+      {
+        "label": "100",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_padding",
+    "label": "Video control padding (px)",
+    "type": "dropdown",
+    "defaultValue": 0,
+    "options": [
+      {
+        "label": "0",
+        "value": 0
+      },
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "7",
+        "value": 7
+      },
+      {
+        "label": "8",
+        "value": 8
+      },
+      {
+        "label": "9",
+        "value": 9
+      },
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "11",
+        "value": 11
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "13",
+        "value": 13
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "15",
+        "value": 15
+      },
+      {
+        "label": "16",
+        "value": 16
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.video_row_height",
+    "label": "Video source row height (px)",
+    "type": "dropdown",
+    "defaultValue": 22,
+    "options": [
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "23",
+        "value": 23
+      },
+      {
+        "label": "24",
+        "value": 24
+      },
+      {
+        "label": "25",
+        "value": 25
+      },
+      {
+        "label": "26",
+        "value": 26
+      },
+      {
+        "label": "27",
+        "value": 27
+      },
+      {
+        "label": "28",
+        "value": 28
+      },
+      {
+        "label": "29",
+        "value": 29
+      },
+      {
+        "label": "30",
+        "value": 30
+      },
+      {
+        "label": "31",
+        "value": 31
+      },
+      {
+        "label": "32",
+        "value": 32
+      },
+      {
+        "label": "33",
+        "value": 33
+      },
+      {
+        "label": "34",
+        "value": 34
+      },
+      {
+        "label": "35",
+        "value": 35
+      },
+      {
+        "label": "36",
+        "value": 36
+      }
+    ]
+  },
+  {
+    "type": "text",
+    "label": "**Video subtitles · Subtitle display**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.youtube_captions",
+    "label": "Mirror captions (text tracks and YouTube)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_placement",
+    "label": "Subtitle placement",
+    "type": "dropdown",
+    "defaultValue": "below",
+    "options": [
+      {
+        "label": "Below the video (separate subtitle area)",
+        "value": "below"
+      },
+      {
+        "label": "Over the video (classic overlay)",
+        "value": "overlay"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_font_size",
+    "label": "Subtitle text size (px)",
+    "type": "dropdown",
+    "defaultValue": 12,
+    "options": [
+      {
+        "label": "10",
+        "value": 10
+      },
+      {
+        "label": "12",
+        "value": 12
+      },
+      {
+        "label": "14",
+        "value": 14
+      },
+      {
+        "label": "16",
+        "value": 16
+      },
+      {
+        "label": "18",
+        "value": 18
+      },
+      {
+        "label": "22",
+        "value": 22
+      },
+      {
+        "label": "28",
+        "value": 28
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_max_lines",
+    "label": "Maximum subtitle lines",
+    "type": "dropdown",
+    "defaultValue": 4,
+    "options": [
+      {
+        "label": "1",
+        "value": 1
+      },
+      {
+        "label": "2",
+        "value": 2
+      },
+      {
+        "label": "3",
+        "value": 3
+      },
+      {
+        "label": "4",
+        "value": 4
+      },
+      {
+        "label": "5",
+        "value": 5
+      },
+      {
+        "label": "6",
+        "value": 6
+      },
+      {
+        "label": "8",
+        "value": 8
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.captions_visible",
+    "label": "Show subtitles (same switch as the video toolbar)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_overflow",
+    "label": "Long subtitle behavior",
+    "type": "dropdown",
+    "defaultValue": "fit",
+    "options": [
+      {
+        "label": "Fit text; ellipsis only when necessary",
+        "value": "fit"
+      },
+      {
+        "label": "Keep selected font size; scroll full text",
+        "value": "scroll"
+      }
+    ]
+  },
+  {
+    "type": "text",
+    "label": "**Video subtitles · Subtitle updates**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_poll_ms",
+    "label": "Caption recovery interval (slower = delayed recovery from missed events)",
+    "type": "dropdown",
+    "defaultValue": 750,
+    "options": [
+      {
+        "label": "250 ms",
+        "value": 250
+      },
+      {
+        "label": "500 ms",
+        "value": 500
+      },
+      {
+        "label": "750 ms",
+        "value": 750
+      },
+      {
+        "label": "1500 ms",
+        "value": 1500
+      },
+      {
+        "label": "3000 ms",
+        "value": 3000
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.caption_events",
+    "label": "Use caption change events when available",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.video_preview.slow_caption_recovery",
+    "label": "Throttle caption-watch rebinding (selected recovery interval is unchanged)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "type": "text",
     "label": "**Video Sources · Discovery & source selection**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.zentral.video_preview.auto_show_video",
@@ -9142,7 +9781,7 @@
   {
     "type": "text",
     "label": "**Video Performance · Capture & background work**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.zentral.video_preview.pause_when_compact_hidden",
@@ -9386,8 +10025,13 @@
   },
   {
     "type": "text",
+    "label": "**Integrations**",
+    "size": "22px"
+  },
+  {
+    "type": "text",
     "label": "**Browser & Add-on Compatibility · Browser hosts & website styles**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.addon_tab_id_bridge",
@@ -9408,9 +10052,32 @@
     "defaultValue": false
   },
   {
+    "property": "zen.workspace.zentral.compat.external_tab_groups",
+    "label": "Use external Tab Groups: pause Zentral group hooks",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.compat.external_library_layout",
+    "label": "Use external Library layout: pause Extended Library geometry",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.compat.keep_launcher_in_sidebar",
+    "label": "Keep native app launchers in the sidebar (no automatic top-toolbar move)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "type": "text",
+    "label": "**Advanced**",
+    "size": "22px"
+  },
+  {
     "type": "text",
     "label": "**Panel Recovery · Bounded recovery & optional troubleshooting**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.bgalazka.show_triple_style_repair",
@@ -9523,7 +10190,7 @@
   {
     "type": "text",
     "label": "**Modules & CSS Files · File loading**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.zentral.modules.video.enabled",
@@ -9714,7 +10381,7 @@
   {
     "type": "text",
     "label": "**Local Add-ons · Local registrations**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.zentral.addons",
@@ -9725,7 +10392,7 @@
   {
     "type": "text",
     "label": "**Experimental · Native compact sidebar**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate",
@@ -10812,7 +11479,7 @@
   {
     "type": "text",
     "label": "**Experimental · Library layout**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.zentral.experimental.library_resize",
@@ -10937,7 +11604,7 @@
   {
     "type": "text",
     "label": "**Video Experiments · Experimental methods & tests**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.zentral.video_preview.disable_experimental_bridge",
@@ -10965,8 +11632,13 @@
   },
   {
     "type": "text",
+    "label": "**Diagnostics**",
+    "size": "22px"
+  },
+  {
+    "type": "text",
     "label": "**Logs & Diagnostics · Capture & reports**",
-    "size": "18px"
+    "size": "16px"
   },
   {
     "property": "zen.workspace.zentral.debug",
@@ -11021,508 +11693,5 @@
     "label": "Base Mod Diagnostic Log Folder (absolute path)",
     "type": "string",
     "defaultValue": ""
-  },
-  {
-    "type": "text",
-    "label": "**Video Playback · Enlarged preview**",
-    "size": "18px"
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.double_click_enlarge",
-    "label": "Double-click video to enlarge temporarily",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.enlarged_keyboard_controls",
-    "label": "Enable focused Big Preview keyboard controls",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.enlarged_click_toggle",
-    "label": "Click the enlarged video to play/pause",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px",
-    "label": "Default enlarged preview bottom clearance (px)",
-    "type": "dropdown",
-    "defaultValue": 64,
-    "options": [
-      {
-        "label": "12",
-        "value": 12
-      },
-      {
-        "label": "48",
-        "value": 48
-      },
-      {
-        "label": "64",
-        "value": 64
-      },
-      {
-        "label": "80",
-        "value": 80
-      },
-      {
-        "label": "96",
-        "value": 96
-      },
-      {
-        "label": "128",
-        "value": 128
-      },
-      {
-        "label": "192",
-        "value": 192
-      },
-      {
-        "label": "240",
-        "value": 240
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.enlarged_keep_aspect",
-    "label": "Keep video proportions when resizing enlarged preview",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.enlarged_hover_controls",
-    "label": "Show enlarged controls on bottom-edge hover",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.enlarged_width",
-    "label": "Remembered enlarged video width (px)",
-    "type": "string",
-    "defaultValue": 1280
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.enlarged_height",
-    "label": "Remembered enlarged video height (px)",
-    "type": "string",
-    "defaultValue": 720
-  },
-  {
-    "type": "text",
-    "label": "**Video subtitles · Subtitle display**",
-    "size": "18px"
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.youtube_captions",
-    "label": "Mirror captions (text tracks and YouTube)",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.caption_placement",
-    "label": "Subtitle placement",
-    "type": "dropdown",
-    "defaultValue": "below",
-    "options": [
-      {
-        "label": "Below the video (separate subtitle area)",
-        "value": "below"
-      },
-      {
-        "label": "Over the video (classic overlay)",
-        "value": "overlay"
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.caption_font_size",
-    "label": "Subtitle text size (px)",
-    "type": "dropdown",
-    "defaultValue": 12,
-    "options": [
-      {
-        "label": "10",
-        "value": 10
-      },
-      {
-        "label": "12",
-        "value": 12
-      },
-      {
-        "label": "14",
-        "value": 14
-      },
-      {
-        "label": "16",
-        "value": 16
-      },
-      {
-        "label": "18",
-        "value": 18
-      },
-      {
-        "label": "22",
-        "value": 22
-      },
-      {
-        "label": "28",
-        "value": 28
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.caption_max_lines",
-    "label": "Maximum subtitle lines",
-    "type": "dropdown",
-    "defaultValue": 4,
-    "options": [
-      {
-        "label": "1",
-        "value": 1
-      },
-      {
-        "label": "2",
-        "value": 2
-      },
-      {
-        "label": "3",
-        "value": 3
-      },
-      {
-        "label": "4",
-        "value": 4
-      },
-      {
-        "label": "5",
-        "value": 5
-      },
-      {
-        "label": "6",
-        "value": 6
-      },
-      {
-        "label": "8",
-        "value": 8
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.captions_visible",
-    "label": "Show subtitles (same switch as the video toolbar)",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.caption_overflow",
-    "label": "Long subtitle behavior",
-    "type": "dropdown",
-    "defaultValue": "fit",
-    "options": [
-      {
-        "label": "Fit text; ellipsis only when necessary",
-        "value": "fit"
-      },
-      {
-        "label": "Keep selected font size; scroll full text",
-        "value": "scroll"
-      }
-    ]
-  },
-  {
-    "type": "text",
-    "label": "**Video subtitles · Subtitle updates**",
-    "size": "18px"
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.caption_poll_ms",
-    "label": "Caption recovery interval (slower = delayed recovery from missed events)",
-    "type": "dropdown",
-    "defaultValue": 750,
-    "options": [
-      {
-        "label": "250 ms",
-        "value": 250
-      },
-      {
-        "label": "500 ms",
-        "value": 500
-      },
-      {
-        "label": "750 ms",
-        "value": 750
-      },
-      {
-        "label": "1500 ms",
-        "value": 1500
-      },
-      {
-        "label": "3000 ms",
-        "value": 3000
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.caption_events",
-    "label": "Use caption change events when available",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.slow_caption_recovery",
-    "label": "Throttle caption-watch rebinding (selected recovery interval is unchanged)",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.enlarged_remember_position",
-    "label": "Remember enlarged preview position (otherwise open at sidebar bottom corner)",
-    "type": "checkbox",
-    "defaultValue": false
-  },
-  {
-    "property": "zen.workspace.zentral.video_preview.enlarged_position",
-    "label": "Remembered enlarged position (used only when Remember position is enabled)",
-    "type": "string",
-    "defaultValue": ""
-  },
-  {
-    "property": "zen.workspace.zentral.hybrid.hide_detach_button",
-    "label": "Hide Detach / Attach pill button",
-    "type": "checkbox",
-    "defaultValue": false
-  },
-  {
-    "property": "zen.workspace.zentral.compat.external_tab_groups",
-    "label": "Use external Tab Groups: pause Zentral group hooks",
-    "type": "checkbox",
-    "defaultValue": false
-  },
-  {
-    "property": "zen.workspace.zentral.compat.external_library_layout",
-    "label": "Use external Library layout: pause Extended Library geometry",
-    "type": "checkbox",
-    "defaultValue": false
-  },
-  {
-    "property": "zen.workspace.zentral.compat.keep_launcher_in_sidebar",
-    "label": "Keep native app launchers in the sidebar (no automatic top-toolbar move)",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.hybrid.geometry_mode",
-    "label": "Panel geometry engine",
-    "type": "dropdown",
-    "defaultValue": "hybrid",
-    "options": [
-      {
-        "label": "Hybrid: persistent per-app movement and docking",
-        "value": "hybrid"
-      },
-      {
-        "label": "Classic Extended: legacy shared offsets",
-        "value": "extended"
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.hybrid.allow_overflow",
-    "label": "Allow panels partly outside the window (keep controls reachable)",
-    "type": "checkbox",
-    "defaultValue": false
-  },
-  {
-    "property": "zen.workspace.zentral.hybrid.position_scope",
-    "label": "Remember panel placement for",
-    "type": "dropdown",
-    "defaultValue": "app",
-    "options": [
-      {
-        "label": "Each app",
-        "value": "app"
-      },
-      {
-        "label": "Each app in each workspace",
-        "value": "workspace"
-      },
-      {
-        "label": "All apps together",
-        "value": "global"
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.hybrid.snap_enabled",
-    "label": "Show edge docking previews while moving panels",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.hybrid.dock_push_px",
-    "label": "Docking distance (px; snap near edge when overflow is allowed)",
-    "type": "dropdown",
-    "defaultValue": 15,
-    "options": [
-      {
-        "label": "8",
-        "value": 8
-      },
-      {
-        "label": "15",
-        "value": 15
-      },
-      {
-        "label": "24",
-        "value": 24
-      },
-      {
-        "label": "40",
-        "value": 40
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.hybrid.dock_gap",
-    "label": "Gap between docked panels and edge (px)",
-    "type": "dropdown",
-    "defaultValue": 0,
-    "options": [
-      {
-        "label": "0",
-        "value": 0
-      },
-      {
-        "label": "4",
-        "value": 4
-      },
-      {
-        "label": "8",
-        "value": 8
-      },
-      {
-        "label": "12",
-        "value": 12
-      },
-      {
-        "label": "16",
-        "value": 16
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.hybrid.pill_layout",
-    "label": "Pill layout",
-    "type": "dropdown",
-    "defaultValue": "upstream",
-    "options": [
-      {
-        "label": "Upstream: separate close box",
-        "value": "upstream"
-      },
-      {
-        "label": "Classic Extended: single pill",
-        "value": "extended"
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.hybrid.panel_url_shortcut",
-    "label": "Ctrl/Cmd+L focuses panel URL only while panel has focus",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.hybrid.navigation_mode",
-    "label": "Panel address entry behavior",
-    "type": "dropdown",
-    "defaultValue": "extended-search",
-    "options": [
-      {
-        "label": "Extended: addresses and configured search",
-        "value": "extended-search"
-      },
-      {
-        "label": "Upstream style: addresses only",
-        "value": "address-only"
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.hybrid.detached_height_percent",
-    "label": "Height when detaching from an edge (%)",
-    "type": "dropdown",
-    "defaultValue": 78,
-    "options": [
-      {
-        "label": "60",
-        "value": 60
-      },
-      {
-        "label": "72",
-        "value": 72
-      },
-      {
-        "label": "78",
-        "value": 78
-      },
-      {
-        "label": "85",
-        "value": 85
-      },
-      {
-        "label": "100",
-        "value": 100
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.theme.policy",
-    "label": "Panel controls and tooltip light/dark source",
-    "type": "dropdown",
-    "defaultValue": "browser",
-    "options": [
-      {
-        "label": "Browser interface",
-        "value": "browser"
-      },
-      {
-        "label": "Website appearance preference",
-        "value": "content"
-      },
-      {
-        "label": "Operating system",
-        "value": "system"
-      },
-      {
-        "label": "Always light",
-        "value": "light"
-      },
-      {
-        "label": "Always dark",
-        "value": "dark"
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.zentral.theme.contrast",
-    "label": "Tooltip and control contrast",
-    "type": "dropdown",
-    "defaultValue": "adaptive",
-    "options": [
-      {
-        "label": "Adaptive readable tooltips; keep custom controls",
-        "value": "adaptive"
-      },
-      {
-        "label": "High contrast tooltips and controls",
-        "value": "high"
-      },
-      {
-        "label": "Keep all Extended custom appearance",
-        "value": "custom"
-      }
-    ]
   }
 ]

@@ -15,10 +15,11 @@ The shared loader can activate these while Apps/Groups are unavailable or disabl
 
 ## Standalone install through Sine
 
-Modules with a `standalone.json` can be installed on their own by pasting their folder URL into Sine. The full pack always takes precedence if both are installed. Generated files are produced by `node tools/build-standalone.cjs`; see `docs/SINE-MODULAR-INSTALL.md`.
+Modules with a `standalone.json` can be installed on their own by pasting their folder URL into Sine. The full pack always takes precedence if both are installed. Generated files are produced by `node tools/build-standalone.cjs` (development tooling kept in the local working copy).
 
 | Module | Sine install URL |
 | --- | --- |
+| Zentral Sidebar Video Preview | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/video` |
 | Zentral Logger | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/diagnostics` |
 | Zentral Library Resize | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/library` |
 | Zentral RSS Display | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/rss` |
@@ -27,4 +28,4 @@ Modules with a `standalone.json` can be installed on their own by pasting their 
 | Zentral Load Tab at Startup | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/tabs/startup` |
 | Zentral Tab Unload | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/tabs/unloading` |
 
-Full-pack only (not standalone-capable): `theme/` (service consumed by panels and settings, needs the module loader) and `video/` (about 14 files and content frames loaded through the module loader).
+Full-pack only (not standalone-capable): `theme/` (a service consumed by panels and settings; it needs the module loader).
