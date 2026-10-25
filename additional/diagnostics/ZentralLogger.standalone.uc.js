@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Logger
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.2
+// @version 3.1.3
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,9 +24,9 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.2.
+ * Placeholders replaced by the build: 3.1.3.
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.2";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.3";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -510,7 +510,8 @@ function nativeSidebarSide() {
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const ZentralRuntime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
+  const ZentralRuntime =
+    window.ZentralRuntime || window.__zentralStandaloneRuntime;
   ZentralRuntime.register({
     id: "logger",
     // Used by the standalone shim; the full runtime ignores unknown fields.
@@ -852,8 +853,8 @@ function nativeSidebarSide() {
           export() {
             exportLog();
           },
-          generateLogString() {
-            return generateLogString();
+          generateLogString(options) {
+            return generateLogString(options);
           },
           clear() {
             ringBuffer.length = 0;
@@ -1926,7 +1927,37 @@ function nativeSidebarSide() {
          * Generates formatted diagnostic log string in-memory without file operations
          * @returns {string} Formatted log output
          */
-        function generateLogString() {
+        /**
+         * Removes data that should not leave the machine: credentials inside
+         * URLs, URL query strings / fragments, profile-folder user names, email
+         * addresses and token-like values. Everything else is kept untouched
+         * so the log stays useful for debugging.
+         */
+        function redactSensitive(text) {
+          return String(text)
+            .replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@"'<>]+@/gi, "$1")
+            .replace(
+              /\b(https?:\/\/[^\s"'<>?#]+)[?#][^\s"'<>]*/gi,
+              "$1?[redacted]",
+            )
+            .replace(
+              /([A-Za-z]:[\\/]+(?:Users|Documents and Settings)[\\/]+)[^\\/"'<>:|?*\r\n]+/gi,
+              "$1<user>",
+            )
+            .replace(/(\/(?:Users|home)\/)[^/\s"'<>:]+/g, "$1<user>")
+            .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, "[email]")
+            .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/g, "Bearer [redacted]")
+            .replace(
+              /\b((?:access[_-]?)?token|api[_-]?key|secret|password|passwd|authorization)(\s*[=:]\s*)[^\s"',;]+/gi,
+              "$1$2[redacted]",
+            );
+        }
+
+        /**
+         * @param {{raw?: boolean}} [options] raw:true skips redaction. Callers
+         * that share the log (Report an Issue, file export) never pass it.
+         */
+        function generateLogString(options) {
           const isFull = Services.prefs.getBoolPref(
             "zen.workspace.zentral.debug.full",
             true,
@@ -1973,7 +2004,8 @@ function nativeSidebarSide() {
           );
           parts.push(`End of export.`);
 
-          return parts.join("\n");
+          const text = parts.join("\n");
+          return options && options.raw === true ? text : redactSensitive(text);
         }
 
         /**
@@ -2048,7 +2080,9 @@ function nativeSidebarSide() {
 
             const logText = generateLogString();
             cos.writeString(logText);
-            cos.writeString(`\nLog file path: ${targetFile.path}\n`);
+            cos.writeString(
+              redactSensitive(`\nLog file path: ${targetFile.path}\n`),
+            );
 
             cos.close();
             fos.close();

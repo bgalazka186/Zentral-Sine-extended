@@ -1,5 +1,9 @@
 [
   {
+    "type": "separator",
+    "label": "Start here · Essential features"
+  },
+  {
     "property": "zen.workspace.bgalazka.rss.hide_empty",
     "label": "Hide Empty RSS Live Folders",
     "type": "checkbox",
@@ -16,6 +20,10 @@
     "label": "Reader card for RSS articles",
     "type": "checkbox",
     "defaultValue": false
+  },
+  {
+    "type": "separator",
+    "label": "Reader card"
   },
   {
     "property": "zen.workspace.bgalazka.rss.card_hover_delay",
@@ -90,5 +98,469 @@
     "label": "Reader card replaces the native article tooltip",
     "type": "checkbox",
     "defaultValue": true
+  },
+  {
+    "type": "separator",
+    "label": "Appearance & layout · Size & shape"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_width",
+    "label": "Reader card width (px)",
+    "type": "dropdown",
+    "defaultValue": 340,
+    "options": [
+      {
+        "label": "240 px",
+        "value": 240
+      },
+      {
+        "label": "280 px",
+        "value": 280
+      },
+      {
+        "label": "320 px",
+        "value": 320
+      },
+      {
+        "label": "340 px",
+        "value": 340
+      },
+      {
+        "label": "380 px",
+        "value": 380
+      },
+      {
+        "label": "420 px",
+        "value": 420
+      },
+      {
+        "label": "480 px",
+        "value": 480
+      },
+      {
+        "label": "560 px",
+        "value": 560
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_max_height",
+    "label": "Reader card max height (%)",
+    "type": "dropdown",
+    "defaultValue": 60,
+    "options": [
+      {
+        "label": "20 %",
+        "value": 20
+      },
+      {
+        "label": "30 %",
+        "value": 30
+      },
+      {
+        "label": "40 %",
+        "value": 40
+      },
+      {
+        "label": "50 %",
+        "value": 50
+      },
+      {
+        "label": "60 %",
+        "value": 60
+      },
+      {
+        "label": "70 %",
+        "value": 70
+      },
+      {
+        "label": "80 %",
+        "value": 80
+      },
+      {
+        "label": "90 %",
+        "value": 90
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_font_size",
+    "label": "Reader card font size (px)",
+    "type": "dropdown",
+    "defaultValue": 13,
+    "options": [
+      {
+        "label": "10 px",
+        "value": 10
+      },
+      {
+        "label": "11 px",
+        "value": 11
+      },
+      {
+        "label": "12 px",
+        "value": 12
+      },
+      {
+        "label": "13 px",
+        "value": 13
+      },
+      {
+        "label": "14 px",
+        "value": 14
+      },
+      {
+        "label": "15 px",
+        "value": 15
+      },
+      {
+        "label": "16 px",
+        "value": 16
+      },
+      {
+        "label": "18 px",
+        "value": 18
+      },
+      {
+        "label": "20 px",
+        "value": 20
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_line_height",
+    "label": "Reader card line height (%)",
+    "type": "dropdown",
+    "defaultValue": 145,
+    "options": [
+      {
+        "label": "110 %",
+        "value": 110
+      },
+      {
+        "label": "120 %",
+        "value": 120
+      },
+      {
+        "label": "130 %",
+        "value": 130
+      },
+      {
+        "label": "145 %",
+        "value": 145
+      },
+      {
+        "label": "160 %",
+        "value": 160
+      },
+      {
+        "label": "180 %",
+        "value": 180
+      },
+      {
+        "label": "200 %",
+        "value": 200
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_padding",
+    "label": "Reader card padding (px)",
+    "type": "dropdown",
+    "defaultValue": 12,
+    "options": [
+      {
+        "label": "6 px",
+        "value": 6
+      },
+      {
+        "label": "8 px",
+        "value": 8
+      },
+      {
+        "label": "10 px",
+        "value": 10
+      },
+      {
+        "label": "12 px",
+        "value": 12
+      },
+      {
+        "label": "14 px",
+        "value": 14
+      },
+      {
+        "label": "16 px",
+        "value": 16
+      },
+      {
+        "label": "20 px",
+        "value": 20
+      },
+      {
+        "label": "24 px",
+        "value": 24
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_radius",
+    "label": "Reader card corner radius (px)",
+    "type": "dropdown",
+    "defaultValue": 10,
+    "options": [
+      {
+        "label": "0 px",
+        "value": 0
+      },
+      {
+        "label": "4 px",
+        "value": 4
+      },
+      {
+        "label": "6 px",
+        "value": 6
+      },
+      {
+        "label": "8 px",
+        "value": 8
+      },
+      {
+        "label": "10 px",
+        "value": 10
+      },
+      {
+        "label": "12 px",
+        "value": 12
+      },
+      {
+        "label": "16 px",
+        "value": 16
+      },
+      {
+        "label": "20 px",
+        "value": 20
+      },
+      {
+        "label": "24 px",
+        "value": 24
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_border",
+    "label": "Reader card border width (px)",
+    "type": "dropdown",
+    "defaultValue": 1,
+    "options": [
+      {
+        "label": "0 px",
+        "value": 0
+      },
+      {
+        "label": "1 px",
+        "value": 1
+      },
+      {
+        "label": "2 px",
+        "value": 2
+      },
+      {
+        "label": "3 px",
+        "value": 3
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_opacity",
+    "label": "Reader card background opacity (%)",
+    "type": "dropdown",
+    "defaultValue": 100,
+    "options": [
+      {
+        "label": "10 %",
+        "value": 10
+      },
+      {
+        "label": "25 %",
+        "value": 25
+      },
+      {
+        "label": "50 %",
+        "value": 50
+      },
+      {
+        "label": "75 %",
+        "value": 75
+      },
+      {
+        "label": "100 %",
+        "value": 100
+      }
+    ]
+  },
+  {
+    "type": "separator",
+    "label": "Appearance & layout · Card buttons"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_button_radius",
+    "label": "Reader card button corner radius (px)",
+    "type": "dropdown",
+    "defaultValue": 6,
+    "options": [
+      {
+        "label": "0 px",
+        "value": 0
+      },
+      {
+        "label": "4 px",
+        "value": 4
+      },
+      {
+        "label": "6 px",
+        "value": 6
+      },
+      {
+        "label": "8 px",
+        "value": 8
+      },
+      {
+        "label": "10 px",
+        "value": 10
+      },
+      {
+        "label": "12 px",
+        "value": 12
+      },
+      {
+        "label": "16 px",
+        "value": 16
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_gap",
+    "label": "Reader card element gap (px)",
+    "type": "dropdown",
+    "defaultValue": 6,
+    "options": [
+      {
+        "label": "0 px",
+        "value": 0
+      },
+      {
+        "label": "4 px",
+        "value": 4
+      },
+      {
+        "label": "6 px",
+        "value": 6
+      },
+      {
+        "label": "8 px",
+        "value": 8
+      },
+      {
+        "label": "10 px",
+        "value": 10
+      },
+      {
+        "label": "12 px",
+        "value": 12
+      },
+      {
+        "label": "16 px",
+        "value": 16
+      },
+      {
+        "label": "24 px",
+        "value": 24
+      },
+      {
+        "label": "32 px",
+        "value": 32
+      }
+    ]
+  },
+  {
+    "type": "separator",
+    "label": "Appearance & layout · Colors & backing"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_shadow",
+    "label": "Reader card shadow style",
+    "type": "dropdown",
+    "defaultValue": "soft",
+    "options": [
+      {
+        "label": "None",
+        "value": "none"
+      },
+      {
+        "label": "Soft",
+        "value": "soft"
+      },
+      {
+        "label": "Strong",
+        "value": "strong"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_font",
+    "label": "Reader card font family",
+    "type": "dropdown",
+    "defaultValue": "system",
+    "options": [
+      {
+        "label": "System",
+        "value": "system"
+      },
+      {
+        "label": "Serif",
+        "value": "serif"
+      },
+      {
+        "label": "Monospace",
+        "value": "mono"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_background",
+    "label": "Reader card background color (#RRGGBB)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_text",
+    "label": "Reader card text color (#RRGGBB)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_url",
+    "label": "Reader card URL color (#RRGGBB)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_border_color",
+    "label": "Reader card border color (#RRGGBB)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_button_background",
+    "label": "Reader card button background color (#RRGGBB)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.rss_card_button_text",
+    "label": "Reader card button text color (#RRGGBB)",
+    "type": "string",
+    "defaultValue": ""
   }
 ]

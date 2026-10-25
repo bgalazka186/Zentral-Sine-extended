@@ -2,12 +2,13 @@
 // ==UserScript==
 // @name Zentral RSS Display
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.2
+// @version 3.1.6
 // ==/UserScript==
 (function () {
   "use strict";
   // The full pack, when installed, owns this feature.
   if (window.ZentralRuntime) return;
+  // Resolve the install folder before anything else runs.
 /* Zentral standalone shim - TEMPLATE. Never loaded by the full pack.
  * tools/build-standalone.cjs prepends this to a module to produce a bundle that
  * Sine can install on its own (…/additional/<module> folder URL).
@@ -24,9 +25,9 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.2.
+ * Placeholders replaced by the build: 3.1.6.
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.2";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.6";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -485,6 +486,331 @@ function nativeSidebarSide() {
   return shim;
 })();
 
+const __BUNDLE_URL__ = Components.stack.filename; // install folder, resolved synchronously
+/* Zentral standalone embedded loader - TEMPLATE. Never loaded by the full pack.
+ * tools/build-standalone.cjs inserts it into bundles whose manifest sets
+ * "loader" (multi-file modules such as video).
+ *
+ * It implements the part of the full pack's window.ZentralModuleLoader contract
+ * that those modules use: define, load, create, require, has, readText, rootURI,
+ * sources, report, destroy. Differences, all deliberate:
+ * - Sources are not read from disk. The build embeds each controller as a
+ *   function and each content helper as a string, keyed by its repo path, so the
+ *   paths the module already uses keep working. (eval/new Function are blocked
+ *   in privileged windows, so sources are real code, not strings.)
+ * - The loader is published under a PRIVATE global (__zentralRssLoader). The full
+ *   pack's loader/Zentral.uc.js refuses to start when window.ZentralModuleLoader
+ *   exists, so a standalone loader must never occupy that name.
+ * - rootURI is the folder of the bundle script (where Sine put the package), so
+ *   files that Gecko must read itself (the window actor) stay real files.
+ */
+const __zentralEmbeddedLoader = (function () {
+  const sources = {
+
+};
+  const texts = {
+
+};
+  const definitions = new Map(),
+    files = new Map(),
+    sourceById = new Map(),
+    components = new Map();
+  let loadingSource = null,
+    destroyed = false;
+  // Same shape of check as the full loader: only embedded repo paths resolve.
+  const safePath = (path) =>
+    /^(?:additional)\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*(?:\.uc|\.sys)?\.(?:js|mjs|css|json)$/.test(
+      path,
+    );
+  const rootURI = (() => {
+    try {
+      return Services.io.newURI("./", null, Services.io.newURI(__BUNDLE_URL__))
+        .spec;
+    } catch (error) {
+      console.error("[Zentral standalone] cannot resolve install folder", error);
+      return "";
+    }
+  })();
+  const loader = {
+    standalone: true,
+    rootURI,
+    define(id, factory) {
+      if (definitions.has(id)) throw new Error("Duplicate component: " + id);
+      definitions.set(id, factory);
+      sourceById.set(id, loadingSource);
+    },
+    load(path, { optional = false, owner = "core" } = {}) {
+      if (destroyed) throw new Error("Loader destroyed: " + path);
+      if (!safePath(path) || !/\.(?:js|mjs)$/.test(path))
+        throw new Error("Unsafe module path: " + path);
+      const existing = files.get(path);
+      if (existing?.state === "loaded") return true;
+      if (existing?.state === "failed") {
+        if (optional) return false;
+        throw new Error(
+          "Required source unavailable: " + path + ": " + existing.error,
+        );
+      }
+      const run = sources[path];
+      if (typeof run !== "function") {
+        // Not part of this package (for example the Zentral settings UI).
+        const error = "not included in the standalone package";
+        files.set(path, { file: path, owner, phase: "load", state: "failed", error });
+        if (optional) return false;
+        throw new Error("Required source unavailable: " + path + ": " + error);
+      }
+      const row = { file: path, owner, phase: "load", state: "loading" };
+      files.set(path, row);
+      const previousSource = loadingSource;
+      loadingSource = path;
+      const priorDefinitions = new Set(definitions.keys());
+      try {
+        run(window);
+        row.state = "loaded";
+        return true;
+      } catch (error) {
+        for (const id of definitions.keys())
+          if (!priorDefinitions.has(id) && sourceById.get(id) === path) {
+            definitions.delete(id);
+            sourceById.delete(id);
+          }
+        row.state = "failed";
+        row.error = String(error) + (error?.stack ? "\n" + error.stack : "");
+        console.error("[Zentral source]", path, error);
+        if (!optional) throw error;
+        return false;
+      } finally {
+        loadingSource = previousSource;
+      }
+    },
+    readText(path, owner = "core") {
+      if (!safePath(path)) throw new Error("Unsafe resource path: " + path);
+      if (typeof texts[path] !== "string" || !texts[path])
+        throw new Error("Resource unavailable: " + path);
+      files.set(path, { file: path, owner, phase: "resource", state: "loaded" });
+      return texts[path];
+    },
+    create(id, args, { optional = false } = {}) {
+      const file = sourceById.get(id);
+      try {
+        const factory = this.require(id);
+        if (typeof factory !== "function")
+          throw new Error("Invalid factory: " + id);
+        const value = factory(args);
+        const component = components.get(id) || { id, file, constructions: 0 };
+        component.state = "initialized";
+        component.constructions++;
+        delete component.error;
+        components.set(id, component);
+        return value;
+      } catch (error) {
+        components.set(id, { id, file, state: "failed", error: String(error) });
+        const row = file && files.get(file);
+        if (row) {
+          row.state = "failed";
+          row.phase = "factory";
+          row.component = id;
+          row.error = String(error) + (error?.stack ? "\n" + error.stack : "");
+        }
+        console.error("[Zentral component]", file || id, error);
+        if (!optional) throw error;
+        return null;
+      }
+    },
+    require(id) {
+      if (
+        !definitions.has(id) ||
+        files.get(sourceById.get(id))?.state === "failed"
+      )
+        throw new Error("Component did not register: " + id);
+      return definitions.get(id);
+    },
+    has: (id) =>
+      definitions.has(id) && files.get(sourceById.get(id))?.state !== "failed",
+    sources: () => [...files.values()].map((row) => ({ ...row })),
+    report() {
+      return {
+        standalone: true,
+        sources: this.sources(),
+        components: [...components.values()].map((row) => ({ ...row })),
+      };
+    },
+    destroy() {
+      destroyed = true;
+      definitions.clear();
+      components.clear();
+      files.clear();
+      sourceById.clear();
+      if (window.__zentralRssLoader === loader) delete window.__zentralRssLoader;
+    },
+  };
+  return loader;
+})();
+
+window.__zentralRssLoader?.destroy?.(); // live re-run replaces the old instance
+window.__zentralRssLoader = __zentralEmbeddedLoader;
+const __zentralExtras = [
+function (window, runtime, lifecycle) {
+/* Standalone-only extra for the RSS package (never loaded by the full pack).
+ *
+ * The full pack styles the reader card through the Appearance owner
+ * (extension/appearance/ZentralAppearance.js writes --bgalazka-look-rss-card-*
+ * custom properties on :root). Installed alone there is no Appearance owner, so
+ * this script writes the same custom properties from the RSS appearance
+ * preferences; ZentralRssDisplay.css holds the theme fallbacks. Optional colors
+ * are only written when a valid hex is present, otherwise the property is
+ * removed and the theme token wins. Body of a function (window, runtime,
+ * lifecycle) that returns its cleanup.
+ */
+const root = document.documentElement;
+const P = "zen.workspace.bgalazka.look.";
+const HEX = /^#[0-9a-f]{6}$/i;
+const ATTR = "zentral-rss-standalone";
+const read = (key, fallback) => {
+  try {
+    switch (Services.prefs.getPrefType(key)) {
+      case 128:
+        return Services.prefs.getBoolPref(key);
+      case 64:
+        return Services.prefs.getIntPref(key);
+      case 32:
+        return Services.prefs.getStringPref(key);
+    }
+  } catch (_) {}
+  return fallback;
+};
+const num = (key, fallback, min, max) => {
+  const n = Number(read(key, fallback));
+  return Math.max(min, Math.min(max, Number.isFinite(n) ? n : fallback));
+};
+const optHex = (key) => {
+  const v = String(read(key, "")).trim().toLowerCase();
+  return HEX.test(v) ? v : "";
+};
+const SHADOWS = Object.freeze({
+  none: "none",
+  soft: "0 6px 24px #0008",
+  strong: "0 12px 36px #000c",
+});
+const FONTS = Object.freeze({
+  system: "system-ui, -apple-system, 'Segoe UI', sans-serif",
+  serif: "Georgia, 'Times New Roman', serif",
+  mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+});
+const owned = new Set();
+const set = (name, value) => {
+  owned.add(name);
+  root.style.setProperty(name, value);
+};
+const unset = (name) => {
+  owned.delete(name);
+  root.style.removeProperty(name);
+};
+const PREFS = [
+  P + "rss_card_width",
+  P + "rss_card_max_height",
+  P + "rss_card_font_size",
+  P + "rss_card_line_height",
+  P + "rss_card_padding",
+  P + "rss_card_radius",
+  P + "rss_card_border",
+  P + "rss_card_opacity",
+  P + "rss_card_button_radius",
+  P + "rss_card_gap",
+  P + "rss_card_shadow",
+  P + "rss_card_font",
+  P + "rss_card_background",
+  P + "rss_card_text",
+  P + "rss_card_url",
+  P + "rss_card_border_color",
+  P + "rss_card_button_background",
+  P + "rss_card_button_text",
+];
+function apply() {
+  root.setAttribute(ATTR, "");
+  set("--bgalazka-look-rss-card-width", num(P + "rss_card_width", 340, 240, 560) + "px");
+  set("--bgalazka-look-rss-card-max-height", num(P + "rss_card_max_height", 60, 20, 90) + "%");
+  set("--bgalazka-look-rss-card-font-size", num(P + "rss_card_font_size", 13, 10, 20) + "px");
+  set("--bgalazka-look-rss-card-line-height", String(num(P + "rss_card_line_height", 145, 110, 200) / 100));
+  set("--bgalazka-look-rss-card-padding", num(P + "rss_card_padding", 12, 6, 24) + "px");
+  set("--bgalazka-look-rss-card-radius", num(P + "rss_card_radius", 10, 0, 24) + "px");
+  set("--bgalazka-look-rss-card-border", num(P + "rss_card_border", 1, 0, 3) + "px");
+  set("--bgalazka-look-rss-card-opacity", num(P + "rss_card_opacity", 100, 10, 100) + "%");
+  set("--bgalazka-look-rss-card-button-radius", num(P + "rss_card_button_radius", 6, 0, 16) + "px");
+  set("--bgalazka-look-rss-card-gap", num(P + "rss_card_gap", 6, 0, 32) + "px");
+  const shadow = String(read(P + "rss_card_shadow", "soft"));
+  set("--bgalazka-look-rss-card-shadow", SHADOWS[shadow] ?? SHADOWS.soft);
+  const font = String(read(P + "rss_card_font", "system"));
+  set("--bgalazka-look-rss-card-font", FONTS[font] ?? FONTS.system);
+  const background = optHex(P + "rss_card_background");
+  if (background) set("--bgalazka-look-rss-card-background", background);
+  else unset("--bgalazka-look-rss-card-background");
+  const text = optHex(P + "rss_card_text");
+  if (text) set("--bgalazka-look-rss-card-text", text);
+  else unset("--bgalazka-look-rss-card-text");
+  const url = optHex(P + "rss_card_url");
+  if (url) set("--bgalazka-look-rss-card-url", url);
+  else unset("--bgalazka-look-rss-card-url");
+  const borderColor = optHex(P + "rss_card_border_color");
+  if (borderColor) set("--bgalazka-look-rss-card-border-color", borderColor);
+  else unset("--bgalazka-look-rss-card-border-color");
+  const buttonBackground = optHex(P + "rss_card_button_background");
+  if (buttonBackground) set("--bgalazka-look-rss-card-button-background", buttonBackground);
+  else unset("--bgalazka-look-rss-card-button-background");
+  const buttonText = optHex(P + "rss_card_button_text");
+  if (buttonText) set("--bgalazka-look-rss-card-button-text", buttonText);
+  else unset("--bgalazka-look-rss-card-button-text");
+}
+// Sine writes several prefs in a row; coalesce them into one style update.
+let pending = false;
+let disposed = false;
+const observer = {
+  observe() {
+    if (pending || disposed) return;
+    pending = true;
+    Promise.resolve().then(() => {
+      pending = false;
+      if (!disposed) apply();
+    });
+  },
+};
+for (const key of PREFS) Services.prefs.addObserver(key, observer);
+apply();
+return () => {
+  disposed = true;
+  for (const key of PREFS) Services.prefs.removeObserver(key, observer);
+  for (const name of owned) root.style.removeProperty(name);
+  root.removeAttribute(ATTR);
+};
+
+},
+];
+const __zentralRegister = __zentralShim.register;
+__zentralShim.register = function (def) {
+  return __zentralRegister({
+    ...def,
+    init(args) {
+      const stops = [];
+      const stopAll = () => {
+        for (const stop of stops.splice(0).reverse()) {
+          try { stop(); } catch (error) { console.warn("[Zentral standalone] cleanup", error); }
+        }
+        __zentralEmbeddedLoader.destroy();
+      };
+      try {
+        for (const start of __zentralExtras) {
+          const stop = start(window, args.runtime, args.lifecycle);
+          if (typeof stop === "function") stops.push(stop);
+        }        const base = def.init(args);
+        stops.push(typeof base === "function" ? base : () => base?.destroy?.());
+      } catch (error) {
+        stopAll();
+        throw error;
+      }
+      return stopAll;
+    },
+  });
+};
 /*
  * ZENTRAL FILE GUIDE - additional/rss/ZentralRssDisplay.uc.js
  *
