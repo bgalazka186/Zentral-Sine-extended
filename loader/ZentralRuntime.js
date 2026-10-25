@@ -108,8 +108,7 @@
   };
   const setPref = (key, value) => {
     if (typeof value === "boolean") Services.prefs.setBoolPref(key, value);
-    else if (typeof value === "number")
-      Services.prefs.setIntPref(key, Math.round(value));
+    else if (typeof value === "number") Services.prefs.setStringPref(key, String(value));
     else Services.prefs.setStringPref(key, String(value));
   };
   let hostUnloadWarning = false;
@@ -1533,13 +1532,14 @@
           : typeof item.defaultValue === "number"
             ? "number"
             : "text";
+      if (input.type === "number") input.step = "1";
       if (input.type !== "checkbox") input.className = "zs-text-input";
     }
     input.addEventListener("change", () => {
       let value = input.type === "checkbox" ? input.checked : input.value;
       if (typeof item.defaultValue === "number") value = Number(value);
       const valid =
-        (typeof value !== "number" || Number.isInteger(value)) &&
+        (typeof value !== "number" || Number.isFinite(value)) &&
         (!item.label.includes("#RRGGBB") || /^#[0-9a-fA-F]{6}$/.test(value));
       input.setCustomValidity(
         valid

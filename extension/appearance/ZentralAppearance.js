@@ -1573,11 +1573,11 @@
         "POPUP_OPACITY",
       ]) {
         const pref = LOOK_PREFS[key];
-        const value = ctx.getPref(pref, LOOK_DEFAULTS[pref]);
+        const raw = Number(ctx.getPref(pref, LOOK_DEFAULTS[pref]));
         const [min, max] = LOOK_BOUNDS[pref];
         const clamped =
-          typeof value === "number" && Number.isFinite(value)
-            ? Math.max(min, Math.min(max, value))
+          Number.isFinite(raw)
+            ? Math.max(min, Math.min(max, raw))
             : LOOK_DEFAULTS[pref];
         root.style.setProperty(
           "--bgalazka-look-" + key.toLowerCase().replaceAll("_", "-"),
@@ -1599,7 +1599,7 @@
         const [min, max] = LOOK_BOUNDS[pref];
         const raw = Number(ctx.getPref(pref, LOOK_DEFAULTS[pref]));
         const value = Number.isFinite(raw)
-          ? Math.max(min, Math.min(max, Math.round(raw)))
+          ? Math.max(min, Math.min(max, raw))
           : LOOK_DEFAULTS[pref];
         root.style.setProperty(
           "--bgalazka-look-rss-card-" +

@@ -366,8 +366,14 @@
           )
             position = p;
         } catch (_) {}
-        let w = Services.prefs.getIntPref(P + "enlarged_width", 1280),
+        let w, h;
+        try {
+          w = Services.prefs.getIntPref(P + "enlarged_width", 1280);
           h = Services.prefs.getIntPref(P + "enlarged_height", 720);
+        } catch (_) {
+          w = 1280;
+          h = 720;
+        }
         const bottomGap = position ? inset() : defaultBottomGap();
         // Migrate the former untouched 640x420 default; preserve other custom sizes.
         if (!position && w === 640 && h === 420) {

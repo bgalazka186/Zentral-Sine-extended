@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Compact Sidebar Hover
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.2
+// @version 3.1.5
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,9 +24,9 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.2.
+ * Placeholders replaced by the build: 3.1.5.
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.2";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.5";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -428,8 +428,14 @@ function nativeSidebarSide() {
       // 1. The full pack owns every feature it contains.
       if (window.ZentralRuntime) return;
       // Live re-run (Sine reloads scripts): replace the previous instance.
+      const existing = features[def.id];
+      if (existing && existing.version && existing.version !== __ZENTRAL_STANDALONE_VERSION__) {
+        try {
+          Services.appinfo.invalidateCachesOnRestart();
+        } catch (_) {}
+      }
       try {
-        features[def.id]?.dispose?.();
+        existing?.dispose?.();
       } catch (_) {}
       const lifecycle = createFeatureScope(def.id);
       let cleanup = null,
@@ -974,14 +980,22 @@ function nativeSidebarSide() {
     function refreshTunables() {
       // Preference reads stay outside the pointer-event path. Updating sliders
       // affects the next hit-test/exit without restarting an active grace timer.
-      edgeMargin = Math.max(
-        0,
-        Math.min(64, Services.prefs.getIntPref(MARGIN_PREF, 12)),
-      );
-      exitGrace = Math.max(
-        0,
-        Math.min(2000, Services.prefs.getIntPref(GRACE_PREF, 250)),
-      );
+      const readEdgeMargin = () => {
+        try {
+          return Services.prefs.getIntPref(MARGIN_PREF, 12);
+        } catch (_) {
+          return 12;
+        }
+      };
+      const readExitGrace = () => {
+        try {
+          return Services.prefs.getIntPref(GRACE_PREF, 250);
+        } catch (_) {
+          return 250;
+        }
+      };
+      edgeMargin = Math.max(0, Math.min(64, readEdgeMargin()));
+      exitGrace = Math.max(0, Math.min(2000, readExitGrace()));
       keepHoverDelay = Math.max(
         0,
         Math.min(
@@ -1318,14 +1332,21 @@ function nativeSidebarSide() {
       }
       if (repairDone || repairFrame !== null || repairTimer !== null) return;
       window.addEventListener("MozAfterPaint", onRepairReady);
-      const delay =
-        Math.max(
-          0,
-          Math.min(
-            60,
-            Services.prefs.getIntPref(REPAIR_PREF + ".delay_seconds", 0),
-          ),
-        ) * 1000;
+      const delay = (() => {
+        try {
+          return (
+            Math.max(
+              0,
+              Math.min(
+                60,
+                Services.prefs.getIntPref(REPAIR_PREF + ".delay_seconds", 0),
+              ),
+            ) * 1000
+          );
+        } catch (_) {
+          return 0;
+        }
+      })();
       repairStatus(
         "scheduled: waiting " + delay + " ms before sidebar expansion",
       );

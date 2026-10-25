@@ -191,6 +191,15 @@
         },
         {
           "label": "Reader card"
+        },
+        {
+          "label": "Appearance & layout · Size & shape"
+        },
+        {
+          "label": "Appearance & layout · Card buttons"
+        },
+        {
+          "label": "Appearance & layout · Colors & backing"
         }
       ],
       "icon": "rss"

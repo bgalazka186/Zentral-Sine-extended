@@ -743,14 +743,26 @@
             "zen.workspace.zentral.video_preview.caption_placement",
             "below",
           ),
-          fontSize: Services.prefs.getIntPref(
-            "zen.workspace.zentral.video_preview.caption_font_size",
-            12,
-          ),
-          maxLines: Services.prefs.getIntPref(
-            "zen.workspace.zentral.video_preview.caption_max_lines",
-            4,
-          ),
+          fontSize: (() => {
+            try {
+              return Services.prefs.getIntPref(
+                "zen.workspace.zentral.video_preview.caption_font_size",
+                12,
+              );
+            } catch (_) {
+              return 12;
+            }
+          })(),
+          maxLines: (() => {
+            try {
+              return Services.prefs.getIntPref(
+                "zen.workspace.zentral.video_preview.caption_max_lines",
+                4,
+              );
+            } catch (_) {
+              return 4;
+            }
+          })(),
         });
         deps.box.hidden = !deps.enabled();
         deps.box.toggleAttribute(

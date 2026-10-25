@@ -77,9 +77,9 @@
       const panelHideDelayPref =
         "zen.workspace.zentral.panels.autohide_delay_ms";
       const boundedPanelPref = (key, fallback, min, max) => {
-        const value = getPref(key, fallback);
-        return typeof value === "number" && Number.isFinite(value)
-          ? Math.max(min, Math.min(max, Math.round(value)))
+        const raw = Number(getPref(key, fallback));
+        return Number.isFinite(raw)
+          ? Math.max(min, Math.min(max, raw))
           : fallback;
       };
       let panelOutsideHeld = false;
@@ -306,12 +306,14 @@
         document.documentElement.setAttribute("bgalazka-panel-side", side);
       }
       function getHiddenPanelRevealWidth() {
-        const width = getPref(
-          BGALAZKA_EXT_PREFS.HOVER_REVEAL_WIDTH,
-          HIDDEN_PANEL_REVEAL_DEFAULT_WIDTH_PX,
+        const raw = Number(
+          getPref(
+            BGALAZKA_EXT_PREFS.HOVER_REVEAL_WIDTH,
+            HIDDEN_PANEL_REVEAL_DEFAULT_WIDTH_PX,
+          ),
         );
-        return typeof width === "number" && Number.isFinite(width)
-          ? Math.max(1, Math.min(64, Math.round(width)))
+        return Number.isFinite(raw)
+          ? Math.max(1, Math.min(64, raw))
           : HIDDEN_PANEL_REVEAL_DEFAULT_WIDTH_PX;
       }
       function updateRevealEdgeGeometry() {
@@ -363,12 +365,14 @@
         hoverRevealSurface = null;
       }
       function getHiddenPanelRevealDelay() {
-        const delay = getPref(
-          BGALAZKA_EXT_PREFS.HOVER_REVEAL_DELAY,
-          HIDDEN_PANEL_REVEAL_DEFAULT_MS,
+        const raw = Number(
+          getPref(
+            BGALAZKA_EXT_PREFS.HOVER_REVEAL_DELAY,
+            HIDDEN_PANEL_REVEAL_DEFAULT_MS,
+          ),
         );
-        return typeof delay === "number" && Number.isFinite(delay)
-          ? Math.max(0, Math.min(2000, Math.round(delay)))
+        return Number.isFinite(raw)
+          ? Math.max(0, Math.min(2000, raw))
           : HIDDEN_PANEL_REVEAL_DEFAULT_MS;
       }
       function scheduleHoverReveal(surface) {

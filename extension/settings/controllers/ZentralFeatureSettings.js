@@ -210,6 +210,9 @@
               100,
               0,
               "%",
+              undefined,
+              undefined,
+              "any",
             );
             const blackSteps = createTextRow(
               "Pill backing cycle levels",
@@ -273,6 +276,9 @@
               100,
               100,
               "%",
+              undefined,
+              undefined,
+              "any",
             );
             const s2 = createSliderRow(
               "Pinned Focus Opacity",
@@ -282,6 +288,9 @@
               100,
               95,
               "%",
+              undefined,
+              undefined,
+              "any",
             );
             const s3 = createSliderRow(
               "Pinned Idle Opacity",
@@ -291,6 +300,9 @@
               100,
               90,
               "%",
+              undefined,
+              undefined,
+              "any",
             );
             slidersGroup.append(s1.row, s2.row, s3.row);
             slidersGroup.setAttribute(
@@ -614,6 +626,9 @@
               50,
               0,
               "%",
+              undefined,
+              undefined,
+              "any",
             );
             const tPeekDot = createToggleRow(
               "Show Mini Pill When Idle",
@@ -637,6 +652,9 @@
               100,
               90,
               "%",
+              undefined,
+              undefined,
+              "any",
             );
             const pillBackgroundOpacitySlider = createSliderRow(
               "Pill Background Opacity",
@@ -646,6 +664,9 @@
               100,
               90,
               "%",
+              undefined,
+              undefined,
+              "any",
             );
             const tDualView = createToggleRow(
               "Hide Dual-View Button",
@@ -2759,6 +2780,7 @@
             ) => {
               const inverted = LOOK_TRANSPARENCY_KEYS.has(key);
               const invert = (value) => 100 - value;
+              const sliderStep = suffix === "%" ? "any" : "1";
               const control = createSliderRow(
                 label,
                 description,
@@ -2769,6 +2791,7 @@
                 suffix,
                 inverted ? invert : undefined,
                 inverted ? invert : undefined,
+                sliderStep,
               );
               // Density controls apply in Classic as well; changing them must not
               // switch the user's other Look choices to Custom.

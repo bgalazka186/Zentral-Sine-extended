@@ -16,6 +16,8 @@
   },
   "author": "bgalazka186",
   "version": "3.1.2",
+  "createdAt": "2026-10-25",
+  "updatedAt": "2026-10-25",
   "preferences": "preferences.json",
   "tags": ["apps", "tabs", "sidebar", "groups"],
   "fork": ["zen"],

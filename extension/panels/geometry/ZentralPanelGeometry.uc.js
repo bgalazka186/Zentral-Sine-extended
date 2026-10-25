@@ -461,9 +461,9 @@
     }
 
     function getPillPosition() {
-      const value = ctx.getPref(PILL_POSITION_PREF, 0);
-      return typeof value === "number" && Number.isFinite(value)
-        ? clampPillPosition(value)
+      const raw = Number(ctx.getPref(PILL_POSITION_PREF, 0));
+      return Number.isFinite(raw)
+        ? clampPillPosition(raw)
         : 0;
     }
 
@@ -515,7 +515,7 @@
       if (pillPosDragState)
         ctx.setPref(
           PILL_POSITION_PREF,
-          Math.round(pillPosDragState.livePosition),
+          pillPosDragState.livePosition,
         );
       pillPosDragState = null;
     }

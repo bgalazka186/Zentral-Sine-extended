@@ -3,7 +3,7 @@
   "themeId": "zentral-compact-hover",
   "name": "Zentral Compact Sidebar Hover",
   "description": "Compact-mode sidebar hover reveal and startup width recalculation for Zen. Standalone part of Zentral Extended.",
-  "version": "3.1.2",
+  "version": "3.1.5",
   "entry": "ZentralCompactHover.uc.js",
   "output": "ZentralCompactHover.standalone.uc.js",
   "settings": "settings.json",

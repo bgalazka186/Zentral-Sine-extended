@@ -115,8 +115,14 @@ const __zentralShim = (function () {
       // 1. The full pack owns every feature it contains.
       if (window.ZentralRuntime) return;
       // Live re-run (Sine reloads scripts): replace the previous instance.
+      const existing = features[def.id];
+      if (existing && existing.version && existing.version !== __ZENTRAL_STANDALONE_VERSION__) {
+        try {
+          Services.appinfo.invalidateCachesOnRestart();
+        } catch (_) {}
+      }
       try {
-        features[def.id]?.dispose?.();
+        existing?.dispose?.();
       } catch (_) {}
       const lifecycle = createFeatureScope(def.id);
       let cleanup = null,

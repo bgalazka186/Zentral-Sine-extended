@@ -487,14 +487,22 @@
     function refreshTunables() {
       // Preference reads stay outside the pointer-event path. Updating sliders
       // affects the next hit-test/exit without restarting an active grace timer.
-      edgeMargin = Math.max(
-        0,
-        Math.min(64, Services.prefs.getIntPref(MARGIN_PREF, 12)),
-      );
-      exitGrace = Math.max(
-        0,
-        Math.min(2000, Services.prefs.getIntPref(GRACE_PREF, 250)),
-      );
+      const readEdgeMargin = () => {
+        try {
+          return Services.prefs.getIntPref(MARGIN_PREF, 12);
+        } catch (_) {
+          return 12;
+        }
+      };
+      const readExitGrace = () => {
+        try {
+          return Services.prefs.getIntPref(GRACE_PREF, 250);
+        } catch (_) {
+          return 250;
+        }
+      };
+      edgeMargin = Math.max(0, Math.min(64, readEdgeMargin()));
+      exitGrace = Math.max(0, Math.min(2000, readExitGrace()));
       keepHoverDelay = Math.max(
         0,
         Math.min(
@@ -831,14 +839,21 @@
       }
       if (repairDone || repairFrame !== null || repairTimer !== null) return;
       window.addEventListener("MozAfterPaint", onRepairReady);
-      const delay =
-        Math.max(
-          0,
-          Math.min(
-            60,
-            Services.prefs.getIntPref(REPAIR_PREF + ".delay_seconds", 0),
-          ),
-        ) * 1000;
+      const delay = (() => {
+        try {
+          return (
+            Math.max(
+              0,
+              Math.min(
+                60,
+                Services.prefs.getIntPref(REPAIR_PREF + ".delay_seconds", 0),
+              ),
+            ) * 1000
+          );
+        } catch (_) {
+          return 0;
+        }
+      })();
       repairStatus(
         "scheduled: waiting " + delay + " ms before sidebar expansion",
       );

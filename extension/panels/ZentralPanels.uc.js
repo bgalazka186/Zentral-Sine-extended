@@ -651,9 +651,9 @@
         // CSS layer; see the one-time migration further below (near "Initial
         // attribute sync") that also clears the stale string off disk so the
         // settings-panel slider stops silently disagreeing with it too.
-        const rawPillOffset = getPref(EXT_PREFS.PILL_POSITION, 0);
+        const rawPillOffset = Number(getPref(EXT_PREFS.PILL_POSITION, 0));
         const pillOffset =
-          typeof rawPillOffset === "number" && Number.isFinite(rawPillOffset)
+          Number.isFinite(rawPillOffset)
             ? Math.max(-50, Math.min(50, rawPillOffset))
             : 0;
         root.style.setProperty("--bgalazka-pill-offset", pillOffset + "%");

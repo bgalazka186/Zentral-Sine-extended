@@ -106,298 +106,50 @@
   {
     "property": "zen.workspace.bgalazka.look.rss_card_width",
     "label": "Reader card width (px)",
-    "type": "dropdown",
-    "defaultValue": 340,
-    "options": [
-      {
-        "label": "240 px",
-        "value": 240
-      },
-      {
-        "label": "280 px",
-        "value": 280
-      },
-      {
-        "label": "320 px",
-        "value": 320
-      },
-      {
-        "label": "340 px",
-        "value": 340
-      },
-      {
-        "label": "380 px",
-        "value": 380
-      },
-      {
-        "label": "420 px",
-        "value": 420
-      },
-      {
-        "label": "480 px",
-        "value": 480
-      },
-      {
-        "label": "560 px",
-        "value": 560
-      }
-    ]
+    "type": "string",
+    "defaultValue": 340
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_max_height",
     "label": "Reader card max height (%)",
-    "type": "dropdown",
-    "defaultValue": 60,
-    "options": [
-      {
-        "label": "20 %",
-        "value": 20
-      },
-      {
-        "label": "30 %",
-        "value": 30
-      },
-      {
-        "label": "40 %",
-        "value": 40
-      },
-      {
-        "label": "50 %",
-        "value": 50
-      },
-      {
-        "label": "60 %",
-        "value": 60
-      },
-      {
-        "label": "70 %",
-        "value": 70
-      },
-      {
-        "label": "80 %",
-        "value": 80
-      },
-      {
-        "label": "90 %",
-        "value": 90
-      }
-    ]
+    "type": "string",
+    "defaultValue": 60
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_font_size",
     "label": "Reader card font size (px)",
-    "type": "dropdown",
-    "defaultValue": 13,
-    "options": [
-      {
-        "label": "10 px",
-        "value": 10
-      },
-      {
-        "label": "11 px",
-        "value": 11
-      },
-      {
-        "label": "12 px",
-        "value": 12
-      },
-      {
-        "label": "13 px",
-        "value": 13
-      },
-      {
-        "label": "14 px",
-        "value": 14
-      },
-      {
-        "label": "15 px",
-        "value": 15
-      },
-      {
-        "label": "16 px",
-        "value": 16
-      },
-      {
-        "label": "18 px",
-        "value": 18
-      },
-      {
-        "label": "20 px",
-        "value": 20
-      }
-    ]
+    "type": "string",
+    "defaultValue": 13
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_line_height",
     "label": "Reader card line height (%)",
-    "type": "dropdown",
-    "defaultValue": 145,
-    "options": [
-      {
-        "label": "110 %",
-        "value": 110
-      },
-      {
-        "label": "120 %",
-        "value": 120
-      },
-      {
-        "label": "130 %",
-        "value": 130
-      },
-      {
-        "label": "145 %",
-        "value": 145
-      },
-      {
-        "label": "160 %",
-        "value": 160
-      },
-      {
-        "label": "180 %",
-        "value": 180
-      },
-      {
-        "label": "200 %",
-        "value": 200
-      }
-    ]
+    "type": "string",
+    "defaultValue": 145
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_padding",
     "label": "Reader card padding (px)",
-    "type": "dropdown",
-    "defaultValue": 12,
-    "options": [
-      {
-        "label": "6 px",
-        "value": 6
-      },
-      {
-        "label": "8 px",
-        "value": 8
-      },
-      {
-        "label": "10 px",
-        "value": 10
-      },
-      {
-        "label": "12 px",
-        "value": 12
-      },
-      {
-        "label": "14 px",
-        "value": 14
-      },
-      {
-        "label": "16 px",
-        "value": 16
-      },
-      {
-        "label": "20 px",
-        "value": 20
-      },
-      {
-        "label": "24 px",
-        "value": 24
-      }
-    ]
+    "type": "string",
+    "defaultValue": 12
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_radius",
     "label": "Reader card corner radius (px)",
-    "type": "dropdown",
-    "defaultValue": 10,
-    "options": [
-      {
-        "label": "0 px",
-        "value": 0
-      },
-      {
-        "label": "4 px",
-        "value": 4
-      },
-      {
-        "label": "6 px",
-        "value": 6
-      },
-      {
-        "label": "8 px",
-        "value": 8
-      },
-      {
-        "label": "10 px",
-        "value": 10
-      },
-      {
-        "label": "12 px",
-        "value": 12
-      },
-      {
-        "label": "16 px",
-        "value": 16
-      },
-      {
-        "label": "20 px",
-        "value": 20
-      },
-      {
-        "label": "24 px",
-        "value": 24
-      }
-    ]
+    "type": "string",
+    "defaultValue": 10
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_border",
     "label": "Reader card border width (px)",
-    "type": "dropdown",
-    "defaultValue": 1,
-    "options": [
-      {
-        "label": "0 px",
-        "value": 0
-      },
-      {
-        "label": "1 px",
-        "value": 1
-      },
-      {
-        "label": "2 px",
-        "value": 2
-      },
-      {
-        "label": "3 px",
-        "value": 3
-      }
-    ]
+    "type": "string",
+    "defaultValue": 1
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_opacity",
     "label": "Reader card background opacity (%)",
-    "type": "dropdown",
-    "defaultValue": 100,
-    "options": [
-      {
-        "label": "10 %",
-        "value": 10
-      },
-      {
-        "label": "25 %",
-        "value": 25
-      },
-      {
-        "label": "50 %",
-        "value": 50
-      },
-      {
-        "label": "75 %",
-        "value": 75
-      },
-      {
-        "label": "100 %",
-        "value": 100
-      }
-    ]
+    "type": "string",
+    "defaultValue": 100
   },
   {
     "type": "separator",
@@ -406,82 +158,14 @@
   {
     "property": "zen.workspace.bgalazka.look.rss_card_button_radius",
     "label": "Reader card button corner radius (px)",
-    "type": "dropdown",
-    "defaultValue": 6,
-    "options": [
-      {
-        "label": "0 px",
-        "value": 0
-      },
-      {
-        "label": "4 px",
-        "value": 4
-      },
-      {
-        "label": "6 px",
-        "value": 6
-      },
-      {
-        "label": "8 px",
-        "value": 8
-      },
-      {
-        "label": "10 px",
-        "value": 10
-      },
-      {
-        "label": "12 px",
-        "value": 12
-      },
-      {
-        "label": "16 px",
-        "value": 16
-      }
-    ]
+    "type": "string",
+    "defaultValue": 6
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_gap",
     "label": "Reader card element gap (px)",
-    "type": "dropdown",
-    "defaultValue": 6,
-    "options": [
-      {
-        "label": "0 px",
-        "value": 0
-      },
-      {
-        "label": "4 px",
-        "value": 4
-      },
-      {
-        "label": "6 px",
-        "value": 6
-      },
-      {
-        "label": "8 px",
-        "value": 8
-      },
-      {
-        "label": "10 px",
-        "value": 10
-      },
-      {
-        "label": "12 px",
-        "value": 12
-      },
-      {
-        "label": "16 px",
-        "value": 16
-      },
-      {
-        "label": "24 px",
-        "value": 24
-      },
-      {
-        "label": "32 px",
-        "value": 32
-      }
-    ]
+    "type": "string",
+    "defaultValue": 6
   },
   {
     "type": "separator",

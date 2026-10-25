@@ -29,94 +29,8 @@
   {
     "property": "zen.workspace.zentral.experimental.library_resize.minimum_content_width_px",
     "label": "Minimum webpage width (px; may overlap Library in narrow windows)",
-    "type": "dropdown",
-    "defaultValue": 200,
-    "options": [
-      {
-        "label": "0 px",
-        "value": 0
-      },
-      {
-        "label": "50 px",
-        "value": 50
-      },
-      {
-        "label": "100 px",
-        "value": 100
-      },
-      {
-        "label": "150 px",
-        "value": 150
-      },
-      {
-        "label": "200 px",
-        "value": 200
-      },
-      {
-        "label": "250 px",
-        "value": 250
-      },
-      {
-        "label": "300 px",
-        "value": 300
-      },
-      {
-        "label": "350 px",
-        "value": 350
-      },
-      {
-        "label": "400 px",
-        "value": 400
-      },
-      {
-        "label": "450 px",
-        "value": 450
-      },
-      {
-        "label": "500 px",
-        "value": 500
-      },
-      {
-        "label": "550 px",
-        "value": 550
-      },
-      {
-        "label": "600 px",
-        "value": 600
-      },
-      {
-        "label": "650 px",
-        "value": 650
-      },
-      {
-        "label": "700 px",
-        "value": 700
-      },
-      {
-        "label": "750 px",
-        "value": 750
-      },
-      {
-        "label": "800 px",
-        "value": 800
-      },
-      {
-        "label": "850 px",
-        "value": 850
-      },
-      {
-        "label": "900 px",
-        "value": 900
-      },
-      {
-        "label": "950 px",
-        "value": 950
-      },
-      {
-        "label": "1000 px",
-        "value": 1000
-      }
-    ]
+    "type": "string",
+    "defaultValue": 200
   },
   {
     "property": "zen.workspace.zentral.experimental.library_resize.animate_content",
@@ -156,49 +70,7 @@
   {
     "property": "zen.workspace.zentral.library.custom_background.opacity",
     "label": "Custom Library background opacity (multiplies any alpha already in the color)",
-    "type": "dropdown",
-    "defaultValue": 100,
-    "options": [
-      {
-        "label": "100%",
-        "value": 100
-      },
-      {
-        "label": "95%",
-        "value": 95
-      },
-      {
-        "label": "90%",
-        "value": 90
-      },
-      {
-        "label": "85%",
-        "value": 85
-      },
-      {
-        "label": "80%",
-        "value": 80
-      },
-      {
-        "label": "70%",
-        "value": 70
-      },
-      {
-        "label": "60%",
-        "value": 60
-      },
-      {
-        "label": "50%",
-        "value": 50
-      },
-      {
-        "label": "40%",
-        "value": 40
-      },
-      {
-        "label": "30%",
-        "value": 30
-      }
-    ]
+    "type": "string",
+    "defaultValue": 100
   }
 ]

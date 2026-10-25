@@ -376,6 +376,7 @@
         suffix,
         toPreference = (value) => value,
         fromPreference = (value) => value,
+        step = "1",
       ) {
         const row = document.createElement("div");
         row.className = "zs-row";
@@ -428,12 +429,13 @@
         input.style.width = "100%";
         input.min = min;
         input.max = max;
+        input.step = step;
         input.value = fromPreference(ctx.getPref(prefKey, defaultVal));
         badge.textContent = input.value + suffix;
 
         input.addEventListener("input", () => {
           badge.textContent = input.value + suffix;
-          ctx.setPref(prefKey, toPreference(parseInt(input.value, 10)));
+          ctx.setPref(prefKey, toPreference(parseFloat(input.value)));
           if (
             !prefKey.startsWith("zen.workspace.bgalazka.look.") &&
             typeof ctx.updateCSSVars === "function"

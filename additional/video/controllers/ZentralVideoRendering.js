@@ -93,10 +93,15 @@
         const retryKey = key + ":" + mode;
         const attempts = (deps.rendererRetryCounts.get(retryKey) || 0) + 1;
         deps.rendererRetryCounts.set(retryKey, attempts);
-        const rawLimit = deps.Services.prefs.getIntPref(
-          "zen.workspace.bgalazka.panel_retry_limit",
-          2,
-        );
+        let rawLimit;
+        try {
+          rawLimit = deps.Services.prefs.getIntPref(
+            "zen.workspace.bgalazka.panel_retry_limit",
+            2,
+          );
+        } catch (_) {
+          rawLimit = 2;
+        }
         const retryLimit = Math.max(0, Math.min(6, rawLimit));
         deps.unavailableBySource.get(key).set(mode, {
           reason: String(error).slice(0, 100),

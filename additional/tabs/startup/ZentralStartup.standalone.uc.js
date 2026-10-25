@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Load Tab at Startup
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.2
+// @version 3.1.3
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,9 +24,9 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.2.
+ * Placeholders replaced by the build: 3.1.3.
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.2";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.3";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -428,8 +428,14 @@ function nativeSidebarSide() {
       // 1. The full pack owns every feature it contains.
       if (window.ZentralRuntime) return;
       // Live re-run (Sine reloads scripts): replace the previous instance.
+      const existing = features[def.id];
+      if (existing && existing.version && existing.version !== __ZENTRAL_STANDALONE_VERSION__) {
+        try {
+          Services.appinfo.invalidateCachesOnRestart();
+        } catch (_) {}
+      }
       try {
-        features[def.id]?.dispose?.();
+        existing?.dispose?.();
       } catch (_) {}
       const lifecycle = createFeatureScope(def.id);
       let cleanup = null,

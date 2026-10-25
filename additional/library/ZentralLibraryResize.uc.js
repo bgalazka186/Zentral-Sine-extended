@@ -199,10 +199,13 @@
       "zen-sidebar-top-buttons",
     ];
     function number(key, fallback, min, max) {
-      return Math.max(
-        min,
-        Math.min(max, Services.prefs.getIntPref(PREF + key, fallback)),
-      );
+      let value;
+      try {
+        value = Services.prefs.getIntPref(PREF + key, fallback);
+      } catch (_) {
+        value = fallback;
+      }
+      return Math.max(min, Math.min(max, value));
     }
     function set(name, value) {
       if (root.style.getPropertyValue(name) !== value)

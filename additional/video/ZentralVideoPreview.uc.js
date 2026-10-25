@@ -2965,22 +2965,19 @@
         const SCAN_INTERVALS = [0, 5000, 15000, 30000, 60000, 120000];
         const CAPTION_INTERVALS = [250, 500, 750, 1500, 3000];
         function scanIntervalMs() {
-          const value = Services.prefs.getIntPref(SCAN_INTERVAL_PREF, 5000);
+          const value = readInt(SCAN_INTERVAL_PREF, 5000);
           return SCAN_INTERVALS.includes(value) ? value : 5000;
         }
         function captionIntervalMs() {
-          const value = Services.prefs.getIntPref(CAPTION_POLL_PREF, 750);
+          const value = readInt(CAPTION_POLL_PREF, 750);
           return CAPTION_INTERVALS.includes(value) ? value : 750;
         }
         function canvasStreamWidth() {
-          const value = Services.prefs.getIntPref(
-            CANVAS_STREAM_WIDTH_PREF,
-            640,
-          );
+          const value = readInt(CANVAS_STREAM_WIDTH_PREF, 640);
           return [160, 240, 320, 480, 640].includes(value) ? value : 640;
         }
         function canvasStreamFps() {
-          const value = Services.prefs.getIntPref(CANVAS_STREAM_FPS_PREF, 30);
+          const value = readInt(CANVAS_STREAM_FPS_PREF, 30);
           return [5, 10, 15, 24, 30].includes(value) ? value : 30;
         }
         // POWER SAVING (build 22): normal playback samples presentation at 2 s;

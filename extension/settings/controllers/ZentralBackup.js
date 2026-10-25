@@ -214,6 +214,7 @@
           )
             throw new Error("Invalid preference in settings file: " + key);
           const expected = backupDefault(key);
+          const declared = backupSchema().get(key);
           // Older grid menus wrote numeric strings; keep these exports importable.
           const legacyGridValue =
             [
@@ -222,13 +223,17 @@
             ].includes(key) &&
             typeof value === "string" &&
             /^\d+$/.test(value);
+          // Free-text numeric prefs (converted from dropdowns to string) store
+          // whatever the user typed; a string value is valid even when the
+          // numeric default differs in type.
+          const freeTextString = declared?.type === "string";
           if (
             expected !== undefined &&
             typeof value !== typeof expected &&
+            !freeTextString &&
             !legacyGridValue
           )
             throw new Error("Invalid preference type: " + key);
-          const declared = backupSchema().get(key);
           if (
             declared?.options &&
             typeof value === "string" &&
