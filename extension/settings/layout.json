@@ -652,7 +652,6 @@
     "zen.workspace.bgalazka.hide_grabber",
     "zen.workspace.bgalazka.hide_refresh",
     "zen.workspace.bgalazka.hide_close",
-    "zen.workspace.zentral.hybrid.hide_detach_button",
     "zen.workspace.zentral.hybrid.pill_layout",
     {
       "type": "text",

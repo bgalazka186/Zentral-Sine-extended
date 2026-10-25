@@ -96,7 +96,9 @@
  * native panel tokens. The JS only sets the behavior-driven parts. */
 #bgalazka-rss-card {
   position: fixed;
-  z-index: 2147483000;
+  /* Above the Zentral panel root (2147483600), pill controls and reveal edge
+   * (2147483640-2147483642); below the settings window (2147483647). */
+  z-index: 2147483646;
   box-sizing: border-box;
   width: var(--bgalazka-look-rss-card-width, 340px);
   min-width: 200px;

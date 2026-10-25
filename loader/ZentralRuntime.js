@@ -1788,7 +1788,7 @@
       apps: "zen.workspace.zentral.debug.apps",
       menus: "zen.workspace.zentral.debug.menus",
       layout: "zen.workspace.zentral.debug.layout",
-      path: "zen.workspace.zentral.logger.path",
+      path: "zentral.logger.path",
     })) {
       const row = modal
         .querySelector("#zs-pref-logger-" + id)

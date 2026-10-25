@@ -55,6 +55,23 @@
 .zen-app-resize-strip-bottom {
   bottom: -5px !important;
 }
+/* Corner handles also straddle the edge (8px out, 8px in); keep them inside. */
+#zen-app-panel-root[data-edge-top="true"] .zen-app-resize-corner-top-outer,
+#zen-app-panel-root[data-edge-top="true"] .zen-app-resize-corner-top-inner {
+  top: 0 !important;
+}
+#zen-app-panel-root[data-edge-bottom="true"] .zen-app-resize-corner-bottom-outer,
+#zen-app-panel-root[data-edge-bottom="true"] .zen-app-resize-corner-bottom-inner {
+  bottom: 0 !important;
+}
+/* Panel flush with the window edge: the outer half of the handle would be
+ * off-screen, so keep the whole handle inside the panel instead. */
+#zen-app-panel-root[data-edge-top="true"] .zen-app-resize-strip-top {
+  top: 0 !important;
+}
+#zen-app-panel-root[data-edge-bottom="true"] .zen-app-resize-strip-bottom {
+  bottom: 0 !important;
+}
 
 /* Master toggle: only becomes interactive when enabled (pill button or
  * settings row, both write the same "bgalazka-all-sides-resize" attribute -

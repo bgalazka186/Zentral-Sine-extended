@@ -1165,6 +1165,59 @@
       return true;
     }
 
+    // The top/bottom handles straddle the panel edge (half outside). When the
+    // panel touches the window edge that outer half is off-screen and the
+    // handle becomes a thin, hard-to-hit sliver. Mark the flush edge so CSS can
+    // move the handle fully inside the panel. Only data attributes are written,
+    // and the observer ignores them, so this cannot feed back into itself.
+    const EDGE_FLUSH_PX = 6;
+    function syncEdgeFlush(root) {
+      if (!root?.isConnected) return;
+      const rect = root.getBoundingClientRect();
+      if (!rect.height) return;
+      const top = rect.top <= EDGE_FLUSH_PX ? "true" : "false";
+      const bottom =
+        rect.bottom >= window.innerHeight - EDGE_FLUSH_PX ? "true" : "false";
+      if (root.getAttribute("data-edge-top") !== top)
+        root.setAttribute("data-edge-top", top);
+      if (root.getAttribute("data-edge-bottom") !== bottom)
+        root.setAttribute("data-edge-bottom", bottom);
+    }
+    function watchEdgeFlush(root) {
+      if (root._bgalazkaEdgeWatch) return;
+      let frame = 0;
+      let observer = null;
+      const schedule = () => {
+        if (frame) return;
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          // A replaced panel root releases its own watcher.
+          if (!root.isConnected) {
+            observer?.disconnect();
+            window.removeEventListener("resize", schedule);
+            return;
+          }
+          syncEdgeFlush(root);
+        });
+      };
+      observer = new MutationObserver(schedule);
+      observer.observe(root, {
+        attributes: true,
+        attributeFilter: ["style", "open", "class"],
+      });
+      window.addEventListener("resize", schedule);
+      root._bgalazkaEdgeWatch = true;
+      ctx.registerCleanup(() => {
+        observer.disconnect();
+        window.removeEventListener("resize", schedule);
+        if (frame) cancelAnimationFrame(frame);
+        delete root._bgalazkaEdgeWatch;
+        root.removeAttribute("data-edge-top");
+        root.removeAttribute("data-edge-bottom");
+      });
+      syncEdgeFlush(root);
+    }
+
     // Creates extension-owned all-sides handles once per panel root. CSS hides
     // the base outer strip completely: keeping two handlers on one edge was the
     // source of conflicting opposite-docking drag signs.
@@ -1173,6 +1226,7 @@
       if (!root) return false;
       applyVerticalResizeExtras(root);
       applyHorizontalPanelOffset(root);
+      watchEdgeFlush(root);
 
       if (!root.querySelector(".zen-app-resize-strip-top")) {
         const topStrip = document.createElement("div");

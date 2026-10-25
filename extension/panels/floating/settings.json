@@ -166,12 +166,6 @@
           "value": 100
         }
       ]
-    },
-    {
-      "property": "zen.workspace.zentral.hybrid.hide_detach_button",
-      "label": "Hide Detach / Attach pill button",
-      "type": "checkbox",
-      "defaultValue": false
     }
   ],
   "settings": {
@@ -223,11 +217,6 @@
     "zen.workspace.zentral.hybrid.dock_push_px": {
       "category": "panel-layout",
       "section": "Docking, size & input",
-      "owner": "panel-enhancements"
-    },
-    "zen.workspace.zentral.hybrid.hide_detach_button": {
-      "category": "theme-details",
-      "section": "Floating pill",
       "owner": "panel-enhancements"
     }
   }

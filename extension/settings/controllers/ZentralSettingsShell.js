@@ -1395,6 +1395,16 @@
                   </div>
                 </div>
 
+                <!-- Report destination -->
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                  <label class="zs-label" for="zs-report-target" style="font-size: 12.5px;">Report to</label>
+                  <select id="zs-report-target" class="zs-text-input" style="width: 100%;">
+                    <option value="extended" selected>Zentral Extended: bgalazka186/Zentral-Sine-extended</option>
+                    <option value="base">Original Zentral base: Michele501st/Zentral-Sine</option>
+                  </select>
+                  <span id="zs-report-target-note" class="zs-sublabel" style="font-size: 11px;"></span>
+                </div>
+
                 <!-- Description Field -->
                 <div style="display: flex; flex-direction: column; gap: 6px;">
                   <label class="zs-label" for="zs-report-description" style="font-size: 12.5px;">Description & Steps to Reproduce</label>
@@ -1410,7 +1420,7 @@
                     </label>
                     <div style="display: flex; flex-direction: column;">
                       <span class="zs-label" style="font-size: 12.5px;">Attach Diagnostic Log</span>
-                      <span class="zs-sublabel" style="font-size: 11px;">Includes active modules & layout snapshot</span>
+                      <span class="zs-sublabel" style="font-size: 11px;">Active modules & layout snapshot. URL queries, user names in paths, emails and tokens are removed first; please still read it before posting.</span>
                     </div>
                   </div>
 
@@ -2029,6 +2039,32 @@
           );
           const statusEl = this.modal.querySelector("#zs-report-status");
 
+          const REPORT_TARGETS = {
+            extended: {
+              name: "Zentral Extended",
+              repo: "bgalazka186/Zentral-Sine-extended",
+              useWorker: false,
+              note: "Opens a pre-filled issue page on the Zentral Extended repository. Nothing is uploaded until you press Submit on GitHub.",
+            },
+            base: {
+              name: "original Zentral base",
+              repo: "Michele501st/Zentral-Sine",
+              useWorker: true,
+              note: "Only for bugs in the original Zentral base, not Extended features. Your report and log are sent to the original author's issue service, then the page opens on GitHub if that fails.",
+            },
+          };
+          const targetSelect = this.modal.querySelector("#zs-report-target");
+          const targetNote = this.modal.querySelector("#zs-report-target-note");
+          const syncTargetNote = () => {
+            const t =
+              targetSelect?.value === "base"
+                ? REPORT_TARGETS.base
+                : REPORT_TARGETS.extended;
+            if (targetNote) targetNote.textContent = t.note;
+          };
+          targetSelect?.addEventListener("change", syncTargetNote);
+          syncTargetNote();
+
           if (submitReportBtn && titleInput && descInput) {
             submitReportBtn.addEventListener("click", async () => {
               saveDiagnosticsPrefsImmediately();
@@ -2067,17 +2103,16 @@
                 statusEl.style.display = "inline";
                 statusEl.style.color =
                   "var(--zl-settings-muted,rgba(255, 255, 255, 0.6))";
-                statusEl.textContent = "Connecting to GitHub...";
+                statusEl.textContent = "Preparing report...";
               }
 
-              // 1. Gather diagnostic logs & system metadata
+              // 1. Gather diagnostic logs & system metadata. Only the Logger's
+              // redacted export is used; without it no log is attached.
               let logContent = "";
-              if (attachLogs) {
-                if (window.ZentralLogger?.generateLogString) {
+              if (attachLogs && window.ZentralLogger?.generateLogString) {
+                try {
                   logContent = window.ZentralLogger.generateLogString();
-                } else if (window.ZentralLogger?.entries) {
-                  logContent = window.ZentralLogger.entries.join("\n");
-                }
+                } catch (_) {}
               }
 
               // Safety guard: GitHub limits issue bodies to 65,536 characters.
@@ -2090,7 +2125,10 @@
               }
 
               const systemInfo = {
-                zentralVersion: "v3.1.2",
+                zentralVersion:
+                  this.modal
+                    .querySelector(".zs-version-badge")
+                    ?.textContent?.trim() || "unknown",
                 zenVersion: navigator.userAgent,
                 platform: navigator.platform || "Desktop",
                 windowSize: `${window.innerWidth}x${window.innerHeight}`,
@@ -2103,22 +2141,37 @@
                     : "Compact",
               };
 
-              // 2. Attempt background submission to Cloudflare Worker endpoint if configured
-              const endpointPref = Core.getPref(
-                Constants.Diagnostics.PREF_REPORT_ENDPOINT,
-              );
-              let endpoint = null;
-              try {
-                const candidate = new URL(endpointPref);
-                if (candidate.protocol === "https:") endpoint = candidate.href;
-              } catch (_) {}
+              const reportTarget =
+                this.modal.querySelector("#zs-report-target")?.value === "base"
+                  ? REPORT_TARGETS.base
+                  : REPORT_TARGETS.extended;
+
+              // 2. Only the original base's own issue service accepts a direct
+              // upload, and only when you chose that destination. Reports to
+              // Zentral Extended never upload anything: they open a pre-filled
+              // GitHub page that you review and submit yourself.
               let submitted = false;
+              let endpoint = null;
+              if (reportTarget.useWorker) {
+                try {
+                  const candidate = new URL(
+                    Core.getPref(Constants.Diagnostics.PREF_REPORT_ENDPOINT),
+                  );
+                  if (candidate.protocol === "https:") endpoint = candidate.href;
+                } catch (_) {}
+              }
 
               if (endpoint) {
+                if (statusEl) {
+                  statusEl.textContent = "Sending to the original author's issue service...";
+                }
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 12000);
                 try {
                   const resp = await fetch(endpoint, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
+                    signal: controller.signal,
                     body: JSON.stringify({
                       title,
                       description: desc,
@@ -2135,8 +2188,12 @@
                       statusEl.style.display = "inline";
                       statusEl.style.color = "var(--zl-success,#10b981)";
                       statusEl.replaceChildren();
-                      const issueUrl = new URL(String(result.issueUrl || ""));
+                      let issueUrl = null;
+                      try {
+                        issueUrl = new URL(String(result.issueUrl || ""));
+                      } catch (_) {}
                       if (
+                        issueUrl &&
                         issueUrl.protocol === "https:" &&
                         issueUrl.hostname === "github.com"
                       ) {
@@ -2159,7 +2216,6 @@
                     console.warn(
                       "[Zentral-Report] Worker returned error:",
                       resp.status,
-                      result,
                     );
                   }
                 } catch (postErr) {
@@ -2167,35 +2223,54 @@
                     "[Zentral-Report] Worker submission failed, falling back to Web:",
                     postErr,
                   );
+                } finally {
+                  clearTimeout(timeout);
                 }
               }
 
-              // 3. Fallback: If not submitted via worker, open pre-filled GitHub issue in new tab & copy logs to clipboard
+              // 3. Open a pre-filled GitHub issue page. Long text goes through
+              // the clipboard because GitHub rejects very long URLs.
               if (!submitted) {
-                if (logContent) {
+                const MAX_DESC_IN_URL = 3000;
+                const descTooLong = desc.length > MAX_DESC_IN_URL;
+                const urlDesc = descTooLong
+                  ? `${desc.slice(0, MAX_DESC_IN_URL)}\n\n[Description shortened. The full text is on your clipboard.]`
+                  : desc;
+
+                let clipText = sendLogContent || "";
+                if (descTooLong) {
+                  clipText = `${desc}${clipText ? `\n\n--- Diagnostic log ---\n${clipText}` : ""}`;
+                }
+                if (clipText) {
                   try {
                     const clipboardHelper = Cc[
                       "@mozilla.org/widget/clipboardhelper;1"
                     ]?.getService(Ci.nsIClipboardHelper);
                     if (clipboardHelper) {
-                      clipboardHelper.copyString(sendLogContent);
+                      clipboardHelper.copyString(clipText);
                     } else if (navigator.clipboard?.writeText) {
-                      navigator.clipboard.writeText(sendLogContent);
+                      navigator.clipboard.writeText(clipText);
                     }
                   } catch (_) {}
                 }
 
-                let ghBody = `### 📝 Description\n${desc}\n\n`;
+                let ghBody = `### 📝 Description\n${urlDesc}\n\n`;
                 ghBody += `### 🖥️ Environment\n`;
                 ghBody += `- **Zentral Version:** ${systemInfo.zentralVersion}\n`;
                 ghBody += `- **Zen Build:** ${systemInfo.zenVersion}\n`;
                 ghBody += `- **OS / Platform:** ${systemInfo.platform}\n`;
                 ghBody += `- **Window / DPR:** ${systemInfo.windowSize} (DPR: ${systemInfo.dpr})\n\n`;
                 if (logContent) {
-                  ghBody += `*(Diagnostic log copied to your clipboard — paste below if relevant)*\n\n`;
+                  ghBody += `*(Diagnostic log copied to your clipboard. Paste it below if relevant.)*\n\n`;
                 }
 
-                const ghUrl = `https://github.com/Michele501st/Zentral-Sine/issues/new?title=${encodeURIComponent(`[${category.toUpperCase()}] ${title}`)}&body=${encodeURIComponent(ghBody)}&labels=${encodeURIComponent(category)}`;
+                // Only labels that exist by default on every repo.
+                const label =
+                  category === "bug" || category === "enhancement"
+                    ? `&labels=${encodeURIComponent(category)}`
+                    : "";
+                const ghTitle = `[${category.toUpperCase()}] ${title}`.slice(0, 150);
+                const ghUrl = `https://github.com/${reportTarget.repo}/issues/new?title=${encodeURIComponent(ghTitle)}&body=${encodeURIComponent(ghBody)}${label}`;
 
                 if (window.gBrowser?.addTab) {
                   window.gBrowser.addTab(ghUrl, {
@@ -2209,9 +2284,9 @@
                 if (statusEl) {
                   statusEl.style.display = "inline";
                   statusEl.style.color = "var(--zl-focus,#60a5fa)";
-                  statusEl.textContent = logContent
-                    ? "✓ Opened in GitHub (Log copied to clipboard!)"
-                    : "✓ Opened in GitHub!";
+                  statusEl.textContent = clipText
+                    ? `✓ Opened on GitHub (${reportTarget.name}). Text copied to clipboard.`
+                    : `✓ Opened on GitHub (${reportTarget.name}).`;
                 }
               }
 

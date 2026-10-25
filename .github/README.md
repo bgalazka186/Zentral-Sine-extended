@@ -294,6 +294,8 @@ Release and install notes for each module are in its own folder README.
 
 Please [open an issue](https://github.com/bgalazka186/Zentral-Sine-extended/issues) and include:
 
+You can also do it from inside Zen: open Extended Settings, go to **Diagnostics → Report an Issue** and pick where the report goes. **Zentral Extended** (the default) opens a pre-filled page on this repository and uploads nothing until you submit it yourself. **Original Zentral base** is only for bugs in the original mod. The attached log is redacted first (URL queries, user names in file paths, emails and tokens are removed), but please read it before posting.
+
 - Your Zen and Zentral Extended versions, and whether you use the full pack or a standalone module.
 - The steps needed to reproduce the problem, and whether it happens in a fresh profile.
 - Relevant appearance, video or compatibility settings, and any errors from the Browser Console. The [Logger](https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/diagnostics) can export a report with **Alt+L**.

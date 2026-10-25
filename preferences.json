@@ -3829,12 +3829,6 @@
     "defaultValue": false
   },
   {
-    "property": "zen.workspace.zentral.hybrid.hide_detach_button",
-    "label": "Hide Detach / Attach pill button",
-    "type": "checkbox",
-    "defaultValue": false
-  },
-  {
     "property": "zen.workspace.zentral.hybrid.pill_layout",
     "label": "Pill layout",
     "type": "dropdown",

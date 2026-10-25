@@ -23,7 +23,8 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const ZentralRuntime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
+  const ZentralRuntime =
+    window.ZentralRuntime || window.__zentralStandaloneRuntime;
   ZentralRuntime.register({
     id: "logger",
     // Used by the standalone shim; the full runtime ignores unknown fields.
@@ -365,8 +366,8 @@
           export() {
             exportLog();
           },
-          generateLogString() {
-            return generateLogString();
+          generateLogString(options) {
+            return generateLogString(options);
           },
           clear() {
             ringBuffer.length = 0;
@@ -1439,7 +1440,37 @@
          * Generates formatted diagnostic log string in-memory without file operations
          * @returns {string} Formatted log output
          */
-        function generateLogString() {
+        /**
+         * Removes data that should not leave the machine: credentials inside
+         * URLs, URL query strings / fragments, profile-folder user names, email
+         * addresses and token-like values. Everything else is kept untouched
+         * so the log stays useful for debugging.
+         */
+        function redactSensitive(text) {
+          return String(text)
+            .replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@"'<>]+@/gi, "$1")
+            .replace(
+              /\b(https?:\/\/[^\s"'<>?#]+)[?#][^\s"'<>]*/gi,
+              "$1?[redacted]",
+            )
+            .replace(
+              /([A-Za-z]:[\\/]+(?:Users|Documents and Settings)[\\/]+)[^\\/"'<>:|?*\r\n]+/gi,
+              "$1<user>",
+            )
+            .replace(/(\/(?:Users|home)\/)[^/\s"'<>:]+/g, "$1<user>")
+            .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, "[email]")
+            .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/g, "Bearer [redacted]")
+            .replace(
+              /\b((?:access[_-]?)?token|api[_-]?key|secret|password|passwd|authorization)(\s*[=:]\s*)[^\s"',;]+/gi,
+              "$1$2[redacted]",
+            );
+        }
+
+        /**
+         * @param {{raw?: boolean}} [options] raw:true skips redaction. Callers
+         * that share the log (Report an Issue, file export) never pass it.
+         */
+        function generateLogString(options) {
           const isFull = Services.prefs.getBoolPref(
             "zen.workspace.zentral.debug.full",
             true,
@@ -1486,7 +1517,8 @@
           );
           parts.push(`End of export.`);
 
-          return parts.join("\n");
+          const text = parts.join("\n");
+          return options && options.raw === true ? text : redactSensitive(text);
         }
 
         /**
@@ -1561,7 +1593,9 @@
 
             const logText = generateLogString();
             cos.writeString(logText);
-            cos.writeString(`\nLog file path: ${targetFile.path}\n`);
+            cos.writeString(
+              redactSensitive(`\nLog file path: ${targetFile.path}\n`),
+            );
 
             cos.close();
             fos.close();
