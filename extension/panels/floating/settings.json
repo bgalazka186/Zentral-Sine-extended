@@ -52,14 +52,64 @@
     {
       "property": "zen.workspace.zentral.hybrid.dock_push_px",
       "label": "Docking distance (px; snap near edge when overflow is allowed)",
-      "type": "string",
-      "defaultValue": 15
+      "type": "dropdown",
+      "defaultValue": 15,
+      "options": [
+        {
+          "label": "8",
+          "value": 8
+        },
+        {
+          "label": "15",
+          "value": 15
+        },
+        {
+          "label": "24",
+          "value": 24
+        },
+        {
+          "label": "40",
+          "value": 40
+        }
+      ],
+      "numeric": {
+        "min": 4,
+        "max": 440,
+        "unit": "px"
+      }
     },
     {
       "property": "zen.workspace.zentral.hybrid.dock_gap",
       "label": "Gap between docked panels and edge (px)",
-      "type": "string",
-      "defaultValue": 0
+      "type": "dropdown",
+      "defaultValue": 0,
+      "options": [
+        {
+          "label": "0",
+          "value": 0
+        },
+        {
+          "label": "4",
+          "value": 4
+        },
+        {
+          "label": "8",
+          "value": 8
+        },
+        {
+          "label": "12",
+          "value": 12
+        },
+        {
+          "label": "16",
+          "value": 16
+        }
+      ],
+      "numeric": {
+        "min": 0,
+        "max": 416,
+        "unit": "px"
+      }
     },
     {
       "property": "zen.workspace.zentral.hybrid.pill_layout",
@@ -102,8 +152,35 @@
     {
       "property": "zen.workspace.zentral.hybrid.detached_height_percent",
       "label": "Height when detaching from an edge (%)",
-      "type": "string",
-      "defaultValue": 78
+      "type": "dropdown",
+      "defaultValue": 78,
+      "options": [
+        {
+          "label": "60",
+          "value": 60
+        },
+        {
+          "label": "72",
+          "value": 72
+        },
+        {
+          "label": "78",
+          "value": 78
+        },
+        {
+          "label": "85",
+          "value": 85
+        },
+        {
+          "label": "100",
+          "value": 100
+        }
+      ],
+      "numeric": {
+        "min": 20,
+        "max": 100,
+        "unit": "%"
+      }
     }
   ],
   "settings": {

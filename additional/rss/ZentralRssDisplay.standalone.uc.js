@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral RSS Display
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.8
+// @version 3.1.3
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,9 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.8.
+ * Placeholders replaced by the build: 3.1.3, the numeric-preference list and
+ * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.8";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.3";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -51,6 +52,120 @@ const __zentralShim = (function () {
     return fallback;
   }
   let stopped = false;
+  function createNumericPrefSync(options) {
+    const {
+      Services,
+      items,
+      setTimer = (fn, ms) => setTimeout(fn, ms),
+      clearTimer = (id) => clearTimeout(id),
+      warn = () => {},
+    } = options;
+    const prefs = Services.prefs;
+    const INT = prefs.PREF_INT ?? 64,
+      STR = prefs.PREF_STRING ?? 32;
+    const byKey = new Map(),
+      byText = new Map(),
+      timers = new Map();
+    for (const item of items) {
+      byKey.set(item.key, item);
+      byText.set(item.text, item);
+    }
+    let writing = 0,
+      stopped = false;
+    const clamp = (item, n) => Math.min(item.max, Math.max(item.min, Math.round(n)));
+    const parse = (raw) => {
+      const m = /^(-?\d+(?:[.,]\d+)?)\s*(?:px|ms|pt|%|s)?$/i.exec(String(raw ?? "").trim());
+      return m ? Number(m[1].replace(",", ".")) : null;
+    };
+    const readInt = (key) => {
+      try {
+        return prefs.getPrefType(key) === INT && prefs.prefHasUserValue(key)
+          ? prefs.getIntPref(key)
+          : null;
+      } catch (_) {
+        return null;
+      }
+    };
+    const readText = (key) => {
+      try {
+        return prefs.getPrefType(key) === STR && prefs.prefHasUserValue(key)
+          ? prefs.getStringPref(key)
+          : null;
+      } catch (_) {
+        return null;
+      }
+    };
+    const guarded = (fn) => {
+      writing++;
+      try {
+        fn();
+      } catch (error) {
+        warn(error);
+      } finally {
+        writing--;
+      }
+    };
+    const textToBase = (item) => {
+      const n = parse(readText(item.text));
+      if (n === null) return;
+      const value = clamp(item, n);
+      if (readInt(item.key) === value) return;
+      guarded(() => {
+        // A leftover value of the wrong type must go first; Firefox refuses a type change.
+        if (prefs.prefHasUserValue(item.key) && prefs.getPrefType(item.key) !== INT)
+          prefs.clearUserPref(item.key);
+        prefs.setIntPref(item.key, value);
+      });
+    };
+    const baseToText = (item) => {
+      const value = readInt(item.key);
+      if (value === null) return;
+      const n = parse(readText(item.text));
+      if (n !== null && clamp(item, n) === value && Math.round(n) === value) return;
+      guarded(() => prefs.setStringPref(item.text, String(value)));
+    };
+    const observer = {
+      observe(_subject, _topic, name) {
+        if (stopped || writing) return;
+        const text = byText.get(name);
+        if (text) {
+          // Typing in Sine can write on every keystroke: apply once it settles.
+          if (timers.has(name)) clearTimer(timers.get(name));
+          timers.set(
+            name,
+            setTimer(() => {
+              timers.delete(name);
+              if (!stopped) textToBase(text);
+            }, 500),
+          );
+          return;
+        }
+        const base = byKey.get(name);
+        if (base) baseToText(base);
+      },
+    };
+    // Startup reconcile: the stored integer wins; text is only trusted when no integer
+    // has ever been stored.
+    for (const item of items) {
+      if (readInt(item.key) !== null) baseToText(item);
+      else if (readText(item.text) !== null) textToBase(item);
+    }
+    prefs.addObserver("zen.workspace.", observer);
+    return {
+      destroy() {
+        if (stopped) return;
+        stopped = true;
+        try {
+          prefs.removeObserver("zen.workspace.", observer);
+        } catch (_) {}
+        for (const id of timers.values()) clearTimer(id);
+        timers.clear();
+      },
+      // Exposed for tests only.
+      _observer: observer,
+    };
+  }
+  const numericItems = [{"key":"zen.workspace.bgalazka.rss.card_hover_delay","text":"zen.workspace.bgalazka.rss.card_hover_delay_text","min":0,"max":60000,"def":0},{"key":"zen.workspace.bgalazka.rss.card_hide_delay","text":"zen.workspace.bgalazka.rss.card_hide_delay_text","min":0,"max":60000,"def":250}];
   function nativeSidebarElement() {
       const tabs = window.gBrowser?.tabContainer;
       const candidates = [
@@ -428,16 +543,23 @@ function nativeSidebarSide() {
       // 1. The full pack owns every feature it contains.
       if (window.ZentralRuntime) return;
       // Live re-run (Sine reloads scripts): replace the previous instance.
-      const existing = features[def.id];
-      if (existing && existing.version && existing.version !== __ZENTRAL_STANDALONE_VERSION__) {
-        try {
-          Services.appinfo.invalidateCachesOnRestart();
-        } catch (_) {}
-      }
       try {
-        existing?.dispose?.();
+        features[def.id]?.dispose?.();
       } catch (_) {}
       const lifecycle = createFeatureScope(def.id);
+      // Sine's free numeric fields (<key>_text) feed the real integer preferences.
+      let numericSync = null;
+      if (numericItems.length) {
+        try {
+          numericSync = createNumericPrefSync({
+            Services,
+            items: numericItems,
+            warn: (error) => console.warn("[Zentral standalone] numeric preference sync", error),
+          });
+        } catch (error) {
+          console.warn("[Zentral standalone] numeric preference sync unavailable", error);
+        }
+      }
       let cleanup = null,
         initialized = false,
         disposed = false;
@@ -457,6 +579,7 @@ function nativeSidebarSide() {
             console.warn("[Zentral standalone] cleanup", def.id, error);
           }
           lifecycle.destroy();
+          numericSync?.destroy();
         },
       });
       unloadHandlers.add(handle.dispose);
@@ -491,167 +614,6 @@ function nativeSidebarSide() {
   return shim;
 })();
 
-const __zentralExtras = [
-function (window, runtime, lifecycle) {
-/* Standalone-only extra for the RSS package (never loaded by the full pack).
- *
- * The full pack styles the reader card through the Appearance owner
- * (extension/appearance/ZentralAppearance.js writes --bgalazka-look-rss-card-*
- * custom properties on :root). Installed alone there is no Appearance owner, so
- * this script writes the same custom properties from the RSS appearance
- * preferences; ZentralRssDisplay.css holds the theme fallbacks. Optional colors
- * are only written when a valid hex is present, otherwise the property is
- * removed and the theme token wins. Body of a function (window, runtime,
- * lifecycle) that returns its cleanup.
- */
-const root = document.documentElement;
-const P = "zen.workspace.bgalazka.look.";
-const HEX = /^#[0-9a-f]{6}$/i;
-const ATTR = "zentral-rss-standalone";
-const read = (key, fallback) => {
-  try {
-    switch (Services.prefs.getPrefType(key)) {
-      case 128:
-        return Services.prefs.getBoolPref(key);
-      case 64:
-        return Services.prefs.getIntPref(key);
-      case 32:
-        return Services.prefs.getStringPref(key);
-    }
-  } catch (_) {}
-  return fallback;
-};
-const num = (key, fallback, min, max) => {
-  const n = Number(read(key, fallback));
-  return Math.max(min, Math.min(max, Number.isFinite(n) ? n : fallback));
-};
-const optHex = (key) => {
-  const v = String(read(key, "")).trim().toLowerCase();
-  return HEX.test(v) ? v : "";
-};
-const SHADOWS = Object.freeze({
-  none: "none",
-  soft: "0 6px 24px #0008",
-  strong: "0 12px 36px #000c",
-});
-const FONTS = Object.freeze({
-  system: "system-ui, -apple-system, 'Segoe UI', sans-serif",
-  serif: "Georgia, 'Times New Roman', serif",
-  mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-});
-const owned = new Set();
-const set = (name, value) => {
-  owned.add(name);
-  root.style.setProperty(name, value);
-};
-const unset = (name) => {
-  owned.delete(name);
-  root.style.removeProperty(name);
-};
-const PREFS = [
-  P + "rss_card_width",
-  P + "rss_card_max_height",
-  P + "rss_card_font_size",
-  P + "rss_card_line_height",
-  P + "rss_card_padding",
-  P + "rss_card_radius",
-  P + "rss_card_border",
-  P + "rss_card_opacity",
-  P + "rss_card_button_radius",
-  P + "rss_card_gap",
-  P + "rss_card_shadow",
-  P + "rss_card_font",
-  P + "rss_card_background",
-  P + "rss_card_text",
-  P + "rss_card_url",
-  P + "rss_card_border_color",
-  P + "rss_card_button_background",
-  P + "rss_card_button_text",
-];
-function apply() {
-  root.setAttribute(ATTR, "");
-  set("--bgalazka-look-rss-card-width", num(P + "rss_card_width", 340, 240, 560) + "px");
-  set("--bgalazka-look-rss-card-max-height", num(P + "rss_card_max_height", 60, 20, 90) + "%");
-  set("--bgalazka-look-rss-card-font-size", num(P + "rss_card_font_size", 13, 10, 20) + "px");
-  set("--bgalazka-look-rss-card-line-height", String(num(P + "rss_card_line_height", 145, 110, 200) / 100));
-  set("--bgalazka-look-rss-card-padding", num(P + "rss_card_padding", 12, 6, 24) + "px");
-  set("--bgalazka-look-rss-card-radius", num(P + "rss_card_radius", 10, 0, 24) + "px");
-  set("--bgalazka-look-rss-card-border", num(P + "rss_card_border", 1, 0, 3) + "px");
-  set("--bgalazka-look-rss-card-opacity", num(P + "rss_card_opacity", 100, 10, 100) + "%");
-  set("--bgalazka-look-rss-card-button-radius", num(P + "rss_card_button_radius", 6, 0, 16) + "px");
-  set("--bgalazka-look-rss-card-gap", num(P + "rss_card_gap", 6, 0, 32) + "px");
-  const shadow = String(read(P + "rss_card_shadow", "soft"));
-  set("--bgalazka-look-rss-card-shadow", SHADOWS[shadow] ?? SHADOWS.soft);
-  const font = String(read(P + "rss_card_font", "system"));
-  set("--bgalazka-look-rss-card-font", FONTS[font] ?? FONTS.system);
-  const background = optHex(P + "rss_card_background");
-  if (background) set("--bgalazka-look-rss-card-background", background);
-  else unset("--bgalazka-look-rss-card-background");
-  const text = optHex(P + "rss_card_text");
-  if (text) set("--bgalazka-look-rss-card-text", text);
-  else unset("--bgalazka-look-rss-card-text");
-  const url = optHex(P + "rss_card_url");
-  if (url) set("--bgalazka-look-rss-card-url", url);
-  else unset("--bgalazka-look-rss-card-url");
-  const borderColor = optHex(P + "rss_card_border_color");
-  if (borderColor) set("--bgalazka-look-rss-card-border-color", borderColor);
-  else unset("--bgalazka-look-rss-card-border-color");
-  const buttonBackground = optHex(P + "rss_card_button_background");
-  if (buttonBackground) set("--bgalazka-look-rss-card-button-background", buttonBackground);
-  else unset("--bgalazka-look-rss-card-button-background");
-  const buttonText = optHex(P + "rss_card_button_text");
-  if (buttonText) set("--bgalazka-look-rss-card-button-text", buttonText);
-  else unset("--bgalazka-look-rss-card-button-text");
-}
-// Sine writes several prefs in a row; coalesce them into one style update.
-let pending = false;
-let disposed = false;
-const observer = {
-  observe() {
-    if (pending || disposed) return;
-    pending = true;
-    Promise.resolve().then(() => {
-      pending = false;
-      if (!disposed) apply();
-    });
-  },
-};
-for (const key of PREFS) Services.prefs.addObserver(key, observer);
-apply();
-return () => {
-  disposed = true;
-  for (const key of PREFS) Services.prefs.removeObserver(key, observer);
-  for (const name of owned) root.style.removeProperty(name);
-  root.removeAttribute(ATTR);
-};
-
-},
-];
-const __zentralRegister = __zentralShim.register;
-__zentralShim.register = function (def) {
-  return __zentralRegister({
-    ...def,
-    init(args) {
-      const stops = [];
-      const stopAll = () => {
-        for (const stop of stops.splice(0).reverse()) {
-          try { stop(); } catch (error) { console.warn("[Zentral standalone] cleanup", error); }
-        }
-      };
-      try {
-        for (const start of __zentralExtras) {
-          const stop = start(window, args.runtime, args.lifecycle);
-          if (typeof stop === "function") stops.push(stop);
-        }        const base = def.init(args);
-        stops.push(typeof base === "function" ? base : () => base?.destroy?.());
-      } catch (error) {
-        stopAll();
-        throw error;
-      }
-      return stopAll;
-    },
-  });
-};
 /*
  * ZENTRAL FILE GUIDE - additional/rss/ZentralRssDisplay.uc.js
  *
@@ -936,12 +898,31 @@ __zentralShim.register = function (def) {
         applyCardParts();
         if (card && cardTab && !card.hidden) showCard(cardTab);
       }
+      // Big Preview (and other popovers) live in the browser's top layer, which no
+      // z-index can outrank. The card is therefore a manual popover too, and every
+      // show re-enters the top layer, because a later popover sits above an earlier
+      // one. Without popover support the z-index in the stylesheet still applies.
+      function raiseCard(c) {
+        if (typeof c.showPopover !== "function") return;
+        try {
+          if (c.matches(":popover-open")) c.hidePopover();
+          c.showPopover();
+        } catch (_) {}
+      }
+      function dropCard(c) {
+        try {
+          if (c?.matches(":popover-open")) c.hidePopover();
+        } catch (_) {}
+      }
       function hideCard(delay = 0) {
         cancelShow();
         cancelHide();
         hideTimer = setTimeout(() => {
           hideTimer = null;
-          if (card) card.hidden = true;
+          if (card) {
+            card.hidden = true;
+            dropCard(card);
+          }
           cardTab = null;
         }, Math.max(0, delay));
       }
@@ -949,6 +930,7 @@ __zentralShim.register = function (def) {
         if (card) return card;
         card = document.createElement("div");
         card.id = "bgalazka-rss-card";
+        card.setAttribute("popover", "manual");
         card.hidden = true;
         card.innerHTML =
           '<div class="rc-folder"></div><div class="rc-text"></div>' +
@@ -1018,6 +1000,7 @@ __zentralShim.register = function (def) {
         c.querySelector(".rc-url").textContent = url;
         applyCardParts();
         c.hidden = false;
+        raiseCard(c);
         const side = document.getElementById("navigator-toolbox");
         const sr = side?.getBoundingClientRect();
         const tr = tab.getBoundingClientRect();

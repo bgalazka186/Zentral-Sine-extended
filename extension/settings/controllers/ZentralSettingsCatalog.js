@@ -80,6 +80,10 @@
         file: "additional/rss/settings.json",
       },
       {
+        owner: "notes",
+        file: "additional/notes/settings.json",
+      },
+      {
         owner: "geometry",
         file: "extension/panels/geometry/settings.json",
       },

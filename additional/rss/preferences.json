@@ -1,9 +1,5 @@
 [
   {
-    "type": "separator",
-    "label": "Start here · Essential features"
-  },
-  {
     "property": "zen.workspace.bgalazka.rss.hide_empty",
     "label": "Hide Empty RSS Live Folders",
     "type": "checkbox",
@@ -22,20 +18,18 @@
     "defaultValue": false
   },
   {
-    "type": "separator",
-    "label": "Reader card"
+    "property": "zen.workspace.bgalazka.rss.card_hover_delay_text",
+    "label": "Reader card hover delay (ms) [0 to 60000 ms]",
+    "type": "string",
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
-    "property": "zen.workspace.bgalazka.rss.card_hover_delay",
-    "label": "Reader card hover delay (ms)",
-    "type": "input",
-    "defaultValue": 0
-  },
-  {
-    "property": "zen.workspace.bgalazka.rss.card_hide_delay",
-    "label": "Reader card hide delay (ms)",
-    "type": "input",
-    "defaultValue": 250
+    "property": "zen.workspace.bgalazka.rss.card_hide_delay_text",
+    "label": "Reader card hide delay (ms) [0 to 60000 ms]",
+    "type": "string",
+    "defaultValue": "250",
+    "placeholder": "250"
   },
   {
     "property": "zen.workspace.bgalazka.rss.card_side",
@@ -98,153 +92,5 @@
     "label": "Reader card replaces the native article tooltip",
     "type": "checkbox",
     "defaultValue": true
-  },
-  {
-    "type": "separator",
-    "label": "Appearance & layout · Size & shape"
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_width",
-    "label": "Reader card width (px)",
-    "type": "string",
-    "defaultValue": 340
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_max_height",
-    "label": "Reader card max height (%)",
-    "type": "string",
-    "defaultValue": 60
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_font_size",
-    "label": "Reader card font size (px)",
-    "type": "string",
-    "defaultValue": 13
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_line_height",
-    "label": "Reader card line height (%)",
-    "type": "string",
-    "defaultValue": 145
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_padding",
-    "label": "Reader card padding (px)",
-    "type": "string",
-    "defaultValue": 12
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_radius",
-    "label": "Reader card corner radius (px)",
-    "type": "string",
-    "defaultValue": 10
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_border",
-    "label": "Reader card border width (px)",
-    "type": "string",
-    "defaultValue": 1
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_opacity",
-    "label": "Reader card background opacity (%)",
-    "type": "string",
-    "defaultValue": 100
-  },
-  {
-    "type": "separator",
-    "label": "Appearance & layout · Card buttons"
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_button_radius",
-    "label": "Reader card button corner radius (px)",
-    "type": "string",
-    "defaultValue": 6
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_gap",
-    "label": "Reader card element gap (px)",
-    "type": "string",
-    "defaultValue": 6
-  },
-  {
-    "type": "separator",
-    "label": "Appearance & layout · Colors & backing"
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_shadow",
-    "label": "Reader card shadow style",
-    "type": "dropdown",
-    "defaultValue": "soft",
-    "options": [
-      {
-        "label": "None",
-        "value": "none"
-      },
-      {
-        "label": "Soft",
-        "value": "soft"
-      },
-      {
-        "label": "Strong",
-        "value": "strong"
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_font",
-    "label": "Reader card font family",
-    "type": "dropdown",
-    "defaultValue": "system",
-    "options": [
-      {
-        "label": "System",
-        "value": "system"
-      },
-      {
-        "label": "Serif",
-        "value": "serif"
-      },
-      {
-        "label": "Monospace",
-        "value": "mono"
-      }
-    ]
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_background",
-    "label": "Reader card background color (#RRGGBB)",
-    "type": "string",
-    "defaultValue": ""
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_text",
-    "label": "Reader card text color (#RRGGBB)",
-    "type": "string",
-    "defaultValue": ""
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_url",
-    "label": "Reader card URL color (#RRGGBB)",
-    "type": "string",
-    "defaultValue": ""
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_border_color",
-    "label": "Reader card border color (#RRGGBB)",
-    "type": "string",
-    "defaultValue": ""
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_button_background",
-    "label": "Reader card button background color (#RRGGBB)",
-    "type": "string",
-    "defaultValue": ""
-  },
-  {
-    "property": "zen.workspace.bgalazka.look.rss_card_button_text",
-    "label": "Reader card button text color (#RRGGBB)",
-    "type": "string",
-    "defaultValue": ""
   }
 ]

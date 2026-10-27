@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Zentral Core and Settings
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.2
+// @version 3.1.3
 // ==/UserScript==
 /*
  * ZENTRAL FILE GUIDE - loader/ZentralRuntime.js
@@ -38,7 +38,7 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const VERSION = "3.1.2";
+  const VERSION = "3.1.3";
   // Sine installs this package under theme.json's id. Resolve from the
   // executing script so local folders and installed copies use their own files.
   // Keep this universal: never hard-code a mod id, folder name, or profile path.
@@ -108,7 +108,8 @@
   };
   const setPref = (key, value) => {
     if (typeof value === "boolean") Services.prefs.setBoolPref(key, value);
-    else if (typeof value === "number") Services.prefs.setStringPref(key, String(value));
+    else if (typeof value === "number")
+      Services.prefs.setIntPref(key, Math.round(value));
     else Services.prefs.setStringPref(key, String(value));
   };
   let hostUnloadWarning = false;
@@ -213,6 +214,129 @@
     console.error(`[Zentral/${r.id}]`, error);
     emit();
   };
+  // Free numeric entry for Sine. Sine can only show a fixed dropdown for an integer
+  // preference, so each numeric setting gets a twin text preference (<key>_text) that
+  // Sine renders as a free input. This service keeps the two in step and is the ONLY
+  // writer between them: text is parsed ("120", "120px", "50%"), rounded, clamped to the
+  // setting's safe range and written to the real integer preference every other part of
+  // the mod already reads, so no reader ever sees a string or an out-of-range number.
+  // Invalid text is ignored and never overwrites a good value. The text twin is only
+  // created for settings the user has actually changed. Self-contained on purpose: the
+  // standalone build copies this function verbatim into each bundle.
+  function createNumericPrefSync(options) {
+    const {
+      Services,
+      items,
+      setTimer = (fn, ms) => setTimeout(fn, ms),
+      clearTimer = (id) => clearTimeout(id),
+      warn = () => {},
+    } = options;
+    const prefs = Services.prefs;
+    const INT = prefs.PREF_INT ?? 64,
+      STR = prefs.PREF_STRING ?? 32;
+    const byKey = new Map(),
+      byText = new Map(),
+      timers = new Map();
+    for (const item of items) {
+      byKey.set(item.key, item);
+      byText.set(item.text, item);
+    }
+    let writing = 0,
+      stopped = false;
+    const clamp = (item, n) => Math.min(item.max, Math.max(item.min, Math.round(n)));
+    const parse = (raw) => {
+      const m = /^(-?\d+(?:[.,]\d+)?)\s*(?:px|ms|pt|%|s)?$/i.exec(String(raw ?? "").trim());
+      return m ? Number(m[1].replace(",", ".")) : null;
+    };
+    const readInt = (key) => {
+      try {
+        return prefs.getPrefType(key) === INT && prefs.prefHasUserValue(key)
+          ? prefs.getIntPref(key)
+          : null;
+      } catch (_) {
+        return null;
+      }
+    };
+    const readText = (key) => {
+      try {
+        return prefs.getPrefType(key) === STR && prefs.prefHasUserValue(key)
+          ? prefs.getStringPref(key)
+          : null;
+      } catch (_) {
+        return null;
+      }
+    };
+    const guarded = (fn) => {
+      writing++;
+      try {
+        fn();
+      } catch (error) {
+        warn(error);
+      } finally {
+        writing--;
+      }
+    };
+    const textToBase = (item) => {
+      const n = parse(readText(item.text));
+      if (n === null) return;
+      const value = clamp(item, n);
+      if (readInt(item.key) === value) return;
+      guarded(() => {
+        // A leftover value of the wrong type must go first; Firefox refuses a type change.
+        if (prefs.prefHasUserValue(item.key) && prefs.getPrefType(item.key) !== INT)
+          prefs.clearUserPref(item.key);
+        prefs.setIntPref(item.key, value);
+      });
+    };
+    const baseToText = (item) => {
+      const value = readInt(item.key);
+      if (value === null) return;
+      const n = parse(readText(item.text));
+      if (n !== null && clamp(item, n) === value && Math.round(n) === value) return;
+      guarded(() => prefs.setStringPref(item.text, String(value)));
+    };
+    const observer = {
+      observe(_subject, _topic, name) {
+        if (stopped || writing) return;
+        const text = byText.get(name);
+        if (text) {
+          // Typing in Sine can write on every keystroke: apply once it settles.
+          if (timers.has(name)) clearTimer(timers.get(name));
+          timers.set(
+            name,
+            setTimer(() => {
+              timers.delete(name);
+              if (!stopped) textToBase(text);
+            }, 500),
+          );
+          return;
+        }
+        const base = byKey.get(name);
+        if (base) baseToText(base);
+      },
+    };
+    // Startup reconcile: the stored integer wins; text is only trusted when no integer
+    // has ever been stored.
+    for (const item of items) {
+      if (readInt(item.key) !== null) baseToText(item);
+      else if (readText(item.text) !== null) textToBase(item);
+    }
+    prefs.addObserver("zen.workspace.", observer);
+    return {
+      destroy() {
+        if (stopped) return;
+        stopped = true;
+        try {
+          prefs.removeObserver("zen.workspace.", observer);
+        } catch (_) {}
+        for (const id of timers.values()) clearTimer(id);
+        timers.clear();
+      },
+      // Exposed for tests only.
+      _observer: observer,
+    };
+  }
+
   // CORE LIFECYCLE CONTRACT (for future contributors/AI): keep this generic.
   // Features declare dependencies in the catalog and register synchronously.
   // init receives one owned scope; register cleanup BEFORE fallible/async work.
@@ -1532,14 +1656,13 @@
           : typeof item.defaultValue === "number"
             ? "number"
             : "text";
-      if (input.type === "number") input.step = "1";
       if (input.type !== "checkbox") input.className = "zs-text-input";
     }
     input.addEventListener("change", () => {
       let value = input.type === "checkbox" ? input.checked : input.value;
       if (typeof item.defaultValue === "number") value = Number(value);
       const valid =
-        (typeof value !== "number" || Number.isFinite(value)) &&
+        (typeof value !== "number" || Number.isInteger(value)) &&
         (!item.label.includes("#RRGGBB") || /^#[0-9a-fA-F]{6}$/.test(value));
       input.setCustomValidity(
         valid
@@ -1609,6 +1732,7 @@
     // second owner exists. Start here receives copies of the main switches and
     // of "Hide Unattached App Controls" (hides the empty standalone apps box).
     const destinations = {
+      "zen.workspace.zentral.notes.enabled": ["essentials", "Essential features"],
       "zen.workspace.bgalazka.hide_unattached_app_controls": [
         "essentials",
         "Essential features",
@@ -2432,6 +2556,28 @@
   // Resume features when an initially disabled base engine becomes available.
   let activating = false,
     activationRequested = false;
+  let numericSync = null;
+  function startNumericPrefSync() {
+    if (numericSync || stopped) return;
+    try {
+      const items = JSON.parse(
+        moduleLoader.readText("loader/numeric-prefs.json", "numeric-prefs"),
+      );
+      numericSync = createNumericPrefSync({
+        Services,
+        items,
+        warn: (error) => console.warn("[Zentral] numeric preference sync", error),
+      });
+      disposers.push(() => {
+        numericSync?.destroy();
+        numericSync = null;
+      });
+    } catch (error) {
+      // Missing or unreadable list: Sine's free fields simply do not sync.
+      console.warn("[Zentral] numeric preference sync unavailable", error);
+    }
+  }
+
   function activateReady() {
     if (!activationReady || stopped) return;
     if (activating) {
@@ -2683,6 +2829,7 @@
     runtime.nativeReady = waitForNativeStartup();
     await runtime.nativeReady;
     if (stopped) return;
+    startNumericPrefSync();
     activationReady = true;
     startupStage = "activating-features";
     activateReady();

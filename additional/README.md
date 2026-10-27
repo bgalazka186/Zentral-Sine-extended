@@ -5,6 +5,7 @@ The shared loader can activate these while Apps/Groups are unavailable or disabl
 | Part           | Purpose                                                                                            |
 | -------------- | -------------------------------------------------------------------------------------------------- |
 | `video/`       | Sidebar video preview, capture/transport, source selection, subtitle presentation and playback UI. |
+| `notes/`       | Quick notes sheet (Markdown files), bar button and shortcut.                                       |
 | `rss/`         | Native/live-folder display improvements.                                                           |
 | `tabs/`        | Startup loading, background sorting, middle-click unloading and optional compact hover continuity. |
 | `library/`     | Optional native Library geometry; external-layout compatibility can pause it.                      |
@@ -20,6 +21,7 @@ Modules with a `standalone.json` can be installed on their own by pasting their 
 | Module | Sine install URL |
 | --- | --- |
 | Zentral Sidebar Video Preview | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/video` |
+| Zentral Notes | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/notes` |
 | Zentral Logger | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/diagnostics` |
 | Zentral Library Resize | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/library` |
 | Zentral RSS Display | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/rss` |

@@ -139,7 +139,7 @@
               !!document.querySelector('[zentral-hover="true"]:hover');
 
             if (isHovered) {
-              // User is hovering the popup or label ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â keep it open!
+              // User is hovering the popup or label — keep it open!
               return;
             }
 
@@ -526,7 +526,7 @@
             // Track for cleanup when this group is removed from the DOM (M-02)
             access.groupObservers.set(group, styleWatcher);
 
-            // Labels are always full-width ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no hover expand/collapse needed.
+            // Labels are always full-width — no hover expand/collapse needed.
 
             let hoverTimer = null;
             lifecycle.listen(labelContainer, "mouseenter", () => {

@@ -28,6 +28,7 @@
  * extension/panels/navigation/styles/ZentralPanelBackground.css;
  * extension/panels/navigation/styles/ZentralPanelToolbar.css; extension/panels/secondary-
  * views/ZentralSecondaryViews.uc.js; extension/panels/styling/ZentralPanelStyles.uc.js;
+ * additional/notes/ZentralNotes.css; additional/notes/ZentralNotes.uc.js;
  * additional/rss/ZentralRssDisplay.css; additional/rss/ZentralRssDisplay.uc.js;
  * extension/settings/styles/ZentralControls.css; extension/settings/styles/ZentralSettings.css;
  * extension/settings/styles/ZentralSettingsFoundation.css; additional/tabs/ZentralTabDensity.css;
@@ -198,6 +199,13 @@
           "panel-toolbar",
           "panels",
         ],
+      },
+      {
+        id: "notes",
+        name: "Quick notes",
+        file: "additional/notes/ZentralNotes.uc.js",
+        description:
+          "Independent notes sheet stored as Markdown files; normal live preference switches.",
       },
       {
         id: "rss",
@@ -384,6 +392,11 @@
         id: "Appearance",
         file: "extension/appearance/ZentralAppearance.css",
         owners: [],
+      },
+      {
+        id: "Notes",
+        file: "additional/notes/ZentralNotes.css",
+        owners: ["notes"],
       },
       {
         id: "RssDisplay",

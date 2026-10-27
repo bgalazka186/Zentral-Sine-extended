@@ -461,9 +461,9 @@
     }
 
     function getPillPosition() {
-      const raw = Number(ctx.getPref(PILL_POSITION_PREF, 0));
-      return Number.isFinite(raw)
-        ? clampPillPosition(raw)
+      const value = ctx.getPref(PILL_POSITION_PREF, 0);
+      return typeof value === "number" && Number.isFinite(value)
+        ? clampPillPosition(value)
         : 0;
     }
 
@@ -515,7 +515,7 @@
       if (pillPosDragState)
         ctx.setPref(
           PILL_POSITION_PREF,
-          pillPosDragState.livePosition,
+          Math.round(pillPosDragState.livePosition),
         );
       pillPosDragState = null;
     }
@@ -643,6 +643,7 @@
     // "bottom". Mirrors native startResize()/onDrag()'s shape (snapshot on
     // mousedown, live style writes on mousemove, persist on mouseup) but for
     // the vertical axis, which the base mod has no equivalent of at all.
+    let vResizeFrame = 0;
     function startVerticalResize(e, edge) {
       if (panelGeometryLocked()) return;
       if (e.button !== 0) return;
@@ -722,10 +723,25 @@
         newTop - vResizeState.naturalTop + vResizeState.posOffset;
       vResizeState.liveExtraBottom =
         newBottom - vResizeState.naturalBottom - vResizeState.posOffset;
-      applyVerticalResizeExtras(root);
+      // Once per frame is enough: the offsets above are already up to date, so extra mouse
+      // events inside one frame would only repeat the same style writes and layout reads.
+      if (vResizeFrame) return;
+      vResizeFrame = window.requestAnimationFrame(() => {
+        vResizeFrame = 0;
+        if (!vResizeState) return;
+        const current = document.getElementById("zen-app-panel-root");
+        if (current) applyVerticalResizeExtras(current);
+      });
     }
 
     function stopVerticalResizeDrag() {
+      if (vResizeFrame) {
+        window.cancelAnimationFrame(vResizeFrame);
+        vResizeFrame = 0;
+        // Apply the final offsets so the saved value matches what is on screen.
+        const last = document.getElementById("zen-app-panel-root");
+        if (last && vResizeState) applyVerticalResizeExtras(last);
+      }
       document.removeEventListener("mousemove", onVerticalResizeDrag);
       document.removeEventListener("mouseup", stopVerticalResizeDrag);
       window.removeEventListener("blur", stopVerticalResizeDrag);

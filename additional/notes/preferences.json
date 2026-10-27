@@ -1,0 +1,44 @@
+[
+  {
+    "type": "text",
+    "label": "**Quick notes**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.enabled",
+    "label": "Enable Notes (note button on panel bars and shortcut)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.show_button",
+    "label": "Show the Notes button on panel URL bars",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.dock_sidebar",
+    "label": "Dock Notes to the sidebar (opens beside the sidebar and adds a Notes button to it)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.shortcut",
+    "label": "Notes shortcut (needs Alt, Ctrl or Cmd, e.g. Alt+Shift+N)",
+    "type": "string",
+    "defaultValue": "Alt+Shift+N"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.autosave_seconds_text",
+    "label": "Longest time between saves while typing (seconds, 2–60) [2 to 60 s]",
+    "type": "string",
+    "defaultValue": "5",
+    "placeholder": "5"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.folder",
+    "label": "Notes folder (absolute path; empty = zentral-notes inside your profile)",
+    "type": "string",
+    "defaultValue": ""
+  }
+]

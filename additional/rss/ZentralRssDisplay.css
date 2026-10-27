@@ -95,9 +95,17 @@
  * preference keeps the current Look palette and Classic falls back to the
  * native panel tokens. The JS only sets the behavior-driven parts. */
 #bgalazka-rss-card {
+  /* The card is a manual popover (top layer, above Big Preview). Undo the
+   * popover defaults that would center it and shrink-wrap its size. */
+  inset: auto;
+  right: auto;
+  bottom: auto;
+  margin: 0;
+  height: auto;
   position: fixed;
-  /* Above the Zentral panel root (2147483600), pill controls and reveal edge
-   * (2147483640-2147483642); below the settings window (2147483647). */
+  /* Fallback only (no popover support): above the Zentral panel root (2147483600),
+   * pill controls and reveal edge (2147483640-2147483642); below the settings window
+   * (2147483647). With popover support the top layer decides, see raiseCard. */
   z-index: 2147483646;
   box-sizing: border-box;
   width: var(--bgalazka-look-rss-card-width, 340px);

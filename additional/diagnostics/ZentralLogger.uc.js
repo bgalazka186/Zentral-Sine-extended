@@ -23,8 +23,7 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const ZentralRuntime =
-    window.ZentralRuntime || window.__zentralStandaloneRuntime;
+  const ZentralRuntime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
   ZentralRuntime.register({
     id: "logger",
     // Used by the standalone shim; the full runtime ignores unknown fields.
@@ -36,7 +35,7 @@
       // @name         Zentral-Logger
       // @description  Comprehensive diagnostic logger for Zentral (Apps Grid, Tab Groups, Settings & Layout Renderings).
       // @author       Michele Pierini
-      // @version      v3.1.2
+      // @version      v3.1.3
       // @include      main
       // ==/UserScript==
 
@@ -1677,7 +1676,7 @@
 
         ZentralLogger.log(
           "Zentral-Logger",
-          "Zentral-Logger v3.1.2 initialized with clean format & deduplication. Press Alt+L to export logs.",
+          "Zentral-Logger v3.1.3 initialized with clean format & deduplication. Press Alt+L to export logs.",
         );
       })();
     },

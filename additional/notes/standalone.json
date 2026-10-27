@@ -1,0 +1,29 @@
+{
+  "id": "notes",
+  "themeId": "zentral-notes",
+  "name": "Zentral Notes",
+  "description": "Quick notes as plain Markdown files: multiple notes, highlights, checklists, search, trash, Save to file. Opens from a shortcut anywhere and adds a Notes button to Zentral panel bars when the full pack's panels are present. Standalone part of Zentral Extended.",
+  "version": "3.1.3",
+  "entry": "ZentralNotes.uc.js",
+  "output": "ZentralNotes.standalone.uc.js",
+  "settings": "settings.json",
+  "css": "ZentralNotes.css",
+  "tags": [
+    "notes",
+    "productivity",
+    "zen"
+  ],
+  "preferenceOrder": [
+    {
+      "type": "text",
+      "label": "**Quick notes**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.notes.enabled",
+    "zen.workspace.zentral.notes.show_button",
+    "zen.workspace.zentral.notes.dock_sidebar",
+    "zen.workspace.zentral.notes.shortcut",
+    "zen.workspace.zentral.notes.autosave_seconds",
+    "zen.workspace.zentral.notes.folder"
+  ]
+}

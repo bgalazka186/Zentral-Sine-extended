@@ -1,0 +1,723 @@
+[
+  {
+    "key": "zen.workspace.bgalazka.look.primary_opacity",
+    "text": "zen.workspace.bgalazka.look.primary_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.control_strength",
+    "text": "zen.workspace.bgalazka.look.control_strength_text",
+    "min": 0,
+    "max": 300,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.web_opacity",
+    "text": "zen.workspace.bgalazka.look.web_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.backdrop_opacity",
+    "text": "zen.workspace.bgalazka.look.backdrop_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 75
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.surface_opacity",
+    "text": "zen.workspace.bgalazka.look.surface_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.raised_opacity",
+    "text": "zen.workspace.bgalazka.look.raised_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.bgalazka.opacity_unpinned",
+    "text": "zen.workspace.bgalazka.opacity_unpinned_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.bgalazka.opacity_pinned_focus",
+    "text": "zen.workspace.bgalazka.opacity_pinned_focus_text",
+    "min": 0,
+    "max": 100,
+    "def": 95
+  },
+  {
+    "key": "zen.workspace.bgalazka.opacity_pinned_blur",
+    "text": "zen.workspace.bgalazka.opacity_pinned_blur_text",
+    "min": 0,
+    "max": 100,
+    "def": 90
+  },
+  {
+    "key": "zen.workspace.bgalazka.panel_black_opacity",
+    "text": "zen.workspace.bgalazka.panel_black_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.apps.sidebar.animation_speed",
+    "text": "zen.workspace.apps.sidebar.animation_speed_text",
+    "min": 0,
+    "max": 60000,
+    "def": 450
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.radius",
+    "text": "zen.workspace.bgalazka.look.radius_text",
+    "min": 0,
+    "max": 200,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.depth",
+    "text": "zen.workspace.bgalazka.look.depth_text",
+    "min": 0,
+    "max": 100,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.panel_border",
+    "text": "zen.workspace.bgalazka.look.panel_border_text",
+    "min": 0,
+    "max": 12,
+    "def": 1
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.button_opacity",
+    "text": "zen.workspace.bgalazka.look.button_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.button_border",
+    "text": "zen.workspace.bgalazka.look.button_border_text",
+    "min": 0,
+    "max": 12,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.row_rule",
+    "text": "zen.workspace.bgalazka.look.row_rule_text",
+    "min": 0,
+    "max": 12,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.toolbar_opacity",
+    "text": "zen.workspace.bgalazka.look.toolbar_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.address_opacity",
+    "text": "zen.workspace.bgalazka.look.address_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.toolbar_border",
+    "text": "zen.workspace.bgalazka.look.toolbar_border_text",
+    "min": 0,
+    "max": 12,
+    "def": 1
+  },
+  {
+    "key": "zen.workspace.bgalazka.pill_position",
+    "text": "zen.workspace.bgalazka.pill_position_text",
+    "min": -50,
+    "max": 50,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.bgalazka.pill_peek_dot_opacity",
+    "text": "zen.workspace.bgalazka.pill_peek_dot_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 31
+  },
+  {
+    "key": "zen.workspace.bgalazka.pill_background_opacity",
+    "text": "zen.workspace.bgalazka.pill_background_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 48
+  },
+  {
+    "key": "zen.workspace.tabgroups.label_opacity",
+    "text": "zen.workspace.tabgroups.label_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 85
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.tile_opacity",
+    "text": "zen.workspace.bgalazka.look.tile_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.popup_opacity",
+    "text": "zen.workspace.bgalazka.look.popup_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.zentral.library.custom_background.opacity",
+    "text": "zen.workspace.zentral.library.custom_background.opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.rss_card_width",
+    "text": "zen.workspace.bgalazka.look.rss_card_width_text",
+    "min": 120,
+    "max": 3000,
+    "def": 340
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.rss_card_max_height",
+    "text": "zen.workspace.bgalazka.look.rss_card_max_height_text",
+    "min": 10,
+    "max": 100,
+    "def": 60
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.rss_card_font_size",
+    "text": "zen.workspace.bgalazka.look.rss_card_font_size_text",
+    "min": 6,
+    "max": 72,
+    "def": 13
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.rss_card_line_height",
+    "text": "zen.workspace.bgalazka.look.rss_card_line_height_text",
+    "min": 80,
+    "max": 400,
+    "def": 145
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.rss_card_padding",
+    "text": "zen.workspace.bgalazka.look.rss_card_padding_text",
+    "min": 0,
+    "max": 120,
+    "def": 12
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.rss_card_radius",
+    "text": "zen.workspace.bgalazka.look.rss_card_radius_text",
+    "min": 0,
+    "max": 200,
+    "def": 10
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.rss_card_border",
+    "text": "zen.workspace.bgalazka.look.rss_card_border_text",
+    "min": 0,
+    "max": 30,
+    "def": 1
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.rss_card_opacity",
+    "text": "zen.workspace.bgalazka.look.rss_card_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.rss_card_button_radius",
+    "text": "zen.workspace.bgalazka.look.rss_card_button_radius_text",
+    "min": 0,
+    "max": 100,
+    "def": 6
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.rss_card_gap",
+    "text": "zen.workspace.bgalazka.look.rss_card_gap_text",
+    "min": 0,
+    "max": 100,
+    "def": 6
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.essentials_height",
+    "text": "zen.workspace.bgalazka.look.essentials_height_text",
+    "min": 16,
+    "max": 160,
+    "def": 32
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.tabbar_section_gap",
+    "text": "zen.workspace.bgalazka.look.tabbar_section_gap_text",
+    "min": 0,
+    "max": 100,
+    "def": 2
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.folder_icon_size",
+    "text": "zen.workspace.bgalazka.look.folder_icon_size_text",
+    "min": 8,
+    "max": 64,
+    "def": 20
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.workspace_icon_size",
+    "text": "zen.workspace.bgalazka.look.workspace_icon_size_text",
+    "min": 8,
+    "max": 64,
+    "def": 16
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.workspace_height",
+    "text": "zen.workspace.bgalazka.look.workspace_height_text",
+    "min": 14,
+    "max": 100,
+    "def": 22
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.bottom_bar_height",
+    "text": "zen.workspace.bgalazka.look.bottom_bar_height_text",
+    "min": 14,
+    "max": 100,
+    "def": 24
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.urlbar_top_gap",
+    "text": "zen.workspace.bgalazka.look.urlbar_top_gap_text",
+    "min": 0,
+    "max": 100,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.newtab_height",
+    "text": "zen.workspace.bgalazka.look.newtab_height_text",
+    "min": 14,
+    "max": 80,
+    "def": 20
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.tabbar_row_height",
+    "text": "zen.workspace.bgalazka.look.tabbar_row_height_text",
+    "min": 9,
+    "max": 400,
+    "def": 20
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.tabbar_row_gap",
+    "text": "zen.workspace.bgalazka.look.tabbar_row_gap_text",
+    "min": 0,
+    "max": 400,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.tabbar_icon_gap",
+    "text": "zen.workspace.bgalazka.look.tabbar_icon_gap_text",
+    "min": 0,
+    "max": 400,
+    "def": 4
+  },
+  {
+    "key": "zen.workspace.apps.sidebar.apps_per_row",
+    "text": "zen.workspace.apps.sidebar.apps_per_row_text",
+    "min": 1,
+    "max": 30,
+    "def": 7
+  },
+  {
+    "key": "zen.workspace.apps.sidebar.max_rows",
+    "text": "zen.workspace.apps.sidebar.max_rows_text",
+    "min": 1,
+    "max": 15,
+    "def": 3
+  },
+  {
+    "key": "zen.workspace.apps.sidebar.max_apps",
+    "text": "zen.workspace.apps.sidebar.max_apps_text",
+    "min": 1,
+    "max": 126,
+    "def": 21
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.row_padding",
+    "text": "zen.workspace.bgalazka.look.row_padding_text",
+    "min": 0,
+    "max": 60,
+    "def": 4
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.control_size",
+    "text": "zen.workspace.bgalazka.look.control_size_text",
+    "min": 12,
+    "max": 64,
+    "def": 22
+  },
+  {
+    "key": "zen.workspace.apps.sidebar.width",
+    "text": "zen.workspace.apps.sidebar.width_text",
+    "min": 280,
+    "max": 4000,
+    "def": 350
+  },
+  {
+    "key": "zen.workspace.bgalazka.panel_horizontal_offset_px",
+    "text": "zen.workspace.bgalazka.panel_horizontal_offset_px_text",
+    "min": -2000,
+    "max": 2000,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.bgalazka.panel_top_extra_px",
+    "text": "zen.workspace.bgalazka.panel_top_extra_px_text",
+    "min": -2000,
+    "max": 2000,
+    "def": 4
+  },
+  {
+    "key": "zen.workspace.bgalazka.panel_bottom_extra_px",
+    "text": "zen.workspace.bgalazka.panel_bottom_extra_px_text",
+    "min": -2000,
+    "max": 2000,
+    "def": 4
+  },
+  {
+    "key": "zen.workspace.bgalazka.panel_position_offset_px",
+    "text": "zen.workspace.bgalazka.panel_position_offset_px_text",
+    "min": -2000,
+    "max": 2000,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.bgalazka.rss.card_hover_delay",
+    "text": "zen.workspace.bgalazka.rss.card_hover_delay_text",
+    "min": 0,
+    "max": 60000,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.bgalazka.rss.card_hide_delay",
+    "text": "zen.workspace.bgalazka.rss.card_hide_delay_text",
+    "min": 0,
+    "max": 60000,
+    "def": 250
+  },
+  {
+    "key": "zen.workspace.zentral.hybrid.dock_push_px",
+    "text": "zen.workspace.zentral.hybrid.dock_push_px_text",
+    "min": 4,
+    "max": 440,
+    "def": 15
+  },
+  {
+    "key": "zen.workspace.zentral.hybrid.dock_gap",
+    "text": "zen.workspace.zentral.hybrid.dock_gap_text",
+    "min": 0,
+    "max": 416,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.zentral.hybrid.detached_height_percent",
+    "text": "zen.workspace.zentral.hybrid.detached_height_percent_text",
+    "min": 20,
+    "max": 100,
+    "def": 78
+  },
+  {
+    "key": "zen.workspace.bgalazka.hover_reveal_delay_ms",
+    "text": "zen.workspace.bgalazka.hover_reveal_delay_ms_text",
+    "min": 0,
+    "max": 60000,
+    "def": 160
+  },
+  {
+    "key": "zen.workspace.bgalazka.hover_reveal_width_px",
+    "text": "zen.workspace.bgalazka.hover_reveal_width_px_text",
+    "min": 0,
+    "max": 464,
+    "def": 1
+  },
+  {
+    "key": "zen.workspace.zentral.panels.hover_push_width_px",
+    "text": "zen.workspace.zentral.panels.hover_push_width_px_text",
+    "min": 0,
+    "max": 464,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.zentral.panels.outside_distance_px",
+    "text": "zen.workspace.zentral.panels.outside_distance_px_text",
+    "min": 0,
+    "max": 4000,
+    "def": 250
+  },
+  {
+    "key": "zen.workspace.zentral.panels.outside_trigger_margin_px",
+    "text": "zen.workspace.zentral.panels.outside_trigger_margin_px_text",
+    "min": 0,
+    "max": 464,
+    "def": 10
+  },
+  {
+    "key": "zen.workspace.zentral.panels.autohide_delay_ms",
+    "text": "zen.workspace.zentral.panels.autohide_delay_ms_text",
+    "min": 0,
+    "max": 60000,
+    "def": 400
+  },
+  {
+    "key": "zen.workspace.apps.sidebar.badge_poll_interval_ms",
+    "text": "zen.workspace.apps.sidebar.badge_poll_interval_ms_text",
+    "min": 0,
+    "max": 3600000,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.zentral.notes.autosave_seconds",
+    "text": "zen.workspace.zentral.notes.autosave_seconds_text",
+    "min": 2,
+    "max": 60,
+    "def": 5
+  },
+  {
+    "key": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px",
+    "text": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px_text",
+    "min": 6,
+    "max": 960,
+    "def": 64
+  },
+  {
+    "key": "zen.workspace.zentral.video_preview.width_percent",
+    "text": "zen.workspace.zentral.video_preview.width_percent_text",
+    "min": 10,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.zentral.video_preview.height_px",
+    "text": "zen.workspace.zentral.video_preview.height_px_text",
+    "min": 0,
+    "max": 4000,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.zentral.video_preview.radius_px",
+    "text": "zen.workspace.zentral.video_preview.radius_px_text",
+    "min": 0,
+    "max": 424,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.zentral.video_preview.button_size_px",
+    "text": "zen.workspace.zentral.video_preview.button_size_px_text",
+    "min": 9,
+    "max": 432,
+    "def": 26
+  },
+  {
+    "key": "zen.workspace.zentral.video_preview.button_radius_px",
+    "text": "zen.workspace.zentral.video_preview.button_radius_px_text",
+    "min": 0,
+    "max": 412,
+    "def": 4
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.video_opacity",
+    "text": "zen.workspace.bgalazka.look.video_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.video_control_opacity",
+    "text": "zen.workspace.bgalazka.look.video_control_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.video_border",
+    "text": "zen.workspace.bgalazka.look.video_border_text",
+    "min": 0,
+    "max": 12,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.video_controls_gap",
+    "text": "zen.workspace.bgalazka.look.video_controls_gap_text",
+    "min": 0,
+    "max": 400,
+    "def": 1
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.video_overlay_opacity",
+    "text": "zen.workspace.bgalazka.look.video_overlay_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 40
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.video_padding",
+    "text": "zen.workspace.bgalazka.look.video_padding_text",
+    "min": 0,
+    "max": 60,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.video_row_height",
+    "text": "zen.workspace.bgalazka.look.video_row_height_text",
+    "min": 14,
+    "max": 80,
+    "def": 22
+  },
+  {
+    "key": "zen.workspace.zentral.video_preview.caption_font_size",
+    "text": "zen.workspace.zentral.video_preview.caption_font_size_text",
+    "min": 5,
+    "max": 300,
+    "def": 12
+  },
+  {
+    "key": "zen.workspace.zentral.video_preview.caption_max_lines",
+    "text": "zen.workspace.zentral.video_preview.caption_max_lines_text",
+    "min": 1,
+    "max": 24,
+    "def": 4
+  },
+  {
+    "key": "zen.workspace.zentral.video_preview.caption_poll_ms",
+    "text": "zen.workspace.zentral.video_preview.caption_poll_ms_text",
+    "min": 0,
+    "max": 60000,
+    "def": 750
+  },
+  {
+    "key": "zen.workspace.zentral.video_preview.capture_width_px",
+    "text": "zen.workspace.zentral.video_preview.capture_width_px_text",
+    "min": 80,
+    "max": 2560,
+    "def": 480
+  },
+  {
+    "key": "zen.workspace.zentral.video_preview.capture_rate_tenths",
+    "text": "zen.workspace.zentral.video_preview.capture_rate_tenths_text",
+    "min": 1,
+    "max": 600,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.zentral.video_preview.scan_interval_ms",
+    "text": "zen.workspace.zentral.video_preview.scan_interval_ms_text",
+    "min": 0,
+    "max": 480000,
+    "def": 5000
+  },
+  {
+    "key": "zen.workspace.zentral.video_preview.canvas_stream_width_px",
+    "text": "zen.workspace.zentral.video_preview.canvas_stream_width_px_text",
+    "min": 80,
+    "max": 2560,
+    "def": 640
+  },
+  {
+    "key": "zen.workspace.zentral.video_preview.canvas_stream_fps",
+    "text": "zen.workspace.zentral.video_preview.canvas_stream_fps_text",
+    "min": 1,
+    "max": 90,
+    "def": 30
+  },
+  {
+    "key": "zen.workspace.bgalazka.panel_retry_limit",
+    "text": "zen.workspace.bgalazka.panel_retry_limit_text",
+    "min": 0,
+    "max": 6,
+    "def": 2
+  },
+  {
+    "key": "zen.workspace.bgalazka.panel_retry_delay_ms",
+    "text": "zen.workspace.bgalazka.panel_retry_delay_ms_text",
+    "min": 0,
+    "max": 60000,
+    "def": 500
+  },
+  {
+    "key": "zen.workspace.bgalazka.panel_fallback_interval_ms",
+    "text": "zen.workspace.bgalazka.panel_fallback_interval_ms_text",
+    "min": 0,
+    "max": 300000,
+    "def": 10000
+  },
+  {
+    "key": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.delay_seconds",
+    "text": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.delay_seconds_text",
+    "min": 0,
+    "max": 60,
+    "def": 0
+  },
+  {
+    "key": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.target_width_px",
+    "text": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.target_width_px_text",
+    "min": 100,
+    "max": 4000,
+    "def": 400
+  },
+  {
+    "key": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.extra_width_px",
+    "text": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.extra_width_px_text",
+    "min": 25,
+    "max": 4000,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.hold_ms",
+    "text": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.hold_ms_text",
+    "min": 0,
+    "max": 60000,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.verification_frames",
+    "text": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.verification_frames_text",
+    "min": 1,
+    "max": 30,
+    "def": 2
+  },
+  {
+    "key": "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px",
+    "text": "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px_text",
+    "min": 0,
+    "max": 464,
+    "def": 12
+  },
+  {
+    "key": "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms",
+    "text": "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms_text",
+    "min": 0,
+    "max": 60000,
+    "def": 250
+  },
+  {
+    "key": "zen.workspace.zentral.experimental.library_resize.minimum_content_width_px",
+    "text": "zen.workspace.zentral.experimental.library_resize.minimum_content_width_px_text",
+    "min": 0,
+    "max": 4000,
+    "def": 200
+  }
+]

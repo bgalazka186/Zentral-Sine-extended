@@ -128,34 +128,39 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.zentral.video_preview.capture_width_px",
-    "label": "Capture Detail: Video Frames and Page Snapshots (px)",
+    "property": "zen.workspace.zentral.video_preview.capture_width_px_text",
+    "label": "Capture Detail: Video Frames and Page Snapshots (px) [80 to 2560 px]",
     "type": "string",
-    "defaultValue": 480
+    "defaultValue": "480",
+    "placeholder": "480"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.capture_rate_tenths",
-    "label": "Still-Frame Capture Rate (higher rates use more CPU)",
+    "property": "zen.workspace.zentral.video_preview.capture_rate_tenths_text",
+    "label": "Still-Frame Capture Rate (higher rates use more CPU) [1 to 600]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.scan_interval_ms",
-    "label": "Source discovery interval (slower = less polling; events can still scan)",
+    "property": "zen.workspace.zentral.video_preview.scan_interval_ms_text",
+    "label": "Source discovery interval (slower = less polling; events can still scan) [0 to 480000 ms]",
     "type": "string",
-    "defaultValue": 5000
+    "defaultValue": "5000",
+    "placeholder": "5000"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.canvas_stream_width_px",
-    "label": "Canvas stream width (smaller = less detail and drawing work)",
+    "property": "zen.workspace.zentral.video_preview.canvas_stream_width_px_text",
+    "label": "Canvas stream width (smaller = less detail and drawing work) [80 to 2560 px]",
     "type": "string",
-    "defaultValue": 640
+    "defaultValue": "640",
+    "placeholder": "640"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.canvas_stream_fps",
-    "label": "Canvas stream FPS (lower = less smooth video and drawing work)",
+    "property": "zen.workspace.zentral.video_preview.canvas_stream_fps_text",
+    "label": "Canvas stream FPS (lower = less smooth video and drawing work) [1 to 90]",
     "type": "string",
-    "defaultValue": 30
+    "defaultValue": "30",
+    "placeholder": "30"
   },
   {
     "property": "zen.workspace.zentral.video_preview.display_capture_cap",
@@ -274,10 +279,11 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px",
-    "label": "Default enlarged preview bottom clearance (px)",
+    "property": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px_text",
+    "label": "Default enlarged preview bottom clearance (px) [6 to 960 px]",
     "type": "string",
-    "defaultValue": 64
+    "defaultValue": "64",
+    "placeholder": "64"
   },
   {
     "property": "zen.workspace.zentral.video_preview.enlarged_keep_aspect",
@@ -330,16 +336,18 @@
     ]
   },
   {
-    "property": "zen.workspace.zentral.video_preview.caption_font_size",
-    "label": "Subtitle text size (px)",
+    "property": "zen.workspace.zentral.video_preview.caption_font_size_text",
+    "label": "Subtitle text size (px) [5 to 300 px]",
     "type": "string",
-    "defaultValue": 12
+    "defaultValue": "12",
+    "placeholder": "12"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.caption_max_lines",
-    "label": "Maximum subtitle lines",
+    "property": "zen.workspace.zentral.video_preview.caption_max_lines_text",
+    "label": "Maximum subtitle lines [1 to 24]",
     "type": "string",
-    "defaultValue": 4
+    "defaultValue": "4",
+    "placeholder": "4"
   },
   {
     "property": "zen.workspace.zentral.video_preview.captions_visible",
@@ -368,10 +376,11 @@
     "label": "Video subtitles · Subtitle updates"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.caption_poll_ms",
-    "label": "Caption recovery interval (slower = delayed recovery from missed events)",
+    "property": "zen.workspace.zentral.video_preview.caption_poll_ms_text",
+    "label": "Caption recovery interval (slower = delayed recovery from missed events) [0 to 60000 ms]",
     "type": "string",
-    "defaultValue": 750
+    "defaultValue": "750",
+    "placeholder": "750"
   },
   {
     "property": "zen.workspace.zentral.video_preview.caption_events",
@@ -412,22 +421,25 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.zentral.video_preview.width_percent",
-    "label": "Preview Width (%) when Fill Width is Off",
+    "property": "zen.workspace.zentral.video_preview.width_percent_text",
+    "label": "Preview Width (%) when Fill Width is Off [10 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.height_px",
-    "label": "Preview Height (px; 0 = auto)",
+    "property": "zen.workspace.zentral.video_preview.height_px_text",
+    "label": "Preview Height (px; 0 = auto) [0 to 4000 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.radius_px",
-    "label": "Preview Corner Radius (px)",
+    "property": "zen.workspace.zentral.video_preview.radius_px_text",
+    "label": "Preview Corner Radius (px) [0 to 424 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
     "property": "zen.workspace.zentral.video_preview.framing",
@@ -558,16 +570,18 @@
     ]
   },
   {
-    "property": "zen.workspace.zentral.video_preview.button_size_px",
-    "label": "Toolbar button size (standalone)",
+    "property": "zen.workspace.zentral.video_preview.button_size_px_text",
+    "label": "Toolbar button size (standalone) [9 to 432 px]",
     "type": "string",
-    "defaultValue": 26
+    "defaultValue": "26",
+    "placeholder": "26"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.button_radius_px",
-    "label": "Toolbar button corner radius (px, standalone mod)",
+    "property": "zen.workspace.zentral.video_preview.button_radius_px_text",
+    "label": "Toolbar button corner radius (px, standalone mod) [0 to 412 px]",
     "type": "string",
-    "defaultValue": 4
+    "defaultValue": "4",
+    "placeholder": "4"
   },
   {
     "property": "zen.workspace.zentral.video_preview.button_icon_color",
@@ -595,16 +609,18 @@
     "label": "Appearance & layout · Colors & backing"
   },
   {
-    "property": "zen.workspace.bgalazka.look.video_opacity",
-    "label": "Video preview canvas opacity (%)",
+    "property": "zen.workspace.bgalazka.look.video_opacity_text",
+    "label": "Video preview canvas opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
-    "property": "zen.workspace.bgalazka.look.video_control_opacity",
-    "label": "Video control strip opacity (%)",
+    "property": "zen.workspace.bgalazka.look.video_control_opacity_text",
+    "label": "Video control strip opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
     "property": "zen.workspace.bgalazka.look.video_canvas",
@@ -642,10 +658,11 @@
     "border": "value"
   },
   {
-    "property": "zen.workspace.bgalazka.look.video_border",
-    "label": "Video control border width (px; 0 = none)",
+    "property": "zen.workspace.bgalazka.look.video_border_text",
+    "label": "Video control border width (px; 0 = none) [0 to 12 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
     "property": "zen.workspace.bgalazka.look.video_source_style",
@@ -674,28 +691,32 @@
     "defaultValue": false
   },
   {
-    "property": "zen.workspace.bgalazka.look.video_controls_gap",
-    "label": "Sidebar video control spacing (px)",
+    "property": "zen.workspace.bgalazka.look.video_controls_gap_text",
+    "label": "Sidebar video control spacing (px) [0 to 400 px]",
     "type": "string",
-    "defaultValue": 1
+    "defaultValue": "1",
+    "placeholder": "1"
   },
   {
-    "property": "zen.workspace.bgalazka.look.video_overlay_opacity",
-    "label": "Big Preview hover overlay opacity (%)",
+    "property": "zen.workspace.bgalazka.look.video_overlay_opacity_text",
+    "label": "Big Preview hover overlay opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 40
+    "defaultValue": "40",
+    "placeholder": "40"
   },
   {
-    "property": "zen.workspace.bgalazka.look.video_padding",
-    "label": "Video control padding (px)",
+    "property": "zen.workspace.bgalazka.look.video_padding_text",
+    "label": "Video control padding (px) [0 to 60 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
-    "property": "zen.workspace.bgalazka.look.video_row_height",
-    "label": "Video source row height (px)",
+    "property": "zen.workspace.bgalazka.look.video_row_height_text",
+    "label": "Video source row height (px) [14 to 80 px]",
     "type": "string",
-    "defaultValue": 22
+    "defaultValue": "22",
+    "placeholder": "22"
   },
   {
     "type": "separator",

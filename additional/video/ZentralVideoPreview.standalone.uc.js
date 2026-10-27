@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Video Preview
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.5
+// @version 3.1.3
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,9 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.5.
+ * Placeholders replaced by the build: 3.1.3, the numeric-preference list and
+ * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.5";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.3";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -52,6 +53,120 @@ const __zentralShim = (function () {
     return fallback;
   }
   let stopped = false;
+  function createNumericPrefSync(options) {
+    const {
+      Services,
+      items,
+      setTimer = (fn, ms) => setTimeout(fn, ms),
+      clearTimer = (id) => clearTimeout(id),
+      warn = () => {},
+    } = options;
+    const prefs = Services.prefs;
+    const INT = prefs.PREF_INT ?? 64,
+      STR = prefs.PREF_STRING ?? 32;
+    const byKey = new Map(),
+      byText = new Map(),
+      timers = new Map();
+    for (const item of items) {
+      byKey.set(item.key, item);
+      byText.set(item.text, item);
+    }
+    let writing = 0,
+      stopped = false;
+    const clamp = (item, n) => Math.min(item.max, Math.max(item.min, Math.round(n)));
+    const parse = (raw) => {
+      const m = /^(-?\d+(?:[.,]\d+)?)\s*(?:px|ms|pt|%|s)?$/i.exec(String(raw ?? "").trim());
+      return m ? Number(m[1].replace(",", ".")) : null;
+    };
+    const readInt = (key) => {
+      try {
+        return prefs.getPrefType(key) === INT && prefs.prefHasUserValue(key)
+          ? prefs.getIntPref(key)
+          : null;
+      } catch (_) {
+        return null;
+      }
+    };
+    const readText = (key) => {
+      try {
+        return prefs.getPrefType(key) === STR && prefs.prefHasUserValue(key)
+          ? prefs.getStringPref(key)
+          : null;
+      } catch (_) {
+        return null;
+      }
+    };
+    const guarded = (fn) => {
+      writing++;
+      try {
+        fn();
+      } catch (error) {
+        warn(error);
+      } finally {
+        writing--;
+      }
+    };
+    const textToBase = (item) => {
+      const n = parse(readText(item.text));
+      if (n === null) return;
+      const value = clamp(item, n);
+      if (readInt(item.key) === value) return;
+      guarded(() => {
+        // A leftover value of the wrong type must go first; Firefox refuses a type change.
+        if (prefs.prefHasUserValue(item.key) && prefs.getPrefType(item.key) !== INT)
+          prefs.clearUserPref(item.key);
+        prefs.setIntPref(item.key, value);
+      });
+    };
+    const baseToText = (item) => {
+      const value = readInt(item.key);
+      if (value === null) return;
+      const n = parse(readText(item.text));
+      if (n !== null && clamp(item, n) === value && Math.round(n) === value) return;
+      guarded(() => prefs.setStringPref(item.text, String(value)));
+    };
+    const observer = {
+      observe(_subject, _topic, name) {
+        if (stopped || writing) return;
+        const text = byText.get(name);
+        if (text) {
+          // Typing in Sine can write on every keystroke: apply once it settles.
+          if (timers.has(name)) clearTimer(timers.get(name));
+          timers.set(
+            name,
+            setTimer(() => {
+              timers.delete(name);
+              if (!stopped) textToBase(text);
+            }, 500),
+          );
+          return;
+        }
+        const base = byKey.get(name);
+        if (base) baseToText(base);
+      },
+    };
+    // Startup reconcile: the stored integer wins; text is only trusted when no integer
+    // has ever been stored.
+    for (const item of items) {
+      if (readInt(item.key) !== null) baseToText(item);
+      else if (readText(item.text) !== null) textToBase(item);
+    }
+    prefs.addObserver("zen.workspace.", observer);
+    return {
+      destroy() {
+        if (stopped) return;
+        stopped = true;
+        try {
+          prefs.removeObserver("zen.workspace.", observer);
+        } catch (_) {}
+        for (const id of timers.values()) clearTimer(id);
+        timers.clear();
+      },
+      // Exposed for tests only.
+      _observer: observer,
+    };
+  }
+  const numericItems = [{"key":"zen.workspace.zentral.video_preview.capture_width_px","text":"zen.workspace.zentral.video_preview.capture_width_px_text","min":80,"max":2560,"def":480},{"key":"zen.workspace.zentral.video_preview.capture_rate_tenths","text":"zen.workspace.zentral.video_preview.capture_rate_tenths_text","min":1,"max":600,"def":100},{"key":"zen.workspace.zentral.video_preview.scan_interval_ms","text":"zen.workspace.zentral.video_preview.scan_interval_ms_text","min":0,"max":480000,"def":5000},{"key":"zen.workspace.zentral.video_preview.canvas_stream_width_px","text":"zen.workspace.zentral.video_preview.canvas_stream_width_px_text","min":80,"max":2560,"def":640},{"key":"zen.workspace.zentral.video_preview.canvas_stream_fps","text":"zen.workspace.zentral.video_preview.canvas_stream_fps_text","min":1,"max":90,"def":30},{"key":"zen.workspace.zentral.video_preview.enlarged_bottom_gap_px","text":"zen.workspace.zentral.video_preview.enlarged_bottom_gap_px_text","min":6,"max":960,"def":64},{"key":"zen.workspace.zentral.video_preview.caption_font_size","text":"zen.workspace.zentral.video_preview.caption_font_size_text","min":5,"max":300,"def":12},{"key":"zen.workspace.zentral.video_preview.caption_max_lines","text":"zen.workspace.zentral.video_preview.caption_max_lines_text","min":1,"max":24,"def":4},{"key":"zen.workspace.zentral.video_preview.caption_poll_ms","text":"zen.workspace.zentral.video_preview.caption_poll_ms_text","min":0,"max":60000,"def":750},{"key":"zen.workspace.zentral.video_preview.width_percent","text":"zen.workspace.zentral.video_preview.width_percent_text","min":10,"max":100,"def":100},{"key":"zen.workspace.zentral.video_preview.height_px","text":"zen.workspace.zentral.video_preview.height_px_text","min":0,"max":4000,"def":0},{"key":"zen.workspace.zentral.video_preview.radius_px","text":"zen.workspace.zentral.video_preview.radius_px_text","min":0,"max":424,"def":0},{"key":"zen.workspace.zentral.video_preview.button_size_px","text":"zen.workspace.zentral.video_preview.button_size_px_text","min":9,"max":432,"def":26},{"key":"zen.workspace.zentral.video_preview.button_radius_px","text":"zen.workspace.zentral.video_preview.button_radius_px_text","min":0,"max":412,"def":4},{"key":"zen.workspace.bgalazka.look.video_opacity","text":"zen.workspace.bgalazka.look.video_opacity_text","min":0,"max":100,"def":100},{"key":"zen.workspace.bgalazka.look.video_control_opacity","text":"zen.workspace.bgalazka.look.video_control_opacity_text","min":0,"max":100,"def":100},{"key":"zen.workspace.bgalazka.look.video_border","text":"zen.workspace.bgalazka.look.video_border_text","min":0,"max":12,"def":0},{"key":"zen.workspace.bgalazka.look.video_controls_gap","text":"zen.workspace.bgalazka.look.video_controls_gap_text","min":0,"max":400,"def":1},{"key":"zen.workspace.bgalazka.look.video_overlay_opacity","text":"zen.workspace.bgalazka.look.video_overlay_opacity_text","min":0,"max":100,"def":40},{"key":"zen.workspace.bgalazka.look.video_padding","text":"zen.workspace.bgalazka.look.video_padding_text","min":0,"max":60,"def":0},{"key":"zen.workspace.bgalazka.look.video_row_height","text":"zen.workspace.bgalazka.look.video_row_height_text","min":14,"max":80,"def":22}];
   function nativeSidebarElement() {
       const tabs = window.gBrowser?.tabContainer;
       const candidates = [
@@ -429,16 +544,23 @@ function nativeSidebarSide() {
       // 1. The full pack owns every feature it contains.
       if (window.ZentralRuntime) return;
       // Live re-run (Sine reloads scripts): replace the previous instance.
-      const existing = features[def.id];
-      if (existing && existing.version && existing.version !== __ZENTRAL_STANDALONE_VERSION__) {
-        try {
-          Services.appinfo.invalidateCachesOnRestart();
-        } catch (_) {}
-      }
       try {
-        existing?.dispose?.();
+        features[def.id]?.dispose?.();
       } catch (_) {}
       const lifecycle = createFeatureScope(def.id);
+      // Sine's free numeric fields (<key>_text) feed the real integer preferences.
+      let numericSync = null;
+      if (numericItems.length) {
+        try {
+          numericSync = createNumericPrefSync({
+            Services,
+            items: numericItems,
+            warn: (error) => console.warn("[Zentral standalone] numeric preference sync", error),
+          });
+        } catch (error) {
+          console.warn("[Zentral standalone] numeric preference sync unavailable", error);
+        }
+      }
       let cleanup = null,
         initialized = false,
         disposed = false;
@@ -458,6 +580,7 @@ function nativeSidebarSide() {
             console.warn("[Zentral standalone] cleanup", def.id, error);
           }
           lifecycle.destroy();
+          numericSync?.destroy();
         },
       });
       unloadHandlers.add(handle.dispose);
@@ -2352,14 +2475,8 @@ const __zentralEmbeddedLoader = (function () {
           )
             position = p;
         } catch (_) {}
-        let w, h;
-        try {
-          w = Services.prefs.getIntPref(P + "enlarged_width", 1280);
+        let w = Services.prefs.getIntPref(P + "enlarged_width", 1280),
           h = Services.prefs.getIntPref(P + "enlarged_height", 720);
-        } catch (_) {
-          w = 1280;
-          h = 720;
-        }
         const bottomGap = position ? inset() : defaultBottomGap();
         // Migrate the former untouched 640x420 default; preserve other custom sizes.
         if (!position && w === 640 && h === 420) {
@@ -3098,15 +3215,10 @@ const __zentralEmbeddedLoader = (function () {
         const retryKey = key + ":" + mode;
         const attempts = (deps.rendererRetryCounts.get(retryKey) || 0) + 1;
         deps.rendererRetryCounts.set(retryKey, attempts);
-        let rawLimit;
-        try {
-          rawLimit = deps.Services.prefs.getIntPref(
-            "zen.workspace.bgalazka.panel_retry_limit",
-            2,
-          );
-        } catch (_) {
-          rawLimit = 2;
-        }
+        const rawLimit = deps.Services.prefs.getIntPref(
+          "zen.workspace.bgalazka.panel_retry_limit",
+          2,
+        );
         const retryLimit = Math.max(0, Math.min(6, rawLimit));
         deps.unavailableBySource.get(key).set(mode, {
           reason: String(error).slice(0, 100),
@@ -5343,26 +5455,14 @@ const __zentralEmbeddedLoader = (function () {
             "zen.workspace.zentral.video_preview.caption_placement",
             "below",
           ),
-          fontSize: (() => {
-            try {
-              return Services.prefs.getIntPref(
-                "zen.workspace.zentral.video_preview.caption_font_size",
-                12,
-              );
-            } catch (_) {
-              return 12;
-            }
-          })(),
-          maxLines: (() => {
-            try {
-              return Services.prefs.getIntPref(
-                "zen.workspace.zentral.video_preview.caption_max_lines",
-                4,
-              );
-            } catch (_) {
-              return 4;
-            }
-          })(),
+          fontSize: Services.prefs.getIntPref(
+            "zen.workspace.zentral.video_preview.caption_font_size",
+            12,
+          ),
+          maxLines: Services.prefs.getIntPref(
+            "zen.workspace.zentral.video_preview.caption_max_lines",
+            4,
+          ),
         });
         deps.box.hidden = !deps.enabled();
         deps.box.toggleAttribute(
@@ -9587,19 +9687,22 @@ __zentralShim.register = function (def) {
         const SCAN_INTERVALS = [0, 5000, 15000, 30000, 60000, 120000];
         const CAPTION_INTERVALS = [250, 500, 750, 1500, 3000];
         function scanIntervalMs() {
-          const value = readInt(SCAN_INTERVAL_PREF, 5000);
+          const value = Services.prefs.getIntPref(SCAN_INTERVAL_PREF, 5000);
           return SCAN_INTERVALS.includes(value) ? value : 5000;
         }
         function captionIntervalMs() {
-          const value = readInt(CAPTION_POLL_PREF, 750);
+          const value = Services.prefs.getIntPref(CAPTION_POLL_PREF, 750);
           return CAPTION_INTERVALS.includes(value) ? value : 750;
         }
         function canvasStreamWidth() {
-          const value = readInt(CANVAS_STREAM_WIDTH_PREF, 640);
+          const value = Services.prefs.getIntPref(
+            CANVAS_STREAM_WIDTH_PREF,
+            640,
+          );
           return [160, 240, 320, 480, 640].includes(value) ? value : 640;
         }
         function canvasStreamFps() {
-          const value = readInt(CANVAS_STREAM_FPS_PREF, 30);
+          const value = Services.prefs.getIntPref(CANVAS_STREAM_FPS_PREF, 30);
           return [5, 10, 15, 24, 30].includes(value) ? value : 30;
         }
         // POWER SAVING (build 22): normal playback samples presentation at 2 s;

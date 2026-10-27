@@ -3,67 +3,11 @@
   "themeId": "zentral-rss-display",
   "name": "Zentral RSS Display",
   "description": "Cleaner display and reader card for Zen live-folder RSS items. Standalone part of Zentral Extended.",
-  "version": "3.1.8",
+  "version": "3.1.3",
   "entry": "ZentralRssDisplay.uc.js",
   "output": "ZentralRssDisplay.standalone.uc.js",
   "settings": "settings.json",
   "css": "ZentralRssDisplay.css",
-  "extras": [
-    "standalone/ZentralRssControlsLook.js"
-  ],
-  "preferenceOrder": [
-    {
-      "type": "separator",
-      "label": "Start here · Essential features"
-    },
-    "zen.workspace.bgalazka.rss.hide_empty",
-    "zen.workspace.bgalazka.rss.compact_headers",
-    "zen.workspace.bgalazka.rss.reader_card",
-    {
-      "type": "separator",
-      "label": "Reader card"
-    },
-    "zen.workspace.bgalazka.rss.card_hover_delay",
-    "zen.workspace.bgalazka.rss.card_hide_delay",
-    "zen.workspace.bgalazka.rss.card_side",
-    "zen.workspace.bgalazka.rss.card_show_folder",
-    "zen.workspace.bgalazka.rss.card_show_url",
-    "zen.workspace.bgalazka.rss.card_show_buttons",
-    "zen.workspace.bgalazka.rss.card_mmb_dismiss",
-    "zen.workspace.bgalazka.rss.card_retarget",
-    "zen.workspace.bgalazka.rss.card_confirm_all",
-    "zen.workspace.bgalazka.rss.card_replace_tooltip",
-    {
-      "type": "separator",
-      "label": "Appearance & layout · Size & shape"
-    },
-    "zen.workspace.bgalazka.look.rss_card_width",
-    "zen.workspace.bgalazka.look.rss_card_max_height",
-    "zen.workspace.bgalazka.look.rss_card_font_size",
-    "zen.workspace.bgalazka.look.rss_card_line_height",
-    "zen.workspace.bgalazka.look.rss_card_padding",
-    "zen.workspace.bgalazka.look.rss_card_radius",
-    "zen.workspace.bgalazka.look.rss_card_border",
-    "zen.workspace.bgalazka.look.rss_card_opacity",
-    {
-      "type": "separator",
-      "label": "Appearance & layout · Card buttons"
-    },
-    "zen.workspace.bgalazka.look.rss_card_button_radius",
-    "zen.workspace.bgalazka.look.rss_card_gap",
-    {
-      "type": "separator",
-      "label": "Appearance & layout · Colors & backing"
-    },
-    "zen.workspace.bgalazka.look.rss_card_shadow",
-    "zen.workspace.bgalazka.look.rss_card_font",
-    "zen.workspace.bgalazka.look.rss_card_background",
-    "zen.workspace.bgalazka.look.rss_card_text",
-    "zen.workspace.bgalazka.look.rss_card_url",
-    "zen.workspace.bgalazka.look.rss_card_border_color",
-    "zen.workspace.bgalazka.look.rss_card_button_background",
-    "zen.workspace.bgalazka.look.rss_card_button_text"
-  ],
   "fullPackOnly": [
     "services"
   ],

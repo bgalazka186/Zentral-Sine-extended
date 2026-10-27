@@ -6,34 +6,39 @@
     "defaultValue": false
   },
   {
-    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.delay_seconds",
-    "label": "Sidebar layout refresh delay (seconds)",
+    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.delay_seconds_text",
+    "label": "Sidebar layout refresh delay (seconds) [0 to 60 s]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
-    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.target_width_px",
-    "label": "Sidebar expansion target width (px)",
+    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.target_width_px_text",
+    "label": "Sidebar expansion target width (px) [100 to 4000 px]",
     "type": "string",
-    "defaultValue": 400
+    "defaultValue": "400",
+    "placeholder": "400"
   },
   {
-    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.extra_width_px",
-    "label": "Sidebar expansion extra width (px)",
+    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.extra_width_px_text",
+    "label": "Sidebar expansion extra width (px) [25 to 4000 px]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
-    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.hold_ms",
-    "label": "Sidebar expansion hold time (ms)",
+    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.hold_ms_text",
+    "label": "Sidebar expansion hold time (ms) [0 to 60000 ms]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
-    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.verification_frames",
-    "label": "Sidebar expansion verification frames",
+    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.verification_frames_text",
+    "label": "Sidebar expansion verification frames [1 to 30]",
     "type": "string",
-    "defaultValue": 2
+    "defaultValue": "2",
+    "placeholder": "2"
   },
   {
     "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal",
@@ -60,15 +65,17 @@
     "defaultValue": false
   },
   {
-    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px",
-    "label": "Compact sidebar edge tolerance (px)",
+    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px_text",
+    "label": "Compact sidebar edge tolerance (px) [0 to 464 px]",
     "type": "string",
-    "defaultValue": 12
+    "defaultValue": "12",
+    "placeholder": "12"
   },
   {
-    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms",
-    "label": "Compact sidebar exit grace (ms)",
+    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms_text",
+    "label": "Compact sidebar exit grace (ms) [0 to 60000 ms]",
     "type": "string",
-    "defaultValue": 250
+    "defaultValue": "250",
+    "placeholder": "250"
   }
 ]

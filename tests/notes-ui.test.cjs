@@ -1,0 +1,189 @@
+"use strict";
+/* Drives the real sheet code of additional/notes/ZentralNotes.uc.js through a small fake DOM.
+ * Proves the sheet logic (typing, formatting, list continuation, read mode checkboxes, search,
+ * pin/trash, two sheets in sync, saving on close). It does NOT prove layout, CSS or real Gecko. */
+const assert = require("node:assert/strict"),
+  fs = require("node:fs"),
+  path = require("node:path"),
+  vm = require("node:vm");
+const source = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
+
+const dom = require("./helpers/fake-dom.cjs")();
+const { El, Ev, document, raf } = dom;
+const win = {
+  document, ZentralRuntime: { register() {} }, __zentralNotesTestSeam: {},
+  requestAnimationFrame: (fn) => raf.push(fn), cancelAnimationFrame() {},
+  setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {},
+};
+win.window = win;
+vm.runInNewContext(source, { window: win, document, Event: Ev, globalThis: { Services: {} }, ChromeUtils: {}, console, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, setTimeout, clearTimeout, navigator: { platform: "Linux" } });
+const c = win.__zentralNotesTestSeam.core;
+const flushRaf = async () => { for (let i = 0; i < 4; i++) { raf.splice(0).forEach((f) => f()); await new Promise((r) => setImmediate(r)); } };
+
+
+// ---- fixtures ------------------------------------------------------------------------
+const files = new Map();
+const io = {
+  join: (...p) => p.join("/"), filename: (p) => p.split("/").pop(),
+  readUTF8: async (p) => { if (!files.has(p)) throw new Error("nf"); return files.get(p).text; },
+  writeUTF8: async (p, t) => files.set(p, { text: t, mtime: Date.now() }),
+  remove: async (p) => files.delete(p), exists: async (p) => files.has(p),
+  children: async (d) => [...files.keys()].filter((k) => k.startsWith(d + "/")),
+  stat: async (p) => ({ lastModified: files.get(p)?.mtime || 0 }), restrict: async () => {},
+};
+const store = c.createStore({ io, notify() {}, windowId: "t", getDir: async () => "/n", getMaxSaveMs: () => 5000, setTimer: setTimeout, clearTimer: clearTimeout });
+const envCalls = [];
+const env = { openLink: (u) => envCalls.push(["link", u]), copyText: (t) => envCalls.push(["copy", t]), exportNote: (n) => envCalls.push(["export", n.id]), exportAll() {}, revealFolder() {} };
+function makeAdapter() {
+  const host = new El("div");
+  return { position: "fixed", host, attach: (r) => host.appendChild(r), getArea: () => ({ left: 0, top: 0, width: 400, height: 600, anchor: "top" }), watch: () => () => {}, setActive() {}, rewatch() {} };
+}
+const ensureStore = () => store.open();
+const key = (el, k, extra = {}) => { const e = new Ev("keydown", { key: k, bubbles: true, ...extra }); el.dispatchEvent(e); return e; };
+const type = (ta, text) => { ta.value = text; ta.selectionStart = ta.selectionEnd = text.length; ta.dispatchEvent(new Ev("input", { bubbles: true })); };
+
+let passed = 0;
+async function test(name, fn) { await fn(); passed++; console.log("ok -", name); }
+
+(async () => {
+  const sheetA = c.createSheet({ store, adapter: makeAdapter(), env, ensureStore });
+  const sheetB = c.createSheet({ store, adapter: makeAdapter(), env, ensureStore });
+  const q = (sheet, cls) => sheet.root.querySelector(cls);
+
+  await test("open creates an empty draft; typing sets the title and saves nothing until text exists", async () => {
+    await sheetA.open(); await flushRaf();
+    assert.equal(sheetA.root.hidden, false);
+    assert.equal(store.list().length, 1, "one empty draft in memory");
+    assert.equal(files.size, 0);
+    assert.equal(q(sheetA, ".zn-title").textContent, "Untitled note");
+    type(q(sheetA, ".zn-editor"), "Shopping\n- [ ] milk");
+    await flushRaf();
+    assert.equal(q(sheetA, ".zn-title").textContent, "Shopping");
+    assert.equal(store.state.save, "dirty");
+    assert.match(q(sheetA, ".zn-count").textContent, /2 words/);
+  });
+
+  await test("Enter continues a checklist, Enter on an empty item leaves the list", async () => {
+    const ta = q(sheetA, ".zn-editor");
+    dom.state.activeElement = ta;
+    const e1 = key(ta, "Enter");
+    assert.ok(e1.defaultPrevented);
+    assert.equal(ta.value, "Shopping\n- [ ] milk\n- [ ] ");
+    key(ta, "Enter");
+    assert.equal(ta.value, "Shopping\n- [ ] milk\n");
+  });
+
+  await test("Ctrl+B / Ctrl+Shift+H wrap the selection and toggle off again", async () => {
+    const ta = q(sheetA, ".zn-editor");
+    type(ta, "plan the trip");
+    ta.setSelectionRange(9, 13);
+    key(ta, "b", { ctrlKey: true });
+    assert.equal(ta.value, "plan the **trip**");
+    ta.setSelectionRange(11, 15);
+    key(ta, "h", { ctrlKey: true, shiftKey: true });
+    assert.equal(ta.value, "plan the **==trip==**");
+    ta.setSelectionRange(0, ta.value.length);
+    type(ta, "plan the trip");
+    ta.setSelectionRange(9, 13);
+    key(ta, "h", { ctrlKey: true, shiftKey: true });
+    assert.equal(ta.value, "plan the ==trip==");
+    ta.setSelectionRange(11, 15);
+    key(ta, "h", { ctrlKey: true, shiftKey: true });
+    assert.equal(ta.value, "plan the trip");
+  });
+
+  await test("read mode renders highlights safely; checkboxes edit the source", async () => {
+    const ta = q(sheetA, ".zn-editor");
+    type(ta, "# Todo\n- [ ] one\n- [x] two\nsee ==this== and [x](javascript:alert(1)) <b>raw</b>");
+    key(ta, "e", { ctrlKey: true });
+    await flushRaf();
+    const read = q(sheetA, ".zn-read");
+    assert.equal(read.hidden, false);
+    assert.equal(q(sheetA, ".zn-editor").hidden, true);
+    const marks = read.all().filter((e) => e.tag === "mark");
+    assert.equal(marks.length, 1);
+    assert.equal(marks[0].textContent, "this");
+    assert.equal(read.all().filter((e) => e.tag === "a").length, 0, "no anchors, no href attributes");
+    assert.ok(read.textContent.includes("<b>raw</b>"), "html stays literal text");
+    assert.ok(read.textContent.includes("[x](javascript:alert(1))"));
+    const boxes = read.all().filter((e) => e.tag === "button" && e._classes.has("zn-check"));
+    assert.equal(boxes.length, 2);
+    boxes[0].click();
+    assert.ok(store.get(store.latestId()).body.includes("- [x] one"));
+    key(read, "e", { ctrlKey: true });
+    assert.equal(q(sheetA, ".zn-editor").value.split("\n")[1], "- [x] one");
+  });
+
+  await test("a second sheet shows the same note and follows edits live", async () => {
+    await sheetB.open(); await flushRaf();
+    const taA = q(sheetA, ".zn-editor"),
+      taB = q(sheetB, ".zn-editor");
+    assert.equal(taB.value, taA.value);
+    dom.state.activeElement = taA;
+    type(taA, "written in A");
+    await flushRaf();
+    assert.equal(taB.value, "written in A");
+    dom.state.activeElement = taB;
+    type(taB, "now typing in B");
+    await flushRaf();
+    assert.equal(taA.value, "now typing in B");
+    assert.equal(q(sheetA, ".zn-title").textContent, "now typing in B");
+  });
+
+  await test("new note, list view, search, pin and trash", async () => {
+    const ta = q(sheetA, ".zn-editor");
+    dom.state.activeElement = ta;
+    key(ta, "n", { ctrlKey: true });
+    type(ta, "Second note about cats");
+    await store.flush();
+    assert.equal(files.size > 0, true);
+    key(ta, "k", { ctrlKey: true });
+    await flushRaf();
+    assert.equal(sheetA.root.dataset.view, "list");
+    let items = q(sheetA, ".zn-items").all().filter((e) => e._classes.has("zn-item"));
+    assert.equal(items.length, 2);
+    const search = q(sheetA, ".zn-search");
+    search.value = "cats"; search.dispatchEvent(new Ev("input", { bubbles: true })); await flushRaf();
+    items = q(sheetA, ".zn-items").all().filter((e) => e._classes.has("zn-item"));
+    assert.equal(items.length, 1);
+    search.value = "nothing-matches"; search.dispatchEvent(new Ev("input", { bubbles: true })); await flushRaf();
+    assert.match(q(sheetA, ".zn-items").textContent, /No notes match/);
+    search.value = ""; search.dispatchEvent(new Ev("input", { bubbles: true })); await flushRaf();
+    const row = q(sheetA, ".zn-items").all().find((e) => e._classes.has("zn-item") && e.textContent.includes("cats"));
+    const pin = row.all().find((e) => e.tag === "button" && e.title === "Pin");
+    pin.click(); await flushRaf();
+    assert.equal(store.list()[0].body, "Second note about cats", "pinned note sorts first");
+    const row2 = q(sheetA, ".zn-items").all().find((e) => e._classes.has("zn-item") && e.textContent.includes("cats"));
+    row2.all().find((e) => e.tag === "button" && e.title === "Move to trash").click(); await flushRaf();
+    assert.equal(store.list().length, 1);
+    assert.equal(store.list({ trashed: true }).length, 1);
+    key(search, "Escape");
+    assert.equal(sheetA.root.dataset.view, "editor", "Escape leaves the list, it does not close the sheet");
+    assert.equal(sheetA.root.hidden, false);
+  });
+
+  await test("Escape closes, flushes to disk and keeps keys away from the page", async () => {
+    const ta = q(sheetA, ".zn-editor");
+    dom.state.activeElement = ta;
+    type(ta, "final text");
+    const e = key(ta, "Escape");
+    assert.ok(e.defaultPrevented && e.stopped);
+    assert.equal(sheetA.root.hidden, true);
+    await new Promise((r) => setTimeout(r, 50));
+    assert.ok([...files.values()].some((f) => f.text.endsWith("final text")), "saved on close");
+    const other = key(q(sheetB, ".zn-editor"), "a");
+    assert.ok(other.stopped, "typing never reaches panel shortcuts");
+  });
+
+  await test("shortcut parsing", async () => {
+    const s = c.parseShortcut("Alt+Shift+N");
+    assert.ok(c.matchesShortcut({ altKey: true, shiftKey: true, ctrlKey: false, metaKey: false, key: "N", code: "KeyN" }, s));
+    assert.ok(!c.matchesShortcut({ altKey: true, shiftKey: false, ctrlKey: false, metaKey: false, key: "n", code: "KeyN" }, s));
+    assert.equal(c.parseShortcut("N"), null, "a bare key is refused");
+    assert.equal(c.parseShortcut("Shift+N"), null, "shift alone is refused");
+    assert.ok(c.parseShortcut("Ctrl+Alt+K"));
+  });
+
+  sheetA.destroy(); sheetB.destroy();
+  console.log(`\n${passed} notes UI tests passed`);
+})().catch((error) => { console.error("FAIL", error); process.exit(1); });

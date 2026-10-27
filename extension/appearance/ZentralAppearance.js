@@ -607,40 +607,40 @@
           LOOK_PREFS.POPUP_OPACITY,
         ].map((key) => [key, [0, 100]]),
       ),
-      [LOOK_PREFS.CONTROL_STRENGTH]: [0, 100],
-      [LOOK_PREFS.RADIUS]: [0, 26],
+      [LOOK_PREFS.CONTROL_STRENGTH]: [0, 300],
+      [LOOK_PREFS.RADIUS]: [0, 200],
       [LOOK_PREFS.DEPTH]: [0, 100],
-      [LOOK_PREFS.VIDEO_RADIUS]: [0, 24],
-      [LOOK_PREFS.PANEL_BORDER]: [0, 3],
-      [LOOK_PREFS.TOOLBAR_BORDER]: [0, 3],
-      [LOOK_PREFS.BUTTON_BORDER]: [0, 3],
-      [LOOK_PREFS.CONTROL_SIZE]: [18, 32],
-      [LOOK_PREFS.ROW_PADDING]: [4, 20],
-      [LOOK_PREFS.ROW_RULE]: [0, 2],
-      [LOOK_PREFS.VIDEO_BORDER]: [0, 3],
-      [LOOK_PREFS.VIDEO_PADDING]: [0, 16],
-      [LOOK_PREFS.VIDEO_ROW_HEIGHT]: [22, 36],
-      [LOOK_PREFS.TABBAR_ROW_HEIGHT]: [18, 36],
-      [LOOK_PREFS.TABBAR_ROW_GAP]: [0, 8],
-      [LOOK_PREFS.TABBAR_ICON_GAP]: [0, 12],
-      [LOOK_PREFS.ESSENTIALS_HEIGHT]: [20, 64],
-      [LOOK_PREFS.TABBAR_SECTION_GAP]: [0, 20],
-      [LOOK_PREFS.FOLDER_ICON_SIZE]: [12, 28],
-      [LOOK_PREFS.WORKSPACE_ICON_SIZE]: [12, 28],
-      [LOOK_PREFS.WORKSPACE_HEIGHT]: [18, 40],
-      [LOOK_PREFS.BOTTOM_BAR_HEIGHT]: [20, 40],
-      [LOOK_PREFS.URLBAR_TOP_GAP]: [0, 16],
-      [LOOK_PREFS.NEWTAB_HEIGHT]: [18, 36],
-      [LOOK_PREFS.RSS_CARD_WIDTH]: [240, 560],
-      [LOOK_PREFS.RSS_CARD_MAX_HEIGHT]: [20, 90],
-      [LOOK_PREFS.RSS_CARD_FONT_SIZE]: [10, 20],
-      [LOOK_PREFS.RSS_CARD_LINE_HEIGHT]: [110, 200],
-      [LOOK_PREFS.RSS_CARD_PADDING]: [6, 24],
-      [LOOK_PREFS.RSS_CARD_RADIUS]: [0, 24],
-      [LOOK_PREFS.RSS_CARD_BORDER]: [0, 3],
+      [LOOK_PREFS.VIDEO_RADIUS]: [0, 200],
+      [LOOK_PREFS.PANEL_BORDER]: [0, 12],
+      [LOOK_PREFS.TOOLBAR_BORDER]: [0, 12],
+      [LOOK_PREFS.BUTTON_BORDER]: [0, 12],
+      [LOOK_PREFS.CONTROL_SIZE]: [12, 64],
+      [LOOK_PREFS.ROW_PADDING]: [0, 60],
+      [LOOK_PREFS.ROW_RULE]: [0, 12],
+      [LOOK_PREFS.VIDEO_BORDER]: [0, 12],
+      [LOOK_PREFS.VIDEO_PADDING]: [0, 60],
+      [LOOK_PREFS.VIDEO_ROW_HEIGHT]: [14, 80],
+      [LOOK_PREFS.TABBAR_ROW_HEIGHT]: [14, 80],
+      [LOOK_PREFS.TABBAR_ROW_GAP]: [0, 40],
+      [LOOK_PREFS.TABBAR_ICON_GAP]: [0, 40],
+      [LOOK_PREFS.ESSENTIALS_HEIGHT]: [16, 160],
+      [LOOK_PREFS.TABBAR_SECTION_GAP]: [0, 100],
+      [LOOK_PREFS.FOLDER_ICON_SIZE]: [8, 64],
+      [LOOK_PREFS.WORKSPACE_ICON_SIZE]: [8, 64],
+      [LOOK_PREFS.WORKSPACE_HEIGHT]: [14, 100],
+      [LOOK_PREFS.BOTTOM_BAR_HEIGHT]: [14, 100],
+      [LOOK_PREFS.URLBAR_TOP_GAP]: [0, 100],
+      [LOOK_PREFS.NEWTAB_HEIGHT]: [14, 80],
+      [LOOK_PREFS.RSS_CARD_WIDTH]: [120, 3000],
+      [LOOK_PREFS.RSS_CARD_MAX_HEIGHT]: [10, 100],
+      [LOOK_PREFS.RSS_CARD_FONT_SIZE]: [6, 72],
+      [LOOK_PREFS.RSS_CARD_LINE_HEIGHT]: [80, 400],
+      [LOOK_PREFS.RSS_CARD_PADDING]: [0, 120],
+      [LOOK_PREFS.RSS_CARD_RADIUS]: [0, 200],
+      [LOOK_PREFS.RSS_CARD_BORDER]: [0, 30],
       [LOOK_PREFS.RSS_CARD_OPACITY]: [10, 100],
-      [LOOK_PREFS.RSS_CARD_BUTTON_RADIUS]: [0, 16],
-      [LOOK_PREFS.RSS_CARD_GAP]: [0, 32],
+      [LOOK_PREFS.RSS_CARD_BUTTON_RADIUS]: [0, 100],
+      [LOOK_PREFS.RSS_CARD_GAP]: [0, 100],
       [LOOK_GROUP_PREFS.LABEL_OPACITY]: [0, 100],
       [ctx.BGALAZKA_EXT_PREFS.PANEL_BLACK_OPACITY]: [0, 100],
       [ctx.BGALAZKA_EXT_PREFS.OPACITY_UNPINNED]: [10, 100],
@@ -1573,11 +1573,11 @@
         "POPUP_OPACITY",
       ]) {
         const pref = LOOK_PREFS[key];
-        const raw = Number(ctx.getPref(pref, LOOK_DEFAULTS[pref]));
+        const value = ctx.getPref(pref, LOOK_DEFAULTS[pref]);
         const [min, max] = LOOK_BOUNDS[pref];
         const clamped =
-          Number.isFinite(raw)
-            ? Math.max(min, Math.min(max, raw))
+          typeof value === "number" && Number.isFinite(value)
+            ? Math.max(min, Math.min(max, value))
             : LOOK_DEFAULTS[pref];
         root.style.setProperty(
           "--bgalazka-look-" + key.toLowerCase().replaceAll("_", "-"),
@@ -1599,7 +1599,7 @@
         const [min, max] = LOOK_BOUNDS[pref];
         const raw = Number(ctx.getPref(pref, LOOK_DEFAULTS[pref]));
         const value = Number.isFinite(raw)
-          ? Math.max(min, Math.min(max, raw))
+          ? Math.max(min, Math.min(max, Math.round(raw)))
           : LOOK_DEFAULTS[pref];
         root.style.setProperty(
           "--bgalazka-look-rss-card-" +

@@ -191,15 +191,6 @@
         },
         {
           "label": "Reader card"
-        },
-        {
-          "label": "Appearance & layout · Size & shape"
-        },
-        {
-          "label": "Appearance & layout · Card buttons"
-        },
-        {
-          "label": "Appearance & layout · Colors & backing"
         }
       ],
       "icon": "rss"
@@ -311,6 +302,18 @@
         },
         {
           "label": "Panel shortcuts & mouse actions"
+        }
+      ],
+      "icon": "keyboard"
+    },
+    {
+      "id": "notes",
+      "label": "Notes",
+      "group": "Panels",
+      "owner": "notes",
+      "sections": [
+        {
+          "label": "Quick notes"
         }
       ],
       "icon": "keyboard"
@@ -964,6 +967,17 @@
     "zen.workspace.zentral.hybrid.panel_url_shortcut",
     {
       "type": "text",
+      "label": "**Notes · Quick notes**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.notes.enabled",
+    "zen.workspace.zentral.notes.show_button",
+    "zen.workspace.zentral.notes.shortcut",
+    "zen.workspace.zentral.notes.autosave_seconds",
+    "zen.workspace.zentral.notes.folder",
+    "zen.workspace.zentral.notes.dock_sidebar",
+    {
+      "type": "text",
       "label": "**Video**",
       "size": "22px"
     },
@@ -1167,6 +1181,8 @@
     "zen.workspace.zentral.modules.library-resize.enabled",
     "zen.workspace.zentral.modules.compact-hover.enabled",
     "zen.workspace.zentral.modules.tab-drag.enabled",
+    "zen.workspace.zentral.modules.notes.enabled",
+    "zen.workspace.zentral.modules.css.Notes.enabled",
     {
       "type": "text",
       "label": "**Local Add-ons · Local registrations**",

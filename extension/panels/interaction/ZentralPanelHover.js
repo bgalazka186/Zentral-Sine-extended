@@ -77,9 +77,9 @@
       const panelHideDelayPref =
         "zen.workspace.zentral.panels.autohide_delay_ms";
       const boundedPanelPref = (key, fallback, min, max) => {
-        const raw = Number(getPref(key, fallback));
-        return Number.isFinite(raw)
-          ? Math.max(min, Math.min(max, raw))
+        const value = getPref(key, fallback);
+        return typeof value === "number" && Number.isFinite(value)
+          ? Math.max(min, Math.min(max, Math.round(value)))
           : fallback;
       };
       let panelOutsideHeld = false;
@@ -306,14 +306,12 @@
         document.documentElement.setAttribute("bgalazka-panel-side", side);
       }
       function getHiddenPanelRevealWidth() {
-        const raw = Number(
-          getPref(
-            BGALAZKA_EXT_PREFS.HOVER_REVEAL_WIDTH,
-            HIDDEN_PANEL_REVEAL_DEFAULT_WIDTH_PX,
-          ),
+        const width = getPref(
+          BGALAZKA_EXT_PREFS.HOVER_REVEAL_WIDTH,
+          HIDDEN_PANEL_REVEAL_DEFAULT_WIDTH_PX,
         );
-        return Number.isFinite(raw)
-          ? Math.max(1, Math.min(64, raw))
+        return typeof width === "number" && Number.isFinite(width)
+          ? Math.max(1, Math.min(64, Math.round(width)))
           : HIDDEN_PANEL_REVEAL_DEFAULT_WIDTH_PX;
       }
       function updateRevealEdgeGeometry() {
@@ -365,14 +363,12 @@
         hoverRevealSurface = null;
       }
       function getHiddenPanelRevealDelay() {
-        const raw = Number(
-          getPref(
-            BGALAZKA_EXT_PREFS.HOVER_REVEAL_DELAY,
-            HIDDEN_PANEL_REVEAL_DEFAULT_MS,
-          ),
+        const delay = getPref(
+          BGALAZKA_EXT_PREFS.HOVER_REVEAL_DELAY,
+          HIDDEN_PANEL_REVEAL_DEFAULT_MS,
         );
-        return Number.isFinite(raw)
-          ? Math.max(0, Math.min(2000, raw))
+        return typeof delay === "number" && Number.isFinite(delay)
+          ? Math.max(0, Math.min(2000, Math.round(delay)))
           : HIDDEN_PANEL_REVEAL_DEFAULT_MS;
       }
       function scheduleHoverReveal(surface) {
@@ -936,7 +932,17 @@
       window.addEventListener("focusout", onHoverPanelFocusOut, true);
       window.addEventListener("focusin", onHoverPanelFocusIn, true);
       window.addEventListener("keydown", onHoverPanelKeyDown, true);
-      window.addEventListener("resize", updateRevealEdgeGeometry);
+      // Window resizing fires this every frame and the handler measures the page box and
+      // the apps bar. One run per frame is enough; the last size always wins.
+      let revealResizeFrame = 0;
+      const onRevealEdgeResize = () => {
+        if (revealResizeFrame) return;
+        revealResizeFrame = window.requestAnimationFrame(() => {
+          revealResizeFrame = 0;
+          updateRevealEdgeGeometry();
+        });
+      };
+      window.addEventListener("resize", onRevealEdgeResize);
       const onHoverRevealWidthChange = () => {
         clearHoverReveal();
         hoverRevealLedgeBounds = null;
@@ -1012,7 +1018,9 @@
         window.removeEventListener("blur", onResizeEndForHover);
         clearHoverHide();
         if (hoverRevealFrame) cancelAnimationFrame(hoverRevealFrame);
-        window.removeEventListener("resize", updateRevealEdgeGeometry);
+        window.removeEventListener("resize", onRevealEdgeResize);
+        if (revealResizeFrame) window.cancelAnimationFrame(revealResizeFrame);
+        revealResizeFrame = 0;
         hoverBoundRoot?.removeEventListener("pointerenter", onHoverRootEnter);
         hoverBoundRoot?.removeEventListener("pointerleave", onHoverRootLeave);
         document.getElementById(hoverRevealId)?.remove();

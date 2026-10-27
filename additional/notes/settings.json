@@ -1,0 +1,78 @@
+{
+  "owner": "notes",
+  "schema": [
+    {
+      "property": "zen.workspace.zentral.notes.enabled",
+      "label": "Enable Notes (note button on panel bars and shortcut)",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.notes.show_button",
+      "label": "Show the Notes button on panel URL bars",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.notes.dock_sidebar",
+      "label": "Dock Notes to the sidebar (opens beside the sidebar and adds a Notes button to it)",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.notes.shortcut",
+      "label": "Notes shortcut (needs Alt, Ctrl or Cmd, e.g. Alt+Shift+N)",
+      "type": "string",
+      "defaultValue": "Alt+Shift+N"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.autosave_seconds",
+      "label": "Longest time between saves while typing (seconds, 2–60)",
+      "type": "input",
+      "defaultValue": 5,
+      "numeric": {
+        "min": 2,
+        "max": 60,
+        "unit": "s"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.notes.folder",
+      "label": "Notes folder (absolute path; empty = zentral-notes inside your profile)",
+      "type": "string",
+      "defaultValue": ""
+    }
+  ],
+  "settings": {
+    "zen.workspace.zentral.notes.enabled": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.show_button": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.shortcut": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.autosave_seconds": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.folder": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.dock_sidebar": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    }
+  }
+}

@@ -108,10 +108,11 @@
     "border": "value"
   },
   {
-    "property": "zen.workspace.bgalazka.look.primary_opacity",
-    "label": "Linked primary transparency",
+    "property": "zen.workspace.bgalazka.look.primary_opacity_text",
+    "label": "Linked primary transparency [0 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
     "type": "text",
@@ -125,10 +126,11 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.bgalazka.look.control_strength",
-    "label": "Keep controls readable: strength",
+    "property": "zen.workspace.bgalazka.look.control_strength_text",
+    "label": "Keep controls readable: strength [0 to 300]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
     "property": "zen.workspace.bgalazka.look.button_style",
@@ -246,10 +248,11 @@
     "border": "value"
   },
   {
-    "property": "zen.workspace.bgalazka.look.web_opacity",
-    "label": "Web panel background transparency (independent of whole-panel opacity)",
+    "property": "zen.workspace.bgalazka.look.web_opacity_text",
+    "label": "Web panel background transparency (independent of whole-panel opacity) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
     "property": "zen.workspace.bgalazka.look.backdrop",
@@ -259,10 +262,11 @@
     "border": "value"
   },
   {
-    "property": "zen.workspace.bgalazka.look.backdrop_opacity",
-    "label": "Settings backdrop transparency",
+    "property": "zen.workspace.bgalazka.look.backdrop_opacity_text",
+    "label": "Settings backdrop transparency [0 to 100 %]",
     "type": "string",
-    "defaultValue": 75
+    "defaultValue": "75",
+    "placeholder": "75"
   },
   {
     "property": "zen.workspace.bgalazka.look.canvas",
@@ -286,16 +290,18 @@
     "border": "value"
   },
   {
-    "property": "zen.workspace.bgalazka.look.surface_opacity",
-    "label": "Main panel surface opacity (%)",
+    "property": "zen.workspace.bgalazka.look.surface_opacity_text",
+    "label": "Main panel surface opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
-    "property": "zen.workspace.bgalazka.look.raised_opacity",
-    "label": "Raised card opacity (%)",
+    "property": "zen.workspace.bgalazka.look.raised_opacity_text",
+    "label": "Raised card opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
     "property": "zen.workspace.bgalazka.translucency",
@@ -304,33 +310,37 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.bgalazka.opacity_unpinned",
-    "label": "Whole-Panel Opacity: Unpinned (%)",
+    "property": "zen.workspace.bgalazka.opacity_unpinned_text",
+    "label": "Whole-Panel Opacity: Unpinned (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
-    "property": "zen.workspace.bgalazka.opacity_pinned_focus",
-    "label": "Whole-Panel Opacity: Pinned and Focused (%)",
+    "property": "zen.workspace.bgalazka.opacity_pinned_focus_text",
+    "label": "Whole-Panel Opacity: Pinned and Focused (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 95
+    "defaultValue": "95",
+    "placeholder": "95"
   },
   {
-    "property": "zen.workspace.bgalazka.opacity_pinned_blur",
-    "label": "Whole-Panel Opacity: Pinned and Unfocused (%)",
+    "property": "zen.workspace.bgalazka.opacity_pinned_blur_text",
+    "label": "Whole-Panel Opacity: Pinned and Unfocused (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 90
+    "defaultValue": "90",
+    "placeholder": "90"
   },
   {
-    "property": "zen.workspace.bgalazka.panel_black_opacity",
-    "label": "Black panel backing opacity (0–100)",
-    "type": "input",
-    "defaultValue": 0
+    "property": "zen.workspace.bgalazka.panel_black_opacity_text",
+    "label": "Black panel backing opacity (0–100) [0 to 100 %]",
+    "type": "string",
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
     "property": "zen.workspace.bgalazka.panel_black_steps",
     "label": "Black backing cycle levels (comma separated)",
-    "type": "input",
+    "type": "string",
     "defaultValue": "0,1,5,10,20,30,40,50,60,70,80,90,100"
   },
   {
@@ -345,10 +355,11 @@
     "size": "16px"
   },
   {
-    "property": "zen.workspace.apps.sidebar.animation_speed",
-    "label": "Panel Animation Duration (ms)",
+    "property": "zen.workspace.apps.sidebar.animation_speed_text",
+    "label": "Panel Animation Duration (ms) [0 to 60000 ms]",
     "type": "string",
-    "defaultValue": 450
+    "defaultValue": "450",
+    "placeholder": "450"
   },
   {
     "property": "zen.workspace.apps.sidebar.animation_type",
@@ -423,28 +434,32 @@
     "border": "value"
   },
   {
-    "property": "zen.workspace.bgalazka.look.radius",
-    "label": "Panel and control corner radius (px; 0 = square)",
+    "property": "zen.workspace.bgalazka.look.radius_text",
+    "label": "Panel and control corner radius (px; 0 = square) [0 to 200 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
-    "property": "zen.workspace.bgalazka.look.depth",
-    "label": "Surface shadow depth (%; 0 = flat)",
+    "property": "zen.workspace.bgalazka.look.depth_text",
+    "label": "Surface shadow depth (%; 0 = flat) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
-    "property": "zen.workspace.bgalazka.look.panel_border",
-    "label": "Outer panel border width (px; 0 = none)",
+    "property": "zen.workspace.bgalazka.look.panel_border_text",
+    "label": "Outer panel border width (px; 0 = none) [0 to 12 px]",
     "type": "string",
-    "defaultValue": 1
+    "defaultValue": "1",
+    "placeholder": "1"
   },
   {
-    "property": "zen.workspace.bgalazka.look.button_opacity",
-    "label": "Panel button background opacity (%)",
+    "property": "zen.workspace.bgalazka.look.button_opacity_text",
+    "label": "Panel button background opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
     "property": "zen.workspace.bgalazka.look.button_surface",
@@ -468,10 +483,11 @@
     "border": "value"
   },
   {
-    "property": "zen.workspace.bgalazka.look.button_border",
-    "label": "Button border width (px; 0 = no border)",
+    "property": "zen.workspace.bgalazka.look.button_border_text",
+    "label": "Button border width (px; 0 = no border) [0 to 12 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
     "type": "text",
@@ -551,10 +567,11 @@
     ]
   },
   {
-    "property": "zen.workspace.bgalazka.look.row_rule",
-    "label": "Selection row separator width (px)",
+    "property": "zen.workspace.bgalazka.look.row_rule_text",
+    "label": "Selection row separator width (px) [0 to 12 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
     "type": "text",
@@ -604,16 +621,18 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.bgalazka.look.toolbar_opacity",
-    "label": "Navigation toolbar opacity (%)",
+    "property": "zen.workspace.bgalazka.look.toolbar_opacity_text",
+    "label": "Navigation toolbar opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
-    "property": "zen.workspace.bgalazka.look.address_opacity",
-    "label": "Secondary address field opacity (%)",
+    "property": "zen.workspace.bgalazka.look.address_opacity_text",
+    "label": "Secondary address field opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
     "property": "zen.workspace.bgalazka.look.toolbar_surface",
@@ -630,10 +649,11 @@
     "border": "value"
   },
   {
-    "property": "zen.workspace.bgalazka.look.toolbar_border",
-    "label": "Toolbar border width (px; 0 = none)",
+    "property": "zen.workspace.bgalazka.look.toolbar_border_text",
+    "label": "Toolbar border width (px; 0 = none) [0 to 12 px]",
     "type": "string",
-    "defaultValue": 1
+    "defaultValue": "1",
+    "placeholder": "1"
   },
   {
     "type": "text",
@@ -653,10 +673,11 @@
     "defaultValue": false
   },
   {
-    "property": "zen.workspace.bgalazka.pill_position",
-    "label": "Pill Vertical Offset (%)",
+    "property": "zen.workspace.bgalazka.pill_position_text",
+    "label": "Pill Vertical Offset (%) [-50 to 50 %]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
     "property": "zen.workspace.bgalazka.pill_peek_dot",
@@ -671,16 +692,18 @@
     "defaultValue": "#5e0002"
   },
   {
-    "property": "zen.workspace.bgalazka.pill_peek_dot_opacity",
-    "label": "Mini Pill Opacity (%)",
+    "property": "zen.workspace.bgalazka.pill_peek_dot_opacity_text",
+    "label": "Mini Pill Opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 31
+    "defaultValue": "31",
+    "placeholder": "31"
   },
   {
-    "property": "zen.workspace.bgalazka.pill_background_opacity",
-    "label": "Pill Background Opacity (%)",
+    "property": "zen.workspace.bgalazka.pill_background_opacity_text",
+    "label": "Pill Background Opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 48
+    "defaultValue": "48",
+    "placeholder": "48"
   },
   {
     "property": "zen.workspace.bgalazka.hide_dual_view",
@@ -798,10 +821,11 @@
     ]
   },
   {
-    "property": "zen.workspace.tabgroups.label_opacity",
-    "label": "Tab Group Label Opacity (%)",
+    "property": "zen.workspace.tabgroups.label_opacity_text",
+    "label": "Tab Group Label Opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 85
+    "defaultValue": "85",
+    "placeholder": "85"
   },
   {
     "property": "zen.workspace.bgalazka.hover_corner_tiles",
@@ -834,10 +858,11 @@
     "defaultValue": false
   },
   {
-    "property": "zen.workspace.bgalazka.look.tile_opacity",
-    "label": "App tile background opacity (%)",
+    "property": "zen.workspace.bgalazka.look.tile_opacity_text",
+    "label": "App tile background opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
     "property": "zen.workspace.bgalazka.look.tile_style",
@@ -896,10 +921,11 @@
     "border": "value"
   },
   {
-    "property": "zen.workspace.bgalazka.look.popup_opacity",
-    "label": "Panel popup opacity (%)",
+    "property": "zen.workspace.bgalazka.look.popup_opacity_text",
+    "label": "Panel popup opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
     "type": "text",
@@ -931,10 +957,11 @@
     "defaultValue": ""
   },
   {
-    "property": "zen.workspace.zentral.library.custom_background.opacity",
-    "label": "Custom Library background opacity (multiplies any alpha already in the color)",
+    "property": "zen.workspace.zentral.library.custom_background.opacity_text",
+    "label": "Custom Library background opacity (multiplies any alpha already in the color) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
     "type": "text",
@@ -942,68 +969,78 @@
     "size": "16px"
   },
   {
-    "property": "zen.workspace.bgalazka.look.rss_card_width",
-    "label": "Reader card width (px)",
+    "property": "zen.workspace.bgalazka.look.rss_card_width_text",
+    "label": "Reader card width (px) [120 to 3000 px]",
     "type": "string",
-    "defaultValue": 340
+    "defaultValue": "340",
+    "placeholder": "340"
   },
   {
-    "property": "zen.workspace.bgalazka.look.rss_card_max_height",
-    "label": "Reader card max height (%)",
+    "property": "zen.workspace.bgalazka.look.rss_card_max_height_text",
+    "label": "Reader card maximum height (% of the window) [10 to 100 %]",
     "type": "string",
-    "defaultValue": 60
+    "defaultValue": "60",
+    "placeholder": "60"
   },
   {
-    "property": "zen.workspace.bgalazka.look.rss_card_font_size",
-    "label": "Reader card font size (px)",
+    "property": "zen.workspace.bgalazka.look.rss_card_font_size_text",
+    "label": "Reader card text size (px) [6 to 72 px]",
     "type": "string",
-    "defaultValue": 13
+    "defaultValue": "13",
+    "placeholder": "13"
   },
   {
-    "property": "zen.workspace.bgalazka.look.rss_card_line_height",
-    "label": "Reader card line height (%)",
+    "property": "zen.workspace.bgalazka.look.rss_card_line_height_text",
+    "label": "Reader card line height (% of the text size) [80 to 400 %]",
     "type": "string",
-    "defaultValue": 145
+    "defaultValue": "145",
+    "placeholder": "145"
   },
   {
-    "property": "zen.workspace.bgalazka.look.rss_card_padding",
-    "label": "Reader card padding (px)",
+    "property": "zen.workspace.bgalazka.look.rss_card_padding_text",
+    "label": "Reader card padding (px) [0 to 120 px]",
     "type": "string",
-    "defaultValue": 12
+    "defaultValue": "12",
+    "placeholder": "12"
   },
   {
-    "property": "zen.workspace.bgalazka.look.rss_card_radius",
-    "label": "Reader card corner radius (px)",
+    "property": "zen.workspace.bgalazka.look.rss_card_radius_text",
+    "label": "Reader card corner radius (px) [0 to 200 px]",
     "type": "string",
-    "defaultValue": 10
+    "defaultValue": "10",
+    "placeholder": "10"
   },
   {
-    "property": "zen.workspace.bgalazka.look.rss_card_border",
-    "label": "Reader card border width (px)",
+    "property": "zen.workspace.bgalazka.look.rss_card_border_text",
+    "label": "Reader card border width (px) [0 to 30 px]",
     "type": "string",
-    "defaultValue": 1
+    "defaultValue": "1",
+    "placeholder": "1"
   },
   {
-    "property": "zen.workspace.bgalazka.look.rss_card_opacity",
-    "label": "Reader card background opacity (%)",
+    "property": "zen.workspace.bgalazka.look.rss_card_opacity_text",
+    "label": "Reader card background opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
-    "property": "zen.workspace.bgalazka.look.rss_card_button_radius",
-    "label": "Reader card button corner radius (px)",
+    "property": "zen.workspace.bgalazka.look.rss_card_button_radius_text",
+    "label": "Reader card button corner radius (px) [0 to 100 px]",
     "type": "string",
-    "defaultValue": 6
+    "defaultValue": "6",
+    "placeholder": "6"
   },
   {
-    "property": "zen.workspace.bgalazka.look.rss_card_gap",
-    "label": "Reader card element gap (px)",
+    "property": "zen.workspace.bgalazka.look.rss_card_gap_text",
+    "label": "Reader card gap (px) [0 to 100 px]",
     "type": "string",
-    "defaultValue": 6
+    "defaultValue": "6",
+    "placeholder": "6"
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_shadow",
-    "label": "Reader card shadow style",
+    "label": "Reader card shadow",
     "type": "dropdown",
     "defaultValue": "soft",
     "options": [
@@ -1023,7 +1060,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_font",
-    "label": "Reader card font family",
+    "label": "Reader card font",
     "type": "dropdown",
     "defaultValue": "system",
     "options": [
@@ -1043,37 +1080,37 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_background",
-    "label": "Reader card background color (#RRGGBB)",
+    "label": "Reader card background color (empty follows the theme)",
     "type": "string",
     "defaultValue": ""
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_text",
-    "label": "Reader card text color (#RRGGBB)",
+    "label": "Reader card text color (empty follows the theme)",
     "type": "string",
     "defaultValue": ""
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_url",
-    "label": "Reader card URL color (#RRGGBB)",
+    "label": "Reader card link color (empty follows the theme)",
     "type": "string",
     "defaultValue": ""
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_border_color",
-    "label": "Reader card border color (#RRGGBB)",
+    "label": "Reader card border color (empty follows the theme)",
     "type": "string",
     "defaultValue": ""
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_button_background",
-    "label": "Reader card button background color (#RRGGBB)",
+    "label": "Reader card button background color (empty follows the theme)",
     "type": "string",
     "defaultValue": ""
   },
   {
     "property": "zen.workspace.bgalazka.look.rss_card_button_text",
-    "label": "Reader card button text color (#RRGGBB)",
+    "label": "Reader card button text color (empty follows the theme)",
     "type": "string",
     "defaultValue": ""
   },
@@ -1118,70 +1155,81 @@
     "defaultValue": false
   },
   {
-    "property": "zen.workspace.bgalazka.look.essentials_height",
-    "label": "Essentials Height",
+    "property": "zen.workspace.bgalazka.look.essentials_height_text",
+    "label": "Essentials Height [16 to 160 px]",
     "type": "string",
-    "defaultValue": 32
+    "defaultValue": "32",
+    "placeholder": "32"
   },
   {
-    "property": "zen.workspace.bgalazka.look.tabbar_section_gap",
-    "label": "Pinned to Normal Tabs Spacing",
+    "property": "zen.workspace.bgalazka.look.tabbar_section_gap_text",
+    "label": "Pinned to Normal Tabs Spacing [0 to 100 px]",
     "type": "string",
-    "defaultValue": 2
+    "defaultValue": "2",
+    "placeholder": "2"
   },
   {
-    "property": "zen.workspace.bgalazka.look.folder_icon_size",
-    "label": "Folder icon size",
+    "property": "zen.workspace.bgalazka.look.folder_icon_size_text",
+    "label": "Folder icon size [8 to 64 px]",
     "type": "string",
-    "defaultValue": 20
+    "defaultValue": "20",
+    "placeholder": "20"
   },
   {
-    "property": "zen.workspace.bgalazka.look.workspace_icon_size",
-    "label": "Workspace icon size",
+    "property": "zen.workspace.bgalazka.look.workspace_icon_size_text",
+    "label": "Workspace icon size [8 to 64 px]",
     "type": "string",
-    "defaultValue": 16
+    "defaultValue": "16",
+    "placeholder": "16"
   },
   {
-    "property": "zen.workspace.bgalazka.look.workspace_height",
-    "label": "Workspace indicator height",
+    "property": "zen.workspace.bgalazka.look.workspace_height_text",
+    "label": "Workspace indicator height [14 to 100 px]",
     "type": "string",
-    "defaultValue": 22
+    "defaultValue": "22",
+    "placeholder": "22"
   },
   {
-    "property": "zen.workspace.bgalazka.look.bottom_bar_height",
-    "label": "Bottom bar height",
+    "property": "zen.workspace.bgalazka.look.bottom_bar_height_text",
+    "label": "Bottom bar height [14 to 100 px]",
     "type": "string",
-    "defaultValue": 24
+    "defaultValue": "24",
+    "placeholder": "24"
   },
   {
-    "property": "zen.workspace.bgalazka.look.urlbar_top_gap",
-    "label": "Space above address bar",
+    "property": "zen.workspace.bgalazka.look.urlbar_top_gap_text",
+    "label": "Space above address bar [0 to 100 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
-    "property": "zen.workspace.bgalazka.look.newtab_height",
-    "label": "New Tab button height",
+    "property": "zen.workspace.bgalazka.look.newtab_height_text",
+    "label": "New Tab button height [14 to 80 px]",
     "type": "string",
-    "defaultValue": 20
+    "defaultValue": "20",
+    "placeholder": "20"
   },
   {
-    "property": "zen.workspace.bgalazka.look.tabbar_row_height",
-    "label": "Tab and Folder Minimum Height",
+    "property": "zen.workspace.bgalazka.look.tabbar_row_height_text",
+    "label": "Tab and Folder Minimum Height [9 to 400 px]",
     "type": "string",
-    "defaultValue": 20
+    "defaultValue": "20",
+    "placeholder": "20"
   },
   {
-    "property": "zen.workspace.bgalazka.look.tabbar_row_gap",
-    "label": "Space Between Tab and Folder Rows",
+    "property": "zen.workspace.bgalazka.look.tabbar_row_gap_text",
+    "label": "Space Between Tab and Folder Rows [0 to 400 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
-    "property": "zen.workspace.bgalazka.look.tabbar_icon_gap",
-    "label": "Favicon to Title Gap",
+    "property": "zen.workspace.bgalazka.look.tabbar_icon_gap_text",
+    "label": "Favicon to Title Gap [0 to 400 px]",
     "type": "string",
-    "defaultValue": 4
+    "defaultValue": "4",
+    "placeholder": "4"
   },
   {
     "type": "text",
@@ -1189,22 +1237,25 @@
     "size": "16px"
   },
   {
-    "property": "zen.workspace.apps.sidebar.apps_per_row",
-    "label": "Apps Displayed Per Row",
+    "property": "zen.workspace.apps.sidebar.apps_per_row_text",
+    "label": "Apps Displayed Per Row [1 to 30]",
     "type": "string",
-    "defaultValue": 7
+    "defaultValue": "7",
+    "placeholder": "7"
   },
   {
-    "property": "zen.workspace.apps.sidebar.max_rows",
-    "label": "Maximum Grid Rows",
+    "property": "zen.workspace.apps.sidebar.max_rows_text",
+    "label": "Maximum Grid Rows [1 to 15]",
     "type": "string",
-    "defaultValue": 3
+    "defaultValue": "3",
+    "placeholder": "3"
   },
   {
-    "property": "zen.workspace.apps.sidebar.max_apps",
-    "label": "Maximum Apps",
+    "property": "zen.workspace.apps.sidebar.max_apps_text",
+    "label": "Maximum Apps [1 to 126]",
     "type": "string",
-    "defaultValue": 21
+    "defaultValue": "21",
+    "placeholder": "21"
   },
   {
     "property": "zen.workspace.apps.sidebar.placement",
@@ -1248,16 +1299,18 @@
     ]
   },
   {
-    "property": "zen.workspace.bgalazka.look.row_padding",
-    "label": "Selection row padding (px)",
+    "property": "zen.workspace.bgalazka.look.row_padding_text",
+    "label": "Selection row padding (px) [0 to 60 px]",
     "type": "string",
-    "defaultValue": 4
+    "defaultValue": "4",
+    "placeholder": "4"
   },
   {
-    "property": "zen.workspace.bgalazka.look.control_size",
-    "label": "Button size (px)",
+    "property": "zen.workspace.bgalazka.look.control_size_text",
+    "label": "Button size (px) [12 to 64 px]",
     "type": "string",
-    "defaultValue": 22
+    "defaultValue": "22",
+    "placeholder": "22"
   },
   {
     "type": "text",
@@ -1265,34 +1318,39 @@
     "size": "16px"
   },
   {
-    "property": "zen.workspace.apps.sidebar.width",
-    "label": "Panel Width (px)",
+    "property": "zen.workspace.apps.sidebar.width_text",
+    "label": "Panel Width (px) [280 to 4000 px]",
     "type": "string",
-    "defaultValue": 350
+    "defaultValue": "350",
+    "placeholder": "350"
   },
   {
-    "property": "zen.workspace.bgalazka.panel_horizontal_offset_px",
-    "label": "Panel Horizontal Offset (px; use extension settings for fine adjustment)",
+    "property": "zen.workspace.bgalazka.panel_horizontal_offset_px_text",
+    "label": "Panel Horizontal Offset (px; use extension settings for fine adjustment) [-2000 to 2000 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
-    "property": "zen.workspace.bgalazka.panel_top_extra_px",
-    "label": "Panel Top Height Adjustment (px)",
+    "property": "zen.workspace.bgalazka.panel_top_extra_px_text",
+    "label": "Panel Top Height Adjustment (px) [-2000 to 2000 px]",
     "type": "string",
-    "defaultValue": 4
+    "defaultValue": "4",
+    "placeholder": "4"
   },
   {
-    "property": "zen.workspace.bgalazka.panel_bottom_extra_px",
-    "label": "Panel Bottom Height Adjustment (px)",
+    "property": "zen.workspace.bgalazka.panel_bottom_extra_px_text",
+    "label": "Panel Bottom Height Adjustment (px) [-2000 to 2000 px]",
     "type": "string",
-    "defaultValue": 4
+    "defaultValue": "4",
+    "placeholder": "4"
   },
   {
-    "property": "zen.workspace.bgalazka.panel_position_offset_px",
-    "label": "Whole Panel Vertical Offset (px)",
+    "property": "zen.workspace.bgalazka.panel_position_offset_px_text",
+    "label": "Whole Panel Vertical Offset (px) [-2000 to 2000 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
     "type": "text",
@@ -1372,16 +1430,18 @@
     "defaultValue": false
   },
   {
-    "property": "zen.workspace.bgalazka.rss.card_hover_delay",
-    "label": "Reader card hover delay (ms)",
-    "type": "input",
-    "defaultValue": 0
+    "property": "zen.workspace.bgalazka.rss.card_hover_delay_text",
+    "label": "Reader card hover delay (ms) [0 to 60000 ms]",
+    "type": "string",
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
-    "property": "zen.workspace.bgalazka.rss.card_hide_delay",
-    "label": "Reader card hide delay (ms)",
-    "type": "input",
-    "defaultValue": 250
+    "property": "zen.workspace.bgalazka.rss.card_hide_delay_text",
+    "label": "Reader card hide delay (ms) [0 to 60000 ms]",
+    "type": "string",
+    "defaultValue": "250",
+    "placeholder": "250"
   },
   {
     "property": "zen.workspace.bgalazka.rss.card_side",
@@ -1528,22 +1588,25 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.zentral.hybrid.dock_push_px",
-    "label": "Docking distance (px; snap near edge when overflow is allowed)",
+    "property": "zen.workspace.zentral.hybrid.dock_push_px_text",
+    "label": "Docking distance (px; snap near edge when overflow is allowed) [4 to 440 px]",
     "type": "string",
-    "defaultValue": 15
+    "defaultValue": "15",
+    "placeholder": "15"
   },
   {
-    "property": "zen.workspace.zentral.hybrid.dock_gap",
-    "label": "Gap between docked panels and edge (px)",
+    "property": "zen.workspace.zentral.hybrid.dock_gap_text",
+    "label": "Gap between docked panels and edge (px) [0 to 416 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
-    "property": "zen.workspace.zentral.hybrid.detached_height_percent",
-    "label": "Height when detaching from an edge (%)",
+    "property": "zen.workspace.zentral.hybrid.detached_height_percent_text",
+    "label": "Height when detaching from an edge (%) [20 to 100 %]",
     "type": "string",
-    "defaultValue": 78
+    "defaultValue": "78",
+    "placeholder": "78"
   },
   {
     "type": "text",
@@ -1568,22 +1631,25 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.bgalazka.hover_reveal_delay_ms",
-    "label": "Hidden Panel Reveal Delay (ms; fine adjustment in extension settings)",
+    "property": "zen.workspace.bgalazka.hover_reveal_delay_ms_text",
+    "label": "Hidden Panel Reveal Delay (ms; fine adjustment in extension settings) [0 to 60000 ms]",
     "type": "string",
-    "defaultValue": 160
+    "defaultValue": "160",
+    "placeholder": "160"
   },
   {
-    "property": "zen.workspace.bgalazka.hover_reveal_width_px",
-    "label": "Hidden Panel Hover Activation Width (px; independent of webpage push)",
+    "property": "zen.workspace.bgalazka.hover_reveal_width_px_text",
+    "label": "Hidden Panel Hover Activation Width (px; independent of webpage push) [0 to 464 px]",
     "type": "string",
-    "defaultValue": 1
+    "defaultValue": "1",
+    "placeholder": "1"
   },
   {
-    "property": "zen.workspace.zentral.panels.hover_push_width_px",
-    "label": "Hidden Panel Webpage Push Width (px; independent of hover activation)",
+    "property": "zen.workspace.zentral.panels.hover_push_width_px_text",
+    "label": "Hidden Panel Webpage Push Width (px; independent of hover activation) [0 to 464 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
     "type": "text",
@@ -1603,22 +1669,25 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.zentral.panels.outside_distance_px",
-    "label": "Panel Outside Tracking Distance (px; shared native sessions use Zen distance)",
+    "property": "zen.workspace.zentral.panels.outside_distance_px_text",
+    "label": "Panel Outside Tracking Distance (px; shared native sessions use Zen distance) [0 to 4000 px]",
     "type": "string",
-    "defaultValue": 250
+    "defaultValue": "250",
+    "placeholder": "250"
   },
   {
-    "property": "zen.workspace.zentral.panels.outside_trigger_margin_px",
-    "label": "Window Edge Exit Tolerance (px)",
+    "property": "zen.workspace.zentral.panels.outside_trigger_margin_px_text",
+    "label": "Window Edge Exit Tolerance (px) [0 to 464 px]",
     "type": "string",
-    "defaultValue": 10
+    "defaultValue": "10",
+    "placeholder": "10"
   },
   {
-    "property": "zen.workspace.zentral.panels.autohide_delay_ms",
-    "label": "Panel Autohide Delay (ms)",
+    "property": "zen.workspace.zentral.panels.autohide_delay_ms_text",
+    "label": "Panel Autohide Delay (ms) [0 to 60000 ms]",
     "type": "string",
-    "defaultValue": 400
+    "defaultValue": "400",
+    "placeholder": "400"
   },
   {
     "type": "text",
@@ -1858,10 +1927,11 @@
     "size": "16px"
   },
   {
-    "property": "zen.workspace.apps.sidebar.badge_poll_interval_ms",
-    "label": "Notification badge fallback refresh",
+    "property": "zen.workspace.apps.sidebar.badge_poll_interval_ms_text",
+    "label": "Notification badge fallback refresh [0 to 3600000 ms]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
     "type": "text",
@@ -2012,6 +2082,48 @@
   },
   {
     "type": "text",
+    "label": "**Notes · Quick notes**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.enabled",
+    "label": "Enable Notes (note button on panel bars and shortcut)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.show_button",
+    "label": "Show the Notes button on panel URL bars",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.shortcut",
+    "label": "Notes shortcut (needs Alt, Ctrl or Cmd, e.g. Alt+Shift+N)",
+    "type": "string",
+    "defaultValue": "Alt+Shift+N"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.autosave_seconds_text",
+    "label": "Longest time between saves while typing (seconds, 2–60) [2 to 60 s]",
+    "type": "string",
+    "defaultValue": "5",
+    "placeholder": "5"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.folder",
+    "label": "Notes folder (absolute path; empty = zentral-notes inside your profile)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.dock_sidebar",
+    "label": "Dock Notes to the sidebar (opens beside the sidebar and adds a Notes button to it)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "type": "text",
     "label": "**Video**",
     "size": "22px"
   },
@@ -2096,10 +2208,11 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px",
-    "label": "Default enlarged preview bottom clearance (px)",
+    "property": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px_text",
+    "label": "Default enlarged preview bottom clearance (px) [6 to 960 px]",
     "type": "string",
-    "defaultValue": 64
+    "defaultValue": "64",
+    "placeholder": "64"
   },
   {
     "property": "zen.workspace.zentral.video_preview.enlarged_keep_aspect",
@@ -2149,22 +2262,25 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.zentral.video_preview.width_percent",
-    "label": "Preview Width (%) when Fill Width is Off",
+    "property": "zen.workspace.zentral.video_preview.width_percent_text",
+    "label": "Preview Width (%) when Fill Width is Off [10 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.height_px",
-    "label": "Preview Height (px; 0 = auto)",
+    "property": "zen.workspace.zentral.video_preview.height_px_text",
+    "label": "Preview Height (px; 0 = auto) [0 to 4000 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.radius_px",
-    "label": "Preview Corner Radius (px)",
+    "property": "zen.workspace.zentral.video_preview.radius_px_text",
+    "label": "Preview Corner Radius (px) [0 to 424 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
     "property": "zen.workspace.zentral.video_preview.framing",
@@ -2296,16 +2412,18 @@
     ]
   },
   {
-    "property": "zen.workspace.zentral.video_preview.button_size_px",
-    "label": "Toolbar button size (standalone)",
+    "property": "zen.workspace.zentral.video_preview.button_size_px_text",
+    "label": "Toolbar button size (standalone) [9 to 432 px]",
     "type": "string",
-    "defaultValue": 26
+    "defaultValue": "26",
+    "placeholder": "26"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.button_radius_px",
-    "label": "Toolbar button corner radius (px, standalone mod)",
+    "property": "zen.workspace.zentral.video_preview.button_radius_px_text",
+    "label": "Toolbar button corner radius (px, standalone mod) [0 to 412 px]",
     "type": "string",
-    "defaultValue": 4
+    "defaultValue": "4",
+    "placeholder": "4"
   },
   {
     "property": "zen.workspace.zentral.video_preview.button_icon_color",
@@ -2334,16 +2452,18 @@
     "size": "16px"
   },
   {
-    "property": "zen.workspace.bgalazka.look.video_opacity",
-    "label": "Video preview canvas opacity (%)",
+    "property": "zen.workspace.bgalazka.look.video_opacity_text",
+    "label": "Video preview canvas opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
-    "property": "zen.workspace.bgalazka.look.video_control_opacity",
-    "label": "Video control strip opacity (%)",
+    "property": "zen.workspace.bgalazka.look.video_control_opacity_text",
+    "label": "Video control strip opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
     "property": "zen.workspace.bgalazka.look.video_canvas",
@@ -2381,10 +2501,11 @@
     "border": "value"
   },
   {
-    "property": "zen.workspace.bgalazka.look.video_border",
-    "label": "Video control border width (px; 0 = none)",
+    "property": "zen.workspace.bgalazka.look.video_border_text",
+    "label": "Video control border width (px; 0 = none) [0 to 12 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
     "property": "zen.workspace.bgalazka.look.video_source_style",
@@ -2414,28 +2535,32 @@
     "defaultValue": false
   },
   {
-    "property": "zen.workspace.bgalazka.look.video_controls_gap",
-    "label": "Sidebar video control spacing (px)",
+    "property": "zen.workspace.bgalazka.look.video_controls_gap_text",
+    "label": "Sidebar video control spacing (px) [0 to 400 px]",
     "type": "string",
-    "defaultValue": 1
+    "defaultValue": "1",
+    "placeholder": "1"
   },
   {
-    "property": "zen.workspace.bgalazka.look.video_overlay_opacity",
-    "label": "Big Preview hover overlay opacity (%)",
+    "property": "zen.workspace.bgalazka.look.video_overlay_opacity_text",
+    "label": "Big Preview hover overlay opacity (%) [0 to 100 %]",
     "type": "string",
-    "defaultValue": 40
+    "defaultValue": "40",
+    "placeholder": "40"
   },
   {
-    "property": "zen.workspace.bgalazka.look.video_padding",
-    "label": "Video control padding (px)",
+    "property": "zen.workspace.bgalazka.look.video_padding_text",
+    "label": "Video control padding (px) [0 to 60 px]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
-    "property": "zen.workspace.bgalazka.look.video_row_height",
-    "label": "Video source row height (px)",
+    "property": "zen.workspace.bgalazka.look.video_row_height_text",
+    "label": "Video source row height (px) [14 to 80 px]",
     "type": "string",
-    "defaultValue": 22
+    "defaultValue": "22",
+    "placeholder": "22"
   },
   {
     "type": "text",
@@ -2465,16 +2590,18 @@
     ]
   },
   {
-    "property": "zen.workspace.zentral.video_preview.caption_font_size",
-    "label": "Subtitle text size (px)",
+    "property": "zen.workspace.zentral.video_preview.caption_font_size_text",
+    "label": "Subtitle text size (px) [5 to 300 px]",
     "type": "string",
-    "defaultValue": 12
+    "defaultValue": "12",
+    "placeholder": "12"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.caption_max_lines",
-    "label": "Maximum subtitle lines",
+    "property": "zen.workspace.zentral.video_preview.caption_max_lines_text",
+    "label": "Maximum subtitle lines [1 to 24]",
     "type": "string",
-    "defaultValue": 4
+    "defaultValue": "4",
+    "placeholder": "4"
   },
   {
     "property": "zen.workspace.zentral.video_preview.captions_visible",
@@ -2504,10 +2631,11 @@
     "size": "16px"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.caption_poll_ms",
-    "label": "Caption recovery interval (slower = delayed recovery from missed events)",
+    "property": "zen.workspace.zentral.video_preview.caption_poll_ms_text",
+    "label": "Caption recovery interval (slower = delayed recovery from missed events) [0 to 60000 ms]",
     "type": "string",
-    "defaultValue": 750
+    "defaultValue": "750",
+    "placeholder": "750"
   },
   {
     "property": "zen.workspace.zentral.video_preview.caption_events",
@@ -2586,34 +2714,39 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.zentral.video_preview.capture_width_px",
-    "label": "Capture Detail: Video Frames and Page Snapshots (px)",
+    "property": "zen.workspace.zentral.video_preview.capture_width_px_text",
+    "label": "Capture Detail: Video Frames and Page Snapshots (px) [80 to 2560 px]",
     "type": "string",
-    "defaultValue": 480
+    "defaultValue": "480",
+    "placeholder": "480"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.capture_rate_tenths",
-    "label": "Still-Frame Capture Rate (higher rates use more CPU)",
+    "property": "zen.workspace.zentral.video_preview.capture_rate_tenths_text",
+    "label": "Still-Frame Capture Rate (higher rates use more CPU) [1 to 600]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.scan_interval_ms",
-    "label": "Source discovery interval (slower = less polling; events can still scan)",
+    "property": "zen.workspace.zentral.video_preview.scan_interval_ms_text",
+    "label": "Source discovery interval (slower = less polling; events can still scan) [0 to 480000 ms]",
     "type": "string",
-    "defaultValue": 5000
+    "defaultValue": "5000",
+    "placeholder": "5000"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.canvas_stream_width_px",
-    "label": "Canvas stream width (smaller = less detail and drawing work)",
+    "property": "zen.workspace.zentral.video_preview.canvas_stream_width_px_text",
+    "label": "Canvas stream width (smaller = less detail and drawing work) [80 to 2560 px]",
     "type": "string",
-    "defaultValue": 640
+    "defaultValue": "640",
+    "placeholder": "640"
   },
   {
-    "property": "zen.workspace.zentral.video_preview.canvas_stream_fps",
-    "label": "Canvas stream FPS (lower = less smooth video and drawing work)",
+    "property": "zen.workspace.zentral.video_preview.canvas_stream_fps_text",
+    "label": "Canvas stream FPS (lower = less smooth video and drawing work) [1 to 90]",
     "type": "string",
-    "defaultValue": 30
+    "defaultValue": "30",
+    "placeholder": "30"
   },
   {
     "property": "zen.workspace.zentral.video_preview.display_capture_cap",
@@ -2744,22 +2877,25 @@
     "defaultValue": true
   },
   {
-    "property": "zen.workspace.bgalazka.panel_retry_limit",
-    "label": "Panel recovery retry limit",
+    "property": "zen.workspace.bgalazka.panel_retry_limit_text",
+    "label": "Panel recovery retry limit [0 to 6]",
     "type": "string",
-    "defaultValue": 2
+    "defaultValue": "2",
+    "placeholder": "2"
   },
   {
-    "property": "zen.workspace.bgalazka.panel_retry_delay_ms",
-    "label": "Panel recovery retry delay",
+    "property": "zen.workspace.bgalazka.panel_retry_delay_ms_text",
+    "label": "Panel recovery retry delay [0 to 60000 ms]",
     "type": "string",
-    "defaultValue": 500
+    "defaultValue": "500",
+    "placeholder": "500"
   },
   {
-    "property": "zen.workspace.bgalazka.panel_fallback_interval_ms",
-    "label": "Panel troubleshooting refresh interval",
+    "property": "zen.workspace.bgalazka.panel_fallback_interval_ms_text",
+    "label": "Panel troubleshooting refresh interval [0 to 300000 ms]",
     "type": "string",
-    "defaultValue": 10000
+    "defaultValue": "10000",
+    "placeholder": "10000"
   },
   {
     "property": "zen.workspace.bgalazka.periodic_fallback_polling",
@@ -2959,6 +3095,18 @@
     "defaultValue": true
   },
   {
+    "property": "zen.workspace.zentral.modules.notes.enabled",
+    "label": "Load quick notes",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.css.Notes.enabled",
+    "label": "Load additional/notes/ZentralNotes.css",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "type": "text",
     "label": "**Local Add-ons · Local registrations**",
     "size": "16px"
@@ -2981,34 +3129,39 @@
     "defaultValue": false
   },
   {
-    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.delay_seconds",
-    "label": "Sidebar layout refresh delay (seconds)",
+    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.delay_seconds_text",
+    "label": "Sidebar layout refresh delay (seconds) [0 to 60 s]",
     "type": "string",
-    "defaultValue": 0
+    "defaultValue": "0",
+    "placeholder": "0"
   },
   {
-    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.target_width_px",
-    "label": "Sidebar expansion target width (px)",
+    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.target_width_px_text",
+    "label": "Sidebar expansion target width (px) [100 to 4000 px]",
     "type": "string",
-    "defaultValue": 400
+    "defaultValue": "400",
+    "placeholder": "400"
   },
   {
-    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.extra_width_px",
-    "label": "Sidebar expansion extra width (px)",
+    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.extra_width_px_text",
+    "label": "Sidebar expansion extra width (px) [25 to 4000 px]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
-    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.hold_ms",
-    "label": "Sidebar expansion hold time (ms)",
+    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.hold_ms_text",
+    "label": "Sidebar expansion hold time (ms) [0 to 60000 ms]",
     "type": "string",
-    "defaultValue": 100
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
-    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.verification_frames",
-    "label": "Sidebar expansion verification frames",
+    "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.verification_frames_text",
+    "label": "Sidebar expansion verification frames [1 to 30]",
     "type": "string",
-    "defaultValue": 2
+    "defaultValue": "2",
+    "placeholder": "2"
   },
   {
     "property": "zen.workspace.zentral.experimental.compact_sidebar_hover",
@@ -3017,16 +3170,18 @@
     "defaultValue": false
   },
   {
-    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px",
-    "label": "Compact sidebar edge tolerance (px)",
+    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px_text",
+    "label": "Compact sidebar edge tolerance (px) [0 to 464 px]",
     "type": "string",
-    "defaultValue": 12
+    "defaultValue": "12",
+    "placeholder": "12"
   },
   {
-    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms",
-    "label": "Compact sidebar exit grace (ms)",
+    "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms_text",
+    "label": "Compact sidebar exit grace (ms) [0 to 60000 ms]",
     "type": "string",
-    "defaultValue": 250
+    "defaultValue": "250",
+    "placeholder": "250"
   },
   {
     "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.window_entry_reveal",
@@ -3074,10 +3229,11 @@
     ]
   },
   {
-    "property": "zen.workspace.zentral.experimental.library_resize.minimum_content_width_px",
-    "label": "Minimum webpage width (px; may overlap Library in narrow windows)",
+    "property": "zen.workspace.zentral.experimental.library_resize.minimum_content_width_px_text",
+    "label": "Minimum webpage width (px; may overlap Library in narrow windows) [0 to 4000 px]",
     "type": "string",
-    "defaultValue": 200
+    "defaultValue": "200",
+    "placeholder": "200"
   },
   {
     "property": "zen.workspace.zentral.experimental.library_resize.animate_content",

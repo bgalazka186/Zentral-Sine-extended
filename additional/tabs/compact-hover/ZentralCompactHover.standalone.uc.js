@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Compact Sidebar Hover
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.5
+// @version 3.1.3
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,9 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.5.
+ * Placeholders replaced by the build: 3.1.3, the numeric-preference list and
+ * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.5";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.3";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -51,6 +52,120 @@ const __zentralShim = (function () {
     return fallback;
   }
   let stopped = false;
+  function createNumericPrefSync(options) {
+    const {
+      Services,
+      items,
+      setTimer = (fn, ms) => setTimeout(fn, ms),
+      clearTimer = (id) => clearTimeout(id),
+      warn = () => {},
+    } = options;
+    const prefs = Services.prefs;
+    const INT = prefs.PREF_INT ?? 64,
+      STR = prefs.PREF_STRING ?? 32;
+    const byKey = new Map(),
+      byText = new Map(),
+      timers = new Map();
+    for (const item of items) {
+      byKey.set(item.key, item);
+      byText.set(item.text, item);
+    }
+    let writing = 0,
+      stopped = false;
+    const clamp = (item, n) => Math.min(item.max, Math.max(item.min, Math.round(n)));
+    const parse = (raw) => {
+      const m = /^(-?\d+(?:[.,]\d+)?)\s*(?:px|ms|pt|%|s)?$/i.exec(String(raw ?? "").trim());
+      return m ? Number(m[1].replace(",", ".")) : null;
+    };
+    const readInt = (key) => {
+      try {
+        return prefs.getPrefType(key) === INT && prefs.prefHasUserValue(key)
+          ? prefs.getIntPref(key)
+          : null;
+      } catch (_) {
+        return null;
+      }
+    };
+    const readText = (key) => {
+      try {
+        return prefs.getPrefType(key) === STR && prefs.prefHasUserValue(key)
+          ? prefs.getStringPref(key)
+          : null;
+      } catch (_) {
+        return null;
+      }
+    };
+    const guarded = (fn) => {
+      writing++;
+      try {
+        fn();
+      } catch (error) {
+        warn(error);
+      } finally {
+        writing--;
+      }
+    };
+    const textToBase = (item) => {
+      const n = parse(readText(item.text));
+      if (n === null) return;
+      const value = clamp(item, n);
+      if (readInt(item.key) === value) return;
+      guarded(() => {
+        // A leftover value of the wrong type must go first; Firefox refuses a type change.
+        if (prefs.prefHasUserValue(item.key) && prefs.getPrefType(item.key) !== INT)
+          prefs.clearUserPref(item.key);
+        prefs.setIntPref(item.key, value);
+      });
+    };
+    const baseToText = (item) => {
+      const value = readInt(item.key);
+      if (value === null) return;
+      const n = parse(readText(item.text));
+      if (n !== null && clamp(item, n) === value && Math.round(n) === value) return;
+      guarded(() => prefs.setStringPref(item.text, String(value)));
+    };
+    const observer = {
+      observe(_subject, _topic, name) {
+        if (stopped || writing) return;
+        const text = byText.get(name);
+        if (text) {
+          // Typing in Sine can write on every keystroke: apply once it settles.
+          if (timers.has(name)) clearTimer(timers.get(name));
+          timers.set(
+            name,
+            setTimer(() => {
+              timers.delete(name);
+              if (!stopped) textToBase(text);
+            }, 500),
+          );
+          return;
+        }
+        const base = byKey.get(name);
+        if (base) baseToText(base);
+      },
+    };
+    // Startup reconcile: the stored integer wins; text is only trusted when no integer
+    // has ever been stored.
+    for (const item of items) {
+      if (readInt(item.key) !== null) baseToText(item);
+      else if (readText(item.text) !== null) textToBase(item);
+    }
+    prefs.addObserver("zen.workspace.", observer);
+    return {
+      destroy() {
+        if (stopped) return;
+        stopped = true;
+        try {
+          prefs.removeObserver("zen.workspace.", observer);
+        } catch (_) {}
+        for (const id of timers.values()) clearTimer(id);
+        timers.clear();
+      },
+      // Exposed for tests only.
+      _observer: observer,
+    };
+  }
+  const numericItems = [{"key":"zen.workspace.zentral.experimental.sidebar_startup_recalculate.delay_seconds","text":"zen.workspace.zentral.experimental.sidebar_startup_recalculate.delay_seconds_text","min":0,"max":60,"def":0},{"key":"zen.workspace.zentral.experimental.sidebar_startup_recalculate.target_width_px","text":"zen.workspace.zentral.experimental.sidebar_startup_recalculate.target_width_px_text","min":100,"max":4000,"def":400},{"key":"zen.workspace.zentral.experimental.sidebar_startup_recalculate.extra_width_px","text":"zen.workspace.zentral.experimental.sidebar_startup_recalculate.extra_width_px_text","min":25,"max":4000,"def":100},{"key":"zen.workspace.zentral.experimental.sidebar_startup_recalculate.hold_ms","text":"zen.workspace.zentral.experimental.sidebar_startup_recalculate.hold_ms_text","min":0,"max":60000,"def":100},{"key":"zen.workspace.zentral.experimental.sidebar_startup_recalculate.verification_frames","text":"zen.workspace.zentral.experimental.sidebar_startup_recalculate.verification_frames_text","min":1,"max":30,"def":2},{"key":"zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px","text":"zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px_text","min":0,"max":464,"def":12},{"key":"zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms","text":"zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms_text","min":0,"max":60000,"def":250}];
   function nativeSidebarElement() {
       const tabs = window.gBrowser?.tabContainer;
       const candidates = [
@@ -428,16 +543,23 @@ function nativeSidebarSide() {
       // 1. The full pack owns every feature it contains.
       if (window.ZentralRuntime) return;
       // Live re-run (Sine reloads scripts): replace the previous instance.
-      const existing = features[def.id];
-      if (existing && existing.version && existing.version !== __ZENTRAL_STANDALONE_VERSION__) {
-        try {
-          Services.appinfo.invalidateCachesOnRestart();
-        } catch (_) {}
-      }
       try {
-        existing?.dispose?.();
+        features[def.id]?.dispose?.();
       } catch (_) {}
       const lifecycle = createFeatureScope(def.id);
+      // Sine's free numeric fields (<key>_text) feed the real integer preferences.
+      let numericSync = null;
+      if (numericItems.length) {
+        try {
+          numericSync = createNumericPrefSync({
+            Services,
+            items: numericItems,
+            warn: (error) => console.warn("[Zentral standalone] numeric preference sync", error),
+          });
+        } catch (error) {
+          console.warn("[Zentral standalone] numeric preference sync unavailable", error);
+        }
+      }
       let cleanup = null,
         initialized = false,
         disposed = false;
@@ -457,6 +579,7 @@ function nativeSidebarSide() {
             console.warn("[Zentral standalone] cleanup", def.id, error);
           }
           lifecycle.destroy();
+          numericSync?.destroy();
         },
       });
       unloadHandlers.add(handle.dispose);
@@ -980,22 +1103,14 @@ function nativeSidebarSide() {
     function refreshTunables() {
       // Preference reads stay outside the pointer-event path. Updating sliders
       // affects the next hit-test/exit without restarting an active grace timer.
-      const readEdgeMargin = () => {
-        try {
-          return Services.prefs.getIntPref(MARGIN_PREF, 12);
-        } catch (_) {
-          return 12;
-        }
-      };
-      const readExitGrace = () => {
-        try {
-          return Services.prefs.getIntPref(GRACE_PREF, 250);
-        } catch (_) {
-          return 250;
-        }
-      };
-      edgeMargin = Math.max(0, Math.min(64, readEdgeMargin()));
-      exitGrace = Math.max(0, Math.min(2000, readExitGrace()));
+      edgeMargin = Math.max(
+        0,
+        Math.min(64, Services.prefs.getIntPref(MARGIN_PREF, 12)),
+      );
+      exitGrace = Math.max(
+        0,
+        Math.min(2000, Services.prefs.getIntPref(GRACE_PREF, 250)),
+      );
       keepHoverDelay = Math.max(
         0,
         Math.min(
@@ -1332,21 +1447,14 @@ function nativeSidebarSide() {
       }
       if (repairDone || repairFrame !== null || repairTimer !== null) return;
       window.addEventListener("MozAfterPaint", onRepairReady);
-      const delay = (() => {
-        try {
-          return (
-            Math.max(
-              0,
-              Math.min(
-                60,
-                Services.prefs.getIntPref(REPAIR_PREF + ".delay_seconds", 0),
-              ),
-            ) * 1000
-          );
-        } catch (_) {
-          return 0;
-        }
-      })();
+      const delay =
+        Math.max(
+          0,
+          Math.min(
+            60,
+            Services.prefs.getIntPref(REPAIR_PREF + ".delay_seconds", 0),
+          ),
+        ) * 1000;
       repairStatus(
         "scheduled: waiting " + delay + " ms before sidebar expansion",
       );

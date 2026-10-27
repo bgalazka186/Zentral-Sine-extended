@@ -282,12 +282,31 @@
         applyCardParts();
         if (card && cardTab && !card.hidden) showCard(cardTab);
       }
+      // Big Preview (and other popovers) live in the browser's top layer, which no
+      // z-index can outrank. The card is therefore a manual popover too, and every
+      // show re-enters the top layer, because a later popover sits above an earlier
+      // one. Without popover support the z-index in the stylesheet still applies.
+      function raiseCard(c) {
+        if (typeof c.showPopover !== "function") return;
+        try {
+          if (c.matches(":popover-open")) c.hidePopover();
+          c.showPopover();
+        } catch (_) {}
+      }
+      function dropCard(c) {
+        try {
+          if (c?.matches(":popover-open")) c.hidePopover();
+        } catch (_) {}
+      }
       function hideCard(delay = 0) {
         cancelShow();
         cancelHide();
         hideTimer = setTimeout(() => {
           hideTimer = null;
-          if (card) card.hidden = true;
+          if (card) {
+            card.hidden = true;
+            dropCard(card);
+          }
           cardTab = null;
         }, Math.max(0, delay));
       }
@@ -295,6 +314,7 @@
         if (card) return card;
         card = document.createElement("div");
         card.id = "bgalazka-rss-card";
+        card.setAttribute("popover", "manual");
         card.hidden = true;
         card.innerHTML =
           '<div class="rc-folder"></div><div class="rc-text"></div>' +
@@ -364,6 +384,7 @@
         c.querySelector(".rc-url").textContent = url;
         applyCardParts();
         c.hidden = false;
+        raiseCard(c);
         const side = document.getElementById("navigator-toolbox");
         const sr = side?.getBoundingClientRect();
         const tr = tab.getBoundingClientRect();

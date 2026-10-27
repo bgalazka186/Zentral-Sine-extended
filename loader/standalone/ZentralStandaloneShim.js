@@ -14,7 +14,8 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: __FEATURE_VERSION__.
+ * Placeholders replaced by the build: __FEATURE_VERSION__, the numeric-preference list and
+ * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
 const __ZENTRAL_STANDALONE_VERSION__ = "__FEATURE_VERSION__";
 const __zentralShim = (function () {
@@ -41,6 +42,8 @@ const __zentralShim = (function () {
     return fallback;
   }
   let stopped = false;
+  /*__NUMERIC_FUNCTIONS__*/
+  const numericItems = /*__NUMERIC_ITEMS__*/ [];
   /*__SIDEBAR_FUNCTIONS__*/
   /*__SCOPE_FUNCTIONS__*/
   const unloadHandlers = new Set();
@@ -115,16 +118,23 @@ const __zentralShim = (function () {
       // 1. The full pack owns every feature it contains.
       if (window.ZentralRuntime) return;
       // Live re-run (Sine reloads scripts): replace the previous instance.
-      const existing = features[def.id];
-      if (existing && existing.version && existing.version !== __ZENTRAL_STANDALONE_VERSION__) {
-        try {
-          Services.appinfo.invalidateCachesOnRestart();
-        } catch (_) {}
-      }
       try {
-        existing?.dispose?.();
+        features[def.id]?.dispose?.();
       } catch (_) {}
       const lifecycle = createFeatureScope(def.id);
+      // Sine's free numeric fields (<key>_text) feed the real integer preferences.
+      let numericSync = null;
+      if (numericItems.length) {
+        try {
+          numericSync = createNumericPrefSync({
+            Services,
+            items: numericItems,
+            warn: (error) => console.warn("[Zentral standalone] numeric preference sync", error),
+          });
+        } catch (error) {
+          console.warn("[Zentral standalone] numeric preference sync unavailable", error);
+        }
+      }
       let cleanup = null,
         initialized = false,
         disposed = false;
@@ -144,6 +154,7 @@ const __zentralShim = (function () {
             console.warn("[Zentral standalone] cleanup", def.id, error);
           }
           lifecycle.destroy();
+          numericSync?.destroy();
         },
       });
       unloadHandlers.add(handle.dispose);

@@ -957,7 +957,7 @@
         <div class="zs-header">
           <div class="zs-title-group">
             <h2 class="zs-title">Zentral Settings</h2>
-            <span class="zs-version-badge">v3.1.2</span>
+            <span class="zs-version-badge">v3.1.3</span>
           </div>
           <div class="zs-header-actions">
             <button id="zs-kofi-btn" class="zs-kofi-btn" title="Support Zentral on Ko-fi (ko-fi.com/michele501st)">

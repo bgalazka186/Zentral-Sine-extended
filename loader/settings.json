@@ -74,6 +74,12 @@
       "defaultValue": true
     },
     {
+      "property": "zen.workspace.zentral.modules.notes.enabled",
+      "label": "Load quick notes",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
       "property": "zen.workspace.zentral.modules.rss.enabled",
       "label": "Load RSS folder display",
       "type": "checkbox",
@@ -148,6 +154,12 @@
     {
       "property": "zen.workspace.zentral.modules.css.Appearance.enabled",
       "label": "Load extension/appearance/ZentralAppearance.css",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.modules.css.Notes.enabled",
+      "label": "Load additional/notes/ZentralNotes.css",
       "type": "checkbox",
       "defaultValue": true
     },
@@ -392,6 +404,16 @@
     "zen.workspace.zentral.compat.keep_launcher_in_sidebar": {
       "category": "compatibility",
       "section": "Browser hosts & website styles",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.notes.enabled": {
+      "category": "modules",
+      "section": "File loading",
+      "owner": "core"
+    },
+    "zen.workspace.zentral.modules.css.Notes.enabled": {
+      "category": "modules",
+      "section": "File loading",
       "owner": "core"
     }
   }

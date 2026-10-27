@@ -628,6 +628,7 @@
             this.loadWidth();
           if (access.dom.panel) access.dom.panel.style.pointerEvents = "none";
           this._zentralWidthDragging = true;
+          this._dragLimit = null;
           document.addEventListener("mousemove", this.onDrag);
           document.addEventListener("mouseup", this.onStopDrag);
           window.addEventListener("blur", this.onStopDrag);
@@ -648,12 +649,20 @@
           let newW = this.isPanelAttachedToRight()
             ? this._startW - diff
             : this._startW + diff;
-          let limit = window.innerWidth * Constants.Apps.MAX_WIDTH_RATIO;
-          if (this.isPlacementVerticalBar())
-            limit = Math.min(limit, this.getAppsBarPanelMaxWidth());
-          else
-            limit = Math.min(limit, this.getSidebarDockedMaxWidth());
-          newW = Math.max(Constants.Apps.MIN_WIDTH_PX, Math.min(newW, limit));
+          // The limit depends on the sidebar and window, neither of which moves during
+          // a drag. Reading it per mouse event measured the sidebar right after the
+          // previous event wrote the width, forcing a layout every time. Compute once.
+          if (this._dragLimit == null) {
+            let limit = window.innerWidth * Constants.Apps.MAX_WIDTH_RATIO;
+            if (this.isPlacementVerticalBar())
+              limit = Math.min(limit, this.getAppsBarPanelMaxWidth());
+            else limit = Math.min(limit, this.getSidebarDockedMaxWidth());
+            this._dragLimit = limit;
+          }
+          newW = Math.max(
+            Constants.Apps.MIN_WIDTH_PX,
+            Math.min(newW, this._dragLimit),
+          );
           this.updateWidthVar(newW);
         },
         onStopDrag() {
@@ -664,6 +673,7 @@
           if (this._zentralWidthDragging)
             this.saveWidth(access.state.panelWidthPx);
           this._zentralWidthDragging = false;
+          this._dragLimit = null;
         },
         scheduleRepositionGrid(delay = 120) {
           if (access.state.repositionTimer)

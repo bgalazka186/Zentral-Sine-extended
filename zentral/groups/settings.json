@@ -50,8 +50,35 @@
     {
       "property": "zen.workspace.tabgroups.label_opacity",
       "label": "Tab Group Label Opacity (%)",
-      "type": "string",
-      "defaultValue": 85
+      "type": "dropdown",
+      "defaultValue": 85,
+      "options": [
+        {
+          "label": "40",
+          "value": 40
+        },
+        {
+          "label": "55",
+          "value": 55
+        },
+        {
+          "label": "70",
+          "value": 70
+        },
+        {
+          "label": "85",
+          "value": 85
+        },
+        {
+          "label": "100",
+          "value": 100
+        }
+      ],
+      "numeric": {
+        "min": 0,
+        "max": 100,
+        "unit": "%"
+      }
     }
   ],
   "settings": {

@@ -244,7 +244,9 @@ const baseline = (env) => {
       // Every pref the module owns or borrows ships (minus the explicit, reasoned
       // exclusions), each identical to its source entry.
       const excluded = new Set(m.excludePrefs?.properties || []);
-      const expected = [...schema, ...borrowed].filter((p) => !excluded.has(p.property));
+      // Sine sees the converted view (numeric settings become "<key>_text" free fields).
+      const { toSinePrefs } = require("../tools/lib/sine-prefs.cjs");
+      const expected = toSinePrefs([...schema, ...borrowed].filter((p) => !excluded.has(p.property)));
       const shipped = prefs.filter((p) => p.property);
       assert.deepEqual(shipped.map((p) => p.property).sort(), expected.map((p) => p.property).sort());
       for (const entry of expected)
@@ -428,7 +430,8 @@ const baseline = (env) => {
     assert.ok(!/zentral-arc2-library/.test(appearance) && !/zentral-arc2-library/.test(runtimeSource));
     assert.ok(runtimeSource.includes("arcSidebarPref"), "regular-sidebar match stays in the runtime");
     const rootPrefs = JSON.parse(fs.readFileSync(path.join(root, "preferences.json"), "utf8")).map((p) => p.property);
-    for (const key of [BG.custom, BG.color, BG.opacity, BG.arc]) assert.ok(rootPrefs.includes(key), key);
+    // The opacity setting is a numeric one: Sine shows its free "<key>_text" twin.
+    for (const key of [BG.custom, BG.color, BG.opacity + "_text", BG.arc]) assert.ok(rootPrefs.includes(key), key);
   });
 
   await test("build: a pref read from another owner must be borrowed; an unknown pref must be declared", () => {

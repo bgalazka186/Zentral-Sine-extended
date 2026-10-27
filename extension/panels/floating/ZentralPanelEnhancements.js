@@ -1078,10 +1078,13 @@
           dx = event.clientX - g.x,
           dy = event.clientY - g.y;
         if (!g.moved && Math.hypot(dx, dy) < 4) return;
+        // One geometry read per event, before the first write: area() reads the sidebar and
+        // content rectangles, and every read after a write forces a fresh layout.
+        const areaNow = area();
         g.moved = true;
         shield.setAttribute("data-active", "true");
         if (!g.dir && g.prior.mode === "docked" && !g.floatStart) {
-          const h = Math.min(g.start.h, area().height * detachedHeight()),
+          const h = Math.min(g.start.h, areaNow.height * detachedHeight()),
             anchor = Math.max(
               0,
               Math.min(1, (g.y - g.start.y) / Math.max(1, g.start.h)),
@@ -1100,13 +1103,13 @@
               dx,
               g.pillMove ? 0 : dy,
               {},
-              area(),
+              areaNow,
               {
                 allowOverflow: pref("allow_overflow", false),
                 minVisibleMargin: 96,
               },
             )
-          : bounded({ ...moveStart, x: moveStart.x + dx, y: moveStart.y + dy });
+          : bounded({ ...moveStart, x: moveStart.x + dx, y: moveStart.y + dy }, areaNow);
         g.host.layout.rect = r;
         if (g.pillMove)
           g.host.pillOffset = Math.max(
@@ -1140,21 +1143,21 @@
           const slots = {
             left: math.dockRect(
               "left",
-              { ...r, y: area().top, h: area().height },
-              area(),
+              { ...r, y: areaNow.top, h: areaNow.height },
+              areaNow,
               pref("dock_gap", 0),
             ),
             right: math.dockRect(
               "right",
-              { ...r, y: area().top, h: area().height },
-              area(),
+              { ...r, y: areaNow.top, h: areaNow.height },
+              areaNow,
               pref("dock_gap", 0),
             ),
           };
           // Use the proposed, UNCLAMPED panel edge, not cursor proximity.
           // Its width and the pointer's grab offset therefore both count.
           const proposedX = moveStart.x + dx,
-            box = area(),
+            box = areaNow,
             penetration = Math.max(
               1,
               Math.min(100, Number(pref("dock_push_px", 15)) || 15),
