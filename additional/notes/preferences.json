@@ -88,6 +88,44 @@
     ]
   },
   {
+    "property": "zen.workspace.zentral.notes.read_copy",
+    "label": "Select and copy text in the read view",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.setext",
+    "label": "Treat text over a line of === or --- as a heading (off = --- is a horizontal rule)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.paste_link",
+    "label": "Pasting a web address in the editor",
+    "type": "dropdown",
+    "defaultValue": "ask",
+    "options": [
+      {
+        "label": "Ask – offer to create a link",
+        "value": "ask"
+      },
+      {
+        "label": "Only over selected text",
+        "value": "selection"
+      },
+      {
+        "label": "Paste as plain text",
+        "value": "off"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.shortcuts",
+    "label": "Changed editor shortcuts (set in Notes → Quick settings → Keyboard shortcuts; empty = defaults)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
     "property": "zen.workspace.zentral.notes.folder",
     "label": "Notes folder (absolute path; empty = zentral-notes inside your profile)",
     "type": "string",

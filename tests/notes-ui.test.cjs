@@ -275,6 +275,119 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.ok(c.parseShortcut("Ctrl+Alt+K"));
   });
 
+  // ---- cycle B2: new toolbar actions, dialogs, shortcuts, quick settings ----------------------
+  const prefs = new Map();
+  env.getPref = (k, d) => (prefs.has(k) ? prefs.get(k) : d);
+  env.setPref = (k, v) => prefs.set(k, v);
+  const click = (el) => el.dispatchEvent(new Ev("click", { bubbles: true }));
+  const byLabel = (sheet, label) => sheet.root.all().find((e) => e.getAttribute("aria-label") === label || e.title === label || (e.title || "").startsWith(label + " ("));
+  const dialogOf = (sheet) => q(sheet, ".zn-dialog");
+  const chipNamed = (sheet, text) => sheet.root.all().find((e) => e._classes.has("zn-chip") && e.textContent === text);
+  const prep = (sheet, text, a = 0, b = text.length) => {
+    if (sheet.root.dataset.mode === "read") key(q(sheet, ".zn-read"), "e", { ctrlKey: true });
+    const ta = q(sheet, ".zn-editor");
+    ta.value = text; ta.selectionStart = a; ta.selectionEnd = b; dom.state.activeElement = ta;
+    return ta;
+  };
+
+  await test("B2 shortcuts: inline code, numbered list, code block, image via the shortcut engine", async () => {
+    const ta = prep(sheetA, "word", 0, 4);
+    key(ta, "c", { ctrlKey: true, shiftKey: true, code: "KeyC" });
+    assert.equal(ta.value, "`word`");
+    const t2 = prep(sheetA, "a\nb", 0, 3);
+    key(t2, "&", { ctrlKey: true, shiftKey: true, code: "Digit7" });
+    assert.equal(t2.value, "1. a\n2. b");
+    const t3 = prep(sheetA, "x = 1", 0, 5);
+    key(t3, "m", { ctrlKey: true, shiftKey: true, code: "KeyM" });
+    assert.equal(t3.value, "```\nx = 1\n```");
+    const t4 = prep(sheetA, "pic", 0, 3);
+    key(t4, "g", { ctrlKey: true, shiftKey: true, code: "KeyG" });
+    assert.equal(t4.value, "![pic](https://)");
+  });
+
+  await test("B2 toolbar buttons exist, show their shortcut and act", async () => {
+    for (const name of ["Inline code", "Code block", "Link\u2026", "Image", "Numbered list", "Table\u2026", "Quick settings"]) assert.ok(byLabel(sheetA, name), name);
+    assert.match(byLabel(sheetA, "Inline code").title, /Ctrl\+Shift\+C/);
+    const ta = prep(sheetA, "word", 0, 4);
+    click(byLabel(sheetA, "Inline code"));
+    assert.equal(ta.value, "`word`");
+  });
+
+  await test("B2 link dialog: text + address make a link; a bad address is refused", async () => {
+    const ta = prep(sheetA, "see docs here", 4, 8);
+    key(ta, "k", { ctrlKey: true, shiftKey: true, code: "KeyK" });
+    const [textIn, addrIn] = sheetA.root.all().filter((e) => e._classes.has("zn-field"));
+    assert.equal(textIn.value, "docs", "the selection becomes the label");
+    addrIn.value = "javascript:alert(1)";
+    click(chipNamed(sheetA, "Create link"));
+    assert.ok(dialogOf(sheetA), "refused: the dialog stays");
+    assert.equal(ta.value, "see docs here");
+    addrIn.value = "https://example.org/a b";
+    click(chipNamed(sheetA, "Create link"));
+    assert.equal(dialogOf(sheetA), null);
+    assert.equal(ta.value, "see [docs](https://example.org/a%20b) here");
+  });
+
+  await test("B2 pasting an address offers the link dialog; 'as text' and the off setting paste plainly", async () => {
+    let ta = prep(sheetA, "see docs", 4, 8);
+    const url = "https://example.org/page#:~:text=hello%20world";
+    const paste = () => { const e = new Ev("paste", { clipboardData: { getData: () => url } }); ta.dispatchEvent(e); return e; };
+    assert.ok(paste().defaultPrevented);
+    click(chipNamed(sheetA, "Create link"));
+    assert.equal(ta.value, "see [docs](" + url + ")");
+    ta = prep(sheetA, "see ", 4, 4);
+    assert.ok(paste().defaultPrevented, "no selection: still asks");
+    assert.equal(sheetA.root.all().filter((e) => e._classes.has("zn-field"))[0].value, "hello world", "the highlighted words label the link");
+    click(chipNamed(sheetA, "Paste as text"));
+    assert.equal(ta.value, "see " + url);
+    prefs.set(c.PREF.PASTE_LINK, "selection");
+    ta = prep(sheetA, "see ", 4, 4);
+    assert.ok(!paste().defaultPrevented, "only-over-selection: nothing selected pastes as usual");
+    prefs.set(c.PREF.PASTE_LINK, "off");
+    ta = prep(sheetA, "see docs", 4, 8);
+    assert.ok(!paste().defaultPrevented);
+    assert.ok(!new Ev("paste", { clipboardData: { getData: () => "plain words" } }).defaultPrevented);
+    prefs.delete(c.PREF.PASTE_LINK);
+  });
+
+  await test("B2 table creator inserts the picked size", async () => {
+    const ta = prep(sheetA, "", 0, 0);
+    key(ta, "y", { ctrlKey: true, shiftKey: true, code: "KeyY" });
+    const cell = sheetA.root.all().find((e) => e._classes.has("zn-gcell") && e.getAttribute("aria-label") === "3 columns, 2 rows");
+    click(cell);
+    assert.equal(dialogOf(sheetA), null);
+    const [t] = c.parseBlocks(ta.value);
+    assert.equal(t.type, "table");
+    assert.equal(t.head.length, 3);
+    assert.equal(t.rows.length, 1);
+  });
+
+  await test("B2 quick settings change real preferences; shortcuts can be reassigned and conflicts are refused", async () => {
+    click(byLabel(sheetA, "Quick settings"));
+    assert.ok(dialogOf(sheetA));
+    const row = (label) => sheetA.root.all().find((e) => e._classes.has("zn-quick-row") && e.children[0].textContent === label);
+    click(row("Select and copy text in read view").children[1]);
+    assert.equal(prefs.get(c.PREF.READ_COPY), true);
+    click(row("Text over === or --- is a heading").children[1]);
+    assert.equal(prefs.get(c.PREF.SETEXT), true);
+    click(row("Text size").children[3]);
+    assert.equal(prefs.get(c.PREF.FONT_SIZE), 14);
+    click(chipNamed(sheetA, "Keyboard shortcuts\u2026"));
+    const krow = (label) => sheetA.root.all().find((e) => e._classes.has("zn-quick-row") && e.children[0].textContent === label);
+    const btn = krow("Strikethrough").children[1];
+    click(btn);
+    const press = (k, extra) => key(sheetA.root.all().find((e) => e._classes.has("zn-keybtn") && e.textContent === "Press keys\u2026"), k, extra);
+    press("b", { ctrlKey: true, code: "KeyB" });
+    assert.match(q(sheetA, ".zn-key-note").textContent, /already used by Bold/);
+    press("j", { ctrlKey: true, shiftKey: true, code: "KeyJ" });
+    assert.equal(JSON.parse(prefs.get(c.PREF.SHORTCUTS)).strike, "Ctrl+Shift+J");
+    click(chipNamed(sheetA, "Reset all"));
+    assert.equal(prefs.get(c.PREF.SHORTCUTS), "");
+    click(chipNamed(sheetA, "Back"));
+    click(chipNamed(sheetA, "Done"));
+    assert.equal(dialogOf(sheetA), null);
+  });
+
   sheetA.destroy(); sheetB.destroy();
   console.log(`\n${passed} notes UI tests passed`);
 })().catch((error) => { console.error("FAIL", error); process.exit(1); });

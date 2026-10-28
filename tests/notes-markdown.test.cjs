@@ -224,4 +224,131 @@ test("callouts: > [!NOTE] Title becomes a labelled quote, unknown kinds stay quo
   assert.ok(c.exportText("> [!NOTE]\n> hi").includes("> NOTE"));
 });
 
+test("B2 inline: sub/superscript, keys, link tooltip, mail links, escapes", () => {
+  const n = c.parseInline("H~2~O X^2^ <kbd>Ctrl</kbd> ~~gone~~ a~b \\^not\\^");
+  assert.ok(n.some((x) => x.t === "sub" && text(x.c) === "2"));
+  assert.ok(n.some((x) => x.t === "sup" && text(x.c) === "2"));
+  assert.ok(n.some((x) => x.t === "kbd" && x.s === "Ctrl"));
+  assert.ok(n.some((x) => x.t === "s"), "strike still wins over subscript");
+  assert.ok(!n.some((x) => x.t === "sup" && text(x.c) === "not"), "escaped carets stay text");
+  const [a] = c.parseInline('[x](https://e.org "Tip")');
+  assert.equal(a.title, "Tip");
+  const mail = c.parseInline("<me@x.org> and mailto:y@z.com");
+  assert.equal(mail.filter((x) => x.t === "a").map((x) => x.href).join(), "mailto:me@x.org,mailto:y@z.com");
+  assert.equal(c.safeHref("mailto:a@b.co"), "mailto:a@b.co");
+  assert.equal(c.safeHref("mailto:a@b.co", false), null, "images never take mailto");
+  assert.equal(c.safeHref("javascript:alert(1)"), null);
+});
+
+test("B2 reference links: definitions anywhere, hidden, case-insensitive; unknown stays text", () => {
+  const blocks = c.parseBlocks('See [docs][D] and [d][].\n\n[d]: https://e.org/d "Docs"\n\n[x][nope]');
+  const links = blocks[0].c.filter((x) => x.t === "a");
+  assert.equal(links.length, 2);
+  assert.equal(links[0].href, "https://e.org/d");
+  assert.equal(links[0].title, "Docs");
+  assert.ok(!blocks.some((b) => b.type === "p" && text(b.c).includes("e.org/d")), "the definition line is not shown");
+  assert.equal(text(blocks[blocks.length - 1].c), "[x][nope]");
+  assert.equal(c.parseInline("[a][d]").filter((x) => x.t === "a").length, 0, "no document, no references");
+});
+
+test("B2 Setext headings are opt-in; sources keep their line numbers", () => {
+  same(c.parseBlocks("Title\n=====\n\nSub\n---", false, { setext: true }).map((b) => [b.type, b.level]), [["h", 1], ["h", 2]]);
+  same(c.parseBlocks("Title\n=====\n\ntext\n---").map((b) => b.type), ["p", "p", "hr"], "off: === is text, --- a rule");
+  const blocks = c.parseBlocks("a\n\n\n# H\n\n- x\n- y");
+  assert.equal(blocks.find((b) => b.type === "h").src, 3);
+  assert.ok(!JSON.stringify(blocks).includes('"src"'), "src is not part of the block signature");
+});
+
+test("B2 code blocks keep their language and are coloured by a small offline tokenizer", () => {
+  const [code] = c.parseBlocks("```JS\nconst x = 1;\n```");
+  assert.equal(code.lang, "js");
+  assert.equal(c.parseBlocks("```\nplain\n```")[0].lang, undefined);
+  const kinds = (src, lang) => c.highlightCode(src, lang).map((t) => t.k + ":" + t.s);
+  assert.ok(kinds('const x = foo("a\\"b", 12); // hi', "javascript").join("|").includes("kw:const"));
+  const js = c.highlightCode('const x = foo("a\\"b", 12); // hi', "ts");
+  assert.ok(js.some((t) => t.k === "str" && t.s === '"a\\"b"') && js.some((t) => t.k === "num" && t.s === "12") && js.some((t) => t.k === "fn" && t.s === "foo") && js.some((t) => t.k === "com"));
+  assert.ok(c.highlightCode('{"a": [1, true]}', "json").some((t) => t.k === "prop" && t.s === '"a"'));
+  assert.ok(c.highlightCode("<div class=\"a\"></div>", "html").some((t) => t.k === "tag") );
+  assert.ok(c.highlightCode("SELECT a FROM t -- c", "sql").some((t) => t.k === "kw" && t.s === "SELECT"));
+  assert.ok(c.highlightCode('echo "$HOME" # c', "bash").some((t) => t.k === "prop" || t.k === "str"));
+  same(c.highlightCode("x < y", "unknown-lang"), [{ k: "", s: "x < y" }]);
+  assert.equal(c.highlightCode("a".repeat(30000), "js").length, 1, "huge blocks stay plain");
+  assert.equal(c.highlightCode('const s = "never closed\nlet x', "js").map((t) => t.s).join(""), 'const s = "never closed\nlet x', "tokens always add back up to the text");
+});
+
+test("B2 exports: sub/sup/kbd/title survive in HTML and fall back in text", () => {
+  const html = c.exportHtml('H~2~O X^2^ <kbd>Esc</kbd> [t](https://e.org "tip")');
+  assert.ok(html.includes("<sub>2</sub>") && html.includes("<sup>2</sup>") && html.includes("<kbd>Esc</kbd>") && html.includes('title="tip"'));
+  assert.ok(c.exportText("H~2~O <kbd>Esc</kbd>").includes("H2 Esc") || c.exportText("H~2~O <kbd>Esc</kbd>").includes("H2O Esc"));
+});
+
+test("B2 insert helpers: code block, link, image, table, numbered list", () => {
+  const cb = c.insertCodeBlock("ab", 1, 1);
+  assert.equal(cb.text, "\n```\n\n```\n");
+  const un = c.insertCodeBlock("```js\nx\n```", 0, 11);
+  assert.equal(un.text, "x");
+  assert.equal(c.buildLink("a]b", "https://x.org/a b(1)"), "[a\\]b](https://x.org/a%20b%281%29)");
+  const round = c.parseInline(c.buildLink("a]b", "https://x.org/a b(1)")).find((x) => x.t === "a");
+  assert.equal(text(round.c), "a]b");
+  const img = c.insertImage("alt", 0, 3);
+  assert.equal(img.text, "![alt](https://)");
+  assert.equal(img.text.slice(img.selStart, img.selEnd), "https://");
+  const t = c.makeTable(3, 2);
+  const [tb] = c.parseBlocks(t);
+  assert.equal(tb.type, "table");
+  assert.equal(tb.head.length, 2);
+  assert.equal(tb.rows.length, 2);
+  assert.equal(c.makeTable(999, 999).split("\n").length <= 202, true, "table size is capped");
+  const ins = c.insertTable("abc", 1, 1, 3, 3);
+  assert.ok(ins.text.startsWith("\n\n| Column 1"));
+  assert.equal(c.toggleLinePrefix("a\nb\n\nc", 0, 6, "ordered").text, "1. a\n2. b\n\n3. c");
+  assert.equal(c.toggleLinePrefix("1. a\n2. b", 0, 9, "ordered").text, "a\nb");
+});
+
+test("B2 pasted addresses and 'copy link to highlight' labels", () => {
+  assert.ok(c.pastedLink(" https://e.org/a?b=1 "));
+  assert.equal(c.pastedLink("https://e.org two words"), null);
+  assert.equal(c.pastedLink("javascript:alert(1)"), null);
+  assert.equal(c.pastedLink("just text"), null);
+  assert.equal(c.fragmentLabel("https://e.org/p#:~:text=hello%20wor,ld"), "hello wor\u2026ld");
+  assert.equal(c.fragmentLabel("https://e.org/p"), "");
+});
+
+test("B2 linked scrolling maps by source line, both ways, and clamps at the ends", () => {
+  const a = [{ line: 0, y: 0 }, { line: 10, y: 100 }, { line: 20, y: 400 }];
+  assert.equal(c.mapPosition(a, 15, "line", "y"), 250);
+  assert.equal(c.mapPosition(a, 250, "y", "line"), 15);
+  assert.equal(c.mapPosition(a, -5, "line", "y"), 0);
+  assert.equal(c.mapPosition(a, 999, "y", "line"), 20);
+  same(c.mergeAnchors([{ line: 2, y: 20 }, { line: 2, y: 25 }, { line: 5, y: 50 }], 10, 200).map((x) => x.line), [0, 2, 5, 10]);
+  assert.equal(c.mapPosition([], 5, "y", "line"), 0);
+});
+
+test("B2 shortcuts: defaults, overrides, conflicts, layout-independent digits", () => {
+  const list = c.effectiveShortcuts({});
+  assert.equal(list.find((x) => x.id === "bold").combo, "Ctrl+B");
+  assert.equal(new Set(list.map((x) => x.combo)).size, list.length, "no two defaults share a combination");
+  assert.equal(c.matchShortcutAction({ key: "!", code: "Digit1", ctrlKey: true, shiftKey: true }, list), "heading");
+  const mine = c.effectiveShortcuts(c.parseShortcutMap('{"bold":"","link":"ctrl+alt+k","nope":"Ctrl+Q","code":"K"}'));
+  assert.equal(mine.find((x) => x.id === "bold"), undefined, "empty = unassigned");
+  assert.equal(mine.find((x) => x.id === "link").combo, "Ctrl+Alt+K");
+  assert.equal(mine.find((x) => x.id === "code").combo, "Ctrl+Shift+C", "a combination without a modifier is ignored");
+  assert.equal(c.findShortcutConflict(mine, "bold", "Ctrl+I"), "italic");
+  assert.equal(c.findShortcutConflict(mine, "bold", "Ctrl+Alt+Q"), "");
+  same(c.assignShortcut({}, "bold", "Ctrl+B"), {}, "a default is not stored");
+  same(c.assignShortcut({}, "bold", ""), { bold: "" });
+  assert.equal(c.comboFromEvent({ key: "K", code: "KeyK", ctrlKey: true, shiftKey: true }), "Ctrl+Shift+K");
+  assert.equal(c.comboFromEvent({ key: "Control", ctrlKey: true }), "");
+  same(c.parseShortcutMap("not json"), {});
+});
+
+test("B2 quick settings table points at real preferences and clamps steps", () => {
+  const prefs = new Set(Object.values(c.PREF));
+  for (const o of c.QUICK_OPTIONS) assert.ok(o.meta || prefs.has(o.pref), o.id);
+  const font = c.QUICK_OPTIONS.find((o) => o.id === "font");
+  assert.equal(c.stepOption(font, 40, 1), 40);
+  assert.equal(c.stepOption(font, 8, -1), 8);
+  assert.equal(c.stepOption(font, 13, 1), 14);
+});
+
 console.log(`\n${passed} markdown tests passed`);

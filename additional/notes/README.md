@@ -29,10 +29,23 @@ Highlights are written as `==text==` (yellow) or `=={green}text==` (also `blue`,
 
 ### Markdown supported
 
-Headings (`#` to `######`; seven `#` or `#tag` stay text), paragraphs, **bold** (`**x**` or `__x__`), *italic* (`*x*` or `_x_`), ***bold italic***, ~~strikethrough~~, any of these nested in each other, `code` and fenced code blocks, `[text](https://link)` and bare links, bullet / numbered lists, task lists (`- [ ]`, `- [x]`), ordered lists that number themselves (`1.` `2.` `1.` shows 1, 2, 3; a start such as `42.` is kept), list items with more paragraphs (blank line, then indented text), nested block quotes (`> > text`), callouts (`> [!NOTE] Title`, also tip, important, warning, caution, info), horizontal rules (`---`), **tables** and **images**. Backslash escapes work (`\\*` shows a star), links accept a `"title"` (ignored), `<https://...>` is a link and an image can be a link (`[![alt](img)](url)`). This is a small GitHub-style subset; footnotes, raw HTML and nested tables are not supported.
+Headings (`#` to `######`; seven `#` or `#tag` stay text), paragraphs, **bold** (`**x**` or `__x__`), *italic* (`*x*` or `_x_`), ***bold italic***, ~~strikethrough~~, any of these nested in each other, `code` and fenced code blocks (with colors for a handful of languages, see below), `[text](https://link)` and bare links, bullet / numbered lists, task lists (`- [ ]`, `- [x]`), ordered lists that number themselves (`1.` `2.` `1.` shows 1, 2, 3; a start such as `42.` is kept), list items with more paragraphs (blank line, then indented text), nested block quotes (`> > text`), callouts (`> [!NOTE] Title`, also tip, important, warning, caution, info), horizontal rules (`---`), **tables** and **images**. Backslash escapes work (`\\*` shows a star), `<https://...>` is a link and an image can be a link (`[![alt](img)](url)`). This is a small GitHub-style subset; footnotes, math, raw HTML (`<details>`) and nested tables are not supported on purpose.
 
+- Sub/superscript: `H~2~O`, `X^2^` (no spaces inside). Keys: `<kbd>Ctrl</kbd>` (the only HTML tag understood).
+- Links: `[text](https://link "tooltip")`; reference links `[text][ref]` or `[ref][]` with a line `[ref]: https://link "title"` anywhere in the note (the definition line is not shown); `<me@host.org>` and `mailto:me@host.org` open the mail app. Links may be http, https or mailto; images only http(s).
+- Setext headings (off by default): with *Treat text over === or --- as a heading* on, `Title` over `=====` is a heading 1 and over `-----` a heading 2. Off, `---` stays a horizontal rule and `===` stays text.
+- Code colors: fenced blocks with a language (` ```js `, `ts`, `python`, `c`, `cpp`, `java`, `csharp`, `go`, `rust`, `bash`, `sql`, `json`, `css`, `html`/`xml`) get keyword, string, number, comment, function and tag colors. Small and offline; it is a tokenizer, not a parser, so unusual syntax may be colored plainly. Blocks over 20,000 characters, and unknown languages, stay plain. HTML export keeps the code text without colors.
 - Tables: a header row, a delimiter row (`| --- | :-: | --: |` sets alignment), then rows. `\|` is a literal pipe. Up to 12 columns and 200 rows are shown.
 - Images: `![description](https://...)`. In read view an image is a small placeholder that loads **only when you click it**, so opening a note never contacts a server. Only `http(s)` addresses work.
+
+### Toolbar, link dialog, table creator, quick settings
+
+- The toolbar has a button for every syntax (bold, italic, strikethrough, highlight, heading, bulleted / numbered list, checklist, quote, nesting, rule, inline code, code block, link, image, table, and a `▾` menu for superscript, subscript and keyboard key). Hover a button to see its shortcut.
+- **Link**: select text and press the button (or paste an address) to get *Create link* with the text to show and the address. Pasting a web address asks by default; *Paste as text* keeps it plain. A "copy link to highlight" address (`#:~:text=`) offers the highlighted words as the label. Set the behavior with *Pasting a web address* (ask / only over selected text / plain).
+- **Table**: the button opens a size grid (columns × rows, first row is the header) or two number boxes, and inserts a ready table.
+- **Linked scrolling** (split view) keeps the same *source line* at the top of both panes, so a long wrapped paragraph in the editor and its rendered block stay level. Without layout information it falls back to the proportional position.
+- **Quick settings** (the sliders button, or the `...` menu): text size, line height, wrap, blank lines, line breaks, linked scrolling, copy in read view, link on paste, Setext. Changes are saved at once and are the same preferences as in Zentral settings.
+- **Keyboard shortcuts** (Quick settings → Keyboard shortcuts): click a shortcut and press the new keys; Backspace removes it, *Reset* restores the default. Every shortcut needs Ctrl, Alt or Cmd, and two actions cannot share one. Defaults: Bold Ctrl+B, Italic Ctrl+I, Strike Ctrl+Shift+X, Highlight Ctrl+Shift+H, Code Ctrl+Shift+C, Code block Ctrl+Shift+M, Link Ctrl+Shift+K, Image Ctrl+Shift+G, Heading Ctrl+Shift+1, Numbered Ctrl+Shift+7, Bulleted Ctrl+Shift+8, Quote Ctrl+Shift+9, Checklist Ctrl+Shift+L, Table Ctrl+Shift+Y, New note Ctrl+N, All notes Ctrl+K, Read/edit Ctrl+E, Quick settings Ctrl+,. Rule, nesting, super/subscript, key and split view start unassigned. Your changes are one JSON preference (`zen.workspace.zentral.notes.shortcuts`).
 
 ### Export and import
 
@@ -63,6 +76,10 @@ Notes → Quick notes (the main switch is also under Start here).
 | `zen.workspace.zentral.notes.shortcut` | `Alt+Shift+N` | Needs Alt, Ctrl or Cmd; a bare key is refused. |
 | `zen.workspace.zentral.notes.autosave_seconds` | 5 | Longest gap between saves while typing. |
 | `zen.workspace.zentral.notes.folder` | empty | Absolute folder path. Empty means `zentral-notes` in the profile. An unusable path falls back to the profile folder. |
+| `zen.workspace.zentral.notes.read_copy` | off | Lets you select and copy text in the read view. |
+| `zen.workspace.zentral.notes.setext` | off | Text over `===` / `---` is a heading. |
+| `zen.workspace.zentral.notes.paste_link` | ask | Pasting a web address: `ask`, `selection` (only over selected text) or `off`. |
+| `zen.workspace.zentral.notes.shortcuts` | empty | Changed editor shortcuts as JSON; set in Quick settings, empty = defaults. |
 
 ## Looks
 

@@ -702,8 +702,13 @@ function nativeSidebarSide() {
       LINE_HEIGHT: "zen.workspace.zentral.notes.line_height",
       BLANK_LINES: "zen.workspace.zentral.notes.blank_lines",
       LINE_BREAKS: "zen.workspace.zentral.notes.line_breaks",
+      READ_COPY: "zen.workspace.zentral.notes.read_copy",
+      SETEXT: "zen.workspace.zentral.notes.setext",
+      PASTE_LINK: "zen.workspace.zentral.notes.paste_link",
+      SHORTCUTS: "zen.workspace.zentral.notes.shortcuts",
     });
-    const VIEW_PREFS = new Set([PREF.WRAP, PREF.FONT_SIZE, PREF.LINE_HEIGHT]);
+    const VIEW_PREFS = new Set([PREF.WRAP, PREF.FONT_SIZE, PREF.LINE_HEIGHT, PREF.READ_COPY]);
+    const READ_PREFS = new Set([PREF.BLANK_LINES, PREF.LINE_BREAKS, PREF.SETEXT]);
     const OBS_TOPIC = "zentral-notes-changed";
     const IDLE_SAVE_MS = 800; // pause after the last keystroke
     const DEFAULT_MAX_SAVE_SECONDS = 5; // longest gap while still typing
@@ -724,6 +729,7 @@ function nativeSidebarSide() {
     const MAX_TABLE_COLS = 12;
     const MAX_TABLE_ROWS = 200;
     const PREVIEW_IDLE_MS = 250; // split view: re-render this long after the last keystroke
+    const MAX_HIGHLIGHT_CHARS = 20000; // longer code blocks are shown without syntax colors
     const MAX_IMPORT_FILES = 500;
     const MAX_IMPORT_BYTES = 1024 * 1024;
 
@@ -877,8 +883,9 @@ function nativeSidebarSide() {
     // Pure core: small Markdown dialect (safe: produces data, never HTML)
     // ======================================================================
     // Inline: `code`, **bold**, ==highlight== / =={green}highlight==, ~~strike~~,
-    // *italic* / _italic_, [text](https://link), ![alt](https://image), bare https:// links
-    // (http/https only). An image is a click-to-load placeholder in the UI (nothing is fetched
+    // *italic* / _italic_, [text](https://link "tooltip"), [text][ref] with a "[ref]: url" line anywhere,
+    // ![alt](https://image), bare https:// links, <user@host> / mailto: links, H~2~O, X^2^, <kbd>Ctrl</kbd>
+    // (links: http/https/mailto only; images: http/https only). An image is a click-to-load placeholder in the UI (nothing is fetched
     // until the person asks), so opening a note never contacts a remote server.
     const INLINE_RE = new RegExp(
       [
@@ -892,19 +899,51 @@ function nativeSidebarSide() {
         "~~(?=\\S)([\\s\\S]+?)(?<=\\S)~~", // 10 strike
         "(?<![\\w*])\\*([^\\s*](?:[\\s\\S]*?[^\\s*])?)\\*(?![\\w*])", // 11 italic
         "(?<![\\w_])_([^\\s_](?:[\\s\\S]*?[^\\s_])?)_(?![\\w_])", // 12 italic
-        "\\[((?:!\\[[^\\]\\n]*\\]\\([^\\s)]+\\)|[^\\]\\n])+)\\]\\(([^\\s)]+)(?:\\s+\\x22[^\\x22]*\\x22)?\\)", // 13 text, 14 href (a "title" is accepted and ignored)
-        "<?(https?:\\/\\/[^\\s<>\"')\\]]+)>?", // 15 bare url, or <url>
-        "!\\[([^\\]\\n]*)\\]\\(([^\\s)]+)(?:\\s+\\x22[^\\x22]*\\x22)?\\)", // 16 alt, 17 src (image; a "title" is ignored)
+        "\\[((?:!\\[[^\\]\\n]*\\]\\([^\\s)]+\\)|[^\\]\\n])+)\\]\\(([^\\s)]+)(?:\\s+\\x22([^\\x22]*)\\x22)?\\)", // 13 text, 14 href, 15 "title" (tooltip)
+        "<?(https?:\\/\\/[^\\s<>\"')\\]]+)>?", // 16 bare url, or <url>
+        "!\\[([^\\]\\n]*)\\]\\(([^\\s)]+)(?:\\s+\\x22([^\\x22]*)\\x22)?\\)", // 17 alt, 18 src, 19 "title" (image)
+        "(?<!~)~([^\\s~]+)~(?!~)", // 20 subscript  H~2~O
+        "\\^([^\\s^]+)\\^", // 21 superscript  X^2^
+        "<[kK][bB][dD]>([^<\\n]+)<\\/[kK][bB][dD]>", // 22 keyboard key
+        "\\[([^\\]\\n]+)\\]\\[([^\\]\\n]*)\\]", // 23 text, 24 label (reference link, see REFS)
+        "<(?:mailto:)?([^\\s<>@\\x22]+@[^\\s<>@\\x22]+\\.[^\\s<>@\\x22]+)>", // 25 <user@host.tld>
+        "(?<![\\w/])mailto:([^\\s<>@\\x22]+@[^\\s<>@\\x22]+\\.[^\\s<>@\\x22,;)\\]]+)", // 26 bare mailto:user@host.tld
       ].join("|"),
       "g",
     );
-    function safeHref(raw) {
+    // Links may be http, https or mailto; images (mail = false) only http and https.
+    function safeHref(raw, mail = true) {
       try {
-        const u = new URL(String(raw));
+        const text = String(raw);
+        if (mail && /^mailto:[^\s<>"]+@[^\s<>"]+$/i.test(text)) return text;
+        const u = new URL(text);
         return /^https?:$/.test(u.protocol) ? u.href : null;
       } catch (_) {
         return null;
       }
+    }
+    // Reference definitions ("[ref]: https://... "title"") of the document being parsed. Set by
+    // parseBlocks for the duration of one parse; null outside it (references then stay text).
+    let REFS = null;
+    const refKey = (label) => String(label).trim().replace(/\s+/g, " ").toLowerCase();
+    const REF_DEF_RE = /^ {0,3}\[([^\]\n]+)\]:\s+<?([^\s>]+)>?(?:\s+(?:"([^"]*)"|'([^']*)'|\(([^)]*)\)))?\s*$/;
+    // Takes the definition lines out (blanked, so line numbers stay true) and returns them.
+    function collectRefs(lines) {
+      const refs = new Map();
+      let fence = false;
+      for (let i = 0; i < lines.length; i++) {
+        if (/^```/.test(lines[i])) {
+          fence = !fence;
+          continue;
+        }
+        if (fence) continue;
+        const m = REF_DEF_RE.exec(lines[i]);
+        if (!m) continue;
+        const key = refKey(m[1]);
+        if (!refs.has(key)) refs.set(key, { href: m[2], title: m[3] ?? m[4] ?? m[5] ?? "" });
+        lines[i] = "";
+      }
+      return refs;
     }
     function parseInlineRaw(text, depth = 0) {
       text = String(text);
@@ -938,17 +977,33 @@ function nativeSidebarSide() {
           out.push({ t: "s", c: parseInline(m[10], depth + 1) });
         else if (m[11] !== undefined || m[12] !== undefined)
           out.push({ t: "i", c: parseInline(m[11] ?? m[12], depth + 1) });
-        else if (m[16] !== undefined) {
-          const href = safeHref(m[17]);
-          if (href) out.push({ t: "img", alt: m[16], href });
+        else if (m[17] !== undefined) {
+          const href = safeHref(m[18], false);
+          if (href) out.push({ t: "img", alt: m[17], href });
           else out.push({ t: "text", s: m[0] });
         } else if (m[13] !== undefined) {
           const href = safeHref(m[14]);
-          if (href)
-            out.push({ t: "a", href, c: parseInline(m[13], depth + 1) });
-          else out.push({ t: "text", s: m[0] });
-        } else if (m[15] !== undefined) {
-          let url = m[15];
+          if (href) {
+            const a = { t: "a", href, c: parseInline(m[13], depth + 1) };
+            if (m[15]) a.title = m[15];
+            out.push(a);
+          } else out.push({ t: "text", s: m[0] });
+        } else if (m[20] !== undefined) out.push({ t: "sub", c: parseInline(m[20], depth + 1) });
+        else if (m[21] !== undefined) out.push({ t: "sup", c: parseInline(m[21], depth + 1) });
+        else if (m[22] !== undefined) out.push({ t: "kbd", s: m[22] });
+        else if (m[23] !== undefined) {
+          const def = REFS?.get(refKey(m[24] || m[23]));
+          const href = def && safeHref(def.href);
+          if (href) {
+            const a = { t: "a", href, c: parseInline(m[23], depth + 1) };
+            if (def.title) a.title = def.title;
+            out.push(a);
+          } else out.push({ t: "text", s: m[0] });
+        } else if (m[25] !== undefined || m[26] !== undefined) {
+          const addr = m[25] ?? m[26];
+          out.push({ t: "a", href: "mailto:" + addr, c: [{ t: "text", s: addr }] });
+        } else if (m[16] !== undefined) {
+          let url = m[16];
           let trail = "";
           const tm = /[.,;:!?]+$/.exec(url);
           if (tm) {
@@ -968,12 +1023,12 @@ function nativeSidebarSide() {
 
     // Backslash escapes: \* \# \[ ... show the character itself. They are swapped for private-use
     // characters before parsing and swapped back in the finished text (so they cannot start markup).
-    const ESC_CHARS = "\\`*_{}[]()#+-.!|=~<>";
+    const ESC_CHARS = "\\`*_{}[]()#+-.!|=~<>^";
     function parseInline(text, depth = 0) {
       text = String(text);
       if (depth > 0 || !text.includes("\\")) return parseInlineRaw(text, depth);
-      const swapped = text.replace(/\\([\\`*_{}[\]()#+\-.!|=~<>])/g, (_m, ch) => String.fromCharCode(0xe000 + ESC_CHARS.indexOf(ch)));
-      const back = (str, keepSlash) => str.replace(/[\ue000-\ue013]/g, (c) => (keepSlash ? "\\" : "") + ESC_CHARS[c.charCodeAt(0) - 0xe000]);
+      const swapped = text.replace(/\\([\\`*_{}[\]()#+\-.!|=~<>^])/g, (_m, ch) => String.fromCharCode(0xe000 + ESC_CHARS.indexOf(ch)));
+      const back = (str, keepSlash) => str.replace(/[\ue000-\ue014]/g, (c) => (keepSlash ? "\\" : "") + ESC_CHARS[c.charCodeAt(0) - 0xe000]);
       const fix = (nodes) => {
         for (const n of nodes) {
           if (n.t === "text") n.s = back(n.s, false);
@@ -1034,7 +1089,22 @@ function nativeSidebarSide() {
     }
     // opts.joinLines: a single newline inside a paragraph is a space (standard Markdown) instead of
     // a line break. opts.keepBlanks: every blank line after the first adds one empty gap.
+    // opts.setext: text over a line of === (heading 1) or --- (heading 2) is a heading; off, a line of
+    // --- is a horizontal rule and === stays text. Top-level blocks carry a non-enumerable `src`: the
+    // source line they start on (used by linked scrolling; not part of the block's signature).
     function parseBlocks(text, nested = false, opts = {}) {
+      if (nested) return parseBlocksIn(text, true, opts);
+      const lines = normalizeNewlines(text).split("\n");
+      const before = REFS;
+      REFS = collectRefs(lines);
+      try {
+        return parseBlocksIn(lines.join("\n"), false, opts);
+      } finally {
+        REFS = before;
+      }
+    }
+    const SETEXT_RE = /^\s{0,3}(=+|-+)\s*$/;
+    function parseBlocksIn(text, nested, opts) {
       const lines = normalizeNewlines(text).split("\n");
       const blocks = [];
       let i = 0;
@@ -1046,6 +1116,8 @@ function nativeSidebarSide() {
         /^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(l);
       while (i < lines.length) {
         const line = lines[i];
+        const firstNew = blocks.length;
+        const startLine = i;
         let m;
         if (!line.trim()) {
           let run = 0;
@@ -1055,13 +1127,15 @@ function nativeSidebarSide() {
           }
           if (opts.keepBlanks && run > 1 && blocks.length && i < lines.length)
             blocks.push({ type: "gap", n: run - 1 });
-        } else if ((m = /^```(\w*)\s*$/.exec(line))) {
+        } else if ((m = /^```([\w+#.-]*)\s*$/.exec(line))) {
           const buf = [];
           i++;
           while (i < lines.length && !/^```\s*$/.test(lines[i]))
             buf.push(lines[i++]);
           i++; // closing fence (or end of text)
-          blocks.push({ type: "code", text: buf.join("\n") });
+          const code = { type: "code", text: buf.join("\n") };
+          if (m[1]) code.lang = m[1].toLowerCase();
+          blocks.push(code);
         } else if ((m = /^(#{1,6})\s+(.*\S)\s*$/.exec(line))) {
           blocks.push({
             type: "h",
@@ -1133,18 +1207,285 @@ function nativeSidebarSide() {
           i = t.next;
         } else {
           const buf = [];
-          while (i < lines.length && lines[i].trim() && !startsBlock(lines[i]) && !isTableStart(lines, i))
+          while (
+            i < lines.length &&
+            lines[i].trim() &&
+            !startsBlock(lines[i]) &&
+            !isTableStart(lines, i) &&
+            !(opts.setext && buf.length && SETEXT_RE.test(lines[i]))
+          )
             buf.push(lines[i++]);
           if (!buf.length) buf.push(lines[i++]);
-          const c = [];
-          buf.forEach((l, idx) => {
-            if (idx) c.push(opts.joinLines ? { t: "text", s: " " } : { t: "br" });
-            c.push(...parseInline(l));
-          });
-          blocks.push({ type: "p", c });
+          const under = opts.setext && i < lines.length ? SETEXT_RE.exec(lines[i]) : null;
+          if (under) {
+            blocks.push({
+              type: "h",
+              level: under[1][0] === "=" ? 1 : 2,
+              c: parseInline(buf.map((l) => l.trim()).join(" ")),
+              line: nested ? -1 : startLine,
+            });
+            i++; // the underline
+          } else {
+            const c = [];
+            buf.forEach((l, idx) => {
+              if (idx) c.push(opts.joinLines ? { t: "text", s: " " } : { t: "br" });
+              c.push(...parseInline(l));
+            });
+            blocks.push({ type: "p", c });
+          }
         }
+        if (!nested)
+          for (let k = firstNew; k < blocks.length; k++) Object.defineProperty(blocks[k], "src", { value: startLine });
       }
       return blocks;
+    }
+
+
+    // ======================================================================
+    // Pure core: syntax colors for fenced code (small, offline, a handful of languages)
+    // ======================================================================
+    // highlightCode(text, lang) -> [{ k, s }] where k is "" (plain), kw, lit, str, num, com, fn, prop or
+    // tag. Adjacent pieces of the same kind are merged. Unknown languages, and blocks longer than
+    // MAX_HIGHLIGHT_CHARS, come back as one plain piece. It only reads text; it never builds HTML.
+    const words = (t) => new Set(t.split(" "));
+    const C_KW = "break case continue default do else for goto if return sizeof static struct switch typedef union while const enum extern volatile void";
+    const LANG_SPECS = {
+      js: { kw: words("async await break case catch class const continue debugger default delete do else export extends finally for from function get if import in instanceof let new of return set static super switch throw try typeof var void while with yield as interface type enum implements public private protected readonly abstract declare namespace"), lit: words("true false null undefined NaN Infinity this"), line: ["//"], block: ["/*", "*/"], quotes: ["\"", "'", "`"], fn: true },
+      py: { kw: words("and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield match case"), lit: words("True False None self"), line: ["#"], quotes: ["\"", "'"], triple: true, fn: true, decorator: true },
+      c: { kw: words(C_KW + " inline restrict auto register"), lit: words("true false NULL nullptr"), line: ["//"], block: ["/*", "*/"], quotes: ["\"", "'"], fn: true, preproc: true },
+      cpp: { kw: words(C_KW + " class namespace template typename public private protected virtual override new delete try catch throw using auto constexpr operator this final"), lit: words("true false NULL nullptr"), line: ["//"], block: ["/*", "*/"], quotes: ["\"", "'"], fn: true, preproc: true },
+      java: { kw: words("abstract assert boolean break byte case catch char class const continue default do double else enum extends final finally float for if implements import instanceof int interface long native new package private protected public return short static super switch synchronized this throw throws transient try void volatile while var record"), lit: words("true false null"), line: ["//"], block: ["/*", "*/"], quotes: ["\"", "'"], fn: true, decorator: true },
+      cs: { kw: words("abstract as async await base bool break byte case catch char class const continue decimal default delegate do double else enum event explicit extern finally fixed float for foreach goto if implicit in int interface internal is lock long namespace new object operator out override params private protected public readonly ref return sealed short sizeof static string struct switch this throw try typeof uint ulong unsafe ushort using var virtual void volatile while"), lit: words("true false null"), line: ["//"], block: ["/*", "*/"], quotes: ["\"", "'"], fn: true },
+      go: { kw: words("break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var"), lit: words("true false nil iota"), line: ["//"], block: ["/*", "*/"], quotes: ["\"", "`", "'"], fn: true },
+      rust: { kw: words("as async await break const continue crate dyn else enum extern fn for if impl in let loop match mod move mut pub ref return self Self static struct super trait type unsafe use where while"), lit: words("true false None Some Ok Err"), line: ["//"], block: ["/*", "*/"], quotes: ["\""], fn: true },
+      sh: { kw: words("if then else elif fi for while until do done case esac in function select return exit export local readonly unset echo cd source alias"), lit: words("true false"), line: ["#"], quotes: ["\"", "'"], dollar: true, hashWord: true },
+      sql: { kw: words("SELECT FROM WHERE AND OR NOT NULL INSERT INTO VALUES UPDATE SET DELETE CREATE TABLE ALTER DROP INDEX VIEW JOIN INNER LEFT RIGHT OUTER FULL ON AS GROUP BY ORDER HAVING LIMIT OFFSET DISTINCT UNION ALL EXISTS IN BETWEEN LIKE IS CASE WHEN THEN ELSE END PRIMARY KEY FOREIGN REFERENCES DEFAULT UNIQUE CHECK ASC DESC COUNT SUM AVG MIN MAX"), lit: words("TRUE FALSE NULL"), line: ["--"], block: ["/*", "*/"], quotes: ["'", "\""], fold: true, fn: true },
+      json: { kw: new Set(), lit: words("true false null"), line: [], quotes: ["\""], jsonKeys: true },
+      css: { kw: new Set(), lit: new Set(), line: [], block: ["/*", "*/"], quotes: ["\"", "'"], css: true },
+      html: { kw: new Set(), lit: new Set(), line: [], quotes: ["\"", "'"], markup: true },
+    };
+    const LANG_ALIAS = {
+      javascript: "js", js: "js", jsx: "js", mjs: "js", cjs: "js", typescript: "js", ts: "js", tsx: "js",
+      python: "py", py: "py", c: "c", h: "c", cpp: "cpp", "c++": "cpp", cc: "cpp", hpp: "cpp",
+      java: "java", csharp: "cs", "c#": "cs", cs: "cs", go: "go", golang: "go", rust: "rust", rs: "rust",
+      bash: "sh", sh: "sh", shell: "sh", zsh: "sh", console: "sh", sql: "sql", json: "json", jsonc: "json",
+      css: "css", html: "html", xml: "html", svg: "html", xhtml: "html",
+    };
+    const codeLangKey = (lang) => LANG_ALIAS[String(lang || "").toLowerCase()] || null;
+    function highlightCode(text, lang) {
+      text = String(text);
+      const spec = LANG_SPECS[codeLangKey(lang)];
+      if (!spec || text.length > MAX_HIGHLIGHT_CHARS) return text ? [{ k: "", s: text }] : [];
+      const out = [];
+      const push = (k, str) => {
+        if (!str) return;
+        const last = out[out.length - 1];
+        if (last && last.k === k) last.s += str;
+        else out.push({ k, s: str });
+      };
+      const n = text.length;
+      let i = 0;
+      let depth = 0; // css braces
+      let inTag = false; // markup: between < and >
+      const isWordStart = (c) => /[A-Za-z_$]/.test(c);
+      const endOfString = (from, q) => {
+        let j = from + 1;
+        while (j < n) {
+          if (text[j] === "\\") j += 2;
+          else if (text[j] === q) return j + 1;
+          else if (text[j] === "\n" && q !== "`") return j; // an unclosed string stops at the line end
+          else j++;
+        }
+        return n;
+      };
+      while (i < n) {
+        const c = text[i];
+        // markup (html / xml)
+        if (spec.markup) {
+          if (text.startsWith("<!--", i)) {
+            const e = text.indexOf("-->", i + 4);
+            const to = e < 0 ? n : e + 3;
+            push("com", text.slice(i, to));
+            i = to;
+            continue;
+          }
+          if (!inTag && c === "<" && /[A-Za-z/!?]/.test(text[i + 1] || "")) {
+            const m = /^<[/!?]?[A-Za-z][\w:.-]*/.exec(text.slice(i, i + 80));
+            if (m) {
+              push("tag", m[0]);
+              i += m[0].length;
+              inTag = true;
+              continue;
+            }
+          }
+          if (inTag) {
+            if (c === ">" || (c === "/" && text[i + 1] === ">")) {
+              const to = c === ">" ? i + 1 : i + 2;
+              push("tag", text.slice(i, to));
+              i = to;
+              inTag = false;
+              continue;
+            }
+            if (c === '"' || c === "'") {
+              const to = endOfString(i, c);
+              push("str", text.slice(i, to));
+              i = to;
+              continue;
+            }
+            const am = /^[A-Za-z_:][\w:.-]*/.exec(text.slice(i, i + 60));
+            if (am) {
+              push("prop", am[0]);
+              i += am[0].length;
+              continue;
+            }
+          }
+          push("", c);
+          i++;
+          continue;
+        }
+        // comments
+        if (spec.block && text.startsWith(spec.block[0], i)) {
+          const e = text.indexOf(spec.block[1], i + spec.block[0].length);
+          const to = e < 0 ? n : e + spec.block[1].length;
+          push("com", text.slice(i, to));
+          i = to;
+          continue;
+        }
+        const lc = spec.line.find((t) => text.startsWith(t, i));
+        if (lc && (!spec.hashWord || i === 0 || /[\s;|&(]/.test(text[i - 1]))) {
+          const e = text.indexOf("\n", i);
+          const to = e < 0 ? n : e;
+          push("com", text.slice(i, to));
+          i = to;
+          continue;
+        }
+        // strings
+        if (spec.triple && (text.startsWith('"""', i) || text.startsWith("'''", i))) {
+          const q = text.slice(i, i + 3);
+          const e = text.indexOf(q, i + 3);
+          const to = e < 0 ? n : e + 3;
+          push("str", text.slice(i, to));
+          i = to;
+          continue;
+        }
+        if (spec.quotes.includes(c)) {
+          const to = endOfString(i, c);
+          const str = text.slice(i, to);
+          let kind = "str";
+          if (spec.jsonKeys && /^\s*:/.test(text.slice(to, to + 40))) kind = "prop";
+          push(kind, str);
+          i = to;
+          continue;
+        }
+        // css
+        if (spec.css) {
+          if (c === "{") depth++;
+          else if (c === "}") depth = Math.max(0, depth - 1);
+          const at = /^@[\w-]+/.exec(text.slice(i, i + 40));
+          if (at) {
+            push("kw", at[0]);
+            i += at[0].length;
+            continue;
+          }
+          const hex = /^#[0-9a-fA-F]{3,8}\b/.exec(text.slice(i, i + 12));
+          if (hex && depth > 0) {
+            push("num", hex[0]);
+            i += hex[0].length;
+            continue;
+          }
+          const word = /^-{0,2}[A-Za-z_][\w-]*/.exec(text.slice(i, i + 80));
+          if (word && !/[\w-]/.test(text[i - 1] || "")) {
+            const after = text.slice(i + word[0].length, i + word[0].length + 40);
+            push(depth > 0 && /^\s*:/.test(after) ? "prop" : "", word[0]);
+            i += word[0].length;
+            continue;
+          }
+        }
+        // shell variables, decorators, preprocessor lines
+        if (spec.dollar && c === "$") {
+          const vm = /^\$(?:\{[^}\n]*\}|[A-Za-z_]\w*|[0-9@#?*!$-])/.exec(text.slice(i, i + 80));
+          if (vm) {
+            push("prop", vm[0]);
+            i += vm[0].length;
+            continue;
+          }
+        }
+        if (spec.decorator && c === "@" && /[A-Za-z_]/.test(text[i + 1] || "")) {
+          const dm = /^@[\w.]+/.exec(text.slice(i, i + 80));
+          push("fn", dm[0]);
+          i += dm[0].length;
+          continue;
+        }
+        if (spec.preproc && c === "#" && /^\s*$/.test(text.slice(text.lastIndexOf("\n", i - 1) + 1, i))) {
+          const e = text.indexOf("\n", i);
+          const to = e < 0 ? n : e;
+          push("kw", text.slice(i, to));
+          i = to;
+          continue;
+        }
+        // numbers (not inside a word)
+        if (/[0-9]/.test(c) && !/[\w$]/.test(text[i - 1] || "")) {
+          const nm = /^(?:0[xX][\da-fA-F_]+|0[bB][01_]+|\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?)[a-zA-Z%]*/.exec(text.slice(i, i + 60));
+          push("num", nm[0]);
+          i += nm[0].length;
+          continue;
+        }
+        // words
+        if (isWordStart(c)) {
+          const wm = /^[A-Za-z_$][\w$]*/.exec(text.slice(i, i + 120));
+          const w = wm[0];
+          const key = spec.fold ? w.toUpperCase() : w;
+          let kind = "";
+          if (spec.kw.has(key)) kind = "kw";
+          else if (spec.lit.has(key)) kind = "lit";
+          else if (spec.fn && /^\s?\(/.test(text.slice(i + w.length, i + w.length + 2))) kind = "fn";
+          push(kind, w);
+          i += w.length;
+          continue;
+        }
+        push("", c);
+        i++;
+      }
+      return out;
+    }
+
+    // ======================================================================
+    // Pure core: linked scrolling (map the top visible source line to the rendered block)
+    // ======================================================================
+    // Anchors are [{ line, y }] sorted by both fields: where a source line starts in a pane. mapPosition
+    // converts a position in one pane to the other by straight-line interpolation between the two
+    // anchors around it, so the same source line stays at the top of both panes whatever their line
+    // heights are. `from` / `to` name the fields ("y" or "line").
+    function mapPosition(anchors, value, from, to) {
+      const n = anchors.length;
+      if (!n) return 0;
+      if (value <= anchors[0][from]) return anchors[0][to];
+      if (value >= anchors[n - 1][from]) return anchors[n - 1][to];
+      let lo = 0,
+        hi = n - 1;
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (anchors[mid][from] <= value) lo = mid;
+        else hi = mid;
+      }
+      const a = anchors[lo],
+        b = anchors[hi];
+      const span = b[from] - a[from];
+      return span > 0 ? a[to] + ((value - a[from]) / span) * (b[to] - a[to]) : a[to];
+    }
+    // Anchors for the rendered pane: one per top-level block (or list item) with its source line and
+    // the offset of its first node; `ends` closes the list at the total line count / scroll height.
+    function mergeAnchors(list, endLine, endY) {
+      const out = [];
+      for (const a of list) {
+        const last = out[out.length - 1];
+        if (last && (a.line <= last.line || a.y <= last.y)) continue; // keep both fields strictly increasing
+        out.push(a);
+      }
+      const last = out[out.length - 1];
+      if (!last || (endLine > last.line && endY > last.y)) out.push({ line: endLine, y: endY });
+      if (!out.length || out[0].line > 0) out.unshift({ line: 0, y: 0 });
+      return out;
     }
 
     // ======================================================================
@@ -1177,13 +1518,13 @@ function nativeSidebarSide() {
         label: "HTML page",
         ext: "html",
         loses:
-          "Highlight colors, tables, links and images are kept. Checkboxes become read-only, images load from the web when you open the file, and the note\u2019s color, pin and dates are not included.",
+          "Highlight colors, tables, links, images, sub/superscript and keys are kept. Code blocks keep their text but lose their syntax colors. Checkboxes become read-only, images load from the web when you open the file, and the note\u2019s color, pin and dates are not included.",
       },
       txt: {
         label: "Plain text",
         ext: "txt",
         loses:
-          "All formatting is dropped: bold, italic, strikethrough, highlights and heading sizes disappear. Links are written as text followed by the address, images become [image: description], tables become rows separated by \" | \".",
+          "All formatting is dropped: bold, italic, strikethrough, highlights, sub/superscript and heading sizes disappear. Links are written as text followed by the address, images become [image: description], tables become rows separated by \" | \".",
       },
       pdf: {
         label: "PDF (print)",
@@ -1206,10 +1547,11 @@ function nativeSidebarSide() {
         else if (n.t === "br") out += "<br>";
         else if (n.t === "code") out += "<code>" + escHtml(n.s) + "</code>";
         else if (n.t === "img") out += '<img src="' + escHtml(n.href) + '" alt="' + escHtml(n.alt) + '">';
-        else if (n.t === "a") out += '<a href="' + escHtml(n.href) + '" rel="noopener noreferrer">' + inlineHtml(n.c) + "</a>";
+        else if (n.t === "a") out += '<a href="' + escHtml(n.href) + '"' + (n.title ? ' title="' + escHtml(n.title) + '"' : "") + ' rel="noopener noreferrer">' + inlineHtml(n.c) + "</a>";
+        else if (n.t === "kbd") out += "<kbd>" + escHtml(n.s) + "</kbd>";
         else if (n.t === "hl") out += '<mark data-color="' + escHtml(n.color) + '">' + inlineHtml(n.c) + "</mark>";
         else {
-          const tag = { b: "strong", i: "em", s: "del" }[n.t];
+          const tag = { b: "strong", i: "em", s: "del", sub: "sub", sup: "sup" }[n.t];
           if (tag) out += "<" + tag + ">" + inlineHtml(n.c) + "</" + tag + ">";
         }
       }
@@ -1263,7 +1605,8 @@ function nativeSidebarSide() {
     }
     const EXPORT_CSS =
       ":root{color-scheme:light dark}body{max-width:46rem;margin:2rem auto;padding:0 1rem;font:16px/1.6 system-ui,sans-serif}" +
-      "pre{overflow:auto;padding:.6em .8em;background:rgba(127,127,127,.15);border-radius:6px}code{font-family:ui-monospace,monospace}" +
+      "pre{overflow:auto;padding:.6em .8em;background:rgba(127,127,127,.15);border-radius:6px}code,kbd{font-family:ui-monospace,monospace}" +
+      "kbd{padding:0 .35em;border:1px solid rgba(127,127,127,.6);border-radius:4px;font-size:.9em}" +
       "blockquote{margin:.6em 0;padding-left:1em;border-left:3px solid rgba(127,127,127,.5)}table{border-collapse:collapse}" +
       "th,td{border:1px solid rgba(127,127,127,.5);padding:.3em .6em}img{max-width:100%}" +
       'mark{background:#fff176;color:#000}mark[data-color=green]{background:#a5d6a7}mark[data-color=blue]{background:#90caf9}' +
@@ -1281,7 +1624,7 @@ function nativeSidebarSide() {
     function inlineText(nodes) {
       let out = "";
       for (const n of nodes) {
-        if (n.t === "text" || n.t === "code") out += n.s;
+        if (n.t === "text" || n.t === "code" || n.t === "kbd") out += n.s;
         else if (n.t === "br") out += "\n";
         else if (n.t === "img") out += n.alt ? "[image: " + n.alt + "]" : "[image]";
         else if (n.t === "a") {
@@ -1379,6 +1722,7 @@ function nativeSidebarSide() {
       check: { test: /^\s*[-*+]\s+\[[ xX]\]\s/, add: "- [ ] " },
       heading: { test: /^#{1,6}\s/, add: "## " },
       quote: { test: /^>\s?/, add: "> " },
+      ordered: { test: /^\s*\d+[.)]\s+/, add: (n) => n + ". " },
     };
     const STRIP_PREFIX =
       /^(\s*)(?:(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?|#{1,6}\s+|>\s?)/;
@@ -1391,11 +1735,15 @@ function nativeSidebarSide() {
       if (le < ls) le = ls;
       const lines = value.slice(ls, le).split("\n");
       const all = lines.every((l) => !l.trim() || def.test.test(l));
+      let count = 0;
       const out = lines
         .map((l) => {
           if (!l.trim()) return l;
           const stripped = l.replace(STRIP_PREFIX, "$1");
-          return all ? stripped : stripped.replace(/^(\s*)/, "$1" + def.add);
+          if (all) return stripped;
+          count++;
+          const add = typeof def.add === "function" ? def.add(count) : def.add;
+          return stripped.replace(/^(\s*)/, "$1" + add);
         })
         .join("\n");
       return { start: ls, end: le, text: out, selStart: ls, selEnd: ls + out.length };
@@ -1464,6 +1812,183 @@ function nativeSidebarSide() {
       );
       return lines.join("\n");
     }
+
+    // ---- insert helpers: code, links, images, tables ----------------------------------------------
+    // Fenced code block on its own lines. A selection that already is a fenced block is unwrapped.
+    function insertCodeBlock(value, s, e, lang = "") {
+      const sel = value.slice(s, e);
+      const fenced = /^```[\w+#.-]*\n([\s\S]*?)\n?```$/.exec(sel);
+      if (fenced) return { start: s, end: e, text: fenced[1], selStart: s, selEnd: s + fenced[1].length };
+      const lead = s > 0 && value[s - 1] !== "\n" ? "\n" : "";
+      const trail = e < value.length && value[e] !== "\n" ? "\n" : "";
+      const open = "```" + lang + "\n";
+      const text = lead + open + sel + "\n```" + trail;
+      const inner = s + lead.length + open.length;
+      return { start: s, end: e, text, selStart: inner, selEnd: inner + sel.length };
+    }
+    // [text](address): "]" in the text and spaces or brackets in the address are escaped so the link
+    // always parses back to what was typed.
+    function buildLink(text, url) {
+      const label = String(text).replace(/\\?\]/g, "\\]").replace(/\n+/g, " ");
+      const href = String(url).trim().replace(/\s/g, "%20").replace(/\(/g, "%28").replace(/\)/g, "%29");
+      return "[" + label + "](" + href + ")";
+    }
+    function insertLink(value, s, e, text, url) {
+      const md = buildLink(text, url);
+      return { start: s, end: e, text: md, selStart: s + md.length, selEnd: s + md.length };
+    }
+    // Pasted text that is one web or mail address (nothing else) -> the safe address, or null.
+    function pastedLink(raw) {
+      const t = String(raw ?? "").trim();
+      if (!t || /\s/.test(t) || t.length > 2000) return null;
+      return /^mailto:/i.test(t) || /^https?:\/\//i.test(t) ? safeHref(t) && t : null;
+    }
+    // A "copy link to highlight" address (#:~:text=start,end) names the quoted words: they make a good label.
+    function fragmentLabel(url) {
+      const m = /#:~:text=([^&]+)/.exec(String(url));
+      if (!m) return "";
+      try {
+        const parts = m[1].split(",").map((x) => decodeURIComponent(x.replace(/^[-]|[-]$/g, "")));
+        const label = parts.length > 1 ? parts[0] + "\u2026" + parts[parts.length - 1] : parts[0];
+        return label.length > 80 ? label.slice(0, 79) + "\u2026" : label;
+      } catch (_) {
+        return "";
+      }
+    }
+    function insertImage(value, s, e) {
+      const alt = value.slice(s, e).replace(/[\[\]\n]/g, " ").trim();
+      const text = "![" + alt + "](https://)";
+      const from = s + 2 + alt.length + 2;
+      return { start: s, end: e, text, selStart: from, selEnd: from + 8 };
+    }
+    const clampInt = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v)) || lo));
+    // rows counts every row including the header.
+    function makeTable(rows, cols) {
+      rows = clampInt(rows, 2, MAX_TABLE_ROWS);
+      cols = clampInt(cols, 1, MAX_TABLE_COLS);
+      const row = (cell) => "| " + Array.from({ length: cols }, (_, i) => cell(i)).join(" | ") + " |";
+      return [row((i) => "Column " + (i + 1)), row(() => "---"), ...Array.from({ length: rows - 1 }, () => row(() => " "))].join("\n");
+    }
+    function insertTable(value, s, e, rows, cols) {
+      const table = makeTable(rows, cols);
+      const ls = value.lastIndexOf("\n", s - 1) + 1;
+      let le = value.indexOf("\n", e);
+      if (le === -1) le = value.length;
+      const empty = !value.slice(ls, le).trim();
+      const start = empty ? ls : le;
+      const end = empty ? le : le;
+      const lead = empty ? "" : "\n\n";
+      const text = lead + table + "\n";
+      const first = start + lead.length + 2;
+      return { start, end, text, selStart: first, selEnd: first + "Column 1".length };
+    }
+
+    // ======================================================================
+    // Pure core: shortcuts (one engine for every in-sheet action; the person can reassign any of them)
+    // ======================================================================
+    // An action with an empty `def` has no shortcut until the person assigns one. Every shortcut needs
+    // Ctrl, Alt or Cmd, so typing is never hijacked. Overrides live in one preference, a JSON object
+    // { actionId: "Ctrl+Shift+K" } where "" means "unassigned".
+    const SHORTCUT_ACTIONS = Object.freeze([
+      { id: "bold", label: "Bold", def: "Ctrl+B", edit: true },
+      { id: "italic", label: "Italic", def: "Ctrl+I", edit: true },
+      { id: "strike", label: "Strikethrough", def: "Ctrl+Shift+X", edit: true },
+      { id: "highlight", label: "Highlight selection", def: "Ctrl+Shift+H", edit: true },
+      { id: "code", label: "Inline code", def: "Ctrl+Shift+C", edit: true },
+      { id: "codeBlock", label: "Code block", def: "Ctrl+Shift+M", edit: true },
+      { id: "link", label: "Link\u2026", def: "Ctrl+Shift+K", edit: true },
+      { id: "image", label: "Image", def: "Ctrl+Shift+G", edit: true },
+      { id: "heading", label: "Heading", def: "Ctrl+Shift+1", edit: true },
+      { id: "bullet", label: "Bulleted list", def: "Ctrl+Shift+8", edit: true },
+      { id: "numbered", label: "Numbered list", def: "Ctrl+Shift+7", edit: true },
+      { id: "check", label: "Checklist", def: "Ctrl+Shift+L", edit: true },
+      { id: "quote", label: "Quote", def: "Ctrl+Shift+9", edit: true },
+      { id: "table", label: "Table\u2026", def: "Ctrl+Shift+Y", edit: true },
+      { id: "rule", label: "Horizontal rule", def: "", edit: true },
+      { id: "indent", label: "Nest in", def: "", edit: true },
+      { id: "outdent", label: "Nest out", def: "", edit: true },
+      { id: "sup", label: "Superscript", def: "", edit: true },
+      { id: "sub", label: "Subscript", def: "", edit: true },
+      { id: "kbd", label: "Keyboard key", def: "", edit: true },
+      { id: "newNote", label: "New note", def: "Ctrl+N" },
+      { id: "list", label: "All notes and search", def: "Ctrl+K" },
+      { id: "mode", label: "Read / edit", def: "Ctrl+E" },
+      { id: "split", label: "Split view", def: "" },
+      { id: "settings", label: "Quick settings", def: "Ctrl+," },
+    ]);
+    const SHORTCUT_IDS = new Set(SHORTCUT_ACTIONS.map((a) => a.id));
+    function formatCombo(spec) {
+      if (!spec || !spec.key) return "";
+      const k = spec.key;
+      const name = k.length === 1 ? k.toUpperCase() : k[0].toUpperCase() + k.slice(1);
+      return [spec.ctrl && "Ctrl", spec.alt && "Alt", spec.shift && "Shift", spec.meta && "Meta", name].filter(Boolean).join("+");
+    }
+    const normalizeCombo = (text) => formatCombo(parseShortcut(text));
+    // The combination a key press stands for, as the same canonical text ("" for a lone modifier).
+    function comboFromEvent(e) {
+      const raw = String(e.key || "");
+      if (!raw || ["Control", "Shift", "Alt", "Meta", "AltGraph", "OS", "Dead"].includes(raw)) return "";
+      let key = raw.length === 1 ? raw.toLowerCase() : raw;
+      const code = String(e.code || "");
+      if (/^Key[A-Z]$/.test(code)) key = code.slice(3).toLowerCase(); // same key on every layout
+      else if (/^Digit[0-9]$/.test(code)) key = code.slice(5);
+      if (key === " " || key === "Spacebar") key = "Space";
+      return formatCombo({ ctrl: !!e.ctrlKey, alt: !!e.altKey, shift: !!e.shiftKey, meta: !!e.metaKey, key: key.toLowerCase() });
+    }
+    // The stored overrides, cleaned: unknown actions and combinations without a modifier are dropped.
+    function parseShortcutMap(raw) {
+      let obj = null;
+      try {
+        obj = JSON.parse(String(raw || ""));
+      } catch (_) {}
+      const out = {};
+      if (!obj || typeof obj !== "object" || Array.isArray(obj)) return out;
+      for (const [id, v] of Object.entries(obj)) {
+        if (!SHORTCUT_IDS.has(id) || typeof v !== "string") continue;
+        if (v === "") out[id] = "";
+        else {
+          const c = normalizeCombo(v);
+          if (c) out[id] = c;
+        }
+      }
+      return out;
+    }
+    // [{ id, combo, spec }] for every action that has a shortcut after the overrides are applied.
+    function effectiveShortcuts(overrides = {}) {
+      const list = [];
+      for (const a of SHORTCUT_ACTIONS) {
+        const combo = Object.prototype.hasOwnProperty.call(overrides, a.id) ? overrides[a.id] : a.def;
+        const spec = combo ? parseShortcut(combo) : null;
+        if (spec) list.push({ id: a.id, combo: formatCombo(spec), spec });
+      }
+      return list;
+    }
+    const findShortcutConflict = (list, id, combo) => list.find((x) => x.id !== id && x.combo === combo)?.id || "";
+    const matchShortcutAction = (e, list) => list.find((x) => matchesShortcut(e, x.spec))?.id || "";
+    // What a new assignment does to the stored overrides (a value equal to the default is not stored).
+    function assignShortcut(overrides, id, combo) {
+      const next = { ...overrides };
+      const def = SHORTCUT_ACTIONS.find((a) => a.id === id)?.def ?? "";
+      if (combo === def) delete next[id];
+      else next[id] = combo;
+      return next;
+    }
+
+    // ======================================================================
+    // Pure core: quick settings (the options a person changes while writing)
+    // ======================================================================
+    const QUICK_OPTIONS = Object.freeze([
+      { id: "font", label: "Text size", pref: PREF.FONT_SIZE, kind: "step", min: 8, max: 40, step: 1, unit: "px", def: 13 },
+      { id: "lineHeight", label: "Line height", pref: PREF.LINE_HEIGHT, kind: "step", min: 100, max: 300, step: 10, unit: "%", def: 160 },
+      { id: "wrap", label: "Wrap long lines", pref: PREF.WRAP, kind: "bool", def: true },
+      { id: "blank", label: "Blank lines in read view", pref: PREF.BLANK_LINES, kind: "choice", def: "collapse", choices: [["collapse", "Collapse"], ["keep", "Keep"]] },
+      { id: "breaks", label: "Single line breaks", pref: PREF.LINE_BREAKS, kind: "choice", def: "break", choices: [["break", "Break"], ["join", "Join"]] },
+      { id: "sync", label: "Linked scrolling in split view", meta: "syncScroll", kind: "bool", def: true },
+      { id: "copy", label: "Select and copy text in read view", pref: PREF.READ_COPY, kind: "bool", def: false },
+      { id: "paste", label: "Pasting a web address", pref: PREF.PASTE_LINK, kind: "choice", def: "ask", choices: [["ask", "Ask"], ["selection", "Over selection"], ["off", "As text"]] },
+      { id: "setext", label: "Text over === or --- is a heading", pref: PREF.SETEXT, kind: "bool", def: false },
+    ]);
+    const stepOption = (opt, current, dir) => clampInt((Number(current) || opt.def) + dir * opt.step, opt.min, opt.max);
 
     // ======================================================================
     // Store: notes as files, atomic writes, cross-window sync
@@ -1905,6 +2430,10 @@ function nativeSidebarSide() {
         wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine, insertRule, nestLines,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
+        highlightCode, codeLangKey, mapPosition, mergeAnchors, insertCodeBlock, buildLink, insertLink,
+        pastedLink, fragmentLabel, insertImage, makeTable, insertTable, SHORTCUT_ACTIONS, formatCombo,
+        normalizeCombo, comboFromEvent, parseShortcutMap, effectiveShortcuts, findShortcutConflict,
+        matchShortcutAction, assignShortcut, QUICK_OPTIONS, stepOption, PREF,
       };
     }
 
@@ -1946,6 +2475,11 @@ function nativeSidebarSide() {
       indent: "M3 8l4 4-4 4 M21 12H11 M21 6H11 M21 18H11",
       outdent: "M7 8l-4 4 4 4 M21 12H11 M21 6H11 M21 18H11",
       link: "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71 M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
+      code: "m16 18 6-6-6-6 M8 6l-6 6 6 6",
+      codeblock: "M4 4h16v16H4z M10 9l-3 3 3 3 M14 9l3 3-3 3",
+      numbered: "M10 6h11 M10 12h11 M10 18h11 M4 6h1v4 M4 10h2 M4 14.5a1.5 1 0 0 1 3 0c0 1-3 2-3 3.5h3",
+      table: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M3 10h18 M3 15h18 M9 3v18 M15 3v18",
+      sliders: "M4 21v-7 M4 10V3 M12 21v-9 M12 8V3 M20 21v-5 M20 12V3 M1 14h6 M9 8h6 M17 16h6",
     };
     function icon(name, size = 14) {
       const svg = document.createElementNS(SVG_NS, "svg");
@@ -2011,12 +2545,12 @@ function nativeSidebarSide() {
             btn.replaceWith(img);
           });
           parent.append(btn);
-        } else if (n.t === "code") {
-          const c = h("code");
+        } else if (n.t === "code" || n.t === "kbd") {
+          const c = h(n.t === "kbd" ? "kbd" : "code");
           c.textContent = n.s;
           parent.append(c);
         } else {
-          const tag = { b: "strong", i: "em", s: "del", hl: "mark", a: "span" }[n.t];
+          const tag = { b: "strong", i: "em", s: "del", hl: "mark", a: "span", sub: "sub", sup: "sup" }[n.t];
           if (!tag) continue;
           const node = h(tag);
           if (n.t === "hl") {
@@ -2029,7 +2563,7 @@ function nativeSidebarSide() {
             node.dataset.href = n.href;
             node.setAttribute("role", "link");
             node.setAttribute("tabindex", "0");
-            node.title = n.href;
+            node.title = n.title ? n.title + "\n" + n.href : n.href;
             node.addEventListener("click", (e) => {
               e.preventDefault();
               env.openLink(n.href);
@@ -2060,8 +2594,20 @@ function nativeSidebarSide() {
         } else if (b.type === "hr") parent.append(h("hr", { class: "zn-hr" }));
         else if (b.type === "code") {
           const code = h("code");
-          code.textContent = b.text;
-          parent.append(h("pre", { class: "zn-pre" }, code));
+          if (codeLangKey(b.lang)) {
+            for (const tk of highlightCode(b.text, b.lang)) {
+              if (!tk.k) code.append(document.createTextNode(tk.s));
+              else {
+                const span = h("span", { class: "zn-tk" });
+                span.dataset.k = tk.k;
+                span.textContent = tk.s;
+                code.append(span);
+              }
+            }
+          } else code.textContent = b.text;
+          const pre = h("pre", { class: "zn-pre" }, code);
+          if (b.lang) pre.dataset.lang = b.lang;
+          parent.append(pre);
         } else if (b.type === "table") {
           const table = h("table", { class: "zn-table" });
           const row = (tag, cells) => {
@@ -2145,6 +2691,10 @@ function nativeSidebarSide() {
       let previewTimer = 0; // armed only while split view waits for typing to pause
       let flashTimer = 0; // armed only while a short message is showing
       let flashMsg = "";
+      let readAnch = []; // [{ line, node }] first node of each block / list item, for linked scrolling
+      let readAnchY = null; // the same with measured offsets; dropped whenever the pane changes
+      let taAnchY = null; // source line -> editor offset (measured lazily with a hidden mirror)
+      let mirror = null;
       let readSigs = []; // signatures of the blocks drawn in the read/preview pane
       let readNodes = []; // DOM nodes per drawn block
       let readEmpty = false;
@@ -2187,14 +2737,40 @@ function nativeSidebarSide() {
       const tOutdent = iconButton("outdent", "Nest out: list or quote one level up");
       const tIndent = iconButton("indent", "Nest in: list or quote one level deeper");
       const tRule = iconButton("rule", "Horizontal rule");
+      const tCode = iconButton("code", "Inline code");
+      const tCodeBlock = iconButton("codeblock", "Code block");
+      const tLink = iconButton("link", "Link\u2026");
+      const tImage = iconButton("image", "Image");
+      const tNumbered = iconButton("numbered", "Numbered list");
+      const tTable = iconButton("table", "Table\u2026");
+      const tInsert = iconButton("caret", "More: superscript, subscript, keyboard key", "zn-caret");
+      const tSettings = iconButton("sliders", "Quick settings", "zn-mode-btn");
       const tSync = iconButton("link", "Linked scrolling", "zn-mode-btn zn-sync-btn");
       const tSplit = iconButton("columns", "Split view: editor and preview", "zn-mode-btn");
       const tMode = iconButton("eye", "Read (Ctrl+E)", "zn-mode-btn");
+      const TOOL_TITLES = [
+        [tBold, "Bold", "bold"], [tItalic, "Italic", "italic"], [tStrike, "Strikethrough", "strike"],
+        [tHl, "Highlight selection", "highlight"], [tHeading, "Heading", "heading"], [tBullet, "Bulleted list", "bullet"],
+        [tNumbered, "Numbered list", "numbered"], [tCheck, "Checklist", "check"], [tQuote, "Quote (nest deeper with the indent button)", "quote"],
+        [tOutdent, "Nest out: list or quote one level up", "outdent"], [tIndent, "Nest in: list or quote one level deeper", "indent"],
+        [tRule, "Horizontal rule", "rule"], [tCode, "Inline code", "code"], [tCodeBlock, "Code block", "codeBlock"],
+        [tLink, "Link\u2026", "link"], [tImage, "Image", "image"], [tTable, "Table\u2026", "table"], [tSettings, "Quick settings", "settings"],
+      ];
+      const getPref = (k, d) => (env.getPref ? env.getPref(k, d) : d);
+      const setPref = (k, v) => env.setPref?.(k, v);
+      let shortcutCache = { raw: null, list: [] };
+      function shortcutList() {
+        const raw = String(getPref(PREF.SHORTCUTS, "") || "");
+        if (shortcutCache.raw !== raw) shortcutCache = { raw, list: effectiveShortcuts(parseShortcutMap(raw)) };
+        return shortcutCache.list;
+      }
       const tools = h(
         "div",
         { class: "zn-tools" },
-        tBold, tItalic, tStrike, tHl, tHlMenu, tHeading, tBullet, tCheck, tQuote, tOutdent, tIndent, tRule,
+        tBold, tItalic, tStrike, tHl, tHlMenu, tHeading, tBullet, tNumbered, tCheck, tQuote, tOutdent, tIndent, tRule,
+        tCode, tCodeBlock, tLink, tImage, tTable, tInsert,
         h("span", { class: "zn-grow" }),
+        tSettings,
         tSync,
         tSplit,
         tMode,
@@ -2260,6 +2836,10 @@ function nativeSidebarSide() {
         tMode.replaceChildren(icon(mode === "read" ? "edit" : "eye"));
         tMode.title = mode === "read" ? "Edit (Ctrl+E)" : "Read (Ctrl+E)";
         hlDot.dataset.color = store.meta.highlight;
+        for (const [btn, base, id] of TOOL_TITLES) {
+          const combo = shortcutList().find((x) => x.id === id)?.combo;
+          btn.title = combo ? `${base} (${combo})` : base;
+        }
         ta.readOnly = !!n?.trashed;
         ta.hidden = mode === "read";
         readEl.hidden = mode === "edit";
@@ -2293,7 +2873,23 @@ function nativeSidebarSide() {
         readEl.replaceChildren();
         readSigs = [];
         readNodes = [];
+        readAnch = [];
+        readAnchY = null;
         readEmpty = false;
+      }
+      function buildReadAnchors(blocks) {
+        readAnch = [];
+        readAnchY = null;
+        blocks.forEach((b, i) => {
+          const nodes = readNodes[i] || [];
+          if (b.type === "list") {
+            let k = 0;
+            for (const it of b.items) {
+              if (nodes[k] && it.line >= 0) readAnch.push({ line: it.line, node: nodes[k] });
+              k += 1 + (it.more ? it.more.length : 0);
+            }
+          } else if (nodes[0] && b.src !== undefined) readAnch.push({ line: b.src, node: nodes[0] });
+        });
       }
       function renderRead() {
         const n = note();
@@ -2307,7 +2903,10 @@ function nativeSidebarSide() {
         const blocks = parseBlocks(n.body, false, env.readOpts?.() || {});
         const sigs = blocks.map(blockSig);
         const { prefix, suffix } = diffSigs(readSigs, sigs);
-        if (prefix === readSigs.length && prefix === sigs.length) return;
+        if (prefix === readSigs.length && prefix === sigs.length) {
+          buildReadAnchors(blocks);
+          return;
+        }
         const tail = readNodes.slice(readNodes.length - suffix);
         for (const nodes of readNodes.slice(prefix, readNodes.length - suffix)) for (const nd of nodes) nd.remove();
         const anchor = tail.find((nodes) => nodes.length)?.[0] || null;
@@ -2321,6 +2920,7 @@ function nativeSidebarSide() {
         }
         readNodes = [...readNodes.slice(0, prefix), ...fresh, ...tail];
         readSigs = sigs;
+        buildReadAnchors(blocks);
       }
       function schedulePreview() {
         window.clearTimeout(previewTimer);
@@ -2532,6 +3132,16 @@ function nativeSidebarSide() {
       const sel = () => [ta.selectionStart, ta.selectionEnd];
       const hlOpen = () => (store.meta.highlight === "yellow" ? "==" : `=={${store.meta.highlight}}`);
       const fmt = {
+        code: () => applyEdit(wrapSelection(ta.value, ...sel(), "`")),
+        codeBlock: () => applyEdit(insertCodeBlock(ta.value, ...sel())),
+        numbered: () => applyEdit(toggleLinePrefix(ta.value, ...sel(), "ordered")),
+        image: () => applyEdit(insertImage(ta.value, ...sel())),
+        rule: () => applyEdit(insertRule(ta.value, ...sel())),
+        sup: () => applyEdit(wrapSelection(ta.value, ...sel(), "^")),
+        sub: () => applyEdit(wrapSelection(ta.value, ...sel(), "~")),
+        kbd: () => applyEdit(wrapSelection(ta.value, ...sel(), "<kbd>", "</kbd>")),
+        link: () => askLink(),
+        table: () => askTable(),
         bold: () => applyEdit(wrapSelection(ta.value, ...sel(), "**")),
         italic: () => applyEdit(wrapSelection(ta.value, ...sel(), "*")),
         strike: () => applyEdit(wrapSelection(ta.value, ...sel(), "~~")),
@@ -2548,22 +3158,68 @@ function nativeSidebarSide() {
         if (note()?.trashed) return;
         fn();
       };
-      for (const [btn, fn] of [[tBold, fmt.bold], [tItalic, fmt.italic], [tStrike, fmt.strike], [tHl, fmt.highlight], [tHeading, fmt.heading], [tBullet, fmt.bullet], [tCheck, fmt.check], [tQuote, fmt.quote], [tIndent, fmt.indent], [tOutdent, fmt.outdent]]) {
+      for (const [btn, fn] of [[tBold, fmt.bold], [tItalic, fmt.italic], [tStrike, fmt.strike], [tHl, fmt.highlight], [tHeading, fmt.heading], [tBullet, fmt.bullet], [tCheck, fmt.check], [tQuote, fmt.quote], [tIndent, fmt.indent], [tOutdent, fmt.outdent], [tCode, fmt.code], [tCodeBlock, fmt.codeBlock], [tNumbered, fmt.numbered], [tLink, fmt.link], [tImage, fmt.image], [tTable, fmt.table]]) {
         // mousedown must not steal the textarea selection
         listen(btn, "mousedown", (e) => e.preventDefault());
         listen(btn, "click", needEdit(fn));
       }
       listen(tMode, "click", () => setMode(mode === "read" ? "edit" : "read"));
-      // Linked scrolling (split view only): the pane you scroll drags the other to the same relative
-      // position. One frame of lock keeps the two scroll events from chasing each other.
+      // Linked scrolling (split view only): the pane you scroll puts the same SOURCE line at the top of
+      // the other. Each pane has its own line heights (and the editor wraps), so the position is mapped
+      // line by line: editor offset <-> source line <-> rendered block, interpolated between the two
+      // nearest known lines. Without layout information it falls back to the proportional position.
+      // One frame of lock keeps the two scroll events from chasing each other.
       let syncLock = false;
       let rafSync = 0;
+      function measureEditor() {
+        const gcs = window.getComputedStyle;
+        if (typeof gcs !== "function") return null;
+        if (!mirror) {
+          mirror = h("div", { class: "zn-mirror", "aria-hidden": "true" });
+          root.append(mirror);
+        }
+        const cs = gcs(ta);
+        for (const k of ["fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "tabSize", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "borderLeftWidth", "borderRightWidth", "whiteSpace", "overflowWrap", "wordBreak", "boxSizing"])
+          mirror.style[k] = cs[k];
+        mirror.style.width = ta.clientWidth + "px";
+        mirror.replaceChildren();
+        const lines = ta.value.split("\n");
+        const rows = lines.map((l) => h("div", {}, l || "\u200b"));
+        mirror.append(...rows);
+        const out = rows.map((r, i) => ({ line: i, y: r.offsetTop }));
+        mirror.replaceChildren();
+        return mergeAnchors(out, lines.length, ta.scrollHeight);
+      }
+      function measureRead() {
+        const base = readEl.getBoundingClientRect().top - readEl.scrollTop;
+        return mergeAnchors(
+          readAnch.map((a) => ({ line: a.line, y: Math.max(0, a.node.getBoundingClientRect().top - base) })),
+          ta.value.split("\n").length,
+          readEl.scrollHeight,
+        );
+      }
+      const atEnd = (el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
       const linkScroll = (from, to) => () => {
         if (mode !== "split" || !store.meta.syncScroll || syncLock) return;
         const max = from.scrollHeight - from.clientHeight;
         if (!(max > 0)) return;
         syncLock = true;
-        to.scrollTop = (from.scrollTop / max) * Math.max(0, to.scrollHeight - to.clientHeight);
+        let target = null;
+        try {
+          if (from.scrollTop > 0 && !atEnd(from) && readAnch.length) {
+            taAnchY = taAnchY || measureEditor();
+            readAnchY = readAnchY || measureRead();
+            if (taAnchY && readAnchY) {
+              const fromEditor = from === ta;
+              const line = mapPosition(fromEditor ? taAnchY : readAnchY, from.scrollTop, "y", "line");
+              target = mapPosition(fromEditor ? readAnchY : taAnchY, line, "line", "y");
+            }
+          }
+        } catch (_) {
+          target = null;
+        }
+        if (target === null) target = (from.scrollTop / max) * Math.max(0, to.scrollHeight - to.clientHeight);
+        to.scrollTop = target;
         if (!rafSync)
           rafSync = window.requestAnimationFrame(() => {
             rafSync = 0;
@@ -2578,7 +3234,16 @@ function nativeSidebarSide() {
       });
       listen(tSplit, "click", () => setMode(mode === "split" ? "edit" : "split"));
       listen(tRule, "mousedown", (e) => e.preventDefault());
-      listen(tRule, "click", needEdit(() => applyEdit(insertRule(ta.value, ...sel()))));
+      listen(tRule, "click", needEdit(fmt.rule));
+      listen(tInsert, "mousedown", (e) => e.preventDefault());
+      listen(tInsert, "click", () =>
+        showMenu(tInsert, [
+          { label: "Superscript  X^2^", action: needEdit(fmt.sup) },
+          { label: "Subscript  H~2~O", action: needEdit(fmt.sub) },
+          { label: "Keyboard key  <kbd>", action: needEdit(fmt.kbd) },
+        ]),
+      );
+      listen(tSettings, "click", () => askSettings());
 
       // ---- menus -----------------------------------------------------------------
       function closeMenu() {
@@ -2673,6 +3338,241 @@ function nativeSidebarSide() {
         root.append(dialog);
         ok.focus({ preventScroll: true });
       }
+
+      // ---- small dialogs: link, table, quick settings, shortcuts ---------------------------------------
+      function openCard(label, ...kids) {
+        closeMenu();
+        closeDialog();
+        const card = h("div", { class: "zn-dialog-card", role: "dialog", "aria-label": label }, h("strong", {}, label), ...kids);
+        dialog = h("div", { class: "zn-dialog" }, card);
+        dialog.addEventListener("pointerdown", (e) => {
+          if (e.target === dialog) closeDialog();
+        });
+        root.append(dialog);
+        return card;
+      }
+      const chip = (label, on = false) => h("button", { type: "button", class: "zn-chip" + (on ? " is-on" : "") }, label);
+      const field = (label, value, placeholder = "") => {
+        const input = h("input", { type: "text", class: "zn-field", spellcheck: "false", "aria-label": label, placeholder });
+        input.value = value;
+        return { input, row: h("label", { class: "zn-field-row" }, h("span", {}, label), input) };
+      };
+      // Link dialog: text to show + address, like the one in a forum editor. `pasted` is set when it was
+      // opened by pasting an address (then "Paste as text" keeps the address as plain text).
+      function askLink({ pasted = "", s: ps, e: pe } = {}) {
+        if (note()?.trashed) return;
+        if (mode === "read") setMode("edit");
+        const [s, e] = ps === undefined ? sel() : [ps, pe];
+        const selected = ta.value.slice(s, e);
+        const selIsUrl = pastedLink(selected);
+        const url = pasted || selIsUrl || "";
+        const text = pasted ? selected || fragmentLabel(pasted) : selIsUrl ? fragmentLabel(selIsUrl) : selected;
+        const t = field("Text to show", text, "Text to show");
+        const a = field("Address", url, "https://");
+        const ok = chip("Create link", true);
+        const cancel = chip("Cancel");
+        const buttons = [cancel];
+        if (pasted) {
+          const plain = chip("Paste as text");
+          plain.addEventListener("click", () => {
+            closeDialog();
+            applyEdit({ start: s, end: e, text: pasted, selStart: s + pasted.length, selEnd: s + pasted.length });
+          });
+          buttons.push(plain);
+        }
+        buttons.push(ok);
+        const card = openCard("Create link", t.row, a.row, h("div", { class: "zn-dialog-actions" }, ...buttons));
+        const submit = () => {
+          const href = safeHref(a.input.value.trim());
+          if (!href) {
+            a.input.dataset.bad = "true";
+            a.input.focus();
+            return;
+          }
+          closeDialog();
+          applyEdit(insertLink(ta.value, s, e, t.input.value.trim() || a.input.value.trim(), a.input.value.trim()));
+        };
+        ok.addEventListener("click", submit);
+        cancel.addEventListener("click", () => {
+          closeDialog();
+          focusEditor();
+        });
+        for (const f of [t, a]) f.input.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter") {
+            ev.preventDefault();
+            submit();
+          }
+        });
+        (text || !url ? (text ? a : t) : t).input.focus({ preventScroll: true });
+        return card;
+      }
+      // Table creator: pick a size on the grid (or type it) and a ready table is inserted.
+      function askTable() {
+        if (note()?.trashed) return;
+        if (mode === "read") setMode("edit");
+        const [s, e] = sel();
+        const GRID_COLS = 8,
+          GRID_ROWS = 6;
+        const label = h("p", {}, "Pick the size: columns \u00d7 rows (the first row is the header).");
+        const grid = h("div", { class: "zn-grid" });
+        const cells = [];
+        const insert = (rows, cols) => {
+          closeDialog();
+          applyEdit(insertTable(ta.value, s, e, rows, cols));
+        };
+        const paint = (rows, cols) => {
+          label.textContent = rows && cols ? `${cols} \u00d7 ${rows}` : "Pick the size: columns \u00d7 rows (the first row is the header).";
+          for (const c of cells) c.el.classList.toggle("is-on", c.r <= rows && c.c <= cols);
+        };
+        for (let r = 1; r <= GRID_ROWS; r++)
+          for (let c = 1; c <= GRID_COLS; c++) {
+            const el = h("button", { type: "button", class: "zn-gcell", "aria-label": `${c} columns, ${r} rows` });
+            el.addEventListener("mouseover", () => paint(r, c));
+            el.addEventListener("focus", () => paint(r, c));
+            el.addEventListener("click", () => insert(r, c));
+            cells.push({ el, r, c });
+            grid.append(el);
+          }
+        grid.style.setProperty("--cols", String(GRID_COLS));
+        grid.addEventListener("mouseleave", () => paint(0, 0));
+        const cols = field("Columns", "3");
+        const rows = field("Rows", "3");
+        const ok = chip("Insert", true);
+        const cancel = chip("Cancel");
+        ok.addEventListener("click", () => insert(clampInt(rows.input.value, 2, MAX_TABLE_ROWS), clampInt(cols.input.value, 1, MAX_TABLE_COLS)));
+        cancel.addEventListener("click", () => {
+          closeDialog();
+          focusEditor();
+        });
+        openCard("Insert table", label, grid, h("div", { class: "zn-field-pair" }, cols.row, rows.row), h("div", { class: "zn-dialog-actions" }, cancel, ok));
+        cells[0].el.focus({ preventScroll: true });
+      }
+      // Quick settings: the options that are changed while writing. Each change is saved at once.
+      function askSettings() {
+        const body = h("div", { class: "zn-quick" });
+        const read = (o) => (o.meta ? store.meta[o.meta] : getPref(o.pref, o.def));
+        const write = (o, v) => {
+          if (o.meta) store.setMeta({ [o.meta]: v });
+          else setPref(o.pref, v);
+          if (o.meta) applyState();
+          draw();
+        };
+        function draw() {
+          body.replaceChildren();
+          for (const o of QUICK_OPTIONS) {
+            const value = read(o);
+            const row = h("div", { class: "zn-quick-row" }, h("span", { class: "zn-quick-label" }, o.label));
+            if (o.kind === "bool") {
+              const b = chip(value ? "On" : "Off", !!value);
+              b.setAttribute("aria-pressed", value ? "true" : "false");
+              b.addEventListener("click", () => write(o, !value));
+              row.append(b);
+            } else if (o.kind === "step") {
+              const minus = iconButton("x", "Smaller");
+              minus.replaceChildren(h("span", {}, "\u2212"));
+              const plus = iconButton("plus", "Larger");
+              minus.addEventListener("click", () => write(o, stepOption(o, value, -1)));
+              plus.addEventListener("click", () => write(o, stepOption(o, value, 1)));
+              row.append(minus, h("span", { class: "zn-quick-value" }, `${value}${o.unit}`), plus);
+            } else {
+              for (const [v, text] of o.choices) {
+                const b = chip(text, value === v);
+                b.addEventListener("click", () => write(o, v));
+                row.append(b);
+              }
+            }
+            body.append(row);
+          }
+        }
+        draw();
+        const keys = chip("Keyboard shortcuts\u2026");
+        const done = chip("Done", true);
+        keys.addEventListener("click", () => askShortcuts());
+        done.addEventListener("click", () => {
+          closeDialog();
+          focusEditor();
+        });
+        openCard("Quick settings", body, h("div", { class: "zn-dialog-actions" }, keys, done));
+        done.focus({ preventScroll: true });
+      }
+      // Shortcut assignment: click a shortcut, press the new keys. Backspace clears, Esc cancels.
+      function askShortcuts() {
+        const body = h("div", { class: "zn-quick zn-keys" });
+        const note2 = h("p", { class: "zn-key-note" }, "Click a shortcut, then press the new keys (Ctrl, Alt or Cmd is required). Backspace removes it.");
+        let capturing = "";
+        const overrides = () => parseShortcutMap(getPref(PREF.SHORTCUTS, ""));
+        const rows = [...SHORTCUT_ACTIONS.map((a) => ({ id: a.id, label: a.label, def: a.def })), { id: "@global", label: "Open or close Notes (works anywhere)", def: "Alt+Shift+N" }];
+        function current(id) {
+          if (id === "@global") return normalizeCombo(getPref(PREF.SHORTCUT, "Alt+Shift+N"));
+          return shortcutList().find((x) => x.id === id)?.combo || "";
+        }
+        function apply(id, combo) {
+          if (id === "@global") {
+            if (combo) setPref(PREF.SHORTCUT, combo);
+            return;
+          }
+          setPref(PREF.SHORTCUTS, JSON.stringify(assignShortcut(overrides(), id, combo)));
+        }
+        function draw() {
+          body.replaceChildren();
+          for (const r of rows) {
+            const btn = h("button", { type: "button", class: "zn-chip zn-keybtn" + (capturing === r.id ? " is-on" : "") }, capturing === r.id ? "Press keys\u2026" : current(r.id) || "none");
+            btn.addEventListener("click", () => {
+              capturing = capturing === r.id ? "" : r.id;
+              note2.textContent = "Click a shortcut, then press the new keys (Ctrl, Alt or Cmd is required). Backspace removes it.";
+              draw();
+              if (capturing) btn.focus({ preventScroll: true });
+            });
+            btn.addEventListener("keydown", (ev) => {
+              if (capturing !== r.id) return;
+              ev.preventDefault();
+              ev.stopPropagation();
+              if (ev.key === "Escape") capturing = "";
+              else if (ev.key === "Backspace" || ev.key === "Delete") {
+                if (r.id !== "@global") apply(r.id, "");
+                capturing = "";
+              } else {
+                const combo = comboFromEvent(ev);
+                if (!combo) return; // a lone modifier: wait for the real key
+                if (!parseShortcut(combo)) {
+                  note2.textContent = "That needs Ctrl, Alt or Cmd as well.";
+                  return;
+                }
+                const taken = r.id === "@global" ? "" : findShortcutConflict(shortcutList(), r.id, combo);
+                const globalCombo = normalizeCombo(getPref(PREF.SHORTCUT, "Alt+Shift+N"));
+                if (taken || (r.id !== "@global" && combo === globalCombo)) {
+                  note2.textContent = `${combo} is already used by ${taken ? SHORTCUT_ACTIONS.find((a) => a.id === taken).label : "the open/close shortcut"}.`;
+                  return;
+                }
+                apply(r.id, combo);
+                capturing = "";
+              }
+              draw();
+              applyState();
+            });
+            const reset = h("button", { type: "button", class: "zn-chip", title: "Back to the default" }, "Reset");
+            reset.hidden = r.id === "@global" ? current(r.id) === r.def : current(r.id) === r.def;
+            reset.addEventListener("click", () => {
+              apply(r.id, r.def);
+              draw();
+              applyState();
+            });
+            body.append(h("div", { class: "zn-quick-row" }, h("span", { class: "zn-quick-label" }, r.label), btn, reset));
+          }
+        }
+        draw();
+        const all = chip("Reset all");
+        const back = chip("Back", true);
+        all.addEventListener("click", () => {
+          setPref(PREF.SHORTCUTS, "");
+          setPref(PREF.SHORTCUT, "Alt+Shift+N");
+          capturing = "";
+          draw();
+          applyState();
+        });
+        back.addEventListener("click", () => askSettings());
+        openCard("Keyboard shortcuts", note2, body, h("div", { class: "zn-dialog-actions" }, all, back));
+      }
       const moreItems = () => {
         const n = note();
         if (!n) return [];
@@ -2688,6 +3588,7 @@ function nativeSidebarSide() {
           { icon: "save", label: "Export all as zip\u2026", action: () => askExport("zip", async () => { const k = await env.exportZip(store.list()); if (k) flash(`Zipped ${k} notes`); }) },
           { icon: "folder", label: "Import .md folder\u2026", action: async () => { const k = await env.importFolder(store); flash(k ? `Imported ${k} notes` : "Nothing imported"); if (view === "list") scheduleList(); } },
           { icon: "folder", label: "Open notes folder", action: () => env.revealFolder(store.dir) },
+          { icon: "sliders", label: "Quick settings\u2026", action: () => askSettings() },
           { sep: true },
         ];
         if (n.trashed) {
@@ -2753,10 +3654,24 @@ function nativeSidebarSide() {
         }
       });
       listen(ta, "input", () => {
+        taAnchY = null;
+        readAnchY = null;
         typed = true;
         store.update(currentId, ta.value, token);
         scheduleChrome();
         if (mode === "split") schedulePreview();
+      });
+      // Pasting one web address: offer the "create link" dialog (text to show + address).
+      listen(ta, "paste", (e) => {
+        const how = getPref(PREF.PASTE_LINK, "ask");
+        if (how === "off" || ta.readOnly) return;
+        const text = e.clipboardData?.getData?.("text/plain") ?? "";
+        const link = pastedLink(text);
+        if (!link) return;
+        const [s, en] = sel();
+        if (how === "selection" && s === en) return;
+        e.preventDefault();
+        askLink({ pasted: text.trim(), s, e: en });
       });
       listen(ta, "blur", () => {
         const n = note();
@@ -2773,6 +3688,18 @@ function nativeSidebarSide() {
         e.stopPropagation();
       });
 
+      const ACTIONS = {
+        ...Object.fromEntries(["bold", "italic", "strike", "highlight", "code", "codeBlock", "link", "image", "heading", "bullet", "numbered", "check", "quote", "table", "rule", "indent", "outdent", "sup", "sub", "kbd"].map((id) => [id, () => fmt[id]()])),
+        newNote: () => newNote(),
+        list: () => showList(),
+        mode: () => {
+          if (view === "editor") setMode(mode === "read" ? "edit" : "read");
+        },
+        split: () => {
+          if (view === "editor") setMode(mode === "split" ? "edit" : "split");
+        },
+        settings: () => askSettings(),
+      };
       function handleKey(e) {
         if (e.isComposing) return;
         const mod = e.ctrlKey || e.metaKey;
@@ -2785,14 +3712,18 @@ function nativeSidebarSide() {
           e.preventDefault();
           return;
         }
-        if (mod && !e.altKey) {
-          const edit = view === "editor" && mode !== "read" && e.target === ta;
-          if (key === "n" && !e.shiftKey) { newNote(); e.preventDefault(); return; }
-          if (key === "k" && !e.shiftKey) { showList(); e.preventDefault(); return; }
-          if (key === "e" && !e.shiftKey) { if (view === "editor") setMode(mode === "read" ? "edit" : "read"); e.preventDefault(); return; }
-          if (edit && key === "b" && !e.shiftKey) { fmt.bold(); e.preventDefault(); return; }
-          if (edit && key === "i" && !e.shiftKey) { fmt.italic(); e.preventDefault(); return; }
-          if (edit && key === "h" && e.shiftKey) { fmt.highlight(); e.preventDefault(); return; }
+        if (mod || e.altKey) {
+          const id = matchShortcutAction(e, shortcutList());
+          if (id) {
+            const act = ACTIONS[id];
+            const def = SHORTCUT_ACTIONS.find((a) => a.id === id);
+            const editing = view === "editor" && mode !== "read" && e.target === ta;
+            if (act && (!def.edit || editing)) {
+              act();
+              e.preventDefault();
+              return;
+            }
+          }
         }
         if (view === "editor" && mode !== "read" && e.target === ta && key === "Enter" && !e.shiftKey && !mod && !e.altKey && ta.selectionStart === ta.selectionEnd && !ta.readOnly) {
           const edit = continueList(ta.value, ta.selectionStart);
@@ -2860,6 +3791,8 @@ function nativeSidebarSide() {
         root.style.width = Math.round(w) + "px";
         root.style.height = Math.round(hgt) + "px";
         root.dataset.split = w >= 560 ? "side" : "stack";
+        taAnchY = null;
+        readAnchY = null;
       }
       const scheduleLayout = () => {
         if (!rafLayout) rafLayout = window.requestAnimationFrame(layout);
@@ -2928,11 +3861,18 @@ function nativeSidebarSide() {
         for (const id of [rafChrome, rafList, rafLayout, rafSync]) if (id) window.cancelAnimationFrame(id);
         root.remove();
       }
+      // A read option (blank lines, line breaks, Setext) changed: draw the read pane again.
+      function refreshRead() {
+        if (!isOpen || destroyed || view !== "editor") return;
+        resetRead();
+        if (mode !== "edit") renderRead();
+      }
       return {
         root,
         open,
         close,
         destroy,
+        refreshRead,
         layout: scheduleLayout,
         focus: focusEditor,
         isOpen: () => isOpen,
@@ -3074,10 +4014,10 @@ function nativeSidebarSide() {
       return spec.key && (spec.alt || spec.ctrl || spec.meta) ? spec : null;
     }
     function matchesShortcut(e, spec) {
-      if (!spec || e.altKey !== spec.alt || e.ctrlKey !== spec.ctrl || e.shiftKey !== spec.shift || e.metaKey !== spec.meta)
+      if (!spec || !!e.altKey !== spec.alt || !!e.ctrlKey !== spec.ctrl || !!e.shiftKey !== spec.shift || !!e.metaKey !== spec.meta)
         return false;
       const key = String(e.key || "").toLowerCase();
-      return key === spec.key || (spec.key.length === 1 && e.code === "Key" + spec.key.toUpperCase());
+      return key === spec.key || (spec.key.length === 1 && (e.code === "Key" + spec.key.toUpperCase() || e.code === "Digit" + spec.key));
     }
     const isAbsolutePath = (p) => /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(p);
 
@@ -3246,7 +4186,19 @@ function nativeSidebarSide() {
       const readOpts = () => ({
         joinLines: prefStr(PREF.LINE_BREAKS, "break") === "join",
         keepBlanks: prefStr(PREF.BLANK_LINES, "collapse") === "keep",
+        setext: prefBool(PREF.SETEXT, false),
       });
+      // One typed accessor pair for the sheets' quick settings and shortcut editor.
+      const getPref = (k, d) => (typeof d === "boolean" ? prefBool(k, d) : typeof d === "number" ? prefInt(k, d) : prefStr(k, d));
+      const setPref = (k, v) => {
+        try {
+          if (typeof v === "boolean") Services.prefs.setBoolPref(k, v);
+          else if (typeof v === "number") Services.prefs.setIntPref(k, Math.round(v));
+          else Services.prefs.setStringPref(k, String(v));
+        } catch (e) {
+          warn(e);
+        }
+      };
       const withNewline = (t) => (t.endsWith("\n") ? t : t + "\n");
       async function exportNote(n, format = "md") {
         const info = EXPORT_FORMATS[format] || EXPORT_FORMATS.md;
@@ -3356,7 +4308,7 @@ function nativeSidebarSide() {
           warn(error);
         }
       }
-      const env = { openLink, copyText, exportNote, exportAll, exportZip, importFolder, printNote, revealFolder, readOpts };
+      const env = { openLink, copyText, exportNote, exportAll, exportZip, importFolder, printNote, revealFolder, readOpts, getPref, setPref };
 
       // ---- bindings: one per bar, plus the floating card ------------------------
       const bindings = new Map(); // bar element -> binding
@@ -3611,19 +4563,24 @@ function nativeSidebarSide() {
         rootEl.style.setProperty("--zentral-notes-font-size", size + "px");
         rootEl.style.setProperty("--zentral-notes-line-height", String(line / 100));
         rootEl.setAttribute("zentral-notes-wrap", prefBool(PREF.WRAP, true) ? "on" : "off");
+        rootEl.setAttribute("zentral-notes-copy", prefBool(PREF.READ_COPY, false) ? "on" : "off");
       }
       applyViewPrefs();
       onCleanup(() => {
         rootEl.style.removeProperty("--zentral-notes-font-size");
         rootEl.style.removeProperty("--zentral-notes-line-height");
         rootEl.removeAttribute("zentral-notes-wrap");
+        rootEl.removeAttribute("zentral-notes-copy");
       });
       const prefObserver = {
         observe(_s, _t, name) {
           if (disposed) return;
-          // READ_PREFS (blank lines / line breaks) are read on every render of the read view, so
-          // they need no action here; the next render picks them up.
-          if (VIEW_PREFS.has(name)) applyViewPrefs();
+          // READ_PREFS (blank lines, line breaks, Setext) are read on every render of the read view;
+          // open sheets draw it again now so the change shows at once.
+          if (READ_PREFS.has(name)) {
+            for (const b of [...bindings.values(), floating]) b?.sheet?.()?.refreshRead?.();
+            floating?.sheet?.refreshRead?.();
+          } else if (VIEW_PREFS.has(name)) applyViewPrefs();
           else if (name === PREF.SHORTCUT) shortcut = parseShortcut(prefStr(PREF.SHORTCUT, "Alt+Shift+N"));
           else if (name === PREF.FOLDER) {
             if (storePromise)

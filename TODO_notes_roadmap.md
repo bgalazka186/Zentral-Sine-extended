@@ -11,6 +11,7 @@ Owner decisions already taken: 3.1.3 confirmed; no encryption at rest; default s
 default mismatches (test `tests/defaults.test.cjs`), numeric hints, stale doc versions.
 
 ## Cycle A: small fixes and consistency (easiest)
+
 - #21 one Notes icon everywhere (settings, GUI, toolbar): single SVG constant.
 - #5 highlight picker: clamp inside the window, expose all colors.
 - #9 toggle: wrap long lines vs horizontal scroll.
@@ -22,6 +23,7 @@ default mismatches (test `tests/defaults.test.cjs`), numeric hints, stale doc ve
 - Tests: notes-ui, notes-bars, defaults, numeric-prefs.
 
 ## Cycle B: Markdown features
+
 - #7 links with visible text, images, blockquotes (nested), horizontal rules, tables, strike,
   task lists, `---` shortcut, footnote-free GitHub-style subset. Renderer stays a small tokenizer.
 - #10 and #25 split view: live read preview beside the editor, auto-widen when enabled
@@ -29,7 +31,8 @@ default mismatches (test `tests/defaults.test.cjs`), numeric hints, stale doc ve
 - #14 export (HTML, plain text, PDF via print) with a "what is lost" notice per format.
 - Tests: notes, notes-ui (+ a markdown fixture test).
 
-## Cycle B2: Markdown follow-ups (from the two live tests; run before or after C)
+## Cycle B2: Markdown follow-ups: CODE DONE, NEEDS LIVE TEST IN ZEN (see TODO_handoff.md section 10)
+
 - Shortcuts and buttons for every syntax that has none yet (inline code, code block, link, image, numbered list, table), so people who do not know Markdown can learn it from the toolbar; **table creator** (pick rows x columns, inserts a ready table).
 - Paste a URL over selected text (or anywhere) -> "create link" mini dialog like Reddit: text to show + address. Finish the "copy to highlight" link feature the same way (its link should offer the same dialog on paste).
 - Linked scrolling by the **top visible line** (map the first visible source line to its rendered block) instead of the proportional position now used: the two panes have different line heights, so proportional scrolling ends on different lines.
@@ -40,6 +43,7 @@ default mismatches (test `tests/defaults.test.cjs`), numeric hints, stale doc ve
 - Tests: notes-markdown, notes-ui.
 
 ## Cycle C: window behavior and appearance
+
 - #3 drag and resize; above Big Preview while Big Preview is not focused (needs the z-height
   decision: popover only while focused). Update `z-heights_map.md` and its test.
 - #4 pin like a Zentral panel (close on outside click, remember last mode).
@@ -53,6 +57,7 @@ default mismatches (test `tests/defaults.test.cjs`), numeric hints, stale doc ve
 - Tests: resize-perf (drag/resize frame-throttled), z-heights, notes-bars.
 
 ## Cycle D: data model (hardest)
+
 - #12 folders and trees; pin = independent shortcut shown at the top even inside a folder.
 - #16 links between notes (`[[note]]`, hub notes with descriptions).
 - #11 search (Ctrl+F while focused): "found in N other notes", next/previous, plus
@@ -65,11 +70,13 @@ default mismatches (test `tests/defaults.test.cjs`), numeric hints, stale doc ve
 - Tests: new tests per feature; keep fixtures small.
 
 ## Cycle E: remaining audits (run last, or any time between cycles)
+
 - Position tracker rAF loop and `onPanelOutsideWindowReturn`: profile in Zen only, do not guess.
 - Zen Performance panel while dragging panel / floating / Big Preview / Library.
 - Everything in section 4 of `TODO_handoff.md` needs real Zen + Sine.
 
 ## Owner-approved ideas (scheduled with the cycle they fit)
+
 - Inbox quick capture: appends a timestamped line to an "Inbox" note; right-click menu item plus a shortcut (cycle D, with #15).
 - Date notes: today / tomorrow / next work day (date computed), filter and list by date, or all in one file (cycle D, with #17).
 - Backlinks and unlinked mentions (cycle D, with #16).
@@ -79,10 +86,17 @@ default mismatches (test `tests/defaults.test.cjs`), numeric hints, stale doc ve
 - Import a folder of .md files; export all as a zip (cycle B, with #14).
 
 ## Cycle A status: DONE (see TODO_handoff.md)
+
 Deferred on purpose: left/right resize-handle clipping (only affects grab area; revisit in cycle C with #3).
 
 ## Cycle B status: DONE (see TODO_handoff.md sections 9, 9a, 9b)
+
 Owner decision still open: images stay click-to-load placeholders until cycle D #13 adds per-note asset folders.
 
+## Cycle B2 status: DONE
+
+SHORTCUT_ACTIONS and the shortcut helpers in ZentralNotes.uc.js are meant to be reused for #23.
+
 ## Other modules (not Notes)
+
 - RSS card: long items are cut off, show the full text (expandable); links inside an RSS message must be clickable in the card.
