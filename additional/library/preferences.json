@@ -28,7 +28,7 @@
   },
   {
     "property": "zen.workspace.zentral.experimental.library_resize.minimum_content_width_px_text",
-    "label": "Minimum webpage width (px; may overlap Library in narrow windows) [0 to 4000 px]",
+    "label": "Minimum webpage width (px; may overlap Library in narrow windows) [0 to 4000 px; e.g. 0, 150, 300, 450, 550, 700, 850, 1000]",
     "type": "string",
     "defaultValue": "200",
     "placeholder": "200"
@@ -70,7 +70,7 @@
   },
   {
     "property": "zen.workspace.zentral.library.custom_background.opacity_text",
-    "label": "Custom Library background opacity (multiplies any alpha already in the color) [0 to 100 %]",
+    "label": "Custom Library background opacity (multiplies any alpha already in the color) [0 to 100 %; e.g. 30, 40, 60, 70, 80, 85, 95, 100]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"

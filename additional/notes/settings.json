@@ -41,6 +41,126 @@
       "label": "Notes folder (absolute path; empty = zentral-notes inside your profile)",
       "type": "string",
       "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.notes.wrap_lines",
+      "label": "Wrap long lines (off = scroll sideways to see the whole line)",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.notes.font_size",
+      "label": "Text size (px, 8–40)",
+      "type": "input",
+      "defaultValue": 13,
+      "options": [
+        {
+          "label": "11 px",
+          "value": 11
+        },
+        {
+          "label": "12 px",
+          "value": 12
+        },
+        {
+          "label": "13 px",
+          "value": 13
+        },
+        {
+          "label": "14 px",
+          "value": 14
+        },
+        {
+          "label": "16 px",
+          "value": 16
+        },
+        {
+          "label": "18 px",
+          "value": 18
+        },
+        {
+          "label": "20 px",
+          "value": 20
+        },
+        {
+          "label": "24 px",
+          "value": 24
+        }
+      ],
+      "numeric": {
+        "min": 8,
+        "max": 40,
+        "unit": "px"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.notes.line_height",
+      "label": "Line height (%, 100–300)",
+      "type": "input",
+      "defaultValue": 160,
+      "options": [
+        {
+          "label": "120%",
+          "value": 120
+        },
+        {
+          "label": "140%",
+          "value": 140
+        },
+        {
+          "label": "160%",
+          "value": 160
+        },
+        {
+          "label": "180%",
+          "value": 180
+        },
+        {
+          "label": "200%",
+          "value": 200
+        },
+        {
+          "label": "240%",
+          "value": 240
+        }
+      ],
+      "numeric": {
+        "min": 100,
+        "max": 300,
+        "unit": "%"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.notes.blank_lines",
+      "label": "Blank lines in read view",
+      "type": "dropdown",
+      "defaultValue": "collapse",
+      "options": [
+        {
+          "label": "Collapse – any number of blank lines is one paragraph break",
+          "value": "collapse"
+        },
+        {
+          "label": "Keep – every extra blank line adds empty space",
+          "value": "keep"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.notes.line_breaks",
+      "label": "Single line breaks in read view",
+      "type": "dropdown",
+      "defaultValue": "break",
+      "options": [
+        {
+          "label": "Break – a new line stays a new line",
+          "value": "break"
+        },
+        {
+          "label": "Join – a new line is a space (standard Markdown)",
+          "value": "join"
+        }
+      ]
     }
   ],
   "settings": {
@@ -70,6 +190,31 @@
       "owner": "notes"
     },
     "zen.workspace.zentral.notes.dock_sidebar": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.wrap_lines": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.font_size": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.line_height": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.blank_lines": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.line_breaks": {
       "category": "notes",
       "section": "Quick notes",
       "owner": "notes"

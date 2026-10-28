@@ -109,7 +109,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.primary_opacity_text",
-    "label": "Linked primary transparency [0 to 100 %]",
+    "label": "Linked primary transparency [0 to 100 %; e.g. 0, 10, 30, 40, 60, 70, 90, 100]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
@@ -127,7 +127,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.control_strength_text",
-    "label": "Keep controls readable: strength [0 to 300]",
+    "label": "Keep controls readable: strength [0 to 300; e.g. 0, 15, 30, 45, 55, 70, 85, 100]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
@@ -249,7 +249,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.web_opacity_text",
-    "label": "Web panel background transparency (independent of whole-panel opacity) [0 to 100 %]",
+    "label": "Web panel background transparency (independent of whole-panel opacity) [0 to 100 %; e.g. 0, 10, 30, 40, 60, 70, 90, 100]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
@@ -263,7 +263,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.backdrop_opacity_text",
-    "label": "Settings backdrop transparency [0 to 100 %]",
+    "label": "Settings backdrop transparency [0 to 100 %; e.g. 0, 15, 30, 45, 55, 70, 85, 100]",
     "type": "string",
     "defaultValue": "75",
     "placeholder": "75"
@@ -291,14 +291,14 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.surface_opacity_text",
-    "label": "Main panel surface opacity (%) [0 to 100 %]",
+    "label": "Main panel surface opacity (%) [0 to 100 %; e.g. 0, 14, 29, 43, 57, 71, 86, 100]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
   },
   {
     "property": "zen.workspace.bgalazka.look.raised_opacity_text",
-    "label": "Raised card opacity (%) [0 to 100 %]",
+    "label": "Raised card opacity (%) [0 to 100 %; e.g. 0, 14, 29, 43, 57, 71, 86, 100]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
@@ -311,21 +311,21 @@
   },
   {
     "property": "zen.workspace.bgalazka.opacity_unpinned_text",
-    "label": "Whole-Panel Opacity: Unpinned (%) [0 to 100 %]",
+    "label": "Whole-Panel Opacity: Unpinned (%) [0 to 100 %; e.g. 10, 25, 45, 60, 85, 90, 92, 100]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
   },
   {
     "property": "zen.workspace.bgalazka.opacity_pinned_focus_text",
-    "label": "Whole-Panel Opacity: Pinned and Focused (%) [0 to 100 %]",
+    "label": "Whole-Panel Opacity: Pinned and Focused (%) [0 to 100 %; e.g. 10, 25, 60, 75, 85, 90, 95, 100]",
     "type": "string",
     "defaultValue": "95",
     "placeholder": "95"
   },
   {
     "property": "zen.workspace.bgalazka.opacity_pinned_blur_text",
-    "label": "Whole-Panel Opacity: Pinned and Unfocused (%) [0 to 100 %]",
+    "label": "Whole-Panel Opacity: Pinned and Unfocused (%) [0 to 100 %; e.g. 10, 25, 45, 60, 85, 90, 92, 100]",
     "type": "string",
     "defaultValue": "90",
     "placeholder": "90"
@@ -356,7 +356,7 @@
   },
   {
     "property": "zen.workspace.apps.sidebar.animation_speed_text",
-    "label": "Panel Animation Duration (ms) [0 to 60000 ms]",
+    "label": "Panel Animation Duration (ms) [0 to 60000 ms; e.g. 150, 250, 350, 450, 600, 800]",
     "type": "string",
     "defaultValue": "450",
     "placeholder": "450"
@@ -435,28 +435,28 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.radius_text",
-    "label": "Panel and control corner radius (px; 0 = square) [0 to 200 px]",
+    "label": "Panel and control corner radius (px; 0 = square) [0 to 200 px; e.g. 0, 4, 7, 11, 15, 19, 22, 26]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
   },
   {
     "property": "zen.workspace.bgalazka.look.depth_text",
-    "label": "Surface shadow depth (%; 0 = flat) [0 to 100 %]",
+    "label": "Surface shadow depth (%; 0 = flat) [0 to 100 %; e.g. 0, 14, 29, 43, 57, 71, 86, 100]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
   },
   {
     "property": "zen.workspace.bgalazka.look.panel_border_text",
-    "label": "Outer panel border width (px; 0 = none) [0 to 12 px]",
+    "label": "Outer panel border width (px; 0 = none) [0 to 12 px; e.g. 0, 1, 2, 3]",
     "type": "string",
     "defaultValue": "1",
     "placeholder": "1"
   },
   {
     "property": "zen.workspace.bgalazka.look.button_opacity_text",
-    "label": "Panel button background opacity (%) [0 to 100 %]",
+    "label": "Panel button background opacity (%) [0 to 100 %; e.g. 0, 14, 29, 43, 57, 71, 86, 100]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
@@ -484,7 +484,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.button_border_text",
-    "label": "Button border width (px; 0 = no border) [0 to 12 px]",
+    "label": "Button border width (px; 0 = no border) [0 to 12 px; e.g. 0, 1, 2, 3]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
@@ -568,7 +568,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.row_rule_text",
-    "label": "Selection row separator width (px) [0 to 12 px]",
+    "label": "Selection row separator width (px) [0 to 12 px; e.g. 0, 1, 2]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
@@ -622,14 +622,14 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.toolbar_opacity_text",
-    "label": "Navigation toolbar opacity (%) [0 to 100 %]",
+    "label": "Navigation toolbar opacity (%) [0 to 100 %; e.g. 0, 14, 29, 43, 57, 71, 86, 100]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
   },
   {
     "property": "zen.workspace.bgalazka.look.address_opacity_text",
-    "label": "Secondary address field opacity (%) [0 to 100 %]",
+    "label": "Secondary address field opacity (%) [0 to 100 %; e.g. 0, 14, 29, 43, 57, 71, 86, 100]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
@@ -650,7 +650,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.toolbar_border_text",
-    "label": "Toolbar border width (px; 0 = none) [0 to 12 px]",
+    "label": "Toolbar border width (px; 0 = none) [0 to 12 px; e.g. 0, 1, 2, 3]",
     "type": "string",
     "defaultValue": "1",
     "placeholder": "1"
@@ -674,7 +674,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.pill_position_text",
-    "label": "Pill Vertical Offset (%) [-50 to 50 %]",
+    "label": "Pill Vertical Offset (%) [-50 to 50 %; e.g. -50, -25, 0, 25, 50]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
@@ -693,14 +693,14 @@
   },
   {
     "property": "zen.workspace.bgalazka.pill_peek_dot_opacity_text",
-    "label": "Mini Pill Opacity (%) [0 to 100 %]",
+    "label": "Mini Pill Opacity (%) [0 to 100 %; e.g. 10, 30, 31, 50, 70, 90, 100]",
     "type": "string",
     "defaultValue": "31",
     "placeholder": "31"
   },
   {
     "property": "zen.workspace.bgalazka.pill_background_opacity_text",
-    "label": "Pill Background Opacity (%) [0 to 100 %]",
+    "label": "Pill Background Opacity (%) [0 to 100 %; e.g. 10, 30, 48, 50, 70, 90, 100]",
     "type": "string",
     "defaultValue": "48",
     "placeholder": "48"
@@ -822,7 +822,7 @@
   },
   {
     "property": "zen.workspace.tabgroups.label_opacity_text",
-    "label": "Tab Group Label Opacity (%) [0 to 100 %]",
+    "label": "Tab Group Label Opacity (%) [0 to 100 %; e.g. 40, 55, 70, 85, 100]",
     "type": "string",
     "defaultValue": "85",
     "placeholder": "85"
@@ -859,7 +859,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.tile_opacity_text",
-    "label": "App tile background opacity (%) [0 to 100 %]",
+    "label": "App tile background opacity (%) [0 to 100 %; e.g. 0, 14, 29, 43, 57, 71, 86, 100]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
@@ -922,7 +922,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.popup_opacity_text",
-    "label": "Panel popup opacity (%) [0 to 100 %]",
+    "label": "Panel popup opacity (%) [0 to 100 %; e.g. 0, 14, 29, 43, 57, 71, 86, 100]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
@@ -958,7 +958,7 @@
   },
   {
     "property": "zen.workspace.zentral.library.custom_background.opacity_text",
-    "label": "Custom Library background opacity (multiplies any alpha already in the color) [0 to 100 %]",
+    "label": "Custom Library background opacity (multiplies any alpha already in the color) [0 to 100 %; e.g. 30, 40, 60, 70, 80, 85, 95, 100]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
@@ -1156,77 +1156,77 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.essentials_height_text",
-    "label": "Essentials Height [16 to 160 px]",
+    "label": "Essentials Height [16 to 160 px; e.g. 20, 26, 33, 39, 45, 51, 58, 64]",
     "type": "string",
     "defaultValue": "32",
     "placeholder": "32"
   },
   {
     "property": "zen.workspace.bgalazka.look.tabbar_section_gap_text",
-    "label": "Pinned to Normal Tabs Spacing [0 to 100 px]",
+    "label": "Pinned to Normal Tabs Spacing [0 to 100 px; e.g. 0, 3, 6, 9, 11, 14, 17, 20]",
     "type": "string",
     "defaultValue": "2",
     "placeholder": "2"
   },
   {
     "property": "zen.workspace.bgalazka.look.folder_icon_size_text",
-    "label": "Folder icon size [8 to 64 px]",
+    "label": "Folder icon size [8 to 64 px; e.g. 12, 14, 17, 19, 21, 23, 26, 28]",
     "type": "string",
     "defaultValue": "20",
     "placeholder": "20"
   },
   {
     "property": "zen.workspace.bgalazka.look.workspace_icon_size_text",
-    "label": "Workspace icon size [8 to 64 px]",
+    "label": "Workspace icon size [8 to 64 px; e.g. 12, 14, 17, 19, 21, 23, 26, 28]",
     "type": "string",
     "defaultValue": "16",
     "placeholder": "16"
   },
   {
     "property": "zen.workspace.bgalazka.look.workspace_height_text",
-    "label": "Workspace indicator height [14 to 100 px]",
+    "label": "Workspace indicator height [14 to 100 px; e.g. 18, 21, 24, 27, 31, 34, 37, 40]",
     "type": "string",
     "defaultValue": "22",
     "placeholder": "22"
   },
   {
     "property": "zen.workspace.bgalazka.look.bottom_bar_height_text",
-    "label": "Bottom bar height [14 to 100 px]",
+    "label": "Bottom bar height [14 to 100 px; e.g. 20, 23, 26, 29, 31, 34, 37, 40]",
     "type": "string",
     "defaultValue": "24",
     "placeholder": "24"
   },
   {
     "property": "zen.workspace.bgalazka.look.urlbar_top_gap_text",
-    "label": "Space above address bar [0 to 100 px]",
+    "label": "Space above address bar [0 to 100 px; e.g. 0, 2, 5, 7, 9, 11, 14, 16]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
   },
   {
     "property": "zen.workspace.bgalazka.look.newtab_height_text",
-    "label": "New Tab button height [14 to 80 px]",
+    "label": "New Tab button height [14 to 80 px; e.g. 18, 21, 23, 26, 28, 31, 33, 36]",
     "type": "string",
     "defaultValue": "20",
     "placeholder": "20"
   },
   {
     "property": "zen.workspace.bgalazka.look.tabbar_row_height_text",
-    "label": "Tab and Folder Minimum Height [9 to 400 px]",
+    "label": "Tab and Folder Minimum Height [9 to 400 px; e.g. 18, 21, 23, 26, 28, 31, 33, 36]",
     "type": "string",
     "defaultValue": "20",
     "placeholder": "20"
   },
   {
     "property": "zen.workspace.bgalazka.look.tabbar_row_gap_text",
-    "label": "Space Between Tab and Folder Rows [0 to 400 px]",
+    "label": "Space Between Tab and Folder Rows [0 to 400 px; e.g. 0, 1, 2, 3, 5, 6, 7, 8]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
   },
   {
     "property": "zen.workspace.bgalazka.look.tabbar_icon_gap_text",
-    "label": "Favicon to Title Gap [0 to 400 px]",
+    "label": "Favicon to Title Gap [0 to 400 px; e.g. 0, 2, 3, 5, 7, 9, 10, 12]",
     "type": "string",
     "defaultValue": "4",
     "placeholder": "4"
@@ -1238,21 +1238,21 @@
   },
   {
     "property": "zen.workspace.apps.sidebar.apps_per_row_text",
-    "label": "Apps Displayed Per Row [1 to 30]",
+    "label": "Apps Displayed Per Row [1 to 30; e.g. 1, 3, 4, 5, 7, 8, 9, 10]",
     "type": "string",
     "defaultValue": "7",
     "placeholder": "7"
   },
   {
     "property": "zen.workspace.apps.sidebar.max_rows_text",
-    "label": "Maximum Grid Rows [1 to 15]",
+    "label": "Maximum Grid Rows [1 to 15; e.g. 1, 2, 3, 4, 5]",
     "type": "string",
     "defaultValue": "3",
     "placeholder": "3"
   },
   {
     "property": "zen.workspace.apps.sidebar.max_apps_text",
-    "label": "Maximum Apps [1 to 126]",
+    "label": "Maximum Apps [1 to 126; e.g. 7, 14, 21, 28, 35, 42]",
     "type": "string",
     "defaultValue": "21",
     "placeholder": "21"
@@ -1300,14 +1300,14 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.row_padding_text",
-    "label": "Selection row padding (px) [0 to 60 px]",
+    "label": "Selection row padding (px) [0 to 60 px; e.g. 4, 6, 9, 11, 13, 15, 18, 20]",
     "type": "string",
     "defaultValue": "4",
     "placeholder": "4"
   },
   {
     "property": "zen.workspace.bgalazka.look.control_size_text",
-    "label": "Button size (px) [12 to 64 px]",
+    "label": "Button size (px) [12 to 64 px; e.g. 18, 20, 22, 24, 26, 28, 30, 32]",
     "type": "string",
     "defaultValue": "22",
     "placeholder": "22"
@@ -1319,35 +1319,35 @@
   },
   {
     "property": "zen.workspace.apps.sidebar.width_text",
-    "label": "Panel Width (px) [280 to 4000 px]",
+    "label": "Panel Width (px) [280 to 4000 px; e.g. 280, 320, 350, 400, 480, 560]",
     "type": "string",
     "defaultValue": "350",
     "placeholder": "350"
   },
   {
     "property": "zen.workspace.bgalazka.panel_horizontal_offset_px_text",
-    "label": "Panel Horizontal Offset (px; use extension settings for fine adjustment) [-2000 to 2000 px]",
+    "label": "Panel Horizontal Offset (px; use extension settings for fine adjustment) [-2000 to 2000 px; e.g. -200, -100, -50, 0, 50, 100, 200]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
   },
   {
     "property": "zen.workspace.bgalazka.panel_top_extra_px_text",
-    "label": "Panel Top Height Adjustment (px) [-2000 to 2000 px]",
+    "label": "Panel Top Height Adjustment (px) [-2000 to 2000 px; e.g. -100, -50, -20, 0, 4, 20, 50, 100]",
     "type": "string",
     "defaultValue": "4",
     "placeholder": "4"
   },
   {
     "property": "zen.workspace.bgalazka.panel_bottom_extra_px_text",
-    "label": "Panel Bottom Height Adjustment (px) [-2000 to 2000 px]",
+    "label": "Panel Bottom Height Adjustment (px) [-2000 to 2000 px; e.g. -100, -50, -20, 0, 4, 20, 50, 100]",
     "type": "string",
     "defaultValue": "4",
     "placeholder": "4"
   },
   {
     "property": "zen.workspace.bgalazka.panel_position_offset_px_text",
-    "label": "Whole Panel Vertical Offset (px) [-2000 to 2000 px]",
+    "label": "Whole Panel Vertical Offset (px) [-2000 to 2000 px; e.g. -200, -100, -50, 0, 50, 100, 200]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
@@ -1589,21 +1589,21 @@
   },
   {
     "property": "zen.workspace.zentral.hybrid.dock_push_px_text",
-    "label": "Docking distance (px; snap near edge when overflow is allowed) [4 to 440 px]",
+    "label": "Docking distance (px; snap near edge when overflow is allowed) [4 to 440 px; e.g. 8, 15, 24, 40]",
     "type": "string",
     "defaultValue": "15",
     "placeholder": "15"
   },
   {
     "property": "zen.workspace.zentral.hybrid.dock_gap_text",
-    "label": "Gap between docked panels and edge (px) [0 to 416 px]",
+    "label": "Gap between docked panels and edge (px) [0 to 416 px; e.g. 0, 4, 8, 12, 16]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
   },
   {
     "property": "zen.workspace.zentral.hybrid.detached_height_percent_text",
-    "label": "Height when detaching from an edge (%) [20 to 100 %]",
+    "label": "Height when detaching from an edge (%) [20 to 100 %; e.g. 60, 72, 78, 85, 100]",
     "type": "string",
     "defaultValue": "78",
     "placeholder": "78"
@@ -1632,21 +1632,21 @@
   },
   {
     "property": "zen.workspace.bgalazka.hover_reveal_delay_ms_text",
-    "label": "Hidden Panel Reveal Delay (ms; fine adjustment in extension settings) [0 to 60000 ms]",
+    "label": "Hidden Panel Reveal Delay (ms; fine adjustment in extension settings) [0 to 60000 ms; e.g. 0, 80, 160, 320, 500, 1000, 2000]",
     "type": "string",
     "defaultValue": "160",
     "placeholder": "160"
   },
   {
     "property": "zen.workspace.bgalazka.hover_reveal_width_px_text",
-    "label": "Hidden Panel Hover Activation Width (px; independent of webpage push) [0 to 464 px]",
+    "label": "Hidden Panel Hover Activation Width (px; independent of webpage push) [0 to 464 px; e.g. 1, 3, 6, 12, 24, 48, 64]",
     "type": "string",
     "defaultValue": "1",
     "placeholder": "1"
   },
   {
     "property": "zen.workspace.zentral.panels.hover_push_width_px_text",
-    "label": "Hidden Panel Webpage Push Width (px; independent of hover activation) [0 to 464 px]",
+    "label": "Hidden Panel Webpage Push Width (px; independent of hover activation) [0 to 464 px; e.g. 0, 1, 3, 6, 12, 24, 48, 64]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
@@ -1670,21 +1670,21 @@
   },
   {
     "property": "zen.workspace.zentral.panels.outside_distance_px_text",
-    "label": "Panel Outside Tracking Distance (px; shared native sessions use Zen distance) [0 to 4000 px]",
+    "label": "Panel Outside Tracking Distance (px; shared native sessions use Zen distance) [0 to 4000 px; e.g. 1, 50, 100, 250, 500, 1000, 2000]",
     "type": "string",
     "defaultValue": "250",
     "placeholder": "250"
   },
   {
     "property": "zen.workspace.zentral.panels.outside_trigger_margin_px_text",
-    "label": "Window Edge Exit Tolerance (px) [0 to 464 px]",
+    "label": "Window Edge Exit Tolerance (px) [0 to 464 px; e.g. 1, 5, 10, 20, 32, 64]",
     "type": "string",
     "defaultValue": "10",
     "placeholder": "10"
   },
   {
     "property": "zen.workspace.zentral.panels.autohide_delay_ms_text",
-    "label": "Panel Autohide Delay (ms) [0 to 60000 ms]",
+    "label": "Panel Autohide Delay (ms) [0 to 60000 ms; e.g. 0, 100, 200, 400, 800, 1500, 3000, 5000]",
     "type": "string",
     "defaultValue": "400",
     "placeholder": "400"
@@ -1928,7 +1928,7 @@
   },
   {
     "property": "zen.workspace.apps.sidebar.badge_poll_interval_ms_text",
-    "label": "Notification badge fallback refresh [0 to 3600000 ms]",
+    "label": "Notification badge fallback refresh [0 to 3600000 ms; e.g. 0, 1500, 5000, 15000, 60000, 300000, 900000, 3600000]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
@@ -2123,6 +2123,58 @@
     "defaultValue": false
   },
   {
+    "property": "zen.workspace.zentral.notes.wrap_lines",
+    "label": "Wrap long lines (off = scroll sideways to see the whole line)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.font_size_text",
+    "label": "Text size (px, 8–40) [8 to 40 px; e.g. 11, 12, 13, 14, 16, 18, 20, 24]",
+    "type": "string",
+    "defaultValue": "13",
+    "placeholder": "13"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.line_height_text",
+    "label": "Line height (%, 100–300) [100 to 300 %; e.g. 120, 140, 160, 180, 200, 240]",
+    "type": "string",
+    "defaultValue": "160",
+    "placeholder": "160"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.blank_lines",
+    "label": "Blank lines in read view",
+    "type": "dropdown",
+    "defaultValue": "collapse",
+    "options": [
+      {
+        "label": "Collapse – any number of blank lines is one paragraph break",
+        "value": "collapse"
+      },
+      {
+        "label": "Keep – every extra blank line adds empty space",
+        "value": "keep"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.line_breaks",
+    "label": "Single line breaks in read view",
+    "type": "dropdown",
+    "defaultValue": "break",
+    "options": [
+      {
+        "label": "Break – a new line stays a new line",
+        "value": "break"
+      },
+      {
+        "label": "Join – a new line is a space (standard Markdown)",
+        "value": "join"
+      }
+    ]
+  },
+  {
     "type": "text",
     "label": "**Video**",
     "size": "22px"
@@ -2209,7 +2261,7 @@
   },
   {
     "property": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px_text",
-    "label": "Default enlarged preview bottom clearance (px) [6 to 960 px]",
+    "label": "Default enlarged preview bottom clearance (px) [6 to 960 px; e.g. 12, 48, 64, 80, 96, 128, 192, 240]",
     "type": "string",
     "defaultValue": "64",
     "placeholder": "64"
@@ -2263,21 +2315,21 @@
   },
   {
     "property": "zen.workspace.zentral.video_preview.width_percent_text",
-    "label": "Preview Width (%) when Fill Width is Off [10 to 100 %]",
+    "label": "Preview Width (%) when Fill Width is Off [10 to 100 %; e.g. 35, 50, 65, 75, 85, 100]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
   },
   {
     "property": "zen.workspace.zentral.video_preview.height_px_text",
-    "label": "Preview Height (px; 0 = auto) [0 to 4000 px]",
+    "label": "Preview Height (px; 0 = auto) [0 to 4000 px; e.g. 0, 150, 230, 320, 480, 640, 800]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
   },
   {
     "property": "zen.workspace.zentral.video_preview.radius_px_text",
-    "label": "Preview Corner Radius (px) [0 to 424 px]",
+    "label": "Preview Corner Radius (px) [0 to 424 px; e.g. 0, 4, 8, 12, 16, 24]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
@@ -2413,14 +2465,14 @@
   },
   {
     "property": "zen.workspace.zentral.video_preview.button_size_px_text",
-    "label": "Toolbar button size (standalone) [9 to 432 px]",
+    "label": "Toolbar button size (standalone) [9 to 432 px; e.g. 18, 20, 22, 24, 26, 28, 32]",
     "type": "string",
     "defaultValue": "26",
     "placeholder": "26"
   },
   {
     "property": "zen.workspace.zentral.video_preview.button_radius_px_text",
-    "label": "Toolbar button corner radius (px, standalone mod) [0 to 412 px]",
+    "label": "Toolbar button corner radius (px, standalone mod) [0 to 412 px; e.g. 0, 2, 4, 6, 8, 12]",
     "type": "string",
     "defaultValue": "4",
     "placeholder": "4"
@@ -2453,14 +2505,14 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.video_opacity_text",
-    "label": "Video preview canvas opacity (%) [0 to 100 %]",
+    "label": "Video preview canvas opacity (%) [0 to 100 %; e.g. 0, 14, 29, 43, 57, 71, 86, 100]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
   },
   {
     "property": "zen.workspace.bgalazka.look.video_control_opacity_text",
-    "label": "Video control strip opacity (%) [0 to 100 %]",
+    "label": "Video control strip opacity (%) [0 to 100 %; e.g. 0, 14, 29, 43, 57, 71, 86, 100]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
@@ -2502,7 +2554,7 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.video_border_text",
-    "label": "Video control border width (px; 0 = none) [0 to 12 px]",
+    "label": "Video control border width (px; 0 = none) [0 to 12 px; e.g. 0, 1, 2, 3]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
@@ -2536,28 +2588,28 @@
   },
   {
     "property": "zen.workspace.bgalazka.look.video_controls_gap_text",
-    "label": "Sidebar video control spacing (px) [0 to 400 px]",
+    "label": "Sidebar video control spacing (px) [0 to 400 px; e.g. 0, 1, 2, 3, 5, 6, 7, 8]",
     "type": "string",
     "defaultValue": "1",
     "placeholder": "1"
   },
   {
     "property": "zen.workspace.bgalazka.look.video_overlay_opacity_text",
-    "label": "Big Preview hover overlay opacity (%) [0 to 100 %]",
+    "label": "Big Preview hover overlay opacity (%) [0 to 100 %; e.g. 0, 14, 29, 43, 57, 71, 86, 100]",
     "type": "string",
     "defaultValue": "40",
     "placeholder": "40"
   },
   {
     "property": "zen.workspace.bgalazka.look.video_padding_text",
-    "label": "Video control padding (px) [0 to 60 px]",
+    "label": "Video control padding (px) [0 to 60 px; e.g. 0, 2, 5, 7, 9, 11, 14, 16]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
   },
   {
     "property": "zen.workspace.bgalazka.look.video_row_height_text",
-    "label": "Video source row height (px) [14 to 80 px]",
+    "label": "Video source row height (px) [14 to 80 px; e.g. 22, 24, 26, 28, 30, 32, 34, 36]",
     "type": "string",
     "defaultValue": "22",
     "placeholder": "22"
@@ -2591,14 +2643,14 @@
   },
   {
     "property": "zen.workspace.zentral.video_preview.caption_font_size_text",
-    "label": "Subtitle text size (px) [5 to 300 px]",
+    "label": "Subtitle text size (px) [5 to 300 px; e.g. 10, 12, 14, 16, 18, 22, 28]",
     "type": "string",
     "defaultValue": "12",
     "placeholder": "12"
   },
   {
     "property": "zen.workspace.zentral.video_preview.caption_max_lines_text",
-    "label": "Maximum subtitle lines [1 to 24]",
+    "label": "Maximum subtitle lines [1 to 24; e.g. 1, 2, 3, 4, 5, 6, 8]",
     "type": "string",
     "defaultValue": "4",
     "placeholder": "4"
@@ -2632,7 +2684,7 @@
   },
   {
     "property": "zen.workspace.zentral.video_preview.caption_poll_ms_text",
-    "label": "Caption recovery interval (slower = delayed recovery from missed events) [0 to 60000 ms]",
+    "label": "Caption recovery interval (slower = delayed recovery from missed events) [0 to 60000 ms; e.g. 250, 500, 750, 1500, 3000]",
     "type": "string",
     "defaultValue": "750",
     "placeholder": "750"
@@ -2715,35 +2767,35 @@
   },
   {
     "property": "zen.workspace.zentral.video_preview.capture_width_px_text",
-    "label": "Capture Detail: Video Frames and Page Snapshots (px) [80 to 2560 px]",
+    "label": "Capture Detail: Video Frames and Page Snapshots (px) [80 to 2560 px; e.g. 160, 240, 320, 480, 640]",
     "type": "string",
     "defaultValue": "480",
     "placeholder": "480"
   },
   {
     "property": "zen.workspace.zentral.video_preview.capture_rate_tenths_text",
-    "label": "Still-Frame Capture Rate (higher rates use more CPU) [1 to 600]",
+    "label": "Still-Frame Capture Rate (higher rates use more CPU) [1 to 600; e.g. 1, 2, 10, 20, 100, 150, 300, 600]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
   },
   {
     "property": "zen.workspace.zentral.video_preview.scan_interval_ms_text",
-    "label": "Source discovery interval (slower = less polling; events can still scan) [0 to 480000 ms]",
+    "label": "Source discovery interval (slower = less polling; events can still scan) [0 to 480000 ms; e.g. 0, 5000, 15000, 30000, 60000, 120000]",
     "type": "string",
     "defaultValue": "5000",
     "placeholder": "5000"
   },
   {
     "property": "zen.workspace.zentral.video_preview.canvas_stream_width_px_text",
-    "label": "Canvas stream width (smaller = less detail and drawing work) [80 to 2560 px]",
+    "label": "Canvas stream width (smaller = less detail and drawing work) [80 to 2560 px; e.g. 160, 240, 320, 480, 640]",
     "type": "string",
     "defaultValue": "640",
     "placeholder": "640"
   },
   {
     "property": "zen.workspace.zentral.video_preview.canvas_stream_fps_text",
-    "label": "Canvas stream FPS (lower = less smooth video and drawing work) [1 to 90]",
+    "label": "Canvas stream FPS (lower = less smooth video and drawing work) [1 to 90; e.g. 5, 10, 15, 24, 30]",
     "type": "string",
     "defaultValue": "30",
     "placeholder": "30"
@@ -2878,21 +2930,21 @@
   },
   {
     "property": "zen.workspace.bgalazka.panel_retry_limit_text",
-    "label": "Panel recovery retry limit [0 to 6]",
+    "label": "Panel recovery retry limit [0 to 6; e.g. 0, 1, 2, 3, 4, 6]",
     "type": "string",
     "defaultValue": "2",
     "placeholder": "2"
   },
   {
     "property": "zen.workspace.bgalazka.panel_retry_delay_ms_text",
-    "label": "Panel recovery retry delay [0 to 60000 ms]",
+    "label": "Panel recovery retry delay [0 to 60000 ms; e.g. 100, 250, 500, 1000, 2000, 5000]",
     "type": "string",
     "defaultValue": "500",
     "placeholder": "500"
   },
   {
     "property": "zen.workspace.bgalazka.panel_fallback_interval_ms_text",
-    "label": "Panel troubleshooting refresh interval [0 to 300000 ms]",
+    "label": "Panel troubleshooting refresh interval [0 to 300000 ms; e.g. 1000, 5000, 10000, 30000, 60000, 300000]",
     "type": "string",
     "defaultValue": "10000",
     "placeholder": "10000"
@@ -3130,35 +3182,35 @@
   },
   {
     "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.delay_seconds_text",
-    "label": "Sidebar layout refresh delay (seconds) [0 to 60 s]",
+    "label": "Sidebar layout refresh delay (seconds) [0 to 60 s; e.g. 0, 9, 17, 26, 34, 43, 51, 60]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
   },
   {
     "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.target_width_px_text",
-    "label": "Sidebar expansion target width (px) [100 to 4000 px]",
+    "label": "Sidebar expansion target width (px) [100 to 4000 px; e.g. 200, 450, 700, 950, 1250, 1500, 1750, 2000]",
     "type": "string",
     "defaultValue": "400",
     "placeholder": "400"
   },
   {
     "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.extra_width_px_text",
-    "label": "Sidebar expansion extra width (px) [25 to 4000 px]",
+    "label": "Sidebar expansion extra width (px) [25 to 4000 px; e.g. 50, 200, 400, 550, 700, 850, 1050, 1200]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
   },
   {
     "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.hold_ms_text",
-    "label": "Sidebar expansion hold time (ms) [0 to 60000 ms]",
+    "label": "Sidebar expansion hold time (ms) [0 to 60000 ms; e.g. 50, 750, 1450, 2150, 2900, 3600, 4300, 5000]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
   },
   {
     "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.verification_frames_text",
-    "label": "Sidebar expansion verification frames [1 to 30]",
+    "label": "Sidebar expansion verification frames [1 to 30; e.g. 1, 2, 4, 5, 6, 7, 9, 10]",
     "type": "string",
     "defaultValue": "2",
     "placeholder": "2"
@@ -3171,14 +3223,14 @@
   },
   {
     "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px_text",
-    "label": "Compact sidebar edge tolerance (px) [0 to 464 px]",
+    "label": "Compact sidebar edge tolerance (px) [0 to 464 px; e.g. 0, 4, 8, 12, 16, 24, 32, 64]",
     "type": "string",
     "defaultValue": "12",
     "placeholder": "12"
   },
   {
     "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms_text",
-    "label": "Compact sidebar exit grace (ms) [0 to 60000 ms]",
+    "label": "Compact sidebar exit grace (ms) [0 to 60000 ms; e.g. 0, 50, 100, 150, 400, 500, 1000, 2000]",
     "type": "string",
     "defaultValue": "250",
     "placeholder": "250"
@@ -3230,7 +3282,7 @@
   },
   {
     "property": "zen.workspace.zentral.experimental.library_resize.minimum_content_width_px_text",
-    "label": "Minimum webpage width (px; may overlap Library in narrow windows) [0 to 4000 px]",
+    "label": "Minimum webpage width (px; may overlap Library in narrow windows) [0 to 4000 px; e.g. 0, 150, 300, 450, 550, 700, 850, 1000]",
     "type": "string",
     "defaultValue": "200",
     "placeholder": "200"

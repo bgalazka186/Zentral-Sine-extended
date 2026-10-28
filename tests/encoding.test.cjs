@@ -6,7 +6,8 @@ const assert = require("node:assert/strict"),
   fs = require("node:fs"),
   path = require("node:path");
 const root = path.resolve(__dirname, "..");
-const SKIP = new Set([".git", "node_modules", "upstream", "patches", "docs"]);
+// tools/ and .kilo/ describe mojibake literally (the fixer needs the broken sequences as data).
+const SKIP = new Set([".git", ".kilo", "node_modules", "upstream", "patches", "docs", "tools"]);
 const EXT = /\.(js|mjs|cjs|json|css|md|yml|txt)$/i;
 const files = [];
 (function walk(dir) {

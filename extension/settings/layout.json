@@ -316,7 +316,7 @@
           "label": "Quick notes"
         }
       ],
-      "icon": "keyboard"
+      "icon": "note"
     },
     {
       "id": "video-playback",
@@ -976,6 +976,11 @@
     "zen.workspace.zentral.notes.autosave_seconds",
     "zen.workspace.zentral.notes.folder",
     "zen.workspace.zentral.notes.dock_sidebar",
+    "zen.workspace.zentral.notes.wrap_lines",
+    "zen.workspace.zentral.notes.font_size",
+    "zen.workspace.zentral.notes.line_height",
+    "zen.workspace.zentral.notes.blank_lines",
+    "zen.workspace.zentral.notes.line_breaks",
     {
       "type": "text",
       "label": "**Video**",

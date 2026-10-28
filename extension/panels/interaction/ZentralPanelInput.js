@@ -36,7 +36,7 @@
     }) {
       function ensureInputShieldForKeybinds() {
         if (!getPref(BGALAZKA_EXT_PREFS.KEYBINDS_ENABLED, false)) return;
-        if (!getPref(BGALAZKA_EXT_PREFS.PANEL_INPUT_SHIELD, false)) {
+        if (!getPref(BGALAZKA_EXT_PREFS.PANEL_INPUT_SHIELD, true)) {
           setPref(BGALAZKA_EXT_PREFS.PANEL_INPUT_SHIELD, true);
         }
         document.documentElement.setAttribute(
@@ -245,7 +245,7 @@
 
       const panelInputShieldHandler = (event) => {
         if (event.type === "mouseup") panelShieldPresses.delete(event.button);
-        if (!getPref(BGALAZKA_EXT_PREFS.PANEL_INPUT_SHIELD, false)) return;
+        if (!getPref(BGALAZKA_EXT_PREFS.PANEL_INPUT_SHIELD, true)) return;
         if (event.button !== 3 && event.button !== 4) return;
         if (!panelShieldIsOpen()) return;
         const browser = panelShieldBrowserForEvent(event);
@@ -265,7 +265,7 @@
 
       const panelInputShieldAppCommandHandler = (event) => {
         if (
-          !getPref(BGALAZKA_EXT_PREFS.PANEL_INPUT_SHIELD, false) ||
+          !getPref(BGALAZKA_EXT_PREFS.PANEL_INPUT_SHIELD, true) ||
           !panelShieldIsOpen()
         )
           return false;

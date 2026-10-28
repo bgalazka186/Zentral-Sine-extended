@@ -7,35 +7,35 @@
   },
   {
     "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.delay_seconds_text",
-    "label": "Sidebar layout refresh delay (seconds) [0 to 60 s]",
+    "label": "Sidebar layout refresh delay (seconds) [0 to 60 s; e.g. 0, 9, 17, 26, 34, 43, 51, 60]",
     "type": "string",
     "defaultValue": "0",
     "placeholder": "0"
   },
   {
     "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.target_width_px_text",
-    "label": "Sidebar expansion target width (px) [100 to 4000 px]",
+    "label": "Sidebar expansion target width (px) [100 to 4000 px; e.g. 200, 450, 700, 950, 1250, 1500, 1750, 2000]",
     "type": "string",
     "defaultValue": "400",
     "placeholder": "400"
   },
   {
     "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.extra_width_px_text",
-    "label": "Sidebar expansion extra width (px) [25 to 4000 px]",
+    "label": "Sidebar expansion extra width (px) [25 to 4000 px; e.g. 50, 200, 400, 550, 700, 850, 1050, 1200]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
   },
   {
     "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.hold_ms_text",
-    "label": "Sidebar expansion hold time (ms) [0 to 60000 ms]",
+    "label": "Sidebar expansion hold time (ms) [0 to 60000 ms; e.g. 50, 750, 1450, 2150, 2900, 3600, 4300, 5000]",
     "type": "string",
     "defaultValue": "100",
     "placeholder": "100"
   },
   {
     "property": "zen.workspace.zentral.experimental.sidebar_startup_recalculate.verification_frames_text",
-    "label": "Sidebar expansion verification frames [1 to 30]",
+    "label": "Sidebar expansion verification frames [1 to 30; e.g. 1, 2, 4, 5, 6, 7, 9, 10]",
     "type": "string",
     "defaultValue": "2",
     "placeholder": "2"
@@ -66,14 +66,14 @@
   },
   {
     "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.edge_margin_px_text",
-    "label": "Compact sidebar edge tolerance (px) [0 to 464 px]",
+    "label": "Compact sidebar edge tolerance (px) [0 to 464 px; e.g. 0, 4, 8, 12, 16, 24, 32, 64]",
     "type": "string",
     "defaultValue": "12",
     "placeholder": "12"
   },
   {
     "property": "zen.workspace.zentral.experimental.compact_sidebar_hover.exit_grace_ms_text",
-    "label": "Compact sidebar exit grace (ms) [0 to 60000 ms]",
+    "label": "Compact sidebar exit grace (ms) [0 to 60000 ms; e.g. 0, 50, 100, 150, 400, 500, 1000, 2000]",
     "type": "string",
     "defaultValue": "250",
     "placeholder": "250"

@@ -14,7 +14,7 @@ class El {
   constructor(tag) {
     this.tag = tag; this.children = []; this.parent = null; this.attrs = new Map();
     this.dataset = {}; this.listeners = []; this.hidden = false; this.value = ""; this.readOnly = false;
-    this.style = { setProperty() {} }; this._classes = new Set(); this._text = "";
+    this.style = { setProperty() {}, removeProperty() {} }; this._classes = new Set(); this._text = "";
     this.selectionStart = 0; this.selectionEnd = 0; this.scrollTop = 0;
     const self = this;
     this.classList = {
@@ -29,6 +29,8 @@ class El {
   set className(v) { this._classes = new Set(String(v).split(/\s+/).filter(Boolean)); }
   setAttribute(k, v) { this.attrs.set(k, String(v)); if (k === "class") this.className = v; }
   getAttribute(k) { return this.attrs.get(k) ?? null; }
+  hasAttribute(k) { return this.attrs.has(k); }
+  removeAttribute(k) { this.attrs.delete(k); }
   _adopt(n) { if (n.parent) n.parent.children.splice(n.parent.children.indexOf(n), 1); n.parent = this; return n; }
   append(...kids) { for (const k of kids) this.children.push(this._adopt(typeof k === "string" ? Object.assign(new El("#text"), { _text: k }) : k)); }
   appendChild(k) { this.append(k); return k; }

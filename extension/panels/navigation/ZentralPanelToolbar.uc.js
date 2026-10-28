@@ -1073,7 +1073,7 @@
       const active =
         root?.hasAttribute("open") &&
         !root.hasAttribute("closing") &&
-        ctx.getPref(ctx.BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, false);
+        ctx.getPref(ctx.BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, true);
       if (active) updateWebToolbarState();
       ctx.syncPanelFallbackPolling();
     }

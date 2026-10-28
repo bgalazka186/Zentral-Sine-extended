@@ -862,7 +862,7 @@
     let removeAddonHostSelectionGuards = null;
 
     function isAddonTabIdBridgeEnabled() {
-      return ctx.getPref(ctx.BGALAZKA_EXT_PREFS.ADDON_TAB_ID_BRIDGE, false);
+      return ctx.getPref(ctx.BGALAZKA_EXT_PREFS.ADDON_TAB_ID_BRIDGE, true);
     }
 
     function isAddonHostFolderVisible() {

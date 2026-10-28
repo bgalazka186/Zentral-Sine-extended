@@ -82,7 +82,7 @@
     const onTileAudioInput = (event) => {
       const badge = event.target.closest?.(".bgalazka-tile-audio");
       const tile = badge?.closest?.(".zen-app-tile[data-app-id]");
-      if (!tile || !ctx.getPref(ctx.EXT_PREFS.AUDIO_INDICATOR, false)) return;
+      if (!tile || !ctx.getPref(ctx.EXT_PREFS.AUDIO_INDICATOR, true)) return;
       const keyboard = event.type === "keydown" || event.type === "keyup";
       if (keyboard && event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
@@ -718,8 +718,8 @@
       if (isSyncingTiles) return;
       isSyncingTiles = true;
       try {
-        const enabled = ctx.getPref(ctx.EXT_PREFS.CORNER_TILES, false);
-        const allTabs = ctx.getPref(ctx.EXT_PREFS.ALL_TAB_PANELS, false);
+        const enabled = ctx.getPref(ctx.EXT_PREFS.CORNER_TILES, true);
+        const allTabs = ctx.getPref(ctx.EXT_PREFS.ALL_TAB_PANELS, true);
         const storedTabs = new Set(window.gZenWorkspaces?.allStoredTabs ?? window.gBrowser?.tabs ?? []);
         const targets = new Set(
           (enabled || allTabs) &&

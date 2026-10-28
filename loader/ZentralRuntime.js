@@ -732,6 +732,11 @@
         }
       }
     },
+    // Widened range of a numeric setting (from loader/numeric-prefs.json), or null. The settings
+    // window uses it so its exact-number boxes accept what the Sine text fields accept.
+    numericRange(key) {
+      return numericRanges.get(key) || null;
+    },
     snapshot() {
       return {
         version: VERSION,
@@ -1407,6 +1412,8 @@
     search: "M10 3a7 7 0 1 0 0 14 7 7 0 1 0 0-14m5 12 6 6",
     bell: "M5 17h14l-2-3V8a5 5 0 0 0-10 0v6zM10 21h4",
     power: "M12 2v10M6 5a9 9 0 1 0 12 0",
+    // Same path as ICONS.note in additional/notes/ZentralNotes.uc.js (tests/notes-icon.test.cjs).
+    note: "M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z M15 3v6h6",
     keyboard:
       "M2 5h20v14H2zM5 9h.01M9 9h.01M13 9h.01M17 9h.01M5 13h.01M9 13h.01M13 13h.01M17 13h.01M8 16h8",
     list: "M8 5h13M8 12h13M8 19h13M3 5h.01M3 12h.01M3 19h.01",
@@ -2557,12 +2564,14 @@
   let activating = false,
     activationRequested = false;
   let numericSync = null;
+  let numericRanges = new Map();
   function startNumericPrefSync() {
     if (numericSync || stopped) return;
     try {
       const items = JSON.parse(
         moduleLoader.readText("loader/numeric-prefs.json", "numeric-prefs"),
       );
+      numericRanges = new Map(items.map((item) => [item.key, { min: item.min, max: item.max }]));
       numericSync = createNumericPrefSync({
         Services,
         items,

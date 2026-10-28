@@ -13,37 +13,13 @@ Everything below is a **frozen snapshot**. Nothing here has been run inside Zen/
 - Resize perf: floating drag reads geometry once per event; horizontal panel resize caches its limit; vertical resize applies once per frame; reveal-edge geometry coalesced on window resize.
 - Bumped everything to 3.1.3. Standalone locks were reset to 3.1.2 and rebuilt (see "How to rebuild" below).
 
-## 2. Open problem list from the last audit: 21 schema-vs-code default mismatches
+## 2. Default mismatches: RESOLVED
 
-Source: schema `defaultValue` (what Sine and the settings window show) vs the fallback literal in a `getPref(key, fallback)` call. **None have been reviewed.** Some may be intentional (a feature treated as "off" when read from another module). For each, decide which side is right, then change the other, and note it in the changelog because it can change behavior for users who never touched the setting.
+The schema default won in every case (it is what Sine and the settings window show). The 29 live fallback literals in `ZentralPanels.uc.js`, its split modules, `ZentralFeatureSettings.js` and `ZentralSettingsShell.js` (animation type now `spring-gentle`) were aligned. Rows 1-5 already agreed in the current tree. `tools/check-default-drift.cjs` plus `tests/defaults.test.cjs` keep them from drifting. Note: `ZentralPanels` `getPref` already overrode fallbacks with `PROFILE_DEFAULTS`, so runtime behavior there was correct; the literals were dead but misleading.
 
-| # | Setting (after `zen.workspace.`) | Schema default | Code fallback | Location |
-| ---: | --- | --- | --- | --- |
-| 1 | `zentral.startup.enabled` | true | false | additional/library/ZentralLibraryResize.uc.js:508 |
-| 2 | `zentral.tabs.background_drag` | true | false | additional/library/ZentralLibraryResize.uc.js:508 |
-| 3 | `zentral.video_preview.enabled` | true | false | additional/library/ZentralLibraryResize.uc.js:508 |
-| 4 | `zentral.experimental.compact_sidebar_hover` | false | true | additional/tabs/startup/ZentralStartup.uc.js:55 |
-| 5 | `zentral.experimental.library_resize` | false | true | additional/tabs/startup/ZentralStartup.uc.js:55 |
-| 6 | `bgalazka.pill_peek_dot_color` | '#5e0002' | '#4da6ff' | extension/panels/ZentralPanels.uc.js:662 |
-| 7 | `bgalazka.pill_peek_dot_opacity` | 31 | 90 | extension/panels/ZentralPanels.uc.js:666 |
-| 8 | `bgalazka.pill_background_opacity` | 48 | 90 | extension/panels/ZentralPanels.uc.js:670 |
-| 9 | `bgalazka.opposite_docking` | true | false | extension/panels/ZentralPanels.uc.js:1003 |
-| 10 | `bgalazka.push_page` | true | false | extension/panels/ZentralPanels.uc.js:1613 |
-| 11 | `bgalazka.web_toolbar_enabled` | true | false | extension/panels/ZentralPanels.uc.js:2126 |
-| 12 | `bgalazka.web_toolbar_urlbar` | true | false | extension/panels/ZentralPanels.uc.js:2128 |
-| 13 | `bgalazka.audio_indicator` | true | false | extension/panels/ZentralPanels.uc.js:2372 |
-| 14 | `bgalazka.pill_peek_dot` | true | false | extension/panels/ZentralPanels.uc.js:3001 |
-| 15 | `bgalazka.panel_input_shield` | true | false | extension/panels/interaction/ZentralPanelInput.js:39 |
-| 16 | `bgalazka.addon_tab_id_bridge` | true | false | extension/panels/browsers/ZentralBrowserIntegrations.uc.js:865 |
-| 17 | `bgalazka.corner_tiles` | true | false | extension/panels/corner-tiles/ZentralCornerPanels.uc.js:721 |
-| 18 | `bgalazka.all_tab_panels` | true | false | extension/panels/corner-tiles/ZentralCornerPanels.uc.js:722 |
-| 19 | `bgalazka.translucency` | true | false | extension/settings/controllers/ZentralFeatureSettings.js:298 |
-| 20 | `bgalazka.web_toolbar_quickswitch` | true | false | extension/settings/controllers/ZentralFeatureSettings.js:1009 |
-| 21 | `apps.sidebar.animation_type` | 'spring-gentle' | 'slide' | extension/settings/controllers/ZentralSettingsShell.js:380 |
+## 3. Audits (static ones run; see TODO_notes_roadmap.md cycle E for the rest)
 
-Hints for the reviewer: rows 1-5 are cross-module reads (one module reading another feature's switch); rows 6-8 look like real visual disagreements (peek dot color/opacity, pill background); 9-20 are boolean "on in schema, off in code" and the settings window preview may differ from reality until the user touches the setting. Add a test (`tests/defaults.test.cjs`) once decided so the two cannot drift again.
-
-## 3. Audits that were planned but NOT run
+Done: duplicate IDs (only `zentral-bootstrap-diagnostics`, intentionally get-or-create in loader and video), dead attribute selectors (none dead; `secondary-toolbar-*` are set from pref names; `bgalazka-pill-drag-feedback` and `-pill-pos-dragging` are JS-only state flags), README links (only two point into gitignored `docs/`), stale versions (fixed). Still open below:
 
 - CSS attribute selectors that no JS ever sets, and JS-set attributes no CSS uses (dead CSS / dead flags).
 - Duplicate element IDs across modules (`id = "..."`, `getElementById` targets created twice).
@@ -71,7 +47,7 @@ node tools/check-settings-consistency.cjs
 node tools/build-z-map.cjs                   # regenerate z-heights_map.md
 node tools/build-standalone.cjs              # refuses changed content without a version bump
 node tools/build-standalone.cjs --check
-for t in standalone notes notes-ui notes-bars numeric-prefs encoding z-heights resize-perf; do node tests/$t.test.cjs; done
+for t in standalone notes notes-ui notes-bars numeric-prefs encoding z-heights resize-perf defaults notes-decisions; do node tests/$t.test.cjs; done
 ```
 
 Release-in-progress trick: 3.1.3 is unreleased, so after editing a bundled file the builder complains "content changed but version is still 3.1.3". Reset every `additional/**/standalone.lock.json` `"version"` to `"3.1.2"` (last published) and run `node tools/build-standalone.cjs` again. Do not hand-edit `.standalone.uc.js` files.
@@ -105,6 +81,10 @@ Release-in-progress trick: 3.1.3 is unreleased, so after editing a bundled file 
 
 ## 7. Pending decisions for the owner
 
-- Confirm the 3.1.3 bump (everything was bumped together so standalone bundles stay one version).
+- (resolved) 3.1.3 bump confirmed by the owner.
 - Notes: optional encryption at rest (not built; losing the key would lose notes), default sheet size, whether the Notes floating card should sit above Big Preview (currently below, it is not a popover).
 - Whether numeric Sine fields should also show the old preset values as hints.
+
+## 8. Cycle A (Notes) result
+
+Done: one Notes icon (`tests/notes-icon.test.cjs`); menus clamped into sheet and window (`menuPosition`); 8 highlight colors; new settings `wrap_lines`, `font_size`, `line_height`, `blank_lines`, `line_breaks`; shortcut ignores a panel hidden by autohide; Zentral sliders get an exact-number box using widened ranges (`ZentralRuntime.numericRange`); slider defaults now covered by `tools/check-default-drift.cjs`. Not verified in real Zen: menu placement, autohide shortcut, exact-number boxes. Next: cycle B in `TODO_notes_roadmap.md`.

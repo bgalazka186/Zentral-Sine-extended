@@ -130,4 +130,18 @@ test("ranges are wider than the old presets (e.g. RSS card can be much wider)", 
   const panel = list.find((i) => i.key === "zen.workspace.apps.sidebar.width");
   assert.ok(panel.max >= 1000 && panel.min <= 280);
 });
+test("old preset values are shown as hints in the label (thinned when long, never invented)", () => {
+  const { presetHints, sineItem } = require("../tools/lib/sine-prefs.cjs");
+  const few = { property: "x.y", label: "Opacity", defaultValue: 90, numeric: { min: 0, max: 100, unit: "%" }, options: [{ value: 100 }, { value: 90 }, { value: 80 }, { value: 90 }] };
+  assert.deepEqual(presetHints(few), [80, 90, 100], "sorted and de-duplicated");
+  assert.equal(sineItem(few).label, "Opacity [0 to 100 %; e.g. 80, 90, 100]");
+  assert.equal(sineItem(few).placeholder, "90", "the placeholder still shows the default");
+  const many = { options: Array.from({ length: 40 }, (_, i) => ({ value: i * 5 })) };
+  const thin = presetHints(many);
+  assert.ok(thin.length <= 8 && thin[0] === 0 && thin[thin.length - 1] === 195, "thinned, ends kept");
+  assert.deepEqual(presetHints({ options: [{ value: "auto" }] }), [], "non-numeric options are ignored");
+  assert.equal(sineItem({ property: "x.z", label: "Plain", defaultValue: 5, numeric: { min: 1, max: 9 } }).label, "Plain [1 to 9]");
+  const hinted = sine.filter((p) => /_text$/.test(p.property || "") && /; e\.g\. /.test(p.label));
+  assert.ok(hinted.length >= 80, "generated Sine file carries hints (" + hinted.length + ")");
+});
 console.log(`\n${passed} numeric preference tests passed`);

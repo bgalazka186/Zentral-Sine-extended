@@ -307,7 +307,7 @@
             slidersGroup.append(s1.row, s2.row, s3.row);
             slidersGroup.setAttribute(
               "data-hidden",
-              ctx.getPref(ctx.BGALAZKA_EXT_PREFS.TRANSLUCENCY, false)
+              ctx.getPref(ctx.BGALAZKA_EXT_PREFS.TRANSLUCENCY, true)
                 ? "false"
                 : "true",
             );
@@ -650,7 +650,7 @@
               ctx.BGALAZKA_EXT_PREFS.PILL_PEEK_DOT_OPACITY,
               10,
               100,
-              90,
+              31,
               "%",
               undefined,
               undefined,
@@ -662,7 +662,7 @@
               ctx.BGALAZKA_EXT_PREFS.PILL_BACKGROUND_OPACITY,
               10,
               100,
-              90,
+              48,
               "%",
               undefined,
               undefined,
@@ -1027,7 +1027,7 @@
             );
             quickSwitchTargetsSubgroup.setAttribute(
               "data-hidden",
-              ctx.getPref(ctx.BGALAZKA_EXT_PREFS.WEB_TOOLBAR_QUICKSWITCH, false)
+              ctx.getPref(ctx.BGALAZKA_EXT_PREFS.WEB_TOOLBAR_QUICKSWITCH, true)
                 ? "false"
                 : "true",
             );
@@ -1041,7 +1041,7 @@
             );
             webToolbarSubgroup.setAttribute(
               "data-hidden",
-              ctx.getPref(ctx.BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, false)
+              ctx.getPref(ctx.BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, true)
                 ? "false"
                 : "true",
             );

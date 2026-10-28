@@ -2475,8 +2475,14 @@ const __zentralEmbeddedLoader = (function () {
           )
             position = p;
         } catch (_) {}
-        let w = Services.prefs.getIntPref(P + "enlarged_width", 1280),
+        let w, h;
+        try {
+          w = Services.prefs.getIntPref(P + "enlarged_width", 1280);
           h = Services.prefs.getIntPref(P + "enlarged_height", 720);
+        } catch (_) {
+          w = 1280;
+          h = 720;
+        }
         const bottomGap = position ? inset() : defaultBottomGap();
         // Migrate the former untouched 640x420 default; preserve other custom sizes.
         if (!position && w === 640 && h === 420) {
@@ -3215,10 +3221,15 @@ const __zentralEmbeddedLoader = (function () {
         const retryKey = key + ":" + mode;
         const attempts = (deps.rendererRetryCounts.get(retryKey) || 0) + 1;
         deps.rendererRetryCounts.set(retryKey, attempts);
-        const rawLimit = deps.Services.prefs.getIntPref(
-          "zen.workspace.bgalazka.panel_retry_limit",
-          2,
-        );
+        let rawLimit;
+        try {
+          rawLimit = deps.Services.prefs.getIntPref(
+            "zen.workspace.bgalazka.panel_retry_limit",
+            2,
+          );
+        } catch (_) {
+          rawLimit = 2;
+        }
         const retryLimit = Math.max(0, Math.min(6, rawLimit));
         deps.unavailableBySource.get(key).set(mode, {
           reason: String(error).slice(0, 100),
@@ -5455,14 +5466,26 @@ const __zentralEmbeddedLoader = (function () {
             "zen.workspace.zentral.video_preview.caption_placement",
             "below",
           ),
-          fontSize: Services.prefs.getIntPref(
-            "zen.workspace.zentral.video_preview.caption_font_size",
-            12,
-          ),
-          maxLines: Services.prefs.getIntPref(
-            "zen.workspace.zentral.video_preview.caption_max_lines",
-            4,
-          ),
+          fontSize: (() => {
+            try {
+              return Services.prefs.getIntPref(
+                "zen.workspace.zentral.video_preview.caption_font_size",
+                12,
+              );
+            } catch (_) {
+              return 12;
+            }
+          })(),
+          maxLines: (() => {
+            try {
+              return Services.prefs.getIntPref(
+                "zen.workspace.zentral.video_preview.caption_max_lines",
+                4,
+              );
+            } catch (_) {
+              return 4;
+            }
+          })(),
         });
         deps.box.hidden = !deps.enabled();
         deps.box.toggleAttribute(
@@ -9687,22 +9710,19 @@ __zentralShim.register = function (def) {
         const SCAN_INTERVALS = [0, 5000, 15000, 30000, 60000, 120000];
         const CAPTION_INTERVALS = [250, 500, 750, 1500, 3000];
         function scanIntervalMs() {
-          const value = Services.prefs.getIntPref(SCAN_INTERVAL_PREF, 5000);
+          const value = readInt(SCAN_INTERVAL_PREF, 5000);
           return SCAN_INTERVALS.includes(value) ? value : 5000;
         }
         function captionIntervalMs() {
-          const value = Services.prefs.getIntPref(CAPTION_POLL_PREF, 750);
+          const value = readInt(CAPTION_POLL_PREF, 750);
           return CAPTION_INTERVALS.includes(value) ? value : 750;
         }
         function canvasStreamWidth() {
-          const value = Services.prefs.getIntPref(
-            CANVAS_STREAM_WIDTH_PREF,
-            640,
-          );
+          const value = readInt(CANVAS_STREAM_WIDTH_PREF, 640);
           return [160, 240, 320, 480, 640].includes(value) ? value : 640;
         }
         function canvasStreamFps() {
-          const value = Services.prefs.getIntPref(CANVAS_STREAM_FPS_PREF, 30);
+          const value = readInt(CANVAS_STREAM_FPS_PREF, 30);
           return [5, 10, 15, 24, 30].includes(value) ? value : 30;
         }
         // POWER SAVING (build 22): normal playback samples presentation at 2 s;

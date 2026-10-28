@@ -659,15 +659,15 @@
         root.style.setProperty("--bgalazka-pill-offset", pillOffset + "%");
         root.style.setProperty(
           "--bgalazka-pill-peek-color",
-          getPref(EXT_PREFS.PILL_PEEK_DOT_COLOR, "#4da6ff"),
+          getPref(EXT_PREFS.PILL_PEEK_DOT_COLOR, "#5e0002"),
         );
         root.style.setProperty(
           "--bgalazka-pill-peek-opacity",
-          getPref(EXT_PREFS.PILL_PEEK_DOT_OPACITY, 90) + "%",
+          getPref(EXT_PREFS.PILL_PEEK_DOT_OPACITY, 31) + "%",
         );
         root.style.setProperty(
           "--bgalazka-pill-background-opacity",
-          getPref(EXT_PREFS.PILL_BACKGROUND_OPACITY, 90) + "%",
+          getPref(EXT_PREFS.PILL_BACKGROUND_OPACITY, 48) + "%",
         );
       }
 
@@ -1000,7 +1000,7 @@
           // without the user ever touching expand or the resize strip. Clamp
           // it down here too, same helper as toggleExpand/onDrag above.
           if (
-            getPref(EXT_PREFS.OPPOSITE_DOCKING, false) ||
+            getPref(EXT_PREFS.OPPOSITE_DOCKING, true) ||
             this.isPlacementVerticalBar?.()
           ) {
             const root = document.getElementById("zen-app-panel-root");
@@ -1114,7 +1114,7 @@
         appsInstance.toggleExpand = function () {
           if (origToggleExpand) origToggleExpand();
           if (
-            !getPref(EXT_PREFS.OPPOSITE_DOCKING, false) &&
+            !getPref(EXT_PREFS.OPPOSITE_DOCKING, true) &&
             !this.isPlacementVerticalBar?.()
           )
             return;
@@ -1163,7 +1163,7 @@
           // grabber. Flipping it again here double-inverts the native drag.
           if (origOnDrag) origOnDrag(e);
           if (
-            !getPref(EXT_PREFS.OPPOSITE_DOCKING, false) &&
+            !getPref(EXT_PREFS.OPPOSITE_DOCKING, true) &&
             !this.isPlacementVerticalBar?.()
           )
             return;
@@ -1610,7 +1610,7 @@
           });
         }
 
-        const isPushActive = getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false);
+        const isPushActive = getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, true);
         btn.setAttribute("data-active", isPushActive ? "true" : "false");
       }
 
@@ -1782,7 +1782,7 @@
           "true";
         const requestedPush = triple
           ? getPref(BGALAZKA_EXT_PREFS.TRIPLE_PUSH_PAGE, true)
-          : getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false);
+          : getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, true);
         const dualViewActive = requestedPush && !ctx.floating?.isDetached?.();
         const pushChanged =
           document.documentElement.getAttribute("bgalazka-push-page") !==
@@ -2123,9 +2123,9 @@
               return false;
             }
           case "FOCUS_URL": {
-            if (!getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, false))
+            if (!getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_ENABLED, true))
               return false;
-            if (!getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_URLBAR, false))
+            if (!getPref(BGALAZKA_EXT_PREFS.WEB_TOOLBAR_URLBAR, true))
               return false;
             ctx.ensureWebToolbar();
             const secondary =
@@ -2369,7 +2369,7 @@
         if (ctx.zenCssEnabled()) ctx.repairZenInternetPanelCss(browsers, false);
         ctx.updateWebToolbarState();
         ctx.updateSecondaryFallbackState?.();
-        if (getPref(BGALAZKA_EXT_PREFS.AUDIO_INDICATOR, false))
+        if (getPref(BGALAZKA_EXT_PREFS.AUDIO_INDICATOR, true))
           refreshPanelAudio();
       }
       function syncPanelFallbackPolling() {
@@ -2998,13 +2998,13 @@
       // autohide.
       document.documentElement.setAttribute(
         "bgalazka-pill-peek-dot",
-        getPref(BGALAZKA_EXT_PREFS.PILL_PEEK_DOT, false) ? "true" : "false",
+        getPref(BGALAZKA_EXT_PREFS.PILL_PEEK_DOT, true) ? "true" : "false",
       );
       try {
         const pillPeekDotObserver = () => {
           document.documentElement.setAttribute(
             "bgalazka-pill-peek-dot",
-            getPref(BGALAZKA_EXT_PREFS.PILL_PEEK_DOT, false) ? "true" : "false",
+            getPref(BGALAZKA_EXT_PREFS.PILL_PEEK_DOT, true) ? "true" : "false",
           );
         };
         Services.prefs.addObserver(
@@ -3027,7 +3027,7 @@
       );
       document.documentElement.setAttribute(
         "bgalazka-push-page",
-        getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, false) ? "true" : "false",
+        getPref(BGALAZKA_EXT_PREFS.PUSH_PAGE, true) ? "true" : "false",
       );
 
       // Web panel navigation toolbar: initial attribute sync + live observers,

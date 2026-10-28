@@ -1,6 +1,6 @@
 # Floating panel extension
 
-Extended 3.0.0; original Zentral reference 1.1.0. `ZentralPanelEnhancements.js` is the single geometry owner while Hybrid is selected. It uses base B001/B003/B004 and the compatibility bridge; Classic delegates to the original Extended engine.
+Extended 3.1.3; original Zentral reference 1.1.0. `ZentralPanelEnhancements.js` is the single geometry owner while Hybrid is selected. It uses base B001/B003/B004 and the compatibility bridge; Classic delegates to the original Extended engine.
 
 - Docked hosts fill available height. Pushing hosts use the viewport edge/full height. Detached hosts keep their own rectangle; a move away from a dock shrinks to the selected height percentage and docking restores full height.
 - The native/default side is supplied by the coordinator independently of a saved app's explicit side. The extension alone stores `customSide:true`; upstream math does not own that metadata. Hold Expand docks on the opposite side and makes it that app's default.

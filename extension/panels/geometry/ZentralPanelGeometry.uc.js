@@ -825,7 +825,7 @@
         maxWidth: Math.max(
           280,
           Math.min(
-            ctx.getPref(ctx.EXT_PREFS.OPPOSITE_DOCKING, false) ||
+            ctx.getPref(ctx.EXT_PREFS.OPPOSITE_DOCKING, true) ||
               apps.isPlacementVerticalBar?.()
               ? ctx.computeOppositeDockingSafeMaxWidth()
               : Math.max(280, Math.round(window.innerWidth * 0.8)),

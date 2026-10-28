@@ -40,7 +40,7 @@ when the ordering rules below are broken.
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | `#zentral-settings-modal` | extension/settings/styles/ZentralSettingsInjected.css:47 |
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | inline style: `"position:fixed;inset:8%;overflow:auto;z-index:2147483647;padding:20px` | loader/Zentral.uc.js:215 |
 | 2147483646 | RSS reader card (fallback only; see Top layer) | `#bgalazka-rss-card` | additional/rss/ZentralRssDisplay.css:109 |
-| 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-sheet[data-host="float"]` | additional/notes/ZentralNotes.css:86 |
+| 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-sheet[data-host="float"], .zentral-notes-sheet[data-host="dock"]` | additional/notes/ZentralNotes.css:88 |
 | 2147483643 | Big Preview (fallback only; see Top layer) | `#zentral-video-preview#zentral-video-preview[data-enlarged]` | additional/video/ZentralVideoPreview.css:522 |
 | 2147483642 | Dock ghost while a floating panel is dragged | `:root[zentral-geometry-dragging] #zentral-dock-ghost` | extension/panels/floating/ZentralFloatingPanels.css:285 |
 | 2147483640 | Reveal edge and invisible drag shields | `#bgalazka-panel-reveal-edge` | extension/appearance/ZentralAppearance.css:208 |
@@ -71,8 +71,8 @@ Ordering inside one component. Listed by file; values only matter relative to si
 
 | File | Line | z-index | Selector / code |
 | --- | ---: | ---: | --- |
-| additional/notes/ZentralNotes.css | 65 | 40 | `.zentral-notes-sheet` |
-| additional/notes/ZentralNotes.css | 420 | 5 | `.zentral-notes-sheet .zn-menu` |
+| additional/notes/ZentralNotes.css | 66 | 40 | `.zentral-notes-sheet` |
+| additional/notes/ZentralNotes.css | 433 | 5 | `.zentral-notes-sheet .zn-menu` |
 | additional/video/controllers/ZentralVideoSidebar.js | 213 | 5 | `"position:absolute;inset:0;z-index:5;background:var(--zl-video-canvas,` |
 | additional/video/ZentralVideoPreview.css | 132 | 3 | `#zentral-video-preview .zentral-video-preview-subtitles` |
 | additional/video/ZentralVideoPreview.css | 301 | 2 | `#zentral-video-preview canvas` |

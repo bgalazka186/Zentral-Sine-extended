@@ -497,6 +497,20 @@
     "def": 5
   },
   {
+    "key": "zen.workspace.zentral.notes.font_size",
+    "text": "zen.workspace.zentral.notes.font_size_text",
+    "min": 8,
+    "max": 40,
+    "def": 13
+  },
+  {
+    "key": "zen.workspace.zentral.notes.line_height",
+    "text": "zen.workspace.zentral.notes.line_height_text",
+    "min": 100,
+    "max": 300,
+    "def": 160
+  },
+  {
     "key": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px",
     "text": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px_text",
     "min": 6,

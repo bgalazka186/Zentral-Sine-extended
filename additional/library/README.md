@@ -41,7 +41,7 @@ containers; animation watches only Library attributes. Border-box size changes
 and resize events coalesce to at most one update per animation frame. The normal
 mode ignores animation-only style changes. No website document is observed.
 
-Version: 3.0.0. This needs visual testing in Zen, including left/right
+Version: 3.1.3. This needs visual testing in Zen, including left/right
 sidebar, compact mode, opposite-side panels and narrow windows.
 
 ## Library background

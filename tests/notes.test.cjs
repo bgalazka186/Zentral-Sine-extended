@@ -313,7 +313,41 @@ async function newStore({ clock, fsys, bus, id = "w1", maxSec = 5 }) {
     assert.equal(J([again.meta.size, again.meta.mode, again.meta.highlight, again.latestId()]), J(["full", "read", "green", b.id]));
   });
 
-  console.log(`\n${passed} notes tests passed`);
+  
+await test("parseBlocks: single newlines break by default, join as spaces with joinLines", () => {
+  const text = "one\ntwo";
+  assert.ok(J(c.parseBlocks(text)).includes('"br"'));
+  const joined = c.parseBlocks(text, false, { joinLines: true });
+  assert.ok(!J(joined).includes('"br"'));
+  assert.equal(joined[0].c.map((x) => x.s).join(""), "one two");
+});
+await test("parseBlocks: extra blank lines collapse by default and become one gap per extra line with keepBlanks", () => {
+  const text = "a\n\n\n\nb";
+  assert.equal(J(c.parseBlocks(text).map((b) => b.type)), J(["p", "p"]));
+  assert.equal(J(c.parseBlocks(text, false, { keepBlanks: true }).map((b) => b.type)), J(["p", "gap", "p"]));
+  assert.equal(c.parseBlocks(text, false, { keepBlanks: true })[1].n, 2);
+  assert.equal(J(c.parseBlocks("a\n\nb", false, { keepBlanks: true }).map((b) => b.type)), J(["p", "p"]), "one blank line is a normal paragraph break");
+  assert.equal(J(c.parseBlocks("a\n\n\n", false, { keepBlanks: true }).map((b) => b.type)), J(["p"]), "trailing blanks add nothing");
+  assert.equal(c.parseBlocks("> q\n>\n>\n> r", false, { keepBlanks: true })[0].blocks.some((b) => b.type === "gap"), true, "options reach quoted blocks");
+});
+await test("menuPosition: stays inside the sheet and the window, flips up, scrolls when too tall", () => {
+  const host = { left: 100, top: 100, right: 400, bottom: 500 };
+  const inside = (p, w, h) => p.left + host.left >= host.left && p.left + host.left + w <= host.right && p.top + host.top + h <= host.bottom;
+  // anchor near the left edge: a right-aligned 150px menu would start left of the sheet
+  const a = c.menuPosition({ anchor: { left: 110, right: 130, top: 110, bottom: 130 }, host, viewport: { width: 1000, height: 800 }, size: { width: 150, height: 60 } });
+  assert.ok(inside(a, 150, 60), J(a));
+  assert.ok(a.left + host.left >= host.left + 4, "not cropped on the left");
+  // anchor at the bottom of a sheet near the bottom window edge: flips above the anchor
+  const b = c.menuPosition({ anchor: { left: 300, right: 320, top: 470, bottom: 490 }, host, viewport: { width: 1000, height: 520 }, size: { width: 150, height: 80 } });
+  assert.ok(b.top + host.top + 80 <= 470, "placed above the anchor: " + J(b));
+  // sheet partly outside the window on the right
+  const d = c.menuPosition({ anchor: { left: 380, right: 400, top: 110, bottom: 130 }, host, viewport: { width: 350, height: 800 }, size: { width: 150, height: 60 } });
+  assert.ok(d.left + host.left + 150 <= 350 - 6, "kept inside the window: " + J(d));
+  // taller than any space: scrolls
+  const e = c.menuPosition({ anchor: { left: 300, right: 320, top: 110, bottom: 130 }, host, viewport: { width: 1000, height: 800 }, size: { width: 150, height: 900 } });
+  assert.ok(e.maxHeight > 0 && e.maxHeight <= 400);
+});
+console.log(`\n${passed} notes tests passed`);
 })().catch((error) => {
   console.error("FAIL", error);
   process.exit(1);

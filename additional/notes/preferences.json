@@ -36,6 +36,58 @@
     "placeholder": "5"
   },
   {
+    "property": "zen.workspace.zentral.notes.wrap_lines",
+    "label": "Wrap long lines (off = scroll sideways to see the whole line)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.font_size_text",
+    "label": "Text size (px, 8–40) [8 to 40 px; e.g. 11, 12, 13, 14, 16, 18, 20, 24]",
+    "type": "string",
+    "defaultValue": "13",
+    "placeholder": "13"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.line_height_text",
+    "label": "Line height (%, 100–300) [100 to 300 %; e.g. 120, 140, 160, 180, 200, 240]",
+    "type": "string",
+    "defaultValue": "160",
+    "placeholder": "160"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.blank_lines",
+    "label": "Blank lines in read view",
+    "type": "dropdown",
+    "defaultValue": "collapse",
+    "options": [
+      {
+        "label": "Collapse – any number of blank lines is one paragraph break",
+        "value": "collapse"
+      },
+      {
+        "label": "Keep – every extra blank line adds empty space",
+        "value": "keep"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.line_breaks",
+    "label": "Single line breaks in read view",
+    "type": "dropdown",
+    "defaultValue": "break",
+    "options": [
+      {
+        "label": "Break – a new line stays a new line",
+        "value": "break"
+      },
+      {
+        "label": "Join – a new line is a space (standard Markdown)",
+        "value": "join"
+      }
+    ]
+  },
+  {
     "property": "zen.workspace.zentral.notes.folder",
     "label": "Notes folder (absolute path; empty = zentral-notes inside your profile)",
     "type": "string",

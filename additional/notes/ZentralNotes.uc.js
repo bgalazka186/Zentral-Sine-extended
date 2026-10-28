@@ -81,13 +81,19 @@
       FOLDER: "zen.workspace.zentral.notes.folder",
       DOCK_SIDEBAR: "zen.workspace.zentral.notes.dock_sidebar",
       AUTOSAVE: "zen.workspace.zentral.notes.autosave_seconds",
+      WRAP: "zen.workspace.zentral.notes.wrap_lines",
+      FONT_SIZE: "zen.workspace.zentral.notes.font_size",
+      LINE_HEIGHT: "zen.workspace.zentral.notes.line_height",
+      BLANK_LINES: "zen.workspace.zentral.notes.blank_lines",
+      LINE_BREAKS: "zen.workspace.zentral.notes.line_breaks",
     });
+    const VIEW_PREFS = new Set([PREF.WRAP, PREF.FONT_SIZE, PREF.LINE_HEIGHT]);
     const OBS_TOPIC = "zentral-notes-changed";
     const IDLE_SAVE_MS = 800; // pause after the last keystroke
     const DEFAULT_MAX_SAVE_SECONDS = 5; // longest gap while still typing
     const TRASH_DAYS = 30;
     const NOTE_COLORS = ["none", "yellow", "green", "blue", "pink", "purple"];
-    const HIGHLIGHT_COLORS = ["yellow", "green", "blue", "pink", "orange"];
+    const HIGHLIGHT_COLORS = ["yellow", "green", "blue", "pink", "orange", "purple", "red", "teal"];
     const FILE_RE = /^[A-Za-z0-9_][A-Za-z0-9_ .-]{0,120}\.md$/;
     const FRONT_KEYS = new Set([
       "id",
@@ -325,7 +331,9 @@
     }
 
     const LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(?:\[( |x|X)\]\s+)?(.*)$/;
-    function parseBlocks(text, nested = false) {
+    // opts.joinLines: a single newline inside a paragraph is a space (standard Markdown) instead of
+    // a line break. opts.keepBlanks: every blank line after the first adds one empty gap.
+    function parseBlocks(text, nested = false, opts = {}) {
       const lines = normalizeNewlines(text).split("\n");
       const blocks = [];
       let i = 0;
@@ -339,7 +347,13 @@
         const line = lines[i];
         let m;
         if (!line.trim()) {
-          i++;
+          let run = 0;
+          while (i < lines.length && !lines[i].trim()) {
+            run++;
+            i++;
+          }
+          if (opts.keepBlanks && run > 1 && blocks.length && i < lines.length)
+            blocks.push({ type: "gap", n: run - 1 });
         } else if ((m = /^```(\w*)\s*$/.exec(line))) {
           const buf = [];
           i++;
@@ -364,7 +378,7 @@
             buf.push(lines[i++].replace(/^>\s?/, ""));
           blocks.push({
             type: "quote",
-            blocks: parseBlocks(buf.join("\n"), true),
+            blocks: parseBlocks(buf.join("\n"), true, opts),
           });
         } else if ((m = LIST_RE.exec(line))) {
           const items = [];
@@ -386,7 +400,7 @@
           if (!buf.length) buf.push(lines[i++]);
           const c = [];
           buf.forEach((l, idx) => {
-            if (idx) c.push({ t: "br" });
+            if (idx) c.push(opts.joinLines ? { t: "text", s: " " } : { t: "br" });
             c.push(...parseInline(l));
           });
           blocks.push({ type: "p", c });
@@ -908,12 +922,40 @@
     // ======================================================================
     // Test seam (unit tests only; absent in Zen)
     // ======================================================================
+    // Menu placement (pure): right-aligned to the anchor, kept inside both the host sheet and the
+    // viewport, flipped above the anchor when there is no room below, and given a max height (so it
+    // scrolls) when it is taller than the available space. Returns coordinates relative to the host.
+    function menuPosition({ anchor, host, viewport, size, pad = 6 }) {
+      const minX = Math.max(pad, host.left + 4),
+        maxX = Math.min(viewport.width - pad, host.right - 4);
+      const minY = Math.max(pad, host.top + 4),
+        maxY = Math.min(viewport.height - pad, host.bottom - 4);
+      const width = Math.min(size.width, Math.max(0, maxX - minX));
+      let height = size.height;
+      const below = maxY - (anchor.bottom + 4),
+        above = anchor.top - 4 - minY;
+      const useBelow = height <= below || below >= above;
+      const room = Math.max(60, useBelow ? below : above);
+      let maxHeight = 0;
+      if (height > room) {
+        maxHeight = Math.floor(room);
+        height = room;
+      }
+      const x = Math.max(minX, Math.min(anchor.right - width, maxX - width));
+      const y = useBelow ? anchor.bottom + 4 : anchor.top - 4 - height;
+      return {
+        left: Math.round(x - host.left),
+        top: Math.round(Math.max(minY, y) - host.top),
+        maxHeight,
+      };
+    }
+
     if (window.__zentralNotesTestSeam) {
       window.__zentralNotesTestSeam.core = {
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
         wordCount, safeFileName, createAutosaver, parseInline, parseBlocks,
         wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine,
-        createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut,
+        createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
       };
     }
 
@@ -1045,6 +1087,10 @@
           const node = h("p", { class: "zn-p" });
           renderInline(node, b.c, env);
           parent.append(node);
+        } else if (b.type === "gap") {
+          const gap = h("div", { class: "zn-gap", "aria-hidden": "true" });
+          gap.style.setProperty("--n", String(Math.min(b.n, 20)));
+          parent.append(gap);
         } else if (b.type === "hr") parent.append(h("hr", { class: "zn-hr" }));
         else if (b.type === "code") {
           const code = h("code");
@@ -1234,7 +1280,7 @@
           readEl.append(h("p", { class: "zn-empty" }, "Nothing here yet. Switch to edit and start writing."));
           return;
         }
-        renderBlocks(readEl, parseBlocks(n.body), env, (line) => setBody(toggleCheckboxLine(n.body, line)));
+        renderBlocks(readEl, parseBlocks(n.body, false, env.readOpts?.() || {}), env, (line) => setBody(toggleCheckboxLine(n.body, line)));
       }
       function setBody(text) {
         store.update(currentId, text, null);
@@ -1452,6 +1498,22 @@
         menu.el.remove();
         menu = null;
       }
+      // Keeps a menu fully inside both the sheet and the window: it is right-aligned to its anchor,
+      // shifted back in when that would cross an edge, flipped above the anchor when there is no room
+      // below, and scrolls when it is taller than the space (a narrow sheet or a window edge used to
+      // crop the highlight colors).
+      function placeMenu(m, anchor) {
+        const doc = root.ownerDocument.documentElement;
+        const pos = menuPosition({
+          anchor: anchor.getBoundingClientRect(),
+          host: root.getBoundingClientRect(),
+          viewport: { width: doc.clientWidth || Infinity, height: doc.clientHeight || Infinity },
+          size: { width: m.offsetWidth || 0, height: m.offsetHeight || 0 },
+        });
+        if (pos.maxHeight) m.style.maxHeight = pos.maxHeight + "px";
+        m.style.left = pos.left + "px";
+        m.style.top = pos.top + "px";
+      }
       function showMenu(anchor, items) {
         if (menu && menu.anchor === anchor) return closeMenu();
         closeMenu();
@@ -1482,11 +1544,10 @@
             m.append(b);
           }
         }
+        m.style.visibility = "hidden";
         root.append(m);
-        const rr = root.getBoundingClientRect(),
-          ar = anchor.getBoundingClientRect();
-        m.style.top = Math.round(ar.bottom - rr.top + 4) + "px";
-        m.style.right = Math.max(6, Math.round(rr.right - ar.right)) + "px";
+        placeMenu(m, anchor);
+        m.style.visibility = "";
         menu = { el: m, anchor };
         m.querySelector("button")?.focus({ preventScroll: true });
       }
@@ -2090,7 +2151,11 @@
           warn(error);
         }
       }
-      const env = { openLink, copyText, exportNote, exportAll, revealFolder };
+      const readOpts = () => ({
+        joinLines: prefStr(PREF.LINE_BREAKS, "break") === "join",
+        keepBlanks: prefStr(PREF.BLANK_LINES, "collapse") === "keep",
+      });
+      const env = { openLink, copyText, exportNote, exportAll, revealFolder, readOpts };
 
       // ---- bindings: one per bar, plus the floating card ------------------------
       const bindings = new Map(); // bar element -> binding
@@ -2149,7 +2214,7 @@
           adapter,
           sheet: () => sheet,
           isOpen: () => !!sheet?.isOpen(),
-          visible: () => el.isConnected && el.getClientRects().length > 0,
+          visible: () => el.isConnected && !panelsHidden() && el.getClientRects().length > 0,
           open() {
             lastUsed = binding;
             if (!sheet) sheet = createSheet({ store, adapter, env, ensureStore });
@@ -2265,9 +2330,16 @@
 
       // ---- shortcut ----------------------------------------------------------------
       let shortcut = parseShortcut(prefStr(PREF.SHORTCUT, "Alt+Shift+N"));
+      // A panel hidden by "hide when not hovered" keeps its bars in the DOM and may keep focus, but
+      // the user cannot see it: the shortcut then opens the standalone (floating) sheet as if no
+      // panel were open.
+      function panelsHidden() {
+        const r = document.documentElement;
+        return r.hasAttribute("bgalazka-hover-panel-enabled") && r.hasAttribute("bgalazka-hover-panel-hidden");
+      }
       function pickBinding() {
         const active = document.activeElement;
-        if (active) {
+        if (active && !panelsHidden()) {
           for (const b of bindings.values()) {
             const host = b.adapter.host;
             if (b.el.contains(active) || host?.contains(active)) return b;
@@ -2329,10 +2401,29 @@
       onCleanup(() => window.removeEventListener("keydown", onKey, true));
 
       // ---- preferences -----------------------------------------------------------------
+      // Typography and wrapping are CSS variables / attributes on the root element, so every open
+      // sheet follows a preference change without a registry of sheets and without re-rendering.
+      const rootEl = document.documentElement;
+      function applyViewPrefs() {
+        const size = Math.max(8, Math.min(40, prefInt(PREF.FONT_SIZE, 13)));
+        const line = Math.max(100, Math.min(300, prefInt(PREF.LINE_HEIGHT, 160)));
+        rootEl.style.setProperty("--zentral-notes-font-size", size + "px");
+        rootEl.style.setProperty("--zentral-notes-line-height", String(line / 100));
+        rootEl.setAttribute("zentral-notes-wrap", prefBool(PREF.WRAP, true) ? "on" : "off");
+      }
+      applyViewPrefs();
+      onCleanup(() => {
+        rootEl.style.removeProperty("--zentral-notes-font-size");
+        rootEl.style.removeProperty("--zentral-notes-line-height");
+        rootEl.removeAttribute("zentral-notes-wrap");
+      });
       const prefObserver = {
         observe(_s, _t, name) {
           if (disposed) return;
-          if (name === PREF.SHORTCUT) shortcut = parseShortcut(prefStr(PREF.SHORTCUT, "Alt+Shift+N"));
+          // READ_PREFS (blank lines / line breaks) are read on every render of the read view, so
+          // they need no action here; the next render picks them up.
+          if (VIEW_PREFS.has(name)) applyViewPrefs();
+          else if (name === PREF.SHORTCUT) shortcut = parseShortcut(prefStr(PREF.SHORTCUT, "Alt+Shift+N"));
           else if (name === PREF.FOLDER) {
             if (storePromise)
               store

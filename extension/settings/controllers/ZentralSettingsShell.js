@@ -377,8 +377,8 @@
           this.updateMatrixUI(cols, rows);
 
           const animType =
-            Core.getPref(Constants.Apps.PREF_ANIMATION_TYPE, "slide") ||
-            "slide";
+            Core.getPref(Constants.Apps.PREF_ANIMATION_TYPE, "spring-gentle") ||
+            "spring-gentle";
           const animSpeed =
             Core.getPref(Constants.Apps.PREF_ANIMATION_SPEED, 450) ?? 450;
           const maxApps = Core.getPref(Constants.Apps.PREF_MAX_APPS, 21) || 21;

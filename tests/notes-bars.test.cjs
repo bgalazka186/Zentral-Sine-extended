@@ -75,6 +75,13 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.ok(isNotesBtn(toolbar.firstElementChild), "button is the first (max left) child of the URL bar");
     assert.equal(toolbar.children[1], back);
     assert.equal(toolbar.firstElementChild.hidden, false);
+    const html = document.documentElement;
+    assert.equal(html.getAttribute("zentral-notes-wrap"), "on", "wrap defaults to on");
+    prefs.set("zen.workspace.zentral.notes.wrap_lines", false);
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", "zen.workspace.zentral.notes.wrap_lines"));
+    assert.equal(html.getAttribute("zentral-notes-wrap"), "off", "wrap preference applies live");
+    prefs.set("zen.workspace.zentral.notes.wrap_lines", true);
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", "zen.workspace.zentral.notes.wrap_lines"));
   });
 
   await test("button opens a sheet inside the slider over the panel; the browser is untouched; second click closes", async () => {
@@ -148,6 +155,26 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(sheetsIn(slider).length, 1);
   });
 
+  await test("shortcut while the panel is hidden (autohide) opens the standalone card, not a sheet on the hidden bar", async () => {
+    const key = windowListeners.find((l) => l.t === "keydown" && l.c === true);
+    const press = () => key.fn(new Ev("keydown", { key: "N", code: "KeyN", altKey: true, shiftKey: true, ctrlKey: false, metaKey: false }));
+    const html = document.documentElement;
+    const floatCard = () => html.children.find((c) => c._classes.has("zentral-notes-sheet") && c.dataset.host === "float");
+    if (sheetsIn(slider).some((s) => !s.hidden)) { press(); await flush(); }
+    assert.ok(sheetsIn(slider).every((s) => s.hidden), "start with every panel sheet closed");
+    html.setAttribute("bgalazka-hover-panel-enabled", "true");
+    html.setAttribute("bgalazka-hover-panel-hidden", "true");
+    dom.state.activeElement = url; // focus is still inside the hidden panel
+    press(); await sleep(30); await flush();
+    assert.ok(sheetsIn(slider).every((s) => s.hidden), "no sheet opened on the hidden bar");
+    assert.ok(floatCard() && !floatCard().hidden, "standalone card opened instead");
+    press(); await flush();
+    assert.equal(floatCard().hidden, true, "and closes with the same shortcut");
+    html.removeAttribute("bgalazka-hover-panel-enabled");
+    html.removeAttribute("bgalazka-hover-panel-hidden");
+    dom.state.activeElement = null;
+  });
+
   await test("dock to sidebar: button appears in the sidebar row, card opens beside the sidebar, toggle cleans up", async () => {
     const toolbox = new El("div"); toolbox.id = "navigator-toolbox";
     const bottom = new El("div"); bottom.id = "zen-sidebar-bottom-buttons";
@@ -191,6 +218,7 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(sheetsIn(slider).length, 0);
     assert.equal(document.documentElement.children.filter((c) => c._classes.has("zentral-notes-sheet")).length, 0, "floating card removed too");
     assert.equal(prefObservers.length, 0);
+    assert.ok(!document.documentElement.hasAttribute("zentral-notes-wrap"), "view attributes removed");
     assert.equal(mutationCallbacks.length, 0);
     assert.ok(!windowListeners.some((l) => l.t === "keydown"));
   });

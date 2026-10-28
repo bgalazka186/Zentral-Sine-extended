@@ -98,7 +98,7 @@
       function updateAudioButton(button, browser) {
         const state = panelAudioState(browser);
         button.hidden =
-          !getPref(BGALAZKA_EXT_PREFS.AUDIO_INDICATOR, false) || !state.visible;
+          !getPref(BGALAZKA_EXT_PREFS.AUDIO_INDICATOR, true) || !state.visible;
         const muted = state.muted ? "true" : "false";
         if (button.dataset.muted !== muted) {
           button.dataset.muted = muted;
@@ -159,7 +159,7 @@
         const byId = new Map(
           browsers.map((browser) => [browser._bgalazkaAppId, browser]),
         );
-        const enabled = getPref(BGALAZKA_EXT_PREFS.AUDIO_INDICATOR, false);
+        const enabled = getPref(BGALAZKA_EXT_PREFS.AUDIO_INDICATOR, true);
         document
           .querySelectorAll(".zen-app-tile[data-app-id]")
           .forEach((tile) => {

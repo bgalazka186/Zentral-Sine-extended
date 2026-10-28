@@ -445,6 +445,41 @@
         });
 
         header.appendChild(badge);
+        // Exact entry: the slider keeps its practical range, the number box accepts the full
+        // widened range (same limits as the Sine text field). Only for plain values; a slider with
+        // a unit conversion (toPreference/fromPreference) keeps the slider alone.
+        const wide = window.ZentralRuntime?.numericRange?.(prefKey);
+        const plain = toPreference(7) === 7 && fromPreference(7) === 7;
+        if (wide && plain) {
+          const exact = document.createElement("input");
+          exact.type = "number";
+          exact.className = "zs-exact-number";
+          exact.min = wide.min;
+          exact.max = wide.max;
+          exact.step = step;
+          exact.title = "Exact value (" + wide.min + " to " + wide.max + ")";
+          exact.value = input.value;
+          exact.style.cssText = "width:78px;margin-left:8px;";
+          const sliderMin = parseFloat(min), sliderMax = parseFloat(max);
+          exact.addEventListener("change", () => {
+            let v = parseFloat(exact.value);
+            if (!Number.isFinite(v)) v = parseFloat(input.value);
+            v = Math.max(wide.min, Math.min(wide.max, v));
+            exact.value = String(v);
+            badge.textContent = v + suffix;
+            input.value = String(Math.max(sliderMin, Math.min(sliderMax, v)));
+            ctx.setPref(prefKey, v);
+            if (
+              !prefKey.startsWith("zen.workspace.bgalazka.look.") &&
+              typeof ctx.updateCSSVars === "function"
+            )
+              ctx.updateCSSVars();
+          });
+          input.addEventListener("input", () => {
+            exact.value = input.value;
+          });
+          header.appendChild(exact);
+        }
         sliderContainer.appendChild(header);
         sliderContainer.appendChild(input);
 
