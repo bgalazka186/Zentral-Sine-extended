@@ -47,7 +47,7 @@ node tools/check-settings-consistency.cjs
 node tools/build-z-map.cjs                   # regenerate z-heights_map.md
 node tools/build-standalone.cjs              # refuses changed content without a version bump
 node tools/build-standalone.cjs --check
-for t in standalone notes notes-ui notes-bars numeric-prefs encoding z-heights resize-perf defaults notes-decisions; do node tests/$t.test.cjs; done
+for t in standalone notes notes-ui notes-markdown notes-bars numeric-prefs encoding z-heights resize-perf defaults notes-decisions notes-icon; do node tests/$t.test.cjs; done
 ```
 
 Release-in-progress trick: 3.1.3 is unreleased, so after editing a bundled file the builder complains "content changed but version is still 3.1.3". Reset every `additional/**/standalone.lock.json` `"version"` to `"3.1.2"` (last published) and run `node tools/build-standalone.cjs` again. Do not hand-edit `.standalone.uc.js` files.
@@ -88,3 +88,18 @@ Release-in-progress trick: 3.1.3 is unreleased, so after editing a bundled file 
 ## 8. Cycle A (Notes) result
 
 Done: one Notes icon (`tests/notes-icon.test.cjs`); menus clamped into sheet and window (`menuPosition`); 8 highlight colors; new settings `wrap_lines`, `font_size`, `line_height`, `blank_lines`, `line_breaks`; shortcut ignores a panel hidden by autohide; Zentral sliders get an exact-number box using widened ranges (`ZentralRuntime.numericRange`); slider defaults now covered by `tools/check-default-drift.cjs`. Not verified in real Zen: menu placement, autohide shortcut, exact-number boxes. Next: cycle B in `TODO_notes_roadmap.md`.
+
+## 9. Cycle B (Markdown) result
+
+Already present before B (kept, now covered by `tests/notes-markdown.test.cjs`): links with text, nested quotes, rules, strike, task lists. New: tables (GitHub style, alignment, caps 12 x 200), images (`![alt](https://...)`, click-to-load placeholder so opening a note contacts no server), horizontal-rule toolbar button (`insertRule`), split view (`mode: "split"` in `meta.json`; floating card widens to 900 px, other hosts stack the preview under the editor; preview redraws 250 ms after the last keystroke through `diffSigs`, only changed blocks; the timer exists only while a keystroke is pending), export as HTML / plain text / PDF-by-print with a "what is lost" notice per format (`EXPORT_FORMATS`), export all as zip, import of a folder of `.md` files. No new preferences, so no schema or `preferences.json` change.
+
+Not verified in real Zen: `nsIZipWriter` / `nsIStringInputStream` zip export, PDF flow (temp file in `zentral-notes-print/`, opened with the system principal, page calls `print()` itself), remote image loading inside chrome, split layout and widening, `IOUtils.getChildren` import. Judgement calls to confirm: `---` is the toolbar rule button rather than an auto-convert while typing (a textarea cannot show it); there is no scroll sync between editor and preview; blocks that carry a source line number are redrawn when lines are added above them (needed so checkboxes toggle the right line).
+Next: cycle C in `TODO_notes_roadmap.md`.
+
+### 9a. Fixes after the cycle A/B live test (unchecked items of the user's test note)
+`__bold__`, `***bold italic***`, `___x___`, `*__x__*` and `***~~x~~***` now render; `====` and `=={red}==` stay literal text (they used to pair with a later `==`); headings go to H6 (H7 and `#tag` stay text); ordered lists renumber (`1. 2. 1.` shows 3.) and keep a start such as 42; a list item can carry further indented paragraphs (`more` on the item). New toolbar buttons: Quote, Nest in, Nest out (`nestLines`). New split-view option: chain-link button for linked scrolling (`syncScroll` in `meta.json`, default on). Regression tests for each are in `tests/notes-markdown.test.cjs` and `tests/notes-ui.test.cjs`. Group numbers in `INLINE_RE` shifted by 4 (new alternatives sit in front); keep the comments in sync when adding more.
+Still unconfirmed by the user: point 3 (redraw when lines are added above a block) is a behaviour note only; Tab / Shift+Tab were deliberately not bound to nesting (it would trap keyboard focus).
+
+### 9b. Second live test (Cycle B build) and what was done
+Test note: unchecked items were judged against the Cycle B build, which still lacked several things fixed in 9a (H4-H6, `__bold__`, `***x***`, list renumbering, indented list paragraphs). Fixed on top of 9a: **link color** (links used `--zen-primary-color`, near-black in the user's theme, now mostly `--zn-text`), links with `"title"` (title ignored), `<https://...>` autolinks, an image inside a link (`[![a](img)](url)`), backslash escapes (`\*`, `\#`, `\[`, `\=`; implemented as a private-use-character swap around `parseInline`), `**`/`~~` need a non-space next to the marker (`** x **` is text), callouts (`> [!NOTE] Title`; note, tip, important, warning, caution, info). Deliberately not done, now in the roadmap (cycle B2): syntax highlighting, sub/superscript, `<kbd>`, reference links, wiki links (cycle D #16), footnotes, math, `<details>`, Setext headings, mailto autolinks, link tooltips.
+New requests from the owner were written into `TODO_notes_roadmap.md` (cycle B2, cycle C, "Other modules").

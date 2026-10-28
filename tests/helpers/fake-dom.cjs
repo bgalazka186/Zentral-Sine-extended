@@ -69,6 +69,8 @@ class El {
   get id() { return this.attrs.get("id") ?? ""; }
   set id(v) { this.attrs.set("id", String(v)); }
   get firstChild() { return this.children[0] || null; }
+  get childNodes() { return this.children; }
+  replaceWith(n) { const p = this.parent; if (!p) return; const i = p.children.indexOf(this); this.parent = null; p.children.splice(i, 1); p._adopt(n); p.children.splice(i, 0, n); }
   get firstElementChild() { return this.children.find((c) => c.tag !== "#text") || null; }
   insertBefore(n, ref) { this._adopt(n); const i = ref ? this.children.indexOf(ref) : -1; if (i < 0) this.children.push(n); else this.children.splice(i, 0, n); return n; }
   closest(sel) { for (let x = this; x; x = x.parent) if (sel.startsWith("#") ? x.id === sel.slice(1) : sel.startsWith(".") ? x._classes.has(sel.slice(1)) : x.tag === sel) return x; return null; }

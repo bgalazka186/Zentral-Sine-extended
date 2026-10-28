@@ -29,6 +29,16 @@ default mismatches (test `tests/defaults.test.cjs`), numeric hints, stale doc ve
 - #14 export (HTML, plain text, PDF via print) with a "what is lost" notice per format.
 - Tests: notes, notes-ui (+ a markdown fixture test).
 
+## Cycle B2: Markdown follow-ups (from the two live tests; run before or after C)
+- Shortcuts and buttons for every syntax that has none yet (inline code, code block, link, image, numbered list, table), so people who do not know Markdown can learn it from the toolbar; **table creator** (pick rows x columns, inserts a ready table).
+- Paste a URL over selected text (or anywhere) -> "create link" mini dialog like Reddit: text to show + address. Finish the "copy to highlight" link feature the same way (its link should offer the same dialog on paste).
+- Linked scrolling by the **top visible line** (map the first visible source line to its rendered block) instead of the proportional position now used: the two panes have different line heights, so proportional scrolling ends on different lines.
+- Switch (option): allow selecting and copying text in read-only mode.
+- Syntax highlighting inside fenced code (```javascript etc.); small and offline, a handful of languages.
+- Cheap extras that failed the live test: sub/superscript (`H~2~O`, `X^2^`), `<kbd>`, reference links (`[a][ref]` + `[ref]: url`), link tooltips from `"title"`, `mailto:` autolinks, Setext headings (decide: `text` over `---` is a rule today). Footnotes, math and raw HTML (`<details>`) stay unsupported on purpose.
+- In-app **quick settings menu** (most options a user changes while writing: font size, line height, wrap, blank lines, linked scrolling, read-only copy...) and in-app shortcut assignment (shares the engine with cycle C #23).
+- Tests: notes-markdown, notes-ui.
+
 ## Cycle C: window behavior and appearance
 - #3 drag and resize; above Big Preview while Big Preview is not focused (needs the z-height
   decision: popover only while focused). Update `z-heights_map.md` and its test.
@@ -38,6 +48,8 @@ default mismatches (test `tests/defaults.test.cjs`), numeric hints, stale doc ve
 - #23 user-assignable shortcuts for any action.
 - #6 toolbar icon in "Customize toolbar" (`CustomizableUI.createWidget`, unified icon from A).
 - #1 themes in the Appearance menu, based on the recommended RSS style; full mod + standalone.
+- Standalone Notes: the native Zen sidebar and the pill menu can end up **on top of** the notes sheet and catch the clicks, so the sheet seems frozen. Default the sheet to the side opposite the native sidebar and keep out of its space; make that an option (toggle).
+- Split view as a second window (option): instead of halving the available space, open a second note of the **same size** beside the first. The Zentral pill menu must stay reachable and nothing may be covered.
 - Tests: resize-perf (drag/resize frame-throttled), z-heights, notes-bars.
 
 ## Cycle D: data model (hardest)
@@ -68,3 +80,9 @@ default mismatches (test `tests/defaults.test.cjs`), numeric hints, stale doc ve
 
 ## Cycle A status: DONE (see TODO_handoff.md)
 Deferred on purpose: left/right resize-handle clipping (only affects grab area; revisit in cycle C with #3).
+
+## Cycle B status: DONE (see TODO_handoff.md sections 9, 9a, 9b)
+Owner decision still open: images stay click-to-load placeholders until cycle D #13 adds per-note asset folders.
+
+## Other modules (not Notes)
+- RSS card: long items are cut off, show the full text (expandable); links inside an RSS message must be clickable in the card.

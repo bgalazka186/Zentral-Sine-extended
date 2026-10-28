@@ -10,7 +10,7 @@
  * Local interface selectors: .zentral-notes-btn; .zentral-notes-sheet; .zn-*
  * Local interface selectors (dock): .zentral-notes-sidebar-btn
  * Attribute selectors used: bgalazka-force-panel-black; data-active; data-color; data-host; data-mode;
- *   data-size; data-state; data-trashed; data-view
+ *   data-size; data-split; data-state; data-trashed; data-view
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
  * contracts from this source, not a promise that every collaborator is enabled at runtime.
@@ -188,10 +188,12 @@
 .zentral-notes-sheet .zn-tools {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 1px;
   padding: 3px 6px;
   border-bottom: 1px solid var(--zn-line);
 }
+.zentral-notes-sheet .zn-btn[hidden] { display: none; }
 .zentral-notes-sheet[data-view="list"] .zn-tools,
 .zentral-notes-sheet[data-trashed="true"] .zn-tools .zn-btn:not(.zn-mode-btn) { display: none; }
 .zentral-notes-sheet[data-mode="read"] .zn-tools .zn-btn:not(.zn-mode-btn) { opacity: 0.45; }
@@ -263,6 +265,10 @@
 .zentral-notes-sheet .zn-read h1.zn-h { font-size: 1.45em; }
 .zentral-notes-sheet .zn-read h2.zn-h { font-size: 1.25em; }
 .zentral-notes-sheet .zn-read h3.zn-h { font-size: 1.1em; }
+.zentral-notes-sheet .zn-read h4.zn-h { font-size: 1em; }
+.zentral-notes-sheet .zn-read h5.zn-h { font-size: 0.95em; }
+.zentral-notes-sheet .zn-read h6.zn-h { font-size: 0.9em; color: var(--zn-muted); }
+.zentral-notes-sheet .zn-read .zn-li-more { margin: 0.2em 0 0.35em calc(var(--lvl, 0) * 16px + 1.4em); overflow-wrap: anywhere; }
 .zentral-notes-sheet .zn-read .zn-h:first-child { margin-top: 0; }
 .zentral-notes-sheet .zn-read .zn-p { margin: 0.35em 0; overflow-wrap: anywhere; }
 .zentral-notes-sheet .zn-read .zn-hr { border: none; border-top: 1px solid var(--zn-line); margin: 0.8em 0; }
@@ -287,7 +293,8 @@
 }
 .zentral-notes-sheet .zn-read .zn-pre code { padding: 0; background: none; }
 .zentral-notes-sheet .zn-read .zn-link {
-  color: var(--zn-accent);
+  /* mostly the text color: some Zen accents are near-black and vanish on a dark sheet */
+  color: color-mix(in srgb, var(--zn-text) 62%, var(--zn-accent));
   text-decoration: underline;
   cursor: pointer;
 }
@@ -481,3 +488,63 @@
 .zentral-notes-sheet .zn-swatch[data-color="orange"] { background: #ff9f43; }
 .zentral-notes-sheet .zn-swatch[data-color="red"] { background: #ff6b6b; }
 .zentral-notes-sheet .zn-swatch[data-color="teal"] { background: #2ec4b6; }
+
+/* ---- Markdown: tables and images ------------------------------------------- */
+.zentral-notes-sheet .zn-read .zn-table-wrap { max-width: 100%; overflow-x: auto; margin: 0.5em 0; scrollbar-width: thin; }
+.zentral-notes-sheet .zn-read .zn-table { border-collapse: collapse; font-size: 0.95em; }
+.zentral-notes-sheet .zn-read .zn-table th,
+.zentral-notes-sheet .zn-read .zn-table td { padding: 3px 8px; border: 1px solid var(--zn-line); text-align: left; vertical-align: top; }
+.zentral-notes-sheet .zn-read .zn-table th { background: var(--zn-hover); font-weight: 700; }
+.zentral-notes-sheet .zn-read .zn-img {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 1px 7px;
+  border: 1px dashed var(--zn-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zn-muted);
+  font: inherit;
+  cursor: pointer;
+}
+.zentral-notes-sheet .zn-read .zn-img:hover { color: var(--zn-text); border-color: var(--zn-accent); }
+.zentral-notes-sheet .zn-read .zn-img span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet .zn-read .zn-img-loaded { max-width: 100%; height: auto; border-radius: 4px; vertical-align: middle; }
+
+/* ---- split view: editor and live preview ------------------------------------ */
+.zentral-notes-sheet[data-mode="split"][data-view="editor"] .zn-editor,
+.zentral-notes-sheet[data-mode="split"][data-view="editor"] .zn-read { display: block !important; flex: 1 1 0; min-width: 0; min-height: 0; width: auto; }
+.zentral-notes-sheet[data-mode="split"][data-split="side"] .zn-body { flex-direction: row; }
+.zentral-notes-sheet[data-mode="split"][data-split="side"] .zn-read { border-left: 1px solid var(--zn-line); }
+.zentral-notes-sheet[data-mode="split"][data-split="stack"] .zn-read { border-top: 1px solid var(--zn-line); }
+
+/* ---- export notice ------------------------------------------------------------- */
+.zentral-notes-sheet .zn-dialog {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: color-mix(in srgb, var(--zn-surface) 70%, transparent);
+}
+.zentral-notes-sheet .zn-dialog-card {
+  max-width: 340px;
+  padding: 12px 14px;
+  border: 1px solid var(--zn-line);
+  border-radius: var(--zn-radius);
+  background: var(--zn-surface);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+.zentral-notes-sheet .zn-dialog-card p { margin: 6px 0 10px; color: var(--zn-muted); line-height: 1.45; }
+.zentral-notes-sheet .zn-dialog-actions { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* ---- callouts: > [!NOTE] Title ---------------------------------------------------- */
+.zentral-notes-sheet .zn-read .zn-callout { --zn-callout: #6aa7ff; border-left-color: var(--zn-callout); background: color-mix(in srgb, var(--zn-callout) 10%, transparent); padding: 4px 10px; border-radius: 0 6px 6px 0; }
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="tip"] { --zn-callout: #5cc98a; }
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="important"] { --zn-callout: #b58cff; }
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="warning"] { --zn-callout: #f0b44c; }
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="caution"] { --zn-callout: #ef6a6a; }
+.zentral-notes-sheet .zn-read .zn-callout-title { font-weight: 700; color: var(--zn-callout); margin-bottom: 2px; }

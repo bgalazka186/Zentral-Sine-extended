@@ -175,6 +175,97 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.ok(other.stopped, "typing never reaches panel shortcuts");
   });
 
+  await test("split view: preview follows typing after a pause and redraws only the changed block", async () => {
+    await sheetA.open(); await flushRaf();
+    const ta = q(sheetA, ".zn-editor"), read = q(sheetA, ".zn-read");
+    if (sheetA.root.dataset.mode === "read") key(read, "e", { ctrlKey: true });
+    type(ta, "# Title\n\nfirst paragraph\n\nsecond paragraph");
+    const split = sheetA.root.all().find((e) => e.getAttribute("aria-label") === "Split view: editor and preview");
+    split.click(); await flushRaf();
+    assert.equal(sheetA.root.dataset.mode, "split");
+    assert.equal(ta.hidden, false, "editor stays visible");
+    assert.equal(read.hidden, false, "preview is visible beside it");
+    const paras = () => read.all().filter((e) => e.tag === "p");
+    assert.deepEqual(paras().map((e) => e.textContent), ["first paragraph", "second paragraph"]);
+    const [p1, p2] = paras();
+    type(ta, "# Title\n\nfirst paragraph\n\nsecond paragraph, edited");
+    assert.equal(paras()[1].textContent, "second paragraph", "not redrawn on every keystroke (debounced)");
+    await new Promise((r) => setTimeout(r, 400)); await flushRaf();
+    assert.equal(paras()[0], p1, "the unchanged block keeps its DOM node");
+    assert.notEqual(paras()[1], p2);
+    assert.equal(paras()[1].textContent, "second paragraph, edited");
+    // typing in the editor and then closing the sheet must leave no timer armed
+    type(ta, "# Title\n\nlast words");
+    sheetA.close();
+    await new Promise((r) => setTimeout(r, 400));
+    assert.equal(paras().some((e) => e.textContent === "last words"), false, "no render after close");
+    await sheetA.open(); await flushRaf();
+  });
+
+  await test("read view: tables, images (click to load) and nested quotes", async () => {
+    const ta = q(sheetA, ".zn-editor"), read = q(sheetA, ".zn-read");
+    type(ta, "| a | b |\n|---|--:|\n| 1 | 2 |\n\n![cat](https://example.org/c.png) [home](https://example.org)\n\n> one\n> > two\n\n---");
+    await new Promise((r) => setTimeout(r, 400)); await flushRaf();
+    assert.equal(read.all().filter((e) => e.tag === "th").length, 2);
+    assert.equal(read.all().filter((e) => e.tag === "td").length, 2);
+    assert.equal(read.all().filter((e) => e.tag === "blockquote").length, 2, "nested quote");
+    assert.equal(read.all().filter((e) => e.tag === "hr").length, 1);
+    assert.equal(read.all().filter((e) => e.tag === "img").length, 0, "no image is requested until the person clicks");
+    read.all().find((e) => e._classes.has("zn-img")).click();
+    const img = read.all().find((e) => e.tag === "img");
+    assert.equal(img.getAttribute("src"), "https://example.org/c.png");
+    assert.equal(read.all().filter((e) => e._classes.has("zn-link")).length, 1);
+  });
+
+  await test("the horizontal rule button inserts a rule set off by blank lines", async () => {
+    const ta = q(sheetA, ".zn-editor");
+    type(ta, "above"); ta.setSelectionRange(5, 5);
+    sheetA.root.all().find((e) => e.getAttribute("aria-label") === "Horizontal rule").click();
+    assert.equal(ta.value, "above\n\n---\n\n");
+  });
+
+  await test("quote and nesting buttons edit the selected lines", async () => {
+    await sheetA.open(); await flushRaf();
+    const ta = q(sheetA, ".zn-editor");
+    const btn = (label) => sheetA.root.all().find((e) => e.getAttribute("aria-label") === label);
+    if (sheetA.root.dataset.mode === "read") key(q(sheetA, ".zn-read"), "e", { ctrlKey: true });
+    type(ta, "one\ntwo"); ta.setSelectionRange(0, 7);
+    btn("Quote (nest deeper with the indent button)").click();
+    assert.equal(ta.value, "> one\n> two");
+    ta.setSelectionRange(0, ta.value.length);
+    btn("Nest in: list or quote one level deeper").click();
+    assert.equal(ta.value, "> > one\n> > two");
+    ta.setSelectionRange(0, ta.value.length);
+    btn("Nest out: list or quote one level up").click();
+    assert.equal(ta.value, "> one\n> two");
+    type(ta, "- a\n- b"); ta.setSelectionRange(4, 7);
+    btn("Nest in: list or quote one level deeper").click();
+    assert.equal(ta.value, "- a\n  - b");
+  });
+
+  await test("linked scrolling: chain button toggles it, split panes follow each other once", async () => {
+    await sheetA.open(); await flushRaf();
+    const ta = q(sheetA, ".zn-editor"), read = q(sheetA, ".zn-read");
+    const sync = sheetA.root.all().find((e) => e.getAttribute("aria-label") === "Linked scrolling");
+    const split = sheetA.root.all().find((e) => e.getAttribute("aria-label") === "Split view: editor and preview");
+    if (sheetA.root.dataset.mode !== "split") split.click();
+    await flushRaf();
+    assert.equal(sync.hidden, false, "chain button shows in split view");
+    for (const el of [ta, read]) Object.assign(el, { scrollHeight: 1000, clientHeight: 200 });
+    ta.scrollTop = 400; ta.dispatchEvent(new Ev("scroll"));
+    assert.equal(read.scrollTop, 400, "preview follows the editor");
+    await flushRaf();
+    sync.click();
+    assert.equal(sync.classList.contains("is-on"), false);
+    assert.equal(store.meta.syncScroll, false);
+    ta.scrollTop = 100; ta.dispatchEvent(new Ev("scroll"));
+    assert.equal(read.scrollTop, 400, "unlinked: the preview stays");
+    sync.click();
+    assert.equal(store.meta.syncScroll, true);
+    split.click(); await flushRaf();
+    assert.equal(sync.hidden, true, "chain button hides outside split view");
+  });
+
   await test("shortcut parsing", async () => {
     const s = c.parseShortcut("Alt+Shift+N");
     assert.ok(c.matchesShortcut({ altKey: true, shiftKey: true, ctrlKey: false, metaKey: false, key: "N", code: "KeyN" }, s));

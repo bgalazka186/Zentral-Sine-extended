@@ -1,7 +1,7 @@
 {
   "id": "zentral-notes",
   "name": "Zentral Notes",
-  "description": "Quick notes as plain Markdown files: multiple notes, highlights, checklists, search, trash, Save to file. Opens from a shortcut anywhere and adds a Notes button to Zentral panel bars when the full pack's panels are present. Standalone part of Zentral Extended.",
+  "description": "Quick notes as plain Markdown files: multiple notes, highlights, checklists, tables, split-view preview, search, trash, export (Markdown, HTML, text, PDF, zip). Opens from a shortcut anywhere and adds a Notes button to Zentral panel bars when the full pack's panels are present. Standalone part of Zentral Extended.",
   "homepage": "https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/notes",
   "supportsUnload": true,
   "style": {

@@ -67,12 +67,13 @@ when the ordering rules below are broken.
 Ordering inside one component. Listed by file; values only matter relative to siblings.
 
 <details>
-<summary>51 local z-index declarations</summary>
+<summary>52 local z-index declarations</summary>
 
 | File | Line | z-index | Selector / code |
 | --- | ---: | ---: | --- |
 | additional/notes/ZentralNotes.css | 66 | 40 | `.zentral-notes-sheet` |
-| additional/notes/ZentralNotes.css | 433 | 5 | `.zentral-notes-sheet .zn-menu` |
+| additional/notes/ZentralNotes.css | 440 | 5 | `.zentral-notes-sheet .zn-menu` |
+| additional/notes/ZentralNotes.css | 526 | 5 | `.zentral-notes-sheet .zn-dialog` |
 | additional/video/controllers/ZentralVideoSidebar.js | 213 | 5 | `"position:absolute;inset:0;z-index:5;background:var(--zl-video-canvas,` |
 | additional/video/ZentralVideoPreview.css | 132 | 3 | `#zentral-video-preview .zentral-video-preview-subtitles` |
 | additional/video/ZentralVideoPreview.css | 301 | 2 | `#zentral-video-preview canvas` |

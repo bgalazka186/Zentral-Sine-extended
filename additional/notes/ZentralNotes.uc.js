@@ -105,6 +105,11 @@
     ]);
     const MAX_LIST_ROWS = 300;
     const MAX_INLINE_CHARS = 20000;
+    const MAX_TABLE_COLS = 12;
+    const MAX_TABLE_ROWS = 200;
+    const PREVIEW_IDLE_MS = 250; // split view: re-render this long after the last keystroke
+    const MAX_IMPORT_FILES = 500;
+    const MAX_IMPORT_BYTES = 1024 * 1024;
 
     // ======================================================================
     // Pure core: note file format
@@ -256,17 +261,24 @@
     // Pure core: small Markdown dialect (safe: produces data, never HTML)
     // ======================================================================
     // Inline: `code`, **bold**, ==highlight== / =={green}highlight==, ~~strike~~,
-    // *italic* / _italic_, [text](https://link), bare https:// links (http/https only).
+    // *italic* / _italic_, [text](https://link), ![alt](https://image), bare https:// links
+    // (http/https only). An image is a click-to-load placeholder in the UI (nothing is fetched
+    // until the person asks), so opening a note never contacts a remote server.
     const INLINE_RE = new RegExp(
       [
-        "(`+)([\\s\\S]*?[^`])\\1(?!`)", // 1,2 code
-        "\\*\\*([\\s\\S]+?)\\*\\*", // 3 bold
-        "==(?:\\{(\\w+)\\})?([\\s\\S]+?)==", // 4 color, 5 highlight
-        "~~([\\s\\S]+?)~~", // 6 strike
-        "(?<![\\w*])\\*([^\\s*](?:[\\s\\S]*?[^\\s*])?)\\*(?![\\w*])", // 7 italic
-        "(?<![\\w_])_([^\\s_](?:[\\s\\S]*?[^\\s_])?)_(?![\\w_])", // 8 italic
-        "\\[([^\\]\\n]+)\\]\\((\\S+?)\\)", // 9 text, 10 href
-        "(https?:\\/\\/[^\\s<>\"')\\]]+)", // 11 bare url
+        "\\*\\*\\*([^\\s*](?:[\\s\\S]*?[^\\s*])?)\\*\\*\\*", // 1 bold + italic
+        "(?<![\\w_])___([^\\s_](?:[\\s\\S]*?[^\\s_])?)___(?![\\w_])", // 2 bold + italic
+        "(={4,}|==\\{\\w+\\}==)", // 3 empty highlight: kept as text
+        "(?<![\\w_])__([^\\s_](?:[\\s\\S]*?[^\\s_])?)__(?![\\w_])", // 4 bold (underscores)
+        "(`+)([\\s\\S]*?[^`])\\5(?!`)", // 5,6 code
+        "\\*\\*(?=\\S)([\\s\\S]+?)(?<=\\S)\\*\\*", // 7 bold
+        "==(?:\\{(\\w+)\\})?([\\s\\S]+?)==", // 8 color, 9 highlight
+        "~~(?=\\S)([\\s\\S]+?)(?<=\\S)~~", // 10 strike
+        "(?<![\\w*])\\*([^\\s*](?:[\\s\\S]*?[^\\s*])?)\\*(?![\\w*])", // 11 italic
+        "(?<![\\w_])_([^\\s_](?:[\\s\\S]*?[^\\s_])?)_(?![\\w_])", // 12 italic
+        "\\[((?:!\\[[^\\]\\n]*\\]\\([^\\s)]+\\)|[^\\]\\n])+)\\]\\(([^\\s)]+)(?:\\s+\\x22[^\\x22]*\\x22)?\\)", // 13 text, 14 href (a "title" is accepted and ignored)
+        "<?(https?:\\/\\/[^\\s<>\"')\\]]+)>?", // 15 bare url, or <url>
+        "!\\[([^\\]\\n]*)\\]\\(([^\\s)]+)(?:\\s+\\x22[^\\x22]*\\x22)?\\)", // 16 alt, 17 src (image; a "title" is ignored)
       ].join("|"),
       "g",
     );
@@ -278,7 +290,7 @@
         return null;
       }
     }
-    function parseInline(text, depth = 0) {
+    function parseInlineRaw(text, depth = 0) {
       text = String(text);
       if (depth > 4 || text.length > MAX_INLINE_CHARS)
         return text ? [{ t: "text", s: text }] : [];
@@ -293,26 +305,34 @@
         if (m.index > last)
           out.push({ t: "text", s: text.slice(last, m.index) });
         last = m.index + m[0].length;
-        if (m[1] !== undefined) out.push({ t: "code", s: m[2] });
-        else if (m[3] !== undefined)
-          out.push({ t: "b", c: parseInline(m[3], depth + 1) });
-        else if (m[5] !== undefined)
+        if (m[1] !== undefined || m[2] !== undefined)
+          out.push({ t: "b", c: [{ t: "i", c: parseInline(m[1] ?? m[2], depth + 1) }] });
+        else if (m[3] !== undefined) out.push({ t: "text", s: m[3] }); // ==== and =={red}== stay literal
+        else if (m[4] !== undefined) out.push({ t: "b", c: parseInline(m[4], depth + 1) });
+        else if (m[5] !== undefined) out.push({ t: "code", s: m[6] });
+        else if (m[7] !== undefined)
+          out.push({ t: "b", c: parseInline(m[7], depth + 1) });
+        else if (m[9] !== undefined)
           out.push({
             t: "hl",
-            color: HIGHLIGHT_COLORS.includes(m[4]) ? m[4] : "yellow",
-            c: parseInline(m[5], depth + 1),
+            color: HIGHLIGHT_COLORS.includes(m[8]) ? m[8] : "yellow",
+            c: parseInline(m[9], depth + 1),
           });
-        else if (m[6] !== undefined)
-          out.push({ t: "s", c: parseInline(m[6], depth + 1) });
-        else if (m[7] !== undefined || m[8] !== undefined)
-          out.push({ t: "i", c: parseInline(m[7] ?? m[8], depth + 1) });
-        else if (m[9] !== undefined) {
-          const href = safeHref(m[10]);
-          if (href)
-            out.push({ t: "a", href, c: parseInline(m[9], depth + 1) });
+        else if (m[10] !== undefined)
+          out.push({ t: "s", c: parseInline(m[10], depth + 1) });
+        else if (m[11] !== undefined || m[12] !== undefined)
+          out.push({ t: "i", c: parseInline(m[11] ?? m[12], depth + 1) });
+        else if (m[16] !== undefined) {
+          const href = safeHref(m[17]);
+          if (href) out.push({ t: "img", alt: m[16], href });
           else out.push({ t: "text", s: m[0] });
-        } else if (m[11] !== undefined) {
-          let url = m[11];
+        } else if (m[13] !== undefined) {
+          const href = safeHref(m[14]);
+          if (href)
+            out.push({ t: "a", href, c: parseInline(m[13], depth + 1) });
+          else out.push({ t: "text", s: m[0] });
+        } else if (m[15] !== undefined) {
+          let url = m[15];
           let trail = "";
           const tm = /[.,;:!?]+$/.exec(url);
           if (tm) {
@@ -330,7 +350,72 @@
       return out;
     }
 
+    // Backslash escapes: \* \# \[ ... show the character itself. They are swapped for private-use
+    // characters before parsing and swapped back in the finished text (so they cannot start markup).
+    const ESC_CHARS = "\\`*_{}[]()#+-.!|=~<>";
+    function parseInline(text, depth = 0) {
+      text = String(text);
+      if (depth > 0 || !text.includes("\\")) return parseInlineRaw(text, depth);
+      const swapped = text.replace(/\\([\\`*_{}[\]()#+\-.!|=~<>])/g, (_m, ch) => String.fromCharCode(0xe000 + ESC_CHARS.indexOf(ch)));
+      const back = (str, keepSlash) => str.replace(/[\ue000-\ue013]/g, (c) => (keepSlash ? "\\" : "") + ESC_CHARS[c.charCodeAt(0) - 0xe000]);
+      const fix = (nodes) => {
+        for (const n of nodes) {
+          if (n.t === "text") n.s = back(n.s, false);
+          else if (n.t === "code") n.s = back(n.s, true); // inside code a backslash is just a backslash
+          else {
+            if (n.href) n.href = back(n.href, true);
+            if (n.alt) n.alt = back(n.alt, false);
+            if (n.c) fix(n.c);
+          }
+        }
+        return nodes;
+      };
+      return fix(parseInlineRaw(swapped, 0));
+    }
+
     const LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(?:\[( |x|X)\]\s+)?(.*)$/;
+    // GitHub-style tables: a header row, a delimiter row with pipes (| --- | :-: |), body rows.
+    const TABLE_DELIM_RE = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
+    function splitRow(line) {
+      let t = line.trim();
+      if (t.startsWith("|")) t = t.slice(1);
+      if (t.endsWith("|") && !t.endsWith("\\|")) t = t.slice(0, -1);
+      const cells = [];
+      let cur = "";
+      for (let i = 0; i < t.length; i++) {
+        if (t[i] === "\\" && t[i + 1] === "|") {
+          cur += "|";
+          i++;
+        } else if (t[i] === "|") {
+          cells.push(cur.trim());
+          cur = "";
+        } else cur += t[i];
+      }
+      cells.push(cur.trim());
+      return cells;
+    }
+    function isTableStart(lines, i) {
+      if (i + 1 >= lines.length) return false;
+      const head = lines[i],
+        delim = lines[i + 1];
+      if (!head.includes("|") || !delim.includes("|") || !TABLE_DELIM_RE.test(delim)) return false;
+      return splitRow(head).length === splitRow(delim).length;
+    }
+    function parseTable(lines, start) {
+      const head = splitRow(lines[start]).slice(0, MAX_TABLE_COLS);
+      const align = splitRow(lines[start + 1])
+        .slice(0, MAX_TABLE_COLS)
+        .map((d) => (d.startsWith(":") && d.endsWith(":") ? "center" : d.endsWith(":") ? "right" : d.startsWith(":") ? "left" : ""));
+      const rows = [];
+      let i = start + 2;
+      while (i < lines.length && lines[i].trim() && lines[i].includes("|") && rows.length < MAX_TABLE_ROWS) {
+        const cells = splitRow(lines[i]).slice(0, head.length);
+        while (cells.length < head.length) cells.push("");
+        rows.push(cells.map((c) => parseInline(c)));
+        i++;
+      }
+      return { block: { type: "table", align, head: head.map((c) => parseInline(c)), rows }, next: i };
+    }
     // opts.joinLines: a single newline inside a paragraph is a space (standard Markdown) instead of
     // a line break. opts.keepBlanks: every blank line after the first adds one empty gap.
     function parseBlocks(text, nested = false, opts = {}) {
@@ -339,7 +424,7 @@
       let i = 0;
       const startsBlock = (l) =>
         /^```/.test(l) ||
-        /^#{1,3}\s+\S/.test(l) ||
+        /^#{1,6}\s+\S/.test(l) ||
         /^>/.test(l) ||
         LIST_RE.test(l) ||
         /^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(l);
@@ -361,7 +446,7 @@
             buf.push(lines[i++]);
           i++; // closing fence (or end of text)
           blocks.push({ type: "code", text: buf.join("\n") });
-        } else if ((m = /^(#{1,3})\s+(.*\S)\s*$/.exec(line))) {
+        } else if ((m = /^(#{1,6})\s+(.*\S)\s*$/.exec(line))) {
           blocks.push({
             type: "h",
             level: m[1].length,
@@ -376,26 +461,63 @@
           const buf = [];
           while (i < lines.length && /^>/.test(lines[i]))
             buf.push(lines[i++].replace(/^>\s?/, ""));
-          blocks.push({
-            type: "quote",
-            blocks: parseBlocks(buf.join("\n"), true, opts),
-          });
+          const inner = parseBlocks(buf.join("\n"), true, opts);
+          const quote = { type: "quote", blocks: inner };
+          // > [!NOTE] Title  ->  a callout (note, tip, important, warning, caution, info)
+          const first = inner[0]?.type === "p" ? inner[0].c[0] : null;
+          const cm = first && first.t === "text" ? /^\[!(note|tip|important|warning|caution|info)\][ \t]*(.*)$/i.exec(first.s) : null;
+          if (cm) {
+            quote.callout = { kind: cm[1].toLowerCase(), title: cm[2].trim() };
+            inner[0].c.splice(0, inner[0].c[1]?.t === "br" ? 2 : 1);
+            if (!inner[0].c.length) inner.shift();
+          }
+          blocks.push(quote);
         } else if ((m = LIST_RE.exec(line))) {
           const items = [];
-          while (i < lines.length && (m = LIST_RE.exec(lines[i]))) {
-            items.push({
-              level: Math.min(4, Math.floor(m[1].replace(/\t/g, "  ").length / 2)),
-              marker: /^\d/.test(m[2]) ? m[2] : "\u2022",
-              checked: m[3] === undefined ? null : m[3] !== " ",
-              c: parseInline(m[4]),
-              line: nested ? -1 : i,
-            });
-            i++;
+          const counters = []; // running number per nesting level, for ordered lists
+          let lastIndent = 0;
+          while (i < lines.length) {
+            if ((m = LIST_RE.exec(lines[i]))) {
+              lastIndent = m[1].replace(/\t/g, "  ").length;
+              const level = Math.min(4, Math.floor(lastIndent / 2));
+              counters.length = level + 1;
+              let marker = "\u2022";
+              if (/^\d/.test(m[2])) {
+                const n = counters[level] === undefined ? parseInt(m[2], 10) : counters[level] + 1;
+                counters[level] = n;
+                marker = n + m[2].slice(-1);
+              } else counters[level] = undefined;
+              items.push({
+                level,
+                marker,
+                checked: m[3] === undefined ? null : m[3] !== " ",
+                c: parseInline(m[4]),
+                line: nested ? -1 : i,
+              });
+              i++;
+              continue;
+            }
+            // A blank line followed by an indented paragraph continues the previous item.
+            let j = i;
+            while (j < lines.length && !lines[j].trim()) j++;
+            if (j === i || j >= lines.length || LIST_RE.test(lines[j])) break;
+            if (lines[j].replace(/\t/g, "  ").match(/^ */)[0].length < lastIndent + 2) break;
+            const para = [];
+            while (j < lines.length && lines[j].trim() && !LIST_RE.test(lines[j])) para.push(lines[j++].trim());
+            const last = items[items.length - 1];
+            (last.more || (last.more = [])).push(
+              para.flatMap((l, idx) => (idx ? [opts.joinLines ? { t: "text", s: " " } : { t: "br" }, ...parseInline(l)] : parseInline(l))),
+            );
+            i = j;
           }
           blocks.push({ type: "list", items });
+        } else if (isTableStart(lines, i)) {
+          const t = parseTable(lines, i);
+          blocks.push(t.block);
+          i = t.next;
         } else {
           const buf = [];
-          while (i < lines.length && lines[i].trim() && !startsBlock(lines[i]))
+          while (i < lines.length && lines[i].trim() && !startsBlock(lines[i]) && !isTableStart(lines, i))
             buf.push(lines[i++]);
           if (!buf.length) buf.push(lines[i++]);
           const c = [];
@@ -407,6 +529,183 @@
         }
       }
       return blocks;
+    }
+
+    // ======================================================================
+    // Pure core: incremental preview (which blocks need to be drawn again)
+    // ======================================================================
+    // A block's signature is its parsed data. Comparing signatures finds the unchanged leading and
+    // trailing blocks, so typing inside one paragraph redraws only that paragraph. (Blocks that
+    // carry a source line number change signature when lines are added above them, which is the
+    // price of checkboxes that always toggle the right line.)
+    const blockSig = (b) => JSON.stringify(b);
+    function diffSigs(prev, next) {
+      const max = Math.min(prev.length, next.length);
+      let prefix = 0;
+      while (prefix < max && prev[prefix] === next[prefix]) prefix++;
+      let suffix = 0;
+      while (suffix < max - prefix && prev[prev.length - 1 - suffix] === next[next.length - 1 - suffix]) suffix++;
+      return { prefix, suffix };
+    }
+
+    // ======================================================================
+    // Pure core: export (HTML and plain text are built from the parsed blocks, never from raw input)
+    // ======================================================================
+    const EXPORT_FORMATS = Object.freeze({
+      md: {
+        label: "Markdown",
+        ext: "md",
+        loses: "Nothing in the text is lost. The note\u2019s color, pin and dates are not part of the file.",
+      },
+      html: {
+        label: "HTML page",
+        ext: "html",
+        loses:
+          "Highlight colors, tables, links and images are kept. Checkboxes become read-only, images load from the web when you open the file, and the note\u2019s color, pin and dates are not included.",
+      },
+      txt: {
+        label: "Plain text",
+        ext: "txt",
+        loses:
+          "All formatting is dropped: bold, italic, strikethrough, highlights and heading sizes disappear. Links are written as text followed by the address, images become [image: description], tables become rows separated by \" | \".",
+      },
+      pdf: {
+        label: "PDF (print)",
+        ext: "html",
+        loses:
+          "The note opens as a page in a tab and your browser\u2019s print dialog appears: choose \u201cSave as PDF\u201d. Page breaks are decided by the browser, images load from the web, checkboxes are read-only, and the note\u2019s color, pin and dates are not included.",
+      },
+      zip: {
+        label: "Zip of all notes",
+        ext: "zip",
+        loses: "Each note becomes one .md file. Trashed notes are skipped. Note colors, pins and dates are not part of the files.",
+      },
+    });
+    const escHtml = (t) =>
+      String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    function inlineHtml(nodes) {
+      let out = "";
+      for (const n of nodes) {
+        if (n.t === "text") out += escHtml(n.s);
+        else if (n.t === "br") out += "<br>";
+        else if (n.t === "code") out += "<code>" + escHtml(n.s) + "</code>";
+        else if (n.t === "img") out += '<img src="' + escHtml(n.href) + '" alt="' + escHtml(n.alt) + '">';
+        else if (n.t === "a") out += '<a href="' + escHtml(n.href) + '" rel="noopener noreferrer">' + inlineHtml(n.c) + "</a>";
+        else if (n.t === "hl") out += '<mark data-color="' + escHtml(n.color) + '">' + inlineHtml(n.c) + "</mark>";
+        else {
+          const tag = { b: "strong", i: "em", s: "del" }[n.t];
+          if (tag) out += "<" + tag + ">" + inlineHtml(n.c) + "</" + tag + ">";
+        }
+      }
+      return out;
+    }
+    function listHtml(items) {
+      let out = "";
+      const stack = [];
+      for (const it of items) {
+        const tag = /^\d/.test(it.marker) ? "ol" : "ul";
+        while (stack.length && stack[stack.length - 1].level > it.level) out += "</li></" + stack.pop().tag + ">";
+        const top = stack[stack.length - 1];
+        if (top && top.level === it.level && top.tag === tag) out += "</li>";
+        else {
+          if (top && top.level === it.level) out += "</li></" + stack.pop().tag + ">";
+          out += "<" + tag + ">";
+          stack.push({ tag, level: it.level });
+        }
+        out +=
+          "<li>" +
+          (it.checked === null ? "" : '<input type="checkbox" disabled' + (it.checked ? " checked" : "") + "> ") +
+          inlineHtml(it.c) +
+          (it.more || []).map((para) => "<p>" + inlineHtml(para) + "</p>").join("");
+      }
+      while (stack.length) out += "</li></" + stack.pop().tag + ">";
+      return out;
+    }
+    function blocksHtml(blocks) {
+      let out = "";
+      for (const b of blocks) {
+        if (b.type === "h") out += "<h" + b.level + ">" + inlineHtml(b.c) + "</h" + b.level + ">\n";
+        else if (b.type === "p") out += "<p>" + inlineHtml(b.c) + "</p>\n";
+        else if (b.type === "hr") out += "<hr>\n";
+        else if (b.type === "code") out += "<pre><code>" + escHtml(b.text) + "</code></pre>\n";
+        else if (b.type === "quote")
+          out +=
+            "<blockquote" + (b.callout ? ' class="callout" data-kind="' + b.callout.kind + '"' : "") + ">\n" +
+            (b.callout ? "<p><strong>" + escHtml(b.callout.title || b.callout.kind[0].toUpperCase() + b.callout.kind.slice(1)) + "</strong></p>\n" : "") +
+            blocksHtml(b.blocks) + "</blockquote>\n";
+        else if (b.type === "list") out += listHtml(b.items) + "\n";
+        else if (b.type === "table") {
+          const cell = (tag, c, i) =>
+            "<" + tag + (b.align[i] ? ' style="text-align:' + b.align[i] + '"' : "") + ">" + inlineHtml(c) + "</" + tag + ">";
+          out +=
+            "<table>\n<thead><tr>" + b.head.map((c, i) => cell("th", c, i)).join("") + "</tr></thead>\n<tbody>\n" +
+            b.rows.map((r) => "<tr>" + r.map((c, i) => cell("td", c, i)).join("") + "</tr>\n").join("") +
+            "</tbody>\n</table>\n";
+        }
+      }
+      return out;
+    }
+    const EXPORT_CSS =
+      ":root{color-scheme:light dark}body{max-width:46rem;margin:2rem auto;padding:0 1rem;font:16px/1.6 system-ui,sans-serif}" +
+      "pre{overflow:auto;padding:.6em .8em;background:rgba(127,127,127,.15);border-radius:6px}code{font-family:ui-monospace,monospace}" +
+      "blockquote{margin:.6em 0;padding-left:1em;border-left:3px solid rgba(127,127,127,.5)}table{border-collapse:collapse}" +
+      "th,td{border:1px solid rgba(127,127,127,.5);padding:.3em .6em}img{max-width:100%}" +
+      'mark{background:#fff176;color:#000}mark[data-color=green]{background:#a5d6a7}mark[data-color=blue]{background:#90caf9}' +
+      'mark[data-color=pink]{background:#f8bbd0}mark[data-color=orange]{background:#ffcc80}mark[data-color=purple]{background:#ce93d8}' +
+      'mark[data-color=red]{background:#ef9a9a}mark[data-color=teal]{background:#80cbc4}@media print{body{margin:0;max-width:none}}';
+    function exportHtml(body, opts = {}, { print = false } = {}) {
+      const title = titleOf(body) || "Note";
+      return (
+        '<!DOCTYPE html>\n<html><head><meta charset="utf-8"><title>' + escHtml(title) + "</title><style>" + EXPORT_CSS + "</style></head><body>\n" +
+        blocksHtml(parseBlocks(body, false, opts)) +
+        (print ? "<script>addEventListener('load',function(){setTimeout(function(){print()},300)})</script>\n" : "") +
+        "</body></html>\n"
+      );
+    }
+    function inlineText(nodes) {
+      let out = "";
+      for (const n of nodes) {
+        if (n.t === "text" || n.t === "code") out += n.s;
+        else if (n.t === "br") out += "\n";
+        else if (n.t === "img") out += n.alt ? "[image: " + n.alt + "]" : "[image]";
+        else if (n.t === "a") {
+          const label = inlineText(n.c);
+          out += label.replace(/\/$/, "") === n.href.replace(/\/$/, "") ? label : label + " (" + n.href + ")";
+        } else out += inlineText(n.c || []);
+      }
+      return out;
+    }
+    function blocksText(blocks) {
+      const parts = [];
+      for (const b of blocks) {
+        if (b.type === "h" || b.type === "p") parts.push(inlineText(b.c));
+        else if (b.type === "hr") parts.push("----------");
+        else if (b.type === "code") parts.push(b.text.replace(/^/gm, "    "));
+        else if (b.type === "quote")
+          parts.push(((b.callout ? (b.callout.title || b.callout.kind.toUpperCase()) + "\n\n" : "") + blocksText(b.blocks)).replace(/^/gm, "> "));
+        else if (b.type === "list")
+          parts.push(
+            b.items
+              .map((it) => "  ".repeat(it.level) + (it.checked === null ? (it.marker === "\u2022" ? "-" : it.marker) : it.checked ? "[x]" : "[ ]") + " " + inlineText(it.c) + (it.more || []).map((para) => "\n\n" + "  ".repeat(it.level + 1) + inlineText(para)).join(""))
+              .join("\n"),
+          );
+        else if (b.type === "table")
+          parts.push([b.head, ...b.rows].map((r) => r.map(inlineText).join(" | ")).join("\n"));
+      }
+      return parts.join("\n\n");
+    }
+    const exportText = (body, opts = {}) => blocksText(parseBlocks(body, false, opts)) + "\n";
+    // One file name per note, never two the same (case-insensitive), for folder and zip export.
+    function uniqueFileNames(notes, ext = "md") {
+      const used = new Set();
+      return notes.map((n) => {
+        const base = safeFileName(titleOf(n.body), "note");
+        let name = base,
+          i = 2;
+        while (used.has(name.toLowerCase())) name = base + " " + i++;
+        used.add(name.toLowerCase());
+        return name + "." + ext;
+      });
     }
 
     // ======================================================================
@@ -462,7 +761,7 @@
     const LINE_KINDS = {
       bullet: { test: /^\s*[-*+]\s+(?!\[[ xX]\])/, add: "- " },
       check: { test: /^\s*[-*+]\s+\[[ xX]\]\s/, add: "- [ ] " },
-      heading: { test: /^#{1,3}\s/, add: "## " },
+      heading: { test: /^#{1,6}\s/, add: "## " },
       quote: { test: /^>\s?/, add: "> " },
     };
     const STRIP_PREFIX =
@@ -484,6 +783,38 @@
         })
         .join("\n");
       return { start: ls, end: le, text: out, selStart: ls, selEnd: ls + out.length };
+    }
+
+    // Nest deeper (dir 1) or back out (dir -1): one more "> " on quote lines, two spaces on others.
+    function nestLines(value, s, e, dir) {
+      const ls = value.lastIndexOf("\n", s - 1) + 1;
+      let le = value.indexOf("\n", e);
+      if (le === -1) le = value.length;
+      if (e > s && value[e - 1] === "\n") le = e - 1;
+      if (le < ls) le = ls;
+      const out = value
+        .slice(ls, le)
+        .split("\n")
+        .map((l) => {
+          if (!l.trim()) return l;
+          if (/^\s{0,3}>/.test(l)) return dir > 0 ? l.replace(/^(\s{0,3}(?:>\s?)+)/, "$1> ") : l.replace(/^(\s{0,3}(?:>\s?)*)>\s?/, "$1");
+          return dir > 0 ? "  " + l : l.replace(/^(?: {1,2}|\t)/, "");
+        })
+        .join("\n");
+      return { start: ls, end: le, text: out, selStart: ls, selEnd: ls + out.length };
+    }
+
+    // Horizontal rule on its own line, set off by blank lines. On an empty line it just fills it.
+    function insertRule(value, s, e) {
+      const ls = value.lastIndexOf("\n", s - 1) + 1;
+      let le = value.indexOf("\n", e);
+      if (le === -1) le = value.length;
+      if (!value.slice(ls, le).trim()) {
+        const text = "---\n";
+        return { start: ls, end: le, text, selStart: ls + text.length, selEnd: ls + text.length };
+      }
+      const text = "\n\n---\n\n";
+      return { start: le, end: le, text, selStart: le + text.length, selEnd: le + text.length };
     }
 
     function continueList(value, caret) {
@@ -536,7 +867,7 @@
       const dirty = new Set();
       const listeners = new Set();
       const backedUp = new Set();
-      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow" };
+      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true };
       let meta = { ...DEFAULT_META };
       let dir = null;
       let chain = Promise.resolve();
@@ -599,8 +930,9 @@
           const raw = JSON.parse(await io.readUTF8(io.join(dir, "meta.json")));
           if (typeof raw.lastNoteId === "string") meta.lastNoteId = raw.lastNoteId;
           if (raw.size === "full" || raw.size === "peek") meta.size = raw.size;
-          if (raw.mode === "read" || raw.mode === "edit") meta.mode = raw.mode;
+          if (raw.mode === "read" || raw.mode === "edit" || raw.mode === "split") meta.mode = raw.mode;
           if (HIGHLIGHT_COLORS.includes(raw.highlight)) meta.highlight = raw.highlight;
+          if (typeof raw.syncScroll === "boolean") meta.syncScroll = raw.syncScroll;
         } catch (_) {}
       }
 
@@ -954,7 +1286,8 @@
       window.__zentralNotesTestSeam.core = {
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
         wordCount, safeFileName, createAutosaver, parseInline, parseBlocks,
-        wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine,
+        wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine, insertRule, nestLines,
+        diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
       };
     }
@@ -990,6 +1323,13 @@
       restore: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5",
       duplicate: "M9 9h11v11H9z M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1",
       caret: "m6 9 6 6 6-6",
+      columns: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M12 3v18",
+      image: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z M21 15l-5-5L5 21",
+      rule: "M4 12h16",
+      quote: "M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z",
+      indent: "M3 8l4 4-4 4 M21 12H11 M21 6H11 M21 18H11",
+      outdent: "M7 8l-4 4 4 4 M21 12H11 M21 6H11 M21 18H11",
+      link: "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71 M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
     };
     function icon(name, size = 14) {
       const svg = document.createElementNS(SVG_NS, "svg");
@@ -1045,7 +1385,17 @@
       for (const n of nodes) {
         if (n.t === "text") parent.append(document.createTextNode(n.s));
         else if (n.t === "br") parent.append(document.createElement("br"));
-        else if (n.t === "code") {
+        else if (n.t === "img") {
+          // Nothing is fetched until the person clicks: opening a note must not contact a server.
+          const btn = h("button", { type: "button", class: "zn-img", title: "Load image: " + n.href });
+          btn.append(icon("image", 12), h("span", {}, n.alt || "image"));
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const img = h("img", { class: "zn-img-loaded", alt: n.alt, src: n.href, loading: "lazy" });
+            btn.replaceWith(img);
+          });
+          parent.append(btn);
+        } else if (n.t === "code") {
           const c = h("code");
           c.textContent = n.s;
           parent.append(c);
@@ -1096,8 +1446,26 @@
           const code = h("code");
           code.textContent = b.text;
           parent.append(h("pre", { class: "zn-pre" }, code));
+        } else if (b.type === "table") {
+          const table = h("table", { class: "zn-table" });
+          const row = (tag, cells) => {
+            const tr = h("tr");
+            cells.forEach((c, i) => {
+              const cell = h(tag);
+              if (b.align[i]) cell.style.textAlign = b.align[i];
+              renderInline(cell, c, env);
+              tr.append(cell);
+            });
+            return tr;
+          };
+          table.append(h("thead", {}, row("th", b.head)), h("tbody", {}, ...b.rows.map((r) => row("td", r))));
+          parent.append(h("div", { class: "zn-table-wrap" }, table));
         } else if (b.type === "quote") {
-          const node = h("blockquote", { class: "zn-quote" });
+          const node = h("blockquote", { class: b.callout ? "zn-quote zn-callout" : "zn-quote" });
+          if (b.callout) {
+            node.dataset.kind = b.callout.kind;
+            node.append(h("div", { class: "zn-callout-title" }, b.callout.title || b.callout.kind[0].toUpperCase() + b.callout.kind.slice(1)));
+          }
           renderBlocks(node, b.blocks, env, onToggle);
           parent.append(node);
         } else if (b.type === "list") {
@@ -1123,6 +1491,12 @@
             renderInline(text, item.c, env);
             row.append(marker, text);
             parent.append(row);
+            for (const para of item.more || []) {
+              const more = h("p", { class: "zn-li-more" });
+              more.style.setProperty("--lvl", String(item.level));
+              renderInline(more, para, env);
+              parent.append(more);
+            }
           }
         }
       }
@@ -1140,7 +1514,7 @@
       };
       let currentId = "";
       let view = "editor"; // editor | list
-      let mode = "edit"; // edit | read
+      let mode = "edit"; // edit | read | split
       let filter = "all"; // all | trash
       let query = "";
       let isOpen = false;
@@ -1152,6 +1526,13 @@
       let unwatch = null;
       let confirmTimer = 0;
       let destroyed = false;
+      let previewTimer = 0; // armed only while split view waits for typing to pause
+      let flashTimer = 0; // armed only while a short message is showing
+      let flashMsg = "";
+      let readSigs = []; // signatures of the blocks drawn in the read/preview pane
+      let readNodes = []; // DOM nodes per drawn block
+      let readEmpty = false;
+      let dialog = null; // export notice
 
       // ---- DOM -----------------------------------------------------------
       const root = h("div", {
@@ -1186,12 +1567,20 @@
       const tHeading = iconButton("heading", "Heading");
       const tBullet = iconButton("bullets", "Bulleted list");
       const tCheck = iconButton("check", "Checklist");
+      const tQuote = iconButton("quote", "Quote (nest deeper with the indent button)");
+      const tOutdent = iconButton("outdent", "Nest out: list or quote one level up");
+      const tIndent = iconButton("indent", "Nest in: list or quote one level deeper");
+      const tRule = iconButton("rule", "Horizontal rule");
+      const tSync = iconButton("link", "Linked scrolling", "zn-mode-btn zn-sync-btn");
+      const tSplit = iconButton("columns", "Split view: editor and preview", "zn-mode-btn");
       const tMode = iconButton("eye", "Read (Ctrl+E)", "zn-mode-btn");
       const tools = h(
         "div",
         { class: "zn-tools" },
-        tBold, tItalic, tStrike, tHl, tHlMenu, tHeading, tBullet, tCheck,
+        tBold, tItalic, tStrike, tHl, tHlMenu, tHeading, tBullet, tCheck, tQuote, tOutdent, tIndent, tRule,
         h("span", { class: "zn-grow" }),
+        tSync,
+        tSplit,
         tMode,
       );
 
@@ -1245,12 +1634,19 @@
         colorDot.dataset.color = n?.color || "none";
         btnSize.replaceChildren(icon(store.meta.size === "full" ? "minimize" : "maximize"));
         btnSize.title = store.meta.size === "full" ? "Smaller" : "Larger";
+        tSync.hidden = mode !== "split";
+        tSync.classList.toggle("is-on", !!store.meta.syncScroll);
+        tSync.setAttribute("aria-pressed", store.meta.syncScroll ? "true" : "false");
+        tSync.title = store.meta.syncScroll ? "Linked scrolling: on (click to unlink)" : "Linked scrolling: off (click to link)";
+        tSplit.classList.toggle("is-on", mode === "split");
+        tSplit.setAttribute("aria-pressed", mode === "split" ? "true" : "false");
+        tSplit.title = mode === "split" ? "Close split view" : "Split view: editor and preview";
         tMode.replaceChildren(icon(mode === "read" ? "edit" : "eye"));
         tMode.title = mode === "read" ? "Edit (Ctrl+E)" : "Read (Ctrl+E)";
         hlDot.dataset.color = store.meta.highlight;
         ta.readOnly = !!n?.trashed;
         ta.hidden = mode === "read";
-        readEl.hidden = mode !== "read";
+        readEl.hidden = mode === "edit";
         chipAll.classList.toggle("is-on", filter === "all");
         chipTrash.classList.toggle("is-on", filter === "trash");
         chipTrash.textContent = store.trashCount() ? `Trash (${store.trashCount()})` : "Trash";
@@ -1267,20 +1663,65 @@
         const s = store.state;
         statusEl.dataset.state = s.save;
         statusEl.textContent =
-          { saved: "Saved", dirty: "Unsaved\u2026", saving: "Saving\u2026", error: "Couldn\u2019t save, retrying" }[s.save] || "";
+          flashMsg ||
+          { saved: "Saved", dirty: "Unsaved\u2026", saving: "Saving\u2026", error: "Couldn\u2019t save, retrying" }[s.save] ||
+          "";
         statusEl.title = s.error || "";
       }
       const scheduleChrome = () => {
         if (!rafChrome) rafChrome = window.requestAnimationFrame(updateChrome);
       };
-      function renderRead() {
+      // Draws only the blocks that changed since the last draw (see diffSigs). A note switch or a
+      // changed read option starts from scratch.
+      function resetRead() {
         readEl.replaceChildren();
+        readSigs = [];
+        readNodes = [];
+        readEmpty = false;
+      }
+      function renderRead() {
         const n = note();
         if (!n || !n.body.trim()) {
+          resetRead();
+          readEmpty = true;
           readEl.append(h("p", { class: "zn-empty" }, "Nothing here yet. Switch to edit and start writing."));
           return;
         }
-        renderBlocks(readEl, parseBlocks(n.body, false, env.readOpts?.() || {}), env, (line) => setBody(toggleCheckboxLine(n.body, line)));
+        if (readEmpty) resetRead();
+        const blocks = parseBlocks(n.body, false, env.readOpts?.() || {});
+        const sigs = blocks.map(blockSig);
+        const { prefix, suffix } = diffSigs(readSigs, sigs);
+        if (prefix === readSigs.length && prefix === sigs.length) return;
+        const tail = readNodes.slice(readNodes.length - suffix);
+        for (const nodes of readNodes.slice(prefix, readNodes.length - suffix)) for (const nd of nodes) nd.remove();
+        const anchor = tail.find((nodes) => nodes.length)?.[0] || null;
+        const fresh = [];
+        for (let i = prefix; i < blocks.length - suffix; i++) {
+          const tmp = h("div");
+          renderBlocks(tmp, [blocks[i]], env, (line) => setBody(toggleCheckboxLine(note().body, line)));
+          const nodes = [...tmp.childNodes];
+          for (const nd of nodes) readEl.insertBefore(nd, anchor);
+          fresh.push(nodes);
+        }
+        readNodes = [...readNodes.slice(0, prefix), ...fresh, ...tail];
+        readSigs = sigs;
+      }
+      function schedulePreview() {
+        window.clearTimeout(previewTimer);
+        previewTimer = window.setTimeout(() => {
+          previewTimer = 0;
+          if (isOpen && !destroyed && view === "editor" && mode !== "edit") renderRead();
+        }, PREVIEW_IDLE_MS);
+      }
+      function flash(message, ms = 4000) {
+        flashMsg = message;
+        window.clearTimeout(flashTimer);
+        flashTimer = window.setTimeout(() => {
+          flashTimer = 0;
+          flashMsg = "";
+          scheduleChrome();
+        }, ms);
+        scheduleChrome();
       }
       function setBody(text) {
         store.update(currentId, text, null);
@@ -1288,7 +1729,7 @@
         ta.value = text;
         ta.scrollTop = st;
         typed = false;
-        if (mode === "read") renderRead();
+        if (mode !== "edit") renderRead();
         scheduleChrome();
       }
       function showNote(id) {
@@ -1296,7 +1737,9 @@
         const n = note();
         ta.value = n ? n.body : "";
         typed = false;
-        if (mode === "read") renderRead();
+        window.clearTimeout(previewTimer);
+        resetRead();
+        if (mode !== "edit") renderRead();
         applyState();
         updateChrome();
       }
@@ -1327,8 +1770,9 @@
         if (mode === next) return;
         mode = next;
         if (!note()?.trashed) store.setMeta({ mode });
-        if (mode === "read") renderRead();
+        if (mode !== "edit") renderRead();
         applyState();
+        scheduleLayout();
         focusEditor();
       }
       function showList() {
@@ -1479,18 +1923,46 @@
         heading: () => applyEdit(toggleLinePrefix(ta.value, ...sel(), "heading")),
         bullet: () => applyEdit(toggleLinePrefix(ta.value, ...sel(), "bullet")),
         check: () => applyEdit(toggleLinePrefix(ta.value, ...sel(), "check")),
+        quote: () => applyEdit(toggleLinePrefix(ta.value, ...sel(), "quote")),
+        indent: () => applyEdit(nestLines(ta.value, ...sel(), 1)),
+        outdent: () => applyEdit(nestLines(ta.value, ...sel(), -1)),
       };
       const needEdit = (fn) => () => {
         if (mode === "read") setMode("edit");
         if (note()?.trashed) return;
         fn();
       };
-      for (const [btn, fn] of [[tBold, fmt.bold], [tItalic, fmt.italic], [tStrike, fmt.strike], [tHl, fmt.highlight], [tHeading, fmt.heading], [tBullet, fmt.bullet], [tCheck, fmt.check]]) {
+      for (const [btn, fn] of [[tBold, fmt.bold], [tItalic, fmt.italic], [tStrike, fmt.strike], [tHl, fmt.highlight], [tHeading, fmt.heading], [tBullet, fmt.bullet], [tCheck, fmt.check], [tQuote, fmt.quote], [tIndent, fmt.indent], [tOutdent, fmt.outdent]]) {
         // mousedown must not steal the textarea selection
         listen(btn, "mousedown", (e) => e.preventDefault());
         listen(btn, "click", needEdit(fn));
       }
       listen(tMode, "click", () => setMode(mode === "read" ? "edit" : "read"));
+      // Linked scrolling (split view only): the pane you scroll drags the other to the same relative
+      // position. One frame of lock keeps the two scroll events from chasing each other.
+      let syncLock = false;
+      let rafSync = 0;
+      const linkScroll = (from, to) => () => {
+        if (mode !== "split" || !store.meta.syncScroll || syncLock) return;
+        const max = from.scrollHeight - from.clientHeight;
+        if (!(max > 0)) return;
+        syncLock = true;
+        to.scrollTop = (from.scrollTop / max) * Math.max(0, to.scrollHeight - to.clientHeight);
+        if (!rafSync)
+          rafSync = window.requestAnimationFrame(() => {
+            rafSync = 0;
+            syncLock = false;
+          });
+      };
+      listen(ta, "scroll", linkScroll(ta, readEl));
+      listen(readEl, "scroll", linkScroll(readEl, ta));
+      listen(tSync, "click", () => {
+        store.setMeta({ syncScroll: !store.meta.syncScroll });
+        applyState();
+      });
+      listen(tSplit, "click", () => setMode(mode === "split" ? "edit" : "split"));
+      listen(tRule, "mousedown", (e) => e.preventDefault());
+      listen(tRule, "click", needEdit(() => applyEdit(insertRule(ta.value, ...sel()))));
 
       // ---- menus -----------------------------------------------------------------
       function closeMenu() {
@@ -1554,15 +2026,51 @@
       listen(root, "pointerdown", (e) => {
         if (menu && !menu.el.contains(e.target) && !menu.anchor.contains(e.target)) closeMenu();
       }, true);
+      // Export notice: says what each format loses before anything is written.
+      function closeDialog() {
+        if (!dialog) return;
+        dialog.remove();
+        dialog = null;
+      }
+      function askExport(format, run) {
+        closeMenu();
+        closeDialog();
+        const info = EXPORT_FORMATS[format];
+        const ok = h("button", { type: "button", class: "zn-chip is-on" }, format === "pdf" ? "Open print dialog" : "Choose where to save\u2026");
+        const cancel = h("button", { type: "button", class: "zn-chip" }, "Cancel");
+        const card = h(
+          "div",
+          { class: "zn-dialog-card", role: "alertdialog", "aria-label": "Export as " + info.label },
+          h("strong", {}, "Export as " + info.label),
+          h("p", {}, info.loses),
+          h("div", { class: "zn-dialog-actions" }, cancel, ok),
+        );
+        dialog = h("div", { class: "zn-dialog" }, card);
+        cancel.addEventListener("click", closeDialog);
+        ok.addEventListener("click", () => {
+          closeDialog();
+          Promise.resolve(run()).catch((error) => console.warn("[ZentralNotes] export failed", error));
+        });
+        dialog.addEventListener("pointerdown", (e) => {
+          if (e.target === dialog) closeDialog();
+        });
+        root.append(dialog);
+        ok.focus({ preventScroll: true });
+      }
       const moreItems = () => {
         const n = note();
         if (!n) return [];
         const items = [
-          { icon: "save", label: "Save to file\u2026", action: () => env.exportNote(n) },
+          { icon: "save", label: "Save as Markdown\u2026", action: () => env.exportNote(n, "md") },
+          { icon: "save", label: "Export as HTML\u2026", action: () => askExport("html", () => env.exportNote(n, "html")) },
+          { icon: "save", label: "Export as plain text\u2026", action: () => askExport("txt", () => env.exportNote(n, "txt")) },
+          { icon: "save", label: "Print / save as PDF\u2026", action: () => askExport("pdf", () => env.printNote(n)) },
           { icon: "copy", label: "Copy text", action: () => env.copyText(n.body) },
           { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body); store.setColor(c.id, n.color); openNote(c.id); } },
           { sep: true },
           { icon: "save", label: "Export all notes\u2026", action: () => env.exportAll(store.list()) },
+          { icon: "save", label: "Export all as zip\u2026", action: () => askExport("zip", async () => { const k = await env.exportZip(store.list()); if (k) flash(`Zipped ${k} notes`); }) },
+          { icon: "folder", label: "Import .md folder\u2026", action: async () => { const k = await env.importFolder(store); flash(k ? `Imported ${k} notes` : "Nothing imported"); if (view === "list") scheduleList(); } },
           { icon: "folder", label: "Open notes folder", action: () => env.revealFolder(store.dir) },
           { sep: true },
         ];
@@ -1632,6 +2140,7 @@
         typed = true;
         store.update(currentId, ta.value, token);
         scheduleChrome();
+        if (mode === "split") schedulePreview();
       });
       listen(ta, "blur", () => {
         const n = note();
@@ -1653,14 +2162,15 @@
         const mod = e.ctrlKey || e.metaKey;
         const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
         if (key === "Escape") {
-          if (menu) closeMenu();
+          if (dialog) closeDialog();
+          else if (menu) closeMenu();
           else if (view === "list") showEditor();
           else close();
           e.preventDefault();
           return;
         }
         if (mod && !e.altKey) {
-          const edit = view === "editor" && mode === "edit" && e.target === ta;
+          const edit = view === "editor" && mode !== "read" && e.target === ta;
           if (key === "n" && !e.shiftKey) { newNote(); e.preventDefault(); return; }
           if (key === "k" && !e.shiftKey) { showList(); e.preventDefault(); return; }
           if (key === "e" && !e.shiftKey) { if (view === "editor") setMode(mode === "read" ? "edit" : "read"); e.preventDefault(); return; }
@@ -1668,7 +2178,7 @@
           if (edit && key === "i" && !e.shiftKey) { fmt.italic(); e.preventDefault(); return; }
           if (edit && key === "h" && e.shiftKey) { fmt.highlight(); e.preventDefault(); return; }
         }
-        if (view === "editor" && mode === "edit" && e.target === ta && key === "Enter" && !e.shiftKey && !mod && !e.altKey && ta.selectionStart === ta.selectionEnd && !ta.readOnly) {
+        if (view === "editor" && mode !== "read" && e.target === ta && key === "Enter" && !e.shiftKey && !mod && !e.altKey && ta.selectionStart === ta.selectionEnd && !ta.readOnly) {
           const edit = continueList(ta.value, ta.selectionStart);
           if (edit) {
             applyEdit(edit);
@@ -1701,7 +2211,7 @@
               ta.value = n.body;
               ta.scrollTop = st;
             }
-            if (mode === "read" && view === "editor") renderRead();
+            if (mode !== "edit" && view === "editor") renderRead();
             applyState();
             scheduleChrome();
           }
@@ -1713,7 +2223,7 @@
       function layout() {
         rafLayout = 0;
         if (!isOpen || destroyed || root.hidden) return;
-        const a = adapter.getArea();
+        const a = adapter.getArea({ wide: mode === "split" });
         if (!a || a.width < 40 || a.height < 40) return;
         let ox = 0,
           oy = 0;
@@ -1733,6 +2243,7 @@
         root.style.top = Math.round(top - oy) + "px";
         root.style.width = Math.round(w) + "px";
         root.style.height = Math.round(hgt) + "px";
+        root.dataset.split = w >= 560 ? "side" : "stack";
       }
       const scheduleLayout = () => {
         if (!rafLayout) rafLayout = window.requestAnimationFrame(layout);
@@ -1772,6 +2283,9 @@
         if (!isOpen) return;
         isOpen = false;
         closeMenu();
+        closeDialog();
+        window.clearTimeout(previewTimer);
+        previewTimer = 0;
         if (currentId) store.discardIfEmpty(currentId);
         store.flush();
         root.hidden = true;
@@ -1793,7 +2307,9 @@
           } catch (_) {}
         }
         window.clearTimeout(confirmTimer);
-        for (const id of [rafChrome, rafList, rafLayout]) if (id) window.cancelAnimationFrame(id);
+        window.clearTimeout(previewTimer);
+        window.clearTimeout(flashTimer);
+        for (const id of [rafChrome, rafList, rafLayout, rafSync]) if (id) window.cancelAnimationFrame(id);
         root.remove();
       }
       return {
@@ -1890,7 +2406,7 @@
           root.dataset.host = docked() ? "dock" : "float";
           if (root.parentNode !== document.documentElement) document.documentElement.appendChild(root);
         },
-        getArea() {
+        getArea({ wide = false } = {}) {
           if (docked()) {
             const sr = toolbox()?.getBoundingClientRect();
             if (sr && sr.width > 20 && sr.height > 20) {
@@ -1907,7 +2423,8 @@
               };
             }
           }
-          const w = Math.min(460, window.innerWidth - 20);
+          // Split view widens the floating card so the editor and the preview sit side by side.
+          const w = Math.min(wide ? 900 : 460, window.innerWidth - 20);
           return { left: window.innerWidth - w - 4, top: 4, width: w, height: window.innerHeight - 8, anchor: "bottom" };
         },
         watch(cb) {
@@ -2087,17 +2604,17 @@
           warn(error);
         }
       };
-      function pick(mode, title, defaultName) {
+      function pick(mode, title, defaultName, format = "md") {
         return new Promise((resolve) => {
           try {
             const fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
             fp.init(window.browsingContext, title, mode);
             if (defaultName) fp.defaultString = defaultName;
             if (mode === Ci.nsIFilePicker.modeSave) {
-              fp.appendFilter("Markdown (*.md)", "*.md");
-              fp.appendFilter("Plain text (*.txt)", "*.txt");
+              const info = EXPORT_FORMATS[format] || EXPORT_FORMATS.md;
+              fp.appendFilter(`${info.label} (*.${info.ext})`, "*." + info.ext);
               fp.appendFilters(Ci.nsIFilePicker.filterAll);
-              fp.defaultExtension = "md";
+              fp.defaultExtension = info.ext;
             }
             fp.open((rv) =>
               resolve(
@@ -2110,11 +2627,34 @@
           }
         });
       }
-      async function exportNote(n) {
-        const file = await pick(Ci.nsIFilePicker.modeSave, "Save note", safeFileName(titleOf(n.body), "note") + ".md");
+      const readOpts = () => ({
+        joinLines: prefStr(PREF.LINE_BREAKS, "break") === "join",
+        keepBlanks: prefStr(PREF.BLANK_LINES, "collapse") === "keep",
+      });
+      const withNewline = (t) => (t.endsWith("\n") ? t : t + "\n");
+      async function exportNote(n, format = "md") {
+        const info = EXPORT_FORMATS[format] || EXPORT_FORMATS.md;
+        const file = await pick(Ci.nsIFilePicker.modeSave, "Save note", safeFileName(titleOf(n.body), "note") + "." + info.ext, format);
         if (!file) return;
         try {
-          await IOUtils.writeUTF8(file.path, n.body.endsWith("\n") ? n.body : n.body + "\n");
+          const text = format === "html" ? exportHtml(n.body, readOpts()) : format === "txt" ? exportText(n.body, readOpts()) : withNewline(n.body);
+          await IOUtils.writeUTF8(file.path, text);
+        } catch (error) {
+          warn(error);
+        }
+      }
+      // PDF: the note is written as a page to a temporary file and opened in a tab; the page opens
+      // the print dialog itself. The temporary folder is emptied of older files on every print.
+      async function printNote(n) {
+        try {
+          const dir = PathUtils.join(PathUtils.tempDir, "zentral-notes-print");
+          await IOUtils.makeDirectory(dir, { ignoreExisting: true });
+          for (const old of await IOUtils.getChildren(dir).catch(() => [])) await IOUtils.remove(old, { ignoreAbsent: true }).catch(() => {});
+          const path = PathUtils.join(dir, safeFileName(titleOf(n.body), "note") + ".html");
+          await IOUtils.writeUTF8(path, exportHtml(n.body, readOpts(), { print: true }));
+          window.gBrowser.addTab(PathUtils.toFileURI(path), {
+            triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+          });
         } catch (error) {
           warn(error);
         }
@@ -2122,20 +2662,69 @@
       async function exportAll(list) {
         const folder = await pick(Ci.nsIFilePicker.modeGetFolder, "Export all notes to a folder");
         if (!folder) return;
-        const used = new Set();
-        for (const n of list) {
-          let base = safeFileName(titleOf(n.body), "note"),
-            name = base,
-            i = 2;
-          while (used.has(name.toLowerCase())) name = `${base} ${i++}`;
-          used.add(name.toLowerCase());
+        const names = uniqueFileNames(list);
+        for (let i = 0; i < list.length; i++) {
           try {
-            await IOUtils.writeUTF8(PathUtils.join(folder.path, name + ".md"), n.body.endsWith("\n") ? n.body : n.body + "\n", { mode: "create" });
-          } catch (error) {
             // An existing file is never overwritten by an export.
+            await IOUtils.writeUTF8(PathUtils.join(folder.path, names[i]), withNewline(list[i].body), { mode: "create" });
+          } catch (error) {
             warn(error);
           }
         }
+      }
+      async function exportZip(list) {
+        const live = list.filter((n) => !n.trashed);
+        if (!live.length) return 0;
+        const file = await pick(Ci.nsIFilePicker.modeSave, "Save all notes as zip", "zentral-notes.zip", "zip");
+        if (!file) return 0;
+        const names = uniqueFileNames(live);
+        const zw = Cc["@mozilla.org/zipwriter;1"].createInstance(Ci.nsIZipWriter);
+        try {
+          zw.open(file, 0x04 | 0x08 | 0x20); // read/write, create, truncate
+          const enc = new TextEncoder();
+          for (let i = 0; i < live.length; i++) {
+            const bytes = enc.encode(withNewline(live[i].body));
+            let bin = "";
+            for (let j = 0; j < bytes.length; j += 8192) bin += String.fromCharCode(...bytes.subarray(j, j + 8192));
+            const stream = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(Ci.nsIStringInputStream);
+            stream.setData(bin, bin.length);
+            zw.addEntryStream(names[i], (live[i].updated || Date.now()) * 1000, Ci.nsIZipWriter.COMPRESSION_DEFAULT, stream, false);
+          }
+          return live.length;
+        } catch (error) {
+          warn(error);
+          return 0;
+        } finally {
+          try {
+            zw.close();
+          } catch (_) {}
+        }
+      }
+      // Import: every .md file of one folder (not its subfolders) becomes a new note. Files that are
+      // large, unreadable or not text are skipped; nothing in the folder is changed.
+      async function importFolder(store) {
+        const folder = await pick(Ci.nsIFilePicker.modeGetFolder, "Import a folder of .md files");
+        if (!folder) return 0;
+        let count = 0;
+        try {
+          const files = (await IOUtils.getChildren(folder.path)).filter((f) => /\.md$/i.test(f)).sort().slice(0, MAX_IMPORT_FILES);
+          for (const f of files) {
+            try {
+              const info = await IOUtils.stat(f);
+              if (info.type !== "regular" || info.size > MAX_IMPORT_BYTES) continue;
+              const { meta, body } = parseNoteText(await IOUtils.readUTF8(f));
+              if (!body.trim()) continue;
+              const created = store.create(body);
+              if (NOTE_COLORS.includes(meta.color)) store.setColor(created.id, meta.color);
+              count++;
+            } catch (error) {
+              warn(error);
+            }
+          }
+        } catch (error) {
+          warn(error);
+        }
+        return count;
       }
       function revealFolder(dir) {
         if (!dir) return;
@@ -2151,11 +2740,7 @@
           warn(error);
         }
       }
-      const readOpts = () => ({
-        joinLines: prefStr(PREF.LINE_BREAKS, "break") === "join",
-        keepBlanks: prefStr(PREF.BLANK_LINES, "collapse") === "keep",
-      });
-      const env = { openLink, copyText, exportNote, exportAll, revealFolder, readOpts };
+      const env = { openLink, copyText, exportNote, exportAll, exportZip, importFolder, printNote, revealFolder, readOpts };
 
       // ---- bindings: one per bar, plus the floating card ------------------------
       const bindings = new Map(); // bar element -> binding
