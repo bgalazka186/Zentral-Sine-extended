@@ -34,6 +34,8 @@ const cui = {
   getWidget: (id) => ({ provider: cui.widgets.has(id) ? "api" : null }),
   createWidget(def) { if (cui.widgets.has(def.id)) throw new Error("exists"); cui.widgets.set(def.id, def); },
   destroyWidget(id) { cui.widgets.delete(id); },
+  placed: [],
+  ensureWidgetPlacedInWindow(id, w) { cui.placed.push(id); },
 };
 // Popover support for the fake elements (the standalone card enters the top layer while focused).
 El.prototype.showPopover = function () { if (this._pop) throw new Error("already open"); this._pop = true; this.shown = (this.shown || 0) + 1; };
@@ -235,10 +237,15 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.ok(def, "widget registered");
     assert.equal(def.label, "Notes");
     assert.equal(def.defaultArea, undefined, "only in the palette until the person places it");
-    const set = {}; def.onCreated({ style: { setProperty: (k, v) => (set[k] = v) } });
-    assert.match(set["list-style-image"], /^url\("data:image\/svg\+xml/);
-    assert.ok(decodeURIComponent(set["list-style-image"]).includes("M15.5 3H5a2 2 0 0 0-2 2v14"), "same drawing as every other Notes icon");
-    assert.ok(decodeURIComponent(set["list-style-image"]).includes("context-stroke"), "takes the toolbar's text color");
+    def.onCreated({ ownerDocument: document });
+    const st = document.getElementById("zentral-notes-toolbar-style");
+    assert.ok(st, "icon rule lives in a window style element, not an inline style on one node");
+    const css = decodeURIComponent(st.textContent);
+    assert.ok(css.includes("#zentral-notes-toolbar-button{list-style-image:url(\"data:image/svg+xml"), "rule targets the widget id");
+    assert.ok(css.includes("M15.5 3H5a2 2 0 0 0-2 2v14"), "same drawing as every other Notes icon");
+    assert.ok(css.includes("context-stroke") && css.includes("-moz-context-properties:fill,stroke"), "SVG may take the toolbar's text color");
+    def.onCreated({ ownerDocument: document });
+    assert.equal(document.documentElement.all().filter((e) => e.id === "zentral-notes-toolbar-style").length, 1, "style added once per window");
     let toggled = 0; const real = win.__zentralNotesToggle; win.__zentralNotesToggle = () => { toggled++; real(); };
     def.onCommand({ target: { ownerGlobal: win } });
     assert.equal(toggled, 1, "the command reaches the window the button was pressed in");

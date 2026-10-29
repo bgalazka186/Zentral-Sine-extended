@@ -10,6 +10,30 @@ Owner decisions already taken: 3.1.3 confirmed; no encryption at rest; default s
 `peek`; numeric Sine fields show the old presets as hints. Done this session: the 29 schema/code
 default mismatches (test `tests/defaults.test.cjs`), numeric hints, stale doc versions.
 
+## PLAN v2 (takes precedence over the cycle blocks below; those stay as the task source)
+
+Token rules for every session: read only this PLAN block, the handoff section named, then `grep -n` for
+function names and `view` small line ranges of `ZentralNotes.uc.js` (200 KB: never load it whole).
+Run only the tests named in the step; full verify loop (handoff section 5) once at the end of a step.
+Mark the step DONE here and add 5 lines at most to the handoff. One step = one session.
+
+| Step          | Content (source)                                                                                                                                                                                                                                                                        | Tests                                 |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| C2.1 **DONE** | Bugs: toolbar button no icon / click does nothing / missing after restart; dock-to-sidebar ignores new features; H1-H5 look identical; icons readable active + inactive (C2)                                                                                                            | notes-window, notes-ui, notes-icon    |
+| C2.2          | Editor dialogs: image dialog like link dialog (clipboard prefill, explains accepted files/links, optional link on picture); code-block language dropdown; table column alignment picker; callout shortcuts (NOTE, WARNING + rest); option to hide toolbar items / shortcut actions (C2) | notes-ui, notes-markdown              |
+| C2.3          | Markdown: safe HTML subset (`<details>`, `<summary>`), minimal offline math (LaTeX subset to Unicode/sup/sub, no KaTeX bundle; low priority) (C2)                                                                                                                                       | notes-markdown                        |
+| C3.1          | Window options: #8 push page + reveal on hover over top edge, free-text per-note label (C leftovers)                                                                                                                                                                                    | notes-window, notes-bars              |
+| C3.2          | Split view as a second same-size window; #1 themes in Appearance menu (RSS-based theme as template for recomended) (C leftovers)                                                                                                                                                        | notes-window, notes-ui                |
+| D1            | Capture: selection "Add to note" (new / existing / last open) with metadata settings (date, time, source, link with highlight, checkbox, style); #15 context menu; Inbox; page URL/title source snippet (C2 + D)                                                                        | notes-ui, new notes-capture           |
+| D2            | #12 folders and trees, pin as independent shortcut; "recent" list polish                                                                                                                                                                                                                | new notes-tree                        |
+| D3            | #16 `[[note]]` links, hub notes, backlinks, clickable footnotes; #11 search with "found in N other notes"                                                                                                                                                                               | new notes-links, notes-search         |
+| D4            | #13 image paste + per-note asset folder + alignment/size; replaces click-to-load placeholder decision                                                                                                                                                                                   | notes-markdown, new notes-assets      |
+| D5            | #17 reminders (one coarse timer), date notes, version history with size warning                                                                                                                                                                                                         | new notes-reminders, notes-history    |
+| E1            | RSS card: expandable long items, clickable links (Other modules)                                                                                                                                                                                                                        | standalone, encoding                  |
+| E2            | Audits: static ones now (dead CSS/attrs, duplicate IDs, README links); live-only ones get a debug `performance.now()` sampler (pref off by default) and an owner checklist in the handoff                                                                                               | defaults, z-heights, resize-perf, all |
+
+Order is cheapest/highest-value first; D1 follows C because capture reuses the C2.2 dialogs. Nothing was deleted: every item from C, C2, D, E and "Owner-approved ideas" is in a row above.
+
 ## Cycle A: small fixes and consistency (easiest)
 
 - #21 one Notes icon everywhere (settings, GUI, toolbar): single SVG constant.

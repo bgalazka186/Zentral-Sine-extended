@@ -30,7 +30,7 @@
   background: transparent;
   color: inherit;
   cursor: pointer;
-  opacity: 0.85;
+  opacity: 0.92;
 }
 .zentral-notes-btn[hidden] {
   display: none !important;
@@ -44,9 +44,12 @@
   height: 14px;
   pointer-events: none;
 }
+/* Active state: the icon keeps the normal text colour (the primary colour can be as dark as the toolbar in
+   some themes); the state shows as a tinted background with a ring instead of a colour change. */
 .zentral-notes-btn[data-active="true"] {
-  color: var(--zen-primary-color, #83a5ff);
-  background: color-mix(in srgb, var(--zen-primary-color, #83a5ff) 22%, transparent);
+  color: inherit;
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 45%, transparent);
   opacity: 1;
 }
 
@@ -138,7 +141,7 @@
 .zentral-notes-sheet .zn-rz[data-h="sw"] { bottom: 0; left: 0; cursor: nesw-resize; }
 .zentral-notes-sheet .zn-rz[data-h="nw"] { top: 0; left: 0; cursor: nwse-resize; }
 .zentral-notes-sheet .zn-rz[data-h="se"] { bottom: 0; right: 0; cursor: nwse-resize; }
-.zentral-notes-sheet .zn-keep-btn.is-on { color: var(--zn-accent); }
+.zentral-notes-sheet .zn-keep-btn.is-on { color: var(--zn-text); }
 .zentral-notes-sheet *,
 .zentral-notes-sheet *::before,
 .zentral-notes-sheet *::after {
@@ -162,7 +165,7 @@
   background: transparent;
   color: inherit;
   cursor: pointer;
-  opacity: 0.8;
+  opacity: 0.9;
 }
 .zentral-notes-sheet .zn-btn:hover,
 .zentral-notes-sheet .zn-btn:focus-visible {
@@ -171,7 +174,9 @@
   outline: none;
 }
 .zentral-notes-sheet .zn-btn.is-on {
-  color: var(--zn-accent);
+  color: var(--zn-text);
+  background: color-mix(in srgb, var(--zn-text) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--zn-text) 40%, transparent);
   opacity: 1;
 }
 .zentral-notes-sheet .zn-btn.zn-danger:hover { color: #ff6b6b; }
@@ -298,12 +303,14 @@
 :root[zentral-notes-wrap="off"] .zentral-notes-sheet .zn-read .zn-p,
 :root[zentral-notes-wrap="off"] .zentral-notes-sheet .zn-read .zn-li-text { white-space: pre; overflow-wrap: normal; }
 .zentral-notes-sheet .zn-read .zn-h { margin: 0.6em 0 0.3em; line-height: 1.3; font-weight: 700; }
-.zentral-notes-sheet .zn-read h1.zn-h { font-size: 1.45em; }
-.zentral-notes-sheet .zn-read h2.zn-h { font-size: 1.25em; }
-.zentral-notes-sheet .zn-read h3.zn-h { font-size: 1.1em; }
-.zentral-notes-sheet .zn-read h4.zn-h { font-size: 1em; }
-.zentral-notes-sheet .zn-read h5.zn-h { font-size: 0.95em; }
-.zentral-notes-sheet .zn-read h6.zn-h { font-size: 0.9em; color: var(--zn-muted); }
+/* Six clearly different levels: size steps of ~15%, a rule under H1/H2, H5 small caps, H6 muted. Written
+   with !important on the size because a host stylesheet resetting h1-h6 made them all look alike. */
+.zentral-notes-sheet .zn-read h1.zn-h { font-size: 1.9em !important; font-weight: 800; padding-bottom: 0.2em; border-bottom: 2px solid var(--zn-line); }
+.zentral-notes-sheet .zn-read h2.zn-h { font-size: 1.6em !important; font-weight: 750; padding-bottom: 0.15em; border-bottom: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-read h3.zn-h { font-size: 1.35em !important; }
+.zentral-notes-sheet .zn-read h4.zn-h { font-size: 1.15em !important; }
+.zentral-notes-sheet .zn-read h5.zn-h { font-size: 1em !important; text-transform: uppercase; letter-spacing: 0.04em; }
+.zentral-notes-sheet .zn-read h6.zn-h { font-size: 0.9em !important; color: var(--zn-muted); }
 .zentral-notes-sheet .zn-read .zn-li-more { margin: 0.2em 0 0.35em calc(var(--lvl, 0) * 16px + 1.4em); overflow-wrap: anywhere; }
 .zentral-notes-sheet .zn-read .zn-h:first-child { margin-top: 0; }
 .zentral-notes-sheet .zn-read .zn-p { margin: 0.35em 0; overflow-wrap: anywhere; }

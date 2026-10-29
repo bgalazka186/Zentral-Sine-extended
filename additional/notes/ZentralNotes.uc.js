@@ -1315,7 +1315,7 @@
       { id: "openFloating", label: "Open or close the standalone Notes card", def: "", global: true },
     ]);
     const SHORTCUT_IDS = new Set(SHORTCUT_ACTIONS.map((a) => a.id));
-    const GEO_KEYS = Object.freeze(["panel", "float"]); // hosts that remember a position and size
+    const GEO_KEYS = Object.freeze(["panel", "float", "dock"]); // hosts that remember a position and size
     function formatCombo(spec) {
       if (!spec || !spec.key) return "";
       const k = spec.key;
@@ -3650,6 +3650,7 @@
         destroy,
         refreshRead,
         layout: scheduleLayout,
+        applyState,
         focus: focusEditor,
         isOpen: () => isOpen,
         toggle: () => (isOpen ? close() : open()),
@@ -3756,9 +3757,10 @@
       return {
         position: "fixed",
         host: document.documentElement,
-        // Docked next to the sidebar the card is not free to move; otherwise its place is remembered.
+        // Docked or floating, the card's place is remembered (docked has its own slot, so switching the dock
+        // option never moves the floating card).
         get geoKey() {
-          return docked() ? "" : "float";
+          return docked() ? "dock" : "float";
         },
         ignoreOutside: (target) => isTrigger(target),
         attach(root) {
@@ -3779,6 +3781,7 @@
                 width: w,
                 height: content && content.height > 100 ? content.height : window.innerHeight,
                 anchor: "top",
+                bounds: { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight },
               };
             }
           }
@@ -4344,6 +4347,7 @@
             refresh() {
               if (sheet.isOpen()) {
                 sheet.root.dataset.host = dockSidebarNow() ? "dock" : "float";
+                sheet.applyState?.();
                 sheet.layout();
               }
             },
@@ -4468,9 +4472,23 @@
         encodeURIComponent(
           `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS.note}"/></svg>`,
         );
+      // The icon is an SVG that takes its colours from the button (context-stroke), which only works when the
+      // element opts in with -moz-context-properties. A rule in the window covers the toolbar button and the
+      // copy in the Customize palette alike (an inline style on one node did neither after a restart).
+      function iconStyle(doc) {
+        try {
+          if (!doc || doc.getElementById("zentral-notes-toolbar-style")) return;
+          const st = doc.createElement("style");
+          st.id = "zentral-notes-toolbar-style";
+          st.textContent = `#${TOOLBAR_WIDGET_ID}{list-style-image:url("${iconUrl()}");-moz-context-properties:fill,stroke;fill:none;stroke:currentColor}`;
+          (doc.head || doc.documentElement).appendChild(st);
+        } catch (_) {}
+      }
       function claimWidget() {
         const cui = getCUI();
-        if (!cui || disposed || !enabledNow() || cui.__zentralNotesOwner === windowId) return;
+        if (!cui || disposed || !enabledNow()) return;
+        iconStyle(document); // every window needs the icon rule, not only the owner of the widget
+        if (cui.__zentralNotesOwner === windowId) return;
         try {
           if (cui.getWidget?.(TOOLBAR_WIDGET_ID)?.provider) cui.destroyWidget(TOOLBAR_WIDGET_ID);
           cui.createWidget({
@@ -4480,13 +4498,24 @@
             tooltiptext: "Notes",
             localized: false,
             onCreated(node) {
-              node.style.setProperty("list-style-image", `url("${iconUrl()}")`);
+              iconStyle(node.ownerDocument);
             },
             onCommand(event) {
-              event?.target?.ownerGlobal?.__zentralNotesToggle?.();
+              const w = event?.target?.ownerGlobal;
+              (w?.__zentralNotesToggle || window.__zentralNotesToggle)?.();
             },
           });
           cui.__zentralNotesOwner = windowId;
+          // A widget registered after startup is not put back where the user placed it until customize mode
+          // runs; place it in every open window now.
+          try {
+            for (const w of Services.wm.getEnumerator("navigator:browser")) {
+              iconStyle(w.document);
+              try {
+                cui.ensureWidgetPlacedInWindow?.(TOOLBAR_WIDGET_ID, w);
+              } catch (_) {}
+            }
+          } catch (_) {}
         } catch (error) {
           warn(error);
         }
@@ -4509,6 +4538,9 @@
       claimWidget();
       onCleanup(() => {
         releaseWidget();
+        try {
+          document.getElementById("zentral-notes-toolbar-style")?.remove();
+        } catch (_) {}
         delete window.__zentralNotesToggle;
         delete window.__zentralNotesClaimWidget;
       });
