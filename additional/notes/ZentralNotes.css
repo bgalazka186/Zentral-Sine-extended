@@ -630,3 +630,17 @@
 .zentral-notes-sheet .zn-keybtn { min-width: 8.5em; }
 .zentral-notes-sheet .zn-key-note { min-height: 2.6em; }
 .zentral-notes-sheet .zn-gcell { cursor: pointer; }
+
+/* C2.2: long pickers (table alignment, hidden toolbar buttons) scroll inside the dialog */
+.zentral-notes-sheet .zn-aligns { max-height: 38vh; overflow-y: auto; }
+
+/* Markdown: <details> and minimal math (C2.3) */
+.zentral-notes-sheet .zn-read .zn-details { margin: 0.5em 0; border: 1px solid var(--zn-line); border-radius: 6px; }
+.zentral-notes-sheet .zn-read .zn-details-sum { display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 8px; border: none; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; border-radius: 6px; }
+.zentral-notes-sheet .zn-read .zn-details-sum:hover { background: var(--zn-hover); }
+.zentral-notes-sheet .zn-read .zn-details-arrow { flex: none; width: 0; height: 0; border-left: 6px solid currentColor; border-top: 4px solid transparent; border-bottom: 4px solid transparent; opacity: 0.7; }
+.zentral-notes-sheet .zn-read .zn-details-sum[aria-expanded="true"] .zn-details-arrow { transform: rotate(90deg); }
+.zentral-notes-sheet .zn-read .zn-details-body { padding: 0 10px 4px; border-top: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-read .zn-details-body[hidden] { display: none; }
+.zentral-notes-sheet .zn-read .zn-math { font-family: "Cambria Math", "STIX Two Math", Georgia, serif; }
+.zentral-notes-sheet .zn-read .zn-math-block { margin: 0.5em 0; text-align: center; font-size: 1.1em; overflow-x: auto; }

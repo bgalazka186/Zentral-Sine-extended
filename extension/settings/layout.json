@@ -986,6 +986,7 @@
     "zen.workspace.zentral.notes.setext",
     "zen.workspace.zentral.notes.paste_link",
     "zen.workspace.zentral.notes.shortcuts",
+    "zen.workspace.zentral.notes.hidden_tools",
     {
       "type": "text",
       "label": "**Video**",

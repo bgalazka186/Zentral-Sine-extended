@@ -351,4 +351,106 @@ test("B2 quick settings table points at real preferences and clamps steps", () =
   assert.equal(c.stepOption(font, 13, 1), 14);
 });
 
+test("C2.2 table alignment, image + link, code languages, callouts, hidden tools", () => {
+  const [tb] = c.parseBlocks(c.makeTable(2, 4, ["left", "center", "right"]));
+  assert.equal(JSON.stringify(tb.align), JSON.stringify(["left", "center", "right", ""]));
+  assert.equal(c.makeTable(2, 2), c.makeTable(2, 2, []), "no alignment keeps the old table");
+  assert.equal(c.buildImage("a [b]\nc", "https://x.org/a b(1).png"), "![a  b  c](https://x.org/a%20b%281%29.png)");
+  const linked = c.buildImage("pic", "https://x.org/p.png", "https://x.org/page");
+  assert.equal(linked, "[![pic](https://x.org/p.png)](https://x.org/page)");
+  const a = c.parseInline(linked)[0];
+  assert.equal(a.t, "a");
+  assert.equal(a.c[0].t, "img");
+  assert.equal(c.buildImage("pic", "https://x.org/p.png", "javascript:alert(1)"), "![pic](https://x.org/p.png)", "an unsafe link is dropped");
+  assert.equal(c.pastedWebAddress("mailto:a@b.org"), null);
+  assert.ok(c.pastedWebAddress(" https://x.org/p.png "));
+  for (const [id] of c.CODE_LANGS) assert.ok(id === "" || c.codeLangKey(id), "every listed language is highlighted: " + id);
+  assert.equal(c.insertCodeBlock("x", 0, 1, "py").text, "```py\nx\n```");
+  const note = c.insertCallout("hello", 0, 5, "note");
+  assert.equal(note.text, "> [!NOTE]\n> hello");
+  assert.equal(c.insertCallout("a\nb", 0, 3, "warning").text, "> [!WARNING]\n> a\n> b");
+  assert.equal(c.insertCallout("", 0, 0, "tip").text, "> [!TIP]\n> ");
+  const swap = c.insertCallout("> [!NOTE]\n> hi", 3, 3, "caution");
+  assert.equal("> [!NOTE]\n> hi".slice(0, swap.start) + swap.text + "> [!NOTE]\n> hi".slice(swap.end), "> [!CAUTION]\n> hi", "only the kind changes");
+  assert.equal(c.insertCallout("x", 0, 1, "nonsense").text.split("\n")[0], "> [!NOTE]");
+  for (const [kind] of c.CALLOUT_KINDS) {
+    const [q] = c.parseBlocks(c.insertCallout("body", 0, 4, kind).text);
+    assert.equal(q.callout.kind, kind);
+    assert.ok(c.SHORTCUT_ACTIONS.some((s) => s.id === c.calloutId(kind) && s.edit), "shortcut action for " + kind);
+  }
+  assert.equal(c.SHORTCUT_ACTIONS.find((s) => s.id === "calloutNote").def, "Ctrl+Shift+2");
+  assert.equal(c.SHORTCUT_ACTIONS.find((s) => s.id === "calloutWarning").def, "Ctrl+Shift+3");
+  const hidden = c.parseHidden("bold, nonsense;calloutInfo sup");
+  assert.equal(c.serializeHidden(hidden), "bold,calloutInfo,sup");
+  assert.ok(!c.parseHidden("settings").size, "Quick settings can never be hidden");
+  for (const [id] of c.HIDEABLE_TOOLS) assert.ok(c.SHORTCUT_ACTIONS.some((s) => s.id === id), "hideable id is a real action: " + id);
+});
+
+const flat = (nodes) => nodes.map((n) => n.s ?? flat(n.c || [])).join("");
+const tex = (src) => c.texNodes(src);
+
+test("details: summary, markdown body, open flag, nesting, export", () => {
+  const [d] = c.parseBlocks("<details>\n<summary>More **info**</summary>\n\nBody *text*\n\n- a\n- b\n\n</details>");
+  assert.equal(d.type, "details");
+  assert.equal(d.open, false);
+  assert.equal(flat(d.summary), "More info");
+  same(d.blocks.map((b) => b.type), ["p", "list"]);
+  assert.equal(c.parseBlocks("<details open>\n<summary>x</summary>\ny\n</details>")[0].open, true);
+  const [o] = c.parseBlocks("<details>\n<summary>outer</summary>\n<details>\n<summary>inner</summary>\ndeep\n</details>\nafter\n</details>\n\nnext");
+  assert.equal(o.blocks[0].type, "details");
+  assert.equal(flat(o.blocks[0].summary), "inner");
+  assert.equal(flat(o.blocks[1].c), "after");
+  const one = c.parseBlocks("<details><summary>s</summary>text</details>")[0];
+  assert.equal(flat(one.summary), "s");
+  assert.equal(flat(one.blocks[0].c), "text");
+  assert.equal(c.parseBlocks("<details>\ntext")[0].type, "p", "no closing tag: stays text");
+  assert.equal(c.parseBlocks("<details>\nx\n</details>")[0].summary.length, 0, "summary is optional");
+  const html = c.exportHtml("<details>\n<summary>Sum</summary>\n\n<script>alert(1)</script>\n</details>");
+  assert.ok(html.includes("<details>") && html.includes("<summary>Sum</summary>"));
+  assert.ok(!html.includes("<script>alert"), "other tags are escaped, never passed through");
+  assert.ok(c.exportText("<details>\n<summary>Sum</summary>\n\nBody\n</details>").includes("Sum\n\nBody"));
+});
+
+test("details: the paragraph before it ends and the blocks after it continue", () => {
+  same(c.parseBlocks("before\n<details>\n<summary>s</summary>\nx\n</details>\nafter").map((b) => b.type), ["p", "details", "p"]);
+});
+
+test("math: LaTeX subset becomes text + sup/sub, unknown commands stay visible", () => {
+  assert.equal(flat(tex("\\alpha + \\beta \\leq \\infty")), "α + β ≤ ∞");
+  same(tex("x^2").map((n) => n.t), ["text", "sup"]);
+  assert.equal(tex("x_{i+1}^{10}").map((n) => n.t).join(","), "text,sub,sup");
+  assert.equal(flat(tex("\\frac{a}{b}")), "a/b");
+  assert.equal(flat(tex("\\frac{a+b}{c}")), "(a+b)/c");
+  assert.equal(flat(tex("\\sqrt{x}")), "√x");
+  assert.equal(flat(tex("\\sqrt{x+1}")), "√(x+1)");
+  assert.equal(flat(tex("\\mathbb{R}^n")), "ℝn");
+  assert.equal(flat(tex("\\sum_{i=1}^{n} i")), "∑i=1n i");
+  assert.equal(flat(tex("\\sin\\theta \\times \\text{ cm}")), "sinθ ×  cm");
+  assert.equal(flat(tex("\\hat{x}")), "x\u0302");
+  assert.equal(flat(tex("\\unknowncmd{x}")), "\\unknowncmd" + "x");
+  assert.equal(flat(tex("a \\{ b \\}")), "a { b }");
+  assert.equal(typeof flat(tex("}{ ^")), "string", "stray braces and carets do not throw");
+  const deep = "{".repeat(50) + "x" + "}".repeat(50);
+  assert.equal(flat(tex(deep)).includes("x"), true, "deep nesting is capped, not a hang");
+  assert.ok(tex("x".repeat(5000)).length >= 1, "oversized input stays text");
+});
+
+test("math: $...$ inline and $$ block, prices are not math", () => {
+  assert.equal(c.parseInline("area $\\pi r^2$ ok").some((n) => n.t === "math"), true);
+  assert.equal(c.parseInline("costs $5 and $10 today").some((n) => n.t === "math"), false);
+  assert.equal(c.parseInline("$5-$6").some((n) => n.t === "math"), false);
+  assert.equal(c.parseInline("a $ b $ c").some((n) => n.t === "math"), false, "spaces inside: not math");
+  assert.equal(c.parseInline("\\$x\\$").some((n) => n.t === "math"), false, "escaped dollars");
+  assert.equal(flat(c.parseInline("\\$x\\$")), "$x$");
+  assert.equal(flat(c.parseInline("**$\\alpha$**")), "α", "math inside bold");
+  assert.equal(flat(c.parseInline("`$x$`")), "$x$", "code wins");
+  const [m] = c.parseBlocks("$$\n\\frac{a}{b}\n$$");
+  assert.equal(m.type, "math");
+  assert.equal(flat(m.c), "a/b");
+  assert.equal(c.parseBlocks("$$ E = mc^2 $$")[0].type, "math");
+  assert.equal(c.parseBlocks("$$\nunclosed")[0].type, "p", "unclosed block stays text");
+  assert.ok(c.exportHtml("$$ x^2 $$").includes('class="math-block"'));
+  assert.equal(c.exportText("$$ \\alpha $$").trim(), "α");
+});
+
 console.log(`\n${passed} markdown tests passed`);

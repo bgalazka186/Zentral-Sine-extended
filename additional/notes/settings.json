@@ -205,6 +205,12 @@
       "label": "Changed editor shortcuts (set in Notes → Quick settings → Keyboard shortcuts; empty = defaults)",
       "type": "string",
       "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.notes.hidden_tools",
+      "label": "Hidden editor buttons and shortcuts (set in Notes → Quick settings → Toolbar buttons; empty = all shown)",
+      "type": "string",
+      "defaultValue": ""
     }
   ],
   "settings": {
@@ -284,6 +290,11 @@
       "owner": "notes"
     },
     "zen.workspace.zentral.notes.shortcuts": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.hidden_tools": {
       "category": "notes",
       "section": "Quick notes",
       "owner": "notes"

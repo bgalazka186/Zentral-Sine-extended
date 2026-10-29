@@ -2219,6 +2219,12 @@
     "defaultValue": ""
   },
   {
+    "property": "zen.workspace.zentral.notes.hidden_tools",
+    "label": "Hidden editor buttons and shortcuts (set in Notes → Quick settings → Toolbar buttons; empty = all shown)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
     "type": "text",
     "label": "**Video**",
     "size": "22px"

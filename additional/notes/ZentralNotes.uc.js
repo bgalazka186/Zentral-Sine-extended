@@ -90,6 +90,7 @@
       SETEXT: "zen.workspace.zentral.notes.setext",
       PASTE_LINK: "zen.workspace.zentral.notes.paste_link",
       SHORTCUTS: "zen.workspace.zentral.notes.shortcuts",
+      HIDDEN_TOOLS: "zen.workspace.zentral.notes.hidden_tools",
       AVOID_SIDEBAR: "zen.workspace.zentral.notes.avoid_sidebar",
     });
     const VIEW_PREFS = new Set([PREF.WRAP, PREF.FONT_SIZE, PREF.LINE_HEIGHT, PREF.READ_COPY]);
@@ -297,6 +298,7 @@
         "\\[([^\\]\\n]+)\\]\\[([^\\]\\n]*)\\]", // 23 text, 24 label (reference link, see REFS)
         "<(?:mailto:)?([^\\s<>@\\x22]+@[^\\s<>@\\x22]+\\.[^\\s<>@\\x22]+)>", // 25 <user@host.tld>
         "(?<![\\w/])mailto:([^\\s<>@\\x22]+@[^\\s<>@\\x22]+\\.[^\\s<>@\\x22,;)\\]]+)", // 26 bare mailto:user@host.tld
+        "(?<![\\w$])\\$([^\\s$](?:[^$\\n]*?[^\\s$])?)\\$(?![\\d$\\w])", // 27 $math$ (not "$5 and $10": no space inside, no digit after)
       ].join("|"),
       "g",
     );
@@ -334,6 +336,141 @@
       }
       return refs;
     }
+
+    // ======================================================================
+    // Pure core: minimal offline math. A LaTeX subset becomes plain text plus sup / sub nodes
+    // (no KaTeX, nothing is fetched). Anything it does not know stays visible as typed (\name).
+    // $x^2$ inline, $$ ... $$ as a block. Unsupported: matrices, aligned, over/under braces.
+    // ======================================================================
+    const TEX_SYMBOLS = {};
+    for (const [names, ch] of [
+      ["alpha", "α"], ["beta", "β"], ["gamma", "γ"], ["delta", "δ"], ["epsilon", "ϵ"], ["varepsilon", "ε"], ["zeta", "ζ"], ["eta", "η"],
+      ["theta", "θ"], ["vartheta", "ϑ"], ["iota", "ι"], ["kappa", "κ"], ["lambda", "λ"], ["mu", "μ"], ["nu", "ν"], ["xi", "ξ"], ["pi", "π"],
+      ["rho", "ρ"], ["sigma", "σ"], ["tau", "τ"], ["upsilon", "υ"], ["phi", "ϕ"], ["varphi", "φ"], ["chi", "χ"], ["psi", "ψ"], ["omega", "ω"],
+      ["Gamma", "Γ"], ["Delta", "Δ"], ["Theta", "Θ"], ["Lambda", "Λ"], ["Xi", "Ξ"], ["Pi", "Π"], ["Sigma", "Σ"], ["Upsilon", "Υ"], ["Phi", "Φ"],
+      ["Psi", "Ψ"], ["Omega", "Ω"], ["times", "×"], ["cdot", "·"], ["pm", "±"], ["mp", "∓"], ["div", "÷"], ["leq le", "≤"], ["geq ge", "≥"],
+      ["neq ne", "≠"], ["approx", "≈"], ["equiv", "≡"], ["sim", "∼"], ["propto", "∝"], ["infty", "∞"], ["partial", "∂"], ["nabla", "∇"],
+      ["sum", "∑"], ["prod", "∏"], ["int", "∫"], ["oint", "∮"], ["in", "∈"], ["notin", "∉"], ["subset", "⊂"], ["subseteq", "⊆"], ["supset", "⊃"],
+      ["cup", "∪"], ["cap", "∩"], ["emptyset", "∅"], ["forall", "∀"], ["exists", "∃"], ["neg lnot", "¬"], ["land wedge", "∧"], ["lor vee", "∨"],
+      ["to rightarrow", "→"], ["leftarrow gets", "←"], ["Rightarrow implies", "⇒"], ["Leftarrow", "⇐"], ["leftrightarrow", "↔"],
+      ["Leftrightarrow iff", "⇔"], ["mapsto", "↦"], ["ldots dots", "…"], ["cdots", "⋯"], ["circ", "∘"], ["degree", "°"], ["angle", "∠"],
+      ["perp", "⊥"], ["parallel", "∥"], ["hbar", "ℏ"], ["ell", "ℓ"], ["prime", "′"], ["langle", "⟨"], ["rangle", "⟩"], ["ll", "≪"], ["gg", "≫"],
+      ["star", "⋆"], ["bullet", "•"], ["oplus", "⊕"], ["otimes", "⊗"], ["therefore", "∴"], ["because", "∵"], ["quad qquad", "  "],
+      [", ; : space !", " "],
+      ["{ lbrace", "{"], ["} rbrace", "}"], ["% ", "%"], ["& ", "&"], ["# ", "#"], ["_ ", "_"], ["$ ", "$"], ["| ", "‖"],
+    ])
+      for (const name of names.split(" ")) if (name) TEX_SYMBOLS[name] = ch;
+    TEX_SYMBOLS[" "] = " ";
+    const TEX_WORDS = new Set("sin cos tan cot sec csc arcsin arccos arctan sinh cosh tanh log ln lg exp lim max min sup inf det dim ker gcd deg arg mod".split(" "));
+    const TEX_BLACKBOARD = { R: "ℝ", N: "ℕ", Z: "ℤ", Q: "ℚ", C: "ℂ", P: "ℙ" };
+    const TEX_ACCENTS = { bar: "\u0304", overline: "\u0304", hat: "\u0302", widehat: "\u0302", tilde: "\u0303", widetilde: "\u0303", vec: "\u20d7", dot: "\u0307", ddot: "\u0308" };
+    const TEX_MAX_DEPTH = 6;
+    function texNodes(src) {
+      src = String(src);
+      if (src.length > 2000) return [{ t: "text", s: src }];
+      const ctx = { s: src, i: 0 };
+      const nodes = texSeq(ctx, 0, false);
+      return nodes.length ? nodes : [{ t: "text", s: src }];
+    }
+    function texPush(out, node) {
+      const last = out[out.length - 1];
+      if (node.t === "text" && last && last.t === "text") last.s += node.s;
+      else out.push(node);
+    }
+    // One argument: {group}, \command, or a single character.
+    function texArg(ctx, depth) {
+      const { s } = ctx;
+      while (s[ctx.i] === " ") ctx.i++;
+      if (ctx.i >= s.length) return [];
+      if (s[ctx.i] === "{") {
+        ctx.i++;
+        return texSeq(ctx, depth + 1, true);
+      }
+      if (s[ctx.i] === "\\") return texCommand(ctx, depth);
+      return [{ t: "text", s: s[ctx.i++] }];
+    }
+    function texFlat(nodes) {
+      return nodes.map((n) => n.s ?? texFlat(n.c || [])).join("");
+    }
+    const texSimple = (nodes) => /^[\w.\u0370-\u03ff\u2200-\u22ff]+$/.test(texFlat(nodes));
+    function texWrap(nodes) {
+      return texSimple(nodes) ? nodes : [{ t: "text", s: "(" }, ...nodes, { t: "text", s: ")" }];
+    }
+    function texCommand(ctx, depth) {
+      const { s } = ctx;
+      ctx.i++; // the backslash
+      let name = "";
+      if (/[A-Za-z]/.test(s[ctx.i] || "")) while (/[A-Za-z]/.test(s[ctx.i] || "")) name += s[ctx.i++];
+      else name = s[ctx.i++] || "";
+      if (name === "\\") return [{ t: "text", s: " " }];
+      if (name === "left" || name === "right" || name === "displaystyle" || name === "limits" || name === "nolimits") {
+        if (name === "left" || name === "right") {
+          if (s[ctx.i] === ".") ctx.i++; // \left. is an invisible delimiter
+        }
+        return [];
+      }
+      if (Object.prototype.hasOwnProperty.call(TEX_SYMBOLS, name)) return [{ t: "text", s: TEX_SYMBOLS[name] }];
+      if (TEX_WORDS.has(name)) return [{ t: "text", s: name }];
+      if (depth >= TEX_MAX_DEPTH) return [{ t: "text", s: "\\" + name }];
+      if (name === "frac" || name === "dfrac" || name === "tfrac") {
+        const a = texArg(ctx, depth);
+        const b = texArg(ctx, depth);
+        return [...texWrap(a), { t: "text", s: "/" }, ...texWrap(b)];
+      }
+      if (name === "sqrt") {
+        let root = null;
+        if (s[ctx.i] === "[") {
+          const end = s.indexOf("]", ctx.i);
+          if (end > 0) {
+            root = s.slice(ctx.i + 1, end);
+            ctx.i = end + 1;
+          }
+        }
+        const body = texArg(ctx, depth);
+        return [...(root ? [{ t: "sup", c: [{ t: "text", s: root }] }] : []), { t: "text", s: "√" }, ...texWrap(body)];
+      }
+      if (name === "text" || name === "mathrm" || name === "operatorname" || name === "mathit" || name === "mbox" || name === "mathcal" || name === "mathsf" || name === "mathtt")
+        return texArg(ctx, depth);
+      if (name === "mathbf" || name === "boldsymbol" || name === "bm") return [{ t: "b", c: texArg(ctx, depth) }];
+      if (name === "mathbb") {
+        const a = texArg(ctx, depth);
+        const f = texFlat(a);
+        return [{ t: "text", s: f.length === 1 && TEX_BLACKBOARD[f] ? TEX_BLACKBOARD[f] : f }];
+      }
+      if (TEX_ACCENTS[name]) {
+        const a = texArg(ctx, depth);
+        const f = texFlat(a);
+        return f ? [{ t: "text", s: f[0] + TEX_ACCENTS[name] + f.slice(1) }] : [];
+      }
+      return [{ t: "text", s: "\\" + name }]; // unknown: shown as typed
+    }
+    function texSeq(ctx, depth, inGroup) {
+      const out = [];
+      const { s } = ctx;
+      while (ctx.i < s.length) {
+        const ch = s[ctx.i];
+        if (ch === "}" && inGroup) {
+          ctx.i++;
+          return out;
+        }
+        if (ch === "{") {
+          ctx.i++;
+          if (depth >= TEX_MAX_DEPTH) texPush(out, { t: "text", s: "{" });
+          else for (const n of texSeq(ctx, depth + 1, true)) texPush(out, n);
+        } else if (ch === "^" || ch === "_") {
+          ctx.i++;
+          const arg = depth >= TEX_MAX_DEPTH ? [{ t: "text", s: ch }] : texArg(ctx, depth);
+          if (arg.length) out.push({ t: ch === "^" ? "sup" : "sub", c: arg });
+        } else if (ch === "\\") {
+          for (const n of texCommand(ctx, depth)) texPush(out, n);
+        } else {
+          ctx.i++;
+          texPush(out, { t: "text", s: ch === "~" ? " " : ch });
+        }
+      }
+      return out;
+    }
+
     function parseInlineRaw(text, depth = 0) {
       text = String(text);
       if (depth > 4 || text.length > MAX_INLINE_CHARS)
@@ -380,6 +517,7 @@
         } else if (m[20] !== undefined) out.push({ t: "sub", c: parseInline(m[20], depth + 1) });
         else if (m[21] !== undefined) out.push({ t: "sup", c: parseInline(m[21], depth + 1) });
         else if (m[22] !== undefined) out.push({ t: "kbd", s: m[22] });
+        else if (m[27] !== undefined) out.push({ t: "math", c: texNodes(m[27]) });
         else if (m[23] !== undefined) {
           const def = REFS?.get(refKey(m[24] || m[23]));
           const href = def && safeHref(def.href);
@@ -412,12 +550,12 @@
 
     // Backslash escapes: \* \# \[ ... show the character itself. They are swapped for private-use
     // characters before parsing and swapped back in the finished text (so they cannot start markup).
-    const ESC_CHARS = "\\`*_{}[]()#+-.!|=~<>^";
+    const ESC_CHARS = "\\`*_{}[]()#+-.!|=~<>^$";
     function parseInline(text, depth = 0) {
       text = String(text);
       if (depth > 0 || !text.includes("\\")) return parseInlineRaw(text, depth);
-      const swapped = text.replace(/\\([\\`*_{}[\]()#+\-.!|=~<>^])/g, (_m, ch) => String.fromCharCode(0xe000 + ESC_CHARS.indexOf(ch)));
-      const back = (str, keepSlash) => str.replace(/[\ue000-\ue014]/g, (c) => (keepSlash ? "\\" : "") + ESC_CHARS[c.charCodeAt(0) - 0xe000]);
+      const swapped = text.replace(/\\([\\`*_{}[\]()#+\-.!|=~<>^$])/g, (_m, ch) => String.fromCharCode(0xe000 + ESC_CHARS.indexOf(ch)));
+      const back = (str, keepSlash) => str.replace(/[\ue000-\ue015]/g, (c) => (keepSlash ? "\\" : "") + ESC_CHARS[c.charCodeAt(0) - 0xe000]);
       const fix = (nodes) => {
         for (const n of nodes) {
           if (n.t === "text") n.s = back(n.s, false);
@@ -492,6 +630,58 @@
         REFS = before;
       }
     }
+    // <details> ... </details> with an optional <summary>: a collapsible block. Only these two tags (and
+    // <details open>) are understood; attributes are ignored and the inner text is plain Markdown.
+    const DETAILS_OPEN_RE = /^\s*<details(?:\s+open)?\s*>/i;
+    const DETAILS_CLOSE_RE = /<\/details\s*>/i;
+    // Returns { block, next } or null (no matching close tag: the lines stay ordinary text).
+    function parseDetails(lines, start, nested, opts) {
+      const first = lines[start];
+      const open = /^\s*<details\s+open\s*>/i.test(first);
+      const rest = first.replace(DETAILS_OPEN_RE, "");
+      let depth = 1;
+      const inner = [];
+      let end = -1;
+      for (let j = start; j < lines.length && j - start < 2000; j++) {
+        const raw = j === start ? rest : lines[j];
+        let line = raw;
+        let scan = raw;
+        for (let m; (m = /<details(?:\s+open)?\s*>|<\/details\s*>/i.exec(scan)); ) {
+          const closing = m[0][1] === "/";
+          depth += closing ? -1 : 1;
+          if (depth === 0) {
+            line = raw.slice(0, raw.length - scan.length + m.index);
+            end = j;
+            break;
+          }
+          scan = scan.slice(m.index + m[0].length);
+        }
+        inner.push(line);
+        if (end >= 0) break;
+      }
+      if (end < 0) return null;
+      let k = 0;
+      while (k < inner.length && !inner[k].trim()) k++;
+      let summary = [];
+      const sm = k < inner.length ? /^\s*<summary>([\s\S]*?)<\/summary>\s*/i.exec(inner[k]) : null;
+      if (sm) {
+        summary = parseInline(sm[1].trim());
+        inner[k] = inner[k].slice(sm[0].length);
+      }
+      const body = parseBlocks(inner.slice(k).join("\n"), true, opts);
+      return { block: { type: "details", open, summary, blocks: body }, next: end + 1 };
+    }
+    // $$ x^2 $$ on one line, or $$ on its own line ... $$ on its own line.
+    function parseMathBlock(lines, start) {
+      const one = /^\s*\$\$(.+?)\$\$\s*$/.exec(lines[start]);
+      if (one) return { block: { type: "math", c: texNodes(one[1].trim()) }, next: start + 1 };
+      if (!/^\s*\$\$\s*$/.test(lines[start])) return null;
+      for (let j = start + 1; j < lines.length && j - start < 200; j++) {
+        if (/^\s*\$\$\s*$/.test(lines[j]))
+          return { block: { type: "math", c: texNodes(lines.slice(start + 1, j).join(" ").trim()) }, next: j + 1 };
+      }
+      return null;
+    }
     const SETEXT_RE = /^\s{0,3}(=+|-+)\s*$/;
     function parseBlocksIn(text, nested, opts) {
       const lines = normalizeNewlines(text).split("\n");
@@ -501,6 +691,8 @@
         /^```/.test(l) ||
         /^#{1,6}\s+\S/.test(l) ||
         /^>/.test(l) ||
+        DETAILS_OPEN_RE.test(l) ||
+        /^\s*\$\$/.test(l) ||
         LIST_RE.test(l) ||
         /^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(l);
       while (i < lines.length) {
@@ -516,6 +708,12 @@
           }
           if (opts.keepBlanks && run > 1 && blocks.length && i < lines.length)
             blocks.push({ type: "gap", n: run - 1 });
+        } else if (DETAILS_OPEN_RE.test(line) && (m = parseDetails(lines, i, nested, opts))) {
+          blocks.push(m.block);
+          i = m.next;
+        } else if (/^\s*\$\$/.test(line) && (m = parseMathBlock(lines, i))) {
+          blocks.push(m.block);
+          i = m.next;
         } else if ((m = /^```([\w+#.-]*)\s*$/.exec(line))) {
           const buf = [];
           i++;
@@ -934,6 +1132,7 @@
       for (const n of nodes) {
         if (n.t === "text") out += escHtml(n.s);
         else if (n.t === "br") out += "<br>";
+        else if (n.t === "math") out += '<span class="math">' + inlineHtml(n.c) + "</span>";
         else if (n.t === "code") out += "<code>" + escHtml(n.s) + "</code>";
         else if (n.t === "img") out += '<img src="' + escHtml(n.href) + '" alt="' + escHtml(n.alt) + '">';
         else if (n.t === "a") out += '<a href="' + escHtml(n.href) + '"' + (n.title ? ' title="' + escHtml(n.title) + '"' : "") + ' rel="noopener noreferrer">' + inlineHtml(n.c) + "</a>";
@@ -974,6 +1173,9 @@
         if (b.type === "h") out += "<h" + b.level + ">" + inlineHtml(b.c) + "</h" + b.level + ">\n";
         else if (b.type === "p") out += "<p>" + inlineHtml(b.c) + "</p>\n";
         else if (b.type === "hr") out += "<hr>\n";
+        else if (b.type === "math") out += '<p class="math-block">' + inlineHtml(b.c) + "</p>\n";
+        else if (b.type === "details")
+          out += "<details" + (b.open ? " open" : "") + ">\n" + (b.summary.length ? "<summary>" + inlineHtml(b.summary) + "</summary>\n" : "") + blocksHtml(b.blocks) + "</details>\n";
         else if (b.type === "code") out += "<pre><code>" + escHtml(b.text) + "</code></pre>\n";
         else if (b.type === "quote")
           out +=
@@ -996,7 +1198,7 @@
       ":root{color-scheme:light dark}body{max-width:46rem;margin:2rem auto;padding:0 1rem;font:16px/1.6 system-ui,sans-serif}" +
       "pre{overflow:auto;padding:.6em .8em;background:rgba(127,127,127,.15);border-radius:6px}code,kbd{font-family:ui-monospace,monospace}" +
       "kbd{padding:0 .35em;border:1px solid rgba(127,127,127,.6);border-radius:4px;font-size:.9em}" +
-      "blockquote{margin:.6em 0;padding-left:1em;border-left:3px solid rgba(127,127,127,.5)}table{border-collapse:collapse}" +
+      "blockquote{margin:.6em 0;padding-left:1em;border-left:3px solid rgba(127,127,127,.5)}.math,.math-block{font-family:Cambria Math,STIX Two Math,serif}.math-block{text-align:center;font-size:1.1em}table{border-collapse:collapse}" +
       "th,td{border:1px solid rgba(127,127,127,.5);padding:.3em .6em}img{max-width:100%}" +
       'mark{background:#fff176;color:#000}mark[data-color=green]{background:#a5d6a7}mark[data-color=blue]{background:#90caf9}' +
       'mark[data-color=pink]{background:#f8bbd0}mark[data-color=orange]{background:#ffcc80}mark[data-color=purple]{background:#ce93d8}' +
@@ -1028,6 +1230,8 @@
       for (const b of blocks) {
         if (b.type === "h" || b.type === "p") parts.push(inlineText(b.c));
         else if (b.type === "hr") parts.push("----------");
+        else if (b.type === "math") parts.push(inlineText(b.c));
+        else if (b.type === "details") parts.push((b.summary.length ? inlineText(b.summary) + "\n\n" : "") + blocksText(b.blocks));
         else if (b.type === "code") parts.push(b.text.replace(/^/gm, "    "));
         else if (b.type === "quote")
           parts.push(((b.callout ? (b.callout.title || b.callout.kind.toUpperCase()) + "\n\n" : "") + blocksText(b.blocks)).replace(/^/gm, "> "));
@@ -1252,14 +1456,16 @@
     }
     const clampInt = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v)) || lo));
     // rows counts every row including the header.
-    function makeTable(rows, cols) {
+    // aligns[i] is "left", "center", "right" or "" (default) for column i.
+    const alignDelim = (a) => (a === "left" ? ":---" : a === "center" ? ":---:" : a === "right" ? "---:" : "---");
+    function makeTable(rows, cols, aligns = []) {
       rows = clampInt(rows, 2, MAX_TABLE_ROWS);
       cols = clampInt(cols, 1, MAX_TABLE_COLS);
       const row = (cell) => "| " + Array.from({ length: cols }, (_, i) => cell(i)).join(" | ") + " |";
-      return [row((i) => "Column " + (i + 1)), row(() => "---"), ...Array.from({ length: rows - 1 }, () => row(() => " "))].join("\n");
+      return [row((i) => "Column " + (i + 1)), row((i) => alignDelim(aligns[i])), ...Array.from({ length: rows - 1 }, () => row(() => " "))].join("\n");
     }
-    function insertTable(value, s, e, rows, cols) {
-      const table = makeTable(rows, cols);
+    function insertTable(value, s, e, rows, cols, aligns = []) {
+      const table = makeTable(rows, cols, aligns);
       const ls = value.lastIndexOf("\n", s - 1) + 1;
       let le = value.indexOf("\n", e);
       if (le === -1) le = value.length;
@@ -1270,6 +1476,47 @@
       const text = lead + table + "\n";
       const first = start + lead.length + 2;
       return { start, end, text, selStart: first, selEnd: first + "Column 1".length };
+    }
+    // Picture with an optional link around it: ![alt](src) or [![alt](src)](link). Spaces and brackets
+    // in the addresses are escaped so the line parses back to what was typed.
+    const escAddr = (u) => String(u).trim().replace(/\s/g, "%20").replace(/\(/g, "%28").replace(/\)/g, "%29");
+    function buildImage(alt, src, link = "") {
+      const img = "![" + String(alt).replace(/[\[\]\n]/g, " ").trim() + "](" + escAddr(src) + ")";
+      return link && safeHref(String(link).trim()) ? "[" + img + "](" + escAddr(link) + ")" : img;
+    }
+    function insertImageMd(value, s, e, alt, src, link = "") {
+      const md = buildImage(alt, src, link);
+      return { start: s, end: e, text: md, selStart: s + md.length, selEnd: s + md.length };
+    }
+    // Text that is one web address (http or https only: the preview loads nothing else) or null.
+    const pastedWebAddress = (raw) => (/^https?:\/\//i.test(String(raw ?? "").trim()) ? pastedLink(raw) : null);
+    // Languages the code highlighter knows: [fence word, label]. "" = plain text, no highlighting.
+    const CODE_LANGS = Object.freeze([
+      ["", "Plain text (no highlighting)"], ["js", "JavaScript / TypeScript"], ["py", "Python"], ["c", "C"], ["cpp", "C++"],
+      ["java", "Java"], ["cs", "C#"], ["go", "Go"], ["rust", "Rust"], ["sh", "Shell / Bash"], ["sql", "SQL"],
+      ["json", "JSON"], ["css", "CSS"], ["html", "HTML / XML"],
+    ]);
+    // Callouts (> [!NOTE]): kind -> label. The selected lines (or the current line) become the body;
+    // on a block that already starts with a callout line only the kind changes.
+    const CALLOUT_KINDS = Object.freeze([
+      ["note", "Note"], ["tip", "Tip"], ["important", "Important"], ["warning", "Warning"], ["caution", "Caution"], ["info", "Info"],
+    ]);
+    const calloutId = (kind) => "callout" + kind[0].toUpperCase() + kind.slice(1);
+    function insertCallout(value, s, e, kind) {
+      kind = CALLOUT_KINDS.some((k) => k[0] === kind) ? kind : "note";
+      const head = "> [!" + kind.toUpperCase() + "]";
+      const ls = value.lastIndexOf("\n", s - 1) + 1;
+      let le = value.indexOf("\n", e > s ? e - 1 : e);
+      if (le === -1) le = value.length;
+      const lines = value.slice(ls, le).split("\n");
+      let text;
+      const already = /^>\s*\[!(?:note|tip|important|warning|caution|info)\]/i.exec(lines[0]);
+      if (already) {
+        lines[0] = head + lines[0].slice(already[0].length);
+        text = lines.join("\n");
+      } else if (!lines.join("").trim()) text = head + "\n> ";
+      else text = head + "\n" + lines.map((l) => (l.trim() ? "> " + l : ">")).join("\n");
+      return { start: ls, end: le, text, selStart: ls + text.length, selEnd: ls + text.length };
     }
 
     // ======================================================================
@@ -1299,6 +1546,12 @@
       { id: "sup", label: "Superscript", def: "", edit: true },
       { id: "sub", label: "Subscript", def: "", edit: true },
       { id: "kbd", label: "Keyboard key", def: "", edit: true },
+      { id: "calloutNote", label: "Callout: note", def: "Ctrl+Shift+2", edit: true },
+      { id: "calloutWarning", label: "Callout: warning", def: "Ctrl+Shift+3", edit: true },
+      { id: "calloutTip", label: "Callout: tip", def: "", edit: true },
+      { id: "calloutImportant", label: "Callout: important", def: "", edit: true },
+      { id: "calloutCaution", label: "Callout: caution", def: "", edit: true },
+      { id: "calloutInfo", label: "Callout: info", def: "", edit: true },
       { id: "newNote", label: "New note", def: "Ctrl+N" },
       { id: "list", label: "All notes and search", def: "Ctrl+K" },
       { id: "mode", label: "Read / edit", def: "Ctrl+E" },
@@ -1315,6 +1568,20 @@
       { id: "openFloating", label: "Open or close the standalone Notes card", def: "", global: true },
     ]);
     const SHORTCUT_IDS = new Set(SHORTCUT_ACTIONS.map((a) => a.id));
+    // Toolbar buttons and editor actions the person may hide (a hidden action has no button, no menu
+    // entry and no shortcut). Quick settings is never hideable, so the way back always stays.
+    const HIDEABLE_TOOLS = Object.freeze([
+      ["bold", "Bold"], ["italic", "Italic"], ["strike", "Strikethrough"], ["highlight", "Highlight"], ["heading", "Heading"],
+      ["bullet", "Bulleted list"], ["numbered", "Numbered list"], ["check", "Checklist"], ["quote", "Quote"],
+      ["outdent", "Nest out"], ["indent", "Nest in"], ["rule", "Horizontal rule"], ["code", "Inline code"],
+      ["codeBlock", "Code block"], ["link", "Link"], ["image", "Image"], ["table", "Table"],
+      ...CALLOUT_KINDS.map(([k, label]) => [calloutId(k), "Callout: " + label.toLowerCase()]),
+      ["sup", "Superscript"], ["sub", "Subscript"], ["kbd", "Keyboard key"],
+    ]);
+    const HIDEABLE_IDS = new Set(HIDEABLE_TOOLS.map((t) => t[0]));
+    // Preference text "bold,sup" -> Set of valid ids (unknown words are ignored).
+    const parseHidden = (raw) => new Set(String(raw ?? "").split(/[\s,;]+/).filter((x) => HIDEABLE_IDS.has(x)));
+    const serializeHidden = (set) => HIDEABLE_TOOLS.map((t) => t[0]).filter((id) => set.has(id)).join(",");
     const GEO_KEYS = Object.freeze(["panel", "float", "dock"]); // hosts that remember a position and size
     function formatCombo(spec) {
       if (!spec || !spec.key) return "";
@@ -1948,10 +2215,12 @@
         wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine, insertRule, nestLines,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
-        highlightCode, codeLangKey, mapPosition, mergeAnchors, insertCodeBlock, buildLink, insertLink,
+        highlightCode, codeLangKey, texNodes, mapPosition, mergeAnchors, insertCodeBlock, buildLink, insertLink,
         pastedLink, fragmentLabel, insertImage, makeTable, insertTable, SHORTCUT_ACTIONS, formatCombo,
         normalizeCombo, comboFromEvent, parseShortcutMap, effectiveShortcuts, findShortcutConflict,
         matchShortcutAction, assignShortcut, QUICK_OPTIONS, stepOption, PREF,
+        alignDelim, buildImage, insertImageMd, pastedWebAddress, CODE_LANGS, CALLOUT_KINDS, calloutId, insertCallout,
+        HIDEABLE_TOOLS, parseHidden, serializeHidden,
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, sideOf, createHoldAction,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
       };
@@ -2071,10 +2340,11 @@
           c.textContent = n.s;
           parent.append(c);
         } else {
-          const tag = { b: "strong", i: "em", s: "del", hl: "mark", a: "span", sub: "sub", sup: "sup" }[n.t];
+          const tag = { b: "strong", i: "em", s: "del", hl: "mark", a: "span", sub: "sub", sup: "sup", math: "span" }[n.t];
           if (!tag) continue;
           const node = h(tag);
-          if (n.t === "hl") {
+          if (n.t === "math") node.className = "zn-math";
+          else if (n.t === "hl") {
             node.className = "zn-hl";
             node.dataset.color = n.color;
           } else if (n.t === "a") {
@@ -2108,6 +2378,30 @@
           const node = h("p", { class: "zn-p" });
           renderInline(node, b.c, env);
           parent.append(node);
+        } else if (b.type === "math") {
+          const node = h("div", { class: "zn-math zn-math-block" });
+          renderInline(node, b.c, env);
+          parent.append(node);
+        } else if (b.type === "details") {
+          // A button + div instead of a native <details>: same behaviour in chrome and in the tests, and the
+          // open state is only view state (it is not saved in the note).
+          const box = h("div", { class: "zn-details" });
+          const body = h("div", { class: "zn-details-body" });
+          const head = h("button", { type: "button", class: "zn-details-sum", "aria-expanded": b.open ? "true" : "false" });
+          const label = h("span", { class: "zn-details-label" });
+          if (b.summary.length) renderInline(label, b.summary, env);
+          else label.textContent = "Details";
+          head.append(h("span", { class: "zn-details-arrow", "aria-hidden": "true" }), label);
+          body.hidden = !b.open;
+          head.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const on = head.getAttribute("aria-expanded") !== "true";
+            head.setAttribute("aria-expanded", on ? "true" : "false");
+            body.hidden = !on;
+          });
+          renderBlocks(body, b.blocks, env, onToggle);
+          box.append(head, body);
+          parent.append(box);
         } else if (b.type === "gap") {
           const gap = h("div", { class: "zn-gap", "aria-hidden": "true" });
           gap.style.setProperty("--n", String(Math.min(b.n, 20)));
@@ -2267,7 +2561,7 @@
       const tImage = iconButton("image", "Image");
       const tNumbered = iconButton("numbered", "Numbered list");
       const tTable = iconButton("table", "Table\u2026");
-      const tInsert = iconButton("caret", "More: superscript, subscript, keyboard key", "zn-caret");
+      const tInsert = iconButton("caret", "More: callouts, superscript, subscript, keyboard key", "zn-caret");
       const tSettings = iconButton("sliders", "Quick settings", "zn-mode-btn");
       const tSync = iconButton("link", "Linked scrolling", "zn-mode-btn zn-sync-btn");
       const tSplit = iconButton("columns", "Split view: editor and preview", "zn-mode-btn");
@@ -2282,10 +2576,15 @@
       ];
       const getPref = (k, d) => (env.getPref ? env.getPref(k, d) : d);
       const setPref = (k, v) => env.setPref?.(k, v);
-      let shortcutCache = { raw: null, list: [] };
+      let shortcutCache = { raw: null, hid: null, list: [] };
+      const hiddenTools = () => parseHidden(getPref(PREF.HIDDEN_TOOLS, ""));
       function shortcutList() {
         const raw = String(getPref(PREF.SHORTCUTS, "") || "");
-        if (shortcutCache.raw !== raw) shortcutCache = { raw, list: effectiveShortcuts(parseShortcutMap(raw)) };
+        const hid = String(getPref(PREF.HIDDEN_TOOLS, "") || "");
+        if (shortcutCache.raw !== raw || shortcutCache.hid !== hid) {
+          const gone = parseHidden(hid);
+          shortcutCache = { raw, hid, list: effectiveShortcuts(parseShortcutMap(raw)).filter((x) => !gone.has(x.id)) };
+        }
         return shortcutCache.list;
       }
       const tools = h(
@@ -2368,10 +2667,14 @@
         tMode.replaceChildren(icon(mode === "read" ? "edit" : "eye"));
         tMode.title = mode === "read" ? "Edit (Ctrl+E)" : "Read (Ctrl+E)";
         hlDot.dataset.color = store.meta.highlight;
+        const gone = hiddenTools();
         for (const [btn, base, id] of TOOL_TITLES) {
           const combo = shortcutList().find((x) => x.id === id)?.combo;
           btn.title = combo ? `${base} (${combo})` : base;
+          if (id !== "settings") btn.hidden = gone.has(id);
         }
+        tHlMenu.hidden = gone.has("highlight");
+        tInsert.hidden = ["sup", "sub", "kbd", ...CALLOUT_KINDS.map(([k]) => calloutId(k))].every((id) => gone.has(id));
         ta.readOnly = !!n?.trashed;
         ta.hidden = mode === "read";
         readEl.hidden = mode === "edit";
@@ -2673,9 +2976,9 @@
       const hlOpen = () => (store.meta.highlight === "yellow" ? "==" : `=={${store.meta.highlight}}`);
       const fmt = {
         code: () => applyEdit(wrapSelection(ta.value, ...sel(), "`")),
-        codeBlock: () => applyEdit(insertCodeBlock(ta.value, ...sel())),
+        codeBlock: () => askCodeBlock(),
         numbered: () => applyEdit(toggleLinePrefix(ta.value, ...sel(), "ordered")),
-        image: () => applyEdit(insertImage(ta.value, ...sel())),
+        image: () => askImage(),
         rule: () => applyEdit(insertRule(ta.value, ...sel())),
         sup: () => applyEdit(wrapSelection(ta.value, ...sel(), "^")),
         sub: () => applyEdit(wrapSelection(ta.value, ...sel(), "~")),
@@ -2693,6 +2996,7 @@
         indent: () => applyEdit(nestLines(ta.value, ...sel(), 1)),
         outdent: () => applyEdit(nestLines(ta.value, ...sel(), -1)),
       };
+      for (const [kind] of CALLOUT_KINDS) fmt[calloutId(kind)] = () => applyEdit(insertCallout(ta.value, ...sel(), kind));
       const needEdit = (fn) => () => {
         if (mode === "read") setMode("edit");
         if (note()?.trashed) return;
@@ -2778,10 +3082,12 @@
       listen(tInsert, "mousedown", (e) => e.preventDefault());
       listen(tInsert, "click", () =>
         showMenu(tInsert, [
-          { label: "Superscript  X^2^", action: needEdit(fmt.sup) },
-          { label: "Subscript  H~2~O", action: needEdit(fmt.sub) },
-          { label: "Keyboard key  <kbd>", action: needEdit(fmt.kbd) },
-        ]),
+          ...CALLOUT_KINDS.filter(([k]) => !hiddenTools().has(calloutId(k))).map(([k, label]) => ({ label: "Callout: " + label, action: needEdit(fmt[calloutId(k)]) })),
+          { sep: true },
+          { label: "Superscript  X^2^", action: needEdit(fmt.sup), id: "sup" },
+          { label: "Subscript  H~2~O", action: needEdit(fmt.sub), id: "sub" },
+          { label: "Keyboard key  <kbd>", action: needEdit(fmt.kbd), id: "kbd" },
+        ].filter((it) => !it.id || !hiddenTools().has(it.id))),
       );
       listen(tSettings, "click", () => askSettings());
 
@@ -2897,6 +3203,22 @@
         input.value = value;
         return { input, row: h("label", { class: "zn-field-row" }, h("span", {}, label), input) };
       };
+      // Fills an empty address field from the clipboard when it holds one address `accept` approves.
+      // Asynchronous and best effort: a refused or empty clipboard changes nothing.
+      function prefillFromClipboard(input, accept, onFill) {
+        try {
+          const nav = window.navigator;
+          Promise.resolve(nav?.clipboard?.readText?.())
+            .then((text) => {
+              const found = input.value ? null : accept(text);
+              if (!found || !dialog) return;
+              input.value = found;
+              input.select?.();
+              onFill?.(found);
+            })
+            .catch(() => {});
+        } catch (_) {}
+      }
       // Link dialog: text to show + address, like the one in a forum editor. `pasted` is set when it was
       // opened by pasting an address (then "Paste as text" keeps the address as plain text).
       function askLink({ pasted = "", s: ps, e: pe } = {}) {
@@ -2944,48 +3266,200 @@
           }
         });
         (text || !url ? (text ? a : t) : t).input.focus({ preventScroll: true });
+        if (!url) prefillFromClipboard(a.input, pastedLink, (u) => { if (!t.input.value) t.input.value = fragmentLabel(u); });
         return card;
       }
-      // Table creator: pick a size on the grid (or type it) and a ready table is inserted.
+      // Image dialog: same layout as the link dialog. The address may come from the selection or the
+      // clipboard; an optional second address makes the picture a link.
+      function askImage() {
+        if (note()?.trashed) return;
+        if (mode === "read") setMode("edit");
+        const [s, e] = sel();
+        const selected = ta.value.slice(s, e);
+        const selUrl = pastedWebAddress(selected);
+        const alt = field("Description (alt text)", selUrl ? "" : selected.replace(/\s+/g, " ").trim(), "What the picture shows");
+        const src = field("Picture address", selUrl || "", "https://");
+        const link = field("Link when clicked (optional)", "", "https://");
+        const help = h("p", {}, "Works with the web address (http:// or https://) of a picture: png, jpg, gif, webp or svg. Local files, data: addresses and pages behind a login do not load. In read view a picture loads only when you click it.");
+        const ok = chip("Insert image", true);
+        const cancel = chip("Cancel");
+        openCard("Insert image", help, src.row, alt.row, link.row, h("div", { class: "zn-dialog-actions" }, cancel, ok));
+        const submit = () => {
+          let bad = null;
+          if (!safeHref(src.input.value.trim(), false)) bad = src.input;
+          else if (link.input.value.trim() && !safeHref(link.input.value.trim())) bad = link.input;
+          if (bad) {
+            bad.dataset.bad = "true";
+            bad.focus();
+            return;
+          }
+          closeDialog();
+          applyEdit(insertImageMd(ta.value, s, e, alt.input.value.trim(), src.input.value.trim(), link.input.value.trim()));
+        };
+        ok.addEventListener("click", submit);
+        cancel.addEventListener("click", () => {
+          closeDialog();
+          focusEditor();
+        });
+        for (const f of [src, alt, link]) f.input.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter") {
+            ev.preventDefault();
+            submit();
+          }
+        });
+        src.input.focus({ preventScroll: true });
+        if (!selUrl) prefillFromClipboard(src.input, pastedWebAddress);
+      }
+      // Code block dialog: pick the language the block is highlighted as. A selection that already is
+      // a fenced block is unwrapped at once instead.
+      let lastCodeLang = "";
+      function askCodeBlock() {
+        if (note()?.trashed) return;
+        if (mode === "read") setMode("edit");
+        const [s, e] = sel();
+        if (/^```[\w+#.-]*\n[\s\S]*?\n?```$/.test(ta.value.slice(s, e))) return applyEdit(insertCodeBlock(ta.value, s, e));
+        // A list of buttons inside the sheet, not a native <select>: its popup is a separate window, so
+        // clicking an option counts as a click outside the sheet and closes it.
+        let chosen = lastCodeLang;
+        const list = h("div", { class: "zn-quick zn-aligns", role: "listbox", "aria-label": "Highlight as" });
+        const drawLangs = () => {
+          list.replaceChildren();
+          for (const [v, label] of CODE_LANGS) {
+            const b = chip(label, v === chosen);
+            b.setAttribute("aria-pressed", v === chosen ? "true" : "false");
+            b.addEventListener("click", () => {
+              chosen = v;
+              drawLangs();
+            });
+            list.append(b);
+          }
+        };
+        drawLangs();
+        const ok = chip("Insert", true);
+        const cancel = chip("Cancel");
+        openCard("Code block: highlight as", list, h("div", { class: "zn-dialog-actions" }, cancel, ok));
+        const go = () => {
+          lastCodeLang = chosen;
+          closeDialog();
+          applyEdit(insertCodeBlock(ta.value, s, e, chosen));
+        };
+        ok.addEventListener("click", go);
+        cancel.addEventListener("click", () => {
+          closeDialog();
+          focusEditor();
+        });
+        ok.focus({ preventScroll: true });
+      }
+      // Table creator: pick a size on the grid (or type it), choose left / centre / right per column,
+      // then insert a ready table.
       function askTable() {
         if (note()?.trashed) return;
         if (mode === "read") setMode("edit");
         const [s, e] = sel();
         const GRID_COLS = 8,
           GRID_ROWS = 6;
-        const label = h("p", {}, "Pick the size: columns \u00d7 rows (the first row is the header).");
+        const HINT = "Pick the size: columns \u00d7 rows (the first row is the header).";
+        const label = h("p", {}, HINT);
         const grid = h("div", { class: "zn-grid" });
         const cells = [];
-        const insert = (rows, cols) => {
-          closeDialog();
-          applyEdit(insertTable(ta.value, s, e, rows, cols));
+        const aligns = [];
+        const alignBox = h("div", { class: "zn-quick zn-aligns" });
+        const cols = field("Columns", "3");
+        const rows = field("Rows", "3");
+        const colCount = () => clampInt(cols.input.value, 1, MAX_TABLE_COLS);
+        const drawAligns = () => {
+          alignBox.replaceChildren();
+          for (let i = 0; i < colCount(); i++) {
+            const row = h("div", { class: "zn-quick-row" }, h("span", { class: "zn-quick-label" }, "Column " + (i + 1)));
+            for (const [v, text] of [["left", "Left"], ["center", "Centre"], ["right", "Right"]]) {
+              const b = chip(text, aligns[i] === v);
+              b.setAttribute("aria-pressed", aligns[i] === v ? "true" : "false");
+              b.addEventListener("click", () => {
+                aligns[i] = aligns[i] === v ? "" : v;
+                drawAligns();
+              });
+              row.append(b);
+            }
+            alignBox.append(row);
+          }
         };
-        const paint = (rows, cols) => {
-          label.textContent = rows && cols ? `${cols} \u00d7 ${rows}` : "Pick the size: columns \u00d7 rows (the first row is the header).";
-          for (const c of cells) c.el.classList.toggle("is-on", c.r <= rows && c.c <= cols);
+        const insert = () => {
+          const n = colCount();
+          closeDialog();
+          applyEdit(insertTable(ta.value, s, e, clampInt(rows.input.value, 2, MAX_TABLE_ROWS), n, aligns.slice(0, n)));
+        };
+        const paint = (r, c) => {
+          label.textContent = r && c ? `${c} \u00d7 ${r}` : HINT;
+          for (const cell of cells) cell.el.classList.toggle("is-on", cell.r <= r && cell.c <= c);
         };
         for (let r = 1; r <= GRID_ROWS; r++)
           for (let c = 1; c <= GRID_COLS; c++) {
             const el = h("button", { type: "button", class: "zn-gcell", "aria-label": `${c} columns, ${r} rows` });
             el.addEventListener("mouseover", () => paint(r, c));
             el.addEventListener("focus", () => paint(r, c));
-            el.addEventListener("click", () => insert(r, c));
+            el.addEventListener("click", () => {
+              cols.input.value = String(c);
+              rows.input.value = String(r);
+              drawAligns();
+            });
             cells.push({ el, r, c });
             grid.append(el);
           }
         grid.style.setProperty("--cols", String(GRID_COLS));
         grid.addEventListener("mouseleave", () => paint(0, 0));
-        const cols = field("Columns", "3");
-        const rows = field("Rows", "3");
+        cols.input.addEventListener("input", drawAligns);
+        for (const f of [cols, rows]) f.input.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter") {
+            ev.preventDefault();
+            insert();
+          }
+        });
         const ok = chip("Insert", true);
         const cancel = chip("Cancel");
-        ok.addEventListener("click", () => insert(clampInt(rows.input.value, 2, MAX_TABLE_ROWS), clampInt(cols.input.value, 1, MAX_TABLE_COLS)));
+        ok.addEventListener("click", insert);
         cancel.addEventListener("click", () => {
           closeDialog();
           focusEditor();
         });
-        openCard("Insert table", label, grid, h("div", { class: "zn-field-pair" }, cols.row, rows.row), h("div", { class: "zn-dialog-actions" }, cancel, ok));
+        drawAligns();
+        openCard("Insert table", label, grid, h("div", { class: "zn-field-pair" }, cols.row, rows.row), h("p", {}, "Text alignment per column (optional):"), alignBox, h("div", { class: "zn-dialog-actions" }, cancel, ok));
         cells[0].el.focus({ preventScroll: true });
+      }
+      // Toolbar and shortcut actions: hide the ones that are never used (each change is saved at once).
+      function askTools() {
+        const body = h("div", { class: "zn-quick zn-aligns" });
+        const draw = () => {
+          body.replaceChildren();
+          const gone = hiddenTools();
+          for (const [id, name] of HIDEABLE_TOOLS) {
+            const shown = !gone.has(id);
+            const b = chip(shown ? "Shown" : "Hidden", shown);
+            b.setAttribute("aria-pressed", shown ? "true" : "false");
+            b.addEventListener("click", () => {
+              const g = hiddenTools();
+              if (shown) g.add(id);
+              else g.delete(id);
+              setPref(PREF.HIDDEN_TOOLS, serializeHidden(g));
+              applyState();
+              draw();
+            });
+            body.append(h("div", { class: "zn-quick-row" }, h("span", { class: "zn-quick-label" }, name), b));
+          }
+        };
+        draw();
+        const all = chip("Show all");
+        const done = chip("Done", true);
+        all.addEventListener("click", () => {
+          setPref(PREF.HIDDEN_TOOLS, "");
+          applyState();
+          draw();
+        });
+        done.addEventListener("click", () => {
+          closeDialog();
+          focusEditor();
+        });
+        openCard("Toolbar buttons and shortcuts", h("p", {}, "A hidden action has no button, no menu entry and no keyboard shortcut. Quick settings always stays."), body, h("div", { class: "zn-dialog-actions" }, all, done));
+        done.focus({ preventScroll: true });
       }
       // Quick settings: the options that are changed while writing. Each change is saved at once.
       function askSettings() {
@@ -3026,13 +3500,15 @@
         }
         draw();
         const keys = chip("Keyboard shortcuts\u2026");
+        const toolsChip = chip("Toolbar buttons\u2026");
         const done = chip("Done", true);
         keys.addEventListener("click", () => askShortcuts());
+        toolsChip.addEventListener("click", () => askTools());
         done.addEventListener("click", () => {
           closeDialog();
           focusEditor();
         });
-        openCard("Quick settings", body, h("div", { class: "zn-dialog-actions" }, keys, done));
+        openCard("Quick settings", body, h("div", { class: "zn-dialog-actions" }, toolsChip, keys, done));
         done.focus({ preventScroll: true });
       }
       // Shortcut assignment: click a shortcut, press the new keys. Backspace clears, Esc cancels.
@@ -3381,7 +3857,7 @@
       });
 
       const ACTIONS = {
-        ...Object.fromEntries(["bold", "italic", "strike", "highlight", "code", "codeBlock", "link", "image", "heading", "bullet", "numbered", "check", "quote", "table", "rule", "indent", "outdent", "sup", "sub", "kbd"].map((id) => [id, () => fmt[id]()])),
+        ...Object.fromEntries(["bold", "italic", "strike", "highlight", "code", "codeBlock", "link", "image", "heading", "bullet", "numbered", "check", "quote", "table", "rule", "indent", "outdent", "sup", "sub", "kbd", ...CALLOUT_KINDS.map(([k]) => calloutId(k))].map((id) => [id, () => fmt[id]()])),
         newNote: () => newNote(),
         list: () => showList(),
         mode: () => {

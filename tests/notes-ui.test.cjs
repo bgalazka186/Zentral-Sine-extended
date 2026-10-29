@@ -299,10 +299,100 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(t2.value, "1. a\n2. b");
     const t3 = prep(sheetA, "x = 1", 0, 5);
     key(t3, "m", { ctrlKey: true, shiftKey: true, code: "KeyM" });
+    click(chipNamed(sheetA, "Insert")); // the language dialog opens first; plain text is the default
     assert.equal(t3.value, "```\nx = 1\n```");
     const t4 = prep(sheetA, "pic", 0, 3);
     key(t4, "g", { ctrlKey: true, shiftKey: true, code: "KeyG" });
-    assert.equal(t4.value, "![pic](https://)");
+    assert.ok(dialogOf(sheetA), "the image dialog opens");
+    click(chipNamed(sheetA, "Cancel"));
+    assert.equal(t4.value, "pic");
+  });
+
+  await test("C2.2 image dialog: address, description, optional link; bad addresses are refused", async () => {
+    const ta = prep(sheetA, "a cat", 0, 5);
+    key(ta, "g", { ctrlKey: true, shiftKey: true, code: "KeyG" });
+    const [srcIn, altIn, linkIn] = sheetA.root.all().filter((e) => e._classes.has("zn-field"));
+    assert.equal(altIn.value, "a cat", "the selection becomes the description");
+    srcIn.value = "file:///C:/cat.png";
+    click(chipNamed(sheetA, "Insert image"));
+    assert.ok(dialogOf(sheetA) && srcIn.dataset.bad === "true", "only web addresses are accepted");
+    srcIn.value = "https://example.org/cat 1.png";
+    linkIn.value = "javascript:alert(1)";
+    click(chipNamed(sheetA, "Insert image"));
+    assert.ok(dialogOf(sheetA), "a bad link address is refused too");
+    linkIn.value = "https://example.org/page";
+    click(chipNamed(sheetA, "Insert image"));
+    assert.equal(dialogOf(sheetA), null);
+    assert.equal(ta.value, "[![a cat](https://example.org/cat%201.png)](https://example.org/page)");
+    const [para] = c.parseBlocks(ta.value);
+    assert.equal(para.c[0].t, "a");
+    assert.equal(para.c[0].c[0].t, "img");
+  });
+
+  await test("C2.2 image and link dialogs take a web address from the clipboard when none is given", async () => {
+    const savedNav = win.navigator;
+    win.navigator = { clipboard: { readText: async () => "https://example.org/clip.png" } };
+    try {
+      prep(sheetA, "", 0, 0);
+      click(byLabel(sheetA, "Image"));
+      await new Promise((r) => setTimeout(r, 0));
+      const [srcIn] = sheetA.root.all().filter((e) => e._classes.has("zn-field"));
+      assert.equal(srcIn.value, "https://example.org/clip.png");
+      click(chipNamed(sheetA, "Cancel"));
+      prep(sheetA, "", 0, 0);
+      click(byLabel(sheetA, "Link\u2026"));
+      await new Promise((r) => setTimeout(r, 0));
+      const [, addrIn] = sheetA.root.all().filter((e) => e._classes.has("zn-field"));
+      assert.equal(addrIn.value, "https://example.org/clip.png");
+      click(chipNamed(sheetA, "Cancel"));
+    } finally {
+      win.navigator = savedNav;
+    }
+  });
+
+  await test("C2.2 code block dialog: the chosen language becomes the fence; a fenced selection is unwrapped", async () => {
+    const ta = prep(sheetA, "let x = 1", 0, 9);
+    click(byLabel(sheetA, "Code block"));
+    assert.ok(!sheetA.root.all().some((e) => e.tag === "select"), "no native select: its popup closes the sheet");
+    click(chipNamed(sheetA, "JavaScript / TypeScript"));
+    click(chipNamed(sheetA, "Insert"));
+    assert.equal(ta.value, "```js\nlet x = 1\n```");
+    const t2 = prep(sheetA, ta.value, 0, ta.value.length);
+    click(byLabel(sheetA, "Code block"));
+    assert.equal(dialogOf(sheetA), null, "no dialog when unwrapping");
+    assert.equal(t2.value, "let x = 1");
+  });
+
+  await test("C2.2 callout shortcuts and menu entries", async () => {
+    const ta = prep(sheetA, "careful", 0, 7);
+    key(ta, "@", { ctrlKey: true, shiftKey: true, code: "Digit2" });
+    assert.equal(ta.value, "> [!NOTE]\n> careful");
+    const t2 = prep(sheetA, "careful", 0, 7);
+    key(t2, "#", { ctrlKey: true, shiftKey: true, code: "Digit3" });
+    assert.equal(t2.value, "> [!WARNING]\n> careful");
+    const [q] = c.parseBlocks(t2.value);
+    assert.equal(q.callout.kind, "warning");
+  });
+
+  await test("C2.2 hidden toolbar actions: no button, no shortcut; Show all brings them back", async () => {
+    prefs.set(c.PREF.HIDDEN_TOOLS, "strike,codeBlock");
+    sheetA.applyState?.();
+    const sheetBtn = (name) => sheetA.root.all().find((e) => e.title === name || (e.title || "").startsWith(name + " ("));
+    assert.equal(sheetBtn("Strikethrough").hidden, true);
+    assert.ok(!sheetBtn("Bold (Ctrl+B)")?.hidden);
+    const ta = prep(sheetA, "x", 0, 1);
+    key(ta, "x", { ctrlKey: true, shiftKey: true, code: "KeyX" });
+    assert.equal(ta.value, "x", "a hidden action has no shortcut");
+    click(byLabel(sheetA, "Quick settings"));
+    click(chipNamed(sheetA, "Toolbar buttons\u2026"));
+    click(chipNamed(sheetA, "Show all"));
+    assert.equal(prefs.get(c.PREF.HIDDEN_TOOLS), "");
+    assert.ok(!sheetBtn("Strikethrough").hidden);
+    click(chipNamed(sheetA, "Done"));
+    const again = prep(sheetA, "x", 0, 1);
+    key(again, "x", { ctrlKey: true, shiftKey: true, code: "KeyX" });
+    assert.equal(again.value, "~~x~~");
+    prefs.delete(c.PREF.HIDDEN_TOOLS);
   });
 
   await test("B2 toolbar buttons exist, show their shortcut and act", async () => {
@@ -355,11 +445,18 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     key(ta, "y", { ctrlKey: true, shiftKey: true, code: "KeyY" });
     const cell = sheetA.root.all().find((e) => e._classes.has("zn-gcell") && e.getAttribute("aria-label") === "3 columns, 2 rows");
     click(cell);
+    // alignment per column: column 2 centre, column 3 right
+    const rowOf = (n) => sheetA.root.all().filter((e) => e._classes.has("zn-quick-row") && e.textContent.startsWith("Column " + n))[0];
+    const inRow = (n, name) => rowOf(n).all().find((e) => e._classes.has("zn-chip") && e.textContent === name);
+    click(inRow(2, "Centre"));
+    click(inRow(3, "Right"));
+    click(chipNamed(sheetA, "Insert"));
     assert.equal(dialogOf(sheetA), null);
     const [t] = c.parseBlocks(ta.value);
     assert.equal(t.type, "table");
     assert.equal(t.head.length, 3);
     assert.equal(t.rows.length, 1);
+    assert.equal(JSON.stringify(t.align), JSON.stringify(["", "center", "right"]));
   });
 
   await test("B2 quick settings change real preferences; shortcuts can be reassigned and conflicts are refused", async () => {
