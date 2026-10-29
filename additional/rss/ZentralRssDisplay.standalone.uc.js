@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral RSS Display
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.3
+// @version 3.1.6
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.3, the numeric-preference list and
+ * Placeholders replaced by the build: 3.1.6, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.3";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.6";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -914,6 +914,142 @@ function nativeSidebarSide() {
           if (c?.matches(":popover-open")) c.hidePopover();
         } catch (_) {}
       }
+      const URL_RE = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+      const HTML_HINT_RE = /<[a-z!/][\s\S]*?>|&(?:#\d+|#x[0-9a-f]+|[a-z0-9]+);/i;
+
+      function normalizeHttpUrl(raw, baseUrl = "") {
+        if (!raw) return "";
+        const trimmed = String(raw).trim();
+        if (!trimmed) return "";
+        const candidate = /^www\./i.test(trimmed)
+          ? "https://" + trimmed
+          : trimmed;
+        try {
+          const parsed = baseUrl
+            ? new URL(candidate, baseUrl)
+            : new URL(candidate);
+          if (["http:", "https:", "mailto:"].includes(parsed.protocol))
+            return parsed.href;
+        } catch (_) {}
+        return "";
+      }
+
+      function splitTrailingPunctuation(rawUrl) {
+        let url = rawUrl;
+        let trailing = "";
+        while (url.length) {
+          const last = url[url.length - 1];
+          if (/[.,;:!?'"]/.test(last)) {
+            trailing = last + trailing;
+            url = url.slice(0, -1);
+            continue;
+          }
+          if (last === ")") {
+            const opens = (url.match(/\(/g) || []).length;
+            const closes = (url.match(/\)/g) || []).length;
+            if (closes > opens) {
+              trailing = last + trailing;
+              url = url.slice(0, -1);
+              continue;
+            }
+          }
+          if (last === "]") {
+            const opens = (url.match(/\[/g) || []).length;
+            const closes = (url.match(/\]/g) || []).length;
+            if (closes > opens) {
+              trailing = last + trailing;
+              url = url.slice(0, -1);
+              continue;
+            }
+          }
+          break;
+        }
+        return { url, trailing };
+      }
+
+      function createLinkNode(href, label) {
+        const a = document.createElement("a");
+        a.className = "rc-link";
+        a.href = href;
+        a.title = href;
+        a.textContent = label || href;
+
+        const openLink = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          try {
+            if (typeof window.openTrustedLinkIn === "function") {
+              window.openTrustedLinkIn(href, "tab");
+            } else if (
+              window.gBrowser &&
+              typeof window.gBrowser.addTrustedTab === "function"
+            ) {
+              window.gBrowser.selectedTab = window.gBrowser.addTrustedTab(href);
+            } else if (
+              window.gBrowser &&
+              typeof window.gBrowser.addTab === "function"
+            ) {
+              window.gBrowser.selectedTab = window.gBrowser.addTab(href, {
+                triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+              });
+            } else {
+              window.open(href, "_blank");
+            }
+          } catch (err) {
+            console.error("Failed to open RSS link:", err);
+          }
+        };
+
+        a.addEventListener("click", (e) => {
+          if (e.button === 0) openLink(e);
+        });
+        a.addEventListener("auxclick", (e) => {
+          if (e.button === 1) openLink(e);
+        });
+
+        return a;
+      }
+
+      function appendLinkifiedText(target, text, baseUrl) {
+        if (!text) return;
+        URL_RE.lastIndex = 0;
+        let lastIndex = 0;
+        let match;
+        while ((match = URL_RE.exec(text)) !== null) {
+          const start = match.index;
+          if (start > lastIndex) {
+            target.appendChild(
+              document.createTextNode(text.slice(lastIndex, start)),
+            );
+          }
+          const { url, trailing } = splitTrailingPunctuation(match[0]);
+          const href = normalizeHttpUrl(url, baseUrl);
+          if (href) {
+            target.appendChild(createLinkNode(href, url));
+          } else {
+            target.appendChild(document.createTextNode(url));
+          }
+          if (trailing) {
+            target.appendChild(document.createTextNode(trailing));
+          }
+          lastIndex = start + match[0].length;
+        }
+        if (lastIndex < text.length) {
+          target.appendChild(document.createTextNode(text.slice(lastIndex)));
+        }
+      }
+
+      function renderRichText(container, rawText, baseUrl = "") {
+        container.replaceChildren();
+        const source = String(rawText || "").trim();
+        if (!source) return;
+        if (!HTML_HINT_RE.test(source)) {
+          appendLinkifiedText(container, source, baseUrl);
+        } else {
+          const doc = new DOMParser().parseFromString(source, "text/html");
+          appendLinkifiedText(container, doc.body?.textContent || "", baseUrl);
+        }
+      }
       function hideCard(delay = 0) {
         cancelShow();
         cancelHide();
@@ -985,6 +1121,74 @@ function nativeSidebarSide() {
         if (index < 0) return items[0] || null;
         return items[index + 1] || items[index - 1] || null;
       }
+      function getFullTabText(tab) {
+        if (!tab) return "";
+        const candidates = [];
+
+        // Firefox's internal untruncated tab label property
+        if (typeof tab._fullLabel === "string" && tab._fullLabel) {
+          candidates.push(tab._fullLabel);
+        }
+
+        // SessionStore lazy data (used for unloaded / pending RSS live-folder tabs)
+        try {
+          const ss = window.SessionStore || globalThis.SessionStore;
+          if (ss && typeof ss.getLazyTabValue === "function") {
+            const lazyTitle = ss.getLazyTabValue(tab, "title");
+            if (typeof lazyTitle === "string" && lazyTitle) candidates.push(lazyTitle);
+          }
+          if (tab.__SS_lazyData?.title) {
+            candidates.push(tab.__SS_lazyData.title);
+          }
+        } catch (_) {}
+
+        // Only fall back to the expensive getTabState serialization if the fast
+        // properties did not already yield something longer than tab.label.
+        const labelLen = typeof tab.label === "string" ? tab.label.length : 0;
+        const fastBest = candidates.reduce(
+          (max, c) => Math.max(max, String(c).trim().length),
+          0,
+        );
+        if (fastBest <= labelLen) {
+          try {
+            const ss = window.SessionStore || globalThis.SessionStore;
+            if (ss && typeof ss.getTabState === "function") {
+              const state = JSON.parse(ss.getTabState(tab));
+              const entry =
+                state?.entries?.[(state.index || 1) - 1] || state?.entries?.[0];
+              if (entry?.title) candidates.push(entry.title);
+            }
+          } catch (_) {}
+        }
+
+        // Linked browser contentTitle & Places/Zen custom attributes
+        if (tab.linkedBrowser?.contentTitle) {
+          candidates.push(tab.linkedBrowser.contentTitle);
+        }
+        for (const attr of [
+          "data-rss-fulltext",
+          "zen-original-label",
+          "tooltiptext",
+          "label",
+        ]) {
+          const val = tab.getAttribute?.(attr);
+          if (val) candidates.push(val);
+        }
+        if (typeof tab.label === "string" && tab.label) {
+          candidates.push(tab.label);
+        }
+
+        // Pick the longest valid candidate so the 250-char truncated `tab.label`
+        // loses to the full title stored elsewhere.
+        let best = "";
+        for (const c of candidates) {
+          const str = String(c).trim();
+          if (str.length > best.length) {
+            best = str;
+          }
+        }
+        return best;
+      }
       function showCard(tab) {
         if (!tab) return;
         const c = ensureCard();
@@ -994,9 +1198,10 @@ function nativeSidebarSide() {
         const folder = tab.closest("zen-folder");
         c.querySelector(".rc-folder").textContent =
           folder?.label || folder?.getAttribute("label") || "";
-        c.querySelector(".rc-text").textContent =
-          tab.label || tab.getAttribute("label") || "";
         const url = tabUrl(tab);
+        const rcText = c.querySelector(".rc-text");
+        rcText.className = "rc-text";
+        renderRichText(rcText, getFullTabText(tab), url);
         c.querySelector(".rc-url").textContent = url;
         applyCardParts();
         c.hidden = false;

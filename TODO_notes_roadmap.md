@@ -141,7 +141,3 @@ SHORTCUT_ACTIONS and the shortcut helpers in ZentralNotes.uc.js are meant to be 
 Done (code + tests, nothing run in real Zen): #3 drag and resize + above Big Preview while focused (z-height decision taken, `z-heights_map.md` and tests updated), #4 window pin with outside-click close and remembered state, #24 hold-to-act (Larger = fill, window pin = reset), #23 shortcuts for every action incl. two global ones, #6 Customize-toolbar button, standalone card keeps clear of the native sidebar (option `avoid_sidebar`), "recent" list, left/right panel resize-handle clipping NOT touched (it is in the panel suite, not Notes).
 
 NOT done, still open for the next session: #8 panel-like options (push page, reveal on hover over the top edge), #1 themes in the Appearance menu (RSS-based), split view as a second window of the same size, free-text per-note label (color already existed). Reason: each needs live layout feedback from Zen (push page touches `bgalazka-push-page` geometry in the panel suite) and was not started rather than guessed.
-
-## Other modules (not Notes)
-
-- RSS card: long items are cut off, show the full text (expandable); links inside an RSS message must be clickable in the card.

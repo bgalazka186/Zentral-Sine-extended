@@ -103,6 +103,7 @@
   margin: 0;
   height: auto;
   position: fixed;
+  pointer-events: auto !important;
   /* Fallback only (no popover support): above the Zentral panel root (2147483600),
    * pill controls and reveal edge (2147483640-2147483642); below the settings window
    * (2147483647). With popover support the top layer decides, see raiseCard. */
@@ -157,11 +158,32 @@
 }
 #bgalazka-rss-card .rc-text {
   white-space: pre-wrap;
+  word-break: break-word;
   overflow-wrap: anywhere;
+  max-height: none !important;
+  overflow: visible !important;
+  display: block !important;
+  pointer-events: auto;
   color: var(
     --bgalazka-look-rss-card-text,
     var(--zl-popup-text, var(--arrowpanel-color, #eee))
   );
+}
+#bgalazka-rss-card .rc-link {
+  color: var(
+    --bgalazka-look-rss-card-url,
+    var(--zl-accent, var(--zen-primary-color, #58a6ff))
+  );
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  white-space: pre-wrap !important;
+  word-break: break-all !important;
+  overflow-wrap: anywhere !important;
+  display: inline !important;
+}
+#bgalazka-rss-card .rc-link:hover {
+  opacity: 0.85;
 }
 #bgalazka-rss-card .rc-url {
   margin-top: 6px;
