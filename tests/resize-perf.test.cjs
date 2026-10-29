@@ -51,4 +51,26 @@ test("new resize observers in the notes module are frame-throttled", () => {
   const src = read("additional/notes/ZentralNotes.uc.js");
   assert.match(src, /const scheduleLayout = \(\) => \{\s*if \(!rafLayout\)/);
 });
+test("notes drag / resize: geometry is read once at the start, pointer events only remember a position, one frame paints", () => {
+  const src = read("additional/notes/ZentralNotes.uc.js");
+  const move = slice(src, "function moveEvent(e) {", "function endGesture()");
+  assert.ok(!/getBoundingClientRect|getArea|getComputedStyle|offsetWidth|offsetHeight|clientWidth/.test(move), "no layout read per pointer event");
+  assert.match(move, /requestAnimationFrame\(paintGesture\)/);
+  assert.match(move, /if \(!rafDrag\)/, "at most one frame is queued");
+  const start = slice(src, "function startGesture(e, kind) {", "function paintGesture()");
+  assert.equal((start.match(/adapter\.getArea\(/g) || []).length, 1, "the area is measured once per gesture");
+  assert.equal((start.match(/getBoundingClientRect\(\)/g) || []).length, 1, "the sheet is measured once per gesture");
+  const paint = slice(src, "function paintGesture() {", "function moveEvent(e)");
+  assert.ok(!/getBoundingClientRect|getArea|getComputedStyle/.test(paint), "painting only writes styles");
+  assert.match(slice(src, "function endGesture() {", 'listen(head, "pointerdown"'), /cancelAnimationFrame/, "a pending frame is cancelled and flushed on release");
+});
+test("notes: timers exist only while armed (hold press, drag frame); no polling was added", () => {
+  const src = read("additional/notes/ZentralNotes.uc.js");
+  assert.ok(!/setInterval/.test(src), "no setInterval anywhere in Notes");
+  const hold = slice(src, "function createHoldAction(", "// Most recently opened note first");
+  assert.match(hold, /press\(\) \{[\s\S]*?setTimer\(/, "the hold timer starts on press");
+  assert.match(hold, /release\(\) \{[\s\S]*?stop\(\)/, "and stops on release");
+  assert.match(src, /window\.addEventListener\("mousedown", onOutsidePress, true\)/);
+  assert.match(src, /window\.removeEventListener\("mousedown", onOutsidePress, true\)/, "the outside-press listener is removed on close");
+});
 console.log(`\n${passed} resize performance guards passed`);

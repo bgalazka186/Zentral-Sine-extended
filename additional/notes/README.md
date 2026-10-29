@@ -47,6 +47,17 @@ Headings (`#` to `######`; seven `#` or `#tag` stay text), paragraphs, **bold** 
 - **Quick settings** (the sliders button, or the `...` menu): text size, line height, wrap, blank lines, line breaks, linked scrolling, copy in read view, link on paste, Setext. Changes are saved at once and are the same preferences as in Zentral settings.
 - **Keyboard shortcuts** (Quick settings → Keyboard shortcuts): click a shortcut and press the new keys; Backspace removes it, *Reset* restores the default. Every shortcut needs Ctrl, Alt or Cmd, and two actions cannot share one. Defaults: Bold Ctrl+B, Italic Ctrl+I, Strike Ctrl+Shift+X, Highlight Ctrl+Shift+H, Code Ctrl+Shift+C, Code block Ctrl+Shift+M, Link Ctrl+Shift+K, Image Ctrl+Shift+G, Heading Ctrl+Shift+1, Numbered Ctrl+Shift+7, Bulleted Ctrl+Shift+8, Quote Ctrl+Shift+9, Checklist Ctrl+Shift+L, Table Ctrl+Shift+Y, New note Ctrl+N, All notes Ctrl+K, Read/edit Ctrl+E, Quick settings Ctrl+,. Rule, nesting, super/subscript, key and split view start unassigned. Your changes are one JSON preference (`zen.workspace.zentral.notes.shortcuts`).
 
+### The window: move, resize, pin, fill
+
+- **Move and resize**: drag the title bar, or any edge or corner. The place is remembered separately for panel sheets and for the standalone card, kept inside its area when the window gets smaller, and a double click on the empty title bar (or holding the window pin, or the `...` menu) resets it. The card docked to the sidebar (*Dock Notes to the sidebar*) stays attached and cannot be moved.
+- **Window pin** (the pin in the title bar; the note's own pin is now the bookmark): pinned (the default) stays open; unpinned closes when you press outside it, like a Zentral panel. The browser's sidebar and toolbars, the Notes buttons and Sine's own windows do not count as outside. The state is remembered.
+- **Hold-to-act buttons**: a tap on *Larger* toggles larger / smaller; **holding** it fills the whole area (both views in Triple View, everything free in the standalone card). Holding the window pin resets the position.
+- **Above Big Preview**: the standalone card enters the browser's top layer only while it has the focus, so it is above Big Preview; pressing Big Preview (or anything outside) drops it back below. Inside a panel it is never above the panel.
+- **Standalone card and the sidebar**: *Keep the standalone Notes card clear of the native sidebar* (on by default) opens it on the side opposite the sidebar and keeps it out of its space.
+- **Recent**: the list view has a *Recent* filter with the last 8 opened notes.
+- **Customize toolbar**: a Notes button is available in Zen's *Customize toolbar* and opens or closes Notes in the window where it was pressed.
+- **Shortcuts for every action**: the same shortcut editor now also lists Recent, Pin note, Keep open, Larger, Fill, Reset position, and two actions that work anywhere in the window even while Notes is closed: *New note from anywhere* and *Open or close the standalone card*. All start unassigned.
+
 ### Export and import
 
 - **Save as Markdown** writes the note text. **HTML** writes a self-contained page; **plain text** drops all formatting; **PDF** opens the note as a page and your browser's print dialog (choose "Save as PDF"). Each one except Markdown shows what it loses before anything is written.
@@ -76,6 +87,7 @@ Notes → Quick notes (the main switch is also under Start here).
 | `zen.workspace.zentral.notes.shortcut` | `Alt+Shift+N` | Needs Alt, Ctrl or Cmd; a bare key is refused. |
 | `zen.workspace.zentral.notes.autosave_seconds` | 5 | Longest gap between saves while typing. |
 | `zen.workspace.zentral.notes.folder` | empty | Absolute folder path. Empty means `zentral-notes` in the profile. An unusable path falls back to the profile folder. |
+| `zen.workspace.zentral.notes.avoid_sidebar` | on | The standalone card opens opposite the native sidebar and cannot be dragged under it. |
 | `zen.workspace.zentral.notes.read_copy` | off | Lets you select and copy text in the read view. |
 | `zen.workspace.zentral.notes.setext` | off | Text over `===` / `---` is a heading. |
 | `zen.workspace.zentral.notes.paste_link` | ask | Pasting a web address: `ask`, `selection` (only over selected text) or `off`. |

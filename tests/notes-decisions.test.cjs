@@ -2,7 +2,8 @@
 /* Pins the owner's Notes decisions so a later change has to be deliberate:
  *  - no encryption at rest (losing a key would lose the notes); notes stay plain, readable data
  *  - default sheet size is "peek"
- *  - the floating card is an ordinary layer, not a top-layer popover, so Big Preview stays above it */
+ *  - the standalone card is a top-layer popover ONLY while Notes is focused (roadmap cycle C #3, replaces the old
+ *    "never a popover" decision): above Big Preview until Big Preview is pressed, then back to a normal layer */
 const assert = require("node:assert/strict"),
   fs = require("node:fs"),
   path = require("node:path");
@@ -19,7 +20,10 @@ test("no encryption: no crypto.subtle use and no encryption setting", () => {
 test("default sheet size is peek", () => {
   assert.match(js, /DEFAULT_META = \{[^}]*size: "peek"/);
 });
-test("floating card is not a popover (Big Preview stays above it)", () => {
-  assert.ok(!/showPopover|setAttribute\("popover"/.test(js), "notes card must not enter the top layer");
+test("standalone card is a popover only while focused, and never a popover inside a panel", () => {
+  assert.match(js, /function raise\(\) \{\s*if \(adapter\.position !== "fixed"/, "only the fixed (standalone) host can enter the top layer");
+  assert.match(js, /function drop\(\) \{[\s\S]*?removeAttribute\("popover"\)/, "dropping removes the attribute so the card stays visible");
+  assert.match(js, /onOutsidePress = [\s\S]*?drop\(\);/, "any press outside the card leaves the top layer");
+  assert.equal((js.match(/showPopover\(\)/g) || []).length, 1, "one place enters the top layer");
 });
 console.log(`\n${passed} notes decision tests passed`);

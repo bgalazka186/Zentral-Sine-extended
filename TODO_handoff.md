@@ -47,7 +47,7 @@ node tools/check-settings-consistency.cjs
 node tools/build-z-map.cjs                   # regenerate z-heights_map.md
 node tools/build-standalone.cjs              # refuses changed content without a version bump
 node tools/build-standalone.cjs --check
-for t in standalone notes notes-ui notes-markdown notes-bars numeric-prefs encoding z-heights resize-perf defaults notes-decisions notes-icon; do node tests/$t.test.cjs; done
+for t in standalone notes notes-ui notes-markdown notes-bars notes-window numeric-prefs encoding z-heights resize-perf defaults notes-decisions notes-icon; do node tests/$t.test.cjs; done
 ```
 
 Release-in-progress trick: 3.1.3 is unreleased, so after editing a bundled file the builder complains "content changed but version is still 3.1.3". Reset every `additional/**/standalone.lock.json` `"version"` to `"3.1.2"` (last published) and run `node tools/build-standalone.cjs` again. Do not hand-edit `.standalone.uc.js` files.
@@ -121,4 +121,20 @@ Code and tests are done; **nothing here has been run in real Zen**. Done, all in
 Please check in real Zen: the mirror measurement and scroll mapping (wrapped lines, split view, long notes), paste dialog focus, `user-select` in the read view, table grid layout and dialog sizes in a narrow sheet, `mailto:` click via `openLink`, shortcut capture (Ctrl+Shift+C/M/B-style combinations may be claimed by Zen before the sheet sees them), and the toolbar wrapping with the 6 extra buttons.
 Known limits: Setext `--`/`-` underline needs `opts.setext`; shorthand `[ref]` without a second bracket is not a reference; the highlighter is a tokenizer (no nesting, e.g. template-string `${}` is plain string); mapping resolves per block / list item, not per line inside one long paragraph.
 
-**Cycle C has NOT been started.** Next: cycle C in `TODO_notes_roadmap.md` (reuse the shortcut engine for #23).
+## 11. Cycle C (window behavior) result: partly done
+
+All in `additional/notes/ZentralNotes.uc.js` (+ `.css`, schema, README); **nothing here has been run in real Zen**, only Node tests with a fake DOM. New test file `tests/notes-window.test.cjs` (add it to the verify loop in section 5); new steps in `tests/notes-bars.test.cjs`; two guards in `tests/resize-perf.test.cjs`.
+
+- **Pure core** (exported through the test seam): `normalizeGeo`, `clampGeo`, `moveGeo`, `resizeGeo`, `placeSheet` (the old layout maths, now testable), `keepClear`, `sideOf`, `createHoldAction`, `pushRecent`, `cleanRecent`.
+- **meta.json** gains `pinned` (default true = old behavior), `geo` (`{ panel, float }` rectangles local to the host area), `recent` (max 8), and `size` may be `"span"`. Dock host has no geo (`adapter.geoKey === ""`).
+- **Sheet**: drag by the title bar (3px slop so the title still opens the list; the click after a drag is swallowed), 8 resize grips, double click on the empty title bar resets, one frame paints (`paintGesture`), geometry measured once per gesture, saved on release (also sets size back to `peek`). Window pin button (`btnKeep`, pin icon); the note pin is now the `bookmark` icon. Outside press: `window` `mousedown` capture, only while open; exempt `navigator-toolbox`, `sidebar-box`, `PersonalToolbar`, `nav-bar`, `zentral-settings-modal`, anything with `sine` in its id, Notes buttons and sheets (copied from the panel's `handleOutsideClick`).
+- **Z decision**: standalone card (`position: fixed`) calls `showPopover()` only while focused (`raise()` on open, press inside, focusin; `drop()` on any outside press, removes the `popover` attribute so it stays visible). `notes-decisions` test was deliberately reversed; the map generator text was updated. `data-settled` stops the entrance animation from replaying.
+- **Adapters**: bar adapter `geoKey: "panel"` and a `span` area (union of all visible pages); floating adapter keeps clear of `#navigator-toolbox` (`keepClear`) and starts on the opposite side when `avoid_sidebar` is on.
+- **Shortcuts (#23)**: `SHORTCUT_ACTIONS` + `recent`, `notePin`, `keepOpen`, `larger`, `span`, `resetGeo` and `global: true` actions `quickNew`, `openFloating` (toggle); the window `keydown` capture handler reads the same JSON pref. The old global open/close shortcut still lives in its own pref.
+- **Toolbar button (#6)**: `CustomizableUI.createWidget` once per application. The creating window owns it (its callbacks die with it), hands it over on unload via `window.__zentralNotesClaimWidget`, and `onCommand` routes to `event.target.ownerGlobal.__zentralNotesToggle`. Icon is a `data:` SVG built from `ICONS.note` with `context-stroke`.
+- **Bug fixed on the way**: after Notes was disabled and re-enabled, `lastUsed` still pointed to a destroyed binding, so a shortcut opened a sheet nobody tracked (never closed, survived `destroy()`). `syncBars` clears it and `pickBinding` checks membership. Covered by the Recent step in `notes-bars`.
+
+Please check in real Zen: sheet moving/resizing over a remote `<browser>` (pointer capture on chrome elements), that `mousedown` on page content reaches the window listener (the panels rely on the same), popover raise/drop with Big Preview (focus loss on `hidePopover`; the "already focused" guard exists to avoid it), the `popover` UA defaults reset in CSS, Customize toolbar placement surviving `destroyWidget` + `createWidget` on window handover, `context-stroke` icon colour in the toolbar, sidebar avoidance in compact mode (the sidebar rect may be hidden or zero-width then, which simply disables the avoidance), shortcut capture of the new defaults-free actions.
+Known limits: if Big Preview opens while Notes already has focus it is above Notes until Notes is pressed again after a press outside; geometry is shared by all windows (one `meta.json`) and clamped per window; panel sheets are not covered by a behavior test for dragging (the fake DOM has no `offsetParent`), only by the pure functions.
+Open: #8, #1, split view as a second window, free-text labels (see roadmap "Cycle C status").
+Next: finish cycle C (above) or go on with cycle D.

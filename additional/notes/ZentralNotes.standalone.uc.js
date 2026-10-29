@@ -706,6 +706,7 @@ function nativeSidebarSide() {
       SETEXT: "zen.workspace.zentral.notes.setext",
       PASTE_LINK: "zen.workspace.zentral.notes.paste_link",
       SHORTCUTS: "zen.workspace.zentral.notes.shortcuts",
+      AVOID_SIDEBAR: "zen.workspace.zentral.notes.avoid_sidebar",
     });
     const VIEW_PREFS = new Set([PREF.WRAP, PREF.FONT_SIZE, PREF.LINE_HEIGHT, PREF.READ_COPY]);
     const READ_PREFS = new Set([PREF.BLANK_LINES, PREF.LINE_BREAKS, PREF.SETEXT]);
@@ -732,6 +733,10 @@ function nativeSidebarSide() {
     const MAX_HIGHLIGHT_CHARS = 20000; // longer code blocks are shown without syntax colors
     const MAX_IMPORT_FILES = 500;
     const MAX_IMPORT_BYTES = 1024 * 1024;
+    const MAX_RECENT = 8; // notes remembered in the "Recent" list
+    const HOLD_MS = 450; // a press longer than this is a "hold" on buttons that have a second action
+    const DRAG_SLOP = 3; // pixels before a press on the title becomes a drag
+    const TOOLBAR_WIDGET_ID = "zentral-notes-toolbar-button";
 
     // ======================================================================
     // Pure core: note file format
@@ -1915,8 +1920,18 @@ function nativeSidebarSide() {
       { id: "mode", label: "Read / edit", def: "Ctrl+E" },
       { id: "split", label: "Split view", def: "" },
       { id: "settings", label: "Quick settings", def: "Ctrl+," },
+      { id: "recent", label: "Recent notes", def: "" },
+      { id: "notePin", label: "Pin note to the top of the list", def: "" },
+      { id: "keepOpen", label: "Keep open / close on outside click", def: "" },
+      { id: "larger", label: "Larger / smaller", def: "" },
+      { id: "span", label: "Fill the whole area (both panels in Triple View)", def: "" },
+      { id: "resetGeo", label: "Reset position and size", def: "" },
+      // Global actions work anywhere in the window, also while Notes is closed.
+      { id: "quickNew", label: "New note from anywhere", def: "", global: true },
+      { id: "openFloating", label: "Open or close the standalone Notes card", def: "", global: true },
     ]);
     const SHORTCUT_IDS = new Set(SHORTCUT_ACTIONS.map((a) => a.id));
+    const GEO_KEYS = Object.freeze(["panel", "float"]); // hosts that remember a position and size
     function formatCombo(spec) {
       if (!spec || !spec.key) return "";
       const k = spec.key;
@@ -1991,6 +2006,118 @@ function nativeSidebarSide() {
     const stepOption = (opt, current, dir) => clampInt((Number(current) || opt.def) + dir * opt.step, opt.min, opt.max);
 
     // ======================================================================
+    // Pure core: window geometry (drag, resize, stay inside the area), hold-to-act, recent list
+    // ======================================================================
+    // Rectangles are {x, y, w, h} in pixels, local to an area {w, h} (the page area of a panel, or the
+    // window for the standalone card). Nothing here touches the DOM, so every rule is unit-tested.
+    const GEO_MIN = Object.freeze({ w: 240, h: 160 });
+    const RESIZE_HANDLES = Object.freeze(["n", "s", "e", "w", "ne", "nw", "se", "sw"]);
+    const isNum = (v) => typeof v === "number" && Number.isFinite(v);
+    // A stored rectangle, cleaned: whole pixels and a sane size, otherwise null (= use the default place).
+    function normalizeGeo(raw) {
+      if (!raw || typeof raw !== "object") return null;
+      const { x, y, w, h } = raw;
+      if (![x, y, w, h].every(isNum)) return null;
+      if (w < GEO_MIN.w || h < GEO_MIN.h || w > 20000 || h > 20000 || Math.abs(x) > 40000 || Math.abs(y) > 40000) return null;
+      return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
+    }
+    // Pull a rectangle back inside the area. It keeps the minimum size unless the area itself is smaller.
+    function clampGeo(rect, area, min = GEO_MIN) {
+      const aw = Math.max(1, area.w), ah = Math.max(1, area.h);
+      const w = Math.min(Math.max(rect.w, Math.min(min.w, aw)), aw);
+      const h = Math.min(Math.max(rect.h, Math.min(min.h, ah)), ah);
+      return {
+        x: Math.round(Math.min(Math.max(rect.x, 0), aw - w)),
+        y: Math.round(Math.min(Math.max(rect.y, 0), ah - h)),
+        w: Math.round(w),
+        h: Math.round(h),
+      };
+    }
+    const moveGeo = (start, dx, dy, area) => clampGeo({ ...start, x: start.x + dx, y: start.y + dy }, area);
+    // Drag one edge or corner: a west / north edge moves the origin, the opposite edge stays where it is.
+    function resizeGeo(start, handle, dx, dy, area, min = GEO_MIN) {
+      let left = start.x, top = start.y, right = start.x + start.w, bottom = start.y + start.h;
+      const has = (c) => String(handle).includes(c);
+      if (has("w")) left = Math.min(Math.max(left + dx, 0), right - min.w);
+      if (has("e")) right = Math.max(Math.min(right + dx, area.w), left + min.w);
+      if (has("n")) top = Math.min(Math.max(top + dy, 0), bottom - min.h);
+      if (has("s")) bottom = Math.max(Math.min(bottom + dy, area.h), top + min.h);
+      return clampGeo({ x: left, y: top, w: right - left, h: bottom - top }, area, min);
+    }
+    // Where the sheet goes inside `area` ({width, height, anchor}); the result is local to the area.
+    // size: "peek" (a part of the area), "full" (all of it), "span" (all of the widest area, see the adapters).
+    // A stored `geo` replaces only the peek size.
+    function placeSheet({ area, size = "peek", geo = null, margin = 6 }) {
+      const m = margin, aw = area.width, ah = area.height;
+      const full = size === "full" || size === "span" || ah < 320;
+      if (geo && !full) return clampGeo(geo, { w: aw, h: ah });
+      const w = Math.max(200, aw - m * 2);
+      const hgt = full ? Math.max(120, ah - m * 2) : Math.min(ah - m * 2, Math.max(280, Math.round(ah * 0.62)));
+      return { x: m, y: area.anchor === "bottom" ? ah - m - hgt : m, w, h: hgt };
+    }
+    // The part of `bounds` left when tall strips at its left or right edge (the native sidebar) are taken
+    // out. Short or small rectangles are ignored; at least `minWidth` always remains.
+    function keepClear(bounds, rects, viewHeight, minWidth = 240) {
+      let left = bounds.left, right = bounds.left + bounds.width;
+      const mid = bounds.left + bounds.width / 2;
+      for (const r of rects || []) {
+        if (!r || !(r.width >= 20) || !(r.height >= viewHeight * 0.4)) continue;
+        if (r.left + r.width / 2 < mid) left = Math.max(left, Math.min(r.left + r.width, right - minWidth));
+        else right = Math.min(right, Math.max(r.left, left + minWidth));
+      }
+      return { left, top: bounds.top, width: right - left, height: bounds.height };
+    }
+    // Which side of the window a strip (the native sidebar) is on.
+    const sideOf = (rect, viewWidth) => (rect && rect.left + rect.width / 2 > viewWidth / 2 ? "right" : "left");
+    // A button with a second action on a long press. The timer exists only between press and release.
+    function createHoldAction({ ms = HOLD_MS, setTimer, clearTimer, onTap, onHold }) {
+      let timer = null, held = false, down = false;
+      const stop = () => {
+        if (timer !== null) clearTimer(timer);
+        timer = null;
+      };
+      return {
+        press() {
+          if (down) return;
+          down = true;
+          held = false;
+          stop();
+          timer = setTimer(() => {
+            timer = null;
+            held = true;
+            onHold();
+          }, ms);
+        },
+        release() {
+          down = false;
+          stop();
+          return held;
+        },
+        cancel() {
+          down = false;
+          held = false;
+          stop();
+        },
+        // The click that ends a hold is swallowed; any other click (mouse tap, Enter, Space) is a tap.
+        click() {
+          if (held) {
+            held = false;
+            return false;
+          }
+          onTap();
+          return true;
+        },
+        get armed() {
+          return timer !== null;
+        },
+      };
+    }
+    // Most recently opened note first, no duplicates, at most `max`.
+    const pushRecent = (list, id, max = MAX_RECENT) => [id, ...(list || []).filter((x) => x !== id)].slice(0, max);
+    const cleanRecent = (raw) =>
+      Array.isArray(raw) ? raw.filter((x, i, a) => typeof x === "string" && x && x.length < 80 && a.indexOf(x) === i).slice(0, MAX_RECENT) : [];
+
+    // ======================================================================
     // Store: notes as files, atomic writes, cross-window sync
     // ======================================================================
     function createStore({
@@ -2008,7 +2135,7 @@ function nativeSidebarSide() {
       const dirty = new Set();
       const listeners = new Set();
       const backedUp = new Set();
-      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true };
+      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, geo: {}, recent: [] };
       let meta = { ...DEFAULT_META };
       let dir = null;
       let chain = Promise.resolve();
@@ -2066,14 +2193,21 @@ function nativeSidebarSide() {
       }
 
       async function loadMeta() {
-        meta = { ...DEFAULT_META };
+        meta = { ...DEFAULT_META, geo: {}, recent: [] };
         try {
           const raw = JSON.parse(await io.readUTF8(io.join(dir, "meta.json")));
           if (typeof raw.lastNoteId === "string") meta.lastNoteId = raw.lastNoteId;
-          if (raw.size === "full" || raw.size === "peek") meta.size = raw.size;
+          if (raw.size === "full" || raw.size === "peek" || raw.size === "span") meta.size = raw.size;
           if (raw.mode === "read" || raw.mode === "edit" || raw.mode === "split") meta.mode = raw.mode;
           if (HIGHLIGHT_COLORS.includes(raw.highlight)) meta.highlight = raw.highlight;
           if (typeof raw.syncScroll === "boolean") meta.syncScroll = raw.syncScroll;
+          if (typeof raw.pinned === "boolean") meta.pinned = raw.pinned;
+          if (raw.geo && typeof raw.geo === "object")
+            for (const key of GEO_KEYS) {
+              const g = normalizeGeo(raw.geo[key]);
+              if (g) meta.geo[key] = g;
+            }
+          meta.recent = cleanRecent(raw.recent);
         } catch (_) {}
       }
 
@@ -2097,7 +2231,7 @@ function nativeSidebarSide() {
       function setMeta(patch) {
         let changed = false;
         for (const [k, v] of Object.entries(patch))
-          if (meta[k] !== v) {
+          if (v && typeof v === "object" ? JSON.stringify(meta[k]) !== JSON.stringify(v) : meta[k] !== v) {
             meta[k] = v;
             changed = true;
           }
@@ -2434,6 +2568,8 @@ function nativeSidebarSide() {
         pastedLink, fragmentLabel, insertImage, makeTable, insertTable, SHORTCUT_ACTIONS, formatCombo,
         normalizeCombo, comboFromEvent, parseShortcutMap, effectiveShortcuts, findShortcutConflict,
         matchShortcutAction, assignShortcut, QUICK_OPTIONS, stepOption, PREF,
+        normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, sideOf, createHoldAction,
+        pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
       };
     }
 
@@ -2479,6 +2615,7 @@ function nativeSidebarSide() {
       codeblock: "M4 4h16v16H4z M10 9l-3 3 3 3 M14 9l3 3-3 3",
       numbered: "M10 6h11 M10 12h11 M10 18h11 M4 6h1v4 M4 10h2 M4 14.5a1.5 1 0 0 1 3 0c0 1-3 2-3 3.5h3",
       table: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M3 10h18 M3 15h18 M9 3v18 M15 3v18",
+      bookmark: "m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z",
       sliders: "M4 21v-7 M4 10V3 M12 21v-9 M12 8V3 M20 21v-5 M20 12V3 M1 14h6 M9 8h6 M17 16h6",
     };
     function icon(name, size = 14) {
@@ -2677,7 +2814,7 @@ function nativeSidebarSide() {
       let currentId = "";
       let view = "editor"; // editor | list
       let mode = "edit"; // edit | read | split
-      let filter = "all"; // all | trash
+      let filter = "all"; // all | recent | trash
       let query = "";
       let isOpen = false;
       let typed = false;
@@ -2709,7 +2846,10 @@ function nativeSidebarSide() {
       root.hidden = true;
       const btnList = iconButton("list", "All notes (Ctrl+K)", "zn-list-btn");
       const titleEl = h("button", { type: "button", class: "zn-title", title: "All notes" });
-      const btnPin = iconButton("pin", "Pin note");
+      const btnPin = iconButton("bookmark", "Pin note to the top of the list");
+      // The window pin works like the pin of a Zentral panel: pinned = stays open, unpinned = closes on an
+      // outside click. Hold it to put the window back in its default place.
+      const btnKeep = iconButton("pin", "Keep open", "zn-keep-btn");
       const colorDot = h("span", { class: "zn-dot" });
       const btnColor = h("button", {
         type: "button",
@@ -2718,10 +2858,10 @@ function nativeSidebarSide() {
         "aria-label": "Note color",
       });
       btnColor.append(colorDot);
-      const btnSize = iconButton("maximize", "Larger");
+      const btnSize = iconButton("maximize", "Larger (hold: fill the whole area)");
       const btnMore = iconButton("more", "More");
       const btnClose = iconButton("x", "Close notes (Esc)");
-      const head = h("div", { class: "zn-head" }, btnList, titleEl, btnPin, btnColor, btnSize, btnMore, btnClose);
+      const head = h("div", { class: "zn-head" }, btnList, titleEl, btnPin, btnColor, btnKeep, btnSize, btnMore, btnClose);
 
       const tBold = iconButton("bold", "Bold (Ctrl+B)");
       const tItalic = iconButton("italic", "Italic (Ctrl+I)");
@@ -2792,6 +2932,7 @@ function nativeSidebarSide() {
       });
       const btnNew = iconButton("plus", "New note (Ctrl+N)", "zn-new");
       const chipAll = h("button", { type: "button", class: "zn-chip" }, "Notes");
+      const chipRecent = h("button", { type: "button", class: "zn-chip" }, "Recent");
       const chipTrash = h("button", { type: "button", class: "zn-chip" }, "Trash");
       const chipEmpty = h("button", { type: "button", class: "zn-chip zn-chip-danger" }, "Empty trash");
       const listItems = h("div", { class: "zn-items", role: "list" });
@@ -2799,7 +2940,7 @@ function nativeSidebarSide() {
         "div",
         { class: "zn-list" },
         h("div", { class: "zn-list-head" }, h("span", { class: "zn-search-wrap" }, icon("search", 13), search), btnNew),
-        h("div", { class: "zn-chips" }, chipAll, chipTrash, h("span", { class: "zn-grow" }), chipEmpty),
+        h("div", { class: "zn-chips" }, chipAll, chipRecent, chipTrash, h("span", { class: "zn-grow" }), chipEmpty),
         listItems,
       );
       const body = h("div", { class: "zn-body" }, ta, readEl, listEl);
@@ -2807,6 +2948,8 @@ function nativeSidebarSide() {
       const countEl = h("span", { class: "zn-count" });
       const foot = h("div", { class: "zn-foot" }, statusEl, h("span", { class: "zn-grow" }), countEl);
       root.append(head, tools, body, foot);
+      // Eight resize grips (edges and corners); CSS shows them only where the sheet may be moved.
+      for (const hd of RESIZE_HANDLES) root.append(h("span", { class: "zn-rz", "data-h": hd }));
 
       // ---- state -> DOM ----------------------------------------------------
       const note = () => store.get(currentId);
@@ -2821,11 +2964,16 @@ function nativeSidebarSide() {
           view === "list" ? (filter === "trash" ? "Trash" : "All notes") : titleOf(n?.body || "") || "Untitled note";
         titleEl.title = view === "list" ? "Back to note" : "All notes";
         btnPin.classList.toggle("is-on", !!n?.pinned);
-        btnPin.title = n?.pinned ? "Unpin note" : "Pin note";
+        btnPin.title = n?.pinned ? "Unpin note" : "Pin note to the top of the list";
         btnPin.setAttribute("aria-pressed", n?.pinned ? "true" : "false");
         colorDot.dataset.color = n?.color || "none";
-        btnSize.replaceChildren(icon(store.meta.size === "full" ? "minimize" : "maximize"));
-        btnSize.title = store.meta.size === "full" ? "Smaller" : "Larger";
+        const big = store.meta.size !== "peek";
+        btnSize.replaceChildren(icon(big ? "minimize" : "maximize"));
+        btnSize.title = big ? "Smaller (hold: fill the whole area)" : "Larger (hold: fill the whole area)";
+        root.dataset.geo = adapter.geoKey ? "on" : "off";
+        btnKeep.classList.toggle("is-on", store.meta.pinned !== false);
+        btnKeep.setAttribute("aria-pressed", store.meta.pinned !== false ? "true" : "false");
+        btnKeep.title = store.meta.pinned !== false ? "Kept open: click to close on an outside click (hold: reset position)" : "Closes on an outside click: click to keep open (hold: reset position)";
         tSync.hidden = mode !== "split";
         tSync.classList.toggle("is-on", !!store.meta.syncScroll);
         tSync.setAttribute("aria-pressed", store.meta.syncScroll ? "true" : "false");
@@ -2844,6 +2992,7 @@ function nativeSidebarSide() {
         ta.hidden = mode === "read";
         readEl.hidden = mode === "edit";
         chipAll.classList.toggle("is-on", filter === "all");
+        chipRecent.classList.toggle("is-on", filter === "recent");
         chipTrash.classList.toggle("is-on", filter === "trash");
         chipTrash.textContent = store.trashCount() ? `Trash (${store.trashCount()})` : "Trash";
         chipEmpty.hidden = filter !== "trash" || !store.trashCount();
@@ -2969,7 +3118,7 @@ function nativeSidebarSide() {
       }
       function openNote(id, { focus = true } = {}) {
         if (currentId && currentId !== id) store.discardIfEmpty(currentId);
-        store.setMeta({ lastNoteId: id });
+        store.setMeta({ lastNoteId: id, recent: pushRecent(store.meta.recent, id) });
         view = "editor";
         const n = store.get(id);
         mode = n?.trashed ? "read" : store.meta.mode;
@@ -3015,16 +3164,23 @@ function nativeSidebarSide() {
       }
 
       // ---- list view -----------------------------------------------------------
+      // The last opened notes, newest first, narrowed by the search box.
+      function recentNotes() {
+        const q = query.trim().toLowerCase();
+        return (store.meta.recent || [])
+          .map((id) => store.get(id))
+          .filter((n) => n && !n.trashed && (!q || n.body.toLowerCase().includes(q)));
+      }
       function renderList() {
         rafList = 0;
         if (view !== "list") return;
         applyState();
         const trashed = filter === "trash";
-        const all = store.list({ query, trashed });
+        const all = filter === "recent" ? recentNotes() : store.list({ query, trashed });
         listItems.replaceChildren();
         if (!all.length) {
           listItems.append(
-            h("p", { class: "zn-empty" }, query ? "No notes match your search." : trashed ? "Trash is empty." : "No notes yet. Press + to create one."),
+            h("p", { class: "zn-empty" }, query ? "No notes match your search." : trashed ? "Trash is empty." : filter === "recent" ? "Nothing opened yet." : "No notes yet. Press + to create one."),
           );
           return;
         }
@@ -3589,6 +3745,7 @@ function nativeSidebarSide() {
           { icon: "folder", label: "Import .md folder\u2026", action: async () => { const k = await env.importFolder(store); flash(k ? `Imported ${k} notes` : "Nothing imported"); if (view === "list") scheduleList(); } },
           { icon: "folder", label: "Open notes folder", action: () => env.revealFolder(store.dir) },
           { icon: "sliders", label: "Quick settings\u2026", action: () => askSettings() },
+          ...(adapter.geoKey ? [{ icon: "restore", label: "Reset position and size", action: () => resetGeo() }] : []),
           { sep: true },
         ];
         if (n.trashed) {
@@ -3620,13 +3777,164 @@ function nativeSidebarSide() {
           applyState();
         }
       });
-      listen(btnSize, "click", () => {
-        store.setMeta({ size: store.meta.size === "full" ? "peek" : "full" });
+      // ---- size, window pin, geometry -------------------------------------------------------------
+      const setSize = (size) => {
+        store.setMeta({ size });
         applyState();
         layout();
+      };
+      const toggleLarger = () => setSize(store.meta.size === "peek" ? "full" : "peek");
+      const toggleSpan = () => setSize(store.meta.size === "span" ? "peek" : "span");
+      const toggleKeep = () => {
+        store.setMeta({ pinned: store.meta.pinned === false });
+        applyState();
+      };
+      function resetGeo() {
+        const key = adapter.geoKey;
+        if (!key) return;
+        const g = { ...(store.meta.geo || {}) };
+        delete g[key];
+        store.setMeta({ geo: g, size: "peek" });
+        applyState();
+        layout();
+        flash("Position and size reset", 2500);
+      }
+      // A button with a second action on a long press: the timer exists only between press and release.
+      function holdButton(btn, onTap, onHold) {
+        const hold = createHoldAction({
+          setTimer: (fn, ms) => window.setTimeout(fn, ms),
+          clearTimer: (id) => window.clearTimeout(id),
+          onTap,
+          onHold,
+        });
+        listen(btn, "pointerdown", (e) => {
+          if (e.button === undefined || e.button === 0) hold.press();
+        });
+        listen(btn, "pointerup", () => hold.release());
+        listen(btn, "pointerleave", () => hold.cancel());
+        listen(btn, "click", () => hold.click());
+        cleanups.push(() => hold.cancel());
+        return hold;
+      }
+      holdButton(btnSize, toggleLarger, toggleSpan);
+      holdButton(btnKeep, toggleKeep, resetGeo);
+
+      // Drag the title bar, resize from any edge or corner. The area is measured once when the gesture
+      // starts; pointer events only remember the latest position and one frame paints it. The result is
+      // stored (per host: panel / standalone card) when the pointer is released.
+      let gesture = null;
+      let rafDrag = 0;
+      let swallowClick = false;
+      function hostOffset() {
+        if (adapter.position !== "absolute") return { ox: 0, oy: 0 };
+        const op = root.offsetParent;
+        if (!op) return null;
+        const r = op.getBoundingClientRect();
+        return { ox: r.left + (op.clientLeft || 0), oy: r.top + (op.clientTop || 0) };
+      }
+      function startGesture(e, kind) {
+        if (!adapter.geoKey || (e.button !== undefined && e.button !== 0)) return;
+        const a = adapter.getArea({});
+        const off = hostOffset();
+        if (!a || !off) return;
+        const b = a.bounds || a;
+        const r = root.getBoundingClientRect();
+        gesture = {
+          kind,
+          key: adapter.geoKey,
+          id: e.pointerId,
+          sx: e.clientX,
+          sy: e.clientY,
+          start: { x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height },
+          area: { w: b.width, h: b.height },
+          ox: b.left - off.ox,
+          oy: b.top - off.oy,
+          active: kind !== "move",
+          next: null,
+          rect: null,
+        };
+        try {
+          e.currentTarget?.setPointerCapture?.(e.pointerId);
+        } catch (_) {}
+        if (kind !== "move") {
+          root.dataset.dragging = "true";
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }
+      function paintGesture() {
+        rafDrag = 0;
+        const g = gesture;
+        if (!g || !g.next) return;
+        const { dx, dy } = g.next;
+        const rect = g.kind === "move" ? moveGeo(g.start, dx, dy, g.area) : resizeGeo(g.start, g.kind, dx, dy, g.area);
+        g.rect = rect;
+        root.style.left = Math.round(g.ox + rect.x) + "px";
+        root.style.top = Math.round(g.oy + rect.y) + "px";
+        root.style.width = rect.w + "px";
+        root.style.height = rect.h + "px";
+        const split = rect.w >= 560 ? "side" : "stack";
+        if (root.dataset.split !== split) root.dataset.split = split;
+      }
+      function moveEvent(e) {
+        const g = gesture;
+        if (!g || (e.pointerId !== undefined && g.id !== undefined && e.pointerId !== g.id)) return;
+        const dx = e.clientX - g.sx,
+          dy = e.clientY - g.sy;
+        if (!g.active) {
+          if (Math.hypot(dx, dy) < DRAG_SLOP) return;
+          g.active = true;
+          root.dataset.dragging = "true";
+          closeMenu();
+        }
+        g.next = { dx, dy };
+        if (!rafDrag) rafDrag = window.requestAnimationFrame(paintGesture);
+      }
+      function endGesture() {
+        const g = gesture;
+        if (!g) return;
+        gesture = null;
+        if (rafDrag) window.cancelAnimationFrame(rafDrag);
+        rafDrag = 0;
+        delete root.dataset.dragging;
+        if (!g.active || !g.next) return;
+        if (g.kind === "move") swallowClick = true;
+        gesture = g;
+        paintGesture(); // flush the last position
+        gesture = null;
+        taAnchY = null;
+        readAnchY = null;
+        if (g.rect) {
+          store.setMeta({ geo: { ...(store.meta.geo || {}), [g.key]: g.rect }, size: "peek" });
+          applyState();
+        }
+      }
+      listen(head, "pointerdown", (e) => {
+        const btn = e.target?.closest?.("button");
+        if (btn && !btn.classList.contains("zn-title")) return;
+        startGesture(e, "move");
+      });
+      for (const grip of root.querySelectorAll(".zn-rz"))
+        listen(grip, "pointerdown", (e) => startGesture(e, grip.getAttribute("data-h")));
+      listen(root, "pointermove", moveEvent);
+      listen(root, "pointerup", endGesture);
+      listen(root, "pointercancel", endGesture);
+      listen(head, "click", (e) => {
+        if (!swallowClick) return;
+        swallowClick = false;
+        e.stopPropagation();
+        e.preventDefault();
+      }, true);
+      listen(head, "dblclick", (e) => {
+        const btn = e.target?.closest?.("button");
+        if (!btn || btn.classList.contains("zn-title")) resetGeo();
+      });
+      cleanups.push(() => {
+        if (rafDrag) window.cancelAnimationFrame(rafDrag);
       });
       listen(btnNew, "click", newNote);
       listen(chipAll, "click", () => { filter = "all"; renderList(); });
+      listen(chipRecent, "click", () => { filter = "recent"; renderList(); });
       listen(chipTrash, "click", () => { filter = "trash"; renderList(); });
       listen(chipEmpty, "click", () => {
         if (chipEmpty.dataset.armed) {
@@ -3699,6 +4007,15 @@ function nativeSidebarSide() {
           if (view === "editor") setMode(mode === "split" ? "edit" : "split");
         },
         settings: () => askSettings(),
+        recent: () => {
+          filter = "recent";
+          showList();
+        },
+        notePin: () => btnPin.click(),
+        keepOpen: () => toggleKeep(),
+        larger: () => toggleLarger(),
+        span: () => toggleSpan(),
+        resetGeo: () => resetGeo(),
       };
       function handleKey(e) {
         if (e.isComposing) return;
@@ -3770,24 +4087,30 @@ function nativeSidebarSide() {
       function layout() {
         rafLayout = 0;
         if (!isOpen || destroyed || root.hidden) return;
-        const a = adapter.getArea({ wide: mode === "split" });
+        const size = store.meta.size;
+        const a = adapter.getArea({ wide: mode === "split", span: size === "span" });
         if (!a || a.width < 40 || a.height < 40) return;
-        let ox = 0,
-          oy = 0;
-        if (adapter.position === "absolute") {
-          const op = root.offsetParent;
-          if (!op) return;
-          const r = op.getBoundingClientRect();
-          ox = r.left + (op.clientLeft || 0);
-          oy = r.top + (op.clientTop || 0);
+        const off = hostOffset();
+        if (!off) return;
+        const key = adapter.geoKey || "";
+        const b = a.bounds || a;
+        const geo = key ? store.meta.geo?.[key] : null;
+        let left, top, w, hgt;
+        if (geo && size === "peek" && b.height >= 320) {
+          const g = clampGeo(geo, { w: b.width, h: b.height });
+          left = b.left + g.x;
+          top = b.top + g.y;
+          w = g.w;
+          hgt = g.h;
+        } else {
+          const r = placeSheet({ area: a, size });
+          left = a.left + r.x;
+          top = a.top + r.y;
+          w = r.w;
+          hgt = r.h;
         }
-        const m = 6;
-        const full = store.meta.size === "full" || a.height < 320;
-        const w = Math.max(200, a.width - m * 2);
-        const hgt = full ? Math.max(120, a.height - m * 2) : Math.min(a.height - m * 2, Math.max(280, Math.round(a.height * 0.62)));
-        const top = a.anchor === "bottom" ? a.top + a.height - m - hgt : a.top + m;
-        root.style.left = Math.round(a.left + m - ox) + "px";
-        root.style.top = Math.round(top - oy) + "px";
+        root.style.left = Math.round(left - off.ox) + "px";
+        root.style.top = Math.round(top - off.oy) + "px";
         root.style.width = Math.round(w) + "px";
         root.style.height = Math.round(hgt) + "px";
         root.dataset.split = w >= 560 ? "side" : "stack";
@@ -3796,6 +4119,68 @@ function nativeSidebarSide() {
       }
       const scheduleLayout = () => {
         if (!rafLayout) rafLayout = window.requestAnimationFrame(layout);
+      };
+
+      // ---- top layer (standalone card only) -------------------------------------------------------
+      // Big Preview lives in the browser's top layer, which no z-index outranks. While Notes has the
+      // focus the card is a manual popover shown after Big Preview, so it sits above it; when something
+      // else is pressed the popover is dropped (the attribute is removed so the card stays visible as a
+      // normal layer) and Big Preview is above again.
+      let topLayer = false;
+      function raise() {
+        if (adapter.position !== "fixed" || !isOpen || destroyed || root.hidden || typeof root.showPopover !== "function") return;
+        try {
+          if (topLayer && root.matches(":popover-open")) root.hidePopover();
+          root.setAttribute("popover", "manual");
+          root.showPopover();
+          topLayer = true;
+        } catch (_) {
+          topLayer = false;
+        }
+      }
+      function drop() {
+        if (!topLayer) return;
+        topLayer = false;
+        try {
+          if (root.matches(":popover-open")) root.hidePopover();
+        } catch (_) {}
+        root.removeAttribute("popover");
+      }
+      const focusInside = () => root.contains(document.activeElement);
+      listen(root, "pointerdown", () => {
+        if (!topLayer || !focusInside()) raise();
+      }, true);
+      listen(root, "focusin", () => {
+        if (!topLayer) raise();
+      });
+      // The entrance animation plays once per open; entering or leaving the top layer must not replay it.
+      listen(root, "animationend", () => {
+        root.dataset.settled = "true";
+      });
+      // A press anywhere outside the sheet: leave the top layer and, when the window is not pinned,
+      // close (as the panels do). The bar's own button and the browser chrome are exempt.
+      const EXEMPT_IDS = ["navigator-toolbox", "sidebar-box", "PersonalToolbar", "nav-bar", "zentral-settings-modal"];
+      function isExempt(target, path) {
+        if (adapter.ignoreOutside?.(target, path)) return true;
+        const nodes = path && path.length ? path : [];
+        for (const el of nodes) {
+          if (el?.classList?.contains?.("zentral-notes-sheet") || el?.classList?.contains?.("zentral-notes-btn")) return true;
+          if (el?.id && (EXEMPT_IDS.includes(el.id) || el.id.includes("sine"))) return true;
+        }
+        if (target?.closest) {
+          for (const id of EXEMPT_IDS) if (target.closest("#" + id)) return true;
+          if (target.closest(".zentral-notes-btn") || target.closest(".zentral-notes-sheet")) return true;
+        }
+        return false;
+      }
+      const onOutsidePress = (e) => {
+        if (!isOpen || destroyed || gesture) return;
+        const path = e.composedPath ? e.composedPath() : [];
+        if (root.contains(e.target) || path.includes(root)) return;
+        drop();
+        if (store.meta.pinned !== false) return;
+        if (isExempt(e.target, path)) return;
+        close();
       };
 
       // ---- open / close -------------------------------------------------------------
@@ -3812,7 +4197,9 @@ function nativeSidebarSide() {
         applyState();
         layout();
         unwatch = adapter.watch(scheduleLayout);
+        window.addEventListener("mousedown", onOutsidePress, true);
         adapter.setActive(true);
+        raise();
         try {
           await ensureStore();
         } catch (error) {
@@ -3837,7 +4224,11 @@ function nativeSidebarSide() {
         previewTimer = 0;
         if (currentId) store.discardIfEmpty(currentId);
         store.flush();
+        window.removeEventListener("mousedown", onOutsidePress, true);
+        endGesture();
+        drop();
         root.hidden = true;
+        delete root.dataset.settled;
         try {
           unwatch?.();
         } catch (_) {}
@@ -3859,6 +4250,7 @@ function nativeSidebarSide() {
         window.clearTimeout(previewTimer);
         window.clearTimeout(flashTimer);
         for (const id of [rafChrome, rafList, rafLayout, rafSync]) if (id) window.cancelAnimationFrame(id);
+        window.removeEventListener("mousedown", onOutsidePress, true);
         root.remove();
       }
       // A read option (blank lines, line breaks, Setext) changed: draw the read pane again.
@@ -3877,6 +4269,9 @@ function nativeSidebarSide() {
         focus: focusEditor,
         isOpen: () => isOpen,
         toggle: () => (isOpen ? close() : open()),
+        newNote: () => {
+          if (isOpen && !destroyed) newNote();
+        },
       };
     }
 
@@ -3905,14 +4300,29 @@ function nativeSidebarSide() {
       let observeAll = () => {};
       return {
         position: "absolute",
+        geoKey: "panel",
         get host() {
           return host();
         },
+        // The button that opens this sheet must not count as an "outside" press.
+        ignoreOutside: (target) => !!target && (button === target || button.contains?.(target)),
         attach(root) {
           const h2 = host();
           if (h2 && root.parentNode !== h2) h2.appendChild(root);
         },
-        getArea() {
+        getArea({ span = false } = {}) {
+          // Hold-to-fill: one rectangle around every visible page of the panel (both views in Triple View).
+          if (span) {
+            const rects = [...(slider()?.querySelectorAll(":scope > browser") || [])]
+              .filter((x) => !x.hidden && x.getClientRects().length)
+              .map((x) => x.getBoundingClientRect())
+              .filter((r) => r.width > 40 && r.height > 40);
+            if (rects.length) {
+              const left = Math.min(...rects.map((r) => r.left)), top = Math.min(...rects.map((r) => r.top));
+              const right = Math.max(...rects.map((r) => r.right)), bottom = Math.max(...rects.map((r) => r.bottom));
+              return { left, top, width: right - left, height: bottom - top, anchor: "top" };
+            }
+          }
           const b = browserEl();
           if (b) {
             const r = b.getBoundingClientRect();
@@ -3953,19 +4363,28 @@ function nativeSidebarSide() {
     }
     // The floating card. With `docked()` on it opens beside the Zen sidebar (on the
     // content side, whichever side the sidebar is on) instead of in the window corner.
-    function createFloatingAdapter({ docked = () => false, onActive = () => {} } = {}) {
+    function createFloatingAdapter({ docked = () => false, avoidSidebar = () => false, onActive = () => {}, isTrigger = () => false } = {}) {
       const toolbox = () => document.getElementById("navigator-toolbox");
+      const sidebarRect = () => {
+        const sr = toolbox()?.getBoundingClientRect();
+        return sr && sr.width > 20 && sr.height > 20 ? sr : null;
+      };
       return {
         position: "fixed",
         host: document.documentElement,
+        // Docked next to the sidebar the card is not free to move; otherwise its place is remembered.
+        get geoKey() {
+          return docked() ? "" : "float";
+        },
+        ignoreOutside: (target) => isTrigger(target),
         attach(root) {
           root.dataset.host = docked() ? "dock" : "float";
           if (root.parentNode !== document.documentElement) document.documentElement.appendChild(root);
         },
-        getArea({ wide = false } = {}) {
+        getArea({ wide = false, span = false } = {}) {
+          const sr = sidebarRect();
           if (docked()) {
-            const sr = toolbox()?.getBoundingClientRect();
-            if (sr && sr.width > 20 && sr.height > 20) {
+            if (sr) {
               const content = document.getElementById("appcontent")?.getBoundingClientRect();
               const onRight = sr.left > window.innerWidth / 2;
               const room = onRight ? sr.left : window.innerWidth - sr.right;
@@ -3979,9 +4398,20 @@ function nativeSidebarSide() {
               };
             }
           }
-          // Split view widens the floating card so the editor and the preview sit side by side.
-          const w = Math.min(wide ? 900 : 460, window.innerWidth - 20);
-          return { left: window.innerWidth - w - 4, top: 4, width: w, height: window.innerHeight - 8, anchor: "bottom" };
+          // Standalone: keep out of the native sidebar's space and start on the opposite side (the sidebar
+          // used to cover the card and catch its clicks). The whole window is the area it may be moved in.
+          const vw = window.innerWidth, vh = window.innerHeight;
+          let view = { left: 0, top: 0, width: vw, height: vh };
+          let side = "right";
+          if (avoidSidebar() && sr) {
+            view = keepClear(view, [sr], vh);
+            side = sideOf(sr, vw) === "right" ? "left" : "right";
+          }
+          if (span) return { left: view.left, top: view.top, width: view.width, height: view.height, anchor: "top", bounds: view };
+          // Split view widens the card so the editor and the preview sit side by side.
+          const w = Math.min(wide ? 900 : 460, view.width - 20);
+          const left = side === "right" ? view.left + view.width - w - 4 : view.left + 4;
+          return { left, top: 4, width: w, height: vh - 8, anchor: "bottom", bounds: view };
         },
         watch(cb) {
           const ro = new ResizeObserver(cb);
@@ -4408,6 +4838,7 @@ function nativeSidebarSide() {
         if (!enabledNow()) {
           for (const b of bindings.values()) b.destroy();
           bindings.clear();
+          lastUsed = null; // a destroyed binding must never be picked again (it would open an untracked sheet)
           floating?.close();
           return;
         }
@@ -4498,7 +4929,7 @@ function nativeSidebarSide() {
             if (b.el.contains(active) || host?.contains(active)) return b;
           }
         }
-        if (lastUsed && lastUsed.visible()) return lastUsed;
+        if (lastUsed && [...bindings.values()].includes(lastUsed) && lastUsed.visible()) return lastUsed;
         const primary = [...bindings.values()].find((b) => b.kind === "primary" && b.visible());
         if (primary && document.getElementById("zen-app-panel-root")?.hasAttribute("open")) return primary;
         return ensureFloating();
@@ -4507,6 +4938,8 @@ function nativeSidebarSide() {
         if (!floating) {
           const adapter = createFloatingAdapter({
             docked: () => dockSidebarNow(),
+            avoidSidebar: () => prefBool(PREF.AVOID_SIDEBAR, true),
+            isTrigger: (t) => !!sidebarBtn && (sidebarBtn === t || sidebarBtn.contains?.(t)),
             onActive: (on) => {
               if (sidebarBtn) {
                 sidebarBtn.dataset.active = on ? "true" : "false";
@@ -4542,12 +4975,42 @@ function nativeSidebarSide() {
         }
         Promise.resolve(pickBinding().open()).catch(warn);
       }
+      // Global actions (usable while Notes is closed) come from the same shortcut table as the editor ones.
+      let globalCache = { raw: null, list: [] };
+      function globalShortcuts() {
+        const raw = prefStr(PREF.SHORTCUTS, "");
+        if (globalCache.raw !== raw)
+          globalCache = {
+            raw,
+            list: effectiveShortcuts(parseShortcutMap(raw)).filter((x) => SHORTCUT_ACTIONS.find((a) => a.id === x.id)?.global),
+          };
+        return globalCache.list;
+      }
+      const sheetOf = (b) => (typeof b.sheet === "function" ? b.sheet() : b.sheet);
+      function runGlobal(id) {
+        if (id === "openFloating") {
+          const f = ensureFloating();
+          return Promise.resolve(f.isOpen() ? f.close() : f.open());
+        }
+        if (id === "quickNew") {
+          const b = pickBinding();
+          return Promise.resolve(b.open()).then(() => sheetOf(b)?.newNote?.());
+        }
+      }
       const onKey = (e) => {
         if (disposed || e.repeat || e.isComposing || !enabledNow()) return;
         if (matchesShortcut(e, shortcut)) {
           e.preventDefault();
           e.stopPropagation();
           toggleFromShortcut();
+          return;
+        }
+        if (!(e.ctrlKey || e.metaKey || e.altKey)) return;
+        const id = matchShortcutAction(e, globalShortcuts());
+        if (id) {
+          e.preventDefault();
+          e.stopPropagation();
+          Promise.resolve(runGlobal(id)).catch(warn);
         }
       };
       window.addEventListener("keydown", onKey, true);
@@ -4582,6 +5045,7 @@ function nativeSidebarSide() {
             floating?.sheet?.refreshRead?.();
           } else if (VIEW_PREFS.has(name)) applyViewPrefs();
           else if (name === PREF.SHORTCUT) shortcut = parseShortcut(prefStr(PREF.SHORTCUT, "Alt+Shift+N"));
+          else if (name === PREF.AVOID_SIDEBAR) floating?.sheet.layout();
           else if (name === PREF.FOLDER) {
             if (storePromise)
               store
@@ -4590,6 +5054,7 @@ function nativeSidebarSide() {
           } else if (name === PREF.ENABLED || name === PREF.SHOW_BUTTON) {
             attachObservers();
             syncBars();
+            if (name === PREF.ENABLED) enabledNow() ? claimWidget() : releaseWidget();
           } else if (name === PREF.DOCK_SIDEBAR) {
             syncSidebarButton();
             floating?.refresh();
@@ -4601,6 +5066,67 @@ function nativeSidebarSide() {
         try {
           Services.prefs.removeObserver("zen.workspace.zentral.notes.", prefObserver);
         } catch (_) {}
+      });
+
+      // ---- "Customize toolbar" button ------------------------------------------------------------------
+      // One shared widget definition per application. Its callbacks live in the window that created it, so
+      // that window owns it and hands it over when it closes (a closed window's functions must not stay
+      // registered). The click is routed to the window the button was pressed in.
+      function getCUI() {
+        try {
+          return globalThis.CustomizableUI || ChromeUtils.importESModule("resource:///modules/CustomizableUI.sys.mjs").CustomizableUI;
+        } catch (_) {
+          return null;
+        }
+      }
+      const iconUrl = () =>
+        "data:image/svg+xml;charset=utf-8," +
+        encodeURIComponent(
+          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="context-stroke" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS.note}"/></svg>`,
+        );
+      function claimWidget() {
+        const cui = getCUI();
+        if (!cui || disposed || !enabledNow() || cui.__zentralNotesOwner === windowId) return;
+        try {
+          if (cui.getWidget?.(TOOLBAR_WIDGET_ID)?.provider) cui.destroyWidget(TOOLBAR_WIDGET_ID);
+          cui.createWidget({
+            id: TOOLBAR_WIDGET_ID,
+            type: "button",
+            label: "Notes",
+            tooltiptext: "Notes",
+            localized: false,
+            onCreated(node) {
+              node.style.setProperty("list-style-image", `url("${iconUrl()}")`);
+            },
+            onCommand(event) {
+              event?.target?.ownerGlobal?.__zentralNotesToggle?.();
+            },
+          });
+          cui.__zentralNotesOwner = windowId;
+        } catch (error) {
+          warn(error);
+        }
+      }
+      function releaseWidget() {
+        const cui = getCUI();
+        if (!cui || cui.__zentralNotesOwner !== windowId) return;
+        try {
+          cui.destroyWidget(TOOLBAR_WIDGET_ID);
+        } catch (_) {}
+        cui.__zentralNotesOwner = null;
+        try {
+          for (const w of Services.wm.getEnumerator("navigator:browser")) if (w !== window && w.__zentralNotesClaimWidget) return w.__zentralNotesClaimWidget();
+        } catch (_) {}
+      }
+      window.__zentralNotesToggle = () => {
+        if (!disposed && enabledNow()) toggleFromShortcut();
+      };
+      window.__zentralNotesClaimWidget = claimWidget;
+      claimWidget();
+      onCleanup(() => {
+        releaseWidget();
+        delete window.__zentralNotesToggle;
+        delete window.__zentralNotesClaimWidget;
       });
 
       const api = {

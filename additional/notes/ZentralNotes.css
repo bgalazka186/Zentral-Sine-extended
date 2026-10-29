@@ -9,8 +9,8 @@
  *   same black backing under the sheet, so notes stay readable on translucent panels.
  * Local interface selectors: .zentral-notes-btn; .zentral-notes-sheet; .zn-*
  * Local interface selectors (dock): .zentral-notes-sidebar-btn
- * Attribute selectors used: bgalazka-force-panel-black; data-active; data-color; data-host; data-mode;
- *   data-size; data-split; data-state; data-trashed; data-view
+ * Attribute selectors used: bgalazka-force-panel-black; data-active; data-color; data-dragging; data-geo; data-h;
+ *   data-host; data-mode; data-settled; data-size; popover; data-split; data-state; data-trashed; data-view
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
  * contracts from this source, not a promise that every collaborator is enabled at runtime.
@@ -103,6 +103,42 @@
 @media (prefers-reduced-motion: reduce) {
   .zentral-notes-sheet { animation: none; }
 }
+/* The entrance animation plays once per open: entering or leaving the top layer re-renders the card and
+   would otherwise replay it. */
+.zentral-notes-sheet[data-settled] { animation: none; }
+/* While Notes has the focus the standalone card is a manual popover (above Big Preview). A popover gets
+   centered, bordered and padded by the browser; the card places itself, so those defaults are reset. */
+.zentral-notes-sheet[popover] {
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--zn-text);
+}
+
+/* ---- move and resize ----------------------------------------------------------- */
+.zentral-notes-sheet[data-geo="on"] .zn-head { cursor: grab; }
+.zentral-notes-sheet[data-dragging] { user-select: none; }
+.zentral-notes-sheet[data-dragging] .zn-head { cursor: grabbing; }
+.zentral-notes-sheet .zn-rz {
+  position: absolute;
+  z-index: 6;
+  touch-action: none;
+}
+.zentral-notes-sheet[data-geo="off"] .zn-rz { display: none; }
+.zentral-notes-sheet .zn-rz[data-h="n"], .zentral-notes-sheet .zn-rz[data-h="s"] { left: 10px; right: 10px; height: 5px; cursor: ns-resize; }
+.zentral-notes-sheet .zn-rz[data-h="e"], .zentral-notes-sheet .zn-rz[data-h="w"] { top: 10px; bottom: 10px; width: 5px; cursor: ew-resize; }
+.zentral-notes-sheet .zn-rz[data-h="n"] { top: 0; }
+.zentral-notes-sheet .zn-rz[data-h="s"] { bottom: 0; }
+.zentral-notes-sheet .zn-rz[data-h="e"] { right: 0; }
+.zentral-notes-sheet .zn-rz[data-h="w"] { left: 0; }
+.zentral-notes-sheet .zn-rz[data-h="ne"], .zentral-notes-sheet .zn-rz[data-h="nw"],
+.zentral-notes-sheet .zn-rz[data-h="se"], .zentral-notes-sheet .zn-rz[data-h="sw"] { width: 10px; height: 10px; }
+.zentral-notes-sheet .zn-rz[data-h="ne"] { top: 0; right: 0; cursor: nesw-resize; }
+.zentral-notes-sheet .zn-rz[data-h="sw"] { bottom: 0; left: 0; cursor: nesw-resize; }
+.zentral-notes-sheet .zn-rz[data-h="nw"] { top: 0; left: 0; cursor: nwse-resize; }
+.zentral-notes-sheet .zn-rz[data-h="se"] { bottom: 0; right: 0; cursor: nwse-resize; }
+.zentral-notes-sheet .zn-keep-btn.is-on { color: var(--zn-accent); }
 .zentral-notes-sheet *,
 .zentral-notes-sheet *::before,
 .zentral-notes-sheet *::after {

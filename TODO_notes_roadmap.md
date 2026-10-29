@@ -56,10 +56,25 @@ default mismatches (test `tests/defaults.test.cjs`), numeric hints, stale doc ve
 - Split view as a second window (option): instead of halving the available space, open a second note of the **same size** beside the first. The Zentral pill menu must stay reachable and nothing may be covered.
 - Tests: resize-perf (drag/resize frame-throttled), z-heights, notes-bars.
 
+## Cycle C2: Things noticed after live Test
+
+- complete half done Cycle C
+- option for window wide shrocut on selected text "add to note" drop down menu new note/existing note/last open note, and configuration in settings what metadata to include in such quick note, like date,time,source,link to source with hilight,checkbox,style options and so on
+- fix: Headers from H1 to H5 look exacly the same
+- add more shortcuts and option to hide some options, features that do exist but have no proper shortcut are > [!NOTE] and > [!WARNING],
+- Image import from link does not give same nice UI like link import, both should see if link is avalible in clipboard and if no other link is avalible paste it in to dialog box, import image should explain there what files/links it will work with, also option to add link to picture
+- drop down menu for code so user can select also what should be hilighted
+- when creating table there should be allign left centre right option for each collumn
+- make sure that all icons are readable both in active and inactive state,
+- LaTeX / KaTeX / MathJax (low priority)
+- safe HTML tags like <details>
+- Notes button in customize toolbar mode now appears but has no icon and clicking it does nothing, doesnt appear after restart untill customize toolbar mode is turned on and off
+- bug: when dock notes to the sidebar is turned on features from last upadte do not apply
+
 ## Cycle D: data model (hardest)
 
 - #12 folders and trees; pin = independent shortcut shown at the top even inside a folder.
-- #16 links between notes (`[[note]]`, hub notes with descriptions).
+- #16 links between notes and items inside notes (`[[note]]`, hub notes with descriptions), and clickable Footnotes.
 - #11 search (Ctrl+F while focused): "found in N other notes", next/previous, plus
   next/previous not fully visible in the current view.
 - #13 image paste: per-note asset folder, link inserted into the .md; controls for alignment,
@@ -96,6 +111,12 @@ Owner decision still open: images stay click-to-load placeholders until cycle D 
 ## Cycle B2 status: DONE
 
 SHORTCUT_ACTIONS and the shortcut helpers in ZentralNotes.uc.js are meant to be reused for #23.
+
+## Cycle C status: PARTLY DONE (see TODO_handoff.md section 11)
+
+Done (code + tests, nothing run in real Zen): #3 drag and resize + above Big Preview while focused (z-height decision taken, `z-heights_map.md` and tests updated), #4 window pin with outside-click close and remembered state, #24 hold-to-act (Larger = fill, window pin = reset), #23 shortcuts for every action incl. two global ones, #6 Customize-toolbar button, standalone card keeps clear of the native sidebar (option `avoid_sidebar`), "recent" list, left/right panel resize-handle clipping NOT touched (it is in the panel suite, not Notes).
+
+NOT done, still open for the next session: #8 panel-like options (push page, reveal on hover over the top edge), #1 themes in the Appearance menu (RSS-based), split view as a second window of the same size, free-text per-note label (color already existed). Reason: each needs live layout feedback from Zen (push page touches `bgalazka-push-page` geometry in the panel suite) and was not started rather than guessed.
 
 ## Other modules (not Notes)
 

@@ -2123,6 +2123,12 @@
     "defaultValue": false
   },
   {
+    "property": "zen.workspace.zentral.notes.avoid_sidebar",
+    "label": "Keep the standalone Notes card clear of the native sidebar (opens on the opposite side and cannot be dragged under it)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "property": "zen.workspace.zentral.notes.wrap_lines",
     "label": "Wrap long lines (off = scroll sideways to see the whole line)",
     "type": "checkbox",

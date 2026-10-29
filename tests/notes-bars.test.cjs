@@ -28,6 +28,17 @@ const Services = {
 };
 class FakeMO { constructor(cb) { this.cb = cb; mutationCallbacks.push(cb); } observe() {} disconnect() { const i = mutationCallbacks.indexOf(this.cb); if (i >= 0) mutationCallbacks.splice(i, 1); } }
 class FakeRO { observe() {} disconnect() {} }
+// Fake CustomizableUI: one shared widget table, like the real one.
+const cui = {
+  widgets: new Map(),
+  getWidget: (id) => ({ provider: cui.widgets.has(id) ? "api" : null }),
+  createWidget(def) { if (cui.widgets.has(def.id)) throw new Error("exists"); cui.widgets.set(def.id, def); },
+  destroyWidget(id) { cui.widgets.delete(id); },
+};
+// Popover support for the fake elements (the standalone card enters the top layer while focused).
+El.prototype.showPopover = function () { if (this._pop) throw new Error("already open"); this._pop = true; this.shown = (this.shown || 0) + 1; };
+El.prototype.hidePopover = function () { this._pop = false; };
+El.prototype.matches = function (sel) { return sel === ":popover-open" && !!this._pop; };
 const win = {
   document,
   ZentralRuntime: { register: (def) => (registered = def) },
@@ -38,7 +49,7 @@ const win = {
 };
 win.window = win;
 vm.runInNewContext(source, {
-  window: win, document, Event: Ev, globalThis: { Services }, ChromeUtils: {}, console, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, setTimeout, clearTimeout,
+  window: win, document, Event: Ev, globalThis: { Services, CustomizableUI: cui }, ChromeUtils: {}, console, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, setTimeout, clearTimeout,
   MutationObserver: FakeMO, ResizeObserver: FakeRO, navigator: { platform: "Linux" },
   PathUtils: { profileDir: "/profile", join: (...p) => p.join("/"), filename: (p) => p.split("/").pop() },
   IOUtils: {
@@ -212,6 +223,228 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.ok(!bottom.children.some(isNotesBtn), "toggle off removes the sidebar button");
   });
 
+
+  const keyOf = (spec) => new Ev("keydown", { key: spec.key, code: spec.code, altKey: !!spec.alt, shiftKey: !!spec.shift, ctrlKey: !!spec.ctrl, metaKey: false });
+  const press = (spec) => windowListeners.find((l) => l.t === "keydown" && l.c === true).fn(keyOf(spec));
+  const outside = (target) => windowListeners.filter((l) => l.t === "mousedown" && l.c === true).forEach((l) => l.fn(new Ev("mousedown", { target, bubbles: true })));
+  const floatCard = () => document.documentElement.children.find((c) => c._classes.has("zentral-notes-sheet") && c.dataset.host === "float");
+  const readMeta = () => { const f = disk.get("/profile/zentral-notes/meta.json"); return f ? JSON.parse(f) : {}; };
+
+  await test("Customize toolbar widget: created once, icon is the Notes drawing, click goes to the pressed window, follows the enable switch", async () => {
+    const def = cui.widgets.get("zentral-notes-toolbar-button");
+    assert.ok(def, "widget registered");
+    assert.equal(def.label, "Notes");
+    assert.equal(def.defaultArea, undefined, "only in the palette until the person places it");
+    const set = {}; def.onCreated({ style: { setProperty: (k, v) => (set[k] = v) } });
+    assert.match(set["list-style-image"], /^url\("data:image\/svg\+xml/);
+    assert.ok(decodeURIComponent(set["list-style-image"]).includes("M15.5 3H5a2 2 0 0 0-2 2v14"), "same drawing as every other Notes icon");
+    assert.ok(decodeURIComponent(set["list-style-image"]).includes("context-stroke"), "takes the toolbar's text color");
+    let toggled = 0; const real = win.__zentralNotesToggle; win.__zentralNotesToggle = () => { toggled++; real(); };
+    def.onCommand({ target: { ownerGlobal: win } });
+    assert.equal(toggled, 1, "the command reaches the window the button was pressed in");
+    def.onCommand({ target: { ownerGlobal: {} } }); // a window without Notes: nothing happens, no throw
+    win.__zentralNotesToggle = real;
+    await flush();
+    for (const s of sheetsIn(slider)) if (!s.hidden) press({ key: "N", code: "KeyN", alt: true, shift: true });
+    await flush();
+    prefs.set("zen.workspace.zentral.notes.enabled", false);
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", "zen.workspace.zentral.notes.enabled"));
+    assert.equal(cui.widgets.size, 0, "disabled: widget removed");
+    prefs.set("zen.workspace.zentral.notes.enabled", true);
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", "zen.workspace.zentral.notes.enabled"));
+    assert.equal(cui.widgets.size, 1, "enabled: widget back");
+  });
+
+  await test("global shortcuts from the shared table open the standalone card; it keeps clear of the native sidebar", async () => {
+    const toolbox = document.getElementById("navigator-toolbox");
+    assert.ok(toolbox, "left over from the dock test");
+    toolbox.getBoundingClientRect = () => ({ left: 920, top: 0, right: 1200, bottom: 800, width: 280, height: 800 });
+    prefs.set("zen.workspace.zentral.notes.shortcuts", JSON.stringify({ openFloating: "Alt+Shift+F", quickNew: "Alt+Shift+Q", span: "Ctrl+Alt+J" }));
+    for (const s of document.documentElement.all().filter((c) => c._classes.has("zentral-notes-sheet") && !c.hidden)) press({ key: "N", code: "KeyN", alt: true, shift: true });
+    await flush();
+    press({ key: "F", code: "KeyF", alt: true, shift: true });
+    await sleep(40); await flush();
+    const card = floatCard();
+    assert.ok(card && !card.hidden, "Alt+Shift+F opened the standalone card");
+    assert.equal(card.style.left, "10px", "sidebar on the right: the card starts on the LEFT (4px margin + 6px)");
+    assert.equal(card.style.width, "448px");
+    assert.equal(card.dataset.geo, "on");
+    prefs.set("zen.workspace.zentral.notes.avoid_sidebar", false);
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", "zen.workspace.zentral.notes.avoid_sidebar")); await flush();
+    assert.equal(card.style.left, "742px", "option off: the old place at the right edge (1200 - 460 - 4 + 6)");
+    prefs.set("zen.workspace.zentral.notes.avoid_sidebar", true);
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", "zen.workspace.zentral.notes.avoid_sidebar")); await flush();
+    assert.equal(card.style.left, "10px");
+    toolbox.getBoundingClientRect = () => ({ left: 0, top: 0, right: 280, bottom: 800, width: 280, height: 800 });
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", "zen.workspace.zentral.notes.avoid_sidebar")); await flush();
+    assert.ok(Number.parseInt(card.style.left) >= 280, "sidebar on the left: the card sits right of it");
+  });
+
+  await test("top layer only while focused: raised on open and on a press inside, dropped (attribute removed, still visible) by a press outside", async () => {
+    const card = floatCard();
+    assert.equal(card.getAttribute("popover"), "manual", "raised when it opened");
+    assert.equal(card._pop, true);
+    outside(page);
+    assert.equal(card.getAttribute("popover"), null, "attribute removed on drop, or the card would vanish (display:none)");
+    assert.equal(card._pop, false);
+    assert.equal(card.hidden, false, "still visible, now an ordinary layer below Big Preview");
+    const before = card.shown;
+    card.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0 }));
+    assert.equal(card._pop, true, "pressing inside raises it again");
+    assert.equal(card.shown, before + 1);
+    card.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0 }));
+    dom.state.activeElement = card.querySelector(".zn-editor");
+    card.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0 }));
+    assert.equal(card.shown, before + 1, "no hide/show churn while it is already on top and focused (it would blur the editor)");
+  });
+
+  await test("window pin: kept open by default; unpinned closes on an outside press but not on the sidebar, the bar button or itself", async () => {
+    const card = floatCard();
+    const keep = card.querySelector(".zn-keep-btn");
+    assert.equal(keep.classList.contains("is-on"), true, "pinned by default (the old behavior)");
+    outside(page);
+    assert.equal(card.hidden, false, "pinned: outside press does not close");
+    keep.click();
+    assert.equal(keep.classList.contains("is-on"), false);
+    outside(document.getElementById("navigator-toolbox"));
+    assert.equal(card.hidden, false, "native sidebar is exempt");
+    const stray = new El("div"); stray.className = "zentral-notes-btn"; document.body.append(stray);
+    outside(stray);
+    assert.equal(card.hidden, false, "a Notes button is exempt (its own click toggles)");
+    outside(card.querySelector(".zn-editor"));
+    assert.equal(card.hidden, false, "a press inside is not outside");
+    stray.remove();
+    outside(page);
+    await flush();
+    assert.equal(card.hidden, true, "unpinned: pressing the page closes it");
+    assert.ok(!windowListeners.some((l) => l.t === "mousedown"), "the outside listener exists only while open");
+    await sleep(700);
+    assert.equal(readMeta().pinned, false, "the pin state is remembered");
+    press({ key: "F", code: "KeyF", alt: true, shift: true });
+    await sleep(40); await flush();
+    assert.equal(card.querySelector(".zn-keep-btn").classList.contains("is-on"), false, "and restored on the next open");
+    card.querySelector(".zn-keep-btn").click();
+    assert.equal(card.querySelector(".zn-keep-btn").classList.contains("is-on"), true);
+  });
+
+  await test("hold Larger: tap = larger / smaller, hold = fill the whole area, the click that ends a hold does nothing", async () => {
+    const card = floatCard();
+    const btn = card.querySelector(".zn-head").children.find((b) => b.title.startsWith("Larger"));
+    assert.ok(btn);
+    const tap = () => { btn.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0 })); btn.dispatchEvent(new Ev("pointerup", { bubbles: true })); btn.click(); };
+    tap(); await flush();
+    assert.equal(card.dataset.size, "full");
+    assert.equal(card.style.height, "780px", "full: the card area (window 800 - 2x4) minus the 6px margins, as before");
+    tap(); await flush();
+    assert.equal(card.dataset.size, "peek");
+    btn.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0 }));
+    await sleep(520);
+    btn.dispatchEvent(new Ev("pointerup", { bubbles: true })); btn.click(); await flush();
+    assert.equal(card.dataset.size, "span", "held: fills all the free space");
+    assert.ok(Number.parseInt(card.style.width) > 800, "wider than the usual card");
+    tap(); await flush();
+    assert.equal(card.dataset.size, "peek", "a tap on a spanned card goes back");
+    // pointer leaves before the hold time: nothing fires
+    btn.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0 }));
+    btn.dispatchEvent(new Ev("pointerleave", { bubbles: true }));
+    await sleep(520);
+    assert.equal(card.dataset.size, "peek");
+  });
+
+  await test("drag the title bar and resize a grip: frame-throttled, saved once on release, restored on reopen, reset by double click", async () => {
+    const card = floatCard();
+    const px = (v) => Number.parseInt(v);
+    // a real element reports where it is; the fake one needs to be told
+    card.getBoundingClientRect = () => ({ left: px(card.style.left), top: px(card.style.top), width: px(card.style.width), height: px(card.style.height), right: 0, bottom: 0 });
+    document.getElementById("navigator-toolbox").getBoundingClientRect = () => ({ left: 920, top: 0, right: 1200, bottom: 800, width: 280, height: 800 });
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", "zen.workspace.zentral.notes.avoid_sidebar")); await flush();
+    const s0 = { x: px(card.style.left), y: px(card.style.top), w: px(card.style.width), h: px(card.style.height) };
+    assert.equal(s0.x, 10, "default place: left of the right-hand sidebar");
+    const head = card.querySelector(".zn-head");
+    head.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0, clientX: 100, clientY: 100, pointerId: 1 }));
+    const rafBefore = raf.length;
+    for (let i = 1; i <= 30; i++) card.dispatchEvent(new Ev("pointermove", { bubbles: true, clientX: 100 + i * 2, clientY: 100 - i, pointerId: 1 }));
+    assert.equal(raf.length - rafBefore, 1, "thirty pointer events schedule ONE frame of work");
+    assert.equal(card.dataset.dragging, "true");
+    raf.splice(0).forEach((f) => f());
+    assert.equal(card.style.left, s0.x + 60 + "px", "moved by the pointer distance");
+    assert.equal(card.style.top, s0.y - 30 + "px", "dragged up");
+    card.dispatchEvent(new Ev("pointermove", { bubbles: true, clientX: 160, clientY: 99999, pointerId: 1 }));
+    raf.splice(0).forEach((f) => f());
+    assert.equal(px(card.style.top) + px(card.style.height), 800, "dragged far down: stops at the window's lower edge");
+    card.dispatchEvent(new Ev("pointermove", { bubbles: true, clientX: 160, clientY: 70, pointerId: 1 }));
+    raf.splice(0).forEach((f) => f());
+    assert.equal(readMeta().geo?.float, undefined, "nothing is written while dragging");
+    card.dispatchEvent(new Ev("pointerup", { bubbles: true, pointerId: 1 }));
+    assert.equal(card.dataset.dragging, undefined);
+    await sleep(700);
+    assert.deepEqual(JSON.parse(JSON.stringify(readMeta().geo.float)), { x: s0.x + 60, y: s0.y - 30, w: s0.w, h: s0.h });
+    assert.equal(readMeta().size, "peek");
+    // the click that ends a title drag must not open the notes list
+    const clickEv = new Ev("click", { bubbles: true }); head.dispatchEvent(clickEv);
+    assert.equal(clickEv.stopped, true, "swallowed once");
+    // resize from the south-east grip
+    const se = card.querySelectorAll(".zn-rz").find((g) => g.getAttribute("data-h") === "se");
+    se.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0, clientX: 400, clientY: 400, pointerId: 2 }));
+    card.dispatchEvent(new Ev("pointermove", { bubbles: true, clientX: 440, clientY: 420, pointerId: 2 }));
+    raf.splice(0).forEach((f) => f());
+    assert.equal(px(card.style.width), s0.w + 40);
+    assert.equal(px(card.style.height), s0.h + 20);
+    assert.equal(px(card.style.left), s0.x + 60, "a south-east drag leaves the origin where it is");
+    card.dispatchEvent(new Ev("pointerup", { bubbles: true, pointerId: 2 }));
+    const resized = card.style.width;
+    // close and reopen: the place is remembered
+    press({ key: "F", code: "KeyF", alt: true, shift: true }); await flush();
+    assert.equal(card.hidden, true);
+    press({ key: "F", code: "KeyF", alt: true, shift: true }); await sleep(40); await flush();
+    assert.equal(card.style.width, resized, "size restored");
+    assert.equal(card.style.left, s0.x + 60 + "px", "position restored");
+    // a window that got smaller pulls the card back inside
+    win.innerWidth = 500;
+    windowListeners.filter((l) => l.t === "resize").forEach((l) => l.fn()); await flush();
+    assert.ok(px(card.style.left) + px(card.style.width) <= 500, "kept inside the window");
+    win.innerWidth = 1200;
+    windowListeners.filter((l) => l.t === "resize").forEach((l) => l.fn()); await flush();
+    // double click on the empty title bar resets
+    head.dispatchEvent(new Ev("dblclick", { bubbles: true, target: head }));
+    await flush();
+    assert.equal(card.style.width, s0.w + "px", "back to the default size");
+    assert.equal(card.style.left, s0.x + "px");
+    await sleep(700);
+    assert.equal(readMeta().geo.float, undefined, "stored position removed");
+    // a press on a header button never starts a drag
+    const closeBtn = head.children[head.children.length - 1];
+    closeBtn.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0, clientX: 5, clientY: 5, pointerId: 3 }));
+    card.dispatchEvent(new Ev("pointermove", { bubbles: true, clientX: 300, clientY: 300, pointerId: 3 }));
+    assert.equal(raf.length, 0, "no frame scheduled: buttons are not drag handles");
+  });
+
+  await test("Recent: opening notes builds the list (newest first); quick new note works from anywhere", async () => {
+    const mds = () => [...disk.keys()].filter((k) => k.startsWith("/profile/zentral-notes/") && k.endsWith(".md"));
+    const before = mds().length;
+    press({ key: "F", code: "KeyF", alt: true, shift: true }); await flush(); // close the card
+    for (const s of document.documentElement.all().filter((c) => c._classes.has("zentral-notes-sheet") && !c.hidden)) press({ key: "N", code: "KeyN", alt: true, shift: true });
+    await flush();
+    press({ key: "Q", code: "KeyQ", alt: true, shift: true });
+    await sleep(60); await flush();
+    const open = document.documentElement.all().concat(slider.all()).filter((c) => c._classes.has("zentral-notes-sheet") && !c.hidden);
+    assert.ok(open.length, "quick new opened a sheet");
+    const ta = open[0].querySelector(".zn-editor");
+    assert.equal(ta.value, "", "and it is a fresh, empty note");
+    dom.state.activeElement = ta; ta.value = "brand new from anywhere"; ta.dispatchEvent(new Ev("input", { bubbles: true }));
+    await sleep(1000); await flush();
+    assert.equal(mds().length, before + 1, "saved as an additional note");
+    await sleep(700);
+    const recent = readMeta().recent;
+    assert.ok(Array.isArray(recent) && recent.length >= 1 && recent.length <= 8, "recent list persisted");
+    assert.equal(new Set(recent).size, recent.length);
+    const chip = open[0].querySelector(".zn-chips").children.find((c) => c.textContent === "Recent");
+    assert.ok(chip, "Recent chip in the list view");
+    open[0].querySelector(".zn-list-btn").click(); chip.click(); await flush();
+    assert.ok(open[0].querySelectorAll(".zn-item").length >= 1, "recent notes are listed");
+    press({ key: "N", code: "KeyN", alt: true, shift: true }); await flush();
+  });
+
   await test("destroy removes buttons, sheets, observers and listeners", async () => {
     await stop();
     assert.ok(!toolbar.children.some(isNotesBtn));
@@ -221,6 +454,9 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.ok(!document.documentElement.hasAttribute("zentral-notes-wrap"), "view attributes removed");
     assert.equal(mutationCallbacks.length, 0);
     assert.ok(!windowListeners.some((l) => l.t === "keydown"));
+    assert.ok(!windowListeners.some((l) => l.t === "mousedown"), "outside-press listener gone");
+    assert.equal(cui.widgets.size, 0, "toolbar widget removed with its owner");
+    assert.equal(win.__zentralNotesToggle, undefined);
   });
   console.log(`\n${passed} notes bar tests passed`);
 })().catch((e) => { console.error("FAIL", e); process.exit(1); });

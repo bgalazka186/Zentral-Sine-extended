@@ -10,6 +10,7 @@ when the ordering rules below are broken.
    painted above everything that is not also in the top layer, whatever its z-index. Among top-layer
    elements the one added **later** is on top. Top-layer users in this mod:
 
+   - `additional/notes/ZentralNotes.uc.js`: Notes standalone card: popover="manual" only WHILE Notes has the focus (raise on focus / press inside, drop and remove the attribute on any outside press), so it is above Big Preview unless Big Preview was pressed
    - `additional/rss/ZentralRssDisplay.uc.js`: RSS reader card: popover="manual", re-shown on every showCard so it sits above Big Preview
    - `additional/video/controllers/ZentralVideoEnlarge.js`: Big Preview: popover="manual", shown with showPopover() while enlarged
 
@@ -27,6 +28,7 @@ when the ordering rules below are broken.
 - The Notes floating card is above Big Preview's fallback value (2147483643) and the panel root (2147483600).
 - The RSS card fallback is above every panel layer (panel root 2147483600, reveal edge and pills 2147483640-2147483642).
 - RSS card is a top-layer popover shown after Big Preview, so it is above Big Preview whenever both are visible.
+- The Notes standalone card is a top-layer popover only while it is focused: it is above Big Preview until Big Preview (or anything outside Notes) is pressed, then it drops to its normal layer (2147483645) below Big Preview. Notes inside a panel is never a popover.
 
 ## Global layers (z-index 1000 and above)
 
@@ -67,13 +69,14 @@ when the ordering rules below are broken.
 Ordering inside one component. Listed by file; values only matter relative to siblings.
 
 <details>
-<summary>52 local z-index declarations</summary>
+<summary>53 local z-index declarations</summary>
 
 | File | Line | z-index | Selector / code |
 | --- | ---: | ---: | --- |
 | additional/notes/ZentralNotes.css | 66 | 40 | `.zentral-notes-sheet` |
-| additional/notes/ZentralNotes.css | 440 | 5 | `.zentral-notes-sheet .zn-menu` |
-| additional/notes/ZentralNotes.css | 526 | 5 | `.zentral-notes-sheet .zn-dialog` |
+| additional/notes/ZentralNotes.css | 125 | 6 | `.zentral-notes-sheet .zn-rz` |
+| additional/notes/ZentralNotes.css | 476 | 5 | `.zentral-notes-sheet .zn-menu` |
+| additional/notes/ZentralNotes.css | 562 | 5 | `.zentral-notes-sheet .zn-dialog` |
 | additional/video/controllers/ZentralVideoSidebar.js | 213 | 5 | `"position:absolute;inset:0;z-index:5;background:var(--zl-video-canvas,` |
 | additional/video/ZentralVideoPreview.css | 132 | 3 | `#zentral-video-preview .zentral-video-preview-subtitles` |
 | additional/video/ZentralVideoPreview.css | 301 | 2 | `#zentral-video-preview canvas` |

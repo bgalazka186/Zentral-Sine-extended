@@ -22,6 +22,7 @@
     "zen.workspace.zentral.notes.enabled",
     "zen.workspace.zentral.notes.show_button",
     "zen.workspace.zentral.notes.dock_sidebar",
+    "zen.workspace.zentral.notes.avoid_sidebar",
     "zen.workspace.zentral.notes.shortcut",
     "zen.workspace.zentral.notes.autosave_seconds",
     "zen.workspace.zentral.notes.wrap_lines",
