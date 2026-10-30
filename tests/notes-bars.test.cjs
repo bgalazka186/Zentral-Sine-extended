@@ -41,6 +41,8 @@ const cui = {
 El.prototype.showPopover = function () { if (this._pop) throw new Error("already open"); this._pop = true; this.shown = (this.shown || 0) + 1; };
 El.prototype.hidePopover = function () { this._pop = false; };
 El.prototype.matches = function (sel) { return sel === ":popover-open" && !!this._pop; };
+Object.defineProperty(El.prototype, "offsetParent", { get() { return this.parent; }, configurable: true }); // layout needs a positioned parent
+document.dispatchEvent = document.dispatchEvent || (() => true);
 const win = {
   document,
   ZentralRuntime: { register: (def) => (registered = def) },
@@ -115,6 +117,47 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(btn.dataset.active, "false");
     await sleep(60);
     assert.ok([...disk.keys()].some((k) => k.startsWith("/profile/zentral-notes/") && k.endsWith(".md")), "note saved to the profile folder, not prefs");
+  });
+
+  await test("R3 reveal strip: appears on the panel bar when enabled, hovering opens the sheet, it leaves while open and returns on close", async () => {
+    const P = "zen.workspace.zentral.notes.";
+    const strips = () => toolbar.children.filter((e) => e._classes.has("zentral-notes-reveal-strip"));
+    assert.equal(strips().length, 0, "off by default");
+    prefs.set(P + "reveal_delay_ms", 0);
+    prefs.set(P + "reveal_strip", true);
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", P + "reveal_strip"));
+    assert.equal(strips().length, 1);
+    strips()[0].dispatchEvent(new Ev("mouseenter"));
+    await sleep(30); await flush();
+    assert.equal(sheetsIn(slider)[0].hidden, false, "hover opened the sheet");
+    assert.equal(strips().length, 0, "strip is gone while the sheet is open");
+    toolbar.firstElementChild.click();
+    await flush();
+    assert.equal(strips().length, 1, "strip is back after closing");
+    prefs.set(P + "reveal_strip", false);
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", P + "reveal_strip"));
+    assert.equal(strips().length, 0, "turned off again");
+  });
+
+  await test("R2 push page in a panel: the sheet takes a share of the panel height through the reserve variable, released on close", async () => {
+    const P = "zen.workspace.zentral.notes.";
+    const calls = [];
+    const st = document.documentElement.style;
+    const [sp, rp] = [st.setProperty, st.removeProperty];
+    st.setProperty = (k, v) => calls.push(["set", k, v]);
+    st.removeProperty = (k) => calls.push(["remove", k]);
+    prefs.set(P + "push_page", true);
+    prefs.set(P + "push_panel_percent", 50);
+    const btn = toolbar.firstElementChild;
+    btn.click();
+    await sleep(30); await flush();
+    const reserve = calls.filter((c) => c[1] === "--zentral-notes-panel-reserve");
+    assert.deepEqual(reserve[0], ["set", "--zentral-notes-panel-reserve", "300px"], "50% of the 600px page");
+    btn.click();
+    await flush();
+    assert.equal(calls.filter((c) => c[1] === "--zentral-notes-panel-reserve").pop()[0], "remove", "released on close");
+    prefs.set(P + "push_page", false);
+    st.setProperty = sp; st.removeProperty = rp;
   });
 
   await test("preferences: hide button, disable and re-enable", async () => {

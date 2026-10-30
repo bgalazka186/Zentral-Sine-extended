@@ -25,7 +25,11 @@
     "zen.workspace.zentral.notes.avoid_sidebar",
     "zen.workspace.zentral.notes.hover_reveal",
     "zen.workspace.zentral.notes.push_page",
-    "zen.workspace.zentral.notes.split_window",
+    "zen.workspace.zentral.notes.push_panel_percent",
+    "zen.workspace.zentral.notes.reveal_strip",
+    "zen.workspace.zentral.notes.reveal_height_px",
+    "zen.workspace.zentral.notes.reveal_delay_ms",
+    "zen.workspace.zentral.notes.wide_percent",
     "zen.workspace.zentral.notes.theme",
     {
       "type": "text",

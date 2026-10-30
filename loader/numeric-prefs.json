@@ -511,6 +511,97 @@
     "def": 160
   },
   {
+    "key": "zen.workspace.zentral.notes.push_panel_percent",
+    "text": "zen.workspace.zentral.notes.push_panel_percent_text",
+    "min": 20,
+    "max": 80,
+    "def": 45
+  },
+  {
+    "key": "zen.workspace.zentral.notes.reveal_height_px",
+    "text": "zen.workspace.zentral.notes.reveal_height_px_text",
+    "min": 2,
+    "max": 24,
+    "def": 6
+  },
+  {
+    "key": "zen.workspace.zentral.notes.reveal_delay_ms",
+    "text": "zen.workspace.zentral.notes.reveal_delay_ms_text",
+    "min": 0,
+    "max": 1000,
+    "def": 150
+  },
+  {
+    "key": "zen.workspace.zentral.notes.wide_percent",
+    "text": "zen.workspace.zentral.notes.wide_percent_text",
+    "min": 130,
+    "max": 300,
+    "def": 200
+  },
+  {
+    "key": "zen.workspace.zentral.notes.look_radius",
+    "text": "zen.workspace.zentral.notes.look_radius_text",
+    "min": -1,
+    "max": 60,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.notes.look_border",
+    "text": "zen.workspace.zentral.notes.look_border_text",
+    "min": -1,
+    "max": 8,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.notes.look_shadow_blur",
+    "text": "zen.workspace.zentral.notes.look_shadow_blur_text",
+    "min": -1,
+    "max": 120,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.notes.look_shadow_y",
+    "text": "zen.workspace.zentral.notes.look_shadow_y_text",
+    "min": -1,
+    "max": 60,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.notes.look_shadow_alpha",
+    "text": "zen.workspace.zentral.notes.look_shadow_alpha_text",
+    "min": -1,
+    "max": 100,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.notes.look_opacity",
+    "text": "zen.workspace.zentral.notes.look_opacity_text",
+    "min": -1,
+    "max": 100,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.notes.look_padding",
+    "text": "zen.workspace.zentral.notes.look_padding_text",
+    "min": -1,
+    "max": 64,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.notes.look_btn_size",
+    "text": "zen.workspace.zentral.notes.look_btn_size_text",
+    "min": -1,
+    "max": 56,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.notes.look_btn_radius",
+    "text": "zen.workspace.zentral.notes.look_btn_radius_text",
+    "min": -1,
+    "max": 50,
+    "def": -1
+  },
+  {
     "key": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px",
     "text": "zen.workspace.zentral.video_preview.enlarged_bottom_gap_px_text",
     "min": 6,

@@ -687,8 +687,9 @@
   background: transparent;
 }
 /* Push page: the page area gives way to the standalone card (set by createFloatingAdapter.push). */
-:root[zentral-notes-push="right"] #appcontent { margin-right: var(--zentral-notes-push) !important; }
-:root[zentral-notes-push="left"] #appcontent { margin-left: var(--zentral-notes-push) !important; }
+:root[zentral-notes-push] #tabbrowser-tabbox { transition: margin 0.22s ease; }
+:root[zentral-notes-push="right"] #tabbrowser-tabbox { margin-right: var(--zentral-notes-push) !important; }
+:root[zentral-notes-push="left"] #tabbrowser-tabbox { margin-left: var(--zentral-notes-push) !important; }
 /* Themes. "recommended" copies the RSS card: popup colours, solid surface, soft shadow. */
 :root[zentral-notes-theme="recommended"] .zentral-notes-sheet {
   --zn-surface: var(--zl-popup, var(--arrowpanel-background, #1f1f24));
@@ -774,3 +775,7 @@
 .zentral-notes-sheet .zn-set-sub { display: grid; grid-template-columns: 6em 1fr; align-items: center; gap: 8px; color: var(--zn-muted); font-size: 0.9em; }
 .zentral-notes-sheet .zn-set-sub .zn-range { height: 12px; border-radius: 6px; }
 .zentral-notes-sheet .zn-hex { max-width: 9em; font-family: ui-monospace, Consolas, monospace; }
+
+/* ---- reveal strip: thin hover zone along the top of an open panel's bar ----------------------------- */
+.zentral-notes-reveal-strip { position: absolute; top: 0; left: 0; right: 0; z-index: 3; background: transparent; cursor: default; -moz-window-dragging: no-drag; }
+.zentral-notes-reveal-strip:hover { background: color-mix(in srgb, var(--zentral-notes-ov-accent, #6aa7ff) 45%, transparent); }

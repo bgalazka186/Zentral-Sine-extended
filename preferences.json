@@ -2226,21 +2226,49 @@
   },
   {
     "property": "zen.workspace.zentral.notes.hover_reveal",
-    "label": "Tuck the card away on an outside click and bring it back by hovering its top edge (instead of closing it)",
+    "label": "Hide the card on an outside click instead of closing it; bring it back by hovering its top edge",
     "type": "checkbox",
     "defaultValue": false
   },
   {
     "property": "zen.workspace.zentral.notes.push_page",
-    "label": "Push the page aside while the standalone card is open (instead of covering it)",
+    "label": "Push page: the page makes room while Notes is open (standalone card), or the panel gives up height (sheet in a panel)",
     "type": "checkbox",
     "defaultValue": false
   },
   {
-    "property": "zen.workspace.zentral.notes.split_window",
-    "label": "Split view as a second window of the same size (instead of halving one window)",
+    "property": "zen.workspace.zentral.notes.push_panel_percent_text",
+    "label": "Push page in a panel: share of the panel height the Notes sheet takes (%, 20–80) [20 to 80 %]",
+    "type": "string",
+    "defaultValue": "45",
+    "placeholder": "45"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.reveal_strip",
+    "label": "Reveal strip: a thin strip along the top of an open panel opens Notes when hovered",
     "type": "checkbox",
     "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.reveal_height_px_text",
+    "label": "Reveal strip height (px, 2–24) [2 to 24 px]",
+    "type": "string",
+    "defaultValue": "6",
+    "placeholder": "6"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.reveal_delay_ms_text",
+    "label": "Reveal strip hover delay (ms, 0–1000) [0 to 1000 ms]",
+    "type": "string",
+    "defaultValue": "150",
+    "placeholder": "150"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.wide_percent_text",
+    "label": "Split view: width of the Notes sheet compared with normal (%, 130–300); it may reach beyond the panel and over the page [130 to 300 %]",
+    "type": "string",
+    "defaultValue": "200",
+    "placeholder": "200"
   },
   {
     "property": "zen.workspace.zentral.notes.theme",
@@ -2399,46 +2427,53 @@
     "size": "16px"
   },
   {
-    "property": "zen.workspace.zentral.notes.look_radius",
-    "label": "Notes card corner radius (px, 0–60, empty = theme)",
+    "property": "zen.workspace.zentral.notes.look_radius_text",
+    "label": "Notes card corner radius (px, 0–60; -1 = theme default) [-1 to 60 px]",
     "type": "string",
-    "defaultValue": ""
+    "defaultValue": "-1",
+    "placeholder": "-1"
   },
   {
-    "property": "zen.workspace.zentral.notes.look_border",
-    "label": "Notes card border width (px, 0–8, empty = theme)",
+    "property": "zen.workspace.zentral.notes.look_border_text",
+    "label": "Notes card border width (px, 0–8; -1 = theme default) [-1 to 8 px]",
     "type": "string",
-    "defaultValue": ""
+    "defaultValue": "-1",
+    "placeholder": "-1"
   },
   {
-    "property": "zen.workspace.zentral.notes.look_shadow_blur",
-    "label": "Shadow blur (px, 0–120, empty = theme)",
+    "property": "zen.workspace.zentral.notes.look_shadow_blur_text",
+    "label": "Notes card shadow blur (px, 0–120; -1 = theme default) [-1 to 120 px]",
     "type": "string",
-    "defaultValue": ""
+    "defaultValue": "-1",
+    "placeholder": "-1"
   },
   {
-    "property": "zen.workspace.zentral.notes.look_shadow_y",
-    "label": "Shadow offset down (px, 0–60, empty = theme)",
+    "property": "zen.workspace.zentral.notes.look_shadow_y_text",
+    "label": "Notes card shadow offset down (px, 0–60; -1 = theme default) [-1 to 60 px]",
     "type": "string",
-    "defaultValue": ""
+    "defaultValue": "-1",
+    "placeholder": "-1"
   },
   {
-    "property": "zen.workspace.zentral.notes.look_shadow_alpha",
-    "label": "Shadow strength (%, 0–100; 0 = no shadow; empty = theme)",
+    "property": "zen.workspace.zentral.notes.look_shadow_alpha_text",
+    "label": "Notes card shadow strength (0 = no shadow) (%, 0–100; -1 = theme default) [-1 to 100 %]",
     "type": "string",
-    "defaultValue": ""
+    "defaultValue": "-1",
+    "placeholder": "-1"
   },
   {
-    "property": "zen.workspace.zentral.notes.look_opacity",
-    "label": "Notes card background opacity (%, 0–100, empty = theme)",
+    "property": "zen.workspace.zentral.notes.look_opacity_text",
+    "label": "Notes card background opacity (%, 0–100; -1 = theme default) [-1 to 100 %]",
     "type": "string",
-    "defaultValue": ""
+    "defaultValue": "-1",
+    "placeholder": "-1"
   },
   {
-    "property": "zen.workspace.zentral.notes.look_padding",
-    "label": "Notes card inner padding (px, 0–64, empty = theme)",
+    "property": "zen.workspace.zentral.notes.look_padding_text",
+    "label": "Notes card inner padding (px, 0–64; -1 = theme default) [-1 to 64 px]",
     "type": "string",
-    "defaultValue": ""
+    "defaultValue": "-1",
+    "placeholder": "-1"
   },
   {
     "type": "text",
@@ -2501,16 +2536,18 @@
     "size": "16px"
   },
   {
-    "property": "zen.workspace.zentral.notes.look_btn_size",
-    "label": "Notes button size (px, 14–56, empty = theme)",
+    "property": "zen.workspace.zentral.notes.look_btn_size_text",
+    "label": "Notes button size (px, 14–56; -1 = theme default) [-1 to 56 px]",
     "type": "string",
-    "defaultValue": ""
+    "defaultValue": "-1",
+    "placeholder": "-1"
   },
   {
-    "property": "zen.workspace.zentral.notes.look_btn_radius",
-    "label": "Notes button corner radius (px, 0–50, empty = theme)",
+    "property": "zen.workspace.zentral.notes.look_btn_radius_text",
+    "label": "Notes button corner radius (px, 0–50; -1 = theme default) [-1 to 50 px]",
     "type": "string",
-    "defaultValue": ""
+    "defaultValue": "-1",
+    "placeholder": "-1"
   },
   {
     "property": "zen.workspace.zentral.notes.look_btn_style",

@@ -1613,7 +1613,72 @@
   runtime.invalidateSettingsLayout = () => {
     settingsLayoutRevision++;
   };
+  // Schema items with "control": "slider" (integer with numeric {min,max,unit}) or "color" (#RRGGBB text)
+  // get a slider / colour picker and a Reset button. The "off" value (numeric.min for a slider, "" for a
+  // colour) means "no override", so the module keeps its own default there. Sine shows the same pref as
+  // a plain text box; both write the same preference.
+  function createSchemaControlRow(item, row) {
+    const key = item.property;
+    row.classList.add("zs-schema-control");
+    const left = document.createElement("div");
+    left.className = "zs-label-container";
+    const label = document.createElement("span");
+    label.className = "zs-label";
+    label.textContent = item.label.replace(/\s*\([^)]*\)\s*$/, "") || item.label;
+    left.appendChild(label);
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "zs-reset-btn";
+    reset.textContent = "Default";
+    reset.style.cssText = "padding:3px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:transparent;color:inherit;cursor:pointer;flex:none";
+    const input = document.createElement("input");
+    const box = document.createElement("div");
+    box.style.cssText = "display:flex;align-items:center;gap:10px;flex:1 1 auto;justify-content:flex-end;min-width:0";
+    let readout = null;
+    const isSlider = item.control === "slider";
+    const off = isSlider ? item.numeric.min : "";
+    const unit = isSlider ? item.numeric.unit || "" : "";
+    if (isSlider) {
+      input.type = "range";
+      input.min = String(item.numeric.min + 1);
+      input.max = String(item.numeric.max);
+      input.step = "1";
+      input.style.cssText = "flex:1 1 140px;min-width:80px;max-width:320px";
+      readout = document.createElement("span");
+      readout.style.cssText = "min-width:5.5em;text-align:right;opacity:.85";
+      box.append(input, readout);
+    } else {
+      input.type = "color";
+      input.style.cssText = "width:36px;height:26px;padding:0;border:1px solid rgba(255,255,255,.15);border-radius:8px;background:transparent;cursor:pointer";
+      box.append(input);
+    }
+    box.append(reset);
+    const current = () => Core.getPref(key, item.defaultValue);
+    const show = () => {
+      const value = current();
+      const isOff = isSlider ? !(Number(value) > off) : !/^#[0-9a-f]{6}$/i.test(String(value));
+      if (isSlider) {
+        if (!isOff) input.value = String(value);
+        readout.textContent = isOff ? "Default" : value + unit;
+      } else if (!isOff) input.value = String(value).toLowerCase();
+      row.dataset.schemaOff = isOff ? "true" : "false";
+      reset.disabled = isOff;
+    };
+    input.addEventListener("input", () => {
+      Core.setPref(key, isSlider ? Number(input.value) : input.value.toLowerCase());
+      show();
+    });
+    reset.addEventListener("click", () => {
+      Core.setPref(key, off);
+      show();
+    });
+    row._sync = show;
+    show();
+    row.append(left, box);
+    return row;
+  }
   function syncSchemaSetting(item, row) {
+    if (row._sync) return row._sync();
     const input = row.querySelector("input, select");
     if (!input || document.activeElement === input) return;
     const value = Core.getPref(item.property, item.defaultValue);
@@ -1639,6 +1704,8 @@
     row.dataset.settingKey = key;
     row.dataset.settingsOwner = meta.owner;
     row.dataset.schemaFallback = "true";
+    if (item.control === "slider" || item.control === "color")
+      return createSchemaControlRow(item, row);
     const label = document.createElement("label");
     label.className = "zs-label";
     label.textContent = item.label;

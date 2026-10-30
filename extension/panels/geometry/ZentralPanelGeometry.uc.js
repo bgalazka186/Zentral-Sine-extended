@@ -540,6 +540,22 @@
     // deliberately chose. startVerticalResize() below is the ONLY place that
     // gates on the toggle, since that's what actually needs to be prevented
     // while the resize surfaces are "off".
+    // Height the Notes sheet asks the panel to give up (push page for a panel-hosted sheet). Notes sets the
+    // variable on the root element and fires "zentral-notes-reserve"; 0 / absent = nothing reserved.
+    const notesReserve = () =>
+      Math.max(
+        0,
+        Math.min(
+          4000,
+          Math.round(
+            parseFloat(
+              document.documentElement.style.getPropertyValue(
+                "--zentral-notes-panel-reserve",
+              ),
+            ) || 0,
+          ),
+        ),
+      );
     function applyVerticalResizeExtras(root) {
       if (!root) return;
       if (ctx.floating?.owns(root)) {
@@ -585,7 +601,7 @@
               ? Math.max(0, Math.round(window.innerHeight - rect.bottom))
               : 0;
           topMargin = Math.min(0, desiredTop - nativeTop) + "px";
-          bottomMargin = desiredBottom - nativeBottom + "px";
+          bottomMargin = desiredBottom - nativeBottom + notesReserve() + "px";
         }
         if (root.style.marginTop !== topMargin)
           root.style.marginTop = topMargin;
@@ -624,11 +640,18 @@
       const marginTop = Math.round(
         Math.min(resizeTop - posOffset, maxMarginTop),
       ) + "px";
-      const marginBottom = Math.round(resizeBottom + posOffset) + "px";
+      const marginBottom =
+        Math.round(resizeBottom + posOffset + notesReserve()) + "px";
       if (root.style.marginTop !== marginTop) root.style.marginTop = marginTop;
       if (root.style.marginBottom !== marginBottom)
         root.style.marginBottom = marginBottom;
     }
+    const onNotesReserve = () =>
+      applyVerticalResizeExtras(document.getElementById("zen-app-panel-root"));
+    document.addEventListener("zentral-notes-reserve", onNotesReserve);
+    ctx.registerCleanup(() =>
+      document.removeEventListener("zentral-notes-reserve", onNotesReserve),
+    );
     ctx.registerCleanup(() => {
       const root = document.getElementById("zen-app-panel-root");
       if (!root) return;

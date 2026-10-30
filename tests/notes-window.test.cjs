@@ -141,14 +141,5 @@ const same = (a, b, msg) => assert.equal(canon(a), canon(b), msg);
     assert.equal(c.pushAmount({ left: 0, width: 0 }, content), null);
     assert.equal(c.pushAmount({ left: 0, width: 300 }, { left: 0, right: 0 }), null, "no page rectangle");
   });
-  await test("second window: same size beside the first, shrinks when short of room, none when it cannot fit", () => {
-    const b = { x: 0, y: 0, w: 1000, h: 700 };
-    same(c.companionRect({ x: 20, y: 30, w: 400, h: 500 }, b), { x: 428, y: 30, w: 400, h: 500 });
-    same(c.companionRect({ x: 580, y: 30, w: 400, h: 500 }, b), { x: 172, y: 30, w: 400, h: 500 }, "no room on the right: goes left");
-    same(c.companionRect({ x: 20, y: 30, w: 600, h: 500 }, b), { x: 628, y: 30, w: 372, h: 500 }, "shrinks to the room that is left");
-    assert.equal(c.companionRect({ x: 20, y: 30, w: 900, h: 500 }, b), null, "less than the minimum width: no second window");
-    const r = c.companionRect({ x: 300, y: 30, w: 400, h: 500 }, b);
-    assert.ok(r.x >= 708 || r.x + r.w <= 292, "never overlaps the first window");
-  });
   console.log(`\n${passed} notes window tests passed`);
 })().catch((e) => { console.error("FAIL", e); process.exit(1); });
