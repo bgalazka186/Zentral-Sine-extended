@@ -33,6 +33,20 @@ Mark the step DONE here and add 5 lines at most to the handoff. One step = one s
 
 Order is cheapest/highest-value first; D1 follows C because capture reuses the C2.2 dialogs. Nothing was deleted: every item from C, C2, D, E and "Owner-approved ideas" is in a row above.
 
+## PLAN v3 (replaces C3.1 / C3.2 and reworks D1 placement; takes precedence over v2 for these rows)
+
+Owner answers: push in a panel = **shrink the panel's height** (website pushed as the panel does); reveal = the **full Notes sheet as an overlay** on the panel, opened from a strip on the panel's top edge, while the cursor going over the top edge must not make the top bar expand; wide sheet may **cover the page**, the pill menu must stay reachable; old keys (`split_window`, `look_shadow`, preset dropdowns) may be deleted once replaced.
+Review that led here: `NOTES_C3-D1_review_and_rebuild_plan.md`.
+
+| Step        | Content                                                                                                                                                                                                                                                                                                                    | Tests                               |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| R1 **DONE** | In-app **Settings** view (tabs Writing / Window / Appearance / Capture) with real sliders, an HSL colour picker (no native dialog), "Theme" reset per value; quick menu cut to 8 items + "All settings…"; numeric shadow (blur / offset / strength) replaces the 3 presets; ranges widened (opacity 0-100, radius 0-60...) | notes-ui, notes-capture, defaults   |
+| R2          | Push page on the panel contract (`#tabbrowser-tabbox`, panel attributes, transition, hover-hidden release); panel-hosted sheet shrinks the panel height                                                                                                                                                                    | notes-window, notes-bars, z-heights |
+| R3          | Reveal strip at the top of an open panel opening the full sheet as an overlay; guard so the strip does not trigger the native top bar; drop the "tuck" behaviour or rename it                                                                                                                                              | notes-bars, notes-window            |
+| R4          | Delete the companion window (`createCompanionAdapter`, `syncCompanion`, `companionRect`, `split_window`); split view widens the one sheet ~2x, bounded by the window, pill menu kept clear (`keepClear`)                                                                                                                   | notes-window, notes-ui, resize-perf |
+| R5          | D1 rework: capture options move to Settings > Capture (done in R1), re-check menu/shortcut paths and the "where quick notes open" presentation option                                                                                                                                                                      | notes-capture                       |
+| D2 - D5, E2 | unchanged from v2 (folders/trees, links/search, assets, reminders/history, audits); start after R2-R4                                                                                                                                                                                                                      | as in v2                            |
+
 ## Cycle A: small fixes and consistency (easiest)
 
 - #21 one Notes icon everywhere (settings, GUI, toolbar): single SVG constant.

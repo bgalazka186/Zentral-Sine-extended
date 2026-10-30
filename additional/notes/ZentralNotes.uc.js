@@ -99,7 +99,9 @@
       // Appearance (Notes appearance menu); "auto" / empty = keep the theme's own look
       LOOK_RADIUS: "zen.workspace.zentral.notes.look_radius",
       LOOK_BORDER: "zen.workspace.zentral.notes.look_border",
-      LOOK_SHADOW: "zen.workspace.zentral.notes.look_shadow",
+      LOOK_SHADOW_BLUR: "zen.workspace.zentral.notes.look_shadow_blur",
+      LOOK_SHADOW_Y: "zen.workspace.zentral.notes.look_shadow_y",
+      LOOK_SHADOW_ALPHA: "zen.workspace.zentral.notes.look_shadow_alpha",
       LOOK_OPACITY: "zen.workspace.zentral.notes.look_opacity",
       LOOK_PADDING: "zen.workspace.zentral.notes.look_padding",
       LOOK_FONT: "zen.workspace.zentral.notes.look_font",
@@ -1700,7 +1702,9 @@
       ["paper", "Paper"],
     ]);
     const normalizeTheme = (v) => (NOTE_THEMES.some(([k]) => k === v) ? v : "zentral");
-    const QUICK_OPTIONS = Object.freeze([
+    // Every writing option. The Quick menu shows only the QUICK_IDS (the ones changed while writing); the
+    // full Settings view shows all of them, so nothing is reachable only from the Zentral settings window.
+    const WRITING_OPTIONS = Object.freeze([
       { id: "font", label: "Text size", pref: PREF.FONT_SIZE, kind: "step", min: 8, max: 40, step: 1, unit: "px", def: 13 },
       { id: "lineHeight", label: "Line height", pref: PREF.LINE_HEIGHT, kind: "step", min: 100, max: 300, step: 10, unit: "%", def: 160 },
       { id: "wrap", label: "Wrap long lines", pref: PREF.WRAP, kind: "bool", def: true },
@@ -1711,15 +1715,106 @@
       { id: "paste", label: "Pasting a web address", pref: PREF.PASTE_LINK, kind: "choice", def: "ask", choices: [["ask", "Ask"], ["selection", "Over selection"], ["off", "As text"]] },
       { id: "setext", label: "Text over === or --- is a heading", pref: PREF.SETEXT, kind: "bool", def: false },
       { id: "theme", label: "Theme", pref: PREF.THEME, kind: "choice", def: "zentral", choices: NOTE_THEMES.map(([k, t]) => [k, t]) },
-      { id: "lookRadius", label: "Corner radius", pref: PREF.LOOK_RADIUS, kind: "choice", def: "auto", choices: [["auto", "Theme"], ["0", "0"], ["8", "8"], ["16", "16"], ["24", "24"]] },
-      { id: "lookFont", label: "Font", pref: PREF.LOOK_FONT, kind: "choice", def: "auto", choices: [["auto", "Theme"], ["sans", "Sans"], ["serif", "Serif"], ["mono", "Mono"], ["rounded", "Rounded"]] },
-      { id: "lookOpacity", label: "Background opacity", pref: PREF.LOOK_OPACITY, kind: "choice", def: "auto", choices: [["auto", "Theme"], ["100", "100%"], ["80", "80%"], ["60", "60%"]] },
-      { id: "lookBtn", label: "Button style", pref: PREF.LOOK_BTN_STYLE, kind: "choice", def: "plain", choices: [["plain", "Plain"], ["filled", "Filled"], ["outlined", "Outlined"]] },
-      { id: "hover", label: "Tuck away on an outside click, reveal on the top edge", pref: PREF.HOVER_REVEAL, kind: "bool", def: false },
-      { id: "push", label: "Push the page aside (standalone card)", pref: PREF.PUSH_PAGE, kind: "bool", def: false },
-      { id: "splitwin", label: "Split view as a second window", pref: PREF.SPLIT_WINDOW, kind: "bool", def: false },
     ]);
+    const QUICK_IDS = Object.freeze(["font", "lineHeight", "wrap", "blank", "breaks", "sync", "copy", "theme"]);
+    const QUICK_OPTIONS = Object.freeze(WRITING_OPTIONS.filter((o) => QUICK_IDS.includes(o.id)));
     const stepOption = (opt, current, dir) => clampInt((Number(current) || opt.def) + dir * opt.step, opt.min, opt.max);
+
+    // ---- colour maths for the in-app picker (hex <-> HSL, no native colour dialog: its popup counts as an
+    // outside click and would close the sheet, like a native <select>) ---------------------------------
+    function hexToHsl(hex) {
+      const m = /^#?([0-9a-f]{6})$/i.exec(String(hex ?? "").trim());
+      if (!m) return null;
+      const n = parseInt(m[1], 16);
+      const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min, l = (max + min) / 2;
+      let hh = 0, ss = 0;
+      if (d) {
+        ss = d / (1 - Math.abs(2 * l - 1));
+        hh = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+        hh = (hh * 60 + 360) % 360;
+      }
+      return { h: Math.round(hh), s: Math.round(ss * 100), l: Math.round(l * 100) };
+    }
+    function hslToHex(h, s, l) {
+      h = ((Number(h) % 360) + 360) % 360;
+      s = Math.max(0, Math.min(100, Number(s))) / 100;
+      l = Math.max(0, Math.min(100, Number(l))) / 100;
+      const k = (n) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+      const f = (n) => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))));
+      return "#" + [f(0), f(8), f(4)].map((v) => v.toString(16).padStart(2, "0")).join("");
+    }
+    // "rgb(12, 34, 56)" / "rgba(...)" from getComputedStyle -> "#0c2238" (null when it is not opaque enough to use)
+    function cssColorToHex(css) {
+      const m = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\s*\)$/.exec(String(css ?? "").trim());
+      if (!m) return null;
+      if (m[4] !== undefined && Number(m[4]) === 0) return null;
+      return "#" + [m[1], m[2], m[3]].map((v) => Math.min(255, Number(v)).toString(16).padStart(2, "0")).join("");
+    }
+    // The full Settings view: tabs of items. kind: bool | choice | step (+/-) | slider (empty = theme) |
+    // color (empty = theme) | text. Window items change in R2-R4; the tab list stays the one place to add one.
+    const CAPTURE_STYLES = Object.freeze([["quote", "Quote"], ["plain", "Plain text"], ["bullet", "Bullet"], ["highlight", "Highlight"], ["callout", "Callout"]]);
+    const CAPTURE_TARGETS = Object.freeze([["last", "Last open note"], ["new", "New note"], ["inbox", "Inbox note"]]);
+    const L = (id, label, pref, min, max, unit, seed) => ({ id, label, pref, kind: "slider", min, max, unit, seed, theme: true });
+    const C = (id, label, pref, seed) => ({ id, label, pref, kind: "color", seed, theme: true });
+    const SETTINGS_TABS = Object.freeze([
+      { id: "writing", label: "Writing", items: WRITING_OPTIONS },
+      {
+        id: "window", label: "Window", items: [
+          { id: "dock", label: "Dock to the sidebar", pref: PREF.DOCK_SIDEBAR, kind: "bool", def: false },
+          { id: "avoid", label: "Keep clear of the native sidebar (standalone card)", pref: PREF.AVOID_SIDEBAR, kind: "bool", def: true },
+          { id: "push", label: "Push the page aside (standalone card)", pref: PREF.PUSH_PAGE, kind: "bool", def: false },
+          { id: "hover", label: "Tuck away on an outside click, reveal on the top edge", pref: PREF.HOVER_REVEAL, kind: "bool", def: false },
+          { id: "splitwin", label: "Split view as a second window", pref: PREF.SPLIT_WINDOW, kind: "bool", def: false },
+        ],
+      },
+      {
+        id: "appearance", label: "Appearance", items: [
+          { id: "theme2", label: "Theme (a starting point: every value below can override it)", pref: PREF.THEME, kind: "choice", def: "zentral", choices: NOTE_THEMES.map(([k, t]) => [k, t]) },
+          { kind: "heading", label: "Shape" },
+          L("radius", "Corner radius", PREF.LOOK_RADIUS, 0, 60, "px", 10),
+          L("border", "Border width", PREF.LOOK_BORDER, 0, 8, "px", 1),
+          L("padding", "Inner padding", PREF.LOOK_PADDING, 0, 64, "px", 12),
+          L("opacity", "Background opacity", PREF.LOOK_OPACITY, 0, 100, "%", 100),
+          { kind: "heading", label: "Shadow" },
+          L("shBlur", "Blur", PREF.LOOK_SHADOW_BLUR, 0, 120, "px", 24),
+          L("shY", "Offset down", PREF.LOOK_SHADOW_Y, 0, 60, "px", 6),
+          L("shAlpha", "Strength (0 = none)", PREF.LOOK_SHADOW_ALPHA, 0, 100, "%", 28),
+          { kind: "heading", label: "Text" },
+          { id: "lookFont", label: "Font", pref: PREF.LOOK_FONT, kind: "choice", def: "auto", choices: [["auto", "Theme"], ["sans", "Sans"], ["serif", "Serif"], ["mono", "Mono"], ["rounded", "Rounded"]] },
+          { id: "lookEditor", label: "Editor font", pref: PREF.LOOK_EDITOR_FONT, kind: "choice", def: "same", choices: [["same", "Same"], ["mono", "Mono"]] },
+          C("heading", "Heading color", PREF.LOOK_HEADING, "text"),
+          { kind: "heading", label: "Colors" },
+          C("bg", "Background", PREF.LOOK_BG, "bg"),
+          C("text", "Text", PREF.LOOK_TEXT, "text"),
+          C("accent", "Accent (links, active items)", PREF.LOOK_ACCENT, "accent"),
+          C("line", "Lines and border", PREF.LOOK_LINE, "text"),
+          { kind: "heading", label: "Buttons" },
+          L("btnSize", "Size", PREF.LOOK_BTN_SIZE, 14, 56, "px", 26),
+          L("btnRadius", "Corner radius", PREF.LOOK_BTN_RADIUS, 0, 50, "px", 6),
+          { id: "btnStyle", label: "Style", pref: PREF.LOOK_BTN_STYLE, kind: "choice", def: "plain", choices: [["plain", "Plain"], ["filled", "Filled"], ["outlined", "Outlined"]] },
+          C("btnIcon", "Icon color", PREF.LOOK_BTN_ICON, "text"),
+          C("btnFill", "Fill color", PREF.LOOK_BTN_FILL, "accent"),
+          C("btnBorder", "Border color", PREF.LOOK_BTN_BORDER, "text"),
+        ],
+      },
+      {
+        id: "capture", label: "Capture", items: [
+          { id: "capTarget", label: "Default target of the shortcuts", pref: PREF.CAPTURE_TARGET, kind: "choice", def: "last", choices: CAPTURE_TARGETS },
+          { id: "capMenu", label: "Entry in the right-click menu", pref: PREF.CAPTURE_MENU, kind: "bool", def: true },
+          { id: "capDate", label: "Include the date", pref: PREF.CAPTURE_DATE, kind: "bool", def: true },
+          { id: "capTime", label: "Include the time", pref: PREF.CAPTURE_TIME, kind: "bool", def: false },
+          { id: "capSource", label: "Include the page title", pref: PREF.CAPTURE_SOURCE, kind: "bool", def: true },
+          { id: "capLink", label: "Link to the page", pref: PREF.CAPTURE_LINK, kind: "bool", def: true },
+          { id: "capHl", label: "Link highlights the selection", pref: PREF.CAPTURE_HIGHLIGHT, kind: "bool", def: true },
+          { id: "capCheck", label: "Start with a checkbox", pref: PREF.CAPTURE_CHECKBOX, kind: "bool", def: false },
+          { id: "capStyle", label: "Style of the selected text", pref: PREF.CAPTURE_STYLE, kind: "choice", def: "quote", choices: CAPTURE_STYLES },
+          { id: "capPos", label: "Where new entries go", pref: PREF.CAPTURE_POSITION, kind: "choice", def: "end", choices: [["end", "End"], ["top", "Top"]] },
+          { id: "capOpen", label: "Open the note afterwards", pref: PREF.CAPTURE_OPEN, kind: "bool", def: false },
+          { id: "capInbox", label: "Inbox note name", pref: PREF.CAPTURE_INBOX, kind: "text", def: "Inbox" },
+        ],
+      },
+    ]);
 
     // ======================================================================
     // Pure core: appearance overrides (Notes appearance menu)
@@ -1733,11 +1828,6 @@
       serif: 'Georgia, "Iowan Old Style", "Times New Roman", serif',
       mono: 'ui-monospace, "Cascadia Code", Consolas, Menlo, monospace',
       rounded: '"Segoe UI Variable Rounded", "Nunito", "Varela Round", system-ui, sans-serif',
-    });
-    const LOOK_SHADOWS = Object.freeze({
-      none: "none",
-      soft: "0 6px 24px rgba(0, 0, 0, 0.28)",
-      strong: "0 18px 50px rgba(0, 0, 0, 0.6)",
     });
     const LOOK_VARS = Object.freeze([
       "radius", "border", "shadow", "opacity", "padding", "font", "editor-font", "heading", "btn-size",
@@ -1758,18 +1848,23 @@
         return LOOK_HEX.test(raw) ? raw.toLowerCase() : null;
       };
       let n;
-      if ((n = num(PREF.LOOK_RADIUS, 0, 40)) !== null) put("radius", "radius", n + "px");
-      if ((n = num(PREF.LOOK_BORDER, 0, 6)) !== null) put("border", "border", n + "px");
-      const shadow = String(get(PREF.LOOK_SHADOW) ?? "auto");
-      if (LOOK_SHADOWS[shadow]) put("shadow", "shadow", LOOK_SHADOWS[shadow]);
-      if ((n = num(PREF.LOOK_OPACITY, 30, 100)) !== null) put("opacity", "opacity", n + "%");
-      if ((n = num(PREF.LOOK_PADDING, 0, 48)) !== null) put("padding", "padding", n + "px");
+      if ((n = num(PREF.LOOK_RADIUS, 0, 60)) !== null) put("radius", "radius", n + "px");
+      if ((n = num(PREF.LOOK_BORDER, 0, 8)) !== null) put("border", "border", n + "px");
+      // Shadow: blur, vertical offset and strength are independent; any one of them set builds the whole
+      // shadow (the others fall back to a soft default), strength 0 means no shadow.
+      const sb = num(PREF.LOOK_SHADOW_BLUR, 0, 120), sy = num(PREF.LOOK_SHADOW_Y, 0, 60), sa = num(PREF.LOOK_SHADOW_ALPHA, 0, 100);
+      if (sb !== null || sy !== null || sa !== null) {
+        const alpha = sa === null ? 28 : sa;
+        put("shadow", "shadow", alpha === 0 ? "none" : `0 ${sy === null ? 6 : sy}px ${sb === null ? 24 : sb}px rgba(0, 0, 0, ${(alpha / 100).toFixed(2)})`);
+      }
+      if ((n = num(PREF.LOOK_OPACITY, 0, 100)) !== null) put("opacity", "opacity", n + "%");
+      if ((n = num(PREF.LOOK_PADDING, 0, 64)) !== null) put("padding", "padding", n + "px");
       const font = String(get(PREF.LOOK_FONT) ?? "auto");
       if (LOOK_FONTS[font]) put("font", "font", LOOK_FONTS[font]);
       if (String(get(PREF.LOOK_EDITOR_FONT) ?? "same") === "mono") put("editor-font", "editor-font", LOOK_FONTS.mono);
       let c;
       if ((c = hex(PREF.LOOK_HEADING))) put("heading", "heading", c);
-      if ((n = num(PREF.LOOK_BTN_SIZE, 16, 48)) !== null) put("btn-size", "btn-size", n + "px");
+      if ((n = num(PREF.LOOK_BTN_SIZE, 14, 56)) !== null) put("btn-size", "btn-size", n + "px");
       if ((n = num(PREF.LOOK_BTN_RADIUS, 0, 50)) !== null) put("btn-radius", "btn-radius", n + "px");
       const style = String(get(PREF.LOOK_BTN_STYLE) ?? "plain");
       if (style === "filled" || style === "outlined") flags.push("btn-" + style);
@@ -1786,8 +1881,6 @@
     // ======================================================================
     // Pure core: capture (selected text or page -> a snippet in a note)
     // ======================================================================
-    const CAPTURE_STYLES = Object.freeze([["quote", "Quote"], ["plain", "Plain text"], ["bullet", "Bullet"], ["highlight", "Highlight"], ["callout", "Callout"]]);
-    const CAPTURE_TARGETS = Object.freeze([["last", "Last open note"], ["new", "New note"], ["inbox", "Inbox note"]]);
     const CAPTURE_MAX_CHARS = 8000;
     const CAPTURE_STYLE_IDS = new Set(CAPTURE_STYLES.map((s) => s[0]));
     const CAPTURE_DEFAULTS = Object.freeze({ date: true, time: false, source: true, link: true, highlight: true, checkbox: false, style: "quote", position: "end" });
@@ -2463,7 +2556,7 @@
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, sideOf, createHoldAction,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount, companionRect,
-        lookOverrides, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
+        lookOverrides, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
       };
     }
@@ -3789,6 +3882,188 @@
           }
         }
         draw();
+        const more = chip("All settings\u2026");
+        const done = chip("Done", true);
+        more.addEventListener("click", () => askAllSettings());
+        done.addEventListener("click", () => {
+          closeDialog();
+          focusEditor();
+        });
+        openCard("Quick settings", body, h("div", { class: "zn-dialog-actions" }, more, done));
+        done.focus({ preventScroll: true });
+      }
+      // Settings: every option in one wide view with tabs (the Quick menu is the short list of what changes
+      // while writing). Sliders and the colour picker are plain in-card inputs; "Theme" puts a value back to
+      // what the theme says. Each change is saved at once.
+      function askAllSettings(startTab = "writing") {
+        let tabId = SETTINGS_TABS.some((t) => t.id === startTab) ? startTab : "writing";
+        const tabs = h("div", { class: "zn-set-tabs", role: "tablist" });
+        const body = h("div", { class: "zn-set-body" });
+        const seedColor = (kind) => {
+          try {
+            const cs = window.getComputedStyle(root);
+            const hex = kind === "bg" ? cssColorToHex(cs.backgroundColor) : kind === "text" ? cssColorToHex(cs.color) : null;
+            return hex || (kind === "bg" ? "#1f1f24" : kind === "text" ? "#e9e9f0" : "#6aa7ff");
+          } catch (_) {
+            return "#6aa7ff";
+          }
+        };
+        const readValue = (o) => (o.meta ? store.meta[o.meta] : getPref(o.pref, o.def));
+        const writeValue = (o, v) => {
+          if (o.meta) {
+            store.setMeta({ [o.meta]: v });
+            applyState();
+          } else setPref(o.pref, v);
+        };
+        function sliderRow(o) {
+          const stored = () => getPref(o.pref, "").trim();
+          const has = () => /^\d{1,3}$/.test(stored());
+          const input = h("input", { type: "range", class: "zn-range", min: String(o.min), max: String(o.max), step: "1", "aria-label": o.label });
+          const out = h("span", { class: "zn-quick-value" });
+          const theme = chip("Theme", !has());
+          const show = () => {
+            input.value = has() ? stored() : String(o.seed);
+            out.textContent = has() ? stored() + o.unit : "Theme";
+            theme.classList.toggle("is-on", !has());
+          };
+          input.addEventListener("input", () => {
+            setPref(o.pref, String(input.value));
+            show();
+          });
+          theme.addEventListener("click", () => {
+            setPref(o.pref, "");
+            show();
+          });
+          show();
+          return h("div", { class: "zn-set-row" }, h("span", { class: "zn-quick-label" }, o.label), input, out, theme);
+        }
+        function colorRow(o) {
+          const stored = () => (LOOK_HEX.test(getPref(o.pref, "").trim()) ? getPref(o.pref, "").trim().toLowerCase() : "");
+          const swatch = h("button", { type: "button", class: "zn-swatch", "aria-label": o.label, "aria-expanded": "false" });
+          const theme = chip("Theme", !stored());
+          const panel = h("div", { class: "zn-cpanel" });
+          panel.hidden = true;
+          const hsl = () => hexToHsl(stored() || seedColor(o.seed)) || { h: 210, s: 80, l: 60 };
+          const mk = (label, max) => {
+            const i = h("input", { type: "range", class: "zn-range", min: "0", max: String(max), step: "1", "aria-label": label });
+            return i;
+          };
+          const sh = mk("Hue", 359), ss = mk("Saturation", 100), sl = mk("Lightness", 100);
+          const hexIn = h("input", { type: "text", class: "zn-field zn-hex", spellcheck: "false", maxlength: "7", "aria-label": o.label + " hex", placeholder: "#rrggbb" });
+          const paint = () => {
+            const c = stored();
+            swatch.style.background = c || "transparent";
+            swatch.dataset.empty = c ? "false" : "true";
+            theme.classList.toggle("is-on", !c);
+            const v = hsl();
+            sh.value = String(v.h);
+            ss.value = String(v.s);
+            sl.value = String(v.l);
+            sh.style.background = "linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)";
+            ss.style.background = `linear-gradient(90deg, ${hslToHex(v.h, 0, v.l)}, ${hslToHex(v.h, 100, v.l)})`;
+            sl.style.background = `linear-gradient(90deg, #000, ${hslToHex(v.h, v.s, 50)}, #fff)`;
+            if (document.activeElement !== hexIn) hexIn.value = c;
+          };
+          const fromSliders = () => {
+            setPref(o.pref, hslToHex(sh.value, ss.value, sl.value));
+            paint();
+          };
+          for (const i of [sh, ss, sl]) i.addEventListener("input", fromSliders);
+          hexIn.addEventListener("input", () => {
+            const t = hexIn.value.trim();
+            const v = t.startsWith("#") ? t : "#" + t;
+            const ok = LOOK_HEX.test(v);
+            hexIn.dataset.bad = ok || !t ? "false" : "true";
+            if (ok) {
+              setPref(o.pref, v.toLowerCase());
+              paint();
+            }
+          });
+          swatch.addEventListener("click", () => {
+            panel.hidden = !panel.hidden;
+            swatch.setAttribute("aria-expanded", panel.hidden ? "false" : "true");
+          });
+          theme.addEventListener("click", () => {
+            setPref(o.pref, "");
+            paint();
+          });
+          panel.append(h("label", { class: "zn-set-sub" }, h("span", {}, "Hue"), sh), h("label", { class: "zn-set-sub" }, h("span", {}, "Saturation"), ss), h("label", { class: "zn-set-sub" }, h("span", {}, "Lightness"), sl), hexIn);
+          paint();
+          return h("div", { class: "zn-set-item" }, h("div", { class: "zn-set-row" }, h("span", { class: "zn-quick-label" }, o.label), swatch, theme), panel);
+        }
+        function simpleRow(o) {
+          const value = readValue(o);
+          const row = h("div", { class: "zn-set-row" }, h("span", { class: "zn-quick-label" }, o.label));
+          const redraw = () => {
+            // Only the one row is drawn again, so a slider elsewhere is never rebuilt while it is dragged.
+            row.replaceWith(simpleRow(o));
+          };
+          if (o.kind === "bool") {
+            const b = chip(value ? "On" : "Off", !!value);
+            b.setAttribute("aria-pressed", value ? "true" : "false");
+            b.addEventListener("click", () => {
+              writeValue(o, !value);
+              redraw();
+            });
+            row.append(b);
+          } else if (o.kind === "step") {
+            const minus = iconButton("x", "Smaller");
+            minus.replaceChildren(h("span", {}, "\u2212"));
+            const plus = iconButton("plus", "Larger");
+            minus.addEventListener("click", () => {
+              writeValue(o, stepOption(o, value, -1));
+              redraw();
+            });
+            plus.addEventListener("click", () => {
+              writeValue(o, stepOption(o, value, 1));
+              redraw();
+            });
+            row.append(minus, h("span", { class: "zn-quick-value" }, `${value}${o.unit}`), plus);
+          } else if (o.kind === "text") {
+            const input = h("input", { type: "text", class: "zn-field", spellcheck: "false", "aria-label": o.label });
+            input.value = String(value ?? "");
+            input.addEventListener("change", () => setPref(o.pref, input.value.trim()));
+            row.append(input);
+          } else {
+            const group = h("div", { class: "zn-set-chips" });
+            for (const [v, text] of o.choices) {
+              const b = chip(text, value === v);
+              b.addEventListener("click", () => {
+                writeValue(o, v);
+                redraw();
+              });
+              group.append(b);
+            }
+            row.append(group);
+          }
+          return row;
+        }
+        function drawTab() {
+          const tab = SETTINGS_TABS.find((t) => t.id === tabId);
+          tabs.replaceChildren(
+            ...SETTINGS_TABS.map((t) => {
+              const b = chip(t.label, t.id === tabId);
+              b.setAttribute("role", "tab");
+              b.setAttribute("aria-selected", t.id === tabId ? "true" : "false");
+              b.addEventListener("click", () => {
+                tabId = t.id;
+                drawTab();
+              });
+              return b;
+            }),
+          );
+          body.replaceChildren(
+            ...tab.items.map((o) => (o.kind === "heading" ? h("strong", { class: "zn-set-heading" }, o.label) : o.kind === "slider" ? sliderRow(o) : o.kind === "color" ? colorRow(o) : simpleRow(o))),
+          );
+          body.scrollTop = 0;
+        }
+        drawTab();
+        const reset = chip("Reset appearance");
+        reset.addEventListener("click", () => {
+          for (const k of LOOK_PREFS) setPref(k, k === PREF.LOOK_FONT ? "auto" : k === PREF.LOOK_EDITOR_FONT ? "same" : k === PREF.LOOK_BTN_STYLE ? "plain" : "");
+          setPref(PREF.THEME, "zentral");
+          drawTab();
+        });
         const keys = chip("Keyboard shortcuts\u2026");
         const toolsChip = chip("Toolbar buttons\u2026");
         const done = chip("Done", true);
@@ -3798,7 +4073,8 @@
           closeDialog();
           focusEditor();
         });
-        openCard("Quick settings", body, h("div", { class: "zn-dialog-actions" }, toolsChip, keys, done));
+        const card = openCard("Settings", tabs, body, h("div", { class: "zn-dialog-actions" }, reset, toolsChip, keys, done));
+        card.classList.add("zn-settings");
         done.focus({ preventScroll: true });
       }
       // Shortcut assignment: click a shortcut, press the new keys. Backspace clears, Esc cancels.
@@ -3896,6 +4172,7 @@
           { icon: "folder", label: "Import .md folder\u2026", action: async () => { const k = await env.importFolder(store); flash(k ? `Imported ${k} notes` : "Nothing imported"); if (view === "list") scheduleList(); } },
           { icon: "folder", label: "Open notes folder", action: () => env.revealFolder(store.dir) },
           { icon: "sliders", label: "Quick settings\u2026", action: () => askSettings() },
+          { icon: "sliders", label: "All settings\u2026", action: () => askAllSettings() },
           ...(adapter.geoKey ? [{ icon: "restore", label: "Reset position and size", action: () => resetGeo() }] : []),
           { sep: true },
         ];

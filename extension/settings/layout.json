@@ -1044,7 +1044,9 @@
     },
     "zen.workspace.zentral.notes.look_radius",
     "zen.workspace.zentral.notes.look_border",
-    "zen.workspace.zentral.notes.look_shadow",
+    "zen.workspace.zentral.notes.look_shadow_blur",
+    "zen.workspace.zentral.notes.look_shadow_y",
+    "zen.workspace.zentral.notes.look_shadow_alpha",
     "zen.workspace.zentral.notes.look_opacity",
     "zen.workspace.zentral.notes.look_padding",
     {

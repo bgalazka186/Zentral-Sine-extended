@@ -756,3 +756,21 @@
   white-space: nowrap;
 }
 .zentral-notes-toast:not([data-on="true"]) { display: none; }
+
+/* ---- Settings view: wide card with tabs, sliders and the in-card colour picker -------------------------- */
+.zentral-notes-sheet .zn-dialog-card.zn-settings { width: 100%; max-width: none; height: 100%; max-height: none; display: flex; flex-direction: column; box-sizing: border-box; }
+.zentral-notes-sheet .zn-set-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.zentral-notes-sheet .zn-set-body { flex: 1 1 0; min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 6px; padding-right: 4px; }
+.zentral-notes-sheet .zn-set-heading { margin-top: 8px; color: var(--zn-muted); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; }
+.zentral-notes-sheet .zn-set-row { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+.zentral-notes-sheet .zn-set-row .zn-quick-label { flex: 1 1 40%; }
+.zentral-notes-sheet .zn-set-chips { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.zentral-notes-sheet .zn-range { flex: 1 1 90px; min-width: 60px; height: 8px; margin: 0; accent-color: var(--zn-accent); }
+.zentral-notes-sheet .zn-set-row .zn-quick-value { min-width: 3.6em; }
+.zentral-notes-sheet .zn-swatch { width: 38px; height: 22px; padding: 0; border: 1px solid var(--zn-line); border-radius: 6px; cursor: pointer; }
+.zentral-notes-sheet .zn-swatch[data-empty="true"] { background-image: repeating-linear-gradient(45deg, var(--zn-line) 0 4px, transparent 4px 8px) !important; }
+.zentral-notes-sheet .zn-cpanel { display: grid; gap: 6px; margin: 4px 0 8px; padding: 8px; border: 1px solid var(--zn-line); border-radius: 8px; }
+.zentral-notes-sheet .zn-cpanel[hidden] { display: none; }
+.zentral-notes-sheet .zn-set-sub { display: grid; grid-template-columns: 6em 1fr; align-items: center; gap: 8px; color: var(--zn-muted); font-size: 0.9em; }
+.zentral-notes-sheet .zn-set-sub .zn-range { height: 12px; border-radius: 6px; }
+.zentral-notes-sheet .zn-hex { max-width: 9em; font-family: ui-monospace, Consolas, monospace; }

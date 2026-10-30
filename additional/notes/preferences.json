@@ -81,171 +81,45 @@
   },
   {
     "property": "zen.workspace.zentral.notes.look_radius",
-    "label": "Notes card corner radius (px)",
-    "type": "dropdown",
-    "defaultValue": "auto",
-    "options": [
-      {
-        "label": "Theme default",
-        "value": "auto"
-      },
-      {
-        "label": "0 px",
-        "value": "0"
-      },
-      {
-        "label": "4 px",
-        "value": "4"
-      },
-      {
-        "label": "8 px",
-        "value": "8"
-      },
-      {
-        "label": "12 px",
-        "value": "12"
-      },
-      {
-        "label": "16 px",
-        "value": "16"
-      },
-      {
-        "label": "24 px",
-        "value": "24"
-      },
-      {
-        "label": "32 px",
-        "value": "32"
-      }
-    ]
+    "label": "Notes card corner radius (px, 0–60, empty = theme)",
+    "type": "string",
+    "defaultValue": ""
   },
   {
     "property": "zen.workspace.zentral.notes.look_border",
-    "label": "Notes card border width (px)",
-    "type": "dropdown",
-    "defaultValue": "auto",
-    "options": [
-      {
-        "label": "Theme default",
-        "value": "auto"
-      },
-      {
-        "label": "0 px",
-        "value": "0"
-      },
-      {
-        "label": "1 px",
-        "value": "1"
-      },
-      {
-        "label": "2 px",
-        "value": "2"
-      },
-      {
-        "label": "3 px",
-        "value": "3"
-      },
-      {
-        "label": "4 px",
-        "value": "4"
-      }
-    ]
+    "label": "Notes card border width (px, 0–8, empty = theme)",
+    "type": "string",
+    "defaultValue": ""
   },
   {
-    "property": "zen.workspace.zentral.notes.look_shadow",
-    "label": "Notes card shadow",
-    "type": "dropdown",
-    "defaultValue": "auto",
-    "options": [
-      {
-        "label": "Theme default",
-        "value": "auto"
-      },
-      {
-        "label": "None",
-        "value": "none"
-      },
-      {
-        "label": "Soft",
-        "value": "soft"
-      },
-      {
-        "label": "Strong",
-        "value": "strong"
-      }
-    ]
+    "property": "zen.workspace.zentral.notes.look_shadow_blur",
+    "label": "Shadow blur (px, 0–120, empty = theme)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_shadow_y",
+    "label": "Shadow offset down (px, 0–60, empty = theme)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_shadow_alpha",
+    "label": "Shadow strength (%, 0–100; 0 = no shadow; empty = theme)",
+    "type": "string",
+    "defaultValue": ""
   },
   {
     "property": "zen.workspace.zentral.notes.look_opacity",
-    "label": "Notes card background opacity (%)",
-    "type": "dropdown",
-    "defaultValue": "auto",
-    "options": [
-      {
-        "label": "Theme default",
-        "value": "auto"
-      },
-      {
-        "label": "100 %",
-        "value": "100"
-      },
-      {
-        "label": "90 %",
-        "value": "90"
-      },
-      {
-        "label": "80 %",
-        "value": "80"
-      },
-      {
-        "label": "70 %",
-        "value": "70"
-      },
-      {
-        "label": "60 %",
-        "value": "60"
-      },
-      {
-        "label": "50 %",
-        "value": "50"
-      }
-    ]
+    "label": "Notes card background opacity (%, 0–100, empty = theme)",
+    "type": "string",
+    "defaultValue": ""
   },
   {
     "property": "zen.workspace.zentral.notes.look_padding",
-    "label": "Space around the text (px)",
-    "type": "dropdown",
-    "defaultValue": "auto",
-    "options": [
-      {
-        "label": "Theme default",
-        "value": "auto"
-      },
-      {
-        "label": "4 px",
-        "value": "4"
-      },
-      {
-        "label": "8 px",
-        "value": "8"
-      },
-      {
-        "label": "12 px",
-        "value": "12"
-      },
-      {
-        "label": "16 px",
-        "value": "16"
-      },
-      {
-        "label": "24 px",
-        "value": "24"
-      },
-      {
-        "label": "32 px",
-        "value": "32"
-      }
-    ]
+    "label": "Notes card inner padding (px, 0–64, empty = theme)",
+    "type": "string",
+    "defaultValue": ""
   },
   {
     "property": "zen.workspace.zentral.notes.look_font",
@@ -299,71 +173,15 @@
   },
   {
     "property": "zen.workspace.zentral.notes.look_btn_size",
-    "label": "Button size in the notes card (px)",
-    "type": "dropdown",
-    "defaultValue": "auto",
-    "options": [
-      {
-        "label": "Theme default",
-        "value": "auto"
-      },
-      {
-        "label": "20 px",
-        "value": "20"
-      },
-      {
-        "label": "22 px",
-        "value": "22"
-      },
-      {
-        "label": "26 px",
-        "value": "26"
-      },
-      {
-        "label": "30 px",
-        "value": "30"
-      },
-      {
-        "label": "34 px",
-        "value": "34"
-      },
-      {
-        "label": "40 px",
-        "value": "40"
-      }
-    ]
+    "label": "Notes button size (px, 14–56, empty = theme)",
+    "type": "string",
+    "defaultValue": ""
   },
   {
     "property": "zen.workspace.zentral.notes.look_btn_radius",
-    "label": "Button corner radius (px)",
-    "type": "dropdown",
-    "defaultValue": "auto",
-    "options": [
-      {
-        "label": "Theme default",
-        "value": "auto"
-      },
-      {
-        "label": "0 px",
-        "value": "0"
-      },
-      {
-        "label": "4 px",
-        "value": "4"
-      },
-      {
-        "label": "6 px",
-        "value": "6"
-      },
-      {
-        "label": "10 px",
-        "value": "10"
-      },
-      {
-        "label": "50 px",
-        "value": "50"
-      }
-    ]
+    "label": "Notes button corner radius (px, 0–50, empty = theme)",
+    "type": "string",
+    "defaultValue": ""
   },
   {
     "property": "zen.workspace.zentral.notes.look_btn_style",
