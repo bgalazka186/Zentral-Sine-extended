@@ -111,7 +111,7 @@ const same = (a, b, msg) => assert.equal(canon(a), canon(b), msg);
     const ids = c.SHORTCUT_ACTIONS.map((a) => a.id);
     assert.equal(new Set(ids).size, ids.length);
     for (const id of ["recent", "notePin", "keepOpen", "larger", "span", "resetGeo", "quickNew", "openFloating"]) assert.ok(ids.includes(id), id);
-    same(c.SHORTCUT_ACTIONS.filter((a) => a.global).map((a) => a.id).sort(), ["openFloating", "quickNew"]);
+    same(c.SHORTCUT_ACTIONS.filter((a) => a.global).map((a) => a.id).sort(), ["captureInbox", "capturePage", "captureQuick", "openFloating", "quickNew"]);
     const defs = c.SHORTCUT_ACTIONS.map((a) => a.def).filter(Boolean);
     assert.equal(new Set(defs).size, defs.length, "no two defaults share a combination");
     const list = c.effectiveShortcuts(c.parseShortcutMap(JSON.stringify({ span: "Ctrl+Alt+J", quickNew: "Alt+Shift+Q" })));

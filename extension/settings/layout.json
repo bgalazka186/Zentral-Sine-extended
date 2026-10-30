@@ -314,9 +314,38 @@
       "sections": [
         {
           "label": "Quick notes"
+        },
+        {
+          "label": "Capture"
         }
       ],
       "icon": "note"
+    },
+    {
+      "id": "notes-appearance",
+      "label": "Notes appearance",
+      "group": "Panels",
+      "owner": "notes",
+      "icon": "palette",
+      "description": "Size, shape, fonts, buttons and colors of the Notes card. These live in Notes so they also work when Notes runs standalone. Everything is optional: \"Theme default\" or an empty color keeps the theme's own look.",
+      "sections": [
+        {
+          "label": "Size & shape",
+          "icon": "note"
+        },
+        {
+          "label": "Text",
+          "icon": "text"
+        },
+        {
+          "label": "Toolbar buttons",
+          "icon": "sliders"
+        },
+        {
+          "label": "Colors & backing",
+          "icon": "palette"
+        }
+      ]
     },
     {
       "id": "video-playback",
@@ -991,6 +1020,61 @@
     "zen.workspace.zentral.notes.push_page",
     "zen.workspace.zentral.notes.split_window",
     "zen.workspace.zentral.notes.theme",
+    {
+      "type": "text",
+      "label": "**Notes · Capture**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.notes.capture_target",
+    "zen.workspace.zentral.notes.capture_menu",
+    "zen.workspace.zentral.notes.capture_date",
+    "zen.workspace.zentral.notes.capture_time",
+    "zen.workspace.zentral.notes.capture_source",
+    "zen.workspace.zentral.notes.capture_link",
+    "zen.workspace.zentral.notes.capture_highlight",
+    "zen.workspace.zentral.notes.capture_checkbox",
+    "zen.workspace.zentral.notes.capture_style",
+    "zen.workspace.zentral.notes.capture_position",
+    "zen.workspace.zentral.notes.capture_open",
+    "zen.workspace.zentral.notes.capture_inbox",
+    {
+      "type": "text",
+      "label": "**Notes appearance · Size & shape**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.notes.look_radius",
+    "zen.workspace.zentral.notes.look_border",
+    "zen.workspace.zentral.notes.look_shadow",
+    "zen.workspace.zentral.notes.look_opacity",
+    "zen.workspace.zentral.notes.look_padding",
+    {
+      "type": "text",
+      "label": "**Notes appearance · Text**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.notes.look_font",
+    "zen.workspace.zentral.notes.look_editor_font",
+    "zen.workspace.zentral.notes.look_heading",
+    {
+      "type": "text",
+      "label": "**Notes appearance · Toolbar buttons**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.notes.look_btn_size",
+    "zen.workspace.zentral.notes.look_btn_radius",
+    "zen.workspace.zentral.notes.look_btn_style",
+    "zen.workspace.zentral.notes.look_btn_icon",
+    "zen.workspace.zentral.notes.look_btn_fill",
+    "zen.workspace.zentral.notes.look_btn_border",
+    {
+      "type": "text",
+      "label": "**Notes appearance · Colors & backing**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.notes.look_bg",
+    "zen.workspace.zentral.notes.look_text",
+    "zen.workspace.zentral.notes.look_accent",
+    "zen.workspace.zentral.notes.look_line",
     {
       "type": "text",
       "label": "**Video**",

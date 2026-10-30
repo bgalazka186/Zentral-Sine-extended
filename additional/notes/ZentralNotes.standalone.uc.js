@@ -712,8 +712,41 @@ function nativeSidebarSide() {
       PUSH_PAGE: "zen.workspace.zentral.notes.push_page",
       SPLIT_WINDOW: "zen.workspace.zentral.notes.split_window",
       THEME: "zen.workspace.zentral.notes.theme",
+      // Appearance (Notes appearance menu); "auto" / empty = keep the theme's own look
+      LOOK_RADIUS: "zen.workspace.zentral.notes.look_radius",
+      LOOK_BORDER: "zen.workspace.zentral.notes.look_border",
+      LOOK_SHADOW: "zen.workspace.zentral.notes.look_shadow",
+      LOOK_OPACITY: "zen.workspace.zentral.notes.look_opacity",
+      LOOK_PADDING: "zen.workspace.zentral.notes.look_padding",
+      LOOK_FONT: "zen.workspace.zentral.notes.look_font",
+      LOOK_EDITOR_FONT: "zen.workspace.zentral.notes.look_editor_font",
+      LOOK_HEADING: "zen.workspace.zentral.notes.look_heading",
+      LOOK_BTN_SIZE: "zen.workspace.zentral.notes.look_btn_size",
+      LOOK_BTN_RADIUS: "zen.workspace.zentral.notes.look_btn_radius",
+      LOOK_BTN_STYLE: "zen.workspace.zentral.notes.look_btn_style",
+      LOOK_BTN_ICON: "zen.workspace.zentral.notes.look_btn_icon",
+      LOOK_BTN_FILL: "zen.workspace.zentral.notes.look_btn_fill",
+      LOOK_BTN_BORDER: "zen.workspace.zentral.notes.look_btn_border",
+      LOOK_BG: "zen.workspace.zentral.notes.look_bg",
+      LOOK_TEXT: "zen.workspace.zentral.notes.look_text",
+      LOOK_ACCENT: "zen.workspace.zentral.notes.look_accent",
+      LOOK_LINE: "zen.workspace.zentral.notes.look_line",
+      // Capture: selection / page -> note
+      CAPTURE_TARGET: "zen.workspace.zentral.notes.capture_target",
+      CAPTURE_MENU: "zen.workspace.zentral.notes.capture_menu",
+      CAPTURE_DATE: "zen.workspace.zentral.notes.capture_date",
+      CAPTURE_TIME: "zen.workspace.zentral.notes.capture_time",
+      CAPTURE_SOURCE: "zen.workspace.zentral.notes.capture_source",
+      CAPTURE_LINK: "zen.workspace.zentral.notes.capture_link",
+      CAPTURE_HIGHLIGHT: "zen.workspace.zentral.notes.capture_highlight",
+      CAPTURE_CHECKBOX: "zen.workspace.zentral.notes.capture_checkbox",
+      CAPTURE_STYLE: "zen.workspace.zentral.notes.capture_style",
+      CAPTURE_POSITION: "zen.workspace.zentral.notes.capture_position",
+      CAPTURE_OPEN: "zen.workspace.zentral.notes.capture_open",
+      CAPTURE_INBOX: "zen.workspace.zentral.notes.capture_inbox",
     });
-    const VIEW_PREFS = new Set([PREF.WRAP, PREF.FONT_SIZE, PREF.LINE_HEIGHT, PREF.READ_COPY, PREF.THEME]);
+    const LOOK_PREFS = Object.freeze(Object.keys(PREF).filter((k) => k.startsWith("LOOK_")).map((k) => PREF[k]));
+    const VIEW_PREFS = new Set([PREF.WRAP, PREF.FONT_SIZE, PREF.LINE_HEIGHT, PREF.READ_COPY, PREF.THEME, ...LOOK_PREFS]);
     const WINDOW_PREFS = new Set([PREF.HOVER_REVEAL, PREF.PUSH_PAGE, PREF.SPLIT_WINDOW, PREF.AVOID_SIDEBAR]);
     const READ_PREFS = new Set([PREF.BLANK_LINES, PREF.LINE_BREAKS, PREF.SETEXT]);
     const OBS_TOPIC = "zentral-notes-changed";
@@ -2193,6 +2226,9 @@ function nativeSidebarSide() {
       // Global actions work anywhere in the window, also while Notes is closed.
       { id: "quickNew", label: "New note from anywhere", def: "", global: true },
       { id: "openFloating", label: "Open or close the standalone Notes card", def: "", global: true },
+      { id: "captureQuick", label: "Add selected text to a note (default target)", def: "", global: true },
+      { id: "captureInbox", label: "Add selected text to the Inbox note", def: "", global: true },
+      { id: "capturePage", label: "Add this page (title and link) to a note", def: "", global: true },
     ]);
     const SHORTCUT_IDS = new Set(SHORTCUT_ACTIONS.map((a) => a.id));
     // Toolbar buttons and editor actions the person may hide (a hidden action has no button, no menu
@@ -2291,11 +2327,155 @@ function nativeSidebarSide() {
       { id: "paste", label: "Pasting a web address", pref: PREF.PASTE_LINK, kind: "choice", def: "ask", choices: [["ask", "Ask"], ["selection", "Over selection"], ["off", "As text"]] },
       { id: "setext", label: "Text over === or --- is a heading", pref: PREF.SETEXT, kind: "bool", def: false },
       { id: "theme", label: "Theme", pref: PREF.THEME, kind: "choice", def: "zentral", choices: NOTE_THEMES.map(([k, t]) => [k, t]) },
+      { id: "lookRadius", label: "Corner radius", pref: PREF.LOOK_RADIUS, kind: "choice", def: "auto", choices: [["auto", "Theme"], ["0", "0"], ["8", "8"], ["16", "16"], ["24", "24"]] },
+      { id: "lookFont", label: "Font", pref: PREF.LOOK_FONT, kind: "choice", def: "auto", choices: [["auto", "Theme"], ["sans", "Sans"], ["serif", "Serif"], ["mono", "Mono"], ["rounded", "Rounded"]] },
+      { id: "lookOpacity", label: "Background opacity", pref: PREF.LOOK_OPACITY, kind: "choice", def: "auto", choices: [["auto", "Theme"], ["100", "100%"], ["80", "80%"], ["60", "60%"]] },
+      { id: "lookBtn", label: "Button style", pref: PREF.LOOK_BTN_STYLE, kind: "choice", def: "plain", choices: [["plain", "Plain"], ["filled", "Filled"], ["outlined", "Outlined"]] },
       { id: "hover", label: "Tuck away on an outside click, reveal on the top edge", pref: PREF.HOVER_REVEAL, kind: "bool", def: false },
       { id: "push", label: "Push the page aside (standalone card)", pref: PREF.PUSH_PAGE, kind: "bool", def: false },
       { id: "splitwin", label: "Split view as a second window", pref: PREF.SPLIT_WINDOW, kind: "bool", def: false },
     ]);
     const stepOption = (opt, current, dir) => clampInt((Number(current) || opt.def) + dir * opt.step, opt.min, opt.max);
+
+    // ======================================================================
+    // Pure core: appearance overrides (Notes appearance menu)
+    // ======================================================================
+    // Every option is "keep the theme" until the person picks a value. lookOverrides() turns the stored
+    // values into CSS custom properties plus a list of flags; ZentralNotes.css has one rule per flag
+    // (:root[zentral-notes-ov~="radius"] ...), so a theme that is left alone is never touched.
+    const LOOK_HEX = /^#[0-9a-f]{6}$/i;
+    const LOOK_FONTS = Object.freeze({
+      sans: 'system-ui, -apple-system, "Segoe UI", sans-serif',
+      serif: 'Georgia, "Iowan Old Style", "Times New Roman", serif',
+      mono: 'ui-monospace, "Cascadia Code", Consolas, Menlo, monospace',
+      rounded: '"Segoe UI Variable Rounded", "Nunito", "Varela Round", system-ui, sans-serif',
+    });
+    const LOOK_SHADOWS = Object.freeze({
+      none: "none",
+      soft: "0 6px 24px rgba(0, 0, 0, 0.28)",
+      strong: "0 18px 50px rgba(0, 0, 0, 0.6)",
+    });
+    const LOOK_VARS = Object.freeze([
+      "radius", "border", "shadow", "opacity", "padding", "font", "editor-font", "heading", "btn-size",
+      "btn-radius", "btn-icon", "btn-fill", "btn-border", "bg", "text", "accent", "line",
+    ].map((n) => "--zentral-notes-ov-" + n));
+    // get(prefName) -> stored text. Returns { vars: {name: value}, flags: [..] }; invalid values are ignored.
+    function lookOverrides(get) {
+      const vars = {}, flags = [];
+      const put = (flag, name, value) => { vars["--zentral-notes-ov-" + name] = value; flags.push(flag); };
+      const num = (pref, lo, hi) => {
+        const raw = String(get(pref) ?? "auto").trim();
+        if (!/^\d{1,3}$/.test(raw)) return null;
+        const n = Number(raw);
+        return n >= lo && n <= hi ? n : null;
+      };
+      const hex = (pref) => {
+        const raw = String(get(pref) ?? "").trim();
+        return LOOK_HEX.test(raw) ? raw.toLowerCase() : null;
+      };
+      let n;
+      if ((n = num(PREF.LOOK_RADIUS, 0, 40)) !== null) put("radius", "radius", n + "px");
+      if ((n = num(PREF.LOOK_BORDER, 0, 6)) !== null) put("border", "border", n + "px");
+      const shadow = String(get(PREF.LOOK_SHADOW) ?? "auto");
+      if (LOOK_SHADOWS[shadow]) put("shadow", "shadow", LOOK_SHADOWS[shadow]);
+      if ((n = num(PREF.LOOK_OPACITY, 30, 100)) !== null) put("opacity", "opacity", n + "%");
+      if ((n = num(PREF.LOOK_PADDING, 0, 48)) !== null) put("padding", "padding", n + "px");
+      const font = String(get(PREF.LOOK_FONT) ?? "auto");
+      if (LOOK_FONTS[font]) put("font", "font", LOOK_FONTS[font]);
+      if (String(get(PREF.LOOK_EDITOR_FONT) ?? "same") === "mono") put("editor-font", "editor-font", LOOK_FONTS.mono);
+      let c;
+      if ((c = hex(PREF.LOOK_HEADING))) put("heading", "heading", c);
+      if ((n = num(PREF.LOOK_BTN_SIZE, 16, 48)) !== null) put("btn-size", "btn-size", n + "px");
+      if ((n = num(PREF.LOOK_BTN_RADIUS, 0, 50)) !== null) put("btn-radius", "btn-radius", n + "px");
+      const style = String(get(PREF.LOOK_BTN_STYLE) ?? "plain");
+      if (style === "filled" || style === "outlined") flags.push("btn-" + style);
+      if ((c = hex(PREF.LOOK_BTN_ICON))) put("btn-icon", "btn-icon", c);
+      if ((c = hex(PREF.LOOK_BTN_FILL))) put("btn-fill", "btn-fill", c);
+      if ((c = hex(PREF.LOOK_BTN_BORDER))) put("btn-border", "btn-border", c);
+      if ((c = hex(PREF.LOOK_BG))) put("bg", "bg", c);
+      if ((c = hex(PREF.LOOK_TEXT))) put("text", "text", c);
+      if ((c = hex(PREF.LOOK_ACCENT))) put("accent", "accent", c);
+      if ((c = hex(PREF.LOOK_LINE))) put("line", "line", c);
+      return { vars, flags };
+    }
+
+    // ======================================================================
+    // Pure core: capture (selected text or page -> a snippet in a note)
+    // ======================================================================
+    const CAPTURE_STYLES = Object.freeze([["quote", "Quote"], ["plain", "Plain text"], ["bullet", "Bullet"], ["highlight", "Highlight"], ["callout", "Callout"]]);
+    const CAPTURE_TARGETS = Object.freeze([["last", "Last open note"], ["new", "New note"], ["inbox", "Inbox note"]]);
+    const CAPTURE_MAX_CHARS = 8000;
+    const CAPTURE_STYLE_IDS = new Set(CAPTURE_STYLES.map((s) => s[0]));
+    const CAPTURE_DEFAULTS = Object.freeze({ date: true, time: false, source: true, link: true, highlight: true, checkbox: false, style: "quote", position: "end" });
+    const cleanCaptureText = (raw) =>
+      String(raw ?? "").replace(/\0/g, "").replace(/\r\n?/g, "\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, CAPTURE_MAX_CHARS).trim();
+    // Page address without its #fragment plus a text-fragment directive that names the selection, so the
+    // link opens the page scrolled to the words and highlighted (Firefox "link to highlight" syntax).
+    function captureFragmentUrl(url, text) {
+      const base = String(url ?? "").split("#")[0];
+      const words = String(text ?? "").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+      if (!base || !words.length) return base;
+      const enc = (s) => encodeURIComponent(s).replace(/[-,&]/g, (ch) => "%" + ch.charCodeAt(0).toString(16).toUpperCase());
+      const spec = words.length <= 8 ? enc(words.join(" ")) : enc(words.slice(0, 4).join(" ")) + "," + enc(words.slice(-4).join(" "));
+      return base + "#:~:text=" + spec;
+    }
+    const pad2 = (n) => String(n).padStart(2, "0");
+    const captureDate = (ms) => { const d = new Date(ms); return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); };
+    const captureTime = (ms) => { const d = new Date(ms); return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); };
+    function captureStyleLines(text, style) {
+      const lines = text.split("\n");
+      switch (style) {
+        case "quote": return lines.map((l) => (l ? "> " + l : ">"));
+        case "bullet": return lines.map((l, i) => (i === 0 ? "- " : "  ") + l);
+        case "highlight": return ["==" + text.replace(/\s*\n\s*/g, " ").replace(/==/g, "= =") + "=="];
+        case "callout": return ["> [!NOTE]", ...lines.map((l) => (l ? "> " + l : ">"))];
+        default: return lines;
+      }
+    }
+    // { text, title, url, now, opts } -> Markdown snippet (no trailing newline). A page without selected
+    // text becomes a single source line.
+    function buildCapture({ text = "", title = "", url = "", now = Date.now(), opts = {} } = {}) {
+      const o = { ...CAPTURE_DEFAULTS, ...opts };
+      if (!CAPTURE_STYLE_IDS.has(o.style)) o.style = "quote";
+      const body = cleanCaptureText(text);
+      const label = String(title ?? "").replace(/\s+/g, " ").trim();
+      const safe = url && safeHref(url, false) ? String(url) : "";
+      const meta = [];
+      if (o.date) meta.push(captureDate(now));
+      if (o.time) meta.push(captureTime(now));
+      let host = "";
+      try { host = new URL(safe).host; } catch (_) { host = ""; }
+      const sourceText = o.source ? label || host : "";
+      if (o.link && safe) {
+        const href = o.highlight && body ? captureFragmentUrl(safe, body) : safe;
+        meta.push(buildLink(sourceText || label || host || safe, href));
+      } else if (sourceText) meta.push(sourceText.replace(/\n/g, " "));
+      const head = meta.join(" \u00b7 ");
+      const one = body.replace(/\s*\n\s*/g, " ");
+      if (!body) return o.checkbox && head ? "- [ ] " + head : head;
+      if (o.checkbox) {
+        if (!head) return "- [ ] " + (o.style === "highlight" ? "==" + one.replace(/==/g, "= =") + "==" : one);
+        return ["- [ ] " + head, "", ...captureStyleLines(body, o.style)].join("\n");
+      }
+      return (head ? [head, "", ...captureStyleLines(body, o.style)] : captureStyleLines(body, o.style)).join("\n");
+    }
+    // Put a snippet into a note body: at the end, or at the top (below a first "# Title" line if there is one).
+    function insertCapture(body, snippet, position = "end") {
+      const b = String(body ?? "");
+      const s = String(snippet ?? "").replace(/\s+$/, "");
+      if (!s) return b;
+      if (!b.trim()) return s + "\n";
+      if (position === "top") {
+        const m = /^(# [^\n]*\n)\n*/.exec(b);
+        return m ? m[1] + "\n" + s + "\n\n" + b.slice(m[0].length) : s + "\n\n" + b;
+      }
+      return b.replace(/\s+$/, "") + "\n\n" + s + "\n";
+    }
+    // The inbox is the first live note whose label equals the configured name (case-insensitive).
+    const findInbox = (notes, name) => {
+      const want = cleanLabel(name || "Inbox").toLowerCase();
+      return (notes || []).find((n) => !n.trashed && String(n.label || "").toLowerCase() === want) || null;
+    };
 
     // ======================================================================
     // Pure core: window geometry (drag, resize, stay inside the area), hold-to-act, recent list
@@ -2899,6 +3079,8 @@ function nativeSidebarSide() {
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, sideOf, createHoldAction,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount, companionRect,
+        lookOverrides, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
+        CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
       };
     }
 
@@ -5734,7 +5916,118 @@ function nativeSidebarSide() {
         return globalCache.list;
       }
       const sheetOf = (b) => (typeof b.sheet === "function" ? b.sheet() : b.sheet);
+      // ---- capture: selected text or page -> note ------------------------------------------
+      const captureOpts = () => ({
+        date: prefBool(PREF.CAPTURE_DATE, true),
+        time: prefBool(PREF.CAPTURE_TIME, false),
+        source: prefBool(PREF.CAPTURE_SOURCE, true),
+        link: prefBool(PREF.CAPTURE_LINK, true),
+        highlight: prefBool(PREF.CAPTURE_HIGHLIGHT, true),
+        checkbox: prefBool(PREF.CAPTURE_CHECKBOX, false),
+        style: prefStr(PREF.CAPTURE_STYLE, "quote"),
+        position: prefStr(PREF.CAPTURE_POSITION, "end"),
+      });
+      // A short message that disappears by itself (the timer exists only while it is visible).
+      let toastEl = null, toastTimer = 0;
+      function toast(text) {
+        if (disposed) return;
+        if (!toastEl) {
+          toastEl = h("div", { class: "zentral-notes-toast", role: "status" });
+          (document.body || rootEl).appendChild(toastEl);
+        }
+        toastEl.textContent = text;
+        toastEl.dataset.on = "true";
+        window.clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(() => { if (toastEl) toastEl.dataset.on = "false"; }, 2200);
+      }
+      onCleanup(() => { window.clearTimeout(toastTimer); toastEl?.remove(); toastEl = null; });
+      function pageInfo(browser) {
+        const b = browser || window.gBrowser?.selectedBrowser;
+        let url = "";
+        try { url = Services.io.createExposableURI(b.currentURI).spec; } catch (_) { url = ""; }
+        return { url, title: b?.contentTitle || window.gBrowser?.selectedTab?.label || "" };
+      }
+      // Selected text of the current tab for the keyboard path (the right-click path gets it from the menu).
+      async function readSelection() {
+        try {
+          const text = await window.gBrowser?.selectedBrowser?.finder?.getActiveSelectionText?.();
+          if (text) return String(text);
+        } catch (_) {}
+        try { return String(document.commandDispatcher?.focusedWindow?.getSelection?.() ?? ""); } catch (_) { return ""; }
+      }
+      // target: "last" | "new" | "inbox" | { id }. Returns the note id, or "" when nothing was added.
+      async function captureInto(target, input) {
+        await ensureStore();
+        const snippet = buildCapture({ text: input.text, title: input.title, url: input.url, now: Date.now(), opts: captureOpts() });
+        if (!snippet) { toast("Nothing to add"); return ""; }
+        const position = prefStr(PREF.CAPTURE_POSITION, "end");
+        let id = typeof target === "object" ? target.id : "";
+        if (target === "inbox") {
+          const name = cleanLabel(prefStr(PREF.CAPTURE_INBOX, "Inbox")) || "Inbox";
+          id = findInbox(store.list(), name)?.id || "";
+          if (!id) { const n = store.create("# " + name + "\n"); store.setLabel(n.id, name); id = n.id; }
+        } else if (target === "last") id = store.latestId();
+        if (target === "new" || !id || !store.get(id)) id = store.create("").id;
+        store.update(id, insertCapture(store.get(id).body, snippet, position), "capture");
+        store.setMeta({ lastNoteId: id, recent: pushRecent(store.meta.recent, id) });
+        await store.flush();
+        toast("Added to \u201c" + (titleOf(store.get(id).body) || "Untitled") + "\u201d");
+        if (prefBool(PREF.CAPTURE_OPEN, false)) {
+          const b = pickBinding();
+          Promise.resolve(b.open()).catch(warn);
+        }
+        return id;
+      }
+      async function captureFromShortcut(kind) {
+        const page = pageInfo();
+        const text = kind === "capturePage" ? "" : await readSelection();
+        if (kind !== "capturePage" && !text.trim()) { toast("Select some text first"); return; }
+        const pref = prefStr(PREF.CAPTURE_TARGET, "last");
+        const target = kind === "captureInbox" ? "inbox" : pref === "new" || pref === "inbox" ? pref : "last";
+        await captureInto(target, { text, ...page });
+      }
+      // Right-click entry in the page menu: Last open note / New note / Inbox / Choose note.
+      const CTX_ID = "zentral-notes-capture-menu";
+      const ctxMenu = () => document.getElementById("contentAreaContextMenu");
+      function onCtxShowing(ev) {
+        const menu = ev.target;
+        if (menu !== ctxMenu() || ev.defaultPrevented) return;
+        document.getElementById(CTX_ID)?.remove();
+        if (disposed || !enabledNow() || !prefBool(PREF.CAPTURE_MENU, true)) return;
+        const cm = window.gContextMenu;
+        const text = cm?.isTextSelected ? String(cm.selectionInfo?.fullText || cm.selectionInfo?.text || "") : "";
+        const page = pageInfo(cm?.browser);
+        if (!text.trim() && !page.url) return;
+        const item = (label, target) => {
+          const mi = document.createXULElement("menuitem");
+          mi.setAttribute("label", label);
+          mi.addEventListener("command", () => captureInto(target, { text, ...page }).catch(warn));
+          return mi;
+        };
+        const m = document.createXULElement("menu");
+        m.id = CTX_ID;
+        m.setAttribute("label", text.trim() ? "Add selection to note" : "Add page link to note");
+        const pop = document.createXULElement("menupopup");
+        pop.append(item("Last open note", "last"), item("New note", "new"), item("Inbox", "inbox"));
+        const ids = (store.meta.recent || []).filter((x) => store.get(x) && !store.get(x).trashed).slice(0, MAX_RECENT);
+        if (ids.length) {
+          pop.append(document.createXULElement("menuseparator"));
+          for (const rid of ids) pop.append(item(titleOf(store.get(rid).body) || "Untitled", { id: rid }));
+        } else ensureStore().catch(warn); // the recent list fills on the next right-click
+        m.append(pop);
+        const anchor = document.getElementById("context-copy") || document.getElementById("context-searchselect");
+        if (anchor) anchor.after(m); else menu.append(m);
+      }
+      const onCtxHidden = (ev) => { if (ev.target === ctxMenu()) document.getElementById(CTX_ID)?.remove(); };
+      ctxMenu()?.addEventListener("popupshowing", onCtxShowing);
+      ctxMenu()?.addEventListener("popuphidden", onCtxHidden);
+      onCleanup(() => {
+        ctxMenu()?.removeEventListener("popupshowing", onCtxShowing);
+        ctxMenu()?.removeEventListener("popuphidden", onCtxHidden);
+        document.getElementById(CTX_ID)?.remove();
+      });
       function runGlobal(id) {
+        if (id === "captureQuick" || id === "captureInbox" || id === "capturePage") return captureFromShortcut(id).catch(warn);
         if (id === "openFloating") {
           const f = ensureFloating();
           return Promise.resolve(f.isOpen() ? f.close() : f.open());
@@ -5775,6 +6068,11 @@ function nativeSidebarSide() {
         rootEl.setAttribute("zentral-notes-wrap", prefBool(PREF.WRAP, true) ? "on" : "off");
         rootEl.setAttribute("zentral-notes-copy", prefBool(PREF.READ_COPY, false) ? "on" : "off");
         rootEl.setAttribute("zentral-notes-theme", normalizeTheme(prefStr(PREF.THEME, "zentral")));
+        const look = lookOverrides((k) => prefStr(k, ""));
+        for (const v of LOOK_VARS) rootEl.style.removeProperty(v);
+        for (const [k, v] of Object.entries(look.vars)) rootEl.style.setProperty(k, v);
+        if (look.flags.length) rootEl.setAttribute("zentral-notes-ov", look.flags.join(" "));
+        else rootEl.removeAttribute("zentral-notes-ov");
       }
       applyViewPrefs();
       onCleanup(() => {
@@ -5783,6 +6081,8 @@ function nativeSidebarSide() {
         rootEl.removeAttribute("zentral-notes-wrap");
         rootEl.removeAttribute("zentral-notes-copy");
         rootEl.removeAttribute("zentral-notes-theme");
+        rootEl.removeAttribute("zentral-notes-ov");
+        for (const v of LOOK_VARS) rootEl.style.removeProperty(v);
       });
       const prefObserver = {
         observe(_s, _t, name) {

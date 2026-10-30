@@ -47,7 +47,7 @@ node tools/check-settings-consistency.cjs
 node tools/build-z-map.cjs                   # regenerate z-heights_map.md
 node tools/build-standalone.cjs              # refuses changed content without a version bump
 node tools/build-standalone.cjs --check
-for t in standalone notes notes-ui notes-markdown notes-bars notes-window numeric-prefs encoding z-heights resize-perf defaults notes-decisions notes-icon; do node tests/$t.test.cjs; done
+for t in standalone notes notes-capture notes-ui notes-markdown notes-bars notes-window numeric-prefs encoding z-heights resize-perf defaults notes-decisions notes-icon; do node tests/$t.test.cjs; done
 ```
 
 Release-in-progress trick: 3.1.3 is unreleased, so after editing a bundled file the builder complains "content changed but version is still 3.1.3". Reset every `additional/**/standalone.lock.json` `"version"` to `"3.1.2"` (last published) and run `node tools/build-standalone.cjs` again. Do not hand-edit `.standalone.uc.js` files.
@@ -156,3 +156,6 @@ Check live: click toggle inside read/split pane, Cambria Math fallback font, `$`
 Code + Node tests only; **nothing run in real Zen**. New prefs `notes.hover_reveal` (unpinned card *tucks* on an outside press, strip `.zentral-notes-reveal` on its top edge brings it back after 140 ms; `isOpen()` is false while tucked), `push_page` (standalone card only: `#appcontent` margin via root attr `zentral-notes-push` + `--zentral-notes-push`), `split_window` (Split makes a companion sheet: `createCompanionAdapter`, same size beside the first via `companionRect`, shows another note, never writes meta), `theme` (root attr `zentral-notes-theme`: zentral/recommended/light/dark/paper; also in Quick settings). Free-text `label:` in the front matter (`cleanLabel`, max 40, Note menu / header chip, searchable). Tests: `notes-window` (+4 pure), `notes-bars` (+1 tucked card). Check live: push margin on `#appcontent` in Zen, tuck strip over a remote `<browser>`, companion placement/drag lag (it follows on release, not per frame), theme contrast.
 Next: D1 in the PLAN v2 table of `TODO_notes_roadmap.md`.
 
+## 16. Step D1 (capture + Notes appearance menu) result
+Code + Node tests only; **nothing run in real Zen**. Right-click "Add selection to note" (last / new / Inbox / recent, label = Inbox name) + 3 global shortcuts (`captureQuick/Inbox/Page`, unassigned); snippet = date, time, source link with text-fragment highlight, checkbox, style, position (`buildCapture`, `insertCapture`, prefs `capture_*`). New category *Notes appearance* (18 `look_*` prefs: radius, border, shadow, opacity, padding, fonts, heading, button size/radius/style/colors, bg/text/accent/line) via `lookOverrides` -> `--zentral-notes-ov-*` + root attr `zentral-notes-ov`; also in standalone order; 4 of them in Quick settings. Test `notes-capture` (9); `notes-window` global list updated.
+Check live: `finder.getActiveSelectionText` for the shortcut path (fallback: focused window selection), menu placement after `context-copy`, text-fragment links, toast, colors on all 5 themes. Next: D2.

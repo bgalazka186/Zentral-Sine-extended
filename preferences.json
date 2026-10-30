@@ -2272,6 +2272,497 @@
   },
   {
     "type": "text",
+    "label": "**Notes · Capture**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.capture_target",
+    "label": "Add to note: default target of the shortcuts",
+    "type": "dropdown",
+    "defaultValue": "last",
+    "options": [
+      {
+        "label": "Last open note",
+        "value": "last"
+      },
+      {
+        "label": "New note",
+        "value": "new"
+      },
+      {
+        "label": "Inbox note",
+        "value": "inbox"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.capture_menu",
+    "label": "Add to note: show the entry in the right-click menu",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.capture_date",
+    "label": "Add to note: include the date",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.capture_time",
+    "label": "Add to note: include the time",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.capture_source",
+    "label": "Add to note: include the page title as the source",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.capture_link",
+    "label": "Add to note: make the source a link to the page",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.capture_highlight",
+    "label": "Add to note: link jumps to and highlights the selected text (needs a link)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.capture_checkbox",
+    "label": "Add to note: add as an unchecked checklist item",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.capture_style",
+    "label": "Add to note: style of the selected text",
+    "type": "dropdown",
+    "defaultValue": "quote",
+    "options": [
+      {
+        "label": "Quote",
+        "value": "quote"
+      },
+      {
+        "label": "Plain text",
+        "value": "plain"
+      },
+      {
+        "label": "Bullet",
+        "value": "bullet"
+      },
+      {
+        "label": "Highlight",
+        "value": "highlight"
+      },
+      {
+        "label": "Callout",
+        "value": "callout"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.capture_position",
+    "label": "Add to note: where new entries go",
+    "type": "dropdown",
+    "defaultValue": "end",
+    "options": [
+      {
+        "label": "End of the note",
+        "value": "end"
+      },
+      {
+        "label": "Top of the note",
+        "value": "top"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.capture_open",
+    "label": "Add to note: open the note afterwards",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.capture_inbox",
+    "label": "Inbox note name (the note carrying this label collects quick captures)",
+    "type": "string",
+    "defaultValue": "Inbox"
+  },
+  {
+    "type": "text",
+    "label": "**Notes appearance · Size & shape**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_radius",
+    "label": "Notes card corner radius (px)",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Theme default",
+        "value": "auto"
+      },
+      {
+        "label": "0 px",
+        "value": "0"
+      },
+      {
+        "label": "4 px",
+        "value": "4"
+      },
+      {
+        "label": "8 px",
+        "value": "8"
+      },
+      {
+        "label": "12 px",
+        "value": "12"
+      },
+      {
+        "label": "16 px",
+        "value": "16"
+      },
+      {
+        "label": "24 px",
+        "value": "24"
+      },
+      {
+        "label": "32 px",
+        "value": "32"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_border",
+    "label": "Notes card border width (px)",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Theme default",
+        "value": "auto"
+      },
+      {
+        "label": "0 px",
+        "value": "0"
+      },
+      {
+        "label": "1 px",
+        "value": "1"
+      },
+      {
+        "label": "2 px",
+        "value": "2"
+      },
+      {
+        "label": "3 px",
+        "value": "3"
+      },
+      {
+        "label": "4 px",
+        "value": "4"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_shadow",
+    "label": "Notes card shadow",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Theme default",
+        "value": "auto"
+      },
+      {
+        "label": "None",
+        "value": "none"
+      },
+      {
+        "label": "Soft",
+        "value": "soft"
+      },
+      {
+        "label": "Strong",
+        "value": "strong"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_opacity",
+    "label": "Notes card background opacity (%)",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Theme default",
+        "value": "auto"
+      },
+      {
+        "label": "100 %",
+        "value": "100"
+      },
+      {
+        "label": "90 %",
+        "value": "90"
+      },
+      {
+        "label": "80 %",
+        "value": "80"
+      },
+      {
+        "label": "70 %",
+        "value": "70"
+      },
+      {
+        "label": "60 %",
+        "value": "60"
+      },
+      {
+        "label": "50 %",
+        "value": "50"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_padding",
+    "label": "Space around the text (px)",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Theme default",
+        "value": "auto"
+      },
+      {
+        "label": "4 px",
+        "value": "4"
+      },
+      {
+        "label": "8 px",
+        "value": "8"
+      },
+      {
+        "label": "12 px",
+        "value": "12"
+      },
+      {
+        "label": "16 px",
+        "value": "16"
+      },
+      {
+        "label": "24 px",
+        "value": "24"
+      },
+      {
+        "label": "32 px",
+        "value": "32"
+      }
+    ]
+  },
+  {
+    "type": "text",
+    "label": "**Notes appearance · Text**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_font",
+    "label": "Notes text font",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Theme default",
+        "value": "auto"
+      },
+      {
+        "label": "Sans-serif",
+        "value": "sans"
+      },
+      {
+        "label": "Serif",
+        "value": "serif"
+      },
+      {
+        "label": "Monospace",
+        "value": "mono"
+      },
+      {
+        "label": "Rounded",
+        "value": "rounded"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_editor_font",
+    "label": "Editor font (edit mode)",
+    "type": "dropdown",
+    "defaultValue": "same",
+    "options": [
+      {
+        "label": "Same as the notes text",
+        "value": "same"
+      },
+      {
+        "label": "Monospace",
+        "value": "mono"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_heading",
+    "label": "Heading color in read view (six-digit #RRGGBB, empty = text color)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "type": "text",
+    "label": "**Notes appearance · Toolbar buttons**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_btn_size",
+    "label": "Button size in the notes card (px)",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Theme default",
+        "value": "auto"
+      },
+      {
+        "label": "20 px",
+        "value": "20"
+      },
+      {
+        "label": "22 px",
+        "value": "22"
+      },
+      {
+        "label": "26 px",
+        "value": "26"
+      },
+      {
+        "label": "30 px",
+        "value": "30"
+      },
+      {
+        "label": "34 px",
+        "value": "34"
+      },
+      {
+        "label": "40 px",
+        "value": "40"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_btn_radius",
+    "label": "Button corner radius (px)",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Theme default",
+        "value": "auto"
+      },
+      {
+        "label": "0 px",
+        "value": "0"
+      },
+      {
+        "label": "4 px",
+        "value": "4"
+      },
+      {
+        "label": "6 px",
+        "value": "6"
+      },
+      {
+        "label": "10 px",
+        "value": "10"
+      },
+      {
+        "label": "50 px",
+        "value": "50"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_btn_style",
+    "label": "Button style",
+    "type": "dropdown",
+    "defaultValue": "plain",
+    "options": [
+      {
+        "label": "Plain",
+        "value": "plain"
+      },
+      {
+        "label": "Filled",
+        "value": "filled"
+      },
+      {
+        "label": "Outlined",
+        "value": "outlined"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_btn_icon",
+    "label": "Button icon color (six-digit #RRGGBB, empty = text color)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_btn_fill",
+    "label": "Button fill color (six-digit #RRGGBB, empty = automatic)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_btn_border",
+    "label": "Button border color (six-digit #RRGGBB, empty = automatic)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "type": "text",
+    "label": "**Notes appearance · Colors & backing**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_bg",
+    "label": "Card background color (six-digit #RRGGBB, empty = theme)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_text",
+    "label": "Card text color (six-digit #RRGGBB, empty = theme)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_accent",
+    "label": "Accent color (links, active items; six-digit #RRGGBB, empty = theme)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.look_line",
+    "label": "Lines and card border color (six-digit #RRGGBB, empty = theme)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "type": "text",
     "label": "**Video**",
     "size": "22px"
   },
