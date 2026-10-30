@@ -1218,3 +1218,88 @@
   font-size: 1.1em;
   overflow-x: auto;
 }
+
+/* ---- label, hover reveal, push page, themes (C3) -------------------------------------------------- */
+.zentral-notes-sheet .zn-label {
+  appearance: none;
+  flex: 0 1 auto;
+  max-width: 34%;
+  margin: 0 2px;
+  padding: 1px 8px;
+  border: 1px solid var(--zn-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--zn-muted);
+  font: inherit;
+  font-size: 0.85em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.zentral-notes-sheet .zn-label:hover {
+  background: var(--zn-hover);
+  color: inherit;
+}
+.zentral-notes-sheet .zn-item-label {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--zn-line);
+  border-radius: 999px;
+  color: var(--zn-muted);
+  font-size: 0.8em;
+  font-weight: 400;
+  vertical-align: 1px;
+}
+/* Tucked away: the card slides up out of sight; only the strip on its top edge stays. */
+.zentral-notes-sheet[data-tucked="true"] {
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(calc(-100% - 12px));
+}
+.zentral-notes-reveal {
+  z-index: 2147483645;
+  height: 6px;
+  background: transparent;
+}
+/* Push page: the page area gives way to the standalone card (set by createFloatingAdapter.push). */
+:root[zentral-notes-push="right"] #appcontent {
+  margin-right: var(--zentral-notes-push) !important;
+}
+:root[zentral-notes-push="left"] #appcontent {
+  margin-left: var(--zentral-notes-push) !important;
+}
+/* Themes. "recommended" copies the RSS card: popup colours, solid surface, soft shadow. */
+:root[zentral-notes-theme="recommended"] .zentral-notes-sheet {
+  --zn-surface: var(--zl-popup, var(--arrowpanel-background, #1f1f24));
+  --zn-text: var(--zl-popup-text, var(--arrowpanel-color, #eee));
+  --zn-line: var(
+    --zl-button-border-color,
+    var(--arrowpanel-border-color, #444)
+  );
+  --zn-tint: var(--zn-surface);
+  --zn-radius: 10px;
+  box-shadow: 0 6px 24px #0008;
+}
+:root[zentral-notes-theme="light"] .zentral-notes-sheet {
+  color-scheme: light;
+  --zn-surface: #fbfbfd;
+  --zn-text: #1d1d22;
+  --zn-accent: #3b6df0;
+  --zn-tint: #fbfbfd;
+}
+:root[zentral-notes-theme="dark"] .zentral-notes-sheet {
+  color-scheme: dark;
+  --zn-surface: #17171c;
+  --zn-text: #e9e9f0;
+  --zn-accent: #83a5ff;
+  --zn-tint: #17171c;
+}
+:root[zentral-notes-theme="paper"] .zentral-notes-sheet {
+  color-scheme: light;
+  --zn-surface: #f4ecd8;
+  --zn-text: #3b3226;
+  --zn-accent: #9a6b2f;
+  --zn-tint: #f4ecd8;
+}

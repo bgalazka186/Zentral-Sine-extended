@@ -708,8 +708,13 @@ function nativeSidebarSide() {
       SHORTCUTS: "zen.workspace.zentral.notes.shortcuts",
       HIDDEN_TOOLS: "zen.workspace.zentral.notes.hidden_tools",
       AVOID_SIDEBAR: "zen.workspace.zentral.notes.avoid_sidebar",
+      HOVER_REVEAL: "zen.workspace.zentral.notes.hover_reveal",
+      PUSH_PAGE: "zen.workspace.zentral.notes.push_page",
+      SPLIT_WINDOW: "zen.workspace.zentral.notes.split_window",
+      THEME: "zen.workspace.zentral.notes.theme",
     });
-    const VIEW_PREFS = new Set([PREF.WRAP, PREF.FONT_SIZE, PREF.LINE_HEIGHT, PREF.READ_COPY]);
+    const VIEW_PREFS = new Set([PREF.WRAP, PREF.FONT_SIZE, PREF.LINE_HEIGHT, PREF.READ_COPY, PREF.THEME]);
+    const WINDOW_PREFS = new Set([PREF.HOVER_REVEAL, PREF.PUSH_PAGE, PREF.SPLIT_WINDOW, PREF.AVOID_SIDEBAR]);
     const READ_PREFS = new Set([PREF.BLANK_LINES, PREF.LINE_BREAKS, PREF.SETEXT]);
     const OBS_TOPIC = "zentral-notes-changed";
     const IDLE_SAVE_MS = 800; // pause after the last keystroke
@@ -723,9 +728,13 @@ function nativeSidebarSide() {
       "created",
       "updated",
       "color",
+      "label",
       "pinned",
       "trashed",
     ]);
+    // A free-text label per note: one short line, no front matter breaking characters.
+    const LABEL_MAX = 40;
+    const cleanLabel = (v) => String(v ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, LABEL_MAX).trim();
     const MAX_LIST_ROWS = 300;
     const MAX_INLINE_CHARS = 20000;
     const MAX_TABLE_COLS = 12;
@@ -794,6 +803,7 @@ function nativeSidebarSide() {
         created: toTime(meta.created, mtime),
         updated: toTime(meta.updated, mtime),
         color: NOTE_COLORS.includes(meta.color) ? meta.color : "none",
+        label: cleanLabel(meta.label),
         pinned: meta.pinned === "true",
         trashed: meta.trashed ? toTime(meta.trashed, mtime) : 0,
         _onDisk: true,
@@ -808,6 +818,7 @@ function nativeSidebarSide() {
         "updated: " + iso(n.updated),
       ];
       if (n.color && n.color !== "none") lines.push("color: " + n.color);
+      if (cleanLabel(n.label)) lines.push("label: " + cleanLabel(n.label));
       if (n.pinned) lines.push("pinned: true");
       if (n.trashed) lines.push("trashed: " + iso(n.trashed));
       return "---\n" + lines.join("\n") + "\n---\n" + n.body;
@@ -2259,6 +2270,16 @@ function nativeSidebarSide() {
     // ======================================================================
     // Pure core: quick settings (the options a person changes while writing)
     // ======================================================================
+    // Themes of the card (Appearance): "zentral" follows the Zen look, "recommended" copies the RSS card
+    // (popup colours, solid surface, soft shadow), the rest are fixed palettes.
+    const NOTE_THEMES = Object.freeze([
+      ["zentral", "Zentral"],
+      ["recommended", "Recommended"],
+      ["light", "Light"],
+      ["dark", "Dark"],
+      ["paper", "Paper"],
+    ]);
+    const normalizeTheme = (v) => (NOTE_THEMES.some(([k]) => k === v) ? v : "zentral");
     const QUICK_OPTIONS = Object.freeze([
       { id: "font", label: "Text size", pref: PREF.FONT_SIZE, kind: "step", min: 8, max: 40, step: 1, unit: "px", def: 13 },
       { id: "lineHeight", label: "Line height", pref: PREF.LINE_HEIGHT, kind: "step", min: 100, max: 300, step: 10, unit: "%", def: 160 },
@@ -2269,6 +2290,10 @@ function nativeSidebarSide() {
       { id: "copy", label: "Select and copy text in read view", pref: PREF.READ_COPY, kind: "bool", def: false },
       { id: "paste", label: "Pasting a web address", pref: PREF.PASTE_LINK, kind: "choice", def: "ask", choices: [["ask", "Ask"], ["selection", "Over selection"], ["off", "As text"]] },
       { id: "setext", label: "Text over === or --- is a heading", pref: PREF.SETEXT, kind: "bool", def: false },
+      { id: "theme", label: "Theme", pref: PREF.THEME, kind: "choice", def: "zentral", choices: NOTE_THEMES.map(([k, t]) => [k, t]) },
+      { id: "hover", label: "Tuck away on an outside click, reveal on the top edge", pref: PREF.HOVER_REVEAL, kind: "bool", def: false },
+      { id: "push", label: "Push the page aside (standalone card)", pref: PREF.PUSH_PAGE, kind: "bool", def: false },
+      { id: "splitwin", label: "Split view as a second window", pref: PREF.SPLIT_WINDOW, kind: "bool", def: false },
     ]);
     const stepOption = (opt, current, dir) => clampInt((Number(current) || opt.def) + dir * opt.step, opt.min, opt.max);
 
@@ -2321,6 +2346,31 @@ function nativeSidebarSide() {
       const w = Math.max(200, aw - m * 2);
       const hgt = full ? Math.max(120, ah - m * 2) : Math.min(ah - m * 2, Math.max(280, Math.round(ah * 0.62)));
       return { x: m, y: area.anchor === "bottom" ? ah - m - hgt : m, w, h: hgt };
+    }
+    // How far the page must move aside for a card at [left, left+width] so it does not cover the page.
+    // `content` is the page's un-pushed rectangle. Null = do not push (card wider than 60% of the page,
+    // or it does not touch either edge of the page).
+    function pushAmount({ left, width }, content, gap = 8) {
+      const cw = content.right - content.left;
+      if (!(width > 0) || !(cw > 0) || width > cw * 0.6) return null;
+      const center = left + width / 2;
+      if (center > (content.left + content.right) / 2) {
+        const px = Math.round(content.right - left + gap);
+        return px > 0 && px <= cw * 0.7 ? { side: "right", px } : null;
+      }
+      const px = Math.round(left + width - content.left + gap);
+      return px > 0 && px <= cw * 0.7 ? { side: "left", px } : null;
+    }
+    // The second window of a split view: the same size as `rect`, beside it on the side with room
+    // (right first), inside `bounds`. When it does not fit at full width it shrinks; below the
+    // minimum width there is no place for it (null) rather than covering the first window.
+    function companionRect(rect, bounds, gap = 8) {
+      const right = bounds.x + bounds.w - (rect.x + rect.w) - gap;
+      const left = rect.x - bounds.x - gap;
+      const side = right >= rect.w ? "right" : left >= rect.w ? "left" : right >= left ? "right" : "left";
+      const w = Math.min(rect.w, Math.floor(side === "right" ? right : left));
+      if (!(w >= GEO_MIN.w)) return null;
+      return { x: side === "right" ? rect.x + rect.w + gap : rect.x - gap - w, y: rect.y, w, h: rect.h };
     }
     // The part of `bounds` left when tall strips at its left or right edge (the native sidebar) are taken
     // out. Short or small rectangles are ignored; at least `minWidth` always remains.
@@ -2643,7 +2693,7 @@ function nativeSidebarSide() {
             .filter(
               (n) =>
                 !!n.trashed === trashed &&
-                terms.every((t) => n.body.toLowerCase().includes(t)),
+                terms.every((t) => n.body.toLowerCase().includes(t) || (n.label || "").toLowerCase().includes(t)),
             )
             .sort((a, b) =>
               trashed
@@ -2667,6 +2717,7 @@ function nativeSidebarSide() {
             created: t,
             updated: t,
             color: "none",
+            label: "",
             pinned: false,
             trashed: 0,
             _onDisk: false,
@@ -2690,6 +2741,14 @@ function nativeSidebarSide() {
           const note = notes.get(id);
           if (!note || !NOTE_COLORS.includes(color) || note.color === color) return;
           note.color = color;
+          if (note.body.trim() || note._onDisk) markDirty(id);
+          emit("change", id, { meta: true });
+        },
+        setLabel(id, label) {
+          const note = notes.get(id);
+          const next = cleanLabel(label);
+          if (!note || (note.label || "") === next) return;
+          note.label = next;
           if (note.body.trim() || note._onDisk) markDirty(id);
           emit("change", id, { meta: true });
         },
@@ -2839,6 +2898,7 @@ function nativeSidebarSide() {
         HIDEABLE_TOOLS, parseHidden, serializeHidden,
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, sideOf, createHoldAction,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
+        cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount, companionRect,
       };
     }
 
@@ -3098,7 +3158,7 @@ function nativeSidebarSide() {
     // ======================================================================
     // Sheet: one editor view; many can exist, all bound to the same store
     // ======================================================================
-    function createSheet({ store, adapter, env, ensureStore }) {
+    function createSheet({ store, adapter, env, ensureStore, companion = null }) {
       const token = {};
       const cleanups = [];
       const listen = (target, type, fn, opts) => {
@@ -3130,6 +3190,11 @@ function nativeSidebarSide() {
       let readNodes = []; // DOM nodes per drawn block
       let readEmpty = false;
       let dialog = null; // export notice
+      let tucked = false; // hover reveal: open but slid away, a thin strip on the top edge brings it back
+      let revealEl = null;
+      let revealTimer = 0; // armed only while the pointer rests on the strip
+      let peerRoot = null; // the other window of a two-window split view: pressing in it is not "outside"
+      let comp = null; // the second window (a sheet of its own) while the split view uses two windows
 
       // ---- DOM -----------------------------------------------------------
       const root = h("div", {
@@ -3155,7 +3220,9 @@ function nativeSidebarSide() {
       const btnSize = iconButton("maximize", "Larger (hold: fill the whole area)");
       const btnMore = iconButton("more", "More");
       const btnClose = iconButton("x", "Close notes (Esc)");
-      const head = h("div", { class: "zn-head" }, btnList, titleEl, btnPin, btnColor, btnKeep, btnSize, btnMore, btnClose);
+      const labelEl = h("button", { type: "button", class: "zn-label", title: "Edit label" });
+      labelEl.hidden = true;
+      const head = h("div", { class: "zn-head" }, btnList, titleEl, labelEl, btnPin, btnColor, btnKeep, btnSize, btnMore, btnClose);
 
       const tBold = iconButton("bold", "Bold (Ctrl+B)");
       const tItalic = iconButton("italic", "Italic (Ctrl+I)");
@@ -3252,11 +3319,17 @@ function nativeSidebarSide() {
 
       // ---- state -> DOM ----------------------------------------------------
       const note = () => store.get(currentId);
+      // Split view as two windows: only where the sheet floats over a host and the option is on.
+      const twoWin = () => mode === "split" && !companion && !!adapter.position && !!getPref(PREF.SPLIT_WINDOW, false);
       function applyState() {
         const n = note();
         root.dataset.view = view;
-        root.dataset.mode = mode;
+        root.dataset.mode = twoWin() ? "edit" : mode;
+        root.dataset.win = twoWin() ? "two" : "one";
         root.dataset.size = store.meta.size;
+        labelEl.hidden = !n?.label || view === "list";
+        labelEl.textContent = n?.label || "";
+        tSplit.hidden = !!companion;
         root.dataset.color = n?.color || "none";
         root.dataset.trashed = n?.trashed ? "true" : "false";
         titleEl.textContent =
@@ -3293,12 +3366,13 @@ function nativeSidebarSide() {
         tInsert.hidden = ["sup", "sub", "kbd", ...CALLOUT_KINDS.map(([k]) => calloutId(k))].every((id) => gone.has(id));
         ta.readOnly = !!n?.trashed;
         ta.hidden = mode === "read";
-        readEl.hidden = mode === "edit";
+        readEl.hidden = mode === "edit" || twoWin();
         chipAll.classList.toggle("is-on", filter === "all");
         chipRecent.classList.toggle("is-on", filter === "recent");
         chipTrash.classList.toggle("is-on", filter === "trash");
         chipTrash.textContent = store.trashCount() ? `Trash (${store.trashCount()})` : "Trash";
         chipEmpty.hidden = filter !== "trash" || !store.trashCount();
+        syncCompanion();
       }
       function updateChrome() {
         rafChrome = 0;
@@ -3421,23 +3495,23 @@ function nativeSidebarSide() {
       }
       function openNote(id, { focus = true } = {}) {
         if (currentId && currentId !== id) store.discardIfEmpty(currentId);
-        store.setMeta({ lastNoteId: id, recent: pushRecent(store.meta.recent, id) });
+        if (!companion) store.setMeta({ lastNoteId: id, recent: pushRecent(store.meta.recent, id) });
         view = "editor";
         const n = store.get(id);
-        mode = n?.trashed ? "read" : store.meta.mode;
+        mode = n?.trashed ? "read" : companion ? mode : store.meta.mode;
         showNote(id);
         if (focus) focusEditor();
       }
       function newNote() {
         const n = store.create("");
         mode = "edit";
-        store.setMeta({ mode: "edit" });
+        if (!companion) store.setMeta({ mode: "edit" });
         openNote(n.id);
       }
       function setMode(next) {
         if (mode === next) return;
         mode = next;
-        if (!note()?.trashed) store.setMeta({ mode });
+        if (!note()?.trashed && !companion) store.setMeta({ mode });
         if (mode !== "edit") renderRead();
         applyState();
         scheduleLayout();
@@ -3472,7 +3546,7 @@ function nativeSidebarSide() {
         const q = query.trim().toLowerCase();
         return (store.meta.recent || [])
           .map((id) => store.get(id))
-          .filter((n) => n && !n.trashed && (!q || n.body.toLowerCase().includes(q)));
+          .filter((n) => n && !n.trashed && (!q || n.body.toLowerCase().includes(q) || (n.label || "").toLowerCase().includes(q)));
       }
       function renderList() {
         rafList = 0;
@@ -3537,6 +3611,7 @@ function nativeSidebarSide() {
               "span",
               { class: "zn-item-main" },
               h("span", { class: "zn-item-title" }, (n.pinned ? "\u{1F4CC} " : "") + (titleOf(n.body) || "Untitled note")),
+              ...(n.label ? [h("span", { class: "zn-item-label" }, n.label)] : []),
               h("span", { class: "zn-item-snippet" }, snippetOf(n.body)),
             ),
             h("span", { class: "zn-item-time" }, relativeTime(trashed ? n.trashed : n.updated)),
@@ -3775,6 +3850,39 @@ function nativeSidebarSide() {
         dialog.remove();
         dialog = null;
       }
+      // Free-text label of the note (one short line, shown beside the title and in the list, searchable).
+      function askLabel() {
+        const n = note();
+        if (!n || n.trashed) return;
+        const f = field("Label", n.label || "", "e.g. work, ideas, shopping");
+        f.input.maxLength = LABEL_MAX;
+        const ok = chip("Save", true);
+        const clear = chip("Remove label");
+        const cancel = chip("Cancel");
+        openCard("Note label", f.row, h("div", { class: "zn-dialog-actions" }, cancel, clear, ok));
+        const save = (v) => {
+          store.setLabel(n.id, v);
+          closeDialog();
+          applyState();
+          if (view === "list") scheduleList();
+          focusEditor();
+        };
+        ok.addEventListener("click", () => save(f.input.value));
+        clear.addEventListener("click", () => save(""));
+        cancel.addEventListener("click", () => {
+          closeDialog();
+          focusEditor();
+        });
+        f.input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            save(f.input.value);
+          }
+        });
+        f.input.focus({ preventScroll: true });
+        f.input.select?.();
+      }
+      listen(labelEl, "click", () => askLabel());
       function askExport(format, run) {
         closeMenu();
         closeDialog();
@@ -4214,7 +4322,8 @@ function nativeSidebarSide() {
           { icon: "save", label: "Export as plain text\u2026", action: () => askExport("txt", () => env.exportNote(n, "txt")) },
           { icon: "save", label: "Print / save as PDF\u2026", action: () => askExport("pdf", () => env.printNote(n)) },
           { icon: "copy", label: "Copy text", action: () => env.copyText(n.body) },
-          { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body); store.setColor(c.id, n.color); openNote(c.id); } },
+          ...(n.trashed ? [] : [{ icon: "bookmark", label: n.label ? "Edit label\u2026" : "Add label\u2026", action: () => askLabel() }]),
+          { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body); store.setColor(c.id, n.color); store.setLabel(c.id, n.label); openNote(c.id); } },
           { sep: true },
           { icon: "save", label: "Export all notes\u2026", action: () => env.exportAll(store.list()) },
           { icon: "save", label: "Export all as zip\u2026", action: () => askExport("zip", async () => { const k = await env.exportZip(store.list()); if (k) flash(`Zipped ${k} notes`); }) },
@@ -4443,7 +4552,7 @@ function nativeSidebarSide() {
         typed = true;
         store.update(currentId, ta.value, token);
         scheduleChrome();
-        if (mode === "split") schedulePreview();
+        if (mode === "split" && !twoWin()) schedulePreview();
       });
       // Pasting one web address: offer the "create link" dialog (text to show + address).
       listen(ta, "paste", (e) => {
@@ -4563,9 +4672,11 @@ function nativeSidebarSide() {
       function layout() {
         rafLayout = 0;
         if (!isOpen || destroyed || root.hidden) return;
-        const size = store.meta.size;
-        const a = adapter.getArea({ wide: mode === "split", span: size === "span" });
+        const a = adapter.getArea({ wide: mode === "split" && !twoWin(), span: store.meta.size === "span" });
+        // The second window has no place of its own when the first leaves no room beside it.
+        root.style.display = companion && !a ? "none" : "";
         if (!a || a.width < 40 || a.height < 40) return;
+        const size = a.fill ? "full" : store.meta.size;
         const off = hostOffset();
         if (!off) return;
         const key = adapter.geoKey || "";
@@ -4592,6 +4703,95 @@ function nativeSidebarSide() {
         root.dataset.split = w >= 560 ? "side" : "stack";
         taAnchY = null;
         readAnchY = null;
+        placeReveal();
+        applyPush(left, w);
+        comp?.layout();
+      }
+      // ---- push page (standalone card): the page makes room instead of being covered ---------------
+      let pushed = false;
+      function applyPush(left, w) {
+        const want = !!adapter.push && !tucked && !companion && !!getPref(PREF.PUSH_PAGE, false) && store.meta.size === "peek";
+        if (want) pushed = adapter.push({ left, width: w }) || false;
+        else if (pushed || adapter.push) {
+          adapter.unpush?.();
+          pushed = false;
+        }
+      }
+      // ---- hover reveal: an outside click tucks the card away; the strip on its top edge brings it back ----
+      function placeReveal() {
+        if (!revealEl) return;
+        revealEl.style.position = adapter.position;
+        revealEl.style.left = root.style.left;
+        revealEl.style.top = root.style.top;
+        revealEl.style.width = root.style.width;
+      }
+      function tuck() {
+        if (tucked || !isOpen || destroyed || companion) return;
+        tucked = true;
+        closeMenu();
+        closeDialog();
+        drop();
+        try {
+          if (root.contains(document.activeElement)) document.activeElement.blur();
+        } catch (_) {}
+        root.dataset.tucked = "true";
+        revealEl = h("div", { class: "zentral-notes-reveal", "aria-hidden": "true" });
+        revealEl.addEventListener("mouseenter", () => {
+          window.clearTimeout(revealTimer);
+          revealTimer = window.setTimeout(untuck, 140);
+        });
+        revealEl.addEventListener("mouseleave", () => window.clearTimeout(revealTimer));
+        (root.parentNode || document.documentElement).appendChild(revealEl);
+        placeReveal();
+        applyPush(0, 0);
+        adapter.setActive(false);
+        syncCompanion();
+      }
+      function dropReveal() {
+        window.clearTimeout(revealTimer);
+        revealTimer = 0;
+        revealEl?.remove();
+        revealEl = null;
+      }
+      function untuck() {
+        if (!tucked) return;
+        tucked = false;
+        delete root.dataset.tucked;
+        dropReveal();
+        adapter.setActive(true);
+        raise();
+        syncCompanion();
+        scheduleLayout();
+        focusEditor();
+      }
+      // ---- split view as a second window -----------------------------------------------------------
+      function syncCompanion() {
+        const want = isOpen && !destroyed && !tucked && twoWin();
+        if (want && !comp) {
+          const sibling = createSheet({
+            store,
+            adapter: createCompanionAdapter(adapter, root, () => {
+              if (!comp) return;
+              const gone = comp;
+              comp = null;
+              peerRoot = null;
+              gone.destroy();
+              if (mode === "split") setMode("edit");
+            }),
+            env,
+            ensureStore,
+            companion: { parent: () => currentId },
+          });
+          comp = sibling;
+          peerRoot = sibling.root;
+          sibling.setPeer(root);
+          sibling.open();
+        } else if (!want && comp) {
+          const gone = comp;
+          comp = null;
+          peerRoot = null;
+          gone.destroy();
+        }
       }
       const scheduleLayout = () => {
         if (!rafLayout) rafLayout = window.requestAnimationFrame(layout);
@@ -4653,23 +4853,28 @@ function nativeSidebarSide() {
         if (!isOpen || destroyed || gesture) return;
         const path = e.composedPath ? e.composedPath() : [];
         if (root.contains(e.target) || path.includes(root)) return;
+        if (peerRoot && (peerRoot.contains(e.target) || path.includes(peerRoot))) return;
+        if (tucked) return;
         drop();
+        if (companion) return; // the first window decides (tuck or close) and takes this one along
         if (store.meta.pinned !== false) return;
         if (isExempt(e.target, path)) return;
-        close();
+        if (getPref(PREF.HOVER_REVEAL, false)) tuck();
+        else close();
       };
 
       // ---- open / close -------------------------------------------------------------
       async function open() {
         if (destroyed) return;
         if (isOpen) {
-          focusEditor();
+          if (tucked) untuck();
+          else focusEditor();
           return;
         }
         isOpen = true;
         adapter.attach(root);
         root.hidden = false;
-        mode = store.meta.mode;
+        mode = companion ? "edit" : store.meta.mode;
         applyState();
         layout();
         unwatch = adapter.watch(scheduleLayout);
@@ -4684,9 +4889,15 @@ function nativeSidebarSide() {
           return;
         }
         if (!isOpen || destroyed) return;
-        mode = store.meta.mode;
+        mode = companion ? "edit" : store.meta.mode;
         store.refresh().catch(() => {});
-        const id = store.latestId();
+        // The second window shows another note than the first (never the same one in two editors).
+        const other = companion?.parent();
+        const id = companion
+          ? (store.meta.recent || []).find((x) => x !== other && store.get(x) && !store.get(x).trashed) ||
+            store.list().find((n) => n.id !== other)?.id ||
+            ""
+          : store.latestId();
         if (id) openNote(id);
         else newNote();
         layout();
@@ -4694,6 +4905,13 @@ function nativeSidebarSide() {
       function close() {
         if (!isOpen) return;
         isOpen = false;
+        syncCompanion();
+        if (tucked) {
+          tucked = false;
+          delete root.dataset.tucked;
+        }
+        dropReveal();
+        applyPush(0, 0);
         closeMenu();
         closeDialog();
         window.clearTimeout(previewTimer);
@@ -4744,8 +4962,12 @@ function nativeSidebarSide() {
         layout: scheduleLayout,
         applyState,
         focus: focusEditor,
-        isOpen: () => isOpen,
-        toggle: () => (isOpen ? close() : open()),
+        // A tucked card counts as closed for the button and the shortcuts: using them brings it back.
+        isOpen: () => isOpen && !tucked,
+        setPeer: (el) => {
+          peerRoot = el;
+        },
+        toggle: () => (isOpen && !tucked ? close() : open()),
         newNote: () => {
           if (isOpen && !destroyed) newNote();
         },
@@ -4838,6 +5060,31 @@ function nativeSidebarSide() {
         onClosed: null,
       };
     }
+    // The second window of a split view. It borrows the host of the first one and takes the first window's
+    // size and the room beside it (see companionRect); it has no position of its own to drag or save.
+    function createCompanionAdapter(parent, parentRoot, onClose) {
+      return {
+        position: parent.position,
+        geoKey: "",
+        get host() {
+          return parent.host;
+        },
+        ignoreOutside: (t, path) => parent.ignoreOutside?.(t, path),
+        attach: (root) => parent.attach(root),
+        getArea() {
+          const pr = parentRoot.getBoundingClientRect();
+          const pa = parent.getArea({});
+          const b = pa && (pa.bounds || pa);
+          if (!b || pr.width < 40) return null;
+          const r = companionRect({ x: pr.left, y: pr.top, w: pr.width, h: pr.height }, { x: b.left, y: b.top, w: b.width, h: b.height });
+          return r ? { left: r.x - 6, top: r.y - 6, width: r.w + 12, height: r.h + 12, anchor: "top", fill: true } : null;
+        },
+        watch: (cb) => parent.watch(cb),
+        rewatch: () => parent.rewatch?.(),
+        setActive() {},
+        onClosed: onClose,
+      };
+    }
     // The floating card. With `docked()` on it opens beside the Zen sidebar (on the
     // content side, whichever side the sidebar is on) instead of in the window corner.
     function createFloatingAdapter({ docked = () => false, avoidSidebar = () => false, onActive = () => {}, isTrigger = () => false } = {}) {
@@ -4904,6 +5151,25 @@ function nativeSidebarSide() {
         },
         rewatch() {},
         setActive: (on) => onActive(on),
+        // Push page: the page area gets a margin on the card's side while the card is open. Returns true
+        // when it pushed. The margin lives in one root attribute + one variable, both removed again.
+        push({ left, width }) {
+          const rootEl = document.documentElement;
+          const area = document.getElementById("appcontent");
+          if (!area) return false;
+          rootEl.removeAttribute("zentral-notes-push");
+          const r = area.getBoundingClientRect();
+          const amount = pushAmount({ left, width }, { left: r.left, right: r.right });
+          if (!amount) return false;
+          rootEl.style.setProperty("--zentral-notes-push", amount.px + "px");
+          rootEl.setAttribute("zentral-notes-push", amount.side);
+          return true;
+        },
+        unpush() {
+          const rootEl = document.documentElement;
+          rootEl.removeAttribute("zentral-notes-push");
+          rootEl.style.removeProperty("--zentral-notes-push");
+        },
         onClosed: null,
       };
     }
@@ -5193,6 +5459,7 @@ function nativeSidebarSide() {
               if (!body.trim()) continue;
               const created = store.create(body);
               if (NOTE_COLORS.includes(meta.color)) store.setColor(created.id, meta.color);
+              if (meta.label) store.setLabel(created.id, meta.label);
               count++;
             } catch (error) {
               warn(error);
@@ -5507,6 +5774,7 @@ function nativeSidebarSide() {
         rootEl.style.setProperty("--zentral-notes-line-height", String(line / 100));
         rootEl.setAttribute("zentral-notes-wrap", prefBool(PREF.WRAP, true) ? "on" : "off");
         rootEl.setAttribute("zentral-notes-copy", prefBool(PREF.READ_COPY, false) ? "on" : "off");
+        rootEl.setAttribute("zentral-notes-theme", normalizeTheme(prefStr(PREF.THEME, "zentral")));
       }
       applyViewPrefs();
       onCleanup(() => {
@@ -5514,6 +5782,7 @@ function nativeSidebarSide() {
         rootEl.style.removeProperty("--zentral-notes-line-height");
         rootEl.removeAttribute("zentral-notes-wrap");
         rootEl.removeAttribute("zentral-notes-copy");
+        rootEl.removeAttribute("zentral-notes-theme");
       });
       const prefObserver = {
         observe(_s, _t, name) {
@@ -5525,7 +5794,14 @@ function nativeSidebarSide() {
             floating?.sheet?.refreshRead?.();
           } else if (VIEW_PREFS.has(name)) applyViewPrefs();
           else if (name === PREF.SHORTCUT) shortcut = parseShortcut(prefStr(PREF.SHORTCUT, "Alt+Shift+N"));
-          else if (name === PREF.AVOID_SIDEBAR) floating?.sheet.layout();
+          else if (WINDOW_PREFS.has(name)) {
+            // Hover reveal, push page, split windows and the sidebar option: open sheets follow at once.
+            for (const b of [...bindings.values(), floating]) {
+              const sh = typeof b?.sheet === "function" ? b.sheet() : b?.sheet;
+              sh?.applyState?.();
+              sh?.layout?.();
+            }
+          }
           else if (name === PREF.FOLDER) {
             if (storePromise)
               store

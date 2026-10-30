@@ -29,6 +29,52 @@
     "defaultValue": true
   },
   {
+    "property": "zen.workspace.zentral.notes.hover_reveal",
+    "label": "Tuck the card away on an outside click and bring it back by hovering its top edge (instead of closing it)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.push_page",
+    "label": "Push the page aside while the standalone card is open (instead of covering it)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.split_window",
+    "label": "Split view as a second window of the same size (instead of halving one window)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.theme",
+    "label": "Notes theme",
+    "type": "dropdown",
+    "defaultValue": "zentral",
+    "options": [
+      {
+        "label": "Zentral – follows the Zen look",
+        "value": "zentral"
+      },
+      {
+        "label": "Recommended – like the RSS card",
+        "value": "recommended"
+      },
+      {
+        "label": "Light",
+        "value": "light"
+      },
+      {
+        "label": "Dark",
+        "value": "dark"
+      },
+      {
+        "label": "Paper",
+        "value": "paper"
+      }
+    ]
+  },
+  {
     "property": "zen.workspace.zentral.notes.shortcut",
     "label": "Notes shortcut (needs Alt, Ctrl or Cmd, e.g. Alt+Shift+N)",
     "type": "string",

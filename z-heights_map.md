@@ -43,6 +43,7 @@ when the ordering rules below are broken.
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | inline style: `"position:fixed;inset:8%;overflow:auto;z-index:2147483647;padding:20px` | loader/Zentral.uc.js:215 |
 | 2147483646 | RSS reader card (fallback only; see Top layer) | `#bgalazka-rss-card` | additional/rss/ZentralRssDisplay.css:109 |
 | 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-sheet[data-host="float"], .zentral-notes-sheet[data-host="dock"]` | additional/notes/ZentralNotes.css:91 |
+| 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-reveal` | additional/notes/ZentralNotes.css:685 |
 | 2147483643 | Big Preview (fallback only; see Top layer) | `#zentral-video-preview#zentral-video-preview[data-enlarged]` | additional/video/ZentralVideoPreview.css:522 |
 | 2147483642 | Dock ghost while a floating panel is dragged | `:root[zentral-geometry-dragging] #zentral-dock-ghost` | extension/panels/floating/ZentralFloatingPanels.css:285 |
 | 2147483640 | Reveal edge and invisible drag shields | `#bgalazka-panel-reveal-edge` | extension/appearance/ZentralAppearance.css:208 |

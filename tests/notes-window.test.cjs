@@ -118,5 +118,37 @@ const same = (a, b, msg) => assert.equal(canon(a), canon(b), msg);
     assert.equal(list.find((x) => x.id === "span").combo, "Ctrl+Alt+J");
     assert.equal(c.findShortcutConflict(list, "larger", "Ctrl+Alt+J"), "span", "conflicts are found across sheet and global actions");
   });
+  await test("labels: cleaned to one short line, saved in the front matter, read back, searchable", () => {
+    assert.equal(c.cleanLabel("  work \n\t ideas  "), "work ideas");
+    assert.equal(c.cleanLabel("x".repeat(100)).length, 40);
+    assert.equal(c.cleanLabel(null), "");
+    const text = c.serializeNote({ id: "n1", created: 1000, updated: 2000, color: "none", label: "Shopping list", pinned: false, trashed: 0, body: "hi" });
+    assert.ok(text.includes("label: Shopping list"));
+    assert.equal(c.noteFromFile("n1", text, 5).label, "Shopping list");
+    assert.ok(!c.serializeNote({ id: "n2", created: 1, updated: 1, color: "none", label: "  ", body: "" }).includes("label:"), "no empty label line");
+    assert.equal(c.noteFromFile("n3", "no front matter", 5).label, "");
+  });
+  await test("themes: known names pass, anything else falls back to the Zen look", () => {
+    assert.equal(c.normalizeTheme("recommended"), "recommended");
+    for (const bad of ["", "neon", null, undefined, 3]) assert.equal(c.normalizeTheme(bad), "zentral");
+    same(c.NOTE_THEMES.map((t) => t[0]), ["zentral", "recommended", "light", "dark", "paper"]);
+  });
+  await test("push page: the side follows the card, wide cards and cards far from an edge do not push", () => {
+    const content = { left: 0, right: 1000 };
+    same(c.pushAmount({ left: 560, width: 440 }, content), { side: "right", px: 448 });
+    same(c.pushAmount({ left: 0, width: 400 }, content), { side: "left", px: 408 });
+    assert.equal(c.pushAmount({ left: 100, width: 700 }, content), null, "wider than 60% of the page");
+    assert.equal(c.pushAmount({ left: 0, width: 0 }, content), null);
+    assert.equal(c.pushAmount({ left: 0, width: 300 }, { left: 0, right: 0 }), null, "no page rectangle");
+  });
+  await test("second window: same size beside the first, shrinks when short of room, none when it cannot fit", () => {
+    const b = { x: 0, y: 0, w: 1000, h: 700 };
+    same(c.companionRect({ x: 20, y: 30, w: 400, h: 500 }, b), { x: 428, y: 30, w: 400, h: 500 });
+    same(c.companionRect({ x: 580, y: 30, w: 400, h: 500 }, b), { x: 172, y: 30, w: 400, h: 500 }, "no room on the right: goes left");
+    same(c.companionRect({ x: 20, y: 30, w: 600, h: 500 }, b), { x: 628, y: 30, w: 372, h: 500 }, "shrinks to the room that is left");
+    assert.equal(c.companionRect({ x: 20, y: 30, w: 900, h: 500 }, b), null, "less than the minimum width: no second window");
+    const r = c.companionRect({ x: 300, y: 30, w: 400, h: 500 }, b);
+    assert.ok(r.x >= 708 || r.x + r.w <= 292, "never overlaps the first window");
+  });
   console.log(`\n${passed} notes window tests passed`);
 })().catch((e) => { console.error("FAIL", e); process.exit(1); });

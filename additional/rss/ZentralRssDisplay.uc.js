@@ -23,7 +23,8 @@
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
-  const ZentralRuntime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
+  const ZentralRuntime =
+    window.ZentralRuntime || window.__zentralStandaloneRuntime;
 
   function standaloneReady(start) {
     let started = false;
@@ -251,12 +252,11 @@
       // The distance to the sidebar follows the Look gap value.
       const cardGap = () => {
         const value = parseFloat(
-          getComputedStyle(document.documentElement)
-            .getPropertyValue("--bgalazka-look-rss-card-gap"),
+          getComputedStyle(document.documentElement).getPropertyValue(
+            "--bgalazka-look-rss-card-gap",
+          ),
         );
-        return Number.isFinite(value)
-          ? Math.max(0, Math.min(32, value))
-          : 6;
+        return Number.isFinite(value) ? Math.max(0, Math.min(32, value)) : 6;
       };
       // The card's look is owned by the Look custom properties on the root
       // element. Only the behavior switches are applied here.
@@ -299,7 +299,8 @@
         } catch (_) {}
       }
       const URL_RE = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
-      const HTML_HINT_RE = /<[a-z!/][\s\S]*?>|&(?:#\d+|#x[0-9a-f]+|[a-z0-9]+);/i;
+      const HTML_HINT_RE =
+        /<[a-z!/][\s\S]*?>|&(?:#\d+|#x[0-9a-f]+|[a-z0-9]+);/i;
 
       function normalizeHttpUrl(raw, baseUrl = "") {
         if (!raw) return "";
@@ -374,7 +375,8 @@
               typeof window.gBrowser.addTab === "function"
             ) {
               window.gBrowser.selectedTab = window.gBrowser.addTab(href, {
-                triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+                triggeringPrincipal:
+                  Services.scriptSecurityManager.getSystemPrincipal(),
               });
             } else {
               window.open(href, "_blank");
@@ -437,14 +439,17 @@
       function hideCard(delay = 0) {
         cancelShow();
         cancelHide();
-        hideTimer = setTimeout(() => {
-          hideTimer = null;
-          if (card) {
-            card.hidden = true;
-            dropCard(card);
-          }
-          cardTab = null;
-        }, Math.max(0, delay));
+        hideTimer = setTimeout(
+          () => {
+            hideTimer = null;
+            if (card) {
+              card.hidden = true;
+              dropCard(card);
+            }
+            cardTab = null;
+          },
+          Math.max(0, delay),
+        );
       }
       function ensureCard() {
         if (card) return card;
@@ -500,7 +505,9 @@
         if (!folder) return null;
         const items = [
           ...folder.querySelectorAll("tab, .tabbrowser-tab"),
-        ].filter((item) => itemTab(item) && !item.hasAttribute("zen-empty-tab"));
+        ].filter(
+          (item) => itemTab(item) && !item.hasAttribute("zen-empty-tab"),
+        );
         const index = items.indexOf(tab);
         if (index < 0) return items[0] || null;
         return items[index + 1] || items[index - 1] || null;
@@ -519,7 +526,8 @@
           const ss = window.SessionStore || globalThis.SessionStore;
           if (ss && typeof ss.getLazyTabValue === "function") {
             const lazyTitle = ss.getLazyTabValue(tab, "title");
-            if (typeof lazyTitle === "string" && lazyTitle) candidates.push(lazyTitle);
+            if (typeof lazyTitle === "string" && lazyTitle)
+              candidates.push(lazyTitle);
           }
           if (tab.__SS_lazyData?.title) {
             candidates.push(tab.__SS_lazyData.title);
@@ -876,8 +884,7 @@
       window.addEventListener("unload", () => api.destroy(), { once: true });
       return () => api.destroy();
     }
-    if (ZentralRuntime)
-      ZentralRuntime.register({ id: "rss", init: start });
+    if (ZentralRuntime) ZentralRuntime.register({ id: "rss", init: start });
     else standaloneReady(start);
   })();
 })();

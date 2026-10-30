@@ -8,165 +8,187 @@
   "use strict";
   // The full pack, when installed, owns this feature.
   if (window.ZentralRuntime) return;
-/* Zentral standalone shim - TEMPLATE. Never loaded by the full pack.
- * tools/build-standalone.cjs prepends this to a module to produce a bundle that
- * Sine can install on its own (…/additional/<module> folder URL).
- *
- * It provides ONLY what standalone modules use: register (with the same owned
- * lifecycle scope the full runtime hands to init), registerSettingsHook,
- * ensureSettingsSection, registerHostUnload, the native sidebar helpers and the
- * two status slots compact-hover writes. The sidebar helpers and the lifecycle
- * scope (createFeatureScope, including watchNative) are not written here: the
- * build copies them verbatim from loader/ZentralRuntime.js at the markers below,
- * so they cannot drift.
- *
- * Coexistence (full pack always wins, either load order):
- *   1. If window.ZentralRuntime exists, this bundle does nothing.
- *   2. Otherwise each feature is published in window.__zentralStandalone[id];
- *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.6, the numeric-preference list and
- * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
- */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.6";
-const __zentralShim = (function () {
-  const Services =
-    globalThis.Services ||
-    ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
-      .Services;
-  const PREF_STRING = 32,
-    PREF_INT = 64,
-    PREF_BOOL = 128;
-  // Same contract as the runtime's getPref: only a user-visible stored value,
-  // otherwise the fallback.
-  function getPref(key, fallback) {
-    try {
-      switch (Services.prefs.getPrefType(key)) {
-        case PREF_BOOL:
-          return Services.prefs.getBoolPref(key);
-        case PREF_INT:
-          return Services.prefs.getIntPref(key);
-        case PREF_STRING:
-          return Services.prefs.getStringPref(key);
-      }
-    } catch (_) {}
-    return fallback;
-  }
-  let stopped = false;
-  function createNumericPrefSync(options) {
-    const {
-      Services,
-      items,
-      setTimer = (fn, ms) => setTimeout(fn, ms),
-      clearTimer = (id) => clearTimeout(id),
-      warn = () => {},
-    } = options;
-    const prefs = Services.prefs;
-    const INT = prefs.PREF_INT ?? 64,
-      STR = prefs.PREF_STRING ?? 32;
-    const byKey = new Map(),
-      byText = new Map(),
-      timers = new Map();
-    for (const item of items) {
-      byKey.set(item.key, item);
-      byText.set(item.text, item);
-    }
-    let writing = 0,
-      stopped = false;
-    const clamp = (item, n) => Math.min(item.max, Math.max(item.min, Math.round(n)));
-    const parse = (raw) => {
-      const m = /^(-?\d+(?:[.,]\d+)?)\s*(?:px|ms|pt|%|s)?$/i.exec(String(raw ?? "").trim());
-      return m ? Number(m[1].replace(",", ".")) : null;
-    };
-    const readInt = (key) => {
+  /* Zentral standalone shim - TEMPLATE. Never loaded by the full pack.
+   * tools/build-standalone.cjs prepends this to a module to produce a bundle that
+   * Sine can install on its own (…/additional/<module> folder URL).
+   *
+   * It provides ONLY what standalone modules use: register (with the same owned
+   * lifecycle scope the full runtime hands to init), registerSettingsHook,
+   * ensureSettingsSection, registerHostUnload, the native sidebar helpers and the
+   * two status slots compact-hover writes. The sidebar helpers and the lifecycle
+   * scope (createFeatureScope, including watchNative) are not written here: the
+   * build copies them verbatim from loader/ZentralRuntime.js at the markers below,
+   * so they cannot drift.
+   *
+   * Coexistence (full pack always wins, either load order):
+   *   1. If window.ZentralRuntime exists, this bundle does nothing.
+   *   2. Otherwise each feature is published in window.__zentralStandalone[id];
+   *      the full runtime disposes it before activating the same feature id.
+   * Placeholders replaced by the build: 3.1.6, the numeric-preference list and
+   * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
+   */
+  const __ZENTRAL_STANDALONE_VERSION__ = "3.1.6";
+  const __zentralShim = (function () {
+    const Services =
+      globalThis.Services ||
+      ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
+        .Services;
+    const PREF_STRING = 32,
+      PREF_INT = 64,
+      PREF_BOOL = 128;
+    // Same contract as the runtime's getPref: only a user-visible stored value,
+    // otherwise the fallback.
+    function getPref(key, fallback) {
       try {
-        return prefs.getPrefType(key) === INT && prefs.prefHasUserValue(key)
-          ? prefs.getIntPref(key)
-          : null;
-      } catch (_) {
-        return null;
-      }
-    };
-    const readText = (key) => {
-      try {
-        return prefs.getPrefType(key) === STR && prefs.prefHasUserValue(key)
-          ? prefs.getStringPref(key)
-          : null;
-      } catch (_) {
-        return null;
-      }
-    };
-    const guarded = (fn) => {
-      writing++;
-      try {
-        fn();
-      } catch (error) {
-        warn(error);
-      } finally {
-        writing--;
-      }
-    };
-    const textToBase = (item) => {
-      const n = parse(readText(item.text));
-      if (n === null) return;
-      const value = clamp(item, n);
-      if (readInt(item.key) === value) return;
-      guarded(() => {
-        // A leftover value of the wrong type must go first; Firefox refuses a type change.
-        if (prefs.prefHasUserValue(item.key) && prefs.getPrefType(item.key) !== INT)
-          prefs.clearUserPref(item.key);
-        prefs.setIntPref(item.key, value);
-      });
-    };
-    const baseToText = (item) => {
-      const value = readInt(item.key);
-      if (value === null) return;
-      const n = parse(readText(item.text));
-      if (n !== null && clamp(item, n) === value && Math.round(n) === value) return;
-      guarded(() => prefs.setStringPref(item.text, String(value)));
-    };
-    const observer = {
-      observe(_subject, _topic, name) {
-        if (stopped || writing) return;
-        const text = byText.get(name);
-        if (text) {
-          // Typing in Sine can write on every keystroke: apply once it settles.
-          if (timers.has(name)) clearTimer(timers.get(name));
-          timers.set(
-            name,
-            setTimer(() => {
-              timers.delete(name);
-              if (!stopped) textToBase(text);
-            }, 500),
-          );
-          return;
+        switch (Services.prefs.getPrefType(key)) {
+          case PREF_BOOL:
+            return Services.prefs.getBoolPref(key);
+          case PREF_INT:
+            return Services.prefs.getIntPref(key);
+          case PREF_STRING:
+            return Services.prefs.getStringPref(key);
         }
-        const base = byKey.get(name);
-        if (base) baseToText(base);
-      },
-    };
-    // Startup reconcile: the stored integer wins; text is only trusted when no integer
-    // has ever been stored.
-    for (const item of items) {
-      if (readInt(item.key) !== null) baseToText(item);
-      else if (readText(item.text) !== null) textToBase(item);
+      } catch (_) {}
+      return fallback;
     }
-    prefs.addObserver("zen.workspace.", observer);
-    return {
-      destroy() {
-        if (stopped) return;
-        stopped = true;
+    let stopped = false;
+    function createNumericPrefSync(options) {
+      const {
+        Services,
+        items,
+        setTimer = (fn, ms) => setTimeout(fn, ms),
+        clearTimer = (id) => clearTimeout(id),
+        warn = () => {},
+      } = options;
+      const prefs = Services.prefs;
+      const INT = prefs.PREF_INT ?? 64,
+        STR = prefs.PREF_STRING ?? 32;
+      const byKey = new Map(),
+        byText = new Map(),
+        timers = new Map();
+      for (const item of items) {
+        byKey.set(item.key, item);
+        byText.set(item.text, item);
+      }
+      let writing = 0,
+        stopped = false;
+      const clamp = (item, n) =>
+        Math.min(item.max, Math.max(item.min, Math.round(n)));
+      const parse = (raw) => {
+        const m = /^(-?\d+(?:[.,]\d+)?)\s*(?:px|ms|pt|%|s)?$/i.exec(
+          String(raw ?? "").trim(),
+        );
+        return m ? Number(m[1].replace(",", ".")) : null;
+      };
+      const readInt = (key) => {
         try {
-          prefs.removeObserver("zen.workspace.", observer);
-        } catch (_) {}
-        for (const id of timers.values()) clearTimer(id);
-        timers.clear();
+          return prefs.getPrefType(key) === INT && prefs.prefHasUserValue(key)
+            ? prefs.getIntPref(key)
+            : null;
+        } catch (_) {
+          return null;
+        }
+      };
+      const readText = (key) => {
+        try {
+          return prefs.getPrefType(key) === STR && prefs.prefHasUserValue(key)
+            ? prefs.getStringPref(key)
+            : null;
+        } catch (_) {
+          return null;
+        }
+      };
+      const guarded = (fn) => {
+        writing++;
+        try {
+          fn();
+        } catch (error) {
+          warn(error);
+        } finally {
+          writing--;
+        }
+      };
+      const textToBase = (item) => {
+        const n = parse(readText(item.text));
+        if (n === null) return;
+        const value = clamp(item, n);
+        if (readInt(item.key) === value) return;
+        guarded(() => {
+          // A leftover value of the wrong type must go first; Firefox refuses a type change.
+          if (
+            prefs.prefHasUserValue(item.key) &&
+            prefs.getPrefType(item.key) !== INT
+          )
+            prefs.clearUserPref(item.key);
+          prefs.setIntPref(item.key, value);
+        });
+      };
+      const baseToText = (item) => {
+        const value = readInt(item.key);
+        if (value === null) return;
+        const n = parse(readText(item.text));
+        if (n !== null && clamp(item, n) === value && Math.round(n) === value)
+          return;
+        guarded(() => prefs.setStringPref(item.text, String(value)));
+      };
+      const observer = {
+        observe(_subject, _topic, name) {
+          if (stopped || writing) return;
+          const text = byText.get(name);
+          if (text) {
+            // Typing in Sine can write on every keystroke: apply once it settles.
+            if (timers.has(name)) clearTimer(timers.get(name));
+            timers.set(
+              name,
+              setTimer(() => {
+                timers.delete(name);
+                if (!stopped) textToBase(text);
+              }, 500),
+            );
+            return;
+          }
+          const base = byKey.get(name);
+          if (base) baseToText(base);
+        },
+      };
+      // Startup reconcile: the stored integer wins; text is only trusted when no integer
+      // has ever been stored.
+      for (const item of items) {
+        if (readInt(item.key) !== null) baseToText(item);
+        else if (readText(item.text) !== null) textToBase(item);
+      }
+      prefs.addObserver("zen.workspace.", observer);
+      return {
+        destroy() {
+          if (stopped) return;
+          stopped = true;
+          try {
+            prefs.removeObserver("zen.workspace.", observer);
+          } catch (_) {}
+          for (const id of timers.values()) clearTimer(id);
+          timers.clear();
+        },
+        // Exposed for tests only.
+        _observer: observer,
+      };
+    }
+    const numericItems = [
+      {
+        key: "zen.workspace.bgalazka.rss.card_hover_delay",
+        text: "zen.workspace.bgalazka.rss.card_hover_delay_text",
+        min: 0,
+        max: 60000,
+        def: 0,
       },
-      // Exposed for tests only.
-      _observer: observer,
-    };
-  }
-  const numericItems = [{"key":"zen.workspace.bgalazka.rss.card_hover_delay","text":"zen.workspace.bgalazka.rss.card_hover_delay_text","min":0,"max":60000,"def":0},{"key":"zen.workspace.bgalazka.rss.card_hide_delay","text":"zen.workspace.bgalazka.rss.card_hide_delay_text","min":0,"max":60000,"def":250}];
-  function nativeSidebarElement() {
+      {
+        key: "zen.workspace.bgalazka.rss.card_hide_delay",
+        text: "zen.workspace.bgalazka.rss.card_hide_delay_text",
+        min: 0,
+        max: 60000,
+        def: 250,
+      },
+    ];
+    function nativeSidebarElement() {
       const tabs = window.gBrowser?.tabContainer;
       const candidates = [
         window.gNavToolbox,
@@ -198,7 +220,7 @@ const __zentralShim = (function () {
       }
       return null;
     }
-function nativeSidebarRect() {
+    function nativeSidebarRect() {
       const r = nativeSidebarElement()?.getBoundingClientRect();
       if (!r)
         return { left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 };
@@ -215,7 +237,7 @@ function nativeSidebarRect() {
         height: bottom - top,
       };
     }
-function nativeSidebarSide() {
+    function nativeSidebarSide() {
       const ui = document.documentElement;
       for (const key of ["zen-right-side", "zen-sidebar-right"])
         if (ui.hasAttribute(key))
@@ -226,1276 +248,1308 @@ function nativeSidebarSide() {
         ? "right"
         : "left";
     }
-  function createFeatureScope(owner) {
-    let active = true;
-    const cleanups = new Set(),
-      timers = new Set(),
-      frames = new Set();
-    const bindings = new Map();
-    const report = (error) => console.warn("[Zentral lifecycle]", owner, error);
-    const scope = {
-      get active() {
-        return active && !stopped;
-      },
-      bindings,
-      own(dispose) {
-        if (typeof dispose !== "function")
-          throw new TypeError("Cleanup must be a function");
-        let owned = true;
-        const release = () => {
-          if (!owned) return;
-          owned = false;
-          cleanups.delete(release);
-          try {
-            dispose();
-          } catch (error) {
-            report(error);
-          }
-        };
-        if (scope.active) cleanups.add(release);
-        else release();
-        return release;
-      },
-      listen(target, type, callback, options) {
-        if (!scope.active) return () => {};
-        const guarded = (...args) => {
-          if (scope.active) callback.apply(target, args);
-        };
-        target.addEventListener(type, guarded, options);
-        return scope.own(() =>
-          target.removeEventListener(type, guarded, options),
-        );
-      },
-      observe(topic, callback) {
-        if (!scope.active) return () => {};
-        const observer = {
-          observe(...args) {
-            if (scope.active) callback(...args);
-          },
-        };
-        Services.obs.addObserver(observer, topic);
-        return scope.own(() => Services.obs.removeObserver(observer, topic));
-      },
-      preference(prefix, callback) {
-        if (!scope.active) return () => {};
-        const observer = {
-          observe(...args) {
-            if (scope.active) callback(...args);
-          },
-        };
-        Services.prefs.addObserver(prefix, observer);
-        return scope.own(() => Services.prefs.removeObserver(prefix, observer));
-      },
-      setTimeout(callback, delay = 0) {
-        if (!scope.active) return null;
-        const id = window.setTimeout(() => {
-          timers.delete(id);
-          if (scope.active) callback();
-        }, delay);
-        timers.add(id);
-        return id;
-      },
-      clearTimeout(id) {
-        window.clearTimeout(id);
-        timers.delete(id);
-      },
-      requestAnimationFrame(callback) {
-        if (!scope.active) return null;
-        const id = window.requestAnimationFrame((time) => {
-          frames.delete(id);
-          if (scope.active) callback(time);
-        });
-        frames.add(id);
-        return id;
-      },
-      cancelAnimationFrame(id) {
-        window.cancelAnimationFrame(id);
-        frames.delete(id);
-      },
-      destroy() {
-        if (!active) return;
-        active = false;
-        for (const id of timers) window.clearTimeout(id);
-        for (const id of frames) window.cancelAnimationFrame(id);
-        timers.clear();
-        frames.clear();
-        for (const release of [...cleanups].reverse()) release();
-      },
-      watchNative(spec) {
-        const name = spec.name || "native";
-        if (bindings.has(name))
-          throw new Error("Duplicate native binding: " + name);
-        const status = { state: "disabled", attempts: 0 };
-        bindings.set(name, status);
-        let listening = false,
-          disposed = false,
-          busy = false;
-        let target = null,
-          installed = null,
-          attachment = null;
-        let scheduled = null,
-          retry = null,
-          retryIndex = 0;
-        let lastError = null;
-        const listeners = [];
-        const delays = [50, 150, 500, 1500, 4000];
-        const allowed = () =>
-          scope.active && !disposed && (!spec.enabled || spec.enabled());
-        function cancelWork() {
-          scope.clearTimeout(scheduled);
-          scope.clearTimeout(retry);
-          scheduled = retry = null;
-        }
-        function detach() {
-          attachment?.destroy();
-          attachment = installed = target = null;
-        }
-        function scheduleRetry() {
-          if (!allowed() || retry !== null || retryIndex >= delays.length)
-            return;
-          retry = scope.setTimeout(() => {
-            retry = null;
-            check();
-            scheduleRetry();
-          }, delays[retryIndex++]);
-        }
-        function check(event) {
-          if (!allowed() || busy) return;
-          busy = true;
-          try {
-            const next = spec.resolve();
-            if (
-              attachment &&
-              next === target &&
-              installed?.isCurrent?.() !== false
-            )
-              return;
-            detach();
-            if (!next) {
-              status.state = "waiting-native";
-              return;
-            }
-            target = next;
-            const attempt = (attachment = createFeatureScope(
-              owner + "/" + name,
-            ));
-            status.attempts++;
-            installed = spec.attach(next, attempt);
-            const result = installed;
-            if (result && typeof result.then === "function") {
-              Promise.resolve(result).then((late) => {
-                if (typeof late === "function") attempt.own(late);
-                else if (late?.destroy) attempt.own(() => late.destroy());
-              }, report);
-              throw new Error("Native attachment must be synchronous");
-            }
-            if (typeof result === "function") attempt.own(result);
-            else if (result?.destroy) attempt.own(() => result.destroy());
-            if (!allowed()) {
-              detach();
-              return;
-            }
-            status.state = "active";
-            delete status.error;
-            lastError = null;
-            installed?.onReadyEvent?.(event);
-          } catch (error) {
-            detach();
-            status.state = "waiting-native";
-            status.error = String(error);
-            if (lastError !== status.error) {
-              lastError = status.error;
+    function createFeatureScope(owner) {
+      let active = true;
+      const cleanups = new Set(),
+        timers = new Set(),
+        frames = new Set();
+      const bindings = new Map();
+      const report = (error) =>
+        console.warn("[Zentral lifecycle]", owner, error);
+      const scope = {
+        get active() {
+          return active && !stopped;
+        },
+        bindings,
+        own(dispose) {
+          if (typeof dispose !== "function")
+            throw new TypeError("Cleanup must be a function");
+          let owned = true;
+          const release = () => {
+            if (!owned) return;
+            owned = false;
+            cleanups.delete(release);
+            try {
+              dispose();
+            } catch (error) {
               report(error);
             }
-          } finally {
+          };
+          if (scope.active) cleanups.add(release);
+          else release();
+          return release;
+        },
+        listen(target, type, callback, options) {
+          if (!scope.active) return () => {};
+          const guarded = (...args) => {
+            if (scope.active) callback.apply(target, args);
+          };
+          target.addEventListener(type, guarded, options);
+          return scope.own(() =>
+            target.removeEventListener(type, guarded, options),
+          );
+        },
+        observe(topic, callback) {
+          if (!scope.active) return () => {};
+          const observer = {
+            observe(...args) {
+              if (scope.active) callback(...args);
+            },
+          };
+          Services.obs.addObserver(observer, topic);
+          return scope.own(() => Services.obs.removeObserver(observer, topic));
+        },
+        preference(prefix, callback) {
+          if (!scope.active) return () => {};
+          const observer = {
+            observe(...args) {
+              if (scope.active) callback(...args);
+            },
+          };
+          Services.prefs.addObserver(prefix, observer);
+          return scope.own(() =>
+            Services.prefs.removeObserver(prefix, observer),
+          );
+        },
+        setTimeout(callback, delay = 0) {
+          if (!scope.active) return null;
+          const id = window.setTimeout(() => {
+            timers.delete(id);
+            if (scope.active) callback();
+          }, delay);
+          timers.add(id);
+          return id;
+        },
+        clearTimeout(id) {
+          window.clearTimeout(id);
+          timers.delete(id);
+        },
+        requestAnimationFrame(callback) {
+          if (!scope.active) return null;
+          const id = window.requestAnimationFrame((time) => {
+            frames.delete(id);
+            if (scope.active) callback(time);
+          });
+          frames.add(id);
+          return id;
+        },
+        cancelAnimationFrame(id) {
+          window.cancelAnimationFrame(id);
+          frames.delete(id);
+        },
+        destroy() {
+          if (!active) return;
+          active = false;
+          for (const id of timers) window.clearTimeout(id);
+          for (const id of frames) window.cancelAnimationFrame(id);
+          timers.clear();
+          frames.clear();
+          for (const release of [...cleanups].reverse()) release();
+        },
+        watchNative(spec) {
+          const name = spec.name || "native";
+          if (bindings.has(name))
+            throw new Error("Duplicate native binding: " + name);
+          const status = { state: "disabled", attempts: 0 };
+          bindings.set(name, status);
+          let listening = false,
+            disposed = false,
             busy = false;
-          }
-        }
-        function queue(event) {
-          if (!allowed() || scheduled !== null) return;
-          scheduled = scope.setTimeout(() => {
-            scheduled = null;
-            check(event);
-          });
-        }
-        function sync() {
-          const on = allowed();
-          if (on !== listening) {
-            listening = on;
-            cancelWork();
+          let target = null,
+            installed = null,
+            attachment = null;
+          let scheduled = null,
+            retry = null,
             retryIndex = 0;
-            for (const release of listeners.splice(0)) release();
-            if (on) {
-              for (const item of spec.events || []) {
-                const event = typeof item === "string" ? { type: item } : item;
-                listeners.push(
-                  scope.listen(
-                    event.target || window,
-                    event.type,
-                    (value) => {
-                      if (event.filter && !event.filter(value)) return;
-                      if (event.synchronous) check(value);
-                      else queue(value);
-                    },
-                    event.capture || false,
-                  ),
-                );
-              }
-              for (const topic of spec.topics || [])
-                listeners.push(scope.observe(topic, () => queue()));
-            }
+          let lastError = null;
+          const listeners = [];
+          const delays = [50, 150, 500, 1500, 4000];
+          const allowed = () =>
+            scope.active && !disposed && (!spec.enabled || spec.enabled());
+          function cancelWork() {
+            scope.clearTimeout(scheduled);
+            scope.clearTimeout(retry);
+            scheduled = retry = null;
           }
-          if (!on) {
-            detach();
-            status.state = "disabled";
-            delete status.error;
-            return;
+          function detach() {
+            attachment?.destroy();
+            attachment = installed = target = null;
           }
-          check();
-          scheduleRetry();
-        }
-        const prefs = (spec.prefs || []).map((pref) =>
-          scope.preference(pref, sync),
-        );
-        const destroy = scope.own(() => {
-          disposed = true;
-          cancelWork();
-          for (const release of listeners.splice(0)) release();
-          for (const release of prefs) release();
-          detach();
-          status.state = "stopped";
-        });
-        sync();
-        return { check, refresh: queue, destroy, status };
-      },
-    };
-    return scope;
-  }
-  const unloadHandlers = new Set();
-  const runUnload = () => {
-    stopped = true;
-    for (const handler of [...unloadHandlers]) {
-      try {
-        handler();
-      } catch (error) {
-        console.warn("[Zentral standalone] unload cleanup", error);
-      }
-    }
-    unloadHandlers.clear();
-  };
-  window.addEventListener("unload", runUnload, { once: true });
-  // Disabling the mod in Sine while the window stays open: the loader's own
-  // unload hook (the one the full pack uses) must stop the feature too.
-  try {
-    if (typeof window.addUnloadListener === "function")
-      window.addUnloadListener(runUnload);
-    else if (
-      typeof UC_API !== "undefined" &&
-      typeof UC_API.addUnloadListener === "function"
-    )
-      UC_API.addUnloadListener(runUnload);
-  } catch (error) {
-    console.warn("[Zentral standalone] loader unload hook unavailable", error);
-  }
-  // Same barrier the full runtime uses: session restore, Zen workspaces and
-  // Zen startup. Native promises are re-read after each await because Zen can
-  // replace them during restoration. Bounded, never polls.
-  async function nativeReady() {
-    const seen = new Set();
-    for (let round = 0; round < 4 && !stopped; round++) {
-      const pending = [];
-      for (const read of [
-        () => window.SessionStore?.promiseAllWindowsRestored,
-        () => window.gZenWorkspaces?.promiseInitialized,
-        () => window.gZenStartup?.promiseInitialized,
-      ]) {
-        try {
-          const promise = read();
-          if (promise?.then && !seen.has(promise)) {
-            seen.add(promise);
-            pending.push(promise);
-          }
-        } catch (_) {}
-      }
-      if (round && !pending.length) break;
-      await Promise.allSettled(pending);
-      await new Promise((resolve) => window.setTimeout(resolve, 0));
-    }
-  }
-  const features = (window.__zentralStandalone ||= {});
-  const shim = {
-    standalone: true,
-    getPref,
-    nativeSidebarElement,
-    nativeSidebarRect,
-    nativeSidebarSide,
-    sidebarLayoutRepair: null,
-    compactHoverStatus: null,
-    registerSettingsHook: () => () => {},
-    ensureSettingsSection: () => null,
-    registerHostUnload(fn) {
-      unloadHandlers.add(fn);
-      return () => unloadHandlers.delete(fn);
-    },
-    register(def) {
-      if (!def?.id || typeof def.init !== "function")
-        throw new Error("Standalone registration needs id and init");
-      // 1. The full pack owns every feature it contains.
-      if (window.ZentralRuntime) return;
-      // Live re-run (Sine reloads scripts): replace the previous instance.
-      try {
-        features[def.id]?.dispose?.();
-      } catch (_) {}
-      const lifecycle = createFeatureScope(def.id);
-      // Sine's free numeric fields (<key>_text) feed the real integer preferences.
-      let numericSync = null;
-      if (numericItems.length) {
-        try {
-          numericSync = createNumericPrefSync({
-            Services,
-            items: numericItems,
-            warn: (error) => console.warn("[Zentral standalone] numeric preference sync", error),
-          });
-        } catch (error) {
-          console.warn("[Zentral standalone] numeric preference sync unavailable", error);
-        }
-      }
-      let cleanup = null,
-        initialized = false,
-        disposed = false;
-      const handle = (features[def.id] = {
-        version: __ZENTRAL_STANDALONE_VERSION__,
-        dispose() {
-          if (disposed) return;
-          disposed = true;
-          unloadHandlers.delete(handle.dispose);
-          if (features[def.id] === handle) delete features[def.id];
-          const fn = initialized ? (cleanup ?? def.dispose) : null;
-          cleanup = null;
-          try {
-            if (typeof fn === "function") fn();
-            else fn?.destroy?.();
-          } catch (error) {
-            console.warn("[Zentral standalone] cleanup", def.id, error);
-          }
-          lifecycle.destroy();
-          numericSync?.destroy();
-        },
-      });
-      unloadHandlers.add(handle.dispose);
-      nativeReady().then(() => {
-        // The full runtime may have appeared while we waited; it disposes us
-        // (2) when activating, and if it already activated we must not start.
-        if (disposed || stopped || window.ZentralRuntime) {
-          handle.dispose();
-          return;
-        }
-        try {
-          initialized = true;
-          const result = def.init({ lifecycle, runtime: shim });
-          if (result && typeof result.then === "function")
-            throw new Error("init must be synchronous");
-          if (disposed) {
-            // Disposed during init: release what init just created.
-            const late = result ?? def.dispose;
-            if (typeof late === "function") late();
-            else late?.destroy?.();
-            return;
-          }
-          cleanup = result;
-        } catch (error) {
-          console.error("[Zentral standalone] init failed:", def.id, error);
-          handle.dispose();
-        }
-      });
-    },
-  };
-  window.__zentralStandaloneRuntime = shim;
-  return shim;
-})();
-
-/*
- * ZENTRAL FILE GUIDE - additional/rss/ZentralRssDisplay.uc.js
- *
- * Purpose: Independent RSS folder badge/display refresh driven by relevant native events and preferences.
- * Interaction / execution: Runtime exposes services.rss.refresh used by FeatureSettings; standalone mode
- *   waits for native browser readiness. No Apps/panel suite dependency.
- * Ownership / failure: Owns RSS observer/listener cleanup and its stylesheet. Preserve event-driven refresh
- *   rather than reinstalling a permanent folder repair scan.
- * Reader card: The card's appearance is owned by the Look custom properties written by
- *   extension/appearance/ZentralAppearance.js. This file owns the behavior switches
- *   (zen.workspace.bgalazka.rss.card_*): hover and hide delay, side, visible parts,
- *   middle-click dismiss, pointer re-target, dismiss-all confirmation and tooltip replacement.
- * Registration: rss
- * Loaded/created by: loader/ZentralCatalog.js
- * Literal DOM event subscriptions: unload
- *
- * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
- * contracts from this source, not a promise that every collaborator is enabled at runtime.
- */
-(function () {
-  "use strict";
-  const Services =
-    globalThis.Services ||
-    ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
-      .Services;
-  const ZentralRuntime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
-
-  function standaloneReady(start) {
-    let started = false;
-    const run = () => {
-      if (started || !window.gBrowser) return;
-      started = true;
-      try {
-        Services.obs.removeObserver(
-          observer,
-          "browser-delayed-startup-finished",
-        );
-      } catch (_) {}
-      start();
-    };
-    const observer = {
-      observe(subject, topic) {
-        if (subject === window && topic === "browser-delayed-startup-finished")
-          run();
-      },
-    };
-    if (
-      window.gBrowser &&
-      (!window.gBrowserInit || window.gBrowserInit.delayedStartupFinished)
-    )
-      run();
-    else {
-      Services.obs.addObserver(observer, "browser-delayed-startup-finished");
-      window.addEventListener(
-        "unload",
-        () => {
-          try {
-            Services.obs.removeObserver(
-              observer,
-              "browser-delayed-startup-finished",
-            );
-          } catch (_) {}
-        },
-        { once: true },
-      );
-      if (window.gBrowserInit?.delayedStartupFinished) run();
-    }
-  }
-  (function () {
-    function start({ lifecycle } = {}) {
-      const cleanups = [];
-      const registerCleanup = (fn) => cleanups.push(fn);
-      const getPref = (key, fallback) =>
-        Services.prefs.getBoolPref(key, fallback);
-      // Colors are optional overrides: an unset (or invalid) value keeps the
-      // theme token that the stylesheet falls back to.
-      const getStringPref = (key, fallback) => {
-        try {
-          if (!Services.prefs.prefHasUserValue(key)) return fallback;
-          return Services.prefs.getStringPref(key);
-        } catch (_) {
-          return fallback;
-        }
-      };
-      const getNumberPref = (key, fallback) => {
-        try {
-          if (!Services.prefs.prefHasUserValue(key)) return fallback;
-          return Services.prefs.getIntPref(key);
-        } catch (_) {
-          return fallback;
-        }
-      };
-      const EXT_PREFS = {
-        RSS_HIDE_EMPTY: "zen.workspace.bgalazka.rss.hide_empty",
-        RSS_COMPACT_HEADERS: "zen.workspace.bgalazka.rss.compact_headers",
-        RSS_READER_CARD: "zen.workspace.bgalazka.rss.reader_card",
-        RSS_CARD_HOVER_DELAY: "zen.workspace.bgalazka.rss.card_hover_delay",
-        RSS_CARD_HIDE_DELAY: "zen.workspace.bgalazka.rss.card_hide_delay",
-        RSS_CARD_SIDE: "zen.workspace.bgalazka.rss.card_side",
-        RSS_CARD_SHOW_FOLDER: "zen.workspace.bgalazka.rss.card_show_folder",
-        RSS_CARD_SHOW_URL: "zen.workspace.bgalazka.rss.card_show_url",
-        RSS_CARD_SHOW_BUTTONS: "zen.workspace.bgalazka.rss.card_show_buttons",
-        RSS_CARD_MMB_DISMISS: "zen.workspace.bgalazka.rss.card_mmb_dismiss",
-        RSS_CARD_RETARGET: "zen.workspace.bgalazka.rss.card_retarget",
-        RSS_CARD_CONFIRM_ALL: "zen.workspace.bgalazka.rss.card_confirm_all",
-        RSS_CARD_REPLACE_TOOLTIP:
-          "zen.workspace.bgalazka.rss.card_replace_tooltip",
-      };
-      // Behavior delays are bounded so a stray value can never make the card
-      // unusable. The card's look lives in the Look custom properties.
-      const CARD_DELAY_LIMITS = Object.freeze({
-        hover: [0, 2000],
-        hide: [0, 5000],
-      });
-      const CARD_DELAY_DEFAULTS = Object.freeze({
-        hover: 0,
-        hide: 250,
-      });
-      const rssMarkedFolders = new Set();
-      let rssScanTimer = null;
-      let rssObserver = null,
-        rssObservedContainer = null,
-        nativeBinding = null;
-      let disposed = false;
-      const readerOn = () => getPref(EXT_PREFS.RSS_READER_CARD, false);
-      const rssEnabled = () =>
-        getPref(EXT_PREFS.RSS_HIDE_EMPTY, false) ||
-        getPref(EXT_PREFS.RSS_COMPACT_HEADERS, false);
-      function clearRssMarks() {
-        for (const folder of rssMarkedFolders) {
-          folder.removeAttribute("bgalazka-rss-live-folder");
-          folder.removeAttribute("bgalazka-rss-empty");
-        }
-        rssMarkedFolders.clear();
-      }
-      function isNativeLiveFolder(folder) {
-        // Zen versions expose the live-folder flag either as a DOM property or
-        // an attribute. Fail closed if neither is present: ordinary folders must
-        // never be hidden simply because they are empty.
-        return (
-          folder.isLiveFolder === true ||
-          (folder.hasAttribute("is-live-folder") &&
-            folder.getAttribute("is-live-folder") !== "false") ||
-          folder.getAttribute("isLiveFolder") === "true" ||
-          (folder.hasAttribute("zen-live-folder") &&
-            folder.getAttribute("zen-live-folder") !== "false") ||
-          (folder.hasAttribute("data-is-live-folder") &&
-            folder.getAttribute("data-is-live-folder") !== "false")
-        );
-      }
-      function scanRssFolders() {
-        if (!rssEnabled()) return;
-        const live = new Set();
-        for (const folder of document.querySelectorAll(
-          "#tabbrowser-tabs zen-folder",
-        )) {
-          if (!isNativeLiveFolder(folder)) continue;
-          live.add(folder);
-          if (!folder.hasAttribute("bgalazka-rss-live-folder"))
-            folder.setAttribute("bgalazka-rss-live-folder", "true");
-          // Track before inspecting children, so failure cleanup also clears the
-          // current folder's marker instead of leaving a partially hidden row.
-          rssMarkedFolders.add(folder);
-          // A manually placed tab or nested folder is content too. Zen's
-          // restoration placeholder is not an article and must not keep an
-          // otherwise empty live folder visible.
-          const hasContent =
-            Boolean(
-              folder.querySelector("tab[selected], .tabbrowser-tab[selected]"),
-            ) ||
-            [
-              ...folder.querySelectorAll("tab, .tabbrowser-tab, zen-folder"),
-            ].some((child) => {
-              if (child.localName === "zen-folder") return true;
-              if (child.hasAttribute("zen-live-folder-item-id")) return true;
-              if (
-                child.hasAttribute("zen-empty-tab") ||
-                child.hasAttribute("zen-folder-empty-tab")
-              )
-                return false;
-              // A real tab may also be about:blank. Treat every unmarked tab as
-              // content; an unknown Zen placeholder leaves its folder visible.
-              return true;
-            });
-          if (folder.hasAttribute("bgalazka-rss-empty") === hasContent)
-            folder.toggleAttribute("bgalazka-rss-empty", !hasContent);
-        }
-        for (const folder of rssMarkedFolders) {
-          if (live.has(folder)) continue;
-          folder.removeAttribute("bgalazka-rss-live-folder");
-          folder.removeAttribute("bgalazka-rss-empty");
-          rssMarkedFolders.delete(folder);
-        }
-      }
-      function safeScanRssFolders() {
-        try {
-          scanRssFolders();
-        } catch (error) {
-          console.warn("[BgalazkaExtension] RSS display scan failed:", error);
-          clearRssMarks();
-        }
-      }
-
-      // ---- Reader card -------------------------------------------------
-      // Own hover card for live-folder articles. Replaces the native tab
-      // tooltip (only for those tabs) and continues with the next article
-      // after a dismiss, so no extra mouse movement is needed.
-      let card = null,
-        cardTab = null,
-        hideTimer = null,
-        showTimer = null,
-        showTab = null,
-        lastXY = null,
-        readerBound = false;
-      const itemTab = (el) => {
-        const tab = el?.closest?.("tab, .tabbrowser-tab");
-        if (!tab) return null;
-        if (tab.hasAttribute("zen-live-folder-item-id")) return tab;
-        const folder = tab.closest("zen-folder");
-        return folder && isNativeLiveFolder(folder) ? tab : null;
-      };
-      const tabUrl = (tab) => {
-        try {
-          return tab.linkedBrowser?.currentURI?.spec || "";
-        } catch (_) {
-          return "";
-        }
-      };
-      const cancelHide = () => {
-        clearTimeout(hideTimer);
-        hideTimer = null;
-      };
-      const cancelShow = () => {
-        clearTimeout(showTimer);
-        showTimer = null;
-        showTab = null;
-      };
-      const cardDelay = (name, key) => {
-        const [min, max] = CARD_DELAY_LIMITS[name];
-        const raw = Number(getNumberPref(key, CARD_DELAY_DEFAULTS[name]));
-        if (!Number.isFinite(raw)) return CARD_DELAY_DEFAULTS[name];
-        return Math.max(min, Math.min(max, Math.round(raw)));
-      };
-      const hoverDelay = () =>
-        cardDelay("hover", EXT_PREFS.RSS_CARD_HOVER_DELAY);
-      const hideDelay = () => cardDelay("hide", EXT_PREFS.RSS_CARD_HIDE_DELAY);
-      const readerSide = () => {
-        const value = getStringPref(EXT_PREFS.RSS_CARD_SIDE, "auto");
-        return ["auto", "left", "right"].includes(value) ? value : "auto";
-      };
-      // The distance to the sidebar follows the Look gap value.
-      const cardGap = () => {
-        const value = parseFloat(
-          getComputedStyle(document.documentElement)
-            .getPropertyValue("--bgalazka-look-rss-card-gap"),
-        );
-        return Number.isFinite(value)
-          ? Math.max(0, Math.min(32, value))
-          : 6;
-      };
-      // The card's look is owned by the Look custom properties on the root
-      // element. Only the behavior switches are applied here.
-      function applyCardParts() {
-        if (!card) return;
-        card.querySelector(".rc-folder").hidden = !getPref(
-          EXT_PREFS.RSS_CARD_SHOW_FOLDER,
-          true,
-        );
-        card.querySelector(".rc-url").hidden = !getPref(
-          EXT_PREFS.RSS_CARD_SHOW_URL,
-          true,
-        );
-        card.querySelector(".rc-actions").hidden = !getPref(
-          EXT_PREFS.RSS_CARD_SHOW_BUTTONS,
-          true,
-        );
-        card.dataset.side = readerSide();
-      }
-      // A behavior change only restyles the open card; it never triggers a
-      // folder refresh.
-      function applyCardStyle() {
-        applyCardParts();
-        if (card && cardTab && !card.hidden) showCard(cardTab);
-      }
-      // Big Preview (and other popovers) live in the browser's top layer, which no
-      // z-index can outrank. The card is therefore a manual popover too, and every
-      // show re-enters the top layer, because a later popover sits above an earlier
-      // one. Without popover support the z-index in the stylesheet still applies.
-      function raiseCard(c) {
-        if (typeof c.showPopover !== "function") return;
-        try {
-          if (c.matches(":popover-open")) c.hidePopover();
-          c.showPopover();
-        } catch (_) {}
-      }
-      function dropCard(c) {
-        try {
-          if (c?.matches(":popover-open")) c.hidePopover();
-        } catch (_) {}
-      }
-      const URL_RE = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
-      const HTML_HINT_RE = /<[a-z!/][\s\S]*?>|&(?:#\d+|#x[0-9a-f]+|[a-z0-9]+);/i;
-
-      function normalizeHttpUrl(raw, baseUrl = "") {
-        if (!raw) return "";
-        const trimmed = String(raw).trim();
-        if (!trimmed) return "";
-        const candidate = /^www\./i.test(trimmed)
-          ? "https://" + trimmed
-          : trimmed;
-        try {
-          const parsed = baseUrl
-            ? new URL(candidate, baseUrl)
-            : new URL(candidate);
-          if (["http:", "https:", "mailto:"].includes(parsed.protocol))
-            return parsed.href;
-        } catch (_) {}
-        return "";
-      }
-
-      function splitTrailingPunctuation(rawUrl) {
-        let url = rawUrl;
-        let trailing = "";
-        while (url.length) {
-          const last = url[url.length - 1];
-          if (/[.,;:!?'"]/.test(last)) {
-            trailing = last + trailing;
-            url = url.slice(0, -1);
-            continue;
-          }
-          if (last === ")") {
-            const opens = (url.match(/\(/g) || []).length;
-            const closes = (url.match(/\)/g) || []).length;
-            if (closes > opens) {
-              trailing = last + trailing;
-              url = url.slice(0, -1);
-              continue;
-            }
-          }
-          if (last === "]") {
-            const opens = (url.match(/\[/g) || []).length;
-            const closes = (url.match(/\]/g) || []).length;
-            if (closes > opens) {
-              trailing = last + trailing;
-              url = url.slice(0, -1);
-              continue;
-            }
-          }
-          break;
-        }
-        return { url, trailing };
-      }
-
-      function createLinkNode(href, label) {
-        const a = document.createElement("a");
-        a.className = "rc-link";
-        a.href = href;
-        a.title = href;
-        a.textContent = label || href;
-
-        const openLink = (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          try {
-            if (typeof window.openTrustedLinkIn === "function") {
-              window.openTrustedLinkIn(href, "tab");
-            } else if (
-              window.gBrowser &&
-              typeof window.gBrowser.addTrustedTab === "function"
-            ) {
-              window.gBrowser.selectedTab = window.gBrowser.addTrustedTab(href);
-            } else if (
-              window.gBrowser &&
-              typeof window.gBrowser.addTab === "function"
-            ) {
-              window.gBrowser.selectedTab = window.gBrowser.addTab(href, {
-                triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
-              });
-            } else {
-              window.open(href, "_blank");
-            }
-          } catch (err) {
-            console.error("Failed to open RSS link:", err);
-          }
-        };
-
-        a.addEventListener("click", (e) => {
-          if (e.button === 0) openLink(e);
-        });
-        a.addEventListener("auxclick", (e) => {
-          if (e.button === 1) openLink(e);
-        });
-
-        return a;
-      }
-
-      function appendLinkifiedText(target, text, baseUrl) {
-        if (!text) return;
-        URL_RE.lastIndex = 0;
-        let lastIndex = 0;
-        let match;
-        while ((match = URL_RE.exec(text)) !== null) {
-          const start = match.index;
-          if (start > lastIndex) {
-            target.appendChild(
-              document.createTextNode(text.slice(lastIndex, start)),
-            );
-          }
-          const { url, trailing } = splitTrailingPunctuation(match[0]);
-          const href = normalizeHttpUrl(url, baseUrl);
-          if (href) {
-            target.appendChild(createLinkNode(href, url));
-          } else {
-            target.appendChild(document.createTextNode(url));
-          }
-          if (trailing) {
-            target.appendChild(document.createTextNode(trailing));
-          }
-          lastIndex = start + match[0].length;
-        }
-        if (lastIndex < text.length) {
-          target.appendChild(document.createTextNode(text.slice(lastIndex)));
-        }
-      }
-
-      function renderRichText(container, rawText, baseUrl = "") {
-        container.replaceChildren();
-        const source = String(rawText || "").trim();
-        if (!source) return;
-        if (!HTML_HINT_RE.test(source)) {
-          appendLinkifiedText(container, source, baseUrl);
-        } else {
-          const doc = new DOMParser().parseFromString(source, "text/html");
-          appendLinkifiedText(container, doc.body?.textContent || "", baseUrl);
-        }
-      }
-      function hideCard(delay = 0) {
-        cancelShow();
-        cancelHide();
-        hideTimer = setTimeout(() => {
-          hideTimer = null;
-          if (card) {
-            card.hidden = true;
-            dropCard(card);
-          }
-          cardTab = null;
-        }, Math.max(0, delay));
-      }
-      function ensureCard() {
-        if (card) return card;
-        card = document.createElement("div");
-        card.id = "bgalazka-rss-card";
-        card.setAttribute("popover", "manual");
-        card.hidden = true;
-        card.innerHTML =
-          '<div class="rc-folder"></div><div class="rc-text"></div>' +
-          '<div class="rc-url"></div><div class="rc-actions">' +
-          '<button data-a="open">Open</button>' +
-          '<button data-a="dismiss">Dismiss</button>' +
-          '<button data-a="all">Dismiss all</button></div>';
-        card.addEventListener("mouseenter", cancelHide);
-        card.addEventListener("mouseleave", () => hideCard(hideDelay()));
-        card.addEventListener("click", (e) => {
-          const a = e.target.closest("button")?.dataset.a;
-          if (!a || !cardTab) return;
-          const tab = cardTab;
-          if (a === "open") {
-            gBrowser.selectedTab = tab;
-            hideCard();
-          } else if (a === "dismiss") dismiss(tab, false);
-          else if (a === "all") {
-            const folder = tab.closest("zen-folder");
-            const tabs = folder
-              ? [...folder.querySelectorAll("tab, .tabbrowser-tab")].filter(
-                  (t) => itemTab(t) && !t.hasAttribute("zen-empty-tab"),
-                )
-              : [tab];
-            if (
-              getPref(EXT_PREFS.RSS_CARD_CONFIRM_ALL, false) &&
-              !window.confirm(
-                "Dismiss all " +
-                  tabs.length +
-                  " article" +
-                  (tabs.length === 1 ? "" : "s") +
-                  " in this folder?",
-              )
-            )
+          function scheduleRetry() {
+            if (!allowed() || retry !== null || retryIndex >= delays.length)
               return;
-            hideCard();
-            tabs.forEach((t) => gBrowser.removeTab(t, { animate: false }));
+            retry = scope.setTimeout(() => {
+              retry = null;
+              check();
+              scheduleRetry();
+            }, delays[retryIndex++]);
           }
-        });
-        document.documentElement.appendChild(card);
-        applyCardParts();
-        registerCleanup(() => card?.remove());
-        return card;
-      }
-      // The article that follows the dismissed one inside the same folder.
-      function nextArticle(folder, tab) {
-        if (!folder) return null;
-        const items = [
-          ...folder.querySelectorAll("tab, .tabbrowser-tab"),
-        ].filter((item) => itemTab(item) && !item.hasAttribute("zen-empty-tab"));
-        const index = items.indexOf(tab);
-        if (index < 0) return items[0] || null;
-        return items[index + 1] || items[index - 1] || null;
-      }
-      function getFullTabText(tab) {
-        if (!tab) return "";
-        const candidates = [];
-
-        // Firefox's internal untruncated tab label property
-        if (typeof tab._fullLabel === "string" && tab._fullLabel) {
-          candidates.push(tab._fullLabel);
-        }
-
-        // SessionStore lazy data (used for unloaded / pending RSS live-folder tabs)
+          function check(event) {
+            if (!allowed() || busy) return;
+            busy = true;
+            try {
+              const next = spec.resolve();
+              if (
+                attachment &&
+                next === target &&
+                installed?.isCurrent?.() !== false
+              )
+                return;
+              detach();
+              if (!next) {
+                status.state = "waiting-native";
+                return;
+              }
+              target = next;
+              const attempt = (attachment = createFeatureScope(
+                owner + "/" + name,
+              ));
+              status.attempts++;
+              installed = spec.attach(next, attempt);
+              const result = installed;
+              if (result && typeof result.then === "function") {
+                Promise.resolve(result).then((late) => {
+                  if (typeof late === "function") attempt.own(late);
+                  else if (late?.destroy) attempt.own(() => late.destroy());
+                }, report);
+                throw new Error("Native attachment must be synchronous");
+              }
+              if (typeof result === "function") attempt.own(result);
+              else if (result?.destroy) attempt.own(() => result.destroy());
+              if (!allowed()) {
+                detach();
+                return;
+              }
+              status.state = "active";
+              delete status.error;
+              lastError = null;
+              installed?.onReadyEvent?.(event);
+            } catch (error) {
+              detach();
+              status.state = "waiting-native";
+              status.error = String(error);
+              if (lastError !== status.error) {
+                lastError = status.error;
+                report(error);
+              }
+            } finally {
+              busy = false;
+            }
+          }
+          function queue(event) {
+            if (!allowed() || scheduled !== null) return;
+            scheduled = scope.setTimeout(() => {
+              scheduled = null;
+              check(event);
+            });
+          }
+          function sync() {
+            const on = allowed();
+            if (on !== listening) {
+              listening = on;
+              cancelWork();
+              retryIndex = 0;
+              for (const release of listeners.splice(0)) release();
+              if (on) {
+                for (const item of spec.events || []) {
+                  const event =
+                    typeof item === "string" ? { type: item } : item;
+                  listeners.push(
+                    scope.listen(
+                      event.target || window,
+                      event.type,
+                      (value) => {
+                        if (event.filter && !event.filter(value)) return;
+                        if (event.synchronous) check(value);
+                        else queue(value);
+                      },
+                      event.capture || false,
+                    ),
+                  );
+                }
+                for (const topic of spec.topics || [])
+                  listeners.push(scope.observe(topic, () => queue()));
+              }
+            }
+            if (!on) {
+              detach();
+              status.state = "disabled";
+              delete status.error;
+              return;
+            }
+            check();
+            scheduleRetry();
+          }
+          const prefs = (spec.prefs || []).map((pref) =>
+            scope.preference(pref, sync),
+          );
+          const destroy = scope.own(() => {
+            disposed = true;
+            cancelWork();
+            for (const release of listeners.splice(0)) release();
+            for (const release of prefs) release();
+            detach();
+            status.state = "stopped";
+          });
+          sync();
+          return { check, refresh: queue, destroy, status };
+        },
+      };
+      return scope;
+    }
+    const unloadHandlers = new Set();
+    const runUnload = () => {
+      stopped = true;
+      for (const handler of [...unloadHandlers]) {
         try {
-          const ss = window.SessionStore || globalThis.SessionStore;
-          if (ss && typeof ss.getLazyTabValue === "function") {
-            const lazyTitle = ss.getLazyTabValue(tab, "title");
-            if (typeof lazyTitle === "string" && lazyTitle) candidates.push(lazyTitle);
-          }
-          if (tab.__SS_lazyData?.title) {
-            candidates.push(tab.__SS_lazyData.title);
-          }
-        } catch (_) {}
-
-        // Only fall back to the expensive getTabState serialization if the fast
-        // properties did not already yield something longer than tab.label.
-        const labelLen = typeof tab.label === "string" ? tab.label.length : 0;
-        const fastBest = candidates.reduce(
-          (max, c) => Math.max(max, String(c).trim().length),
-          0,
-        );
-        if (fastBest <= labelLen) {
+          handler();
+        } catch (error) {
+          console.warn("[Zentral standalone] unload cleanup", error);
+        }
+      }
+      unloadHandlers.clear();
+    };
+    window.addEventListener("unload", runUnload, { once: true });
+    // Disabling the mod in Sine while the window stays open: the loader's own
+    // unload hook (the one the full pack uses) must stop the feature too.
+    try {
+      if (typeof window.addUnloadListener === "function")
+        window.addUnloadListener(runUnload);
+      else if (
+        typeof UC_API !== "undefined" &&
+        typeof UC_API.addUnloadListener === "function"
+      )
+        UC_API.addUnloadListener(runUnload);
+    } catch (error) {
+      console.warn(
+        "[Zentral standalone] loader unload hook unavailable",
+        error,
+      );
+    }
+    // Same barrier the full runtime uses: session restore, Zen workspaces and
+    // Zen startup. Native promises are re-read after each await because Zen can
+    // replace them during restoration. Bounded, never polls.
+    async function nativeReady() {
+      const seen = new Set();
+      for (let round = 0; round < 4 && !stopped; round++) {
+        const pending = [];
+        for (const read of [
+          () => window.SessionStore?.promiseAllWindowsRestored,
+          () => window.gZenWorkspaces?.promiseInitialized,
+          () => window.gZenStartup?.promiseInitialized,
+        ]) {
           try {
-            const ss = window.SessionStore || globalThis.SessionStore;
-            if (ss && typeof ss.getTabState === "function") {
-              const state = JSON.parse(ss.getTabState(tab));
-              const entry =
-                state?.entries?.[(state.index || 1) - 1] || state?.entries?.[0];
-              if (entry?.title) candidates.push(entry.title);
+            const promise = read();
+            if (promise?.then && !seen.has(promise)) {
+              seen.add(promise);
+              pending.push(promise);
             }
           } catch (_) {}
         }
-
-        // Linked browser contentTitle & Places/Zen custom attributes
-        if (tab.linkedBrowser?.contentTitle) {
-          candidates.push(tab.linkedBrowser.contentTitle);
-        }
-        for (const attr of [
-          "data-rss-fulltext",
-          "zen-original-label",
-          "tooltiptext",
-          "label",
-        ]) {
-          const val = tab.getAttribute?.(attr);
-          if (val) candidates.push(val);
-        }
-        if (typeof tab.label === "string" && tab.label) {
-          candidates.push(tab.label);
-        }
-
-        // Pick the longest valid candidate so the 250-char truncated `tab.label`
-        // loses to the full title stored elsewhere.
-        let best = "";
-        for (const c of candidates) {
-          const str = String(c).trim();
-          if (str.length > best.length) {
-            best = str;
+        if (round && !pending.length) break;
+        await Promise.allSettled(pending);
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+      }
+    }
+    const features = (window.__zentralStandalone ||= {});
+    const shim = {
+      standalone: true,
+      getPref,
+      nativeSidebarElement,
+      nativeSidebarRect,
+      nativeSidebarSide,
+      sidebarLayoutRepair: null,
+      compactHoverStatus: null,
+      registerSettingsHook: () => () => {},
+      ensureSettingsSection: () => null,
+      registerHostUnload(fn) {
+        unloadHandlers.add(fn);
+        return () => unloadHandlers.delete(fn);
+      },
+      register(def) {
+        if (!def?.id || typeof def.init !== "function")
+          throw new Error("Standalone registration needs id and init");
+        // 1. The full pack owns every feature it contains.
+        if (window.ZentralRuntime) return;
+        // Live re-run (Sine reloads scripts): replace the previous instance.
+        try {
+          features[def.id]?.dispose?.();
+        } catch (_) {}
+        const lifecycle = createFeatureScope(def.id);
+        // Sine's free numeric fields (<key>_text) feed the real integer preferences.
+        let numericSync = null;
+        if (numericItems.length) {
+          try {
+            numericSync = createNumericPrefSync({
+              Services,
+              items: numericItems,
+              warn: (error) =>
+                console.warn(
+                  "[Zentral standalone] numeric preference sync",
+                  error,
+                ),
+            });
+          } catch (error) {
+            console.warn(
+              "[Zentral standalone] numeric preference sync unavailable",
+              error,
+            );
           }
         }
-        return best;
-      }
-      function showCard(tab) {
-        if (!tab) return;
-        const c = ensureCard();
-        cancelHide();
-        cancelShow();
-        cardTab = tab;
-        const folder = tab.closest("zen-folder");
-        c.querySelector(".rc-folder").textContent =
-          folder?.label || folder?.getAttribute("label") || "";
-        const url = tabUrl(tab);
-        const rcText = c.querySelector(".rc-text");
-        rcText.className = "rc-text";
-        renderRichText(rcText, getFullTabText(tab), url);
-        c.querySelector(".rc-url").textContent = url;
-        applyCardParts();
-        c.hidden = false;
-        raiseCard(c);
-        const side = document.getElementById("navigator-toolbox");
-        const sr = side?.getBoundingClientRect();
-        const tr = tab.getBoundingClientRect();
-        const w = c.offsetWidth,
-          h = c.offsetHeight;
-        const onRight = sr && sr.left > window.innerWidth / 2;
-        const sidePref = readerSide();
-        const placeLeft =
-          sidePref === "left" ? true : sidePref === "right" ? false : onRight;
-        const gap = cardGap();
-        let left = placeLeft ? tr.left - w - gap : tr.right + gap;
-        // Fall back to the other side when the chosen one has no room.
-        if (left < 4) {
-          const flipped = tr.right + gap;
-          if (flipped + w <= window.innerWidth - 4) left = flipped;
-        }
-        c.style.left =
-          Math.max(4, Math.min(left, window.innerWidth - w - 4)) + "px";
-        c.style.top =
-          Math.max(4, Math.min(tr.top, window.innerHeight - h - 4)) + "px";
-      }
-      // A dismiss never hides the card first: it continues with the next
-      // article, so the reader sees no flash of a closed card.
-      function dismiss(tab, viaPointer) {
-        if (!tab) return;
-        const folder = tab.closest("zen-folder");
-        const next = nextArticle(folder, tab);
-        gBrowser.removeTab(tab, { animate: false });
-        if (
-          viaPointer &&
-          getPref(EXT_PREFS.RSS_CARD_RETARGET, true) &&
-          lastXY
-        ) {
-          // The list shifts under a still pointer: re-target the item that
-          // moved under it. The card stays open while that happens.
-          window.requestAnimationFrame(() => {
-            if (!readerOn()) return;
-            const under = itemTab(document.elementFromPoint(...lastXY));
-            if (under) showCard(under);
-            else if (next?.isConnected) showCard(next);
-            else hideCard();
-          });
-          return;
-        }
-        if (next) {
-          showCard(next);
-          return;
-        }
-        hideCard();
-      }
-      const onOver = (e) => {
-        if (!readerOn()) return;
-        lastXY = [e.clientX, e.clientY];
-        const tab = itemTab(e.target);
-        if (tab) {
-          scheduleShow(tab);
-          return;
-        }
-        if (card && !card.hidden && !card.contains(e.target))
-          hideCard(hideDelay());
-      };
-      const scheduleShow = (tab) => {
-        const delay = hoverDelay();
-        if (delay <= 0) {
-          cancelShow();
-          showCard(tab);
-          return;
-        }
-        if (showTimer !== null && showTab === tab) return;
-        cancelShow();
-        showTab = tab;
-        showTimer = setTimeout(() => {
-          showTimer = null;
-          showTab = null;
-          if (readerOn()) showCard(tab);
-        }, delay);
-      };
-      const onMove = (e) => (lastXY = [e.clientX, e.clientY]);
-      const onAux = (e) => {
-        if (e.button !== 1 || !readerOn()) return;
-        if (!getPref(EXT_PREFS.RSS_CARD_MMB_DISMISS, true)) return;
-        const tab = itemTab(e.target);
-        if (!tab) return;
-        e.preventDefault();
-        e.stopPropagation();
-        dismiss(tab, true);
-      };
-      const onPopup = (e) => {
-        if (!readerOn() || e.target.id !== "tabbrowser-tab-tooltip") return;
-        if (!getPref(EXT_PREFS.RSS_CARD_REPLACE_TOOLTIP, true)) return;
-        if (itemTab(e.target.triggerNode)) e.preventDefault();
-      };
-      const onKeyDown = (e) => {
-        if (e.key !== "Escape" || !readerOn()) return;
-        if (!card || card.hidden) return;
-        e.preventDefault();
-        e.stopPropagation();
-        hideCard();
-      };
-      const onContainerLeave = () => hideCard(hideDelay());
-      function syncReader() {
-        const container = window.gBrowser?.tabContainer;
-        // Appearance preferences reach the card through the same refresh path
-        // as the folder state, so a change applies without a restart.
-        applyCardStyle();
-        if (readerOn() && container && !readerBound) {
-          readerBound = true;
-          container.addEventListener("mouseover", onOver);
-          container.addEventListener("mousemove", onMove);
-          container.addEventListener("auxclick", onAux, true);
-          container.addEventListener("mouseleave", onContainerLeave);
-          window.addEventListener("popupshowing", onPopup, true);
-          window.addEventListener("keydown", onKeyDown);
-          registerCleanup(() => {
-            container.removeEventListener("mouseover", onOver);
-            container.removeEventListener("mousemove", onMove);
-            container.removeEventListener("auxclick", onAux, true);
-            container.removeEventListener("mouseleave", onContainerLeave);
-            window.removeEventListener("popupshowing", onPopup, true);
-            window.removeEventListener("keydown", onKeyDown);
-          });
-        } else if (!readerOn()) hideCard();
-      }
-      function syncRssFolderDisplay() {
-        if (disposed) return;
-        syncReader();
-        const enabled = rssEnabled();
-        document.documentElement.toggleAttribute(
-          "bgalazka-rss-hide-empty",
-          getPref(EXT_PREFS.RSS_HIDE_EMPTY, false),
-        );
-        document.documentElement.toggleAttribute(
-          "bgalazka-rss-compact-headers",
-          getPref(EXT_PREFS.RSS_COMPACT_HEADERS, false),
-        );
-        if (!enabled) {
-          if (rssScanTimer !== null) clearTimeout(rssScanTimer);
-          rssScanTimer = null;
-          rssObserver?.disconnect();
-          rssObserver = rssObservedContainer = null;
-          clearRssMarks();
-          return;
-        }
-        const container = window.gBrowser?.tabContainer;
-        if (rssObserver && rssObservedContainer !== container) {
-          rssObserver.disconnect();
-          rssObserver = rssObservedContainer = null;
-          if (rssScanTimer !== null) clearTimeout(rssScanTimer);
-          rssScanTimer = null;
-        }
-        safeScanRssFolders();
-        if (!rssObserver && container) {
-          rssObservedContainer = container;
-          rssObserver = new MutationObserver(() => {
-            if (disposed || !rssEnabled() || rssScanTimer !== null) return;
-            rssScanTimer = setTimeout(() => {
-              rssScanTimer = null;
-              safeScanRssFolders();
-            }, 100);
-          });
-          rssObserver.observe(container, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: [
-              "is-live-folder",
-              "isLiveFolder",
-              "zen-live-folder",
-              "data-is-live-folder",
-              "zen-live-folder-item-id",
-              "zen-empty-tab",
-              "zen-folder-empty-tab",
-              "selected",
-            ],
-          });
-        }
-        nativeBinding?.check();
-      }
-      // An enabled RSS setting must recover a late/replaced native tab strip.
-      // Core owns bounded probes and lifecycle events; no permanent scan loop.
-      if (lifecycle)
-        nativeBinding = lifecycle.watchNative({
-          name: "rss-tab-strip",
-          prefs: [
-            EXT_PREFS.RSS_HIDE_EMPTY,
-            EXT_PREFS.RSS_COMPACT_HEADERS,
-            EXT_PREFS.RSS_READER_CARD,
-          ],
-          enabled: () => rssEnabled() || readerOn(),
-          resolve: () => window.gBrowser?.tabContainer || null,
-          events: ["activate", "aftercustomization", "TabOpen"],
-          attach(container, child) {
-            child.own(() => {
-              if (rssObservedContainer !== container) return;
-              rssObserver?.disconnect();
-              rssObserver = rssObservedContainer = null;
-              if (rssScanTimer !== null) clearTimeout(rssScanTimer);
-              rssScanTimer = null;
-            });
-            syncRssFolderDisplay();
-            return {
-              isCurrent: () =>
-                rssObservedContainer === container && !!rssObserver,
-            };
+        let cleanup = null,
+          initialized = false,
+          disposed = false;
+        const handle = (features[def.id] = {
+          version: __ZENTRAL_STANDALONE_VERSION__,
+          dispose() {
+            if (disposed) return;
+            disposed = true;
+            unloadHandlers.delete(handle.dispose);
+            if (features[def.id] === handle) delete features[def.id];
+            const fn = initialized ? (cleanup ?? def.dispose) : null;
+            cleanup = null;
+            try {
+              if (typeof fn === "function") fn();
+              else fn?.destroy?.();
+            } catch (error) {
+              console.warn("[Zentral standalone] cleanup", def.id, error);
+            }
+            lifecycle.destroy();
+            numericSync?.destroy();
           },
         });
-      for (const pref of [
-        EXT_PREFS.RSS_HIDE_EMPTY,
-        EXT_PREFS.RSS_COMPACT_HEADERS,
-        EXT_PREFS.RSS_READER_CARD,
-      ]) {
-        try {
-          Services.prefs.addObserver(pref, syncRssFolderDisplay);
-          registerCleanup(() => {
-            try {
-              Services.prefs.removeObserver(pref, syncRssFolderDisplay);
-            } catch (_) {}
-          });
-        } catch (error) {
-          console.warn(
-            "[BgalazkaExtension] RSS pref observer unavailable:",
-            error,
-          );
-        }
-      }
-      // Reader card behavior uses its own light observer: a behavior change
-      // restyles the open card and never rescans the feed folders.
-      const onReaderBehaviorChanged = () => {
-        applyCardStyle();
-        syncReader();
-      };
-      for (const pref of [
-        EXT_PREFS.RSS_CARD_HOVER_DELAY,
-        EXT_PREFS.RSS_CARD_HIDE_DELAY,
-        EXT_PREFS.RSS_CARD_SIDE,
-        EXT_PREFS.RSS_CARD_SHOW_FOLDER,
-        EXT_PREFS.RSS_CARD_SHOW_URL,
-        EXT_PREFS.RSS_CARD_SHOW_BUTTONS,
-        EXT_PREFS.RSS_CARD_MMB_DISMISS,
-        EXT_PREFS.RSS_CARD_RETARGET,
-        EXT_PREFS.RSS_CARD_CONFIRM_ALL,
-        EXT_PREFS.RSS_CARD_REPLACE_TOOLTIP,
-      ]) {
-        try {
-          Services.prefs.addObserver(pref, onReaderBehaviorChanged);
-          registerCleanup(() => {
-            try {
-              Services.prefs.removeObserver(pref, onReaderBehaviorChanged);
-            } catch (_) {}
-          });
-        } catch (error) {
-          console.warn(
-            "[BgalazkaExtension] RSS card pref observer unavailable:",
-            error,
-          );
-        }
-      }
-      registerCleanup(() => {
-        if (rssScanTimer !== null) clearTimeout(rssScanTimer);
-        rssObserver?.disconnect();
-        clearRssMarks();
-        document.documentElement.removeAttribute("bgalazka-rss-hide-empty");
-        document.documentElement.removeAttribute(
-          "bgalazka-rss-compact-headers",
-        );
-      });
-      syncRssFolderDisplay();
+        unloadHandlers.add(handle.dispose);
+        nativeReady().then(() => {
+          // The full runtime may have appeared while we waited; it disposes us
+          // (2) when activating, and if it already activated we must not start.
+          if (disposed || stopped || window.ZentralRuntime) {
+            handle.dispose();
+            return;
+          }
+          try {
+            initialized = true;
+            const result = def.init({ lifecycle, runtime: shim });
+            if (result && typeof result.then === "function")
+              throw new Error("init must be synchronous");
+            if (disposed) {
+              // Disposed during init: release what init just created.
+              const late = result ?? def.dispose;
+              if (typeof late === "function") late();
+              else late?.destroy?.();
+              return;
+            }
+            cleanup = result;
+          } catch (error) {
+            console.error("[Zentral standalone] init failed:", def.id, error);
+            handle.dispose();
+          }
+        });
+      },
+    };
+    window.__zentralStandaloneRuntime = shim;
+    return shim;
+  })();
 
-      const api = {
-        refresh: syncRssFolderDisplay,
-        destroy() {
-          if (disposed) return;
-          disposed = true;
-          nativeBinding?.destroy();
-          if (window.ZentralRuntime?.services.rss === api)
-            delete window.ZentralRuntime.services.rss;
-          cleanups
-            .splice(0)
-            .reverse()
-            .forEach((fn) => fn());
+  /*
+   * ZENTRAL FILE GUIDE - additional/rss/ZentralRssDisplay.uc.js
+   *
+   * Purpose: Independent RSS folder badge/display refresh driven by relevant native events and preferences.
+   * Interaction / execution: Runtime exposes services.rss.refresh used by FeatureSettings; standalone mode
+   *   waits for native browser readiness. No Apps/panel suite dependency.
+   * Ownership / failure: Owns RSS observer/listener cleanup and its stylesheet. Preserve event-driven refresh
+   *   rather than reinstalling a permanent folder repair scan.
+   * Reader card: The card's appearance is owned by the Look custom properties written by
+   *   extension/appearance/ZentralAppearance.js. This file owns the behavior switches
+   *   (zen.workspace.bgalazka.rss.card_*): hover and hide delay, side, visible parts,
+   *   middle-click dismiss, pointer re-target, dismiss-all confirmation and tooltip replacement.
+   * Registration: rss
+   * Loaded/created by: loader/ZentralCatalog.js
+   * Literal DOM event subscriptions: unload
+   *
+   * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
+   * contracts from this source, not a promise that every collaborator is enabled at runtime.
+   */
+  (function () {
+    "use strict";
+    const Services =
+      globalThis.Services ||
+      ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
+        .Services;
+    const ZentralRuntime =
+      window.ZentralRuntime || window.__zentralStandaloneRuntime;
+
+    function standaloneReady(start) {
+      let started = false;
+      const run = () => {
+        if (started || !window.gBrowser) return;
+        started = true;
+        try {
+          Services.obs.removeObserver(
+            observer,
+            "browser-delayed-startup-finished",
+          );
+        } catch (_) {}
+        start();
+      };
+      const observer = {
+        observe(subject, topic) {
+          if (
+            subject === window &&
+            topic === "browser-delayed-startup-finished"
+          )
+            run();
         },
       };
-      if (window.ZentralRuntime) ZentralRuntime.services.rss = api;
-      window.addEventListener("unload", () => api.destroy(), { once: true });
-      return () => api.destroy();
+      if (
+        window.gBrowser &&
+        (!window.gBrowserInit || window.gBrowserInit.delayedStartupFinished)
+      )
+        run();
+      else {
+        Services.obs.addObserver(observer, "browser-delayed-startup-finished");
+        window.addEventListener(
+          "unload",
+          () => {
+            try {
+              Services.obs.removeObserver(
+                observer,
+                "browser-delayed-startup-finished",
+              );
+            } catch (_) {}
+          },
+          { once: true },
+        );
+        if (window.gBrowserInit?.delayedStartupFinished) run();
+      }
     }
-    if (ZentralRuntime)
-      ZentralRuntime.register({ id: "rss", init: start });
-    else standaloneReady(start);
-  })();
-})();
+    (function () {
+      function start({ lifecycle } = {}) {
+        const cleanups = [];
+        const registerCleanup = (fn) => cleanups.push(fn);
+        const getPref = (key, fallback) =>
+          Services.prefs.getBoolPref(key, fallback);
+        // Colors are optional overrides: an unset (or invalid) value keeps the
+        // theme token that the stylesheet falls back to.
+        const getStringPref = (key, fallback) => {
+          try {
+            if (!Services.prefs.prefHasUserValue(key)) return fallback;
+            return Services.prefs.getStringPref(key);
+          } catch (_) {
+            return fallback;
+          }
+        };
+        const getNumberPref = (key, fallback) => {
+          try {
+            if (!Services.prefs.prefHasUserValue(key)) return fallback;
+            return Services.prefs.getIntPref(key);
+          } catch (_) {
+            return fallback;
+          }
+        };
+        const EXT_PREFS = {
+          RSS_HIDE_EMPTY: "zen.workspace.bgalazka.rss.hide_empty",
+          RSS_COMPACT_HEADERS: "zen.workspace.bgalazka.rss.compact_headers",
+          RSS_READER_CARD: "zen.workspace.bgalazka.rss.reader_card",
+          RSS_CARD_HOVER_DELAY: "zen.workspace.bgalazka.rss.card_hover_delay",
+          RSS_CARD_HIDE_DELAY: "zen.workspace.bgalazka.rss.card_hide_delay",
+          RSS_CARD_SIDE: "zen.workspace.bgalazka.rss.card_side",
+          RSS_CARD_SHOW_FOLDER: "zen.workspace.bgalazka.rss.card_show_folder",
+          RSS_CARD_SHOW_URL: "zen.workspace.bgalazka.rss.card_show_url",
+          RSS_CARD_SHOW_BUTTONS: "zen.workspace.bgalazka.rss.card_show_buttons",
+          RSS_CARD_MMB_DISMISS: "zen.workspace.bgalazka.rss.card_mmb_dismiss",
+          RSS_CARD_RETARGET: "zen.workspace.bgalazka.rss.card_retarget",
+          RSS_CARD_CONFIRM_ALL: "zen.workspace.bgalazka.rss.card_confirm_all",
+          RSS_CARD_REPLACE_TOOLTIP:
+            "zen.workspace.bgalazka.rss.card_replace_tooltip",
+        };
+        // Behavior delays are bounded so a stray value can never make the card
+        // unusable. The card's look lives in the Look custom properties.
+        const CARD_DELAY_LIMITS = Object.freeze({
+          hover: [0, 2000],
+          hide: [0, 5000],
+        });
+        const CARD_DELAY_DEFAULTS = Object.freeze({
+          hover: 0,
+          hide: 250,
+        });
+        const rssMarkedFolders = new Set();
+        let rssScanTimer = null;
+        let rssObserver = null,
+          rssObservedContainer = null,
+          nativeBinding = null;
+        let disposed = false;
+        const readerOn = () => getPref(EXT_PREFS.RSS_READER_CARD, false);
+        const rssEnabled = () =>
+          getPref(EXT_PREFS.RSS_HIDE_EMPTY, false) ||
+          getPref(EXT_PREFS.RSS_COMPACT_HEADERS, false);
+        function clearRssMarks() {
+          for (const folder of rssMarkedFolders) {
+            folder.removeAttribute("bgalazka-rss-live-folder");
+            folder.removeAttribute("bgalazka-rss-empty");
+          }
+          rssMarkedFolders.clear();
+        }
+        function isNativeLiveFolder(folder) {
+          // Zen versions expose the live-folder flag either as a DOM property or
+          // an attribute. Fail closed if neither is present: ordinary folders must
+          // never be hidden simply because they are empty.
+          return (
+            folder.isLiveFolder === true ||
+            (folder.hasAttribute("is-live-folder") &&
+              folder.getAttribute("is-live-folder") !== "false") ||
+            folder.getAttribute("isLiveFolder") === "true" ||
+            (folder.hasAttribute("zen-live-folder") &&
+              folder.getAttribute("zen-live-folder") !== "false") ||
+            (folder.hasAttribute("data-is-live-folder") &&
+              folder.getAttribute("data-is-live-folder") !== "false")
+          );
+        }
+        function scanRssFolders() {
+          if (!rssEnabled()) return;
+          const live = new Set();
+          for (const folder of document.querySelectorAll(
+            "#tabbrowser-tabs zen-folder",
+          )) {
+            if (!isNativeLiveFolder(folder)) continue;
+            live.add(folder);
+            if (!folder.hasAttribute("bgalazka-rss-live-folder"))
+              folder.setAttribute("bgalazka-rss-live-folder", "true");
+            // Track before inspecting children, so failure cleanup also clears the
+            // current folder's marker instead of leaving a partially hidden row.
+            rssMarkedFolders.add(folder);
+            // A manually placed tab or nested folder is content too. Zen's
+            // restoration placeholder is not an article and must not keep an
+            // otherwise empty live folder visible.
+            const hasContent =
+              Boolean(
+                folder.querySelector(
+                  "tab[selected], .tabbrowser-tab[selected]",
+                ),
+              ) ||
+              [
+                ...folder.querySelectorAll("tab, .tabbrowser-tab, zen-folder"),
+              ].some((child) => {
+                if (child.localName === "zen-folder") return true;
+                if (child.hasAttribute("zen-live-folder-item-id")) return true;
+                if (
+                  child.hasAttribute("zen-empty-tab") ||
+                  child.hasAttribute("zen-folder-empty-tab")
+                )
+                  return false;
+                // A real tab may also be about:blank. Treat every unmarked tab as
+                // content; an unknown Zen placeholder leaves its folder visible.
+                return true;
+              });
+            if (folder.hasAttribute("bgalazka-rss-empty") === hasContent)
+              folder.toggleAttribute("bgalazka-rss-empty", !hasContent);
+          }
+          for (const folder of rssMarkedFolders) {
+            if (live.has(folder)) continue;
+            folder.removeAttribute("bgalazka-rss-live-folder");
+            folder.removeAttribute("bgalazka-rss-empty");
+            rssMarkedFolders.delete(folder);
+          }
+        }
+        function safeScanRssFolders() {
+          try {
+            scanRssFolders();
+          } catch (error) {
+            console.warn("[BgalazkaExtension] RSS display scan failed:", error);
+            clearRssMarks();
+          }
+        }
 
+        // ---- Reader card -------------------------------------------------
+        // Own hover card for live-folder articles. Replaces the native tab
+        // tooltip (only for those tabs) and continues with the next article
+        // after a dismiss, so no extra mouse movement is needed.
+        let card = null,
+          cardTab = null,
+          hideTimer = null,
+          showTimer = null,
+          showTab = null,
+          lastXY = null,
+          readerBound = false;
+        const itemTab = (el) => {
+          const tab = el?.closest?.("tab, .tabbrowser-tab");
+          if (!tab) return null;
+          if (tab.hasAttribute("zen-live-folder-item-id")) return tab;
+          const folder = tab.closest("zen-folder");
+          return folder && isNativeLiveFolder(folder) ? tab : null;
+        };
+        const tabUrl = (tab) => {
+          try {
+            return tab.linkedBrowser?.currentURI?.spec || "";
+          } catch (_) {
+            return "";
+          }
+        };
+        const cancelHide = () => {
+          clearTimeout(hideTimer);
+          hideTimer = null;
+        };
+        const cancelShow = () => {
+          clearTimeout(showTimer);
+          showTimer = null;
+          showTab = null;
+        };
+        const cardDelay = (name, key) => {
+          const [min, max] = CARD_DELAY_LIMITS[name];
+          const raw = Number(getNumberPref(key, CARD_DELAY_DEFAULTS[name]));
+          if (!Number.isFinite(raw)) return CARD_DELAY_DEFAULTS[name];
+          return Math.max(min, Math.min(max, Math.round(raw)));
+        };
+        const hoverDelay = () =>
+          cardDelay("hover", EXT_PREFS.RSS_CARD_HOVER_DELAY);
+        const hideDelay = () =>
+          cardDelay("hide", EXT_PREFS.RSS_CARD_HIDE_DELAY);
+        const readerSide = () => {
+          const value = getStringPref(EXT_PREFS.RSS_CARD_SIDE, "auto");
+          return ["auto", "left", "right"].includes(value) ? value : "auto";
+        };
+        // The distance to the sidebar follows the Look gap value.
+        const cardGap = () => {
+          const value = parseFloat(
+            getComputedStyle(document.documentElement).getPropertyValue(
+              "--bgalazka-look-rss-card-gap",
+            ),
+          );
+          return Number.isFinite(value) ? Math.max(0, Math.min(32, value)) : 6;
+        };
+        // The card's look is owned by the Look custom properties on the root
+        // element. Only the behavior switches are applied here.
+        function applyCardParts() {
+          if (!card) return;
+          card.querySelector(".rc-folder").hidden = !getPref(
+            EXT_PREFS.RSS_CARD_SHOW_FOLDER,
+            true,
+          );
+          card.querySelector(".rc-url").hidden = !getPref(
+            EXT_PREFS.RSS_CARD_SHOW_URL,
+            true,
+          );
+          card.querySelector(".rc-actions").hidden = !getPref(
+            EXT_PREFS.RSS_CARD_SHOW_BUTTONS,
+            true,
+          );
+          card.dataset.side = readerSide();
+        }
+        // A behavior change only restyles the open card; it never triggers a
+        // folder refresh.
+        function applyCardStyle() {
+          applyCardParts();
+          if (card && cardTab && !card.hidden) showCard(cardTab);
+        }
+        // Big Preview (and other popovers) live in the browser's top layer, which no
+        // z-index can outrank. The card is therefore a manual popover too, and every
+        // show re-enters the top layer, because a later popover sits above an earlier
+        // one. Without popover support the z-index in the stylesheet still applies.
+        function raiseCard(c) {
+          if (typeof c.showPopover !== "function") return;
+          try {
+            if (c.matches(":popover-open")) c.hidePopover();
+            c.showPopover();
+          } catch (_) {}
+        }
+        function dropCard(c) {
+          try {
+            if (c?.matches(":popover-open")) c.hidePopover();
+          } catch (_) {}
+        }
+        const URL_RE = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+        const HTML_HINT_RE =
+          /<[a-z!/][\s\S]*?>|&(?:#\d+|#x[0-9a-f]+|[a-z0-9]+);/i;
+
+        function normalizeHttpUrl(raw, baseUrl = "") {
+          if (!raw) return "";
+          const trimmed = String(raw).trim();
+          if (!trimmed) return "";
+          const candidate = /^www\./i.test(trimmed)
+            ? "https://" + trimmed
+            : trimmed;
+          try {
+            const parsed = baseUrl
+              ? new URL(candidate, baseUrl)
+              : new URL(candidate);
+            if (["http:", "https:", "mailto:"].includes(parsed.protocol))
+              return parsed.href;
+          } catch (_) {}
+          return "";
+        }
+
+        function splitTrailingPunctuation(rawUrl) {
+          let url = rawUrl;
+          let trailing = "";
+          while (url.length) {
+            const last = url[url.length - 1];
+            if (/[.,;:!?'"]/.test(last)) {
+              trailing = last + trailing;
+              url = url.slice(0, -1);
+              continue;
+            }
+            if (last === ")") {
+              const opens = (url.match(/\(/g) || []).length;
+              const closes = (url.match(/\)/g) || []).length;
+              if (closes > opens) {
+                trailing = last + trailing;
+                url = url.slice(0, -1);
+                continue;
+              }
+            }
+            if (last === "]") {
+              const opens = (url.match(/\[/g) || []).length;
+              const closes = (url.match(/\]/g) || []).length;
+              if (closes > opens) {
+                trailing = last + trailing;
+                url = url.slice(0, -1);
+                continue;
+              }
+            }
+            break;
+          }
+          return { url, trailing };
+        }
+
+        function createLinkNode(href, label) {
+          const a = document.createElement("a");
+          a.className = "rc-link";
+          a.href = href;
+          a.title = href;
+          a.textContent = label || href;
+
+          const openLink = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+              if (typeof window.openTrustedLinkIn === "function") {
+                window.openTrustedLinkIn(href, "tab");
+              } else if (
+                window.gBrowser &&
+                typeof window.gBrowser.addTrustedTab === "function"
+              ) {
+                window.gBrowser.selectedTab =
+                  window.gBrowser.addTrustedTab(href);
+              } else if (
+                window.gBrowser &&
+                typeof window.gBrowser.addTab === "function"
+              ) {
+                window.gBrowser.selectedTab = window.gBrowser.addTab(href, {
+                  triggeringPrincipal:
+                    Services.scriptSecurityManager.getSystemPrincipal(),
+                });
+              } else {
+                window.open(href, "_blank");
+              }
+            } catch (err) {
+              console.error("Failed to open RSS link:", err);
+            }
+          };
+
+          a.addEventListener("click", (e) => {
+            if (e.button === 0) openLink(e);
+          });
+          a.addEventListener("auxclick", (e) => {
+            if (e.button === 1) openLink(e);
+          });
+
+          return a;
+        }
+
+        function appendLinkifiedText(target, text, baseUrl) {
+          if (!text) return;
+          URL_RE.lastIndex = 0;
+          let lastIndex = 0;
+          let match;
+          while ((match = URL_RE.exec(text)) !== null) {
+            const start = match.index;
+            if (start > lastIndex) {
+              target.appendChild(
+                document.createTextNode(text.slice(lastIndex, start)),
+              );
+            }
+            const { url, trailing } = splitTrailingPunctuation(match[0]);
+            const href = normalizeHttpUrl(url, baseUrl);
+            if (href) {
+              target.appendChild(createLinkNode(href, url));
+            } else {
+              target.appendChild(document.createTextNode(url));
+            }
+            if (trailing) {
+              target.appendChild(document.createTextNode(trailing));
+            }
+            lastIndex = start + match[0].length;
+          }
+          if (lastIndex < text.length) {
+            target.appendChild(document.createTextNode(text.slice(lastIndex)));
+          }
+        }
+
+        function renderRichText(container, rawText, baseUrl = "") {
+          container.replaceChildren();
+          const source = String(rawText || "").trim();
+          if (!source) return;
+          if (!HTML_HINT_RE.test(source)) {
+            appendLinkifiedText(container, source, baseUrl);
+          } else {
+            const doc = new DOMParser().parseFromString(source, "text/html");
+            appendLinkifiedText(
+              container,
+              doc.body?.textContent || "",
+              baseUrl,
+            );
+          }
+        }
+        function hideCard(delay = 0) {
+          cancelShow();
+          cancelHide();
+          hideTimer = setTimeout(
+            () => {
+              hideTimer = null;
+              if (card) {
+                card.hidden = true;
+                dropCard(card);
+              }
+              cardTab = null;
+            },
+            Math.max(0, delay),
+          );
+        }
+        function ensureCard() {
+          if (card) return card;
+          card = document.createElement("div");
+          card.id = "bgalazka-rss-card";
+          card.setAttribute("popover", "manual");
+          card.hidden = true;
+          card.innerHTML =
+            '<div class="rc-folder"></div><div class="rc-text"></div>' +
+            '<div class="rc-url"></div><div class="rc-actions">' +
+            '<button data-a="open">Open</button>' +
+            '<button data-a="dismiss">Dismiss</button>' +
+            '<button data-a="all">Dismiss all</button></div>';
+          card.addEventListener("mouseenter", cancelHide);
+          card.addEventListener("mouseleave", () => hideCard(hideDelay()));
+          card.addEventListener("click", (e) => {
+            const a = e.target.closest("button")?.dataset.a;
+            if (!a || !cardTab) return;
+            const tab = cardTab;
+            if (a === "open") {
+              gBrowser.selectedTab = tab;
+              hideCard();
+            } else if (a === "dismiss") dismiss(tab, false);
+            else if (a === "all") {
+              const folder = tab.closest("zen-folder");
+              const tabs = folder
+                ? [...folder.querySelectorAll("tab, .tabbrowser-tab")].filter(
+                    (t) => itemTab(t) && !t.hasAttribute("zen-empty-tab"),
+                  )
+                : [tab];
+              if (
+                getPref(EXT_PREFS.RSS_CARD_CONFIRM_ALL, false) &&
+                !window.confirm(
+                  "Dismiss all " +
+                    tabs.length +
+                    " article" +
+                    (tabs.length === 1 ? "" : "s") +
+                    " in this folder?",
+                )
+              )
+                return;
+              hideCard();
+              tabs.forEach((t) => gBrowser.removeTab(t, { animate: false }));
+            }
+          });
+          document.documentElement.appendChild(card);
+          applyCardParts();
+          registerCleanup(() => card?.remove());
+          return card;
+        }
+        // The article that follows the dismissed one inside the same folder.
+        function nextArticle(folder, tab) {
+          if (!folder) return null;
+          const items = [
+            ...folder.querySelectorAll("tab, .tabbrowser-tab"),
+          ].filter(
+            (item) => itemTab(item) && !item.hasAttribute("zen-empty-tab"),
+          );
+          const index = items.indexOf(tab);
+          if (index < 0) return items[0] || null;
+          return items[index + 1] || items[index - 1] || null;
+        }
+        function getFullTabText(tab) {
+          if (!tab) return "";
+          const candidates = [];
+
+          // Firefox's internal untruncated tab label property
+          if (typeof tab._fullLabel === "string" && tab._fullLabel) {
+            candidates.push(tab._fullLabel);
+          }
+
+          // SessionStore lazy data (used for unloaded / pending RSS live-folder tabs)
+          try {
+            const ss = window.SessionStore || globalThis.SessionStore;
+            if (ss && typeof ss.getLazyTabValue === "function") {
+              const lazyTitle = ss.getLazyTabValue(tab, "title");
+              if (typeof lazyTitle === "string" && lazyTitle)
+                candidates.push(lazyTitle);
+            }
+            if (tab.__SS_lazyData?.title) {
+              candidates.push(tab.__SS_lazyData.title);
+            }
+          } catch (_) {}
+
+          // Only fall back to the expensive getTabState serialization if the fast
+          // properties did not already yield something longer than tab.label.
+          const labelLen = typeof tab.label === "string" ? tab.label.length : 0;
+          const fastBest = candidates.reduce(
+            (max, c) => Math.max(max, String(c).trim().length),
+            0,
+          );
+          if (fastBest <= labelLen) {
+            try {
+              const ss = window.SessionStore || globalThis.SessionStore;
+              if (ss && typeof ss.getTabState === "function") {
+                const state = JSON.parse(ss.getTabState(tab));
+                const entry =
+                  state?.entries?.[(state.index || 1) - 1] ||
+                  state?.entries?.[0];
+                if (entry?.title) candidates.push(entry.title);
+              }
+            } catch (_) {}
+          }
+
+          // Linked browser contentTitle & Places/Zen custom attributes
+          if (tab.linkedBrowser?.contentTitle) {
+            candidates.push(tab.linkedBrowser.contentTitle);
+          }
+          for (const attr of [
+            "data-rss-fulltext",
+            "zen-original-label",
+            "tooltiptext",
+            "label",
+          ]) {
+            const val = tab.getAttribute?.(attr);
+            if (val) candidates.push(val);
+          }
+          if (typeof tab.label === "string" && tab.label) {
+            candidates.push(tab.label);
+          }
+
+          // Pick the longest valid candidate so the 250-char truncated `tab.label`
+          // loses to the full title stored elsewhere.
+          let best = "";
+          for (const c of candidates) {
+            const str = String(c).trim();
+            if (str.length > best.length) {
+              best = str;
+            }
+          }
+          return best;
+        }
+        function showCard(tab) {
+          if (!tab) return;
+          const c = ensureCard();
+          cancelHide();
+          cancelShow();
+          cardTab = tab;
+          const folder = tab.closest("zen-folder");
+          c.querySelector(".rc-folder").textContent =
+            folder?.label || folder?.getAttribute("label") || "";
+          const url = tabUrl(tab);
+          const rcText = c.querySelector(".rc-text");
+          rcText.className = "rc-text";
+          renderRichText(rcText, getFullTabText(tab), url);
+          c.querySelector(".rc-url").textContent = url;
+          applyCardParts();
+          c.hidden = false;
+          raiseCard(c);
+          const side = document.getElementById("navigator-toolbox");
+          const sr = side?.getBoundingClientRect();
+          const tr = tab.getBoundingClientRect();
+          const w = c.offsetWidth,
+            h = c.offsetHeight;
+          const onRight = sr && sr.left > window.innerWidth / 2;
+          const sidePref = readerSide();
+          const placeLeft =
+            sidePref === "left" ? true : sidePref === "right" ? false : onRight;
+          const gap = cardGap();
+          let left = placeLeft ? tr.left - w - gap : tr.right + gap;
+          // Fall back to the other side when the chosen one has no room.
+          if (left < 4) {
+            const flipped = tr.right + gap;
+            if (flipped + w <= window.innerWidth - 4) left = flipped;
+          }
+          c.style.left =
+            Math.max(4, Math.min(left, window.innerWidth - w - 4)) + "px";
+          c.style.top =
+            Math.max(4, Math.min(tr.top, window.innerHeight - h - 4)) + "px";
+        }
+        // A dismiss never hides the card first: it continues with the next
+        // article, so the reader sees no flash of a closed card.
+        function dismiss(tab, viaPointer) {
+          if (!tab) return;
+          const folder = tab.closest("zen-folder");
+          const next = nextArticle(folder, tab);
+          gBrowser.removeTab(tab, { animate: false });
+          if (
+            viaPointer &&
+            getPref(EXT_PREFS.RSS_CARD_RETARGET, true) &&
+            lastXY
+          ) {
+            // The list shifts under a still pointer: re-target the item that
+            // moved under it. The card stays open while that happens.
+            window.requestAnimationFrame(() => {
+              if (!readerOn()) return;
+              const under = itemTab(document.elementFromPoint(...lastXY));
+              if (under) showCard(under);
+              else if (next?.isConnected) showCard(next);
+              else hideCard();
+            });
+            return;
+          }
+          if (next) {
+            showCard(next);
+            return;
+          }
+          hideCard();
+        }
+        const onOver = (e) => {
+          if (!readerOn()) return;
+          lastXY = [e.clientX, e.clientY];
+          const tab = itemTab(e.target);
+          if (tab) {
+            scheduleShow(tab);
+            return;
+          }
+          if (card && !card.hidden && !card.contains(e.target))
+            hideCard(hideDelay());
+        };
+        const scheduleShow = (tab) => {
+          const delay = hoverDelay();
+          if (delay <= 0) {
+            cancelShow();
+            showCard(tab);
+            return;
+          }
+          if (showTimer !== null && showTab === tab) return;
+          cancelShow();
+          showTab = tab;
+          showTimer = setTimeout(() => {
+            showTimer = null;
+            showTab = null;
+            if (readerOn()) showCard(tab);
+          }, delay);
+        };
+        const onMove = (e) => (lastXY = [e.clientX, e.clientY]);
+        const onAux = (e) => {
+          if (e.button !== 1 || !readerOn()) return;
+          if (!getPref(EXT_PREFS.RSS_CARD_MMB_DISMISS, true)) return;
+          const tab = itemTab(e.target);
+          if (!tab) return;
+          e.preventDefault();
+          e.stopPropagation();
+          dismiss(tab, true);
+        };
+        const onPopup = (e) => {
+          if (!readerOn() || e.target.id !== "tabbrowser-tab-tooltip") return;
+          if (!getPref(EXT_PREFS.RSS_CARD_REPLACE_TOOLTIP, true)) return;
+          if (itemTab(e.target.triggerNode)) e.preventDefault();
+        };
+        const onKeyDown = (e) => {
+          if (e.key !== "Escape" || !readerOn()) return;
+          if (!card || card.hidden) return;
+          e.preventDefault();
+          e.stopPropagation();
+          hideCard();
+        };
+        const onContainerLeave = () => hideCard(hideDelay());
+        function syncReader() {
+          const container = window.gBrowser?.tabContainer;
+          // Appearance preferences reach the card through the same refresh path
+          // as the folder state, so a change applies without a restart.
+          applyCardStyle();
+          if (readerOn() && container && !readerBound) {
+            readerBound = true;
+            container.addEventListener("mouseover", onOver);
+            container.addEventListener("mousemove", onMove);
+            container.addEventListener("auxclick", onAux, true);
+            container.addEventListener("mouseleave", onContainerLeave);
+            window.addEventListener("popupshowing", onPopup, true);
+            window.addEventListener("keydown", onKeyDown);
+            registerCleanup(() => {
+              container.removeEventListener("mouseover", onOver);
+              container.removeEventListener("mousemove", onMove);
+              container.removeEventListener("auxclick", onAux, true);
+              container.removeEventListener("mouseleave", onContainerLeave);
+              window.removeEventListener("popupshowing", onPopup, true);
+              window.removeEventListener("keydown", onKeyDown);
+            });
+          } else if (!readerOn()) hideCard();
+        }
+        function syncRssFolderDisplay() {
+          if (disposed) return;
+          syncReader();
+          const enabled = rssEnabled();
+          document.documentElement.toggleAttribute(
+            "bgalazka-rss-hide-empty",
+            getPref(EXT_PREFS.RSS_HIDE_EMPTY, false),
+          );
+          document.documentElement.toggleAttribute(
+            "bgalazka-rss-compact-headers",
+            getPref(EXT_PREFS.RSS_COMPACT_HEADERS, false),
+          );
+          if (!enabled) {
+            if (rssScanTimer !== null) clearTimeout(rssScanTimer);
+            rssScanTimer = null;
+            rssObserver?.disconnect();
+            rssObserver = rssObservedContainer = null;
+            clearRssMarks();
+            return;
+          }
+          const container = window.gBrowser?.tabContainer;
+          if (rssObserver && rssObservedContainer !== container) {
+            rssObserver.disconnect();
+            rssObserver = rssObservedContainer = null;
+            if (rssScanTimer !== null) clearTimeout(rssScanTimer);
+            rssScanTimer = null;
+          }
+          safeScanRssFolders();
+          if (!rssObserver && container) {
+            rssObservedContainer = container;
+            rssObserver = new MutationObserver(() => {
+              if (disposed || !rssEnabled() || rssScanTimer !== null) return;
+              rssScanTimer = setTimeout(() => {
+                rssScanTimer = null;
+                safeScanRssFolders();
+              }, 100);
+            });
+            rssObserver.observe(container, {
+              childList: true,
+              subtree: true,
+              attributes: true,
+              attributeFilter: [
+                "is-live-folder",
+                "isLiveFolder",
+                "zen-live-folder",
+                "data-is-live-folder",
+                "zen-live-folder-item-id",
+                "zen-empty-tab",
+                "zen-folder-empty-tab",
+                "selected",
+              ],
+            });
+          }
+          nativeBinding?.check();
+        }
+        // An enabled RSS setting must recover a late/replaced native tab strip.
+        // Core owns bounded probes and lifecycle events; no permanent scan loop.
+        if (lifecycle)
+          nativeBinding = lifecycle.watchNative({
+            name: "rss-tab-strip",
+            prefs: [
+              EXT_PREFS.RSS_HIDE_EMPTY,
+              EXT_PREFS.RSS_COMPACT_HEADERS,
+              EXT_PREFS.RSS_READER_CARD,
+            ],
+            enabled: () => rssEnabled() || readerOn(),
+            resolve: () => window.gBrowser?.tabContainer || null,
+            events: ["activate", "aftercustomization", "TabOpen"],
+            attach(container, child) {
+              child.own(() => {
+                if (rssObservedContainer !== container) return;
+                rssObserver?.disconnect();
+                rssObserver = rssObservedContainer = null;
+                if (rssScanTimer !== null) clearTimeout(rssScanTimer);
+                rssScanTimer = null;
+              });
+              syncRssFolderDisplay();
+              return {
+                isCurrent: () =>
+                  rssObservedContainer === container && !!rssObserver,
+              };
+            },
+          });
+        for (const pref of [
+          EXT_PREFS.RSS_HIDE_EMPTY,
+          EXT_PREFS.RSS_COMPACT_HEADERS,
+          EXT_PREFS.RSS_READER_CARD,
+        ]) {
+          try {
+            Services.prefs.addObserver(pref, syncRssFolderDisplay);
+            registerCleanup(() => {
+              try {
+                Services.prefs.removeObserver(pref, syncRssFolderDisplay);
+              } catch (_) {}
+            });
+          } catch (error) {
+            console.warn(
+              "[BgalazkaExtension] RSS pref observer unavailable:",
+              error,
+            );
+          }
+        }
+        // Reader card behavior uses its own light observer: a behavior change
+        // restyles the open card and never rescans the feed folders.
+        const onReaderBehaviorChanged = () => {
+          applyCardStyle();
+          syncReader();
+        };
+        for (const pref of [
+          EXT_PREFS.RSS_CARD_HOVER_DELAY,
+          EXT_PREFS.RSS_CARD_HIDE_DELAY,
+          EXT_PREFS.RSS_CARD_SIDE,
+          EXT_PREFS.RSS_CARD_SHOW_FOLDER,
+          EXT_PREFS.RSS_CARD_SHOW_URL,
+          EXT_PREFS.RSS_CARD_SHOW_BUTTONS,
+          EXT_PREFS.RSS_CARD_MMB_DISMISS,
+          EXT_PREFS.RSS_CARD_RETARGET,
+          EXT_PREFS.RSS_CARD_CONFIRM_ALL,
+          EXT_PREFS.RSS_CARD_REPLACE_TOOLTIP,
+        ]) {
+          try {
+            Services.prefs.addObserver(pref, onReaderBehaviorChanged);
+            registerCleanup(() => {
+              try {
+                Services.prefs.removeObserver(pref, onReaderBehaviorChanged);
+              } catch (_) {}
+            });
+          } catch (error) {
+            console.warn(
+              "[BgalazkaExtension] RSS card pref observer unavailable:",
+              error,
+            );
+          }
+        }
+        registerCleanup(() => {
+          if (rssScanTimer !== null) clearTimeout(rssScanTimer);
+          rssObserver?.disconnect();
+          clearRssMarks();
+          document.documentElement.removeAttribute("bgalazka-rss-hide-empty");
+          document.documentElement.removeAttribute(
+            "bgalazka-rss-compact-headers",
+          );
+        });
+        syncRssFolderDisplay();
+
+        const api = {
+          refresh: syncRssFolderDisplay,
+          destroy() {
+            if (disposed) return;
+            disposed = true;
+            nativeBinding?.destroy();
+            if (window.ZentralRuntime?.services.rss === api)
+              delete window.ZentralRuntime.services.rss;
+            cleanups
+              .splice(0)
+              .reverse()
+              .forEach((fn) => fn());
+          },
+        };
+        if (window.ZentralRuntime) ZentralRuntime.services.rss = api;
+        window.addEventListener("unload", () => api.destroy(), { once: true });
+        return () => api.destroy();
+      }
+      if (ZentralRuntime) ZentralRuntime.register({ id: "rss", init: start });
+      else standaloneReady(start);
+    })();
+  })();
 })();

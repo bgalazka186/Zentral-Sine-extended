@@ -135,11 +135,7 @@
       var(--zl-button-border-color, var(--arrowpanel-border-color, #444))
     );
   box-shadow: var(--bgalazka-look-rss-card-shadow, 0 6px 24px #0008);
-  font-family: var(
-    --bgalazka-look-rss-card-font,
-    system-ui,
-    sans-serif
-  );
+  font-family: var(--bgalazka-look-rss-card-font, system-ui, sans-serif);
   font-size: var(--bgalazka-look-rss-card-font-size, 13px);
   line-height: var(--bgalazka-look-rss-card-line-height, 1.45);
 }
@@ -149,10 +145,7 @@
 }
 #bgalazka-rss-card .rc-folder {
   font-size: calc(var(--bgalazka-look-rss-card-font-size, 13px) - 2px);
-  color: var(
-    --bgalazka-look-rss-card-url,
-    var(--zl-muted, #a4aaad)
-  );
+  color: var(--bgalazka-look-rss-card-url, var(--zl-muted, #a4aaad));
   opacity: 0.85;
   margin-bottom: 4px;
 }
@@ -188,10 +181,7 @@
 #bgalazka-rss-card .rc-url {
   margin-top: 6px;
   font-size: calc(var(--bgalazka-look-rss-card-font-size, 13px) - 2px);
-  color: var(
-    --bgalazka-look-rss-card-url,
-    var(--zl-muted, #a4aaad)
-  );
+  color: var(--bgalazka-look-rss-card-url, var(--zl-muted, #a4aaad));
   opacity: 0.8;
   overflow-wrap: anywhere;
 }
