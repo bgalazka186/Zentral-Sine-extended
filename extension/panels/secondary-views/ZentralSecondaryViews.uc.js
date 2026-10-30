@@ -234,6 +234,10 @@
             )
               tile.dataset.active = "true";
           });
+      function notesGap() {
+        const v = parseFloat(document.documentElement.style.getPropertyValue("--zentral-notes-gap"));
+        return Number.isFinite(v) && v > 0 ? v : 0;
+      }
       function fitSecondaryBrowsers() {
         // Keep the live XUL <browser> elements under layout control. Writing
         // width/height attributes or absolute inline sizes can recreate or
@@ -248,11 +252,13 @@
         const rect = panel?.getBoundingClientRect();
         if (!rect) return;
         const toolbar = document.getElementById("zen-app-panel-toolbar");
+        // V4-R2: Notes between the panels opens a gap at the divider; both panels share what is left.
         const usable =
           rect.height -
           (toolbar?.offsetHeight || 0) -
           state.shell.offsetHeight -
           state.divider.offsetHeight -
+          notesGap() -
           panel.clientTop * 2;
         if (usable <= 0) return;
         const min = Math.min(160, usable * 0.25);
@@ -306,6 +312,10 @@
             queueSecondaryResumeFrame();
           }, 250);
       };
+      // Notes (bottom bar of Triple View) opens / closes its gap at the divider: fit both panels again.
+      const onNotesGap = () => fitSecondaryBrowsers();
+      document.addEventListener("zentral-notes-reserve", onNotesGap);
+      ctx.registerCleanup(() => document.removeEventListener("zentral-notes-reserve", onNotesGap));
       window.addEventListener("activate", resumeSecondaryView);
       window.addEventListener("sizemodechange", resumeSecondaryView);
       document.addEventListener("visibilitychange", resumeSecondaryView);
@@ -603,7 +613,8 @@
               rect.height -
               toolbarHeight -
               bar.offsetHeight -
-              divider.offsetHeight;
+              divider.offsetHeight -
+              notesGap();
             if (usable <= 0) return;
             const min = Math.min(160, usable * 0.25);
             const pixels = Math.max(

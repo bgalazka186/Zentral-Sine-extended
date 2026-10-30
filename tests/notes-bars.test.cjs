@@ -146,7 +146,7 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     const [sp, rp] = [st.setProperty, st.removeProperty];
     st.setProperty = (k, v) => calls.push(["set", k, v]);
     st.removeProperty = (k) => calls.push(["remove", k]);
-    prefs.set(P + "push_page", true);
+    prefs.set(P + "push_page", false); // slot model: a panel-hosted sheet pushes regardless of this pref
     prefs.set(P + "push_panel_percent", 50);
     const btn = toolbar.firstElementChild;
     btn.click();
@@ -156,8 +156,27 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     btn.click();
     await flush();
     assert.equal(calls.filter((c) => c[1] === "--zentral-notes-panel-reserve").pop()[0], "remove", "released on close");
-    prefs.set(P + "push_page", false);
     st.setProperty = sp; st.removeProperty = rp;
+  });
+
+  await test("V4-R1/R4 quad: in Triple View the sheet is the third slot (root attr + slot marker); a normal panel is not quad", async () => {
+    const root = document.documentElement;
+    const has = (a) => root.hasAttribute(a);
+    const btn = toolbar.firstElementChild;
+    btn.click();
+    await sleep(30); await flush();
+    assert.equal(has("bgalazka-quad-view"), false, "normal panel: page + Notes, not quad");
+    btn.click();
+    await flush();
+    root.setAttribute("bgalazka-triple-view", "true");
+    btn.click();
+    await sleep(30); await flush();
+    assert.equal(has("bgalazka-quad-view"), true, "Triple View + Notes = quad");
+    assert.equal(sheetsIn(slider)[0].dataset.bgalazkaTripleSlot, "notes");
+    btn.click();
+    await flush();
+    assert.equal(has("bgalazka-quad-view"), false, "released on close");
+    root.removeAttribute("bgalazka-triple-view");
   });
 
   await test("preferences: hide button, disable and re-enable", async () => {

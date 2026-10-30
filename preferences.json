@@ -2226,13 +2226,13 @@
   },
   {
     "property": "zen.workspace.zentral.notes.hover_reveal",
-    "label": "Hide the card on an outside click instead of closing it; bring it back by hovering its top edge",
+    "label": "New panel sheets start in autohide (hover) mode",
     "type": "checkbox",
     "defaultValue": false
   },
   {
     "property": "zen.workspace.zentral.notes.push_page",
-    "label": "Push page: the page makes room while Notes is open (standalone card), or the panel gives up height (sheet in a panel)",
+    "label": "Push page: the page makes room while the standalone Notes card is open (a sheet in a panel always takes its own slot)",
     "type": "checkbox",
     "defaultValue": false
   },
@@ -2258,10 +2258,10 @@
   },
   {
     "property": "zen.workspace.zentral.notes.reveal_delay_ms_text",
-    "label": "Reveal strip hover delay (ms, 0–1000) [0 to 1000 ms]",
+    "label": "Hover open delay (ms, 0–1000) [0 to 1000 ms]",
     "type": "string",
-    "defaultValue": "150",
-    "placeholder": "150"
+    "defaultValue": "200",
+    "placeholder": "200"
   },
   {
     "property": "zen.workspace.zentral.notes.wide_percent_text",

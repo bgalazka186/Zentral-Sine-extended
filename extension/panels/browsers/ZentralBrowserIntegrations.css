@@ -470,6 +470,15 @@
   border-bottom: 4px solid transparent !important;
   background-clip: content-box !important;
   box-sizing: border-box !important;
+  /* V4-R2: Notes between the panels: the gap opens just above the divider (set by the Notes bar adapter). */
+  margin-top: var(--zentral-notes-gap, 0px) !important;
+}
+/* Quad View: Notes is a third slot. The slider reserves its height, so both page slots shrink
+ * (their heights are percentages of the content box) and the sheet sits in the freed band. */
+:root[bgalazka-quad-view="true"][bgalazka-triple-view="true"][bgalazka-triple-populated="true"]
+  #zen-app-panel-slider {
+  box-sizing: border-box !important;
+  padding-bottom: var(--zentral-notes-panel-reserve, 0px) !important;
 }
 .bgalazka-triple-drag-handle {
   position: fixed !important;

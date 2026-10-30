@@ -10,7 +10,7 @@
  * Local interface selectors: .zentral-notes-btn; .zentral-notes-sheet; .zn-*
  * Local interface selectors (dock): .zentral-notes-sidebar-btn
  * Attribute selectors used: bgalazka-force-panel-black; data-active; data-color; data-dragging; data-geo; data-h;
- *   data-host; data-mode; data-settled; data-size; popover; data-split; data-state; data-trashed; data-view
+ *   data-collapsed; data-dock; data-host; data-mode; data-placement; data-settled; data-size; popover; data-split; data-state; data-trashed; data-view
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
  * contracts from this source, not a promise that every collaborator is enabled at runtime.
@@ -51,6 +51,10 @@
   background: color-mix(in srgb, currentColor 18%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 45%, transparent);
   opacity: 1;
+}
+/* Between the panels (bottom bar of Triple View): the ring is open at the sides, a band top and bottom. */
+.zentral-notes-btn[data-mode="between"][data-active="true"] {
+  box-shadow: inset 0 2px 0 color-mix(in srgb, currentColor 55%, transparent), inset 0 -2px 0 color-mix(in srgb, currentColor 55%, transparent);
 }
 
 /* ---- sheet ------------------------------------------------------------- */
@@ -141,7 +145,9 @@
 .zentral-notes-sheet .zn-rz[data-h="sw"] { bottom: 0; left: 0; cursor: nesw-resize; }
 .zentral-notes-sheet .zn-rz[data-h="nw"] { top: 0; left: 0; cursor: nwse-resize; }
 .zentral-notes-sheet .zn-rz[data-h="se"] { bottom: 0; right: 0; cursor: nwse-resize; }
-.zentral-notes-sheet .zn-keep-btn.is-on { color: var(--zn-text); }
+.zentral-notes-sheet .zn-keep-btn.is-on,
+.zentral-notes-sheet .zn-hover-btn.is-on,
+.zentral-notes-sheet .zn-dock-btn.is-on { color: var(--zn-text); }
 .zentral-notes-sheet *,
 .zentral-notes-sheet *::before,
 .zentral-notes-sheet *::after {
@@ -675,17 +681,18 @@
   font-weight: 400;
   vertical-align: 1px;
 }
-/* Tucked away: the card slides up out of sight; only the strip on its top edge stays. */
-.zentral-notes-sheet[data-tucked="true"] {
+/* Hover mode, folded away: the sheet is hidden; the strip is a real band of the layout (sized by script). */
+.zentral-notes-sheet[data-collapsed="true"] {
   visibility: hidden;
   pointer-events: none;
-  transform: translateY(calc(-100% - 12px));
 }
 .zentral-notes-reveal {
   z-index: 2147483645;
-  height: 6px;
+  min-height: 4px;
   background: transparent;
+  cursor: default;
 }
+.zentral-notes-reveal:hover { background: color-mix(in srgb, var(--zentral-notes-ov-accent, #6aa7ff) 45%, transparent); }
 /* Push page: the page area gives way to the standalone card (set by createFloatingAdapter.push). */
 :root[zentral-notes-push] #tabbrowser-tabbox { transition: margin 0.22s ease; }
 :root[zentral-notes-push="right"] #tabbrowser-tabbox { margin-right: var(--zentral-notes-push) !important; }
@@ -779,3 +786,22 @@
 /* ---- reveal strip: thin hover zone along the top of an open panel's bar ----------------------------- */
 .zentral-notes-reveal-strip { position: absolute; top: 0; left: 0; right: 0; z-index: 3; background: transparent; cursor: default; -moz-window-dragging: no-drag; }
 .zentral-notes-reveal-strip:hover { background: color-mix(in srgb, var(--zentral-notes-ov-accent, #6aa7ff) 45%, transparent); }
+
+/* V4-R3: a split / span sheet is wider than the Zentral panel and visually spills over the page. The clip and
+   slider stop clipping while the root attribute is set; the transparent wrappers stay click-through
+   (pointer-events:none) and only the sheet itself catches the pointer, so the page below stays clickable and
+   the panel's pill menu stays reachable (see clearOfRect in ZentralNotes.uc.js). */
+:root[bgalazka-notes-spill="true"] #zen-app-panel-root #zen-app-panel-clip,
+:root[bgalazka-notes-spill="true"] #zen-app-panel-root #zen-app-panel-slider {
+  overflow: visible !important;
+}
+:root[bgalazka-notes-spill="true"] #zen-app-panel-root #zen-app-panel-clip {
+  pointer-events: none !important;
+}
+:root[bgalazka-notes-spill="true"] #zen-app-panel-root #zen-app-panel-slider > .zentral-notes-sheet {
+  position: absolute;
+  pointer-events: auto !important;
+}
+:root[bgalazka-notes-spill="true"] #zen-app-panel-root #zen-app-panel-slider > browser {
+  border-radius: inherit;
+}

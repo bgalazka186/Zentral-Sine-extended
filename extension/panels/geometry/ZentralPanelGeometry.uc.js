@@ -542,8 +542,11 @@
     // while the resize surfaces are "off".
     // Height the Notes sheet asks the panel to give up (push page for a panel-hosted sheet). Notes sets the
     // variable on the root element and fires "zentral-notes-reserve"; 0 / absent = nothing reserved.
+    // In quad mode (Notes = third slot of Triple View) the CSS slot rule makes room; no margin then.
     const notesReserve = () =>
-      Math.max(
+      document.documentElement.hasAttribute("bgalazka-quad-view")
+        ? 0
+        : Math.max(
         0,
         Math.min(
           4000,

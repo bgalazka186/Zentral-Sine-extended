@@ -133,6 +133,24 @@ const same = (a, b, msg) => assert.equal(canon(a), canon(b), msg);
     for (const bad of ["", "neon", null, undefined, 3]) assert.equal(c.normalizeTheme(bad), "zentral");
     same(c.NOTE_THEMES.map((t) => t[0]), ["zentral", "recommended", "light", "dark", "paper"]);
   });
+  await test("V4-R3 clearOfRect keeps a wide sheet off the pill menu and leaves non-overlapping boxes alone", () => {
+    const box = { left: 100, top: 50, width: 800, height: 600 };
+    same(c.clearOfRect(box, null), box);
+    same(c.clearOfRect(box, { left: 5, top: 100, width: 20, height: 20 }), box, "left of the box");
+    same(c.clearOfRect(box, { left: 120, top: 900, width: 20, height: 20 }), box, "below the box");
+    const l = c.clearOfRect(box, { left: 110, top: 100, width: 30, height: 30 });
+    assert.equal(l.left, 144); assert.equal(l.left + l.width, 900);
+    const r = c.clearOfRect(box, { left: 860, top: 100, width: 30, height: 30 });
+    assert.equal(r.left, 100); assert.equal(r.left + r.width, 856);
+    const tiny = c.clearOfRect({ left: 0, top: 0, width: 300, height: 300 }, { left: 10, top: 10, width: 280, height: 20 });
+    assert.ok(tiny.width >= 240, "minimum width wins");
+  });
+  await test("V4-R3 CSS lets the spilled sheet escape the clip but keeps wrappers click-through", () => {
+    const css = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.css"), "utf8");
+    assert.match(css, /bgalazka-notes-spill="true"\][^{]*#zen-app-panel-clip,[^{]*#zen-app-panel-slider\s*\{\s*overflow:\s*visible/);
+    assert.match(css, /#zen-app-panel-clip\s*\{\s*pointer-events:\s*none/);
+    assert.match(css, /> \.zentral-notes-sheet\s*\{[^}]*pointer-events:\s*auto/);
+  });
   await test("push page: the side follows the card, wide cards and cards far from an edge do not push", () => {
     const content = { left: 0, right: 1000 };
     same(c.pushAmount({ left: 560, width: 440 }, content), { side: "right", px: 448 });

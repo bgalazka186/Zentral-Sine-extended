@@ -529,7 +529,7 @@
     "text": "zen.workspace.zentral.notes.reveal_delay_ms_text",
     "min": 0,
     "max": 1000,
-    "def": 150
+    "def": 200
   },
   {
     "key": "zen.workspace.zentral.notes.wide_percent",

@@ -42,11 +42,27 @@ Review that led here: `NOTES_C3-D1_review_and_rebuild_plan.md`.
 | Step | Content | Tests |
 | ---- | ------- | ----- |
 | R1 **DONE** | Full mod: schema items with `control: "slider"/"color"` render as real sliders / colour pickers + Default button in the Zentral settings window (loader/ZentralRuntime.js `createSchemaControlRow`); standalone: same prefs as numeric text boxes in Sine (-1 = theme). Also an in-app **Settings** view (tabs Writing / Window / Appearance / Capture) with real sliders, an HSL colour picker (no native dialog), "Theme" reset per value; quick menu cut to 8 items + "All settings…"; numeric shadow (blur / offset / strength) replaces the 3 presets; ranges widened (opacity 0-100, radius 0-60...) | notes-ui, notes-capture, defaults |
-| R2 **DONE** | Push page on the panel contract (`#tabbrowser-tabbox`, panel attributes, transition, hover-hidden release); panel-hosted sheet shrinks the panel height | notes-window, notes-bars, z-heights |
-| R3 **DONE** | Reveal strip at the top of an open panel opening the full sheet as an overlay; guard so the strip does not trigger the native top bar; drop the "tuck" behaviour or rename it | notes-bars, notes-window |
-| R4 **DONE** | Delete the companion window (`createCompanionAdapter`, `syncCompanion`, `companionRect`, `split_window`); split view widens the one sheet ~2x, bounded by the window, pill menu kept clear (`keepClear`) | notes-window, notes-ui, resize-perf |
+| R2 ~~DONE~~ SUPERSEDED by PLAN v4 | Push page on the panel contract (`#tabbrowser-tabbox`, panel attributes, transition, hover-hidden release); panel-hosted sheet shrinks the panel height | notes-window, notes-bars, z-heights |
+| R3 ~~DONE~~ SUPERSEDED by PLAN v4 | Reveal strip at the top of an open panel opening the full sheet as an overlay; guard so the strip does not trigger the native top bar; drop the "tuck" behaviour or rename it | notes-bars, notes-window |
+| R4 ~~DONE~~ SUPERSEDED by PLAN v4 | Delete the companion window (`createCompanionAdapter`, `syncCompanion`, `companionRect`, `split_window`); split view widens the one sheet ~2x, bounded by the window, pill menu kept clear (`keepClear`) | notes-window, notes-ui, resize-perf |
 | R5 | D1 rework: capture options move to Settings > Capture (done in R1), re-check menu/shortcut paths and the "where quick notes open" presentation option | notes-capture |
 | D2 - D5, E2 | unchanged from v2 (folders/trees, links/search, assets, reminders/history, audits); start after R2-R4 | as in v2 |
+
+## PLAN v4 (supersedes R2-R5 of PLAN v3; context in `TODO_handoff.md` section 19; spec in `docs/NOTES-FOLDERS-ZEN-SYNC-SPEC.md`)
+
+One step = one session. Read only this block, handoff section 19, then `grep -n` the function names and `view` small ranges.
+
+| Step | Content | Tests |
+| ---- | ------- | ----- |
+| V4-R1+R4 **DONE** | Notes as a real slot: panel + Notes = Triple-like split; Triple + Notes = Quad; push on by default for panel-hosted Notes; remove `size==="peek"` gate | notes-bars, notes-window, z-heights, new notes-slots |
+| V4-R3 **DONE** | Wide/span sheet visually overflows the Zentral panel (re-attach fixed to root or unclip), pill menu clear | notes-window |
+| V4-R2 **DONE** | Hover/dock modes in the Notes top bar; between-URL-bars mode (default in Triple View); bottom bar icon = between-bars, top icon = overlay; icon states | notes-bars, notes-ui, notes-icon |
+| V4-QS | Quick Settings container grows with font size (em sizing, wrap, re-position) | notes-ui |
+| D2a/D2b | Folders + tree data model and in-sheet UI (spec 1.1-1.2) | new notes-tree |
+| E-a..E-c | Zen-native `NOTES` folder, activation over last Zentral panel, RMB menus (spec 1.3-1.5), off by default | new notes-zenfolder |
+| E-d | Zen Sync short-note tier (spec section 4); only after spec 4.1 live verification | new notes-sync |
+| R5 (old) | D1 capture path re-check after V4 | notes-capture |
+| D3-D5, E2 | unchanged | as in v2 |
 
 ## Cycle A: small fixes and consistency (easiest)
 

@@ -1772,7 +1772,7 @@
           { id: "dock", label: "Dock to the sidebar", pref: PREF.DOCK_SIDEBAR, kind: "bool", def: false },
           { id: "avoid", label: "Keep clear of the native sidebar (standalone card)", pref: PREF.AVOID_SIDEBAR, kind: "bool", def: true },
           { kind: "heading", label: "Push page" },
-          { id: "push", label: "Push the page aside (standalone) / shorten the panel (panel sheet)", pref: PREF.PUSH_PAGE, kind: "bool", def: false },
+          { id: "push", label: "Push the page aside (standalone card only; a sheet in a panel always takes its own slot)", pref: PREF.PUSH_PAGE, kind: "bool", def: false },
           S("pushPct", "Share of the panel height the sheet takes", PREF.PUSH_PANEL_PERCENT, 20, 80, "%", 45),
           { kind: "heading", label: "Reveal strip" },
           { id: "strip", label: "Strip at the top of an open panel opens Notes on hover", pref: PREF.REVEAL_STRIP, kind: "bool", def: false },
@@ -2045,6 +2045,18 @@
       }
       return { left, top: bounds.top, width: right - left, height: bounds.height };
     }
+    // V4-R3: a sheet that spills over the page must not cover a small control (the panel pill menu). If `rect`
+    // overlaps the box, the box loses the part on the pill's side; at least `minWidth` always remains.
+    function clearOfRect(box, rect, minWidth = 240) {
+      if (!box || !rect || !(rect.width > 0) || !(rect.height > 0)) return box;
+      const right = box.left + box.width, rr = rect.left + rect.width;
+      const vOverlap = rect.top < box.top + box.height && rect.top + rect.height > box.top;
+      if (!vOverlap || rr <= box.left || rect.left >= right) return box;
+      let left = box.left, end = right;
+      if (rect.left + rect.width / 2 < box.left + box.width / 2) left = Math.min(rr + 4, right - minWidth);
+      else end = Math.max(rect.left - 4, left + minWidth);
+      return { ...box, left, width: end - left };
+    }
     // Which side of the window a strip (the native sidebar) is on.
     const sideOf = (rect, viewWidth) => (rect && rect.left + rect.width / 2 > viewWidth / 2 ? "right" : "left");
     // A button with a second action on a long press. The timer exists only between press and release.
@@ -2113,7 +2125,7 @@
       const dirty = new Set();
       const listeners = new Set();
       const backedUp = new Set();
-      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, geo: {}, recent: [] };
+      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", geo: {}, recent: [] };
       let meta = { ...DEFAULT_META };
       let dir = null;
       let chain = Promise.resolve();
@@ -2180,6 +2192,8 @@
           if (HIGHLIGHT_COLORS.includes(raw.highlight)) meta.highlight = raw.highlight;
           if (typeof raw.syncScroll === "boolean") meta.syncScroll = raw.syncScroll;
           if (typeof raw.pinned === "boolean") meta.pinned = raw.pinned;
+          if (DOCK_MODES.includes(raw.dock)) meta.dock = raw.dock;
+          else if (raw.pinned === false) meta.dock = "hover";
           if (raw.geo && typeof raw.geo === "object")
             for (const key of GEO_KEYS) {
               const g = normalizeGeo(raw.geo[key]);
@@ -2544,8 +2558,27 @@
       };
     }
 
+    // ---- V4-R2: window modes + hover timing (pure) ------------------------------------------------------
+    // pin = stays open over the panel (overlay, no push); hover = a thin real strip, opens on hover and closes
+    // after a grace; dock = stays open and keeps its own slot (pushes the page / panels).
+    const DOCK_MODES = Object.freeze(["pin", "hover", "dock"]);
+    const cleanDockMode = (v, fallback = "dock") => (DOCK_MODES.includes(v) ? v : fallback);
+    const HOVER_CLOSE_GRACE_MS = 600;
+    const hoverStripPx = (v) => Math.max(4, Math.min(6, Math.round(Number(v)) || 6));
+    function hoverTiming({ open, grace } = {}) {
+      const o = Number(open);
+      const g = Number(grace);
+      return {
+        openMs: Number.isFinite(o) ? Math.max(0, Math.min(1000, Math.round(o))) : 200,
+        graceMs: Math.max(HOVER_CLOSE_GRACE_MS, Number.isFinite(g) ? Math.round(g) : HOVER_CLOSE_GRACE_MS),
+      };
+    }
+    // A hover-opened sheet may only fold away when nothing holds it open.
+    const hoverMayClose = ({ focusInside = false, menuOpen = false, dialogOpen = false, pointerDown = false, gesture = false, pointerInside = false } = {}) =>
+      !(focusInside || menuOpen || dialogOpen || pointerDown || gesture || pointerInside);
     if (window.__zentralNotesTestSeam) {
       window.__zentralNotesTestSeam.core = {
+        DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
         wordCount, safeFileName, createAutosaver, parseInline, parseBlocks,
         wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine, insertRule, nestLines,
@@ -2557,7 +2590,7 @@
         matchShortcutAction, assignShortcut, QUICK_OPTIONS, stepOption, PREF,
         alignDelim, buildImage, insertImageMd, pastedWebAddress, CODE_LANGS, CALLOUT_KINDS, calloutId, insertCallout,
         HIDEABLE_TOOLS, parseHidden, serializeHidden,
-        normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, sideOf, createHoldAction,
+        normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, clearOfRect, sideOf, createHoldAction,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
@@ -2608,6 +2641,9 @@
       numbered: "M10 6h11 M10 12h11 M10 18h11 M4 6h1v4 M4 10h2 M4 14.5a1.5 1 0 0 1 3 0c0 1-3 2-3 3.5h3",
       table: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M3 10h18 M3 15h18 M9 3v18 M15 3v18",
       bookmark: "m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z",
+      hover: "M4 4l7.07 16.97 2.51-7.39 7.39-2.51L4 4z",
+      dock: "M3 4h18v16H3z M3 14h18",
+      noteBetween: "M5 3h14 M5 21h14 M5 8h14v8H5z M9 12h6",
       sliders: "M4 21v-7 M4 10V3 M12 21v-9 M12 8V3 M20 21v-5 M20 12V3 M1 14h6 M9 8h6 M17 16h6",
     };
     function icon(name, size = 14) {
@@ -2853,9 +2889,12 @@
       let readNodes = []; // DOM nodes per drawn block
       let readEmpty = false;
       let dialog = null; // export notice
-      let tucked = false; // hover reveal: open but slid away, a thin strip on the top edge brings it back
+      let collapsed = false; // hover mode: open but folded away; only the thin real strip stays in layout
       let revealEl = null;
-      let revealTimer = 0; // armed only while the pointer rests on the strip
+      let openTimer = 0; // armed only while the pointer rests on the strip
+      let graceTimer = 0; // armed only while a hover-opened sheet waits to fold away
+      let ptrDown = false;
+      let ptrInside = false;
 
       // ---- DOM -----------------------------------------------------------
       const root = h("div", {
@@ -2870,6 +2909,9 @@
       // The window pin works like the pin of a Zentral panel: pinned = stays open, unpinned = closes on an
       // outside click. Hold it to put the window back in its default place.
       const btnKeep = iconButton("pin", "Keep open", "zn-keep-btn");
+      // Panel docking modes (same wording as the panel's own docking / autohide buttons).
+      const btnHover = iconButton("hover", "Autohide: show Notes on hover at its docked edge", "zn-hover-btn");
+      const btnDock = iconButton("dock", "Dock: Notes keeps its own space", "zn-dock-btn");
       const colorDot = h("span", { class: "zn-dot" });
       const btnColor = h("button", {
         type: "button",
@@ -2883,7 +2925,7 @@
       const btnClose = iconButton("x", "Close notes (Esc)");
       const labelEl = h("button", { type: "button", class: "zn-label", title: "Edit label" });
       labelEl.hidden = true;
-      const head = h("div", { class: "zn-head" }, btnList, titleEl, labelEl, btnPin, btnColor, btnKeep, btnSize, btnMore, btnClose);
+      const head = h("div", { class: "zn-head" }, btnList, titleEl, labelEl, btnPin, btnColor, btnKeep, btnHover, btnDock, btnSize, btnMore, btnClose);
 
       const tBold = iconButton("bold", "Bold (Ctrl+B)");
       const tItalic = iconButton("italic", "Italic (Ctrl+I)");
@@ -3001,9 +3043,24 @@
         btnSize.replaceChildren(icon(big ? "minimize" : "maximize"));
         btnSize.title = big ? "Smaller (hold: fill the whole area)" : "Larger (hold: fill the whole area)";
         root.dataset.geo = adapter.geoKey ? "on" : "off";
-        btnKeep.classList.toggle("is-on", store.meta.pinned !== false);
-        btnKeep.setAttribute("aria-pressed", store.meta.pinned !== false ? "true" : "false");
-        btnKeep.title = store.meta.pinned !== false ? "Kept open: click to close on an outside click (hold: reset position)" : "Closes on an outside click: click to keep open (hold: reset position)";
+        const panelHosted = !!adapter.pushPanel;
+        btnHover.hidden = btnDock.hidden = !panelHosted;
+        if (panelHosted) {
+          const dm = dockMode();
+          root.dataset.dock = dm;
+          root.dataset.placement = adapter.placement?.() || "overlay";
+          for (const [btn, on] of [[btnKeep, dm === "pin"], [btnHover, dm === "hover"], [btnDock, dm === "dock"]]) {
+            btn.classList.toggle("is-on", on);
+            btn.setAttribute("aria-pressed", on ? "true" : "false");
+          }
+          btnKeep.title = "Pin: stays open over the panel without moving it (hold: reset position)";
+        } else {
+          delete root.dataset.dock;
+          delete root.dataset.placement;
+          btnKeep.classList.toggle("is-on", store.meta.pinned !== false);
+          btnKeep.setAttribute("aria-pressed", store.meta.pinned !== false ? "true" : "false");
+          btnKeep.title = store.meta.pinned !== false ? "Kept open: click to close on an outside click (hold: reset position)" : "Closes on an outside click: click to keep open (hold: reset position)";
+        }
         tSync.hidden = mode !== "split";
         tSync.classList.toggle("is-on", !!store.meta.syncScroll);
         tSync.setAttribute("aria-pressed", store.meta.syncScroll ? "true" : "false");
@@ -4211,7 +4268,22 @@
       };
       const toggleLarger = () => setSize(store.meta.size === "peek" ? "full" : "peek");
       const toggleSpan = () => setSize(store.meta.size === "span" ? "peek" : "span");
+      const dockMode = () => (adapter.pushPanel ? cleanDockMode(store.meta.dock, getPref(PREF.HOVER_REVEAL, false) ? "hover" : "dock") : "pin");
+      function setDock(next) {
+        const m = cleanDockMode(next);
+        store.setMeta({ dock: m, pinned: m !== "hover" });
+        if (m !== "hover") {
+          window.clearTimeout(graceTimer);
+          graceTimer = 0;
+          if (collapsed) expand(false);
+        }
+        applyState();
+        scheduleLayout();
+        if (isOpen && !collapsed) applyPush(0, 0);
+        if (m === "hover") armGrace();
+      }
       const toggleKeep = () => {
+        if (adapter.pushPanel) return setDock(dockMode() === "pin" ? "dock" : "pin");
         store.setMeta({ pinned: store.meta.pinned === false });
         applyState();
       };
@@ -4244,6 +4316,8 @@
       }
       holdButton(btnSize, toggleLarger, toggleSpan);
       holdButton(btnKeep, toggleKeep, resetGeo);
+      listen(btnHover, "click", () => setDock(dockMode() === "hover" ? "dock" : "hover"));
+      listen(btnDock, "click", () => setDock("dock"));
 
       // Drag the title bar, resize from any edge or corner. The area is measured once when the gesture
       // starts; pointer events only remember the latest position and one frame paints it. The result is
@@ -4513,6 +4587,10 @@
       function layout() {
         rafLayout = 0;
         if (!isOpen || destroyed || root.hidden) return;
+        if (collapsed) {
+          placeReveal();
+          return;
+        }
         const a = adapter.getArea({ wide: mode === "split", span: store.meta.size === "span" });
         if (!a || a.width < 40 || a.height < 40) return;
         const size = a.fill ? "full" : store.meta.size;
@@ -4549,6 +4627,7 @@
         root.dataset.split = w >= 560 ? "side" : "stack";
         taAnchY = null;
         readAnchY = null;
+        adapter.setSpill?.(!!a.wideFill);
         placeReveal();
         applyPush(left, w);
       }
@@ -4556,62 +4635,104 @@
       const widePct = () => Math.max(1.3, Math.min(3, getPref(PREF.WIDE_PERCENT, 200) / 100));
       let pushed = false;
       function applyPush(left, w) {
-        const on = !tucked && !!getPref(PREF.PUSH_PAGE, false) && store.meta.size === "peek";
+        // Slot model (V4-R1/R4): a panel-hosted sheet is a layout slot (normal panel = page + Notes,
+        // Triple View = quad, bottom bar of Triple View = the gap between the two panels). Pin mode is the
+        // plain overlay (no push); a collapsed hover sheet keeps only its thin real strip in layout.
+        // The push_page pref + peek gate govern the standalone card.
+        const panelHosted = !!adapter.pushPanel;
+        const between = panelHosted && adapter.placement?.() === "between";
+        const on = panelHosted ? dockMode() !== "pin" || between : !!getPref(PREF.PUSH_PAGE, false) && store.meta.size === "peek";
         const want = !!adapter.push && on;
         if (want) pushed = adapter.push({ left, width: w }) || false;
         else if (pushed || adapter.push) {
           adapter.unpush?.();
           pushed = false;
         }
-        // Panel-hosted sheet: the panel gives up part of its height and the sheet takes that band.
-        if (adapter.pushPanel) adapter.pushPanel(on ? Math.max(20, Math.min(80, getPref(PREF.PUSH_PANEL_PERCENT, 45))) / 100 : 0);
+        if (panelHosted) {
+          const strip = isOpen && collapsed ? hoverStripPx(getPref(PREF.REVEAL_HEIGHT, 6)) : 0;
+          const share = on && !collapsed && isOpen ? Math.max(20, Math.min(80, getPref(PREF.PUSH_PANEL_PERCENT, 45))) / 100 : 0;
+          const quad = adapter.pushPanel(share, { strip });
+          if (quad) root.dataset.bgalazkaTripleSlot = "notes";
+          else delete root.dataset.bgalazkaTripleSlot;
+        }
       }
-      // ---- hover reveal: an outside click tucks the card away; the strip on its top edge brings it back ----
+      // ---- hover mode (V4-R2, replaces tuck) --------------------------------------------------------
+      // Collapsed = the sheet is hidden and a 4-6 px strip is a REAL band of the layout (the panel gave up
+      // that height), positioned from the live band every time, never from a copy of the sheet's geometry.
+      // Opening waits an open delay; folding away waits a grace of at least 600 ms and never happens while
+      // focus is inside, a menu or dialog is open, a drag runs or the pointer is down.
+      const hoverMode = () => !!adapter.pushPanel && dockMode() === "hover";
+      const timing = () => hoverTiming({ open: getPref(PREF.REVEAL_DELAY, 200), grace: HOVER_CLOSE_GRACE_MS });
       function placeReveal() {
         if (!revealEl) return;
+        const band = adapter.bandRect?.();
+        const off = hostOffset();
+        if (!band || !off) return;
         revealEl.style.position = adapter.position;
-        revealEl.style.left = root.style.left;
-        revealEl.style.top = root.style.top;
-        revealEl.style.width = root.style.width;
+        revealEl.style.left = Math.round(band.left - off.ox) + "px";
+        revealEl.style.top = Math.round(band.top - off.oy) + "px";
+        revealEl.style.width = Math.round(band.width) + "px";
+        revealEl.style.height = Math.round(band.height) + "px";
       }
-      function tuck() {
-        if (tucked || !isOpen || destroyed) return;
-        tucked = true;
+      function armGrace() {
+        window.clearTimeout(graceTimer);
+        graceTimer = 0;
+        if (!hoverMode() || !isOpen || collapsed || destroyed || ptrInside) return;
+        graceTimer = window.setTimeout(() => {
+          graceTimer = 0;
+          if (!hoverMode() || !isOpen || collapsed || destroyed || ptrInside) return;
+          const may = hoverMayClose({ focusInside: focusInside(), menuOpen: !!menu, dialogOpen: !!dialog, pointerDown: ptrDown, gesture: !!gesture, pointerInside: ptrInside });
+          if (may) collapse();
+          else armGrace();
+        }, timing().graceMs);
+      }
+      function collapse() {
+        if (collapsed || !isOpen || destroyed || !hoverMode()) return;
+        collapsed = true;
+        window.clearTimeout(graceTimer);
+        graceTimer = 0;
         closeMenu();
         closeDialog();
         drop();
         try {
           if (root.contains(document.activeElement)) document.activeElement.blur();
         } catch (_) {}
-        root.dataset.tucked = "true";
+        root.dataset.collapsed = "true";
         revealEl = h("div", { class: "zentral-notes-reveal", "aria-hidden": "true" });
         revealEl.addEventListener("mouseenter", () => {
-          window.clearTimeout(revealTimer);
-          revealTimer = window.setTimeout(untuck, 140);
+          window.clearTimeout(openTimer);
+          openTimer = window.setTimeout(() => expand(true), timing().openMs);
         });
-        revealEl.addEventListener("mouseleave", () => window.clearTimeout(revealTimer));
-        (root.parentNode || document.documentElement).appendChild(revealEl);
-        placeReveal();
+        revealEl.addEventListener("mouseleave", () => {
+          window.clearTimeout(openTimer);
+          openTimer = 0;
+        });
+        (adapter.host || root.parentNode || document.documentElement).appendChild(revealEl);
+        adapter.setActive(false, { strip: true });
         applyPush(0, 0);
-        adapter.setActive(false);
+        placeReveal();
+        scheduleLayout();
       }
       function dropReveal() {
-        window.clearTimeout(revealTimer);
-        revealTimer = 0;
+        window.clearTimeout(openTimer);
+        openTimer = 0;
         revealEl?.remove();
         revealEl = null;
       }
-      function untuck() {
-        if (!tucked) return;
-        tucked = false;
-        delete root.dataset.tucked;
+      function expand(fromHover) {
+        window.clearTimeout(openTimer);
+        openTimer = 0;
+        if (!collapsed) return;
+        collapsed = false;
+        delete root.dataset.collapsed;
         dropReveal();
         adapter.setActive(true);
+        applyPush(0, 0);
         raise();
         scheduleLayout();
-        focusEditor();
-      }
-      // ---- split view as a second window -----------------------------------------------------------
+        // Opened by hovering: do not steal the focus; fold away again if the pointer never reaches the sheet.
+        if (fromHover) armGrace();
+      }      // ---- split view as a second window -----------------------------------------------------------
       const scheduleLayout = () => {
         if (!rafLayout) rafLayout = window.requestAnimationFrame(layout);
       };
@@ -4672,20 +4793,37 @@
         if (!isOpen || destroyed || gesture) return;
         const path = e.composedPath ? e.composedPath() : [];
         if (root.contains(e.target) || path.includes(root)) return;
-        if (tucked) return;
         drop();
+        // A panel-hosted sheet follows its mode (pin / dock stay, hover folds away when the pointer leaves).
+        if (adapter.pushPanel) return;
         if (store.meta.pinned !== false) return;
         if (isExempt(e.target, path)) return;
-        if (getPref(PREF.HOVER_REVEAL, false)) tuck();
-        else close();
+        close();
       };
+      const onPress = () => {
+        ptrDown = true;
+      };
+      const onRelease = () => {
+        ptrDown = false;
+        armGrace();
+      };
+      listen(root, "mouseenter", () => {
+        ptrInside = true;
+        window.clearTimeout(graceTimer);
+        graceTimer = 0;
+      });
+      listen(root, "mouseleave", () => {
+        ptrInside = false;
+        armGrace();
+      });
+      listen(root, "focusout", () => armGrace());
 
       // ---- open / close -------------------------------------------------------------
       async function open() {
         if (destroyed) return;
         if (isOpen) {
-          if (tucked) untuck();
-          else focusEditor();
+          if (collapsed) expand(false);
+          focusEditor();
           return;
         }
         isOpen = true;
@@ -4696,6 +4834,8 @@
         layout();
         unwatch = adapter.watch(scheduleLayout);
         window.addEventListener("mousedown", onOutsidePress, true);
+        window.addEventListener("mousedown", onPress, true);
+        window.addEventListener("mouseup", onRelease, true);
         adapter.setActive(true);
         raise();
         try {
@@ -4716,11 +4856,13 @@
       function close() {
         if (!isOpen) return;
         isOpen = false;
-        if (tucked) {
-          tucked = false;
-          delete root.dataset.tucked;
-        }
+        collapsed = false;
+        delete root.dataset.collapsed;
         dropReveal();
+        window.clearTimeout(graceTimer);
+        graceTimer = 0;
+        ptrDown = false;
+        ptrInside = false;
         applyPush(0, 0);
         closeMenu();
         closeDialog();
@@ -4729,6 +4871,8 @@
         if (currentId) store.discardIfEmpty(currentId);
         store.flush();
         window.removeEventListener("mousedown", onOutsidePress, true);
+        window.removeEventListener("mousedown", onPress, true);
+        window.removeEventListener("mouseup", onRelease, true);
         endGesture();
         drop();
         root.hidden = true;
@@ -4753,8 +4897,13 @@
         window.clearTimeout(confirmTimer);
         window.clearTimeout(previewTimer);
         window.clearTimeout(flashTimer);
+        window.clearTimeout(graceTimer);
+        window.clearTimeout(openTimer);
         for (const id of [rafChrome, rafList, rafLayout, rafSync]) if (id) window.cancelAnimationFrame(id);
         window.removeEventListener("mousedown", onOutsidePress, true);
+        window.removeEventListener("mousedown", onPress, true);
+        window.removeEventListener("mouseup", onRelease, true);
+        dropReveal();
         root.remove();
       }
       // A read option (blank lines, line breaks, Setext) changed: draw the read pane again.
@@ -4772,9 +4921,9 @@
         layout: scheduleLayout,
         applyState,
         focus: focusEditor,
-        // A tucked card counts as closed for the button and the shortcuts: using them brings it back.
-        isOpen: () => isOpen && !tucked,
-        toggle: () => (isOpen && !tucked ? close() : open()),
+        // A collapsed (hover) sheet counts as closed for the button and the shortcuts: using them opens it.
+        isOpen: () => isOpen && !collapsed,
+        toggle: () => (isOpen && !collapsed ? close() : open()),
         newNote: () => {
           if (isOpen && !destroyed) newNote();
         },
@@ -4805,6 +4954,18 @@
       }
       let observeAll = () => {};
       let reserve = 0;
+      let inGap = false;
+      // Union of every visible page of the panel (one in a normal panel, two in Triple View).
+      function pageSpan() {
+        const rects = [...(slider()?.querySelectorAll(":scope > browser") || [])]
+          .filter((x) => !x.hidden && x.getClientRects().length)
+          .map((x) => x.getBoundingClientRect())
+          .filter((r) => r.width > 40 && r.height > 40);
+        if (!rects.length) return { left: 0, top: 0, width: 0, height: 0, bottom: 0 };
+        const left = Math.min(...rects.map((r) => r.left)), top = Math.min(...rects.map((r) => r.top));
+        const right = Math.max(...rects.map((r) => r.right)), bottom = Math.max(...rects.map((r) => r.bottom));
+        return { left, top, width: right - left, height: bottom - top, bottom };
+      }
       return {
         position: "absolute",
         geoKey: "panel",
@@ -4817,18 +4978,51 @@
           const h2 = host();
           if (h2 && root.parentNode !== h2) h2.appendChild(root);
         },
+        // V4-R2: the bottom bar of Triple View sits at the divider, so its sheet goes BETWEEN the two panels
+        // (a gap at the divider); every other bar's sheet is an overlay on its own panel.
+        placement: () => (kind === "triple" && document.documentElement.hasAttribute("bgalazka-triple-view") ? "between" : "overlay"),
+        // Button state: data-mode says where the sheet lives; the icon follows it.
+        syncMode() {
+          const mode = this.placement();
+          if (button.dataset.mode === mode) return;
+          button.dataset.mode = mode;
+          button.replaceChildren(icon(mode === "between" ? "noteBetween" : "note", 14));
+        },
         // Push page for a panel-hosted sheet. `fraction` of the panel's page height is handed to the sheet
-        // (0 = give it back). The geometry module reads --zentral-notes-panel-reserve and shortens the panel.
-        pushPanel(fraction) {
+        // (0 = give it back); `strip` > 0 reserves just that many px (hover mode's thin real band). Overlay:
+        // the geometry module reads --zentral-notes-panel-reserve and shortens the panel. Between: the
+        // secondary-views module reads --zentral-notes-gap and opens a gap at the divider (both panels
+        // shrink by their share). Returns true while the sheet is a layout slot of Triple View.
+        pushPanel(fraction, { strip = 0 } = {}) {
           const rootEl = document.documentElement;
-          const b = browserEl();
-          const full = b ? b.getBoundingClientRect().height + reserve : 0;
-          const px = fraction > 0 && full > 200 ? Math.round(full * fraction) : 0;
-          if (px === reserve) return;
+          const between = this.placement() === "between";
+          const full = pageSpan().height + reserve;
+          const want = strip > 0 ? Math.round(strip) : fraction > 0 ? Math.round(full * fraction) : 0;
+          const px = full > 200 ? want : 0;
+          const quad = !between && px > 0 && rootEl.hasAttribute("bgalazka-triple-view");
+          const wasQuad = rootEl.hasAttribute("bgalazka-quad-view");
+          if (px === reserve && quad === wasQuad && between === inGap) return quad || (between && px > 0);
           reserve = px;
-          if (px) rootEl.style.setProperty("--zentral-notes-panel-reserve", px + "px");
-          else rootEl.style.removeProperty("--zentral-notes-panel-reserve");
+          inGap = between;
+          const [prop, other] = between ? ["--zentral-notes-gap", "--zentral-notes-panel-reserve"] : ["--zentral-notes-panel-reserve", "--zentral-notes-gap"];
+          if (px) rootEl.style.setProperty(prop, px + "px");
+          else rootEl.style.removeProperty(prop);
+          rootEl.style.removeProperty(other);
+          if (quad) rootEl.setAttribute("bgalazka-quad-view", "true");
+          else rootEl.removeAttribute("bgalazka-quad-view");
           document.dispatchEvent(new Event("zentral-notes-reserve"));
+          return quad || (between && px > 0);
+        },
+        // The band the sheet (or, collapsed, the hover strip) occupies in the layout, or null.
+        bandRect() {
+          if (!reserve) return null;
+          const bb = pageSpan();
+          if (bb.width <= 40) return null;
+          if (this.placement() === "between") {
+            const d = slider()?.querySelector(":scope > .bgalazka-triple-divider")?.getBoundingClientRect?.();
+            if (d && d.height > 0) return { left: bb.left, top: d.top - reserve, width: bb.width, height: reserve };
+          }
+          return { left: bb.left, top: bb.bottom, width: bb.width, height: reserve };
         },
         // Split view widens the sheet beyond the panel: it grows from the panel's inner edge toward the
         // middle of the window and may cover part of the page (the panel and its bar stay visible).
@@ -4839,12 +5033,20 @@
           const w = Math.min(Math.round(area.width * widePercent()), vw - 16);
           if (w <= area.width + 8) return area;
           const left = area.left + area.width / 2 > vw / 2 ? Math.max(8, area.left + area.width - w) : Math.min(area.left, vw - w - 8);
-          return { ...area, left, width: w, wideFill: true };
+          const pill = document.getElementById("zen-app-panel-pill")?.getBoundingClientRect?.();
+          const out = clearOfRect({ ...area, left, width: w }, pill);
+          return { ...out, wideFill: true };
+        },
+        // V4-R3: while the sheet is wider than the panel (split / span) the clip and slider stop clipping.
+        setSpill(on) {
+          const r = document.documentElement;
+          if (on) r.setAttribute("bgalazka-notes-spill", "true");
+          else r.removeAttribute("bgalazka-notes-spill");
         },
         baseArea({ span = false } = {}) {
           if (reserve) {
-            const bb = browserEl()?.getBoundingClientRect();
-            if (bb && bb.width > 40) return { left: bb.left, top: bb.bottom, width: bb.width, height: reserve, anchor: "top" };
+            const band = this.bandRect();
+            if (band) return { ...band, anchor: "top" };
           }
           // Hold-to-fill: one rectangle around every visible page of the panel (both views in Triple View).
           if (span) {
@@ -4889,8 +5091,12 @@
           };
         },
         rewatch: () => observeAll(),
-        setActive(on) {
-          if (!on) this.pushPanel(0);
+        setActive(on, { strip = false } = {}) {
+          if (!on) {
+            if (!strip) this.pushPanel(0);
+            this.setSpill(false);
+          }
+          this.syncMode();
           button.dataset.active = on ? "true" : "false";
           button.setAttribute("aria-pressed", on ? "true" : "false");
         },
@@ -5347,6 +5553,7 @@
         });
         button.appendChild(icon("note", 14));
         const adapter = createBarAdapter({ kind, barEl: el, button, widePercent: () => Math.max(1.3, Math.min(3, prefInt(PREF.WIDE_PERCENT, 200) / 100)) });
+        adapter.syncMode?.();
         let sheet = null;
         let strip = null;
         let stripTimer = 0;
@@ -5460,6 +5667,7 @@
             bindings.set(f.el, b);
           }
           b.button.hidden = !show;
+          b.adapter.syncMode?.();
           if (f.el.firstElementChild !== b.button) f.el.insertBefore(b.button, f.el.firstChild);
           if (b.isOpen()) {
             b.adapter.rewatch();
