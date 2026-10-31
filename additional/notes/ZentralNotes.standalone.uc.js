@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.5
+// @version 3.1.7
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.5, the numeric-preference list and
+ * Placeholders replaced by the build: 3.1.7, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.5";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.7";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -165,7 +165,7 @@ const __zentralShim = (function () {
       _observer: observer,
     };
   }
-  const numericItems = [{"key":"zen.workspace.zentral.notes.push_panel_percent","text":"zen.workspace.zentral.notes.push_panel_percent_text","min":20,"max":80,"def":45},{"key":"zen.workspace.zentral.notes.reveal_height_px","text":"zen.workspace.zentral.notes.reveal_height_px_text","min":2,"max":24,"def":6},{"key":"zen.workspace.zentral.notes.reveal_delay_ms","text":"zen.workspace.zentral.notes.reveal_delay_ms_text","min":0,"max":1000,"def":200},{"key":"zen.workspace.zentral.notes.wide_percent","text":"zen.workspace.zentral.notes.wide_percent_text","min":130,"max":300,"def":200},{"key":"zen.workspace.zentral.notes.look_radius","text":"zen.workspace.zentral.notes.look_radius_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_border","text":"zen.workspace.zentral.notes.look_border_text","min":-1,"max":8,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_blur","text":"zen.workspace.zentral.notes.look_shadow_blur_text","min":-1,"max":120,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_y","text":"zen.workspace.zentral.notes.look_shadow_y_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_alpha","text":"zen.workspace.zentral.notes.look_shadow_alpha_text","min":-1,"max":100,"def":-1},{"key":"zen.workspace.zentral.notes.look_opacity","text":"zen.workspace.zentral.notes.look_opacity_text","min":-1,"max":100,"def":-1},{"key":"zen.workspace.zentral.notes.look_padding","text":"zen.workspace.zentral.notes.look_padding_text","min":-1,"max":64,"def":-1},{"key":"zen.workspace.zentral.notes.look_btn_size","text":"zen.workspace.zentral.notes.look_btn_size_text","min":-1,"max":56,"def":-1},{"key":"zen.workspace.zentral.notes.look_btn_radius","text":"zen.workspace.zentral.notes.look_btn_radius_text","min":-1,"max":50,"def":-1},{"key":"zen.workspace.zentral.notes.autosave_seconds","text":"zen.workspace.zentral.notes.autosave_seconds_text","min":2,"max":60,"def":5},{"key":"zen.workspace.zentral.notes.font_size","text":"zen.workspace.zentral.notes.font_size_text","min":8,"max":40,"def":13},{"key":"zen.workspace.zentral.notes.line_height","text":"zen.workspace.zentral.notes.line_height_text","min":100,"max":300,"def":160}];
+  const numericItems = [{"key":"zen.workspace.zentral.notes.push_panel_percent","text":"zen.workspace.zentral.notes.push_panel_percent_text","min":20,"max":80,"def":45},{"key":"zen.workspace.zentral.notes.reveal_height_px","text":"zen.workspace.zentral.notes.reveal_height_px_text","min":2,"max":24,"def":10},{"key":"zen.workspace.zentral.notes.reveal_delay_ms","text":"zen.workspace.zentral.notes.reveal_delay_ms_text","min":0,"max":1000,"def":100},{"key":"zen.workspace.zentral.notes.wide_percent","text":"zen.workspace.zentral.notes.wide_percent_text","min":130,"max":300,"def":200},{"key":"zen.workspace.zentral.notes.look_radius","text":"zen.workspace.zentral.notes.look_radius_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_border","text":"zen.workspace.zentral.notes.look_border_text","min":-1,"max":8,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_blur","text":"zen.workspace.zentral.notes.look_shadow_blur_text","min":-1,"max":120,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_y","text":"zen.workspace.zentral.notes.look_shadow_y_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_alpha","text":"zen.workspace.zentral.notes.look_shadow_alpha_text","min":-1,"max":100,"def":-1},{"key":"zen.workspace.zentral.notes.look_opacity","text":"zen.workspace.zentral.notes.look_opacity_text","min":-1,"max":100,"def":-1},{"key":"zen.workspace.zentral.notes.look_padding","text":"zen.workspace.zentral.notes.look_padding_text","min":-1,"max":64,"def":-1},{"key":"zen.workspace.zentral.notes.look_btn_size","text":"zen.workspace.zentral.notes.look_btn_size_text","min":-1,"max":56,"def":-1},{"key":"zen.workspace.zentral.notes.look_btn_radius","text":"zen.workspace.zentral.notes.look_btn_radius_text","min":-1,"max":50,"def":-1},{"key":"zen.workspace.zentral.notes.autosave_seconds","text":"zen.workspace.zentral.notes.autosave_seconds_text","min":2,"max":60,"def":5},{"key":"zen.workspace.zentral.notes.font_size","text":"zen.workspace.zentral.notes.font_size_text","min":8,"max":40,"def":13},{"key":"zen.workspace.zentral.notes.line_height","text":"zen.workspace.zentral.notes.line_height_text","min":100,"max":300,"def":160}];
   function nativeSidebarElement() {
       const tabs = window.gBrowser?.tabContainer;
       const candidates = [
@@ -772,6 +772,7 @@ function nativeSidebarSide() {
       "label",
       "pinned",
       "trashed",
+      "folder",
     ]);
     // A free-text label per note: one short line, no front matter breaking characters.
     const LABEL_MAX = 40;
@@ -845,6 +846,7 @@ function nativeSidebarSide() {
         updated: toTime(meta.updated, mtime),
         color: NOTE_COLORS.includes(meta.color) ? meta.color : "none",
         label: cleanLabel(meta.label),
+        folder: cleanFolder(meta.folder),
         pinned: meta.pinned === "true",
         trashed: meta.trashed ? toTime(meta.trashed, mtime) : 0,
         _onDisk: true,
@@ -860,9 +862,221 @@ function nativeSidebarSide() {
       ];
       if (n.color && n.color !== "none") lines.push("color: " + n.color);
       if (cleanLabel(n.label)) lines.push("label: " + cleanLabel(n.label));
+      if (cleanFolder(n.folder)) lines.push("folder: " + cleanFolder(n.folder));
       if (n.pinned) lines.push("pinned: true");
       if (n.trashed) lines.push("trashed: " + iso(n.trashed));
       return "---\n" + lines.join("\n") + "\n---\n" + n.body;
+    }
+
+
+    // ======================================================================
+    // Pure core: folders and the note tree (D2)
+    // ======================================================================
+    // A note lives in one folder path (`work/clients`, ASCII segments, max depth 4). Folder labels, order and
+    // collapsed state are kept in meta.json (`folders`); a folder that only a note names still exists (its label
+    // is the last segment). Pinned stays independent: a pinned note is also listed in the virtual "Pinned" row.
+    const FOLDER_SEG_RE = /^[a-z0-9-]{1,40}$/;
+    const FOLDER_MAX_DEPTH = 4;
+    const MAX_FOLDERS = 64;
+    const FOLDER_LABEL_MAX = 60;
+    function cleanFolder(v) {
+      if (typeof v !== "string" || !v) return "";
+      const segs = v.split("/").filter(Boolean);
+      if (segs.length === 0 || segs.length > FOLDER_MAX_DEPTH) return "";
+      for (const s of segs) if (!FOLDER_SEG_RE.test(s)) return "";
+      return segs.join("/");
+    }
+    function parentOfFolder(fid) {
+      const segs = String(fid || "").split("/").filter(Boolean);
+      segs.pop();
+      return segs.join("/");
+    }
+    function sortNotes(a, b) {
+      return Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || (b.updated || 0) - (a.updated || 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    }
+    function buildTree(notes, folders) {
+      const root = { id: "", label: "", collapsed: false, children: [], notes: [] };
+      const folderNodes = new Map();
+      const ensureChain = (rawId, explicitMeta = null) => {
+        const cleanId = cleanFolder(rawId);
+        if (!cleanId) return;
+        const segs = cleanId.split("/");
+        let path = "";
+        for (let i = 0; i < segs.length; i++) {
+          path = i === 0 ? segs[0] : path + "/" + segs[i];
+          const isTarget = i === segs.length - 1 && explicitMeta;
+          if (!folderNodes.has(path)) {
+            folderNodes.set(path, { id: path, label: isTarget && explicitMeta.label ? String(explicitMeta.label).slice(0, 60) : segs[i], collapsed: isTarget ? Boolean(explicitMeta.collapsed) : false, children: [], notes: [], _order: isTarget && typeof explicitMeta.order === "number" ? explicitMeta.order : 0 });
+          } else if (isTarget) {
+            const existing = folderNodes.get(path);
+            if (explicitMeta.label) existing.label = String(explicitMeta.label).slice(0, 60);
+            if (typeof explicitMeta.collapsed === "boolean") existing.collapsed = explicitMeta.collapsed;
+            if (typeof explicitMeta.order === "number") existing._order = explicitMeta.order;
+          }
+        }
+      };
+      for (const f of folders || []) if (f && f.id) ensureChain(f.id, f);
+      const liveNotes = (notes || []).filter((n) => n && !n.trashed);
+      const notesIn = new Map();
+      for (const n of liveNotes) {
+        const fid = cleanFolder(n.folder);
+        if (fid) ensureChain(fid);
+        if (!notesIn.has(fid)) notesIn.set(fid, []);
+        notesIn.get(fid).push(n);
+      }
+      for (const [, arr] of notesIn) arr.sort(sortNotes);
+      [...folderNodes.keys()].sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b)).forEach((fid) => {
+        const node = folderNodes.get(fid);
+        const pid = parentOfFolder(fid);
+        const parent = pid === "" ? root : folderNodes.get(pid) || root;
+        if (!parent.children.some((c) => c.id === fid)) {
+          parent.children.push(node);
+          parent.children.sort((a, b) => a._order - b._order || a.label.localeCompare(b.label) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+        }
+      });
+      for (const [fid, arr] of notesIn) (fid === "" ? root : folderNodes.get(fid)).notes = arr;
+      return root;
+    }
+    const folderDepth = (fid) => (fid ? fid.split("/").length : 0);
+    const lastSeg = (fid) => String(fid || "").split("/").pop();
+    const inFolder = (fid, root) => fid === root || fid.startsWith(root + "/");
+    // meta.json `folders`: only valid, unique entries, at most MAX_FOLDERS.
+    function cleanFolders(raw) {
+      const out = [];
+      const seen = new Set();
+      if (!Array.isArray(raw)) return out;
+      for (const f of raw) {
+        const id = cleanFolder(f && f.id);
+        if (!id || seen.has(id) || out.length >= MAX_FOLDERS) continue;
+        seen.add(id);
+        const label = String((f && f.label) ?? "").replace(/[\r\n\t]+/g, " ").trim().slice(0, FOLDER_LABEL_MAX);
+        out.push({ id, label: label || lastSeg(id), order: Number.isFinite(Number(f && f.order)) ? Math.round(Number(f.order)) : 0, collapsed: !!(f && f.collapsed) });
+      }
+      return out;
+    }
+    // Folder id from a label: lower-case ASCII, `-` between words, unique among `taken` ids.
+    function slugFolder(label, parentId = "", taken = []) {
+      let base = String(label ?? "")
+        .toLowerCase()
+        .replace(/\u0142/g, "l")
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 40)
+        .replace(/-+$/, "");
+      if (!base) base = "folder";
+      const used = new Set(taken);
+      const mk = (seg) => (parentId ? parentId + "/" : "") + seg;
+      let seg = base;
+      for (let n = 2; used.has(mk(seg)); n++) {
+        const suffix = "-" + n;
+        seg = base.slice(0, 40 - suffix.length).replace(/-+$/, "") + suffix;
+      }
+      return mk(seg);
+    }
+    // Every folder id that exists: listed in meta or named by a note (plus all their parents).
+    function allFolderIds(notes, folders) {
+      const ids = new Set();
+      const add = (raw) => {
+        const id = cleanFolder(raw);
+        if (!id) return;
+        const segs = id.split("/");
+        for (let i = 1; i <= segs.length; i++) ids.add(segs.slice(0, i).join("/"));
+      };
+      for (const f of folders || []) add(f && f.id);
+      for (const n of notes || []) if (n && !n.trashed) add(n.folder);
+      return [...ids];
+    }
+    function moveNote(note, folderId) {
+      return { ...note, folder: cleanFolder(folderId) };
+    }
+    // New folder under `parentId`. Returns {folders, id} or null (invalid parent, too deep, or MAX_FOLDERS).
+    function addFolderMeta(folders, notes, parentId, label) {
+      const parent = cleanFolder(parentId);
+      if (parentId && !parent) return null;
+      if (folderDepth(parent) >= FOLDER_MAX_DEPTH) return null;
+      const list = cleanFolders(folders);
+      const taken = allFolderIds(notes, list);
+      if (taken.length >= MAX_FOLDERS) return null;
+      const text = String(label ?? "").replace(/[\r\n\t]+/g, " ").trim().slice(0, FOLDER_LABEL_MAX);
+      if (!text) return null;
+      const id = slugFolder(text, parent, taken);
+      const order = list.filter((f) => parentOfFolder(f.id) === parent).reduce((m, f) => Math.max(m, f.order + 1), 0);
+      return { folders: [...list, { id, label: text, order, collapsed: false }], id };
+    }
+    // Rename / collapse change the meta entry only (the id, and so every note file, stays as it is).
+    function patchFolderMeta(folders, id, patch) {
+      const fid = cleanFolder(id);
+      if (!fid) return null;
+      const list = cleanFolders(folders);
+      const at = list.findIndex((f) => f.id === fid);
+      const next = { ...(at >= 0 ? list[at] : { id: fid, label: lastSeg(fid), order: 0, collapsed: false }) };
+      if (typeof patch.label === "string") {
+        const text = patch.label.replace(/[\r\n\t]+/g, " ").trim().slice(0, FOLDER_LABEL_MAX);
+        if (!text) return null;
+        next.label = text;
+      }
+      if (typeof patch.collapsed === "boolean") next.collapsed = patch.collapsed;
+      if (at >= 0) list[at] = next;
+      else if (list.length < MAX_FOLDERS) list.push(next);
+      else return null;
+      return list;
+    }
+    // Delete a folder and its subfolders. Notes inside go to the root ("toRoot") or to the trash ("toTrash").
+    function deleteFolder(folders, notes, id, mode = "toRoot") {
+      const fid = cleanFolder(id);
+      if (!fid) return null;
+      const changes = [];
+      for (const n of notes || []) {
+        const nf = cleanFolder(n && n.folder);
+        if (nf && inFolder(nf, fid) && !n.trashed) changes.push({ id: n.id, folder: "", trash: mode === "toTrash" });
+      }
+      return { folders: cleanFolders(folders).filter((f) => !inFolder(f.id, fid)), changes };
+    }
+    // Move a folder (with everything below it) under another folder; the path ids change, so the notes inside
+    // are rewritten. Returns {folders, changes, id} or null (cycle, too deep, nothing to do).
+    function reparentFolder(folders, notes, id, newParent) {
+      const fid = cleanFolder(id);
+      const parent = newParent ? cleanFolder(newParent) : "";
+      if (!fid || (newParent && !parent) || parent === parentOfFolder(fid)) return null;
+      if (parent && inFolder(parent, fid)) return null;
+      const list = cleanFolders(folders);
+      const ids = allFolderIds(notes, list);
+      const family = ids.filter((x) => inFolder(x, fid));
+      const span = Math.max(...family.map(folderDepth)) - folderDepth(fid) + 1;
+      if (folderDepth(parent) + span > FOLDER_MAX_DEPTH) return null;
+      const outside = ids.filter((x) => !inFolder(x, fid));
+      const newId = slugFolder(lastSeg(fid), parent, outside);
+      const remap = (x) => newId + x.slice(fid.length);
+      const moved = list.map((f) => (inFolder(f.id, fid) ? { ...f, id: remap(f.id) } : f));
+      const known = new Set(moved.map((f) => f.id));
+      if (!known.has(newId)) moved.push({ id: newId, label: lastSeg(fid), order: 0, collapsed: false });
+      const changes = [];
+      for (const n of notes || []) {
+        const nf = cleanFolder(n && n.folder);
+        if (nf && inFolder(nf, fid)) changes.push({ id: n.id, folder: remap(nf) });
+      }
+      return { folders: cleanFolders(moved), changes, id: newId };
+    }
+    // The tree as visible rows (a collapsed folder hides what is inside). `pinned` is the virtual first row.
+    function treeRows(root, pinned = []) {
+      const rows = [];
+      if (pinned.length) {
+        rows.push({ type: "pinned", depth: 0, count: pinned.length });
+        for (const n of pinned) rows.push({ type: "note", depth: 1, note: n, pinnedRow: true });
+      }
+      const countOf = (node) => node.notes.length + node.children.reduce((s, c) => s + countOf(c), 0);
+      const walk = (node, depth) => {
+        for (const c of node.children) {
+          rows.push({ type: "folder", depth, node: c, count: countOf(c) });
+          if (!c.collapsed) walk(c, depth + 1);
+        }
+        if (depth === 0 || !node.collapsed) for (const n of node.notes) rows.push({ type: "note", depth, note: n });
+      };
+      // The root's own notes follow the folders, like files after directories.
+      walk(root, 0);
+      return rows;
     }
 
     const MARKERS_RE = /\*\*|==(?:\{\w+\})?|~~|`/g;
@@ -2392,8 +2606,8 @@ function nativeSidebarSide() {
           S("pushPct", "Share of the panel height the sheet takes", PREF.PUSH_PANEL_PERCENT, 20, 80, "%", 45),
           { kind: "heading", label: "Reveal strip" },
           { id: "strip", label: "Strip at the top of an open panel opens Notes on hover", pref: PREF.REVEAL_STRIP, kind: "bool", def: false },
-          S("stripH", "Strip height", PREF.REVEAL_HEIGHT, 2, 24, "px", 6),
-          S("stripD", "Hover delay", PREF.REVEAL_DELAY, 0, 1000, "ms", 150),
+          S("stripH", "Strip height", PREF.REVEAL_HEIGHT, 2, 24, "px", 10),
+          S("stripD", "Hover delay", PREF.REVEAL_DELAY, 0, 1000, "ms", 100),
           { id: "hover", label: "Hide on an outside click instead of closing; bring back from the top edge", pref: PREF.HOVER_REVEAL, kind: "bool", def: false },
           { kind: "heading", label: "Split view" },
           S("widePct", "Width of the sheet in split view (100% = normal)", PREF.WIDE_PERCENT, 130, 300, "%", 200),
@@ -2741,7 +2955,7 @@ function nativeSidebarSide() {
       const dirty = new Set();
       const listeners = new Set();
       const backedUp = new Set();
-      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", geo: {}, recent: [] };
+      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", geo: {}, recent: [], folders: [], openIn: "" };
       let meta = { ...DEFAULT_META };
       let dir = null;
       let chain = Promise.resolve();
@@ -2799,7 +3013,7 @@ function nativeSidebarSide() {
       }
 
       async function loadMeta() {
-        meta = { ...DEFAULT_META, geo: {}, recent: [] };
+        meta = { ...DEFAULT_META, geo: {}, recent: [], folders: [] };
         try {
           const raw = JSON.parse(await io.readUTF8(io.join(dir, "meta.json")));
           if (typeof raw.lastNoteId === "string") meta.lastNoteId = raw.lastNoteId;
@@ -2816,6 +3030,8 @@ function nativeSidebarSide() {
               if (g) meta.geo[key] = g;
             }
           meta.recent = cleanRecent(raw.recent);
+          meta.folders = cleanFolders(raw.folders);
+          if (OPEN_IN_KINDS.includes(raw.openIn)) meta.openIn = raw.openIn;
         } catch (_) {}
       }
 
@@ -2998,7 +3214,7 @@ function nativeSidebarSide() {
           if (last && !last.trashed) return last.id;
           return api.list()[0]?.id || "";
         },
-        create(body = "") {
+        create(body = "", folder = "") {
           let id = makeId(now());
           while (notes.has(id)) id = makeId(now());
           const t = now();
@@ -3009,6 +3225,7 @@ function nativeSidebarSide() {
             updated: t,
             color: "none",
             label: "",
+            folder: cleanFolder(folder),
             pinned: false,
             trashed: 0,
             _onDisk: false,
@@ -3049,6 +3266,70 @@ function nativeSidebarSide() {
           note.pinned = !!pinned;
           if (note.body.trim() || note._onDisk) markDirty(id);
           emit("change", id, { meta: true });
+        },
+        // ---- folders (D2): the tree is the source of truth, files only carry `folder:` ----------------
+        tree() {
+          return buildTree([...notes.values()], meta.folders);
+        },
+        setFolder(id, folderId) {
+          const note = notes.get(id);
+          const next = cleanFolder(folderId);
+          if (!note || cleanFolder(note.folder) === next) return false;
+          note.folder = next;
+          if (note.body.trim() || note._onDisk) markDirty(id);
+          emit("change", id, { meta: true });
+          emit("tree", id);
+          return true;
+        },
+        addFolder(label, parentId = "") {
+          const r = addFolderMeta(meta.folders, [...notes.values()], parentId, label);
+          if (!r) return "";
+          setMeta({ folders: r.folders });
+          emit("tree", r.id);
+          return r.id;
+        },
+        renameFolder(id, label) {
+          const list = patchFolderMeta(meta.folders, id, { label });
+          if (!list) return false;
+          setMeta({ folders: list });
+          emit("tree", id);
+          return true;
+        },
+        setFolderCollapsed(id, collapsed) {
+          const list = patchFolderMeta(meta.folders, id, { collapsed: !!collapsed });
+          if (!list) return false;
+          setMeta({ folders: list });
+          emit("tree", id);
+          return true;
+        },
+        removeFolder(id, mode = "toRoot") {
+          const r = deleteFolder(meta.folders, [...notes.values()], id, mode);
+          if (!r) return false;
+          for (const c of r.changes) {
+            const note = notes.get(c.id);
+            if (!note) continue;
+            note.folder = c.folder;
+            if (c.trash) note.trashed = now();
+            if (note.body.trim() || note._onDisk) markDirty(c.id);
+          }
+          setMeta({ folders: r.folders });
+          for (const c of r.changes) emit("change", c.id, { meta: true });
+          emit("tree", id);
+          return true;
+        },
+        moveFolder(id, newParent) {
+          const r = reparentFolder(meta.folders, [...notes.values()], id, newParent);
+          if (!r) return "";
+          for (const c of r.changes) {
+            const note = notes.get(c.id);
+            if (!note) continue;
+            note.folder = c.folder;
+            if (note.body.trim() || note._onDisk) markDirty(c.id);
+          }
+          setMeta({ folders: r.folders });
+          for (const c of r.changes) emit("change", c.id, { meta: true });
+          emit("tree", r.id);
+          return r.id;
         },
         trash(id) {
           const note = notes.get(id);
@@ -3174,18 +3455,36 @@ function nativeSidebarSide() {
       };
     }
 
+    // ---- V4-QS: where a dialog card goes ---------------------------------------------------------------
+    // `size` = the card's natural (max-content) size in px, `sheet` = the sheet's rect, `viewport` = the window.
+    // A card that fits inside the sheet stays centered by the overlay (spill: false). A bigger one (large font)
+    // grows past the sheet, centered on it and clamped into the window, and scrolls only when it is bigger than
+    // the window. Offsets are relative to the sheet, whose overflow is lifted while a card spills.
+    function fitDialog({ sheet, viewport, size, pad = 6, inset = 12 }) {
+      const roomW = Math.max(0, sheet.width - inset * 2), roomH = Math.max(0, sheet.height - inset * 2);
+      if (size.width <= roomW && size.height <= roomH) return { spill: false, left: 0, top: 0, width: 0, height: 0, scroll: false };
+      const maxW = Math.max(120, viewport.width - pad * 2), maxH = Math.max(80, viewport.height - pad * 2);
+      const width = Math.min(Math.max(size.width, 1), maxW), height = Math.min(Math.max(size.height, 1), maxH);
+      const cx = sheet.left + sheet.width / 2, cy = sheet.top + sheet.height / 2;
+      const x = Math.max(pad, Math.min(cx - width / 2, viewport.width - pad - width));
+      const y = Math.max(pad, Math.min(cy - height / 2, viewport.height - pad - height));
+      return { spill: true, left: Math.round(x - sheet.left), top: Math.round(y - sheet.top), width: Math.round(width), height: Math.round(height), scroll: size.width > maxW || size.height > maxH };
+    }
+
     // ---- V4-R2: window modes + hover timing (pure) ------------------------------------------------------
     // pin = stays open over the panel (overlay, no push); hover = a thin real strip, opens on hover and closes
     // after a grace; dock = stays open and keeps its own slot (pushes the page / panels).
     const DOCK_MODES = Object.freeze(["pin", "hover", "dock"]);
+    // Where Notes was open when the window closed (restored with "Open on Startup"): the bar kind, or "" = closed.
+    const OPEN_IN_KINDS = Object.freeze(["", "primary", "triple", "super"]);
     const cleanDockMode = (v, fallback = "dock") => (DOCK_MODES.includes(v) ? v : fallback);
     const HOVER_CLOSE_GRACE_MS = 600;
-    const hoverStripPx = (v) => Math.max(4, Math.min(6, Math.round(Number(v)) || 6));
+    const hoverStripPx = (v) => Math.max(8, Math.min(16, Math.round(Number(v)) || 10));
     function hoverTiming({ open, grace } = {}) {
       const o = Number(open);
       const g = Number(grace);
       return {
-        openMs: Number.isFinite(o) ? Math.max(0, Math.min(1000, Math.round(o))) : 200,
+        openMs: Number.isFinite(o) ? Math.max(0, Math.min(1000, Math.round(o))) : 100,
         graceMs: Math.max(HOVER_CLOSE_GRACE_MS, Number.isFinite(g) ? Math.round(g) : HOVER_CLOSE_GRACE_MS),
       };
     }
@@ -3209,6 +3508,8 @@ function nativeSidebarSide() {
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, clearOfRect, sideOf, createHoldAction,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
+        FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
+        allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
       };
@@ -3616,6 +3917,7 @@ function nativeSidebarSide() {
         spellcheck: "false",
       });
       const btnNew = iconButton("plus", "New note (Ctrl+N)", "zn-new");
+      const btnFolder = iconButton("folder", "New folder", "zn-newfolder");
       const chipAll = h("button", { type: "button", class: "zn-chip" }, "Notes");
       const chipRecent = h("button", { type: "button", class: "zn-chip" }, "Recent");
       const chipTrash = h("button", { type: "button", class: "zn-chip" }, "Trash");
@@ -3624,7 +3926,7 @@ function nativeSidebarSide() {
       const listEl = h(
         "div",
         { class: "zn-list" },
-        h("div", { class: "zn-list-head" }, h("span", { class: "zn-search-wrap" }, icon("search", 13), search), btnNew),
+        h("div", { class: "zn-list-head" }, h("span", { class: "zn-search-wrap" }, icon("search", 13), search), btnFolder, btnNew),
         h("div", { class: "zn-chips" }, chipAll, chipRecent, chipTrash, h("span", { class: "zn-grow" }), chipEmpty),
         listItems,
       );
@@ -3832,8 +4134,10 @@ function nativeSidebarSide() {
         showNote(id);
         if (focus) focusEditor();
       }
-      function newNote() {
-        const n = store.create("");
+      function newNote(folderId) {
+        const folder = typeof folderId === "string" ? cleanFolder(folderId) : "";
+        if (folder && store.meta.folders.find((f) => f.id === folder)?.collapsed) store.setFolderCollapsed(folder, false);
+        const n = store.create("", folder);
         mode = "edit";
         store.setMeta({ mode: "edit" });
         openNote(n.id);
@@ -3878,96 +4182,318 @@ function nativeSidebarSide() {
           .map((id) => store.get(id))
           .filter((n) => n && !n.trashed && (!q || n.body.toLowerCase().includes(q) || (n.label || "").toLowerCase().includes(q)));
       }
+      // One note row. `opts.tree` = drawn inside the folder tree (indented, draggable onto folders).
+      function buildItem(n, trashed, opts = {}) {
+      const item = h("div", { class: "zn-item", role: opts.tree ? "treeitem" : "listitem", tabindex: "0", "data-id": n.id, "data-key": (opts.pinnedRow ? "p:" : "n:") + n.id });
+      if (opts.tree) {
+        item.style.setProperty("--d", String(opts.depth || 0));
+        item.setAttribute("aria-level", String((opts.depth || 0) + 1));
+        item.setAttribute("draggable", "true");
+        item.addEventListener("dragstart", (e) => {
+          dragNoteId = n.id;
+          try {
+            e.dataTransfer?.setData("text/plain", n.id);
+          } catch (_) {}
+        });
+        item.addEventListener("dragend", () => (dragNoteId = ""));
+      }
+      item.dataset.color = n.color;
+      if (n.id === currentId) item.classList.add("is-current");
+      const act = h("span", { class: "zn-item-actions" });
+      if (trashed) {
+        const r = iconButton("restore", "Restore");
+        r.addEventListener("click", (e) => {
+          e.stopPropagation();
+          store.restore(n.id);
+          scheduleList();
+        });
+        const d = iconButton("trash", "Delete forever", "zn-danger");
+        d.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (d.dataset.armed) {
+            store.deleteForever(n.id).then(scheduleList);
+          } else {
+            d.dataset.armed = "true";
+            d.title = "Click again to delete forever";
+            window.clearTimeout(confirmTimer);
+            confirmTimer = window.setTimeout(() => {
+              delete d.dataset.armed;
+              d.title = "Delete forever";
+            }, 3000);
+          }
+        });
+        act.append(r, d);
+      } else {
+        const p = iconButton("pin", n.pinned ? "Unpin" : "Pin", n.pinned ? "is-on" : "");
+        p.addEventListener("click", (e) => {
+          e.stopPropagation();
+          store.setPinned(n.id, !n.pinned);
+          scheduleList();
+        });
+        const t = iconButton("trash", "Move to trash");
+        t.addEventListener("click", (e) => {
+          e.stopPropagation();
+          store.trash(n.id);
+          if (n.id === currentId) currentId = "";
+          scheduleList();
+        });
+        act.append(p, t);
+      }
+      item.append(
+        h("span", { class: "zn-item-bar" }),
+        h(
+          "span",
+          { class: "zn-item-main" },
+          h("span", { class: "zn-item-title" }, (n.pinned ? "\u{1F4CC} " : "") + (titleOf(n.body) || "Untitled note")),
+          ...(n.label ? [h("span", { class: "zn-item-label" }, n.label)] : []),
+          ...(!opts.tree && cleanFolder(n.folder) ? [h("span", { class: "zn-item-label zn-item-folder" }, cleanFolder(n.folder))] : []),
+          h("span", { class: "zn-item-snippet" }, snippetOf(n.body)),
+        ),
+        h("span", { class: "zn-item-time" }, relativeTime(trashed ? n.trashed : n.updated)),
+        act,
+      );
+      const open = () => {
+        openNote(n.id);
+      };
+      item.addEventListener("click", open);
+      item.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          open();
+        } else if (e.key === "ArrowDown") {
+          e.preventDefault();
+          (item.nextElementSibling || item).focus?.();
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          if (item.previousElementSibling) item.previousElementSibling.focus();
+          else search.focus();
+        } else if (e.key === "ArrowLeft" && opts.tree) {
+          const fid = cleanFolder(n.folder);
+          const up = !opts.pinnedRow && fid ? [...listItems.children].find((c) => c.dataset?.fid === fid) : null;
+          if (up) {
+            e.preventDefault();
+            up.focus?.();
+          }
+        }
+      });
+        return item;
+      }
+      // ---- folder tree (D2) ----------------------------------------------------------------------
+      let dragNoteId = "";
+      const treeMode = () => filter === "all" && !query.trim();
+      const folderTargets = (exclude = "") =>
+        allFolderIds([...store.tree().notes, ...store.list()], store.meta.folders)
+          .filter((id) => !exclude || !(id === exclude || id.startsWith(exclude + "/")))
+          .sort();
+      function buildFolderRow(node, depth, count) {
+        const open = !node.collapsed;
+        const chev = iconButton("caret", open ? "Collapse" : "Expand", "zn-chev");
+        const add = iconButton("plus", "New note here", "zn-fadd");
+        const more = iconButton("more", "Folder menu", "zn-fmore");
+        const row = h(
+          "div",
+          { class: "zn-item zn-frow", role: "treeitem", tabindex: "0", "data-fid": node.id, "data-key": "f:" + node.id, "aria-level": String(depth + 1), "aria-expanded": open ? "true" : "false" },
+          chev,
+          h("span", { class: "zn-frow-icon" }, icon("folder", 14)),
+          h("span", { class: "zn-item-main" }, h("span", { class: "zn-item-title" }, node.label)),
+          h("span", { class: "zn-item-time" }, String(count)),
+          h("span", { class: "zn-item-actions" }, add, more),
+        );
+        row.style.setProperty("--d", String(depth));
+        const toggle = () => store.setFolderCollapsed(node.id, open);
+        chev.addEventListener("click", (e) => {
+          e.stopPropagation();
+          toggle();
+        });
+        add.addEventListener("click", (e) => {
+          e.stopPropagation();
+          newNote(node.id);
+        });
+        more.addEventListener("click", (e) => {
+          e.stopPropagation();
+          showMenu(more, folderMenuItems(node));
+        });
+        row.addEventListener("click", toggle);
+        row.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          showMenu(more, folderMenuItems(node));
+        });
+        row.addEventListener("keydown", (e) => {
+          if (e.target !== row) return;
+          if (e.key === "Enter") {
+            e.preventDefault();
+            toggle();
+          } else if (e.key === "ArrowRight") {
+            e.preventDefault();
+            if (!open) toggle();
+            else row.nextElementSibling?.focus?.();
+          } else if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            if (open) toggle();
+            else {
+              const parent = parentOfFolder(node.id);
+              (parent ? [...listItems.children].find((c) => c.dataset?.fid === parent) : null)?.focus?.();
+            }
+          } else if (e.key === "F2") {
+            e.preventDefault();
+            askFolderName("Rename folder", node.label, (name) => store.renameFolder(node.id, name));
+          } else if (e.key === "ArrowDown") {
+            e.preventDefault();
+            (row.nextElementSibling || row).focus?.();
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            if (row.previousElementSibling) row.previousElementSibling.focus();
+            else search.focus();
+          }
+        });
+        row.addEventListener("dragover", (e) => {
+          if (!dragNoteId) return;
+          e.preventDefault();
+          row.classList.add("is-drop");
+        });
+        row.addEventListener("dragleave", () => row.classList.remove("is-drop"));
+        row.addEventListener("drop", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          row.classList.remove("is-drop");
+          let id = dragNoteId;
+          try {
+            id = id || e.dataTransfer?.getData("text/plain") || "";
+          } catch (_) {}
+          dragNoteId = "";
+          if (id && store.get(id)) store.setFolder(id, node.id);
+        });
+        return row;
+      }
+      function folderMenuItems(node) {
+        const items = [{ icon: "plus", label: "New note here", action: () => newNote(node.id) }];
+        if (folderDepth(node.id) < FOLDER_MAX_DEPTH)
+          items.push({ icon: "folder", label: "New subfolder\u2026", action: () => askFolderName("New subfolder", "", (name) => store.addFolder(name, node.id)) });
+        items.push(
+          { icon: "edit", label: "Rename\u2026", action: () => askFolderName("Rename folder", node.label, (name) => store.renameFolder(node.id, name)) },
+          { icon: "folder", label: "Move to\u2026", action: () => askFolderMove(node) },
+          { sep: true },
+          { icon: "trash", label: "Delete\u2026", danger: true, action: () => askFolderDelete(node) },
+        );
+        return items;
+      }
+      function renderTree(keep) {
+        const root0 = store.tree();
+        const pinned = store.list().filter((n) => n.pinned);
+        const rows = treeRows(root0, pinned);
+        if (!rows.length) {
+          listItems.append(h("p", { class: "zn-empty" }, "No notes yet. Press + to create one."));
+          return;
+        }
+        let shown = 0;
+        for (const r of rows) {
+          if (shown >= MAX_LIST_ROWS) break;
+          shown++;
+          if (r.type === "pinned") {
+            listItems.append(h("div", { class: "zn-tree-head", role: "presentation" }, icon("pin", 12), h("span", {}, "Pinned"), h("span", { class: "zn-item-time" }, String(r.count))));
+          } else if (r.type === "folder") listItems.append(buildFolderRow(r.node, r.depth, r.count));
+          else listItems.append(buildItem(r.note, false, { tree: true, depth: r.depth, pinnedRow: !!r.pinnedRow }));
+        }
+        if (rows.length > MAX_LIST_ROWS)
+          listItems.append(h("p", { class: "zn-empty" }, `Showing the first ${MAX_LIST_ROWS} of ${rows.length}. Use search to narrow down.`));
+      }
+      // Small dialogs for folder actions (one text field, a confirm, a target picker).
+      function askFolderName(title, initial, onOk) {
+        const f = field("Folder name", initial, "e.g. Work");
+        f.input.maxLength = FOLDER_LABEL_MAX;
+        const ok = chip("Save", true);
+        const cancel = chip("Cancel");
+        openCard(title, f.row, h("div", { class: "zn-dialog-actions" }, cancel, ok));
+        const submit = () => {
+          const name = f.input.value.trim();
+          if (!name) {
+            f.input.dataset.bad = "true";
+            f.input.focus?.();
+            return;
+          }
+          closeDialog();
+          onOk(name);
+        };
+        ok.addEventListener("click", submit);
+        cancel.addEventListener("click", closeDialog);
+        f.input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            submit();
+          }
+        });
+        f.input.focus?.({ preventScroll: true });
+        f.input.select?.();
+      }
+      function askFolderDelete(node) {
+        const toRoot = chip("Notes to top level", true);
+        const toTrash = chip("Notes to trash");
+        const cancel = chip("Cancel");
+        openCard("Delete folder", h("p", {}, `Delete \u201c${node.label}\u201d and its subfolders? Notes inside are not lost unless you choose the trash.`), h("div", { class: "zn-dialog-actions" }, cancel, toTrash, toRoot));
+        cancel.addEventListener("click", closeDialog);
+        toRoot.addEventListener("click", () => {
+          closeDialog();
+          store.removeFolder(node.id, "toRoot");
+        });
+        toTrash.addEventListener("click", () => {
+          closeDialog();
+          store.removeFolder(node.id, "toTrash");
+        });
+        cancel.focus?.({ preventScroll: true });
+      }
+      // A list of folders to pick from ("Top level" first). `label(id)` indents by depth.
+      function askFolderPick(title, targets, onPick, current = "") {
+        const list = h("div", { class: "zn-aligns" });
+        const cancel = chip("Cancel");
+        const rowFor = (id) => {
+          const b = chip(id ? "\u2003".repeat(folderDepth(id) - 1) + (store.meta.folders.find((f) => f.id === id)?.label || lastSeg(id)) : "Top level", id === current);
+          b.dataset.fid = id;
+          b.addEventListener("click", () => {
+            closeDialog();
+            onPick(id);
+          });
+          return b;
+        };
+        for (const id of ["", ...targets]) list.append(rowFor(id));
+        openCard(title, list, h("div", { class: "zn-dialog-actions" }, cancel));
+        cancel.addEventListener("click", closeDialog);
+      }
+      function askFolderMove(node) {
+        const span = Math.max(...folderTargets().filter((x) => x === node.id || x.startsWith(node.id + "/")).map(folderDepth), 1) - folderDepth(node.id) + 1;
+        const targets = folderTargets(node.id).filter((id) => folderDepth(id) + span <= FOLDER_MAX_DEPTH && id !== parentOfFolder(node.id));
+        askFolderPick(`Move \u201c${node.label}\u201d to`, targets, (id) => store.moveFolder(node.id, id), parentOfFolder(node.id));
+      }
+      function askNoteFolder() {
+        const n = note();
+        if (!n || n.trashed) return;
+        askFolderPick("Move note to folder", folderTargets(), (id) => {
+          store.setFolder(n.id, id);
+          applyState();
+          focusEditor();
+        }, cleanFolder(n.folder));
+      }
       function renderList() {
         rafList = 0;
         if (view !== "list") return;
         applyState();
         const trashed = filter === "trash";
-        const all = filter === "recent" ? recentNotes() : store.list({ query, trashed });
+        const keep = listItems.contains?.(document.activeElement) ? document.activeElement?.dataset?.key || "" : "";
         listItems.replaceChildren();
-        if (!all.length) {
-          listItems.append(
-            h("p", { class: "zn-empty" }, query ? "No notes match your search." : trashed ? "Trash is empty." : filter === "recent" ? "Nothing opened yet." : "No notes yet. Press + to create one."),
-          );
-          return;
-        }
-        for (const n of all.slice(0, MAX_LIST_ROWS)) {
-          const item = h("div", { class: "zn-item", role: "listitem", tabindex: "0", "data-id": n.id });
-          item.dataset.color = n.color;
-          if (n.id === currentId) item.classList.add("is-current");
-          const act = h("span", { class: "zn-item-actions" });
-          if (trashed) {
-            const r = iconButton("restore", "Restore");
-            r.addEventListener("click", (e) => {
-              e.stopPropagation();
-              store.restore(n.id);
-              scheduleList();
-            });
-            const d = iconButton("trash", "Delete forever", "zn-danger");
-            d.addEventListener("click", (e) => {
-              e.stopPropagation();
-              if (d.dataset.armed) {
-                store.deleteForever(n.id).then(scheduleList);
-              } else {
-                d.dataset.armed = "true";
-                d.title = "Click again to delete forever";
-                window.clearTimeout(confirmTimer);
-                confirmTimer = window.setTimeout(() => {
-                  delete d.dataset.armed;
-                  d.title = "Delete forever";
-                }, 3000);
-              }
-            });
-            act.append(r, d);
-          } else {
-            const p = iconButton("pin", n.pinned ? "Unpin" : "Pin", n.pinned ? "is-on" : "");
-            p.addEventListener("click", (e) => {
-              e.stopPropagation();
-              store.setPinned(n.id, !n.pinned);
-              scheduleList();
-            });
-            const t = iconButton("trash", "Move to trash");
-            t.addEventListener("click", (e) => {
-              e.stopPropagation();
-              store.trash(n.id);
-              if (n.id === currentId) currentId = "";
-              scheduleList();
-            });
-            act.append(p, t);
+        listItems.setAttribute("role", treeMode() ? "tree" : "list");
+        if (treeMode()) renderTree();
+        else {
+          const all = filter === "recent" ? recentNotes() : store.list({ query, trashed });
+          if (!all.length) {
+            listItems.append(
+              h("p", { class: "zn-empty" }, query ? "No notes match your search." : trashed ? "Trash is empty." : filter === "recent" ? "Nothing opened yet." : "No notes yet. Press + to create one."),
+            );
+            return;
           }
-          item.append(
-            h("span", { class: "zn-item-bar" }),
-            h(
-              "span",
-              { class: "zn-item-main" },
-              h("span", { class: "zn-item-title" }, (n.pinned ? "\u{1F4CC} " : "") + (titleOf(n.body) || "Untitled note")),
-              ...(n.label ? [h("span", { class: "zn-item-label" }, n.label)] : []),
-              h("span", { class: "zn-item-snippet" }, snippetOf(n.body)),
-            ),
-            h("span", { class: "zn-item-time" }, relativeTime(trashed ? n.trashed : n.updated)),
-            act,
-          );
-          const open = () => {
-            openNote(n.id);
-          };
-          item.addEventListener("click", open);
-          item.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              open();
-            } else if (e.key === "ArrowDown") {
-              e.preventDefault();
-              (item.nextElementSibling || item).focus?.();
-            } else if (e.key === "ArrowUp") {
-              e.preventDefault();
-              if (item.previousElementSibling) item.previousElementSibling.focus();
-              else search.focus();
-            }
-          });
-          listItems.append(item);
+          for (const n of all.slice(0, MAX_LIST_ROWS)) listItems.append(buildItem(n, trashed));
+          if (all.length > MAX_LIST_ROWS)
+            listItems.append(h("p", { class: "zn-empty" }, `Showing the first ${MAX_LIST_ROWS} of ${all.length}. Use search to narrow down.`));
         }
-        if (all.length > MAX_LIST_ROWS)
-          listItems.append(h("p", { class: "zn-empty" }, `Showing the first ${MAX_LIST_ROWS} of ${all.length}. Use search to narrow down.`));
+        if (keep) [...listItems.children].find((c) => c.dataset?.key === keep)?.focus?.({ preventScroll: true });
       }
       const scheduleList = () => {
         if (!rafList) rafList = window.requestAnimationFrame(renderList);
@@ -4177,9 +4703,58 @@ function nativeSidebarSide() {
       // Export notice: says what each format loses before anything is written.
       function closeDialog() {
         if (!dialog) return;
+        try {
+          cardRO?.disconnect();
+        } catch (_) {}
+        cardRO = null;
+        window.cancelAnimationFrame(rafFit);
+        rafFit = 0;
+        delete root.dataset.dialogSpill;
         dialog.remove();
         dialog = null;
       }
+      // V4-QS: a dialog card is sized in em/ch (it follows the sheet font) and, when it is bigger than the sheet,
+      // grows past it up to the window (fitDialog). Re-run after every redraw and when the card resizes.
+      let cardRO = null;
+      let rafFit = 0;
+      let fitting = false;
+      const FIT_PROPS = ["position", "left", "top", "width", "height", "maxWidth", "maxHeight"];
+      function fitCard() {
+        if (!dialog) return null;
+        const card = dialog.querySelector(".zn-dialog-card");
+        if (!card || card.classList.contains("zn-settings")) return null;
+        fitting = true;
+        window.requestAnimationFrame(() => (fitting = false));
+        const doc = (root.ownerDocument || document).documentElement || {};
+        const viewport = { width: doc.clientWidth || window.innerWidth || 0, height: doc.clientHeight || window.innerHeight || 0 };
+        for (const k of FIT_PROPS) card.style[k] = "";
+        delete dialog.dataset.spill;
+        delete root.dataset.dialogSpill;
+        if (viewport.width > 0) card.style.maxWidth = "min(34em, " + Math.max(120, viewport.width - 12) + "px)";
+        const size = { width: Math.max(card.offsetWidth || 0, card.scrollWidth || 0), height: Math.max(card.offsetHeight || 0, card.scrollHeight || 0) };
+        const sr = root.getBoundingClientRect();
+        const sheet = { left: sr.left, top: sr.top, width: sr.width, height: sr.height };
+        const fit = viewport.width > 0 ? fitDialog({ sheet, viewport, size }) : { spill: false };
+        card.style.maxWidth = "";
+        if (fit.spill) {
+          dialog.dataset.spill = "true";
+          root.dataset.dialogSpill = "true";
+          card.style.position = "absolute";
+          card.style.left = fit.left + "px";
+          card.style.top = fit.top + "px";
+          card.style.width = fit.width + "px";
+          card.style.height = fit.height + "px";
+          card.style.maxWidth = "none";
+          card.style.maxHeight = "none";
+        }
+        return fit;
+      }
+      const scheduleFit = () => {
+        if (!rafFit) rafFit = window.requestAnimationFrame(() => {
+          rafFit = 0;
+          fitCard();
+        });
+      };
       // Free-text label of the note (one short line, shown beside the title and in the list, searchable).
       function askLabel() {
         const n = note();
@@ -4249,6 +4824,16 @@ function nativeSidebarSide() {
           if (e.target === dialog) closeDialog();
         });
         root.append(dialog);
+        fitCard();
+        try {
+          const RO = window.ResizeObserver;
+          if (RO) {
+            cardRO = new RO(() => {
+              if (!fitting) scheduleFit();
+            });
+            cardRO.observe(card);
+          }
+        } catch (_) {}
         return card;
       }
       const chip = (label, on = false) => h("button", { type: "button", class: "zn-chip" + (on ? " is-on" : "") }, label);
@@ -4524,6 +5109,7 @@ function nativeSidebarSide() {
           else setPref(o.pref, v);
           if (o.meta) applyState();
           draw();
+          fitCard();
         };
         function draw() {
           body.replaceChildren();
@@ -4842,6 +5428,7 @@ function nativeSidebarSide() {
           { icon: "save", label: "Export all as zip\u2026", action: () => askExport("zip", async () => { const k = await env.exportZip(store.list()); if (k) flash(`Zipped ${k} notes`); }) },
           { icon: "folder", label: "Import .md folder\u2026", action: async () => { const k = await env.importFolder(store); flash(k ? `Imported ${k} notes` : "Nothing imported"); if (view === "list") scheduleList(); } },
           { icon: "folder", label: "Open notes folder", action: () => env.revealFolder(store.dir) },
+          { icon: "folder", label: "Move to folder\u2026", action: () => askNoteFolder() },
           { icon: "sliders", label: "Quick settings\u2026", action: () => askSettings() },
           { icon: "sliders", label: "All settings\u2026", action: () => askAllSettings() },
           ...(adapter.geoKey ? [{ icon: "restore", label: "Reset position and size", action: () => resetGeo() }] : []),
@@ -5049,6 +5636,18 @@ function nativeSidebarSide() {
         if (rafDrag) window.cancelAnimationFrame(rafDrag);
       });
       listen(btnNew, "click", newNote);
+      listen(btnFolder, "click", () => askFolderName("New folder", "", (name) => store.addFolder(name, "")));
+      // A note dropped on empty list space goes back to the top level.
+      listen(listItems, "dragover", (e) => {
+        if (dragNoteId && treeMode()) e.preventDefault();
+      });
+      listen(listItems, "drop", (e) => {
+        if (!dragNoteId || !treeMode()) return;
+        e.preventDefault();
+        const id = dragNoteId;
+        dragNoteId = "";
+        if (store.get(id)) store.setFolder(id, "");
+      });
       listen(chipAll, "click", () => { filter = "all"; renderList(); });
       listen(chipRecent, "click", () => { filter = "recent"; renderList(); });
       listen(chipTrash, "click", () => { filter = "trash"; renderList(); });
@@ -5176,6 +5775,7 @@ function nativeSidebarSide() {
           else scheduleList();
           return;
         }
+        if (ev.type === "tree") return view === "list" ? scheduleList() : undefined;
         if (ev.type === "remove") {
           if (ev.id === currentId) {
             currentId = "";
@@ -5265,7 +5865,7 @@ function nativeSidebarSide() {
           pushed = false;
         }
         if (panelHosted) {
-          const strip = isOpen && collapsed ? hoverStripPx(getPref(PREF.REVEAL_HEIGHT, 6)) : 0;
+          const strip = isOpen && collapsed ? hoverStripPx(getPref(PREF.REVEAL_HEIGHT, 10)) : 0;
           const share = on && !collapsed && isOpen ? Math.max(20, Math.min(80, getPref(PREF.PUSH_PANEL_PERCENT, 45))) / 100 : 0;
           const quad = adapter.pushPanel(share, { strip });
           if (quad) root.dataset.bgalazkaTripleSlot = "notes";
@@ -5278,7 +5878,7 @@ function nativeSidebarSide() {
       // Opening waits an open delay; folding away waits a grace of at least 600 ms and never happens while
       // focus is inside, a menu or dialog is open, a drag runs or the pointer is down.
       const hoverMode = () => !!adapter.pushPanel && dockMode() === "hover";
-      const timing = () => hoverTiming({ open: getPref(PREF.REVEAL_DELAY, 200), grace: HOVER_CLOSE_GRACE_MS });
+      const timing = () => hoverTiming({ open: getPref(PREF.REVEAL_DELAY, 100), grace: HOVER_CLOSE_GRACE_MS });
       function placeReveal() {
         if (!revealEl) return;
         const band = adapter.bandRect?.();
@@ -5323,6 +5923,17 @@ function nativeSidebarSide() {
           window.clearTimeout(openTimer);
           openTimer = 0;
         });
+        // The strip is a visible target: pressing it opens the sheet at once, and a pointer that arrives
+        // fast (it overshoots instead of resting on a 1 px edge) is not made to wait the full delay.
+        revealEl.addEventListener("mousedown", (e) => {
+          e.stopPropagation();
+          expand(false);
+        });
+        revealEl.addEventListener("mousemove", (e) => {
+          if (!openTimer || !(Math.abs(e.movementY || 0) + Math.abs(e.movementX || 0) > 30)) return;
+          window.clearTimeout(openTimer);
+          openTimer = window.setTimeout(() => expand(true), Math.min(timing().openMs, 40));
+        });
         (adapter.host || root.parentNode || document.documentElement).appendChild(revealEl);
         adapter.setActive(false, { strip: true });
         applyPush(0, 0);
@@ -5348,7 +5959,7 @@ function nativeSidebarSide() {
         scheduleLayout();
         // Opened by hovering: do not steal the focus; fold away again if the pointer never reaches the sheet.
         if (fromHover) armGrace();
-      }      // ---- split view as a second window -----------------------------------------------------------
+      }
       const scheduleLayout = () => {
         if (!rafLayout) rafLayout = window.requestAnimationFrame(layout);
       };
@@ -5447,6 +6058,8 @@ function nativeSidebarSide() {
         root.hidden = false;
         mode = store.meta.mode;
         applyState();
+        // A panel-hosted sheet takes its slot first, so the first frame already shows the split.
+        if (adapter.pushPanel) applyPush(0, 0);
         layout();
         unwatch = adapter.watch(scheduleLayout);
         window.addEventListener("mousedown", onOutsidePress, true);
@@ -5463,6 +6076,7 @@ function nativeSidebarSide() {
         }
         if (!isOpen || destroyed) return;
         mode = store.meta.mode;
+        if (adapter.kind) store.setMeta({ openIn: adapter.kind });
         store.refresh().catch(() => {});
         const id = store.latestId();
         if (id) openNote(id);
@@ -5485,6 +6099,8 @@ function nativeSidebarSide() {
         window.clearTimeout(previewTimer);
         previewTimer = 0;
         if (currentId) store.discardIfEmpty(currentId);
+        // Closing by hand forgets "open in", a window or panel going away keeps it (restored with Open on Startup).
+        if (adapter.kind && !destroying) store.setMeta({ openIn: "" });
         store.flush();
         window.removeEventListener("mousedown", onOutsidePress, true);
         window.removeEventListener("mousedown", onPress, true);
@@ -5500,8 +6116,10 @@ function nativeSidebarSide() {
         adapter.setActive(false);
         adapter.onClosed?.();
       }
+      let destroying = false;
       function destroy() {
         if (destroyed) return;
+        destroying = true;
         if (isOpen) close();
         destroyed = true;
         offStore();
@@ -5585,6 +6203,7 @@ function nativeSidebarSide() {
       return {
         position: "absolute",
         geoKey: "panel",
+        kind,
         get host() {
           return host();
         },
@@ -5661,8 +6280,9 @@ function nativeSidebarSide() {
         },
         baseArea({ span = false } = {}) {
           if (reserve) {
+            // The band IS the sheet's slot: it fills it (no peek size, no remembered box).
             const band = this.bandRect();
-            if (band) return { ...band, anchor: "top" };
+            if (band) return { ...band, anchor: "top", fill: true };
           }
           // Hold-to-fill: one rectangle around every visible page of the panel (both views in Triple View).
           if (span) {
@@ -6209,12 +6829,12 @@ function nativeSidebarSide() {
                 window.clearTimeout(stripTimer);
                 stripTimer = window.setTimeout(() => {
                   if (!binding.isOpen()) Promise.resolve(binding.open()).catch(warn);
-                }, Math.max(0, Math.min(1000, prefInt(PREF.REVEAL_DELAY, 150))));
+                }, Math.max(0, Math.min(1000, prefInt(PREF.REVEAL_DELAY, 100))));
               });
               strip.addEventListener("mouseleave", () => window.clearTimeout(stripTimer));
               strip.addEventListener("mousedown", (e) => e.stopPropagation());
             }
-            strip.style.height = Math.max(2, Math.min(24, prefInt(PREF.REVEAL_HEIGHT, 6))) + "px";
+            strip.style.height = Math.max(2, Math.min(24, prefInt(PREF.REVEAL_HEIGHT, 10))) + "px";
             if (strip.parentNode !== el) {
               try {
                 if (window.getComputedStyle(el).position === "static") {
@@ -6291,7 +6911,36 @@ function nativeSidebarSide() {
           }
           b.syncReveal();
         }
+        maybeRestore();
       }
+      // "Open on Startup" (a panel setting) also brings Notes back where it was: meta.openIn names the bar kind
+      // (primary panel, Triple View bottom bar, Super Pin). One quiet attempt per sync until it has decided.
+      let restoreState = prefStr("zen.workspace.bgalazka.open_at_startup", "null") !== "null" ? "pending" : "off";
+      function maybeRestore() {
+        if (restoreState !== "pending" || disposed || !enabledNow()) return;
+        if (!document.getElementById("zen-app-panel-root")?.hasAttribute("open")) return;
+        restoreState = "checking";
+        Promise.resolve(ensureStore())
+          .then(() => {
+            const want = store.meta.openIn;
+            if (!want) {
+              restoreState = "done";
+              return null;
+            }
+            const b = [...bindings.values()].find((x) => x.kind === want && x.visible());
+            if (!b) {
+              restoreState = "pending"; // e.g. Triple View is not up yet: the next sync tries again
+              return null;
+            }
+            restoreState = "done";
+            return b.isOpen() ? null : b.open();
+          })
+          .catch((error) => {
+            restoreState = "done";
+            warn(error);
+          });
+      }
+      onCleanup(() => (restoreState = "done"));
       let syncTimer = 0;
       const scheduleSync = () => {
         if (!syncTimer && !disposed) syncTimer = window.setTimeout(syncBars, 60);

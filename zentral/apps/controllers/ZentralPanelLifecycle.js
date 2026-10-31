@@ -330,6 +330,12 @@
         // Responsibility: ZentralPanelPresentation
         openPanel(app) {
           if (!Core.getPref(Constants.Apps.PREF_ENABLED, true)) return;
+          // Switching apps while the panel is already open keeps the panel where it is: no slide-out/slide-in,
+          // so whatever is docked to it (the Notes sheet lives inside the slider) does not seem to close and reopen.
+          const wasOpen =
+            !!access.dom.root?.hasAttribute("open") &&
+            !access.dom.root.hasAttribute("closing") &&
+            !access.state.closeTimerId;
           this.closeLibraryForPanel();
           Core.log(
             "ZentralApps",
@@ -406,8 +412,10 @@
             : isFromRight
               ? "translateX(100%)"
               : "translateX(-100%)";
-          access.dom.panel.style.transition = "none";
-          access.dom.panel.style.transform = slideFrom;
+          if (!wasOpen) {
+            access.dom.panel.style.transition = "none";
+            access.dom.panel.style.transform = slideFrom;
+          }
           if (access.dom.root) {
             access.dom.root.removeAttribute("closing");
             access.dom.root.setAttribute("open", "true");
@@ -429,6 +437,10 @@
           access.dom.panel.getBoundingClientRect(); // Reflow
 
           if (this._openPanelRAF) cancelAnimationFrame(this._openPanelRAF);
+          if (wasOpen) {
+            this._openPanelRAF = null;
+            return;
+          }
           this._openPanelRAF = requestAnimationFrame(() => {
             this._openPanelRAF = null;
             if (this._destroyed || !access.dom.panel) return;

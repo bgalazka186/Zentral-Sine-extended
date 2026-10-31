@@ -580,7 +580,12 @@
   background: color-mix(in srgb, var(--zn-surface) 70%, transparent);
 }
 .zentral-notes-sheet .zn-dialog-card {
-  max-width: 340px;
+  /* V4-QS: sized in em so it follows the sheet font; it may grow past the sheet (JS fitDialog) up to the window */
+  box-sizing: border-box;
+  width: max-content;
+  min-width: min(26em, 100%);
+  max-width: min(34em, 100%);
+  max-height: 100%;
   padding: 12px 14px;
   border: 1px solid var(--zn-line);
   border-radius: var(--zn-radius);
@@ -617,7 +622,9 @@
 :root[zentral-notes-copy="on"] .zentral-notes-sheet .zn-read { -moz-user-select: text; user-select: text; cursor: text; }
 /* hidden copy of the editor text, used to measure where each source line sits for linked scrolling */
 .zentral-notes-sheet .zn-mirror { position: absolute; top: 0; left: 0; visibility: hidden; pointer-events: none; overflow: hidden; height: 0; border-style: solid; border-color: transparent; }
-.zentral-notes-sheet .zn-dialog-card { min-width: 260px; max-height: 90%; overflow: auto; }
+.zentral-notes-sheet .zn-dialog-card { overflow: auto; }
+.zentral-notes-sheet[data-dialog-spill="true"] { overflow: visible; }
+.zentral-notes-sheet .zn-dialog[data-spill="true"] .zn-dialog-card { position: absolute; }
 .zentral-notes-sheet .zn-field-row { display: grid; gap: 3px; margin: 8px 0; color: var(--zn-muted); font-size: 0.9em; }
 .zentral-notes-sheet .zn-field {
   padding: 5px 8px; border: 1px solid var(--zn-line); border-radius: 6px; background: transparent; color: var(--zn-text); font: inherit; outline: none;
@@ -629,9 +636,9 @@
 .zentral-notes-sheet .zn-gcell { aspect-ratio: 1; min-width: 18px; padding: 0; border: 1px solid var(--zn-line); border-radius: 3px; background: transparent; cursor: pointer; }
 .zentral-notes-sheet .zn-gcell.is-on { background: color-mix(in srgb, var(--zn-accent) 40%, transparent); border-color: var(--zn-accent); }
 .zentral-notes-sheet .zn-quick { display: grid; gap: 4px; margin: 8px 0; }
-.zentral-notes-sheet .zn-quick-row { display: flex; align-items: center; gap: 6px; }
-.zentral-notes-sheet .zn-quick-label { flex: 1; min-width: 0; }
-.zentral-notes-sheet .zn-quick-value { min-width: 3.2em; text-align: center; font-variant-numeric: tabular-nums; }
+.zentral-notes-sheet .zn-quick-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.zentral-notes-sheet .zn-quick-label { flex: 1 1 12em; min-width: 0; }
+.zentral-notes-sheet .zn-quick-value { min-width: 4.4em; text-align: center; font-variant-numeric: tabular-nums; }
 .zentral-notes-sheet .zn-keys { max-height: 46vh; overflow: auto; }
 .zentral-notes-sheet .zn-keybtn { min-width: 8.5em; }
 .zentral-notes-sheet .zn-key-note { min-height: 2.6em; }
@@ -686,13 +693,19 @@
   visibility: hidden;
   pointer-events: none;
 }
+/* A visible target (grip on a tinted band) with a wider invisible hit zone, so the pointer does not need an
+   edge to stop against: it can overshoot into the zone and still opens the sheet. */
 .zentral-notes-reveal {
   z-index: 2147483645;
-  min-height: 4px;
-  background: transparent;
-  cursor: default;
+  min-height: 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--zentral-notes-ov-accent, #6aa7ff) 26%, transparent);
+  cursor: pointer;
+  transition: background 0.1s ease;
 }
-.zentral-notes-reveal:hover { background: color-mix(in srgb, var(--zentral-notes-ov-accent, #6aa7ff) 45%, transparent); }
+.zentral-notes-reveal::before { content: ""; position: absolute; left: 0; right: 0; top: -12px; height: 12px; }
+.zentral-notes-reveal::after { content: ""; position: absolute; left: 50%; top: 50%; width: 36px; height: 3px; margin: -1.5px 0 0 -18px; border-radius: 2px; background: color-mix(in srgb, var(--zentral-notes-ov-accent, #6aa7ff) 85%, transparent); }
+.zentral-notes-reveal:hover { background: color-mix(in srgb, var(--zentral-notes-ov-accent, #6aa7ff) 55%, transparent); }
 /* Push page: the page area gives way to the standalone card (set by createFloatingAdapter.push). */
 :root[zentral-notes-push] #tabbrowser-tabbox { transition: margin 0.22s ease; }
 :root[zentral-notes-push="right"] #tabbrowser-tabbox { margin-right: var(--zentral-notes-push) !important; }
@@ -805,3 +818,15 @@
 :root[bgalazka-notes-spill="true"] #zen-app-panel-root #zen-app-panel-slider > browser {
   border-radius: inherit;
 }
+
+/* ---- D2: folder tree in the list view --------------------------------------------------- */
+.zentral-notes-sheet .zn-items[role="tree"] .zn-item { padding-left: calc(6px + var(--d, 0) * 1.1em); }
+.zentral-notes-sheet .zn-frow { align-items: center; gap: 4px; cursor: pointer; }
+.zentral-notes-sheet .zn-frow .zn-item-title { font-weight: 600; }
+.zentral-notes-sheet .zn-frow-icon { display: inline-flex; color: var(--zn-muted); }
+.zentral-notes-sheet .zn-frow .zn-chev svg { transition: transform 0.12s ease; }
+.zentral-notes-sheet .zn-frow[aria-expanded="false"] .zn-chev svg { transform: rotate(-90deg); }
+.zentral-notes-sheet .zn-frow.is-drop { background: color-mix(in srgb, var(--zn-accent) 22%, transparent); outline: 1px dashed var(--zn-accent); }
+.zentral-notes-sheet .zn-tree-head { display: flex; align-items: center; gap: 6px; padding: 6px 6px 2px; color: var(--zn-muted); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; }
+.zentral-notes-sheet .zn-tree-head .zn-item-time { margin-left: auto; }
+.zentral-notes-sheet .zn-item-folder { opacity: 0.8; }

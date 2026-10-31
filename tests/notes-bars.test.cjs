@@ -396,34 +396,20 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(card.querySelector(".zn-keep-btn").classList.contains("is-on"), true);
   });
 
-  await test("hover reveal: an outside press tucks the unpinned card away, the strip on its top edge brings it back, no timer idles", async () => {
+  await test("hover reveal (V4-R5): the standalone card never tucks; an outside press leaves an unpinned card to the pin rules only", async () => {
     const card = floatCard();
     const keep = card.querySelector(".zn-keep-btn");
     const strips = () => document.documentElement.children.filter((c) => c._classes.has("zentral-notes-reveal"));
     prefs.set("zen.workspace.zentral.notes.hover_reveal", true);
     if (keep.classList.contains("is-on")) keep.click();
-    outside(page);
-    await flush();
-    assert.equal(card.hidden, false, "tucked, not closed");
-    assert.equal(card.dataset.tucked, "true");
-    assert.equal(strips().length, 1, "one reveal strip");
-    assert.equal(strips()[0].style.top, card.style.top, "the strip sits on the card's top edge");
-    outside(page);
-    assert.equal(strips().length, 1, "a second outside press changes nothing");
-    strips()[0].dispatchEvent(new Ev("mouseenter", {}));
-    await sleep(220);
-    await flush();
-    assert.equal(card.dataset.tucked, undefined, "hovering the strip brings the card back");
-    assert.equal(strips().length, 0, "strip removed");
-    outside(page);
-    await flush();
-    assert.equal(card.dataset.tucked, "true");
     press({ key: "F", code: "KeyF", alt: true, shift: true });
     await sleep(40); await flush();
-    assert.equal(card.dataset.tucked, undefined, "the shortcut also brings a tucked card back instead of closing it");
-    assert.equal(card.hidden, false);
+    press({ key: "F", code: "KeyF", alt: true, shift: true });
+    await sleep(40); await flush();
+    assert.equal(card.dataset.tucked, undefined, "no tuck state exists any more");
+    assert.equal(strips().length, 0, "the standalone card has no reveal strip (hover mode belongs to panel-hosted sheets)");
     prefs.set("zen.workspace.zentral.notes.hover_reveal", false);
-    keep.click();
+    if (!keep.classList.contains("is-on")) keep.click();
     assert.equal(keep.classList.contains("is-on"), true);
   });
 

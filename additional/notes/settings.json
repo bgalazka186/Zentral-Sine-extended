@@ -246,7 +246,7 @@
       "property": "zen.workspace.zentral.notes.reveal_height_px",
       "label": "Reveal strip height (px, 2–24)",
       "type": "input",
-      "defaultValue": 6,
+      "defaultValue": 10,
       "numeric": {
         "min": 2,
         "max": 24,
@@ -258,7 +258,7 @@
       "property": "zen.workspace.zentral.notes.reveal_delay_ms",
       "label": "Hover open delay (ms, 0–1000)",
       "type": "input",
-      "defaultValue": 200,
+      "defaultValue": 100,
       "numeric": {
         "min": 0,
         "max": 1000,

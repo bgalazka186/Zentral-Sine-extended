@@ -2253,15 +2253,15 @@
     "property": "zen.workspace.zentral.notes.reveal_height_px_text",
     "label": "Reveal strip height (px, 2–24) [2 to 24 px]",
     "type": "string",
-    "defaultValue": "6",
-    "placeholder": "6"
+    "defaultValue": "10",
+    "placeholder": "10"
   },
   {
     "property": "zen.workspace.zentral.notes.reveal_delay_ms_text",
     "label": "Hover open delay (ms, 0–1000) [0 to 1000 ms]",
     "type": "string",
-    "defaultValue": "200",
-    "placeholder": "200"
+    "defaultValue": "100",
+    "placeholder": "100"
   },
   {
     "property": "zen.workspace.zentral.notes.wide_percent_text",

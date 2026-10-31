@@ -522,14 +522,14 @@
     "text": "zen.workspace.zentral.notes.reveal_height_px_text",
     "min": 2,
     "max": 24,
-    "def": 6
+    "def": 10
   },
   {
     "key": "zen.workspace.zentral.notes.reveal_delay_ms",
     "text": "zen.workspace.zentral.notes.reveal_delay_ms_text",
     "min": 0,
     "max": 1000,
-    "def": 200
+    "def": 100
   },
   {
     "key": "zen.workspace.zentral.notes.wide_percent",
