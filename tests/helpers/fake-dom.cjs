@@ -42,7 +42,7 @@ class El {
   all() { return this.children.flatMap((c) => [c, ...c.all()]); }
   querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
   querySelectorAll(sel) {
-    if (sel.startsWith(":scope > ")) return this.children.filter((e) => e.tag === sel.slice(9));
+    if (sel.startsWith(":scope > ")) { const rest = sel.slice(9); return this.children.filter((e) => (rest.startsWith(".") ? e._classes.has(rest.slice(1)) : e.tag === rest)); }
     return this.all().filter((e) => (sel.startsWith(".") ? e._classes.has(sel.slice(1)) : e.tag === sel));
   }
   addEventListener(type, fn, opts) { this.listeners.push({ type, fn, capture: opts === true || opts?.capture === true }); }

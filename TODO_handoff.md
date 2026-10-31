@@ -47,7 +47,7 @@ node tools/check-settings-consistency.cjs
 node tools/build-z-map.cjs                   # regenerate z-heights_map.md
 node tools/build-standalone.cjs              # refuses changed content without a version bump
 node tools/build-standalone.cjs --check
-for t in standalone notes notes-capture notes-ui notes-markdown notes-bars notes-window numeric-prefs encoding z-heights resize-perf defaults notes-decisions notes-icon; do node tests/$t.test.cjs; done
+for t in standalone notes notes-capture notes-ui notes-markdown notes-bars notes-window notes-tree notes-quick-settings numeric-prefs encoding z-heights resize-perf defaults notes-decisions notes-icon; do node tests/$t.test.cjs; done
 ```
 
 Release-in-progress trick: 3.1.3 is unreleased, so after editing a bundled file the builder complains "content changed but version is still 3.1.3". Reset every `additional/**/standalone.lock.json` `"version"` to `"3.1.2"` (last published) and run `node tools/build-standalone.cjs` again. Do not hand-edit `.standalone.uc.js` files.
@@ -191,3 +191,9 @@ Next: pick V4-R1/R4 first (one session), then V4-R3, V4-R2, V4-QS, then D2 (spec
 **V4-R1+R4 DONE (Node tests only, NOT run in real Zen).** Panel-hosted Notes always takes a slot (`applyPush` no longer needs `push_page`/peek; those gate only the standalone card). Triple View + Notes sets root `bgalazka-quad-view` + sheet `data-bgalazka-triple-slot="notes"`; CSS pads `#zen-app-panel-slider` by `--zentral-notes-panel-reserve` (Integrations.css) and G `notesReserve()` returns 0 in quad. S was NOT edited (slot done via padding, not a flex child); `baseArea` uses the union of visible pages. New test in notes-bars. Live check: panel->Triple->Quad on both sheet sizes. Next: V4-R3.
 
 **V4-R3 DONE (Node tests only, NOT run in real Zen).** Wide (split) sheet in a panel: `layout()` calls `adapter.setSpill(!!a.wideFill)` -> root attr `bgalazka-notes-spill`; NC rules make clip+slider `overflow:visible`, clip stays `pointer-events:none`, sheet `pointer-events:auto`. Pure `clearOfRect` (seam `core`) trims the wide box off `#zen-app-panel-pill`. `setActive(false)` clears the attr. Span is NOT spilled (it fills the panel union). Tests added to notes-window. Release trick used (locks reset to 3.1.2, rebuilt). Live check: split sheet over the page, pill menu reachable, page clickable beside it. Next: V4-R2.
+
+## 20. V4-QS + D2a/D2b and panel-slot follow-up (Node/fake-DOM only; NOT run in real Zen)
+V4-QS and D2a/D2b are complete: Quick Settings tested at 8/13/20/40 px; Notes folders/tree, persistence, All Notes rendering, compact rows and drag/drop covered by `notes-tree.test.cjs`.
+Panel follow-up: dock slot edge resizing persists a proportional share; held Larger expands to span; panel replacement follows an open Notes sheet; manual close clears the target; Open on Startup restores the saved `openIn` panel. Gap geometry avoids double-subtracting its reserve.
+Regression fixes: explicit folders remain ahead of note-inferred paths; dropping a note into a folder schedules the tree redraw. Notes standalone rebuilt as 3.1.8. Tests: notes-tree 7, notes-quick-settings 4, notes-window 19, notes-bars 21 (plus the existing Notes suites).
+Still pending from the owner's request: E-a..E-c (Zen-native NOTES folder, activation over the last Zentral panel, and native right-click menus); real Zen verification remains required before release.

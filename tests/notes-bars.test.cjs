@@ -65,6 +65,7 @@ vm.runInNewContext(source, {
 });
 const flush = async () => { for (let i = 0; i < 4; i++) { raf.splice(0).forEach((f) => f()); await new Promise((r) => setImmediate(r)); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const readMeta = () => { const f = disk.get("/profile/zentral-notes/meta.json"); return f ? JSON.parse(f) : {}; };
 const isNotesBtn = (e) => e && e._classes.has("zentral-notes-btn");
 const sheetsIn = (host) => host.children.filter((c) => c._classes.has("zentral-notes-sheet"));
 let passed = 0;
@@ -157,6 +158,48 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     await flush();
     assert.equal(calls.filter((c) => c[1] === "--zentral-notes-panel-reserve").pop()[0], "remove", "released on close");
     st.setProperty = sp; st.removeProperty = rp;
+  });
+
+  await test("dock slot edge can resize its reserved height and remembers the resulting share", async () => {
+    const P = "zen.workspace.zentral.notes.";
+    let reserve = 0;
+    const st = document.documentElement.style;
+    const [sp, rp] = [st.setProperty, st.removeProperty];
+    st.setProperty = (k, v) => { if (k === "--zentral-notes-panel-reserve") reserve = Number.parseFloat(v) || 0; };
+    st.removeProperty = (k) => { if (k === "--zentral-notes-panel-reserve") reserve = 0; };
+    page.getBoundingClientRect = () => ({ left: 0, top: 0, right: 400, bottom: 600 - reserve, width: 400, height: 600 - reserve });
+    prefs.set(P + "push_panel_percent", 50);
+    const btn = toolbar.firstElementChild;
+    btn.click(); await sleep(30); await flush();
+    const sheet = sheetsIn(slider)[0];
+    assert.equal(sheet.dataset.slot, "dock");
+    assert.equal(reserve, 300, "starts at half of the full 600px panel area");
+    const north = sheet.querySelectorAll(".zn-rz").find((g) => g.getAttribute("data-h") === "n");
+    assert.ok(north, "docked slot exposes its top resize edge");
+    north.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0, clientY: 300, pointerId: 41 }));
+    sheet.dispatchEvent(new Ev("pointermove", { bubbles: true, clientY: 240, pointerId: 41 }));
+    await flush();
+    assert.equal(reserve, 360, "dragging the top edge upward increases the slot by 60px");
+    sheet.dispatchEvent(new Ev("pointerup", { bubbles: true, pointerId: 41 }));
+    await sleep(750); await flush();
+    assert.equal(readMeta().shareDock, 0.6, "the user resize is stored as a fraction, not a stale pixel count");
+    // A repeated layout must not change the reserved height (base geometry is invariant).
+    for (let i = 0; i < 4; i++) { sheet.dispatchEvent(new Ev("resize")); await flush(); }
+    assert.equal(reserve, 360, "subsequent layouts do not accumulate the reserve twice");
+    const larger = sheet.querySelector(".zn-head").children.find((el) => el.title.startsWith("Larger"));
+    assert.ok(larger, "Larger control exists in dock mode");
+    larger.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0 }));
+    await sleep(480); await flush();
+    assert.equal(sheet.dataset.size, "span", "holding Larger expands to the full page span");
+    assert.equal(reserve, 0, "full-span mode releases the panel's dock reserve");
+    larger.dispatchEvent(new Ev("pointerup", { bubbles: true }));
+    larger.click(); await flush();
+    assert.equal(sheet.dataset.size, "span", "the pointer-up click is swallowed after the hold");
+    larger.click(); await flush();
+    assert.equal(sheet.dataset.size, "peek", "a subsequent tap returns to the docked peek size");
+    btn.click(); await flush();
+    st.setProperty = sp; st.removeProperty = rp;
+    page.getBoundingClientRect = () => ({ left: 0, top: 0, right: 400, bottom: 600, width: 400, height: 600 });
   });
 
   await test("V4-R1/R4 quad: in Triple View the sheet is the third slot (root attr + slot marker); a normal panel is not quad", async () => {
@@ -292,7 +335,6 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
   const press = (spec) => windowListeners.find((l) => l.t === "keydown" && l.c === true).fn(keyOf(spec));
   const outside = (target) => windowListeners.filter((l) => l.t === "mousedown" && l.c === true).forEach((l) => l.fn(new Ev("mousedown", { target, bubbles: true })));
   const floatCard = () => document.documentElement.children.find((c) => c._classes.has("zentral-notes-sheet") && c.dataset.host === "float");
-  const readMeta = () => { const f = disk.get("/profile/zentral-notes/meta.json"); return f ? JSON.parse(f) : {}; };
 
   await test("Customize toolbar widget: created once, icon is the Notes drawing, click goes to the pressed window, follows the enable switch", async () => {
     const def = cui.widgets.get("zentral-notes-toolbar-button");
@@ -505,6 +547,40 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(raf.length, 0, "no frame scheduled: buttons are not drag handles");
   });
 
+  await test("Notes follows a rebuilt primary Zentral panel if it was already open; manual close clears the restore target", async () => {
+    const oldToolbar = toolbar;
+    const btn = oldToolbar.firstElementChild;
+    // Begin closed, then open on the current primary panel.
+    if (sheetsIn(slider).some((s) => !s.hidden)) {
+      const active = oldToolbar.children.find(isNotesBtn);
+      if (active?.dataset.active === "true") active.click();
+      await flush();
+    }
+    btn.click(); await sleep(40); await flush();
+    assert.equal(sheetsIn(slider).some((s) => !s.hidden), true, "Notes opens on the original panel");
+    await sleep(750);
+    assert.equal(readMeta().openIn, "primary", "the selected Zentral panel kind is persisted");
+
+    const replacement = new El("div"); replacement.id = "zen-app-panel-toolbar";
+    replacement.append(new El("button"), new El("input"));
+    oldToolbar.remove();
+    slider.insertBefore(replacement, page);
+    mutationCallbacks.slice().forEach((cb) => cb([{ addedNodes: [replacement], removedNodes: [oldToolbar] }]));
+    await sleep(180); await flush();
+    assert.ok(isNotesBtn(replacement.firstElementChild), "replacement panel gets its Notes button");
+    assert.equal(sheetsIn(slider).some((s) => !s.hidden), true, "Notes automatically reopens on the replacement primary panel");
+
+    replacement.firstElementChild.click(); await flush();
+    await sleep(750);
+    assert.equal(sheetsIn(slider).every((s) => s.hidden), true, "manual close remains closed");
+    assert.equal(readMeta().openIn, "", "manual close clears the remembered target");
+    // Restore the test fixture so later tests continue using a primary toolbar.
+    replacement.remove();
+    slider.insertBefore(oldToolbar, page);
+    mutationCallbacks.slice().forEach((cb) => cb([{ addedNodes: [oldToolbar], removedNodes: [replacement] }]));
+    await sleep(140); await flush();
+  });
+
   await test("Recent: opening notes builds the list (newest first); quick new note works from anywhere", async () => {
     const mds = () => [...disk.keys()].filter((k) => k.startsWith("/profile/zentral-notes/") && k.endsWith(".md"));
     const before = mds().length;
@@ -529,6 +605,30 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     open[0].querySelector(".zn-list-btn").click(); chip.click(); await flush();
     assert.ok(open[0].querySelectorAll(".zn-item").length >= 1, "recent notes are listed");
     press({ key: "N", code: "KeyN", alt: true, shift: true }); await flush();
+  });
+
+  await test("Open on Startup restores the last Notes panel recorded in meta.json", async () => {
+    // Shut down the first runtime cleanly so the second init models a fresh browser window.
+    for (const s of sheetsIn(slider)) if (!s.hidden) {
+      const b = toolbar.children.find(isNotesBtn);
+      if (b?.dataset.active === "true") b.click();
+    }
+    await sleep(750); await flush();
+    await stop();
+    const metaPath = "/profile/zentral-notes/meta.json";
+    const saved = readMeta();
+    saved.openIn = "primary";
+    disk.set(metaPath, JSON.stringify(saved));
+    prefs.set("zen.workspace.bgalazka.open_at_startup", "true");
+    stop = registered.init();
+    await sleep(180); await flush();
+    assert.ok(isNotesBtn(toolbar.firstElementChild), "the Notes button is restored on the primary bar");
+    assert.equal(sheetsIn(slider).some((s) => !s.hidden), true, "startup restoration opens Notes on that bar");
+    const restored = sheetsIn(slider).find((s) => !s.hidden);
+    assert.equal(restored.dataset.host, undefined, "it is a panel-hosted sheet, not the floating card");
+    toolbar.firstElementChild.click(); await flush();
+    await sleep(750);
+    assert.equal(readMeta().openIn, "", "a manual close after restore clears the saved target");
   });
 
   await test("destroy removes buttons, sheets, observers and listeners", async () => {

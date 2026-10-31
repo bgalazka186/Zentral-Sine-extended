@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.7
+// @version 3.1.8
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.7, the numeric-preference list and
+ * Placeholders replaced by the build: 3.1.8, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.7";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.8";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -906,12 +906,13 @@ function nativeSidebarSide() {
           path = i === 0 ? segs[0] : path + "/" + segs[i];
           const isTarget = i === segs.length - 1 && explicitMeta;
           if (!folderNodes.has(path)) {
-            folderNodes.set(path, { id: path, label: isTarget && explicitMeta.label ? String(explicitMeta.label).slice(0, 60) : segs[i], collapsed: isTarget ? Boolean(explicitMeta.collapsed) : false, children: [], notes: [], _order: isTarget && typeof explicitMeta.order === "number" ? explicitMeta.order : 0 });
+            folderNodes.set(path, { id: path, label: isTarget && explicitMeta.label ? String(explicitMeta.label).slice(0, 60) : segs[i], collapsed: isTarget ? Boolean(explicitMeta.collapsed) : false, children: [], notes: [], _listed: !!isTarget, _order: isTarget && typeof explicitMeta.order === "number" ? explicitMeta.order : 0 });
           } else if (isTarget) {
             const existing = folderNodes.get(path);
             if (explicitMeta.label) existing.label = String(explicitMeta.label).slice(0, 60);
             if (typeof explicitMeta.collapsed === "boolean") existing.collapsed = explicitMeta.collapsed;
             if (typeof explicitMeta.order === "number") existing._order = explicitMeta.order;
+            existing._listed = true;
           }
         }
       };
@@ -931,7 +932,10 @@ function nativeSidebarSide() {
         const parent = pid === "" ? root : folderNodes.get(pid) || root;
         if (!parent.children.some((c) => c.id === fid)) {
           parent.children.push(node);
-          parent.children.sort((a, b) => a._order - b._order || a.label.localeCompare(b.label) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+          // Folders explicitly present in meta.json retain their chosen order; paths inferred only from a note's
+          // `folder:` field follow afterwards, alphabetically. Otherwise a newly imported / legacy path with
+          // a default order of zero could jump ahead of the user's ordered folders.
+          parent.children.sort((a, b) => Number(!!b._listed) - Number(!!a._listed) || a._order - b._order || a.label.localeCompare(b.label) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
         }
       });
       for (const [fid, arr] of notesIn) (fid === "" ? root : folderNodes.get(fid)).notes = arr;
@@ -2863,6 +2867,42 @@ function nativeSidebarSide() {
       const px = Math.round(left + width - content.left + gap);
       return px > 0 && px <= cw * 0.7 ? { side: "left", px } : null;
     }
+    // ---- slot model (a panel-hosted sheet is a band of the panel's layout, not an overlay) -------------
+    // `share` = the fraction of the panels' page height the sheet takes. Pure maths so it can be tested.
+    const SLOT_MIN_SHARE = 0.15, SLOT_MAX_SHARE = 0.85, SLOT_LARGE_SHARE = 0.8, SLOT_MIN_PX = 140, SLOT_PAGE_MIN_PX = 120;
+    const clampShare = (v) => (Number.isFinite(v) ? Math.max(SLOT_MIN_SHARE, Math.min(SLOT_MAX_SHARE, v)) : 0);
+    // size peek = the remembered / preferred share, full = a big share, span = no slot at all (overlay fills the area).
+    function slotShare({ size = "peek", pref = 45, custom = 0 } = {}) {
+      if (size === "span") return 0;
+      const own = Number(custom) > 0 ? clampShare(Number(custom)) : 0;
+      const base = own > 0 ? own : clampShare(Number(pref) / 100) || 0.45;
+      return size === "full" ? Math.max(base, SLOT_LARGE_SHARE) : base;
+    }
+    // Height in px for a share of `base`: never below a usable sheet, never leaving the pages less than a strip.
+    function slotPx(base, share) {
+      if (!(base > 200) || !(share > 0)) return 0;
+      const lo = Math.min(SLOT_MIN_PX, Math.round(base * 0.5)), hi = Math.max(lo, base - SLOT_PAGE_MIN_PX);
+      return Math.max(lo, Math.min(hi, Math.round(base * share)));
+    }
+    // The panel's page rectangles exclude a bottom reserve, but Triple View's gap sits inside their union.
+    // Convert the measured page span back to the original available height without double-counting the gap.
+    function pagesWithoutSlotHeight({ pageHeight = 0, slotPx: reserved = 0, slotKind = "" } = {}) {
+      const h = Math.max(0, Number(pageHeight) || 0);
+      return slotKind === "gap" ? h : h + Math.max(0, Number(reserved) || 0);
+    }
+    // Dragging an edge of a slot sheet: `dir` -1 = the top edge (dragging up grows it), +1 = the bottom edge.
+    function slotDragShare({ startPx, base, dy, dir = -1 }) {
+      if (!(base > 200)) return 0;
+      return clampShare((startPx + (dir < 0 ? -dy : dy)) / base);
+    }
+    // After the panel is switched or rebuilt Notes comes back where it was: the bar of the same kind, or the
+    // main panel bar when the Triple View bottom bar is gone. "" = nowhere to go (yet).
+    function followTarget({ want = "", kinds = [], triple = false } = {}) {
+      if (!want) return "";
+      if (kinds.includes(want)) return want;
+      if (want === "triple" && !triple && kinds.includes("primary")) return "primary";
+      return "";
+    }
     // The part of `bounds` left when tall strips at its left or right edge (the native sidebar) are taken
     // out. Short or small rectangles are ignored; at least `minWidth` always remains.
     function keepClear(bounds, rects, viewHeight, minWidth = 240) {
@@ -2955,7 +2995,7 @@ function nativeSidebarSide() {
       const dirty = new Set();
       const listeners = new Set();
       const backedUp = new Set();
-      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", geo: {}, recent: [], folders: [], openIn: "" };
+      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0 };
       let meta = { ...DEFAULT_META };
       let dir = null;
       let chain = Promise.resolve();
@@ -3032,6 +3072,10 @@ function nativeSidebarSide() {
           meta.recent = cleanRecent(raw.recent);
           meta.folders = cleanFolders(raw.folders);
           if (OPEN_IN_KINDS.includes(raw.openIn)) meta.openIn = raw.openIn;
+          for (const k of ["shareDock", "shareGap"]) {
+            const v = Number(raw[k]);
+            meta[k] = Number.isFinite(v) && v > 0 ? clampShare(v) : 0;
+          }
         } catch (_) {}
       }
 
@@ -3508,6 +3552,7 @@ function nativeSidebarSide() {
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, clearOfRect, sideOf, createHoldAction,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
+        clampShare, slotShare, slotPx, slotDragShare, followTarget, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
         allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
@@ -3961,6 +4006,7 @@ function nativeSidebarSide() {
         btnSize.replaceChildren(icon(big ? "minimize" : "maximize"));
         btnSize.title = big ? "Smaller (hold: fill the whole area)" : "Larger (hold: fill the whole area)";
         root.dataset.geo = adapter.geoKey ? "on" : "off";
+        root.dataset.slot = adapter.slotKind?.() || "";
         const panelHosted = !!adapter.pushPanel;
         btnHover.hidden = btnDock.hidden = !panelHosted;
         if (panelHosted) {
@@ -4361,7 +4407,7 @@ function nativeSidebarSide() {
             id = id || e.dataTransfer?.getData("text/plain") || "";
           } catch (_) {}
           dragNoteId = "";
-          if (id && store.get(id)) store.setFolder(id, node.id);
+          if (id && store.get(id) && store.setFolder(id, node.id)) scheduleList();
         });
         return row;
       }
@@ -5467,6 +5513,7 @@ function nativeSidebarSide() {
       const setSize = (size) => {
         store.setMeta({ size });
         applyState();
+        if (adapter.pushPanel && isOpen && !collapsed) applyPush(0, 0);
         layout();
       };
       const toggleLarger = () => setSize(store.meta.size === "peek" ? "full" : "peek");
@@ -5493,6 +5540,15 @@ function nativeSidebarSide() {
       function resetGeo() {
         const key = adapter.geoKey;
         if (!key) return;
+        if (adapter.pushPanel) {
+          // A slot sheet has no box to reset: it goes back to the preferred height.
+          store.setMeta({ shareDock: 0, shareGap: 0, size: "peek" });
+          applyState();
+          if (isOpen && !collapsed) applyPush(0, 0);
+          layout();
+          flash("Height reset", 2500);
+          return;
+        }
         const g = { ...(store.meta.geo || {}) };
         delete g[key];
         store.setMeta({ geo: g, size: "peek" });
@@ -5535,8 +5591,27 @@ function nativeSidebarSide() {
         const r = op.getBoundingClientRect();
         return { ox: r.left + (op.clientLeft || 0), oy: r.top + (op.clientTop || 0) };
       }
+      // A slot sheet (docked band / gap between the panels) is not a free box: the title bar and its top edge
+      // (also its bottom edge in a gap) resize the band, nothing else moves.
+      function startSlotGesture(e, kind, slot) {
+        const edge = kind === "move" ? "n" : kind.includes("n") ? "n" : kind.includes("s") && slot === "gap" ? "s" : "";
+        const info = adapter.slotInfo?.();
+        if (!edge || !info) return;
+        gesture = { slot, kind, edge, id: e.pointerId, sy: e.clientY, startPx: info.px, base: info.base, active: kind !== "move", next: null, share: 0 };
+        try {
+          e.currentTarget?.setPointerCapture?.(e.pointerId);
+        } catch (_) {}
+        if (kind !== "move") {
+          root.dataset.dragging = "true";
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }
       function startGesture(e, kind) {
-        if (!adapter.geoKey || (e.button !== undefined && e.button !== 0)) return;
+        if (e.button !== undefined && e.button !== 0) return;
+        const slot = adapter.slotKind?.() || "";
+        if (slot) return startSlotGesture(e, kind, slot);
+        if (!adapter.geoKey) return;
         const a = adapter.getArea({});
         const off = hostOffset();
         if (!a || !off) return;
@@ -5570,6 +5645,15 @@ function nativeSidebarSide() {
         const g = gesture;
         if (!g || !g.next) return;
         const { dx, dy } = g.next;
+        if (g.slot) {
+          // The band follows the pointer: new height -> reserve -> the panels give or take the room.
+          g.share = slotDragShare({ startPx: g.startPx, base: g.base, dy, dir: g.edge === "n" ? -1 : 1 });
+          if (g.share > 0) {
+            adapter.pushPanel(g.share);
+            layout();
+          }
+          return;
+        }
         const rect = g.kind === "move" ? moveGeo(g.start, dx, dy, g.area) : resizeGeo(g.start, g.kind, dx, dy, g.area);
         g.rect = rect;
         root.style.left = Math.round(g.ox + rect.x) + "px";
@@ -5582,7 +5666,7 @@ function nativeSidebarSide() {
       function moveEvent(e) {
         const g = gesture;
         if (!g || (e.pointerId !== undefined && g.id !== undefined && e.pointerId !== g.id)) return;
-        const dx = e.clientX - g.sx,
+        const dx = e.clientX - (g.sx ?? e.clientX),
           dy = e.clientY - g.sy;
         if (!g.active) {
           if (Math.hypot(dx, dy) < DRAG_SLOP) return;
@@ -5607,6 +5691,15 @@ function nativeSidebarSide() {
         gesture = null;
         taAnchY = null;
         readAnchY = null;
+        if (g.slot) {
+          if (g.share > 0) {
+            // Remembered per kind of slot, as a share of the pages (so it survives a window resize).
+            store.setMeta({ [g.slot === "gap" ? "shareGap" : "shareDock"]: Math.round(g.share * 1000) / 1000, size: "peek" });
+            applyState();
+            layout();
+          }
+          return;
+        }
         if (g.rect) {
           store.setMeta({ geo: { ...(store.meta.geo || {}), [g.key]: g.rect }, size: "peek" });
           applyState();
@@ -5807,6 +5900,9 @@ function nativeSidebarSide() {
           placeReveal();
           return;
         }
+        // A panel-hosted sheet settles its slot BEFORE the area is measured (the reserve is applied synchronously),
+        // so a stale size / box can never be laid out for one frame in the wrong place.
+        if (adapter.pushPanel) applyPush(0, 0);
         const a = adapter.getArea({ wide: mode === "split", span: store.meta.size === "span" });
         if (!a || a.width < 40 || a.height < 40) return;
         const size = a.fill ? "full" : store.meta.size;
@@ -5843,7 +5939,8 @@ function nativeSidebarSide() {
         root.dataset.split = w >= 560 ? "side" : "stack";
         taAnchY = null;
         readAnchY = null;
-        adapter.setSpill?.(!!a.wideFill);
+        adapter.setSpill?.(!!a.wideFill || !!a.outside);
+        root.dataset.slot = adapter.slotKind?.() || "";
         placeReveal();
         applyPush(left, w);
       }
@@ -5866,8 +5963,14 @@ function nativeSidebarSide() {
         }
         if (panelHosted) {
           const strip = isOpen && collapsed ? hoverStripPx(getPref(PREF.REVEAL_HEIGHT, 10)) : 0;
-          const share = on && !collapsed && isOpen ? Math.max(20, Math.min(80, getPref(PREF.PUSH_PANEL_PERCENT, 45))) / 100 : 0;
+          // While the edge is being dragged the live share wins over the remembered one.
+          const dragShare = gesture && gesture.slot && gesture.active && gesture.share > 0 ? gesture.share : 0;
+          const share =
+            on && !collapsed && isOpen
+              ? dragShare || slotShare({ size: store.meta.size, pref: getPref(PREF.PUSH_PANEL_PERCENT, 45), custom: between ? store.meta.shareGap : store.meta.shareDock })
+              : 0;
           const quad = adapter.pushPanel(share, { strip });
+          root.dataset.slot = adapter.slotKind?.() || "";
           if (quad) root.dataset.bgalazkaTripleSlot = "notes";
           else delete root.dataset.bgalazkaTripleSlot;
         }
@@ -6114,7 +6217,7 @@ function nativeSidebarSide() {
         } catch (_) {}
         unwatch = null;
         adapter.setActive(false);
-        adapter.onClosed?.();
+        adapter.onClosed?.({ manual: !destroying });
       }
       let destroying = false;
       function destroy() {
@@ -6171,6 +6274,25 @@ function nativeSidebarSide() {
     // slider (primary / Triple View) or of the Super Pin shell, positioned
     // over the page area of the browser that bar belongs to. It never moves
     // or reloads that browser.
+    // The slot a panel-hosted sheet takes is ONE thing per window: the CSS variables it sets on the root are
+    // shared by every bar (main panel, Triple View bottom bar, Super Pin). So the state lives here, not in
+    // each adapter, and only the owner may change or release it. (Per-adapter copies went stale when another
+    // bar released the variable, which put the sheet below the panel and overcounted the free height.)
+    const SLOT = { owner: null, px: 0, gap: false, quad: false };
+    function releaseSlot() {
+      if (!SLOT.owner && !SLOT.px) return;
+      const r = document.documentElement;
+      SLOT.owner = null;
+      SLOT.px = 0;
+      SLOT.gap = SLOT.quad = false;
+      r.style.removeProperty("--zentral-notes-panel-reserve");
+      r.style.removeProperty("--zentral-notes-gap");
+      r.removeAttribute("bgalazka-quad-view");
+      r.removeAttribute("bgalazka-notes-spill");
+      try {
+        document.dispatchEvent(new Event("zentral-notes-reserve"));
+      } catch (_) {}
+    }
     function createBarAdapter({ kind, barEl, button, widePercent = () => 2 }) {
       const slider = () => document.getElementById("zen-app-panel-slider");
       const shell = () => barEl.closest("#bgalazka-super-panel");
@@ -6187,8 +6309,7 @@ function nativeSidebarSide() {
         return bySlot || (kind === "primary" ? list[0] : null);
       }
       let observeAll = () => {};
-      let reserve = 0;
-      let inGap = false;
+      const mine = () => SLOT.owner === api && SLOT.px > 0;
       // Union of every visible page of the panel (one in a normal panel, two in Triple View).
       function pageSpan() {
         const rects = [...(slider()?.querySelectorAll(":scope > browser") || [])]
@@ -6200,7 +6321,17 @@ function nativeSidebarSide() {
         const right = Math.max(...rects.map((r) => r.right)), bottom = Math.max(...rects.map((r) => r.bottom));
         return { left, top, width: right - left, height: bottom - top, bottom };
       }
-      return {
+      // What the pages would measure with nothing reserved, whoever currently holds the reserve. Between the
+      // panels the gap lies INSIDE the pages' union (subtract it); at the bottom it lies outside (add it).
+      function pagesWithoutSlot() {
+        const h2 = pageSpan().height;
+        // Triple View's divider margin grows inside a fixed-height flex column: the two browser slots shrink
+        // by the same amount, so their union still spans the original panel height. Do not subtract the gap a
+        // second time or each layout pass would progressively collapse the Notes band. A dock/quad reserve,
+        // in contrast, is outside the browser union and must be added back.
+        return pagesWithoutSlotHeight({ pageHeight: h2, slotPx: SLOT.px, slotKind: SLOT.gap ? "gap" : "dock" });
+      }
+      const api = {
         position: "absolute",
         geoKey: "panel",
         kind,
@@ -6218,11 +6349,15 @@ function nativeSidebarSide() {
         placement: () => (kind === "triple" && document.documentElement.hasAttribute("bgalazka-triple-view") ? "between" : "overlay"),
         // Button state: data-mode says where the sheet lives; the icon follows it.
         syncMode() {
-          const mode = this.placement();
+          const mode = api.placement();
           if (button.dataset.mode === mode) return;
           button.dataset.mode = mode;
           button.replaceChildren(icon(mode === "between" ? "noteBetween" : "note", 14));
         },
+        // "dock" = a band at the bottom of the panel(s), "gap" = a gap between the two panels, "" = overlay.
+        slotKind: () => (mine() ? (SLOT.gap ? "gap" : "dock") : ""),
+        // What a drag of the slot's edge starts from: its height now and the pages' height without it.
+        slotInfo: () => (mine() ? { px: SLOT.px, base: pagesWithoutSlot(), gap: SLOT.gap } : null),
         // Push page for a panel-hosted sheet. `fraction` of the panel's page height is handed to the sheet
         // (0 = give it back); `strip` > 0 reserves just that many px (hover mode's thin real band). Overlay:
         // the geometry module reads --zentral-notes-panel-reserve and shortens the panel. Between: the
@@ -6230,39 +6365,47 @@ function nativeSidebarSide() {
         // shrink by their share). Returns true while the sheet is a layout slot of Triple View.
         pushPanel(fraction, { strip = 0 } = {}) {
           const rootEl = document.documentElement;
-          const between = this.placement() === "between";
-          const full = pageSpan().height + reserve;
-          const want = strip > 0 ? Math.round(strip) : fraction > 0 ? Math.round(full * fraction) : 0;
-          const px = full > 200 ? want : 0;
+          const wants = strip > 0 || fraction > 0;
+          // Only the owner may give the reserve back; a bar that holds nothing leaves another bar's slot alone.
+          if (!wants && SLOT.owner !== api) return false;
+          const between = api.placement() === "between";
+          const base = pagesWithoutSlot();
+          const px = strip > 0 && base > 200 ? Math.round(strip) : slotPx(base, fraction);
           const quad = !between && px > 0 && rootEl.hasAttribute("bgalazka-triple-view");
-          const wasQuad = rootEl.hasAttribute("bgalazka-quad-view");
-          if (px === reserve && quad === wasQuad && between === inGap) return quad || (between && px > 0);
-          reserve = px;
-          inGap = between;
+          const hasQuad = rootEl.hasAttribute("bgalazka-quad-view");
+          if (SLOT.owner === api && px === SLOT.px && between === SLOT.gap && quad === SLOT.quad && quad === hasQuad)
+            return quad || (between && px > 0);
+          if (px <= 0) {
+            releaseSlot();
+            return false;
+          }
+          SLOT.owner = api;
+          SLOT.px = px;
+          SLOT.gap = between;
+          SLOT.quad = quad;
           const [prop, other] = between ? ["--zentral-notes-gap", "--zentral-notes-panel-reserve"] : ["--zentral-notes-panel-reserve", "--zentral-notes-gap"];
-          if (px) rootEl.style.setProperty(prop, px + "px");
-          else rootEl.style.removeProperty(prop);
+          rootEl.style.setProperty(prop, px + "px");
           rootEl.style.removeProperty(other);
           if (quad) rootEl.setAttribute("bgalazka-quad-view", "true");
           else rootEl.removeAttribute("bgalazka-quad-view");
           document.dispatchEvent(new Event("zentral-notes-reserve"));
-          return quad || (between && px > 0);
+          return quad || between;
         },
         // The band the sheet (or, collapsed, the hover strip) occupies in the layout, or null.
         bandRect() {
-          if (!reserve) return null;
+          if (!mine()) return null;
           const bb = pageSpan();
           if (bb.width <= 40) return null;
-          if (this.placement() === "between") {
+          if (SLOT.gap) {
             const d = slider()?.querySelector(":scope > .bgalazka-triple-divider")?.getBoundingClientRect?.();
-            if (d && d.height > 0) return { left: bb.left, top: d.top - reserve, width: bb.width, height: reserve };
+            if (d && d.height > 0) return { left: bb.left, top: d.top - SLOT.px, width: bb.width, height: SLOT.px };
           }
-          return { left: bb.left, top: bb.bottom, width: bb.width, height: reserve };
+          return { left: bb.left, top: bb.bottom, width: bb.width, height: SLOT.px };
         },
         // Split view widens the sheet beyond the panel: it grows from the panel's inner edge toward the
         // middle of the window and may cover part of the page (the panel and its bar stay visible).
         getArea({ span = false, wide = false } = {}) {
-          const area = this.baseArea({ span });
+          const area = api.baseArea({ span });
           if (!wide || !area || span || area.fill) return area;
           const vw = window.innerWidth;
           const w = Math.min(Math.round(area.width * widePercent()), vw - 16);
@@ -6272,17 +6415,19 @@ function nativeSidebarSide() {
           const out = clearOfRect({ ...area, left, width: w }, pill);
           return { ...out, wideFill: true };
         },
-        // V4-R3: while the sheet is wider than the panel (split / span) the clip and slider stop clipping.
+        // V4-R3: while the sheet is wider than the panel (split / span), or its band lies below the shortened
+        // panel (a plain panel gives the height up from its bottom), the clip and slider stop clipping.
         setSpill(on) {
           const r = document.documentElement;
           if (on) r.setAttribute("bgalazka-notes-spill", "true");
           else r.removeAttribute("bgalazka-notes-spill");
         },
         baseArea({ span = false } = {}) {
-          if (reserve) {
-            // The band IS the sheet's slot: it fills it (no peek size, no remembered box).
-            const band = this.bandRect();
-            if (band) return { ...band, anchor: "top", fill: true };
+          if (mine()) {
+            // The band IS the sheet's slot: it fills it (no peek size, no remembered box). A plain panel's band
+            // is the room the panel gave up beneath itself, outside the clip: flagged so the sheet can spill.
+            const band = api.bandRect();
+            if (band) return { ...band, anchor: "top", fill: true, outside: !SLOT.gap && !SLOT.quad };
           }
           // Hold-to-fill: one rectangle around every visible page of the panel (both views in Triple View).
           if (span) {
@@ -6329,15 +6474,22 @@ function nativeSidebarSide() {
         rewatch: () => observeAll(),
         setActive(on, { strip = false } = {}) {
           if (!on) {
-            if (!strip) this.pushPanel(0);
-            this.setSpill(false);
+            if (!strip) api.pushPanel(0);
+            api.setSpill(false);
           }
-          this.syncMode();
+          api.syncMode();
           button.dataset.active = on ? "true" : "false";
           button.setAttribute("aria-pressed", on ? "true" : "false");
         },
         onClosed: null,
       };
+      // Super Pin is a separate floating shell: its sheet stays an overlay and never reserves main-panel height.
+      if (kind === "super") {
+        delete api.pushPanel;
+        delete api.slotKind;
+        delete api.slotInfo;
+      }
+      return api;
     }
     // The floating card. With `docked()` on it opens beside the Zen sidebar (on the
     // content side, whichever side the sidebar is on) instead of in the window corner.
@@ -6744,6 +6896,17 @@ function nativeSidebarSide() {
       const bindings = new Map(); // bar element -> binding
       let floating = null;
       let lastUsed = null;
+      // Which kind of bar Notes was open on until the USER closed it. Switching to another Zentral panel
+      // rebuilds bars (Triple View's second panel gets a new bar), which closes the old sheet without the
+      // user asking: this remembers that Notes should come back on the new bar of the same kind.
+      let followKind = "";
+      let followTries = 0;
+      let followTimer = 0;
+      onCleanup(() => {
+        followKind = "";
+        window.clearTimeout(followTimer);
+        releaseSlot();
+      });
       // Optional dock: the card opens beside the Zen sidebar and the sidebar's bottom
       // row gets a Notes button. Missing sidebar elements simply mean no button.
       let sidebarBtn = null;
@@ -6804,6 +6967,8 @@ function nativeSidebarSide() {
           visible: () => el.isConnected && !panelsHidden() && el.getClientRects().length > 0,
           open() {
             lastUsed = binding;
+            followKind = kind;
+            followTries = 0;
             if (!sheet) sheet = createSheet({ store, adapter, env, ensureStore });
             const opened = sheet.open();
             binding.syncReveal();
@@ -6859,7 +7024,11 @@ function nativeSidebarSide() {
             button.remove();
           },
         };
-        adapter.onClosed = () => binding.syncReveal();
+        adapter.onClosed = (info) => {
+          binding.syncReveal();
+          // Closed by hand: stay closed. Closed because its bar went away: come back on the next bar.
+          if (info?.manual) followKind = "";
+        };
         button.addEventListener("click", (e) => {
           e.stopPropagation();
           Promise.resolve(binding.toggle()).catch(warn);
@@ -6912,6 +7081,32 @@ function nativeSidebarSide() {
           b.syncReveal();
         }
         maybeRestore();
+        maybeFollow();
+      }
+      const panelRootOpen = () => !!document.getElementById("zen-app-panel-root")?.hasAttribute("open");
+      function maybeFollow() {
+        if (!followKind || disposed || !enabledNow() || restoreState === "checking") return;
+        if ([...bindings.values()].some((b) => b.isOpen())) {
+          followTries = 0;
+          return;
+        }
+        if (!panelRootOpen() || panelsHidden()) return;
+        const visible = [...bindings.values()].filter((b) => b.visible());
+        const kind = followTarget({ want: followKind, kinds: visible.map((b) => b.kind), triple: document.documentElement.hasAttribute("bgalazka-triple-view") });
+        const target = kind && visible.find((b) => b.kind === kind);
+        if (target) {
+          followTries = 0;
+          Promise.resolve(target.open()).catch(warn);
+          return;
+        }
+        // The new bar may appear a moment later (the panel is still loading): a few quiet retries, then give up.
+        if (followTries < 4 && !followTimer) {
+          followTries++;
+          followTimer = window.setTimeout(() => {
+            followTimer = 0;
+            scheduleSync();
+          }, 250);
+        }
       }
       // "Open on Startup" (a panel setting) also brings Notes back where it was: meta.openIn names the bar kind
       // (primary panel, Triple View bottom bar, Super Pin). One quiet attempt per sync until it has decided.
@@ -6949,6 +7144,7 @@ function nativeSidebarSide() {
 
       const isOwnMutation = (records) =>
         records.every((r) =>
+          r.type !== "attributes" &&
           [...r.addedNodes, ...r.removedNodes].every(
             (n) => n.nodeType === 1 && n.classList?.contains("zentral-notes-sheet"),
           ),
@@ -6957,12 +7153,18 @@ function nativeSidebarSide() {
         if (!isOwnMutation(records)) scheduleSync();
       });
       let observedSlider = null;
+      let observedRoot = null;
       let bodyObserved = false;
       function attachObservers() {
         const slider = document.getElementById("zen-app-panel-slider");
         if (slider && slider !== observedSlider) {
           observedSlider = slider;
           mo.observe(slider, { childList: true });
+        }
+        const panelRoot = document.getElementById("zen-app-panel-root");
+        if (panelRoot && panelRoot !== observedRoot) {
+          observedRoot = panelRoot;
+          mo.observe(panelRoot, { attributes: true, attributeFilter: ["open"] });
         }
         if (!bodyObserved && document.body) {
           bodyObserved = true;

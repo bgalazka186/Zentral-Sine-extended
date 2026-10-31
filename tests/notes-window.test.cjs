@@ -151,6 +151,36 @@ const same = (a, b, msg) => assert.equal(canon(a), canon(b), msg);
     assert.match(css, /#zen-app-panel-clip\s*\{\s*pointer-events:\s*none/);
     assert.match(css, /> \.zentral-notes-sheet\s*\{[^}]*pointer-events:\s*auto/);
   });
+  await test("panel slot shares are bounded, larger mode expands and zero custom share uses the preference", () => {
+    assert.equal(c.slotShare({ size: "peek", pref: 45, custom: 0 }), 0.45);
+    assert.equal(c.slotShare({ size: "peek", pref: 45, custom: 0.6 }), 0.6);
+    assert.equal(c.slotShare({ size: "full", pref: 45, custom: 0.6 }), 0.8);
+    assert.equal(c.slotShare({ size: "span", pref: 45, custom: 0.6 }), 0);
+    assert.equal(c.slotShare({ size: "peek", pref: 1, custom: 0 }), c.SLOT_MIN_SHARE);
+    assert.equal(c.slotShare({ size: "peek", pref: 100, custom: 0 }), c.SLOT_MAX_SHARE);
+    assert.equal(c.slotPx(600, 0.5), 300);
+    assert.equal(c.slotPx(600, 0.95), 480, "leaves the page its minimum usable height");
+    assert.equal(c.slotPx(180, 0.5), 0, "too-short page cannot be split");
+  });
+  await test("slot edge dragging calculates the same share for dock and between-panel gap", () => {
+    assert.equal(c.slotDragShare({ startPx: 300, base: 600, dy: -60, dir: -1 }), 0.6, "top edge dragged upward grows the band");
+    assert.equal(c.slotDragShare({ startPx: 300, base: 600, dy: 60, dir: -1 }), 0.4, "top edge dragged downward shrinks the band");
+    assert.equal(c.slotDragShare({ startPx: 300, base: 600, dy: 60, dir: 1 }), 0.6, "lower gap edge dragged downward grows the band");
+    assert.equal(c.slotDragShare({ startPx: 300, base: 600, dy: 900, dir: 1 }), c.SLOT_MAX_SHARE);
+    assert.equal(c.slotDragShare({ startPx: 300, base: 180, dy: 60, dir: -1 }), 0, "no drag below the minimum page height");
+  });
+  await test("gap geometry is not subtracted twice; bottom dock reserve is added back", () => {
+    assert.equal(c.pagesWithoutSlotHeight({ pageHeight: 600, slotPx: 120, slotKind: "gap" }), 600);
+    assert.equal(c.pagesWithoutSlotHeight({ pageHeight: 480, slotPx: 120, slotKind: "dock" }), 600);
+    assert.equal(c.pagesWithoutSlotHeight({ pageHeight: 480, slotPx: 120, slotKind: "" }), 600);
+  });
+  await test("panel-follow target restores the remembered bar kind and falls back when Triple View closes", () => {
+    assert.equal(c.followTarget({ want: "primary", kinds: ["primary", "triple"], triple: true }), "primary");
+    assert.equal(c.followTarget({ want: "triple", kinds: ["primary", "triple"], triple: true }), "triple");
+    assert.equal(c.followTarget({ want: "triple", kinds: ["primary"], triple: false }), "primary");
+    assert.equal(c.followTarget({ want: "super", kinds: ["primary"], triple: false }), "");
+    assert.equal(c.followTarget({ want: "", kinds: ["primary"], triple: false }), "");
+  });
   await test("push page: the side follows the card, wide cards and cards far from an edge do not push", () => {
     const content = { left: 0, right: 1000 };
     same(c.pushAmount({ left: 560, width: 440 }, content), { side: "right", px: 448 });

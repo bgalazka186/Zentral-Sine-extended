@@ -41,19 +41,19 @@ when the ordering rules below are broken.
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | `#zentral-settings-modal` | extension/settings/styles/ZentralSettingsFoundation.css:31 |
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | `#zentral-settings-modal` | extension/settings/styles/ZentralSettingsInjected.css:47 |
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | inline style: `"position:fixed;inset:8%;overflow:auto;z-index:2147483647;padding:20px` | loader/Zentral.uc.js:215 |
-| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zentral-notes-toast` | additional/notes/ZentralNotes.css:745 |
+| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zentral-notes-toast` | additional/notes/ZentralNotes.css:767 |
 | 2147483646 | RSS reader card (fallback only; see Top layer) | `#bgalazka-rss-card` | additional/rss/ZentralRssDisplay.css:110 |
-| 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-sheet[data-host="float"], .zentral-notes-sheet[data-host="dock"]` | additional/notes/ZentralNotes.css:91 |
-| 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-reveal` | additional/notes/ZentralNotes.css:685 |
+| 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-sheet[data-host="float"], .zentral-notes-sheet[data-host="dock"]` | additional/notes/ZentralNotes.css:95 |
+| 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-reveal` | additional/notes/ZentralNotes.css:701 |
 | 2147483643 | Big Preview (fallback only; see Top layer) | `#zentral-video-preview#zentral-video-preview[data-enlarged]` | additional/video/ZentralVideoPreview.css:522 |
 | 2147483642 | Dock ghost while a floating panel is dragged | `:root[zentral-geometry-dragging] #zentral-dock-ghost` | extension/panels/floating/ZentralFloatingPanels.css:285 |
 | 2147483640 | Reveal edge and invisible drag shields | `#bgalazka-panel-reveal-edge` | extension/appearance/ZentralAppearance.css:208 |
-| 2147483640 | Reveal edge and invisible drag shields | `.bgalazka-pill-drag-shield` | extension/panels/browsers/ZentralBrowserIntegrations.css:648 |
-| 2147483640 | Reveal edge and invisible drag shields | `.bgalazka-triple-drag-shield` | extension/panels/browsers/ZentralBrowserIntegrations.css:719 |
+| 2147483640 | Reveal edge and invisible drag shields | `.bgalazka-pill-drag-shield` | extension/panels/browsers/ZentralBrowserIntegrations.css:650 |
+| 2147483640 | Reveal edge and invisible drag shields | `.bgalazka-triple-drag-shield` | extension/panels/browsers/ZentralBrowserIntegrations.css:721 |
 | 2147483640 | Reveal edge and invisible drag shields | `#zentral-panel-drag-shield` | extension/panels/floating/ZentralFloatingPanels.css:126 |
 | 2147483638 | Dock ghost (floating panel preview) | `#zentral-dock-ghost` | extension/panels/floating/ZentralFloatingPanels.css:111 |
-| 2147483603 | Triple View drag handle | `.bgalazka-triple-drag-handle` | extension/panels/browsers/ZentralBrowserIntegrations.css:483 |
-| 2147483601 | Super Pin panel | `:root[bgalazka-super-pin="true"] #bgalazka-super-panel` | extension/panels/browsers/ZentralBrowserIntegrations.css:515 |
+| 2147483603 | Triple View drag handle | `.bgalazka-triple-drag-handle` | extension/panels/browsers/ZentralBrowserIntegrations.css:485 |
+| 2147483601 | Super Pin panel | `:root[bgalazka-super-pin="true"] #bgalazka-super-panel` | extension/panels/browsers/ZentralBrowserIntegrations.css:517 |
 | 2147483600 | Zentral panel root | `#zen-app-panel-root` | zentral/apps/styles/ZentralAppsInjected.css:1043 |
 | 2147483600 | Zentral panel root | `#zen-app-panel-root` | zentral/apps/styles/ZentralAppsInjected.css:1527 |
 | 2147483600 | Zentral panel root | `#zen-app-panel-root` | zentral/apps/styles/ZentralVerticalBarLayout.css:281 |
@@ -75,11 +75,11 @@ Ordering inside one component. Listed by file; values only matter relative to si
 
 | File | Line | z-index | Selector / code |
 | --- | ---: | ---: | --- |
-| additional/notes/ZentralNotes.css | 69 | 40 | `.zentral-notes-sheet` |
-| additional/notes/ZentralNotes.css | 128 | 6 | `.zentral-notes-sheet .zn-rz` |
-| additional/notes/ZentralNotes.css | 483 | 5 | `.zentral-notes-sheet .zn-menu` |
-| additional/notes/ZentralNotes.css | 569 | 5 | `.zentral-notes-sheet .zn-dialog` |
-| additional/notes/ZentralNotes.css | 780 | 3 | `.zentral-notes-reveal-strip` |
+| additional/notes/ZentralNotes.css | 73 | 40 | `.zentral-notes-sheet` |
+| additional/notes/ZentralNotes.css | 132 | 6 | `.zentral-notes-sheet .zn-rz` |
+| additional/notes/ZentralNotes.css | 491 | 5 | `.zentral-notes-sheet .zn-menu` |
+| additional/notes/ZentralNotes.css | 577 | 5 | `.zentral-notes-sheet .zn-dialog` |
+| additional/notes/ZentralNotes.css | 802 | 3 | `.zentral-notes-reveal-strip` |
 | additional/video/controllers/ZentralVideoSidebar.js | 213 | 5 | `"position:absolute;inset:0;z-index:5;background:var(--zl-video-canvas,` |
 | additional/video/ZentralVideoPreview.css | 132 | 3 | `#zentral-video-preview .zentral-video-preview-subtitles` |
 | additional/video/ZentralVideoPreview.css | 301 | 2 | `#zentral-video-preview canvas` |
@@ -95,7 +95,7 @@ Ordering inside one component. Listed by file; values only matter relative to si
 | extension/appearance/ZentralAppearance.css | 404 | 3 | `:root[bgalazka-tab-isolation="true"] .tabbrowser-tab .bgalazka-tab-icon-panel[data-loaded="true"]::after` |
 | extension/panels/browsers/ZentralBrowserIntegrations.css | 247 | 2 | `.zen-app-tile .bgalazka-tile-audio` |
 | extension/panels/browsers/ZentralBrowserIntegrations.css | 382 | 1 | `:root[bgalazka-corner-tiles="true"] :is( .tabbrowser-tab, #zen-essentials-container .tabbrowser-tab, [zen-essential="true"] ) .zen-app-tile.bgalazka-tab-icon-panel` |
-| extension/panels/browsers/ZentralBrowserIntegrations.css | 659 | 3 | `:root[bgalazka-super-pin="true"] .bgalazka-second-resize` |
+| extension/panels/browsers/ZentralBrowserIntegrations.css | 661 | 3 | `:root[bgalazka-super-pin="true"] .bgalazka-second-resize` |
 | extension/panels/geometry/ZentralPanelGeometry.css | 43 | 30 | `.zen-app-resize-strip-top, .zen-app-resize-strip-bottom` |
 | extension/panels/geometry/ZentralPanelGeometry.css | 141 | 31 | `.zen-app-resize-strip-outer, .zen-app-resize-strip-inner, .zen-app-resize-corner` |
 | extension/panels/navigation/styles/ZentralPanelToolbar.css | 214 | 5 | `:root[bgalazka-webtoolbar-autohide="true"] #zen-app-panel-toolbar` |

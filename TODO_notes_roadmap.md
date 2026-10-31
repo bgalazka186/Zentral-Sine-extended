@@ -57,8 +57,8 @@ One step = one session. Read only this block, handoff section 19, then `grep -n`
 | V4-R1+R4 **DONE** | Notes as a real slot: panel + Notes = Triple-like split; Triple + Notes = Quad; push on by default for panel-hosted Notes; remove `size==="peek"` gate | notes-bars, notes-window, z-heights, new notes-slots |
 | V4-R3 **DONE** | Wide/span sheet visually overflows the Zentral panel (re-attach fixed to root or unclip), pill menu clear | notes-window |
 | V4-R2 **DONE** | Hover/dock modes in the Notes top bar; between-URL-bars mode (default in Triple View); bottom bar icon = between-bars, top icon = overlay; icon states | notes-bars, notes-ui, notes-icon |
-| V4-QS | Quick Settings container grows with font size (em sizing, wrap, re-position) | notes-ui |
-| D2a/D2b | Folders + tree data model and in-sheet UI (spec 1.1-1.2) | new notes-tree |
+| V4-QS **DONE** | Quick Settings container grows with font size (em sizing, wrap, re-position) | notes-ui, new notes-quick-settings |
+| D2a/D2b **DONE** | Folders + tree data model and in-sheet UI (spec 1.1-1.2) | new notes-tree |
 | E-a..E-c | Zen-native `NOTES` folder, activation over last Zentral panel, RMB menus (spec 1.3-1.5), off by default | new notes-zenfolder |
 | E-d | Zen Sync short-note tier (spec section 4); only after spec 4.1 live verification | new notes-sync |
 | R5 (old) | D1 capture path re-check after V4 | notes-capture |

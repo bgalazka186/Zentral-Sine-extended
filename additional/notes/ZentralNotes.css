@@ -9,7 +9,7 @@
  *   same black backing under the sheet, so notes stay readable on translucent panels.
  * Local interface selectors: .zentral-notes-btn; .zentral-notes-sheet; .zn-*
  * Local interface selectors (dock): .zentral-notes-sidebar-btn
- * Attribute selectors used: bgalazka-force-panel-black; data-active; data-color; data-dragging; data-geo; data-h;
+ * Attribute selectors used: bgalazka-force-panel-black; data-active; data-color; data-dragging; data-geo; data-h; data-slot;
  *   data-collapsed; data-dock; data-host; data-mode; data-placement; data-settled; data-size; popover; data-split; data-state; data-trashed; data-view
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
@@ -399,7 +399,7 @@
 .zentral-notes-sheet .zn-empty { margin: 14px 12px; color: var(--zn-muted); }
 
 /* list view */
-.zentral-notes-sheet .zn-list-head { display: flex; align-items: center; gap: 4px; padding: 6px; }
+.zentral-notes-sheet .zn-list-head { display: flex; align-items: center; gap: 4px; padding: 4px 6px; }
 .zentral-notes-sheet .zn-search-wrap {
   flex: 1 1 auto;
   display: flex;
@@ -415,7 +415,7 @@
   appearance: none;
   flex: 1 1 auto;
   min-width: 0;
-  height: 26px;
+  height: 22px;
   padding: 0;
   border: none;
   outline: none;
@@ -424,10 +424,11 @@
   font: inherit;
 }
 .zentral-notes-sheet .zn-new { background: color-mix(in srgb, var(--zn-accent) 24%, transparent); opacity: 1; }
-.zentral-notes-sheet .zn-chips { display: flex; align-items: center; gap: 4px; padding: 0 6px 6px; }
+.zentral-notes-sheet .zn-chips { display: flex; align-items: center; gap: 4px; padding: 0 6px 4px; }
 .zentral-notes-sheet .zn-chip {
   appearance: none;
-  padding: 2px 9px;
+  padding: 0 8px;
+  line-height: 18px;
   border: 1px solid var(--zn-line);
   border-radius: 999px;
   background: transparent;
@@ -439,13 +440,14 @@
 .zentral-notes-sheet .zn-chip[hidden] { display: none; }
 .zentral-notes-sheet .zn-chip.is-on { color: var(--zn-text); border-color: var(--zn-accent); background: color-mix(in srgb, var(--zn-accent) 16%, transparent); }
 .zentral-notes-sheet .zn-chip-danger:hover { color: #ff6b6b; border-color: #ff6b6b; }
-.zentral-notes-sheet .zn-items { display: flex; flex-direction: column; padding: 0 4px 6px; }
+.zentral-notes-sheet .zn-items { display: flex; flex-direction: column; padding: 0 4px 4px; }
 .zentral-notes-sheet .zn-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px 6px 4px;
-  border-radius: 6px;
+  gap: 6px;
+  padding: 3px 6px 3px 4px;
+  border-radius: 5px;
+  line-height: 1.25;
   cursor: pointer;
   outline: none;
 }
@@ -462,7 +464,7 @@
 .zentral-notes-sheet .zn-item-title,
 .zentral-notes-sheet .zn-item-snippet { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .zentral-notes-sheet .zn-item-title { font-weight: 600; }
-.zentral-notes-sheet .zn-item-snippet { color: var(--zn-muted); font-size: 12px; }
+.zentral-notes-sheet .zn-item-snippet { color: var(--zn-muted); font-size: 0.88em; }
 .zentral-notes-sheet .zn-item-time { flex: 0 0 auto; color: var(--zn-muted); font-size: 11px; }
 .zentral-notes-sheet .zn-item-actions { display: none; flex: 0 0 auto; gap: 0; }
 .zentral-notes-sheet .zn-item:hover .zn-item-actions,
@@ -830,3 +832,24 @@
 .zentral-notes-sheet .zn-tree-head { display: flex; align-items: center; gap: 6px; padding: 6px 6px 2px; color: var(--zn-muted); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; }
 .zentral-notes-sheet .zn-tree-head .zn-item-time { margin-left: auto; }
 .zentral-notes-sheet .zn-item-folder { opacity: 0.8; }
+
+/* ---- compact list: one line per note, folders tight, so a long tree fits ------------------------------ */
+.zentral-notes-sheet .zn-item-main { flex-direction: row; align-items: baseline; gap: 6px; }
+.zentral-notes-sheet .zn-item-main .zn-item-title { flex: 0 1 auto; min-width: 0; max-width: 70%; }
+.zentral-notes-sheet .zn-item-main .zn-item-snippet { flex: 1 1 0; min-width: 0; opacity: 0.75; }
+.zentral-notes-sheet .zn-item-main .zn-item-label { flex: 0 0 auto; margin-left: 0; line-height: 1.2; }
+.zentral-notes-sheet .zn-items[role="tree"] .zn-item { min-height: 22px; padding-top: 1px; padding-bottom: 1px; }
+.zentral-notes-sheet .zn-items[role="tree"] .zn-frow { min-height: 22px; font-size: 0.96em; }
+.zentral-notes-sheet .zn-items[role="tree"] .zn-frow .zn-item-actions svg,
+.zentral-notes-sheet .zn-items[role="tree"] .zn-item .zn-item-actions svg { width: 12px; height: 12px; }
+.zentral-notes-sheet .zn-items[role="tree"] .zn-item-actions button { width: 20px; height: 20px; }
+.zentral-notes-sheet .zn-tree-head { padding: 3px 6px 1px; }
+
+/* ---- slot sheet (docked band / gap between the panels): only the top (and, in a gap, bottom) edge resizes ----- */
+.zentral-notes-sheet[data-slot] .zn-rz:not([data-h="n"]):not([data-h="s"]) { display: none; }
+.zentral-notes-sheet[data-slot="dock"] .zn-rz[data-h="s"] { display: none; }
+.zentral-notes-sheet[data-slot] .zn-rz[data-h="n"], .zentral-notes-sheet[data-slot="gap"] .zn-rz[data-h="s"] { left: 0; right: 0; height: 7px; cursor: ns-resize; }
+.zentral-notes-sheet[data-slot] .zn-head { cursor: ns-resize; }
+/* A plain panel hands its bottom height to the sheet, so the sheet sits just below the shortened panel: the
+   root, clip and slider must not clip it (the same spill rule as a wide sheet, see above). */
+:root[bgalazka-notes-spill="true"] #zen-app-panel-root { overflow: visible !important; }
