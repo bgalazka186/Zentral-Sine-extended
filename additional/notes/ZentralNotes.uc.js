@@ -5672,6 +5672,7 @@
       r.style.removeProperty("--zentral-notes-panel-reserve");
       r.style.removeProperty("--zentral-notes-gap");
       r.removeAttribute("bgalazka-quad-view");
+      r.removeAttribute("bgalazka-notes-gap");
       r.removeAttribute("bgalazka-notes-spill");
       try {
         document.dispatchEvent(new Event("zentral-notes-reserve"));
@@ -5767,6 +5768,8 @@
           SLOT.px = px;
           SLOT.gap = between;
           SLOT.quad = quad;
+          if (between) rootEl.setAttribute("bgalazka-notes-gap", "true");
+          else rootEl.removeAttribute("bgalazka-notes-gap");
           const [prop, other] = between ? ["--zentral-notes-gap", "--zentral-notes-panel-reserve"] : ["--zentral-notes-panel-reserve", "--zentral-notes-gap"];
           rootEl.style.setProperty(prop, px + "px");
           rootEl.style.removeProperty(other);

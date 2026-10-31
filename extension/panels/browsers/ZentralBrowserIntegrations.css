@@ -488,6 +488,12 @@
   -moz-window-dragging: no-drag !important;
   background: transparent !important;
 }
+/* Notes owns the gap while its between-bars sheet is open. The fixed divider hit target
+ * is above the sheet in the stacking order; disable only that hit target so the Notes
+ * bottom resize grip receives the pointer. The visible divider itself remains available. */
+:root[bgalazka-notes-gap="true"] .bgalazka-triple-drag-handle {
+  pointer-events: none !important;
+}
 :root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])
   .bgalazka-triple-drag-handle {
   pointer-events: auto !important;

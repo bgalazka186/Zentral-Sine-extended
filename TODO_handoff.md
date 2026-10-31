@@ -47,7 +47,7 @@ node tools/check-settings-consistency.cjs
 node tools/build-z-map.cjs                   # regenerate z-heights_map.md
 node tools/build-standalone.cjs              # refuses changed content without a version bump
 node tools/build-standalone.cjs --check
-for t in standalone notes notes-capture notes-ui notes-markdown notes-bars notes-window notes-tree notes-quick-settings numeric-prefs encoding z-heights resize-perf defaults notes-decisions notes-icon; do node tests/$t.test.cjs; done
+for t in standalone notes notes-capture notes-ui notes-markdown notes-bars notes-window notes-tree notes-quick-settings notes-docked-reserve notes-gap-resize numeric-prefs encoding z-heights resize-perf defaults notes-decisions notes-icon; do node tests/$t.test.cjs; done
 ```
 
 Release-in-progress trick: 3.1.3 is unreleased, so after editing a bundled file the builder complains "content changed but version is still 3.1.3". Reset every `additional/**/standalone.lock.json` `"version"` to `"3.1.2"` (last published) and run `node tools/build-standalone.cjs` again. Do not hand-edit `.standalone.uc.js` files.
@@ -197,3 +197,8 @@ V4-QS and D2a/D2b are complete: Quick Settings tested at 8/13/20/40 px; Notes fo
 Panel follow-up: dock slot edge resizing persists a proportional share; held Larger expands to span; panel replacement follows an open Notes sheet; manual close clears the target; Open on Startup restores the saved `openIn` panel. Gap geometry avoids double-subtracting its reserve.
 Regression fixes: explicit folders remain ahead of note-inferred paths; dropping a note into a folder schedules the tree redraw. Notes standalone rebuilt as 3.1.8. Tests: notes-tree 7, notes-quick-settings 4, notes-window 19, notes-bars 21 (plus the existing Notes suites).
 Still pending from the owner's request: E-a..E-c (Zen-native NOTES folder, activation over the last Zentral panel, and native right-click menus); real Zen verification remains required before release.
+## 21. Docked Notes reserve + Triple gap resize guard (Node/source guards only; NOT run in real Zen)
+- Edge-attached panel geometry starts with `notesReserve()`, so ordinary docked Notes can shrink the normal panel even outside Dual View.
+- When Notes owns Triple View's between-bars gap, `bgalazka-notes-gap` disables only the overlapping fixed divider hit target so the Notes bottom grip can receive the drag; the visible divider remains.
+- New guards: `notes-docked-reserve` and `notes-gap-resize`; Notes standalone rebuilt to main-mod version 3.1.3 after resetting its lock to published 3.1.2, per `AGENTS.md` (supersedes section 20's historical 3.1.8 note).
+- Live verification required: docked primary-panel URL-bar Notes, Notes gap top/bottom resize, then Triple divider resize after Notes closes. Floating-panel reserve remains a separate unimplemented case.

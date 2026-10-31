@@ -576,7 +576,8 @@
         ) === "true";
       if (dualViewActive || edgeAttachedPanels) {
         let topMargin = "0px";
-        let bottomMargin = "0px";
+        // Edge-attached (docked) panels must also give up the height reserved by docked Notes.
+        let bottomMargin = notesReserve() + "px";
         if (dualViewActive) {
           const content = document.getElementById("tabbrowser-tabbox");
           const rect = content?.getBoundingClientRect();

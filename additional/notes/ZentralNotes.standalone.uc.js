@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.8
+// @version 3.1.3
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.8, the numeric-preference list and
+ * Placeholders replaced by the build: 3.1.3, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.8";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.3";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -6288,6 +6288,7 @@ function nativeSidebarSide() {
       r.style.removeProperty("--zentral-notes-panel-reserve");
       r.style.removeProperty("--zentral-notes-gap");
       r.removeAttribute("bgalazka-quad-view");
+      r.removeAttribute("bgalazka-notes-gap");
       r.removeAttribute("bgalazka-notes-spill");
       try {
         document.dispatchEvent(new Event("zentral-notes-reserve"));
@@ -6383,6 +6384,8 @@ function nativeSidebarSide() {
           SLOT.px = px;
           SLOT.gap = between;
           SLOT.quad = quad;
+          if (between) rootEl.setAttribute("bgalazka-notes-gap", "true");
+          else rootEl.removeAttribute("bgalazka-notes-gap");
           const [prop, other] = between ? ["--zentral-notes-gap", "--zentral-notes-panel-reserve"] : ["--zentral-notes-panel-reserve", "--zentral-notes-gap"];
           rootEl.style.setProperty(prop, px + "px");
           rootEl.style.removeProperty(other);
