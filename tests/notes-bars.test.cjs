@@ -168,6 +168,8 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     st.setProperty = (k, v) => { if (k === "--zentral-notes-panel-reserve") reserve = Number.parseFloat(v) || 0; };
     st.removeProperty = (k) => { if (k === "--zentral-notes-panel-reserve") reserve = 0; };
     page.getBoundingClientRect = () => ({ left: 0, top: 0, right: 400, bottom: 600 - reserve, width: 400, height: 600 - reserve });
+    // The real panel root is inset from the window and SHRINKS by the reserve (its URL bar, 40px, lies below the page).
+    root.getBoundingClientRect = () => ({ left: 0, top: 12, right: 400, bottom: 640 - reserve, width: 400, height: 628 - reserve });
     prefs.set(P + "push_panel_percent", 50);
     const btn = toolbar.firstElementChild;
     btn.click(); await sleep(30); await flush();

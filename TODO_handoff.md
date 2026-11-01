@@ -47,7 +47,7 @@ node tools/check-settings-consistency.cjs
 node tools/build-z-map.cjs                   # regenerate z-heights_map.md
 node tools/build-standalone.cjs              # refuses changed content without a version bump
 node tools/build-standalone.cjs --check
-for t in standalone notes notes-capture notes-ui notes-markdown notes-bars notes-window notes-tree notes-quick-settings notes-docked-reserve notes-gap-resize numeric-prefs encoding z-heights resize-perf defaults notes-decisions notes-icon; do node tests/$t.test.cjs; done
+for t in standalone notes notes-capture notes-ui notes-markdown notes-bars notes-window notes-tree notes-quick-settings notes-docked-reserve notes-gap-resize notes-slot-geometry numeric-prefs encoding z-heights resize-perf defaults notes-decisions notes-icon; do node tests/$t.test.cjs; done
 ```
 
 Release-in-progress trick: 3.1.3 is unreleased, so after editing a bundled file the builder complains "content changed but version is still 3.1.3". Reset every `additional/**/standalone.lock.json` `"version"` to `"3.1.2"` (last published) and run `node tools/build-standalone.cjs` again. Do not hand-edit `.standalone.uc.js` files.
@@ -202,3 +202,9 @@ Still pending from the owner's request: E-a..E-c (Zen-native NOTES folder, activ
 - When Notes owns Triple View's between-bars gap, `bgalazka-notes-gap` disables only the overlapping fixed divider hit target so the Notes bottom grip can receive the drag; the visible divider remains.
 - New guards: `notes-docked-reserve` and `notes-gap-resize`; Notes standalone rebuilt to main-mod version 3.1.3 after resetting its lock to published 3.1.2, per `AGENTS.md` (supersedes section 20's historical 3.1.8 note).
 - Live verification required: docked primary-panel URL-bar Notes, Notes gap top/bottom resize, then Triple divider resize after Notes closes. Floating-panel reserve remains a separate unimplemented case.
+
+## Notes slot geometry + focus (unreleased 3.1.3, NOT live-verified in Zen)
+- Docked band now starts below the whole panel (URL bar), `dockBandTop`. A panel stretched top-to-bottom (`panelSpansFullHeight`, measured; there is no attribute for it) keeps Notes inactive: no reserve, hidden, no hit area.
+- Triple gap: two independent edges (`--zentral-notes-gap-up`, `meta.gapSplit`); `tripleHeights`/`tripleShareFor` in SecondaryViews; dead divider-handle `pointer-events:none` rule removed (it never applied: specificity); handle no longer overlaps the Notes bottom grip; `balance()` subtracts the gap; each panel keeps >=120px.
+- Focus: `outsideClaim` blocks automatic `focusEditor()` after the user pressed outside the sheet (web-panel field). Cleared by a press inside Notes or a fresh open.
+- Not done: floating-panel reserve, Priority 2 (search, images, reminders), Priority 3. Tests: `tests/notes-slot-geometry.test.cjs` (fake DOM; does not prove real Zen hit-testing).

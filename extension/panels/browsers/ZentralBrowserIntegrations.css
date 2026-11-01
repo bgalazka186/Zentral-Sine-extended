@@ -488,12 +488,12 @@
   -moz-window-dragging: no-drag !important;
   background: transparent !important;
 }
-/* Notes owns the gap while its between-bars sheet is open. The fixed divider hit target
- * is above the sheet in the stacking order; disable only that hit target so the Notes
- * bottom resize grip receives the pointer. The visible divider itself remains available. */
-:root[bgalazka-notes-gap="true"] .bgalazka-triple-drag-handle {
-  pointer-events: none !important;
-}
+/* Notes between the panels: the divider and the Notes bottom grip are DISTINCT hit targets, not one stolen
+ * by the other. The handle never reaches above the divider's top edge while Notes owns the gap (set in
+ * ZentralSecondaryViews fitSecondaryBrowsers), where the Notes grip ends. An earlier rule here switched the
+ * handle's pointer-events off, but the panel-open rule below has higher specificity and the same
+ * !important, so it never applied and the overlap remained. Do not reintroduce it: it would also make the
+ * divider ungrabbable. */
 :root[zentral-app-panel-open="true"]:not([bgalazka-hover-panel-hidden])
   .bgalazka-triple-drag-handle {
   pointer-events: auto !important;

@@ -238,6 +238,28 @@
         const v = parseFloat(document.documentElement.style.getPropertyValue("--zentral-notes-gap"));
         return Number.isFinite(v) && v > 0 ? v : 0;
       }
+      // Px of the Notes gap taken from the UPPER panel (the rest comes from the lower one). Absent = the gap is
+      // shared in proportion to state.share (the pre-edge-drag behaviour). Only Notes edge drags set it; it never
+      // touches state.share.
+      function notesGapUp() {
+        const v = parseFloat(document.documentElement.style.getPropertyValue("--zentral-notes-gap-up"));
+        return notesGap() > 0 && Number.isFinite(v) && v >= 0 ? Math.min(v, notesGap()) : -1;
+      }
+      // Pure: heights of the two web panels. `usable` already excludes the gap; the panels would share
+      // `usable + gap` without Notes. up < 0 = proportional gap. U + L always equals `usable`.
+      function tripleHeights({ usable, gap = 0, share = 0.5, up = -1 }) {
+        const min = Math.min(160, usable * 0.25);
+        const s = Number.isFinite(share) ? share : 0.5;
+        const raw = up >= 0 && gap > 0 ? (usable + gap) * s - Math.min(up, gap) : usable * s;
+        const top = Math.max(min, Math.min(usable - min, raw));
+        return { top, bottom: usable - top };
+      }
+      // Pure inverse for a divider drag: the share that puts the upper panel at `topPx`.
+      function tripleShareFor({ usable, gap = 0, topPx, up = -1 }) {
+        const min = Math.min(160, usable * 0.25);
+        const top = Math.max(min, Math.min(usable - min, topPx));
+        return up >= 0 && gap > 0 ? (top + Math.min(up, gap)) / (usable + gap) : top / usable;
+      }
       function fitSecondaryBrowsers() {
         // Keep the live XUL <browser> elements under layout control. Writing
         // width/height attributes or absolute inline sizes can recreate or
@@ -261,8 +283,7 @@
           notesGap() -
           panel.clientTop * 2;
         if (usable <= 0) return;
-        const min = Math.min(160, usable * 0.25);
-        const top = Math.max(min, Math.min(usable - min, usable * state.share));
+        const { top } = tripleHeights({ usable, gap: notesGap(), share: state.share, up: notesGapUp() });
         const topValue = `${Math.round(top)}px`,
           bottomValue = `${Math.round(usable - top)}px`;
         if (panel.style.getPropertyValue("--bgalazka-top-share") !== topValue)
@@ -279,9 +300,12 @@
             return;
           const line = state.divider.getBoundingClientRect();
           state.dividerHandle.style.left = `${line.left}px`;
-          state.dividerHandle.style.top = `${line.top - 3}px`;
+          // While Notes owns the gap its bottom grip ends exactly at the divider's top edge: the handle must
+          // not reach above it, or the two hit targets overlap and the divider steals the Notes drag.
+          const lead = notesGap() > 0 ? 0 : 3;
+          state.dividerHandle.style.top = `${line.top - lead}px`;
           state.dividerHandle.style.width = `${line.width}px`;
-          state.dividerHandle.style.height = `${line.height + 6}px`;
+          state.dividerHandle.style.height = `${line.height + 3 + lead}px`;
         });
       }
       // Resume can leave secondary geometry/activity stale without a resize.
@@ -616,15 +640,13 @@
               divider.offsetHeight -
               notesGap();
             if (usable <= 0) return;
-            const min = Math.min(160, usable * 0.25);
-            const pixels = Math.max(
-              min,
-              Math.min(
-                usable - min,
-                clientY - rect.top - toolbarHeight - panel.clientTop,
-              ),
-            );
-            state.share = pixels / usable;
+            // The divider sits BELOW the Notes gap, so its top is the upper panel's height plus the gap.
+            state.share = tripleShareFor({
+              usable,
+              gap: notesGap(),
+              topPx: clientY - rect.top - toolbarHeight - panel.clientTop - notesGap(),
+              up: notesGapUp(),
+            });
             fitSecondaryBrowsers();
           };
           state.divider = divider;

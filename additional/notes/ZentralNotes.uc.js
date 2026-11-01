@@ -2253,7 +2253,7 @@
     }
     // ---- slot model (a panel-hosted sheet is a band of the panel's layout, not an overlay) -------------
     // `share` = the fraction of the panels' page height the sheet takes. Pure maths so it can be tested.
-    const SLOT_MIN_SHARE = 0.15, SLOT_MAX_SHARE = 0.85, SLOT_LARGE_SHARE = 0.8, SLOT_MIN_PX = 140, SLOT_PAGE_MIN_PX = 120;
+    const SLOT_MIN_SHARE = 0.15, SLOT_MAX_SHARE = 0.85, SLOT_LARGE_SHARE = 0.8, SLOT_MIN_PX = 140, SLOT_PAGE_MIN_PX = 120, GAP_PANEL_MIN_PX = 120;
     const clampShare = (v) => (Number.isFinite(v) ? Math.max(SLOT_MIN_SHARE, Math.min(SLOT_MAX_SHARE, v)) : 0);
     // size peek = the remembered / preferred share, full = a big share, span = no slot at all (overlay fills the area).
     function slotShare({ size = "peek", pref = 45, custom = 0 } = {}) {
@@ -2263,10 +2263,45 @@
       return size === "full" ? Math.max(base, SLOT_LARGE_SHARE) : base;
     }
     // Height in px for a share of `base`: never below a usable sheet, never leaving the pages less than a strip.
+    function clampSlotPx(base, px) {
+      if (!(base > 200) || !(px > 0)) return 0;
+      const lo = Math.min(SLOT_MIN_PX, Math.round(base * 0.5)), hi = Math.max(lo, base - SLOT_PAGE_MIN_PX);
+      return Math.max(lo, Math.min(hi, Math.round(px)));
+    }
     function slotPx(base, share) {
       if (!(base > 200) || !(share > 0)) return 0;
+      return clampSlotPx(base, base * share);
+    }
+    // Between Triple View's web panels the Notes sheet has TWO independent edges. Its top edge moves the upper
+    // panel's boundary (only `up` changes, `down` stays), its bottom edge moves the lower panel's boundary
+    // (only `down` changes). Pure and clamped so a drag can never drift or leave either panel unusable.
+    // `dy` is the pointer travel since the gesture began; every call restarts from the gesture's START values,
+    // so repeated moves do not accumulate.
+    // `roomUp` / `roomDown` = how much more the upper / lower web panel can give before it falls below a usable
+    // height (a panel under ~40px is no longer counted as a page at all, which collapsed the slot mid-drag).
+    function gapEdgeDrag({ edge = "n", startUp = 0, startDown = 0, dy = 0, base = 0, roomUp = Infinity, roomDown = Infinity } = {}) {
+      const su = Math.max(0, Number(startUp) || 0), sd = Math.max(0, Number(startDown) || 0);
+      if (!(base > 200)) return { up: su, down: sd, px: su + sd };
       const lo = Math.min(SLOT_MIN_PX, Math.round(base * 0.5)), hi = Math.max(lo, base - SLOT_PAGE_MIN_PX);
-      return Math.max(lo, Math.min(hi, Math.round(base * share)));
+      let up = su, down = sd;
+      if (edge === "n") up = Math.min(Math.max(0, su - dy), su + Math.max(0, roomUp));
+      else if (edge === "s") down = Math.min(Math.max(0, sd + dy), sd + Math.max(0, roomDown));
+      // Never beyond the allowed total: the edge being dragged stops, the other edge stays where it was.
+      if (up + down > hi) { if (edge === "n") up = Math.max(0, hi - down); else down = Math.max(0, hi - up); }
+      if (up + down < lo) { if (edge === "n") up = Math.max(0, lo - down); else down = Math.max(0, lo - up); }
+      return { up: Math.round(up), down: Math.round(down), px: Math.round(up) + Math.round(down) };
+    }
+    // A panel stretched from the top of the content area to the bottom of the window has nothing left to give:
+    // Notes must not reserve height from it. `reserve` (docked Notes' own margin) is added back so the answer
+    // does not flip once the reserve has shortened the panel. There is no dedicated attribute for this state in the
+    // panel code (Expand is width-only), so it is measured from the real geometry.
+    function panelSpansFullHeight({ top = 0, bottom = 0, reserve = 0, areaTop = 0, windowHeight = 0, tol = 4 } = {}) {
+      if (!(windowHeight > 0) || !(bottom > top)) return false;
+      return top <= areaTop + tol && bottom + Math.max(0, reserve) >= windowHeight - tol;
+    }
+    // Where a docked band starts: below the whole panel (URL bar included), never merely below its pages.
+    function dockBandTop({ pageBottom = 0, panelBottom = NaN } = {}) {
+      return Number.isFinite(panelBottom) ? Math.max(pageBottom, panelBottom) : pageBottom;
     }
     // The panel's page rectangles exclude a bottom reserve, but Triple View's gap sits inside their union.
     // Convert the measured page span back to the original available height without double-counting the gap.
@@ -2379,7 +2414,7 @@
       const dirty = new Set();
       const listeners = new Set();
       const backedUp = new Set();
-      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0 };
+      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, gapSplit: -1 };
       let meta = { ...DEFAULT_META };
       let dir = null;
       let chain = Promise.resolve();
@@ -2459,6 +2494,11 @@
           for (const k of ["shareDock", "shareGap"]) {
             const v = Number(raw[k]);
             meta[k] = Number.isFinite(v) && v > 0 ? clampShare(v) : 0;
+          }
+          // Fraction of the between-panels gap taken from the upper panel; -1 = shared in proportion.
+          {
+            const v = Number(raw.gapSplit);
+            meta.gapSplit = Number.isFinite(v) && v >= 0 && v <= 1 ? Math.round(v * 1000) / 1000 : -1;
           }
         } catch (_) {}
       }
@@ -2936,7 +2976,7 @@
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, clearOfRect, sideOf, createHoldAction,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
-        clampShare, slotShare, slotPx, slotDragShare, followTarget, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
+        clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
         allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
@@ -3547,8 +3587,12 @@
         applyState();
         updateChrome();
       }
+      // Set when the user pressed ANYWHERE outside this sheet (a text field in a web panel, the panel URL bar, the
+      // page). Automatic focus (an open that finished after an async load, a reopen after a panel rebuild, a mode
+      // change) must never take the caret back from there. Cleared by a press inside the sheet or an explicit open.
+      let outsideClaim = false;
       function focusEditor() {
-        if (view !== "editor") return;
+        if (view !== "editor" || outsideClaim) return;
         const target = mode === "read" ? readEl : ta;
         try {
           target.focus({ preventScroll: true });
@@ -3586,6 +3630,7 @@
         applyState();
         renderList();
         window.requestAnimationFrame(() => {
+          if (outsideClaim) return;
           try {
             search.focus({ preventScroll: true });
             search.select();
@@ -4981,7 +5026,7 @@
         const edge = kind === "move" ? "n" : kind.includes("n") ? "n" : kind.includes("s") && slot === "gap" ? "s" : "";
         const info = adapter.slotInfo?.();
         if (!edge || !info) return;
-        gesture = { slot, kind, edge, id: e.pointerId, sy: e.clientY, startPx: info.px, base: info.base, active: kind !== "move", next: null, share: 0 };
+        gesture = { slot, kind, edge, id: e.pointerId, sy: e.clientY, startPx: info.px, startUp: info.up || 0, startDown: info.down || 0, roomUp: info.roomUp, roomDown: info.roomDown, base: info.base, active: kind !== "move", next: null, share: 0, px: 0, up: -1 };
         try {
           e.currentTarget?.setPointerCapture?.(e.pointerId);
         } catch (_) {}
@@ -5031,6 +5076,18 @@
         const { dx, dy } = g.next;
         if (g.slot) {
           // The band follows the pointer: new height -> reserve -> the panels give or take the room.
+          if (g.slot === "gap") {
+            // Between the web panels each edge moves ITS panel's boundary only; the other edge does not follow.
+            const r = gapEdgeDrag({ edge: g.edge, startUp: g.startUp, startDown: g.startDown, dy, base: g.base, roomUp: g.roomUp, roomDown: g.roomDown });
+            g.px = r.px;
+            g.up = r.up;
+            g.share = r.px > 0 && g.base > 200 ? r.px / g.base : 0;
+            if (g.share > 0) {
+              adapter.pushPanel(0, { px: r.px, up: r.up });
+              layout();
+            }
+            return;
+          }
           g.share = slotDragShare({ startPx: g.startPx, base: g.base, dy, dir: g.edge === "n" ? -1 : 1 });
           if (g.share > 0) {
             adapter.pushPanel(g.share);
@@ -5061,6 +5118,14 @@
         g.next = { dx, dy };
         if (!rafDrag) rafDrag = window.requestAnimationFrame(paintGesture);
       }
+      // Drop a gesture without applying it (the sheet closes, the panel is replaced or torn down): no stale
+      // pointer state, pending frame or half-applied reserve survives.
+      function cancelGesture() {
+        gesture = null;
+        if (rafDrag) window.cancelAnimationFrame(rafDrag);
+        rafDrag = 0;
+        delete root.dataset.dragging;
+      }
       function endGesture() {
         const g = gesture;
         if (!g) return;
@@ -5078,7 +5143,9 @@
         if (g.slot) {
           if (g.share > 0) {
             // Remembered per kind of slot, as a share of the pages (so it survives a window resize).
-            store.setMeta({ [g.slot === "gap" ? "shareGap" : "shareDock"]: Math.round(g.share * 1000) / 1000, size: "peek" });
+            const patch = { [g.slot === "gap" ? "shareGap" : "shareDock"]: Math.round(g.share * 1000) / 1000, size: "peek" };
+            if (g.slot === "gap" && g.px > 0) patch.gapSplit = Math.round((g.up / g.px) * 1000) / 1000;
+            store.setMeta(patch);
             applyState();
             layout();
           }
@@ -5287,6 +5354,21 @@
         // A panel-hosted sheet settles its slot BEFORE the area is measured (the reserve is applied synchronously),
         // so a stale size / box can never be laid out for one frame in the wrong place.
         if (adapter.pushPanel) applyPush(0, 0);
+        // A panel stretched top-to-bottom has no room for the band: the sheet stays hidden and takes no clicks
+        // (no invisible hit area) until the panel is shortened again.
+        if (adapter.suspended?.()) {
+          if (gesture) cancelGesture();
+          root.dataset.suspended = "true";
+          root.style.visibility = "hidden";
+          root.style.pointerEvents = "none";
+          root.dataset.slot = "";
+          return;
+        }
+        if (root.dataset.suspended) {
+          delete root.dataset.suspended;
+          root.style.visibility = "";
+          root.style.pointerEvents = "";
+        }
         const a = adapter.getArea({ wide: mode === "split", span: store.meta.size === "span" });
         if (!a || a.width < 40 || a.height < 40) return;
         const size = a.fill ? "full" : store.meta.size;
@@ -5353,7 +5435,8 @@
             on && !collapsed && isOpen
               ? dragShare || slotShare({ size: store.meta.size, pref: getPref(PREF.PUSH_PANEL_PERCENT, 45), custom: between ? store.meta.shareGap : store.meta.shareDock })
               : 0;
-          const quad = adapter.pushPanel(share, { strip });
+          const gdrag = between && isOpen && !collapsed && gesture && gesture.slot === "gap" && gesture.active && gesture.px > 0 ? gesture : null;
+          const quad = adapter.pushPanel(gdrag ? 0 : share, gdrag ? { strip, px: gdrag.px, up: gdrag.up } : { strip, upFrac: between ? store.meta.gapSplit : -1 });
           root.dataset.slot = adapter.slotKind?.() || "";
           if (quad) root.dataset.bgalazkaTripleSlot = "notes";
           else delete root.dataset.bgalazkaTripleSlot;
@@ -5478,6 +5561,7 @@
       }
       const focusInside = () => root.contains(document.activeElement);
       listen(root, "pointerdown", () => {
+        outsideClaim = false;
         if (!topLayer || !focusInside()) raise();
       }, true);
       listen(root, "focusin", () => {
@@ -5507,6 +5591,8 @@
         if (!isOpen || destroyed || gesture) return;
         const path = e.composedPath ? e.composedPath() : [];
         if (root.contains(e.target) || path.includes(root)) return;
+        // A press on the Notes button / browser chrome is not the user moving to a web field.
+        if (!isExempt(e.target, path)) outsideClaim = true;
         drop();
         // A panel-hosted sheet follows its mode (pin / dock stay, hover folds away when the pointer leaves).
         if (adapter.pushPanel) return;
@@ -5541,6 +5627,7 @@
           return;
         }
         isOpen = true;
+        outsideClaim = false;
         adapter.attach(root);
         root.hidden = false;
         mode = store.meta.mode;
@@ -5580,6 +5667,7 @@
         graceTimer = 0;
         ptrDown = false;
         ptrInside = false;
+        cancelGesture();
         applyPush(0, 0);
         closeMenu();
         closeDialog();
@@ -5641,7 +5729,10 @@
         refreshRead,
         layout: scheduleLayout,
         applyState,
-        focus: focusEditor,
+        focus: () => {
+          outsideClaim = false; // an explicit request (shortcut, command) may take the focus
+          focusEditor();
+        },
         // A collapsed (hover) sheet counts as closed for the button and the shortcuts: using them opens it.
         isOpen: () => isOpen && !collapsed,
         toggle: () => (isOpen && !collapsed ? close() : open()),
@@ -5662,15 +5753,18 @@
     // shared by every bar (main panel, Triple View bottom bar, Super Pin). So the state lives here, not in
     // each adapter, and only the owner may change or release it. (Per-adapter copies went stale when another
     // bar released the variable, which put the sheet below the panel and overcounted the free height.)
-    const SLOT = { owner: null, px: 0, gap: false, quad: false };
+    const SLOT = { owner: null, px: 0, gap: false, quad: false, up: -1, suspended: null };
     function releaseSlot() {
+      SLOT.suspended = null;
       if (!SLOT.owner && !SLOT.px) return;
       const r = document.documentElement;
       SLOT.owner = null;
       SLOT.px = 0;
       SLOT.gap = SLOT.quad = false;
+      SLOT.up = -1;
       r.style.removeProperty("--zentral-notes-panel-reserve");
       r.style.removeProperty("--zentral-notes-gap");
+      r.style.removeProperty("--zentral-notes-gap-up");
       r.removeAttribute("bgalazka-quad-view");
       r.removeAttribute("bgalazka-notes-gap");
       r.removeAttribute("bgalazka-notes-spill");
@@ -5742,32 +5836,71 @@
         // "dock" = a band at the bottom of the panel(s), "gap" = a gap between the two panels, "" = overlay.
         slotKind: () => (mine() ? (SLOT.gap ? "gap" : "dock") : ""),
         // What a drag of the slot's edge starts from: its height now and the pages' height without it.
-        slotInfo: () => (mine() ? { px: SLOT.px, base: pagesWithoutSlot(), gap: SLOT.gap } : null),
+        slotInfo: () => {
+          if (!mine()) return null;
+          let up = SLOT.up;
+          if (SLOT.gap && !(up >= 0)) {
+            // Proportional gap: the slider publishes both panels' live heights; the gap was shared in that ratio.
+            const cs = slider()?.style;
+            const t = parseFloat(cs?.getPropertyValue?.("--bgalazka-top-share")), b = parseFloat(cs?.getPropertyValue?.("--bgalazka-bottom-share"));
+            up = Number.isFinite(t) && Number.isFinite(b) && t + b > 0 ? Math.round((SLOT.px * t) / (t + b)) : Math.round(SLOT.px / 2);
+          }
+          let roomUp = Infinity, roomDown = Infinity;
+          if (SLOT.gap) {
+            const cs = slider()?.style;
+            const t = parseFloat(cs?.getPropertyValue?.("--bgalazka-top-share")), b = parseFloat(cs?.getPropertyValue?.("--bgalazka-bottom-share"));
+            if (Number.isFinite(t)) roomUp = Math.max(0, t - GAP_PANEL_MIN_PX);
+            if (Number.isFinite(b)) roomDown = Math.max(0, b - GAP_PANEL_MIN_PX);
+          }
+          return { px: SLOT.px, base: pagesWithoutSlot(), gap: SLOT.gap, up: SLOT.gap ? up : 0, down: SLOT.gap ? SLOT.px - up : 0, roomUp, roomDown };
+        },
+        // A plain panel stretched top-to-bottom has no room to give: Notes stays inactive (no reserve, no hit area).
+        stretched() {
+          const rootEl = document.documentElement;
+          if (kind !== "primary" || rootEl.hasAttribute("bgalazka-triple-view")) return false;
+          const pr = document.getElementById("zen-app-panel-root")?.getBoundingClientRect?.();
+          if (!pr) return false;
+          const content = document.getElementById("tabbrowser-tabbox")?.getBoundingClientRect?.();
+          const reserve = SLOT.owner === api && !SLOT.gap && !SLOT.quad ? SLOT.px : 0;
+          return panelSpansFullHeight({ top: pr.top, bottom: pr.bottom, reserve, areaTop: content && content.height > 0 ? content.top : 0, windowHeight: window.innerHeight });
+        },
+        suspended: () => SLOT.suspended === api,
         // Push page for a panel-hosted sheet. `fraction` of the panel's page height is handed to the sheet
         // (0 = give it back); `strip` > 0 reserves just that many px (hover mode's thin real band). Overlay:
         // the geometry module reads --zentral-notes-panel-reserve and shortens the panel. Between: the
         // secondary-views module reads --zentral-notes-gap and opens a gap at the divider (both panels
         // shrink by their share). Returns true while the sheet is a layout slot of Triple View.
-        pushPanel(fraction, { strip = 0 } = {}) {
+        pushPanel(fraction, { strip = 0, px: wantPx = 0, up: wantUp = -1, upFrac = -1 } = {}) {
           const rootEl = document.documentElement;
-          const wants = strip > 0 || fraction > 0;
+          let wants = strip > 0 || fraction > 0 || wantPx > 0;
+          const between = api.placement() === "between";
+          // A panel stretched from the top to the bottom of the window gives nothing: no reserve, no stale margin.
+          if (wants && !between && api.stretched()) {
+            wants = false;
+            SLOT.suspended = api;
+          } else if (SLOT.suspended === api) SLOT.suspended = null;
           // Only the owner may give the reserve back; a bar that holds nothing leaves another bar's slot alone.
           if (!wants && SLOT.owner !== api) return false;
-          const between = api.placement() === "between";
           const base = pagesWithoutSlot();
-          const px = strip > 0 && base > 200 ? Math.round(strip) : slotPx(base, fraction);
+          const px = !wants ? 0 : wantPx > 0 ? clampSlotPx(base, wantPx) : strip > 0 && base > 200 ? Math.round(strip) : slotPx(base, fraction);
+          const up = !between || px <= 0 ? -1 : wantUp >= 0 ? Math.min(Math.round(wantUp), px) : upFrac >= 0 ? Math.round(px * Math.min(1, upFrac)) : -1;
           const quad = !between && px > 0 && rootEl.hasAttribute("bgalazka-triple-view");
           const hasQuad = rootEl.hasAttribute("bgalazka-quad-view");
-          if (SLOT.owner === api && px === SLOT.px && between === SLOT.gap && quad === SLOT.quad && quad === hasQuad)
+          if (SLOT.owner === api && px === SLOT.px && between === SLOT.gap && quad === SLOT.quad && quad === hasQuad && up === SLOT.up)
             return quad || (between && px > 0);
           if (px <= 0) {
+            const stay = SLOT.suspended === api;
             releaseSlot();
+            if (stay) SLOT.suspended = api;
             return false;
           }
           SLOT.owner = api;
           SLOT.px = px;
           SLOT.gap = between;
           SLOT.quad = quad;
+          SLOT.up = up;
+          if (between && up >= 0) rootEl.style.setProperty("--zentral-notes-gap-up", up + "px");
+          else rootEl.style.removeProperty("--zentral-notes-gap-up");
           if (between) rootEl.setAttribute("bgalazka-notes-gap", "true");
           else rootEl.removeAttribute("bgalazka-notes-gap");
           const [prop, other] = between ? ["--zentral-notes-gap", "--zentral-notes-panel-reserve"] : ["--zentral-notes-panel-reserve", "--zentral-notes-gap"];
@@ -5787,7 +5920,10 @@
             const d = slider()?.querySelector(":scope > .bgalazka-triple-divider")?.getBoundingClientRect?.();
             if (d && d.height > 0) return { left: bb.left, top: d.top - SLOT.px, width: bb.width, height: SLOT.px };
           }
-          return { left: bb.left, top: bb.bottom, width: bb.width, height: SLOT.px };
+          // Plain docked panel: the URL bar is part of the panel (below its pages by default). Start below the whole
+          // panel, not below the pages, or the band sits on top of the URL bar.
+          const panelBottom = SLOT.quad ? NaN : document.getElementById("zen-app-panel-root")?.getBoundingClientRect?.()?.bottom;
+          return { left: bb.left, top: dockBandTop({ pageBottom: bb.bottom, panelBottom }), width: bb.width, height: SLOT.px };
         },
         // Split view widens the sheet beyond the panel: it grows from the panel's inner edge toward the
         // middle of the window and may cover part of the page (the panel and its bar stay visible).
