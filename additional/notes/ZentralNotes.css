@@ -853,3 +853,87 @@
 /* A plain panel hands its bottom height to the sheet, so the sheet sits just below the shortened panel: the
    root, clip and slider must not clip it (the same spill rule as a wide sheet, see above). */
 :root[bgalazka-notes-spill="true"] #zen-app-panel-root { overflow: visible !important; }
+
+/* ---- find in notes (P2) ------------------------------------------------------ */
+.zentral-notes-sheet .zn-find {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--zn-line);
+  color: var(--zn-muted);
+}
+.zentral-notes-sheet .zn-find[hidden] { display: none; }
+.zentral-notes-sheet .zn-find-input {
+  flex: 1 1 110px;
+  min-width: 80px;
+  padding: 3px 6px;
+  border: 1px solid var(--zn-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zn-text);
+  font: inherit;
+}
+.zentral-notes-sheet .zn-find-input:focus { outline: none; border-color: var(--zn-accent); }
+.zentral-notes-sheet .zn-find-count { font-size: 0.9em; white-space: nowrap; }
+.zentral-notes-sheet .zn-find-prev svg { transform: rotate(180deg); }
+.zentral-notes-sheet .zn-find .zn-btn:disabled { opacity: 0.35; cursor: default; }
+.zentral-notes-sheet .zn-find-others {
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.9em;
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+.zentral-notes-sheet .zn-find-others:disabled { text-decoration: none; cursor: default; }
+.zentral-notes-sheet .zn-find-others:not(:disabled):hover { background: var(--zn-hover); color: var(--zn-text); }
+.zentral-notes-sheet .zn-find-others[hidden] { display: none; }
+
+/* ---- pasted pictures (P2) ------------------------------------------------------ */
+.zentral-notes-sheet .zn-read .zn-pic { display: inline-block; max-width: 100%; }
+.zentral-notes-sheet .zn-read .zn-pic[data-align] { display: block; }
+.zentral-notes-sheet .zn-read .zn-pic[data-align="left"] { text-align: left; }
+.zentral-notes-sheet .zn-read .zn-pic[data-align="center"] { text-align: center; }
+.zentral-notes-sheet .zn-read .zn-pic[data-align="right"] { text-align: right; }
+.zentral-notes-sheet .zn-read .zn-pic-img { max-width: 100%; height: auto; border-radius: 4px; vertical-align: middle; }
+.zentral-notes-sheet .zn-read .zn-pic-missing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border: 1px dashed var(--zn-line);
+  border-radius: 6px;
+  color: var(--zn-muted);
+}
+
+/* ---- reminder chip (P2) ---------------------------------------------------------- */
+.zentral-notes-sheet .zn-remind {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border: 1px solid var(--zn-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--zn-muted);
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+.zentral-notes-sheet .zn-remind[hidden] { display: none; }
+.zentral-notes-sheet .zn-remind:hover { background: var(--zn-hover); color: var(--zn-text); }
+.zentral-notes-sheet .zn-remind.is-due { border-color: var(--zn-accent); color: var(--zn-text); }
+
+/* links between notes: same look as links; a missing target is struck through, a trashed one is dimmed */
+.zentral-notes-sheet .zn-read .zn-notelink { cursor: pointer; }
+.zentral-notes-sheet .zn-read .zn-notelink.is-missing { text-decoration: line-through; opacity: 0.65; cursor: default; }
+.zentral-notes-sheet .zn-read .zn-notelink.is-trashed { opacity: 0.7; font-style: italic; }
+.zentral-notes-sheet .zn-noteset { display: flex; flex-direction: column; gap: 1px; max-height: 240px; overflow-y: auto; margin: 6px 0; }
+.zentral-notes-sheet .zn-noteset .zn-menu-item { width: 100%; text-align: left; }
+.zentral-notes-sheet .zn-menu-head { opacity: 0.6; cursor: default; font-weight: 600; }
