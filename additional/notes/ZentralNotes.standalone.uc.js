@@ -6655,6 +6655,8 @@ function nativeSidebarSide() {
       let gesture = null;
       let rafDrag = 0;
       let swallowClick = false;
+      let emptyTimer = 0; // "Empty trash" confirm window (3 s); cleared on destroy
+      cleanups.push(() => window.clearTimeout(emptyTimer));
       function hostOffset() {
         if (adapter.position !== "absolute") return { ox: 0, oy: 0 };
         const op = root.offsetParent;
@@ -6845,7 +6847,9 @@ function nativeSidebarSide() {
         } else {
           chipEmpty.dataset.armed = "true";
           chipEmpty.textContent = "Click again to confirm";
-          window.setTimeout(() => {
+          window.clearTimeout(emptyTimer);
+          emptyTimer = window.setTimeout(() => {
+            emptyTimer = 0;
             delete chipEmpty.dataset.armed;
             chipEmpty.textContent = "Empty trash";
           }, 3000);

@@ -222,3 +222,8 @@ See `CHECKPOINT-P3.md` (repo root) for the full continuation guide. Summary:
 - **B:** canonical `[label](<id>.md)` note links, `[[Title]]`/`[[Title|label]]` shorthand (read + export only), missing/trashed states, backlinks (More menu), export rewriting. `tests/notes-links.test.cjs`.
 - **C:** toolbar button "Link to another note...", More menu: New note, Fill the whole area, Notes that link here; menu arrow keys. Inventory test `tests/notes-writing-ui.test.cjs` (add every new action to `WRITING_UI`).
 - Not done: standalone rebuild status, cheap scan, live Zen checks (see checkpoint).
+
+## P3 close-out (Node/fake-DOM only; NOT run in real Zen)
+- Cheap scan finished: only confirmed bug was the untracked 3 s "Empty trash" confirm timer (now `emptyTimer`, cleared on destroy). Gestures (`cancelGesture` on close/suspend), hold buttons, rAF and `close()`/`destroy()` reserve release checked by reading; no change needed. Guard: `tests/notes-p3-scan.test.cjs`.
+- `TODO_notes_roadmap.md` marked: done items DONE, Node-only ones "CODE DONE", open ones listed (hub notes, footnotes, unlinked mentions, date notes, version history, E-a..E-c blocked, E-d, R5, E2).
+- Part A stays blocked; P3 is not fully DONE until the live checklist in `CHECKPOINT-P3.md` passes.

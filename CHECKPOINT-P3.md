@@ -11,7 +11,7 @@ Baseline = git HEAD `146f159` PLUS the uncommitted P2 work already in the suppli
 | A Zen-native NOTES folder | **NOT shipped (blocked).** No pref, nothing wired. Inert pure groundwork only. | `projectNotesFolder`, `diffProjection`, `planCleanup`, `dropDecision`, `urlNoteBody`, `NOTES_ATTR` in `additional/notes/ZentralNotes.uc.js`; `tests/notes-zenfolder.test.cjs` |
 | B Note links | Done (Node). | pure core "links between notes"; parser node `nl`; `renderInline`; `askNoteLink`, `showBacklinks`; `exportBody`; `tests/notes-links.test.cjs` |
 | C Writing tools in UI | Done (Node). | toolbar `tNoteLink`; More menu entries; `showMenu` arrow keys + `disabled` heading rows; `tests/notes-writing-ui.test.cjs` (inventory `WRITING_UI`) |
-| Cheap scan (drag/resize/z-index/timers) | **NOT started.** | |
+| Cheap scan (drag/resize/z-index/timers) | **Done** (one timer leak fixed). | `emptyTimer`; `tests/notes-p3-scan.test.cjs` |
 
 ## Decisions and contracts
 - Note link = ordinary Markdown `[label](<encodeURIComponent(id)>.md)`; id = file name without `.md`; only relative, no scheme/slash/`..`. Anything else stays an ordinary link or text. Link nodes have NO href (no network, no navigation).
@@ -27,7 +27,7 @@ Baseline = git HEAD `146f159` PLUS the uncommitted P2 work already in the suppli
 All suites pass: standalone, notes, notes-capture, notes-ui, notes-markdown, notes-bars, notes-window, notes-tree, notes-quick-settings, notes-docked-reserve, notes-gap-resize, notes-slot-geometry, notes-p2, notes-p2-ui, notes-links, notes-writing-ui, notes-zenfolder, numeric-prefs, encoding, z-heights, resize-perf, defaults, notes-decisions, notes-icon. `node tools/build-standalone.cjs` (lock reset to 3.1.2 first, rebuilt as 3.1.3), `--check` clean, `build-z-map.cjs` run, `git diff --check` clean. NOT run: `build-preferences`, `check-settings-consistency`, `check-default-drift` (no schema/pref change was made in P3).
 
 ## Still to do
-1. Cheap scan (overlapping drag/resize targets, z-index/pointer-events, panel-switch restore, reserve release, stale gestures, timer/listener cleanup) with targeted greps; fix only confirmed bugs.
+1. ~~Cheap scan~~ done; z-index/pointer-events overlap only provable live.
 2. Part A only after the live facts in the blocker doc are verified (Sync exclusion, drop cancel, stable folder uid).
 3. Optional: backlinks as a persistent panel; heading anchors in note links (`#h` is parsed and ignored); `[[` autocomplete while typing; note-link shortcut default.
 4. Live Zen checklist: note-link picker, read-pane click opens exact note, missing/trashed styling, More menu items, menu arrow keys, toolbar wrapping in a narrow sheet; plus the P2 checklist (Ctrl+F, pictures, reminders) and the original acceptance list 1-4.

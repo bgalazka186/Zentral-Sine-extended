@@ -17,20 +17,20 @@ function names and `view` small line ranges of `ZentralNotes.uc.js` (200 KB: nev
 Run only the tests named in the step; full verify loop (handoff section 5) once at the end of a step.
 Mark the step DONE here and add 5 lines at most to the handoff. One step = one session.
 
-| Step          | Content (source)                                                                                                                                                                                                                                                                        | Tests                                 |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| C2.1 **DONE** | Bugs: toolbar button no icon / click does nothing / missing after restart; dock-to-sidebar ignores new features; H1-H5 look identical; icons readable active + inactive (C2)                                                                                                            | notes-window, notes-ui, notes-icon    |
-| C2.2 **DONE** | Editor dialogs: image dialog like link dialog (clipboard prefill, explains accepted files/links, optional link on picture); code-block language dropdown; table column alignment picker; callout shortcuts (NOTE, WARNING + rest); option to hide toolbar items / shortcut actions (C2) | notes-ui, notes-markdown              |
-| C2.3 **DONE** | Markdown: safe HTML subset (`<details>`, `<summary>`), minimal offline math (LaTeX subset to Unicode/sup/sub, no KaTeX bundle; low priority) (C2)                                                                                                                                       | notes-markdown                        |
-| C3.1 **DONE** | Window options: #8 push page + reveal on hover over top edge, free-text per-note label (C leftovers)                                                                                                                                                                                    | notes-window, notes-bars              |
-| C3.2 **DONE** | Split view as a second same-size window; #1 themes in Appearance menu (RSS-based theme as template for recomended) (C leftovers)                                                                                                                                                        | notes-window, notes-ui                |
-| D1 **DONE**  | Capture: selection "Add to note" (new / existing / last open) with metadata settings (date, time, source, link with highlight, checkbox, style); #15 context menu; Inbox; page URL/title source snippet (C2 + D)                                                                        | notes-ui, new notes-capture           |
-| D2            | #12 folders and trees, pin as independent shortcut; "recent" list polish                                                                                                                                                                                                                | new notes-tree                        |
-| D3            | #16 `[[note]]` links, hub notes, backlinks, clickable footnotes; #11 search with "found in N other notes"                                                                                                                                                                               | new notes-links, notes-search         |
-| D4            | #13 image paste + per-note asset folder + alignment/size; replaces click-to-load placeholder decision                                                                                                                                                                                   | notes-markdown, new notes-assets      |
-| D5            | #17 reminders (one coarse timer), date notes, version history with size warning                                                                                                                                                                                                         | new notes-reminders, notes-history    |
-| E1            | RSS card: expandable long items, clickable links (Other modules)                                                                                                                                                                                                                        | standalone, encoding                  |
-| E2            | Audits: static ones now (dead CSS/attrs, duplicate IDs, README links); live-only ones get a debug `performance.now()` sampler (pref off by default) and an owner checklist in the handoff                                                                                               | defaults, z-heights, resize-perf, all |
+| Step                                                | Content (source)                                                                                                                                                                                                                                                                        | Tests                                 |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| C2.1 **DONE**                                       | Bugs: toolbar button no icon / click does nothing / missing after restart; dock-to-sidebar ignores new features; H1-H5 look identical; icons readable active + inactive (C2)                                                                                                            | notes-window, notes-ui, notes-icon    |
+| C2.2 **DONE**                                       | Editor dialogs: image dialog like link dialog (clipboard prefill, explains accepted files/links, optional link on picture); code-block language dropdown; table column alignment picker; callout shortcuts (NOTE, WARNING + rest); option to hide toolbar items / shortcut actions (C2) | notes-ui, notes-markdown              |
+| C2.3 **DONE**                                       | Markdown: safe HTML subset (`<details>`, `<summary>`), minimal offline math (LaTeX subset to Unicode/sup/sub, no KaTeX bundle; low priority) (C2)                                                                                                                                       | notes-markdown                        |
+| C3.1 **DONE**                                       | Window options: #8 push page + reveal on hover over top edge, free-text per-note label (C leftovers)                                                                                                                                                                                    | notes-window, notes-bars              |
+| C3.2 **DONE**                                       | Split view as a second same-size window; #1 themes in Appearance menu (RSS-based theme as template for recomended) (C leftovers)                                                                                                                                                        | notes-window, notes-ui                |
+| D1 **DONE**                                         | Capture: selection "Add to note" (new / existing / last open) with metadata settings (date, time, source, link with highlight, checkbox, style); #15 context menu; Inbox; page URL/title source snippet (C2 + D)                                                                        | notes-ui, new notes-capture           |
+| D2 **DONE** (see v4 D2a/D2b)                        | #12 folders and trees, pin as independent shortcut; "recent" list polish                                                                                                                                                                                                                | new notes-tree                        |
+| D3 **CODE DONE** (Node only; live test pending)     | #16 `[[note]]` links + backlinks (P3, `notes-links`); #11 search with "found in N other notes" (P2, `notes-p2`). STILL OPEN: hub-note descriptions, clickable footnotes, unlinked mentions                                                                                              | new notes-links, notes-search         |
+| D4 **CODE DONE** (Node only; live test pending)     | #13 image paste + per-note asset folder + alignment/size; replaces click-to-load placeholder decision                                                                                                                                                                                   | notes-markdown, new notes-assets      |
+| D5 **PARTLY DONE** (reminders code done, Node only) | #17 reminders (one coarse timer) done in P2. STILL OPEN: date notes, version history with size warning                                                                                                                                                                                  | new notes-reminders, notes-history    |
+| E1 **DONE**                                         | RSS card: expandable long items, clickable links (Other modules)                                                                                                                                                                                                                        | standalone, encoding                  |
+| E2                                                  | Audits: static ones now (dead CSS/attrs, duplicate IDs, README links); live-only ones get a debug `performance.now()` sampler (pref off by default) and an owner checklist in the handoff                                                                                               | defaults, z-heights, resize-perf, all |
 
 Order is cheapest/highest-value first; D1 follows C because capture reuses the C2.2 dialogs. Nothing was deleted: every item from C, C2, D, E and "Owner-approved ideas" is in a row above.
 
@@ -39,32 +39,32 @@ Order is cheapest/highest-value first; D1 follows C because capture reuses the C
 Owner answers: push in a panel = **shrink the panel's height** (website pushed as the panel does); reveal = the **full Notes sheet as an overlay** on the panel, opened from a strip on the panel's top edge, while the cursor going over the top edge must not make the top bar expand; wide sheet may **cover the page**, the pill menu must stay reachable; old keys (`split_window`, `look_shadow`, preset dropdowns) may be deleted once replaced.
 Review that led here: `NOTES_C3-D1_review_and_rebuild_plan.md`.
 
-| Step | Content | Tests |
-| ---- | ------- | ----- |
-| R1 **DONE** | Full mod: schema items with `control: "slider"/"color"` render as real sliders / colour pickers + Default button in the Zentral settings window (loader/ZentralRuntime.js `createSchemaControlRow`); standalone: same prefs as numeric text boxes in Sine (-1 = theme). Also an in-app **Settings** view (tabs Writing / Window / Appearance / Capture) with real sliders, an HSL colour picker (no native dialog), "Theme" reset per value; quick menu cut to 8 items + "All settings…"; numeric shadow (blur / offset / strength) replaces the 3 presets; ranges widened (opacity 0-100, radius 0-60...) | notes-ui, notes-capture, defaults |
-| R2 ~~DONE~~ SUPERSEDED by PLAN v4 | Push page on the panel contract (`#tabbrowser-tabbox`, panel attributes, transition, hover-hidden release); panel-hosted sheet shrinks the panel height | notes-window, notes-bars, z-heights |
-| R3 ~~DONE~~ SUPERSEDED by PLAN v4 | Reveal strip at the top of an open panel opening the full sheet as an overlay; guard so the strip does not trigger the native top bar; drop the "tuck" behaviour or rename it | notes-bars, notes-window |
-| R4 ~~DONE~~ SUPERSEDED by PLAN v4 | Delete the companion window (`createCompanionAdapter`, `syncCompanion`, `companionRect`, `split_window`); split view widens the one sheet ~2x, bounded by the window, pill menu kept clear (`keepClear`) | notes-window, notes-ui, resize-perf |
-| R5 | D1 rework: capture options move to Settings > Capture (done in R1), re-check menu/shortcut paths and the "where quick notes open" presentation option | notes-capture |
-| D2 - D5, E2 | unchanged from v2 (folders/trees, links/search, assets, reminders/history, audits); start after R2-R4 | as in v2 |
+| Step                              | Content                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Tests                               |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| R1 **DONE**                       | Full mod: schema items with `control: "slider"/"color"` render as real sliders / colour pickers + Default button in the Zentral settings window (loader/ZentralRuntime.js `createSchemaControlRow`); standalone: same prefs as numeric text boxes in Sine (-1 = theme). Also an in-app **Settings** view (tabs Writing / Window / Appearance / Capture) with real sliders, an HSL colour picker (no native dialog), "Theme" reset per value; quick menu cut to 8 items + "All settings…"; numeric shadow (blur / offset / strength) replaces the 3 presets; ranges widened (opacity 0-100, radius 0-60...) | notes-ui, notes-capture, defaults   |
+| R2 ~~DONE~~ SUPERSEDED by PLAN v4 | Push page on the panel contract (`#tabbrowser-tabbox`, panel attributes, transition, hover-hidden release); panel-hosted sheet shrinks the panel height                                                                                                                                                                                                                                                                                                                                                                                                                                                    | notes-window, notes-bars, z-heights |
+| R3 ~~DONE~~ SUPERSEDED by PLAN v4 | Reveal strip at the top of an open panel opening the full sheet as an overlay; guard so the strip does not trigger the native top bar; drop the "tuck" behaviour or rename it                                                                                                                                                                                                                                                                                                                                                                                                                              | notes-bars, notes-window            |
+| R4 ~~DONE~~ SUPERSEDED by PLAN v4 | Delete the companion window (`createCompanionAdapter`, `syncCompanion`, `companionRect`, `split_window`); split view widens the one sheet ~2x, bounded by the window, pill menu kept clear (`keepClear`)                                                                                                                                                                                                                                                                                                                                                                                                   | notes-window, notes-ui, resize-perf |
+| R5                                | D1 rework: capture options move to Settings > Capture (done in R1), re-check menu/shortcut paths and the "where quick notes open" presentation option                                                                                                                                                                                                                                                                                                                                                                                                                                                      | notes-capture                       |
+| D2 - D5, E2                       | unchanged from v2 (folders/trees, links/search, assets, reminders/history, audits); start after R2-R4                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | as in v2                            |
 
 ## PLAN v4 (supersedes R2-R5 of PLAN v3; context in `TODO_handoff.md` section 19; spec in `docs/NOTES-FOLDERS-ZEN-SYNC-SPEC.md`)
 
 One step = one session. Read only this block, handoff section 19, then `grep -n` the function names and `view` small ranges.
 
-| Step | Content | Tests |
-| ---- | ------- | ----- |
-| V4-R1+R4 **DONE** | Notes as a real slot: panel + Notes = Triple-like split; Triple + Notes = Quad; push on by default for panel-hosted Notes; remove `size==="peek"` gate | notes-bars, notes-window, z-heights, new notes-slots |
-| V4-R3 **DONE** | Wide/span sheet visually overflows the Zentral panel (re-attach fixed to root or unclip), pill menu clear | notes-window |
-| V4-R2 **DONE** | Hover/dock modes in the Notes top bar; between-URL-bars mode (default in Triple View); bottom bar icon = between-bars, top icon = overlay; icon states | notes-bars, notes-ui, notes-icon |
-| V4-QS **DONE** | Quick Settings container grows with font size (em sizing, wrap, re-position) | notes-ui, new notes-quick-settings |
-| D2a/D2b **DONE** | Folders + tree data model and in-sheet UI (spec 1.1-1.2) | new notes-tree |
-| E-a..E-c | Zen-native `NOTES` folder, activation over last Zentral panel, RMB menus (spec 1.3-1.5), off by default | new notes-zenfolder |
-| E-d | Zen Sync short-note tier (spec section 4); only after spec 4.1 live verification | new notes-sync |
-| R5 (old) | D1 capture path re-check after V4 | notes-capture |
-| D3-D5, E2 | unchanged | as in v2 |
+| Step                                                                                                            | Content                                                                                                                                                | Tests                                                |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| V4-R1+R4 **DONE**                                                                                               | Notes as a real slot: panel + Notes = Triple-like split; Triple + Notes = Quad; push on by default for panel-hosted Notes; remove `size==="peek"` gate | notes-bars, notes-window, z-heights, new notes-slots |
+| V4-R3 **DONE**                                                                                                  | Wide/span sheet visually overflows the Zentral panel (re-attach fixed to root or unclip), pill menu clear                                              | notes-window                                         |
+| V4-R2 **DONE**                                                                                                  | Hover/dock modes in the Notes top bar; between-URL-bars mode (default in Triple View); bottom bar icon = between-bars, top icon = overlay; icon states | notes-bars, notes-ui, notes-icon                     |
+| V4-QS **DONE**                                                                                                  | Quick Settings container grows with font size (em sizing, wrap, re-position)                                                                           | notes-ui, new notes-quick-settings                   |
+| D2a/D2b **DONE**                                                                                                | Folders + tree data model and in-sheet UI (spec 1.1-1.2)                                                                                               | new notes-tree                                       |
+| E-a..E-c **BLOCKED, not shipped** (pure groundwork + `notes-zenfolder`; see `docs/NOTES-ZEN-FOLDER-BLOCKER.md`) | Zen-native `NOTES` folder, activation over last Zentral panel, RMB menus (spec 1.3-1.5), off by default                                                | new notes-zenfolder                                  |
+| E-d                                                                                                             | Zen Sync short-note tier (spec section 4); only after spec 4.1 live verification                                                                       | new notes-sync                                       |
+| R5 (old)                                                                                                        | D1 capture path re-check after V4 (open)                                                                                                               | notes-capture                                        |
+| D3-D5, E2                                                                                                       | D3 + D4 code done, D5 reminders done (see v2 rows); E2 open                                                                                            | as in v2                                             |
 
-## Cycle A: small fixes and consistency (easiest)
+## Cycle A: small fixes and consistency (easiest) **DONE**
 
 - #21 one Notes icon everywhere (settings, GUI, toolbar): single SVG constant.
 - #5 highlight picker: clamp inside the window, expose all colors.
@@ -76,7 +76,7 @@ One step = one session. Read only this block, handoff section 19, then `grep -n`
 - Leftovers: pill drag flags without CSS; check Left/Right resize handle clipping.
 - Tests: notes-ui, notes-bars, defaults, numeric-prefs.
 
-## Cycle B: Markdown features
+## Cycle B: Markdown features **DONE**
 
 - #7 links with visible text, images, blockquotes (nested), horizontal rules, tables, strike,
   task lists, `---` shortcut, footnote-free GitHub-style subset. Renderer stays a small tokenizer.
@@ -85,7 +85,7 @@ One step = one session. Read only this block, handoff section 19, then `grep -n`
 - #14 export (HTML, plain text, PDF via print) with a "what is lost" notice per format.
 - Tests: notes, notes-ui (+ a markdown fixture test).
 
-## Cycle B2: Markdown follow-ups: CODE DONE, NEEDS LIVE TEST IN ZEN (see TODO_handoff.md section 10)
+## Cycle B2: Markdown follow-ups: CODE DONE, NEEDS LIVE TEST IN ZEN (see TODO_handoff.md section 10) **DONE**
 
 - Shortcuts and buttons for every syntax that has none yet (inline code, code block, link, image, numbered list, table), so people who do not know Markdown can learn it from the toolbar; **table creator** (pick rows x columns, inserts a ready table).
 - Paste a URL over selected text (or anywhere) -> "create link" mini dialog like Reddit: text to show + address. Finish the "copy to highlight" link feature the same way (its link should offer the same dialog on paste).
@@ -96,7 +96,7 @@ One step = one session. Read only this block, handoff section 19, then `grep -n`
 - In-app **quick settings menu** (most options a user changes while writing: font size, line height, wrap, blank lines, linked scrolling, read-only copy...) and in-app shortcut assignment (shares the engine with cycle C #23).
 - Tests: notes-markdown, notes-ui.
 
-## Cycle C: window behavior and appearance
+## Cycle C: window behavior and appearance **DONE**
 
 - #3 drag and resize; above Big Preview while Big Preview is not focused (needs the z-height
   decision: popover only while focused). Update `z-heights_map.md` and its test.
@@ -110,7 +110,7 @@ One step = one session. Read only this block, handoff section 19, then `grep -n`
 - Split view as a second window (option): instead of halving the available space, open a second note of the **same size** beside the first. The Zentral pill menu must stay reachable and nothing may be covered.
 - Tests: resize-perf (drag/resize frame-throttled), z-heights, notes-bars.
 
-## Cycle C2: Things noticed after live Test
+## Cycle C2: Things noticed after live Test (all items DONE in PLAN v2 C2.1-C2.3, Node only)
 
 - complete half done Cycle C
 - option for window wide shrocut on selected text "add to note" drop down menu new note/existing note/last open note, and configuration in settings what metadata to include in such quick note, like date,time,source,link to source with hilight,checkbox,style options and so on
@@ -125,16 +125,16 @@ One step = one session. Read only this block, handoff section 19, then `grep -n`
 - Notes button in customize toolbar mode now appears but has no icon and clicking it does nothing, doesnt appear after restart untill customize toolbar mode is turned on and off
 - bug: when dock notes to the sidebar is turned on features from last upadte do not apply
 
-## Cycle D: data model (hardest)
+## Cycle D: data model (hardest) - status: see per-item marks
 
-- #12 folders and trees; pin = independent shortcut shown at the top even inside a folder.
-- #16 links between notes and items inside notes (`[[note]]`, hub notes with descriptions), and clickable Footnotes.
-- #11 search (Ctrl+F while focused): "found in N other notes", next/previous, plus
+- **DONE (Node)** #12 folders and trees; pin = independent shortcut shown at the top even inside a folder.
+- **PARTLY DONE (Node)** #16 links between notes: `[[note]]` shorthand + canonical `.md` links + backlinks done; hub notes with descriptions and clickable Footnotes still open.
+- **DONE (Node, P2)** #11 search (Ctrl+F while focused): "found in N other notes", next/previous, plus
   next/previous not fully visible in the current view.
-- #13 image paste: per-note asset folder, link inserted into the .md; controls for alignment,
+- **DONE (Node, P2)** #13 image paste: per-note asset folder, link inserted into the .md; controls for alignment,
   centering and display size.
-- #15 browser context menu: copy selection to current note / new note.
-- #17 reminders: 5-minute granularity, one coarse timer armed to the next due time (no polling),
+- **DONE (D1)** #15 browser context menu: copy selection to current note / new note.
+- **DONE (Node, P2)** #17 reminders: 5-minute granularity, one coarse timer armed to the next due time (no polling),
   sound plus text alert from the note.
 - Tests: new tests per feature; keep fixtures small.
 
@@ -146,13 +146,13 @@ One step = one session. Read only this block, handoff section 19, then `grep -n`
 
 ## Owner-approved ideas (scheduled with the cycle they fit)
 
-- Inbox quick capture: appends a timestamped line to an "Inbox" note; right-click menu item plus a shortcut (cycle D, with #15).
+- **DONE (D1)** Inbox quick capture: appends a timestamped line to an "Inbox" note; right-click menu item plus a shortcut (cycle D, with #15).
 - Date notes: today / tomorrow / next work day (date computed), filter and list by date, or all in one file (cycle D, with #17).
-- Backlinks and unlinked mentions (cycle D, with #16).
-- Per-note color/label and a "recent" list (cycle C).
-- Page URL/title as a source snippet: right-click menu (cycle D, with #15).
+- Backlinks **DONE (Node, P3)**; unlinked mentions still open (cycle D, with #16).
+- **DONE** Per-note color/label and a "recent" list (cycle C).
+- **DONE (D1)** Page URL/title as a source snippet: right-click menu (cycle D, with #15).
 - Version history: last N autosave snapshots per note, reliable restore, tunable options (N, interval, size cap) and a warning when the history/notes folder grows huge (cycle D).
-- Import a folder of .md files; export all as a zip (cycle B, with #14).
+- **DONE (cycle B)** Import a folder of .md files; export all as a zip (cycle B, with #14).
 
 ## Cycle A status: DONE (see TODO_handoff.md)
 
@@ -175,3 +175,10 @@ NOT done, still open for the next session: #8 panel-like options (push page, rev
 ## Other modules (not Notes)
 
 - RSS card: long items are cut off, show the full text (expandable); links inside an RSS message must be clickable in the card.
+
+## Priority 3 status (Node/fake-DOM only; NOT run in real Zen; do not mark fully DONE before the live checks)
+
+- A Zen-native `Notes` folder: **BLOCKED, not shipped**, no pref. Needs live proof of Sync exclusion, drop cancel and a stable folder uid first (`docs/NOTES-ZEN-FOLDER-BLOCKER.md`).
+- B note-to-note links: **CODE DONE** (`notes-links`). Open: heading anchors, persistent backlinks panel, unlinked mentions, `[[` autocomplete.
+- C writing tools in the UI: **CODE DONE** (`notes-writing-ui`, inventory `WRITING_UI`). Owner decision pending: hidden toolbar tools stay reachable in a menu?
+- Cheap scan: **DONE** (Empty-trash confirm timer now owned by the sheet, `notes-p3-scan`); gestures, hold buttons, reserve release and listener cleanup checked, no other confirmed bug.
