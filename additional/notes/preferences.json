@@ -519,5 +519,105 @@
     "label": "Notes folder (absolute path; empty = zentral-notes inside your profile)",
     "type": "string",
     "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.hub_descriptions",
+    "label": "Hub notes: a list item that is only a link to another note shows that note's short description (read view)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.wiki_complete",
+    "label": "Suggest notes while typing [[ (Tab or Enter picks, Esc closes)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.backlinks_panel",
+    "label": "Read view: show a \"Linked from\" strip with the notes that link here",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.hidden_tools_menu",
+    "label": "Hidden editor tools stay reachable in More > Hidden tools (their buttons and shortcuts stay off)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.date_notes_mode",
+    "label": "Date notes (today / tomorrow / next work day)",
+    "type": "dropdown",
+    "defaultValue": "separate",
+    "options": [
+      {
+        "label": "One note per day, in the Daily folder",
+        "value": "separate"
+      },
+      {
+        "label": "All days in one note called Journal",
+        "value": "single"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.history_enabled",
+    "label": "Keep earlier versions of each note (history/<note id>/ in the notes folder)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.history_keep_text",
+    "label": "Versions kept per note [1 to 200]",
+    "type": "string",
+    "defaultValue": "20",
+    "placeholder": "20"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.history_minutes_text",
+    "label": "At most one version every (minutes) [1 to 1440 min]",
+    "type": "string",
+    "defaultValue": "10",
+    "placeholder": "10"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.history_cap_kb_text",
+    "label": "Notes bigger than this are not versioned (KB) [16 to 4096 KB]",
+    "type": "string",
+    "defaultValue": "512",
+    "placeholder": "512"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.history_warn_mb_text",
+    "label": "Warn when all history together grows beyond (MB) [5 to 2000 MB]",
+    "type": "string",
+    "defaultValue": "100",
+    "placeholder": "100"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.zen_folder",
+    "label": "EXPERIMENT: show notes in Zen's pinned-tabs folder tree (NOTES folder). Selected = only what is in the Notes (tabbar) folder, like the bookmarks toolbar; Whole = the entire notes tree. Not verified in a live Zen",
+    "type": "dropdown",
+    "defaultValue": "off",
+    "options": [
+      {
+        "label": "Off",
+        "value": "off"
+      },
+      {
+        "label": "Selected only (Notes (tabbar) folder)",
+        "value": "selected"
+      },
+      {
+        "label": "Whole notes structure",
+        "value": "all"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.debug_perf",
+    "label": "DEBUG: sample how long Notes layout, drag and read-view work take (performance.now). Read the result with __zentralNotesPerf.report() in the Browser Console",
+    "type": "checkbox",
+    "defaultValue": false
   }
 ]

@@ -539,6 +539,34 @@
     "def": 200
   },
   {
+    "key": "zen.workspace.zentral.notes.history_keep",
+    "text": "zen.workspace.zentral.notes.history_keep_text",
+    "min": 1,
+    "max": 200,
+    "def": 20
+  },
+  {
+    "key": "zen.workspace.zentral.notes.history_minutes",
+    "text": "zen.workspace.zentral.notes.history_minutes_text",
+    "min": 1,
+    "max": 1440,
+    "def": 10
+  },
+  {
+    "key": "zen.workspace.zentral.notes.history_cap_kb",
+    "text": "zen.workspace.zentral.notes.history_cap_kb_text",
+    "min": 16,
+    "max": 4096,
+    "def": 512
+  },
+  {
+    "key": "zen.workspace.zentral.notes.history_warn_mb",
+    "text": "zen.workspace.zentral.notes.history_warn_mb_text",
+    "min": 5,
+    "max": 2000,
+    "def": 100
+  },
+  {
     "key": "zen.workspace.zentral.notes.look_radius",
     "text": "zen.workspace.zentral.notes.look_radius_text",
     "min": -1,

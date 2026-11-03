@@ -121,8 +121,14 @@
           left: Math.max(0, b.left || 0),
           top,
           width: Math.max(1, (b.right || window.innerWidth) - (b.left || 0)),
-          height: Math.max(1, window.innerHeight - top),
+          height: Math.max(1, window.innerHeight - top - notesReserve()),
         };
+      }
+      // Height docked Notes asked the panel to give up (shared root variable; the quad slot makes its own room).
+      function notesReserve() {
+        if (ui.hasAttribute("bgalazka-quad-view")) return 0;
+        const v = parseFloat(ui.style.getPropertyValue("--zentral-notes-panel-reserve"));
+        return Number.isFinite(v) ? Math.max(0, Math.min(4000, Math.round(v))) : 0;
       }
       const rectOf = (root) => {
         const r = root.getBoundingClientRect();
@@ -174,7 +180,7 @@
               left: pushLeft,
               top: area().top,
               width: Math.max(1, pushRight - pushLeft),
-              height: Math.max(1, window.innerHeight - area().top),
+              height: Math.max(1, window.innerHeight - area().top - notesReserve()),
             }
           : area();
         let r = bounded(
@@ -1265,6 +1271,10 @@
         true,
       );
       lifecycle.listen(window, "blur", () => endGesture(false));
+      // Docked Notes gives and takes height: the floating / docked panel follows it.
+      lifecycle.listen(document, "zentral-notes-reserve", () => {
+        for (const h of hosts.values()) apply(h);
+      });
       lifecycle.listen(window, "resize", () => {
         endGesture(false);
         for (const h of hosts.values()) apply(h);

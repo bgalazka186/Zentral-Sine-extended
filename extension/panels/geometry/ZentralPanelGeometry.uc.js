@@ -1241,6 +1241,10 @@
             return;
           }
           syncEdgeFlush(root);
+          // Zen rewrites the panel's inline margins while it opens or moves; docked Notes' reserve must survive
+          // that. Not while a drag owns the margins. apply...Extras writes only when a value differs, so this
+          // cannot loop through its own style mutation.
+          if (!vResizeState && !vPosDragState && notesReserve() > 0) applyVerticalResizeExtras(root);
         });
       };
       observer = new MutationObserver(schedule);

@@ -937,3 +937,26 @@
 .zentral-notes-sheet .zn-noteset { display: flex; flex-direction: column; gap: 1px; max-height: 240px; overflow-y: auto; margin: 6px 0; }
 .zentral-notes-sheet .zn-noteset .zn-menu-item { width: 100%; text-align: left; }
 .zentral-notes-sheet .zn-menu-head { opacity: 0.6; cursor: default; font-weight: 600; }
+.zentral-notes-sheet .zn-menu-group > span { flex: 1 1 auto; }
+.zentral-notes-sheet .zn-menu-group > svg:last-child { opacity: 0.6; }
+.zentral-notes-sheet .zn-menu-back { opacity: 0.8; }
+
+/* ---- Links, footnotes, history, [[ completion (roadmap leftovers) ---------------------------------------------- */
+.zentral-notes-sheet .zn-hubdesc { opacity: 0.65; font-size: 0.92em; }
+.zentral-notes-sheet .zn-fn { font-size: 0.75em; line-height: 0; }
+.zentral-notes-sheet .zn-fnref, .zentral-notes-sheet .zn-fnback { cursor: pointer; }
+.zentral-notes-sheet .zn-footnotes { margin: 0.4em 0 0.4em 1.4em; padding: 0; font-size: 0.92em; opacity: 0.9; }
+.zentral-notes-sheet .zn-wikibar { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px; border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
+.zentral-notes-sheet .zn-wikibar[hidden], .zentral-notes-sheet .zn-linked[hidden] { display: none; }
+.zentral-notes-sheet .zn-wiki-item { font: inherit; font-size: 0.9em; padding: 2px 8px; border-radius: 999px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); background: transparent; color: inherit; cursor: pointer; }
+.zentral-notes-sheet .zn-wiki-item.is-on { background: color-mix(in srgb, currentColor 16%, transparent); }
+.zentral-notes-sheet .zn-linked { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 8px; border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent); font-size: 0.9em; }
+.zentral-notes-sheet .zn-linked-label { opacity: 0.65; margin-right: 4px; }
+.zentral-notes-sheet .zn-pick-head { font: inherit; margin-left: 4px; padding: 0 6px; border-radius: 4px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); background: transparent; color: inherit; cursor: pointer; }
+.zentral-notes-sheet .zn-hist-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 3px 0; }
+.zentral-notes-sheet .zn-hist-when { flex: 1 1 12em; }
+.zentral-notes-sheet .zn-hist-note { opacity: 0.7; font-size: 0.9em; }
+.zentral-notes-sheet .zn-hist-note.is-warn { opacity: 1; color: #c0392b; }
+
+/* Zen sidebar experiment: while the right-click target is one of our note tabs, every native item is hidden (never removed). */
+:root[zentral-notes-ctx="item"] #tabContextMenu > :not([zentral-notes-own]) { display: none !important; }

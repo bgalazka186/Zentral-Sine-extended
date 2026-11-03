@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.3
+// @version 3.1.4
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.3, the numeric-preference list and
+ * Placeholders replaced by the build: 3.1.4, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.3";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.4";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -165,7 +165,7 @@ const __zentralShim = (function () {
       _observer: observer,
     };
   }
-  const numericItems = [{"key":"zen.workspace.zentral.notes.push_panel_percent","text":"zen.workspace.zentral.notes.push_panel_percent_text","min":20,"max":80,"def":45},{"key":"zen.workspace.zentral.notes.reveal_height_px","text":"zen.workspace.zentral.notes.reveal_height_px_text","min":2,"max":24,"def":10},{"key":"zen.workspace.zentral.notes.reveal_delay_ms","text":"zen.workspace.zentral.notes.reveal_delay_ms_text","min":0,"max":1000,"def":100},{"key":"zen.workspace.zentral.notes.wide_percent","text":"zen.workspace.zentral.notes.wide_percent_text","min":130,"max":300,"def":200},{"key":"zen.workspace.zentral.notes.look_radius","text":"zen.workspace.zentral.notes.look_radius_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_border","text":"zen.workspace.zentral.notes.look_border_text","min":-1,"max":8,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_blur","text":"zen.workspace.zentral.notes.look_shadow_blur_text","min":-1,"max":120,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_y","text":"zen.workspace.zentral.notes.look_shadow_y_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_alpha","text":"zen.workspace.zentral.notes.look_shadow_alpha_text","min":-1,"max":100,"def":-1},{"key":"zen.workspace.zentral.notes.look_opacity","text":"zen.workspace.zentral.notes.look_opacity_text","min":-1,"max":100,"def":-1},{"key":"zen.workspace.zentral.notes.look_padding","text":"zen.workspace.zentral.notes.look_padding_text","min":-1,"max":64,"def":-1},{"key":"zen.workspace.zentral.notes.look_btn_size","text":"zen.workspace.zentral.notes.look_btn_size_text","min":-1,"max":56,"def":-1},{"key":"zen.workspace.zentral.notes.look_btn_radius","text":"zen.workspace.zentral.notes.look_btn_radius_text","min":-1,"max":50,"def":-1},{"key":"zen.workspace.zentral.notes.autosave_seconds","text":"zen.workspace.zentral.notes.autosave_seconds_text","min":2,"max":60,"def":5},{"key":"zen.workspace.zentral.notes.font_size","text":"zen.workspace.zentral.notes.font_size_text","min":8,"max":40,"def":13},{"key":"zen.workspace.zentral.notes.line_height","text":"zen.workspace.zentral.notes.line_height_text","min":100,"max":300,"def":160}];
+  const numericItems = [{"key":"zen.workspace.zentral.notes.push_panel_percent","text":"zen.workspace.zentral.notes.push_panel_percent_text","min":20,"max":80,"def":45},{"key":"zen.workspace.zentral.notes.reveal_height_px","text":"zen.workspace.zentral.notes.reveal_height_px_text","min":2,"max":24,"def":10},{"key":"zen.workspace.zentral.notes.reveal_delay_ms","text":"zen.workspace.zentral.notes.reveal_delay_ms_text","min":0,"max":1000,"def":100},{"key":"zen.workspace.zentral.notes.wide_percent","text":"zen.workspace.zentral.notes.wide_percent_text","min":130,"max":300,"def":200},{"key":"zen.workspace.zentral.notes.look_radius","text":"zen.workspace.zentral.notes.look_radius_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_border","text":"zen.workspace.zentral.notes.look_border_text","min":-1,"max":8,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_blur","text":"zen.workspace.zentral.notes.look_shadow_blur_text","min":-1,"max":120,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_y","text":"zen.workspace.zentral.notes.look_shadow_y_text","min":-1,"max":60,"def":-1},{"key":"zen.workspace.zentral.notes.look_shadow_alpha","text":"zen.workspace.zentral.notes.look_shadow_alpha_text","min":-1,"max":100,"def":-1},{"key":"zen.workspace.zentral.notes.look_opacity","text":"zen.workspace.zentral.notes.look_opacity_text","min":-1,"max":100,"def":-1},{"key":"zen.workspace.zentral.notes.look_padding","text":"zen.workspace.zentral.notes.look_padding_text","min":-1,"max":64,"def":-1},{"key":"zen.workspace.zentral.notes.look_btn_size","text":"zen.workspace.zentral.notes.look_btn_size_text","min":-1,"max":56,"def":-1},{"key":"zen.workspace.zentral.notes.look_btn_radius","text":"zen.workspace.zentral.notes.look_btn_radius_text","min":-1,"max":50,"def":-1},{"key":"zen.workspace.zentral.notes.autosave_seconds","text":"zen.workspace.zentral.notes.autosave_seconds_text","min":2,"max":60,"def":5},{"key":"zen.workspace.zentral.notes.font_size","text":"zen.workspace.zentral.notes.font_size_text","min":8,"max":40,"def":13},{"key":"zen.workspace.zentral.notes.line_height","text":"zen.workspace.zentral.notes.line_height_text","min":100,"max":300,"def":160},{"key":"zen.workspace.zentral.notes.history_keep","text":"zen.workspace.zentral.notes.history_keep_text","min":1,"max":200,"def":20},{"key":"zen.workspace.zentral.notes.history_minutes","text":"zen.workspace.zentral.notes.history_minutes_text","min":1,"max":1440,"def":10},{"key":"zen.workspace.zentral.notes.history_cap_kb","text":"zen.workspace.zentral.notes.history_cap_kb_text","min":16,"max":4096,"def":512},{"key":"zen.workspace.zentral.notes.history_warn_mb","text":"zen.workspace.zentral.notes.history_warn_mb_text","min":5,"max":2000,"def":100}];
   function nativeSidebarElement() {
       const tabs = window.gBrowser?.tabContainer;
       const candidates = [
@@ -750,13 +750,27 @@ function nativeSidebarSide() {
       CAPTURE_POSITION: "zen.workspace.zentral.notes.capture_position",
       CAPTURE_OPEN: "zen.workspace.zentral.notes.capture_open",
       CAPTURE_INBOX: "zen.workspace.zentral.notes.capture_inbox",
+      // Links, dates, history
+      HUB_DESC: "zen.workspace.zentral.notes.hub_descriptions",
+      WIKI_COMPLETE: "zen.workspace.zentral.notes.wiki_complete",
+      BACKLINKS_PANEL: "zen.workspace.zentral.notes.backlinks_panel",
+      HIDDEN_MENU: "zen.workspace.zentral.notes.hidden_tools_menu",
+      DATE_MODE: "zen.workspace.zentral.notes.date_notes_mode",
+      HISTORY_ON: "zen.workspace.zentral.notes.history_enabled",
+      HISTORY_KEEP: "zen.workspace.zentral.notes.history_keep",
+      HISTORY_MINUTES: "zen.workspace.zentral.notes.history_minutes",
+      HISTORY_CAP_KB: "zen.workspace.zentral.notes.history_cap_kb",
+      HISTORY_WARN_MB: "zen.workspace.zentral.notes.history_warn_mb",
+      // Experiments (off by default, not verified in a live Zen)
+      ZEN_MODE: "zen.workspace.zentral.notes.zen_folder",
+      DEBUG_PERF: "zen.workspace.zentral.notes.debug_perf",
     });
     const LOOK_PREFS = Object.freeze(Object.keys(PREF).filter((k) => k.startsWith("LOOK_")).map((k) => PREF[k]));
     // Integer look prefs: -1 (or anything out of range) keeps the theme's own value.
     const LOOK_NUM_PREFS = new Set([PREF.LOOK_RADIUS, PREF.LOOK_BORDER, PREF.LOOK_PADDING, PREF.LOOK_OPACITY, PREF.LOOK_SHADOW_BLUR, PREF.LOOK_SHADOW_Y, PREF.LOOK_SHADOW_ALPHA, PREF.LOOK_BTN_SIZE, PREF.LOOK_BTN_RADIUS]);
     const VIEW_PREFS = new Set([PREF.WRAP, PREF.FONT_SIZE, PREF.LINE_HEIGHT, PREF.READ_COPY, PREF.THEME, ...LOOK_PREFS]);
     const WINDOW_PREFS = new Set([PREF.HOVER_REVEAL, PREF.PUSH_PAGE, PREF.PUSH_PANEL_PERCENT, PREF.WIDE_PERCENT, PREF.REVEAL_STRIP, PREF.REVEAL_HEIGHT, PREF.REVEAL_DELAY, PREF.AVOID_SIDEBAR]);
-    const READ_PREFS = new Set([PREF.BLANK_LINES, PREF.LINE_BREAKS, PREF.SETEXT]);
+    const READ_PREFS = new Set([PREF.BLANK_LINES, PREF.LINE_BREAKS, PREF.SETEXT, PREF.HUB_DESC, PREF.BACKLINKS_PANEL]);
     const OBS_TOPIC = "zentral-notes-changed";
     const IDLE_SAVE_MS = 800; // pause after the last keystroke
     const DEFAULT_MAX_SAVE_SECONDS = 5; // longest gap while still typing
@@ -1193,6 +1207,7 @@ function nativeSidebarSide() {
         "<(?:mailto:)?([^\\s<>@\\x22]+@[^\\s<>@\\x22]+\\.[^\\s<>@\\x22]+)>", // 25 <user@host.tld>
         "(?<![\\w/])mailto:([^\\s<>@\\x22]+@[^\\s<>@\\x22]+\\.[^\\s<>@\\x22,;)\\]]+)", // 26 bare mailto:user@host.tld
         "(?<![\\w$])\\$([^\\s$](?:[^$\\n]*?[^\\s$])?)\\$(?![\\d$\\w])", // 27 $math$ (not "$5 and $10": no space inside, no digit after)
+        "\\[\\^([^\\]\\s]{1,40})\\]", // 28 footnote reference [^1] (see FOOTS)
       ].join("|"),
       "g",
     );
@@ -1234,9 +1249,9 @@ function nativeSidebarSide() {
       return NOTE_ID_RE.test(id) && !id.includes("..") ? id : null;
     }
     const cleanLinkLabel = (label) => String(label ?? "").replace(/[\[\]\n]+/g, " ").replace(/\s+/g, " ").trim() || "note";
-    const buildNoteLink = (id, label) => "[" + cleanLinkLabel(label) + "](" + encodeURIComponent(id) + ".md)";
-    function insertNoteLink(value, s, e, id, label) {
-      const md = buildNoteLink(id, label);
+    const buildNoteLink = (id, label, heading = "") => "[" + cleanLinkLabel(label) + "](" + encodeURIComponent(id) + ".md" + (cleanAnchor(heading) ? "#" + cleanAnchor(heading) : "") + ")";
+    function insertNoteLink(value, s, e, id, label, heading = "") {
+      const md = buildNoteLink(id, label, heading);
       return { start: s, end: e, text: md, selStart: s + md.length, selEnd: s + md.length };
     }
     // Runs fn over the text OUTSIDE fenced code blocks and `inline code`; line count never changes.
@@ -1365,13 +1380,13 @@ function nativeSidebarSide() {
     function findBacklinks(notes, target) {
       const title = titleOf(target.body);
       const resolve = (t) => resolveNoteTitle(notes, t);
-      const needle = title.toLowerCase();
+      const mention = mentionRe(title);
       const linked = [];
       const mentions = [];
       for (const n of notes) {
         if (n.trashed || n.id === target.id) continue;
         if (noteLinksIn(n.body, resolve).has(target.id)) linked.push(n);
-        else if (needle.length >= 3 && n.body.toLowerCase().includes(needle)) mentions.push(n);
+        else if (mention && hasMention(n.body, mention)) mentions.push(n);
       }
       return { linked, mentions };
     }
@@ -1572,10 +1587,12 @@ function nativeSidebarSide() {
           else if (href) out.push({ t: "img", alt: m[17], href });
           else out.push({ t: "text", s: m[0] });
         } else if (m[13] !== undefined) {
-          const noteId = noteLinkTarget(m[14]);
+          const parts = noteLinkParts(m[14]);
+          const noteId = parts?.id || null;
           const href = noteId ? null : safeHref(m[14]);
           if (noteId) {
             const a = { t: "nl", id: noteId, c: parseInline(m[13], depth + 1) };
+            if (parts.heading) a.heading = parts.heading;
             if (m[15]) a.title = m[15];
             out.push(a);
           } else if (href) {
@@ -1587,6 +1604,14 @@ function nativeSidebarSide() {
         else if (m[21] !== undefined) out.push({ t: "sup", c: parseInline(m[21], depth + 1) });
         else if (m[22] !== undefined) out.push({ t: "kbd", s: m[22] });
         else if (m[27] !== undefined) out.push({ t: "math", c: texNodes(m[27]) });
+        else if (m[28] !== undefined) {
+          // Only a label that has a definition becomes a footnote; anything else stays the text it was.
+          if (FOOTS && FOOTS.has(m[28]) && (FOOT_ORDER.includes(m[28]) || FOOT_ORDER.length < FOOT_MAX)) {
+            let k = FOOT_ORDER.indexOf(m[28]);
+            if (k < 0) k = FOOT_ORDER.push(m[28]) - 1;
+            out.push({ t: "fn", label: m[28], n: k + 1 });
+          } else out.push({ t: "text", s: m[0] });
+        }
         else if (m[23] !== undefined) {
           const def = REFS?.get(refKey(m[24] || m[23]));
           const href = def && safeHref(def.href);
@@ -1691,12 +1716,19 @@ function nativeSidebarSide() {
     function parseBlocks(text, nested = false, opts = {}) {
       if (nested) return parseBlocksIn(text, true, opts);
       const lines = normalizeNewlines(text).split("\n");
-      const before = REFS;
+      const before = REFS, beforeFoots = FOOTS, beforeOrder = FOOT_ORDER;
+      FOOTS = collectFootnotes(lines); // before the reference links: "[^1]: text" must not be read as one
+      FOOT_ORDER = [];
       REFS = collectRefs(lines);
       try {
-        return parseBlocksIn(lines.join("\n"), false, opts);
+        const blocks = parseBlocksIn(lines.join("\n"), false, opts);
+        const notes = footnoteBlock(lines.length);
+        if (notes) blocks.push(notes);
+        return blocks;
       } finally {
         REFS = before;
+        FOOTS = beforeFoots;
+        FOOT_ORDER = beforeOrder;
       }
     }
     // <details> ... </details> with an optional <summary>: a collapsible block. Only these two tags (and
@@ -2207,6 +2239,7 @@ function nativeSidebarSide() {
         else if (n.t === "a") out += '<a href="' + escHtml(n.href) + '"' + (n.title ? ' title="' + escHtml(n.title) + '"' : "") + ' rel="noopener noreferrer">' + inlineHtml(n.c) + "</a>";
         else if (n.t === "nl") out += '<span class="note-link">' + inlineHtml(n.c) + "</span>"; // no address: a single exported note cannot reach the others
         else if (n.t === "kbd") out += "<kbd>" + escHtml(n.s) + "</kbd>";
+        else if (n.t === "fn") out += '<sup class="fn"><a href="#fn-' + n.n + '" id="fnref-' + n.n + '">' + n.n + "</a></sup>";
         else if (n.t === "hl") out += '<mark data-color="' + escHtml(n.color) + '">' + inlineHtml(n.c) + "</mark>";
         else {
           const tag = { b: "strong", i: "em", s: "del", sub: "sub", sup: "sup" }[n.t];
@@ -2253,6 +2286,8 @@ function nativeSidebarSide() {
             (b.callout ? "<p><strong>" + escHtml(b.callout.title || b.callout.kind[0].toUpperCase() + b.callout.kind.slice(1)) + "</strong></p>\n" : "") +
             blocksHtml(b.blocks) + "</blockquote>\n";
         else if (b.type === "list") out += listHtml(b.items) + "\n";
+        else if (b.type === "footnotes")
+          out += '<hr>\n<ol class="footnotes">\n' + b.items.map((it) => '<li id="fn-' + it.n + '">' + inlineHtml(it.c) + ' <a href="#fnref-' + it.n + '">\u21a9</a></li>\n').join("") + "</ol>\n";
         else if (b.type === "table") {
           const cell = (tag, c, i) =>
             "<" + tag + (b.align[i] ? ' style="text-align:' + b.align[i] + '"' : "") + ">" + inlineHtml(c) + "</" + tag + ">";
@@ -2288,6 +2323,7 @@ function nativeSidebarSide() {
         if (n.t === "text" || n.t === "code" || n.t === "kbd") out += n.s;
         else if (n.t === "br") out += "\n";
         else if (n.t === "img") out += n.alt ? "[image: " + n.alt + "]" : "[image]";
+        else if (n.t === "fn") out += "[" + n.n + "]";
         else if (n.t === "a") {
           const label = inlineText(n.c);
           out += label.replace(/\/$/, "") === n.href.replace(/\/$/, "") ? label : label + " (" + n.href + ")";
@@ -2313,6 +2349,7 @@ function nativeSidebarSide() {
           );
         else if (b.type === "table")
           parts.push([b.head, ...b.rows].map((r) => r.map(inlineText).join(" | ")).join("\n"));
+        else if (b.type === "footnotes") parts.push(b.items.map((it) => "[" + it.n + "] " + inlineText(it.c)).join("\n"));
       }
       return parts.join("\n\n");
     }
@@ -2605,6 +2642,8 @@ function nativeSidebarSide() {
       { id: "link", label: "Link\u2026", def: "Ctrl+Shift+K", edit: true },
       { id: "noteLink", label: "Link to another note\u2026", def: "", edit: true },
       { id: "image", label: "Image", def: "Ctrl+Shift+G", edit: true },
+      { id: "footnote", label: "Footnote", def: "", edit: true },
+      { id: "hubList", label: "Hub list of notes\u2026", def: "", edit: true },
       { id: "heading", label: "Heading", def: "Ctrl+Shift+1", edit: true },
       { id: "bullet", label: "Bulleted list", def: "Ctrl+Shift+8", edit: true },
       { id: "numbered", label: "Numbered list", def: "Ctrl+Shift+7", edit: true },
@@ -2627,6 +2666,11 @@ function nativeSidebarSide() {
       { id: "pictureOptions", label: "Picture options\u2026 (size, alignment)", def: "", edit: true },
       { id: "find", label: "Find in this note and other notes", def: "Ctrl+F" },
       { id: "remind", label: "Remind me about this note\u2026", def: "" },
+      { id: "dateToday", label: "Open today's note", def: "" },
+      { id: "dateTomorrow", label: "Open tomorrow's note", def: "" },
+      { id: "dateNext", label: "Open the next work day's note", def: "" },
+      { id: "dateList", label: "Notes by date\u2026", def: "" },
+      { id: "history", label: "Version history of this note\u2026", def: "" },
       { id: "newNote", label: "New note", def: "Ctrl+N" },
       { id: "list", label: "All notes and search", def: "Ctrl+K" },
       { id: "mode", label: "Read / edit", def: "Ctrl+E" },
@@ -2654,7 +2698,7 @@ function nativeSidebarSide() {
       ["outdent", "Nest out"], ["indent", "Nest in"], ["rule", "Horizontal rule"], ["code", "Inline code"],
       ["codeBlock", "Code block"], ["link", "Link"], ["noteLink", "Link to another note"], ["image", "Image"], ["table", "Table"],
       ...CALLOUT_KINDS.map(([k, label]) => [calloutId(k), "Callout: " + label.toLowerCase()]),
-      ["sup", "Superscript"], ["sub", "Subscript"], ["kbd", "Keyboard key"],
+      ["sup", "Superscript"], ["sub", "Subscript"], ["kbd", "Keyboard key"], ["footnote", "Footnote"], ["hubList", "Hub list of notes"],
     ]);
     const HIDEABLE_IDS = new Set(HIDEABLE_TOOLS.map((t) => t[0]));
     // Preference text "bold,sup" -> Set of valid ids (unknown words are ignored).
@@ -2850,6 +2894,29 @@ function nativeSidebarSide() {
           { id: "capPos", label: "Where new entries go", pref: PREF.CAPTURE_POSITION, kind: "choice", def: "end", choices: [["end", "End"], ["top", "Top"]] },
           { id: "capOpen", label: "Open the note afterwards", pref: PREF.CAPTURE_OPEN, kind: "bool", def: false },
           { id: "capInbox", label: "Inbox note name", pref: PREF.CAPTURE_INBOX, kind: "text", def: "Inbox" },
+        ],
+      },
+      {
+        id: "links", label: "Links & history", items: [
+          { id: "hubDesc", label: "Hub notes show a short description for each linked note", pref: PREF.HUB_DESC, kind: "bool", def: true },
+          { id: "wikiAuto", label: "Suggest notes while typing [[", pref: PREF.WIKI_COMPLETE, kind: "bool", def: true },
+          { id: "linkedStrip", label: "Show \"Linked from\" under the read view", pref: PREF.BACKLINKS_PANEL, kind: "bool", def: false },
+          { id: "hiddenMenu", label: "Hidden tools stay reachable in More", pref: PREF.HIDDEN_MENU, kind: "bool", def: true },
+          { id: "dateMode", label: "Date notes", pref: PREF.DATE_MODE, kind: "choice", def: "separate", choices: [["separate", "One note per day"], ["single", "All in one Journal note"]] },
+          { kind: "heading", label: "Version history" },
+          { id: "histOn", label: "Keep earlier versions", pref: PREF.HISTORY_ON, kind: "bool", def: true },
+          S("histKeep", "Versions kept per note", PREF.HISTORY_KEEP, 1, 200, "", 20),
+          S("histMin", "At most one version every", PREF.HISTORY_MINUTES, 1, 1440, "min", 10),
+          S("histCap", "Do not version notes bigger than", PREF.HISTORY_CAP_KB, 16, 4096, "KB", 512),
+          S("histWarn", "Warn when all history is bigger than", PREF.HISTORY_WARN_MB, 5, 2000, "MB", 100),
+        ],
+      },
+      {
+        id: "zen", label: "Zen sidebar (experiment)", items: [
+          { kind: "heading", label: "Experiment, off by default: not verified in a live Zen" },
+          { id: "zenMode", label: "Show notes in Zen's pinned-tabs folder tree", pref: PREF.ZEN_MODE, kind: "choice", def: "off", choices: [["off", "Off"], ["selected", "Only Notes (tabbar)"], ["all", "Whole notes tree"]] },
+          { kind: "heading", label: "Diagnostics" },
+          { id: "perf", label: "Sample layout / drag timings (read __zentralNotesPerf.report())", pref: PREF.DEBUG_PERF, kind: "bool", def: false },
         ],
       },
     ]);
@@ -3485,6 +3552,7 @@ function nativeSidebarSide() {
       setTimer,
       clearTimer,
       warn = () => {},
+      getHistory = () => ({ on: true, ...HISTORY_DEFAULTS }),
     }) {
       const notes = new Map();
       const dirty = new Set();
@@ -3626,6 +3694,32 @@ function nativeSidebarSide() {
         notify({ id: note.id, origin: windowId, kind: "saved" });
       }
 
+      // ---- version history: history/<note id>/<UTC stamp>.md, written after a save, rules in the pure core ----
+      const lastSnap = new Map(); // note id -> time of its newest snapshot
+      const lastSnapText = new Map();
+      const histDir = (id) => io.join(dir, HISTORY_DIR, id);
+      async function historyNames(id) {
+        try {
+          return (await io.children(histDir(id))).map((p) => io.filename(p)).filter((n) => parseHistoryName(n));
+        } catch (_) {
+          return [];
+        }
+      }
+      async function snapHistory(note, text, force = false) {
+        const o = getHistory();
+        if (!force && !o.on) return;
+        if (!io.makeDir || !isAssetNoteId(note.id) || !dir) return;
+        const names = await historyNames(note.id);
+        if (!lastSnap.has(note.id)) lastSnap.set(note.id, names.reduce((m, n) => Math.max(m, parseHistoryName(n)), 0));
+        const bytes = utf8Bytes(text).length;
+        if (force ? lastSnapText.get(note.id) === text : !shouldSnapshot({ lastMs: lastSnap.get(note.id), now: now(), minutes: o.minutes, bytes, capKB: o.capKB, same: lastSnapText.get(note.id) === text })) return;
+        await io.makeDir(histDir(note.id));
+        const name = historyFileName(now(), names);
+        await io.writeUTF8(io.join(histDir(note.id), name), text);
+        lastSnap.set(note.id, now());
+        lastSnapText.set(note.id, text);
+        for (const old of pruneHistory([...names, name].map((n) => ({ name: n })), o.keep || HISTORY_DEFAULTS.keep)) await io.remove(io.join(histDir(note.id), old)).catch(() => {});
+      }
       function flushDirty() {
         return queue(async () => {
           if (closed || !dir) return;
@@ -3645,6 +3739,7 @@ function nativeSidebarSide() {
             const snapshot = serializeNote(note);
             try {
               await writeNoteFile(note, snapshot);
+              await snapHistory(note, snapshot).catch(warn); // history never makes a save fail
               if (serializeNote(note) === snapshot) dirty.delete(id);
               else autosaver.touch();
             } catch (error) {
@@ -3711,6 +3806,9 @@ function nativeSidebarSide() {
           const prefix = ASSET_DIR + "/" + id + "/";
           const shared = [...notes.values()].some((n) => [...assetRefs(n.body)].some((r) => r.startsWith(prefix)));
           if (io.removeTree && isAssetNoteId(id) && !shared) await io.removeTree(io.join(dir, ASSET_DIR, id)).catch(() => {});
+          if (io.removeTree && isAssetNoteId(id)) await io.removeTree(histDir(id)).catch(() => {});
+          lastSnap.delete(id);
+          lastSnapText.delete(id);
           notify({ id, origin: windowId, kind: "deleted" });
         });
       }
@@ -3890,6 +3988,78 @@ function nativeSidebarSide() {
             return null;
           }
         },
+        /* NOT ACTIVE CODE (kept for a possible future sync through a linked GitHub repository; Zen Sync is rejected, see mergeRemote's comment).
+         * adoptRemote(r) takes a note that arrived from elsewhere ({ id, body, folder, color, updated }) after a merge decision said
+         * "create" or "update", and stores it under its own id; the first overwrite of an existing file is backed up (.bak) by writeNoteFile.
+         * isDirty: (id) => dirty.has(id),
+         * // A note that arrived from another source. The caller already ran a merge decision; the first
+         * // overwrite of an existing file is backed up by writeNoteFile (.bak). Returns the note.
+         * adoptRemote(r) {
+         *   let note = notes.get(r.id);
+         *   if (!note) {
+         *     note = { id: r.id, body: "", created: r.updated, updated: r.updated, color: "none", label: "", folder: "", pinned: false, trashed: 0, remind: 0, reminded: 0, _onDisk: false, _mtime: now() };
+         *     notes.set(r.id, note);
+         *   }
+         *   note.body = r.body;
+         *   note.color = r.color;
+         *   note.folder = cleanFolder(r.folder);
+         *   note.updated = r.updated;
+         *   markDirty(r.id);
+         *   emit("change", r.id, { remote: true });
+         *   emit("tree", r.id);
+         *   return note;
+         * },
+         */
+        // ---- version history ----------------------------------------------------------------------------
+        async listHistory(id) {
+          if (!dir || !isAssetNoteId(id)) return [];
+          const out = [];
+          for (const name of await historyNames(id)) {
+            let size = 0;
+            try { size = (await io.stat(io.join(histDir(id), name))).size || 0; } catch (_) {}
+            out.push({ name, ms: parseHistoryName(name), size });
+          }
+          return out.sort((a, b) => b.ms - a.ms || (a.name < b.name ? 1 : -1));
+        },
+        async readVersion(id, name) {
+          if (!dir || !isAssetNoteId(id) || !parseHistoryName(name)) return null;
+          try {
+            const text = await io.readUTF8(io.join(histDir(id), name));
+            return noteFromFile(id, text, now()).body;
+          } catch (_) {
+            return null;
+          }
+        },
+        // The current text is kept as a snapshot first, so a restore can itself be undone from the list.
+        async restoreVersion(id, name) {
+          const note = notes.get(id);
+          const body = await api.readVersion(id, name);
+          if (!note || body === null) return false;
+          await snapHistory(note, serializeNote(note), true).catch(warn);
+          api.update(id, body, "history");
+          return true;
+        },
+        async historyUsage() {
+          let bytes = 0, files = 0;
+          if (!dir || !io.children) return { bytes, files };
+          let ids = [];
+          try { ids = await io.children(io.join(dir, HISTORY_DIR)); } catch (_) { return { bytes, files }; }
+          for (const p of ids) {
+            let kids = [];
+            try { kids = await io.children(p); } catch (_) { continue; }
+            for (const k of kids) {
+              try { bytes += (await io.stat(k)).size || 0; files++; } catch (_) {}
+            }
+          }
+          return { bytes, files };
+        },
+        async clearHistory(id) {
+          if (!dir || !io.removeTree || !isAssetNoteId(id)) return false;
+          await io.removeTree(histDir(id)).catch(() => {});
+          lastSnap.delete(id);
+          lastSnapText.delete(id);
+          return true;
+        },
         // ---- folders (D2): the tree is the source of truth, files only carry `folder:` ----------------
         tree() {
           return buildTree([...notes.values()], meta.folders);
@@ -3903,6 +4073,13 @@ function nativeSidebarSide() {
           emit("change", id, { meta: true });
           emit("tree", id);
           return true;
+        },
+        // The reserved "tabbar" folder (what the Zen sidebar shows in mode "selected"); created on demand.
+        ensureTabbarFolder() {
+          if (meta.folders.some((f) => f.id === TABBAR_FOLDER)) return TABBAR_FOLDER;
+          setMeta({ folders: [...meta.folders, { id: TABBAR_FOLDER, label: TABBAR_LABEL, order: 0, collapsed: false }] });
+          emit("tree", TABBAR_FOLDER);
+          return TABBAR_FOLDER;
         },
         addFolder(label, parentId = "") {
           const r = addFolderMeta(meta.folders, [...notes.values()], parentId, label);
@@ -4114,6 +4291,492 @@ function nativeSidebarSide() {
     // A hover-opened sheet may only fold away when nothing holds it open.
     const hoverMayClose = ({ focusInside = false, menuOpen = false, dialogOpen = false, pointerDown = false, gesture = false, pointerInside = false } = {}) =>
       !(focusInside || menuOpen || dialogOpen || pointerDown || gesture || pointerInside);
+    // ======================================================================
+    // Pure core: roadmap leftovers (heading anchors, footnotes, mentions, hub lists, date notes, version
+    // history, [[ completion) and the Zen experiments (projection modes, perf sampler).
+    // Nothing in this block touches the browser, a tab, a preference or the disk.
+    // ======================================================================
+    // ---- heading anchors: [label](<id>.md#heading-slug) ------------------------------------------
+    function headingSlug(text) {
+      const s = foldText(cleanLine(String(text ?? "")))
+        .replace(/[^a-z0-9\s-]/g, "")
+        .trim()
+        .replace(/[\s-]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80);
+      return s || "section";
+    }
+    // Headings of a body (outside code fences) with unique slugs: a repeated title gets -1, -2 ...
+    function headingsOf(body) {
+      const out = [];
+      const seen = new Map();
+      let fence = false;
+      String(body ?? "").split("\n").forEach((line, i) => {
+        if (/^ {0,3}(```|~~~)/.test(line)) {
+          fence = !fence;
+          return;
+        }
+        if (fence) return;
+        const m = /^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+        if (!m) return;
+        const base = headingSlug(m[2]);
+        const n = seen.get(base) || 0;
+        seen.set(base, n + 1);
+        out.push({ level: m[1].length, text: cleanLine(m[2]) || base, slug: n ? base + "-" + n : base, line: i });
+      });
+      return out;
+    }
+    function cleanAnchor(raw) {
+      let h = String(raw ?? "");
+      try {
+        h = decodeURIComponent(h);
+      } catch (_) {
+        return "";
+      }
+      return /^[a-z0-9][a-z0-9-]{0,79}$/.test(h) ? h : "";
+    }
+    // { id, heading } for a note link ("" heading = the whole note); null when it is not a note link.
+    function noteLinkParts(href) {
+      const id = noteLinkTarget(href);
+      if (!id) return null;
+      const hash = /#([^\s]*)$/.exec(String(href));
+      return { id, heading: hash ? cleanAnchor(hash[1]) : "" };
+    }
+    const headingOffset = (body, slug) => {
+      const hit = headingsOf(body).find((x) => x.slug === slug);
+      if (!hit) return -1;
+      const lines = String(body).split("\n");
+      let off = 0;
+      for (let i = 0; i < hit.line; i++) off += lines[i].length + 1;
+      return off;
+    };
+
+    // ---- footnotes: [^1] in the text, [^1]: the note, at any line -------------------------------------
+    const FOOT_DEF_RE = /^ {0,3}\[\^([^\]\s]{1,40})\]:\s*(.*)$/;
+    const FOOT_MAX = 200;
+    let FOOTS = null; // label -> text, set for the duration of one parseBlocks
+    let FOOT_ORDER = null; // labels in the order of first use (that is the number shown)
+    // Takes the definition lines out (blanked, so line numbers stay true). An indented line right after one
+    // continues it. Only one level: a definition cannot contain blocks.
+    function collectFootnotes(lines) {
+      const defs = new Map();
+      let fence = false;
+      for (let i = 0; i < lines.length; i++) {
+        if (/^```/.test(lines[i])) {
+          fence = !fence;
+          continue;
+        }
+        if (fence) continue;
+        const m = FOOT_DEF_RE.exec(lines[i]);
+        if (!m) continue;
+        let text = m[2].trim();
+        lines[i] = "";
+        while (i + 1 < lines.length && /^(?: {4}|\t)\S/.test(lines[i + 1])) {
+          text += " " + lines[i + 1].trim();
+          lines[++i] = "";
+        }
+        if (!defs.has(m[1])) defs.set(m[1], text);
+      }
+      return defs;
+    }
+    function footnoteBlock(line) {
+      if (!FOOT_ORDER || !FOOT_ORDER.length) return null;
+      const items = [];
+      for (let i = 0; i < FOOT_ORDER.length && i < FOOT_MAX; i++) items.push({ label: FOOT_ORDER[i], n: i + 1, c: parseInline(FOOTS.get(FOOT_ORDER[i]) || "") });
+      return { type: "footnotes", items, line };
+    }
+    function nextFootnoteLabel(value) {
+      const used = new Set([...String(value).matchAll(/\[\^([^\]\s]{1,40})\]/g)].map((m) => m[1]));
+      let n = 1;
+      while (used.has(String(n))) n++;
+      return String(n);
+    }
+    // One edit: the reference at the caret and an empty definition at the end of the note.
+    function insertFootnote(value, s, e) {
+      const label = nextFootnoteLabel(value);
+      const tail = String(value).slice(e).replace(/\s+$/, "");
+      const def = "\n\n[^" + label + "]: ";
+      const text = "[^" + label + "]" + tail + def;
+      const caret = s + text.length;
+      return { start: s, end: value.length, text, selStart: caret, selEnd: caret };
+    }
+
+    // ---- mentions without a link, and turning one into a link -------------------------------------
+    const MENTION_MIN = 3;
+    function mentionRe(title) {
+      const t = String(title ?? "").trim();
+      if (t.length < MENTION_MIN) return null;
+      const src = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+      return new RegExp("(?<![\\p{L}\\p{N}_])" + src + "(?![\\p{L}\\p{N}_])", "iu");
+    }
+    // Runs fn over text that is outside code, outside [[wiki]] links, Markdown links and web addresses.
+    function mapOutsideLinks(text, fn) {
+      return mapOutsideCode(text, (seg) =>
+        seg.split(/(\[\[[^\]\n]*\]\]|!?\[[^\]\n]*\]\([^)\n]*\)|<?https?:\/\/[^\s<>)]+>?)/).map((p, i) => (i % 2 ? p : fn(p))).join(""),
+      );
+    }
+    function hasMention(body, re) {
+      let hit = false;
+      mapOutsideLinks(body, (seg) => {
+        if (!hit && re.test(seg)) hit = true;
+        return seg;
+      });
+      return hit;
+    }
+    // The body with the first plain mention of `title` turned into a link to `id`; null if there is none.
+    function linkFirstMention(body, title, id) {
+      const re = mentionRe(title);
+      if (!re) return null;
+      let done = false;
+      const out = mapOutsideLinks(body, (seg) => (done ? seg : seg.replace(re, (all) => ((done = true), buildNoteLink(id, all)))));
+      return done ? out : null;
+    }
+
+    // ---- hub notes: a list of links, each with a short description -----------------------------------
+    const HUB_DESC_MAX = 100;
+    const hubDescription = (n) => {
+      const s = snippetOf(n?.body ?? "");
+      return s.length > HUB_DESC_MAX ? s.slice(0, HUB_DESC_MAX - 1) + "\u2026" : s;
+    };
+    // folder === null: every note; a folder id: that folder and below; "": only notes without a folder.
+    function hubLines(notes, { folder = null, excludeId = "", withDesc = true, max = 100 } = {}) {
+      const pick = notes
+        .filter((n) => !n.trashed && n.id !== excludeId)
+        .filter((n) => (folder === null ? true : folder === "" ? !cleanFolder(n.folder) : inFolder(cleanFolder(n.folder), folder)))
+        .sort((a, b) => titleOf(a.body).localeCompare(titleOf(b.body)) || (a.id < b.id ? -1 : 1))
+        .slice(0, max);
+      return pick
+        .map((n) => {
+          const d = withDesc ? hubDescription(n) : "";
+          return "- " + buildNoteLink(n.id, titleOf(n.body) || "Untitled note") + (d ? " - " + d : "");
+        })
+        .join("\n");
+    }
+    // A list item that holds nothing but one note link (a hub entry): the read view adds the description.
+    const bareNoteLink = (nodes) => (Array.isArray(nodes) && nodes.length === 1 && nodes[0].t === "nl" ? nodes[0] : null);
+
+    // ---- date notes: today / tomorrow / next work day, listed and filtered by date ----------------------
+    const WEEKDAYS = Object.freeze(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]);
+    const DATE_FOLDER = "daily";
+    const DATE_MODES = Object.freeze(["separate", "single"]);
+    const cleanDateMode = (v) => (DATE_MODES.includes(v) ? v : "separate");
+    const ymdOf = (ms) => {
+      const d = new Date(ms);
+      return pad4(d.getFullYear()) + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+    };
+    // Local noon of a YYYY-MM-DD text (noon keeps daylight-saving shifts away from the date); 0 if invalid.
+    function parseYmd(text) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(text ?? "").trim());
+      if (!m) return 0;
+      const y = +m[1], mo = +m[2], d = +m[3];
+      if (y < 2000 || y > 2100) return 0;
+      const t = new Date(y, mo - 1, d, 12);
+      return t.getFullYear() === y && t.getMonth() === mo - 1 && t.getDate() === d ? t.getTime() : 0;
+    }
+    function shiftDays(ms, n) {
+      const d = new Date(ms);
+      d.setDate(d.getDate() + n);
+      return d.getTime();
+    }
+    function nextWorkDay(ms) {
+      let t = shiftDays(ms, 1);
+      while ([0, 6].includes(new Date(t).getDay())) t = shiftDays(t, 1);
+      return t;
+    }
+    const DATE_KINDS = Object.freeze([["today", "Today"], ["tomorrow", "Tomorrow"], ["next", "Next work day"]]);
+    function dateTarget(kind, now) {
+      const base = parseYmd(ymdOf(now));
+      const ms = kind === "tomorrow" ? shiftDays(base, 1) : kind === "next" ? nextWorkDay(base) : base;
+      return { ms, ymd: ymdOf(ms) };
+    }
+    const dateHeading = (ms) => ymdOf(ms) + " " + WEEKDAYS[new Date(ms).getDay()];
+    const dateNoteBody = (ms) => "# " + dateHeading(ms) + "\n\n";
+    const DATE_TITLE_RE = /^(\d{4}-\d{2}-\d{2})(?:\s|$)/;
+    const dateOfNote = (n) => (n && !n.trashed ? DATE_TITLE_RE.exec(titleOf(n.body))?.[1] || "" : "");
+    function findDateNote(notes, ymd) {
+      const hits = notes.filter((n) => dateOfNote(n) === ymd);
+      hits.sort((a, b) => b.updated - a.updated || (a.id < b.id ? -1 : 1));
+      return hits[0] || null;
+    }
+    // Newest date first. "from" / "to" (YYYY-MM-DD) bound the list; a text filter matches the heading.
+    function listDateNotes(notes, { from = "", to = "", text = "" } = {}) {
+      const q = foldText(text).trim();
+      return notes
+        .map((n) => ({ ymd: dateOfNote(n), note: n }))
+        .filter((x) => x.ymd && (!from || x.ymd >= from) && (!to || x.ymd <= to) && (!q || foldText(titleOf(x.note.body)).includes(q)))
+        .sort((a, b) => (a.ymd < b.ymd ? 1 : a.ymd > b.ymd ? -1 : b.note.updated - a.note.updated));
+    }
+    // "All in one file" mode: one note called Journal, one "## YYYY-MM-DD Weekday" section per day.
+    const JOURNAL_TITLE = "Journal";
+    const isJournal = (n) => !!n && !n.trashed && titleOf(n.body).toLowerCase() === JOURNAL_TITLE.toLowerCase();
+    const journalDays = (body) => [...String(body ?? "").matchAll(/^##\s+(\d{4}-\d{2}-\d{2})\b.*$/gm)].map((m) => m[1]);
+    // Body with the day's section (added at the end when missing) and the caret position at the end of it.
+    function journalSection(body, ymd, ms) {
+      const text = String(body ?? "");
+      const re = new RegExp("^##\\s+" + ymd + "\\b.*$", "m");
+      const m = re.exec(text);
+      if (!m) {
+        const base = (text.trim() ? text.replace(/\s+$/, "") : "# " + JOURNAL_TITLE) + "\n\n## " + dateHeading(ms) + "\n\n";
+        return { body: base, caret: base.length, created: true };
+      }
+      const from = m.index + m[0].length;
+      const next = /^##\s/m.exec(text.slice(from));
+      const end = next ? from + next.index : text.length;
+      const trimmed = text.slice(from, end).replace(/\s+$/, "");
+      return { body: text, caret: from + trimmed.length, created: false };
+    }
+
+    // ---- version history: rules only (the store does the file work) --------------------------------------
+    const HISTORY_DIR = "history";
+    const HISTORY_DEFAULTS = Object.freeze({ keep: 20, minutes: 10, capKB: 512, warnMB: 100 });
+    const HISTORY_RANGE = Object.freeze({ keep: [1, 200], minutes: [1, 1440], capKB: [16, 4096], warnMB: [5, 2000] });
+    function historyOptions(raw = {}) {
+      const out = {};
+      for (const k of Object.keys(HISTORY_DEFAULTS)) {
+        const v = Number(raw?.[k]);
+        out[k] = Number.isFinite(v) && raw?.[k] !== "" && raw?.[k] !== null ? clampInt(v, HISTORY_RANGE[k][0], HISTORY_RANGE[k][1]) : HISTORY_DEFAULTS[k];
+      }
+      return out;
+    }
+    const historyStamp = (ms) => new Date(ms).toISOString().replace(/[-:]/g, "").slice(0, 15);
+    function historyFileName(ms, taken = []) {
+      const base = historyStamp(ms);
+      let name = base + ".md";
+      for (let i = 1; taken.includes(name) && i < 100; i++) name = base + "-" + i + ".md";
+      return name;
+    }
+    function parseHistoryName(name) {
+      const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(?:-(\d{1,2}))?\.md$/.exec(String(name ?? ""));
+      if (!m) return 0;
+      const t = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+      return Number.isFinite(t) ? t : 0;
+    }
+    // Snapshot when the text changed, fits the size cap and the last snapshot is old enough.
+    function shouldSnapshot({ lastMs = 0, now = 0, minutes = HISTORY_DEFAULTS.minutes, bytes = 0, capKB = HISTORY_DEFAULTS.capKB, same = false } = {}) {
+      if (same || bytes <= 0 || bytes > capKB * 1024) return false;
+      return !lastMs || now - lastMs >= minutes * 60000;
+    }
+    // Names to delete so at most `keep` remain (the newest are kept). Unknown names are never listed.
+    function pruneHistory(entries, keep) {
+      return entries
+        .filter((e) => e && parseHistoryName(e.name))
+        .sort((a, b) => parseHistoryName(b.name) - parseHistoryName(a.name) || (a.name < b.name ? 1 : -1))
+        .slice(Math.max(1, keep))
+        .map((e) => e.name);
+    }
+    function historyWarning({ bytes = 0, warnMB = HISTORY_DEFAULTS.warnMB } = {}) {
+      return bytes >= warnMB * 1048576 ? "Version history now takes " + (bytes / 1048576).toFixed(1) + " MB (warning at " + warnMB + " MB). Lower the number of versions or clear old history." : "";
+    }
+
+    // ---- [[ completion while typing ------------------------------------------------------------------------
+    function wikiTrigger(value, caret) {
+      const before = String(value).slice(Math.max(0, caret - 130), caret);
+      const m = /\[\[([^\[\]\n|]{0,120})$/.exec(before);
+      return m ? { start: caret - m[0].length, query: m[1] } : null;
+    }
+    function wikiComplete(value, trigger, caret, title) {
+      const t = cleanLinkLabel(title).replace(/\|/g, "/"); // a pipe would start the alias part
+      const end = String(value).slice(caret, caret + 2) === "]]" ? caret + 2 : caret;
+      const text = "[[" + t + "]]";
+      return { start: trigger.start, end, text, selStart: trigger.start + text.length, selEnd: trigger.start + text.length };
+    }
+
+    // ---- Zen sidebar folder (experiment): what to show, and how a tab maps back to a note ----------------------
+    // The reserved folder "tabbar" is the counterpart of the bookmarks toolbar folder: in mode "selected" only what
+    // is inside it appears in Zen's pinned-tabs folder tree; in mode "all" the whole notes tree does.
+    const TABBAR_FOLDER = "tabbar";
+    const TABBAR_LABEL = "Notes (tabbar)";
+    const ZEN_MODES = Object.freeze(["off", "selected", "all"]);
+    const cleanZenMode = (v) => (ZEN_MODES.includes(v) ? v : "off");
+    const ZEN_MAX_ENTRIES = 200;
+    const ZEN_URL_PREFIX = "about:blank#zn-";
+    const zenNoteUrl = (id) => ZEN_URL_PREFIX + "note:" + encodeURIComponent(id);
+    const zenNewUrl = (folderId) => ZEN_URL_PREFIX + "new:" + encodeURIComponent(cleanFolder(folderId));
+    // Our own tab URLs only (about:blank#zn-note:<id> / #zn-new:<folder>); everything else is null.
+    function parseZenUrl(url) {
+      const m = /^about:blank#zn-(note|new):([A-Za-z0-9%._~-]{0,300})$/.exec(String(url ?? ""));
+      if (!m) return null;
+      let v;
+      try {
+        v = decodeURIComponent(m[2]);
+      } catch (_) {
+        return null;
+      }
+      if (m[1] === "note") return NOTE_ID_RE.test(v) && !v.includes("..") ? { kind: "note", id: v } : null;
+      return cleanFolder(v) === v ? { kind: "new", folder: v } : null;
+    }
+    // Tree -> flat ordered entries. mode "all": everything; "selected": only the tabbar folder's content, whose direct
+    // children sit right inside the Zen NOTES folder (parent ""); "off": nothing. Parents always come before children.
+    function projectZen(notes, folders, mode = "all") {
+      mode = cleanZenMode(mode);
+      if (mode === "off") return [];
+      let root = buildTree(notes, folders);
+      if (mode === "selected") {
+        root = root.children.find((c) => c.id === TABBAR_FOLDER);
+        if (!root) return [];
+      }
+      const out = [];
+      const walk = (node, parent) => {
+        for (const f of node.children) {
+          const key = projKey("folder", f.id);
+          out.push({ key, kind: "folder", id: f.id, label: f.label, parent });
+          walk(f, key);
+        }
+        for (const nt of node.notes) out.push({ key: projKey("note", nt.id), kind: "note", id: nt.id, label: titleOf(nt.body) || "Untitled note", parent });
+      };
+      walk(root, "");
+      return out.slice(0, ZEN_MAX_ENTRIES);
+    }
+
+    // UTF-8 byte count of a text (used by version history to enforce the per-snapshot size cap).
+    function utf8Bytes(s) {
+      const out = [];
+      for (const ch of String(s)) {
+        let c = ch.codePointAt(0);
+        if (c >= 0xd800 && c <= 0xdfff) c = 0xfffd;
+        if (c < 0x80) out.push(c);
+        else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+        else if (c < 0x10000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+        else out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+      }
+      return Uint8Array.from(out);
+    }
+    /* ---- NOT ACTIVE CODE: kept for a possible future sync through a linked GitHub repository --------------------------
+     * Notes are NOT synced through Zen Sync / pinned-tab addresses. That idea was designed, then rejected for good (an address
+     * holds ~1.4 KB, Sync would have to carry note text, the limits make it a bad fit). Do not rebuild it.
+     * What follows is only the merge decision any future file-based sync (for example notes <-> a git repository) would need:
+     * given the local note, the incoming copy and whether the local one has unsaved edits, say what to do. Rules: never delete,
+     * unsaved local edits and a newer local note win, a trashed local note is never resurrected, an older local note is replaced
+     * and the replaced text is backed up first. It is unused and has no test; before using it, write its tests back.
+     *
+     * function mergeRemote(local, remote, { dirty = false } = {}) {
+     *   if (!local) return { action: "create" };
+     *   if (local.trashed) return { action: "skip" };
+     *   if (dirty) return { action: "keep-local", push: true };
+     *   if (remote.updated > local.updated) return { action: "update", backup: local.body !== remote.body };
+     *   if (remote.updated === local.updated) return { action: "same" };
+     *   return { action: "keep-local", push: true };
+     * }
+     */
+
+    // ---- debug sampler (pref off by default): per-name count / total / max of performance.now() ----------------
+    function createPerfSampler({ now = () => (typeof performance !== "undefined" ? performance.now() : Date.now()), enabled = () => false, maxNames = 64 } = {}) {
+      const rows = new Map();
+      const add = (name, ms) => {
+        let r = rows.get(name);
+        if (!r) {
+          if (rows.size >= maxNames) return;
+          r = { n: 0, total: 0, max: 0 };
+          rows.set(name, r);
+        }
+        r.n++;
+        r.total += ms;
+        if (ms > r.max) r.max = ms;
+      };
+      return {
+        wrap(name, fn) {
+          return function (...args) {
+            if (!enabled()) return fn.apply(this, args);
+            const t = now();
+            try {
+              return fn.apply(this, args);
+            } finally {
+              add(name, now() - t);
+            }
+          };
+        },
+        rows: () => [...rows].map(([name, r]) => ({ name, n: r.n, total: r.total, avg: r.n ? r.total / r.n : 0, max: r.max })).sort((a, b) => b.total - a.total),
+        reset: () => rows.clear(),
+        report() {
+          const list = this.rows();
+          return list.length ? list.map((r) => r.name + ": " + r.n + " calls, avg " + r.avg.toFixed(2) + " ms, max " + r.max.toFixed(2) + " ms, total " + r.total.toFixed(1) + " ms").join("\n") : "(no samples)";
+        },
+      };
+    }
+
+    // One sampler for the whole file; it records nothing while the debug_perf preference is off.
+    let PERF_ON = false;
+    const PERF = createPerfSampler({ enabled: () => PERF_ON });
+    // ---- Zen sidebar folder controller (experiment, off by default; the browser is reached ONLY through `api`) ----
+    // Order of work on every run: read the mode, build the wanted list with projectZen, diff it against what the
+    // folder holds (only tabs that carry our marker), apply the difference. Any exception switches the whole
+    // controller off (kill switch) and leaves what exists as inert pinned about:blank tabs. Never touches other tabs.
+    function createZenFolder({ api, store, getMode, setTimer, clearTimer, warn = () => {}, onKill = () => {} }) {
+      let dead = false;
+      let timer = null;
+      let flat = null; // null = not tried, true = nested folders unavailable (labels carry the path), false = nested works
+      const kill = (error) => {
+        if (dead) return;
+        dead = true;
+        if (timer !== null) clearTimer(timer);
+        timer = null;
+        try { warn(error); } catch (_) {}
+        try { onKill(error); } catch (_) {}
+      };
+      const flatten = (want) => {
+        const byKey = new Map(want.map((e) => [e.key, e]));
+        return want
+          .filter((e) => e.kind === "note")
+          .map((e) => {
+            const path = [];
+            for (let p = e.parent, g = 0; p && g < 8; g++) {
+              const f = byKey.get(p);
+              if (!f) break;
+              path.unshift(f.label);
+              p = f.parent;
+            }
+            return { ...e, parent: "", label: (path.length ? path.join(" / ") + " / " : "") + e.label };
+          });
+      };
+      function rebuild() {
+        if (dead) return;
+        const mode = cleanZenMode(getMode());
+        if (mode === "off") {
+          if (api.hasRoot()) api.removeAll();
+          return;
+        }
+        if (!api.ready()) return;
+        if (mode === "selected") store.ensureTabbarFolder();
+        if (!api.ensureRoot()) return;
+        const notes = store.list();
+        let want = projectZen(notes, store.meta.folders, mode);
+        if (flat === true) want = flatten(want);
+        const plan = diffProjection(api.list(), want);
+        for (const key of plan.remove) api.remove(key.split("#")[0], key.includes("#dup"));
+        for (const e of plan.add) {
+          if (!api.add(e, e.kind === "note" ? zenNoteUrl(e.id) : "")) {
+            if (e.kind === "folder" && flat === null) { flat = true; return rebuild(); }
+            continue;
+          }
+          if (e.kind === "folder" && flat === null) flat = false;
+        }
+        for (const r of plan.relabel) api.relabel(r.key, r.label);
+        for (const m of plan.move) api.move(m.key, m.parent);
+        if (plan.move.length && timer === null) timer = setTimer(run, 0);
+      }
+      function run() {
+        timer = null;
+        if (dead) return;
+        try { rebuild(); } catch (error) { kill(error); }
+      }
+      return {
+        // Coalesced: any number of requests inside the delay make one run (no polling, no retry loop).
+        schedule(ms = 250) {
+          if (dead || timer !== null) return;
+          timer = setTimer(run, ms);
+        },
+        runNow: run,
+        kill,
+        get dead() { return dead; },
+        get flat() { return flat; },
+        destroy() {
+          dead = true;
+          if (timer !== null) clearTimer(timer);
+          timer = null;
+        },
+      };
+    }
+
     if (window.__zentralNotesTestSeam) {
       window.__zentralNotesTestSeam.core = {
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
@@ -4142,6 +4805,12 @@ function nativeSidebarSide() {
         insertAssetImage, assetImageAt, restyleAssetImage, assetRefs, isAssetNoteId, ASSET_MAX_BYTES, ASSET_MAX_PER_NOTE, ASSET_MIME,
         cleanRemind, ceilStep, dueReminders, nextReminderAt, reminderDelay, reminderPresets, parseRemindInput, remindDateText, remindTimeText,
         createReminderScheduler, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
+        headingSlug, headingsOf, cleanAnchor, noteLinkParts, headingOffset, insertFootnote, nextFootnoteLabel, mentionRe, hasMention, linkFirstMention,
+        hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
+        dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
+        HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
+        wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, projectZen,
+        utf8Bytes, createPerfSampler, createZenFolder,
       };
     }
 
@@ -4176,6 +4845,7 @@ function nativeSidebarSide() {
       restore: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5",
       duplicate: "M9 9h11v11H9z M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1",
       caret: "m6 9 6 6 6-6",
+      chevron: "m9 6 6 6-6 6",
       columns: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M12 3v18",
       image: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z M21 15l-5-5L5 21",
       rule: "M4 12h16",
@@ -4256,7 +4926,7 @@ function nativeSidebarSide() {
           node.title = info ? (info.trashed ? "In the trash: " : "Note: ") + info.title : "This note no longer exists";
           const go = (e) => {
             e.preventDefault();
-            env.openNoteLink?.(n.id);
+            env.openNoteLink?.(n.id, n.heading || "");
           };
           node.addEventListener("click", go);
           node.addEventListener("keydown", (e) => {
@@ -4264,6 +4934,21 @@ function nativeSidebarSide() {
           });
           renderInline(node, n.c, env);
           parent.append(node);
+        } else if (n.t === "fn") {
+          // Footnote number: a click jumps to the footnote at the end of the note (no address, nothing navigates).
+          const sup = h("sup", { class: "zn-fn" });
+          const a = h("span", { class: "zn-link zn-fnref", role: "link", tabindex: "0", title: "Footnote " + n.n }, String(n.n));
+          a.dataset.fnref = n.label;
+          const go = (e) => {
+            e.preventDefault();
+            env.jumpFootnote?.(n.label, false, a);
+          };
+          a.addEventListener("click", go);
+          a.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") go(e);
+          });
+          sup.append(a);
+          parent.append(sup);
         } else if (n.t === "img" && n.asset) {
           // A picture from this note's own asset folder: read through env.loadAsset (validated path, local file),
           // never through a network address. A missing or unreadable file shows a quiet placeholder.
@@ -4330,7 +5015,27 @@ function nativeSidebarSide() {
         if (b.type === "h") {
           const node = h("h" + b.level, { class: "zn-h" });
           renderInline(node, b.c, env);
+          node.dataset.slug = env.slugFor ? env.slugFor(node.textContent) : headingSlug(node.textContent);
           parent.append(node);
+        } else if (b.type === "footnotes") {
+          const list = h("ol", { class: "zn-footnotes" });
+          for (const it of b.items) {
+            const li = h("li", { class: "zn-footnote" });
+            li.dataset.fn = it.label;
+            renderInline(li, it.c, env);
+            const back = h("span", { class: "zn-link zn-fnback", role: "link", tabindex: "0", title: "Back to the text" }, "\u21a9");
+            const go = (e) => {
+              e.preventDefault();
+              env.jumpFootnote?.(it.label, true, back);
+            };
+            back.addEventListener("click", go);
+            back.addEventListener("keydown", (e) => {
+              if (e.key === "Enter" || e.key === " ") go(e);
+            });
+            li.append(" ", back);
+            list.append(li);
+          }
+          parent.append(h("hr", { class: "zn-hr" }), list);
         } else if (b.type === "p") {
           const node = h("p", { class: "zn-p" });
           renderInline(node, b.c, env);
@@ -4423,6 +5128,10 @@ function nativeSidebarSide() {
             const text = h("span", { class: "zn-li-text" });
             if (item.checked) text.dataset.done = "true";
             renderInline(text, item.c, env);
+            // A hub entry (a list item that is only a link to another note) shows that note's short description.
+            const bare = env.hubDescriptions?.() ? bareNoteLink(item.c) : null;
+            const desc = bare && env.noteInfo ? env.noteInfo(bare.id)?.desc : "";
+            if (desc) text.append(h("span", { class: "zn-hubdesc" }, " \u2014 " + desc));
             row.append(marker, text);
             parent.append(row);
             for (const para of item.more || []) {
@@ -4618,7 +5327,17 @@ function nativeSidebarSide() {
       const btnFindClose = iconButton("x", "Close find (Esc)", "zn-find-close");
       const findBar = h("div", { class: "zn-find", role: "search" }, icon("search", 13), findInput, findCount, btnFindPrev, btnFindNext, findOthers, btnFindClose);
       findBar.hidden = true;
-      root.append(head, tools, findBar, body, foot);
+      // "[[" completion: a short strip of matching notes under the toolbar while the caret is inside an open [[.
+      const wikiBar = h("div", { class: "zn-wikibar", role: "listbox", "aria-label": "Notes to link" });
+      wikiBar.hidden = true;
+      // Optional strip under the read view: the notes that link here.
+      const linkedEl = h("div", { class: "zn-linked" });
+      linkedEl.hidden = true;
+      // Debug sampling (pref debug_perf, off by default): these three are the hot paths named in the audit list.
+      layout = PERF.wrap("notes.layout", layout);
+      moveEvent = PERF.wrap("notes.drag-move", moveEvent);
+      renderReadInner = PERF.wrap("notes.read-render", renderReadInner);
+      root.append(head, tools, findBar, wikiBar, body, linkedEl, foot);
       // Eight resize grips (edges and corners); CSS shows them only where the sheet may be moved.
       for (const hd of RESIZE_HANDLES) root.append(h("span", { class: "zn-rz", "data-h": hd }));
 
@@ -4737,6 +5456,11 @@ function nativeSidebarSide() {
         });
       }
       function renderRead() {
+        renderReadInner();
+        tagHeadings();
+        paintLinked();
+      }
+      function renderReadInner() {
         const n = note();
         if (!n || !n.body.trim()) {
           resetRead();
@@ -4829,10 +5553,52 @@ function nativeSidebarSide() {
       // Link support for the read pane: the sheet adds what it alone knows (the open store) to env.
       const noteInfo = (id) => {
         const t = store.get(id);
-        return t ? { title: titleOf(t.body) || "Untitled note", trashed: !!t.trashed } : null;
+        return t ? { title: titleOf(t.body) || "Untitled note", trashed: !!t.trashed, desc: hubDescription(t) } : null;
       };
       // Delegates to the caller's env (live: later changes to it stay visible) and only adds the two lookups.
-      env = Object.assign(Object.create(env), { noteInfo, openNoteLink: (id) => (store.get(id) ? openNote(id, { focus: false }) : flash("That note no longer exists")) });
+      env = Object.assign(Object.create(env), {
+        noteInfo,
+        hubDescriptions: () => getPref(PREF.HUB_DESC, true) !== false,
+        jumpFootnote: (label, back, from) => jumpFootnote(label, back, from),
+        openNoteLink: (id, heading = "") => {
+          if (!store.get(id)) return flash("That note no longer exists");
+          if (id !== currentId) openNote(id, { focus: false });
+          if (heading) goHeading(heading);
+        },
+      });
+      // Heading anchors: the read view tags its top-level headings with the same unique slugs headingsOf gives.
+      function tagHeadings() {
+        const seen = new Map();
+        for (const nd of readEl.childNodes) {
+          if (!/^H[1-6]$/i.test(nd.tagName || nd.nodeName || "")) continue;
+          const base = headingSlug(nd.textContent);
+          const k = seen.get(base) || 0;
+          seen.set(base, k + 1);
+          nd.dataset.slug = k ? base + "-" + k : base;
+        }
+      }
+      function goHeading(slug) {
+        if (mode !== "edit") {
+          renderRead();
+          const el = [...readEl.childNodes].find((nd) => nd.dataset?.slug === slug);
+          if (el) {
+            const y = el.offsetTop || 0;
+            readEl.scrollTop = Math.max(0, y - 8);
+            el.scrollIntoView?.({ block: "start" });
+          }
+        }
+        if (mode !== "read") {
+          const off = headingOffset(ta.value, slug);
+          if (off >= 0) revealSourceMatch({ start: off, end: off });
+        }
+      }
+      function jumpFootnote(label, back, from) {
+        const sel = back ? '[data-fnref="' + label + '"]' : '[data-fn="' + label + '"]';
+        const el = readEl.querySelector?.(sel);
+        if (!el) return;
+        el.scrollIntoView?.({ block: "center" });
+        el.focus?.({ preventScroll: true });
+      }
       const readBody = (body) => expandWikiLinks(body, (t) => resolveNoteTitle(store.list().concat(store.list({ trashed: true })), t));
       function newNote(folderId) {
         const folder = typeof folderId === "string" ? cleanFolder(folderId) : "";
@@ -5564,6 +6330,8 @@ function nativeSidebarSide() {
         kbd: () => applyEdit(wrapSelection(ta.value, ...sel(), "<kbd>", "</kbd>")),
         link: () => askLink(),
         noteLink: () => askNoteLink(),
+        footnote: () => applyEdit(insertFootnote(ta.value, ...sel())),
+        hubList: () => askHubList(),
         table: () => askTable(),
         bold: () => applyEdit(wrapSelection(ta.value, ...sel(), "**")),
         italic: () => applyEdit(wrapSelection(ta.value, ...sel(), "*")),
@@ -5670,6 +6438,9 @@ function nativeSidebarSide() {
           { label: "Superscript  X^2^", action: needEdit(fmt.sup), id: "sup" },
           { label: "Subscript  H~2~O", action: needEdit(fmt.sub), id: "sub" },
           { label: "Keyboard key  <kbd>", action: needEdit(fmt.kbd), id: "kbd" },
+          { sep: true },
+          { label: "Footnote  [^1]", action: needEdit(fmt.footnote), id: "footnote" },
+          { label: "Hub list of notes\u2026", action: needEdit(fmt.hubList), id: "hubList" },
         ].filter((it) => !it.id || !hiddenTools().has(it.id))),
       );
       listen(tSettings, "click", () => askSettings());
@@ -5700,35 +6471,61 @@ function nativeSidebarSide() {
         if (menu && menu.anchor === anchor) return closeMenu();
         closeMenu();
         const m = h("div", { class: "zn-menu", role: "menu" });
-        for (const it of items) {
-          if (it.sep) m.append(h("div", { class: "zn-sep" }));
-          else if (it.swatches) {
-            const row = h("div", { class: "zn-swatches" });
-            for (const c of it.swatches) {
-              const b = h("button", { type: "button", class: "zn-swatch", title: c, "aria-label": c });
-              b.dataset.color = c;
-              if (c === it.current) b.classList.add("is-on");
+        // One entry list per level: an item with `group` opens its entries in place (with a Back row) so a long
+        // menu stays short; closing the menu from any level runs the chosen action once.
+        const fill = (list, parent) => {
+          m.replaceChildren();
+          if (parent) {
+            const back = h("button", { type: "button", class: "zn-menu-item zn-menu-back", role: "menuitem" });
+            back.append(icon("back"), h("span", {}, "Back"));
+            back.addEventListener("click", () => {
+              fill(parent.list, parent.parent);
+              placeMenu(m, anchor);
+              m.querySelector("button")?.focus({ preventScroll: true });
+            });
+            m.append(back, h("div", { class: "zn-sep" }));
+          }
+          for (const it of list) {
+            if (it.sep) m.append(h("div", { class: "zn-sep" }));
+            else if (it.swatches) {
+              const row = h("div", { class: "zn-swatches" });
+              for (const c of it.swatches) {
+                const b = h("button", { type: "button", class: "zn-swatch", title: c, "aria-label": c });
+                b.dataset.color = c;
+                if (c === it.current) b.classList.add("is-on");
+                b.addEventListener("click", () => {
+                  closeMenu();
+                  it.pick(c);
+                });
+                row.append(b);
+              }
+              m.append(row);
+            } else if (it.disabled) {
+              // A heading or a note ("No other note links here"): not a button, never focused or clicked.
+              m.append(h("div", { class: "zn-menu-item zn-menu-head", role: "presentation", "aria-disabled": "true" }, it.label));
+            } else if (it.group) {
+              const b = h("button", { type: "button", class: "zn-menu-item zn-menu-group", role: "menuitem", "aria-haspopup": "menu" });
+              if (it.icon) b.append(icon(it.icon));
+              b.append(h("span", {}, it.label), icon("chevron"));
+              b.addEventListener("click", () => {
+                fill(it.group, { list, parent });
+                placeMenu(m, anchor);
+                m.querySelector("button")?.focus({ preventScroll: true });
+              });
+              m.append(b);
+            } else {
+              const b = h("button", { type: "button", class: "zn-menu-item" + (it.danger ? " is-danger" : ""), role: "menuitem" });
+              if (it.icon) b.append(icon(it.icon));
+              b.append(h("span", {}, it.label));
               b.addEventListener("click", () => {
                 closeMenu();
-                it.pick(c);
+                it.action();
               });
-              row.append(b);
+              m.append(b);
             }
-            m.append(row);
-          } else if (it.disabled) {
-            // A heading or a note ("No other note links here"): not a button, never focused or clicked.
-            m.append(h("div", { class: "zn-menu-item zn-menu-head", role: "presentation", "aria-disabled": "true" }, it.label));
-          } else {
-            const b = h("button", { type: "button", class: "zn-menu-item" + (it.danger ? " is-danger" : ""), role: "menuitem" });
-            if (it.icon) b.append(icon(it.icon));
-            b.append(h("span", {}, it.label));
-            b.addEventListener("click", () => {
-              closeMenu();
-              it.action();
-            });
-            m.append(b);
           }
-        }
+        };
+        fill(items, null);
         // Keyboard: Up / Down / Home / End move between the entries (Tab still works, Esc closes).
         m.addEventListener("keydown", (ev) => {
           if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(ev.key)) return;
@@ -5968,9 +6765,21 @@ function nativeSidebarSide() {
         const rows = h("div", { class: "zn-noteset", role: "listbox", "aria-label": "Notes to link to" });
         const cancel = chip("Cancel");
         const card = openCard("Link to another note", q.row, rows, h("div", { class: "zn-dialog-actions" }, cancel));
-        const pick = (t) => {
+        const pick = (t, slug = "") => {
           closeDialog();
-          applyEdit(insertNoteLink(ta.value, s, e, t.id, selected || titleOf(t.body) || "Untitled note"));
+          applyEdit(insertNoteLink(ta.value, s, e, t.id, selected || titleOf(t.body) || "Untitled note", slug));
+        };
+        // "#" beside a note: choose one of its headings, so the link opens at that place.
+        const pickHeading = (t) => {
+          rows.replaceChildren();
+          const mk = (label, slug) => {
+            const b = h("button", { type: "button", class: "zn-menu-item", role: "option" }, label);
+            b.addEventListener("click", () => pick(t, slug));
+            rows.append(b);
+          };
+          mk("Whole note", "");
+          for (const hd of headingsOf(t.body)) mk("#".repeat(hd.level) + " " + hd.text, hd.slug);
+          rows.querySelector?.("button")?.focus?.();
         };
         const draw = () => {
           rows.replaceChildren();
@@ -5982,6 +6791,11 @@ function nativeSidebarSide() {
             if (t.folder) b.title = "In folder " + t.folder;
             b.addEventListener("click", () => pick(t));
             rows.append(b);
+            if (headingsOf(t.body).length > 1) {
+              const hb = h("button", { type: "button", class: "zn-pick-head", title: "Link to a heading in this note", "aria-label": "Link to a heading in " + (titleOf(t.body) || "this note") }, "#");
+              hb.addEventListener("click", () => pickHeading(t));
+              rows.append(hb);
+            }
           }
         };
         q.input.addEventListener("input", draw);
@@ -6008,6 +6822,142 @@ function nativeSidebarSide() {
         q.input.focus({ preventScroll: true });
         return card;
       }
+      function paintLinked() {
+        const n = note();
+        linkedEl.replaceChildren();
+        linkedEl.hidden = true;
+        if (!getPref(PREF.BACKLINKS_PANEL, false) || !n || n.trashed || view !== "editor" || mode === "edit") return;
+        const { linked } = findBacklinks(store.list(), n);
+        if (!linked.length) return;
+        linkedEl.append(h("span", { class: "zn-linked-label" }, "Linked from"));
+        for (const t of linked.slice(0, 12)) {
+          const b = h("button", { type: "button", class: "zn-chip" }, titleOf(t.body) || "Untitled note");
+          b.addEventListener("click", () => openNote(t.id, { focus: false }));
+          linkedEl.append(b);
+        }
+        linkedEl.hidden = false;
+      }
+      // Hub list: a bulleted list of links to notes (all, or one folder), each with the note's short description.
+      function askHubList() {
+        if (note()?.trashed) return;
+        const [s, e] = sel();
+        const put = (folder) => {
+          const text = hubLines(store.list(), { folder, excludeId: currentId });
+          if (!text) return flash("No notes to list there");
+          applyEdit({ start: s, end: e, text: text + "\n", selStart: s + text.length + 1, selEnd: s + text.length + 1 });
+        };
+        const folders = allFolderIds(store.list(), store.meta.folders);
+        queueMicrotask(() =>
+          showMenu(tInsert, [
+            { label: "List of", disabled: true },
+            { icon: "note", label: "All notes", action: () => put(null) },
+            { icon: "note", label: "Notes without a folder", action: () => put("") },
+            ...folders.slice(0, 30).map((fid) => ({ icon: "folder", label: "Folder " + fid, action: () => put(fid) })),
+          ]),
+        );
+      }
+      // ---- date notes: today / tomorrow / next work day --------------------------------------------------------
+      const dateMode = () => cleanDateMode(getPref(PREF.DATE_MODE, "separate"));
+      function openDay(ms, ymd) {
+        if (dateMode() === "single") {
+          let j = store.list().find(isJournal);
+          if (!j) j = store.create("# " + JOURNAL_TITLE + "\n", "");
+          const r = journalSection(j.body, ymd, ms);
+          if (r.body !== j.body) store.update(j.id, r.body);
+          openNote(j.id);
+          if (mode === "read") setMode("edit");
+          ta.value = store.get(j.id).body;
+          ta.setSelectionRange(r.caret, r.caret);
+          revealSourceMatch({ start: r.caret, end: r.caret });
+          return;
+        }
+        let n = findDateNote(store.list(), ymd);
+        if (!n) {
+          if (!store.meta.folders.some((f) => f.id === DATE_FOLDER)) store.addFolder("Daily");
+          n = store.create(dateNoteBody(ms), DATE_FOLDER);
+        }
+        openNote(n.id);
+      }
+      function openDateNote(kind) {
+        const { ms, ymd } = dateTarget(kind, Date.now());
+        openDay(ms, ymd);
+      }
+      function askOtherDate() {
+        const d = field("Date (YYYY-MM-DD)", ymdOf(Date.now()), "2026-11-03");
+        const ok = chip("Open", true);
+        const cancel = chip("Cancel");
+        openCard("Note for a date", d.row, h("div", { class: "zn-dialog-actions" }, ok, cancel));
+        const go = () => {
+          const ms = parseYmd(d.input.value);
+          if (!ms) return flash("Use the form 2026-11-03");
+          closeDialog();
+          openDay(ms, ymdOf(ms));
+        };
+        ok.addEventListener("click", go);
+        d.input.addEventListener("keydown", (ev) => ev.key === "Enter" && go());
+        cancel.addEventListener("click", closeDialog);
+        d.input.focus({ preventScroll: true });
+      }
+      function showDateMenu() {
+        const now = Date.now();
+        const items = DATE_KINDS.map(([k, label]) => ({ icon: "bell", label: label + "  " + dateTarget(k, now).ymd, action: () => openDateNote(k) }));
+        items.push({ icon: "bell", label: "Other date\u2026", action: () => queueMicrotask(askOtherDate) }, { sep: true });
+        const days = dateMode() === "single" ? (store.list().find(isJournal) ? journalDays(store.list().find(isJournal).body).slice(-15).reverse().map((ymd) => ({ ymd })) : []) : listDateNotes(store.list()).slice(0, 15);
+        if (days.length) items.push({ label: "Earlier days", disabled: true }, ...days.map((d) => ({ icon: "note", label: d.ymd, action: () => openDay(parseYmd(d.ymd), d.ymd) })));
+        showMenu(btnMore, items);
+      }
+      // ---- version history -----------------------------------------------------------------------------------------
+      async function askHistory() {
+        const n = note();
+        if (!n || n.trashed) return;
+        const o = historyOptions({ keep: getPref(PREF.HISTORY_KEEP, 20), minutes: getPref(PREF.HISTORY_MINUTES, 10), capKB: getPref(PREF.HISTORY_CAP_KB, 512), warnMB: getPref(PREF.HISTORY_WARN_MB, 100) });
+        const list = await store.listHistory(n.id);
+        const usage = await store.historyUsage();
+        const rows = h("div", { class: "zn-noteset", role: "list" });
+        if (!getPref(PREF.HISTORY_ON, true)) rows.append(h("p", { class: "zn-empty" }, "Version history is switched off in the settings; existing versions stay available."));
+        if (!list.length) rows.append(h("p", { class: "zn-empty" }, "No earlier versions yet. While you edit, a version is kept at most every " + o.minutes + " minutes."));
+        for (const v of list) {
+          const row = h("div", { class: "zn-hist-row" });
+          row.append(h("span", { class: "zn-hist-when" }, new Date(v.ms).toLocaleString() + " \u00b7 " + Math.max(1, Math.round(v.size / 1024)) + " KB"));
+          const restore = chip("Restore");
+          const copy = chip("As new note");
+          restore.addEventListener("click", async () => {
+            closeDialog();
+            if (await store.restoreVersion(n.id, v.name)) {
+              showNote(n.id);
+              flash("Restored. The text from before is the newest version in the list.");
+            } else flash("That version could not be read");
+          });
+          copy.addEventListener("click", async () => {
+            const body = await store.readVersion(n.id, v.name);
+            if (body === null) return flash("That version could not be read");
+            closeDialog();
+            openNote(store.create(body, n.folder).id);
+          });
+          row.append(restore, copy);
+          rows.append(row);
+        }
+        const warn = historyWarning({ bytes: usage.bytes, warnMB: o.warnMB });
+        const info = h("p", { class: "zn-hist-note" }, "All history: " + (usage.bytes / 1048576).toFixed(1) + " MB in " + usage.files + " files." + (warn ? " " + warn : ""));
+        if (warn) info.classList.add("is-warn");
+        const clear = chip("Clear this note's history");
+        const close = chip("Close", true);
+        clear.addEventListener("click", async () => {
+          await store.clearHistory(n.id);
+          closeDialog();
+          flash("History of this note cleared");
+        });
+        close.addEventListener("click", closeDialog);
+        openCard("Version history", rows, info, h("div", { class: "zn-dialog-actions" }, clear, close));
+      }
+      function showHiddenTools() {
+        const gone = [...hiddenTools()];
+        showMenu(btnMore, [
+          { label: "Hidden tools (their buttons and shortcuts stay off)", disabled: true },
+          ...gone.map((id) => ({ label: HIDEABLE_TOOLS.find((x) => x[0] === id)?.[1] || id, action: needEdit(fmt[id] || (() => {})) })),
+        ]);
+      }
+      const zenMode = () => cleanZenMode(getPref(PREF.ZEN_MODE, "off"));
       // Notes that link to this one, and notes that only mention its title.
       function showBacklinks() {
         const n = note();
@@ -6016,7 +6966,20 @@ function nativeSidebarSide() {
         const item = (t) => ({ icon: "note", label: titleOf(t.body) || "Untitled note", action: () => openNote(t.id, { focus: false }) });
         const items = [];
         if (linked.length) items.push({ label: "Linked from", disabled: true }, ...linked.map(item));
-        if (mentions.length) items.push({ label: "Mentioned without a link", disabled: true }, ...mentions.map(item));
+        if (mentions.length)
+          items.push(
+            { label: "Mentioned without a link (click = turn it into a link)", disabled: true },
+            ...mentions.map((t) => ({
+              icon: "link",
+              label: titleOf(t.body) || "Untitled note",
+              action: () => {
+                const out = linkFirstMention(t.body, titleOf(n.body), n.id);
+                if (out === null) return flash("No plain mention left to link");
+                store.update(t.id, out);
+                flash("Linked in " + (titleOf(t.body) || "that note"));
+              },
+            })),
+          );
         if (!items.length) items.push({ label: "No other note links to this one", disabled: true });
         showMenu(btnMore, items);
       }
@@ -6528,22 +7491,33 @@ function nativeSidebarSide() {
         const n = note();
         if (!n) return [];
         const items = [
-          { icon: "save", label: "Save as Markdown\u2026", action: () => env.exportNote(n, "md") },
-          { icon: "save", label: "Export as HTML\u2026", action: () => askExport("html", () => env.exportNote(n, "html")) },
-          { icon: "save", label: "Export as plain text\u2026", action: () => askExport("txt", () => env.exportNote(n, "txt")) },
-          { icon: "save", label: "Print / save as PDF\u2026", action: () => askExport("pdf", () => env.printNote(n)) },
+          { icon: "save", label: "Import & export", group: [
+            { icon: "save", label: "Save as Markdown\u2026", action: () => env.exportNote(n, "md") },
+            { icon: "save", label: "Export as HTML\u2026", action: () => askExport("html", () => env.exportNote(n, "html")) },
+            { icon: "save", label: "Export as plain text\u2026", action: () => askExport("txt", () => env.exportNote(n, "txt")) },
+            { icon: "save", label: "Print / save as PDF\u2026", action: () => askExport("pdf", () => env.printNote(n)) },
+            { sep: true },
+            { icon: "save", label: "Export all notes\u2026", action: () => env.exportAll(store.list()) },
+            { icon: "save", label: "Export all as zip\u2026", action: () => askExport("zip", async () => { const k = await env.exportZip(store.list()); if (k) flash(`Zipped ${k} notes`); }) },
+            { icon: "folder", label: "Import .md folder\u2026", action: async () => { const k = await env.importFolder(store); flash(k ? `Imported ${k} notes` : "Nothing imported"); if (view === "list") scheduleList(); } },
+          ] },
           { icon: "copy", label: "Copy text", action: () => env.copyText(n.body) },
           ...(n.trashed ? [] : [{ icon: "bookmark", label: n.label ? "Edit label\u2026" : "Add label\u2026", action: () => askLabel() }]),
           ...(n.trashed ? [] : [{ icon: "bell", label: n.remind ? "Reminder: " + reminderText(n.remind) + "\u2026" : "Remind me\u2026", action: () => askReminder() }]),
           ...(n.trashed ? [] : [{ icon: "search", label: "Find in notes (Ctrl+F)", action: () => openFind() }]),
           { icon: "link", label: "Notes that link here\u2026", action: () => queueMicrotask(showBacklinks) },
+          { icon: "bell", label: "Notes by date\u2026", action: () => queueMicrotask(showDateMenu) },
+          ...(n.trashed ? [] : [{ icon: "restore", label: "Version history\u2026", action: () => askHistory() }]),
+          ...(getPref(PREF.HIDDEN_MENU, true) && hiddenTools().size && !n.trashed ? [{ icon: "sliders", label: "Hidden tools\u2026", action: () => queueMicrotask(showHiddenTools) }] : []),
+          ...(zenMode() === "selected" && !n.trashed
+            ? [cleanFolder(n.folder) === TABBAR_FOLDER || cleanFolder(n.folder).startsWith(TABBAR_FOLDER + "/")
+                ? { icon: "folder", label: "Remove from Notes (tabbar)", action: () => { store.setFolder(n.id, ""); applyState(); flash("Moved out of the Zen sidebar folder"); } }
+                : { icon: "folder", label: "Move to Notes (tabbar)", action: () => { store.ensureTabbarFolder(); store.setFolder(n.id, TABBAR_FOLDER); applyState(); flash("Shown in the Zen sidebar folder"); } }]
+            : []),
           { icon: "plus", label: "New note", action: () => newNote() },
           ...(adapter.geoKey || adapter.pushPanel ? [{ icon: "maximize", label: store.meta.size === "span" ? "Back to normal size" : "Fill the whole area", action: () => toggleSpan() }] : []),
           { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body); store.setColor(c.id, n.color); store.setLabel(c.id, n.label); openNote(c.id); } },
           { sep: true },
-          { icon: "save", label: "Export all notes\u2026", action: () => env.exportAll(store.list()) },
-          { icon: "save", label: "Export all as zip\u2026", action: () => askExport("zip", async () => { const k = await env.exportZip(store.list()); if (k) flash(`Zipped ${k} notes`); }) },
-          { icon: "folder", label: "Import .md folder\u2026", action: async () => { const k = await env.importFolder(store); flash(k ? `Imported ${k} notes` : "Nothing imported"); if (view === "list") scheduleList(); } },
           { icon: "folder", label: "Open notes folder", action: () => env.revealFolder(store.dir) },
           { icon: "folder", label: "Move to folder\u2026", action: () => askNoteFolder() },
           { icon: "sliders", label: "Quick settings\u2026", action: () => askSettings() },
@@ -6866,7 +7840,52 @@ function nativeSidebarSide() {
           }
         }
       });
+      let wikiState = null;
+      function hideWiki() {
+        wikiState = null;
+        wikiBar.hidden = true;
+        wikiBar.replaceChildren();
+      }
+      function paintWiki() {
+        wikiBar.replaceChildren();
+        wikiState.hits.forEach((t, i) => {
+          const b = h("button", { type: "button", class: "zn-wiki-item" + (i === wikiState.idx ? " is-on" : ""), role: "option" }, titleOf(t.body) || "Untitled note");
+          b.addEventListener("mousedown", (ev) => ev.preventDefault()); // keep the caret in the editor
+          b.addEventListener("click", () => pickWiki(i));
+          wikiBar.append(b);
+        });
+        wikiBar.hidden = false;
+      }
+      function updateWiki() {
+        if (!getPref(PREF.WIKI_COMPLETE, true) || mode === "read" || ta.readOnly || ta.selectionStart !== ta.selectionEnd) return hideWiki();
+        const trig = wikiTrigger(ta.value, ta.selectionStart);
+        if (!trig) return hideWiki();
+        const hits = store.list({ query: trig.query.trim() }).filter((x) => x.id !== currentId).slice(0, 6);
+        if (!hits.length) return hideWiki();
+        wikiState = { trig, hits, idx: 0 };
+        paintWiki();
+      }
+      function pickWiki(i) {
+        const st = wikiState;
+        if (!st || !st.hits[i]) return;
+        hideWiki();
+        applyEdit(wikiComplete(ta.value, st.trig, ta.selectionStart, titleOf(st.hits[i].body) || "Untitled note"));
+      }
+      listen(ta, "keydown", (e) => {
+        if (!wikiState || e.isComposing) return;
+        const n = wikiState.hits.length;
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") wikiState.idx = (wikiState.idx + (e.key === "ArrowDown" ? 1 : n - 1)) % n, paintWiki();
+        else if (e.key === "Enter" || e.key === "Tab") pickWiki(wikiState.idx);
+        else if (e.key === "Escape") hideWiki();
+        else return;
+        e.preventDefault();
+        e.stopPropagation();
+      }, true);
+      listen(ta, "keyup", (e) => {
+        if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) updateWiki();
+      });
       listen(ta, "input", () => {
+        updateWiki();
         taAnchY = null;
         readAnchY = null;
         typed = true;
@@ -6896,6 +7915,7 @@ function nativeSidebarSide() {
         askLink({ pasted: text.trim(), s, e: en });
       });
       listen(ta, "blur", () => {
+        hideWiki();
         const n = note();
         if (!typed && n && n.body !== ta.value) ta.value = n.body;
         store.flush();
@@ -6911,10 +7931,15 @@ function nativeSidebarSide() {
       });
 
       const ACTIONS = {
-        ...Object.fromEntries(["bold", "italic", "strike", "highlight", "code", "codeBlock", "link", "noteLink", "image", "heading", "bullet", "numbered", "check", "quote", "table", "rule", "indent", "outdent", "sup", "sub", "kbd", ...CALLOUT_KINDS.map(([k]) => calloutId(k))].map((id) => [id, () => fmt[id]()])),
+        ...Object.fromEntries(["bold", "italic", "strike", "highlight", "code", "codeBlock", "link", "noteLink", "image", "heading", "bullet", "numbered", "check", "quote", "table", "rule", "indent", "outdent", "sup", "sub", "kbd", "footnote", "hubList", ...CALLOUT_KINDS.map(([k]) => calloutId(k))].map((id) => [id, () => fmt[id]()])),
         newNote: () => newNote(),
         find: () => openFind(),
         remind: () => askReminder(),
+        dateToday: () => openDateNote("today"),
+        dateTomorrow: () => openDateNote("tomorrow"),
+        dateNext: () => openDateNote("next"),
+        dateList: () => showDateMenu(),
+        history: () => askHistory(),
         pastePicture: () => pastePictureFromClipboard(),
         pictureOptions: () => askPictureOptions(),
         list: () => showList(),
@@ -7578,6 +8603,17 @@ function nativeSidebarSide() {
           if (quad) rootEl.setAttribute("bgalazka-quad-view", "true");
           else rootEl.removeAttribute("bgalazka-quad-view");
           document.dispatchEvent(new Event("zentral-notes-reserve"));
+          // The panel may not be listening yet (load order) or may rewrite its own margin while it opens:
+          // say it again once the frame and the open animation have settled. The geometry module only writes
+          // when the margin differs, so a repeat costs nothing; it is skipped when the slot has moved on.
+          const again = () => {
+            if (SLOT.owner !== api || SLOT.px !== px) return;
+            try {
+              document.dispatchEvent(new Event("zentral-notes-reserve"));
+            } catch (_) {}
+          };
+          window.requestAnimationFrame(again);
+          window.setTimeout(again, 300);
           return quad || between;
         },
         // The band the sheet (or, collapsed, the hover strip) occupies in the layout, or null.
@@ -7877,6 +8913,10 @@ function nativeSidebarSide() {
         getDir: resolveDir,
         getMaxSaveMs: () =>
           Math.max(2, Math.min(60, prefInt(PREF.AUTOSAVE, DEFAULT_MAX_SAVE_SECONDS))) * 1000,
+        getHistory: () => ({
+          on: prefBool(PREF.HISTORY_ON, true),
+          ...historyOptions({ keep: prefInt(PREF.HISTORY_KEEP, HISTORY_DEFAULTS.keep), minutes: prefInt(PREF.HISTORY_MINUTES, HISTORY_DEFAULTS.minutes), capKB: prefInt(PREF.HISTORY_CAP_KB, HISTORY_DEFAULTS.capKB), warnMB: prefInt(PREF.HISTORY_WARN_MB, HISTORY_DEFAULTS.warnMB) }),
+        }),
         setTimer: (fn, ms) => window.setTimeout(fn, ms),
         clearTimer: (id) => window.clearTimeout(id),
         warn,
@@ -8175,6 +9215,221 @@ function nativeSidebarSide() {
       }, 4000);
       onCleanup(() => window.clearTimeout(remindersBoot));
 
+      // ---- Zen sidebar folder (EXPERIMENT, pref zen_folder = off | selected | all; not verified in a live Zen) ----
+      // The browser is reached only here. Every call is wrapped by createZenFolder's kill switch.
+      const ZEN_ROOT_ID = "bgalazka-zentral-notes";
+      const zenMode = () => cleanZenMode(prefStr(PREF.ZEN_MODE, "off"));
+      const zenRootEl = () => document.querySelector('zen-folder[bgalazka-notes-folder="true"]');
+      const systemPrincipal = () => Services.scriptSecurityManager.getSystemPrincipal();
+      let zenMoveBroken = false;
+      const zenTabs = (root) => [...(root?.querySelectorAll?.("tab") || [])].filter((t) => /^(n:|root$|new:)/.test(t.getAttribute(NOTES_ATTR) || ""));
+      const zenByKey = (root, key) => zenTabs(root).filter((t) => t.getAttribute(NOTES_ATTR) === key);
+      const zenFolderByKey = (root, key) => [...(root?.querySelectorAll?.("zen-folder[bgalazka-notes-subfolder]") || [])].find((f) => f.getAttribute("bgalazka-notes-subfolder") === key) || null;
+      const tabUrl = (tab) => {
+        try { return tab.linkedBrowser?.currentURI?.spec || tab._zentralNotesUrl || ""; } catch (_) { return ""; }
+      };
+      function zenPlace(tab, parentEl) {
+        // Zen's own API for putting a tab into a folder is not documented here: try the two known shapes, verify, never guess twice.
+        try { parentEl.addTabs?.([tab]); } catch (_) {}
+        if (tab.closest?.("zen-folder") !== parentEl) { try { window.gBrowser.moveTabToExistingGroup?.(tab, parentEl); } catch (_) {} }
+        return tab.closest?.("zen-folder") === parentEl;
+      }
+      function zenNewTab(url, key) {
+        const tab = window.gBrowser.addTab(url, { skipAnimation: true, triggeringPrincipal: systemPrincipal() });
+        tab.setAttribute(NOTES_ATTR, key); // marked BEFORE pinning, like the add-on host tabs
+        tab._zentralNotesUrl = url;
+        window.gBrowser.pinTab(tab);
+        return tab;
+      }
+      const zenRemoveTab = (tab) => {
+        try { window.gBrowser.removeTab(tab, { animate: false, skipPermitUnload: true, skipSessionStore: true }); } catch (error) { warn(error); }
+      };
+      const zenApi = {
+        ready: () => !zenMoveBroken && !!(window.gBrowser && window.gZenFolders?.createFolder),
+        hasRoot: () => !!zenRootEl(),
+        ensureRoot() {
+          if (zenRootEl()) return true;
+          const tab = zenNewTab(zenNewUrl(""), "root");
+          let folder = null;
+          try {
+            folder = window.gZenFolders.createFolder([tab], { id: ZEN_ROOT_ID, label: "NOTES", renameFolder: false, collapsed: false, workspaceId: window.gZenWorkspaces?.activeWorkspace });
+          } catch (error) { warn(error); }
+          const el = (folder && folder.nodeType ? folder : null) || document.getElementById(ZEN_ROOT_ID) || tab.closest?.("zen-folder");
+          if (!el) return false; // the tab stays an inert pinned about:blank tab; a later run retries once more
+          el.setAttribute("bgalazka-notes-folder", "true");
+          return true;
+        },
+        list() {
+          const root = zenRootEl();
+          const out = [];
+          for (const t of zenTabs(root)) {
+            const k = t.getAttribute(NOTES_ATTR);
+            if (k.startsWith("n:")) out.push({ key: k, label: t.getAttribute("bgalazka-notes-label") || "", parent: t.getAttribute("bgalazka-notes-parent") || "" });
+          }
+          for (const f of root?.querySelectorAll?.("zen-folder[bgalazka-notes-subfolder]") || [])
+            out.push({ key: f.getAttribute("bgalazka-notes-subfolder"), label: f.getAttribute("bgalazka-notes-label") || "", parent: f.getAttribute("bgalazka-notes-parent") || "" });
+          return out;
+        },
+        add(e, url) {
+          const root = zenRootEl();
+          if (!root) return false;
+          const parentEl = e.parent ? zenFolderByKey(root, e.parent) : root;
+          if (!parentEl) return false;
+          if (e.kind === "note") {
+            const tab = zenNewTab(url, e.key);
+            if (!zenPlace(tab, parentEl)) { zenRemoveTab(tab); zenMoveBroken = true; warn("Zen folder: could not put a tab into the NOTES folder; experiment stopped"); return false; }
+            tab.setAttribute("bgalazka-notes-label", e.label);
+            tab.setAttribute("bgalazka-notes-parent", e.parent);
+            tab.setAttribute("label", e.label);
+            return true;
+          }
+          const seed = zenNewTab(zenNewUrl(e.id), "new:" + e.id);
+          let el = null;
+          try { el = window.gZenFolders.createFolder([seed], { label: e.label, renameFolder: false, collapsed: false, parentId: parentEl.id, workspaceId: window.gZenWorkspaces?.activeWorkspace }); } catch (error) { warn(error); }
+          el = (el && el.nodeType ? el : null) || seed.closest?.("zen-folder");
+          if (!el || el === parentEl || el.parentElement?.closest?.("zen-folder") !== parentEl) {
+            if (el && el !== parentEl && el.delete) { try { el.delete(); } catch (_) {} }
+            zenRemoveTab(seed);
+            return false; // nesting not available: the controller switches to path labels
+          }
+          el.setAttribute("bgalazka-notes-subfolder", e.key);
+          el.setAttribute("bgalazka-notes-label", e.label);
+          el.setAttribute("bgalazka-notes-parent", e.parent);
+          return true;
+        },
+        remove(key, dup) {
+          const root = zenRootEl();
+          const tabs = zenByKey(root, key);
+          for (const t of dup ? tabs.slice(1) : tabs) zenRemoveTab(t);
+          const f = dup ? null : zenFolderByKey(root, key);
+          if (f) { for (const t of [...f.querySelectorAll("tab")]) if (t.hasAttribute(NOTES_ATTR)) zenRemoveTab(t); try { f.delete?.(); } catch (_) {} }
+        },
+        relabel(key, label) {
+          const root = zenRootEl();
+          for (const t of zenByKey(root, key)) { t.setAttribute("bgalazka-notes-label", label); t.setAttribute("label", label); }
+          const f = zenFolderByKey(root, key);
+          if (f) { f.setAttribute("bgalazka-notes-label", label); try { f.label = label; } catch (_) {} }
+        },
+        move(key) { zenApi.remove(key, false); }, // removed now, added again by the next run under its new parent
+        removeAll() {
+          const root = zenRootEl();
+          for (const t of [...(root?.querySelectorAll?.("tab") || [])]) if (t.hasAttribute(NOTES_ATTR)) zenRemoveTab(t);
+          try { root?.delete?.(); } catch (_) {}
+        },
+      };
+      const makeZen = () =>
+        createZenFolder({
+          api: zenApi,
+          store,
+          getMode: zenMode,
+          setTimer: (fn, ms) => window.setTimeout(fn, ms),
+          clearTimer: (id) => window.clearTimeout(id),
+          warn,
+          onKill: (error) => warn("Zen sidebar folder switched off after an error: " + (error?.message || error)),
+        });
+      PERF_ON = prefBool(PREF.DEBUG_PERF, false);
+      window.__zentralNotesPerf = PERF; // PERF.report() / PERF.reset() in the Browser Console
+      onCleanup(() => { PERF_ON = false; try { delete window.__zentralNotesPerf; } catch (_) {} });
+      let zen = makeZen();
+      onCleanup(() => zen.destroy());
+      const zenSoon = () => {
+        if (disposed || zenMode() === "off") return;
+        if (zen.dead) zen = makeZen(); // toggling the preference revives it after a kill
+        bindZen(true);
+        ensureStore().then(() => zen.schedule()).catch(warn);
+      };
+      const zenUnsub = store.on((ev) => {
+        if (ev.type === "change" || ev.type === "tree" || ev.type === "remove" || ev.type === "reset") {
+          if (zenMode() !== "off" && !zen.dead) zen.schedule();
+        }
+      });
+      onCleanup(zenUnsub);
+      const zenBoot = window.setTimeout(zenSoon, 6000);
+      onCleanup(() => window.clearTimeout(zenBoot));
+      // A click (or Enter) on one of our tabs opens the note instead of selecting the tab. Capture phase, our tabs only;
+      // TabSelect is the second line for keyboard / programmatic selection: it hands the selection straight back.
+      function activateZenTab(tab) {
+        const key = tab.getAttribute(NOTES_ATTR) || "";
+        if (key.startsWith("n:")) return openReminderNote(key.slice(2));
+        const p = parseZenUrl(tabUrl(tab)) || (key === "root" ? { kind: "new", folder: "" } : null);
+        if (p?.kind !== "new") return null;
+        const folder = p.folder || (zenMode() === "selected" ? TABBAR_FOLDER : "");
+        const b = pickBinding();
+        return Promise.resolve(b.open()).then(() => sheetOf(b)?.newNote?.(folder)).catch(warn);
+      }
+      const onZenMouse = (ev) => {
+        if (disposed || zen.dead || zenMode() === "off" || ev.button !== 0) return;
+        const tab = ev.target?.closest?.("tab[" + NOTES_ATTR + "]");
+        if (!tab) return;
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        if (ev.type === "mousedown") activateZenTab(tab);
+      };
+      const onZenSelect = (ev) => {
+        const tab = ev.target;
+        if (disposed || !tab?.hasAttribute?.(NOTES_ATTR)) return;
+        const prev = ev.detail?.previousTab;
+        const back = prev && !prev.hasAttribute(NOTES_ATTR) ? prev : [...window.gBrowser.tabs].find((t) => !t.hasAttribute(NOTES_ATTR) && !t.hidden);
+        if (back) window.gBrowser.selectedTab = back;
+        activateZenTab(tab);
+      };
+      // Dropping a web tab on the NOTES folder never moves it: it is refused, or captured as a link note (dropDecision).
+      const onZenDrop = (ev) => {
+        const root = zenRootEl();
+        if (disposed || zen.dead || !root || !root.contains?.(ev.target)) return;
+        let tab = null;
+        try { tab = ev.dataTransfer?.mozGetDataAt?.("application/x-moz-tabbrowser-tab", 0); } catch (_) {}
+        if (tab?.hasAttribute?.(NOTES_ATTR)) return;
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        if (ev.type !== "drop" || !tab) return;
+        const d = dropDecision({ tab: { attrs: {}, title: tab.label || "", url: tabUrl(tab) }, intoNotes: true });
+        if (d.action === "capture-url") store.create(d.body, zenMode() === "selected" ? TABBAR_FOLDER : "");
+      };
+      // Right-click menus: our own items are added once; for our targets every native item is hidden with CSS (never removed).
+      const ZEN_MENU_ITEMS = [
+        ["open", "Open note", (tab) => activateZenTab(tab)],
+        ["out", "Remove from sidebar folder", (tab) => { const id = (tab.getAttribute(NOTES_ATTR) || "").slice(2); if (id && zenMode() === "selected") { store.setFolder(id, ""); zen.schedule(0); } }],
+        ["trash", "Move note to trash", (tab) => { const id = (tab.getAttribute(NOTES_ATTR) || "").slice(2); if (id) store.trash(id); }],
+      ];
+      let zenCtxTab = null;
+      const onTabMenuShowing = (ev) => {
+        const menu = ev.target;
+        if (menu?.id !== "tabContextMenu") return;
+        const tab = window.TabContextMenu?.contextTab;
+        zenCtxTab = tab?.hasAttribute?.(NOTES_ATTR) && /^n:/.test(tab.getAttribute(NOTES_ATTR)) ? tab : null;
+        if (zenCtxTab && !menu.querySelector("[zentral-notes-own]")) {
+          for (const [id, label, fn] of ZEN_MENU_ITEMS) {
+            const item = document.createXULElement("menuitem");
+            item.setAttribute("label", label);
+            item.setAttribute("zentral-notes-own", id);
+            item.addEventListener("command", () => zenCtxTab && fn(zenCtxTab));
+            menu.append(item);
+          }
+        }
+        if (zenCtxTab) document.documentElement.setAttribute("zentral-notes-ctx", "item");
+      };
+      const onTabMenuHidden = (ev) => {
+        if (ev.target?.id === "tabContextMenu") { document.documentElement.removeAttribute("zentral-notes-ctx"); zenCtxTab = null; }
+      };
+      // Idle cost: the listeners below exist only while the experiment is on (mode != off).
+      let zenBound = false;
+      function bindZen(on) {
+        if (on === zenBound) return;
+        zenBound = on;
+        const act = on ? "addEventListener" : "removeEventListener";
+        for (const ty of ["mousedown", "click", "mouseup"]) window[act](ty, onZenMouse, true);
+        window[act]("TabSelect", onZenSelect, true);
+        for (const ty of ["dragover", "drop"]) window[act](ty, onZenDrop, true);
+        window[act]("popupshowing", onTabMenuShowing, true);
+        window[act]("popuphidden", onTabMenuHidden, true);
+        if (!on) {
+          document.documentElement.removeAttribute("zentral-notes-ctx");
+          document.querySelectorAll?.("[zentral-notes-own]").forEach((n) => n.remove());
+        }
+      }
+      onCleanup(() => bindZen(false));
+
       // ---- bindings: one per bar, plus the floating card ------------------------
       const bindings = new Map(); // bar element -> binding
       let floating = null;
@@ -8254,7 +9509,7 @@ function nativeSidebarSide() {
             followTries = 0;
             if (!sheet) sheet = createSheet({ store, adapter, env, ensureStore });
             const opened = sheet.open();
-            binding.syncReveal();
+            syncAllReveals();
             return opened;
           },
           close: () => sheet?.close(),
@@ -8262,7 +9517,9 @@ function nativeSidebarSide() {
           // sits inside the panel (never at the window's edge, so the browser's own top bar is not
           // triggered) and is only there while the panel is shown and the sheet is closed.
           syncReveal() {
-            const want = prefBool(PREF.REVEAL_STRIP, false) && !disposed && binding.visible() && !binding.isOpen();
+            // ONE hover target for the whole window (Triple View has two bars plus the folded sheet's own band):
+            // only the bar Notes would open on gets a strip, and none while a sheet is open or folded anywhere.
+            const want = prefBool(PREF.REVEAL_STRIP, false) && !disposed && binding.visible() && !binding.isOpen() && revealOwner() === binding;
             if (!want) {
               window.clearTimeout(stripTimer);
               strip?.remove();
@@ -8308,7 +9565,7 @@ function nativeSidebarSide() {
           },
         };
         adapter.onClosed = (info) => {
-          binding.syncReveal();
+          syncAllReveals();
           // Closed by hand: stay closed. Closed because its bar went away: come back on the next bar.
           if (info?.manual) followKind = "";
         };
@@ -8361,8 +9618,8 @@ function nativeSidebarSide() {
             b.adapter.rewatch();
             b.sheet()?.layout();
           }
-          b.syncReveal();
         }
+        syncAllReveals(); // after the loop: which bar owns the strip depends on every bar being known
         maybeRestore();
         maybeFollow();
       }
@@ -8481,6 +9738,17 @@ function nativeSidebarSide() {
       function panelsHidden() {
         const r = document.documentElement;
         return r.hasAttribute("bgalazka-hover-panel-enabled") && r.hasAttribute("bgalazka-hover-panel-hidden");
+      }
+      // The one bar that carries the reveal strip: the bar used last, else the main panel bar, else the first
+      // visible one; nobody while any sheet is open (folded or not), because the strip would open a second one.
+      function revealOwner() {
+        const list = [...bindings.values()].filter((b) => b.visible());
+        if (!list.length || list.some((b) => b.isOpen())) return null;
+        if (lastUsed && list.includes(lastUsed)) return lastUsed;
+        return list.find((b) => b.kind === "primary") || list[0];
+      }
+      function syncAllReveals() {
+        for (const b of bindings.values()) b.syncReveal();
       }
       function pickBinding() {
         const active = document.activeElement;
@@ -8728,6 +9996,13 @@ function nativeSidebarSide() {
             floating?.sheet?.refreshRead?.();
           } else if (VIEW_PREFS.has(name)) applyViewPrefs();
           else if (name === PREF.SHORTCUT) shortcut = parseShortcut(prefStr(PREF.SHORTCUT, "Alt+Shift+N"));
+          else if (name === PREF.DEBUG_PERF) PERF_ON = prefBool(PREF.DEBUG_PERF, false);
+          else if (name === PREF.ZEN_MODE) {
+            if (zenMode() === "off") {
+              bindZen(false);
+              if (!zen.dead) ensureStore().then(() => zen.runNow()).catch(warn); // the run removes our tabs and folder
+            } else zenSoon();
+          }
           else if (WINDOW_PREFS.has(name)) {
             // Hover reveal, push page, split windows and the sidebar option: open sheets follow at once.
             for (const b of [...bindings.values(), floating]) {

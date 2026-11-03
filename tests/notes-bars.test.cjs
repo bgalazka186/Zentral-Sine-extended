@@ -275,6 +275,34 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(sheetsIn(slider).length, 1);
   });
 
+  await test("reveal strip: with two bars (Triple View) only one carries the strip, and none while a sheet is open", async () => {
+    const P = "zen.workspace.zentral.notes.";
+    const box = new El("div"), bar = new El("div");
+    bar.className = "bgalazka-super-bar";
+    bar.append(new El("button"));
+    box.append(bar);
+    slider.append(box);
+    mutationCallbacks.slice().forEach((cb) => cb([{ addedNodes: [box], removedNodes: [] }]));
+    await sleep(120);
+    for (const b of [toolbar.firstElementChild, bar.firstElementChild]) if (b.dataset.active === "true") b.click(); // earlier tests may leave a sheet open
+    await flush();
+    prefs.set(P + "reveal_delay_ms", 0);
+    prefs.set(P + "reveal_strip", true);
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", P + "reveal_strip"));
+    const strips = () => [toolbar, bar].reduce((n, b) => n + b.children.filter((e) => e._classes.has("zentral-notes-reveal-strip")).length, 0);
+    assert.equal(strips(), 1, "one hover strip for two bars, not one per bar");
+    toolbar.firstElementChild.click(); await sleep(30); await flush();
+    assert.equal(strips(), 0, "no strip anywhere while a sheet is open");
+    toolbar.firstElementChild.click(); await flush();
+    assert.equal(strips(), 1, "one strip again after closing");
+    prefs.set(P + "reveal_strip", false);
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", P + "reveal_strip"));
+    assert.equal(strips(), 0);
+    box.remove();
+    mutationCallbacks.slice().forEach((cb) => cb([{ addedNodes: [], removedNodes: [box] }]));
+    await sleep(120);
+  });
+
   await test("shortcut while the panel is hidden (autohide) opens the standalone card, not a sheet on the hidden bar", async () => {
     const key = windowListeners.find((l) => l.t === "keydown" && l.c === true);
     const press = () => key.fn(new Ev("keydown", { key: "N", code: "KeyN", altKey: true, shiftKey: true, ctrlKey: false, metaKey: false }));
@@ -584,7 +612,7 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
   });
 
   await test("Recent: opening notes builds the list (newest first); quick new note works from anywhere", async () => {
-    const mds = () => [...disk.keys()].filter((k) => k.startsWith("/profile/zentral-notes/") && k.endsWith(".md"));
+    const mds = () => [...disk.keys()].filter((k) => k.startsWith("/profile/zentral-notes/") && k.endsWith(".md") && !k.includes("/history/"));
     const before = mds().length;
     press({ key: "F", code: "KeyF", alt: true, shift: true }); await flush(); // close the card
     for (const s of document.documentElement.all().filter((c) => c._classes.has("zentral-notes-sheet") && !c.hidden)) press({ key: "N", code: "KeyN", alt: true, shift: true });

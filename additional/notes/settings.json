@@ -651,6 +651,126 @@
       "label": "Inbox note name (the note carrying this label collects quick captures)",
       "type": "string",
       "defaultValue": "Inbox"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.hub_descriptions",
+      "label": "Hub notes: a list item that is only a link to another note shows that note's short description (read view)",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.notes.wiki_complete",
+      "label": "Suggest notes while typing [[ (Tab or Enter picks, Esc closes)",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.notes.backlinks_panel",
+      "label": "Read view: show a \"Linked from\" strip with the notes that link here",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.notes.hidden_tools_menu",
+      "label": "Hidden editor tools stay reachable in More > Hidden tools (their buttons and shortcuts stay off)",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.notes.date_notes_mode",
+      "label": "Date notes (today / tomorrow / next work day)",
+      "type": "dropdown",
+      "defaultValue": "separate",
+      "options": [
+        {
+          "label": "One note per day, in the Daily folder",
+          "value": "separate"
+        },
+        {
+          "label": "All days in one note called Journal",
+          "value": "single"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.notes.history_enabled",
+      "label": "Keep earlier versions of each note (history/<note id>/ in the notes folder)",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.notes.history_keep",
+      "label": "Versions kept per note",
+      "type": "input",
+      "defaultValue": 20,
+      "numeric": {
+        "min": 1,
+        "max": 200,
+        "unit": ""
+      },
+      "control": "slider"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.history_minutes",
+      "label": "At most one version every (minutes)",
+      "type": "input",
+      "defaultValue": 10,
+      "numeric": {
+        "min": 1,
+        "max": 1440,
+        "unit": "min"
+      },
+      "control": "slider"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.history_cap_kb",
+      "label": "Notes bigger than this are not versioned (KB)",
+      "type": "input",
+      "defaultValue": 512,
+      "numeric": {
+        "min": 16,
+        "max": 4096,
+        "unit": "KB"
+      },
+      "control": "slider"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.history_warn_mb",
+      "label": "Warn when all history together grows beyond (MB)",
+      "type": "input",
+      "defaultValue": 100,
+      "numeric": {
+        "min": 5,
+        "max": 2000,
+        "unit": "MB"
+      },
+      "control": "slider"
+    },
+    {
+      "property": "zen.workspace.zentral.notes.zen_folder",
+      "label": "EXPERIMENT: show notes in Zen's pinned-tabs folder tree (NOTES folder). Selected = only what is in the Notes (tabbar) folder, like the bookmarks toolbar; Whole = the entire notes tree. Not verified in a live Zen",
+      "type": "dropdown",
+      "defaultValue": "off",
+      "options": [
+        {
+          "label": "Off",
+          "value": "off"
+        },
+        {
+          "label": "Selected only (Notes (tabbar) folder)",
+          "value": "selected"
+        },
+        {
+          "label": "Whole notes structure",
+          "value": "all"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.notes.debug_perf",
+      "label": "DEBUG: sample how long Notes layout, drag and read-view work take (performance.now). Read the result with __zentralNotesPerf.report() in the Browser Console",
+      "type": "checkbox",
+      "defaultValue": false
     }
   ],
   "settings": {
@@ -937,6 +1057,66 @@
     "zen.workspace.zentral.notes.wide_percent": {
       "category": "notes",
       "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.hub_descriptions": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.wiki_complete": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.backlinks_panel": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.hidden_tools_menu": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.date_notes_mode": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.history_enabled": {
+      "category": "notes",
+      "section": "Version history",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.history_keep": {
+      "category": "notes",
+      "section": "Version history",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.history_minutes": {
+      "category": "notes",
+      "section": "Version history",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.history_cap_kb": {
+      "category": "notes",
+      "section": "Version history",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.history_warn_mb": {
+      "category": "notes",
+      "section": "Version history",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.zen_folder": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.debug_perf": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
       "owner": "notes"
     }
   }
