@@ -7,12 +7,14 @@ When the main mod version is bumped (in `theme.json`, `UPSTREAM.json` `extended_
 Reason: Sine installs each `additional/<module>/` folder as an independent mod. The end user sees the `version` in each standalone `theme.json`/`standalone.json`/`standalone.lock.json` and the `// @version` header in each `.standalone.uc.js`. If a standalone module lags behind the main mod version, the user cannot tell whether they have the most up-to-date code.
 
 Files to update per standalone module (`additional/<module>/`):
+
 - `theme.json` — `"version"`
 - `standalone.json` — `"version"`
 - `standalone.lock.json` — `"version"`
 - `<Module>.standalone.uc.js` — `// @version`, `const __ZENTRAL_STANDALONE_VERSION__`, and the build placeholder comment `Placeholders replaced by the build: X.Y.Z.`
 
 Also update:
+
 - `loader/ZentralRuntime.js` — `// @version` and `const VERSION`
 - `INSTALL.md` heading (one version per release), the version badge and the "Extended X.Y.Z uses Zentral…" line in `.github/README.md`
 - Any other `README.md`/`docs/*.md` that cite the old version
@@ -68,3 +70,7 @@ The video standalone bootstrap mirrors source/construction contracts. Keep both 
 ## Notes roadmap handoff
 
 After any change to Zentral Notes, update the "NEXT SESSION HANDOFF" block at the end of `TODO_notes_roadmap.md` in place (state, next picks, live checklist, debts, version). It is the only handoff; never add a second one.
+
+## .git folder
+
+user may send to AI full project file, and ask to update it with changes and give back, Always dont include .git file (drop and replace on root folder may destroy unfinished uncommited diffs and change what is staged and what not just avoid it)
