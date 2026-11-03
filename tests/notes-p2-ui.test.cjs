@@ -27,7 +27,8 @@ const io = {
 };
 let CLOCK = new Date(2026, 10, 1, 9, 0, 0).getTime();
 const store = c.createStore({ io, notify() {}, windowId: "t", now: () => CLOCK, getDir: async () => "/n", getMaxSaveMs: () => 5000, setTimer: setTimeout, clearTimer: clearTimeout });
-const env = { openLink() {}, copyText() {}, exportNote() {}, exportAll() {}, revealFolder() {}, now: () => CLOCK, loadAsset: async (rel) => ({ url: "blob:test/" + rel }) };
+const prefs = new Map();
+const env = { getPref: (k, d) => (prefs.has(k) ? prefs.get(k) : d), openLink() {}, copyText() {}, exportNote() {}, exportAll() {}, revealFolder() {}, now: () => CLOCK, loadAsset: async (rel) => ({ url: "blob:test/" + rel }) };
 const host = new El("div");
 const adapter = { position: "fixed", host, attach: (r) => host.appendChild(r), getArea: () => ({ left: 0, top: 0, width: 400, height: 600, anchor: "top" }), watch: () => () => {}, setActive() {}, rewatch() {} };
 const key = (el, k, extra = {}) => { const e = new Ev("keydown", { key: k, bubbles: true, ...extra }); el.dispatchEvent(e); return e; };
@@ -185,19 +186,90 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     const [d, t] = inputs.slice(-2);
     d.value = "2026-11-02"; t.value = "09:07";
     chipNamed("Set reminder").click();
-    assert.equal(store.get(n.id).remind, new Date(2026, 10, 2, 9, 5).getTime(), "snapped to 5 minutes");
+    assert.equal(store.get(n.id).remind, new Date(2026, 10, 2, 9, 7).getTime(), "kept to the minute");
     assert.equal(q(".zn-remind").hidden, false);
-    assert.match(q(".zn-remind").title, /Reminder: 2026-11-02 09:05/);
+    assert.match(q(".zn-remind").title, /Reminder: 2026-11-02 09:07/);
     // a time in the past is refused
     more.click(); qa(".zn-menu-item").find((b) => /^Reminder:/.test(b.textContent)).click();
     const [d2, t2] = qa(".zn-field").slice(-2);
+    assert.match(q(".zn-remind-preview").textContent, /^Will ring at 2026-11-02 09:07 \(in /, "live preview under the inputs");
     d2.value = "2026-10-31"; t2.value = "09:00";
     chipNamed("Set reminder").click();
     assert.equal(t2.dataset.bad === "true" || d2.dataset.bad === "true", true);
-    assert.equal(store.get(n.id).remind, new Date(2026, 10, 2, 9, 5).getTime(), "unchanged");
+    assert.equal(store.get(n.id).remind, new Date(2026, 10, 2, 9, 7).getTime(), "unchanged");
     chipNamed("Clear reminder").click();
     assert.equal(store.get(n.id).remind, 0);
     assert.equal(q(".zn-remind").hidden, true);
+  });
+
+  await test("find highlight (#8): selection mode paints nothing extra; backdrop mode marks every match and the current one, follows scroll, clears on close", async () => {
+    const note = store.create(lines.join("\n"));
+    sheet.openNoteById(note.id); await flushRaf();
+    dom.state.activeElement = ta;
+    ta.setSelectionRange(0, 0);
+    key(ta, "f", { ctrlKey: true });
+    type(input, "needle"); await wait(160);
+    const hl = q(".zn-findlayer");
+    assert.equal(q(".zn-find-count").textContent, "1 of 3");
+    assert.equal(hl.hidden, true, "default pref 'selection': no backdrop");
+    prefs.set("zen.workspace.zentral.notes.find_highlight", "backdrop");
+    try {
+      type(input, "needl"); await wait(160); type(input, "needle"); await wait(160);
+      assert.equal(hl.hidden, false);
+      assert.equal(sheet.root.dataset.hl, "on");
+      let marks = hl.querySelectorAll("mark");
+      assert.equal(marks.length, 3, "all three matches are marked");
+      assert.deepEqual(marks.map((m) => m.className), ["zn-findlayer-cur", "", ""]);
+      assert.equal(hl.textContent, note.body + "\n", "the layer holds the same text as the editor plus a trailing newline");
+      key(input, "Enter");
+      marks = hl.querySelectorAll("mark");
+      assert.deepEqual(marks.map((m) => m.className), ["", "zn-findlayer-cur", ""], "the current mark follows Enter");
+      ta.scrollTop = 40; ta.dispatchEvent(new Ev("scroll", { bubbles: true }));
+      assert.match(q(".zn-findlayer-inner").style.transform, /translate\(0px, -40px\)/, "the layer scrolls with the editor");
+      type(input, "zzz"); await wait(160);
+      assert.equal(hl.hidden, true, "no matches: nothing painted");
+      type(input, "needle"); await wait(160);
+      assert.equal(hl.hidden, false);
+      q(".zn-find-close").click();
+      assert.equal(hl.hidden, true, "closing find removes the highlights");
+      assert.equal(sheet.root.dataset.hl, undefined);
+    } finally {
+      prefs.delete("zen.workspace.zentral.notes.find_highlight");
+    }
+  });
+
+  await test("trash view (#30): banner says when notes are deleted and follows the pref", async () => {
+    const t = store.create("Banner victim\nx"); store.trash(t.id); await flushRaf();
+    q(".zn-title").click(); await flushRaf();
+    qa(".zn-chip").find((b) => b.textContent.startsWith("Trash")).click(); await flushRaf();
+    assert.match(q(".zn-trash-note").textContent, /^Notes are deleted 30 days after they were trashed, when Notes starts\. The next one expires in 30 days\.$/);
+    prefs.set("zen.workspace.zentral.notes.trash_auto_empty_days", 0);
+    try {
+      chipNamed("Notes").click(); qa(".zn-chip").find((b) => b.textContent.startsWith("Trash")).click(); await flushRaf();
+      assert.match(q(".zn-trash-note").textContent, /^Auto-empty is off/);
+    } finally {
+      prefs.delete("zen.workspace.zentral.notes.trash_auto_empty_days");
+    }
+  });
+
+  await test("spell-check (#31): the editor follows the prefs when the footer updates", async () => {
+    const n = store.create("Spelling note"); sheet.openNoteById(n.id); await flushRaf();
+    dom.state.activeElement = ta;
+    const K = "zen.workspace.zentral.notes.";
+    try {
+      type(ta, "short text"); await flushRaf();
+      assert.equal(ta.spellcheck, true, "default on");
+      prefs.set(K + "spellcheck", false);
+      type(ta, "short text again"); await flushRaf();
+      assert.equal(ta.spellcheck, false, "switched off in the settings");
+      prefs.set(K + "spellcheck", true); prefs.set(K + "spellcheck_max_chars", 20);
+      type(ta, "this note is now longer than twenty characters"); await flushRaf();
+      assert.equal(ta.spellcheck, false, "over the limit");
+      type(ta, "tiny"); await flushRaf();
+      assert.equal(ta.spellcheck, true, "back under the limit");
+    } finally {
+      prefs.delete(K + "spellcheck"); prefs.delete(K + "spellcheck_max_chars");
+    }
   });
 
   console.log(passed + " notes P2 UI tests passed");

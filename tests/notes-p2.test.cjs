@@ -200,21 +200,22 @@ async function remStore(extraNotes = []) {
   const sched = c.createReminderScheduler({ store, now: clk.now, setTimer: lane.setTimer, clearTimer: lane.clearTimer, onDue: (list) => fired.push(list.map((n) => n.id)) });
   return { io, clk: { now: clk.now, advance: clk.advance, get active() { return lane.active; }, delays: lane.delays }, store, sched, fired };
 }
-test("reminders: 5-minute granularity and persisted front matter", async () => {
-  assert.equal(c.cleanRemind(T0 + 7 * 60000), T0 + 5 * 60000);
-  assert.equal(c.cleanRemind(T0 + 8 * 60000), T0 + 10 * 60000);
+test("reminders: whole-minute granularity (Cycle F #15) and persisted front matter", async () => {
+  assert.equal(c.cleanRemind(T0 + 7 * 60000), T0 + 7 * 60000);
+  assert.equal(c.cleanRemind(T0 + 7 * 60000 + 29999), T0 + 7 * 60000);
+  assert.equal(c.cleanRemind(T0 + 7 * 60000 + 30000), T0 + 8 * 60000);
   assert.equal(c.cleanRemind(NaN), 0); assert.equal(c.cleanRemind(5), 0);
   const { io, store } = await remStore();
   const n = store.create("call mum");
   assert.equal(store.setReminder(n.id, T0 + 3 * 60000), true);
-  assert.equal(store.get(n.id).remind, T0 + 5 * 60000);
+  assert.equal(store.get(n.id).remind, T0 + 3 * 60000);
   await store.flush();
   const text = io.files.get("/n/" + n.id + ".md").text;
-  assert.match(text, /\nremind: 2026-11-01T09:05:00\.000Z\n/);
+  assert.match(text, /\nremind: 2026-11-01T09:03:00\.000Z\n/);
   assert.doesNotMatch(text, /reminded:/);
-  assert.equal(c.noteFromFile("x", text, 0).remind, T0 + 5 * 60000);
+  assert.equal(c.noteFromFile("x", text, 0).remind, T0 + 3 * 60000);
   assert.equal(c.noteFromFile("x", "---\nid: x\nremind: nonsense\n---\nb", 0).remind, 0);
-  assert.equal(c.parseRemindInput("2026-11-02", "09:07"), new Date(2026, 10, 2, 9, 5).getTime());
+  assert.equal(c.parseRemindInput("2026-11-02", "09:07"), new Date(2026, 10, 2, 9, 7).getTime());
   assert.equal(c.parseRemindInput("2026-02-31", "09:00"), 0);
   assert.equal(c.parseRemindInput("2026-11-02", "25:00"), 0);
 });
@@ -304,7 +305,7 @@ test("reminders: disposal cancels the timer and silences late events", async () 
   assert.equal(clk.active, 0); assert.equal(fired.length, 0);
   assert.equal(c.reminderDelay(T0 + 10 * 365 * 86400000, T0), c.MAX_TIMER_MS, "a far-away reminder never overflows the timer");
 });
-test("reminders: presets are 5-minute aligned and in the future", () => {
+test("reminders: presets are whole-minute aligned and in the future", () => {
   const list = c.reminderPresets(new Date(2026, 10, 1, 9, 2).getTime());
   assert.ok(list.length >= 3);
   for (const [label, t] of list) { assert.equal(t % c.REMIND_STEP_MS, 0, label); assert.ok(t > new Date(2026, 10, 1, 9, 2).getTime(), label); }

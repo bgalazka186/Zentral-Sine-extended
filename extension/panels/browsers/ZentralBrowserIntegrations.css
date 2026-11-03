@@ -480,6 +480,12 @@
   box-sizing: border-box !important;
   padding-bottom: var(--zentral-notes-panel-reserve, 0px) !important;
 }
+/* Pseudo Triple View: a plain panel with Notes open keeps its page on top and a clean band below it, inside the
+ * panel (same padding mechanism as Quad View, no Triple View needed). Set by the Notes bar adapter. */
+:root[bgalazka-notes-pseudo="true"][bgalazka-quad-view="true"] #zen-app-panel-slider {
+  box-sizing: border-box !important;
+  padding-bottom: var(--zentral-notes-panel-reserve, 0px) !important;
+}
 .bgalazka-triple-drag-handle {
   position: fixed !important;
   z-index: 2147483603 !important;

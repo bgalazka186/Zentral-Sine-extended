@@ -98,7 +98,7 @@ function makeBus() {
     notify: (msg) => stores.forEach((s) => s.onRemoteMessage(JSON.stringify(msg))),
   };
 }
-async function newStore({ clock, fsys, bus, id = "w1", maxSec = 5 }) {
+async function newStore({ clock, fsys, bus, id = "w1", maxSec = 5, trashDays }) {
   const store = c.createStore({
     io: fsys.io,
     notify: (m) => bus?.notify(m),
@@ -106,6 +106,7 @@ async function newStore({ clock, fsys, bus, id = "w1", maxSec = 5 }) {
     now: clock.now,
     getDir: async () => "/notes",
     getMaxSaveMs: () => maxSec * 1000,
+    ...(trashDays === undefined ? {} : { getTrashDays: () => trashDays }),
     setTimer: clock.set,
     clearTimer: clock.clear,
   });
@@ -278,6 +279,65 @@ async function newStore({ clock, fsys, bus, id = "w1", maxSec = 5 }) {
     assert.equal(later.get(keep.id)?.body, "keep");
     assert.equal(fsys.files.has("/notes/" + gone.id + ".md"), false);
     assert.equal(fsys.files.has("/notes/" + gone.id + ".md.bak"), false);
+  });
+
+  await test("trash auto-empty (#30): retention follows getTrashDays; 0 keeps everything; an unknown value falls back to 30", async () => {
+    const mkTrashed = async (days) => {
+      const clock = makeClock(), fsys = makeFs(clock);
+      const s = await newStore({ clock, fsys });
+      const n = s.create("trashed " + days);
+      await s.flush();
+      s.trash(n.id);
+      await s.flush();
+      await clock.advance(days * 86400000);
+      return { clock, fsys, id: n.id };
+    };
+    let t = await mkTrashed(8);
+    assert.equal((await newStore({ clock: t.clock, fsys: t.fsys, id: "w7", trashDays: 7 })).get(t.id), null, "7-day setting removes an 8-day-old note");
+    t = await mkTrashed(8);
+    assert.ok((await newStore({ clock: t.clock, fsys: t.fsys, id: "w7", trashDays: 14 })).get(t.id), "14-day setting keeps it");
+    t = await mkTrashed(400);
+    assert.ok((await newStore({ clock: t.clock, fsys: t.fsys, id: "w7", trashDays: 0 })).get(t.id), "0 = never delete");
+    t = await mkTrashed(31);
+    assert.equal((await newStore({ clock: t.clock, fsys: t.fsys, id: "w7", trashDays: 12345 })).get(t.id), null, "garbage falls back to 30 days");
+  });
+
+  await test("labels (#19): renameLabel renames, merges and removes in one pass, persists, and ignores other labels", async () => {
+    const clock = makeClock(), fsys = makeFs(clock);
+    const store = await newStore({ clock, fsys });
+    const mk = (body, label) => { const n = store.create(body); store.setLabel(n.id, label); return n; };
+    const a = mk("a one", "work"), b = mk("b two", "Work"), c2 = mk("c three", "home"), d = mk("d four", "");
+    const gone = mk("e five", "work"); store.trash(gone.id);
+    assert.equal(store.renameLabel("WORK", "Job"), 3, "all spellings, trashed too");
+    assert.deepEqual([a, b, c2, d, gone].map((n) => store.get(n.id).label), ["Job", "Job", "home", "", "Job"]);
+    assert.equal(store.renameLabel("job", "Job"), 0, "already that name: nothing to do");
+    assert.equal(store.renameLabel("Job", "home"), 3, "naming an existing label merges them");
+    assert.deepEqual([a, b, c2].map((n) => store.get(n.id).label), ["home", "home", "home"]);
+    assert.equal(store.renameLabel("home", ""), 4, "empty name removes the label (a, b, c and the trashed one)");
+    assert.equal(store.renameLabel("", "x"), 0);
+    assert.equal(store.get(c2.id).label, "");
+    await store.flush();
+    const again = await newStore({ clock, fsys, id: "w2" });
+    assert.equal(again.get(a.id).label, "", "saved to disk");
+  });
+
+  await test("ensureNote (#3): creates once by fixed id, never overwrites, refuses bad ids, persists", async () => {
+    const clock = makeClock(), fsys = makeFs(clock);
+    const store = await newStore({ clock, fsys });
+    const first = store.ensureNote("zn-demo-x", "# Demo\nbody", "help");
+    assert.equal(first.created, true);
+    assert.equal(store.get("zn-demo-x").folder, "help");
+    store.update("zn-demo-x", "# Demo\nEDITED by the person", "t");
+    const second = store.ensureNote("zn-demo-x", "# Demo\nbody", "help");
+    assert.equal(second.created, false);
+    assert.match(store.get("zn-demo-x").body, /EDITED/, "an edited note is not overwritten");
+    store.trash("zn-demo-x");
+    assert.equal(store.ensureNote("zn-demo-x", "again", "help").created, false, "a trashed demo stays trashed");
+    assert.equal(store.ensureNote("../evil", "x").note, null);
+    assert.equal(store.ensureNote("", "x").created, false);
+    await store.flush();
+    const again = await newStore({ clock, fsys, id: "w2" });
+    assert.match(again.get("zn-demo-x").body, /EDITED/);
   });
 
   await test("refresh picks up files added or changed by other apps", async () => {

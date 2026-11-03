@@ -233,40 +233,24 @@ function cssTests() {
     assert.ok(reserve > 0, "panel gave up height");
     const panelBottom = 640 - reserve, pageBottom = 600 - reserve;
     assert.ok(panelBottom > pageBottom, "URL bar lies between the page and the panel bottom");
-    assert.equal(parseFloat(sheet.style.top), panelBottom + 6, "sheet = band (below the panel) + its 6px inset, not the bottom of the page");
-    assert.ok(parseFloat(sheet.style.top) >= pageBottom + 40, "the URL bar's 40px are not covered");
+    assert.equal(parseFloat(sheet.style.top), 600 - reserve + 6, "pseudo Triple View: the band is the bottom of the slider (inside the panel) + its 6px inset");
+    assert.equal(html.hasAttribute("bgalazka-notes-pseudo"), true);
     assert.equal(sheet.dataset.slot, "dock");
     primaryBtn.click(); await flush();
     assert.equal(vars.has("--zentral-notes-panel-reserve"), false, "closing restores the previous geometry exactly");
   });
 
   // ---- stretched panel ----------------------------------------------------------------------------------------
-  await test("a panel stretched from window top to bottom keeps Notes inactive: no reserve, hidden, no hit area; shortening restores it", async () => {
+  await test("a panel stretched from window top to bottom still gets its pseudo Triple View band (the panel is never shortened)", async () => {
     root.getBoundingClientRect = () => rect(0, 0, 400, 800);
     page.getBoundingClientRect = () => rect(0, 0, 400, 760);
     primaryBtn.click(); await sleep(30); await flush();
     const sheet = sheetsIn(slider)[0];
-    assert.equal(vars.has("--zentral-notes-panel-reserve"), false, "no stale reserve while stretched");
-    assert.equal(sheet.style.visibility, "hidden");
-    assert.equal(sheet.style.pointerEvents, "none", "no invisible hitbox");
-    assert.equal(sheet.dataset.slot, "");
-    // the panel is shortened (user drags the grips): Notes comes back
-    root.getBoundingClientRect = () => rect(0, 12, 400, 788 - num("--zentral-notes-panel-reserve"));
-    page.getBoundingClientRect = () => rect(0, 12, 400, 748 - num("--zentral-notes-panel-reserve"));
-    windowListeners.filter((l) => l.t === "resize").forEach((l) => l.fn());
-    await sleep(30); await flush();
-    assert.ok(num("--zentral-notes-panel-reserve") > 0, "reserve returns once the panel is shorter");
-    assert.equal(sheet.style.visibility, "");
-    assert.equal(sheet.style.pointerEvents, "");
+    assert.ok(num("--zentral-notes-panel-reserve") > 0, "band reserved inside the panel");
     assert.equal(sheet.dataset.slot, "dock");
-    // stretching again while open releases the reserve it holds (no drift, no stale margin)
-    root.getBoundingClientRect = () => rect(0, 0, 400, 800 - num("--zentral-notes-panel-reserve"));
-    windowListeners.filter((l) => l.t === "resize").forEach((l) => l.fn());
-    await sleep(30); await flush();
-    assert.equal(vars.has("--zentral-notes-panel-reserve"), false, "reserve released when the panel is stretched again");
-    assert.equal(sheet.style.pointerEvents, "none");
     primaryBtn.click(); await flush();
     assert.equal(vars.has("--zentral-notes-panel-reserve"), false);
+    assert.equal(html.hasAttribute("bgalazka-notes-pseudo"), false);
   });
 
   // ---- Triple View gap -----------------------------------------------------------------------------------------
@@ -417,10 +401,10 @@ function cssTests() {
     for (const a of ["bgalazka-notes-gap", "bgalazka-quad-view", "bgalazka-notes-spill"]) assert.equal(html.hasAttribute(a), false, a);
   });
 
-  await test("Triple -> Quad transition: a dock-kind sheet in Triple View uses the quad marker and never the gap variables", async () => {
-    // the primary bar's sheet in Triple View is the third slot (quad); it must not set the gap or edge variables
+  await test("Triple View top bar: Notes is the free-floating window, it reserves nothing (no quad marker, no gap variables)", async () => {
     primaryBtn.click(); await sleep(30); await flush();
-    assert.equal(html.getAttribute("bgalazka-quad-view"), "true");
+    assert.equal(html.hasAttribute("bgalazka-quad-view"), false);
+    assert.equal(vars.has("--zentral-notes-panel-reserve"), false);
     assert.equal(vars.has("--zentral-notes-gap"), false);
     assert.equal(vars.has("--zentral-notes-gap-up"), false);
     primaryBtn.click(); await flush();

@@ -135,6 +135,14 @@
       CAPTURE_OPEN: "zen.workspace.zentral.notes.capture_open",
       CAPTURE_INBOX: "zen.workspace.zentral.notes.capture_inbox",
       // Links, dates, history
+      TREE_ORDER: "zen.workspace.zentral.notes.tree_order",
+      FOOTER_COUNTER: "zen.workspace.zentral.notes.footer_counter",
+      PIN_STRIP: "zen.workspace.zentral.notes.pinned_strip",
+      FIND_HL: "zen.workspace.zentral.notes.find_highlight",
+      TRASH_DAYS: "zen.workspace.zentral.notes.trash_auto_empty_days",
+      SPELL: "zen.workspace.zentral.notes.spellcheck",
+      SPELL_MAX: "zen.workspace.zentral.notes.spellcheck_max_chars",
+      NEW_CHOOSER: "zen.workspace.zentral.notes.new_note_chooser",
       HUB_DESC: "zen.workspace.zentral.notes.hub_descriptions",
       WIKI_COMPLETE: "zen.workspace.zentral.notes.wiki_complete",
       BACKLINKS_PANEL: "zen.workspace.zentral.notes.backlinks_panel",
@@ -147,6 +155,8 @@
       HISTORY_WARN_MB: "zen.workspace.zentral.notes.history_warn_mb",
       // Experiments (off by default, not verified in a live Zen)
       ZEN_MODE: "zen.workspace.zentral.notes.zen_folder",
+      ZEN_NEW_BUTTON: "zen.workspace.zentral.notes.zen_folder_new_button",
+      CAPTURE_FORMAT: "zen.workspace.zentral.notes.quick_capture_format",
       DEBUG_PERF: "zen.workspace.zentral.notes.debug_perf",
     });
     const LOOK_PREFS = Object.freeze(Object.keys(PREF).filter((k) => k.startsWith("LOOK_")).map((k) => PREF[k]));
@@ -158,9 +168,34 @@
     const OBS_TOPIC = "zentral-notes-changed";
     const IDLE_SAVE_MS = 800; // pause after the last keystroke
     const DEFAULT_MAX_SAVE_SECONDS = 5; // longest gap while still typing
-    const TRASH_DAYS = 30;
-    const NOTE_COLORS = ["none", "yellow", "green", "blue", "pink", "purple"];
-    const HIGHLIGHT_COLORS = ["yellow", "green", "blue", "pink", "orange", "purple", "red", "teal"];
+    const TRASH_DAYS = 30; // default retention; the pref trash_auto_empty_days overrides it (0 = never)
+    const TRASH_DAYS_MAX = 3650;
+    // Whole days, 0 = never; anything unreadable or out of range falls back to the default.
+    const cleanTrashDays = (v) => {
+      const n = typeof v === "string" && v.trim() === "" ? NaN : Math.round(Number(v));
+      return Number.isFinite(n) && n >= 0 && n <= TRASH_DAYS_MAX ? n : TRASH_DAYS;
+    };
+    // What auto-empty will do: which trashed notes are past the limit and when the next one expires (0 = nothing waiting).
+    function trashPlan(notes, days, now) {
+      const trashed = (notes || []).filter((n) => n && n.trashed);
+      if (!days) return { days: 0, total: trashed.length, expired: [], nextMs: 0 };
+      const span = days * 86400000;
+      const expired = trashed.filter((n) => n.trashed < now - span).map((n) => n.id);
+      const waiting = trashed.filter((n) => n.trashed >= now - span).map((n) => n.trashed + span);
+      return { days, total: trashed.length, expired, nextMs: waiting.length ? Math.min(...waiting) : 0 };
+    }
+    function trashBanner(plan, now) {
+      if (!plan.days) return "Auto-empty is off: notes stay here until you empty the Trash.";
+      const head = `Notes are deleted ${plan.days} days after they were trashed, when Notes starts.`;
+      if (plan.expired.length) return `${head} ${plan.expired.length} ${plan.expired.length === 1 ? "note is" : "notes are"} past that and will be deleted at the next start.`;
+      if (plan.nextMs) {
+        const d = Math.max(1, Math.ceil((plan.nextMs - now) / 86400000));
+        return `${head} The next one expires in ${d} ${d === 1 ? "day" : "days"}.`;
+      }
+      return head;
+    }
+    const NOTE_COLORS = ["none", "yellow", "green", "blue", "pink", "purple", "orange", "red", "teal", "gray"];
+    const HIGHLIGHT_COLORS = ["yellow", "green", "blue", "pink", "orange", "purple", "red", "teal", "gray", "brown", "lime", "cyan"];
     const FILE_RE = /^[A-Za-z0-9_][A-Za-z0-9_ .-]{0,120}\.md$/;
     const FRONT_KEYS = new Set([
       "id",
@@ -470,21 +505,40 @@
       return { folders: cleanFolders(moved), changes, id: newId };
     }
     // The tree as visible rows (a collapsed folder hides what is inside). `pinned` is the virtual first row.
-    function treeRows(root, pinned = []) {
+    const TREE_ORDERS = Object.freeze(["folders-first", "notes-first", "mixed-by-name"]);
+    const cleanTreeOrder = (v) => (TREE_ORDERS.includes(v) ? v : "folders-first");
+    function treeRows(root, pinned = [], order = "folders-first") {
+      order = cleanTreeOrder(order);
       const rows = [];
       if (pinned.length) {
         rows.push({ type: "pinned", depth: 0, count: pinned.length });
         for (const n of pinned) rows.push({ type: "note", depth: 1, note: n, pinnedRow: true });
       }
       const countOf = (node) => node.notes.length + node.children.reduce((s, c) => s + countOf(c), 0);
-      const walk = (node, depth) => {
-        for (const c of node.children) {
-          rows.push({ type: "folder", depth, node: c, count: countOf(c) });
-          if (!c.collapsed) walk(c, depth + 1);
-        }
-        if (depth === 0 || !node.collapsed) for (const n of node.notes) rows.push({ type: "note", depth, note: n });
+      const pushFolder = (c, depth) => {
+        rows.push({ type: "folder", depth, node: c, count: countOf(c) });
+        if (!c.collapsed) walk(c, depth + 1);
       };
-      // The root's own notes follow the folders, like files after directories.
+      const walk = (node, depth) => {
+        const showNotes = depth === 0 || !node.collapsed;
+        if (order === "notes-first") {
+          if (showNotes) for (const n of node.notes) rows.push({ type: "note", depth, note: n });
+          for (const c of node.children) pushFolder(c, depth);
+        } else if (order === "mixed-by-name") {
+          // One alphabetical list; ties keep folders first. Folder order set by the user is ignored in this mode.
+          const mixed = node.children.map((c) => ({ folder: c, key: String(c.label || "") }));
+          if (showNotes) for (const n of node.notes) mixed.push({ note: n, key: titleOf(n.body) || "Untitled note" });
+          mixed.sort((a, b) => a.key.localeCompare(b.key) || Number(!a.folder) - Number(!b.folder));
+          for (const m of mixed) {
+            if (m.folder) pushFolder(m.folder, depth);
+            else rows.push({ type: "note", depth, note: m.note });
+          }
+        } else {
+          for (const c of node.children) pushFolder(c, depth);
+          if (showNotes) for (const n of node.notes) rows.push({ type: "note", depth, note: n });
+        }
+      };
+      // folders-first: the root's own notes follow the folders, like files after directories.
       walk(root, 0);
       return rows;
     }
@@ -517,6 +571,22 @@
     }
     const wordCount = (body) =>
       (String(body).match(/[\p{L}\p{N}][\p{L}\p{N}'\u2019-]*/gu) || []).length;
+    // Footer text. Plain: "N words" (the old behaviour). Extended (pref footer_counter): words, characters and
+    // reading time at 200 words a minute, rounded up; with a selection it counts the selection and says so.
+    // Spell-check is the costly part of a huge note: below the limit it follows the pref, above it is off.
+    const spellcheckOn = (enabled, maxChars, length) => enabled !== false && !(maxChars > 0 && length > maxChars);
+    const READ_WPM = 200;
+    function counterText(body, selection = "", extended = false) {
+      const text = selection ? String(selection) : String(body || "");
+      const words = wordCount(text);
+      const label = (n) => `${n} ${n === 1 ? "word" : "words"}`;
+      if (!extended) return label(wordCount(body));
+      const chars = Array.from(text).length;
+      const mins = words ? Math.max(1, Math.ceil(words / READ_WPM)) : 0;
+      const parts = [label(words), `${chars} ${chars === 1 ? "char" : "chars"}`];
+      if (mins) parts.push(`~${mins} min read`);
+      return (selection ? "Selected: " : "") + parts.join(" \u00b7 ");
+    }
     const safeFileName = (title, fallback = "note") =>
       (String(title).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim() ||
         fallback
@@ -643,7 +713,7 @@
       let fence = "";
       return String(text)
         .split("\n")
-        .map((line) => {
+        .map((line, li) => {
           const f = /^ {0,3}(`{3,}|~{3,})/.exec(line);
           if (f) {
             if (!fence) fence = f[1][0];
@@ -651,7 +721,7 @@
             return line;
           }
           if (fence) return line;
-          return line.split(/(`+[^`]*`+)/).map((seg, i) => (i % 2 ? seg : fn(seg))).join("");
+          return line.split(/(`+[^`]*`+)/).map((seg, i) => (i % 2 ? seg : fn(seg, li))).join("");
         })
         .join("\n");
     }
@@ -1620,7 +1690,11 @@
         else if (n.t === "math") out += '<span class="math">' + inlineHtml(n.c) + "</span>";
         else if (n.t === "code") out += "<code>" + escHtml(n.s) + "</code>";
         else if (n.t === "img") out += n.asset ? '<span class="zn-picture">[picture: ' + escHtml(n.alt || "image") + "]</span>" : '<img src="' + escHtml(n.href) + '" alt="' + escHtml(n.alt) + '">';
-        else if (n.t === "a") out += '<a href="' + escHtml(n.href) + '"' + (n.title ? ' title="' + escHtml(n.title) + '"' : "") + ' rel="noopener noreferrer">' + inlineHtml(n.c) + "</a>";
+        else if (n.t === "a") {
+          // data-bare: the visible text already is the address, so the print stylesheet must not repeat it.
+          const bare = inlineText(n.c).replace(/\/$/, "") === String(n.href).replace(/\/$/, "");
+          out += '<a href="' + escHtml(n.href) + '"' + (n.title ? ' title="' + escHtml(n.title) + '"' : "") + (bare ? " data-bare" : "") + ' rel="noopener noreferrer">' + inlineHtml(n.c) + "</a>";
+        }
         else if (n.t === "nl") out += '<span class="note-link">' + inlineHtml(n.c) + "</span>"; // no address: a single exported note cannot reach the others
         else if (n.t === "kbd") out += "<kbd>" + escHtml(n.s) + "</kbd>";
         else if (n.t === "fn") out += '<sup class="fn"><a href="#fn-' + n.n + '" id="fnref-' + n.n + '">' + n.n + "</a></sup>";
@@ -1691,7 +1765,15 @@
       "th,td{border:1px solid rgba(127,127,127,.5);padding:.3em .6em}img{max-width:100%}" +
       'mark{background:#fff176;color:#000}mark[data-color=green]{background:#a5d6a7}mark[data-color=blue]{background:#90caf9}' +
       'mark[data-color=pink]{background:#f8bbd0}mark[data-color=orange]{background:#ffcc80}mark[data-color=purple]{background:#ce93d8}' +
-      'mark[data-color=red]{background:#ef9a9a}mark[data-color=teal]{background:#80cbc4}@media print{body{margin:0;max-width:none}}';
+      'mark[data-color=red]{background:#ef9a9a}mark[data-color=teal]{background:#80cbc4}' +
+      'mark[data-color=gray]{background:#cfd8dc}mark[data-color=brown]{background:#bcaaa4}mark[data-color=lime]{background:#e6ee9c}mark[data-color=cyan]{background:#80deea}' +
+      // Print (Cycle F #32, default on, no pref): paper colours, no page-edge margins, no split code/tables/quotes,
+      // headings stay with their text, web links show their address unless the text already is the address.
+      '@media print{:root{color-scheme:light}body{margin:0;max-width:none;background:#fff;color:#000;font-size:11pt}' +
+      'pre,blockquote,table,tr,img,details{break-inside:avoid}pre{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #bbb;background:#f5f5f5}' +
+      'h1,h2,h3,h4,h5,h6{break-after:avoid}a{color:inherit;text-decoration:underline}' +
+      'a[href^="http"]:not([data-bare])::after{content:" (" attr(href) ")";font-size:.85em;overflow-wrap:anywhere}' +
+      'mark{-webkit-print-color-adjust:exact;print-color-adjust:exact}}';
     function exportHtml(body, opts = {}, { print = false } = {}) {
       const title = titleOf(body) || "Note";
       return (
@@ -2054,6 +2136,7 @@
       { id: "dateTomorrow", label: "Open tomorrow's note", def: "" },
       { id: "dateNext", label: "Open the next work day's note", def: "" },
       { id: "dateList", label: "Notes by date\u2026", def: "" },
+      { id: "outline", label: "Outline of this note (headings)\u2026", def: "" },
       { id: "history", label: "Version history of this note\u2026", def: "" },
       { id: "newNote", label: "New note", def: "Ctrl+N" },
       { id: "list", label: "All notes and search", def: "Ctrl+K" },
@@ -2282,6 +2365,10 @@
       },
       {
         id: "links", label: "Links & history", items: [
+          { id: "newChooser", label: "The + button asks: blank note, today, tomorrow or a date", pref: PREF.NEW_CHOOSER, kind: "bool", def: false },
+          { id: "pinStrip", label: "Pinned notes strip and Recent menu under the title", pref: PREF.PIN_STRIP, kind: "bool", def: false },
+          { id: "footerCount", label: "Footer shows characters and reading time (and counts the selection)", pref: PREF.FOOTER_COUNTER, kind: "bool", def: false },
+          { id: "treeOrder", label: "Order in the notes tree", pref: PREF.TREE_ORDER, kind: "choice", def: "folders-first", choices: [["folders-first", "Folders first"], ["notes-first", "Notes first"], ["mixed-by-name", "Mixed, by name"]] },
           { id: "hubDesc", label: "Hub notes show a short description for each linked note", pref: PREF.HUB_DESC, kind: "bool", def: true },
           { id: "wikiAuto", label: "Suggest notes while typing [[", pref: PREF.WIKI_COMPLETE, kind: "bool", def: true },
           { id: "linkedStrip", label: "Show \"Linked from\" under the read view", pref: PREF.BACKLINKS_PANEL, kind: "bool", def: false },
@@ -2293,6 +2380,11 @@
           S("histMin", "At most one version every", PREF.HISTORY_MINUTES, 1, 1440, "min", 10),
           S("histCap", "Do not version notes bigger than", PREF.HISTORY_CAP_KB, 16, 4096, "KB", 512),
           S("histWarn", "Warn when all history is bigger than", PREF.HISTORY_WARN_MB, 5, 2000, "MB", 100),
+          { kind: "heading", label: "Performance" },
+          { id: "findHl", label: "Find in a note shows matches by", pref: PREF.FIND_HL, kind: "choice", def: "selection", choices: [["selection", "Selecting the match"], ["backdrop", "Highlighting every match"]] },
+          S("trashDays", "Delete notes from the Trash after (0 = never)", PREF.TRASH_DAYS, 0, 3650, "days", 30),
+          { id: "spell", label: "Spell-check while typing", pref: PREF.SPELL, kind: "bool", def: true },
+          S("spellMax", "Spell-check off in notes longer than", PREF.SPELL_MAX, 1000, 1000000, "chars", 100000),
         ],
       },
       {
@@ -2482,6 +2574,19 @@
       return out;
     }
     // Rendered text arrives as separate runs (one per text node). A match never spans two runs.
+    // Pieces of `text` for the highlight layer: [{ text, hit: false|index }]. Matches are sorted and non-overlapping.
+    function highlightSegments(text, matches) {
+      const out = [];
+      let at = 0;
+      matches.forEach((m, i) => {
+        if (m.start < at || m.end <= m.start) return;
+        if (m.start > at) out.push({ text: text.slice(at, m.start), hit: false });
+        out.push({ text: text.slice(m.start, m.end), hit: i });
+        at = m.end;
+      });
+      if (at < text.length) out.push({ text: text.slice(at), hit: false });
+      return out;
+    }
     function findInRuns(runs, query, limit = FIND_MAX_MATCHES) {
       const out = [];
       for (let i = 0; i < runs.length && out.length < limit; i++)
@@ -2627,15 +2732,17 @@
 
     // ======================================================================
     // Pure core: reminders (P2)
-    //  - per note, front matter: `remind: <ISO time>` (5-minute steps) and `reminded: <ISO time>` = the due time
+    //  - per note, front matter: `remind: <ISO time>` (whole minutes; seconds are always 0) and `reminded: <ISO time>` = the due time
     //    that was already announced, so a restart or a second window never announces it again;
     //  - one coarse timer for the next due reminder (no polling); dueReminders = overdue and not yet announced.
     // ======================================================================
-    const REMIND_STEP_MS = 5 * 60 * 1000;
+    // Whole minutes: typing 16:43 rings at 16:43 (the old 5-minute snap was a lie, Cycle F #15). The timer below is armed
+    // for the exact due time, so there is no tick to speed up.
+    const REMIND_STEP_MS = 60 * 1000;
     const REMIND_MIN = Date.UTC(2000, 0, 1), REMIND_MAX = Date.UTC(2100, 0, 1);
     const MAX_TIMER_MS = 2 ** 31 - 1;
     const SNOOZE_CHOICES = Object.freeze([[10, "10 minutes"], [60, "1 hour"], [180, "3 hours"], [1440, "Tomorrow"]]);
-    // Nearest 5-minute step; 0 for anything that is not a sensible time.
+    // Nearest whole minute (seconds dropped); 0 for anything that is not a sensible time.
     function cleanRemind(v) {
       const t = Number(v);
       if (!Number.isFinite(t) || t < REMIND_MIN || t > REMIND_MAX) return 0;
@@ -2665,7 +2772,16 @@
     const pad4 = (n) => String(n).padStart(4, "0");
     const remindDateText = (t) => { const d = new Date(t); return pad4(d.getFullYear()) + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); };
     const remindTimeText = (t) => { const d = new Date(t); return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); };
-    // "2026-11-02" + "09:05" (local time) -> time or 0. Seconds are not accepted; minutes snap to 5.
+    // Live line under the reminder inputs: "Will ring at 16:43 (in 12 min)". `at` = parseRemindInput result (0 = unreadable).
+    function remindPreview(at, now) {
+      if (!at) return "Enter the date as YYYY-MM-DD and the time as HH:MM";
+      if (at <= now) return "That time has already passed";
+      const mins = Math.ceil((at - now) / 60000);
+      const left = mins < 60 ? `${mins} min` : mins < 2880 ? `${Math.floor(mins / 60)} h${mins % 60 ? " " + (mins % 60) + " min" : ""}` : `${Math.round(mins / 1440)} days`;
+      const sameDay = remindDateText(at) === remindDateText(now);
+      return `Will ring at ${sameDay ? "" : remindDateText(at) + " "}${remindTimeText(at)} (in ${left})`;
+    }
+    // "2026-11-02" + "09:05" (local time) -> time or 0. Seconds are not accepted; the minute is kept as typed.
     function parseRemindInput(dateText, timeText) {
       const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateText).trim()), tm = /^(\d{1,2}):(\d{2})$/.exec(String(timeText).trim());
       if (!dm || !tm) return 0;
@@ -2933,6 +3049,7 @@
       now = () => Date.now(),
       getDir,
       getMaxSaveMs,
+      getTrashDays = () => TRASH_DAYS,
       setTimer,
       clearTimer,
       warn = () => {},
@@ -3174,10 +3291,8 @@
       }
 
       async function purgeOldTrash() {
-        const limit = now() - TRASH_DAYS * 86400000;
-        for (const note of [...notes.values()]) {
-          if (note.trashed && note.trashed < limit) await removeNoteFiles(note.id);
-        }
+        const plan = trashPlan([...notes.values()], cleanTrashDays(getTrashDays()), now());
+        for (const id of plan.expired) await removeNoteFiles(id);
       }
       function removeNoteFiles(id) {
         notes.delete(id);
@@ -3244,6 +3359,19 @@
           if (last && !last.trashed) return last.id;
           return api.list()[0]?.id || "";
         },
+        // Creates a note with a fixed id unless that id already exists (even trashed): used for the demo notes, so
+        // installing twice never duplicates or overwrites what the person edited. Returns the note and whether it is new.
+        ensureNote(id, body, folder = "") {
+          if (!NOTE_ID_RE.test(String(id))) return { note: null, created: false };
+          const have = notes.get(id);
+          if (have) return { note: have, created: false };
+          const t = now();
+          const note = { id, body, created: t, updated: t, color: "none", label: "", folder: cleanFolder(folder), pinned: false, trashed: 0, remind: 0, reminded: 0, _onDisk: false, _mtime: t };
+          notes.set(id, note);
+          if (body) markDirty(id);
+          emit("change", id, { created: true });
+          return { note, created: true };
+        },
         create(body = "", folder = "") {
           let id = makeId(now());
           while (notes.has(id)) id = makeId(now());
@@ -3291,6 +3419,22 @@
           note.label = next;
           if (note.body.trim() || note._onDisk) markDirty(id);
           emit("change", id, { meta: true });
+        },
+        // Rename a label on every note in one pass (case-insensitive match). `to` = "" removes it; a name that already
+        // exists merges the two. Trashed notes are included so no stale label is left. Returns how many notes changed.
+        renameLabel(from, to) {
+          const want = cleanLabel(from).toLowerCase();
+          if (!want) return 0;
+          const next = cleanLabel(to);
+          let changed = 0;
+          for (const note of notes.values()) {
+            if (cleanLabel(note.label).toLowerCase() !== want || note.label === next) continue;
+            note.label = next;
+            if (note.body.trim() || note._onDisk) markDirty(note.id);
+            emit("change", note.id, { meta: true });
+            changed++;
+          }
+          return changed;
         },
         setPinned(id, pinned) {
           const note = notes.get(id);
@@ -3726,6 +3870,47 @@
       const hash = /#([^\s]*)$/.exec(String(href));
       return { id, heading: hash ? cleanAnchor(hash[1]) : "" };
     }
+
+    // Broken links checker (Cycle G #36). Pure, read only: reports links that lead nowhere, never changes a note.
+    // kind: "missing-note" (no such note, or a [[title]] nobody has), "trashed" (the target is in the Trash),
+    // "missing-heading" (the note exists, the #heading does not). Links inside code are ignored. Missing assets are NOT checked here.
+    const BROKEN_MAX = 500;
+    function findBrokenLinks(notes) {
+      const all = new Map(notes.map((n) => [n.id, n]));
+      const live = notes.filter((n) => !n.trashed);
+      const out = [];
+      for (const n of live) {
+        const seen = new Set();
+        const add = (item) => {
+          const key = item.raw + "\u0000" + item.kind;
+          if (seen.has(key) || out.length >= BROKEN_MAX) return;
+          seen.add(key);
+          out.push({ noteId: n.id, ...item });
+        };
+        mapOutsideCode(n.body, (seg, line) => {
+          for (const m of seg.matchAll(/(!?)\[([^\[\]\n]*)\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g)) {
+            if (m[1]) continue; // images are not note links
+            const parts = noteLinkParts(m[3]);
+            if (!parts) continue;
+            const target = all.get(parts.id);
+            const base = { line, raw: m[0], label: m[2] || parts.id, targetId: parts.id, anchor: parts.heading, title: parts.id };
+            if (!target) add({ ...base, kind: "missing-note" });
+            else if (target.trashed) add({ ...base, kind: "trashed", title: titleOf(target.body) || parts.id });
+            else if (parts.heading && !headingsOf(target.body).some((x) => x.slug === parts.heading)) add({ ...base, kind: "missing-heading", title: titleOf(target.body) || parts.id });
+          }
+          for (const m of seg.matchAll(new RegExp(WIKI_RE.source, "g"))) {
+            const title = m[1].trim();
+            if (!resolveNoteTitle(notes, title)) add({ line, raw: m[0], label: (m[2] || title).trim(), targetId: "", anchor: "", title, kind: "missing-note" });
+          }
+          return seg;
+        });
+      }
+      return out;
+    }
+    // The broken link written as plain text again (the words stay): [label](x.md) -> label, [[a|b]] -> b.
+    function unlinkBroken(body, item) {
+      return mapOutsideCode(body, (seg) => seg.split(item.raw).join(item.label));
+    }
     const headingOffset = (body, slug) => {
       const hit = headingsOf(body).find((x) => x.slug === slug);
       if (!hit) return -1;
@@ -3735,6 +3920,128 @@
       return off;
     };
 
+    // What the pinned strip shows (Cycle F #29): up to `max` pinned notes and the recent ones that are not the open note.
+    function stripModel(notes, recentIds, currentId, max = 8) {
+      const live = (notes || []).filter((n) => n && !n.trashed);
+      const pinned = live.filter((n) => n.pinned).slice(0, max).map((n) => ({ id: n.id, title: titleOf(n.body) || n.label || "Untitled note" }));
+      const byId = new Map(live.map((n) => [n.id, n]));
+      const recent = (recentIds || []).filter((id) => id !== currentId && byId.has(id)).slice(0, MAX_RECENT).map((id) => ({ id, title: titleOf(byId.get(id).body) || byId.get(id).label || "Untitled note" }));
+      return { pinned, recent };
+    }
+    // Note templates (Cycle G #35). User templates are ordinary notes in the reserved "Templates" folder (they sync with the
+    // profile and are edited like any note). The built-ins below are offered from code until a note with the same fixed id
+    // exists (the user's edited copy then wins, a trashed copy stays gone). Variables: {{date}} {{time}} {{title}} {{cursor}} only.
+    const TEMPLATE_FOLDER = "templates";
+    const BUILTIN_TEMPLATES = Object.freeze([
+      { id: "zn-tpl-meeting", name: "Meeting", body: "# {{title}}\n\n**Date:** {{date}} {{time}}\n**Attendees:** \n\n## Agenda\n\n- {{cursor}}\n\n## Notes\n\n## Decisions\n\n## Action items\n\n- [ ] \n" },
+      { id: "zn-tpl-daily", name: "Daily", body: "# {{date}}\n\n## Plan\n\n- [ ] {{cursor}}\n\n## Notes\n\n## Done\n" },
+      { id: "zn-tpl-checklist", name: "Checklist", body: "# {{title}}\n\n- [ ] {{cursor}}\n- [ ] \n- [ ] \n" },
+      { id: "zn-tpl-project", name: "Project", body: "# {{title}}\n\n**Started:** {{date}}\n\n## Goal\n\n{{cursor}}\n\n## Milestones\n\n- [ ] \n\n## Tasks\n\n- [ ] \n\n## Links\n\n## Log\n\n- {{date}} created\n" },
+    ]);
+    const templateNeedsTitle = (body) => String(body ?? "").includes("{{title}}");
+    // Fills the variables; the first {{cursor}} gives the caret, any further ones vanish. Unknown {{x}} stays as typed.
+    function applyTemplate(body, { now = Date.now(), title = "" } = {}) {
+      const d = new Date(now);
+      const time = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+      const t = String(title ?? "").replace(/\s*[\r\n]+\s*/g, " ").trim();
+      const fill = (seg) => seg.split("{{date}}").join(ymdOf(now)).split("{{time}}").join(time).split("{{title}}").join(t);
+      const parts = String(body ?? "").split("{{cursor}}").map(fill);
+      return { body: parts.join(""), caret: parts[0].length };
+    }
+    // Menu entries: the user's templates (non-trashed notes in the Templates folder), then built-ins nobody has a note for.
+    function templateChoices(notes) {
+      const user = notes.filter((n) => !n.trashed && cleanFolder(n.folder) === TEMPLATE_FOLDER).map((n) => ({ id: n.id, name: titleOf(n.body) || "Untitled template", body: n.body, builtin: false }));
+      const have = new Set(notes.map((n) => n.id));
+      const builtin = BUILTIN_TEMPLATES.filter((b) => !have.has(b.id)).map((b) => ({ ...b, builtin: true }));
+      return [...user, ...builtin];
+    }
+    // Demo / showcase notes (Cycle F #3): fixed ids so installing twice changes nothing. They double as a manual test fixture.
+    const DEMO_FOLDER = "help"; // folder id (lowercase slug); the visible label is "Help"
+    const DEMO_NOTES = Object.freeze([
+      { id: "zn-demo-tour", body: [
+        "# Notes syntax tour", "",
+        "Everything here is plain Markdown. Switch between Edit, Read and Split with the toolbar to compare.", "",
+        "## Text", "",
+        "**bold**, *italic*, ~~strikethrough~~, ==highlight==, =={green}green highlight==, `inline code`, X^2^, H~2~O and <kbd>Ctrl</kbd>.", "",
+        "## Lists", "",
+        "- one", "  - nested", "    - deeper", "- two", "", "1. first", "2. second", "", "- [ ] a task", "- [x] a finished task", "",
+        "## Quote, code and table", "",
+        "> A quote can have **formatting** too.", "",
+        "```js", "const answer = 42; // fenced code keeps its spacing", "```", "",
+        "| Name | Value |", "| --- | --- |", "| left | 1 |", "| right | 2 |", "",
+        "## Links and footnotes", "",
+        "A [web link](https://example.com), a link to another note: [[Linking notes demo]], and a footnote.[^1]", "",
+        "[^1]: Footnotes are collected at the bottom of the read view.", "",
+        "---", "", "Next: [[Callouts and reminders]]", ""].join("\n") },
+      { id: "zn-demo-links", body: [
+        "# Linking notes demo", "",
+        "Write `[[` and start typing a note's title to link to it. Links work in both directions:", "",
+        "- This note links to [[Notes syntax tour]] and [[Callouts and reminders]].",
+        "- Open one of them and look at *Linked from* at the bottom: this note is listed there (More > Notes that link here).", "",
+        "## Jump inside a note", "",
+        "[Go to Section B](#section-b) scrolls to the heading below.", "",
+        "## Section A", "", "Some text.", "",
+        "## Section B", "", "You landed here. Try More > Outline to see every heading of this note.", ""].join("\n") },
+      { id: "zn-demo-callouts", body: [
+        "# Callouts and reminders", "",
+        "> [!NOTE]", "> A note callout. Insert one from the caret menu next to the toolbar: Callout.", "",
+        "> [!TIP] A tip with its own title", "> Tips can have several lines.", "> Second line.", "",
+        "> [!IMPORTANT]", "> Important.", "", "> [!WARNING]", "> Warning.", "", "> [!CAUTION]", "> Caution.", "", "> [!INFO]", "> Info.", "",
+        "## Reminders", "",
+        "Open More > Remind me..., pick a time (to the minute) and a bell chip appears beside the title when it is set.",
+        "Try a time two minutes from now to see the notification.", ""].join("\n") },
+      { id: "zn-demo-torture", body: [
+        "# Torture test (placeholder)", "",
+        "These lines poke at edge cases. Each should render without breaking the layout; the owner's own torture test should replace or extend this note.", "",
+        "- unclosed **bold and *italic", "- =={nonsense}unknown highlight colour==", "- ==== and =={red}== stay literal", "- <b>raw html is shown as text</b>",
+        "- escaped \\*stars\\* and a lone * star", "- a very long unbroken word: " + "x".repeat(120), "- unicode: zażółć gęślą jaźń, 日本語, emoji 🙂", "",
+        "#### Empty list items and fences", "", "-", "- ", "", "```", "an unclosed code fence swallows the rest, as in GitHub", "",
+        "Not supported yet (see the roadmap, Cycle G): `![[embed]]`, `[[Note#Heading]]`, extra task states like `[/]`, `[-]`.", ""].join("\n") },
+    ]);
+    const demoTitle = (d) => titleOf(d.body);
+
+    // Quick capture (Cycle G #34): one line appended to a note. "bullet-time" = "- 14:05 text" (local time), "task" = "- [ ] text".
+    const CAPTURE_FORMATS = Object.freeze(["bullet-time", "plain", "task"]);
+    const cleanCaptureFormat = (v) => (CAPTURE_FORMATS.includes(v) ? v : "bullet-time");
+    function captureLine(text, format, ms) {
+      const t = String(text ?? "").replace(/\s*[\r\n]+\s*/g, " ").trim();
+      if (!t) return "";
+      const f = cleanCaptureFormat(format);
+      if (f === "plain") return t;
+      if (f === "task") return "- [ ] " + t;
+      const d = new Date(ms);
+      return `- ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")} ${t}`;
+    }
+    // Puts `line` on its own line at `at` (default: end of the note); never glues lines, never leaves a blank gap.
+    function insertLineAt(body, line, at) {
+      const b = String(body ?? "");
+      if (!line) return b;
+      const pos = at === undefined ? b.length : Math.max(0, Math.min(b.length, at));
+      const before = b.slice(0, pos), after = b.slice(pos);
+      const lead = before && !before.endsWith("\n") ? "\n" : "";
+      return before + lead + line + "\n" + (at !== undefined && after.startsWith("\n") ? after.slice(1) : after);
+    }
+    // Labels in use (Cycle F #19): [{ label, count }], live notes only, matched case-insensitively (the first spelling wins),
+    // most used first, then alphabetical.
+    function labelSummary(notes) {
+      const map = new Map();
+      for (const n of notes || []) {
+        const l = cleanLabel(n && !n.trashed ? n.label : "");
+        if (!l) continue;
+        const k = l.toLowerCase();
+        map.set(k, { label: map.get(k)?.label || l, count: (map.get(k)?.count || 0) + 1 });
+      }
+      return [...map.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+    }
+    // Outline of a note (Cycle F #27): its headings with the one the caret is under marked `current`. At most `max`
+    // are listed; `more` says how many were left out. Levels are shifted so the shallowest heading sits at 1.
+    function outlineItems(body, caretLine = -1, max = 60) {
+      const all = headingsOf(body);
+      const top = all.length ? Math.min(...all.map((x) => x.level)) : 1;
+      let cur = -1;
+      all.forEach((x, i) => { if (caretLine >= 0 && x.line <= caretLine) cur = i; });
+      return { items: all.slice(0, max).map((x, i) => ({ level: x.level - top + 1, text: x.text, slug: x.slug, line: x.line, current: i === cur })), more: Math.max(0, all.length - max) };
+    }
     // ---- footnotes: [^1] in the text, [^1]: the note, at any line -------------------------------------
     const FOOT_DEF_RE = /^ {0,3}\[\^([^\]\s]{1,40})\]:\s*(.*)$/;
     const FOOT_MAX = 200;
@@ -4165,7 +4472,7 @@
       window.__zentralNotesTestSeam.core = {
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
-        wordCount, safeFileName, createAutosaver, parseInline, parseBlocks,
+        wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
         wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine, insertRule, nestLines,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
@@ -4181,13 +4488,13 @@
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, fitDialog,
+        allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
-        foldText, normalizeFindQuery, findMatches, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
+        foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
         FIND_MAX_MATCHES, FIND_MAX_QUERY, sniffImageMime, checkAssetBytes, assetFileName, parseAssetLink, buildAssetLink, buildAssetImage,
         insertAssetImage, assetImageAt, restyleAssetImage, assetRefs, isAssetNoteId, ASSET_MAX_BYTES, ASSET_MAX_PER_NOTE, ASSET_MIME,
-        cleanRemind, ceilStep, dueReminders, nextReminderAt, reminderDelay, reminderPresets, parseRemindInput, remindDateText, remindTimeText,
+        cleanRemind, ceilStep, dueReminders, nextReminderAt, reminderDelay, reminderPresets, parseRemindInput, remindPreview, remindDateText, remindTimeText,
         createReminderScheduler, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
         headingSlug, headingsOf, cleanAnchor, noteLinkParts, headingOffset, insertFootnote, nextFootnoteLabel, mentionRe, hasMention, linkFirstMention,
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
@@ -4699,7 +5006,10 @@
         h("div", { class: "zn-chips" }, chipAll, chipRecent, chipTrash, h("span", { class: "zn-grow" }), chipEmpty),
         listItems,
       );
-      const body = h("div", { class: "zn-body" }, ta, readEl, listEl);
+      // Find "highlight every match" layer (pref find_highlight = backdrop): sits under the transparent textarea.
+      const hlInner = h("div", { class: "zn-findlayer-inner" });
+      const hlEl = h("div", { class: "zn-findlayer", "aria-hidden": "true", hidden: true }, hlInner);
+      const body = h("div", { class: "zn-body" }, hlEl, ta, readEl, listEl);
       const statusEl = h("span", { class: "zn-status", "aria-live": "polite" });
       const countEl = h("span", { class: "zn-count" });
       const foot = h("div", { class: "zn-foot" }, statusEl, h("span", { class: "zn-grow" }), countEl);
@@ -4721,7 +5031,8 @@
       layout = PERF.wrap("notes.layout", layout);
       moveEvent = PERF.wrap("notes.drag-move", moveEvent);
       renderReadInner = PERF.wrap("notes.read-render", renderReadInner);
-      root.append(head, tools, findBar, wikiBar, body, linkedEl, foot);
+      const strip = h("div", { class: "zn-strip", role: "toolbar", "aria-label": "Pinned and recent notes", hidden: true });
+      root.append(head, tools, strip, findBar, wikiBar, body, linkedEl, foot);
       // Eight resize grips (edges and corners); CSS shows them only where the sheet may be moved.
       for (const hd of RESIZE_HANDLES) root.append(h("span", { class: "zn-rz", "data-h": hd }));
 
@@ -4799,10 +5110,15 @@
       function updateChrome() {
         rafChrome = 0;
         const n = note();
+        paintStrip();
         if (n) {
           titleEl.textContent =
             view === "list" ? titleEl.textContent : titleOf(n.body) || "Untitled note";
-          countEl.textContent = `${wordCount(n.body)} words`;
+          const ext = getPref(PREF.FOOTER_COUNTER, false) === true;
+          const sel = ext && mode !== "read" && ta.selectionEnd > ta.selectionStart ? ta.value.slice(ta.selectionStart, ta.selectionEnd) : "";
+          countEl.textContent = counterText(n.body, sel, ext);
+          const spell = spellcheckOn(getPref(PREF.SPELL, true), getPref(PREF.SPELL_MAX, 100000), n.body.length);
+          if (ta.spellcheck !== spell) ta.spellcheck = spell;
         } else countEl.textContent = "";
         const s = store.state;
         statusEl.dataset.state = s.save;
@@ -5053,9 +5369,64 @@
           findList = findInRuns(findRuns.map(textOfNode), q);
         } else findList = findMatches(ta.value, q);
       }
+      // ---- find highlight (pref find_highlight = backdrop) ----
+      const hlOn = () => findOpen && findList.length > 0 && getPref(PREF.FIND_HL, "selection") === "backdrop";
+      function clearHighlights() {
+        hlEl.hidden = true;
+        hlInner.replaceChildren();
+        delete root.dataset.hl;
+        try { window.CSS?.highlights?.delete("zn-find"); window.CSS?.highlights?.delete("zn-find-cur"); } catch (_) {}
+      }
+      function syncBackdropScroll() {
+        if (hlEl.hidden) return;
+        hlInner.style.transform = `translate(${-(ta.scrollLeft || 0)}px, ${-(ta.scrollTop || 0)}px)`;
+      }
+      function paintBackdrop() {
+        if (!hlOn()) return clearHighlights();
+        try {
+          if (findRuns) {
+            // Read view: the CSS Custom Highlight API paints ranges without touching the text.
+            const H = window.Highlight, reg = window.CSS?.highlights;
+            if (typeof H !== "function" || !reg) return clearHighlights();
+            const ranges = findList.slice(0, FIND_MAX_MATCHES).map((m, i) => {
+              const r = document.createRange();
+              r.setStart(findRuns[m.run], m.start);
+              r.setEnd(findRuns[m.run], m.end);
+              return [i, r];
+            });
+            reg.set("zn-find", new H(...ranges.filter(([i]) => i !== findIdx).map(([, r]) => r)));
+            const cur = ranges.find(([i]) => i === findIdx);
+            if (cur) reg.set("zn-find-cur", new H(cur[1]));
+            else reg.delete("zn-find-cur");
+            hlEl.hidden = true;
+            return;
+          }
+          if (mode === "read") return clearHighlights();
+          const gcs = window.getComputedStyle;
+          if (typeof gcs === "function") {
+            const cs = gcs(ta);
+            for (const k of ["fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "tabSize", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "whiteSpace", "overflowWrap", "wordBreak"]) hlEl.style[k] = cs[k];
+          }
+          Object.assign(hlEl.style, { left: (ta.offsetLeft || 0) + "px", top: (ta.offsetTop || 0) + "px", width: (ta.clientWidth || 0) + "px", height: (ta.clientHeight || 0) + "px" });
+          const nodes = [];
+          for (const seg of highlightSegments(ta.value, findList)) {
+            if (seg.hit === false) nodes.push(document.createTextNode(seg.text));
+            else nodes.push(h("mark", { class: seg.hit === findIdx ? "zn-findlayer-cur" : "" }, seg.text));
+          }
+          nodes.push(document.createTextNode("\n")); // a trailing newline keeps the last empty line as tall as the textarea's
+          hlInner.replaceChildren(...nodes);
+          hlEl.hidden = false;
+          root.dataset.hl = "on";
+          syncBackdropScroll();
+        } catch (error) {
+          console.warn("[ZentralNotes] find highlight failed", error);
+          clearHighlights();
+        }
+      }
       function paintFindState() {
         findBar.hidden = !(findOpen && view === "editor");
-        if (findBar.hidden) return;
+        if (findBar.hidden) return clearHighlights();
+        paintBackdrop();
         const q = findQuery();
         findCount.textContent = !q ? "" : findList.length ? `${findIdx >= 0 ? findIdx + 1 : "\u2013"} of ${findList.length}${findList.length >= FIND_MAX_MATCHES ? "+" : ""}` : "No matches";
         const n = findOtherIds.length;
@@ -5322,12 +5693,20 @@
         const presets = reminderPresets(now);
         const start = n.remind > now ? n.remind : presets[0][1];
         const d = field("Date (YYYY-MM-DD)", remindDateText(start), "2026-11-02");
-        const t = field("Time (HH:MM, 5-minute steps)", remindTimeText(start), "09:00");
+        const t = field("Time (HH:MM)", remindTimeText(start), "09:00");
+        const preview = h("div", { class: "zn-remind-preview", "aria-live": "polite" });
+        const paintPreview = () => {
+          const at = parseRemindInput(d.input.value, t.input.value);
+          preview.textContent = remindPreview(at, nowMs());
+          preview.dataset.bad = at && at > nowMs() ? "false" : "true";
+        };
         const quick = presets.map(([label, at]) => {
           const b = chip(label);
-          b.addEventListener("click", () => { d.input.value = remindDateText(at); t.input.value = remindTimeText(at); });
+          b.addEventListener("click", () => { d.input.value = remindDateText(at); t.input.value = remindTimeText(at); paintPreview(); });
           return b;
         });
+        for (const f of [d, t]) f.input.addEventListener("input", paintPreview);
+        paintPreview();
         const ok = chip("Set reminder", true), cancel = chip("Cancel");
         const buttons = [cancel];
         if (n.remind) {
@@ -5336,7 +5715,7 @@
           buttons.push(clear);
         }
         buttons.push(ok);
-        openCard("Remind me about this note", h("div", { class: "zn-dialog-actions" }, ...quick), d.row, t.row, h("div", { class: "zn-dialog-actions" }, ...buttons));
+        openCard("Remind me about this note", h("div", { class: "zn-dialog-actions" }, ...quick), d.row, t.row, preview, h("div", { class: "zn-dialog-actions" }, ...buttons));
         const submit = () => {
           const at = parseRemindInput(d.input.value, t.input.value);
           if (!at || at <= nowMs()) {
@@ -5380,6 +5759,11 @@
         item.addEventListener("dragend", () => (dragNoteId = ""));
       }
       item.dataset.color = n.color;
+      item.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        showMenu(pointAnchor(e), noteMenuItems(n));
+      });
       if (n.id === currentId) item.classList.add("is-current");
       const act = h("span", { class: "zn-item-actions" });
       if (trashed) {
@@ -5498,7 +5882,7 @@
         row.addEventListener("click", toggle);
         row.addEventListener("contextmenu", (e) => {
           e.preventDefault();
-          showMenu(more, folderMenuItems(node));
+          showMenu(pointAnchor(e), folderMenuItems(node));
         });
         row.addEventListener("keydown", (e) => {
           if (e.target !== row) return;
@@ -5548,7 +5932,7 @@
         return row;
       }
       function folderMenuItems(node) {
-        const items = [{ icon: "plus", label: "New note here", action: () => newNote(node.id) }];
+        const items = [{ icon: "plus", label: "New note here", action: () => newNote(node.id) }, { icon: "plus", label: "Quick capture to today\u2019s note\u2026", action: () => queueMicrotask(() => askQuickCapture("")) }];
         if (folderDepth(node.id) < FOLDER_MAX_DEPTH)
           items.push({ icon: "folder", label: "New subfolder\u2026", action: () => askFolderName("New subfolder", "", (name) => store.addFolder(name, node.id)) });
         items.push(
@@ -5562,7 +5946,7 @@
       function renderTree(keep) {
         const root0 = store.tree();
         const pinned = store.list().filter((n) => n.pinned);
-        const rows = treeRows(root0, pinned);
+        const rows = treeRows(root0, pinned, getPref(PREF.TREE_ORDER, "folders-first"));
         if (!rows.length) {
           listItems.append(h("p", { class: "zn-empty" }, "No notes yet. Press + to create one."));
           return;
@@ -5645,6 +6029,88 @@
         const targets = folderTargets(node.id).filter((id) => folderDepth(id) + span <= FOLDER_MAX_DEPTH && id !== parentOfFolder(node.id));
         askFolderPick(`Move \u201c${node.label}\u201d to`, targets, (id) => store.moveFolder(node.id, id), parentOfFolder(node.id));
       }
+      // ---- right-click menus (Cycle G #9 / #34 / #39) ----
+      const pointAnchor = (e) => ({ getBoundingClientRect: () => ({ left: e.clientX, top: e.clientY, right: e.clientX + 1, bottom: e.clientY + 1, width: 1, height: 1 }) });
+      // Where today's quick-capture line goes: { id, body, at } (the note is created when missing, like openDay does).
+      function todayCaptureTarget() {
+        const { ms, ymd } = dateTarget("today", Date.now());
+        if (dateMode() === "single") {
+          let j = store.list().find(isJournal);
+          if (!j) j = store.create("# " + JOURNAL_TITLE + "\n", "");
+          const r = journalSection(j.body, ymd, ms);
+          return { id: j.id, body: r.body, at: r.caret };
+        }
+        let n = findDateNote(store.list(), ymd);
+        if (!n) {
+          if (!store.meta.folders.some((f) => f.id === DATE_FOLDER)) store.addFolder("Daily");
+          n = store.create(dateNoteBody(ms), DATE_FOLDER);
+        }
+        return { id: n.id, body: n.body, at: undefined };
+      }
+      // Appends one line to a note through the store (history sees it). id "" = today's note. Returns the note id or "".
+      function quickCapture(id, text) {
+        const line = captureLine(text, getPref(PREF.CAPTURE_FORMAT, "bullet-time"), Date.now());
+        if (!line) return "";
+        let body, at;
+        if (id) {
+          const n = store.get(id);
+          if (!n || n.trashed) return "";
+          body = n.body;
+        } else ({ id, body, at } = todayCaptureTarget());
+        store.update(id, insertLineAt(body, line, at), "capture");
+        if (id === currentId && view === "editor") openNote(id, { focus: false });
+        return id;
+      }
+      function askQuickCapture(id) {
+        const target = id ? store.get(id) : null;
+        const d = field(id ? "Add a line to \u201c" + (titleOf(target?.body || "") || "Untitled note") + "\u201d" : "Add a line to today\u2019s note", "", "Thought, task, link\u2026");
+        const ok = chip("Add", true);
+        const cancel = chip("Cancel");
+        openCard("Quick capture", d.row, h("div", { class: "zn-dialog-actions" }, ok, cancel));
+        const go = () => {
+          if (!d.input.value.trim()) return;
+          const done = quickCapture(id, d.input.value);
+          closeDialog();
+          flash(done ? "Added" : "Nothing added");
+          scheduleList();
+        };
+        ok.addEventListener("click", go);
+        d.input.addEventListener("keydown", (ev) => ev.key === "Enter" && go());
+        cancel.addEventListener("click", closeDialog);
+        d.input.focus({ preventScroll: true });
+      }
+      function askMoveNote(n) {
+        askFolderPick("Move note to folder", folderTargets(), (fid) => { store.setFolder(n.id, fid); applyState(); scheduleList(); }, cleanFolder(n.folder));
+      }
+      function noteMenuItems(n) {
+        if (n.trashed)
+          return [
+            { icon: "restore", label: "Restore", action: () => { store.restore(n.id); scheduleList(); } },
+            { sep: true },
+            { icon: "trash", label: "Delete forever", danger: true, action: () => { store.deleteForever(n.id).then(scheduleList); } },
+          ];
+        return [
+          { icon: "note", label: "Open", action: () => openNote(n.id) },
+          { icon: "pin", label: n.pinned ? "Unpin" : "Pin", action: () => { store.setPinned(n.id, !n.pinned); scheduleList(); } },
+          { icon: "plus", label: "Quick capture here\u2026", action: () => queueMicrotask(() => askQuickCapture(n.id)) },
+          { icon: "plus", label: "Quick capture to today\u2019s note\u2026", action: () => queueMicrotask(() => askQuickCapture("")) },
+          { sep: true },
+          { icon: "folder", label: "Move to folder\u2026", action: () => queueMicrotask(() => askMoveNote(n)) },
+          { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body, n.folder); store.setColor(c.id, n.color); store.setLabel(c.id, n.label); scheduleList(); } },
+          { label: "Colour", group: NOTE_COLORS.map((c) => ({ label: c, action: () => { store.setColor(n.id, c); scheduleList(); } })) },
+          { icon: "link", label: "Copy link", action: () => { env.copyText?.("[[" + (titleOf(n.body) || "Untitled note") + "]]"); flash("Link copied"); } },
+          { sep: true },
+          { icon: "trash", label: "Move to trash", danger: true, action: () => { store.trash(n.id); if (n.id === currentId) currentId = ""; scheduleList(); } },
+        ];
+      }
+      function trashMenuItems() {
+        const days = Number(getPref(PREF.TRASH_DAYS, TRASH_DAYS));
+        return [
+          { icon: "trash", label: "Empty trash now", danger: true, disabled: !store.trashCount(), action: () => { store.emptyTrash().then(scheduleList); } },
+          { sep: true },
+          { label: "Auto-empty after\u2026", group: [[0, "Never"], [7, "7 days"], [14, "14 days"], [30, "30 days"], [90, "90 days"]].map(([v, label]) => ({ label: (v === days ? "\u2713 " : "") + label, action: () => { setPref(PREF.TRASH_DAYS, v); flash(v ? "Applies at the next start: older than " + v + " days" : "Auto-empty is off"); } })) },
+        ];
+      }
       function askNoteFolder() {
         const n = note();
         if (!n || n.trashed) return;
@@ -5665,6 +6131,10 @@
         if (treeMode()) renderTree();
         else {
           const all = filter === "recent" ? recentNotes() : store.list({ query, trashed });
+          if (trashed) {
+            const plan = trashPlan(store.list({ trashed: true }), cleanTrashDays(getPref(PREF.TRASH_DAYS, TRASH_DAYS)), nowMs());
+            listItems.append(h("p", { class: "zn-trash-note" }, trashBanner(plan, nowMs())));
+          }
           if (!all.length) {
             listItems.append(
               h("p", { class: "zn-empty" }, query ? "No notes match your search." : trashed ? "Trash is empty." : filter === "recent" ? "Nothing opened yet." : "No notes yet. Press + to create one."),
@@ -5803,6 +6273,7 @@
           });
       };
       listen(ta, "scroll", linkScroll(ta, readEl));
+      listen(ta, "scroll", syncBackdropScroll);
       listen(readEl, "scroll", linkScroll(readEl, ta));
       listen(tSync, "click", () => {
         store.setMeta({ syncScroll: !store.meta.syncScroll });
@@ -5817,7 +6288,7 @@
           { icon: "image", label: "Paste picture from clipboard", action: needEdit(pastePictureFromClipboard) },
           { icon: "image", label: "Picture options\u2026 (size, alignment)", action: needEdit(askPictureOptions) },
           { sep: true },
-          ...CALLOUT_KINDS.filter(([k]) => !hiddenTools().has(calloutId(k))).map(([k, label]) => ({ label: "Callout: " + label, action: needEdit(fmt[calloutId(k)]) })),
+          ...(CALLOUT_KINDS.some(([k]) => !hiddenTools().has(calloutId(k))) ? [{ label: "Callout\u2026", action: () => queueMicrotask(showCalloutMenu) }] : []),
           { sep: true },
           { label: "Superscript  X^2^", action: needEdit(fmt.sup), id: "sup" },
           { label: "Subscript  H~2~O", action: needEdit(fmt.sub), id: "sub" },
@@ -5827,6 +6298,10 @@
           { label: "Hub list of notes\u2026", action: needEdit(fmt.hubList), id: "hubList" },
         ].filter((it) => !it.id || !hiddenTools().has(it.id))),
       );
+      // Cycle F #11: one "Callout..." entry instead of six; this menu lists the kinds (hidden ones stay out).
+      function showCalloutMenu() {
+        showMenu(tInsert, CALLOUT_KINDS.filter(([k]) => !hiddenTools().has(calloutId(k))).map(([k, label]) => ({ label, action: needEdit(fmt[calloutId(k)]) })));
+      }
       listen(tSettings, "click", () => askSettings());
 
       // ---- menus -----------------------------------------------------------------
@@ -5985,6 +6460,144 @@
           fitCard();
         });
       };
+      // Demo notes (Cycle F #3): More > Install demo notes. Idempotent by fixed ids; edits and trashing are respected.
+      // ---- templates (Cycle G #35) ----
+      function ensureTemplatesFolder() {
+        return store.meta.folders.some((f) => f.id === TEMPLATE_FOLDER) ? TEMPLATE_FOLDER : store.addFolder("Templates") || "";
+      }
+      function newFromTemplate(tpl, title) {
+        const out = applyTemplate(tpl.body, { now: Date.now(), title });
+        const n = store.create(out.body, "");
+        mode = "edit";
+        store.setMeta({ mode: "edit" });
+        openNote(n.id);
+        try {
+          ta.value = store.get(n.id).body;
+          ta.setSelectionRange(out.caret, out.caret);
+          revealSourceMatch({ start: out.caret, end: out.caret });
+        } catch (_) {}
+      }
+      function pickTemplate(tpl) {
+        if (!templateNeedsTitle(tpl.body)) return newFromTemplate(tpl, "");
+        const f = field("Title", "", tpl.name);
+        const ok = chip("Create", true), cancel = chip("Cancel");
+        openCard("New " + tpl.name.toLowerCase() + " note", f.row, h("div", { class: "zn-dialog-actions" }, cancel, ok));
+        const go = () => { const t = f.input.value; closeDialog(); newFromTemplate(tpl, t); };
+        ok.addEventListener("click", go);
+        cancel.addEventListener("click", closeDialog);
+        f.input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } });
+        f.input.focus({ preventScroll: true });
+      }
+      const templateMenuItems = () => templateChoices(store.list()).map((t) => ({ icon: "note", label: t.name + (t.builtin ? "" : "  \u2605"), action: () => queueMicrotask(() => pickTemplate(t)) }));
+      function showTemplateMenu(anchor) {
+        const items = templateMenuItems();
+        items.push({ sep: true }, { icon: "folder", label: "Templates are notes in the Templates folder", disabled: true });
+        showMenu(anchor, items);
+      }
+      function saveAsTemplate() {
+        const n = note();
+        if (!n || n.trashed) return;
+        const folder = ensureTemplatesFolder();
+        if (!folder) return flash("Could not create the Templates folder");
+        const c = store.create(n.body, folder);
+        flash("Saved as a template: " + (titleOf(c.body) || "Untitled"));
+        if (view === "list") scheduleList();
+      }
+      function installDemoNotes() {
+        let made = 0;
+        const folder = store.meta.folders.some((f) => f.id === DEMO_FOLDER) ? DEMO_FOLDER : store.addFolder("Help") || "";
+        for (const d of DEMO_NOTES) if (store.ensureNote(d.id, d.body, folder).created) made++;
+        flash(made ? `Installed ${made} demo ${made === 1 ? "note" : "notes"} in the Help folder` : "Demo notes are already installed");
+        const first = store.get(DEMO_NOTES[0].id);
+        if (first && !first.trashed) openNote(first.id);
+      }
+      // Labels dialog (Cycle F #19): every label with its note count; rename (naming an existing label merges them) and remove.
+      // More > Check links (Cycle G #36): lists links that lead nowhere; nothing changes until a button is pressed.
+      function askLinkCheck() {
+        const rows = h("div", { class: "zn-labels zn-linkcheck" });
+        const close = chip("Close");
+        const REASON = { "missing-note": "no such note", trashed: "note is in the Trash", "missing-heading": "heading not found" };
+        const paint = () => {
+          rows.replaceChildren();
+          const list = findBrokenLinks(store.list());
+          if (!list.length) rows.append(h("p", { class: "zn-hint" }, "No broken links found."));
+          for (const it of list) {
+            const src = store.get(it.noteId);
+            const open = chip("Open"), unlink = chip("Unlink");
+            const kids = [open];
+            if (it.kind === "missing-note") {
+              const make = chip("Create");
+              make.title = "Create the missing note";
+              make.addEventListener("click", () => {
+                if (it.targetId) store.ensureNote(it.targetId, "# " + (it.label || it.targetId) + "\n\n", "");
+                else store.create("# " + it.title + "\n\n", "");
+                paint();
+              });
+              kids.push(make);
+            }
+            kids.push(unlink);
+            open.addEventListener("click", () => { closeDialog(); openNote(it.noteId); });
+            unlink.title = "Keep the text, remove the link";
+            unlink.addEventListener("click", () => {
+              const cur = store.get(it.noteId);
+              if (cur) store.update(it.noteId, unlinkBroken(cur.body, it), "links");
+              paint();
+            });
+            rows.append(h("div", { class: "zn-labels-row zn-linkcheck-row" },
+              h("span", { class: "zn-labels-name", title: it.raw }, (titleOf(src?.body || "") || "Untitled note") + " \u2192 " + (it.title || it.label) + (it.anchor ? " #" + it.anchor : "")),
+              h("span", { class: "zn-labels-count" }, REASON[it.kind] || it.kind),
+              h("span", { class: "zn-labels-actions" }, ...kids)));
+          }
+        };
+        paint();
+        openCard("Check links", rows, h("div", { class: "zn-dialog-actions" }, close));
+        close.addEventListener("click", closeDialog);
+      }
+      function askLabels() {
+        const rows = h("div", { class: "zn-labels" });
+        const close = chip("Close");
+        const paint = () => {
+          rows.replaceChildren();
+          const list = labelSummary(store.list());
+          if (!list.length) rows.append(h("p", { class: "zn-hint" }, "No labels yet. Use More > Add label on a note."));
+          for (const { label, count } of list) {
+            const ren = chip("Rename"), del = chip("Remove");
+            ren.title = "Rename (type an existing label to merge)";
+            del.title = "Remove this label from its notes";
+            rows.append(h("div", { class: "zn-labels-row" }, h("span", { class: "zn-labels-name", title: label }, label), h("span", { class: "zn-labels-count" }, String(count)), h("span", { class: "zn-grow" }), ren, del));
+            ren.addEventListener("click", () => askRename(label));
+            del.addEventListener("click", () => {
+              const k = store.renameLabel(label, "");
+              flash(`Removed the label from ${k} ${k === 1 ? "note" : "notes"}`);
+              afterLabels();
+              paint();
+            });
+          }
+        };
+        const afterLabels = () => { applyState(); if (view === "list") scheduleList(); };
+        function askRename(old) {
+          const f = field("New name", old, "label");
+          f.input.maxLength = LABEL_MAX;
+          const ok = chip("Rename", true), back = chip("Back");
+          openCard("Rename label", f.row, h("p", { class: "zn-hint" }, "Typing the name of another label merges the two."), h("div", { class: "zn-dialog-actions" }, back, ok));
+          const go = () => {
+            const to = f.input.value;
+            const exists = labelSummary(store.list()).some((x) => x.label.toLowerCase() === cleanLabel(to).toLowerCase() && x.label.toLowerCase() !== old.toLowerCase());
+            const k = store.renameLabel(old, to);
+            flash(k ? `${exists ? "Merged" : "Renamed"} on ${k} ${k === 1 ? "note" : "notes"}` : "Nothing changed");
+            afterLabels();
+            askLabels();
+          };
+          ok.addEventListener("click", go);
+          back.addEventListener("click", () => askLabels());
+          f.input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } });
+          f.input.focus({ preventScroll: true });
+          f.input.select?.();
+        }
+        openCard("Labels", rows, h("div", { class: "zn-dialog-actions" }, close));
+        close.addEventListener("click", () => { closeDialog(); focusEditor(); });
+        paint();
+      }
       // Free-text label of the note (one short line, shown beside the title and in the list, searchable).
       function askLabel() {
         const n = note();
@@ -6288,6 +6901,44 @@
         items.push({ icon: "bell", label: "Other date\u2026", action: () => queueMicrotask(askOtherDate) }, { sep: true });
         const days = dateMode() === "single" ? (store.list().find(isJournal) ? journalDays(store.list().find(isJournal).body).slice(-15).reverse().map((ymd) => ({ ymd })) : []) : listDateNotes(store.list()).slice(0, 15);
         if (days.length) items.push({ label: "Earlier days", disabled: true }, ...days.map((d) => ({ icon: "note", label: d.ymd, action: () => openDay(parseYmd(d.ymd), d.ymd) })));
+        showMenu(btnMore, items);
+      }
+      // ---- pinned strip + Recent menu (Cycle F #29): off by default, rebuilt only when what it shows changed ----
+      let stripSig = "";
+      function paintStrip() {
+        const on = getPref(PREF.PIN_STRIP, false) === true && view === "editor" && !!note();
+        const m = on ? stripModel(store.list(), store.meta.recent, currentId) : { pinned: [], recent: [] };
+        const sig = on ? JSON.stringify([m.pinned, m.recent.length, currentId]) : "";
+        strip.hidden = !on || (!m.pinned.length && !m.recent.length);
+        if (sig === stripSig) return;
+        stripSig = sig;
+        strip.replaceChildren();
+        if (strip.hidden) return;
+        for (const p of m.pinned) {
+          const b = h("button", { type: "button", class: "zn-chip zn-strip-pin" + (p.id === currentId ? " is-on" : ""), title: p.title }, p.title);
+          b.dataset.id = p.id;
+          b.addEventListener("click", () => openNote(p.id));
+          strip.append(b);
+        }
+        if (m.recent.length) {
+          const r = h("button", { type: "button", class: "zn-chip zn-strip-recent", "aria-haspopup": "menu" }, "Recent \u25be");
+          r.addEventListener("click", () => showMenu(r, m.recent.map((x) => ({ icon: "note", label: x.title, action: () => openNote(x.id) }))));
+          strip.append(h("span", { class: "zn-grow" }), r);
+        }
+      }
+      // ---- outline (Cycle F #27): a menu of the note's headings; choosing one scrolls both panes to it ----
+      function showOutline() {
+        const n = note();
+        if (!n || view !== "editor") return;
+        const caret = mode !== "read" ? lineOfOffset(ta.value, ta.selectionStart || 0) : -1;
+        const o = outlineItems(mode !== "read" ? ta.value : n.body, caret);
+        const items = o.items.map((x) => ({
+          icon: x.current ? "pin" : undefined,
+          label: "\u2003".repeat(x.level - 1) + x.text,
+          action: () => goHeading(x.slug),
+        }));
+        if (!items.length) items.push({ label: "No headings in this note (lines starting with #)", disabled: true });
+        if (o.more) items.push({ label: `\u2026and ${o.more} more headings`, disabled: true });
         showMenu(btnMore, items);
       }
       // ---- version history -----------------------------------------------------------------------------------------
@@ -6887,10 +7538,16 @@
           ] },
           { icon: "copy", label: "Copy text", action: () => env.copyText(n.body) },
           ...(n.trashed ? [] : [{ icon: "bookmark", label: n.label ? "Edit label\u2026" : "Add label\u2026", action: () => askLabel() }]),
+          { icon: "bookmark", label: "Labels\u2026", action: () => queueMicrotask(askLabels) },
+          { icon: "link", label: "Check links\u2026", action: () => queueMicrotask(askLinkCheck) },
+          { icon: "note", label: "Install demo notes", action: () => installDemoNotes() },
+          { icon: "note", label: "New from template\u2026", action: () => queueMicrotask(() => showTemplateMenu(btnMore)) },
+          ...(n.trashed ? [] : [{ icon: "duplicate", label: "Save as template", action: () => saveAsTemplate() }]),
           ...(n.trashed ? [] : [{ icon: "bell", label: n.remind ? "Reminder: " + reminderText(n.remind) + "\u2026" : "Remind me\u2026", action: () => askReminder() }]),
           ...(n.trashed ? [] : [{ icon: "search", label: "Find in notes (Ctrl+F)", action: () => openFind() }]),
           { icon: "link", label: "Notes that link here\u2026", action: () => queueMicrotask(showBacklinks) },
           { icon: "bell", label: "Notes by date\u2026", action: () => queueMicrotask(showDateMenu) },
+          ...(n.trashed ? [] : [{ icon: "note", label: "Outline\u2026", action: () => queueMicrotask(showOutline) }]),
           ...(n.trashed ? [] : [{ icon: "restore", label: "Version history\u2026", action: () => askHistory() }]),
           ...(getPref(PREF.HIDDEN_MENU, true) && hiddenTools().size && !n.trashed ? [{ icon: "sliders", label: "Hidden tools\u2026", action: () => queueMicrotask(showHiddenTools) }] : []),
           ...(zenMode() === "selected" && !n.trashed
@@ -7181,7 +7838,21 @@
       cleanups.push(() => {
         if (rafDrag) window.cancelAnimationFrame(rafDrag);
       });
-      listen(btnNew, "click", newNote);
+      // Cycle F #7: with pref new_note_chooser the + button asks first (Blank is focused, so Enter = blank note).
+      // Ctrl+N and the menu entries stay instant. Esc only closes the menu.
+      function newNoteChooser() {
+        if (!getPref(PREF.NEW_CHOOSER, false)) return newNote();
+        const now = Date.now();
+        const day = (k, label) => ({ icon: "bell", label: label + "  " + dateTarget(k, now).ymd, action: () => openDateNote(k) });
+        showMenu(btnNew, [
+          { icon: "plus", label: "Blank note", action: () => newNote() },
+          day("today", "Today"),
+          day("tomorrow", "Tomorrow"),
+          { icon: "bell", label: "Pick date\u2026", action: () => queueMicrotask(askOtherDate) },
+          { icon: "note", label: "From template\u2026", group: templateMenuItems() },
+        ]);
+      }
+      listen(btnNew, "click", () => newNoteChooser());
       listen(btnFolder, "click", () => askFolderName("New folder", "", (name) => store.addFolder(name, "")));
       // A note dropped on empty list space goes back to the top level.
       listen(listItems, "dragover", (e) => {
@@ -7197,6 +7868,7 @@
       listen(chipAll, "click", () => { filter = "all"; renderList(); });
       listen(chipRecent, "click", () => { filter = "recent"; renderList(); });
       listen(chipTrash, "click", () => { filter = "trash"; renderList(); });
+      for (const c of [chipTrash, chipEmpty]) listen(c, "contextmenu", (e) => { e.preventDefault(); showMenu(pointAnchor(e), trashMenuItems()); });
       listen(chipEmpty, "click", () => {
         if (chipEmpty.dataset.armed) {
           delete chipEmpty.dataset.armed;
@@ -7267,7 +7939,9 @@
       }, true);
       listen(ta, "keyup", (e) => {
         if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) updateWiki();
+        if (e.shiftKey || e.key === "Shift") scheduleChrome();
       });
+      listen(ta, "mouseup", () => { if (getPref(PREF.FOOTER_COUNTER, false) === true) scheduleChrome(); });
       listen(ta, "input", () => {
         updateWiki();
         taAnchY = null;
@@ -7317,6 +7991,7 @@
       const ACTIONS = {
         ...Object.fromEntries(["bold", "italic", "strike", "highlight", "code", "codeBlock", "link", "noteLink", "image", "heading", "bullet", "numbered", "check", "quote", "table", "rule", "indent", "outdent", "sup", "sub", "kbd", "footnote", "hubList", ...CALLOUT_KINDS.map(([k]) => calloutId(k))].map((id) => [id, () => fmt[id]()])),
         newNote: () => newNote(),
+        outline: () => showOutline(),
         find: () => openFind(),
         remind: () => askReminder(),
         dateToday: () => openDateNote("today"),
@@ -7831,19 +8506,20 @@
     // shared by every bar (main panel, Triple View bottom bar, Super Pin). So the state lives here, not in
     // each adapter, and only the owner may change or release it. (Per-adapter copies went stale when another
     // bar released the variable, which put the sheet below the panel and overcounted the free height.)
-    const SLOT = { owner: null, px: 0, gap: false, quad: false, up: -1, suspended: null };
+    const SLOT = { owner: null, px: 0, gap: false, quad: false, pseudo: false, up: -1, suspended: null };
     function releaseSlot() {
       SLOT.suspended = null;
       if (!SLOT.owner && !SLOT.px) return;
       const r = document.documentElement;
       SLOT.owner = null;
       SLOT.px = 0;
-      SLOT.gap = SLOT.quad = false;
+      SLOT.gap = SLOT.quad = SLOT.pseudo = false;
       SLOT.up = -1;
       r.style.removeProperty("--zentral-notes-panel-reserve");
       r.style.removeProperty("--zentral-notes-gap");
       r.style.removeProperty("--zentral-notes-gap-up");
       r.removeAttribute("bgalazka-quad-view");
+      r.removeAttribute("bgalazka-notes-pseudo");
       r.removeAttribute("bgalazka-notes-gap");
       r.removeAttribute("bgalazka-notes-spill");
       try {
@@ -7953,7 +8629,10 @@
           let wants = strip > 0 || fraction > 0 || wantPx > 0;
           const between = api.placement() === "between";
           // A panel stretched from the top to the bottom of the window gives nothing: no reserve, no stale margin.
-          if (wants && !between && api.stretched()) {
+          // A plain panel (no Triple View) becomes a pseudo Triple View: page on top, a clean band for Notes below it,
+          // both INSIDE the panel (padding on the slider), so the panel is never shortened and "stretched" is moot.
+          const pseudoOk = kind === "primary" && !rootEl.hasAttribute("bgalazka-triple-view");
+          if (wants && !between && !pseudoOk && api.stretched()) {
             wants = false;
             SLOT.suspended = api;
           } else if (SLOT.suspended === api) SLOT.suspended = null;
@@ -7962,9 +8641,10 @@
           const base = pagesWithoutSlot();
           const px = !wants ? 0 : wantPx > 0 ? clampSlotPx(base, wantPx) : strip > 0 && base > 200 ? Math.round(strip) : slotPx(base, fraction);
           const up = !between || px <= 0 ? -1 : wantUp >= 0 ? Math.min(Math.round(wantUp), px) : upFrac >= 0 ? Math.round(px * Math.min(1, upFrac)) : -1;
-          const quad = !between && px > 0 && rootEl.hasAttribute("bgalazka-triple-view");
+          const pseudo = !between && px > 0 && pseudoOk;
+          const quad = !between && px > 0 && (pseudo || rootEl.hasAttribute("bgalazka-triple-view"));
           const hasQuad = rootEl.hasAttribute("bgalazka-quad-view");
-          if (SLOT.owner === api && px === SLOT.px && between === SLOT.gap && quad === SLOT.quad && quad === hasQuad && up === SLOT.up)
+          if (SLOT.owner === api && px === SLOT.px && between === SLOT.gap && quad === SLOT.quad && pseudo === SLOT.pseudo && quad === hasQuad && up === SLOT.up)
             return quad || (between && px > 0);
           if (px <= 0) {
             const stay = SLOT.suspended === api;
@@ -7976,6 +8656,7 @@
           SLOT.px = px;
           SLOT.gap = between;
           SLOT.quad = quad;
+          SLOT.pseudo = pseudo;
           SLOT.up = up;
           if (between && up >= 0) rootEl.style.setProperty("--zentral-notes-gap-up", up + "px");
           else rootEl.style.removeProperty("--zentral-notes-gap-up");
@@ -7986,6 +8667,8 @@
           rootEl.style.removeProperty(other);
           if (quad) rootEl.setAttribute("bgalazka-quad-view", "true");
           else rootEl.removeAttribute("bgalazka-quad-view");
+          if (pseudo) rootEl.setAttribute("bgalazka-notes-pseudo", "true");
+          else rootEl.removeAttribute("bgalazka-notes-pseudo");
           document.dispatchEvent(new Event("zentral-notes-reserve"));
           // The panel may not be listening yet (load order) or may rewrite its own margin while it opens:
           // say it again once the frame and the open animation have settled. The geometry module only writes
@@ -8008,6 +8691,11 @@
           if (SLOT.gap) {
             const d = slider()?.querySelector(":scope > .bgalazka-triple-divider")?.getBoundingClientRect?.();
             if (d && d.height > 0) return { left: bb.left, top: d.top - SLOT.px, width: bb.width, height: SLOT.px };
+          }
+          // Pseudo Triple View: the band is the padding at the bottom of the slider, inside the panel.
+          if (SLOT.pseudo) {
+            const sr = slider()?.getBoundingClientRect?.();
+            if (sr && sr.width > 40 && sr.height > SLOT.px) return { left: sr.left, top: sr.bottom - SLOT.px, width: sr.width, height: SLOT.px };
           }
           // Plain docked panel: the URL bar is part of the panel (below its pages by default). Start below the whole
           // panel, not below the pages, or the band sits on top of the URL bar.
@@ -8297,6 +8985,7 @@
         getDir: resolveDir,
         getMaxSaveMs: () =>
           Math.max(2, Math.min(60, prefInt(PREF.AUTOSAVE, DEFAULT_MAX_SAVE_SECONDS))) * 1000,
+        getTrashDays: () => cleanTrashDays(prefInt(PREF.TRASH_DAYS, TRASH_DAYS)),
         getHistory: () => ({
           on: prefBool(PREF.HISTORY_ON, true),
           ...historyOptions({ keep: prefInt(PREF.HISTORY_KEEP, HISTORY_DEFAULTS.keep), minutes: prefInt(PREF.HISTORY_MINUTES, HISTORY_DEFAULTS.minutes), capKB: prefInt(PREF.HISTORY_CAP_KB, HISTORY_DEFAULTS.capKB), warnMB: prefInt(PREF.HISTORY_WARN_MB, HISTORY_DEFAULTS.warnMB) }),
@@ -8559,8 +9248,8 @@
         }
       }
       onCleanup(() => { try { soundCtx?.close?.(); } catch (_) {} soundCtx = null; });
-      function openReminderNote(id) {
-        const b = pickBinding();
+      function openReminderNote(id, { floatingWindow = false } = {}) {
+        const b = floatingWindow ? ensureFloating() : pickBinding();
         return Promise.resolve(b.open()).then(() => sheetOf(b)?.openNoteById?.(id)).catch(warn);
       }
       function showReminders(list) {
@@ -8609,6 +9298,11 @@
       const zenTabs = (root) => [...(root?.querySelectorAll?.("tab") || [])].filter((t) => /^(n:|root$|new:)/.test(t.getAttribute(NOTES_ATTR) || ""));
       const zenByKey = (root, key) => zenTabs(root).filter((t) => t.getAttribute(NOTES_ATTR) === key);
       const zenFolderByKey = (root, key) => [...(root?.querySelectorAll?.("zen-folder[bgalazka-notes-subfolder]") || [])].find((f) => f.getAttribute("bgalazka-notes-subfolder") === key) || null;
+      // A tab is ours only when it carries our mark AND sits inside our own NOTES folder. Every Zen-side rule below
+      // starts from this test, so no other tab, folder or menu is ever touched (a leftover marked tab is just a tab).
+      const isOurTab = (tab) => {
+        try { return !!tab?.hasAttribute?.(NOTES_ATTR) && !!tab.closest?.('zen-folder[bgalazka-notes-folder="true"]'); } catch (_) { return false; }
+      };
       const tabUrl = (tab) => {
         try { return tab.linkedBrowser?.currentURI?.spec || tab._zentralNotesUrl || ""; } catch (_) { return ""; }
       };
@@ -8624,6 +9318,28 @@
         tab._zentralNotesUrl = url;
         window.gBrowser.pinTab(tab);
         return tab;
+      }
+      // #6a: the seed tab exists only because gZenFolders.createFolder needs a tab. Unless the user asked for the
+      // "New note" entry (pref zen_folder_new_button), it is closed right after the folder exists. If closing it makes
+      // the folder vanish (Zen deletes empty folders), the seed is kept from then on (zenKeepSeed) and relabelled.
+      let zenKeepSeed = false;
+      const zenWantsSeed = () => zenKeepSeed || prefBool(PREF.ZEN_NEW_BUTTON, false);
+      function zenSettleSeed(seed, folderEl) {
+        try {
+          if (!seed) return true;
+          if (zenWantsSeed()) {
+            seed.setAttribute("bgalazka-notes-label", "New note");
+            seed.setAttribute("label", "New note");
+            return true;
+          }
+          zenRemoveTab(seed);
+          if (folderEl?.isConnected === false) {
+            zenKeepSeed = true;
+            warn("Zen folder: the folder disappeared without its seed tab; keeping the seed as a \"New note\" entry");
+            return false;
+          }
+        } catch (error) { warn(error); }
+        return true;
       }
       const zenRemoveTab = (tab) => {
         try { window.gBrowser.removeTab(tab, { animate: false, skipPermitUnload: true, skipSessionStore: true }); } catch (error) { warn(error); }
@@ -8641,7 +9357,8 @@
           const el = (folder && folder.nodeType ? folder : null) || document.getElementById(ZEN_ROOT_ID) || tab.closest?.("zen-folder");
           if (!el) return false; // the tab stays an inert pinned about:blank tab; a later run retries once more
           el.setAttribute("bgalazka-notes-folder", "true");
-          return true;
+          zenSettleSeed(tab, el);
+          return !zenKeepSeed || !!zenRootEl();
         },
         list() {
           const root = zenRootEl();
@@ -8679,7 +9396,8 @@
           el.setAttribute("bgalazka-notes-subfolder", e.key);
           el.setAttribute("bgalazka-notes-label", e.label);
           el.setAttribute("bgalazka-notes-parent", e.parent);
-          return true;
+          zenSettleSeed(seed, el);
+          return !zenKeepSeed || !!el.isConnected;
         },
         remove(key, dup) {
           const root = zenRootEl();
@@ -8695,10 +9413,14 @@
           if (f) { f.setAttribute("bgalazka-notes-label", label); try { f.label = label; } catch (_) {} }
         },
         move(key) { zenApi.remove(key, false); }, // removed now, added again by the next run under its new parent
+        // Removes everything this feature ever made, wherever it ended up: marked tabs anywhere, then its sub-folders
+        // and the root folder. Only elements carrying our own marks are touched.
         removeAll() {
           const root = zenRootEl();
-          for (const t of [...(root?.querySelectorAll?.("tab") || [])]) if (t.hasAttribute(NOTES_ATTR)) zenRemoveTab(t);
+          for (const t of [...(document.querySelectorAll?.("tab[" + NOTES_ATTR + "]") || [])]) zenRemoveTab(t);
+          for (const f of [...(root?.querySelectorAll?.("zen-folder[bgalazka-notes-subfolder]") || [])]) { try { f.delete?.(); } catch (_) {} }
           try { root?.delete?.(); } catch (_) {}
+          for (const f of [...(document.querySelectorAll?.('zen-folder[bgalazka-notes-folder="true"]') || [])]) { try { f.delete?.(); } catch (_) {} }
         },
       };
       const makeZen = () =>
@@ -8734,28 +9456,42 @@
       // TabSelect is the second line for keyboard / programmatic selection: it hands the selection straight back.
       function activateZenTab(tab) {
         const key = tab.getAttribute(NOTES_ATTR) || "";
-        if (key.startsWith("n:")) return openReminderNote(key.slice(2));
+        if (key.startsWith("n:")) return openReminderNote(key.slice(2), { floatingWindow: true });
         const p = parseZenUrl(tabUrl(tab)) || (key === "root" ? { kind: "new", folder: "" } : null);
         if (p?.kind !== "new") return null;
         const folder = p.folder || (zenMode() === "selected" ? TABBAR_FOLDER : "");
-        const b = pickBinding();
+        const b = ensureFloating(); // Zen's own UI (sidebar folder) opens the free-floating window
         return Promise.resolve(b.open()).then(() => sheetOf(b)?.newNote?.(folder)).catch(warn);
       }
       const onZenMouse = (ev) => {
         if (disposed || zen.dead || zenMode() === "off" || ev.button !== 0) return;
-        const tab = ev.target?.closest?.("tab[" + NOTES_ATTR + "]");
-        if (!tab) return;
+        let tab = null;
+        try { tab = ev.target?.closest?.("tab[" + NOTES_ATTR + "]"); } catch (_) {}
+        if (!tab || !isOurTab(tab)) return; // anything else (unloaded tabs included) is left completely alone
         ev.preventDefault();
         ev.stopImmediatePropagation();
         if (ev.type === "mousedown") activateZenTab(tab);
       };
+      // Selecting one of our tabs (keyboard, session, script) hands the selection back to the previous tab. This must
+      // NOT happen inside Zen's own TabSelect dispatch: re-selecting from there corrupts the tab switcher, and a
+      // pending (unloaded) tab then never loads until the browser restarts. So it is deferred to the next task and
+      // skipped unless our tab is still the selected one.
+      let zenSelectTimer = 0;
+      onCleanup(() => window.clearTimeout(zenSelectTimer));
       const onZenSelect = (ev) => {
         const tab = ev.target;
-        if (disposed || !tab?.hasAttribute?.(NOTES_ATTR)) return;
+        if (disposed || zen.dead || zenMode() === "off" || !isOurTab(tab)) return;
         const prev = ev.detail?.previousTab;
-        const back = prev && !prev.hasAttribute(NOTES_ATTR) ? prev : [...window.gBrowser.tabs].find((t) => !t.hasAttribute(NOTES_ATTR) && !t.hidden);
-        if (back) window.gBrowser.selectedTab = back;
-        activateZenTab(tab);
+        window.clearTimeout(zenSelectTimer);
+        zenSelectTimer = window.setTimeout(() => {
+          zenSelectTimer = 0;
+          try {
+            if (disposed || window.gBrowser.selectedTab !== tab) return;
+            const back = prev && prev.isConnected && !isOurTab(prev) ? prev : [...window.gBrowser.tabs].find((t) => !isOurTab(t) && !t.hasAttribute(NOTES_ATTR) && !t.hidden);
+            if (back) window.gBrowser.selectedTab = back;
+            activateZenTab(tab);
+          } catch (error) { warn(error); }
+        }, 0);
       };
       // Dropping a web tab on the NOTES folder never moves it: it is refused, or captured as a link note (dropDecision).
       const onZenDrop = (ev) => {
@@ -8781,7 +9517,10 @@
         const menu = ev.target;
         if (menu?.id !== "tabContextMenu") return;
         const tab = window.TabContextMenu?.contextTab;
-        zenCtxTab = tab?.hasAttribute?.(NOTES_ATTR) && /^n:/.test(tab.getAttribute(NOTES_ATTR)) ? tab : null;
+        zenCtxTab = isOurTab(tab) && /^n:/.test(tab.getAttribute(NOTES_ATTR)) ? tab : null;
+        // Our items exist only for our tabs: for any other tab they are hidden and the native menu is untouched.
+        for (const own of menu.querySelectorAll("[zentral-notes-own]")) own.hidden = !zenCtxTab;
+        if (!zenCtxTab) document.documentElement.removeAttribute("zentral-notes-ctx");
         if (zenCtxTab && !menu.querySelector("[zentral-notes-own]")) {
           for (const [id, label, fn] of ZEN_MENU_ITEMS) {
             const item = document.createXULElement("menuitem");
@@ -8813,6 +9552,20 @@
         }
       }
       onCleanup(() => bindZen(false));
+      // Turning the feature off unloads it completely: listeners, pending work, flags, menu leftovers, and every tab and
+      // folder it made, even when the sync object was killed or never found its root. Safe to call repeatedly.
+      function zenTeardown() {
+        bindZen(false);
+        window.clearTimeout(zenSelectTimer);
+        zenSelectTimer = 0;
+        zenCtxTab = null;
+        zenMoveBroken = false;
+        zenKeepSeed = false;
+        try { zen.destroy(); } catch (_) {}
+        try { zenApi.removeAll(); } catch (error) { warn(error); }
+        zen = makeZen(); // a fresh, idle sync object for the next time the feature is switched on
+      }
+      onCleanup(() => zenCtxTab = null);
 
       // ---- bindings: one per bar, plus the floating card ------------------------
       const bindings = new Map(); // bar element -> binding
@@ -8887,7 +9640,10 @@
           sheet: () => sheet,
           isOpen: () => !!sheet?.isOpen(),
           visible: () => el.isConnected && !panelsHidden() && el.getClientRects().length > 0,
+          // Triple View: the top bar's Notes is the free-floating window; the bottom bar's goes between the panels.
+          toFloating: () => kind === "primary" && document.documentElement.hasAttribute("bgalazka-triple-view"),
           open() {
+            if (binding.toFloating()) return ensureFloating().open();
             lastUsed = binding;
             followKind = kind;
             followTries = 0;
@@ -8903,7 +9659,7 @@
           syncReveal() {
             // ONE hover target for the whole window (Triple View has two bars plus the folded sheet's own band):
             // only the bar Notes would open on gets a strip, and none while a sheet is open or folded anywhere.
-            const want = prefBool(PREF.REVEAL_STRIP, false) && !disposed && binding.visible() && !binding.isOpen() && revealOwner() === binding;
+            const want = prefBool(PREF.REVEAL_STRIP, false) && !disposed && binding.visible() && !binding.isOpen() && revealWants(binding);
             if (!want) {
               window.clearTimeout(stripTimer);
               strip?.remove();
@@ -8935,6 +9691,7 @@
             }
           },
           toggle() {
+            if (binding.toFloating()) return ensureFloating().toggle();
             return binding.isOpen() ? binding.close() : binding.open();
           },
           destroy() {
@@ -9018,6 +9775,7 @@
         const visible = [...bindings.values()].filter((b) => b.visible());
         const kind = followTarget({ want: followKind, kinds: visible.map((b) => b.kind), triple: document.documentElement.hasAttribute("bgalazka-triple-view") });
         const target = kind && visible.find((b) => b.kind === kind);
+        if (target?.toFloating?.()) return; // the top bar of Triple View is the floating window: never auto-opened
         if (target) {
           followTries = 0;
           Promise.resolve(target.open()).catch(warn);
@@ -9131,6 +9889,14 @@
         if (lastUsed && list.includes(lastUsed)) return lastUsed;
         return list.find((b) => b.kind === "primary") || list[0];
       }
+      // Triple View has two bars, each with its own strip (top = free-floating window, bottom = between the panels);
+      // otherwise only the owner bar has one. Never while any sheet, including the floating one, is open.
+      function revealWants(b) {
+        const list = [...bindings.values()].filter((x) => x.visible());
+        if (!list.length || list.some((x) => x.isOpen()) || floating?.isOpen()) return false;
+        if (document.documentElement.hasAttribute("bgalazka-triple-view") && (b.kind === "primary" || b.kind === "triple")) return true;
+        return revealOwner() === b;
+      }
       function syncAllReveals() {
         for (const b of bindings.values()) b.syncReveal();
       }
@@ -9155,6 +9921,7 @@
             avoidSidebar: () => prefBool(PREF.AVOID_SIDEBAR, true),
             isTrigger: (t) => !!sidebarBtn && (sidebarBtn === t || sidebarBtn.contains?.(t)),
             onActive: (on) => {
+              syncAllReveals();
               if (sidebarBtn) {
                 sidebarBtn.dataset.active = on ? "true" : "false";
                 sidebarBtn.setAttribute("aria-pressed", on ? "true" : "false");
@@ -9382,10 +10149,8 @@
           else if (name === PREF.SHORTCUT) shortcut = parseShortcut(prefStr(PREF.SHORTCUT, "Alt+Shift+N"));
           else if (name === PREF.DEBUG_PERF) PERF_ON = prefBool(PREF.DEBUG_PERF, false);
           else if (name === PREF.ZEN_MODE) {
-            if (zenMode() === "off") {
-              bindZen(false);
-              if (!zen.dead) ensureStore().then(() => zen.runNow()).catch(warn); // the run removes our tabs and folder
-            } else zenSoon();
+            if (zenMode() === "off") zenTeardown();
+            else zenSoon();
           }
           else if (WINDOW_PREFS.has(name)) {
             // Hover reveal, push page, split windows and the sidebar option: open sheets follow at once.

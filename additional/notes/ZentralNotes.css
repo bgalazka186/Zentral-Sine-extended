@@ -960,3 +960,59 @@
 
 /* Zen sidebar experiment: while the right-click target is one of our note tabs, every native item is hidden (never removed). */
 :root[zentral-notes-ctx="item"] #tabContextMenu > :not([zentral-notes-own]) { display: none !important; }
+
+/* Reminder dialog: live "Will ring at ..." line (Cycle F #15) */
+.zentral-notes-sheet .zn-remind-preview { margin: 4px 2px 8px; font-size: 0.9em; opacity: 0.85; }
+.zentral-notes-sheet .zn-remind-preview[data-bad="true"] { color: #ff6b6b; opacity: 1; }
+
+/* Find: "highlight every match" (pref find_highlight = backdrop). The layer copies the textarea's font and padding in JS. */
+.zentral-notes-sheet .zn-findlayer { position: absolute; box-sizing: border-box; overflow: hidden; pointer-events: none; color: transparent; border: 0; margin: 0; z-index: 0; }
+.zentral-notes-sheet .zn-findlayer[hidden] { display: none; }
+.zentral-notes-sheet .zn-findlayer-inner { white-space: inherit; overflow-wrap: inherit; word-break: inherit; }
+.zentral-notes-sheet .zn-findlayer mark { background: rgba(255, 196, 0, 0.35); color: transparent; border-radius: 2px; }
+.zentral-notes-sheet .zn-findlayer mark.zn-findlayer-cur { background: rgba(255, 150, 0, 0.7); }
+.zentral-notes-sheet[data-hl="on"] .zn-editor { position: relative; z-index: 1; }
+::highlight(zn-find) { background-color: rgba(255, 196, 0, 0.4); }
+::highlight(zn-find-cur) { background-color: rgba(255, 150, 0, 0.75); }
+
+/* Trash view: what auto-empty will do (Cycle F #30) */
+.zentral-notes-sheet .zn-trash-note { margin: 4px 4px 8px; font-size: 0.85em; opacity: 0.75; }
+
+/* Pinned strip + Recent menu under the title (Cycle F #29) */
+.zentral-notes-sheet .zn-strip { display: flex; align-items: center; gap: 4px; padding: 2px 6px 4px; overflow-x: auto; scrollbar-width: none; }
+.zentral-notes-sheet .zn-strip[hidden] { display: none; }
+.zentral-notes-sheet .zn-strip .zn-strip-pin { max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 0 auto; }
+.zentral-notes-sheet .zn-strip .zn-strip-recent { flex: 0 0 auto; }
+
+/* More colours (Cycle F #24): note colours orange/red/teal/gray, highlight colours gray/brown/lime/cyan */
+.zentral-notes-sheet[data-color="orange"] { --zn-note: #ff9f43; }
+.zentral-notes-sheet .zn-dot[data-color="orange"] { background: #ff9f43; border-color: #ff9f43; }
+.zentral-notes-sheet[data-color="red"] { --zn-note: #ff6b6b; }
+.zentral-notes-sheet .zn-dot[data-color="red"] { background: #ff6b6b; border-color: #ff6b6b; }
+.zentral-notes-sheet[data-color="teal"] { --zn-note: #2ec4b6; }
+.zentral-notes-sheet .zn-dot[data-color="teal"] { background: #2ec4b6; border-color: #2ec4b6; }
+.zentral-notes-sheet[data-color="gray"] { --zn-note: #9aa0a6; }
+.zentral-notes-sheet .zn-dot[data-color="gray"] { background: #9aa0a6; border-color: #9aa0a6; }
+.zentral-notes-sheet .zn-hl-dot[data-color="gray"] { background: #9aa0a6; }
+.zentral-notes-sheet .zn-hl[data-color="gray"] { background: color-mix(in srgb, #9aa0a6 45%, transparent); }
+.zentral-notes-sheet .zn-hl-dot[data-color="brown"] { background: #a1887f; }
+.zentral-notes-sheet .zn-hl[data-color="brown"] { background: color-mix(in srgb, #a1887f 45%, transparent); }
+.zentral-notes-sheet .zn-hl-dot[data-color="lime"] { background: #b5d334; }
+.zentral-notes-sheet .zn-hl[data-color="lime"] { background: color-mix(in srgb, #b5d334 45%, transparent); }
+.zentral-notes-sheet .zn-hl-dot[data-color="cyan"] { background: #4dd0e1; }
+.zentral-notes-sheet .zn-hl[data-color="cyan"] { background: color-mix(in srgb, #4dd0e1 45%, transparent); }
+.zentral-notes-sheet .zn-swatch[data-color="gray"] { background: #9aa0a6; }
+.zentral-notes-sheet .zn-swatch[data-color="brown"] { background: #a1887f; }
+.zentral-notes-sheet .zn-swatch[data-color="lime"] { background: #b5d334; }
+.zentral-notes-sheet .zn-swatch[data-color="cyan"] { background: #4dd0e1; }
+
+/* Labels dialog (Cycle F #19) */
+.zentral-notes-sheet .zn-labels { display: flex; flex-direction: column; gap: 4px; max-height: 50vh; overflow-y: auto; padding: 2px 0; }
+.zentral-notes-sheet .zn-labels-row { display: flex; align-items: center; gap: 6px; }
+.zentral-notes-sheet .zn-labels-name { max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet .zn-labels-count { opacity: 0.6; font-size: 0.85em; }
+.zentral-notes-sheet .zn-hint { margin: 2px 0 6px; font-size: 0.85em; opacity: 0.7; }
+
+.zentral-notes-sheet .zn-linkcheck-row { flex-wrap: wrap; }
+.zentral-notes-sheet .zn-linkcheck-row .zn-labels-name { max-width: 18em; flex: 1 1 10em; }
+.zentral-notes-sheet .zn-labels-actions { display: inline-flex; gap: 4px; margin-inline-start: auto; }

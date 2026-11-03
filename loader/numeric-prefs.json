@@ -567,6 +567,20 @@
     "def": 100
   },
   {
+    "key": "zen.workspace.zentral.notes.trash_auto_empty_days",
+    "text": "zen.workspace.zentral.notes.trash_auto_empty_days_text",
+    "min": 0,
+    "max": 3650,
+    "def": 30
+  },
+  {
+    "key": "zen.workspace.zentral.notes.spellcheck_max_chars",
+    "text": "zen.workspace.zentral.notes.spellcheck_max_chars_text",
+    "min": 1000,
+    "max": 1000000,
+    "def": 100000
+  },
+  {
     "key": "zen.workspace.zentral.notes.look_radius",
     "text": "zen.workspace.zentral.notes.look_radius_text",
     "min": -1,

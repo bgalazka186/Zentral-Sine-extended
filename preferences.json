@@ -2305,6 +2305,64 @@
     "defaultValue": true
   },
   {
+    "label": "Order in the notes tree",
+    "type": "dropdown",
+    "defaultValue": "folders-first",
+    "options": [
+      {
+        "label": "Folders first, then notes",
+        "value": "folders-first"
+      },
+      {
+        "label": "Notes first, then folders",
+        "value": "notes-first"
+      },
+      {
+        "label": "Mixed, sorted by name",
+        "value": "mixed-by-name"
+      }
+    ],
+    "property": "zen.workspace.zentral.notes.tree_order"
+  },
+  {
+    "label": "Show word, character and reading-time count under the note",
+    "type": "checkbox",
+    "defaultValue": false,
+    "property": "zen.workspace.zentral.notes.footer_counter"
+  },
+  {
+    "label": "New note button asks first: blank / today / tomorrow / pick a date",
+    "type": "checkbox",
+    "defaultValue": false,
+    "property": "zen.workspace.zentral.notes.new_note_chooser"
+  },
+  {
+    "label": "Show a strip of pinned notes and a Recent menu under the title",
+    "type": "checkbox",
+    "defaultValue": false,
+    "property": "zen.workspace.zentral.notes.pinned_strip"
+  },
+  {
+    "label": "Quick capture writes",
+    "type": "dropdown",
+    "defaultValue": "bullet-time",
+    "options": [
+      {
+        "label": "A bullet with the time: - 14:05 text",
+        "value": "bullet-time"
+      },
+      {
+        "label": "Plain text",
+        "value": "plain"
+      },
+      {
+        "label": "A task: - [ ] text",
+        "value": "task"
+      }
+    ],
+    "property": "zen.workspace.zentral.notes.quick_capture_format"
+  },
+  {
     "property": "zen.workspace.zentral.notes.wiki_complete",
     "label": "Suggest notes while typing [[ (Tab or Enter picks, Esc closes)",
     "type": "checkbox",
@@ -2502,6 +2560,47 @@
   },
   {
     "type": "text",
+    "label": "**Notes · Performance**",
+    "size": "16px"
+  },
+  {
+    "label": "Find in a note: how matches are shown",
+    "type": "dropdown",
+    "defaultValue": "selection",
+    "options": [
+      {
+        "label": "Select the match (light and fast)",
+        "value": "selection"
+      },
+      {
+        "label": "Highlight every match (prettier, heavier on huge notes)",
+        "value": "backdrop"
+      }
+    ],
+    "property": "zen.workspace.zentral.notes.find_highlight"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.trash_auto_empty_days_text",
+    "label": "Delete notes from the Trash after this many days (0 = never; checked when Notes starts) [0 to 3650 days]",
+    "type": "string",
+    "defaultValue": "30",
+    "placeholder": "30"
+  },
+  {
+    "label": "Spell-check while typing",
+    "type": "checkbox",
+    "defaultValue": true,
+    "property": "zen.workspace.zentral.notes.spellcheck"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.spellcheck_max_chars_text",
+    "label": "Turn spell-check off in notes longer than this (characters) [1000 to 1000000 chars]",
+    "type": "string",
+    "defaultValue": "100000",
+    "placeholder": "100000"
+  },
+  {
+    "type": "text",
     "label": "**Notes · Experiments (off by default)**",
     "size": "16px"
   },
@@ -2524,6 +2623,12 @@
         "value": "all"
       }
     ]
+  },
+  {
+    "label": "Zen NOTES folder: keep a \"New note\" entry in each folder (off = no placeholder tab is left behind)",
+    "type": "checkbox",
+    "defaultValue": false,
+    "property": "zen.workspace.zentral.notes.zen_folder_new_button"
   },
   {
     "property": "zen.workspace.zentral.notes.debug_perf",

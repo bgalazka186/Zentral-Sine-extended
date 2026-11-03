@@ -64,3 +64,7 @@ ZentralRuntime.register({
 ## Standalone bootstrap contract
 
 The video standalone bootstrap mirrors source/construction contracts. Keep both implementations aligned when changing the loader. Never add guide headers or run formatters inside `zentral/upstream/1.1.0`.
+
+## Notes roadmap handoff
+
+After any change to Zentral Notes, update the "NEXT SESSION HANDOFF" block at the end of `TODO_notes_roadmap.md` in place (state, next picks, live checklist, debts, version). It is the only handoff; never add a second one.

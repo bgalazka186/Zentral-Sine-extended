@@ -163,6 +163,22 @@ async function test(name, fn) {
     assert.ok(!rows.some((x) => x.type === "note" && x.note.id === "child"));
   });
 
+  await test("tree_order: folders-first (default), notes-first and mixed-by-name", () => {
+    const notes = [
+      { id: "a", body: "# Zebra note", updated: 1 },
+      { id: "b", body: "# Apple note", updated: 2 },
+      { id: "c", body: "# inside", folder: "mid", updated: 1 },
+    ];
+    const tree = c.buildTree(notes, [{ id: "mid", label: "Middle", order: 0 }, { id: "zed", label: "Zed", order: 1 }]);
+    const names = (order) => Array.from(c.treeRows(tree, [], order), (r) => (r.type === "folder" ? "F:" + r.node.id : r.note.id));
+    assert.deepEqual(names(), ["F:mid", "c", "F:zed", "b", "a"]);
+    assert.deepEqual(names("nonsense"), names("folders-first"));
+    assert.deepEqual(names("notes-first"), ["b", "a", "F:mid", "c", "F:zed"]);
+    // Apple < Middle < Zebra note < Zed
+    assert.deepEqual(names("mixed-by-name"), ["b", "F:mid", "c", "a", "F:zed"]);
+    assert.deepEqual(Array.from(c.TREE_ORDERS), ["folders-first", "notes-first", "mixed-by-name"]);
+  });
+
   await test("store folder API persists folders and note assignments, then restores them after reopening", async () => {
     const store = await makeStore("store-a");
     const home = store.addFolder("Home");

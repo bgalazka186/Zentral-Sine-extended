@@ -322,6 +322,9 @@
           "label": "Version history"
         },
         {
+          "label": "Performance"
+        },
+        {
           "label": "Experiments (off by default)"
         }
       ],
@@ -1031,6 +1034,11 @@
     "zen.workspace.zentral.notes.wide_percent",
     "zen.workspace.zentral.notes.theme",
     "zen.workspace.zentral.notes.hub_descriptions",
+    "zen.workspace.zentral.notes.tree_order",
+    "zen.workspace.zentral.notes.footer_counter",
+    "zen.workspace.zentral.notes.new_note_chooser",
+    "zen.workspace.zentral.notes.pinned_strip",
+    "zen.workspace.zentral.notes.quick_capture_format",
     "zen.workspace.zentral.notes.wiki_complete",
     "zen.workspace.zentral.notes.backlinks_panel",
     "zen.workspace.zentral.notes.hidden_tools_menu",
@@ -1064,10 +1072,20 @@
     "zen.workspace.zentral.notes.history_warn_mb",
     {
       "type": "text",
+      "label": "**Notes · Performance**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.notes.find_highlight",
+    "zen.workspace.zentral.notes.trash_auto_empty_days",
+    "zen.workspace.zentral.notes.spellcheck",
+    "zen.workspace.zentral.notes.spellcheck_max_chars",
+    {
+      "type": "text",
       "label": "**Notes · Experiments (off by default)**",
       "size": "16px"
     },
     "zen.workspace.zentral.notes.zen_folder",
+    "zen.workspace.zentral.notes.zen_folder_new_button",
     "zen.workspace.zentral.notes.debug_perf",
     {
       "type": "text",

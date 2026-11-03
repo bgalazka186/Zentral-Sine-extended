@@ -27,12 +27,12 @@ const WRITING_UI = {
   bullet: bar("Bulleted list"), numbered: bar("Numbered list"), check: bar("Checklist"), quote: bar("Quote"), table: bar("Table"),
   rule: bar("Horizontal rule"), indent: bar("Nest in"), outdent: bar("Nest out"),
   sup: { at: "insert", label: "Superscript" }, sub: { at: "insert", label: "Subscript" }, kbd: { at: "insert", label: "Keyboard key" },
-  calloutNote: { at: "insert", label: "Callout: Note" }, calloutWarning: { at: "insert", label: "Callout: Warning" }, calloutTip: { at: "insert", label: "Callout: Tip" },
-  calloutImportant: { at: "insert", label: "Callout: Important" }, calloutCaution: { at: "insert", label: "Callout: Caution" }, calloutInfo: { at: "insert", label: "Callout: Info" },
+  calloutNote: { at: "insert", via: "Callout", label: "Note" }, calloutWarning: { at: "insert", via: "Callout", label: "Warning" }, calloutTip: { at: "insert", via: "Callout", label: "Tip" },
+  calloutImportant: { at: "insert", via: "Callout", label: "Important" }, calloutCaution: { at: "insert", via: "Callout", label: "Caution" }, calloutInfo: { at: "insert", via: "Callout", label: "Info" },
   pastePicture: { at: "insert", label: "Paste picture from clipboard" }, pictureOptions: { at: "insert", label: "Picture options" },
   footnote: { at: "insert", label: "Footnote" }, hubList: { at: "insert", label: "Hub list of notes" },
   dateToday: { at: "more", label: "Notes by date" }, dateTomorrow: { at: "more", label: "Notes by date" }, dateNext: { at: "more", label: "Notes by date" }, dateList: { at: "more", label: "Notes by date" },
-  history: { at: "more", label: "Version history" },
+  history: { at: "more", label: "Version history" }, outline: { at: "more", label: "Outline" },
   find: { at: "more", label: "Find in notes" }, remind: { at: "more", label: "Remind me" }, newNote: { at: "more", label: "New note" },
   list: { at: "head", label: "All notes" }, mode: bar("Read"), split: bar("Split view"), settings: bar("Quick settings"),
   recent: { at: "list", label: "Recent" }, notePin: { at: "head", label: "Pin note to the top" }, keepOpen: { at: "head", label: "Kept open" },
@@ -86,7 +86,7 @@ const WRITING_UI = {
       closeAny();
       if (ui.at === "global") continue;
       if (ui.at === "bar" || ui.at === "head") { const b = find(ui.label); assert.ok(b, `${id}: no button "${ui.label}"`); assert.ok(labelOf(b).length > 2, id + " has an accessible name"); assert.ok(b.title, id + " has a tooltip"); }
-      else if (ui.at === "insert") { click(find("More: pictures")); assert.ok(menuHas(ui.label), `${id}: not in the Insert menu: ${menuBtns().map((b) => b.textContent)}`); }
+      else if (ui.at === "insert") { click(find("More: pictures")); if (ui.via) { assert.ok(menuHas(ui.via), `${id}: no \"${ui.via}\" entry`); click(menuBtns().find((b) => b.textContent.startsWith(ui.via))); await new Promise((r) => setImmediate(r)); } assert.ok(menuHas(ui.label), `${id}: not in the Insert menu: ${menuBtns().map((b) => b.textContent)}`); }
       else if (ui.at === "more") { click(find("More")); assert.ok(menuHas(ui.label), `${id}: not in the More menu: ${menuBtns().map((b) => b.textContent)}`); }
       else if (ui.at === "list") { assert.ok(sheet.root.all().some((e) => e._classes.has("zn-chip") && e.textContent === ui.label), id); }
       closeAny();
@@ -105,7 +105,7 @@ const WRITING_UI = {
       const ui = WRITING_UI[id];
       prep("  - word", 4, 8); press(id); const byKey = ta.value;
       prep("  - word", 4, 8); closeAny();
-      if (ui.at === "bar") click(find(ui.label)); else { click(find("More: pictures")); click(menuBtns().find((b) => b.textContent.startsWith(ui.label))); }
+      if (ui.at === "bar") click(find(ui.label)); else { click(find("More: pictures")); if (ui.via) { click(menuBtns().find((b) => b.textContent.startsWith(ui.via))); await new Promise((r) => setImmediate(r)); } click(menuBtns().find((b) => b.textContent.startsWith(ui.label))); }
       assert.equal(ta.value, byKey, `${id}: button/menu and shortcut give different text`);
       assert.notEqual(byKey, "  - word", `${id}: did nothing`);
     }
