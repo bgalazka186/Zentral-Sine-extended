@@ -453,4 +453,55 @@ test("math: $...$ inline and $$ block, prices are not math", () => {
   assert.equal(c.exportText("$$ \\alpha $$").trim(), "α");
 });
 
+test("extended task states: parsed, shown, exported, toggled (#12)", () => {
+  const [l] = c.parseBlocks("- [ ] a\n- [x] b\n- [-] c\n- [/] d\n- [?] e\n- [!] f\n- [q] not a task");
+  same(l.items.slice(0, 6).map((i) => [i.checked, i.status]), [[false, ""], [true, ""], [false, "-"], [false, "/"], [false, "?"], [false, "!"]]);
+  assert.equal(l.items[6].checked, null);
+  const html = c.exportHtml("- [/] d\n- [-] c");
+  assert.ok(html.includes('class="task-status"') && !html.includes("<input"));
+  assert.equal(c.exportText("- [/] d\n- [x] b").trim(), "[/] d\n[x] b");
+  assert.equal(c.toggleCheckboxLine("- [/] d", 0), "- [x] d");
+  assert.equal(c.toggleCheckboxLine("- [x] d", 0), "- [ ] d");
+  assert.equal(c.toggleCheckboxLine("- [ ] d", 0), "- [x] d");
+});
+
+test("setTaskStatus: changes the state of task lines, turns other lines into tasks, keeps blanks", () => {
+  const v = "- [ ] a\n\nplain\n## head\n- bullet";
+  const r = c.setTaskStatus(v, 0, v.length, "/");
+  assert.equal(r.text, "- [/] a\n\n- [/] plain\n- [/] head\n- [/] bullet");
+  const one = c.setTaskStatus("x\n- [x] done\ny", 2, 2, "!");
+  assert.equal(one.text, "- [!] done");
+  assert.equal(one.start, 2);
+  assert.equal(c.setTaskStatus("a", 0, 1, "q").text, "a"); // unknown state: untouched
+  assert.equal(c.setTaskStatus("- [-] gone", 0, 4, " ").text, "- [ ] gone");
+});
+
+test("setHeadingLevel: any level 1-6, same level again removes it, lists lose their prefix", () => {
+  assert.equal(c.setHeadingLevel("title", 0, 5, 3).text, "### title");
+  assert.equal(c.setHeadingLevel("# title", 0, 7, 3).text, "### title");
+  assert.equal(c.setHeadingLevel("### title", 0, 9, 3).text, "title");
+  assert.equal(c.setHeadingLevel("- [ ] t\n\nb", 0, 11, 2).text, "## t\n\n## b");
+  assert.equal(c.setHeadingLevel("a", 0, 1, 99).text, "###### a"); // clamped
+});
+
+test("the old checkbox tools understand the new states", () => {
+  assert.equal(c.toggleLinePrefix("- [/] a", 0, 7, "check").text, "a"); // all lines are tasks: toggled off
+  assert.equal(c.toggleLinePrefix("- [?] a", 0, 7, "bullet").text, "- a"); // a task is not a plain bullet
+});
+
+test("read mode: cycling and picking a state on one task line (Minesweeper-style)", () => {
+  let b = "- [ ] a\n- [x] b\nplain [ ]\n  1. [ ] c";
+  const seen = [];
+  for (let i = 0; i < 6; i++) { b = c.cycleTaskStatus(b, 0); seen.push(b.split("\n")[0]); }
+  assert.deepEqual(seen, ["- [?] a", "- [!] a", "- [/] a", "- [-] a", "- [ ] a", "- [?] a"]);
+  assert.equal(c.cycleTaskStatus(b, 1).split("\n")[1], "- [ ] b", "done goes back to open");
+  assert.equal(c.cycleTaskStatus(b, 2), b, "a line that is not a task is untouched");
+  assert.equal(c.cycleTaskStatus(b, 99), b);
+  assert.equal(c.cycleTaskStatus("  1. [ ] c", 0), "  1. [?] c");
+  assert.equal(c.setLineTaskStatus("- [x] b", 0, "!"), "- [!] b");
+  assert.equal(c.setLineTaskStatus("- [x] b", 0, "q"), "- [x] b", "unknown state ignored");
+  assert.equal(c.setLineTaskStatus("a\n- [ ] b", 1, "x"), "a\n- [x] b");
+  assert.equal(c.setLineTaskStatus("- [ ]b", 0, "?"), "- [ ]b", "needs a space after the box, like the parser");
+});
+
 console.log(`\n${passed} markdown tests passed`);

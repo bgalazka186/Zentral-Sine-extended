@@ -371,6 +371,10 @@
   cursor: pointer;
 }
 .zentral-notes-sheet .zn-check:disabled { cursor: default; opacity: 0.6; }
+.zentral-notes-sheet .zn-check[data-status] { display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; line-height: 1; color: var(--zn-muted); }
+.zentral-notes-sheet .zn-check[data-status="/"] { color: #e0a030; border-color: #e0a030; }
+.zentral-notes-sheet .zn-check[data-status="!"] { color: #e5534b; border-color: #e5534b; }
+.zentral-notes-sheet .zn-check[data-status="?"] { color: #5b9bd5; border-color: #5b9bd5; }
 .zentral-notes-sheet .zn-check[data-on="true"] { background: var(--zn-accent); border-color: var(--zn-accent); }
 .zentral-notes-sheet .zn-check[data-on="true"]::after {
   content: "";

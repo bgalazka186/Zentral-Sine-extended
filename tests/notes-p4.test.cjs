@@ -208,6 +208,7 @@ const note = (id, body, extra = {}) => ({ id, body, folder: "", updated: 1_700_0
       setUrl(key, url) { log.push(["url", key]); items.get(key).url = url; },
       carriers: () => api.carrierTabs, mark(tab, why) { log.push(["mark", why]); tab.marked = why; }, adopt(tab, key) { log.push(["adopt", key]); tab.adopted = key; },
       removeAll() { log.push(["removeAll"]); items.clear(); api.rootMade = false; },
+      buttons: [], syncNewButtons(folders, on) { api.buttons.push({ keys: folders.map((f) => f.key), on }); },
     };
     return api;
   }
@@ -218,7 +219,7 @@ const note = (id, body, extra = {}) => ({ id, body, folder: "", updated: 1_700_0
     await store.open();
     const api = fakeApi(opts);
     const state = { mode, sync, killed: null };
-    const zen = c.createZenFolder({ api, store, getMode: () => state.mode, now: () => clock, setTimer: setT, clearTimer() {}, warn() {}, onKill: (e) => (state.killed = e) });
+    const zen = c.createZenFolder({ api, store, getMode: () => state.mode, getNewButtons: () => !!state.buttons, now: () => clock, setTimer: setT, clearTimer() {}, warn() {}, onKill: (e) => (state.killed = e) });
     return { store, api, zen, state };
   }
   await test("zen controller: selected mode shows only the tabbar folder; idempotent; rename relabels; move re-adds; never lists foreign keys", async () => {
@@ -273,6 +274,27 @@ const note = (id, body, extra = {}) => ({ id, body, folder: "", updated: 1_700_0
     assert.equal(timers.length, 1);
     flushT(); zen.destroy(); zen.schedule();
     assert.equal(timers.length, 0);
+  });
+  await test("zen controller: the New note entries are asked for once per run with every existing folder (root is the api's own)", async () => {
+    const z = await zenSetup({}, "all");
+    z.state.buttons = true;
+    z.store.addFolder("Work"); z.store.addFolder("Deep", "work"); z.store.create("T", "work/deep");
+    z.zen.runNow();
+    const last = z.api.buttons[z.api.buttons.length - 1];
+    assert.equal(last.on, true);
+    assert.deepEqual(J(last.keys).sort(), ["f:work", "f:work/deep"], "every sub-folder, nested ones included");
+    z.state.buttons = false; z.zen.runNow();
+    assert.equal(z.api.buttons[z.api.buttons.length - 1].on, false, "off is passed on so the entries can leave");
+  });
+  await test("zen controller: an entry that is not inside its folder is moved (removed, then added again in the right place)", async () => {
+    const z = await zenSetup({}, "all");
+    z.store.addFolder("Work"); const t = z.store.create("T", "work");
+    z.zen.runNow();
+    z.api.items.get("f:work").parent = "?misplaced"; // what the real list() reports for a folder outside its parent
+    z.api.log.length = 0; z.zen.runNow();
+    assert.deepEqual(z.api.log.map((e) => e[0] + ":" + e[1]), ["move:f:work"]);
+    z.api.log.length = 0; flushT(); // move schedules one follow-up run that creates it again
+    assert.ok(z.api.items.has("f:work") && z.api.items.has("n:" + t.id));
   });
   await test("perf sampler: records nothing while off, counts and maxima while on", () => {
     let on = false, t = 0;

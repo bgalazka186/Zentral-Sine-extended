@@ -1086,6 +1086,7 @@
     },
     "zen.workspace.zentral.notes.zen_folder",
     "zen.workspace.zentral.notes.zen_folder_new_button",
+    "zen.workspace.zentral.notes.zen_folder_top",
     "zen.workspace.zentral.notes.debug_perf",
     {
       "type": "text",

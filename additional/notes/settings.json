@@ -871,10 +871,16 @@
       ]
     },
     {
-      "label": "Zen NOTES folder: keep a \"New note\" entry in each folder (off = no placeholder tab is left behind)",
+      "label": "Zen NOTES folder: keep one \"New note\" entry in the NOTES folder and in every subfolder (creates the note in that folder; off = no placeholder tab is left behind)",
       "type": "checkbox",
       "defaultValue": false,
       "property": "zen.workspace.zentral.notes.zen_folder_new_button"
+    },
+    {
+      "label": "Zen NOTES folder: put it at the top of the Pinned tabs when it is created",
+      "type": "checkbox",
+      "defaultValue": true,
+      "property": "zen.workspace.zentral.notes.zen_folder_top"
     },
     {
       "property": "zen.workspace.zentral.notes.debug_perf",
@@ -1270,6 +1276,11 @@
       "owner": "notes"
     },
     "zen.workspace.zentral.notes.zen_folder_new_button": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.zen_folder_top": {
       "category": "notes",
       "section": "Experiments (off by default)",
       "owner": "notes"

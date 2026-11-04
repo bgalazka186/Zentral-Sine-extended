@@ -156,6 +156,7 @@
       // Experiments (off by default, not verified in a live Zen)
       ZEN_MODE: "zen.workspace.zentral.notes.zen_folder",
       ZEN_NEW_BUTTON: "zen.workspace.zentral.notes.zen_folder_new_button",
+      ZEN_TOP: "zen.workspace.zentral.notes.zen_folder_top",
       CAPTURE_FORMAT: "zen.workspace.zentral.notes.quick_capture_format",
       DEBUG_PERF: "zen.workspace.zentral.notes.debug_perf",
     });
@@ -545,7 +546,7 @@
 
     const MARKERS_RE = /\*\*|==(?:\{\w+\})?|~~|`/g;
     const LEAD_RE =
-      /^\s*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|>\s*)/;
+      /^\s*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX\-/?!]\]\s+)?|\d+[.)]\s+|>\s*)/;
     function cleanLine(raw) {
       return raw.replace(LEAD_RE, "").replace(MARKERS_RE, "").trim();
     }
@@ -1119,7 +1120,7 @@
       return fix(parseInlineRaw(swapped, 0));
     }
 
-    const LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(?:\[( |x|X)\]\s+)?(.*)$/;
+    const LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(?:\[( |x|X|-|\/|\?|!)\]\s+)?(.*)$/;
     // GitHub-style tables: a header row, a delimiter row with pipes (| --- | :-: |), body rows.
     const TABLE_DELIM_RE = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
     function splitRow(line) {
@@ -1322,7 +1323,8 @@
               items.push({
                 level,
                 marker,
-                checked: m[3] === undefined ? null : m[3] !== " ",
+                checked: m[3] === undefined ? null : m[3] === "x" || m[3] === "X",
+                status: m[3] === undefined || m[3] === " " || m[3] === "x" || m[3] === "X" ? "" : m[3], // extended: - / ? !
                 c: parseInline(m[4]),
                 line: nested ? -1 : i,
               });
@@ -1721,7 +1723,7 @@
         }
         out +=
           "<li>" +
-          (it.checked === null ? "" : '<input type="checkbox" disabled' + (it.checked ? " checked" : "") + "> ") +
+          (it.checked === null ? "" : it.status ? '<span class="task-status" title="' + (TASK_STATUS_NAMES[it.status] || "") + '">' + (TASK_STATUS_MARKS[it.status] || it.status) + "</span> " : '<input type="checkbox" disabled' + (it.checked ? " checked" : "") + "> ") +
           inlineHtml(it.c) +
           (it.more || []).map((para) => "<p>" + inlineHtml(para) + "</p>").join("");
       }
@@ -1810,7 +1812,7 @@
         else if (b.type === "list")
           parts.push(
             b.items
-              .map((it) => "  ".repeat(it.level) + (it.checked === null ? (it.marker === "\u2022" ? "-" : it.marker) : it.checked ? "[x]" : "[ ]") + " " + inlineText(it.c) + (it.more || []).map((para) => "\n\n" + "  ".repeat(it.level + 1) + inlineText(para)).join(""))
+              .map((it) => "  ".repeat(it.level) + (it.checked === null ? (it.marker === "\u2022" ? "-" : it.marker) : it.checked ? "[x]" : it.status ? "[" + it.status + "]" : "[ ]") + " " + inlineText(it.c) + (it.more || []).map((para) => "\n\n" + "  ".repeat(it.level + 1) + inlineText(para)).join(""))
               .join("\n"),
           );
         else if (b.type === "table")
@@ -1884,14 +1886,14 @@
     }
 
     const LINE_KINDS = {
-      bullet: { test: /^\s*[-*+]\s+(?!\[[ xX]\])/, add: "- " },
-      check: { test: /^\s*[-*+]\s+\[[ xX]\]\s/, add: "- [ ] " },
+      bullet: { test: /^\s*[-*+]\s+(?!\[[ xX\-/?!]\])/, add: "- " },
+      check: { test: /^\s*[-*+]\s+\[[ xX\-/?!]\]\s/, add: "- [ ] " },
       heading: { test: /^#{1,6}\s/, add: "## " },
       quote: { test: /^>\s?/, add: "> " },
       ordered: { test: /^\s*\d+[.)]\s+/, add: (n) => n + ". " },
     };
     const STRIP_PREFIX =
-      /^(\s*)(?:(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?|#{1,6}\s+|>\s?)/;
+      /^(\s*)(?:(?:[-*+]|\d+[.)])\s+(?:\[[ xX\-/?!]\]\s+)?|#{1,6}\s+|>\s?)/;
     function toggleLinePrefix(value, s, e, kind) {
       const def = LINE_KINDS[kind];
       const ls = value.lastIndexOf("\n", s - 1) + 1;
@@ -1953,7 +1955,7 @@
       if (le === -1) le = value.length;
       const before = value.slice(ls, caret);
       const after = value.slice(caret, le);
-      const m = /^(\s*)(?:([-*+])|(\d+)([.)]))\s+(\[[ xX]\]\s+)?/.exec(before);
+      const m = /^(\s*)(?:([-*+])|(\d+)([.)]))\s+(\[[ xX\-/?!]\]\s+)?/.exec(before);
       if (!m) return null;
       const rest = before.slice(m[0].length);
       if (!rest.trim() && !after.trim())
@@ -1973,10 +1975,73 @@
     function toggleCheckboxLine(body, lineIndex) {
       const lines = normalizeNewlines(body).split("\n");
       if (lineIndex < 0 || lineIndex >= lines.length) return body;
-      lines[lineIndex] = lines[lineIndex].replace(/\[([ xX])\]/, (_m, c) =>
-        c === " " ? "[x]" : "[ ]",
+      lines[lineIndex] = lines[lineIndex].replace(/\[([ xX\-/?!])\]/, (_m, c) =>
+        c === "x" || c === "X" ? "[ ]" : "[x]",
       );
       return lines.join("\n");
+    }
+
+    // Extended task states (Obsidian-style, plain text in the file). Other apps show them as `[-]` text.
+    const TASK_STATUSES = Object.freeze([[" ", "To do"], ["x", "Done"], ["-", "Cancelled"], ["/", "In progress"], ["?", "Question"], ["!", "Important"]]);
+    const TASK_STATUS_NAMES = Object.freeze({ "-": "Cancelled", "/": "In progress", "?": "Question", "!": "Important" });
+    const TASK_STATUS_MARKS = Object.freeze({ "-": "\u2715", "/": "\u25D0", "?": "?", "!": "!" });
+    // Read mode: one task line gets a given state, or the next one in the cycle (like a Minesweeper flag:
+    // [ ] -> [?] -> [!] -> [/] -> [-] -> [ ]; a done [x] goes back to [ ]). Only a line that already is a task is touched.
+    const TASK_CYCLE = Object.freeze([" ", "?", "!", "/", "-"]);
+    function setLineTaskStatus(body, lineIndex, ch) {
+      if (!TASK_STATUSES.some(([k]) => k === ch)) return body;
+      const lines = normalizeNewlines(body).split("\n");
+      if (lineIndex < 0 || lineIndex >= lines.length) return body;
+      lines[lineIndex] = lines[lineIndex].replace(/^(\s*(?:[-*+]|\d+[.)])\s+)\[[ xX\-/?!]\](?=\s)/, "$1[" + ch + "]");
+      return lines.join("\n");
+    }
+    function cycleTaskStatus(body, lineIndex) {
+      const lines = normalizeNewlines(body).split("\n");
+      const m = lines[lineIndex] === undefined ? null : /^\s*(?:[-*+]|\d+[.)])\s+\[([ xX\-/?!])\](?=\s)/.exec(lines[lineIndex]);
+      if (!m) return body;
+      const at = TASK_CYCLE.indexOf(m[1]);
+      return setLineTaskStatus(body, lineIndex, TASK_CYCLE[at < 0 ? 0 : (at + 1) % TASK_CYCLE.length]);
+    }
+    // Every non-empty line of the selection becomes a task with the given state: a task line only changes its state,
+    // any other line loses its list / heading / quote prefix first. Same range rules as toggleLinePrefix.
+    function setTaskStatus(value, s, e, ch) {
+      if (!TASK_STATUSES.some(([k]) => k === ch)) return { start: s, end: e, text: value.slice(s, e), selStart: s, selEnd: e };
+      const ls = value.lastIndexOf("\n", s - 1) + 1;
+      let le = value.indexOf("\n", e);
+      if (le === -1) le = value.length;
+      if (e > s && value[e - 1] === "\n") le = e - 1;
+      if (le < ls) le = ls;
+      const out = value
+        .slice(ls, le)
+        .split("\n")
+        .map((l) => {
+          if (!l.trim()) return l;
+          const m = /^(\s*[-*+]\s+)\[[ xX\-/?!]\](\s)/.exec(l);
+          if (m) return m[1] + "[" + ch + "]" + l.slice(m[0].length - 1);
+          return l.replace(STRIP_PREFIX, "$1").replace(/^(\s*)/, "$1- [" + ch + "] ");
+        })
+        .join("\n");
+      return { start: ls, end: le, text: out, selStart: ls, selEnd: ls + out.length };
+    }
+    // Heading level 1..6 for the selected lines; when every line already has exactly that level the heading is removed.
+    function setHeadingLevel(value, s, e, level) {
+      const n = Math.max(1, Math.min(6, level | 0));
+      const ls = value.lastIndexOf("\n", s - 1) + 1;
+      let le = value.indexOf("\n", e);
+      if (le === -1) le = value.length;
+      if (e > s && value[e - 1] === "\n") le = e - 1;
+      if (le < ls) le = ls;
+      const lines = value.slice(ls, le).split("\n");
+      const same = new RegExp("^#{" + n + "}\\s");
+      const all = lines.every((l) => !l.trim() || same.test(l));
+      const out = lines
+        .map((l) => {
+          if (!l.trim()) return l;
+          const stripped = l.replace(STRIP_PREFIX, "$1");
+          return all ? stripped : stripped.replace(/^(\s*)/, "$1" + "#".repeat(n) + " ");
+        })
+        .join("\n");
+      return { start: ls, end: le, text: out, selStart: ls, selEnd: ls + out.length };
     }
 
     // ---- insert helpers: code, links, images, tables ----------------------------------------------
@@ -2391,6 +2456,8 @@
         id: "zen", label: "Zen sidebar (experiment)", items: [
           { kind: "heading", label: "Experiment, off by default: not verified in a live Zen" },
           { id: "zenMode", label: "Show notes in Zen's pinned-tabs folder tree", pref: PREF.ZEN_MODE, kind: "choice", def: "off", choices: [["off", "Off"], ["selected", "Only Notes (tabbar)"], ["all", "Whole notes tree"]] },
+          { id: "zenNewBtn", label: "Keep a \"New note\" entry once in the NOTES folder and in every subfolder (it creates the note in that folder)", pref: PREF.ZEN_NEW_BUTTON, kind: "bool", def: false },
+          { id: "zenTop", label: "Put the NOTES folder at the top of the Pinned tabs when it is created", pref: PREF.ZEN_TOP, kind: "bool", def: true },
           { kind: "heading", label: "Diagnostics" },
           { id: "perf", label: "Sample layout / drag timings (read __zentralNotesPerf.report())", pref: PREF.DEBUG_PERF, kind: "bool", def: false },
         ],
@@ -3996,7 +4063,7 @@
         "- unclosed **bold and *italic", "- =={nonsense}unknown highlight colour==", "- ==== and =={red}== stay literal", "- <b>raw html is shown as text</b>",
         "- escaped \\*stars\\* and a lone * star", "- a very long unbroken word: " + "x".repeat(120), "- unicode: zażółć gęślą jaźń, 日本語, emoji 🙂", "",
         "#### Empty list items and fences", "", "-", "- ", "", "```", "an unclosed code fence swallows the rest, as in GitHub", "",
-        "Not supported yet (see the roadmap, Cycle G): `![[embed]]`, `[[Note#Heading]]`, extra task states like `[/]`, `[-]`.", ""].join("\n") },
+        "Not supported yet (see the roadmap, Cycle G): `![[embed]]`. Extra task states `[-]` `[/]` `[?]` `[!]` work (hold the checklist button).", ""].join("\n") },
     ]);
     const demoTitle = (d) => titleOf(d.body);
 
@@ -4392,7 +4459,7 @@
     // Order of work on every run: read the mode, build the wanted list with projectZen, diff it against what the
     // folder holds (only tabs that carry our marker), apply the difference. Any exception switches the whole
     // controller off (kill switch) and leaves what exists as inert pinned about:blank tabs. Never touches other tabs.
-    function createZenFolder({ api, store, getMode, setTimer, clearTimer, warn = () => {}, onKill = () => {} }) {
+    function createZenFolder({ api, store, getMode, getNewButtons = () => false, setTimer, clearTimer, warn = () => {}, onKill = () => {} }) {
       let dead = false;
       let timer = null;
       let flat = null; // null = not tried, true = nested folders unavailable (labels carry the path), false = nested works
@@ -4444,6 +4511,8 @@
         for (const r of plan.relabel) api.relabel(r.key, r.label);
         for (const m of plan.move) api.move(m.key, m.parent);
         if (plan.move.length && timer === null) timer = setTimer(run, 0);
+        // "New note" entry: once in the root and once in every sub-folder that exists now (path labels have no sub-folders).
+        if (!plan.move.length && api.syncNewButtons) api.syncNewButtons(want.filter((e) => e.kind === "folder"), !!getNewButtons());
       }
       function run() {
         timer = null;
@@ -4473,7 +4542,7 @@
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
-        wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine, insertRule, nestLines,
+        wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine, TASK_STATUSES, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
@@ -4813,11 +4882,27 @@
                 "aria-label": "Toggle item",
               });
               if (item.checked) marker.dataset.on = "true";
+              if (item.status) {
+                marker.dataset.status = item.status;
+                marker.title = TASK_STATUS_NAMES[item.status] || "";
+                marker.textContent = TASK_STATUS_MARKS[item.status] || "";
+              }
+              if (item.status === "-") marker.setAttribute("aria-checked", "mixed");
+              marker.title = (item.status ? (TASK_STATUS_NAMES[item.status] || "") + ". " : "") + "Click: done. Right-click: next state. Hold: pick a state.";
               if (item.line < 0) marker.disabled = true;
-              else marker.addEventListener("click", () => onToggle(item.line));
+              else {
+                // Tap = done / not done (as before). Right click cycles ? ! / - (like flags in Minesweeper). Holding the
+                // button opens the list of states. The click that ends a hold is swallowed by createHoldAction.
+                const hold = createHoldAction({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), onTap: () => onToggle(item.line), onHold: () => env.taskMenu?.(item.line, marker) });
+                marker.addEventListener("pointerdown", (e) => { if (e.button === undefined || e.button === 0) hold.press(); });
+                marker.addEventListener("pointerup", () => hold.release());
+                marker.addEventListener("pointerleave", () => hold.cancel());
+                marker.addEventListener("click", () => hold.click());
+                marker.addEventListener("contextmenu", (e) => { e.preventDefault(); hold.cancel(); env.taskCycle?.(item.line); });
+              }
             }
             const text = h("span", { class: "zn-li-text" });
-            if (item.checked) text.dataset.done = "true";
+            if (item.checked || item.status === "-") text.dataset.done = "true";
             renderInline(text, item.c, env);
             // A hub entry (a list item that is only a link to another note) shows that note's short description.
             const bare = env.hubDescriptions?.() ? bareNoteLink(item.c) : null;
@@ -4926,9 +5011,9 @@
       const hlDot = h("span", { class: "zn-hl-dot" });
       tHl.append(hlDot);
       const tHlMenu = iconButton("caret", "Highlight color", "zn-caret");
-      const tHeading = iconButton("heading", "Heading");
+      const tHeading = iconButton("heading", "Heading (hold for levels 1-6)");
       const tBullet = iconButton("bullets", "Bulleted list");
-      const tCheck = iconButton("check", "Checklist");
+      const tCheck = iconButton("check", "Checklist (hold for task states)");
       const tQuote = iconButton("quote", "Quote (nest deeper with the indent button)");
       const tOutdent = iconButton("outdent", "Nest out: list or quote one level up");
       const tIndent = iconButton("indent", "Nest in: list or quote one level deeper");
@@ -5259,6 +5344,11 @@
       env = Object.assign(Object.create(env), {
         noteInfo,
         hubDescriptions: () => getPref(PREF.HUB_DESC, true) !== false,
+        taskCycle: (line) => { if (!note()?.trashed) setBody(cycleTaskStatus(note().body, line)); },
+        taskMenu: (line, anchor) => {
+          if (note()?.trashed) return;
+          showMenu(anchor, TASK_STATUSES.map(([ch, name]) => ({ icon: "check", label: "[" + ch + "]  " + name, action: () => setBody(setLineTaskStatus(note().body, line, ch)) })));
+        },
         jumpFootnote: (label, back, from) => jumpFootnote(label, back, from),
         openNoteLink: (id, heading = "") => {
           if (!store.get(id)) return flash("That note no longer exists");
@@ -5938,6 +6028,11 @@
         items.push(
           { icon: "edit", label: "Rename\u2026", action: () => askFolderName("Rename folder", node.label, (name) => store.renameFolder(node.id, name)) },
           { icon: "folder", label: "Move to\u2026", action: () => askFolderMove(node) },
+          ...(node.id !== TABBAR_FOLDER && !node.id.startsWith(TABBAR_FOLDER + "/")
+            ? [{ icon: "folder", label: "Move to Notes (tabbar)", action: () => { store.ensureTabbarFolder(); const r = store.moveFolder(node.id, TABBAR_FOLDER); flash(r ? "Shown in the Zen sidebar folder" : "Cannot move it there (too deep or name taken)"); scheduleList(); } }]
+            : node.id !== TABBAR_FOLDER && parentOfFolder(node.id) === TABBAR_FOLDER
+              ? [{ icon: "folder", label: "Remove from Notes (tabbar)", action: () => { const r = store.moveFolder(node.id, ""); flash(r ? "Moved out of the Zen sidebar folder" : "Cannot move it out"); scheduleList(); } }]
+              : []),
           { sep: true },
           { icon: "trash", label: "Delete\u2026", danger: true, action: () => askFolderDelete(node) },
         );
@@ -6204,10 +6299,23 @@
         if (note()?.trashed) return;
         fn();
       };
-      for (const [btn, fn] of [[tBold, fmt.bold], [tItalic, fmt.italic], [tStrike, fmt.strike], [tHl, fmt.highlight], [tHeading, fmt.heading], [tBullet, fmt.bullet], [tCheck, fmt.check], [tQuote, fmt.quote], [tIndent, fmt.indent], [tOutdent, fmt.outdent], [tCode, fmt.code], [tCodeBlock, fmt.codeBlock], [tNumbered, fmt.numbered], [tLink, fmt.link], [tNoteLink, fmt.noteLink], [tImage, fmt.image], [tTable, fmt.table]]) {
+      for (const [btn, fn] of [[tBold, fmt.bold], [tItalic, fmt.italic], [tStrike, fmt.strike], [tHl, fmt.highlight], [tBullet, fmt.bullet], [tQuote, fmt.quote], [tIndent, fmt.indent], [tOutdent, fmt.outdent], [tCode, fmt.code], [tCodeBlock, fmt.codeBlock], [tNumbered, fmt.numbered], [tLink, fmt.link], [tNoteLink, fmt.noteLink], [tImage, fmt.image], [tTable, fmt.table]]) {
         // mousedown must not steal the textarea selection
         listen(btn, "mousedown", (e) => e.preventDefault());
         listen(btn, "click", needEdit(fn));
+      }
+      // Hold-to-pick variants: a tap keeps the old action, a long press opens the choices (task states, heading levels).
+      for (const [btn, tap, variants] of [
+        [tCheck, fmt.check, () => TASK_STATUSES.map(([ch, name]) => ({ icon: "check", label: "[" + ch + "]  " + name, action: needEdit(() => applyEdit(setTaskStatus(ta.value, ...sel(), ch))) }))],
+        [tHeading, fmt.heading, () => [1, 2, 3, 4, 5, 6].map((n) => ({ icon: "heading", label: "Heading " + n + "  (" + "#".repeat(n) + ")", action: needEdit(() => applyEdit(setHeadingLevel(ta.value, ...sel(), n))) }))],
+      ]) {
+        listen(btn, "mousedown", (e) => e.preventDefault());
+        const hold = createHoldAction({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), onTap: needEdit(tap), onHold: () => showMenu(btn, variants()) });
+        listen(btn, "pointerdown", (e) => { if (e.button === undefined || e.button === 0) hold.press(); });
+        listen(btn, "pointerup", () => hold.release());
+        listen(btn, "pointerleave", () => hold.cancel());
+        listen(btn, "click", () => hold.click());
+        cleanups.push(() => hold.cancel());
       }
       listen(tMode, "click", () => setMode(mode === "read" ? "edit" : "read"));
       // Linked scrolling (split view only): the pane you scroll puts the same SOURCE line at the top of
@@ -8483,8 +8591,11 @@
         // A collapsed (hover) sheet counts as closed for the button and the shortcuts: using them opens it.
         isOpen: () => isOpen && !collapsed,
         toggle: () => (isOpen && !collapsed ? close() : open()),
-        newNote: () => {
-          if (isOpen && !destroyed) newNote();
+        newNote: (folderId) => {
+          if (isOpen && !destroyed) newNote(folderId);
+        },
+        quickCaptureToday: () => {
+          if (isOpen && !destroyed) queueMicrotask(() => askQuickCapture(""));
         },
         openNoteById: (id) => {
           if (!isOpen || destroyed || !store.get(id)) return false;
@@ -9248,8 +9359,18 @@
         }
       }
       onCleanup(() => { try { soundCtx?.close?.(); } catch (_) {} soundCtx = null; });
-      function openReminderNote(id, { floatingWindow = false } = {}) {
-        const b = floatingWindow ? ensureFloating() : pickBinding();
+      // Where a click in Zen's own sidebar folder opens a note: the Zentral panel when one is showing (the Notes sheet
+      // of that panel), otherwise the standalone card. Never a hidden panel.
+      function zenTarget() {
+        if (!panelsHidden()) {
+          const shown = [...bindings.values()].filter((x) => x.visible());
+          const b = (lastUsed && shown.includes(lastUsed) && lastUsed) || shown.find((x) => x.isOpen()) || (document.getElementById("zen-app-panel-root")?.hasAttribute("open") ? shown.find((x) => x.kind === "primary") : null);
+          if (b) return b;
+        }
+        return ensureFloating();
+      }
+      function openReminderNote(id, { zenTab = false } = {}) {
+        const b = zenTab ? zenTarget() : pickBinding();
         return Promise.resolve(b.open()).then(() => sheetOf(b)?.openNoteById?.(id)).catch(warn);
       }
       function showReminders(list) {
@@ -9292,7 +9413,11 @@
       // The browser is reached only here. Every call is wrapped by createZenFolder's kill switch.
       const ZEN_ROOT_ID = "bgalazka-zentral-notes";
       const zenMode = () => cleanZenMode(prefStr(PREF.ZEN_MODE, "off"));
-      const zenRootEl = () => document.querySelector('zen-folder[bgalazka-notes-folder="true"]');
+      const zenRootEl = () => {
+        const el = document.querySelector('zen-folder[bgalazka-notes-folder="true"]') || document.getElementById(ZEN_ROOT_ID);
+        if (el && el.localName === "zen-folder" && !el.hasAttribute("bgalazka-notes-folder")) el.setAttribute("bgalazka-notes-folder", "true"); // adopt the restored folder
+        return el && el.localName === "zen-folder" ? el : null;
+      };
       const systemPrincipal = () => Services.scriptSecurityManager.getSystemPrincipal();
       let zenMoveBroken = false;
       const zenTabs = (root) => [...(root?.querySelectorAll?.("tab") || [])].filter((t) => /^(n:|root$|new:)/.test(t.getAttribute(NOTES_ATTR) || ""));
@@ -9344,10 +9469,88 @@
       const zenRemoveTab = (tab) => {
         try { window.gBrowser.removeTab(tab, { animate: false, skipPermitUnload: true, skipSessionStore: true }); } catch (error) { warn(error); }
       };
+      // Sub-folders must sit INSIDE their parent folder. createFolder's parentId option is not guaranteed in every Zen
+      // build, so after creating, verify the real DOM parent and try the two known ways of adopting a folder.
+      const zenParentOf = (el) => { try { return el.parentElement?.closest?.("zen-folder") || null; } catch (_) { return null; } };
+      function zenNest(el, parentEl) {
+        if (!el || !parentEl || el === parentEl) return false;
+        if (zenParentOf(el) === parentEl) return true;
+        for (const how of [
+          () => parentEl.addTabs?.([el]),
+          () => parentEl.addFolder?.(el),
+          () => window.gBrowser.moveTabToExistingGroup?.(el, parentEl),
+          () => (parentEl.childrenContainer || parentEl.querySelector?.(":scope > .tab-group-container"))?.appendChild?.(el),
+        ]) {
+          try { how(); } catch (_) {}
+          if (zenParentOf(el) === parentEl) return true;
+        }
+        return false;
+      }
+      // Zen saves pinned tabs and folders in its session, so after a restart our folder (and our tabs) come back WITHOUT
+      // the marks that only live in memory. Our own address shape is the proof they are ours: such leftovers are removed
+      // (once per run) before anything is built, so there is never a second NOTES folder or a tab titled about:blank#zn-.
+      let zenSwept = false;
+      function zenSweepStale() {
+        if (zenSwept) return;
+        zenSwept = true;
+        try {
+          const ours = (t) => {
+            let u = "";
+            try { u = t.linkedBrowser?.currentURI?.spec || ""; } catch (_) {}
+            return /^about:blank#zn-/.test(u) || /^about:blank#zn-/.test(t.getAttribute("label") || "");
+          };
+          for (const t of [...(document.querySelectorAll?.("tab:not([" + NOTES_ATTR + "])") || [])]) if (ours(t)) zenRemoveTab(t);
+          const root = zenRootEl();
+          for (const f of [...(root?.querySelectorAll?.("zen-folder:not([bgalazka-notes-subfolder])") || [])])
+            if (!f.querySelector("tab")) { try { f.delete?.(); } catch (_) {} }
+        } catch (error) { warn(error); }
+      }
+      // Several ways to create a sub-folder are tried in turn and each result is checked against the real DOM;
+      // when all of them fail the facts are logged once, so a report says what this Zen build supports.
+      let zenDiagDone = false;
+      function zenMakeSubfolder(e, parentEl) {
+        const diag = [];
+        const opts = { label: e.label, renameFolder: false, collapsed: false, workspaceId: window.gZenWorkspaces?.activeWorkspace };
+        const tries = [
+          // 1: the tab is put inside the parent first, so the new folder is made where the tab is
+          ["seed in parent", () => { const sd = zenNewTab(zenNewUrl(e.id), "new:" + e.id); if (!zenPlace(sd, parentEl)) { zenRemoveTab(sd); return null; } return { seed: sd, el: window.gZenFolders.createFolder([sd], opts) }; }],
+          // 2: the parentId option, then adopting the folder afterwards
+          ["parentId", () => { const sd = zenNewTab(zenNewUrl(e.id), "new:" + e.id); return { seed: sd, el: window.gZenFolders.createFolder([sd], { ...opts, parentId: parentEl.id }) }; }],
+        ];
+        for (const [name, make] of tries) {
+          let r = null;
+          try { r = make(); } catch (error) { diag.push(name + " threw " + (error?.message || error)); }
+          if (!r) { diag.push(name + ": no tab"); continue; }
+          const el = (r.el && r.el.nodeType ? r.el : null) || r.seed.closest?.("zen-folder");
+          if (el && el !== parentEl && zenNest(el, parentEl)) return { el, seed: r.seed };
+          diag.push(name + ": " + (!el ? "no folder made" : el === parentEl ? "the parent came back" : "folder not inside the parent (it is inside " + (zenParentOf(el)?.id || "nothing") + ")"));
+          zenRemoveTab(r.seed);
+          if (el && el !== parentEl) { try { el.delete?.(); } catch (_) {} }
+        }
+        if (!zenDiagDone) {
+          zenDiagDone = true;
+          const info = "Zen folder: nesting failed (" + diag.join("; ") + "). Parent: addTabs=" + typeof parentEl.addTabs + " addFolder=" + typeof parentEl.addFolder + " childrenContainer=" + !!parentEl.childrenContainer + " createFolder.length=" + (window.gZenFolders?.createFolder?.length ?? "?");
+          try { window.__zentralNotesZenDiag = info; } catch (_) {}
+          warn(info);
+        }
+        return null;
+      }
+      // Default place of the NOTES folder: the first entry of the workspace's Pinned tabs (only when it is created;
+      // later the person may drag it anywhere and it stays there).
+      function zenToTop(el) {
+        try {
+          if (!prefBool(PREF.ZEN_TOP, true)) return;
+          const host = el.parentElement;
+          if (!host || zenParentOf(el)) return;
+          const first = [...host.children].find((c) => c !== el && /^(zen-folder|tab)$/i.test(c.localName || ""));
+          if (first && first !== el && first !== el.nextElementSibling) host.insertBefore(el, first);
+        } catch (error) { warn(error); }
+      }
       const zenApi = {
         ready: () => !zenMoveBroken && !!(window.gBrowser && window.gZenFolders?.createFolder),
         hasRoot: () => !!zenRootEl(),
         ensureRoot() {
+          zenSweepStale();
           if (zenRootEl()) return true;
           const tab = zenNewTab(zenNewUrl(""), "root");
           let folder = null;
@@ -9357,18 +9560,28 @@
           const el = (folder && folder.nodeType ? folder : null) || document.getElementById(ZEN_ROOT_ID) || tab.closest?.("zen-folder");
           if (!el) return false; // the tab stays an inert pinned about:blank tab; a later run retries once more
           el.setAttribute("bgalazka-notes-folder", "true");
+          zenToTop(el);
           zenSettleSeed(tab, el);
           return !zenKeepSeed || !!zenRootEl();
         },
         list() {
           const root = zenRootEl();
           const out = [];
+          // The parent counts as "where it really is": an entry that is not inside the folder it belongs to
+          // reports a wrong parent, so the plan moves it (removed now, created again in the right folder).
+          const placed = (el, parentKey) => {
+            const want = parentKey ? zenFolderByKey(root, parentKey) : root;
+            return !want || zenParentOf(el) === want || (!parentKey && el.closest?.("zen-folder") === root) ? parentKey : "?misplaced";
+          };
           for (const t of zenTabs(root)) {
             const k = t.getAttribute(NOTES_ATTR);
-            if (k.startsWith("n:")) out.push({ key: k, label: t.getAttribute("bgalazka-notes-label") || "", parent: t.getAttribute("bgalazka-notes-parent") || "" });
+            if (!k.startsWith("n:")) continue;
+            const pk = t.getAttribute("bgalazka-notes-parent") || "";
+            const want = pk ? zenFolderByKey(root, pk) : root;
+            out.push({ key: k, label: t.getAttribute("bgalazka-notes-label") || "", parent: !want || t.closest?.("zen-folder") === want ? pk : "?misplaced" });
           }
           for (const f of root?.querySelectorAll?.("zen-folder[bgalazka-notes-subfolder]") || [])
-            out.push({ key: f.getAttribute("bgalazka-notes-subfolder"), label: f.getAttribute("bgalazka-notes-label") || "", parent: f.getAttribute("bgalazka-notes-parent") || "" });
+            out.push({ key: f.getAttribute("bgalazka-notes-subfolder"), label: f.getAttribute("bgalazka-notes-label") || "", parent: placed(f, f.getAttribute("bgalazka-notes-parent") || "") });
           return out;
         },
         add(e, url) {
@@ -9384,15 +9597,9 @@
             tab.setAttribute("label", e.label);
             return true;
           }
-          const seed = zenNewTab(zenNewUrl(e.id), "new:" + e.id);
-          let el = null;
-          try { el = window.gZenFolders.createFolder([seed], { label: e.label, renameFolder: false, collapsed: false, parentId: parentEl.id, workspaceId: window.gZenWorkspaces?.activeWorkspace }); } catch (error) { warn(error); }
-          el = (el && el.nodeType ? el : null) || seed.closest?.("zen-folder");
-          if (!el || el === parentEl || el.parentElement?.closest?.("zen-folder") !== parentEl) {
-            if (el && el !== parentEl && el.delete) { try { el.delete(); } catch (_) {} }
-            zenRemoveTab(seed);
-            return false; // nesting not available: the controller switches to path labels
-          }
+          const made = zenMakeSubfolder(e, parentEl);
+          if (!made) return false; // nesting not available: the controller switches to path labels
+          const { el, seed } = made;
           el.setAttribute("bgalazka-notes-subfolder", e.key);
           el.setAttribute("bgalazka-notes-label", e.label);
           el.setAttribute("bgalazka-notes-parent", e.parent);
@@ -9413,6 +9620,34 @@
           if (f) { f.setAttribute("bgalazka-notes-label", label); try { f.label = label; } catch (_) {} }
         },
         move(key) { zenApi.remove(key, false); }, // removed now, added again by the next run under its new parent
+        // One "New note" entry in the root and in every sub-folder (on), or none where the folder has other content (off).
+        // An entry that is the only thing keeping a folder alive is never removed.
+        syncNewButtons(folders, on) {
+          const root = zenRootEl();
+          if (!root) return;
+          const keep = on || zenKeepSeed;
+          const targets = [{ key: "root", id: "", el: root }];
+          for (const f of folders) {
+            const el = zenFolderByKey(root, f.key);
+            if (el) targets.push({ key: "new:" + f.id, id: f.id, el });
+          }
+          for (const t of targets) {
+            const inside = [...t.el.querySelectorAll("tab")].filter((x) => x.closest("zen-folder") === t.el);
+            const seeds = inside.filter((x) => /^(root|new:)/.test(x.getAttribute(NOTES_ATTR) || ""));
+            if (keep) {
+              for (const extra of seeds.slice(1)) zenRemoveTab(extra);
+              let seed = seeds[0];
+              if (!seed) {
+                seed = zenNewTab(zenNewUrl(t.id), t.key);
+                if (!zenPlace(seed, t.el)) { zenRemoveTab(seed); continue; }
+              }
+              seed.setAttribute("bgalazka-notes-label", "New note");
+              seed.setAttribute("label", "New note");
+            } else if (seeds.length && inside.length > seeds.length) {
+              for (const sd of seeds) zenRemoveTab(sd);
+            }
+          }
+        },
         // Removes everything this feature ever made, wherever it ended up: marked tabs anywhere, then its sub-folders
         // and the root folder. Only elements carrying our own marks are touched.
         removeAll() {
@@ -9428,6 +9663,7 @@
           api: zenApi,
           store,
           getMode: zenMode,
+          getNewButtons: () => zenWantsSeed(),
           setTimer: (fn, ms) => window.setTimeout(fn, ms),
           clearTimer: (id) => window.clearTimeout(id),
           warn,
@@ -9456,11 +9692,12 @@
       // TabSelect is the second line for keyboard / programmatic selection: it hands the selection straight back.
       function activateZenTab(tab) {
         const key = tab.getAttribute(NOTES_ATTR) || "";
-        if (key.startsWith("n:")) return openReminderNote(key.slice(2), { floatingWindow: true });
-        const p = parseZenUrl(tabUrl(tab)) || (key === "root" ? { kind: "new", folder: "" } : null);
+        if (key.startsWith("n:")) return openReminderNote(key.slice(2), { zenTab: true });
+        // The folder comes from the tab's own mark (an unloaded about:blank tab has no readable address), then its address.
+        const p = key === "root" ? { kind: "new", folder: "" } : key.startsWith("new:") ? { kind: "new", folder: cleanFolder(key.slice(4)) } : parseZenUrl(tabUrl(tab));
         if (p?.kind !== "new") return null;
         const folder = p.folder || (zenMode() === "selected" ? TABBAR_FOLDER : "");
-        const b = ensureFloating(); // Zen's own UI (sidebar folder) opens the free-floating window
+        const b = zenTarget();
         return Promise.resolve(b.open()).then(() => sheetOf(b)?.newNote?.(folder)).catch(warn);
       }
       const onZenMouse = (ev) => {
@@ -9561,6 +9798,8 @@
         zenCtxTab = null;
         zenMoveBroken = false;
         zenKeepSeed = false;
+        zenSwept = false;
+        zenDiagDone = false;
         try { zen.destroy(); } catch (_) {}
         try { zenApi.removeAll(); } catch (error) { warn(error); }
         zen = makeZen(); // a fresh, idle sync object for the next time the feature is switched on
@@ -9609,6 +9848,12 @@
           sidebarBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             Promise.resolve(ensureFloating().toggle()).catch(warn);
+          });
+          sidebarBtn.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const b = ensureFloating();
+            Promise.resolve(b.isOpen() ? true : b.open()).then(() => sheetOf(b)?.quickCaptureToday?.()).catch(warn);
           });
         }
         if (sidebarBtn.parentNode !== host) host.appendChild(sidebarBtn);
@@ -9713,6 +9958,13 @@
         button.addEventListener("click", (e) => {
           e.stopPropagation();
           Promise.resolve(binding.toggle()).catch(warn);
+        });
+        // Right click on the Notes button: quick capture to today's note (opens Notes first when it is closed).
+        button.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const target = binding.toFloating() ? ensureFloating() : binding;
+          Promise.resolve(target.isOpen() ? true : target.open()).then(() => sheetOf(target)?.quickCaptureToday?.()).catch(warn);
         });
         // The bar's own drag handlers must not start from this button.
         button.addEventListener("mousedown", (e) => e.stopPropagation());
@@ -10151,6 +10403,9 @@
           else if (name === PREF.ZEN_MODE) {
             if (zenMode() === "off") zenTeardown();
             else zenSoon();
+          }
+          else if (name === PREF.ZEN_NEW_BUTTON) {
+            if (zenMode() !== "off") zenSoon(); // entries appear in (or leave) every folder at once
           }
           else if (WINDOW_PREFS.has(name)) {
             // Hover reveal, push page, split windows and the sidebar option: open sheets follow at once.
