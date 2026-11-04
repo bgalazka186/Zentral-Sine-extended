@@ -143,6 +143,7 @@
       SPELL: "zen.workspace.zentral.notes.spellcheck",
       SPELL_MAX: "zen.workspace.zentral.notes.spellcheck_max_chars",
       NEW_CHOOSER: "zen.workspace.zentral.notes.new_note_chooser",
+      DEFAULT_VIEW: "zen.workspace.zentral.notes.default_view",
       HUB_DESC: "zen.workspace.zentral.notes.hub_descriptions",
       WIKI_COMPLETE: "zen.workspace.zentral.notes.wiki_complete",
       BACKLINKS_PANEL: "zen.workspace.zentral.notes.backlinks_panel",
@@ -508,38 +509,44 @@
     // The tree as visible rows (a collapsed folder hides what is inside). `pinned` is the virtual first row.
     const TREE_ORDERS = Object.freeze(["folders-first", "notes-first", "mixed-by-name"]);
     const cleanTreeOrder = (v) => (TREE_ORDERS.includes(v) ? v : "folders-first");
-    function treeRows(root, pinned = [], order = "folders-first") {
+    // W9: how a panel starts. "last" keeps the mode used last time; the others force it every time a sheet opens.
+    const DEFAULT_VIEWS = Object.freeze(["last", "edit", "read", "split"]);
+    const cleanDefaultView = (v) => (DEFAULT_VIEWS.includes(v) ? v : "last");
+    const startMode = (pref, last) => {
+      const v = cleanDefaultView(pref);
+      return v === "last" ? last : v;
+    };
+    // The children of one tree node as an ordered list of {folder} / {note}, in the chosen order. ONE function for the
+    // sheet's tree and for the Zen sidebar folder, so the two can never disagree about order.
+    function childSequence(node, order = "folders-first", showNotes = true) {
       order = cleanTreeOrder(order);
+      const folders = node.children.map((c) => ({ folder: c }));
+      const notes = showNotes ? node.notes.map((n) => ({ note: n })) : [];
+      if (order === "notes-first") return [...notes, ...folders];
+      if (order === "mixed-by-name") {
+        // One alphabetical list; ties keep folders first. Folder order set by the user is ignored in this mode.
+        const mixed = [...folders.map((m) => ({ ...m, key: String(m.folder.label || "") })), ...notes.map((m) => ({ ...m, key: titleOf(m.note.body) || "Untitled note" }))];
+        mixed.sort((a, b) => a.key.localeCompare(b.key) || Number(!a.folder) - Number(!b.folder));
+        return mixed.map(({ folder, note }) => (folder ? { folder } : { note }));
+      }
+      return [...folders, ...notes];
+    }
+    function treeRows(root, pinned = [], order = "folders-first") {
       const rows = [];
       if (pinned.length) {
         rows.push({ type: "pinned", depth: 0, count: pinned.length });
         for (const n of pinned) rows.push({ type: "note", depth: 1, note: n, pinnedRow: true });
       }
       const countOf = (node) => node.notes.length + node.children.reduce((s, c) => s + countOf(c), 0);
-      const pushFolder = (c, depth) => {
-        rows.push({ type: "folder", depth, node: c, count: countOf(c) });
-        if (!c.collapsed) walk(c, depth + 1);
-      };
       const walk = (node, depth) => {
         const showNotes = depth === 0 || !node.collapsed;
-        if (order === "notes-first") {
-          if (showNotes) for (const n of node.notes) rows.push({ type: "note", depth, note: n });
-          for (const c of node.children) pushFolder(c, depth);
-        } else if (order === "mixed-by-name") {
-          // One alphabetical list; ties keep folders first. Folder order set by the user is ignored in this mode.
-          const mixed = node.children.map((c) => ({ folder: c, key: String(c.label || "") }));
-          if (showNotes) for (const n of node.notes) mixed.push({ note: n, key: titleOf(n.body) || "Untitled note" });
-          mixed.sort((a, b) => a.key.localeCompare(b.key) || Number(!a.folder) - Number(!b.folder));
-          for (const m of mixed) {
-            if (m.folder) pushFolder(m.folder, depth);
-            else rows.push({ type: "note", depth, note: m.note });
-          }
-        } else {
-          for (const c of node.children) pushFolder(c, depth);
-          if (showNotes) for (const n of node.notes) rows.push({ type: "note", depth, note: n });
+        for (const m of childSequence(node, order, showNotes)) {
+          if (m.folder) {
+            rows.push({ type: "folder", depth, node: m.folder, count: countOf(m.folder) });
+            if (!m.folder.collapsed) walk(m.folder, depth + 1);
+          } else rows.push({ type: "note", depth, note: m.note });
         }
       };
-      // folders-first: the root's own notes follow the folders, like files after directories.
       walk(root, 0);
       return rows;
     }
@@ -1123,23 +1130,76 @@
     const LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(?:\[( |x|X|-|\/|\?|!)\]\s+)?(.*)$/;
     // GitHub-style tables: a header row, a delimiter row with pipes (| --- | :-: |), body rows.
     const TABLE_DELIM_RE = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
-    function splitRow(line) {
-      let t = line.trim();
-      if (t.startsWith("|")) t = t.slice(1);
-      if (t.endsWith("|") && !t.endsWith("\\|")) t = t.slice(0, -1);
-      const cells = [];
-      let cur = "";
-      for (let i = 0; i < t.length; i++) {
-        if (t[i] === "\\" && t[i + 1] === "|") {
+    // Raw cells with their offsets in the line: { text (untrimmed), s, e }. splitRow trims them; the task-box
+    // write-back needs the offsets to change exactly one character of the source line.
+    function splitRowSpans(line) {
+      let from = 0,
+        to = line.length;
+      while (from < to && /\s/.test(line[from])) from++;
+      while (to > from && /\s/.test(line[to - 1])) to--;
+      if (line[from] === "|") from++;
+      if (to > from && line[to - 1] === "|" && !(to - 1 > from && line[to - 2] === "\\")) to--;
+      const out = [];
+      let cur = "",
+        s0 = from;
+      for (let i = from; i < to; i++) {
+        if (line[i] === "\\" && line[i + 1] === "|") {
           cur += "|";
           i++;
-        } else if (t[i] === "|") {
-          cells.push(cur.trim());
+        } else if (line[i] === "|") {
+          out.push({ text: cur, s: s0, e: i });
           cur = "";
-        } else cur += t[i];
+          s0 = i + 1;
+        } else cur += line[i];
       }
-      cells.push(cur.trim());
-      return cells;
+      out.push({ text: cur, s: s0, e: to });
+      return out;
+    }
+    function splitRow(line) {
+      return splitRowSpans(line).map((c) => c.text.trim());
+    }
+    // A table cell is split at <br> (the only tag it understands); a segment that starts with [ ] or [x] gets a task
+    // box. `line`/`col` say where the cell lives in the note (line -1 = nested block: shown, not clickable).
+    const CELL_BR_RE = /<br\s*\/?>/gi;
+    const CELL_BOX_RE = /^\s*\[([ xX])\](?=\s|$)\s?/;
+    function cellNodes(raw, line, col) {
+      const nodes = [];
+      let k = 0;
+      raw.trim().split(CELL_BR_RE).forEach((seg, idx) => {
+        if (idx) nodes.push({ t: "br" });
+        const m = CELL_BOX_RE.exec(seg);
+        if (m) {
+          nodes.push({ t: "task", on: m[1] !== " ", line, col, k: k++ });
+          seg = seg.slice(m[0].length);
+        }
+        nodes.push(...parseInline(seg.trim()));
+      });
+      return nodes;
+    }
+    // Read mode: flip the k-th task box of one table cell in the source (both [ ] and [x] ways), nothing else.
+    function toggleTableBox(body, lineIndex, col, k) {
+      const lines = normalizeNewlines(body).split("\n");
+      const line = lines[lineIndex];
+      if (line === undefined || !line.includes("|")) return body;
+      const cell = splitRowSpans(line)[col];
+      if (!cell) return body;
+      const raw = line.slice(cell.s, cell.e);
+      let at = 0,
+        seen = 0;
+      for (const seg of raw.split(CELL_BR_RE)) {
+        const m = CELL_BOX_RE.exec(seg);
+        if (m) {
+          if (seen === k) {
+            const pos = raw.indexOf(seg, at) + seg.indexOf("[") + 1;
+            const next = raw[pos] === " " ? "x" : " ";
+            lines[lineIndex] = line.slice(0, cell.s + pos) + next + line.slice(cell.s + pos + 1);
+            return lines.join("\n");
+          }
+          seen++;
+        }
+        at = raw.indexOf(seg, at) + seg.length;
+      }
+      return body;
     }
     function isTableStart(lines, i) {
       if (i + 1 >= lines.length) return false;
@@ -1148,7 +1208,7 @@
       if (!head.includes("|") || !delim.includes("|") || !TABLE_DELIM_RE.test(delim)) return false;
       return splitRow(head).length === splitRow(delim).length;
     }
-    function parseTable(lines, start) {
+    function parseTable(lines, start, nested = false) {
       const head = splitRow(lines[start]).slice(0, MAX_TABLE_COLS);
       const align = splitRow(lines[start + 1])
         .slice(0, MAX_TABLE_COLS)
@@ -1158,10 +1218,10 @@
       while (i < lines.length && lines[i].trim() && lines[i].includes("|") && rows.length < MAX_TABLE_ROWS) {
         const cells = splitRow(lines[i]).slice(0, head.length);
         while (cells.length < head.length) cells.push("");
-        rows.push(cells.map((c) => parseInline(c)));
+        rows.push(cells.map((c, col) => cellNodes(c, nested ? -1 : i, col)));
         i++;
       }
-      return { block: { type: "table", align, head: head.map((c) => parseInline(c)), rows }, next: i };
+      return { block: { type: "table", align, head: head.map((c) => cellNodes(c, -1, 0)), rows }, next: i };
     }
     // opts.joinLines: a single newline inside a paragraph is a space (standard Markdown) instead of
     // a line break. opts.keepBlanks: every blank line after the first adds one empty gap.
@@ -1346,7 +1406,7 @@
           }
           blocks.push({ type: "list", items });
         } else if (isTableStart(lines, i)) {
-          const t = parseTable(lines, i);
+          const t = parseTable(lines, i, nested);
           blocks.push(t.block);
           i = t.next;
         } else {
@@ -1689,6 +1749,7 @@
       for (const n of nodes) {
         if (n.t === "text") out += escHtml(n.s);
         else if (n.t === "br") out += "<br>";
+        else if (n.t === "task") out += '<input type="checkbox" disabled' + (n.on ? " checked" : "") + "> ";
         else if (n.t === "math") out += '<span class="math">' + inlineHtml(n.c) + "</span>";
         else if (n.t === "code") out += "<code>" + escHtml(n.s) + "</code>";
         else if (n.t === "img") out += n.asset ? '<span class="zn-picture">[picture: ' + escHtml(n.alt || "image") + "]</span>" : '<img src="' + escHtml(n.href) + '" alt="' + escHtml(n.alt) + '">';
@@ -1790,6 +1851,7 @@
       for (const n of nodes) {
         if (n.t === "text" || n.t === "code" || n.t === "kbd") out += n.s;
         else if (n.t === "br") out += "\n";
+        else if (n.t === "task") out += n.on ? "[x] " : "[ ] ";
         else if (n.t === "img") out += n.alt ? "[image: " + n.alt + "]" : "[image]";
         else if (n.t === "fn") out += "[" + n.n + "]";
         else if (n.t === "a") {
@@ -2434,6 +2496,7 @@
           { id: "pinStrip", label: "Pinned notes strip and Recent menu under the title", pref: PREF.PIN_STRIP, kind: "bool", def: false },
           { id: "footerCount", label: "Footer shows characters and reading time (and counts the selection)", pref: PREF.FOOTER_COUNTER, kind: "bool", def: false },
           { id: "treeOrder", label: "Order in the notes tree", pref: PREF.TREE_ORDER, kind: "choice", def: "folders-first", choices: [["folders-first", "Folders first"], ["notes-first", "Notes first"], ["mixed-by-name", "Mixed, by name"]] },
+          { id: "defaultView", label: "A panel opens in", pref: PREF.DEFAULT_VIEW, kind: "choice", def: "last", choices: [["last", "The view used last"], ["edit", "Editor"], ["read", "Preview"], ["split", "Split: editor and preview"]] },
           { id: "hubDesc", label: "Hub notes show a short description for each linked note", pref: PREF.HUB_DESC, kind: "bool", def: true },
           { id: "wikiAuto", label: "Suggest notes while typing [[", pref: PREF.WIKI_COMPLETE, kind: "bool", def: true },
           { id: "linkedStrip", label: "Show \"Linked from\" under the read view", pref: PREF.BACKLINKS_PANEL, kind: "bool", def: false },
@@ -4365,7 +4428,7 @@
     }
     // Tree -> flat ordered entries. mode "all": everything; "selected": only the tabbar folder's content, whose direct
     // children sit right inside the Zen NOTES folder (parent ""); "off": nothing. Parents always come before children.
-    function projectZen(notes, folders, mode = "all") {
+    function projectZen(notes, folders, mode = "all", order = "folders-first") {
       mode = cleanZenMode(mode);
       if (mode === "off") return [];
       let root = buildTree(notes, folders);
@@ -4374,16 +4437,41 @@
         if (!root) return [];
       }
       const out = [];
+      // Same order as the sheet's tree (childSequence); a parent always comes before its children, and entries that
+      // share a parent appear in the order the person sees them in Notes.
       const walk = (node, parent) => {
-        for (const f of node.children) {
-          const key = projKey("folder", f.id);
-          out.push({ key, kind: "folder", id: f.id, label: f.label, parent });
-          walk(f, key);
+        for (const m of childSequence(node, order, true)) {
+          if (m.folder) {
+            const key = projKey("folder", m.folder.id);
+            out.push({ key, kind: "folder", id: m.folder.id, label: m.folder.label, parent, color: m.folder.color || "" });
+            walk(m.folder, key);
+          } else out.push({ key: projKey("note", m.note.id), kind: "note", id: m.note.id, label: titleOf(m.note.body) || "Untitled note", parent, color: m.note.color || "" });
         }
-        for (const nt of node.notes) out.push({ key: projKey("note", nt.id), kind: "note", id: nt.id, label: titleOf(nt.body) || "Untitled note", parent });
       };
       walk(root, "");
       return out.slice(0, ZEN_MAX_ENTRIES);
+    }
+    // Which parents hold their entries in a different order than wanted. `current` is in browser order. Only keys found
+    // on both sides are compared (missing ones are added/removed by diffProjection), so this is safe to run after it.
+    function orderPlan(current, wanted) {
+      const wantBy = new Map();
+      for (const e of wanted) {
+        if (!wantBy.has(e.parent)) wantBy.set(e.parent, []);
+        wantBy.get(e.parent).push(e.key);
+      }
+      const have = new Map();
+      for (const e of current) {
+        if (!have.has(e.parent)) have.set(e.parent, []);
+        have.get(e.parent).push(e.key);
+      }
+      const out = [];
+      for (const [parent, keys] of wantBy) {
+        const present = new Set(have.get(parent) || []);
+        const want = keys.filter((k) => present.has(k));
+        const now = (have.get(parent) || []).filter((k) => keys.includes(k));
+        if (want.length > 1 && want.some((k, i) => k !== now[i])) out.push({ parent, keys: want });
+      }
+      return out;
     }
 
     // UTF-8 byte count of a text (used by version history to enforce the per-snapshot size cap).
@@ -4459,8 +4547,10 @@
     // Order of work on every run: read the mode, build the wanted list with projectZen, diff it against what the
     // folder holds (only tabs that carry our marker), apply the difference. Any exception switches the whole
     // controller off (kill switch) and leaves what exists as inert pinned about:blank tabs. Never touches other tabs.
-    function createZenFolder({ api, store, getMode, getNewButtons = () => false, setTimer, clearTimer, warn = () => {}, onKill = () => {} }) {
+    function createZenFolder({ api, store, getMode, getOrder = () => "folders-first", getNewButtons = () => false, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, onKill = () => {} }) {
       let dead = false;
+      let orderOk = true; // set to false once if the browser refuses to reorder (we then stop trying, nothing else changes)
+      let touches = []; // timestamps of browser-side requests (a tab was closed, moved, unpinned...), see touch()
       let timer = null;
       let flat = null; // null = not tried, true = nested folders unavailable (labels carry the path), false = nested works
       const kill = (error) => {
@@ -4496,8 +4586,9 @@
         if (!api.ready()) return;
         if (mode === "selected") store.ensureTabbarFolder();
         if (!api.ensureRoot()) return;
+        if (api.sweepStrays) api.sweepStrays(); // our tabs that ended up outside the NOTES folder (unpinned, essential, dragged away, restored)
         const notes = store.list();
-        let want = projectZen(notes, store.meta.folders, mode);
+        let want = projectZen(notes, store.meta.folders, mode, getOrder());
         if (flat === true) want = flatten(want);
         const plan = diffProjection(api.list(), want);
         for (const key of plan.remove) api.remove(key.split("#")[0], key.includes("#dup"));
@@ -4511,13 +4602,20 @@
         for (const r of plan.relabel) api.relabel(r.key, r.label);
         for (const m of plan.move) api.move(m.key, m.parent);
         if (plan.move.length && timer === null) timer = setTimer(run, 0);
+        // Same order as the sheet's tree. Skipped while moves are pending (the follow-up run does it) and for good
+        // after the first refusal, so a browser that cannot reorder never causes a loop.
+        if (!plan.move.length && orderOk && api.reorder) {
+          for (const o of orderPlan(api.list(), want)) {
+            if (api.reorder(o.parent, o.keys) === false) { orderOk = false; warn("Zen folder: the browser would not reorder the entries; order is left as created"); break; }
+          }
+        }
         // "New note" entry: once in the root and once in every sub-folder that exists now (path labels have no sub-folders).
         if (!plan.move.length && api.syncNewButtons) api.syncNewButtons(want.filter((e) => e.kind === "folder"), !!getNewButtons());
       }
       function run() {
         timer = null;
         if (dead) return;
-        try { rebuild(); } catch (error) { kill(error); }
+        try { api.busy?.(true); rebuild(); } catch (error) { kill(error); } finally { try { api.busy?.(false); } catch (_) {} }
       }
       return {
         // Coalesced: any number of requests inside the delay make one run (no polling, no retry loop).
@@ -4526,6 +4624,19 @@
           timer = setTimer(run, ms);
         },
         runNow: run,
+        // A request that comes from the BROWSER side (someone closed, moved, unpinned or discarded one of our tabs, or
+        // an add-on did it to every tab). Coalesced like schedule(), and rate limited: more than 12 in a minute are
+        // ignored until the minute is over, so a script or add-on that keeps touching our tabs cannot start a loop.
+        // Requests from the notes themselves (schedule) are never limited.
+        touch(ms = 400) {
+          if (dead) return false;
+          const t = now();
+          touches = touches.filter((x) => t - x < 60000);
+          if (touches.length >= 12) return false;
+          touches.push(t);
+          if (timer === null) timer = setTimer(run, ms);
+          return true;
+        },
         kill,
         get dead() { return dead; },
         get flat() { return flat; },
@@ -4542,7 +4653,7 @@
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
-        wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine, TASK_STATUSES, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
+        wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, TASK_STATUSES, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
@@ -4557,7 +4668,7 @@
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, fitDialog,
+        allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
@@ -4569,7 +4680,7 @@
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
         HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
-        wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, projectZen,
+        orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, projectZen,
         utf8Bytes, createPerfSampler, createZenFolder,
       };
     }
@@ -4678,7 +4789,14 @@
       for (const n of nodes) {
         if (n.t === "text") parent.append(document.createTextNode(n.s));
         else if (n.t === "br") parent.append(document.createElement("br"));
-        else if (n.t === "nl") {
+        else if (n.t === "task") {
+          // A task box inside a table cell: a click flips exactly that box in the source (read mode only).
+          const box = h("button", { type: "button", class: "zn-check zn-cell-check", role: "checkbox", "aria-checked": n.on ? "true" : "false", "aria-label": "Toggle item" });
+          if (n.on) box.dataset.on = "true";
+          if (n.line < 0 || !env.tableToggle) box.disabled = true;
+          else box.addEventListener("click", () => env.tableToggle(n.line, n.col, n.k));
+          parent.append(box, document.createTextNode(" "));
+        } else if (n.t === "nl") {
           // Link to another note: no address at all, so nothing can be fetched or navigated. A click opens the note.
           const info = env.noteInfo ? env.noteInfo(n.id) : null;
           const node = h("span", { class: "zn-link zn-notelink" + (info ? (info.trashed ? " is-trashed" : "") : " is-missing"), role: "link", tabindex: "0" });
@@ -5025,7 +5143,7 @@
       const tImage = iconButton("image", "Image");
       const tNumbered = iconButton("numbered", "Numbered list");
       const tTable = iconButton("table", "Table\u2026");
-      const tInsert = iconButton("caret", "More: pictures, callouts, superscript, subscript, keyboard key", "zn-caret");
+      const tInsert = iconButton("caret", "More: pictures, callouts, superscript, subscript, keyboard key (hold: callout kinds)", "zn-caret");
       const tSettings = iconButton("sliders", "Quick settings", "zn-mode-btn");
       const tSync = iconButton("link", "Linked scrolling", "zn-mode-btn zn-sync-btn");
       const tSplit = iconButton("columns", "Split view: editor and preview", "zn-mode-btn");
@@ -5345,6 +5463,7 @@
         noteInfo,
         hubDescriptions: () => getPref(PREF.HUB_DESC, true) !== false,
         taskCycle: (line) => { if (!note()?.trashed) setBody(cycleTaskStatus(note().body, line)); },
+        tableToggle: (line, col, k) => { if (!note()?.trashed) setBody(toggleTableBox(note().body, line, col, k)); },
         taskMenu: (line, anchor) => {
           if (note()?.trashed) return;
           showMenu(anchor, TASK_STATUSES.map(([ch, name]) => ({ icon: "check", label: "[" + ch + "]  " + name, action: () => setBody(setLineTaskStatus(note().body, line, ch)) })));
@@ -6299,18 +6418,22 @@
         if (note()?.trashed) return;
         fn();
       };
-      for (const [btn, fn] of [[tBold, fmt.bold], [tItalic, fmt.italic], [tStrike, fmt.strike], [tHl, fmt.highlight], [tBullet, fmt.bullet], [tQuote, fmt.quote], [tIndent, fmt.indent], [tOutdent, fmt.outdent], [tCode, fmt.code], [tCodeBlock, fmt.codeBlock], [tNumbered, fmt.numbered], [tLink, fmt.link], [tNoteLink, fmt.noteLink], [tImage, fmt.image], [tTable, fmt.table]]) {
+      for (const [btn, fn] of [[tBold, fmt.bold], [tItalic, fmt.italic], [tStrike, fmt.strike], [tHl, fmt.highlight], [tBullet, fmt.bullet], [tIndent, fmt.indent], [tOutdent, fmt.outdent], [tCode, fmt.code], [tCodeBlock, fmt.codeBlock], [tNumbered, fmt.numbered], [tLink, fmt.link], [tNoteLink, fmt.noteLink], [tImage, fmt.image], [tTable, fmt.table]]) {
         // mousedown must not steal the textarea selection
         listen(btn, "mousedown", (e) => e.preventDefault());
         listen(btn, "click", needEdit(fn));
       }
       // Hold-to-pick variants: a tap keeps the old action, a long press opens the choices (task states, heading levels).
-      for (const [btn, tap, variants] of [
+      const calloutVariants = () => CALLOUT_KINDS.filter(([k]) => !hiddenTools().has(calloutId(k))).map(([k, label]) => ({ label, action: needEdit(fmt[calloutId(k)]) }));
+      for (const [btn, tap, variants, noEdit] of [
+        // Quote and the "More" caret: a tap is what it always was, holding lists the callout kinds (a callout is a quote with a marker).
+        [tQuote, fmt.quote, calloutVariants],
+        [tInsert, () => showInsertMenu(), calloutVariants, true],
         [tCheck, fmt.check, () => TASK_STATUSES.map(([ch, name]) => ({ icon: "check", label: "[" + ch + "]  " + name, action: needEdit(() => applyEdit(setTaskStatus(ta.value, ...sel(), ch))) }))],
         [tHeading, fmt.heading, () => [1, 2, 3, 4, 5, 6].map((n) => ({ icon: "heading", label: "Heading " + n + "  (" + "#".repeat(n) + ")", action: needEdit(() => applyEdit(setHeadingLevel(ta.value, ...sel(), n))) }))],
       ]) {
         listen(btn, "mousedown", (e) => e.preventDefault());
-        const hold = createHoldAction({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), onTap: needEdit(tap), onHold: () => showMenu(btn, variants()) });
+        const hold = createHoldAction({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), onTap: noEdit ? tap : needEdit(tap), onHold: () => { const items = variants(); if (items.length) showMenu(btn, items); else (noEdit ? tap : needEdit(tap))(); } });
         listen(btn, "pointerdown", (e) => { if (e.button === undefined || e.button === 0) hold.press(); });
         listen(btn, "pointerup", () => hold.release());
         listen(btn, "pointerleave", () => hold.cancel());
@@ -6390,8 +6513,8 @@
       listen(tSplit, "click", () => setMode(mode === "split" ? "edit" : "split"));
       listen(tRule, "mousedown", (e) => e.preventDefault());
       listen(tRule, "click", needEdit(fmt.rule));
-      listen(tInsert, "mousedown", (e) => e.preventDefault());
-      listen(tInsert, "click", () =>
+      // The "More" menu. Opened by a tap on the caret (see the hold list above: holding it lists the callouts instead).
+      function showInsertMenu() {
         showMenu(tInsert, [
           { icon: "image", label: "Paste picture from clipboard", action: needEdit(pastePictureFromClipboard) },
           { icon: "image", label: "Picture options\u2026 (size, alignment)", action: needEdit(askPictureOptions) },
@@ -6404,8 +6527,8 @@
           { sep: true },
           { label: "Footnote  [^1]", action: needEdit(fmt.footnote), id: "footnote" },
           { label: "Hub list of notes\u2026", action: needEdit(fmt.hubList), id: "hubList" },
-        ].filter((it) => !it.id || !hiddenTools().has(it.id))),
-      );
+        ].filter((it) => !it.id || !hiddenTools().has(it.id)));
+      }
       // Cycle F #11: one "Callout..." entry instead of six; this menu lists the kinds (hidden ones stay out).
       function showCalloutMenu() {
         showMenu(tInsert, CALLOUT_KINDS.filter(([k]) => !hiddenTools().has(calloutId(k))).map(([k, label]) => ({ label, action: needEdit(fmt[calloutId(k)]) })));
@@ -8484,7 +8607,7 @@
         outsideClaim = false;
         adapter.attach(root);
         root.hidden = false;
-        mode = store.meta.mode;
+        mode = startMode(getPref(PREF.DEFAULT_VIEW, "last"), store.meta.mode);
         applyState();
         // A panel-hosted sheet takes its slot first, so the first frame already shows the split.
         if (adapter.pushPanel) applyPush(0, 0);
@@ -8503,7 +8626,9 @@
           return;
         }
         if (!isOpen || destroyed) return;
-        mode = store.meta.mode;
+        // W9: a forced start view is also stored, so opening another note later keeps whatever the user switches to.
+        mode = startMode(getPref(PREF.DEFAULT_VIEW, "last"), store.meta.mode);
+        if (mode !== store.meta.mode) store.setMeta({ mode });
         if (adapter.kind) store.setMeta({ openIn: adapter.kind });
         store.refresh().catch(() => {});
         const id = store.latestId();
@@ -9429,8 +9554,35 @@
         try { return !!tab?.hasAttribute?.(NOTES_ATTR) && !!tab.closest?.('zen-folder[bgalazka-notes-folder="true"]'); } catch (_) { return false; }
       };
       const tabUrl = (tab) => {
-        try { return tab.linkedBrowser?.currentURI?.spec || tab._zentralNotesUrl || ""; } catch (_) { return ""; }
+        try {
+          const spec = tab.linkedBrowser?.currentURI?.spec || "";
+          // A discarded (unloaded) tab reports a bare about:blank: our remembered address is the better answer then.
+          return spec.startsWith(ZEN_URL_PREFIX) ? spec : tab._zentralNotesUrl || spec;
+        } catch (_) { return tab?._zentralNotesUrl || ""; }
       };
+      // True while our own code is changing tabs (and shortly after): the tab events it causes are not "someone else did it".
+      let zenBusy = false;
+      let zenQuietUntil = 0;
+      const zenEventsIgnored = () => zenBusy || Date.now() < zenQuietUntil;
+      // A tab that carries our address shape but not our mark: a session-restored, duplicated or re-opened leftover.
+      // Checked by address, by label, and for pinned/pending tabs by what the session store saved. Cached per tab.
+      const zenChecked = new WeakMap();
+      function zenLooksOurs(t) {
+        if (!t || t.hasAttribute?.(NOTES_ATTR)) return false;
+        if (zenChecked.has(t)) return zenChecked.get(t);
+        let yes = false;
+        try {
+          let u = "";
+          try { u = t.linkedBrowser?.currentURI?.spec || ""; } catch (_) {}
+          yes = /^about:blank#zn-/.test(u) || /^about:blank#zn-/.test(t.getAttribute("label") || "") || /^about:blank#zn-/.test(t._zentralNotesUrl || "");
+          if (!yes && (t.pinned || t.hasAttribute("pending")) && (u === "" || u === "about:blank") && window.SessionStore?.getTabState) {
+            const st = JSON.parse(window.SessionStore.getTabState(t));
+            yes = (st.entries || []).some((e) => /^about:blank#zn-/.test(e?.url || ""));
+          }
+        } catch (_) {}
+        if (yes || t.hasAttribute("pending") || t.pinned) zenChecked.set(t, yes); // a plain tab may still be loading its address
+        return yes;
+      }
       function zenPlace(tab, parentEl) {
         // Zen's own API for putting a tab into a folder is not documented here: try the two known shapes, verify, never guess twice.
         try { parentEl.addTabs?.([tab]); } catch (_) {}
@@ -9494,12 +9646,7 @@
         if (zenSwept) return;
         zenSwept = true;
         try {
-          const ours = (t) => {
-            let u = "";
-            try { u = t.linkedBrowser?.currentURI?.spec || ""; } catch (_) {}
-            return /^about:blank#zn-/.test(u) || /^about:blank#zn-/.test(t.getAttribute("label") || "");
-          };
-          for (const t of [...(document.querySelectorAll?.("tab:not([" + NOTES_ATTR + "])") || [])]) if (ours(t)) zenRemoveTab(t);
+          for (const t of [...(document.querySelectorAll?.("tab:not([" + NOTES_ATTR + "])") || [])]) if (zenLooksOurs(t)) zenRemoveTab(t);
           const root = zenRootEl();
           for (const f of [...(root?.querySelectorAll?.("zen-folder:not([bgalazka-notes-subfolder])") || [])])
             if (!f.querySelector("tab")) { try { f.delete?.(); } catch (_) {} }
@@ -9546,7 +9693,42 @@
           if (first && first !== el && first !== el.nextElementSibling) host.insertBefore(el, first);
         } catch (error) { warn(error); }
       }
+      // Entries of ours that are not inside the NOTES folder any more (unpinned, made an Essential, dragged into another
+      // folder or window, duplicated, restored): they are only placeholders, so they are closed and the next step puts
+      // a fresh one where it belongs. A note is never touched: it lives in the notes folder on disk, not in a tab.
+      function zenSweepStrays() {
+        const root = zenRootEl();
+        if (!root) return;
+        for (const t of [...(document.querySelectorAll?.("tab[" + NOTES_ATTR + "]") || [])]) if (!root.contains(t)) zenRemoveTab(t);
+        for (const t of [...(document.querySelectorAll?.("tab:not([" + NOTES_ATTR + "])") || [])]) if (zenLooksOurs(t)) zenRemoveTab(t);
+        for (const f of [...(document.querySelectorAll?.("zen-folder[bgalazka-notes-subfolder]") || [])]) if (!root.contains(f) && f !== root) { try { f.delete?.(); } catch (_) {} }
+      }
+      // Entries in browser order, direct children of one folder together (what orderPlan compares).
+      const zenElFor = (root, key) => (key.startsWith("f:") ? zenFolderByKey(root, key) : zenByKey(root, key)[0] || null);
+      function zenReorder(parentKey, keys) {
+        const root = zenRootEl();
+        const parentEl = parentKey ? zenFolderByKey(root, parentKey) : root;
+        if (!parentEl) return true; // nothing to order yet; a later run will
+        const els = keys.map((k) => zenElFor(root, k)).filter((el) => el && (zenParentOf(el) === parentEl || (!parentKey && el.localName === "tab" && el.closest("zen-folder") === parentEl)));
+        if (els.length < 2) return true;
+        const host = els[0].parentElement;
+        if (!host || els.some((el) => el.parentElement !== host)) return false;
+        const managed = new Set(els);
+        const nowOrder = () => [...host.children].filter((c) => managed.has(c));
+        for (let i = 0; i < els.length; i++) {
+          const cur = nowOrder();
+          if (cur[i] === els[i]) continue;
+          // Zen/Firefox's own move first (keeps the browser's state in step), the plain DOM insert as the fallback.
+          try { window.gBrowser.moveTabBefore?.(els[i], cur[i]); } catch (_) {}
+          if (nowOrder()[i] !== els[i]) { try { host.insertBefore(els[i], cur[i]); } catch (_) {} }
+          if (nowOrder()[i] !== els[i]) return false;
+        }
+        return true;
+      }
       const zenApi = {
+        busy(on) { zenBusy = on; if (!on) zenQuietUntil = Date.now() + 500; },
+        sweepStrays: zenSweepStrays,
+        reorder: zenReorder,
         ready: () => !zenMoveBroken && !!(window.gBrowser && window.gZenFolders?.createFolder),
         hasRoot: () => !!zenRootEl(),
         ensureRoot() {
@@ -9573,15 +9755,17 @@
             const want = parentKey ? zenFolderByKey(root, parentKey) : root;
             return !want || zenParentOf(el) === want || (!parentKey && el.closest?.("zen-folder") === root) ? parentKey : "?misplaced";
           };
-          for (const t of zenTabs(root)) {
-            const k = t.getAttribute(NOTES_ATTR);
-            if (!k.startsWith("n:")) continue;
-            const pk = t.getAttribute("bgalazka-notes-parent") || "";
-            const want = pk ? zenFolderByKey(root, pk) : root;
-            out.push({ key: k, label: t.getAttribute("bgalazka-notes-label") || "", parent: !want || t.closest?.("zen-folder") === want ? pk : "?misplaced" });
+          // One pass in document order, so the result also tells the real order of the entries in the sidebar.
+          for (const el of root?.querySelectorAll?.("tab, zen-folder[bgalazka-notes-subfolder]") || []) {
+            if (el.localName === "tab") {
+              const k = el.getAttribute(NOTES_ATTR) || "";
+              if (!k.startsWith("n:")) continue;
+              const pk = el.getAttribute("bgalazka-notes-parent") || "";
+              const want = pk ? zenFolderByKey(root, pk) : root;
+              // The tab's real label: when the browser rewrote it (a discard, a title update) the entry is relabelled.
+              out.push({ key: k, label: el.getAttribute("label") || el.getAttribute("bgalazka-notes-label") || "", parent: !want || el.closest?.("zen-folder") === want ? pk : "?misplaced" });
+            } else out.push({ key: el.getAttribute("bgalazka-notes-subfolder"), label: el.getAttribute("bgalazka-notes-label") || "", parent: placed(el, el.getAttribute("bgalazka-notes-parent") || "") });
           }
-          for (const f of root?.querySelectorAll?.("zen-folder[bgalazka-notes-subfolder]") || [])
-            out.push({ key: f.getAttribute("bgalazka-notes-subfolder"), label: f.getAttribute("bgalazka-notes-label") || "", parent: placed(f, f.getAttribute("bgalazka-notes-parent") || "") });
           return out;
         },
         add(e, url) {
@@ -9663,6 +9847,7 @@
           api: zenApi,
           store,
           getMode: zenMode,
+          getOrder: () => cleanTreeOrder(prefStr(PREF.TREE_ORDER, "folders-first")),
           getNewButtons: () => zenWantsSeed(),
           setTimer: (fn, ms) => window.setTimeout(fn, ms),
           clearTimer: (id) => window.clearTimeout(id),
@@ -9692,7 +9877,16 @@
       // TabSelect is the second line for keyboard / programmatic selection: it hands the selection straight back.
       function activateZenTab(tab) {
         const key = tab.getAttribute(NOTES_ATTR) || "";
-        if (key.startsWith("n:")) return openReminderNote(key.slice(2), { zenTab: true });
+        if (key.startsWith("n:")) {
+          // A tab whose note is gone (deleted, trashed, or the notes folder was edited outside) opens nothing:
+          // it is a stale entry, so the next run drops it instead of showing an empty or wrong note.
+          const id = key.slice(2);
+          return ensureStore().then(() => {
+            const n = store.get(id);
+            if (!n || n.trashed) { zen.touch(); return null; }
+            return openReminderNote(id, { zenTab: true });
+          }).catch(warn);
+        }
         // The folder comes from the tab's own mark (an unloaded about:blank tab has no readable address), then its address.
         const p = key === "root" ? { kind: "new", folder: "" } : key.startsWith("new:") ? { kind: "new", folder: cleanFolder(key.slice(4)) } : parseZenUrl(tabUrl(tab));
         if (p?.kind !== "new") return null;
@@ -9701,14 +9895,43 @@
         return Promise.resolve(b.open()).then(() => sheetOf(b)?.newNote?.(folder)).catch(warn);
       }
       const onZenMouse = (ev) => {
-        if (disposed || zen.dead || zenMode() === "off" || ev.button !== 0) return;
+        if (disposed || zen.dead || zenMode() === "off" || (ev.button !== 0 && ev.button !== 1)) return;
         let tab = null;
         try { tab = ev.target?.closest?.("tab[" + NOTES_ATTR + "]"); } catch (_) {}
         if (!tab || !isOurTab(tab)) return; // anything else (unloaded tabs included) is left completely alone
         ev.preventDefault();
         ev.stopImmediatePropagation();
-        if (ev.type === "mousedown") activateZenTab(tab);
+        // Middle click (close / unload in some setups) and the tab's own close / reset buttons do nothing here:
+        // an entry is removed with the context menu or by moving the note, never by closing a placeholder tab.
+        if (ev.button === 1) return;
+        let inButton = false;
+        try { inButton = !!ev.target?.closest?.(".tab-close-button, .tab-reset-button, .tab-reset-pin-button, .tab-icon-overlay"); } catch (_) {}
+        if (ev.type === "mousedown" && !inButton) activateZenTab(tab);
       };
+      // Things done to our tabs by the user, Zen or an add-on that we do not control. None of them can damage a note
+      // (a tab is only a pointer); each one only asks for one coalesced, rate limited repair run.
+      //  - closed (X, middle click, Ctrl+Shift+T later, "close all"): the entry comes back, a restored copy is swept;
+      //  - unpinned / pinned / moved / made an Essential / dragged out: the stray is closed, a fresh entry made in place;
+      //  - discarded (unloaded by hand, by Zen's idle unload or by an add-on for every tab): only the label is repaired,
+      //    the tab is already inert, and clicking it still opens the note (the mark lives on the element, not the page).
+      function zenHeal(tab) {
+        try {
+          const label = tab.getAttribute("bgalazka-notes-label");
+          if (label && tab.getAttribute("label") !== label) tab.setAttribute("label", label);
+          if (tab.getAttribute(NOTES_ATTR) && !tab._zentralNotesUrl) tab._zentralNotesUrl = ZEN_URL_PREFIX + "note:" + encodeURIComponent((tab.getAttribute(NOTES_ATTR) || "").slice(2));
+        } catch (_) {}
+      }
+      const onZenTabEvent = (ev) => {
+        if (disposed || zen.dead || zenMode() === "off" || zenEventsIgnored()) return;
+        const tab = ev.target;
+        if (!tab || tab.localName !== "tab") return;
+        const marked = tab.hasAttribute?.(NOTES_ATTR);
+        if (ev.type === "TabBrowserDiscarded") { if (marked) zenHeal(tab); return; }
+        if (!marked && !(ev.type === "SSTabRestored" && zenLooksOurs(tab))) return; // every other tab: not our business
+        if (ev.type === "SSTabRestored") zenChecked.delete(tab);
+        zen.touch();
+      };
+      const ZEN_TAB_EVENTS = ["TabClose", "TabUnpinned", "TabPinned", "TabMove", "TabBrowserDiscarded", "SSTabRestored"];
       // Selecting one of our tabs (keyboard, session, script) hands the selection back to the previous tab. This must
       // NOT happen inside Zen's own TabSelect dispatch: re-selecting from there corrupts the tab switcher, and a
       // pending (unloaded) tab then never loads until the browser restarts. So it is deferred to the next task and
@@ -9717,7 +9940,10 @@
       onCleanup(() => window.clearTimeout(zenSelectTimer));
       const onZenSelect = (ev) => {
         const tab = ev.target;
-        if (disposed || zen.dead || zenMode() === "off" || !isOurTab(tab)) return;
+        if (disposed || zen.dead || zenMode() === "off") return;
+        // A copy of one of our tabs that lost its mark (duplicate, "open in a new container", reopened closed tab):
+        // it is only a placeholder address, so the next run closes it.
+        if (!isOurTab(tab)) { if (!zenEventsIgnored() && zenLooksOurs(tab)) zen.touch(); return; }
         const prev = ev.detail?.previousTab;
         window.clearTimeout(zenSelectTimer);
         zenSelectTimer = window.setTimeout(() => {
@@ -9778,7 +10004,8 @@
         if (on === zenBound) return;
         zenBound = on;
         const act = on ? "addEventListener" : "removeEventListener";
-        for (const ty of ["mousedown", "click", "mouseup"]) window[act](ty, onZenMouse, true);
+        for (const ty of ["mousedown", "click", "mouseup", "auxclick"]) window[act](ty, onZenMouse, true);
+        for (const ty of ZEN_TAB_EVENTS) window[act](ty, onZenTabEvent, true);
         window[act]("TabSelect", onZenSelect, true);
         for (const ty of ["dragover", "drop"]) window[act](ty, onZenDrop, true);
         window[act]("popupshowing", onTabMenuShowing, true);
@@ -9800,6 +10027,8 @@
         zenKeepSeed = false;
         zenSwept = false;
         zenDiagDone = false;
+        zenBusy = false;
+        zenQuietUntil = 0;
         try { zen.destroy(); } catch (_) {}
         try { zenApi.removeAll(); } catch (error) { warn(error); }
         zen = makeZen(); // a fresh, idle sync object for the next time the feature is switched on

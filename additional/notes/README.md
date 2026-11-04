@@ -130,3 +130,15 @@ Tests: `node tests/notes.test.cjs` (store, autosave, sync, recovery), `node test
 - **Split view as a second window** (setting, off by default): *Split* opens another note in a second window of the same size beside the first, instead of halving one window. With no room beside it the second window is not shown.
 - **Theme** (Quick settings or Zentral settings): Zentral (follows the Zen look), Recommended (like the RSS card), Light, Dark, Paper.
 
+- **Hold in the editor toolbar**: holding *Quote* or the *More* caret lists the callout kinds (Note, Tip, Important, Warning, Caution, Info); a tap does what it always did.
+
+## Notes in the Zen sidebar (pinned NOTES folder)
+
+- **Same order as Notes**: the entries in the sidebar folder follow the tree order you chose in Notes (*Folders first*, *Notes first*, *Mixed, by name*), inside every sub-folder. Notes are sorted like in the tree (pinned first, then by last change), so a note you just edited moves to the top of its folder.
+- **A tab is only a pointer**: closing, unloading, unpinning or moving a Notes tab never changes a note. What happens instead:
+  - closed (X, middle click, *Close all*, reopening a closed tab later): the entry comes back once; a reopened copy is removed. The X, the reset button and the middle click on a Notes tab do nothing;
+  - unpinned, made an Essential, dragged out of the folder or into another folder or window: the stray is closed and a fresh entry appears where it belongs;
+  - unloaded (by hand, by Zen's idle unload or by an add-on that unloads every tab): the label is repaired and a click still opens the note;
+  - the whole NOTES folder (or a sub-folder) deleted: it is rebuilt once. Browser-side repairs are limited to 12 a minute, so an add-on that keeps touching the tabs cannot start a loop;
+  - the note was trashed or deleted: the entry is dropped and a click opens nothing.
+- **Right click** on a Notes tab only offers Notes' own actions; Zen's pin, move, container and unload entries are hidden for it.

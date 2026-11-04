@@ -1043,6 +1043,7 @@
     "zen.workspace.zentral.notes.backlinks_panel",
     "zen.workspace.zentral.notes.hidden_tools_menu",
     "zen.workspace.zentral.notes.date_notes_mode",
+    "zen.workspace.zentral.notes.default_view",
     {
       "type": "text",
       "label": "**Notes · Capture**",

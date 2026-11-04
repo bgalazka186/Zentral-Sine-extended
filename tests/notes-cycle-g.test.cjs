@@ -108,7 +108,7 @@ test("Zen safeguards: every Zen-side handler is scoped to our own tabs; teardown
   const js = fs.readFileSync(path.join(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
   assert.match(js, /const isOurTab = /);
   assert.match(js, /if \(!tab \|\| !isOurTab\(tab\)\) return;/, "mouse handler");
-  assert.match(js, /!isOurTab\(tab\)\) return;\s*const prev = ev\.detail\?\.previousTab;/, "TabSelect handler");
+  assert.match(js, /if \(!isOurTab\(tab\)\) \{[^}]*return;\s*\}\s*const prev = ev\.detail\?\.previousTab;/, "TabSelect handler");
   assert.match(js, /window\.setTimeout\(\(\) => \{\s*zenSelectTimer = 0;/, "re-selection is deferred, never inside TabSelect");
   assert.match(js, /if \(zenMode\(\) === "off"\) zenTeardown\(\);/);
   assert.match(js, /document\.querySelectorAll\?\.\("tab\[" \+ NOTES_ATTR \+ "\]"\)/, "removeAll sweeps marked tabs anywhere");
@@ -133,5 +133,33 @@ test("templateChoices: user templates first, built-ins until a note with the sam
   const trashedBuiltin = N("zn-tpl-meeting", "# x\n", { folder: "templates", trashed: 1 });
   assert.equal(Array.from(c.templateChoices([trashedBuiltin]), (t) => t.name).includes("Meeting"), false, "a trashed built-in stays gone");
   for (const t of c.BUILTIN_TEMPLATES) assert.doesNotThrow(() => c.parseBlocks(c.applyTemplate(t.body, { title: "T" }).body), t.id);
+});
+
+test("hold variants: Quote and the More caret list the callout kinds on a long press, a tap is unchanged", () => {
+  const js = fs.readFileSync(path.join(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
+  assert.match(js, /\[tQuote, fmt\.quote, calloutVariants\]/);
+  assert.match(js, /\[tInsert, \(\) => showInsertMenu\(\), calloutVariants, true\]/);
+  assert.match(js, /onTap: noEdit \? tap : needEdit\(tap\)/, "the More menu opens outside edit mode, as before");
+  assert.match(js, /if \(items\.length\) showMenu\(btn, items\); else/, "all callouts hidden: a hold falls back to the tap");
+  assert.doesNotMatch(js, /\[tBullet, fmt\.bullet\], \[tQuote, fmt\.quote\]/, "quote is no longer a plain button");
+});
+
+test("W9 default_view: last keeps the stored mode, others force it, junk = last; pref is in schema, UI and standalone", () => {
+  assert.equal(c.startMode("last", "read"), "read");
+  assert.equal(c.startMode("split", "edit"), "split");
+  assert.equal(c.startMode("read", "split"), "read");
+  assert.equal(c.startMode("edit", "split"), "edit");
+  assert.equal(c.startMode("bogus", "split"), "split", "unknown value behaves like last");
+  assert.equal(c.startMode(undefined, "edit"), "edit");
+  const root = path.join(__dirname, "..");
+  const schema = JSON.parse(fs.readFileSync(path.join(root, "additional/notes/settings.json"), "utf8")).schema;
+  const item = schema.find((x) => x.property === "zen.workspace.zentral.notes.default_view");
+  assert.equal(item.defaultValue, "last");
+  assert.deepEqual(item.options.map((o) => o.value), Array.from(c.DEFAULT_VIEWS));
+  const js = fs.readFileSync(path.join(root, "additional/notes/ZentralNotes.uc.js"), "utf8");
+  assert.match(js, /id: "defaultView".*kind: "choice", def: "last"/);
+  assert.equal((js.match(/startMode\(getPref\(PREF\.DEFAULT_VIEW, "last"\), store\.meta\.mode\)/g) || []).length, 2, "both sheet-open paths");
+  const man = JSON.parse(fs.readFileSync(path.join(root, "additional/notes/standalone.json"), "utf8"));
+  assert.ok(JSON.stringify(man).includes("notes.default_view"));
 });
 console.log(`\n${passed} notes cycle G tests passed`);

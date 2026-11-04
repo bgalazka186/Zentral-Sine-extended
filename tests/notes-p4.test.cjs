@@ -296,6 +296,65 @@ const note = (id, body, extra = {}) => ({ id, body, folder: "", updated: 1_700_0
     z.api.log.length = 0; flushT(); // move schedules one follow-up run that creates it again
     assert.ok(z.api.items.has("f:work") && z.api.items.has("n:" + t.id));
   });
+  await test("zen order: entries follow the sheet's tree order for every tree_order value, parents first", () => {
+    const folders = [{ id: "b", label: "Beta", order: 1, collapsed: false }, { id: "a", label: "Alpha", order: 0, collapsed: false }];
+    const notes = [note("n1", "Zed", { updated: 5 }), note("n2", "Mid", { folder: "a", updated: 4 }), note("n3", "Apple", { updated: 9 })];
+    const keys = (o) => J(c.projectZen(notes, folders, "all", o)).filter((e) => e.parent === "").map((e) => e.key);
+    assert.deepEqual(keys("folders-first"), ["f:a", "f:b", "n:n3", "n:n1"], "folders by their order, then notes (newest first)");
+    assert.deepEqual(keys("notes-first"), ["n:n3", "n:n1", "f:a", "f:b"]);
+    assert.deepEqual(keys("mixed-by-name"), ["f:a", "n:n3", "f:b", "n:n1"], "one alphabetical list: Alpha, Apple, Beta, Zed");
+  });
+  await test("zen order: orderPlan names only the parents that are out of order and ignores missing keys", () => {
+    const want = [{ key: "n:1", parent: "" }, { key: "n:2", parent: "" }, { key: "n:3", parent: "" }, { key: "n:4", parent: "f:x" }, { key: "n:5", parent: "f:x" }];
+    assert.deepEqual(J(c.orderPlan(want, want)), []);
+    const cur = [{ key: "n:3", parent: "" }, { key: "n:1", parent: "" }, { key: "n:4", parent: "f:x" }, { key: "n:5", parent: "f:x" }];
+    assert.deepEqual(J(c.orderPlan(cur, want)), [{ parent: "", keys: ["n:1", "n:3"] }], "n:2 is missing (added elsewhere); f:x is already right");
+  });
+  await test("zen controller: reorders to the tree order once, stops for good if the browser refuses, never loops", async () => {
+    const z = await zenSetup({}, "all");
+    const a = z.store.create("Alpha", ""); clock += 1000; const b = z.store.create("Bravo", "");
+    const calls = [];
+    z.api.list = () => [{ key: "n:" + a.id, label: "Alpha", parent: "" }, { key: "n:" + b.id, label: "Bravo", parent: "" }];
+    z.api.items.set("n:" + a.id, { key: "n:" + a.id, label: "Alpha", parent: "" }); z.api.items.set("n:" + b.id, { key: "n:" + b.id, label: "Bravo", parent: "" });
+    z.api.reorder = (parent, keys) => { calls.push(keys.join(",")); return false; };
+    z.zen.runNow(); z.zen.runNow();
+    assert.equal(calls.length, 1, "the first refusal switches reordering off; no retry loop");
+    assert.deepEqual(calls[0].split(","), ["n:" + b.id, "n:" + a.id], "newest note first, like the sheet");
+    assert.ok(!z.zen.dead, "a refused reorder does not kill the controller");
+  });
+  await test("zen controller: browser-side requests (touch) are coalesced and rate limited; note-side requests are not", async () => {
+    const z = await zenSetup({}, "all");
+    timers.length = 0;
+    assert.equal(z.zen.touch(), true); assert.equal(z.zen.touch(), true);
+    assert.equal(timers.length, 1, "coalesced to one run");
+    flushT();
+    let accepted = 2;
+    for (let i = 0; i < 30; i++) { if (z.zen.touch()) accepted++; flushT(); }
+    assert.equal(accepted, 12, "12 a minute, then ignored: an add-on touching every tab cannot start a loop");
+    timers.length = 0; z.zen.schedule(); assert.equal(timers.length, 1, "schedule() from the notes is never limited");
+    flushT(); clock += 61000; assert.equal(z.zen.touch(), true, "the limit lifts after a minute");
+    flushT();
+    z.zen.kill(new Error("x")); assert.equal(z.zen.touch(), false, "dead controller ignores everything");
+  });
+  await test("zen controller: strays are swept before the diff, busy flag brackets every run, even a failing one", async () => {
+    const z = await zenSetup({}, "all");
+    const seen = []; z.api.sweepStrays = () => seen.push("sweep"); z.api.busy = (on) => seen.push(on ? "busy" : "idle");
+    z.store.create("x", ""); z.zen.runNow();
+    assert.deepEqual(seen, ["busy", "sweep", "idle"]);
+    const k = await zenSetup({ boom: true }, "all"); const s2 = []; k.api.busy = (on) => s2.push(on); k.store.create("y", ""); k.zen.runNow();
+    assert.deepEqual(s2, [true, false], "released after the kill switch fired");
+  });
+  await test("zen tab safety: every user/add-on action on our tabs is wired and scoped (static)", () => {
+    const js = require("node:fs").readFileSync(require("node:path").join(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
+    assert.match(js, /ZEN_TAB_EVENTS = \["TabClose", "TabUnpinned", "TabPinned", "TabMove", "TabBrowserDiscarded", "SSTabRestored"\]/);
+    assert.match(js, /for \(const ty of ZEN_TAB_EVENTS\) window\[act\]\(ty, onZenTabEvent, true\)/, "bound and unbound with the feature");
+    assert.match(js, /"auxclick"/, "middle click is intercepted on our tabs");
+    assert.match(js, /\.tab-close-button, \.tab-reset-button/, "close / reset buttons on our tabs do not open anything");
+    assert.match(js, /if \(!marked && !\(ev\.type === "SSTabRestored" && zenLooksOurs\(tab\)\)\) return;/, "unmarked tabs are ignored");
+    assert.match(js, /if \(!n \|\| n\.trashed\) \{ zen\.touch\(\); return null; \}/, "a stale entry opens nothing");
+    assert.match(js, /if \(!root\.contains\(t\)\) zenRemoveTab\(t\)/, "marked tabs outside the NOTES folder are closed");
+    assert.match(js, /spec\.startsWith\(ZEN_URL_PREFIX\) \? spec : tab\._zentralNotesUrl/, "a discarded tab keeps its address");
+  });
   await test("perf sampler: records nothing while off, counts and maxima while on", () => {
     let on = false, t = 0;
     const s = c.createPerfSampler({ enabled: () => on, now: () => t });

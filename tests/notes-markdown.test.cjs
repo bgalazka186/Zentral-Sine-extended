@@ -504,4 +504,42 @@ test("read mode: cycling and picking a state on one task line (Minesweeper-style
   assert.equal(c.setLineTaskStatus("- [ ]b", 0, "?"), "- [ ]b", "needs a space after the box, like the parser");
 });
 
+// W3: the owner's bingo card keeps [ ] inside table cells (and after <br>), not only at the start of a list line.
+const BINGO = "# Bingo\n\n| A | B |\n|---|---|\n| [ ] one | [x] two<br>[ ] three<br>plain |\n| no box | \\| [ ] not a box |\n";
+test("W3 table cells: [ ] / [x] at the start of a cell or a <br> segment become task boxes with their source position", () => {
+  const t = c.parseBlocks(BINGO).find((b) => b.type === "table");
+  const tasks = (cell) => cell.filter((n) => n.t === "task").map((n) => ({ on: n.on, line: n.line, col: n.col, k: n.k }));
+  same(tasks(t.rows[0][0]), [{ on: false, line: 4, col: 0, k: 0 }]);
+  same(tasks(t.rows[0][1]), [{ on: true, line: 4, col: 1, k: 0 }, { on: false, line: 4, col: 1, k: 1 }]);
+  assert.equal(t.rows[0][1].filter((n) => n.t === "br").length, 2, "<br> is a line break, not text");
+  assert.equal(text(t.rows[0][0]), "one", "the box text is not repeated as text");
+  assert.equal(tasks(t.rows[1][0]).length, 0, "a cell without a box is unchanged");
+  assert.equal(tasks(t.rows[1][1]).length, 0, "a box that is not at the start of a segment is plain text");
+  assert.equal(tasks(t.head[0]).length + tasks(t.head[1]).length, 0);
+});
+test("W3 toggleTableBox: flips exactly that box in the source, both ways, other cells and lines untouched", () => {
+  const once = c.toggleTableBox(BINGO, 4, 0, 0);
+  assert.equal(once, BINGO.replace("| [ ] one |", "| [x] one |"));
+  assert.equal(c.toggleTableBox(once, 4, 0, 0), BINGO, "second click undoes it");
+  assert.equal(c.toggleTableBox(BINGO, 4, 1, 1), BINGO.replace("[ ] three", "[x] three"), "k picks the box after <br>");
+  assert.equal(c.toggleTableBox(BINGO, 4, 1, 0), BINGO.replace("[x] two", "[ ] two"), "[x] goes back to [ ]");
+  assert.equal(c.toggleTableBox(BINGO, 4, 1, 5), BINGO, "no such box: unchanged");
+  assert.equal(c.toggleTableBox(BINGO, 99, 0, 0), BINGO, "no such line: unchanged");
+  assert.equal(c.toggleTableBox(BINGO, 0, 0, 0), BINGO, "a non-table line: unchanged");
+  const noPipes = "| [ ] a | [ ] b |\n|---|---|\n| [ ] c | [ ] d |";
+  assert.equal(c.toggleTableBox(noPipes, 2, 1, 0), noPipes.replace("[ ] d", "[x] d"));
+  assert.equal(c.toggleTableBox("a | [ ] b\n--|--\nc | [ ] d", 2, 1, 0), "a | [ ] b\n--|--\nc | [x] d", "rows without outer pipes");
+});
+test("W3 table boxes: nested tables are shown but not clickable; exports keep the state", () => {
+  const q = c.parseBlocks("> | A |\n> |---|\n> | [x] hi |").find((b) => b.type === "quote");
+  const t = q.blocks.find((b) => b.type === "table");
+  assert.equal(t.rows[0][0][0].line, -1);
+  const html = c.exportHtml(BINGO);
+  assert.ok(html.includes('<input type="checkbox" disabled checked> two'), html);
+  assert.ok(html.includes('<input type="checkbox" disabled> one'));
+  assert.ok(html.includes("<br>"));
+  assert.ok(c.exportText(BINGO).includes("[x] two"));
+  assert.ok(c.exportText(BINGO).includes("[ ] one"));
+});
+
 console.log(`\n${passed} markdown tests passed`);

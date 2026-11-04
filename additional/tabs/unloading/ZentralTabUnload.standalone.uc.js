@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Tab Unload
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.4
+// @version 3.1.5
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.4, the numeric-preference list and
+ * Placeholders replaced by the build: 3.1.5, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.4";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.5";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -718,6 +718,7 @@ function nativeSidebarSide() {
           tab.hasAttribute("zen-empty-tab") ||
           tab.hasAttribute("bgalazka-addon-host") ||
           tab.hasAttribute("bgalazka-addon-host-fallback") ||
+          tab.hasAttribute("bgalazka-notes-item") ||
           tab.closest(
             "#bgalazka-zentral-addon-hosts, [bgalazka-addon-host-folder='true']",
           )
@@ -742,18 +743,28 @@ function nativeSidebarSide() {
           "[bgalazka-addon-host], [bgalazka-addon-host-fallback]",
         );
       }
+      // Zentral Notes sidebar entries are placeholder tabs: selecting one hands the selection straight back to the
+      // previously selected tab (the one being unloaded), which would reload it. Never pick one as the successor.
+      function isNotesEntryTab(tab) {
+        return !!tab?.hasAttribute?.("bgalazka-notes-item");
+      }
+      function isSuccessorCandidate(tab, current) {
+        return !!(
+          tab !== current &&
+          tab?.isConnected &&
+          !tab.closing &&
+          !tab.hidden &&
+          !isAddonHostTab(tab) &&
+          !isNotesEntryTab(tab) &&
+          tab.linkedPanel
+        );
+      }
       function ensureSafeSuccessorBeforeNormalTabUnload(tab) {
         if (gBrowser.selectedTab !== tab) return true;
         // Choose a visible ordinary tab ourselves: a hidden panel host must never
         // become selected while its browser is reparented into a panel.
-        const next = Array.from(gBrowser.tabs || []).find(
-          (t) =>
-            t !== tab &&
-            t.isConnected &&
-            !t.closing &&
-            !t.hidden &&
-            !isAddonHostTab(t) &&
-            !!t.linkedPanel,
+        const next = Array.from(gBrowser.tabs || []).find((t) =>
+          isSuccessorCandidate(t, tab),
         );
         if (next) gBrowser.selectedTab = next;
         else if (gBrowser.addTrustedTab)
@@ -761,7 +772,9 @@ function nativeSidebarSide() {
             skipAnimation: true,
           });
         return (
-          gBrowser.selectedTab !== tab && !isAddonHostTab(gBrowser.selectedTab)
+          gBrowser.selectedTab !== tab &&
+          !isAddonHostTab(gBrowser.selectedTab) &&
+          !isNotesEntryTab(gBrowser.selectedTab)
         );
       }
 
@@ -790,13 +803,7 @@ function nativeSidebarSide() {
           // first when necessary.
           if (gBrowser.selectedTab === tab) {
             const replacement = Array.from(gBrowser.tabs || []).find(
-              (candidate) =>
-                candidate !== tab &&
-                candidate?.isConnected &&
-                !candidate.closing &&
-                !candidate.hidden &&
-                !isAddonHostTab(candidate) &&
-                !!candidate.linkedPanel,
+              (candidate) => isSuccessorCandidate(candidate, tab),
             );
             if (replacement) {
               gBrowser.selectedTab = replacement;

@@ -2397,6 +2397,30 @@
     ]
   },
   {
+    "label": "A Notes panel opens in",
+    "type": "dropdown",
+    "defaultValue": "last",
+    "options": [
+      {
+        "label": "The view used last",
+        "value": "last"
+      },
+      {
+        "label": "Editor",
+        "value": "edit"
+      },
+      {
+        "label": "Preview",
+        "value": "read"
+      },
+      {
+        "label": "Split: editor and preview",
+        "value": "split"
+      }
+    ],
+    "property": "zen.workspace.zentral.notes.default_view"
+  },
+  {
     "type": "text",
     "label": "**Notes · Capture**",
     "size": "16px"
