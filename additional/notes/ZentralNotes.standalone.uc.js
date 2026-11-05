@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.19
+// @version 3.1.21
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.19, the numeric-preference list and
+ * Placeholders replaced by the build: 3.1.21, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.19";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.21";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1626,10 +1626,11 @@ function nativeSidebarSide() {
       return out;
     }
 
-    function parseInlineRaw(text, depth = 0) {
+    function parseInlineRaw(text, depth = 0, noHtml = false) {
       text = String(text);
       if (depth > 4 || text.length > MAX_INLINE_CHARS)
         return text ? [{ t: "text", s: text }] : [];
+      if (!noHtml && text.includes("<") && HTML_INLINE_RE.test(text)) return htmlInline(text, depth);
       const out = [];
       let last = 0;
       const re = new RegExp(INLINE_RE.source, "g");
@@ -1718,6 +1719,202 @@ function nativeSidebarSide() {
       }
       if (last < text.length) out.push({ t: "text", s: text.slice(last) });
       return out;
+    }
+
+    // ======================================================================
+    // Pure core: safe HTML subset (S6 W4). Markup is NEVER run as HTML: a small allow-list of tags is turned into
+    // the same node objects Markdown produces, `style` keeps only a short list of harmless properties, and
+    // everything else stays visible text.
+    // ======================================================================
+    const HTML_INLINE_RE = /<(?:b|strong|i|em|u|s|del|strike|mark|small|sub|sup|kbd|code|a|br|img)(?:\s[^<>]*)?\/?>/i;
+    const HTML_INLINE_OPEN_RE = /<(b|strong|i|em|u|s|del|strike|mark|small|sub|sup|kbd|code|a|br|img)(\s[^<>]*)?\/?>/gi;
+    const HTML_BLOCK_RE = /^\s*<(h[1-6]|p|div|center|table|hr)(\s[^<>]*)?\/?>/i;
+    const HTML_ALIGNS = Object.freeze(["left", "center", "right"]);
+    const HTML_MAX_ROWS = 200,
+      HTML_MAX_CELLS = 30,
+      HTML_MAX_LINES = 400;
+    function htmlAttr(attrs, name) {
+      const m = new RegExp("(?:^|\\s)" + name + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'>]+))", "i").exec(attrs || "");
+      return m ? (m[1] ?? m[2] ?? m[3]) : null;
+    }
+    const HTML_COLOR_RE = /^(#[0-9a-f]{3,8}|[a-z]{3,20}|(?:rgb|hsl)a?\([\d\s.,%]{1,40}\))$/i;
+    const HTML_SIZE_RE = /^(?:auto|\d{1,4}(?:\.\d{1,2})?(?:px|%|em|rem)?)$/i;
+    const HTML_BORDER_STYLES = ["solid", "dashed", "dotted", "double", "none"];
+    // Allowed CSS: width, height, border, background-color, color, text-align, font-size (+ a few layout-neutral ones).
+    // A value that does not pass its check is dropped; url(), expression(), var() and friends never match.
+    function cleanStyle(raw) {
+      const out = {};
+      for (const decl of String(raw || "").split(";").slice(0, 24)) {
+        const at = decl.indexOf(":");
+        if (at < 0) continue;
+        let prop = decl.slice(0, at).trim().toLowerCase();
+        const val = decl.slice(at + 1).trim().replace(/\s*!important\s*$/i, "");
+        if (!val || val.length > 60) continue;
+        if (prop === "background") prop = "background-color";
+        if (prop === "width" || prop === "height" || prop === "font-size") {
+          if (HTML_SIZE_RE.test(val)) out[prop] = val;
+        } else if (prop === "padding") {
+          const parts = val.split(/\s+/);
+          if (parts.length <= 4 && parts.every((x) => HTML_SIZE_RE.test(x) && x.toLowerCase() !== "auto")) out[prop] = val;
+        } else if (prop === "background-color" || prop === "color") {
+          if (HTML_COLOR_RE.test(val)) out[prop] = val;
+        } else if (prop === "text-align") {
+          if (HTML_ALIGNS.includes(val.toLowerCase())) out[prop] = val.toLowerCase();
+        } else if (prop === "vertical-align") {
+          if (["top", "middle", "bottom"].includes(val.toLowerCase())) out[prop] = val.toLowerCase();
+        } else if (prop === "border-collapse") {
+          if (["collapse", "separate"].includes(val.toLowerCase())) out[prop] = val.toLowerCase();
+        } else if (prop === "font-weight") {
+          if (/^(normal|bold|bolder|lighter|[1-9]00)$/i.test(val)) out[prop] = val.toLowerCase();
+        } else if (prop === "border") {
+          const parts = val.split(/\s+/);
+          if (parts.length <= 3 && parts.every((x) => /^\d{1,2}(?:px)?$/.test(x) || HTML_BORDER_STYLES.includes(x.toLowerCase()) || HTML_COLOR_RE.test(x))) out[prop] = val;
+        }
+      }
+      return out;
+    }
+    // The first close tag that matches the open tag that ended at `from` (nested tags of the same name counted).
+    function htmlFindClose(text, from, tag) {
+      const re = new RegExp("<(/?)" + tag + "\\b[^<>]*>", "gi");
+      re.lastIndex = from;
+      let depth = 1;
+      for (let m; (m = re.exec(text)); ) {
+        if (m[1]) {
+          if (--depth === 0) return { start: m.index, end: m.index + m[0].length };
+        } else if (!/\/>$/.test(m[0])) depth++;
+      }
+      return null;
+    }
+    // Inline: <b> <i> <u> <s> <mark> <small> <sub> <sup> <kbd> <code> <a href> <br> <img src>. Unknown or unclosed tags
+    // stay text; code spans are skipped; links only http(s), images only https (click-to-load like Markdown images).
+    function htmlInline(text, depth) {
+      const spans = [];
+      for (const c of text.matchAll(/`[^`\n]*`/g)) spans.push([c.index, c.index + c[0].length]);
+      const inCode = (i) => spans.find(([a, b]) => i >= a && i < b);
+      const out = [];
+      let last = 0,
+        pos = 0;
+      const flush = (upto) => {
+        if (upto > last) out.push(...parseInlineRaw(text.slice(last, upto), depth, true));
+      };
+      const re = new RegExp(HTML_INLINE_OPEN_RE.source, "gi");
+      for (let m; (m = re.exec(text)); ) {
+        const span = inCode(m.index);
+        if (span) {
+          re.lastIndex = span[1];
+          continue;
+        }
+        const tag = m[1].toLowerCase(),
+          attrs = m[2] || "";
+        let node = null,
+          end = m.index + m[0].length;
+        if (tag === "br") node = { t: "br" };
+        else if (tag === "img") {
+          const href = safeHref(htmlAttr(attrs, "src") || "", false);
+          if (href && /^https:/i.test(href)) node = { t: "img", alt: (htmlAttr(attrs, "alt") || "").slice(0, 200), href };
+        } else {
+          const close = htmlFindClose(text, end, tag);
+          if (close) {
+            const inner = text.slice(end, close.start);
+            end = close.end;
+            if (tag === "code") node = { t: "code", s: inner };
+            else if (tag === "kbd") node = { t: "kbd", s: inner };
+            else if (tag === "a") {
+              const href = safeHref(htmlAttr(attrs, "href") || "");
+              node = href ? { t: "a", href, c: parseInline(inner, depth + 1) } : { t: "span", c: parseInline(inner, depth + 1) };
+            } else {
+              const t = { strong: "b", em: "i", del: "s", strike: "s", mark: "hl" }[tag] || tag;
+              node = { t, c: parseInline(inner, depth + 1) };
+              if (t === "hl") node.color = "yellow";
+            }
+          }
+        }
+        if (!node) continue;
+        flush(m.index);
+        out.push(node);
+        last = end;
+        re.lastIndex = end;
+        pos = end;
+      }
+      void pos;
+      flush(text.length);
+      return out;
+    }
+    // One <table> (no nested table): rows of cells with colspan / rowspan and a filtered style.
+    function parseHtmlTable(inner, attrs) {
+      if (/<table\b/i.test(inner)) return null;
+      const rows = [];
+      for (const tr of inner.matchAll(/<tr\b[^<>]*>([\s\S]*?)<\/tr\s*>/gi)) {
+        if (rows.length >= HTML_MAX_ROWS) break;
+        const cells = [];
+        for (const td of tr[1].matchAll(/<(td|th)\b([^<>]*)>([\s\S]*?)<\/\1\s*>/gi)) {
+          if (cells.length >= HTML_MAX_CELLS) break;
+          const a = td[2];
+          const style = cleanStyle(htmlAttr(a, "style"));
+          const bg = htmlAttr(a, "bgcolor"),
+            al = (htmlAttr(a, "align") || "").toLowerCase(),
+            va = (htmlAttr(a, "valign") || "").toLowerCase();
+          if (bg && HTML_COLOR_RE.test(bg) && !style["background-color"]) style["background-color"] = bg;
+          if (HTML_ALIGNS.includes(al) && !style["text-align"]) style["text-align"] = al;
+          if (["top", "middle", "bottom"].includes(va) && !style["vertical-align"]) style["vertical-align"] = va;
+          for (const dim of ["width", "height"]) {
+            const v = htmlAttr(a, dim);
+            if (v && /^\d{1,4}%?$/.test(v) && !style[dim]) style[dim] = /%$/.test(v) ? v : v + "px";
+          }
+          const span = (name) => {
+            const n = parseInt(htmlAttr(a, name) || "1", 10);
+            return Number.isFinite(n) ? Math.max(1, Math.min(12, n)) : 1;
+          };
+          cells.push({
+            th: td[1].toLowerCase() === "th",
+            style,
+            colspan: span("colspan"),
+            rowspan: span("rowspan"),
+            c: parseInline(td[3].replace(/\s*\n\s*/g, " ").trim()),
+          });
+        }
+        if (cells.length) rows.push(cells);
+      }
+      if (!rows.length) return null;
+      const border = parseInt(htmlAttr(attrs, "border") || "", 10);
+      const block = { type: "htable", style: cleanStyle(htmlAttr(attrs, "style")), rows };
+      if (Number.isFinite(border)) block.border = Math.max(0, Math.min(5, border));
+      return block;
+    }
+    // A block that starts at lines[i]: <h1>-<h6>, <p>, <div>, <center>, <hr>, <table>. Returns null (= plain text) unless
+    // the closing tag is the last thing on its line.
+    function parseHtmlBlock(lines, i, nested, opts) {
+      const first = HTML_BLOCK_RE.exec(lines[i]);
+      if (!first) return null;
+      const tag = first[1].toLowerCase(),
+        attrs = first[2] || "";
+      if (tag === "hr") return /^\s*<hr\b[^<>]*\/?>\s*$/i.test(lines[i]) ? { block: { type: "hr" }, next: i + 1 } : null;
+      if (/\/>\s*$/.test(first[0]) && tag !== "table") return null;
+      const closeLine = new RegExp("</" + tag + "\\s*>", "i");
+      let text = "";
+      for (let j = i; j < Math.min(lines.length, i + HTML_MAX_LINES); j++) {
+        text += (j > i ? "\n" : "") + lines[j];
+        if (!closeLine.test(lines[j])) continue;
+        const close = htmlFindClose(text, first[0].length, tag);
+        if (!close) continue;
+        if (text.slice(close.end).trim()) return null;
+        const inner = text.slice(first[0].length, close.start);
+        const align = (() => {
+          const a = (htmlAttr(attrs, "align") || cleanStyle(htmlAttr(attrs, "style"))["text-align"] || "").toLowerCase();
+          return tag === "center" ? "center" : HTML_ALIGNS.includes(a) ? a : "";
+        })();
+        let block = null;
+        if (tag === "table") block = parseHtmlTable(inner, attrs);
+        else if (/^h[1-6]$/.test(tag)) {
+          block = { type: "h", level: Number(tag[1]), c: parseInline(inner.replace(/\s*\n\s*/g, " ").trim()), line: -1 };
+          if (align) block.align = align;
+        } else {
+          block = { type: "box", blocks: parseBlocks(inner.trim(), true, opts) };
+          if (align) block.align = align;
+        }
+        return block ? { block, next: j + 1 } : null;
+      }
+      return null;
     }
 
     // Backslash escapes: \* \# \[ ... show the character itself. They are swapped for private-use
@@ -1921,6 +2118,7 @@ function nativeSidebarSide() {
       let i = 0;
       const startsBlock = (l) =>
         /^```/.test(l) ||
+        HTML_BLOCK_RE.test(l) ||
         /^#{1,6}\s+\S/.test(l) ||
         /^>/.test(l) ||
         DETAILS_OPEN_RE.test(l) ||
@@ -1941,6 +2139,9 @@ function nativeSidebarSide() {
           if (opts.keepBlanks && run > 1 && blocks.length && i < lines.length)
             blocks.push({ type: "gap", n: run - 1 });
         } else if (DETAILS_OPEN_RE.test(line) && (m = parseDetails(lines, i, nested, opts))) {
+          blocks.push(m.block);
+          i = m.next;
+        } else if (HTML_BLOCK_RE.test(line) && (m = parseHtmlBlock(lines, i, nested, opts))) {
           blocks.push(m.block);
           i = m.next;
         } else if (/^\s*\$\$/.test(line) && (m = parseMathBlock(lines, i))) {
@@ -2374,12 +2575,13 @@ function nativeSidebarSide() {
           const bare = inlineText(n.c).replace(/\/$/, "") === String(n.href).replace(/\/$/, "");
           out += '<a href="' + escHtml(n.href) + '"' + (n.title ? ' title="' + escHtml(n.title) + '"' : "") + (bare ? " data-bare" : "") + ' rel="noopener noreferrer">' + inlineHtml(n.c) + "</a>";
         }
+        else if (n.t === "span") out += inlineHtml(n.c);
         else if (n.t === "nl") out += '<span class="note-link">' + inlineHtml(n.c) + "</span>"; // no address: a single exported note cannot reach the others
         else if (n.t === "kbd") out += "<kbd>" + escHtml(n.s) + "</kbd>";
         else if (n.t === "fn") out += '<sup class="fn"><a href="#fn-' + n.n + '" id="fnref-' + n.n + '">' + n.n + "</a></sup>";
         else if (n.t === "hl") out += '<mark data-color="' + escHtml(n.color) + '">' + inlineHtml(n.c) + "</mark>";
         else {
-          const tag = { b: "strong", i: "em", s: "del", sub: "sub", sup: "sup" }[n.t];
+          const tag = { b: "strong", i: "em", s: "del", u: "u", small: "small", sub: "sub", sup: "sup" }[n.t];
           if (tag) out += "<" + tag + ">" + inlineHtml(n.c) + "</" + tag + ">";
         }
       }
@@ -2410,7 +2612,18 @@ function nativeSidebarSide() {
     function blocksHtml(blocks) {
       let out = "";
       for (const b of blocks) {
-        if (b.type === "h") out += "<h" + b.level + ">" + inlineHtml(b.c) + "</h" + b.level + ">\n";
+        if (b.type === "h") out += "<h" + b.level + (b.align ? ' style="text-align:' + b.align + '"' : "") + ">" + inlineHtml(b.c) + "</h" + b.level + ">\n";
+        else if (b.type === "box") out += "<div" + (b.align ? ' style="text-align:' + b.align + '"' : "") + ">\n" + blocksHtml(b.blocks) + "</div>\n";
+        else if (b.type === "htable") {
+          const st = (o) => {
+            const css = Object.entries(o || {}).map(([k, v]) => k + ":" + v).join(";");
+            return css ? ' style="' + escHtml(css) + '"' : "";
+          };
+          out +=
+            "<table" + st(b.style) + ">\n" +
+            b.rows.map((r) => "<tr>" + r.map((c) => "<" + (c.th ? "th" : "td") + (c.colspan > 1 ? ' colspan="' + c.colspan + '"' : "") + (c.rowspan > 1 ? ' rowspan="' + c.rowspan + '"' : "") + st(c.style) + ">" + inlineHtml(c.c) + "</" + (c.th ? "th" : "td") + ">").join("") + "</tr>\n").join("") +
+            "</table>\n";
+        }
         else if (b.type === "p") out += "<p>" + inlineHtml(b.c) + "</p>\n";
         else if (b.type === "hr") out += "<hr>\n";
         else if (b.type === "math") out += '<p class="math-block">' + inlineHtml(b.c) + "</p>\n";
@@ -2495,6 +2708,8 @@ function nativeSidebarSide() {
           );
         else if (b.type === "table")
           parts.push([b.head, ...b.rows].map((r) => r.map(inlineText).join(" | ")).join("\n"));
+        else if (b.type === "box") parts.push(blocksText(b.blocks));
+        else if (b.type === "htable") parts.push(b.rows.map((r) => r.map((c) => inlineText(c.c)).join(" | ")).join("\n"));
         else if (b.type === "footnotes") parts.push(b.items.map((it) => "[" + it.n + "] " + inlineText(it.c)).join("\n"));
       }
       return parts.join("\n\n");
@@ -4040,16 +4255,55 @@ function nativeSidebarSide() {
         const plan = trashPlan([...notes.values()], cleanTrashDays(getTrashDays()), now());
         for (const id of plan.expired) await removeNoteFiles(id);
       }
+      // ---- backup of deleted notes (48 h): written BEFORE anything is removed; a failed backup never blocks a delete ----
+      const backupRoot = () => io.join(dir, BACKUP_DIR);
+      async function backupNames() {
+        try {
+          return (await io.children(backupRoot())).map((p) => io.filename(p));
+        } catch (_) {
+          return [];
+        }
+      }
+      async function backupNote(id, note, file, withPictures) {
+        if (!io.makeDir || !isAssetNoteId(id) || !dir) return false;
+        let text = note ? serializeNote(note) : null;
+        if (!text) {
+          for (const c of [file, file + ".bak"]) {
+            try {
+              const t = await io.readUTF8(c);
+              if (t && t.trim()) { text = t; break; }
+            } catch (_) {}
+          }
+        }
+        if (!text || !text.trim()) return false;
+        const name = backupEntryName(now(), id, await backupNames());
+        const entry = io.join(backupRoot(), name);
+        await io.makeDir(entry);
+        await io.writeUTF8(io.join(entry, id + ".md"), text, {});
+        // Pictures and history move into the entry (a rename, no copy); without io.moveTree they are simply deleted as before.
+        if (io.moveTree) {
+          if (withPictures && (await io.exists(io.join(dir, ASSET_DIR, id)).catch(() => false))) await io.moveTree(io.join(dir, ASSET_DIR, id), io.join(entry, ASSET_DIR)).catch(warn);
+          if (await io.exists(histDir(id)).catch(() => false)) await io.moveTree(histDir(id), io.join(entry, HISTORY_DIR)).catch(warn);
+        }
+        return true;
+      }
+      async function purgeBackups() {
+        if (!dir || !io.removeTree) return;
+        const plan = backupPlan(await backupNames(), now());
+        for (const name of plan.expired) await io.removeTree(io.join(backupRoot(), name)).catch(() => {});
+      }
       function removeNoteFiles(id) {
+        const note = notes.get(id) || null;
         notes.delete(id);
         dirty.delete(id);
         const file = fileOf(id);
         return queue(async () => {
-          for (const p of [file, file + ".bak", file + ".tmp"])
-            await io.remove(p).catch(() => {});
           // Pictures go with their note, unless another note (a copy, pasted text) still shows them.
           const prefix = ASSET_DIR + "/" + id + "/";
           const shared = [...notes.values()].some((n) => [...assetRefs(n.body)].some((r) => r.startsWith(prefix)));
+          await backupNote(id, note, file, !shared).catch(warn);
+          for (const p of [file, file + ".bak", file + ".tmp"])
+            await io.remove(p).catch(() => {});
           if (io.removeTree && isAssetNoteId(id) && !shared) await io.removeTree(io.join(dir, ASSET_DIR, id)).catch(() => {});
           if (io.removeTree && isAssetNoteId(id)) await io.removeTree(histDir(id)).catch(() => {});
           lastSnap.delete(id);
@@ -4076,6 +4330,7 @@ function nativeSidebarSide() {
           await loadAll();
           await loadMeta();
           await purgeOldTrash();
+          await purgeBackups().catch(warn);
           emit("reset");
         },
         async switchDir() {
@@ -4432,6 +4687,61 @@ function nativeSidebarSide() {
           for (const n of [...notes.values()])
             if (n.trashed) await removeNoteFiles(n.id);
           emit("reset");
+        },
+        // ---- deleted-note backup (48 h) ----
+        async listBackups() {
+          if (!dir || !io.children) return [];
+          const out = [];
+          for (const e of backupPlan(await backupNames(), now()).kept) {
+            let body = "";
+            try {
+              body = noteFromFile(e.id, await io.readUTF8(io.join(backupRoot(), e.name, e.id + ".md")), e.ms).body;
+            } catch (_) {
+              continue; // an entry without its file cannot be restored; it is removed when it expires
+            }
+            out.push({ ...e, title: titleOf(body) || "Untitled note" });
+          }
+          return out;
+        },
+        // Puts a backed-up note back under its own id (a new id when that one is taken); it always comes back out of the Trash.
+        async restoreBackup(name) {
+          const p = parseBackupName(name);
+          if (!dir || !p) return null;
+          const entry = io.join(backupRoot(), name);
+          let text;
+          try {
+            text = await io.readUTF8(io.join(entry, p.id + ".md"));
+          } catch (_) {
+            return null;
+          }
+          let id = p.id;
+          if (notes.has(id) || (await io.exists(fileOf(id)).catch(() => false))) {
+            id = makeId(now());
+            while (notes.has(id)) id = makeId(now());
+          }
+          const note = noteFromFile(id, text, now());
+          note.trashed = 0;
+          note._onDisk = false;
+          notes.set(id, note);
+          markDirty(id);
+          if (io.moveTree) {
+            // Pictures keep their folder name (the note text points at it) unless somebody already owns that folder.
+            if (await io.exists(io.join(entry, ASSET_DIR)).catch(() => false) && !(await io.exists(io.join(dir, ASSET_DIR, p.id)).catch(() => false)))
+              await io.moveTree(io.join(entry, ASSET_DIR), io.join(dir, ASSET_DIR, p.id)).catch(warn);
+            if (id === p.id && (await io.exists(io.join(entry, HISTORY_DIR)).catch(() => false)))
+              await io.moveTree(io.join(entry, HISTORY_DIR), histDir(id)).catch(warn);
+          }
+          await flushDirty();
+          if (io.removeTree) await io.removeTree(entry).catch(() => {});
+          emit("change", id, { created: true });
+          return id;
+        },
+        // Last safeguard: wipes the whole backup folder.
+        async clearBackup() {
+          if (!dir || !io.removeTree) return 0;
+          const n = (await backupNames()).length;
+          await io.removeTree(backupRoot()).catch(() => {});
+          return n;
         },
         // An untouched new note leaves no file behind.
         discardIfEmpty(id) {
@@ -5005,6 +5315,35 @@ function nativeSidebarSide() {
       return bytes >= warnMB * 1048576 ? "Version history now takes " + (bytes / 1048576).toFixed(1) + " MB (warning at " + warnMB + " MB). Lower the number of versions or clear old history." : "";
     }
 
+    // ---- deleted-note backup: backup/<UTC stamp>~<note id>/ holds the file (and its pictures and history) for 48 h ----
+    const BACKUP_DIR = "backup";
+    const BACKUP_HOURS = 48;
+    function backupEntryName(ms, id, taken = []) {
+      const base = historyStamp(ms);
+      let name = base + "~" + id;
+      for (let i = 1; taken.includes(name) && i < 100; i++) name = base + "-" + i + "~" + id;
+      return name;
+    }
+    function parseBackupName(name) {
+      const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(?:-(\d{1,2}))?~(.+)$/.exec(String(name ?? ""));
+      if (!m || !isAssetNoteId(m[8])) return null;
+      const ms = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+      return Number.isFinite(ms) ? { ms, id: m[8] } : null;
+    }
+    // Which backup entries are past the limit. Names that are not ours are never listed, so nothing foreign is deleted.
+    function backupPlan(names, now, hours = BACKUP_HOURS) {
+      const span = hours * 3600000;
+      const mine = (names || []).map((name) => ({ name, p: parseBackupName(name) })).filter((e) => e.p);
+      return {
+        expired: mine.filter((e) => e.p.ms <= now - span).map((e) => e.name),
+        kept: mine.filter((e) => e.p.ms > now - span).sort((a, b) => b.p.ms - a.p.ms).map((e) => ({ name: e.name, ms: e.p.ms, id: e.p.id, expiresMs: e.p.ms + span })),
+      };
+    }
+    function backupLeft(expiresMs, now) {
+      const min = Math.max(0, Math.round((expiresMs - now) / 60000));
+      return min >= 90 ? Math.round(min / 60) + " h left" : min + " min left";
+    }
+
     // ---- [[ completion while typing ------------------------------------------------------------------------
     function wikiTrigger(value, caret) {
       const before = String(value).slice(Math.max(0, caret - 130), caret);
@@ -5269,7 +5608,7 @@ function nativeSidebarSide() {
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
-        wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, TASK_STATUSES, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
+        wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
@@ -5295,7 +5634,7 @@ function nativeSidebarSide() {
         headingSlug, headingsOf, cleanAnchor, noteLinkParts, headingOffset, insertFootnote, nextFootnoteLabel, mentionRe, hasMention, linkFirstMention,
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
-        HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
+        HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, BACKUP_DIR, BACKUP_HOURS, backupEntryName, parseBackupName, backupPlan, backupLeft, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
         orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, projectZen,
         utf8Bytes, createPerfSampler, createZenFolder,
       };
@@ -5476,7 +5815,7 @@ function nativeSidebarSide() {
           c.textContent = n.s;
           parent.append(c);
         } else {
-          const tag = { b: "strong", i: "em", s: "del", hl: "mark", a: "span", sub: "sub", sup: "sup", math: "span" }[n.t];
+          const tag = { b: "strong", i: "em", s: "del", u: "u", small: "small", hl: "mark", a: "span", span: "span", sub: "sub", sup: "sup", math: "span" }[n.t];
           if (!tag) continue;
           const node = h(tag);
           if (n.t === "math") node.className = "zn-math";
@@ -5508,6 +5847,7 @@ function nativeSidebarSide() {
       for (const b of blocks) {
         if (b.type === "h") {
           const node = h("h" + b.level, { class: "zn-h" });
+          if (b.align) node.style.textAlign = b.align;
           renderInline(node, b.c, env);
           node.dataset.slug = env.slugFor ? env.slugFor(node.textContent) : headingSlug(node.textContent);
           parent.append(node);
@@ -5579,6 +5919,33 @@ function nativeSidebarSide() {
           const pre = h("pre", { class: "zn-pre" }, code);
           if (b.lang) pre.dataset.lang = b.lang;
           parent.append(pre);
+        } else if (b.type === "box") {
+          const node = h("div", { class: "zn-box" });
+          if (b.align) node.style.textAlign = b.align;
+          renderBlocks(node, b.blocks, env, onToggle);
+          parent.append(node);
+        } else if (b.type === "htable") {
+          // Styles were filtered when parsing (cleanStyle); only those properties ever reach the element.
+          const style = (el, st) => {
+            for (const [k, v] of Object.entries(st || {})) el.style.setProperty(k, v);
+          };
+          const table = h("table", { class: b.border === 0 ? "zn-table zn-htable zn-htable-plain" : "zn-table zn-htable" });
+          style(table, b.style);
+          const body = h("tbody");
+          for (const r of b.rows) {
+            const tr = h("tr");
+            for (const c of r) {
+              const cell = h(c.th ? "th" : "td");
+              if (c.colspan > 1) cell.colSpan = c.colspan;
+              if (c.rowspan > 1) cell.rowSpan = c.rowspan;
+              style(cell, c.style);
+              renderInline(cell, c.c, env);
+              tr.append(cell);
+            }
+            body.append(tr);
+          }
+          table.append(body);
+          parent.append(h("div", { class: "zn-table-wrap" }, table));
         } else if (b.type === "table") {
           const table = h("table", { class: "zn-table" });
           const row = (tag, cells) => {
@@ -6937,6 +7304,7 @@ function nativeSidebarSide() {
         const days = Number(getPref(PREF.TRASH_DAYS, TRASH_DAYS));
         return [
           { icon: "trash", label: "Empty trash now", danger: true, disabled: !store.trashCount(), action: () => { store.emptyTrash().then(scheduleList); } },
+          { icon: "note", label: "Deleted notes backup (" + BACKUP_HOURS + " h)\u2026", action: () => { askBackup(); } },
           { sep: true },
           { label: "Auto-empty after\u2026", group: [[0, "Never"], [7, "7 days"], [14, "14 days"], [30, "30 days"], [90, "90 days"]].map(([v, label]) => ({ label: (v === days ? "\u2713 " : "") + label, action: () => { setPref(PREF.TRASH_DAYS, v); flash(v ? "Applies at the next start: older than " + v + " days" : "Auto-empty is off"); } })) },
         ];
@@ -7831,6 +8199,49 @@ function nativeSidebarSide() {
         });
         close.addEventListener("click", closeDialog);
         openCard("Version history", rows, info, h("div", { class: "zn-dialog-actions" }, clear, close));
+      }
+      // ---- backup of deleted notes: everything deleted for good stays here for 48 h ----
+      async function askBackup() {
+        const list = await store.listBackups();
+        const rows = h("div", { class: "zn-noteset", role: "list" });
+        if (!list.length) rows.append(h("p", { class: "zn-empty" }, "Nothing here. Notes you delete for good, or that leave the Trash, are kept for " + BACKUP_HOURS + " hours."));
+        for (const b of list.slice(0, MAX_LIST_ROWS)) {
+          const row = h("div", { class: "zn-hist-row" });
+          row.append(h("span", { class: "zn-hist-when" }, b.title + " \u00b7 deleted " + new Date(b.ms).toLocaleString() + " \u00b7 " + backupLeft(b.expiresMs, nowMs())));
+          const restore = chip("Restore");
+          restore.addEventListener("click", async () => {
+            const id = await store.restoreBackup(b.name);
+            closeDialog();
+            if (id) {
+              scheduleList();
+              flash("Restored from the backup");
+            } else flash("That backup could not be read");
+          });
+          row.append(restore);
+          rows.append(row);
+        }
+        const info = h("p", { class: "zn-hist-note" }, "Backups are removed automatically " + BACKUP_HOURS + " hours after the deletion, when Notes starts.");
+        const close = chip("Close", true);
+        close.addEventListener("click", closeDialog);
+        const actions = h("div", { class: "zn-dialog-actions" });
+        if (list.length) {
+          // Last safeguard: two clicks, and it is not in any menu.
+          const clear = chip("Clear backup\u2026");
+          clear.addEventListener("click", async () => {
+            if (clear.dataset.sure !== "yes") {
+              clear.dataset.sure = "yes";
+              clear.textContent = "Really clear? Nothing can bring these back";
+              clear.classList.add("zn-chip-danger");
+              return;
+            }
+            const n = await store.clearBackup();
+            closeDialog();
+            flash(n ? "Backup cleared" : "Nothing to clear");
+          });
+          actions.append(clear);
+        }
+        actions.append(close);
+        openCard("Deleted notes backup", rows, info, actions);
       }
       function showHiddenTools() {
         const gone = [...hiddenTools()];
@@ -9771,6 +10182,7 @@ function nativeSidebarSide() {
       writeBytes: (p, bytes) => IOUtils.write(p, bytes, { mode: "create" }),
       readBytes: (p) => IOUtils.read(p),
       removeTree: (p) => IOUtils.remove(p, { recursive: true, ignoreAbsent: true }),
+      moveTree: (from, to) => IOUtils.move(from, to),
       // Owner-only permissions where the platform supports them.
       restrict: (p) =>
         /^Win/i.test(navigator.platform || "")

@@ -94,7 +94,7 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
 
   await test("read mode renders highlights safely; checkboxes edit the source", async () => {
     const ta = q(sheetA, ".zn-editor");
-    type(ta, "# Todo\n- [ ] one\n- [x] two\nsee ==this== and [x](javascript:alert(1)) <b>raw</b>");
+    type(ta, "# Todo\n- [ ] one\n- [x] two\nsee ==this== and [x](javascript:alert(1)) <b>raw</b> <script>alert(2)</script> <a href=\"javascript:alert(3)\">x</a>");
     key(ta, "e", { ctrlKey: true });
     await flushRaf();
     const read = q(sheetA, ".zn-read");
@@ -104,7 +104,11 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(marks.length, 1);
     assert.equal(marks[0].textContent, "this");
     assert.equal(read.all().filter((e) => e.tag === "a").length, 0, "no anchors, no href attributes");
-    assert.ok(read.textContent.includes("<b>raw</b>"), "html stays literal text");
+    // The HTML subset: an allow-listed tag becomes the matching element, never raw markup; anything else stays text.
+    assert.ok(read.all().some((e) => e.tag === "strong" && e.textContent === "raw"), "<b> is rendered as bold");
+    assert.ok(!read.textContent.includes("<b>raw</b>"), "the tag itself is not shown when it is understood");
+    assert.ok(read.textContent.includes("<script>alert(2)</script>"), "unknown html stays literal text");
+    assert.equal(read.all().filter((e) => e.tag === "script").length, 0, "no script element");
     assert.ok(read.textContent.includes("[x](javascript:alert(1))"));
     const boxes = read.all().filter((e) => e.tag === "button" && e._classes.has("zn-check"));
     assert.equal(boxes.length, 2);

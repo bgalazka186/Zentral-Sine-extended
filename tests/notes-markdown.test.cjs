@@ -542,4 +542,77 @@ test("W3 table boxes: nested tables are shown but not clickable; exports keep th
   assert.ok(c.exportText(BINGO).includes("[ ] one"));
 });
 
+// S6 W4: a small allow-list of HTML. Never innerHTML; unknown / unsafe markup stays visible text.
+test("W4 inline HTML: b i u s mark small sub sup kbd code a br img become the same nodes as Markdown", () => {
+  const n = c.parseBlocks("<b>x</b> <i>y</i> <u>z</u> <strong>s</strong> <mark>m</mark> H<sub>2</sub>O<br>next <kbd>Ctrl</kbd> <code>a*b</code> <small>t</small>")[0].c;
+  same(n.map((x) => x.t).filter((t) => t !== "text"), ["b", "i", "u", "b", "hl", "sub", "br", "kbd", "code", "small"]);
+  assert.equal(n.find((x) => x.t === "code").s, "a*b", "code content is not parsed");
+  const a = c.parseBlocks('<a href="https://example.com/x">site <b>bold</b></a>')[0].c[0];
+  assert.equal(a.t, "a"); assert.equal(a.href, "https://example.com/x"); same(a.c.map((x) => x.t), ["text", "b"]);
+  const img = c.parseBlocks('<img src="https://img.shields.io/a.svg" alt="badge" width="999">')[0].c[0];
+  same({ t: img.t, alt: img.alt, href: img.href }, { t: "img", alt: "badge", href: "https://img.shields.io/a.svg" });
+});
+test("W4 inline HTML: unsafe or unknown markup stays text", () => {
+  const txt = (src) => text(c.parseBlocks(src)[0].c);
+  assert.equal(txt("<b>never closed"), "<b>never closed");
+  assert.equal(txt("<script>alert(1)</script>"), "<script>alert(1)</script>");
+  assert.equal(txt("<span onclick=x>hi</span>"), "<span onclick=x>hi</span>");
+  assert.equal(txt("a < b and c > d"), "a < b and c > d");
+  const bad = c.parseBlocks('<a href="javascript:alert(1)">go</a>')[0].c;
+  assert.ok(!bad.some((x) => x.t === "a"), "javascript: is never a link");
+  assert.equal(text(bad), "go");
+  assert.ok(!c.parseBlocks('<img src="http://insecure/a.png">')[0].c.some((x) => x.t === "img"), "images only over https");
+  assert.ok(!c.parseBlocks('<img src="file:///etc/passwd">')[0].c.some((x) => x.t === "img"));
+  assert.equal(txt("`<b>kept</b>` stays code"), "<b>kept</b> stays code", "code spans are skipped");
+  assert.ok(c.parseBlocks("<user@example.com>")[0].c.some((x) => x.t === "a"), "mailto autolinks still work");
+});
+test("W4 block HTML: headings, p/div/center with align, hr; fences and unclosed tags are left alone", () => {
+  const b = c.parseBlocks('<h1 align="center">Title <b>x</b></h1>\n\n<p align="right">\n  <img src="https://a.b/c.png" alt="pic"> text\n</p>\n\n<div align=center>\n\n# inner\n\n- one\n\n</div>\n\n<center>mid</center>\n\n<hr>\n\n<hr/>');
+  same(b.map((x) => x.type), ["h", "box", "box", "box", "hr", "hr"]);
+  assert.equal(b[0].level, 1); assert.equal(b[0].align, "center");
+  assert.equal(b[1].align, "right"); assert.ok(b[1].blocks[0].c.some((x) => x.t === "img"));
+  same(b[2].blocks.map((x) => x.type), ["h", "list"], "the inside of a div is Markdown");
+  assert.equal(b[3].align, "center");
+  const fence = c.parseBlocks("```text\n<div align=center>\n<h1>x</h1>\n```");
+  same(fence.map((x) => x.type), ["code"], "HTML inside a fence is code");
+  same(c.parseBlocks("<div>no close here").map((x) => x.type), ["p"], "no closing tag: plain text");
+  same(c.parseBlocks("<p>a</p> trailing").map((x) => x.type), ["p"], "text after the close tag: plain");
+  assert.equal(c.parseBlocks("para\n<h2>t</h2>").map((x) => x.type).join(), "p,h", "a block tag ends a paragraph");
+});
+test("W4 cleanStyle keeps a short allow-list and rejects everything that could load or run something", () => {
+  same(c.cleanStyle("width:50%; HEIGHT: 40px; background-color:#ff0; color: red; text-align:center; font-size:12px; border:1px solid #000"), { width: "50%", height: "40px", "background-color": "#ff0", color: "red", "text-align": "center", "font-size": "12px", border: "1px solid #000" });
+  const evil = c.cleanStyle("background:url(http://x/y.png); position:fixed; top:0; width:expression(alert(1)); color:var(--x); background-color:url(a); font-size:9999999px; z-index:9; behavior:url(x.htc); border:1px solid url(x); text-align:justify; margin:-9999px");
+  same(evil, {}, JSON.stringify(evil));
+  same(c.cleanStyle("background: rgb(255, 0, 0)"), { "background-color": "rgb(255, 0, 0)" });
+  same(c.cleanStyle("color:red !important"), { color: "red" });
+});
+test("W4 <table>: rows, th/td, colspan/rowspan, filtered style, attributes; nested or empty tables stay text", () => {
+  const src = '<table style="width:100%; position:fixed; border-collapse:collapse" border="1">\n<tr><th colspan="2" style="background-color:#eee">B I N</th></tr>\n<tr><td align="center" bgcolor="#ff0" width="60">1<br>one</td><td style="height:30px;background:url(x)">2</td></tr>\n</table>';
+  const [t] = c.parseBlocks(src);
+  assert.equal(t.type, "htable");
+  same(t.style, { width: "100%", "border-collapse": "collapse" });
+  assert.equal(t.border, 1);
+  assert.equal(t.rows.length, 2);
+  same({ th: t.rows[0][0].th, colspan: t.rows[0][0].colspan, bg: t.rows[0][0].style["background-color"] }, { th: true, colspan: 2, bg: "#eee" });
+  same(t.rows[1][0].style, { "background-color": "#ff0", "text-align": "center", width: "60px" });
+  same(t.rows[1][1].style, { height: "30px" }, "url() dropped, the rest kept");
+  assert.ok(t.rows[1][0].c.some((x) => x.t === "br"));
+  assert.equal(c.parseBlocks("<table><tr><td><table><tr><td>x</td></tr></table></td></tr></table>")[0].type, "p", "nested table: text");
+  assert.equal(c.parseBlocks("<table></table>")[0].type, "p");
+  const many = "<table>" + "<tr><td>x</td></tr>".repeat(300) + "</table>";
+  assert.equal(c.parseBlocks(many)[0].rows.length, 200, "row cap");
+});
+test("W4 exports: html keeps structure and only filtered style; text export is readable", () => {
+  const src = '<h2 align="center">Hi</h2>\n\n<table style="width:100%; background:url(x)"><tr><td style="color:red">a<br>b</td><td>c</td></tr></table>\n\n<div align="center">\n\nbody <u>u</u>\n\n</div>';
+  const html = c.exportHtml(src);
+  assert.ok(html.includes('<h2 style="text-align:center">Hi</h2>'), html);
+  assert.ok(html.includes('<table style="width:100%">'), "url() style not exported");
+  assert.ok(html.includes('<td style="color:red">a<br>b</td>'));
+  assert.ok(html.includes('<div style="text-align:center">') && html.includes("<u>u</u>"));
+  assert.ok(!/url\(/.test(html.split("</style>").pop()), "no url() in the body");
+  const txt = c.exportText(src);
+  assert.ok(txt.includes("a\nb | c"), txt);
+  assert.ok(txt.includes("body u"));
+});
+
 console.log(`\n${passed} markdown tests passed`);

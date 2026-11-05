@@ -549,6 +549,12 @@
 .zentral-notes-sheet .zn-read .zn-table-wrap { max-width: 100%; overflow-x: auto; margin: 0.5em 0; scrollbar-width: thin; }
 .zentral-notes-sheet .zn-read .zn-table { border-collapse: collapse; font-size: 0.95em; }
 .zentral-notes-sheet .zn-read .zn-table th,
+.zentral-notes-sheet .zn-read .zn-box { margin: 0 0 var(--zn-gap, 0.6em); }
+.zentral-notes-sheet .zn-read .zn-box > :last-child { margin-bottom: 0; }
+.zentral-notes-sheet .zn-read .zn-htable { border-collapse: collapse; }
+.zentral-notes-sheet .zn-read .zn-htable-plain td, .zentral-notes-sheet .zn-read .zn-htable-plain th { border-color: transparent; }
+.zentral-notes-sheet .zn-read u { text-decoration: underline; }
+.zentral-notes-sheet .zn-read small { font-size: 0.85em; }
 .zentral-notes-sheet .zn-read .zn-table td { padding: 3px 8px; border: 1px solid var(--zn-line); text-align: left; vertical-align: top; }
 .zentral-notes-sheet .zn-read .zn-table th { background: var(--zn-hover); font-weight: 700; }
 .zentral-notes-sheet .zn-read .zn-img {
