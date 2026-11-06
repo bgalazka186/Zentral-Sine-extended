@@ -231,6 +231,24 @@
       "defaultValue": false
     },
     {
+      "property": "zen.workspace.zentral.notes.card_window_entry_reveal",
+      "label": "Standalone card hidden at an edge: also reveal it when the pointer leaves the window through that edge and comes back",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.notes.card_sidebar_guard",
+      "label": "Standalone card with autohide: never fold it away while the sidebar, the compact sidebar / top bar, a menu or the address bar is being used",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.notes.card_pill_border",
+      "label": "Standalone card: draw a 1 px border around the pill menu so it stays visible on any page",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
       "property": "zen.workspace.zentral.notes.push_panel_percent",
       "label": "Push page in a panel: share of the panel height the Notes sheet takes (%, 20–80)",
       "type": "input",
@@ -1016,6 +1034,21 @@
       "owner": "notes"
     },
     "zen.workspace.zentral.notes.card_autohide": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.card_window_entry_reveal": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.card_sidebar_guard": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.card_pill_border": {
       "category": "notes",
       "section": "Quick notes",
       "owner": "notes"

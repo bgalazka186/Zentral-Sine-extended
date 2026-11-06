@@ -674,9 +674,10 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(readMeta().geo.float, undefined, "stored position removed");
     // a press on a header button never starts a drag
     const closeBtn = head.children[head.children.length - 1];
+    const framesBefore = raf.length; // the chrome watcher may have a settle frame queued of its own
     closeBtn.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0, clientX: 5, clientY: 5, pointerId: 3 }));
     card.dispatchEvent(new Ev("pointermove", { bubbles: true, clientX: 300, clientY: 300, pointerId: 3 }));
-    assert.equal(raf.length, 0, "no frame scheduled: buttons are not drag handles");
+    assert.equal(raf.length, framesBefore, "no frame scheduled: buttons are not drag handles");
   });
 
   await test("S6 card-as-panel: dragging past an edge docks the card (full height, flush), push comes from that side only while docked", async () => {

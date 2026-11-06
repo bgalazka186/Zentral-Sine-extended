@@ -261,6 +261,19 @@ const same = (a, b, msg) => assert.equal(canon(a), canon(b), msg);
     assert.equal(c.cardSnapSide({ x: -9, w: 400 }, 1000, 8), "left");
     assert.equal(c.cardSnapSide({ x: -7, w: 400 }, 1000, 8), "");
   });
+  await test("the card's resize grips are never hidden by an EMPTY data-slot (it matched every rule written for slot sheets)", () => {
+    const css = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.css"), "utf8");
+    const bare = css.split("\n").filter((l) => /\[data-slot\](?!:not)/.test(l));
+    assert.deepEqual(bare.map((l) => l.trim().slice(0, 80)), [], "a bare [data-slot] also matches data-slot=\"\" (the standalone card)");
+  });
+  await test("the card's pill keeps the panel's item order and carries a border", () => {
+    const js = source;
+    const order = ["mk(\"pin\"", "mk(\"push\"", "mk(\"move\"", "mk(\"hide\"", "mk(\"size\"", "actions.append(grab)", "mk(\"close\""].map((k) => js.indexOf(k));
+    assert.ok(order.every((n) => n > 0) && order.every((n, i) => i === 0 || n > order[i - 1]), "pin, push, move/resize, autohide, expand, grabber, close");
+    assert.match(js, /hide = mk\("hide", "hide"/, "autohide uses the panel's eye icon");
+    const css = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.css"), "utf8");
+    assert.match(css, /\.zn-pill-closebox \{[^}]*border: 1px solid/s, "1 px border on the pill surfaces");
+  });
   await test("push page: the side follows the card, wide cards and cards far from an edge do not push", () => {
     const content = { left: 0, right: 1000 };
     same(c.pushAmount({ left: 560, width: 440 }, content), { side: "right", px: 448 });

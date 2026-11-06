@@ -37,4 +37,10 @@ test("C2.1: docked card remembers its own geometry; heading levels differ; toolb
   assert.match(js, /-moz-context-properties:fill,stroke/, "icon rule opts in to context-stroke");
   assert.match(js, /ensureWidgetPlacedInWindow/, "widget is placed in open windows without customize mode");
 });
+test("a card folded away at its edge (autohide) still gives way to a Zentral panel", () => {
+  const js = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
+  assert.match(js, /held: \(\) => isOpen,/, "the sheet reports open OR folded");
+  assert.match(js, /!floating\?\.held\(\) \|\| !routeFor\(""\)\.host/, "adoptCard also adopts a folded card");
+  assert.match(js, /host !== floating && floating\?\.held\(\)\) floating\.close\(\)/, "closeOthers also closes a folded card");
+});
 console.log(`\n${passed} notes decision tests passed`);

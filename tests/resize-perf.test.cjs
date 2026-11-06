@@ -57,7 +57,7 @@ test("notes drag / resize: geometry is read once at the start, pointer events on
   assert.ok(!/getBoundingClientRect|getArea|getComputedStyle|offsetWidth|offsetHeight|clientWidth/.test(move), "no layout read per pointer event");
   assert.match(move, /requestAnimationFrame\(paintGesture\)/);
   assert.match(move, /if \(!rafDrag\)/, "at most one frame is queued");
-  const start = slice(src, "function startGesture(e, kind) {", "function paintGesture()");
+  const start = slice(src, "function startGesture(e, kind, opts = {}) {", "function paintGesture()");
   assert.equal((start.match(/adapter\.getArea\(/g) || []).length, 1, "the area is measured once per gesture");
   assert.equal((start.match(/getBoundingClientRect\(\)/g) || []).length, 1, "the sheet is measured once per gesture");
   const paint = slice(src, "function paintGesture() {", "function moveEvent(e)");

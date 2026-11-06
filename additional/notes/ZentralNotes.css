@@ -857,10 +857,10 @@
 .zentral-notes-sheet .zn-tree-head { padding: 3px 6px 1px; }
 
 /* ---- slot sheet (docked band / gap between the panels): only the top (and, in a gap, bottom) edge resizes ----- */
-.zentral-notes-sheet[data-slot] .zn-rz:not([data-h="n"]):not([data-h="s"]) { display: none; }
+.zentral-notes-sheet[data-slot]:not([data-slot=""]) .zn-rz:not([data-h="n"]):not([data-h="s"]) { display: none; }
 .zentral-notes-sheet[data-slot="dock"] .zn-rz[data-h="s"] { display: none; }
-.zentral-notes-sheet[data-slot] .zn-rz[data-h="n"], .zentral-notes-sheet[data-slot="gap"] .zn-rz[data-h="s"] { left: 0; right: 0; height: 7px; cursor: ns-resize; }
-.zentral-notes-sheet[data-slot] .zn-head { cursor: ns-resize; }
+.zentral-notes-sheet[data-slot]:not([data-slot=""]) .zn-rz[data-h="n"], .zentral-notes-sheet[data-slot="gap"] .zn-rz[data-h="s"] { left: 0; right: 0; height: 7px; cursor: ns-resize; }
+.zentral-notes-sheet[data-slot]:not([data-slot=""]) .zn-head { cursor: ns-resize; }
 /* A plain panel hands its bottom height to the sheet, so the sheet sits just below the shortened panel: the
    root, clip and slider must not clip it (the same spill rule as a wide sheet, see above). */
 :root[bgalazka-notes-spill="true"] #zen-app-panel-root { overflow: visible !important; }
@@ -1091,19 +1091,24 @@
   width: 40px;
   padding: 5px 3px;
   border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--zl-popup-text, var(--zen-colors-tertiary-text, #fff)) 30%, transparent);
   background: color-mix(in srgb, var(--zl-popup, var(--zen-colors-tertiary, #25252c)) var(--zn-pill-bg, 90%), transparent);
 }
+.zentral-notes-pill[data-noborder="true"] :is(.zn-pill-actions, .zn-pill-closebox) { border-color: transparent; }
+/* Grabber (the panel's dotted handle): drag sideways to resize, up or down to slide the pill. */
 .zentral-notes-pill .zn-pill-grab {
   display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   width: 30px;
-  height: 10px;
-  cursor: ns-resize;
+  height: 30px;
+  border-radius: 8px;
+  cursor: grab;
   touch-action: none;
 }
-.zentral-notes-pill .zn-pill-grab::before { content: ""; width: 22px; height: 3px; border-radius: 2px; background: currentColor; opacity: 0.5; }
-.zentral-notes-pill .zn-pill-grab:hover::before { opacity: 0.9; }
+.zentral-notes-pill .zn-pill-grab:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
+.zentral-notes-pill .zn-pill-grab svg { width: 14px; height: 18px; fill: currentColor; stroke: none; opacity: 0.8; }
 .zentral-notes-pill .zn-pill-btn {
   appearance: none;
   display: flex;
@@ -1120,7 +1125,7 @@
   color: inherit;
   cursor: pointer;
 }
-.zentral-notes-pill .zn-pill-btn svg { width: 18px; height: 18px; min-width: 18px; min-height: 18px; flex: 0 0 18px; }
+.zentral-notes-pill .zn-pill-btn svg { width: 18px; height: 18px; min-width: 18px; min-height: 18px; flex: 0 0 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .zentral-notes-pill .zn-pill-btn:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
 .zentral-notes-pill .zn-pill-btn.is-on { background: color-mix(in srgb, currentColor 20%, transparent); }
 .zentral-notes-pill .zn-pill-btn.zn-unavailable { opacity: 0.45; }
