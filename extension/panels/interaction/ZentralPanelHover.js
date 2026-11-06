@@ -20,7 +20,8 @@
  *   extension/panels/navigation/ZentralPanelToolbar.uc.js -> ctx.getActiveAppBrowser
  * Literal DOM event subscriptions: blur; click; contextmenu; focusin; focusout; keydown; mousedown;
  *   mouseup; pointercancel; pointerdown; pointerenter; pointerleave; pointermove; pointerout; pointerover;
- *   pointerup; popuphidden; popupshowing; resize
+ *   pointerup; popuphidden; popupshowing; resize; zentral-notes-request-reveal (document; Notes asks for an
+ *   autohidden panel to come back before it docks its sheet inside it)
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
  * contracts from this source, not a promise that every collaborator is enabled at runtime.
@@ -466,6 +467,21 @@
         clearHoverHide();
         setHoverPanelHidden(false);
       }
+      // Notes (additional/notes) asks for a panel that autohide has slid away: it is about to put its sheet
+      // inside that panel, so the panel comes back and is held for a few seconds (the normal leave logic
+      // takes over afterwards). One document event is the whole contract; nothing here reads Notes state.
+      // An absent or closing panel is left alone: Notes then keeps its standalone card.
+      const onNotesRevealRequest = () => {
+        const root = document.getElementById("zen-app-panel-root");
+        if (!root?.hasAttribute("open") || root.hasAttribute("closing")) return;
+        hoverHoldUntil = Date.now() + 5000;
+        clearHoverHide();
+        setHoverPanelHidden(false);
+      };
+      document.addEventListener("zentral-notes-request-reveal", onNotesRevealRequest);
+      registerCleanup(() =>
+        document.removeEventListener("zentral-notes-request-reveal", onNotesRevealRequest),
+      );
       function hoverMenuVisible() {
         for (const popup of hoverOpenPopups) {
           if (!popup.isConnected || popup.state === "closed")

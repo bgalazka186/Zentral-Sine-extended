@@ -36,7 +36,13 @@
   },
   {
     "property": "zen.workspace.zentral.notes.push_page",
-    "label": "Push page: the page makes room while the standalone Notes card is open (a sheet in a panel always takes its own slot)",
+    "label": "Push page: the page makes room while the standalone Notes card is docked to an edge (a sheet in a panel always takes its own slot)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.card_autohide",
+    "label": "Standalone card docked to an edge: hide it there and show it again on hover",
     "type": "checkbox",
     "defaultValue": false
   },

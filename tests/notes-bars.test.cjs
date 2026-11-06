@@ -83,6 +83,7 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
   root.append(slider);
   document.body.append(root);
 
+  const floatCard0 = () => document.documentElement.children.find((c) => c._classes.has("zentral-notes-sheet") && c.dataset.host === "float");
   let stop;
   await test("registers as 'notes' and starts without touching the page", async () => {
     assert.equal(registered.id, "notes");
@@ -219,7 +220,8 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     root.setAttribute("bgalazka-triple-view", "true");
     btn.click();
     await sleep(30); await flush();
-    assert.equal(has("bgalazka-quad-view"), false, "Triple View: the top bar's Notes is the floating window, no slot");
+    assert.equal(has("bgalazka-quad-view"), false, "Triple View without its middle bar: no quad slot (the card waits, see the W5 tests)");
+    assert.ok(floatCard0() && !floatCard0().hidden, "no middle bar yet: the card is the fallback");
     btn.click();
     await flush();
     root.removeAttribute("bgalazka-triple-view");
@@ -241,7 +243,7 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.ok(isNotesBtn(toolbar.firstElementChild), "button back when enabled");
   });
 
-  await test("a Triple View / Super Pin bar that appears later gets its own button; both share one note", async () => {
+  await test("a Triple View / Super Pin bar that appears later gets its own button; Notes MOVES to the bar that was clicked (one Notes at a time)", async () => {
     const box = new El("div"), bar = new El("div");
     bar.className = "bgalazka-super-bar";
     bar.append(new El("button"));
@@ -251,24 +253,27 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     await sleep(120);
     assert.ok(isNotesBtn(bar.firstElementChild));
     toolbar.firstElementChild.click(); await sleep(30); await flush();
+    const openSheets = () => sheetsIn(slider).filter((s) => !s.hidden);
+    assert.equal(openSheets().length, 1, "first click: the main panel's sheet");
+    const first = openSheets()[0].querySelector(".zn-editor");
+    dom.state.activeElement = first; first.value = "typed in the first"; first.dispatchEvent(new Ev("input", { bubbles: true })); await flush();
     bar.firstElementChild.click(); await sleep(30); await flush();
     const sheets = sheetsIn(slider);
-    assert.equal(sheets.length, 2, "one sheet per bar");
-    assert.ok(sheets.every((s) => !s.hidden));
-    const [a, b] = sheets.map((s) => s.querySelector(".zn-editor"));
-    assert.equal(a.value, b.value, "same note in both");
-    dom.state.activeElement = a; a.value = "typed in the first"; a.dispatchEvent(new Ev("input", { bubbles: true })); await flush();
-    assert.equal(b.value, "typed in the first", "second sheet follows live");
-    // shortcut closes everything that is open
+    assert.equal(sheets.length, 2, "one sheet object per bar that was used");
+    assert.equal(openSheets().length, 1, "Notes moved: the first bar's sheet closed, never two at once");
+    assert.equal(toolbar.firstElementChild.dataset.active, "false");
+    assert.equal(bar.firstElementChild.dataset.active, "true");
+    assert.equal(openSheets()[0].querySelector(".zn-editor").value, "typed in the first", "the same note came along");
+    // shortcut closes what is open
     const key = windowListeners.find((l) => l.t === "keydown" && l.c === true);
     const press = new Ev("keydown", { key: "N", code: "KeyN", altKey: true, shiftKey: true, ctrlKey: false, metaKey: false });
     key.fn(press);
     assert.ok(press.defaultPrevented);
     await flush();
-    assert.ok(sheets.every((s) => s.hidden), "shortcut toggled all sheets closed");
+    assert.ok(sheets.every((s) => s.hidden), "shortcut closed it");
     key.fn(new Ev("keydown", { key: "N", code: "KeyN", altKey: true, shiftKey: true, ctrlKey: false, metaKey: false }));
     await sleep(30); await flush();
-    assert.ok(sheetsIn(slider).some((s) => !s.hidden), "shortcut opens one sheet again");
+    assert.equal(openSheets().length, 1, "shortcut opens one sheet again");
     // bar removed -> its button and sheet are cleaned up
     box.remove();
     mutationCallbacks.slice().forEach((cb) => cb([{ addedNodes: [], removedNodes: [box] }]));
@@ -296,13 +301,13 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(strips(), 0, "no strip anywhere while a sheet is open");
     toolbar.firstElementChild.click(); await flush();
     assert.equal(strips(), 1, "one strip again after closing");
-    // Triple View: each bar has its own strip; the top one opens the floating window, none while it is open
+    // Triple View: each bar has its own strip; both open the sheet between the cards, none while it is open
     document.documentElement.setAttribute("bgalazka-triple-view", "true");
     toolbar.firstElementChild.click(); await sleep(30); await flush();
     toolbar.firstElementChild.click(); await sleep(30); await flush();
     assert.equal(strips(), 2, "Triple View: a hover strip on each bar");
     toolbar.firstElementChild.click(); await sleep(30); await flush();
-    assert.equal(strips(), 0, "no strip while the floating window is open");
+    assert.equal(strips(), 0, "no strip while Notes is open between the cards");
     toolbar.firstElementChild.click(); await sleep(30); await flush();
     assert.equal(strips(), 2, "both strips back after closing it");
     document.documentElement.removeAttribute("bgalazka-triple-view");
@@ -314,7 +319,7 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     await sleep(120);
   });
 
-  await test("shortcut while the panel is hidden (autohide) opens the standalone card, not a sheet on the hidden bar", async () => {
+  await test("W5: shortcut while the panel is hidden (autohide) brings the panel back through the reveal event, then docks the sheet in it", async () => {
     const key = windowListeners.find((l) => l.t === "keydown" && l.c === true);
     const press = () => key.fn(new Ev("keydown", { key: "N", code: "KeyN", altKey: true, shiftKey: true, ctrlKey: false, metaKey: false }));
     const html = document.documentElement;
@@ -324,17 +329,103 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     html.setAttribute("bgalazka-hover-panel-enabled", "true");
     html.setAttribute("bgalazka-hover-panel-hidden", "true");
     dom.state.activeElement = url; // focus is still inside the hidden panel
-    press(); await sleep(30); await flush();
-    assert.ok(sheetsIn(slider).every((s) => s.hidden), "no sheet opened on the hidden bar");
-    assert.ok(floatCard() && !floatCard().hidden, "standalone card opened instead");
+    // The panel suite answers the event like ZentralPanelHover does: it slides the panel back.
+    const events = [];
+    const realDispatch = document.dispatchEvent;
+    document.dispatchEvent = (ev) => { events.push(ev.type); if (ev.type === "zentral-notes-request-reveal") setTimeout(() => html.removeAttribute("bgalazka-hover-panel-hidden"), 20); return true; };
+    press(); await sleep(150); await flush();
+    document.dispatchEvent = realDispatch;
+    assert.deepEqual(events.filter((t) => t === "zentral-notes-request-reveal"), ["zentral-notes-request-reveal"], "exactly one reveal request");
+    assert.ok(sheetsIn(slider).some((s) => !s.hidden), "the sheet opened in the panel that came back");
+    assert.equal(floatCard()?.hidden ?? true, true, "no card next to the panel");
     press(); await flush();
-    assert.equal(floatCard().hidden, true, "and closes with the same shortcut");
+    assert.ok(sheetsIn(slider).every((s) => s.hidden), "and closes with the same shortcut");
     html.removeAttribute("bgalazka-hover-panel-enabled");
     html.removeAttribute("bgalazka-hover-panel-hidden");
     dom.state.activeElement = null;
   });
 
+  await test("W5: a panel that does not answer the reveal request leaves the card as the fallback, and the card is not pulled into the hidden panel again", async () => {
+    const key = windowListeners.find((l) => l.t === "keydown" && l.c === true);
+    const press = () => key.fn(new Ev("keydown", { key: "N", code: "KeyN", altKey: true, shiftKey: true, ctrlKey: false, metaKey: false }));
+    const html = document.documentElement;
+    const floatCard = () => html.children.find((c) => c._classes.has("zentral-notes-sheet") && c.dataset.host === "float");
+    html.setAttribute("bgalazka-hover-panel-enabled", "true");
+    html.setAttribute("bgalazka-hover-panel-hidden", "true");
+    press(); await sleep(900); await flush();
+    assert.ok(floatCard() && !floatCard().hidden, "no answer within the wait: the card opened");
+    assert.ok(sheetsIn(slider).every((s) => s.hidden), "no sheet on the hidden bar");
+    mutationCallbacks.slice().forEach((cb) => cb([{ type: "attributes", addedNodes: [], removedNodes: [] }]));
+    await sleep(120); await flush();
+    assert.ok(!floatCard().hidden && sheetsIn(slider).every((s) => s.hidden), "a later sync does not move the card into the hidden panel");
+    press(); await flush();
+    assert.equal(floatCard().hidden, true, "closes with the same shortcut");
+    html.removeAttribute("bgalazka-hover-panel-enabled");
+    html.removeAttribute("bgalazka-hover-panel-hidden");
+  });
+
+  await test("W5: the card and a panel are never open together: the panel appearing pulls an open card into it; both orderings", async () => {
+    const key = windowListeners.find((l) => l.t === "keydown" && l.c === true);
+    const press = () => key.fn(new Ev("keydown", { key: "N", code: "KeyN", altKey: true, shiftKey: true, ctrlKey: false, metaKey: false }));
+    const html = document.documentElement;
+    const floatCard = () => html.children.find((c) => c._classes.has("zentral-notes-sheet") && c.dataset.host === "float");
+    const syncNow = async () => { mutationCallbacks.slice().forEach((cb) => cb([{ type: "attributes", addedNodes: [], removedNodes: [] }])); await sleep(150); await flush(); };
+    // order 1: no panel, card open, then the panel opens
+    root.removeAttribute("open");
+    await syncNow();
+    press(); await sleep(40); await flush();
+    assert.ok(floatCard() && !floatCard().hidden, "no panel: the card");
+    assert.ok(sheetsIn(slider).every((s) => s.hidden));
+    root.setAttribute("open", "");
+    await syncNow();
+    assert.equal(floatCard().hidden, true, "the panel opened: the card closed");
+    assert.ok(sheetsIn(slider).some((s) => !s.hidden), "and Notes re-opened inside the panel");
+    // order 2: panel open with Notes, the panel closes (Notes goes with it), the shortcut gives the card, the panel returns
+    root.removeAttribute("open");
+    await syncNow();
+    press(); await sleep(40); await flush(); // closes whatever is still open
+    if (!floatCard() || floatCard().hidden) { press(); await sleep(40); await flush(); }
+    assert.ok(floatCard() && !floatCard().hidden, "panel gone: the card again");
+    root.setAttribute("open", "");
+    await syncNow();
+    assert.equal(floatCard().hidden, true);
+    assert.equal(sheetsIn(slider).filter((s) => !s.hidden).length, 1, "exactly one Notes");
+    press(); await flush();
+  });
+
+  await test("W5 Triple View: both bars open the sheet between the cards, the top bar's button follows, never the card", async () => {
+    const html = document.documentElement;
+    const floatCard = () => html.children.find((c) => c._classes.has("zentral-notes-sheet") && c.dataset.host === "float");
+    const box = new El("div"), bar = new El("div");
+    bar.className = "bgalazka-super-bar";
+    bar.append(new El("button"));
+    box.append(bar);
+    slider.append(box);
+    html.setAttribute("bgalazka-triple-view", "true");
+    mutationCallbacks.slice().forEach((cb) => cb([{ addedNodes: [box], removedNodes: [] }]));
+    await sleep(120);
+    const top = toolbar.firstElementChild, mid = bar.firstElementChild;
+    top.click(); await sleep(40); await flush();
+    const open = () => sheetsIn(slider).filter((s) => !s.hidden);
+    assert.equal(open().length, 1);
+    assert.equal(open()[0].dataset.slot, "gap", "between the two cards");
+    assert.equal(mid.dataset.active, "true");
+    assert.equal(top.dataset.active, "true", "the top bar's button shows that Notes is open");
+    assert.equal(floatCard()?.hidden ?? true, true, "no card");
+    top.click(); await flush();
+    assert.equal(open().length, 0, "the top bar's button closes it again");
+    assert.equal(top.dataset.active, "false");
+    mid.click(); await sleep(40); await flush();
+    assert.equal(open().length, 1);
+    mid.click(); await flush();
+    html.removeAttribute("bgalazka-triple-view");
+    box.remove();
+    mutationCallbacks.slice().forEach((cb) => cb([{ addedNodes: [], removedNodes: [box] }]));
+    await sleep(120);
+  });
+
   await test("dock to sidebar: button appears in the sidebar row, card opens beside the sidebar, toggle cleans up", async () => {
+    root.removeAttribute("open"); // the card is the no-panel fallback (S6 W5): the next tests run with the panel closed
     const toolbox = new El("div"); toolbox.id = "navigator-toolbox";
     const bottom = new El("div"); bottom.id = "zen-sidebar-bottom-buttons";
     toolbox.append(bottom);
@@ -588,7 +679,199 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(raf.length, 0, "no frame scheduled: buttons are not drag handles");
   });
 
+  await test("S6 card-as-panel: dragging past an edge docks the card (full height, flush), push comes from that side only while docked", async () => {
+    const card = floatCard();
+    const html = document.documentElement;
+    const px = (v) => Number.parseInt(v);
+    const tabbox = new El("div"); tabbox.id = "tabbrowser-tabbox"; document.body.append(tabbox);
+    tabbox.getBoundingClientRect = () => ({ left: 0, top: 0, right: 920, bottom: 800, width: 920, height: 800 });
+    const head = card.querySelector(".zn-head");
+    const sx = px(card.style.left);
+    head.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0, clientX: 300, clientY: 100, pointerId: 11 }));
+    card.dispatchEvent(new Ev("pointermove", { bubbles: true, clientX: 300 - sx - 60, clientY: 100, pointerId: 11 }));
+    raf.splice(0).forEach((f) => f());
+    assert.equal(card.dataset.snap, "left", "pushed 60px past the left edge: the dock preview shows");
+    assert.equal(card.style.left, "0px");
+    assert.equal(card.style.top, "0px", "the preview is a full-height strip");
+    assert.equal(card.style.height, "800px");
+    card.dispatchEvent(new Ev("pointerup", { bubbles: true, pointerId: 11 }));
+    await flush();
+    assert.equal(card.dataset.snap, undefined);
+    assert.equal(card.dataset.docked, "left");
+    assert.equal(readMeta().cardDock ?? "", "", "written lazily");
+    await sleep(700);
+    assert.equal(readMeta().cardDock, "left");
+    assert.ok(readMeta().cardW >= 240);
+    assert.equal(card.style.left, "0px");
+    assert.equal(card.style.height, "800px", "full height of the room");
+    // push: only docked, from the docked side
+    assert.equal(html.getAttribute("zentral-notes-push"), null, "push page is off");
+    let pushVar = "";
+    const [spv, rpv] = [html.style.setProperty, html.style.removeProperty];
+    html.style.setProperty = (k, v) => { if (k === "--zentral-notes-push") pushVar = v; };
+    html.style.removeProperty = (k) => { if (k === "--zentral-notes-push") pushVar = ""; };
+    prefs.set("zen.workspace.zentral.notes.push_page", true);
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", "zen.workspace.zentral.notes.push_page")); await flush();
+    assert.equal(html.getAttribute("zentral-notes-push"), "left", "docked left pushes from the left");
+    assert.equal(pushVar, card.style.width, "by exactly the card's width");
+    // the pill exists and its push / autohide buttons reflect the docked state
+    const pill = document.documentElement.all().find((c) => c._classes.has("zentral-notes-pill"));
+    assert.ok(pill && !pill.hidden, "pill beside the card");
+    assert.equal(pill.dataset.side, "right", "docked left: the pill is on the page side");
+    const pb = (id) => pill.querySelectorAll("button").find((b) => b.dataset.id === id);
+    assert.equal(pb("push").classList.contains("is-on"), true);
+    assert.equal(pb("push").getAttribute("aria-disabled"), "false");
+    // drag it away from the edge: it detaches (floats) and the page is released
+    card.getBoundingClientRect = () => ({ left: px(card.style.left), top: px(card.style.top), width: px(card.style.width), height: px(card.style.height), right: 0, bottom: 0 });
+    head.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0, clientX: 100, clientY: 100, pointerId: 12 }));
+    card.dispatchEvent(new Ev("pointermove", { bubbles: true, clientX: 400, clientY: 160, pointerId: 12 }));
+    raf.splice(0).forEach((f) => f());
+    card.dispatchEvent(new Ev("pointerup", { bubbles: true, pointerId: 12 }));
+    await flush();
+    assert.equal(card.dataset.docked, undefined, "dragged away: detached");
+    assert.equal(html.getAttribute("zentral-notes-push"), null, "a detached card never pushes");
+    assert.equal(pb("push").getAttribute("aria-disabled"), "true");
+    assert.equal(pushVar, "", "and its margin variable is removed");
+    html.style.setProperty = spv; html.style.removeProperty = rpv;
+    await sleep(700);
+    assert.equal(readMeta().cardDock ?? "", "");
+    prefs.set("zen.workspace.zentral.notes.push_page", false);
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", "zen.workspace.zentral.notes.push_page")); await flush();
+    tabbox.remove();
+  });
+
+  await test("S6 card-as-panel: docked card resizes only from its inner edge and keeps the width; split view widens it without storing the widened size", async () => {
+    const card = floatCard();
+    const px = (v) => Number.parseInt(v);
+    const html = document.documentElement;
+    card.getBoundingClientRect = () => ({ left: px(card.style.left), top: px(card.style.top), width: px(card.style.width), height: px(card.style.height), right: 0, bottom: 0 });
+    // dock at the right edge of the room (920 wide, the sidebar is on the right)
+    const head = card.querySelector(".zn-head");
+    head.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0, clientX: 400, clientY: 100, pointerId: 21 }));
+    card.dispatchEvent(new Ev("pointermove", { bubbles: true, clientX: 2000, clientY: 100, pointerId: 21 }));
+    raf.splice(0).forEach((f) => f());
+    assert.equal(card.dataset.snap, "right");
+    card.dispatchEvent(new Ev("pointerup", { bubbles: true, pointerId: 21 }));
+    await flush();
+    assert.equal(card.dataset.docked, "right");
+    const w0 = px(card.style.width);
+    assert.equal(px(card.style.left) + w0, 920, "flush against the right edge of the room (left of the sidebar)");
+    // only the inner (west) grip works; a corner does nothing
+    const grips = card.querySelectorAll(".zn-rz");
+    const se = grips.find((g) => g.getAttribute("data-h") === "se");
+    const before = raf.length;
+    se.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0, clientX: 900, clientY: 700, pointerId: 22 }));
+    card.dispatchEvent(new Ev("pointermove", { bubbles: true, clientX: 800, clientY: 600, pointerId: 22 }));
+    assert.equal(raf.length, before, "a docked card ignores corner grips");
+    card.dispatchEvent(new Ev("pointerup", { bubbles: true, pointerId: 22 }));
+    const west = grips.find((g) => g.getAttribute("data-h") === "w");
+    west.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0, clientX: 500, clientY: 300, pointerId: 23 }));
+    card.dispatchEvent(new Ev("pointermove", { bubbles: true, clientX: 420, clientY: 300, pointerId: 23 }));
+    raf.splice(0).forEach((f) => f());
+    assert.equal(px(card.style.width), w0 + 80, "dragged 80px to the left: 80px wider");
+    assert.equal(px(card.style.left) + px(card.style.width), 920, "the outer edge stays on the window edge");
+    card.dispatchEvent(new Ev("pointerup", { bubbles: true, pointerId: 23 }));
+    await sleep(700);
+    assert.equal(readMeta().cardW, w0 + 80, "the docked width is remembered on its own");
+    assert.equal(px(card.style.height), 800, "still full height");
+    // split view widens the display only
+    const split = card.querySelectorAll("button").find((b) => /split/i.test(b.title || ""));
+    assert.ok(split, "split button");
+    split.click(); await sleep(30); await flush();
+    const wide = px(card.style.width);
+    assert.ok(wide > w0 + 80, "split view widens the docked card");
+    assert.equal(px(card.style.left) + wide, 920, "and keeps it flush at the edge");
+    split.click(); await sleep(30); await flush();
+    assert.equal(px(card.style.width), w0 + 80, "back to the remembered width: nothing accumulated");
+    assert.equal(readMeta().cardW, w0 + 80);
+  });
+
+  await test("S6 card-as-panel: autohide folds a docked card to an edge strip and a hover brings it back; push is released while it is hidden", async () => {
+    const card = floatCard();
+    const html = document.documentElement;
+    const tabbox = new El("div"); tabbox.id = "tabbrowser-tabbox"; document.body.append(tabbox);
+    tabbox.getBoundingClientRect = () => ({ left: 0, top: 0, right: 920, bottom: 800, width: 920, height: 800 });
+    dom.state.activeElement = null;
+    prefs.set("zen.workspace.zentral.notes.push_page", true);
+    prefs.set("zen.workspace.zentral.notes.card_autohide", true);
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", "zen.workspace.zentral.notes.card_autohide")); await flush();
+    assert.equal(html.getAttribute("zentral-notes-push"), "right", "docked right and shown: pushes from the right");
+    await sleep(1100); await flush();
+    assert.equal(card.dataset.collapsed, "true", "no pointer, no focus inside: folded away");
+    assert.equal(html.getAttribute("zentral-notes-push"), null, "the page gets its room back while the card is hidden");
+    const strip = document.documentElement.all().find((c) => c._classes.has("zentral-notes-reveal"));
+    assert.ok(strip, "an edge strip stays");
+    assert.equal(strip.dataset.edge, "right");
+    assert.equal(parseInt(strip.style.top), 0);
+    assert.equal(parseInt(strip.style.height), 800, "the strip spans the docked edge");
+    const pill = document.documentElement.all().find((c) => c._classes.has("zentral-notes-pill"));
+    assert.equal(pill.hidden, true, "no pill while hidden");
+    strip.dispatchEvent(new Ev("mousedown", { bubbles: true }));
+    await flush();
+    assert.equal(card.dataset.collapsed, undefined, "pressing the strip reveals the card at once");
+    assert.equal(html.getAttribute("zentral-notes-push"), "right");
+    // switching autohide off keeps it shown
+    prefs.set("zen.workspace.zentral.notes.card_autohide", false);
+    prefs.set("zen.workspace.zentral.notes.push_page", false);
+    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", "zen.workspace.zentral.notes.card_autohide")); await flush();
+    assert.equal(card.dataset.collapsed, undefined);
+    // hold the move button: detach again, then clean up for the next tests
+    tabbox.remove();
+  });
+
+  await test("S6 card-as-panel: pill buttons act (push and autohide are refused while detached, larger / close work), handles toggle shows every grip", async () => {
+    const card = floatCard();
+    const html = document.documentElement;
+    const pill = html.all().find((c) => c._classes.has("zentral-notes-pill"));
+    assert.ok(pill);
+    const pb = (id) => pill.querySelectorAll("button").find((b) => b.dataset.id === id);
+    // dock state is right here; detach through the hold action's function by dragging away
+    card.getBoundingClientRect = () => ({ left: Number.parseInt(card.style.left), top: Number.parseInt(card.style.top), width: Number.parseInt(card.style.width), height: Number.parseInt(card.style.height), right: 0, bottom: 0 });
+    const head = card.querySelector(".zn-head");
+    head.dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0, clientX: 600, clientY: 100, pointerId: 31 }));
+    card.dispatchEvent(new Ev("pointermove", { bubbles: true, clientX: 300, clientY: 200, pointerId: 31 }));
+    raf.splice(0).forEach((f) => f());
+    card.dispatchEvent(new Ev("pointerup", { bubbles: true, pointerId: 31 }));
+    await flush();
+    assert.equal(card.dataset.docked, undefined);
+    const pushBefore = prefs.get("zen.workspace.zentral.notes.push_page");
+    pb("push").click(); await flush();
+    assert.equal(prefs.get("zen.workspace.zentral.notes.push_page"), pushBefore, "push refused while detached");
+    pb("hide").click(); await flush();
+    assert.notEqual(prefs.get("zen.workspace.zentral.notes.card_autohide"), true, "autohide refused while detached");
+    pb("move").dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0, clientX: 5, clientY: 5, pointerId: 32 }));
+    pb("move").dispatchEvent(new Ev("pointerup", { bubbles: true, pointerId: 32 }));
+    pb("move").click(); await flush();
+    assert.equal(card.dataset.handles, "all", "tap on move: all-side handles");
+    pb("move").dispatchEvent(new Ev("pointerdown", { bubbles: true, button: 0, clientX: 5, clientY: 5, pointerId: 33 }));
+    pb("move").dispatchEvent(new Ev("pointerup", { bubbles: true, pointerId: 33 }));
+    pb("move").click(); await flush();
+    assert.equal(card.dataset.handles, undefined, "tap again: back to normal");
+    pb("size").click(); await sleep(20); await flush();
+    assert.equal(card.dataset.size, "span", "larger button fills the area");
+    pb("size").click(); await sleep(20); await flush();
+    assert.equal(card.dataset.size, "peek");
+    pb("close").click(); await flush();
+    assert.equal(card.hidden, true, "close button closes");
+    assert.ok(!html.all().some((c) => c._classes.has("zentral-notes-pill")), "the pill goes with the card");
+    press({ key: "F", code: "KeyF", alt: true, shift: true }); await sleep(40); await flush();
+    assert.equal(floatCard().hidden, false);
+  });
+
+  await test("default view: a NEW note starts in the chosen view (split / edit; read and last start in the editor, an empty note has nothing to read)", async () => {
+    const card = floatCard();
+    prefs.set("zen.workspace.zentral.notes.shortcuts", JSON.stringify({ openFloating: "Alt+Shift+F", quickNew: "Alt+Shift+Q", span: "Ctrl+Alt+J" }));
+    const quickNew = async () => { press({ key: "Q", code: "KeyQ", alt: true, shift: true }); await sleep(40); await flush(); };
+    for (const [pref, want] of [["split", "split"], ["edit", "edit"], ["read", "edit"], ["last", "edit"]]) {
+      prefs.set("zen.workspace.zentral.notes.default_view", pref);
+      await quickNew();
+      assert.equal(card.dataset.mode, want, `default view ${pref}: a new note opens in ${want}`);
+    }
+    prefs.set("zen.workspace.zentral.notes.default_view", "last");
+  });
+
   await test("Notes follows a rebuilt primary Zentral panel if it was already open; manual close clears the restore target", async () => {
+    root.setAttribute("open", ""); // the panel is back (the card tests above ran without it)
     const oldToolbar = toolbar;
     const btn = oldToolbar.firstElementChild;
     // Begin closed, then open on the current primary panel.

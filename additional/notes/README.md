@@ -5,10 +5,16 @@ Quick notes that open **over the panel you are looking at**, without touching it
 ## Using it
 
 - Press the **note button** at the far left of a panel's URL bar (also on the Triple View and Super Pin bars), or press **Alt+Shift+N**.
-- The sheet covers the page area of the panel whose bar you used. In Triple View you can open a note from one bar and keep reading the other panel. The page, its tab and the panel are never navigated, moved or unloaded.
-- Every sheet shows the **same notes**. Open the note from two bars at once and they follow each other live; two Zen windows stay in sync too.
+- The sheet covers the page area of the panel whose bar you used. In Triple View **both** bars open it between the two cards (the top bar's button shows that it is open). The page, its tab and the panel are never navigated, moved or unloaded.
+- **Notes lives inside the Zentral panel whenever one exists.** There is only one Notes at a time: pressing the button on another bar (or Super Pin) moves it there, and it is never open as the floating card next to a panel. If the panel is slid away by *autohide*, the button, the shortcut, a reminder or a click in the Zen sidebar folder first bring the panel back, then dock Notes in it. If a panel opens while the card is open, the card closes and Notes continues inside the panel.
+- Two Zen windows stay in sync through the notes folder.
 - The first line of a note is its title. Switch between **edit** and **read** with Ctrl+E.
-- In a standalone install (no Zentral panels) the shortcut opens a floating note card at the corner of the window.
+- With no Zentral panel open (and in a standalone install without the panels) the shortcut opens the **standalone card**, which behaves like a Zentral panel:
+  - It stays below the top bar and beside the native sidebar (never over either).
+  - Drag it past a window edge and it **docks** there: full height, flush, with its own remembered width. Drag it away and it detaches. Hold the pill's move button to dock / detach without dragging.
+  - Only while docked: **push the page** from that side (pill button or the setting) and **autohide** (the card folds into a thin strip at the edge and comes back on hover or a press on the strip). A detached card never pushes.
+  - The **pill** beside the card has push, move / resize (tap: show handles on every side, drag: move), larger, autohide and close. A docked card resizes from its inner edge.
+  - Split view only widens the card for display; the remembered width is never the widened one.
 
 | Action | How |
 | --- | --- |

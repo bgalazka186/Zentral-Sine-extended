@@ -401,7 +401,7 @@ function cssTests() {
     for (const a of ["bgalazka-notes-gap", "bgalazka-quad-view", "bgalazka-notes-spill"]) assert.equal(html.hasAttribute(a), false, a);
   });
 
-  await test("Triple View top bar: Notes is the free-floating window, it reserves nothing (no quad marker, no gap variables)", async () => {
+  await test("Triple View with no middle bar yet: Notes waits as the card, it reserves nothing (no quad marker, no gap variables)", async () => {
     primaryBtn.click(); await sleep(30); await flush();
     assert.equal(html.hasAttribute("bgalazka-quad-view"), false);
     assert.equal(vars.has("--zentral-notes-panel-reserve"), false);

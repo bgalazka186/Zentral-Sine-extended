@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.21
+// @version 3.1.24
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.21, the numeric-preference list and
+ * Placeholders replaced by the build: 3.1.24, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.21";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.24";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -710,6 +710,7 @@ function nativeSidebarSide() {
       AVOID_SIDEBAR: "zen.workspace.zentral.notes.avoid_sidebar",
       HOVER_REVEAL: "zen.workspace.zentral.notes.hover_reveal",
       PUSH_PAGE: "zen.workspace.zentral.notes.push_page",
+      CARD_AUTOHIDE: "zen.workspace.zentral.notes.card_autohide",
       REVEAL_STRIP: "zen.workspace.zentral.notes.reveal_strip",
       REVEAL_HEIGHT: "zen.workspace.zentral.notes.reveal_height_px",
       REVEAL_DELAY: "zen.workspace.zentral.notes.reveal_delay_ms",
@@ -781,7 +782,7 @@ function nativeSidebarSide() {
     // Integer look prefs: -1 (or anything out of range) keeps the theme's own value.
     const LOOK_NUM_PREFS = new Set([PREF.LOOK_RADIUS, PREF.LOOK_BORDER, PREF.LOOK_PADDING, PREF.LOOK_OPACITY, PREF.LOOK_SHADOW_BLUR, PREF.LOOK_SHADOW_Y, PREF.LOOK_SHADOW_ALPHA, PREF.LOOK_BTN_SIZE, PREF.LOOK_BTN_RADIUS]);
     const VIEW_PREFS = new Set([PREF.WRAP, PREF.FONT_SIZE, PREF.LINE_HEIGHT, PREF.READ_COPY, PREF.THEME, ...LOOK_PREFS]);
-    const WINDOW_PREFS = new Set([PREF.HOVER_REVEAL, PREF.PUSH_PAGE, PREF.PUSH_PANEL_PERCENT, PREF.WIDE_PERCENT, PREF.REVEAL_STRIP, PREF.REVEAL_HEIGHT, PREF.REVEAL_DELAY, PREF.AVOID_SIDEBAR]);
+    const WINDOW_PREFS = new Set([PREF.HOVER_REVEAL, PREF.PUSH_PAGE, PREF.CARD_AUTOHIDE, PREF.PUSH_PANEL_PERCENT, PREF.WIDE_PERCENT, PREF.REVEAL_STRIP, PREF.REVEAL_HEIGHT, PREF.REVEAL_DELAY, PREF.AVOID_SIDEBAR]);
     const READ_PREFS = new Set([PREF.BLANK_LINES, PREF.LINE_BREAKS, PREF.SETEXT, PREF.HUB_DESC, PREF.BACKLINKS_PANEL]);
     const OBS_TOPIC = "zentral-notes-changed";
     const IDLE_SAVE_MS = 800; // pause after the last keystroke
@@ -3109,7 +3110,7 @@ function nativeSidebarSide() {
       { id: "resetGeo", label: "Reset position and size", def: "" },
       // Global actions work anywhere in the window, also while Notes is closed.
       { id: "quickNew", label: "New note from anywhere", def: "", global: true },
-      { id: "openFloating", label: "Open or close the standalone Notes card", def: "", global: true },
+      { id: "openFloating", label: "Open or close Notes (in the Zentral panel; the standalone card only when no panel exists)", def: "", global: true },
       { id: "captureQuick", label: "Add selected text to a note (default target)", def: "", global: true },
       { id: "captureInbox", label: "Add selected text to the Inbox note", def: "", global: true },
       { id: "capturePage", label: "Add this page (title and link) to a note", def: "", global: true },
@@ -3264,7 +3265,8 @@ function nativeSidebarSide() {
           { id: "dock", label: "Dock to the sidebar", pref: PREF.DOCK_SIDEBAR, kind: "bool", def: false },
           { id: "avoid", label: "Keep clear of the native sidebar (standalone card)", pref: PREF.AVOID_SIDEBAR, kind: "bool", def: true },
           { kind: "heading", label: "Push page" },
-          { id: "push", label: "Push the page aside (standalone card only; a sheet in a panel always takes its own slot)", pref: PREF.PUSH_PAGE, kind: "bool", def: false },
+          { id: "push", label: "Push the page aside while the standalone card is docked to an edge (a sheet in a panel always takes its own slot)", pref: PREF.PUSH_PAGE, kind: "bool", def: false },
+          { id: "cardHide", label: "Standalone card docked to an edge: hide it there, show it on hover", pref: PREF.CARD_AUTOHIDE, kind: "bool", def: false },
           S("pushPct", "Share of the panel height the sheet takes", PREF.PUSH_PANEL_PERCENT, 20, 80, "%", 45),
           { kind: "heading", label: "Reveal strip" },
           { id: "strip", label: "Strip at the top of an open panel opens Notes on hover", pref: PREF.REVEAL_STRIP, kind: "bool", def: false },
@@ -3855,6 +3857,49 @@ function nativeSidebarSide() {
       const px = Math.round(left + width - content.left + gap);
       return px > 0 && px <= cw * 0.7 ? { side: "left", px } : null;
     }
+    // ---- the standalone card behaves like a Zentral panel: it is docked to a window edge or floats --------
+    // Docked = hugs the left or right edge of the room it may use, full height, and may push the page aside
+    // (and hide until the edge is hovered). Floating = free rectangle, never pushes. Dragging a card past
+    // an edge docks it there; dragging a docked card away detaches it. The numbers below are the same
+    // idea as the panel's hybrid layer (dockRect / hit test), kept as small pure functions.
+    const CARD_SNAP_PX = 28, CARD_DEFAULT_W = 460;
+    const cleanCardDock = (v) => (v === "left" || v === "right" ? v : "");
+    // The room a card may use: below the top bar, beside (never over) the native sidebar.
+    function cardView({ vw, vh, contentTop = 0, sidebar = null, avoid = true }) {
+      const top = contentTop > 0 && contentTop < vh / 2 ? Math.round(contentTop) : 0;
+      let view = { left: 0, top, width: vw, height: Math.max(1, vh - top) };
+      if (avoid && sidebar) view = keepClear(view, [sidebar], vh);
+      return view;
+    }
+    // Which edge a dragged card is being pushed past (x is its UNclamped left, local to the room).
+    function cardSnapSide({ x, w }, areaW, slop = CARD_SNAP_PX) {
+      if (x < -slop) return "left";
+      if (x + w > areaW + slop) return "right";
+      return "";
+    }
+    // A docked card: flush against its edge, the full height of the room.
+    function cardDockRect({ side, w, view }) {
+      const width = Math.round(Math.max(Math.min(GEO_MIN.w, view.width), Math.min(w > 0 ? w : CARD_DEFAULT_W, view.width - 20)));
+      return { left: side === "right" ? view.left + view.width - width : view.left, top: view.top, width, height: view.height };
+    }
+    // How far the page must move for a card docked at `side`. `content` is the page's un-pushed rectangle.
+    // At most 70% of the page moves; the rest of a very wide card overlaps it.
+    function cardPush({ side, left, width }, content) {
+      const cw = content.right - content.left;
+      if (cleanCardDock(side) === "" || !(width > 0) || !(cw > 0)) return null;
+      const raw = side === "right" ? content.right - left : left + width - content.left;
+      const px = Math.min(Math.round(raw), Math.round(cw * 0.7));
+      return px > 0 ? { side, px } : null;
+    }
+    // Split view only WIDENS the card for display (width x pct, growing toward the middle of the room). A rect
+    // read from the screen while widened is turned back into the remembered base size, so switching between
+    // split / read / edit never makes the stored card grow. `rect` is local to a room `areaW` wide.
+    function cardBaseRect(rect, pct, areaW) {
+      if (!(pct > 1.001)) return { ...rect };
+      const w = Math.max(GEO_MIN.w, Math.round(rect.w / pct));
+      const onRight = rect.x + rect.w / 2 > areaW / 2;
+      return { ...rect, w, x: onRight ? rect.x + rect.w - w : rect.x };
+    }
     // ---- slot model (a panel-hosted sheet is a band of the panel's layout, not an overlay) -------------
     // `share` = the fraction of the panels' page height the sheet takes. Pure maths so it can be tested.
     const SLOT_MIN_SHARE = 0.15, SLOT_MAX_SHARE = 0.85, SLOT_LARGE_SHARE = 0.8, SLOT_MIN_PX = 140, SLOT_PAGE_MIN_PX = 120, GAP_PANEL_MIN_PX = 120;
@@ -3924,6 +3969,20 @@ function nativeSidebarSide() {
       if (!want) return "";
       if (kinds.includes(want)) return want;
       if (want === "triple" && !triple && kinds.includes("primary")) return "primary";
+      return "";
+    }
+    // S6 W5: which Zentral panel bar a Notes request lands on. A Zentral panel (open, even when autohide has
+    // slid it away) always wins over the free-floating card; "" means no panel host: the card is the fallback.
+    //  - Triple View: the sheet lives BETWEEN the two cards, so every request (top bar, bottom bar, shortcut)
+    //    goes to the "triple" bar. A Super Pin bar is its own panel and keeps its own request.
+    //  - otherwise the first bar that exists in this order: the one asked for (clicked), the one holding the
+    //    focus, the one used last, the main panel, Super Pin (a Triple View bar only when it was asked for).
+    // Triple View without its middle bar yet (the second panel is still loading) gives "": the card opens
+    // and moves into the panel as soon as the bar exists.
+    function chooseHost({ panelOpen = false, triple = false, kinds = [], want = "", focused = "", last = "" } = {}) {
+      if (!panelOpen || !kinds.length) return "";
+      if (triple) return want === "super" && kinds.includes("super") ? "super" : kinds.includes("triple") ? "triple" : "";
+      for (const k of [want, focused, last, "primary", "super"]) if (k && kinds.includes(k) && (k !== "triple" || k === want)) return k;
       return "";
     }
     // The part of `bounds` left when tall strips at its left or right edge (the native sidebar) are taken
@@ -4020,7 +4079,7 @@ function nativeSidebarSide() {
       const dirty = new Set();
       const listeners = new Set();
       const backedUp = new Set();
-      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, gapSplit: -1 };
+      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, gapSplit: -1, cardDock: "", cardW: 0 };
       let meta = { ...DEFAULT_META };
       let dir = null;
       let chain = Promise.resolve();
@@ -4097,6 +4156,9 @@ function nativeSidebarSide() {
           meta.recent = cleanRecent(raw.recent);
           meta.folders = cleanFolders(raw.folders);
           if (OPEN_IN_KINDS.includes(raw.openIn)) meta.openIn = raw.openIn;
+          meta.cardDock = cleanCardDock(raw.cardDock);
+          const cardW = Number(raw.cardW);
+          if (Number.isFinite(cardW) && cardW >= GEO_MIN.w && cardW <= 4000) meta.cardW = Math.round(cardW);
           for (const k of ["shareDock", "shareGap"]) {
             const v = Number(raw[k]);
             meta[k] = Number.isFinite(v) && v > 0 ? clampShare(v) : 0;
@@ -5621,7 +5683,7 @@ function nativeSidebarSide() {
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, clearOfRect, sideOf, createHoldAction,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
-        clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
+        clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
         allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
@@ -5686,6 +5748,8 @@ function nativeSidebarSide() {
       bookmark: "m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z",
       hover: "M4 4l7.07 16.97 2.51-7.39 7.39-2.51L4 4z",
       dock: "M3 4h18v16H3z M3 14h18",
+      push: "M3 4h5v16H3z M12 12h9 M18 8l4 4-4 4",
+      move: "M12 2v20 M2 12h20 M8 6l4-4 4 4 M8 18l4 4 4-4 M6 8l-4 4 4 4 M18 8l4 4-4 4",
       noteBetween: "M5 3h14 M5 21h14 M5 8h14v8H5z M9 12h6",
       bell: "M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9 M10.3 21a1.94 1.94 0 0 0 3.4 0",
       sliders: "M4 21v-7 M4 10V3 M12 21v-9 M12 8V3 M20 21v-5 M20 12V3 M1 14h6 M9 8h6 M17 16h6",
@@ -6496,8 +6560,10 @@ function nativeSidebarSide() {
         const folder = typeof folderId === "string" ? cleanFolder(folderId) : "";
         if (folder && store.meta.folders.find((f) => f.id === folder)?.collapsed) store.setFolderCollapsed(folder, false);
         const n = store.create("", folder);
-        mode = "edit";
-        store.setMeta({ mode: "edit" });
+        // A new note starts in the chosen default view; an empty note has nothing to read, so "read" and
+        // "last" start in the editor.
+        mode = cleanDefaultView(getPref(PREF.DEFAULT_VIEW, "last")) === "split" ? "split" : "edit";
+        store.setMeta({ mode });
         openNote(n.id);
       }
       function setMode(next) {
@@ -8958,6 +9024,8 @@ function nativeSidebarSide() {
         const slot = adapter.slotKind?.() || "";
         if (slot) return startSlotGesture(e, kind, slot);
         if (!adapter.geoKey) return;
+        // A docked card is full height and flush: only its inner edge resizes it (the width), anything else is a move.
+        if (dockedSide() && kind !== "move" && kind !== (dockedSide() === "left" ? "e" : "w")) return;
         const a = adapter.getArea({});
         const off = hostOffset();
         if (!a || !off) return;
@@ -9012,7 +9080,17 @@ function nativeSidebarSide() {
           }
           return;
         }
-        const rect = g.kind === "move" ? moveGeo(g.start, dx, dy, g.area) : resizeGeo(g.start, g.kind, dx, dy, g.area);
+        let rect = g.kind === "move" ? moveGeo(g.start, dx, dy, g.area) : resizeGeo(g.start, g.kind, dx, dy, g.area);
+        if (cardFree() && g.kind === "move") {
+          // Pushed past an edge = dock there: the card previews as a full-height strip against that edge.
+          const snap = cardSnapSide({ x: g.start.x + dx, w: g.start.w }, g.area.w);
+          if (snap !== (g.snap || "")) {
+            g.snap = snap;
+            if (snap) root.dataset.snap = snap;
+            else delete root.dataset.snap;
+          }
+          if (snap) rect = { x: snap === "left" ? 0 : g.area.w - rect.w, y: 0, w: rect.w, h: g.area.h };
+        }
         g.rect = rect;
         root.style.left = Math.round(g.ox + rect.x) + "px";
         root.style.top = Math.round(g.oy + rect.y) + "px";
@@ -9020,6 +9098,12 @@ function nativeSidebarSide() {
         root.style.height = rect.h + "px";
         const split = rect.w >= 560 ? "side" : "stack";
         if (root.dataset.split !== split) root.dataset.split = split;
+        if (cardFree()) {
+          // The pill follows the card; a docked card being resized keeps the page push in step with its width.
+          const l = Math.round(g.ox + rect.x), t = Math.round(g.oy + rect.y);
+          if (dockedSide() && g.kind !== "move") applyPush(l, rect.w);
+          placePill(l, t, rect.w, rect.h);
+        }
       }
       function moveEvent(e) {
         const g = gesture;
@@ -9030,6 +9114,7 @@ function nativeSidebarSide() {
           if (Math.hypot(dx, dy) < DRAG_SLOP) return;
           g.active = true;
           root.dataset.dragging = "true";
+          holdMove?.cancel?.();
           closeMenu();
         }
         g.next = { dx, dy };
@@ -9068,9 +9153,16 @@ function nativeSidebarSide() {
           }
           return;
         }
+        delete root.dataset.snap;
         if (g.rect) {
-          store.setMeta({ geo: { ...(store.meta.geo || {}), [g.key]: g.rect }, size: "peek" });
+          // A rect read while split view widened the card goes back to the base size (no growing on every switch).
+          const base = cardBaseRect(g.rect, mode === "split" ? widePct() : 1, g.area.w);
+          if (cardFree() && g.kind === "move" && g.snap) store.setMeta({ cardDock: g.snap, cardW: Math.max(GEO_MIN.w, base.w), size: "peek" });
+          else if (cardFree() && dockedSide() && g.kind === "move") store.setMeta({ cardDock: "", geo: { ...(store.meta.geo || {}), [g.key]: base }, size: "peek" });
+          else if (cardFree() && dockedSide()) store.setMeta({ cardW: Math.max(GEO_MIN.w, base.w), size: "peek" });
+          else store.setMeta({ geo: { ...(store.meta.geo || {}), [g.key]: base }, size: "peek" });
           applyState();
+          layout();
         }
       }
       listen(head, "pointerdown", (e) => {
@@ -9351,6 +9443,8 @@ function nativeSidebarSide() {
       function layout() {
         rafLayout = 0;
         if (!isOpen || destroyed || root.hidden) return;
+        // Autohide switched off (or the card undocked / enlarged) while folded away: bring it back.
+        if (collapsed && !hoverMode()) expand(false);
         if (collapsed) {
           placeReveal();
           return;
@@ -9373,7 +9467,7 @@ function nativeSidebarSide() {
           root.style.visibility = "";
           root.style.pointerEvents = "";
         }
-        const a = adapter.getArea({ wide: mode === "split", span: store.meta.size === "span" });
+        const a = adapter.getArea({ wide: mode === "split", span: store.meta.size === "span", dock: store.meta.cardDock, dockW: store.meta.cardW });
         if (!a || a.width < 40 || a.height < 40) return;
         const size = a.fill ? "full" : store.meta.size;
         const off = hostOffset();
@@ -9382,7 +9476,13 @@ function nativeSidebarSide() {
         const b = a.bounds || a;
         const geo = key ? store.meta.geo?.[key] : null;
         let left, top, w, hgt;
-        if (geo && size === "peek" && b.height >= 320 && !a.wideFill) {
+        if (a.docked) {
+          // Docked card: flush against its edge, the full height of the room (width = its own remembered one).
+          left = a.left;
+          top = a.top;
+          w = a.width;
+          hgt = a.height;
+        } else if (geo && size === "peek" && b.height >= 320 && !a.wideFill) {
           const g = clampGeo(geo, { w: b.width, h: b.height });
           left = b.left + g.x;
           top = b.top + g.y;
@@ -9407,12 +9507,19 @@ function nativeSidebarSide() {
         root.style.width = Math.round(w) + "px";
         root.style.height = Math.round(hgt) + "px";
         root.dataset.split = w >= 560 ? "side" : "stack";
+        if (adapter.cardMode) {
+          if (a.docked) root.dataset.docked = a.docked;
+          else delete root.dataset.docked;
+        }
         taAnchY = null;
         readAnchY = null;
         adapter.setSpill?.(!!a.wideFill || !!a.outside);
         root.dataset.slot = adapter.slotKind?.() || "";
         placeReveal();
         applyPush(left, w);
+        placePill(left, top, w, hgt);
+        // Autohide just switched on (or the card was just docked): start counting down to folding away.
+        if (adapter.cardMode && hoverMode() && !graceTimer) armGrace();
       }
       // ---- push page (standalone card): the page makes room instead of being covered ---------------
       const widePct = () => Math.max(1.3, Math.min(3, getPref(PREF.WIDE_PERCENT, 200) / 100));
@@ -9424,9 +9531,12 @@ function nativeSidebarSide() {
         // The push_page pref + peek gate govern the standalone card.
         const panelHosted = !!adapter.pushPanel;
         const between = panelHosted && adapter.placement?.() === "between";
-        const on = panelHosted ? dockMode() !== "pin" || between : !!getPref(PREF.PUSH_PAGE, false) && store.meta.size === "peek";
+        // The standalone card pushes the page only while it is DOCKED to an edge (a loose card never does),
+        // from the side it is docked to, and only at its normal size (the big sizes cover the page).
+        const docked = adapter.cardMode ? cleanCardDock(store.meta.cardDock) : "";
+        const on = panelHosted ? dockMode() !== "pin" || between : !!getPref(PREF.PUSH_PAGE, false) && store.meta.size === "peek" && (!adapter.cardMode || !!docked);
         const want = !!adapter.push && on;
-        if (want) pushed = adapter.push({ left, width: w }) || false;
+        if (want) pushed = adapter.push({ left, width: w, side: docked }) || false;
         else if (pushed || adapter.push) {
           adapter.unpush?.();
           pushed = false;
@@ -9446,18 +9556,162 @@ function nativeSidebarSide() {
           else delete root.dataset.bgalazkaTripleSlot;
         }
       }
+      // ---- the card's pill: the same controls as a Zentral panel's pill ---------------------------------
+      // Push page (docked only), move / resize (click: all-side handles, drag: move and dock at an edge, hold:
+      // dock / detach), larger, autohide (docked only), close. A separate element beside the card (the card
+      // clips its own children), placed on the side that has room.
+      const cardFree = () => !!adapter.cardMode && adapter.geoKey === "float";
+      let pillEl = null;
+      const pillBtn = {};
+      let holdMove = null;
+      function dockedSide() {
+        return cardFree() ? cleanCardDock(store.meta.cardDock) : "";
+      }
+      // Dock to the nearer edge, or detach into a floating card of the same width.
+      function toggleDockEdge() {
+        if (!cardFree()) return;
+        const key = adapter.geoKey;
+        const v = adapter.view();
+        const r = root.getBoundingClientRect();
+        const base = cardBaseRect({ x: r.left - v.left, y: r.top - v.top, w: r.width, h: r.height }, mode === "split" ? widePct() : 1, v.width);
+        if (dockedSide()) {
+          // Detach: the width it had at the edge, 80% of the height, centered (a detach never resizes it sideways).
+          const h2 = Math.max(GEO_MIN.h, Math.round(v.height * 0.8));
+          const rect = clampGeo({ x: base.x, y: Math.round((v.height - h2) / 2), w: base.w, h: h2 }, { w: v.width, h: v.height });
+          store.setMeta({ cardDock: "", geo: { ...(store.meta.geo || {}), [key]: rect }, size: "peek" });
+        } else {
+          const side = r.left + r.width / 2 > v.left + v.width / 2 ? "right" : "left";
+          store.setMeta({ cardDock: side, cardW: base.w, size: "peek" });
+        }
+        applyState();
+        layout();
+      }
+      function toggleHandles() {
+        if (root.dataset.handles === "all") delete root.dataset.handles;
+        else root.dataset.handles = "all";
+        syncPill();
+      }
+      function buildPill() {
+        if (pillEl || !cardFree() || destroyed) return;
+        pillEl = h("div", { class: "zentral-notes-pill", role: "toolbar", "aria-label": "Notes panel controls" });
+        pillEl.style.position = adapter.position;
+        const mk = (id, ic, title) => {
+          const b = iconButton(ic, title, "zn-pill-btn");
+          b.dataset.id = id;
+          pillBtn[id] = b;
+          pillEl.append(b);
+          return b;
+        };
+        const push = mk("push", "push", "Push the page aside");
+        const move = mk("move", "move", "Move / resize");
+        const size = mk("size", "maximize", "Fill the whole area");
+        const hide = mk("hide", "hover", "Autohide");
+        const close2 = mk("close", "x", "Close notes");
+        listen(push, "click", () => {
+          if (!dockedSide()) return flash("Page push needs the card docked to an edge: drag it past the edge or hold the move button", 3500);
+          setPref(PREF.PUSH_PAGE, !getPref(PREF.PUSH_PAGE, false));
+          syncPill();
+          scheduleLayout();
+        });
+        listen(hide, "click", () => {
+          if (!dockedSide()) return flash("Autohide needs the card docked to an edge: drag it past the edge or hold the move button", 3500);
+          setPref(PREF.CARD_AUTOHIDE, !getPref(PREF.CARD_AUTOHIDE, false));
+          syncPill();
+          scheduleLayout();
+          armGrace();
+        });
+        listen(size, "click", () => toggleSpan());
+        listen(close2, "click", () => close());
+        // The move button: a press that moves is a drag (docks at an edge), a tap toggles the handles, a hold docks / detaches.
+        holdMove = holdButton(move, () => { if (!swallowClick) toggleHandles(); }, toggleDockEdge);
+        listen(move, "pointerdown", (e) => {
+          swallowClick = false; // a title-bar drag earlier must not swallow this tap
+          if (e.button === undefined || e.button === 0) startGesture(e, "move");
+        });
+        for (const ev of ["pointermove"]) listen(pillEl, ev, moveEvent);
+        for (const ev of ["pointerup", "pointercancel"]) {
+          listen(pillEl, ev, () => {
+            endGesture();
+            window.setTimeout(() => { swallowClick = false; }, 0);
+          });
+        }
+        listen(pillEl, "mouseenter", () => {
+          ptrInside = true;
+          window.clearTimeout(graceTimer);
+          graceTimer = 0;
+        });
+        listen(pillEl, "mouseleave", () => {
+          ptrInside = false;
+          armGrace();
+        });
+        (adapter.host || document.documentElement).appendChild(pillEl);
+        syncPill();
+      }
+      function syncPill() {
+        if (!pillEl) return;
+        const docked = dockedSide();
+        const big = store.meta.size !== "peek";
+        const set = (id, { on = false, off = false, title }) => {
+          const b = pillBtn[id];
+          if (!b) return;
+          b.classList.toggle("is-on", on);
+          b.classList.toggle("zn-unavailable", off);
+          b.setAttribute("aria-pressed", on ? "true" : "false");
+          b.setAttribute("aria-disabled", off ? "true" : "false");
+          b.title = title;
+          b.setAttribute("aria-label", title);
+        };
+        set("push", { on: !!docked && !!getPref(PREF.PUSH_PAGE, false), off: !docked, title: docked ? "Click: toggle page push" : "Page push is unavailable while the card is detached. Dock it first (drag past an edge, or hold the move button)." });
+        set("move", { on: root.dataset.handles === "all", title: "Move / resize: click toggles all-side handles; drag moves the card (past an edge it docks); hold to dock / detach" });
+        set("size", { on: big, title: big ? "Back to the normal size" : "Fill the whole area" });
+        pillBtn.size.replaceChildren(icon(big ? "minimize" : "maximize"));
+        set("hide", { on: !!docked && !!getPref(PREF.CARD_AUTOHIDE, false), off: !docked, title: docked ? "Autohide: hide at the edge, show on hover" : "Autohide is unavailable while the card is detached. Dock it first." });
+        set("close", { title: "Close notes (Esc)" });
+      }
+      // Beside the card, on the side that has room (docked: always on the page side), centered on its height.
+      function placePill(left, top, w, hgt) {
+        if (!cardFree() || !isOpen || destroyed || collapsed) {
+          if (pillEl) pillEl.hidden = true;
+          return;
+        }
+        buildPill();
+        if (!pillEl) return;
+        pillEl.hidden = false;
+        syncPill();
+        const v = adapter.view();
+        const pw = 34, ph = Math.min(pillEl.scrollHeight || 190, v.height - 8);
+        const docked = dockedSide();
+        const roomRight = v.left + v.width - (left + w), roomLeft = left - v.left;
+        const side = docked ? (docked === "right" ? "left" : "right") : roomRight >= roomLeft ? "right" : "left";
+        const fits = side === "right" ? roomRight >= pw + 2 : roomLeft >= pw + 2;
+        let px = side === "right" ? left + w + 2 : left - pw - 2;
+        if (!fits) px = side === "right" ? left + w - pw - 4 : left + 4; // no room outside: overlay the card's own edge
+        const py = Math.max(v.top + 4, Math.min(v.top + v.height - ph - 4, top + hgt / 2 - ph / 2));
+        pillEl.style.left = Math.round(px) + "px";
+        pillEl.style.top = Math.round(py) + "px";
+        pillEl.dataset.side = side;
+      }
+      function dropPill() {
+        holdMove?.cancel?.();
+        pillEl?.remove();
+        pillEl = null;
+        for (const k of Object.keys(pillBtn)) delete pillBtn[k];
+      }
       // ---- hover mode (V4-R2, replaces tuck) --------------------------------------------------------
       // Collapsed = the sheet is hidden and a 4-6 px strip is a REAL band of the layout (the panel gave up
       // that height), positioned from the live band every time, never from a copy of the sheet's geometry.
       // Opening waits an open delay; folding away waits a grace of at least 600 ms and never happens while
       // focus is inside, a menu or dialog is open, a drag runs or the pointer is down.
-      const hoverMode = () => !!adapter.pushPanel && dockMode() === "hover";
+      // Autohide: a panel-hosted sheet in hover mode, or a card docked to an edge with card_autohide on.
+      const cardHides = () => !!adapter.cardMode && !!cleanCardDock(store.meta.cardDock) && !!getPref(PREF.CARD_AUTOHIDE, false) && store.meta.size !== "span";
+      const hoverMode = () => (!!adapter.pushPanel && dockMode() === "hover") || cardHides();
       const timing = () => hoverTiming({ open: getPref(PREF.REVEAL_DELAY, 100), grace: HOVER_CLOSE_GRACE_MS });
       function placeReveal() {
         if (!revealEl) return;
-        const band = adapter.bandRect?.();
+        const band = adapter.cardMode ? adapter.edgeBand(cleanCardDock(store.meta.cardDock), hoverStripPx(getPref(PREF.REVEAL_HEIGHT, 10))) : adapter.bandRect?.();
         const off = hostOffset();
         if (!band || !off) return;
+        if (adapter.cardMode) revealEl.dataset.edge = cleanCardDock(store.meta.cardDock);
         revealEl.style.position = adapter.position;
         revealEl.style.left = Math.round(band.left - off.ox) + "px";
         revealEl.style.top = Math.round(band.top - off.oy) + "px";
@@ -9488,6 +9742,7 @@ function nativeSidebarSide() {
           if (root.contains(document.activeElement)) document.activeElement.blur();
         } catch (_) {}
         root.dataset.collapsed = "true";
+        if (pillEl) pillEl.hidden = true;
         revealEl = h("div", { class: "zentral-notes-reveal", "aria-hidden": "true" });
         revealEl.addEventListener("mouseenter", () => {
           window.clearTimeout(openTimer);
@@ -9582,19 +9837,19 @@ function nativeSidebarSide() {
         if (adapter.ignoreOutside?.(target, path)) return true;
         const nodes = path && path.length ? path : [];
         for (const el of nodes) {
-          if (el?.classList?.contains?.("zentral-notes-sheet") || el?.classList?.contains?.("zentral-notes-btn")) return true;
+          if (el?.classList?.contains?.("zentral-notes-sheet") || el?.classList?.contains?.("zentral-notes-btn") || el?.classList?.contains?.("zentral-notes-pill")) return true;
           if (el?.id && (EXEMPT_IDS.includes(el.id) || el.id.includes("sine"))) return true;
         }
         if (target?.closest) {
           for (const id of EXEMPT_IDS) if (target.closest("#" + id)) return true;
-          if (target.closest(".zentral-notes-btn") || target.closest(".zentral-notes-sheet")) return true;
+          if (target.closest(".zentral-notes-btn") || target.closest(".zentral-notes-sheet") || target.closest(".zentral-notes-pill")) return true;
         }
         return false;
       }
       const onOutsidePress = (e) => {
         if (!isOpen || destroyed || gesture) return;
         const path = e.composedPath ? e.composedPath() : [];
-        if (root.contains(e.target) || path.includes(root)) return;
+        if (root.contains(e.target) || path.includes(root) || (pillEl && (pillEl.contains(e.target) || path.includes(pillEl)))) return;
         // A press on the Notes button / browser chrome is not the user moving to a web field.
         if (!isExempt(e.target, path)) outsideClaim = true;
         drop();
@@ -9662,6 +9917,7 @@ function nativeSidebarSide() {
         if (id) openNote(id);
         else newNote();
         layout();
+        if (adapter.cardMode && hoverMode()) armGrace();
       }
       function close() {
         if (!isOpen) return;
@@ -9669,6 +9925,7 @@ function nativeSidebarSide() {
         collapsed = false;
         delete root.dataset.collapsed;
         dropReveal();
+        dropPill();
         window.clearTimeout(graceTimer);
         graceTimer = 0;
         ptrDown = false;
@@ -9720,6 +9977,7 @@ function nativeSidebarSide() {
         window.removeEventListener("mousedown", onPress, true);
         window.removeEventListener("mouseup", onRelease, true);
         dropReveal();
+        dropPill();
         root.remove();
       }
       // A read option (blank lines, line breaks, Setext) changed: draw the read pane again.
@@ -9752,6 +10010,9 @@ function nativeSidebarSide() {
         openNoteById: (id) => {
           if (!isOpen || destroyed || !store.get(id)) return false;
           outsideClaim = false;
+          // Opened from outside (tab bar, reminder): the chosen default view applies even if Notes is already open.
+          const wanted = startMode(getPref(PREF.DEFAULT_VIEW, "last"), store.meta.mode);
+          if (wanted !== store.meta.mode) store.setMeta({ mode: wanted });
           openNote(id);
           return true;
         },
@@ -10075,7 +10336,26 @@ function nativeSidebarSide() {
           root.dataset.host = docked() ? "dock" : "float";
           if (root.parentNode !== document.documentElement) document.documentElement.appendChild(root);
         },
-        getArea({ wide = false, span = false } = {}) {
+        // True for the standalone card: it docks to a window edge like a Zentral panel (see cardView & co).
+        cardMode: true,
+        // The room the card may use now: below the top bar, beside the native sidebar (the room it is
+        // moved, resized and docked in).
+        view() {
+          const tabbox = document.getElementById("tabbrowser-tabbox")?.getBoundingClientRect();
+          return cardView({
+            vw: window.innerWidth,
+            vh: window.innerHeight,
+            contentTop: tabbox && tabbox.height > 100 ? tabbox.top : 0,
+            sidebar: sidebarRect(),
+            avoid: avoidSidebar(),
+          });
+        },
+        // The thin band at a docked edge where the hidden (autohide) card is revealed again.
+        edgeBand(side, px) {
+          const v = this.view();
+          return { left: side === "right" ? v.left + v.width - px : v.left, top: v.top, width: px, height: v.height };
+        },
+        getArea({ wide = false, span = false, dock = "", dockW = 0 } = {}) {
           const sr = sidebarRect();
           if (docked()) {
             if (sr) {
@@ -10093,20 +10373,22 @@ function nativeSidebarSide() {
               };
             }
           }
-          // Standalone: keep out of the native sidebar's space and start on the opposite side (the sidebar
-          // used to cover the card and catch its clicks). The whole window is the area it may be moved in.
-          const vw = window.innerWidth, vh = window.innerHeight;
-          let view = { left: 0, top: 0, width: vw, height: vh };
-          let side = "right";
-          if (avoidSidebar() && sr) {
-            view = keepClear(view, [sr], vh);
-            side = sideOf(sr, vw) === "right" ? "left" : "right";
-          }
+          // Standalone: keep below the top bar and out of the native sidebar's space (the sidebar used to
+          // cover the card and catch its clicks), and start on the side opposite the sidebar. The room it
+          // may be moved in is the whole window minus those two.
+          const view = this.view();
+          const side = avoidSidebar() && sr ? (sideOf(sr, window.innerWidth) === "right" ? "left" : "right") : "right";
           if (span) return { left: view.left, top: view.top, width: view.width, height: view.height, anchor: "top", bounds: view };
+          // Docked to an edge: full height, flush, its own remembered width. Split view widens it as well.
+          if (cleanCardDock(dock)) {
+            const base = dockW > 0 ? dockW : CARD_DEFAULT_W;
+            const r = cardDockRect({ side: dock, w: wide ? Math.round(base * widePercent()) : base, view });
+            return { ...r, anchor: "top", bounds: view, docked: dock };
+          }
           // Split view widens the card so the editor and the preview sit side by side.
-          const w = Math.min(wide ? Math.round(460 * widePercent()) : 460, view.width - 20);
+          const w = Math.min(wide ? Math.round(CARD_DEFAULT_W * widePercent()) : CARD_DEFAULT_W, view.width - 20);
           const left = side === "right" ? view.left + view.width - w - 4 : view.left + 4;
-          return { left, top: 4, width: w, height: vh - 8, anchor: "bottom", bounds: view };
+          return { left, top: view.top + 4, width: w, height: view.height - 8, anchor: "bottom", bounds: view };
         },
         watch(cb) {
           const ro = new ResizeObserver(cb);
@@ -10122,14 +10404,18 @@ function nativeSidebarSide() {
         setActive: (on) => onActive(on),
         // Push page: the page area gets a margin on the card's side while the card is open. Returns true
         // when it pushed. The margin lives in one root attribute + one variable, both removed again.
-        push({ left, width }) {
+        push({ left, width, side = "" }) {
           const rootEl = document.documentElement;
           const area = document.getElementById("tabbrowser-tabbox") || document.getElementById("appcontent");
           if (!area) return false;
           rootEl.removeAttribute("zentral-notes-push");
           const r = area.getBoundingClientRect();
-          const amount = pushAmount({ left, width }, { left: r.left, right: r.right });
-          if (!amount) return false;
+          // A docked card pushes from ITS side; a loose one (old callers) from the side it is nearer to.
+          const amount = side ? cardPush({ side, left, width }, { left: r.left, right: r.right }) : pushAmount({ left, width }, { left: r.left, right: r.right });
+          if (!amount) {
+            rootEl.style.removeProperty("--zentral-notes-push");
+            return false;
+          }
           rootEl.style.setProperty("--zentral-notes-push", amount.px + "px");
           rootEl.setAttribute("zentral-notes-push", amount.side);
           return true;
@@ -10512,19 +10798,10 @@ function nativeSidebarSide() {
         }
       }
       onCleanup(() => { try { soundCtx?.close?.(); } catch (_) {} soundCtx = null; });
-      // Where a click in Zen's own sidebar folder opens a note: the Zentral panel when one is showing (the Notes sheet
-      // of that panel), otherwise the standalone card. Never a hidden panel.
-      function zenTarget() {
-        if (!panelsHidden()) {
-          const shown = [...bindings.values()].filter((x) => x.visible());
-          const b = (lastUsed && shown.includes(lastUsed) && lastUsed) || shown.find((x) => x.isOpen()) || (document.getElementById("zen-app-panel-root")?.hasAttribute("open") ? shown.find((x) => x.kind === "primary") : null);
-          if (b) return b;
-        }
-        return ensureFloating();
-      }
+      // Notes from outside the panel (Zen's sidebar folder, a reminder): the Zentral panel (brought out of
+      // autohide when it is hidden), otherwise the standalone card. `zenTab` is kept for the callers.
       function openReminderNote(id, { zenTab = false } = {}) {
-        const b = zenTab ? zenTarget() : pickBinding();
-        return Promise.resolve(b.open()).then(() => sheetOf(b)?.openNoteById?.(id)).catch(warn);
+        return showNotes("").then((h) => sheetOf(h)?.openNoteById?.(id)).catch(warn);
       }
       function showReminders(list) {
         if (disposed) return;
@@ -10919,8 +11196,7 @@ function nativeSidebarSide() {
         const p = key === "root" ? { kind: "new", folder: "" } : key.startsWith("new:") ? { kind: "new", folder: cleanFolder(key.slice(4)) } : parseZenUrl(tabUrl(tab));
         if (p?.kind !== "new") return null;
         const folder = p.folder || (zenMode() === "selected" ? TABBAR_FOLDER : "");
-        const b = zenTarget();
-        return Promise.resolve(b.open()).then(() => sheetOf(b)?.newNote?.(folder)).catch(warn);
+        return showNotes("").then((h) => sheetOf(h)?.newNote?.(folder)).catch(warn);
       }
       const onZenMouse = (ev) => {
         if (disposed || zen.dead || zenMode() === "off" || (ev.button !== 0 && ev.button !== 1)) return;
@@ -11067,6 +11343,10 @@ function nativeSidebarSide() {
       const bindings = new Map(); // bar element -> binding
       let floating = null;
       let lastUsed = null;
+      // True while the card is open only because a panel could not be brought out of autohide (the panel code
+      // did not answer): the card is then left alone instead of being moved into the hidden panel again.
+      let cardFallback = false;
+      let adopting = false;
       // Which kind of bar Notes was open on until the USER closed it. Switching to another Zentral panel
       // rebuilds bars (Triple View's second panel gets a new bar), which closes the old sheet without the
       // user asking: this remembers that Notes should come back on the new bar of the same kind.
@@ -11104,13 +11384,12 @@ function nativeSidebarSide() {
           sidebarBtn.appendChild(icon("note", 14));
           sidebarBtn.addEventListener("click", (e) => {
             e.stopPropagation();
-            Promise.resolve(ensureFloating().toggle()).catch(warn);
+            Promise.resolve(toggleFromShortcut()).catch(warn);
           });
           sidebarBtn.addEventListener("contextmenu", (e) => {
             e.preventDefault();
             e.stopPropagation();
-            const b = ensureFloating();
-            Promise.resolve(b.isOpen() ? true : b.open()).then(() => sheetOf(b)?.quickCaptureToday?.()).catch(warn);
+            showNotes("").then((h) => sheetOf(h)?.quickCaptureToday?.()).catch(warn);
           });
         }
         if (sidebarBtn.parentNode !== host) host.appendChild(sidebarBtn);
@@ -11142,10 +11421,14 @@ function nativeSidebarSide() {
           sheet: () => sheet,
           isOpen: () => !!sheet?.isOpen(),
           visible: () => el.isConnected && !panelsHidden() && el.getClientRects().length > 0,
-          // Triple View: the top bar's Notes is the free-floating window; the bottom bar's goes between the panels.
-          toFloating: () => kind === "primary" && document.documentElement.hasAttribute("bgalazka-triple-view"),
-          open() {
-            if (binding.toFloating()) return ensureFloating().open();
+          // The bar exists on screen or slid away with an autohidden panel (a hidden panel keeps its bars).
+          present: () => el.isConnected && el.getClientRects().length > 0,
+          // A request from this bar: it lands on the host chooseHost picks (Triple View: the bar between the
+          // cards for both bars), brings an autohidden panel out first, and moves Notes away from any other
+          // bar or the card. Resolves to the binding (or the card) that now shows the sheet.
+          open: () => openFrom(kind),
+          // Open the sheet on THIS bar (called by openFrom once the host is decided).
+          openHere() {
             lastUsed = binding;
             followKind = kind;
             followTries = 0;
@@ -11193,7 +11476,10 @@ function nativeSidebarSide() {
             }
           },
           toggle() {
-            if (binding.toFloating()) return ensureFloating().toggle();
+            const host = routeFor(kind).host;
+            if (host) return host.isOpen() ? host.close() : binding.open();
+            // No panel host (Triple View still loading): the card is what this bar's button shows.
+            if (floating?.isOpen()) return floating.close();
             return binding.isOpen() ? binding.close() : binding.open();
           },
           destroy() {
@@ -11220,12 +11506,100 @@ function nativeSidebarSide() {
         button.addEventListener("contextmenu", (e) => {
           e.preventDefault();
           e.stopPropagation();
-          const target = binding.toFloating() ? ensureFloating() : binding;
-          Promise.resolve(target.isOpen() ? true : target.open()).then(() => sheetOf(target)?.quickCaptureToday?.()).catch(warn);
+          showNotes(kind).then((h) => sheetOf(h)?.quickCaptureToday?.()).catch(warn);
         });
         // The bar's own drag handlers must not start from this button.
         button.addEventListener("mousedown", (e) => e.stopPropagation());
         return binding;
+      }
+      // ---- where a request lands (S6 W5) ---------------------------------------------------
+      // A Zentral panel always wins over the free-floating card: Notes opens INSIDE the panel (main panel, between
+      // the cards of Triple View, Super Pin) and moves to the bar that was asked for. The card is only the
+      // fallback while no panel exists. The panel code is told through one document event (the same channel
+      // the push reserve uses), never by touching its DOM.
+      function focusedKind() {
+        const active = document.activeElement;
+        if (!active || panelsHidden()) return "";
+        for (const b of bindings.values()) {
+          if (b.el.contains(active) || b.adapter.host?.contains(active)) return b.kind;
+        }
+        return "";
+      }
+      function routeFor(want = "") {
+        const present = [...bindings.values()].filter((b) => b.present());
+        const kind = chooseHost({
+          panelOpen: panelRootOpen(),
+          triple: document.documentElement.hasAttribute("bgalazka-triple-view"),
+          kinds: present.map((b) => b.kind),
+          want,
+          focused: focusedKind(),
+          last: lastUsed && present.includes(lastUsed) ? lastUsed.kind : "",
+        });
+        return { kind, host: kind ? present.find((b) => b.kind === kind) || null : null };
+      }
+      // Autohide has slid the panel away: ask it to come back (hover.js listens), then wait a moment for it.
+      // False when it did not answer; the caller then falls back to the card instead of a sheet nobody can see.
+      async function ensurePanelShown() {
+        if (!panelsHidden()) return true;
+        try {
+          document.dispatchEvent(new Event("zentral-notes-request-reveal"));
+        } catch (_) {}
+        for (let i = 0; i < 12 && panelsHidden() && !disposed; i++) await new Promise((r) => window.setTimeout(r, 50));
+        return !panelsHidden();
+      }
+      // One Notes at a time: opening it on a bar (or as the card) closes it everywhere else.
+      function closeOthers(host) {
+        for (const b of bindings.values()) if (b !== host && b.isOpen()) b.close();
+        if (host !== floating && floating?.isOpen()) floating.close();
+      }
+      async function openCard(forced = false) {
+        const f = ensureFloating();
+        cardFallback = forced;
+        closeOthers(f);
+        await f.open();
+        return f;
+      }
+      async function openFrom(want = "") {
+        let route = routeFor(want);
+        if (!route.host) return openCard();
+        if (panelsHidden()) {
+          const shown = await ensurePanelShown();
+          if (disposed) return null;
+          if (!shown) return openCard(true);
+          route = routeFor(want); // the bars may have changed while the panel slid in
+          if (!route.host) return openCard();
+        }
+        const host = route.host;
+        closeOthers(host);
+        await host.openHere();
+        return host;
+      }
+      // Open (or keep open) and say where it is now.
+      async function showNotes(want = "") {
+        const host = routeFor(want).host;
+        if (host?.isOpen()) return host;
+        if (!host && floating?.isOpen()) return floating;
+        return openFrom(want);
+      }
+      // The card must never stay open next to a panel: when a panel (or its bar) appears, Notes moves into it.
+      function adoptCard() {
+        if (adopting || cardFallback || disposed || !floating?.isOpen() || !routeFor("").host) return;
+        adopting = true;
+        Promise.resolve(openFrom(""))
+          .catch(warn)
+          .then(() => {
+            adopting = false;
+          });
+      }
+      // A bar whose request lands on another bar (Triple View's top bar) shows that bar's state.
+      function syncRedirectButtons() {
+        for (const b of bindings.values()) {
+          const host = routeFor(b.kind).host;
+          if (!host || host === b) continue;
+          const on = host.isOpen();
+          b.button.dataset.active = on ? "true" : "false";
+          b.button.setAttribute("aria-pressed", on ? "true" : "false");
+        }
       }
       function discoverBars() {
         const out = [];
@@ -11270,6 +11644,7 @@ function nativeSidebarSide() {
           }
         }
         syncAllReveals(); // after the loop: which bar owns the strip depends on every bar being known
+        adoptCard();
         maybeRestore();
         maybeFollow();
       }
@@ -11284,7 +11659,6 @@ function nativeSidebarSide() {
         const visible = [...bindings.values()].filter((b) => b.visible());
         const kind = followTarget({ want: followKind, kinds: visible.map((b) => b.kind), triple: document.documentElement.hasAttribute("bgalazka-triple-view") });
         const target = kind && visible.find((b) => b.kind === kind);
-        if (target?.toFloating?.()) return; // the top bar of Triple View is the floating window: never auto-opened
         if (target) {
           followTries = 0;
           Promise.resolve(target.open()).catch(warn);
@@ -11408,19 +11782,10 @@ function nativeSidebarSide() {
       }
       function syncAllReveals() {
         for (const b of bindings.values()) b.syncReveal();
+        syncRedirectButtons();
       }
       function pickBinding() {
-        const active = document.activeElement;
-        if (active && !panelsHidden()) {
-          for (const b of bindings.values()) {
-            const host = b.adapter.host;
-            if (b.el.contains(active) || host?.contains(active)) return b;
-          }
-        }
-        if (lastUsed && [...bindings.values()].includes(lastUsed) && lastUsed.visible()) return lastUsed;
-        const primary = [...bindings.values()].find((b) => b.kind === "primary" && b.visible());
-        if (primary && document.getElementById("zen-app-panel-root")?.hasAttribute("open")) return primary;
-        return ensureFloating();
+        return routeFor("").host || ensureFloating();
       }
       function ensureFloating() {
         if (!floating) {
@@ -11430,6 +11795,7 @@ function nativeSidebarSide() {
             avoidSidebar: () => prefBool(PREF.AVOID_SIDEBAR, true),
             isTrigger: (t) => !!sidebarBtn && (sidebarBtn === t || sidebarBtn.contains?.(t)),
             onActive: (on) => {
+              if (!on) cardFallback = false;
               syncAllReveals();
               if (sidebarBtn) {
                 sidebarBtn.dataset.active = on ? "true" : "false";
@@ -11534,10 +11900,7 @@ function nativeSidebarSide() {
         store.setMeta({ lastNoteId: id, recent: pushRecent(store.meta.recent, id) });
         await store.flush();
         toast("Added to \u201c" + (titleOf(store.get(id).body) || "Untitled") + "\u201d");
-        if (prefBool(PREF.CAPTURE_OPEN, false)) {
-          const b = pickBinding();
-          Promise.resolve(b.open()).catch(warn);
-        }
+        if (prefBool(PREF.CAPTURE_OPEN, false)) showNotes("").catch(warn);
         return id;
       }
       async function captureFromShortcut(kind) {
@@ -11590,14 +11953,8 @@ function nativeSidebarSide() {
       });
       function runGlobal(id) {
         if (id === "captureQuick" || id === "captureInbox" || id === "capturePage") return captureFromShortcut(id).catch(warn);
-        if (id === "openFloating") {
-          const f = ensureFloating();
-          return Promise.resolve(f.isOpen() ? f.close() : f.open());
-        }
-        if (id === "quickNew") {
-          const b = pickBinding();
-          return Promise.resolve(b.open()).then(() => sheetOf(b)?.newNote?.());
-        }
+        if (id === "openFloating") return toggleFromShortcut(); // the card only when no panel exists
+        if (id === "quickNew") return showNotes("").then((h) => sheetOf(h)?.newNote?.());
       }
       const onKey = (e) => {
         if (disposed || e.repeat || e.isComposing || !enabledNow()) return;

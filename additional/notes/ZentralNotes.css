@@ -1027,3 +1027,47 @@
 .zentral-notes-sheet .zn-linkcheck-row { flex-wrap: wrap; }
 .zentral-notes-sheet .zn-linkcheck-row .zn-labels-name { max-width: 18em; flex: 1 1 10em; }
 .zentral-notes-sheet .zn-labels-actions { display: inline-flex; gap: 4px; margin-inline-start: auto; }
+
+/* ---- the standalone card as a panel: docked edge, snap preview, pill, handles -------------------- */
+/* Docked: flush against the edge it hugs, no rounded corners on that side, only the inner edge resizes. */
+.zentral-notes-sheet[data-docked="left"] { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.zentral-notes-sheet[data-docked="right"] { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.zentral-notes-sheet[data-docked="left"] .zn-rz:not([data-h="e"]),
+.zentral-notes-sheet[data-docked="right"] .zn-rz:not([data-h="w"]) { display: none; }
+.zentral-notes-sheet[data-docked] .zn-rz[data-h="e"],
+.zentral-notes-sheet[data-docked] .zn-rz[data-h="w"] { top: 0; bottom: 0; width: 8px; }
+/* The move / resize button turns the grips into visible handles on every side. */
+.zentral-notes-sheet[data-handles="all"] .zn-rz { background: color-mix(in srgb, var(--zn-accent) 45%, transparent); }
+.zentral-notes-sheet[data-handles="all"] .zn-rz[data-h="n"], .zentral-notes-sheet[data-handles="all"] .zn-rz[data-h="s"] { height: 7px; }
+.zentral-notes-sheet[data-handles="all"] .zn-rz[data-h="e"], .zentral-notes-sheet[data-handles="all"] .zn-rz[data-h="w"] { width: 7px; }
+/* Dragged past a window edge: the card previews as a strip against that edge and docks on release. */
+.zentral-notes-sheet[data-snap="left"] { box-shadow: inset 4px 0 0 var(--zn-accent), 0 0 0 1px var(--zn-accent); }
+.zentral-notes-sheet[data-snap="right"] { box-shadow: inset -4px 0 0 var(--zn-accent), 0 0 0 1px var(--zn-accent); }
+/* The pill: a vertical strip of controls beside the card, like the Zentral panel's own. */
+.zentral-notes-pill {
+  z-index: 2147483644;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-sizing: border-box;
+  width: 34px;
+  padding: 3px;
+  border-radius: 12px;
+  color: var(--bgalazka-look-text, #e9e9f0);
+  background: color-mix(in srgb, var(--bgalazka-look-toolbar-surface, var(--bgalazka-look-surface, #1e1e24)) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bgalazka-look-text, #e9e9f0) 14%, transparent);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+  opacity: 0.55;
+  transition: opacity 0.12s ease;
+}
+.zentral-notes-pill:hover, .zentral-notes-pill:focus-within { opacity: 1; }
+.zentral-notes-pill[hidden] { display: none; }
+.zentral-notes-pill .zn-pill-btn { width: 28px; height: 28px; border-radius: 8px; }
+.zentral-notes-pill .zn-pill-btn.is-on { background: color-mix(in srgb, var(--zen-primary-color, #83a5ff) 30%, transparent); }
+.zentral-notes-pill .zn-pill-btn.zn-unavailable { opacity: 0.38; }
+/* The hidden (autohide) card's strip at a window edge stands upright. */
+.zentral-notes-reveal[data-edge] { min-height: 0; min-width: 8px; }
+.zentral-notes-reveal[data-edge]::before { top: 0; bottom: 0; height: auto; width: 12px; }
+.zentral-notes-reveal[data-edge="right"]::before { left: -12px; right: auto; }
+.zentral-notes-reveal[data-edge="left"]::before { right: -12px; left: auto; }
+.zentral-notes-reveal[data-edge]::after { width: 3px; height: 36px; margin: -18px 0 0 -1.5px; }

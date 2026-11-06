@@ -158,7 +158,7 @@ test("W9 default_view: last keeps the stored mode, others force it, junk = last;
   assert.deepEqual(item.options.map((o) => o.value), Array.from(c.DEFAULT_VIEWS));
   const js = fs.readFileSync(path.join(root, "additional/notes/ZentralNotes.uc.js"), "utf8");
   assert.match(js, /id: "defaultView".*kind: "choice", def: "last"/);
-  assert.equal((js.match(/startMode\(getPref\(PREF\.DEFAULT_VIEW, "last"\), store\.meta\.mode\)/g) || []).length, 2, "both sheet-open paths");
+  assert.equal((js.match(/startMode\(getPref\(PREF\.DEFAULT_VIEW, "last"\), store\.meta\.mode\)/g) || []).length, 3, "both sheet-open paths + a note opened from outside (tab bar, reminder)");
   const man = JSON.parse(fs.readFileSync(path.join(root, "additional/notes/standalone.json"), "utf8"));
   assert.ok(JSON.stringify(man).includes("notes.default_view"));
 });
