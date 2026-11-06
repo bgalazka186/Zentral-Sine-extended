@@ -1040,34 +1040,114 @@
 .zentral-notes-sheet[data-handles="all"] .zn-rz { background: color-mix(in srgb, var(--zn-accent) 45%, transparent); }
 .zentral-notes-sheet[data-handles="all"] .zn-rz[data-h="n"], .zentral-notes-sheet[data-handles="all"] .zn-rz[data-h="s"] { height: 7px; }
 .zentral-notes-sheet[data-handles="all"] .zn-rz[data-h="e"], .zentral-notes-sheet[data-handles="all"] .zn-rz[data-h="w"] { width: 7px; }
-/* Dragged past a window edge: the card previews as a strip against that edge and docks on release. */
-.zentral-notes-sheet[data-snap="left"] { box-shadow: inset 4px 0 0 var(--zn-accent), 0 0 0 1px var(--zn-accent); }
-.zentral-notes-sheet[data-snap="right"] { box-shadow: inset -4px 0 0 var(--zn-accent), 0 0 0 1px var(--zn-accent); }
-/* The pill: a vertical strip of controls beside the card, like the Zentral panel's own. */
+/* Dragged far enough past an edge: a dashed strip shows where the card docks on release (the panel's own ghost).
+   The shield keeps the pointer events while a gesture runs over a web page. */
+.zentral-notes-ghost {
+  position: fixed;
+  display: none;
+  pointer-events: none;
+  z-index: 2147483642;
+  box-sizing: border-box;
+  border: 2px dashed var(--zen-primary-color, #8495ef);
+  border-radius: var(--zen-border-radius, 10px);
+  background: color-mix(in srgb, var(--zen-primary-color, #8495ef) 20%, transparent);
+}
+.zentral-notes-shield { position: fixed; inset: 0; display: none; z-index: 2147483643; background: transparent; }
+.zentral-notes-ghost[data-active="true"], .zentral-notes-shield[data-active="true"] { display: block; }
+/* Sideways grips are wider than the 5 px default so they are easy to hit (the card clips its own children). */
+.zentral-notes-sheet .zn-rz[data-h="e"], .zentral-notes-sheet .zn-rz[data-h="w"] { width: 9px; }
+.zentral-notes-sheet .zn-rz[data-h="n"], .zentral-notes-sheet .zn-rz[data-h="s"] { height: 8px; }
+/* The pill: the Zentral panel's pill (one surface for the actions, one for close, the same colours and
+   opacity, the idle mini dot). It is a manual popover while the card is in the top layer, so it is never
+   covered by the card. */
 .zentral-notes-pill {
-  z-index: 2147483644;
+  z-index: 2147483646;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 4px;
   box-sizing: border-box;
-  width: 34px;
-  padding: 3px;
-  border-radius: 12px;
-  color: var(--bgalazka-look-text, #e9e9f0);
-  background: color-mix(in srgb, var(--bgalazka-look-toolbar-surface, var(--bgalazka-look-surface, #1e1e24)) 94%, transparent);
-  border: 1px solid color-mix(in srgb, var(--bgalazka-look-text, #e9e9f0) 14%, transparent);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
-  opacity: 0.55;
-  transition: opacity 0.12s ease;
+  width: 40px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  inset: auto;
+  overflow: visible;
+  background: transparent;
+  color: var(--zl-popup-text, var(--zen-colors-tertiary-text, #fff));
+  --zn-pill-scale: 1;
+  transform: scale(var(--zn-pill-scale));
+  transform-origin: var(--zn-pill-origin, left center);
+  transition: transform 0.18s ease, opacity 0.18s ease;
 }
-.zentral-notes-pill:hover, .zentral-notes-pill:focus-within { opacity: 1; }
 .zentral-notes-pill[hidden] { display: none; }
-.zentral-notes-pill .zn-pill-btn { width: 28px; height: 28px; border-radius: 8px; }
-.zentral-notes-pill .zn-pill-btn.is-on { background: color-mix(in srgb, var(--zen-primary-color, #83a5ff) 30%, transparent); }
-.zentral-notes-pill .zn-pill-btn.zn-unavailable { opacity: 0.38; }
-/* The hidden (autohide) card's strip at a window edge stands upright. */
-.zentral-notes-reveal[data-edge] { min-height: 0; min-width: 8px; }
+.zentral-notes-pill .zn-pill-actions,
+.zentral-notes-pill .zn-pill-closebox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 40px;
+  padding: 5px 3px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--zl-popup, var(--zen-colors-tertiary, #25252c)) var(--zn-pill-bg, 90%), transparent);
+}
+.zentral-notes-pill .zn-pill-grab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 10px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.zentral-notes-pill .zn-pill-grab::before { content: ""; width: 22px; height: 3px; border-radius: 2px; background: currentColor; opacity: 0.5; }
+.zentral-notes-pill .zn-pill-grab:hover::before { opacity: 0.9; }
+.zentral-notes-pill .zn-pill-btn {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.zentral-notes-pill .zn-pill-btn svg { width: 18px; height: 18px; min-width: 18px; min-height: 18px; flex: 0 0 18px; }
+.zentral-notes-pill .zn-pill-btn:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
+.zentral-notes-pill .zn-pill-btn.is-on { background: color-mix(in srgb, currentColor 20%, transparent); }
+.zentral-notes-pill .zn-pill-btn.zn-unavailable { opacity: 0.45; }
+/* Idle mini dot (the panel's "peek dot"): the pill shrinks to a small coloured dot until it is hovered or dragged. */
+.zentral-notes-pill[data-peek="true"]:not(:hover, :focus-within, [data-dragging]) {
+  --zn-pill-scale: 0.22;
+  opacity: var(--zn-pill-peek-opacity, 90%);
+}
+.zentral-notes-pill[data-peek="true"]:not(:hover, :focus-within, [data-dragging]) :is(.zn-pill-actions, .zn-pill-closebox) {
+  background: var(--zn-pill-peek-color, #4da6ff);
+}
+/* The hidden (autohide) card: it slides back to its edge instead of vanishing; its edge strip is invisible
+   (a thin line shows only while the pointer is on it), like the panel's hover zone. */
+.zentral-notes-sheet[data-docked] { transition: transform 0.22s ease, opacity 0.18s ease; }
+.zentral-notes-sheet[data-docked="left"] { --zn-hide-x: -100%; }
+.zentral-notes-sheet[data-docked="right"] { --zn-hide-x: 100%; }
+.zentral-notes-sheet[data-docked][data-collapsed="true"] {
+  transform: translateX(var(--zn-hide-x, 0));
+  opacity: 0;
+  transition: transform 0.22s ease, opacity 0.18s ease, visibility 0s linear 0.22s;
+}
+.zentral-notes-reveal[data-edge] { min-height: 0; min-width: 1px; background: transparent; border-radius: 0; }
 .zentral-notes-reveal[data-edge]::before { top: 0; bottom: 0; height: auto; width: 12px; }
 .zentral-notes-reveal[data-edge="right"]::before { left: -12px; right: auto; }
 .zentral-notes-reveal[data-edge="left"]::before { right: -12px; left: auto; }
-.zentral-notes-reveal[data-edge]::after { width: 3px; height: 36px; margin: -18px 0 0 -1.5px; }
+.zentral-notes-reveal[data-edge]::after { left: 0; top: 50%; width: 2px; height: 36px; margin: -18px 0 0 0; border-radius: 1px; opacity: 0; transition: opacity 0.12s ease; }
+.zentral-notes-reveal[data-edge="right"]::after { left: auto; right: 0; }
+.zentral-notes-reveal[data-edge]:hover { background: transparent; }
+.zentral-notes-reveal[data-edge]:hover::after { opacity: 1; }
+.zentral-notes-pill[popover] { inset: auto; margin: 0; padding: 0; border: 0; overflow: visible; background: transparent; color: var(--zl-popup-text, var(--zen-colors-tertiary-text, #fff)); }

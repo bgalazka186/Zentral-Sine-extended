@@ -14,7 +14,7 @@ assert.ok(!/^\s*window\.setTimeout\(\(\) => \{\s*\n\s*delete chipEmpty/m.test(no
 console.log("ok - Empty-trash confirm timer is owned by the sheet");
 
 // Gestures are dropped when the sheet closes or is suspended (no stale pointer state or pending frame).
-assert.match(notes, /function cancelGesture\(\) \{\s*gesture = null;\s*if \(rafDrag\) window\.cancelAnimationFrame\(rafDrag\);/, "cancelGesture clears the frame");
+assert.match(notes, /function cancelGesture\(\) \{\s*gesture = null;[\s\S]*?if \(rafDrag\) window\.cancelAnimationFrame\(rafDrag\);/, "cancelGesture clears the frame");
 assert.match(notes, /if \(gesture\) cancelGesture\(\);\s*root\.dataset\.suspended = "true";/, "suspended layout cancels a gesture");
 console.log("ok - stale gestures are cancelled on close / suspend");
 console.log("\n2 P3 scan guards passed");

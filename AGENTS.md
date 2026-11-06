@@ -74,3 +74,7 @@ After any change to Zentral Notes, update the "NEXT SESSION HANDOFF" block at th
 ## .git folder
 
 user may send to AI full project file, and ask to update it with changes and give back, Always dont include .git file (drop and replace on root folder may destroy unfinished uncommited diffs and change what is staged and what not just avoid it)
+
+## Delivering changes (download card)
+
+Whenever an AI edit changes files for the user, finish the turn by presenting the changed files as a download card: zip them (without `.git`), place the zip in `/mnt/user-data/outputs/`, and call `present_files` on it. Do this every time, unless the changes were just uploaded to GitHub in this same turn. A chat reply that only describes the changes is not a delivery.

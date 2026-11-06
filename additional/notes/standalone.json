@@ -3,7 +3,7 @@
   "themeId": "zentral-notes",
   "name": "Zentral Notes",
   "description": "Quick notes as plain Markdown files: multiple notes, highlights, checklists, tables, split-view preview, search, trash, export (Markdown, HTML, text, PDF, zip). Opens from a shortcut anywhere and adds a Notes button to Zentral panel bars when the full pack's panels are present. Standalone part of Zentral Extended.",
-  "version": "3.1.24",
+  "version": "3.1.25",
   "entry": "ZentralNotes.uc.js",
   "output": "ZentralNotes.standalone.uc.js",
   "settings": "settings.json",
@@ -113,6 +113,15 @@
     "zen.workspace.zentral.notes.debug_perf"
   ],
   "externalPrefs": [
-    "zen.workspace.bgalazka.open_at_startup"
+    "zen.workspace.bgalazka.open_at_startup",
+    "zen.workspace.zentral.hybrid.dock_push_px",
+    "zen.workspace.zentral.hybrid.detached_height_percent",
+    "zen.workspace.bgalazka.pill_position",
+    "zen.workspace.bgalazka.pill_background_opacity",
+    "zen.workspace.bgalazka.pill_peek_dot",
+    "zen.workspace.bgalazka.pill_peek_dot_color",
+    "zen.workspace.bgalazka.pill_peek_dot_opacity",
+    "zen.workspace.bgalazka.hover_reveal_width_px",
+    "zen.workspace.bgalazka.hover_reveal_delay_ms"
   ]
 }

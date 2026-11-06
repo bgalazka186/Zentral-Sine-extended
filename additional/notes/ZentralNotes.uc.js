@@ -3249,8 +3249,15 @@
     const CARD_SNAP_PX = 28, CARD_DEFAULT_W = 460;
     const cleanCardDock = (v) => (v === "left" || v === "right" ? v : "");
     // The room a card may use: below the top bar, beside (never over) the native sidebar.
-    function cardView({ vw, vh, contentTop = 0, sidebar = null, avoid = true }) {
+    function cardView({ vw, vh, contentTop = 0, sidebar = null, avoid = true, bounds = null }) {
       const top = contentTop > 0 && contentTop < vh / 2 ? Math.round(contentTop) : 0;
+      // `bounds` = the safe left / right edges measured like the Zentral panel does (native sidebar, compact mode,
+      // apps bar); when given they replace the single sidebar rectangle.
+      if (bounds && avoid) {
+        const left = Math.max(0, Math.min(vw - 1, Math.round(bounds.left)));
+        const right = Math.max(left + 1, Math.min(vw, Math.round(bounds.right)));
+        return { left, top, width: right - left, height: Math.max(1, vh - top) };
+      }
       let view = { left: 0, top, width: vw, height: Math.max(1, vh - top) };
       if (avoid && sidebar) view = keepClear(view, [sidebar], vh);
       return view;
@@ -3284,6 +3291,35 @@
       const onRight = rect.x + rect.w / 2 > areaW / 2;
       return { ...rect, w, x: onRight ? rect.x + rect.w - w : rect.x };
     }
+    // Where the pill goes: the same rules as the Zentral panel's hybrid placement. It prefers the right side of the
+    // card, sits OUTSIDE the card when the window has room for it (otherwise on the card's own edge, inside), and
+    // its vertical place is a percentage (-50..50) of the card's height, shared with the panel's pill position.
+    // `lockSide` keeps the side steady while a gesture runs (no flipping under the pointer).
+    function cardPillPlace({ rect, view, winW, offsetPct = 0, pillW = 40, pillH = 190, lockSide = "" }) {
+      const roomL = rect.x - view.left, roomR = view.left + view.width - rect.x - rect.w;
+      const side = lockSide === "left" || lockSide === "right" ? lockSide : roomR >= 48 ? "right" : roomL >= 48 ? "left" : roomR >= roomL ? "right" : "left";
+      const edge = side === "left" ? rect.x : rect.x + rect.w;
+      const outsideLeft = side === "left" ? edge - pillW : edge;
+      const outside = outsideLeft >= 4 && outsideLeft + pillW <= winW - 4;
+      const fallbackLeft = side === "left" ? edge : edge - pillW;
+      const left = Math.round(Math.max(0, Math.min(Math.max(0, winW - pillW), outside ? outsideLeft : fallbackLeft)));
+      const origin = outside ? (side === "left" ? "right center" : "left center") : side === "left" ? "left center" : "right center";
+      const off = Math.max(-50, Math.min(50, Number(offsetPct) || 0));
+      const ph = Math.max(1, Math.min(pillH, view.height - 16));
+      const lo = view.top + ph / 2 + 8, hi = view.top + view.height - ph / 2 - 8;
+      const cy = Math.max(lo, Math.min(Math.max(lo, hi), rect.y + rect.h * (0.5 + off / 100)));
+      return { left, top: Math.round(cy - ph / 2), side, outside, origin };
+    }
+    // Dragging a docked card away from its edge: like the panel it lets go of the edge, shrinks to the detached
+    // height (percent of the room, default 78) and keeps the grabbed point (`anchor` 0..1 of its height) under the pointer.
+    function cardDetachRect({ start, areaH, pct = 78, anchor = 0.5 }) {
+      const share = Math.max(40, Math.min(100, Number(pct) || 78)) / 100;
+      const h2 = Math.max(Math.min(GEO_MIN.h, start.h), Math.min(start.h, Math.round(areaH * share)));
+      const a = Math.max(0, Math.min(1, Number.isFinite(anchor) ? anchor : 0.5));
+      return { ...start, y: Math.round(start.y + (start.h - h2) * a), h: h2 };
+    }
+    // Dragging the pill's handle moves the pill along the card: before + dy as a percentage of the card's height.
+    const cardPillOffset = (before, dy, h2) => Math.max(-50, Math.min(50, Math.round((Number(before) || 0) + (dy / Math.max(1, h2)) * 100)));
     // ---- slot model (a panel-hosted sheet is a band of the panel's layout, not an overlay) -------------
     // `share` = the fraction of the panels' page height the sheet takes. Pure maths so it can be tested.
     const SLOT_MIN_SHARE = 0.15, SLOT_MAX_SHARE = 0.85, SLOT_LARGE_SHARE = 0.8, SLOT_MIN_PX = 140, SLOT_PAGE_MIN_PX = 120, GAP_PANEL_MIN_PX = 120;
@@ -5067,7 +5103,7 @@
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, clearOfRect, sideOf, createHoldAction,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
-        clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
+        clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
         allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
@@ -8403,6 +8439,59 @@
           e.stopPropagation();
         }
       }
+      // ---- drag guard (copied from the Zentral panel): a transparent shield over the window while a gesture runs, so a
+      // web page or XUL frame under the pointer can never swallow the move / up events (a sideways resize or move over
+      // the page lost its pointer that way), plus the same events listened to on the window. Also the snap preview.
+      const HYBRID = { SNAP: "zen.workspace.zentral.hybrid.dock_push_px", DETACH_H: "zen.workspace.zentral.hybrid.detached_height_percent", PILL_Y: "zen.workspace.bgalazka.pill_position", PILL_BG: "zen.workspace.bgalazka.pill_background_opacity", PEEK: "zen.workspace.bgalazka.pill_peek_dot", PEEK_COLOR: "zen.workspace.bgalazka.pill_peek_dot_color", PEEK_OPACITY: "zen.workspace.bgalazka.pill_peek_dot_opacity", REVEAL_W: "zen.workspace.bgalazka.hover_reveal_width_px", REVEAL_D: "zen.workspace.bgalazka.hover_reveal_delay_ms" };
+      let shieldEl = null;
+      let ghostEl = null;
+      const dragWin = [];
+      const RESIZE_CURSOR = { n: "ns-resize", s: "ns-resize", e: "ew-resize", w: "ew-resize", ne: "nesw-resize", sw: "nesw-resize", nw: "nwse-resize", se: "nwse-resize" };
+      function beginDragGuard(kind) {
+        if (!shieldEl) {
+          shieldEl = h("div", { class: "zentral-notes-shield", "aria-hidden": "true" });
+          document.documentElement.appendChild(shieldEl);
+        }
+        shieldEl.style.cursor = kind === "move" ? "grabbing" : RESIZE_CURSOR[kind] || "default";
+        shieldEl.dataset.active = "true";
+        if (!dragWin.length) {
+          for (const [type, fn] of [["pointermove", moveEvent], ["pointerup", endGesture], ["pointercancel", endGesture], ["mouseup", endGesture]]) {
+            window.addEventListener(type, fn, true);
+            dragWin.push([type, fn]);
+          }
+        }
+      }
+      function endDragGuard() {
+        for (const [type, fn] of dragWin.splice(0)) window.removeEventListener(type, fn, true);
+        if (shieldEl) delete shieldEl.dataset.active;
+        if (ghostEl) delete ghostEl.dataset.active;
+      }
+      // The strip the card would dock into, shown while it is pulled far enough past an edge (releasing docks it).
+      function showGhost(side, w, view) {
+        if (!side || !view) {
+          if (ghostEl) delete ghostEl.dataset.active;
+          return;
+        }
+        const r = cardDockRect({ side, w, view });
+        if (!ghostEl) {
+          ghostEl = h("div", { class: "zentral-notes-ghost", "aria-hidden": "true" });
+          document.documentElement.appendChild(ghostEl);
+        }
+        ghostEl.style.left = Math.round(r.left) + "px";
+        ghostEl.style.top = Math.round(r.top) + "px";
+        ghostEl.style.width = Math.round(r.width) + "px";
+        ghostEl.style.height = Math.round(r.height) + "px";
+        ghostEl.dataset.active = "true";
+      }
+      cleanups.push(() => {
+        endDragGuard();
+        shieldEl?.remove();
+        ghostEl?.remove();
+        shieldEl = null;
+        ghostEl = null;
+      });
+      // How far past an edge the card has to be pulled to dock: the panel's own setting when the full pack set it.
+      const snapPx = () => Math.max(1, Math.min(100, getPref(HYBRID.SNAP, CARD_SNAP_PX)));
       function startGesture(e, kind) {
         if (e.button !== undefined && e.button !== 0) return;
         const slot = adapter.slotKind?.() || "";
@@ -8428,12 +8517,19 @@
           active: kind !== "move",
           next: null,
           rect: null,
+          fromDock: dockedSide(),
+          grab: r.height > 0 ? Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)) : 0.5,
+          floatStart: null,
+          snap: "",
+          view: adapter.cardMode ? adapter.view() : null,
         };
+        pillSideLock = pillEl?.dataset.side || "";
         try {
           e.currentTarget?.setPointerCapture?.(e.pointerId);
         } catch (_) {}
         if (kind !== "move") {
           root.dataset.dragging = "true";
+          beginDragGuard(kind);
           e.preventDefault();
           e.stopPropagation();
         }
@@ -8464,17 +8560,23 @@
           }
           return;
         }
-        let rect = g.kind === "move" ? moveGeo(g.start, dx, dy, g.area) : resizeGeo(g.start, g.kind, dx, dy, g.area);
+        let rect;
         if (cardFree() && g.kind === "move") {
-          // Pushed past an edge = dock there: the card previews as a full-height strip against that edge.
-          const snap = cardSnapSide({ x: g.start.x + dx, w: g.start.w }, g.area.w);
-          if (snap !== (g.snap || "")) {
-            g.snap = snap;
-            if (snap) root.dataset.snap = snap;
-            else delete root.dataset.snap;
+          let from = g.start;
+          if (g.fromDock && !g.floatStart) {
+            // Pulled away from its edge: like the panel it lets go of the edge at once, shrinks to the detached
+            // height with the grabbed point under the pointer, and the page gets its room back.
+            g.floatStart = cardDetachRect({ start: g.start, areaH: g.area.h, pct: getPref(HYBRID.DETACH_H, 78), anchor: g.grab });
+            delete root.dataset.docked;
+            adapter.unpush?.();
+            pushed = false;
           }
-          if (snap) rect = { x: snap === "left" ? 0 : g.area.w - rect.w, y: 0, w: rect.w, h: g.area.h };
-        }
+          if (g.floatStart) from = g.floatStart;
+          rect = moveGeo(from, dx, dy, g.area);
+          // Snap from the UNclamped edge (the card's width and where it was grabbed count), as the panel does.
+          g.snap = cardSnapSide({ x: from.x + dx, w: from.w }, g.area.w, snapPx());
+          showGhost(g.snap, from.w, g.view);
+        } else rect = resizeGeo(g.start, g.kind, dx, dy, g.area);
         g.rect = rect;
         root.style.left = Math.round(g.ox + rect.x) + "px";
         root.style.top = Math.round(g.oy + rect.y) + "px";
@@ -8490,6 +8592,13 @@
         }
       }
       function moveEvent(e) {
+        if (pillGrab) {
+          // The pill's handle: the pill slides along the card (a percentage, shared with the panel's pill position).
+          if (e.pointerId !== undefined && pillGrab.id !== undefined && e.pointerId !== pillGrab.id) return;
+          pillOffLive = cardPillOffset(pillGrab.before, e.clientY - pillGrab.sy, pillGrab.h);
+          if (lastRect) placePill(lastRect.left, lastRect.top, lastRect.w, lastRect.h);
+          return;
+        }
         const g = gesture;
         if (!g || (e.pointerId !== undefined && g.id !== undefined && e.pointerId !== g.id)) return;
         const dx = e.clientX - (g.sx ?? e.clientX),
@@ -8500,6 +8609,7 @@
           root.dataset.dragging = "true";
           holdMove?.cancel?.();
           closeMenu();
+          beginDragGuard(g.kind);
         }
         g.next = { dx, dy };
         if (!rafDrag) rafDrag = window.requestAnimationFrame(paintGesture);
@@ -8508,22 +8618,42 @@
       // pointer state, pending frame or half-applied reserve survives.
       function cancelGesture() {
         gesture = null;
+        pillGrab = null;
+        pillOffLive = null;
+        pillSideLock = "";
         if (rafDrag) window.cancelAnimationFrame(rafDrag);
         rafDrag = 0;
         delete root.dataset.dragging;
+        endDragGuard();
       }
       function endGesture() {
+        if (pillGrab) {
+          pillGrab = null;
+          endDragGuard();
+          if (pillEl) delete pillEl.dataset.dragging;
+          if (pillOffLive !== null) setPref(HYBRID.PILL_Y, pillOffLive);
+          pillOffLive = null;
+          pillSideLock = "";
+          if (lastRect) placePill(lastRect.left, lastRect.top, lastRect.w, lastRect.h);
+          return;
+        }
         const g = gesture;
         if (!g) return;
         gesture = null;
         if (rafDrag) window.cancelAnimationFrame(rafDrag);
         rafDrag = 0;
         delete root.dataset.dragging;
-        if (!g.active || !g.next) return;
+        if (!g.active || !g.next) {
+          endDragGuard();
+          pillSideLock = "";
+          return;
+        }
         if (g.kind === "move") swallowClick = true;
         gesture = g;
         paintGesture(); // flush the last position
         gesture = null;
+        endDragGuard();
+        pillSideLock = "";
         taAnchY = null;
         readAnchY = null;
         if (g.slot) {
@@ -8542,7 +8672,7 @@
           // A rect read while split view widened the card goes back to the base size (no growing on every switch).
           const base = cardBaseRect(g.rect, mode === "split" ? widePct() : 1, g.area.w);
           if (cardFree() && g.kind === "move" && g.snap) store.setMeta({ cardDock: g.snap, cardW: Math.max(GEO_MIN.w, base.w), size: "peek" });
-          else if (cardFree() && dockedSide() && g.kind === "move") store.setMeta({ cardDock: "", geo: { ...(store.meta.geo || {}), [g.key]: base }, size: "peek" });
+          else if (cardFree() && g.kind === "move" && g.fromDock) store.setMeta({ cardDock: "", geo: { ...(store.meta.geo || {}), [g.key]: base }, size: "peek" });
           else if (cardFree() && dockedSide()) store.setMeta({ cardW: Math.max(GEO_MIN.w, base.w), size: "peek" });
           else store.setMeta({ geo: { ...(store.meta.geo || {}), [g.key]: base }, size: "peek" });
           applyState();
@@ -8851,6 +8981,8 @@
           root.style.visibility = "";
           root.style.pointerEvents = "";
         }
+        // A card being moved or resized is placed by the gesture; a layout pass now would snap it back to the old place.
+        if (adapter.cardMode && gesture && gesture.active && !gesture.slot) return;
         const a = adapter.getArea({ wide: mode === "split", span: store.meta.size === "span", dock: store.meta.cardDock, dockW: store.meta.cardW });
         if (!a || a.width < 40 || a.height < 40) return;
         const size = a.fill ? "full" : store.meta.size;
@@ -8948,6 +9080,11 @@
       let pillEl = null;
       const pillBtn = {};
       let holdMove = null;
+      let pillGrab = null; // the pill's handle being dragged: { id, sy, before, h }
+      let pillOffLive = null; // live vertical place while the handle is dragged (percent, -50..50)
+      let pillSideLock = ""; // keeps the pill's side steady during a gesture
+      let lastRect = null; // the card's last placed rectangle (the pill is re-placed from it)
+      const pillOffsetNow = () => (pillOffLive !== null ? pillOffLive : Math.max(-50, Math.min(50, getPref(HYBRID.PILL_Y, 0))));
       function dockedSide() {
         return cardFree() ? cleanCardDock(store.meta.cardDock) : "";
       }
@@ -8979,18 +9116,38 @@
         if (pillEl || !cardFree() || destroyed) return;
         pillEl = h("div", { class: "zentral-notes-pill", role: "toolbar", "aria-label": "Notes panel controls" });
         pillEl.style.position = adapter.position;
-        const mk = (id, ic, title) => {
+        // The panel's pill: one rounded surface for the actions, one for close (the "upstream" layout).
+        const actions = h("div", { class: "zn-pill-actions" });
+        const closeBox = h("div", { class: "zn-pill-closebox" });
+        pillEl.append(actions, closeBox);
+        const mk = (id, ic, title, parent = actions) => {
           const b = iconButton(ic, title, "zn-pill-btn");
           b.dataset.id = id;
           pillBtn[id] = b;
-          pillEl.append(b);
+          parent.append(b);
           return b;
         };
+        // Handle: drag up or down to slide the pill along the card (the panel's pill-position setting).
+        const grab = h("div", { class: "zn-pill-grab", title: "Drag up or down to move this bar along the card", "aria-label": "Move the bar" });
+        actions.append(grab);
         const push = mk("push", "push", "Push the page aside");
         const move = mk("move", "move", "Move / resize");
         const size = mk("size", "maximize", "Fill the whole area");
         const hide = mk("hide", "hover", "Autohide");
-        const close2 = mk("close", "x", "Close notes");
+        const pin = mk("pin", "pin", "Keep open");
+        const close2 = mk("close", "x", "Close notes", closeBox);
+        listen(grab, "pointerdown", (e) => {
+          if (e.button !== undefined && e.button !== 0) return;
+          e.preventDefault();
+          e.stopPropagation();
+          pillGrab = { id: e.pointerId, sy: e.clientY, before: pillOffsetNow(), h: Math.max(1, lastRect?.h || 300) };
+          pillSideLock = pillEl?.dataset.side || "";
+          pillEl.dataset.dragging = "true";
+          try {
+            grab.setPointerCapture?.(e.pointerId);
+          } catch (_) {}
+          beginDragGuard("move");
+        });
         listen(push, "click", () => {
           if (!dockedSide()) return flash("Page push needs the card docked to an edge: drag it past the edge or hold the move button", 3500);
           setPref(PREF.PUSH_PAGE, !getPref(PREF.PUSH_PAGE, false));
@@ -9006,6 +9163,11 @@
         });
         listen(size, "click", () => toggleSpan());
         listen(close2, "click", () => close());
+        // Pin = keep open (the header's pin): it stays when something outside is clicked.
+        listen(pin, "click", () => {
+          toggleKeep();
+          syncPill();
+        });
         // The move button: a press that moves is a drag (docks at an edge), a tap toggles the handles, a hold docks / detaches.
         holdMove = holdButton(move, () => { if (!swallowClick) toggleHandles(); }, toggleDockEdge);
         listen(move, "pointerdown", (e) => {
@@ -9030,6 +9192,7 @@
         });
         (adapter.host || document.documentElement).appendChild(pillEl);
         syncPill();
+        liftPill();
       }
       function syncPill() {
         if (!pillEl) return;
@@ -9050,10 +9213,21 @@
         set("size", { on: big, title: big ? "Back to the normal size" : "Fill the whole area" });
         pillBtn.size.replaceChildren(icon(big ? "minimize" : "maximize"));
         set("hide", { on: !!docked && !!getPref(PREF.CARD_AUTOHIDE, false), off: !docked, title: docked ? "Autohide: hide at the edge, show on hover" : "Autohide is unavailable while the card is detached. Dock it first." });
+        const kept = store.meta.pinned !== false;
+        set("pin", { on: kept, title: kept ? "Pinned: stays open when something outside is clicked. Click to unpin." : "Click to pin: keep the card open when something outside is clicked." });
         set("close", { title: "Close notes (Esc)" });
+        // The same look settings as the panel's pill: surface opacity and the idle mini dot.
+        pillEl.style.setProperty("--zn-pill-bg", Math.max(0, Math.min(100, getPref(HYBRID.PILL_BG, 48))) + "%");
+        const peek = getPref(HYBRID.PEEK, true);
+        if (peek) {
+          pillEl.dataset.peek = "true";
+          pillEl.style.setProperty("--zn-pill-peek-color", getPref(HYBRID.PEEK_COLOR, "#5e0002") || "#5e0002");
+          pillEl.style.setProperty("--zn-pill-peek-opacity", Math.max(0, Math.min(100, getPref(HYBRID.PEEK_OPACITY, 31))) + "%");
+        } else delete pillEl.dataset.peek;
       }
-      // Beside the card, on the side that has room (docked: always on the page side), centered on its height.
+      // Beside the card exactly as the panel places its pill (see cardPillPlace).
       function placePill(left, top, w, hgt) {
+        lastRect = { left, top, w, h: hgt };
         if (!cardFree() || !isOpen || destroyed || collapsed) {
           if (pillEl) pillEl.hidden = true;
           return;
@@ -9063,20 +9237,17 @@
         pillEl.hidden = false;
         syncPill();
         const v = adapter.view();
-        const pw = 34, ph = Math.min(pillEl.scrollHeight || 190, v.height - 8);
-        const docked = dockedSide();
-        const roomRight = v.left + v.width - (left + w), roomLeft = left - v.left;
-        const side = docked ? (docked === "right" ? "left" : "right") : roomRight >= roomLeft ? "right" : "left";
-        const fits = side === "right" ? roomRight >= pw + 2 : roomLeft >= pw + 2;
-        let px = side === "right" ? left + w + 2 : left - pw - 2;
-        if (!fits) px = side === "right" ? left + w - pw - 4 : left + 4; // no room outside: overlay the card's own edge
-        const py = Math.max(v.top + 4, Math.min(v.top + v.height - ph - 4, top + hgt / 2 - ph / 2));
-        pillEl.style.left = Math.round(px) + "px";
-        pillEl.style.top = Math.round(py) + "px";
-        pillEl.dataset.side = side;
+        const p = cardPillPlace({ rect: { x: left, y: top, w, h: hgt }, view: v, winW: window.innerWidth, offsetPct: pillOffsetNow(), pillH: pillEl.scrollHeight || 190, lockSide: pillSideLock });
+        pillEl.style.left = p.left + "px";
+        pillEl.style.top = p.top + "px";
+        pillEl.dataset.side = p.side;
+        pillEl.style.setProperty("--zn-pill-origin", p.origin);
       }
       function dropPill() {
         holdMove?.cancel?.();
+        pillGrab = null;
+        pillOffLive = null;
+        pillSideLock = "";
         pillEl?.remove();
         pillEl = null;
         for (const k of Object.keys(pillBtn)) delete pillBtn[k];
@@ -9089,10 +9260,21 @@
       // Autohide: a panel-hosted sheet in hover mode, or a card docked to an edge with card_autohide on.
       const cardHides = () => !!adapter.cardMode && !!cleanCardDock(store.meta.cardDock) && !!getPref(PREF.CARD_AUTOHIDE, false) && store.meta.size !== "span";
       const hoverMode = () => (!!adapter.pushPanel && dockMode() === "hover") || cardHides();
-      const timing = () => hoverTiming({ open: getPref(PREF.REVEAL_DELAY, 100), grace: HOVER_CLOSE_GRACE_MS });
+      // The panel's own hover settings win when the user set them (the card should react like the panel does);
+      // otherwise the Notes settings apply.
+      const userSet = (k) => {
+        try {
+          return Services.prefs.prefHasUserValue(k);
+        } catch (_) {
+          return false;
+        }
+      };
+      const revealPx = () => (userSet(HYBRID.REVEAL_W) ? Math.max(1, Math.min(24, getPref(HYBRID.REVEAL_W, 1))) : hoverStripPx(getPref(PREF.REVEAL_HEIGHT, 10)));
+      const revealMs = () => (userSet(HYBRID.REVEAL_D) ? Math.max(0, Math.min(1000, getPref(HYBRID.REVEAL_D, 160))) : getPref(PREF.REVEAL_DELAY, 100));
+      const timing = () => hoverTiming({ open: revealMs(), grace: HOVER_CLOSE_GRACE_MS });
       function placeReveal() {
         if (!revealEl) return;
-        const band = adapter.cardMode ? adapter.edgeBand(cleanCardDock(store.meta.cardDock), hoverStripPx(getPref(PREF.REVEAL_HEIGHT, 10))) : adapter.bandRect?.();
+        const band = adapter.cardMode ? adapter.edgeBand(cleanCardDock(store.meta.cardDock), revealPx()) : adapter.bandRect?.();
         const off = hostOffset();
         if (!band || !off) return;
         if (adapter.cardMode) revealEl.dataset.edge = cleanCardDock(store.meta.cardDock);
@@ -9193,6 +9375,17 @@
         } catch (_) {
           topLayer = false;
         }
+        liftPill();
+      }
+      // The card in the top layer covers everything with a z-index, the pill included (it used to vanish behind the
+      // card). So while the card is up there the pill goes up too, shown AFTER the card, and again after each re-raise.
+      function liftPill() {
+        if (!pillEl || !topLayer || typeof pillEl.showPopover !== "function") return;
+        try {
+          if (pillEl.matches(":popover-open")) pillEl.hidePopover();
+          pillEl.setAttribute("popover", "manual");
+          pillEl.showPopover();
+        } catch (_) {}
       }
       function drop() {
         if (!topLayer) return;
@@ -9201,6 +9394,10 @@
           if (root.matches(":popover-open")) root.hidePopover();
         } catch (_) {}
         root.removeAttribute("popover");
+        try {
+          if (pillEl?.matches(":popover-open")) pillEl.hidePopover();
+        } catch (_) {}
+        pillEl?.removeAttribute("popover");
       }
       const focusInside = () => root.contains(document.activeElement);
       listen(root, "pointerdown", () => {
@@ -9707,6 +9904,69 @@
         const sr = toolbox()?.getBoundingClientRect();
         return sr && sr.width > 20 && sr.height > 20 ? sr : null;
       };
+      // The room left and right of the native chrome, measured the way the Zentral panel measures it
+      // (the runtime's sidebarSafeBounds): the native sidebar, Zen's sidebar box / splitter, the compact
+      // mode sliver and the Zentral apps bar. The card never covers any of them.
+      function safeBounds() {
+        const vw = window.innerWidth;
+        let left = 0, right = vw;
+        const ui = document.documentElement;
+        const tb = toolbox();
+        const tr = tb?.getBoundingClientRect();
+        const onRight = !!tr && tr.width > 0 && tr.left + tr.width / 2 > vw / 2;
+        if (ui.getAttribute("zen-compact-mode") === "true" && ui.getAttribute("zen-compact-sidebar-visible") === "true") {
+          if (onRight) right -= 22;
+          else left += 22;
+        }
+        for (const node of new Set([tb, document.getElementById("sidebar-box"), document.getElementById("zen-sidebar-splitter")])) {
+          if (!node?.isConnected) continue;
+          let cs = null;
+          try {
+            cs = window.getComputedStyle(node);
+          } catch (_) {}
+          const r = node.getBoundingClientRect();
+          const splitter = node.id === "zen-sidebar-splitter";
+          // A horizontal toolbox (the whole window wide) is not a sidebar.
+          if (cs?.display === "none" || cs?.visibility === "hidden" || cs?.visibility === "collapse" || (!splitter && cs?.opacity === "0") || r.width <= 0 || r.width >= vw - 1 || r.height <= 0 || r.right <= 0 || r.left >= vw) continue;
+          const belongsRight = node === tb || splitter ? onRight : r.left + r.width / 2 >= vw / 2;
+          if (belongsRight) right = Math.min(right, r.left);
+          else left = Math.max(left, r.right);
+        }
+        const bar = document.getElementById("zentral-apps-vertical-bar");
+        if (bar?.isConnected) {
+          const barOnRight = !onRight;
+          let inset = 0;
+          if (ui.getAttribute("zentral-apps-autohide") === "true") {
+            const bs = window.getComputedStyle(bar);
+            inset = (bar.offsetWidth || 44) + Math.max(0, parseFloat(bs[barOnRight ? "right" : "left"]) || 8);
+          } else {
+            const br = bar.getBoundingClientRect();
+            if (br.width > 0) inset = barOnRight ? vw - br.left : br.right;
+          }
+          if (Number.isFinite(inset) && inset > 0) {
+            if (barOnRight) right = Math.min(right, vw - inset);
+            else left = Math.max(left, inset);
+          }
+        }
+        left = Math.max(0, Math.min(left, vw));
+        return { left, right: Math.max(left + 1, Math.min(right, vw)) };
+      }
+      // The page area measured WITHOUT our own push. The push is a margin that animates, so a rectangle read
+      // mid-animation (or while the previous push is still applied) is not where the page edge really is. The
+      // margin we added is the difference to the margin the area has when nothing is pushed.
+      let baseMargin = null;
+      let unpushedAt = 0;
+      function unpushedRect(area) {
+        let cs = null;
+        try {
+          cs = window.getComputedStyle(area);
+        } catch (_) {}
+        const mL = parseFloat(cs?.marginLeft) || 0, mR = parseFloat(cs?.marginRight) || 0;
+        const r = area.getBoundingClientRect();
+        if (!document.documentElement.hasAttribute("zentral-notes-push") && (!baseMargin || Date.now() - unpushedAt > 320)) baseMargin = { l: mL, r: mR };
+        const b = baseMargin || { l: mL, r: mR };
+        return { left: r.left - Math.max(0, mL - b.l), right: r.right + Math.max(0, mR - b.r) };
+      }
       return {
         position: "fixed",
         host: document.documentElement,
@@ -9732,6 +9992,7 @@
             contentTop: tabbox && tabbox.height > 100 ? tabbox.top : 0,
             sidebar: sidebarRect(),
             avoid: avoidSidebar(),
+            bounds: safeBounds(),
           });
         },
         // The thin band at a docked edge where the hidden (autohide) card is revealed again.
@@ -9792,11 +10053,12 @@
           const rootEl = document.documentElement;
           const area = document.getElementById("tabbrowser-tabbox") || document.getElementById("appcontent");
           if (!area) return false;
-          rootEl.removeAttribute("zentral-notes-push");
-          const r = area.getBoundingClientRect();
+          const r = unpushedRect(area);
           // A docked card pushes from ITS side; a loose one (old callers) from the side it is nearer to.
           const amount = side ? cardPush({ side, left, width }, { left: r.left, right: r.right }) : pushAmount({ left, width }, { left: r.left, right: r.right });
           if (!amount) {
+            if (rootEl.hasAttribute("zentral-notes-push")) unpushedAt = Date.now();
+            rootEl.removeAttribute("zentral-notes-push");
             rootEl.style.removeProperty("--zentral-notes-push");
             return false;
           }
@@ -9805,6 +10067,7 @@
           return true;
         },
         unpush() {
+          unpushedAt = Date.now();
           const rootEl = document.documentElement;
           rootEl.removeAttribute("zentral-notes-push");
           rootEl.style.removeProperty("--zentral-notes-push");

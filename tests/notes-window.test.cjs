@@ -230,6 +230,37 @@ const same = (a, b, msg) => assert.equal(canon(a), canon(b), msg);
     assert.equal(c.cleanCardDock("left"), "left");
     assert.equal(c.cleanCardDock("top"), "");
   });
+  await test("card pill, detach and safe bounds follow the Zentral panel's rules", () => {
+    const view = { left: 280, top: 40, width: 920, height: 760 };
+    // pill: right side preferred, outside the card when the window has room
+    let p = J(c.cardPillPlace({ rect: { x: 300, y: 100, w: 400, h: 500 }, view, winW: 1200, pillH: 200 }));
+    assert.equal(p.side, "right"); assert.equal(p.outside, true); assert.equal(p.left, 700); assert.equal(p.origin, "left center");
+    assert.equal(p.top, 250, "centred on the card height (offset 0)");
+    // card at the right edge: pill on the left, outside
+    p = J(c.cardPillPlace({ rect: { x: 740, y: 40, w: 460, h: 760 }, view, winW: 1200, pillH: 200 }));
+    assert.equal(p.side, "left"); assert.equal(p.outside, true); assert.equal(p.left, 700); assert.equal(p.origin, "right center");
+    // no room anywhere: sits on the card's own edge (inside), never off the window
+    p = J(c.cardPillPlace({ rect: { x: 0, y: 40, w: 1200, h: 760 }, view: { left: 0, top: 40, width: 1200, height: 760 }, winW: 1200, pillH: 200 }));
+    assert.equal(p.outside, false); assert.ok(p.left >= 0 && p.left <= 1160);
+    // the locked side wins (no flipping during a drag)
+    assert.equal(c.cardPillPlace({ rect: { x: 300, y: 100, w: 400, h: 500 }, view, winW: 1200, lockSide: "left" }).side, "left");
+    // vertical offset moves it and is clamped inside the room
+    assert.ok(c.cardPillPlace({ rect: { x: 300, y: 100, w: 400, h: 500 }, view, winW: 1200, pillH: 200, offsetPct: 20 }).top > 250);
+    assert.ok(c.cardPillPlace({ rect: { x: 300, y: 100, w: 400, h: 500 }, view, winW: 1200, pillH: 200, offsetPct: -50 }).top >= 40 + 8);
+    assert.equal(c.cardPillOffset(0, 50, 500), 10);
+    assert.equal(c.cardPillOffset(45, 500, 500), 50, "clamped");
+    assert.equal(c.cardPillOffset(-45, -500, 500), -50, "clamped");
+    // detach: shrinks to the detached share, grabbed point stays under the pointer
+    assert.deepEqual(J(c.cardDetachRect({ start: { x: 0, y: 40, w: 460, h: 760 }, areaH: 760, pct: 78, anchor: 0 })), { x: 0, y: 40, w: 460, h: 593 });
+    assert.deepEqual(J(c.cardDetachRect({ start: { x: 0, y: 40, w: 460, h: 760 }, areaH: 760, pct: 78, anchor: 1 })), { x: 0, y: 207, w: 460, h: 593 });
+    assert.equal(c.cardDetachRect({ start: { x: 0, y: 0, w: 460, h: 300 }, areaH: 760, pct: 78, anchor: 0.5 }).h, 300, "never taller than it was");
+    // safe bounds replace the single sidebar rectangle
+    assert.deepEqual(J(c.cardView({ vw: 1200, vh: 800, contentTop: 40, bounds: { left: 300, right: 1100 } })), { left: 300, top: 40, width: 800, height: 760 });
+    assert.deepEqual(J(c.cardView({ vw: 1200, vh: 800, contentTop: 40, bounds: { left: 300, right: 1100 }, avoid: false })), { left: 0, top: 40, width: 1200, height: 760 }, "avoid off ignores the bounds");
+    // snap uses the configurable penetration (the panel's dock_push_px)
+    assert.equal(c.cardSnapSide({ x: -9, w: 400 }, 1000, 8), "left");
+    assert.equal(c.cardSnapSide({ x: -7, w: 400 }, 1000, 8), "");
+  });
   await test("push page: the side follows the card, wide cards and cards far from an edge do not push", () => {
     const content = { left: 0, right: 1000 };
     same(c.pushAmount({ left: 560, width: 440 }, content), { side: "right", px: 448 });
