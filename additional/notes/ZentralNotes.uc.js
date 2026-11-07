@@ -9412,6 +9412,10 @@
         window.clearTimeout(graceTimer);
         graceTimer = 0;
         if (!hoverMode() || !isOpen || collapsed || destroyed || ptrInside) return;
+        // A panel-hosted "leave" autohide belongs to the Zentral panel, not to the Notes
+        // sheet. Keep Notes as part of that panel until the panel itself slides away; an
+        // independent Notes strip here would create a second reveal target inside the panel.
+        if (adapter.pushPanel && hideTrigger() === "leave") return;
         if (hideTrigger() === "click" && !openedByHover) return;
         graceTimer = window.setTimeout(() => {
           graceTimer = 0;
@@ -9441,6 +9445,8 @@
       }
       function collapse() {
         if (collapsed || !isOpen || destroyed || !hoverMode()) return;
+        // The parent panel owns pointer-away autohide for panel-hosted Notes.
+        if (adapter.pushPanel && hideTrigger() === "leave") return;
         collapsed = true;
         collapsedAt = Date.now();
         openedByHover = false;
@@ -10084,13 +10090,29 @@
       // The room left and right of the native chrome, measured the way the Zentral panel measures it
       // (the runtime's sidebarSafeBounds): the native sidebar, Zen's sidebar box / splitter, the compact
       // mode sliver and the Zentral apps bar. The card never covers any of them.
+      function sidebarOnRight() {
+        // Use the same authoritative side detection as the Zentral panel. `navigator-toolbox`
+        // may span the whole window, so its midpoint is not a reliable sidebar-side signal.
+        try {
+          const runtime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
+          const side = runtime?.nativeSidebarSide?.();
+          if (side === "left" || side === "right") return side === "right";
+        } catch (_) {}
+        for (const key of ["zen-right-side", "zen-sidebar-right"]) {
+          if (document.documentElement.hasAttribute(key))
+            return document.documentElement.getAttribute(key) !== "false";
+        }
+        const sidebar = document.getElementById("sidebar-box") || toolbox();
+        const r = sidebar?.getBoundingClientRect();
+        return !!r && r.width > 0 && r.width < window.innerWidth - 1 && r.left + r.width / 2 > window.innerWidth / 2;
+      }
       function safeBounds() {
         const vw = window.innerWidth;
         let left = 0, right = vw;
         const ui = document.documentElement;
         const tb = toolbox();
         const tr = tb?.getBoundingClientRect();
-        const onRight = !!tr && tr.width > 0 && tr.left + tr.width / 2 > vw / 2;
+        const onRight = sidebarOnRight();
         if (ui.getAttribute("zen-compact-mode") === "true" && ui.getAttribute("zen-compact-sidebar-visible") === "true") {
           if (onRight) right -= 22;
           else left += 22;
@@ -10127,21 +10149,6 @@
         }
         left = Math.max(0, Math.min(left, vw));
         return { left, right: Math.max(left + 1, Math.min(right, vw)) };
-      }
-      // How far the Zentral apps bar reaches into the window from `side` (0 = not there, or hidden by its own
-      // autohide: then the bezel itself is the target). Same measure as the panel's getAppsBarPanelBounds.
-      function appsBarInset(side) {
-        const ui = document.documentElement;
-        const bar = document.getElementById("zentral-apps-vertical-bar");
-        if (!bar?.isConnected || ui.getAttribute("zentral-apps-placement") !== "vertical-bar" || ui.getAttribute("zentral-apps-autohide") === "true") return 0;
-        const tr = toolbox()?.getBoundingClientRect();
-        const sidebarRight = !!tr && tr.width > 0 && tr.left + tr.width / 2 > window.innerWidth / 2;
-        const barRight = !sidebarRight;
-        if ((side === "right") !== barRight) return 0;
-        const br = bar.getBoundingClientRect();
-        if (!(br.width > 0)) return 0;
-        const inset = barRight ? window.innerWidth - br.left : br.right;
-        return Number.isFinite(inset) && inset > 0 && inset < window.innerWidth / 3 ? Math.round(inset) : 0;
       }
       // The page area measured WITHOUT our own push. The push is a margin that animates, so a rectangle read
       // mid-animation (or while the previous push is still applied) is not where the page edge really is. The
@@ -10195,15 +10202,17 @@
             bounds: safeBounds(),
           });
         },
-        // The thin band at a docked edge where the hidden (autohide) card is revealed again.
+        // The thin band at the docked edge where the hidden card is revealed again. Anchor
+        // it to the same safe-area edge as the card itself (sidebar / apps bar excluded).
+        // Anchoring to the outer window edge puts a right-docked card's strip underneath a
+        // right-hand native sidebar, so the pointer can never reach it.
         edgeBand(side, px) {
           const v = this.view();
-          // Like the panel's reveal edge: anchored to the WINDOW edge (the sidebar never pushes it away), except
-          // where the Zentral apps bar stands (it sits on the side opposite the sidebar, so mostly the RIGHT edge):
-          // there the strip goes beside the bar, as the panel's `updateRevealEdgeGeometry` does. A strip under / on
-          // the bar never received the pointer, which is why the card would not come back from the right edge.
-          const inset = appsBarInset(side);
-          return side === "right" ? { left: window.innerWidth - inset - px, right: inset, top: v.top, width: px, height: v.height } : { left: inset, top: v.top, width: px, height: v.height };
+          const left = v.left;
+          const right = v.left + v.width;
+          return side === "right"
+            ? { left: right - px, right: window.innerWidth - right, top: v.top, width: px, height: v.height }
+            : { left, top: v.top, width: px, height: v.height };
         },
         getArea({ wide = false, span = false, dock = "", dockW = 0 } = {}) {
           const sr = sidebarRect();
@@ -11313,6 +11322,9 @@
           adapter,
           sheet: () => sheet,
           isOpen: () => !!sheet?.isOpen(),
+          // Includes a sheet folded to its own reveal strip. A folded sheet still owns the
+          // window-wide Notes instance and must be closed before another host can open one.
+          held: () => !!sheet?.held(),
           visible: () => el.isConnected && !panelsHidden() && el.getClientRects().length > 0,
           // The bar exists on screen or slid away with an autohidden panel (a hidden panel keeps its bars).
           present: () => el.isConnected && el.getClientRects().length > 0,
@@ -11402,7 +11414,7 @@
       }
       // One Notes at a time: opening it on a bar (or as the card) closes it everywhere else.
       function closeOthers(host) {
-        for (const b of bindings.values()) if (b !== host && b.isOpen()) b.close();
+        for (const b of bindings.values()) if (b !== host && b.held()) b.close();
         if (host !== floating && floating?.held()) floating.close();
       }
       async function openCard(forced = false) {
@@ -11424,7 +11436,7 @@
       // one in use (last used, else the routed host, else the first) stays and the rest are closed.
       function enforceSingle() {
         if (disposed || adopting) return;
-        const open = [...bindings.values()].filter((b) => b.isOpen());
+        const open = [...bindings.values()].filter((b) => b.held());
         const cardOpen = !!floating?.held();
         if (open.length + (cardOpen ? 1 : 0) < 2) return;
         const routed = routeFor("").host;
@@ -11437,7 +11449,7 @@
         if (disposed || adopting || !document.documentElement.hasAttribute("bgalazka-triple-view")) return;
         const tri = [...bindings.values()].find((b) => b.kind === "triple" && b.present());
         if (!tri) return;
-        const stray = [...bindings.values()].some((b) => b !== tri && b.isOpen());
+        const stray = [...bindings.values()].some((b) => b !== tri && b.held());
         if (!stray) return;
         if (tri.isOpen()) closeOthers(tri);
         else Promise.resolve(openFrom("triple")).catch(warn);
@@ -11536,7 +11548,9 @@
       const panelRootOpen = () => !!document.getElementById("zen-app-panel-root")?.hasAttribute("open");
       function maybeFollow() {
         if (!followKind || disposed || !enabledNow() || restoreState === "checking") return;
-        if ([...bindings.values()].some((b) => b.isOpen())) {
+        // A folded sheet is still the current Notes instance. Treating it as closed here
+        // makes the childList sync from its reveal strip immediately reopen it.
+        if ([...bindings.values()].some((b) => b.held())) {
           followTries = 0;
           return;
         }

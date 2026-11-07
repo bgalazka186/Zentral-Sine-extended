@@ -45,7 +45,13 @@ Object.defineProperty(El.prototype, "offsetParent", { get() { return this.parent
 document.dispatchEvent = document.dispatchEvent || (() => true);
 const win = {
   document,
-  ZentralRuntime: { register: (def) => (registered = def) },
+  ZentralRuntime: {
+    register: (def) => (registered = def),
+    nativeSidebarSide: () => {
+      const r = document.getElementById("navigator-toolbox")?.getBoundingClientRect();
+      return r && r.width > 0 && r.left + r.width / 2 > 600 ? "right" : "left";
+    },
+  },
   requestAnimationFrame: (fn) => raf.push(fn), cancelAnimationFrame() {},
   setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800,
   addEventListener: (t, fn, c) => windowListeners.push({ t, fn, c }),
@@ -455,6 +461,69 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
   const outside = (target) => windowListeners.filter((l) => l.t === "mousedown" && l.c === true).forEach((l) => l.fn(new Ev("mousedown", { target, bubbles: true })));
   const floatCard = () => document.documentElement.children.find((c) => c._classes.has("zentral-notes-sheet") && c.dataset.host === "float");
 
+  await test("panel autohide owns pointer-away hiding; outside-click collapse stays hidden and never leaves a second Notes reveal strip", async () => {
+    const html = document.documentElement;
+    root.setAttribute("open", "");
+    html.setAttribute("bgalazka-triple-view", "true");
+    const box = new El("div"), bar = new El("div");
+    bar.className = "bgalazka-super-bar";
+    bar.append(new El("button"));
+    box.append(bar);
+    slider.append(box);
+    mutationCallbacks.slice().forEach((cb) => cb([{ type: "childList", addedNodes: [box], removedNodes: [] }]));
+    await sleep(120);
+
+    bar.firstElementChild.click();
+    await sleep(40); await flush();
+    const first = sheetsIn(slider).find((s) => !s.hidden);
+    assert.ok(first, "the Triple View bar opened Notes");
+    const hover = first.querySelector(".zn-hover-btn");
+    assert.ok(hover, "panel-hosted Notes exposes its autohide control");
+    hover.click(); // Autohide: pointer-away (the panel owns the actual hide)
+    await sleep(720); await flush();
+    assert.equal(first.dataset.dock, "hover");
+    assert.equal(first.dataset.collapsed, undefined, "pointer-away alone does not fold Notes inside the panel");
+    assert.equal(slider.children.filter((e) => e._classes.has("zentral-notes-reveal")).length, 0, "no second Notes reveal target");
+
+    html.setAttribute("bgalazka-hover-panel-enabled", "true");
+    html.setAttribute("bgalazka-hover-panel-hidden", "true");
+    await sleep(30);
+    assert.equal(first.dataset.collapsed, undefined, "Notes remains part of the whole panel while it is hidden");
+    html.removeAttribute("bgalazka-hover-panel-hidden");
+    html.removeAttribute("bgalazka-hover-panel-enabled");
+
+    hover.click(); // Switch the same mode to outside-click.
+    outside(page);
+    await flush();
+    assert.equal(first.dataset.collapsed, "true", "an outside press folds Notes");
+    const strip = slider.children.find((e) => e._classes.has("zentral-notes-reveal"));
+    assert.ok(strip, "one reveal target belongs to the one folded Notes instance");
+
+    // The reveal element is a childList mutation in the real DOM; that sync must not mistake
+    // the folded instance for a closed sheet and restore it through `followKind`.
+    mutationCallbacks.slice().forEach((cb) => cb([{ type: "childList", target: slider, addedNodes: [strip], removedNodes: [] }]));
+    await sleep(120); await flush();
+    assert.equal(first.dataset.collapsed, "true", "the sync pass does not immediately reopen it");
+    assert.equal(slider.children.filter((e) => e._classes.has("zentral-notes-reveal")).length, 1, "there is still exactly one reveal target");
+    hover.click(); // Third click: turn autohide off and restore the normal pinned state for later tests.
+    await flush();
+    assert.equal(first.dataset.collapsed, undefined);
+
+    html.removeAttribute("bgalazka-triple-view");
+    toolbar.firstElementChild.click();
+    await sleep(40); await flush();
+    assert.equal(first.hidden, true, "opening the primary host closes the folded Triple View instance");
+    assert.equal(slider.children.filter((e) => e._classes.has("zentral-notes-reveal")).length, 0, "closing the old host removes its reveal target");
+    assert.equal(sheetsIn(slider).filter((s) => !s.hidden).length, 1, "only the new primary Notes instance is shown");
+    toolbar.firstElementChild.click();
+    await flush();
+
+    box.remove();
+    mutationCallbacks.slice().forEach((cb) => cb([{ type: "childList", addedNodes: [], removedNodes: [box] }]));
+    await sleep(120);
+    root.removeAttribute("open");
+  });
+
   await test("Customize toolbar widget: created once, icon is the Notes drawing, click goes to the pressed window, follows the enable switch", async () => {
     const def = cui.widgets.get("zentral-notes-toolbar-button");
     assert.ok(def, "widget registered");
@@ -793,11 +862,20 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     await sleep(1100); await flush();
     assert.equal(card.dataset.collapsed, "true", "no pointer, no focus inside: folded away");
     assert.equal(html.getAttribute("zentral-notes-push"), null, "the page gets its room back while the card is hidden");
-    const strip = document.documentElement.all().find((c) => c._classes.has("zentral-notes-reveal"));
+    let strip = document.documentElement.all().find((c) => c._classes.has("zentral-notes-reveal"));
     assert.ok(strip, "an edge strip stays");
     assert.equal(strip.dataset.edge, "right");
     assert.equal(parseInt(strip.style.top), 0);
     assert.equal(parseInt(strip.style.height), 800, "the strip spans the docked edge");
+    assert.equal(strip.style.right, "280px", "the reveal strip sits at the card's safe-area edge, left of the right-hand sidebar");
+    assert.equal(strip.style.left, "auto", "right-edge placement is anchored from the right, not rounded outside the viewport");
+    strip.dispatchEvent(new Ev("mouseenter", { bubbles: true }));
+    await sleep(150); await flush();
+    assert.equal(card.dataset.collapsed, undefined, "hovering the right-hand safe-area strip reveals the card");
+    await sleep(700); await flush();
+    assert.equal(card.dataset.collapsed, "true", "a hover-opened standalone card folds again when the pointer stays away");
+    strip = document.documentElement.all().find((c) => c._classes.has("zentral-notes-reveal"));
+    assert.ok(strip, "the right-edge target is recreated after the grace period");
     const pill = document.documentElement.all().find((c) => c._classes.has("zentral-notes-pill"));
     assert.equal(pill.hidden, true, "no pill while hidden");
     strip.dispatchEvent(new Ev("mousedown", { bubbles: true }));
