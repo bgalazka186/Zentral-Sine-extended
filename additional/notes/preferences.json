@@ -668,6 +668,96 @@
     "property": "zen.workspace.zentral.notes.default_view"
   },
   {
+    "property": "zen.workspace.zentral.notes.markdown_flavor",
+    "label": "Markdown mode (a note can set its own in its menu)",
+    "type": "dropdown",
+    "defaultValue": "mixed",
+    "options": [
+      {
+        "label": "Mixed (accept what all three apps accept)",
+        "value": "mixed"
+      },
+      {
+        "label": "Mixed, collisions follow Obsidian",
+        "value": "mixed+obsidian"
+      },
+      {
+        "label": "Mixed, collisions follow GitHub",
+        "value": "mixed+github"
+      },
+      {
+        "label": "Mixed, collisions follow Reddit",
+        "value": "mixed+reddit"
+      },
+      {
+        "label": "Obsidian only",
+        "value": "obsidian"
+      },
+      {
+        "label": "GitHub only",
+        "value": "github"
+      },
+      {
+        "label": "Reddit only",
+        "value": "reddit"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.single_tilde",
+    "label": "One tilde, ~a~, in the mixed modes",
+    "type": "dropdown",
+    "defaultValue": "sub",
+    "options": [
+      {
+        "label": "Subscript (H~2~O)",
+        "value": "sub"
+      },
+      {
+        "label": "Strikethrough (as on GitHub)",
+        "value": "strike"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.ignore_syntax",
+    "label": "Show as plain text (words separated by spaces): >[!info] <mark> == or a rule id such as A10",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.notes.text_shortcuts",
+    "label": "Typing shortcuts: {{date}}  @today  /tomorrow  @+3d  @monday",
+    "type": "dropdown",
+    "defaultValue": "all",
+    "options": [
+      {
+        "label": "All: {{ }}, @ and /",
+        "value": "all"
+      },
+      {
+        "label": "Only {{date}} style",
+        "value": "braces"
+      },
+      {
+        "label": "Off",
+        "value": "off"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.shortcut_date_format",
+    "label": "Date format of the shortcuts (YYYY MM DD, [text] is kept)",
+    "type": "string",
+    "defaultValue": "YYYY-MM-DD"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.shortcut_time_format",
+    "label": "Time format of the shortcuts (HH mm ss, hh mm A)",
+    "type": "string",
+    "defaultValue": "HH:mm"
+  },
+  {
     "label": "Show word, character and reading-time count under the note",
     "type": "checkbox",
     "defaultValue": false,
