@@ -27,6 +27,23 @@
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
   const ZentralRuntime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
+  // The Markdown flavor modes and the typing shortcuts live in their own files (additional/notes/flavors). The full
+  // pack loads them through the module loader, the standalone bundle embeds them; a test may hand them over in
+  // window.__zentralNotesParts. Without them Notes behaves as plain "mixed" and no shortcut expands.
+  const loadPart = (path, name) => {
+    try {
+      const loader = window.ZentralModuleLoader;
+      if (loader) {
+        loader.load(path, { owner: "notes" });
+        return loader.create(name);
+      }
+    } catch (error) {
+      console.warn("[ZentralNotes] could not load " + name, error);
+    }
+    return window.__zentralNotesParts?.[name] || null;
+  };
+  const FLAVORS_PART = loadPart("additional/notes/flavors/ZentralNotesFlavors.js", "notes-flavors");
+  const SHORTCUTS_PART = loadPart("additional/notes/flavors/ZentralNotesShortcuts.js", "notes-shortcuts");
 
   function standaloneReady(start) {
     let started = false;
@@ -152,6 +169,12 @@
       BACKLINKS_PANEL: "zen.workspace.zentral.notes.backlinks_panel",
       HIDDEN_MENU: "zen.workspace.zentral.notes.hidden_tools_menu",
       DATE_MODE: "zen.workspace.zentral.notes.date_notes_mode",
+      MD_FLAVOR: "zen.workspace.zentral.notes.markdown_flavor",
+      TILDE: "zen.workspace.zentral.notes.single_tilde",
+      IGNORE_SYNTAX: "zen.workspace.zentral.notes.ignore_syntax",
+      TEXT_SHORTCUTS: "zen.workspace.zentral.notes.text_shortcuts",
+      SHORTCUT_DATE: "zen.workspace.zentral.notes.shortcut_date_format",
+      SHORTCUT_TIME: "zen.workspace.zentral.notes.shortcut_time_format",
       HISTORY_ON: "zen.workspace.zentral.notes.history_enabled",
       HISTORY_KEEP: "zen.workspace.zentral.notes.history_keep",
       HISTORY_MINUTES: "zen.workspace.zentral.notes.history_minutes",
@@ -209,6 +232,7 @@
       "color",
       "label",
       "pinned",
+      "flavor",
       "trashed",
       "folder",
       "remind",
@@ -288,6 +312,7 @@
         label: cleanLabel(meta.label),
         folder: cleanFolder(meta.folder),
         pinned: meta.pinned === "true",
+        flavor: meta.flavor && FLAVORS_PART && FLAVORS_PART.MODES.includes(meta.flavor) ? meta.flavor : "",
         trashed: meta.trashed ? toTime(meta.trashed, mtime) : 0,
         remind: meta.remind ? cleanRemind(toTime(meta.remind, 0)) : 0,
         reminded: meta.reminded ? toTime(meta.reminded, 0) : 0,
@@ -306,6 +331,7 @@
       if (cleanLabel(n.label)) lines.push("label: " + cleanLabel(n.label));
       if (cleanFolder(n.folder)) lines.push("folder: " + cleanFolder(n.folder));
       if (n.pinned) lines.push("pinned: true");
+      if (n.flavor && FLAVORS_PART && FLAVORS_PART.MODES.includes(n.flavor)) lines.push("flavor: " + n.flavor);
       if (n.trashed) lines.push("trashed: " + iso(n.trashed));
       if (n.remind > 0) {
         lines.push("remind: " + iso(n.remind));
@@ -662,9 +688,9 @@
         "~~(?=\\S)([\\s\\S]+?)(?<=\\S)~~", // 10 strike
         "(?<![\\w*])\\*([^\\s*](?:[\\s\\S]*?[^\\s*])?)\\*(?![\\w*])", // 11 italic
         "(?<![\\w_])_([^\\s_](?:[\\s\\S]*?[^\\s_])?)_(?![\\w_])", // 12 italic
-        "\\[((?:!\\[[^\\]\\n]*\\]\\([^\\s)]+\\)|[^\\]\\n])+)\\]\\(([^\\s)]+)(?:\\s+\\x22([^\\x22]*)\\x22)?\\)", // 13 text, 14 href, 15 "title" (tooltip)
+        "\\[((?:!\\[[^\\]\\n]*\\]\\([^\\s)]+\\)|[^\\]\\n])+)\\]\\((<[^<>\\n]*>|(?:[^\\s()]|\\([^\\s()]*\\))+)(?:\\s+\\x22([^\\x22]*)\\x22)?\\)", // 13 text, 14 href, 15 "title" (tooltip)
         "<?(https?:\\/\\/[^\\s<>\"')\\]]+)>?", // 16 bare url, or <url>
-        "!\\[([^\\]\\n]*)\\]\\(([^\\s)]+)(?:\\s+\\x22([^\\x22]*)\\x22)?\\)", // 17 alt, 18 src, 19 "title" (image)
+        "!\\[([^\\]\\n]*)\\]\\((<[^<>\\n]*>|(?:[^\\s()]|\\([^\\s()]*\\))+)(?:\\s+\\x22([^\\x22]*)\\x22)?\\)", // 17 alt, 18 src, 19 "title" (image)
         "(?<!~)~([^\\s~]+)~(?!~)", // 20 subscript  H~2~O
         "\\^([^\\s^]+)\\^", // 21 superscript  X^2^
         "<[kK][bB][dD]>([^<\\n]+)<\\/[kK][bB][dD]>", // 22 keyboard key
@@ -673,6 +699,24 @@
         "(?<![\\w/])mailto:([^\\s<>@\\x22]+@[^\\s<>@\\x22]+\\.[^\\s<>@\\x22,;)\\]]+)", // 26 bare mailto:user@host.tld
         "(?<![\\w$])\\$([^\\s$](?:[^$\\n]*?[^\\s$])?)\\$(?![\\d$\\w])", // 27 $math$ (not "$5 and $10": no space inside, no digit after)
         "\\[\\^([^\\]\\s]{1,40})\\]", // 28 footnote reference [^1] (see FOOTS)
+        // 29 and up: rules that other apps read differently or that we added from the flavor table. Each one is gated by
+        // inlineOff() (feature id in the comment), so a mode that does not know the syntax leaves it as plain text.
+        "\\$\\$([^$\\n]+?)\\$\\$", // 29 $$x$$ inline (I03)
+        "!\\[([^\\]\\n]*)\\]\\[([^\\]\\n]*)\\]", // 30 alt, 31 label: image reference (B18)
+        "(?<![\\w/.@])(www\\.[^\\s<>\\x22')\\]]+\\.[A-Za-z]{2,}[^\\s<>\\x22')\\]]*)", // 32 www.x.com (B12)
+        "(?<=\\w)\\*([^\\s*](?:[^*\\n]*?[^\\s*])?)\\*(?=\\w)", // 33 a*b*c (A05)
+        "(?<![\\w:]):([a-z0-9_+-]{1,32}):(?![\\w:])", // 34 :smile: (L05, known names only)
+        "%%([^%\\n]+?)%%", // 35 comment (A31)
+        "<!--([\\s\\S]*?)-->", // 36 HTML comment (A32)
+        "\\[([^\\]\\n]+)\\](?![\\[(:])", // 37 [text] with a [text]: url line (B09)
+        "\\^\\(([^()\\n]+)\\)", // 38 Reddit superscript group (A17)
+        "\\^([^\\s^()]+)", // 39 Reddit superscript word (A17)
+        ">!([^!\\n]+?)!<", // 40 Reddit spoiler (A27)
+        "(?<![|\\w])\\|\\|([^|\\n]+?)\\|\\|(?![|\\w])", // 41 Discord spoiler (A29)
+        "\\+\\+(?=\\S)([^+\\n]+?)(?<=\\S)\\+\\+", // 42 ++underline++ (A20)
+        "(?<![\\w&/#>])#([A-Za-z_\\u00C0-\\uFFFF][\\w\\u00C0-\\uFFFF/-]*)", // 43 #tag (C14)
+        "(?<![\\w./-])(\\d{4})-(\\d{2})-(\\d{2})(?:[ T](\\d{2}):(\\d{2}))?(?![\\w-]|:\\d)", // 44 year 45 month 46 day 47 hour 48 minute: a date (L07)
+        "(?<![\\w/])\\/?([ur])\\/([A-Za-z0-9_-]{2,30})(?![\\w/])", // 49 kind, 50 name: u/name r/sub (L04)
       ].join("|"),
       "g",
     );
@@ -858,6 +902,67 @@
     // Reference definitions ("[ref]: https://... "title"") of the document being parsed. Set by
     // parseBlocks for the duration of one parse; null outside it (references then stay text).
     let REFS = null;
+    // The Markdown flavor gate for the parse in progress (see additional/notes/flavors). Rules that other apps read
+    // differently ask FLAVOR.on("A10") first. Without the flavors file only the rules every app agrees on are on.
+    const FLAVOR_DEFAULT_OFF = new Set(["A09", "A17", "D02", "G05", "L04", "M24"]);
+    const flavorGate = (mode, o = {}) => (FLAVORS_PART ? FLAVORS_PART.gate(mode, o) : { mode: "mixed", only: false, flavor: null, on: (id) => !FLAVOR_DEFAULT_OFF.has(id) });
+    // The "ignore syntax" setting, parsed once per distinct text.
+    let ignoreMemo = { raw: "", value: { ids: new Set(), literals: [] } };
+    function parseIgnoreCached(raw) {
+      raw = String(raw || "");
+      if (!raw) return ignoreMemo.value.literals.length || ignoreMemo.value.ids.size ? (ignoreMemo = { raw, value: { ids: new Set(), literals: [] } }).value : ignoreMemo.value;
+      if (ignoreMemo.raw !== raw) ignoreMemo = { raw, value: FLAVORS_PART ? FLAVORS_PART.parseIgnore(raw) : { ids: new Set(), literals: [] } };
+      return ignoreMemo.value;
+    }
+    // Line-for-line rewrites done before the blocks are read (the line count never changes, so task lines and scroll
+    // positions stay right): "[ ] a" and "• a" become list items (E12, E19), \[ ... \] becomes a $$ block (I05), and the
+    // pieces of syntax the person listed under "ignore syntax" get a backslash in front of every symbol so they show as text.
+    const IGNORE_ESC = /[\\`*_{}[\]()#+\-.!|=~<>^$]/g;
+    // ">[!info]" also finds "> [!info]": a leading > matches the spaces after it.
+    let ignoreMemoRes = { key: "", list: [] };
+    function ignoreRes(literals) {
+      const key = literals.join("\u0000");
+      if (ignoreMemoRes.key !== key)
+        ignoreMemoRes = { key, list: literals.map((lit) => new RegExp((lit[0] === ">" ? ">[ \\t]*" : "") + (lit[0] === ">" ? lit.slice(1) : lit).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) };
+      return ignoreMemoRes.list;
+    }
+    function prepareLines(lines, literals) {
+      const bullets = FLAVOR.on("E19"), boxes = FLAVOR.on("E12"), brackets = FLAVOR.on("I05");
+      if (!bullets && !boxes && !brackets && !literals.length) return lines;
+      let fence = "";
+      let inMath = false;
+      return lines.map((line) => {
+        const f = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+        if (f) {
+          if (!fence) fence = f[1][0];
+          else if (f[1][0] === fence) fence = "";
+          return line;
+        }
+        if (fence) return line;
+        let out = line;
+        if (bullets) out = out.replace(/^(\s*)[\u2022\u00b7\u25e6\u25aa\u2023]\s+(?=\S)/, "$1- ");
+        if (boxes) out = out.replace(/^(\s*)\[( |x|X)\]\s+(?=\S)/, "$1- [$2] ");
+        if (brackets) {
+          const one = /^\s*\\\[(.+)\\\]\s*$/.exec(out);
+          if (one) out = "$$ " + one[1].trim() + " $$";
+          else if (!inMath && /^\s*\\\[\s*$/.test(out)) (inMath = true), (out = "$$");
+          else if (inMath && /^\s*\\\]\s*$/.test(out)) (inMath = false), (out = "$$");
+        }
+        if (literals.length && out.trim()) {
+          out = out
+            .split(/(`+[^`]*`+)/)
+            .map((seg, i) => {
+              if (i % 2) return seg;
+              for (const re of ignoreRes(literals)) seg = seg.replace(re, (hit) => hit.replace(IGNORE_ESC, "\\$&"));
+              return seg;
+            })
+            .join("");
+        }
+        return out;
+      });
+    }
+    const cleanFlavor = (v) => (FLAVORS_PART ? FLAVORS_PART.cleanMode(v) : "mixed");
+    let FLAVOR = flavorGate("mixed");
     const refKey = (label) => String(label).trim().replace(/\s+/g, " ").toLowerCase();
     const REF_DEF_RE = /^ {0,3}\[([^\]\n]+)\]:\s+<?([^\s>]+)>?(?:\s+(?:"([^"]*)"|'([^']*)'|\(([^)]*)\)))?\s*$/;
     // Takes the definition lines out (blanked, so line numbers stay true) and returns them.
@@ -1013,6 +1118,76 @@
       return out;
     }
 
+    // True when the match belongs to a rule the current flavor does not read (then it stays text and the scan goes on
+    // one character later). Rules 29 and up are new; the others are old rules that now ask the gate.
+    const validYmd = (y, mo, d, hh, mi) => {
+      const dt = new Date(+y, +mo - 1, +d);
+      return dt.getFullYear() === +y && dt.getMonth() === +mo - 1 && dt.getDate() === +d && (hh === undefined || (+hh < 24 && +mi < 60));
+    };
+    function inlineOff(m) {
+      if (m[9] !== undefined) return !FLAVOR.on(m[8] ? "A11" : "A10");
+      if (m[20] !== undefined) return !FLAVOR.on("A09") && !FLAVOR.on("A13");
+      if (m[21] !== undefined) return !FLAVOR.on("A15");
+      if (m[27] !== undefined) return !FLAVOR.on("I01");
+      if (m[29] !== undefined) return !FLAVOR.on("I03");
+      if (m[30] !== undefined) return !FLAVOR.on("B18") || !REFS?.has(refKey(m[31] || m[30]));
+      if (m[32] !== undefined) return !FLAVOR.on("B12");
+      if (m[33] !== undefined) return !FLAVOR.on("A05");
+      if (m[34] !== undefined) return !FLAVOR.on("L05") || !FLAVORS_PART?.EMOJI[m[34]];
+      if (m[35] !== undefined) return !FLAVOR.on("A31");
+      if (m[36] !== undefined) return !FLAVOR.on("A32");
+      if (m[37] !== undefined) return !FLAVOR.on("B09") || !REFS?.has(refKey(m[37]));
+      if (m[38] !== undefined || m[39] !== undefined) return !FLAVOR.on("A17");
+      if (m[40] !== undefined) return !FLAVOR.on("A27");
+      if (m[41] !== undefined) return !FLAVOR.on("A29");
+      if (m[42] !== undefined) return !FLAVOR.on("A20");
+      if (m[43] !== undefined) return !FLAVOR.on("C14");
+      if (m[44] !== undefined) return !FLAVOR.on("L07") || !validYmd(m[44], m[45], m[46], m[47], m[48]);
+      if (m[49] !== undefined) return !FLAVOR.on("L04");
+      return false;
+    }
+    const unAngle = (u) => (u && u[0] === "<" ? u.slice(1, -1) : u);
+    function extraInline(m, depth) {
+      if (m[29] !== undefined) return [{ t: "math", c: texNodes(m[29]) }];
+      if (m[30] !== undefined) {
+        const def = REFS?.get(refKey(m[31] || m[30]));
+        const href = def && safeHref(def.href, false);
+        return href ? [{ t: "img", alt: m[30], href }] : [{ t: "text", s: m[0] }];
+      }
+      if (m[32] !== undefined) {
+        let url = m[32],
+          trail = "";
+        const tm = /[.,;:!?]+$/.exec(url);
+        if (tm) {
+          trail = tm[0];
+          url = url.slice(0, -trail.length);
+        }
+        const href = safeHref("https://" + url);
+        return href ? [{ t: "a", href, c: [{ t: "text", s: url }] }, ...(trail ? [{ t: "text", s: trail }] : [])] : [{ t: "text", s: m[0] }];
+      }
+      if (m[33] !== undefined) return [{ t: "i", c: parseInline(m[33], depth + 1) }];
+      if (m[34] !== undefined) return [{ t: "text", s: FLAVORS_PART.EMOJI[m[34]] }];
+      if (m[35] !== undefined || m[36] !== undefined) return []; // comments: in the file, not on the screen
+      if (m[37] !== undefined) {
+        const def = REFS.get(refKey(m[37]));
+        const href = def && safeHref(def.href);
+        if (!href) return [{ t: "text", s: m[0] }];
+        const a = { t: "a", href, c: parseInline(m[37], depth + 1) };
+        if (def.title) a.title = def.title;
+        return [a];
+      }
+      if (m[38] !== undefined || m[39] !== undefined) return [{ t: "sup", c: parseInline(m[38] ?? m[39], depth + 1) }];
+      if (m[40] !== undefined || m[41] !== undefined) return [{ t: "spoiler", c: parseInline(m[40] ?? m[41], depth + 1) }];
+      if (m[42] !== undefined) return [{ t: "u", c: parseInline(m[42], depth + 1) }];
+      if (m[43] !== undefined) return [{ t: "tag", s: "#" + m[43] }];
+      if (m[44] !== undefined)
+        return [{ t: "date", s: m[0], ymd: m[44] + "-" + m[45] + "-" + m[46], time: m[47] !== undefined ? m[47] + ":" + m[48] : "" }];
+      if (m[49] !== undefined) {
+        const href = safeHref("https://www.reddit.com/" + (m[49] === "u" ? "user" : "r") + "/" + m[50]);
+        return href ? [{ t: "a", href, c: [{ t: "text", s: m[0].replace(/^\//, "") }] }] : [{ t: "text", s: m[0] }];
+      }
+      return [{ t: "text", s: m[0] }];
+    }
     function parseInlineRaw(text, depth = 0, noHtml = false) {
       text = String(text);
       if (depth > 4 || text.length > MAX_INLINE_CHARS)
@@ -1026,10 +1201,15 @@
           re.lastIndex++;
           continue;
         }
+        if (inlineOff(m)) {
+          re.lastIndex = m.index + 1;
+          continue;
+        }
         if (m.index > last)
           out.push({ t: "text", s: text.slice(last, m.index) });
         last = m.index + m[0].length;
-        if (m[1] !== undefined || m[2] !== undefined)
+        if (m.length > 29 && m.slice(29).some((x) => x !== undefined)) out.push(...extraInline(m, depth));
+        else if (m[1] !== undefined || m[2] !== undefined)
           out.push({ t: "b", c: [{ t: "i", c: parseInline(m[1] ?? m[2], depth + 1) }] });
         else if (m[3] !== undefined) out.push({ t: "text", s: m[3] }); // ==== and =={red}== stay literal
         else if (m[4] !== undefined) out.push({ t: "b", c: parseInline(m[4], depth + 1) });
@@ -1047,15 +1227,20 @@
         else if (m[11] !== undefined || m[12] !== undefined)
           out.push({ t: "i", c: parseInline(m[11] ?? m[12], depth + 1) });
         else if (m[17] !== undefined) {
-          const asset = parseAssetLink(m[18]);
-          const href = asset ? null : safeHref(m[18], false);
-          if (asset) out.push({ t: "img", alt: m[17], asset: asset.rel, width: asset.width, align: asset.align });
-          else if (href) out.push({ t: "img", alt: m[17], href });
+          const src = unAngle(m[18]);
+          const asset = parseAssetLink(src);
+          const href = asset ? null : safeHref(src, false);
+          // ![alt|100](url) and ![alt|100x50](url): Obsidian's size, kept out of the alt text (B17).
+          const size = FLAVOR.on("B17") ? /\|(\d{1,4})(?:x(\d{1,4}))?$/.exec(m[17]) : null;
+          const alt = size ? m[17].slice(0, size.index) : m[17];
+          if (asset) out.push({ t: "img", alt, asset: asset.rel, width: size ? +size[1] : asset.width, align: asset.align });
+          else if (href) out.push(size ? { t: "img", alt, href, width: +size[1] } : { t: "img", alt, href });
           else out.push({ t: "text", s: m[0] });
         } else if (m[13] !== undefined) {
-          const parts = noteLinkParts(m[14]);
+          const target = unAngle(m[14]);
+          const parts = noteLinkParts(target);
           const noteId = parts?.id || null;
-          const href = noteId ? null : safeHref(m[14]);
+          const href = noteId ? null : safeHref(target);
           if (noteId) {
             const a = { t: "nl", id: noteId, c: parseInline(m[13], depth + 1) };
             if (parts.heading) a.heading = parts.heading;
@@ -1066,13 +1251,13 @@
             if (m[15]) a.title = m[15];
             out.push(a);
           } else out.push({ t: "text", s: m[0] });
-        } else if (m[20] !== undefined) out.push({ t: "sub", c: parseInline(m[20], depth + 1) });
+        } else if (m[20] !== undefined) out.push({ t: FLAVOR.on("A09") ? "s" : "sub", c: parseInline(m[20], depth + 1) });
         else if (m[21] !== undefined) out.push({ t: "sup", c: parseInline(m[21], depth + 1) });
         else if (m[22] !== undefined) out.push({ t: "kbd", s: m[22] });
         else if (m[27] !== undefined) out.push({ t: "math", c: texNodes(m[27]) });
         else if (m[28] !== undefined) {
           // Only a label that has a definition becomes a footnote; anything else stays the text it was.
-          if (FOOTS && FOOTS.has(m[28]) && (FOOT_ORDER.includes(m[28]) || FOOT_ORDER.length < FOOT_MAX)) {
+          if (FOOTS && FLAVOR.on("J01") && FOOTS.has(m[28]) && (FOOT_ORDER.includes(m[28]) || FOOT_ORDER.length < FOOT_MAX)) {
             let k = FOOT_ORDER.indexOf(m[28]);
             if (k < 0) k = FOOT_ORDER.push(m[28]) - 1;
             out.push({ t: "fn", label: m[28], n: k + 1 });
@@ -1113,8 +1298,8 @@
     // the same node objects Markdown produces, `style` keeps only a short list of harmless properties, and
     // everything else stays visible text.
     // ======================================================================
-    const HTML_INLINE_RE = /<(?:b|strong|i|em|u|s|del|strike|mark|small|sub|sup|kbd|code|a|br|img)(?:\s[^<>]*)?\/?>/i;
-    const HTML_INLINE_OPEN_RE = /<(b|strong|i|em|u|s|del|strike|mark|small|sub|sup|kbd|code|a|br|img)(\s[^<>]*)?\/?>/gi;
+    const HTML_INLINE_RE = /<(?:b|strong|i|em|u|ins|s|del|strike|mark|small|span|big|font|abbr|q|cite|var|samp|tt|sub|sup|kbd|code|a|br|img)(?:\s[^<>]*)?\/?>/i;
+    const HTML_INLINE_OPEN_RE = /<(b|strong|i|em|u|ins|s|del|strike|mark|small|span|big|font|abbr|q|cite|var|samp|tt|sub|sup|kbd|code|a|br|img)(\s[^<>]*)?\/?>/gi;
     const HTML_BLOCK_RE = /^\s*<(h[1-6]|p|div|center|table|hr)(\s[^<>]*)?\/?>/i;
     const HTML_ALIGNS = Object.freeze(["left", "center", "right"]);
     const HTML_MAX_ROWS = 200,
@@ -1210,9 +1395,18 @@
               const href = safeHref(htmlAttr(attrs, "href") || "");
               node = href ? { t: "a", href, c: parseInline(inner, depth + 1) } : { t: "span", c: parseInline(inner, depth + 1) };
             } else {
-              const t = { strong: "b", em: "i", del: "s", strike: "s", mark: "hl" }[tag] || tag;
-              node = { t, c: parseInline(inner, depth + 1) };
-              if (t === "hl") node.color = "yellow";
+              let t = { strong: "b", em: "i", del: "s", strike: "s", mark: "hl" }[tag] || tag;
+              // <ins> is underline (A19); <span style>, <big>, <abbr> ... keep their text and lose the tag (A25, A26).
+              if (tag === "ins") t = FLAVOR.on("A19") ? "u" : null;
+              else if (["span", "big", "font", "abbr", "q", "cite", "var", "samp", "tt"].includes(tag)) {
+                // Only tags with harmless attributes lose the tag; <span onclick=...> stays visible text.
+                const plain = attrs.replace(/\s(?:style|title|class|color|face|size|lang|dir)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>]+)/gi, "").replace(/\/$/, "").trim() === "";
+                t = plain && FLAVOR.on(tag === "span" ? "A25" : "A26") ? "span" : null;
+              }
+              if (t) {
+                node = { t, c: parseInline(inner, depth + 1) };
+                if (t === "hl") node.color = "yellow";
+              }
             }
           }
         }
@@ -1307,8 +1501,32 @@
     // Backslash escapes: \* \# \[ ... show the character itself. They are swapped for private-use
     // characters before parsing and swapped back in the finished text (so they cannot start markup).
     const ESC_CHARS = "\\`*_{}[]()#+-.!|=~<>^$";
+    // HTML entities in text (J13): the common named ones and &#169; / &#xA9;. Decoded once, in text only (never in code).
+    const ENTITIES = Object.freeze({ amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0", copy: "\u00a9", reg: "\u00ae", trade: "\u2122", hellip: "\u2026", mdash: "\u2014", ndash: "\u2013", laquo: "\u00ab", raquo: "\u00bb", larr: "\u2190", rarr: "\u2192", uarr: "\u2191", darr: "\u2193", times: "\u00d7", divide: "\u00f7", deg: "\u00b0", plusmn: "\u00b1", euro: "\u20ac", pound: "\u00a3", yen: "\u00a5", cent: "\u00a2", bull: "\u2022", middot: "\u00b7", ne: "\u2260", le: "\u2264", ge: "\u2265", infin: "\u221e", check: "\u2713" });
+    const decodeEntities = (str) =>
+      str.replace(/&(#\d{1,6}|#[xX][\da-fA-F]{1,6}|[A-Za-z]{2,8});/g, (all, name) => {
+        if (name[0] === "#") {
+          const code = name[1] === "x" || name[1] === "X" ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
+          return code > 31 && code < 0x110000 && !(code >= 0xd800 && code < 0xe000) ? String.fromCodePoint(code) : all;
+        }
+        return ENTITIES[name] ?? all;
+      });
+    function decodeNodes(nodes) {
+      for (const n of nodes) {
+        if (n.t === "text" && n.s.includes("&")) n.s = decodeEntities(n.s);
+        else if (n.c && n.t !== "math") decodeNodes(n.c);
+      }
+      return nodes;
+    }
     function parseInline(text, depth = 0) {
+      const nodes = parseInlineEsc(text, depth);
+      return depth === 0 && FLAVOR.on("J13") ? decodeNodes(nodes) : nodes;
+    }
+    function parseInlineEsc(text, depth = 0) {
       text = String(text);
+      // \( x^2 \) is what ChatGPT and Gemini write for inline math (I04): read it as $x^2$.
+      if (depth === 0 && text.includes("\\(") && FLAVOR.on("I04"))
+        text = text.replace(/\\\((?=\S)([^\n]*?\S)\\\)/g, (all, x) => (x.includes("$") ? all : "$" + x + "$"));
       if (depth > 0 || !text.includes("\\")) return parseInlineRaw(text, depth);
       const swapped = text.replace(/\\([\\`*_{}[\]()#+\-.!|=~<>^$])/g, (_m, ch) => String.fromCharCode(0xe000 + ESC_CHARS.indexOf(ch)));
       const back = (str, keepSlash) => str.replace(/[\ue000-\ue015]/g, (c) => (keepSlash ? "\\" : "") + ESC_CHARS[c.charCodeAt(0) - 0xe000]);
@@ -1327,7 +1545,8 @@
       return fix(parseInlineRaw(swapped, 0));
     }
 
-    const LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(?:\[( |x|X|-|\/|\?|!)\]\s+)?(.*)$/;
+    const LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(?:\[( |x|X|-|\/|\?|!|>|<|\*|i|b|"|l|p|c|f|I|S|n)\]\s+)?(.*)$/;
+    const TASK_ORIGINAL = new Set(["-", "/", "?", "!"]); // the four extra states we had first (E09); the rest is E10
     // GitHub-style tables: a header row, a delimiter row with pipes (| --- | :-: |), body rows.
     const TABLE_DELIM_RE = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
     // Raw cells with their offsets in the line: { text (untrimmed), s, e }. splitRow trims them; the task-box
@@ -1430,8 +1649,10 @@
     // source line they start on (used by linked scrolling; not part of the block's signature).
     function parseBlocks(text, nested = false, opts = {}) {
       if (nested) return parseBlocksIn(text, true, opts);
-      const lines = normalizeNewlines(text).split("\n");
-      const before = REFS, beforeFoots = FOOTS, beforeOrder = FOOT_ORDER;
+      const before = REFS, beforeFoots = FOOTS, beforeOrder = FOOT_ORDER, beforeFlavor = FLAVOR;
+      const ignore = parseIgnoreCached(opts.ignore);
+      FLAVOR = flavorGate(opts.flavor, { tilde: opts.tilde, ignore: ignore.ids });
+      const lines = prepareLines(normalizeNewlines(text).split("\n"), ignore.literals);
       FOOTS = collectFootnotes(lines); // before the reference links: "[^1]: text" must not be read as one
       FOOT_ORDER = [];
       REFS = collectRefs(lines);
@@ -1444,6 +1665,7 @@
         REFS = before;
         FOOTS = beforeFoots;
         FOOT_ORDER = beforeOrder;
+        FLAVOR = beforeFlavor;
       }
     }
     // <details> ... </details> with an optional <summary>: a collapsible block. Only these two tags (and
@@ -1499,12 +1721,29 @@
       return null;
     }
     const SETEXT_RE = /^\s{0,3}(=+|-+)\s*$/;
+    // ```lang, ````lang, ~~~lang, ```js title="a" {1,3}: the first word is the language, the rest is ignored (G02, G03, G04).
+    const FENCE_RE = /^ {0,3}(`{3,}|~{3,})[ \t]*([\w+#.-]*)((?:[ \t{][^\n]*)?)$/;
+    function fenceReadable(m, line) {
+      const mark = m[1];
+      if (mark[0] === "`" && line.slice(line.indexOf(mark) + mark.length).includes("`")) return false;
+      if (mark[0] === "~" && !FLAVOR.on("G03")) return false;
+      if (mark.length > 3 && !FLAVOR.on("G02")) return false;
+      if (m[3] && m[3].trim() && !FLAVOR.on("G04")) return false;
+      return true;
+    }
+    const unsupportedNotice = (lang) => ({
+      type: "quote",
+      callout: { kind: "danger", title: lang[0].toUpperCase() + lang.slice(1) + " is not supported" },
+      blocks: [{ type: "p", c: [{ t: "text", s: "Notes cannot draw " + lang + " diagrams. The source is shown as code below." }] }],
+    });
     function parseBlocksIn(text, nested, opts) {
       const lines = normalizeNewlines(text).split("\n");
       const blocks = [];
       let i = 0;
       const startsBlock = (l) =>
-        /^```/.test(l) ||
+        /^ {0,3}(```|~~~)/.test(l) ||
+        (FLAVOR.on("O04") && /^:::\s*[A-Za-z]/.test(l)) ||
+        (FLAVOR.on("D02") && /^#{1,6}[^#\s]/.test(l)) ||
         HTML_BLOCK_RE.test(l) ||
         /^#{1,6}\s+\S/.test(l) ||
         /^>/.test(l) ||
@@ -1534,20 +1773,27 @@
         } else if (/^\s*\$\$/.test(line) && (m = parseMathBlock(lines, i))) {
           blocks.push(m.block);
           i = m.next;
-        } else if ((m = /^```([\w+#.-]*)\s*$/.exec(line))) {
+        } else if ((m = FENCE_RE.exec(line)) && fenceReadable(m, line)) {
+          const mark = m[1];
+          const closing = new RegExp("^ {0,3}" + (mark[0] === "`" ? "`" : "~") + "{" + mark.length + ",}[ \\t]*$");
           const buf = [];
           i++;
-          while (i < lines.length && !/^```\s*$/.test(lines[i]))
-            buf.push(lines[i++]);
+          while (i < lines.length && !closing.test(lines[i])) buf.push(lines[i++]);
           i++; // closing fence (or end of text)
-          const code = { type: "code", text: buf.join("\n") };
-          if (m[1]) code.lang = m[1].toLowerCase();
-          blocks.push(code);
-        } else if ((m = /^(#{1,6})\s+(.*\S)\s*$/.exec(line))) {
+          const lang = (m[2] || "").toLowerCase();
+          if (lang === "math" && FLAVOR.on("G08")) blocks.push({ type: "math", c: texNodes(buf.join(" ").trim()) });
+          else {
+            // A diagram language we cannot draw: say so above the code, which stays readable.
+            if (lang && FLAVORS_PART?.UNSUPPORTED_FENCES.includes(lang)) blocks.push(unsupportedNotice(lang));
+            const code = { type: "code", text: buf.join("\n") };
+            if (lang) code.lang = lang;
+            blocks.push(code);
+          }
+        } else if ((m = /^(#{1,6})\s+(.*\S)\s*$/.exec(line)) || (FLAVOR.on("D02") && (m = /^(#{1,6})(?!#)(\S.*)$/.exec(line)))) {
           blocks.push({
             type: "h",
             level: m[1].length,
-            c: parseInline(m[2]),
+            c: parseInline(FLAVOR.on("D03") ? m[2].replace(/\s+#+\s*$/, "") || m[2] : m[2]),
             line: nested ? -1 : i,
           });
           i++;
@@ -1562,9 +1808,13 @@
           const quote = { type: "quote", blocks: inner };
           // > [!NOTE] Title  ->  a callout (note, tip, important, warning, caution, info)
           const first = inner[0]?.type === "p" ? inner[0].c[0] : null;
-          const cm = first && first.t === "text" ? /^\[!(note|tip|important|warning|caution|info)\][ \t]*(.*)$/i.exec(first.s) : null;
-          if (cm) {
-            quote.callout = { kind: cm[1].toLowerCase(), title: cm[2].trim() };
+          const cm = first && first.t === "text" ? /^\[!([A-Za-z][\w-]{0,30})\]([+-]?)[ \t]*(.*)$/.exec(first.s) : null;
+          const ck = cm ? (FLAVORS_PART ? FLAVORS_PART.calloutKind(cm[1], FLAVOR) : /^(note|tip|important|warning|caution|info)$/i.test(cm[1]) ? { kind: cm[1].toLowerCase(), type: cm[1].toLowerCase(), known: true } : null) : null;
+          if (ck) {
+            const own = cm[3].trim();
+            // [!summary] shows "Summary", an unknown [!bingo] shows "Bingo"; [!note]- is folded, [!note]+ is open (F22).
+            quote.callout = { kind: ck.kind, title: own || (ck.type !== ck.kind || !ck.known ? ck.type[0].toUpperCase() + ck.type.slice(1) : "") };
+            if (cm[2] && FLAVOR.on("F22")) quote.callout.fold = cm[2] === "-" ? "closed" : "open";
             inner[0].c.splice(0, inner[0].c[1]?.t === "br" ? 2 : 1);
             if (!inner[0].c.length) inner.shift();
           }
@@ -1572,11 +1822,19 @@
         } else if ((m = LIST_RE.exec(line))) {
           const items = [];
           const counters = []; // running number per nesting level, for ordered lists
+          const indents = []; // [{ n: indent in spaces, level }] of the open levels
           let lastIndent = 0;
           while (i < lines.length) {
             if ((m = LIST_RE.exec(lines[i]))) {
               lastIndent = m[1].replace(/\t/g, "  ").length;
-              const level = Math.min(4, Math.floor(lastIndent / 2));
+              // A deeper indent of two or more spaces opens one level, whatever the width (2, 3 or 4 spaces, a tab): E05, E07.
+              while (indents.length && indents[indents.length - 1].n > lastIndent) indents.pop();
+              const top = indents[indents.length - 1];
+              let level;
+              if (!top) level = Math.min(4, Math.floor(lastIndent / 2));
+              else if (lastIndent - top.n >= 2) level = Math.min(4, top.level + 1);
+              else level = top.level;
+              if (!top || top.n !== lastIndent) indents.push({ n: lastIndent, level });
               counters.length = level + 1;
               let marker = "\u2022";
               if (/^\d/.test(m[2])) {
@@ -1584,12 +1842,22 @@
                 counters[level] = n;
                 marker = n + m[2].slice(-1);
               } else counters[level] = undefined;
+              let box = m[3],
+                itemText = m[4];
+              if (box !== undefined) {
+                const plain = box === " " || box === "x" || box === "X";
+                // A box this flavor does not know is ordinary text: "- [-] a" stays "[-] a".
+                if (!(plain ? FLAVOR.on("E08") : FLAVOR.on(TASK_ORIGINAL.has(box) ? "E09" : "E10") && FLAVOR.on("E08"))) {
+                  itemText = "[" + box + "] " + itemText;
+                  box = undefined;
+                }
+              }
               items.push({
                 level,
                 marker,
-                checked: m[3] === undefined ? null : m[3] === "x" || m[3] === "X",
-                status: m[3] === undefined || m[3] === " " || m[3] === "x" || m[3] === "X" ? "" : m[3], // extended: - / ? !
-                c: parseInline(m[4]),
+                checked: box === undefined ? null : box === "x" || box === "X",
+                status: box === undefined || box === " " || box === "x" || box === "X" ? "" : box, // extended: - / ? ! and the Obsidian theme set
+                c: parseInline(itemText),
                 line: nested ? -1 : i,
               });
               i++;
@@ -1613,6 +1881,34 @@
           const t = parseTable(lines, i, nested);
           blocks.push(t.block);
           i = t.next;
+        } else if (FLAVOR.on("O01") && /^-#\s+\S/.test(line)) {
+          // Discord: "-# small text" is a line of small print.
+          blocks.push({ type: "p", c: [{ t: "small", c: parseInline(line.replace(/^-#\s+/, "")) }] });
+          i++;
+        } else if (FLAVOR.on("O04") && /^:::\s*[A-Za-z][\w-]*/.test(line)) {
+          // markdown-it / VitePress / Docusaurus container: ::: warning Title ... :::  becomes the callout of that name.
+          const head = /^:::\s*([A-Za-z][\w-]*)[ \t]*(.*)$/.exec(line);
+          const buf = [];
+          let j = i + 1;
+          while (j < lines.length && !/^:::\s*$/.test(lines[j])) buf.push(lines[j++]);
+          const type = head[1].toLowerCase() === "details" ? "note" : head[1].toLowerCase();
+          const ck = FLAVORS_PART ? FLAVORS_PART.calloutKind(type, FLAVOR) : null;
+          if (ck && j < lines.length) {
+            const title = head[2].replace(/\s*:::\s*$/, "").trim();
+            const inner = parseBlocks(buf.join("\n"), true, opts);
+            const callout = { kind: ck.kind, title: title || (head[1].toLowerCase() === "details" ? "Details" : ck.type[0].toUpperCase() + ck.type.slice(1)) };
+            if (head[1].toLowerCase() === "details" && FLAVOR.on("F22")) callout.fold = "closed";
+            blocks.push({ type: "quote", blocks: inner, callout });
+            i = j + 1;
+          } else {
+            blocks.push({ type: "p", c: parseInline(line) });
+            i++;
+          }
+        } else if (FLAVOR.on("G05") && /^(?: {4}|\t)\S/.test(line)) {
+          // Four spaces or a tab: code. Only the Reddit flavors read it that way (G05).
+          const buf = [];
+          while (i < lines.length && (/^(?: {4}|\t)/.test(lines[i]) || (!lines[i].trim() && /^(?: {4}|\t)/.test(lines.slice(i + 1).find((x) => x.trim()) || "")))) buf.push(lines[i++].replace(/^(?: {4}|\t)/, ""));
+          blocks.push({ type: "code", text: buf.join("\n").replace(/\s+$/, "") });
         } else {
           const buf = [];
           while (
@@ -1635,8 +1931,15 @@
             i++; // the underline
           } else {
             const c = [];
+            let forced = false;
             buf.forEach((l, idx) => {
-              if (idx) c.push(opts.joinLines ? { t: "text", s: " " } : { t: "br" });
+              if (idx) c.push(opts.joinLines && !forced ? { t: "text", s: " " } : { t: "br" });
+              forced = false;
+              // A single backslash at the end of the line is a hard break (J09).
+              if (idx < buf.length - 1 && FLAVOR.on("J09") && /(^|[^\\])\\$/.test(l)) {
+                l = l.slice(0, -1);
+                forced = true;
+              }
               c.push(...parseInline(l));
             });
             blocks.push({ type: "p", c });
@@ -1678,10 +1981,24 @@
       java: "java", csharp: "cs", "c#": "cs", cs: "cs", go: "go", golang: "go", rust: "rust", rs: "rust",
       bash: "sh", sh: "sh", shell: "sh", zsh: "sh", console: "sh", sql: "sql", json: "json", jsonc: "json",
       css: "css", html: "html", xml: "html", svg: "html", xhtml: "html",
+      diff: "diff", patch: "diff",
     };
     const codeLangKey = (lang) => LANG_ALIAS[String(lang || "").toLowerCase()] || null;
     function highlightCode(text, lang) {
       text = String(text);
+      // ```diff: added lines green, removed lines red, headers dimmed (G07).
+      if (codeLangKey(lang) === "diff" && FLAVOR.on("G07") && text.length <= MAX_HIGHLIGHT_CHARS) {
+        const out = [];
+        text.split("\n").forEach((line, i, all) => {
+          const k = /^(\+\+\+|---|@@|diff |index )/.test(line) ? "com" : line[0] === "+" ? "add" : line[0] === "-" ? "del" : "";
+          const piece = i < all.length - 1 ? line + "\n" : line;
+          const last = out[out.length - 1];
+          if (!piece) return;
+          if (last && last.k === k) last.s += piece;
+          else out.push({ k, s: piece });
+        });
+        return out;
+      }
       const spec = LANG_SPECS[codeLangKey(lang)];
       if (!spec || text.length > MAX_HIGHLIGHT_CHARS) return text ? [{ k: "", s: text }] : [];
       const out = [];
@@ -1963,6 +2280,9 @@
           out += '<a href="' + escHtml(n.href) + '"' + (n.title ? ' title="' + escHtml(n.title) + '"' : "") + (bare ? " data-bare" : "") + ' rel="noopener noreferrer">' + inlineHtml(n.c) + "</a>";
         }
         else if (n.t === "span") out += inlineHtml(n.c);
+        else if (n.t === "spoiler") out += '<span class="spoiler">' + inlineHtml(n.c) + "</span>";
+        else if (n.t === "tag") out += '<span class="tag">' + escHtml(n.s) + "</span>";
+        else if (n.t === "date") out += '<time datetime="' + escHtml(n.ymd + (n.time ? "T" + n.time : "")) + '">' + escHtml(n.s) + "</time>";
         else if (n.t === "nl") out += '<span class="note-link">' + inlineHtml(n.c) + "</span>"; // no address: a single exported note cannot reach the others
         else if (n.t === "kbd") out += "<kbd>" + escHtml(n.s) + "</kbd>";
         else if (n.t === "fn") out += '<sup class="fn"><a href="#fn-' + n.n + '" id="fnref-' + n.n + '">' + n.n + "</a></sup>";
@@ -2065,7 +2385,7 @@
     function inlineText(nodes) {
       let out = "";
       for (const n of nodes) {
-        if (n.t === "text" || n.t === "code" || n.t === "kbd") out += n.s;
+        if (n.t === "text" || n.t === "code" || n.t === "kbd" || n.t === "tag" || n.t === "date") out += n.s;
         else if (n.t === "br") out += "\n";
         else if (n.t === "task") out += n.on ? "[x] " : "[ ] ";
         else if (n.t === "img") out += n.alt ? "[image: " + n.alt + "]" : "[image]";
@@ -2263,8 +2583,9 @@
 
     // Extended task states (Obsidian-style, plain text in the file). Other apps show them as `[-]` text.
     const TASK_STATUSES = Object.freeze([[" ", "To do"], ["x", "Done"], ["-", "Cancelled"], ["/", "In progress"], ["?", "Question"], ["!", "Important"]]);
-    const TASK_STATUS_NAMES = Object.freeze({ "-": "Cancelled", "/": "In progress", "?": "Question", "!": "Important" });
-    const TASK_STATUS_MARKS = Object.freeze({ "-": "\u2715", "/": "\u25D0", "?": "?", "!": "!" });
+    // The first four are in the state picker; the rest is the Obsidian theme set (E10): shown, never cycled.
+    const TASK_STATUS_NAMES = Object.freeze({ "-": "Cancelled", "/": "In progress", "?": "Question", "!": "Important", ">": "Forwarded", "<": "Scheduled", "*": "Star", i: "Information", b: "Bookmark", '"': "Quote", l: "Location", p: "Pro", c: "Con", f: "Fire", I: "Idea", S: "Amount", n: "Note" });
+    const TASK_STATUS_MARKS = Object.freeze({ "-": "\u2715", "/": "\u25D0", "?": "?", "!": "!", ">": "\u2192", "<": "\u25F7", "*": "\u2605", i: "i", b: "\u2690", '"': "\u275D", l: "\u2316", p: "+", c: "\u2212", f: "\u2668", I: "\u2736", S: "$", n: "\u270E" });
     // Read mode: one task line gets a given state, or the next one in the cycle (like a Minesweeper flag:
     // [ ] -> [?] -> [!] -> [/] -> [-] -> [ ]; a done [x] goes back to [ ]). Only a line that already is a task is touched.
     const TASK_CYCLE = Object.freeze([" ", "?", "!", "/", "-"]);
@@ -2717,6 +3038,13 @@
           { id: "defaultView", label: "A panel opens in", pref: PREF.DEFAULT_VIEW, kind: "choice", def: "last", choices: [["last", "The view used last"], ["edit", "Editor"], ["read", "Preview"], ["split", "Split: editor and preview"]] },
           { id: "hubDesc", label: "Hub notes show a short description for each linked note", pref: PREF.HUB_DESC, kind: "bool", def: true },
           { id: "wikiAuto", label: "Suggest notes while typing [[", pref: PREF.WIKI_COMPLETE, kind: "bool", def: true },
+          { kind: "heading", label: "Markdown mode and shortcuts" },
+          { id: "mdFlavor", label: "Markdown mode (a note can set its own in its menu)", pref: PREF.MD_FLAVOR, kind: "choice", def: "mixed", choices: FLAVORS_PART ? FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]]) : [["mixed", "Mixed"]] },
+          { id: "singleTilde", label: "One tilde, ~a~, in the mixed modes", pref: PREF.TILDE, kind: "choice", def: "sub", choices: [["sub", "Subscript (H~2~O)"], ["strike", "Strikethrough (as on GitHub)"]] },
+          { id: "ignoreSyntax", label: "Show as plain text (spaces between): >[!info] <mark> == or a rule id such as A10", pref: PREF.IGNORE_SYNTAX, kind: "text", def: "" },
+          { id: "textShortcuts", label: "Typing shortcuts: {{date}}  @today  /tomorrow  @+3d  @monday", pref: PREF.TEXT_SHORTCUTS, kind: "choice", def: "all", choices: [["all", "All: {{ }}, @ and /"], ["braces", "Only {{date}} style"], ["off", "Off"]] },
+          { id: "shortcutDate", label: "Date format of the shortcuts", pref: PREF.SHORTCUT_DATE, kind: "text", def: "YYYY-MM-DD" },
+          { id: "shortcutTime", label: "Time format of the shortcuts", pref: PREF.SHORTCUT_TIME, kind: "text", def: "HH:mm" },
           { id: "linkedStrip", label: "Show \"Linked from\" under the read view", pref: PREF.BACKLINKS_PANEL, kind: "bool", def: false },
           { id: "hiddenMenu", label: "Hidden tools stay reachable in More", pref: PREF.HIDDEN_MENU, kind: "bool", def: true },
           { id: "dateMode", label: "Date notes", pref: PREF.DATE_MODE, kind: "choice", def: "separate", choices: [["separate", "One note per day"], ["single", "All in one Journal note"]] },
@@ -3896,6 +4224,15 @@
           const note = notes.get(id);
           if (!note || !NOTE_COLORS.includes(color) || note.color === color) return;
           note.color = color;
+          if (note.body.trim() || note._onDisk) markDirty(id);
+          emit("change", id, { meta: true });
+        },
+        // The note's own Markdown mode ("" = follow the setting). Written to the front matter as `flavor:`.
+        setFlavor(id, flavor) {
+          const note = notes.get(id);
+          const next = FLAVORS_PART && FLAVORS_PART.MODES.includes(flavor) ? flavor : "";
+          if (!note || (note.flavor || "") === next) return;
+          note.flavor = next;
           if (note.body.trim() || note._onDisk) markDirty(id);
           emit("change", id, { meta: true });
         },
@@ -5093,6 +5430,7 @@
 
     if (window.__zentralNotesTestSeam) {
       window.__zentralNotesTestSeam.core = {
+        flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART,
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
@@ -5322,9 +5660,26 @@
           btn.addEventListener("click", (e) => {
             e.stopPropagation();
             const img = h("img", { class: "zn-img-loaded", alt: n.alt, src: n.href, loading: "lazy" });
+            if (n.width) img.style.width = n.width + "px"; // ![alt|100](url)
             btn.replaceWith(img);
           });
           parent.append(btn);
+        } else if (n.t === "spoiler") {
+          // Reddit >!text!< and Discord ||text||: hidden until it is clicked.
+          const sp = h("span", { class: "zn-spoiler", role: "button", tabindex: "0", title: "Click to show or hide" });
+          renderInline(sp, n.c, env);
+          const flip = () => sp.classList.toggle("is-shown");
+          sp.addEventListener("click", flip);
+          sp.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } });
+          parent.append(sp);
+        } else if (n.t === "tag") {
+          parent.append(h("span", { class: "zn-tag" }, n.s));
+        } else if (n.t === "date") {
+          // A date (2026-11-07, optionally with HH:mm). Only recognised for now; reminders and the calendar use data-ymd.
+          const d = h("span", { class: "zn-date", title: n.time ? "Date and time" : "Date" }, n.s);
+          d.dataset.ymd = n.ymd;
+          if (n.time) d.dataset.time = n.time;
+          parent.append(d);
         } else if (n.t === "code" || n.t === "kbd") {
           const c = h(n.t === "kbd" ? "kbd" : "code");
           c.textContent = n.s;
@@ -5479,7 +5834,18 @@
           const node = h("blockquote", { class: b.callout ? "zn-quote zn-callout" : "zn-quote" });
           if (b.callout) {
             node.dataset.kind = b.callout.kind;
-            node.append(h("div", { class: "zn-callout-title" }, b.callout.title || b.callout.kind[0].toUpperCase() + b.callout.kind.slice(1)));
+            const title = h("div", { class: "zn-callout-title" }, b.callout.title || b.callout.kind[0].toUpperCase() + b.callout.kind.slice(1));
+            if (b.callout.fold) {
+              // > [!note]- starts closed, > [!note]+ starts open; the title is the switch.
+              node.dataset.fold = b.callout.fold;
+              title.classList.add("zn-fold-title");
+              title.setAttribute("role", "button");
+              title.setAttribute("tabindex", "0");
+              const flip = () => { node.dataset.fold = node.dataset.fold === "closed" ? "open" : "closed"; };
+              title.addEventListener("click", flip);
+              title.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } });
+            }
+            node.append(title);
           }
           renderBlocks(node, b.blocks, env, onToggle);
           parent.append(node);
@@ -5875,7 +6241,9 @@
           return;
         }
         if (readEmpty) resetRead();
-        const blocks = parseBlocks(readBody(n.body), false, env.readOpts?.() || {});
+        const readOpts = { ...(env.readOpts?.() || {}) };
+        if (n.flavor) readOpts.flavor = n.flavor; // the note's own mode wins over the setting
+        const blocks = parseBlocks(readBody(n.body, readOpts.flavor), false, readOpts);
         const sigs = blocks.map(blockSig);
         const { prefix, suffix } = diffSigs(readSigs, sigs);
         if (prefix === readSigs.length && prefix === sigs.length) {
@@ -6011,7 +6379,7 @@
         el.scrollIntoView?.({ block: "center" });
         el.focus?.({ preventScroll: true });
       }
-      const readBody = (body) => expandWikiLinks(body, (t) => resolveNoteTitle(store.list().concat(store.list({ trashed: true })), t));
+      const readBody = (body, flavor) => (flavorGate(flavor).on("C01") ? expandWikiLinks(body, (t) => resolveNoteTitle(store.list().concat(store.list({ trashed: true })), t)) : body);
       function newNote(folderId) {
         const folder = typeof folderId === "string" ? cleanFolder(folderId) : "";
         if (folder && store.meta.folders.find((f) => f.id === folder)?.collapsed) store.setFolderCollapsed(folder, false);
@@ -6817,6 +7185,7 @@
           { icon: "folder", label: "Move to folder\u2026", action: () => queueMicrotask(() => askMoveNote(n)) },
           { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body, n.folder); store.setColor(c.id, n.color); store.setLabel(c.id, n.label); scheduleList(); } },
           { label: "Colour", group: NOTE_COLORS.map((c) => ({ label: c, action: () => { store.setColor(n.id, c); scheduleList(); } })) },
+          ...(FLAVORS_PART ? [{ label: "Markdown mode", group: [["", "Follow the setting"], ...FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]])].map(([m, label]) => ({ label: (n.flavor || "") === m ? "\u2713 " + label : label, action: () => { store.setFlavor(n.id, m); scheduleList(); } })) }] : []),
           { icon: "link", label: "Copy link", action: () => { env.copyText?.("[[" + (titleOf(n.body) || "Untitled note") + "]]"); flash("Link copied"); } },
           { sep: true },
           { icon: "trash", label: "Move to trash", danger: true, action: () => { store.trash(n.id); if (n.id === currentId) currentId = ""; scheduleList(); } },
@@ -8341,6 +8710,7 @@
           { sep: true },
           { icon: "folder", label: "Open notes folder", action: () => env.revealFolder(store.dir) },
           { icon: "folder", label: "Move to folder\u2026", action: () => askNoteFolder() },
+          ...(FLAVORS_PART ? [{ icon: "sliders", label: "Markdown mode", group: [["", "Follow the setting"], ...FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]])].map(([m, label]) => ({ label: (n.flavor || "") === m ? "\u2713 " + label : label, action: () => { store.setFlavor(n.id, m); renderRead(); } })) }] : []),
           { icon: "sliders", label: "Quick settings\u2026", action: () => askSettings() },
           { icon: "sliders", label: "All settings\u2026", action: () => askAllSettings() },
           ...(adapter.geoKey ? [{ icon: "restore", label: "Reset position and size", action: () => resetGeo() }] : []),
@@ -8852,7 +9222,28 @@
         if (e.shiftKey || e.key === "Shift") scheduleChrome();
       });
       listen(ta, "mouseup", () => { if (getPref(PREF.FOOTER_COUNTER, false) === true) scheduleChrome(); });
-      listen(ta, "input", () => {
+      // {{date}}, @today, /tomorrow ...: swapped for the real date the moment the last character is typed (see
+      // additional/notes/flavors/ZentralNotesShortcuts.js). The note keeps plain text, so every other app reads it too.
+      function expandShortcut(ev) {
+        const how = getPref(PREF.TEXT_SHORTCUTS, "all");
+        if (!SHORTCUTS_PART || how === "off" || mode === "read" || ta.readOnly || ta.selectionStart !== ta.selectionEnd || ev?.isComposing) return;
+        const typed = ev?.inputType === "insertLineBreak" ? "\n" : ev?.inputType === "insertText" && typeof ev.data === "string" && ev.data.length === 1 ? ev.data : "";
+        if (!typed) return;
+        const edit = SHORTCUTS_PART.expandTyped(
+          ta.value,
+          ta.selectionStart,
+          typed,
+          { now: env.now ? env.now() : Date.now(), dateFormat: getPref(PREF.SHORTCUT_DATE, "YYYY-MM-DD"), timeFormat: getPref(PREF.SHORTCUT_TIME, "HH:mm"), title: titleOf(ta.value) },
+          how,
+        );
+        if (edit) applyEdit(edit);
+      }
+      listen(ta, "input", (ev) => {
+        try {
+          expandShortcut(ev);
+        } catch (error) {
+          console.warn("[ZentralNotes] shortcut failed", error);
+        }
         updateWiki();
         taAnchY = null;
         readAnchY = null;
@@ -10612,6 +11003,9 @@
         joinLines: prefStr(PREF.LINE_BREAKS, "break") === "join",
         keepBlanks: prefStr(PREF.BLANK_LINES, "collapse") === "keep",
         setext: prefBool(PREF.SETEXT, false),
+        flavor: cleanFlavor(prefStr(PREF.MD_FLAVOR, "mixed")),
+        tilde: prefStr(PREF.TILDE, "sub") === "strike" ? "strike" : "sub",
+        ignore: prefStr(PREF.IGNORE_SYNTAX, ""),
       });
       // One typed accessor pair for the sheets' quick settings and shortcut editor.
       const getPref = (k, d) => (typeof d === "boolean" ? prefBool(k, d) : typeof d === "number" ? prefInt(k, d) : prefStr(k, d));

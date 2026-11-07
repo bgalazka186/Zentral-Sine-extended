@@ -1047,6 +1047,12 @@
     "zen.workspace.zentral.notes.card_window_entry_reveal",
     "zen.workspace.zentral.notes.card_sidebar_guard",
     "zen.workspace.zentral.notes.card_pill_border",
+    "zen.workspace.zentral.notes.markdown_flavor",
+    "zen.workspace.zentral.notes.single_tilde",
+    "zen.workspace.zentral.notes.ignore_syntax",
+    "zen.workspace.zentral.notes.text_shortcuts",
+    "zen.workspace.zentral.notes.shortcut_date_format",
+    "zen.workspace.zentral.notes.shortcut_time_format",
     {
       "type": "text",
       "label": "**Notes · Capture**",

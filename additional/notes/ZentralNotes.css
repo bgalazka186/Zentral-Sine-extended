@@ -616,6 +616,29 @@
 .zentral-notes-sheet .zn-read .zn-callout[data-kind="warning"] { --zn-callout: #f0b44c; }
 .zentral-notes-sheet .zn-read .zn-callout[data-kind="caution"] { --zn-callout: #ef6a6a; }
 .zentral-notes-sheet .zn-read .zn-callout-title { font-weight: 700; color: var(--zn-callout); margin-bottom: 2px; }
+/* the other Obsidian callout kinds (aliases map to these); an unknown kind keeps the note look */
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="info"] { --zn-callout: #4fb7d9; }
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="abstract"] { --zn-callout: #3fc1c9; }
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="todo"] { --zn-callout: #4f8ff0; }
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="success"] { --zn-callout: #3fbf6a; }
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="question"] { --zn-callout: #d9a53a; }
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="failure"] { --zn-callout: #e0624f; }
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="danger"] { --zn-callout: #e5484d; }
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="bug"] { --zn-callout: #d6568f; }
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="example"] { --zn-callout: #9a7ae6; }
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="quote"] { --zn-callout: #8b94a3; }
+/* foldable callouts: > [!note]- closed, > [!note]+ open */
+.zentral-notes-sheet .zn-read .zn-callout[data-fold] .zn-fold-title { cursor: pointer; user-select: none; }
+.zentral-notes-sheet .zn-read .zn-callout[data-fold] .zn-fold-title::before { content: "\25BE\00a0"; }
+.zentral-notes-sheet .zn-read .zn-callout[data-fold="closed"] .zn-fold-title::before { content: "\25B8\00a0"; }
+.zentral-notes-sheet .zn-read .zn-callout[data-fold="closed"] > :not(.zn-callout-title) { display: none; }
+/* spoilers (Reddit >!a!<, Discord ||a||), #tags and dates written as 2026-11-07 */
+.zentral-notes-sheet .zn-read .zn-spoiler { cursor: pointer; border-radius: 3px; background: currentColor; color: transparent; }
+.zentral-notes-sheet .zn-read .zn-spoiler > * { color: transparent; }
+.zentral-notes-sheet .zn-read .zn-spoiler.is-shown { background: color-mix(in srgb, currentColor 14%, transparent); color: inherit; }
+.zentral-notes-sheet .zn-read .zn-spoiler.is-shown > * { color: inherit; }
+.zentral-notes-sheet .zn-read .zn-tag { color: var(--zn-accent, #6aa7ff); background: color-mix(in srgb, var(--zn-accent, #6aa7ff) 14%, transparent); border-radius: 999px; padding: 0 6px; }
+.zentral-notes-sheet .zn-read .zn-date { border-bottom: 1px dotted color-mix(in srgb, currentColor 55%, transparent); }
 
 /* ---- B2: code colors, sub/superscript, keys, dialogs, copy in read view ----------------- */
 .zentral-notes-sheet .zn-read { --zn-tk-kw: #c792ea; --zn-tk-str: #8bd49c; --zn-tk-num: #f0a46a; --zn-tk-com: color-mix(in srgb, var(--zn-text) 45%, transparent); --zn-tk-fn: #82aaff; --zn-tk-lit: #ff9e80; --zn-tk-prop: #7fd6e8; --zn-tk-tag: #f07178; }
@@ -627,6 +650,8 @@
 .zentral-notes-sheet .zn-tk[data-k="lit"] { color: var(--zn-tk-lit); }
 .zentral-notes-sheet .zn-tk[data-k="prop"] { color: var(--zn-tk-prop); }
 .zentral-notes-sheet .zn-tk[data-k="tag"] { color: var(--zn-tk-tag); }
+.zentral-notes-sheet .zn-tk[data-k="add"] { color: #5cc98a; background: color-mix(in srgb, #5cc98a 12%, transparent); }
+.zentral-notes-sheet .zn-tk[data-k="del"] { color: #ef6a6a; background: color-mix(in srgb, #ef6a6a 12%, transparent); }
 .zentral-notes-sheet .zn-read kbd {
   padding: 0 0.35em; border: 1px solid var(--zn-line); border-bottom-width: 2px; border-radius: 4px;
   font: 0.9em ui-monospace, monospace; background: color-mix(in srgb, var(--zn-text) 8%, transparent);

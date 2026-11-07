@@ -3,9 +3,18 @@
   "themeId": "zentral-notes",
   "name": "Zentral Notes",
   "description": "Quick notes as plain Markdown files: multiple notes, highlights, checklists, tables, split-view preview, search, trash, export (Markdown, HTML, text, PDF, zip). Opens from a shortcut anywhere and adds a Notes button to Zentral panel bars when the full pack's panels are present. Standalone part of Zentral Extended.",
+<<<<<<< HEAD
   "version": "3.1.33",
+=======
+  "version": "3.1.30",
+>>>>>>> branch2
   "entry": "ZentralNotes.uc.js",
   "output": "ZentralNotes.standalone.uc.js",
+  "loader": "__zentralNotesLoader",
+  "include": [
+    "flavors/ZentralNotesFlavors.js",
+    "flavors/ZentralNotesShortcuts.js"
+  ],
   "settings": "settings.json",
   "css": "ZentralNotes.css",
   "tags": [
@@ -108,6 +117,12 @@
     "zen.workspace.zentral.notes.hub_descriptions",
     "zen.workspace.zentral.notes.tree_order",
     "zen.workspace.zentral.notes.default_view",
+    "zen.workspace.zentral.notes.markdown_flavor",
+    "zen.workspace.zentral.notes.single_tilde",
+    "zen.workspace.zentral.notes.ignore_syntax",
+    "zen.workspace.zentral.notes.text_shortcuts",
+    "zen.workspace.zentral.notes.shortcut_date_format",
+    "zen.workspace.zentral.notes.shortcut_time_format",
     "zen.workspace.zentral.notes.footer_counter",
     "zen.workspace.zentral.notes.new_note_chooser",
     "zen.workspace.zentral.notes.pinned_strip",

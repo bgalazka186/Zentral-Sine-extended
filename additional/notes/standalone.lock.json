@@ -1,4 +1,9 @@
 {
+<<<<<<< HEAD
   "version": "3.1.33",
   "hash": "3ef32836b9eb358d86a6b0bae0a7e43fab1e1309b03193fdcf2e7cfbb81e785f"
+=======
+  "version": "3.1.30",
+  "hash": "fc4c8c4453e6a2bf10bc6d89676b81ed0a384c6bddd429db03604e07bd0db5bc"
+>>>>>>> branch2
 }

@@ -2,12 +2,17 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
+<<<<<<< HEAD
 // @version 3.1.33
+=======
+// @version 3.1.30
+>>>>>>> branch2
 // ==/UserScript==
 (function () {
   "use strict";
   // The full pack, when installed, owns this feature.
   if (window.ZentralRuntime) return;
+  // Resolve the install folder before anything else runs.
 /* Zentral standalone shim - TEMPLATE. Never loaded by the full pack.
  * tools/build-standalone.cjs prepends this to a module to produce a bundle that
  * Sine can install on its own (…/additional/<module> folder URL).
@@ -24,10 +29,17 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
+<<<<<<< HEAD
  * Placeholders replaced by the build: 3.1.33, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
 const __ZENTRAL_STANDALONE_VERSION__ = "3.1.33";
+=======
+ * Placeholders replaced by the build: 3.1.30, the numeric-preference list and
+ * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
+ */
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.30";
+>>>>>>> branch2
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -614,6 +626,767 @@ function nativeSidebarSide() {
   return shim;
 })();
 
+const __BUNDLE_URL__ = Components.stack.filename; // install folder, resolved synchronously
+/* Zentral standalone embedded loader - TEMPLATE. Never loaded by the full pack.
+ * tools/build-standalone.cjs inserts it into bundles whose manifest sets
+ * "loader" (multi-file modules such as video).
+ *
+ * It implements the part of the full pack's window.ZentralModuleLoader contract
+ * that those modules use: define, load, create, require, has, readText, rootURI,
+ * sources, report, destroy. Differences, all deliberate:
+ * - Sources are not read from disk. The build embeds each controller as a
+ *   function and each content helper as a string, keyed by its repo path, so the
+ *   paths the module already uses keep working. (eval/new Function are blocked
+ *   in privileged windows, so sources are real code, not strings.)
+ * - The loader is published under a PRIVATE global (__zentralNotesLoader). The full
+ *   pack's loader/Zentral.uc.js refuses to start when window.ZentralModuleLoader
+ *   exists, so a standalone loader must never occupy that name.
+ * - rootURI is the folder of the bundle script (where Sine put the package), so
+ *   files that Gecko must read itself (the window actor) stay real files.
+ */
+const __zentralEmbeddedLoader = (function () {
+  const sources = {
+"additional/notes/flavors/ZentralNotesFlavors.js": function (window) {
+/*
+ * ZENTRAL FILE GUIDE - additional/notes/flavors/ZentralNotesFlavors.js
+ *
+ * Purpose: The Markdown flavor MODES of Notes as pure logic: which syntax the parser accepts in each mode.
+ * Interaction / execution: ZentralNotes.uc.js loads this file (full pack: module loader; standalone: embedded
+ *   include) and asks `gate(mode).on("A10")` before it uses a rule that other apps read differently. Nothing here
+ *   touches the DOM, the network or a preference; a missing file means "mixed, everything on" (the old behaviour).
+ * Ownership / failure: The feature table is GENERATED from docs/MARKDOWN_FLAVORS.md by
+ *   tools/build-flavors-data.cjs (the doc is the source of truth; --check fails when they differ).
+ * Registration: notes-flavors
+ * Loaded/created by: additional/notes/ZentralNotes.uc.js
+ *
+ * MODES (the pref `markdown_flavor`)
+ *   mixed            the default: accept what the three apps accept; where two apps give the same symbols a
+ *                    different meaning, the default written in the doc wins (see MIXED_PICK).
+ *   mixed+obsidian   mixed, but every collision follows Obsidian.   (same for mixed+github, mixed+reddit)
+ *   obsidian         Obsidian only: a rule is on only when core Obsidian does it. (same for github, reddit)
+ * Plugin-only syntax (the doc's plug symbol) is NOT core, so it is off in the "only" modes and on in every mixed mode.
+ */
+(function () {
+  "use strict";
+  /*__FEATURES_BEGIN__*/
+  // id: [github, obsidian, reddit, notes today, mixed]. github/obsidian/reddit: y yes, p partly, t only as an HTML tag,
+  // x plugin or theme, n no. mixed: ON, ON+guard, PICK, OFF. GENERATED from docs/MARKDOWN_FLAVORS.md; do not edit.
+  const FEATURES = {
+  "A01": ["y", "y", "y", "H", "ON"],
+  "A02": ["y", "y", "y", "H", "ON"],
+  "A03": ["y", "y", "y", "H", "ON"],
+  "A04": ["y", "y", "y", "H", "ON"],
+  "A05": ["y", "y", "y", "H", "ON"],
+  "A06": ["y", "y", "y", "H", "ON"],
+  "A07": ["y", "y", "y", "H", "ON"],
+  "A08": ["y", "y", "y", "H", "ON"],
+  "A09": ["y", "n", "n", "H", "PICK"],
+  "A10": ["n", "y", "n", "H", "ON"],
+  "A11": ["n", "n", "n", "H", "ON"],
+  "A12": ["y", "y", "y", "H", "ON"],
+  "A13": ["n", "x", "n", "H", "ON"],
+  "A14": ["t", "t", "n", "H", "ON"],
+  "A15": ["n", "x", "n", "H", "ON"],
+  "A16": ["t", "t", "n", "H", "ON"],
+  "A17": ["n", "n", "y", "H", "PICK"],
+  "A18": ["n", "t", "n", "H", "ON"],
+  "A19": ["t", "t", "n", "H", "ON"],
+  "A20": ["n", "n", "n", "H", "ON"],
+  "A21": ["n", "t", "n", "H", "ON"],
+  "A22": ["t", "t", "n", "H", "ON"],
+  "A23": ["t", "t", "n", "H", "ON"],
+  "A24": ["t", "t", "n", "H", "ON"],
+  "A25": ["n", "t", "n", "H", "ON+guard"],
+  "A26": ["t", "t", "n", "H", "ON+guard"],
+  "A27": ["n", "n", "y", "H", "PICK"],
+  "A28": ["n", "n", "y", "N", "OFF"],
+  "A29": ["n", "n", "n", "H", "ON+guard"],
+  "A30": ["n", "y", "n", "N", "ON"],
+  "A31": ["n", "y", "n", "H", "ON+guard"],
+  "A32": ["y", "y", "n", "H", "ON"],
+  "A33": ["y", "y", "y", "H", "ON"],
+  "B01": ["y", "y", "y", "H", "ON"],
+  "B02": ["y", "y", "y", "P", "ON"],
+  "B03": ["y", "y", "n", "H", "ON"],
+  "B04": ["y", "y", "y", "H", "ON"],
+  "B05": ["y", "y", "n", "H", "ON"],
+  "B06": ["y", "y", "n", "P", "ON"],
+  "B07": ["y", "y", "y", "H", "ON"],
+  "B08": ["y", "y", "y", "H", "ON"],
+  "B09": ["y", "y", "y", "H", "ON"],
+  "B10": ["y", "y", "y", "H", "ON"],
+  "B11": ["y", "y", "y", "H", "ON"],
+  "B12": ["y", "n", "p", "H", "ON+guard"],
+  "B13": ["y", "y", "n", "H", "ON"],
+  "B14": ["y", "n", "n", "N", "OFF"],
+  "B15": ["y", "y", "p", "H", "ON"],
+  "B16": ["y", "y", "n", "P", "ON"],
+  "B17": ["n", "y", "n", "H", "ON"],
+  "B18": ["y", "y", "n", "H", "ON"],
+  "B19": ["y", "y", "n", "H", "ON"],
+  "B20": ["t", "t", "n", "P", "ON"],
+  "B21": ["y", "y", "n", "N", "OFF"],
+  "B22": ["t", "n", "n", "N", "OFF"],
+  "B23": ["n", "t", "n", "N", "OFF"],
+  "B24": ["n", "y", "n", "N", "ON+guard"],
+  "C01": ["p", "y", "n", "H", "ON"],
+  "C02": ["p", "y", "n", "H", "ON"],
+  "C03": ["n", "y", "n", "N", "ON"],
+  "C04": ["n", "y", "n", "N", "ON"],
+  "C05": ["n", "y", "n", "N", "ON"],
+  "C06": ["n", "y", "n", "N", "ON"],
+  "C07": ["n", "y", "n", "N", "ON+guard"],
+  "C08": ["n", "y", "n", "N", "ON+guard"],
+  "C09": ["n", "y", "n", "N", "ON+guard"],
+  "C10": ["n", "y", "n", "N", "ON"],
+  "C11": ["n", "y", "n", "N", "ON"],
+  "C12": ["n", "y", "n", "N", "OFF"],
+  "C13": ["n", "y", "n", "N", "OFF"],
+  "C14": ["n", "y", "n", "H", "ON+guard"],
+  "C15": ["n", "y", "n", "N", "ON"],
+  "C16": ["n", "y", "n", "N", "ON"],
+  "C17": ["n", "y", "n", "P", "ON"],
+  "C18": ["n", "y", "n", "H", "ON"],
+  "D01": ["y", "y", "y", "H", "ON"],
+  "D02": ["n", "n", "y", "H", "PICK"],
+  "D03": ["y", "y", "y", "H", "ON"],
+  "D04": ["y", "y", "y", "P", "ON"],
+  "D05": ["n", "n", "n", "H", "ON"],
+  "D06": ["n", "n", "n", "N", "OFF"],
+  "D07": ["y", "y", "n", "N", "OFF"],
+  "D08": ["y", "y", "n", "P", "ON"],
+  "D09": ["n", "n", "n", "N", "OFF"],
+  "E01": ["y", "y", "y", "H", "ON"],
+  "E02": ["y", "y", "y", "H", "ON"],
+  "E03": ["y", "y", "n", "H", "ON"],
+  "E04": ["y", "y", "n", "H", "ON"],
+  "E05": ["y", "y", "y", "H", "ON"],
+  "E06": ["y", "y", "y", "H", "ON"],
+  "E07": ["y", "y", "y", "H", "ON"],
+  "E08": ["y", "y", "n", "H", "ON"],
+  "E09": ["n", "x", "n", "H", "ON"],
+  "E10": ["n", "x", "n", "H", "ON"],
+  "E11": ["n", "n", "n", "H", "ON"],
+  "E12": ["n", "n", "n", "H", "ON+guard"],
+  "E13": ["y", "y", "y", "B", "ON"],
+  "E14": ["y", "y", "p", "H", "ON"],
+  "E15": ["y", "y", "p", "B", "ON"],
+  "E16": ["y", "y", "n", "N", "ON"],
+  "E17": ["y", "y", "n", "N", "OFF"],
+  "E18": ["n", "n", "n", "N", "OFF"],
+  "E19": ["n", "n", "n", "H", "ON+guard"],
+  "E20": ["y", "y", "y", "P", "ON"],
+  "F01": ["y", "y", "y", "H", "ON"],
+  "F02": ["y", "y", "y", "H", "ON"],
+  "F03": ["y", "y", "y", "B", "ON"],
+  "F04": ["y", "y", "p", "H", "ON"],
+  "F05": ["y", "y", "n", "H", "ON"],
+  "F06": ["y", "y", "n", "H", "ON"],
+  "F07": ["y", "y", "n", "H", "ON"],
+  "F08": ["y", "y", "n", "H", "ON"],
+  "F09": ["y", "y", "n", "H", "ON"],
+  "F10": ["n", "y", "n", "H", "ON"],
+  "F11": ["n", "y", "n", "H", "ON"],
+  "F12": ["n", "y", "n", "H", "ON"],
+  "F13": ["n", "y", "n", "H", "ON"],
+  "F14": ["n", "y", "n", "H", "ON"],
+  "F15": ["n", "y", "n", "H", "ON"],
+  "F16": ["n", "y", "n", "H", "ON"],
+  "F17": ["n", "y", "n", "H", "ON"],
+  "F18": ["n", "y", "n", "H", "ON"],
+  "F19": ["n", "y", "n", "H", "ON"],
+  "F20": ["n", "y", "n", "H", "ON"],
+  "F21": ["n", "y", "n", "H", "ON"],
+  "F22": ["n", "y", "n", "H", "ON"],
+  "F23": ["n", "y", "n", "H", "ON"],
+  "F24": ["n", "x", "n", "H", "ON+guard"],
+  "F25": ["y", "y", "n", "H", "ON"],
+  "G01": ["y", "y", "p", "H", "ON"],
+  "G02": ["y", "y", "n", "H", "ON"],
+  "G03": ["y", "y", "n", "H", "ON"],
+  "G04": ["y", "p", "n", "H", "ON"],
+  "G05": ["y", "y", "y", "H", "PICK"],
+  "G06": ["y", "y", "n", "P", "ON"],
+  "G07": ["y", "y", "n", "H", "ON"],
+  "G08": ["y", "n", "n", "H", "ON"],
+  "G09": ["y", "y", "n", "P", "OFF"],
+  "G10": ["y", "n", "n", "N", "OFF"],
+  "G11": ["y", "y", "n", "H", "ON"],
+  "G12": ["y", "y", "p", "B", "ON"],
+  "H01": ["y", "y", "y", "H", "ON"],
+  "H02": ["y", "y", "y", "H", "ON"],
+  "H03": ["y", "y", "n", "H", "ON"],
+  "H04": ["y", "y", "y", "H", "ON"],
+  "H05": ["y", "y", "y", "H", "ON"],
+  "H06": ["y", "y", "n", "H", "ON"],
+  "H07": ["y", "y", "y", "H", "ON"],
+  "H08": ["y", "y", "n", "H", "ON"],
+  "H09": ["n", "n", "n", "H", "ON"],
+  "H10": ["n", "n", "n", "N", "OFF"],
+  "H11": ["t", "t", "n", "H", "ON"],
+  "H12": ["n", "n", "n", "N", "OFF"],
+  "I01": ["y", "y", "n", "P", "ON"],
+  "I02": ["y", "y", "n", "P", "ON"],
+  "I03": ["y", "y", "n", "H", "ON"],
+  "I04": ["n", "n", "n", "H", "ON"],
+  "I05": ["n", "n", "n", "H", "ON"],
+  "I06": ["y", "y", "n", "N", "ON"],
+  "I07": ["y", "y", "n", "H", "ON"],
+  "I08": ["y", "n", "n", "H", "ON"],
+  "I09": ["y", "x", "n", "N", "OFF"],
+  "I10": ["y", "y", "n", "P", "OFF"],
+  "J01": ["y", "y", "n", "H", "ON"],
+  "J02": ["y", "y", "n", "H", "ON"],
+  "J03": ["n", "y", "n", "N", "ON"],
+  "J04": ["y", "y", "n", "H", "ON"],
+  "J05": ["y", "y", "y", "H", "ON"],
+  "J06": ["y", "y", "n", "P", "ON"],
+  "J07": ["n", "n", "n", "N", "OFF"],
+  "J08": ["y", "y", "y", "H", "ON"],
+  "J09": ["y", "y", "n", "H", "ON"],
+  "J10": ["p", "p", "p", "H", "ON"],
+  "J11": ["y", "y", "y", "H", "ON"],
+  "J12": ["y", "y", "y", "H", "ON"],
+  "J13": ["y", "y", "p", "H", "ON"],
+  "J14": ["n", "y", "n", "N", "OFF"],
+  "K01": ["y", "y", "n", "H", "ON"],
+  "K02": ["y", "y", "n", "H", "ON"],
+  "K03": ["y", "y", "n", "H", "ON"],
+  "K04": ["y", "y", "n", "H", "ON"],
+  "K05": ["y", "y", "n", "H", "ON"],
+  "K06": ["y", "y", "n", "H", "ON"],
+  "K07": ["y", "y", "n", "N", "ON"],
+  "K08": ["y", "y", "n", "N", "ON"],
+  "K09": ["y", "y", "n", "N", "ON"],
+  "K10": ["y", "y", "n", "N", "ON"],
+  "K11": ["y", "y", "n", "N", "OFF"],
+  "K12": ["n", "n", "n", "N", "OFF"],
+  "L01": ["y", "n", "n", "N", "OFF"],
+  "L02": ["y", "n", "n", "N", "OFF"],
+  "L03": ["y", "n", "n", "N", "OFF"],
+  "L04": ["n", "n", "y", "H", "PICK"],
+  "L05": ["y", "x", "p", "H", "ON+guard"],
+  "L06": ["y", "n", "n", "N", "OFF"],
+  "L07": ["n", "n", "n", "H", "ON"],
+  "M01": ["y", "y", "y", "H", "ON"],
+  "M02": ["y", "y", "y", "H", "ON"],
+  "M03": ["y", "y", "y", "H", "ON"],
+  "M04": ["y", "y", "p", "B", "ON"],
+  "M05": ["y", "y", "n", "H", "ON"],
+  "M06": ["n", "n", "n", "H", "ON"],
+  "M07": ["y", "y", "n", "H", "ON"],
+  "M08": ["y", "y", "y", "H", "ON"],
+  "M09": ["y", "y", "y", "H", "ON"],
+  "M10": ["y", "y", "p", "H", "ON"],
+  "M11": ["y", "y", "n", "H", "ON"],
+  "M12": ["n", "n", "n", "P", "ON+guard"],
+  "M13": ["y", "y", "n", "H", "ON"],
+  "M14": ["y", "y", "n", "H", "ON"],
+  "M15": ["n", "y", "n", "H", "ON"],
+  "M16": ["y", "y", "n", "H", "ON"],
+  "M17": ["y", "y", "n", "H", "ON"],
+  "M18": ["y", "y", "y", "P", "ON"],
+  "M19": ["y", "y", "p", "H", "ON"],
+  "M20": ["y", "y", "n", "P", "OFF"],
+  "M21": ["y", "y", "n", "H", "ON"],
+  "M22": ["n", "y", "n", "H", "ON"],
+  "M23": ["y", "y", "n", "P", "ON"],
+  "M24": ["n", "n", "y", "H", "PICK"],
+  "N01": ["n", "y", "n", "H", "ON"],
+  "N02": ["n", "y", "n", "H", "ON"],
+  "N03": ["n", "n", "n", "H", "ON"],
+  "N04": ["n", "n", "n", "H", "ON+guard"],
+  "N05": ["n", "n", "n", "H", "ON+guard"],
+  "N06": ["n", "n", "n", "H", "ON+guard"],
+  "N07": ["n", "n", "n", "H", "ON+guard"],
+  "N08": ["n", "y", "n", "N", "ON"],
+  "N09": ["n", "n", "n", "N", "ON+guard"],
+  "N10": ["n", "x", "n", "N", "OFF"],
+  "N11": ["n", "n", "n", "N", "OFF"],
+  "O01": ["n", "n", "n", "H", "ON"],
+  "O02": ["n", "n", "n", "N", "OFF"],
+  "O03": ["n", "n", "n", "H", "OFF"],
+  "O04": ["n", "n", "n", "H", "ON"],
+  "O05": ["n", "n", "n", "H", "OFF"],
+  };
+  /*__FEATURES_END__*/
+
+  const MODES = Object.freeze(["mixed", "mixed+obsidian", "mixed+github", "mixed+reddit", "obsidian", "github", "reddit"]);
+  const MODE_LABELS = Object.freeze({
+    mixed: "Mixed (accept what all three apps accept)",
+    "mixed+obsidian": "Mixed, collisions follow Obsidian",
+    "mixed+github": "Mixed, collisions follow GitHub",
+    "mixed+reddit": "Mixed, collisions follow Reddit",
+    obsidian: "Obsidian only",
+    github: "GitHub only",
+    reddit: "Reddit only",
+  });
+  const FLAVORS = Object.freeze(["github", "obsidian", "reddit"]);
+  const COL = { github: 0, obsidian: 1, reddit: 2 };
+  const SUPPORTS = { y: true, p: true, t: true, x: false, n: false }; // x = plugin or theme: not core
+
+  const cleanMode = (v) => (MODES.includes(v) ? v : "mixed");
+  function parseMode(v) {
+    const mode = cleanMode(v);
+    if (mode === "mixed") return { mode, only: false, flavor: null };
+    if (mode.startsWith("mixed+")) return { mode, only: false, flavor: mode.slice(6) };
+    return { mode, only: true, flavor: mode };
+  }
+
+  // Rows whose symbols mean different things in different apps (the PICK rows). In plain mixed they take this value;
+  // in mixed+X they follow what X does with the symbols.
+  const MIXED_PICK = Object.freeze({ A09: false, A17: false, A27: true, D02: false, G05: false, L04: false, M24: false });
+  // Rows that are ON in mixed but use symbols the chosen flavor reads another way: switched off in that mixed+X mode.
+  const FLIP_OFF = Object.freeze({
+    A13: ["github"], // H~2~O: GitHub reads ~a~ as strikethrough
+    A15: ["reddit"], // X^2^: Reddit reads ^ as superscript
+    C07: ["reddit"], // block id ^abc: same caret
+    C14: ["reddit"], // #tag: Reddit reads #a as a heading
+  });
+
+  // Our own recognitions that no app has but that change nothing about the text (a date gets a dotted underline and a
+  // data-ymd for the calendar): they stay on in the "only" modes too.
+  const OURS = Object.freeze(new Set(["L07"]));
+
+  function supports(flavor, id) {
+    const row = FEATURES[id];
+    return !!row && !!SUPPORTS[row[COL[flavor]]];
+  }
+  // true when the parser should apply the rule `id` in `mode`. An id that is not in the table is never gated.
+  function enabled(modeValue, id) {
+    const row = FEATURES[id];
+    if (!row) return true;
+    const { only, flavor } = parseMode(modeValue);
+    const verdict = row[4];
+    if (only && OURS.has(id)) return true;
+    if (only) return verdict !== "OFF" && supports(flavor, id);
+    if (verdict === "OFF") return false;
+    if (verdict === "PICK") return flavor ? supports(flavor, id) : !!MIXED_PICK[id];
+    if (flavor && FLIP_OFF[id]?.includes(flavor)) return false;
+    return true;
+  }
+  // gate("github").on("A10") - one object per parse so a rule reads like a plain flag.
+  // opts.tilde: "strike" makes ~a~ strikethrough in the mixed modes (default: subscript, see COLLISION 1).
+  // opts.ignore: a Set of feature ids the person switched off ("ignore this syntax" setting).
+  function gate(modeValue, opts = {}) {
+    const info = parseMode(modeValue);
+    const cache = new Map();
+    const strike = !info.only && opts.tilde === "strike";
+    const off = opts.ignore instanceof Set ? opts.ignore : null;
+    return {
+      mode: info.mode,
+      only: info.only,
+      flavor: info.flavor,
+      on(id) {
+        if (!cache.has(id)) {
+          let v = enabled(info.mode, id);
+          if (strike && !info.flavor) v = id === "A09" ? true : id === "A13" ? false : v;
+          if (off && off.has(id)) v = false;
+          cache.set(id, v);
+        }
+        return cache.get(id);
+      },
+    };
+  }
+  // The "ignore syntax" setting: words separated by spaces or commas. A feature id (A10, F10) switches that rule off;
+  // anything else is a piece of syntax that must show as plain text (">[!info]", "<mark>", "=="). Max 40 words.
+  function parseIgnore(text) {
+    const ids = new Set(), literals = [];
+    for (const w of String(text || "").split(/[\s,]+/).filter(Boolean).slice(0, 40)) {
+      if (/^[A-Za-z]\d{2}$/.test(w)) ids.add(w.toUpperCase());
+      else if (w.length <= 40) literals.push(w);
+    }
+    literals.sort((a, b) => b.length - a.length); // the longer piece first: "==" must not eat "=={red}"
+    return { ids, literals };
+  }
+  // Fences of things we cannot draw: the block is still shown as code, with an error callout above it.
+  const UNSUPPORTED_FENCES = Object.freeze(["mermaid", "plantuml", "puml", "dot", "graphviz", "geojson", "topojson", "stl", "chart", "vega", "vega-lite", "flowchart", "sequence", "d2", "tikz"]);
+  // Every id switched on in a mode (for tests and for the doc's counters).
+  const enabledIds = (modeValue) => Object.keys(FEATURES).filter((id) => enabled(modeValue, id));
+
+  // ---- callout kinds ---------------------------------------------------------------------------------------------
+  // Canonical kind (what the look and the CSS are keyed by) and the feature row that gates it. GitHub alerts are
+  // note / tip / important / warning / caution; Obsidian has thirteen with aliases. Our look keeps the six we had.
+  const CALLOUTS = Object.freeze({
+    note: ["note", "F05"], tip: ["tip", "F06"], important: ["important", "F07"], warning: ["warning", "F08"], caution: ["caution", "F09"],
+    info: ["info", "F10"],
+    abstract: ["abstract", "F11"], summary: ["abstract", "F11"], tldr: ["abstract", "F11"],
+    todo: ["todo", "F12"],
+    success: ["success", "F13"], check: ["success", "F13"], done: ["success", "F13"],
+    question: ["question", "F14"], help: ["question", "F14"], faq: ["question", "F14"],
+    failure: ["failure", "F15"], fail: ["failure", "F15"], missing: ["failure", "F15"],
+    danger: ["danger", "F16"], error: ["danger", "F16"],
+    bug: ["bug", "F17"],
+    example: ["example", "F18"],
+    quote: ["quote", "F19"], cite: ["quote", "F19"],
+    hint: ["tip", "F20"], attention: ["warning", "F20"],
+  });
+  const CALLOUT_LOOKS = Object.freeze(["note", "tip", "important", "warning", "caution", "info", "abstract", "todo", "success", "question", "failure", "danger", "bug", "example", "quote"]);
+  // "[!Summary]" -> { kind: "abstract", type: "summary", known: true }. An unknown type is a "note" look that keeps
+  // its own name as the title (Obsidian does the same); null when the mode does not read callouts of that type.
+  function calloutKind(raw, g) {
+    const type = String(raw || "").toLowerCase();
+    if (!/^[a-z][\w-]{0,30}$/.test(type)) return null;
+    const hit = CALLOUTS[type];
+    if (hit) return !g || g.on(hit[1]) ? { kind: hit[0], type, known: true } : null;
+    return !g || g.on("F24") || (g.only && g.flavor === "obsidian") ? { kind: "note", type, known: false } : null;
+  }
+
+  // Shortcode -> character, known names only (a made-up :name: stays text). The common GitHub / Slack / Discord set.
+  const EMOJI = Object.freeze(Object.fromEntries(
+    ("+1 👍;-1 👎;thumbsup 👍;thumbsdown 👎;smile 😄;smiley 😃;grin 😁;laughing 😆;joy 😂;wink 😉;blush 😊;heart_eyes 😍;sunglasses 😎;thinking 🤔;neutral_face 😐;" +
+      "unamused 😒;sweat_smile 😅;cry 😢;sob 😭;angry 😠;rage 😡;scream 😱;sleeping 😴;confused 😕;innocent 😇;relaxed ☺️;slightly_smiling_face 🙂;upside_down_face 🙃;" +
+      "heart ❤️;broken_heart 💔;blue_heart 💙;green_heart 💚;yellow_heart 💛;purple_heart 💜;star ⭐;star2 🌟;sparkles ✨;fire 🔥;boom 💥;zap ⚡;tada 🎉;confetti_ball 🎊;" +
+      "rocket 🚀;trophy 🏆;medal 🏅;gift 🎁;bulb 💡;bell 🔔;mag 🔍;lock 🔒;unlock 🔓;key 🔑;link 🔗;paperclip 📎;pushpin 📌;memo 📝;pencil2 ✏️;book 📖;books 📚;" +
+      "calendar 📅;date 📅;clock1 🕐;hourglass ⌛;alarm_clock ⏰;warning ⚠️;no_entry ⛔;x ❌;white_check_mark ✅;heavy_check_mark ✔️;check ✔️;question ❓;exclamation ❗;" +
+      "bangbang ‼️;information_source ℹ️;bug 🐛;wrench 🔧;hammer 🔨;gear ⚙️;package 📦;computer 💻;iphone 📱;email 📧;envelope ✉️;phone ☎️;globe_with_meridians 🌐;" +
+      "sunny ☀️;cloud ☁️;umbrella ☔;snowflake ❄️;rainbow 🌈;earth_africa 🌍;seedling 🌱;evergreen_tree 🌲;rose 🌹;coffee ☕;pizza 🍕;beer 🍺;cake 🍰;apple 🍎;" +
+      "dog 🐶;cat 🐱;bird 🐦;turtle 🐢;see_no_evil 🙈;eyes 👀;wave 👋;clap 👏;pray 🙏;muscle 💪;ok_hand 👌;point_right 👉;point_left 👈;raised_hands 🙌;handshake 🤝;" +
+      "100 💯;arrow_right ➡️;arrow_left ⬅️;arrow_up ⬆️;arrow_down ⬇️;recycle ♻️;moneybag 💰;chart_with_upwards_trend 📈;chart_with_downwards_trend 📉;house 🏠;car 🚗;airplane ✈️").split(";")
+      .map((x) => { const i = x.indexOf(" "); return [x.slice(0, i), x.slice(i + 1)]; }),
+  ));
+
+  const api = { EMOJI, parseIgnore, UNSUPPORTED_FENCES, FEATURES, MODES, MODE_LABELS, FLAVORS, cleanMode, parseMode, supports, enabled, gate, enabledIds, MIXED_PICK, FLIP_OFF, CALLOUTS, CALLOUT_LOOKS, calloutKind };
+  if (typeof module === "object" && module.exports) module.exports = api;
+  if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-flavors", () => api);
+})();
+
+},
+"additional/notes/flavors/ZentralNotesShortcuts.js": function (window) {
+/*
+ * ZENTRAL FILE GUIDE - additional/notes/flavors/ZentralNotesShortcuts.js
+ *
+ * Purpose: Typing shortcuts for the Notes editor as pure logic: write {{date}}, @today or /today and the editor
+ *   swaps it for the real date (or time, title ...). The note then holds plain text, so it reads the same in every app.
+ * Interaction / execution: ZentralNotes.uc.js calls expandTyped() from the editor's input event with the character
+ *   that was just typed, and applies the returned edit through the same applyEdit the [[ completion uses (undo stays).
+ * Ownership / failure: no DOM, no preferences, no clock of its own (the caller passes `now`). Returns null when nothing
+ *   should happen. Never expands inside a code fence or an inline code span.
+ * Registration: notes-shortcuts
+ * Loaded/created by: additional/notes/ZentralNotes.uc.js
+ *
+ * FAMILIES (the pref `text_shortcuts`: all / braces / off)
+ *   braces   {{date}} {{time}} {{title}} {{date:DD.MM.YYYY}} {{time:HH:mm}} ...  Obsidian's Templates plugin, expands the
+ *            moment the closing }} is typed.
+ *   at       @today @now @tomorrow @yesterday @date @time @datetime @weekday     Notion style, expands when Space or Enter follows.
+ *   slash    /today /now /tomorrow /yesterday /date /time /datetime /weekday     Logseq style, same rule, only after a space or at a line start.
+ */
+(function () {
+  "use strict";
+  const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const DEFAULT_DATE = "YYYY-MM-DD";
+  const DEFAULT_TIME = "HH:mm";
+  const MAX_FORMAT = 40;
+  const p2 = (n) => String(n).padStart(2, "0");
+
+  // Moment-style tokens: YYYY YY MMMM MMM MM M DD D dddd ddd HH H hh h mm m ss s A a; [text] is copied as it is.
+  function formatDate(ms, fmt) {
+    const d = new Date(ms);
+    if (Number.isNaN(d.getTime())) return "";
+    const f = String(fmt || DEFAULT_DATE).slice(0, MAX_FORMAT);
+    const h12 = d.getHours() % 12 || 12;
+    const map = {
+      YYYY: String(d.getFullYear()), YY: String(d.getFullYear()).slice(-2),
+      MMMM: MONTHS[d.getMonth()], MMM: MONTHS[d.getMonth()].slice(0, 3), MM: p2(d.getMonth() + 1), M: String(d.getMonth() + 1),
+      DD: p2(d.getDate()), D: String(d.getDate()),
+      dddd: DAYS[d.getDay()], ddd: DAYS[d.getDay()].slice(0, 3),
+      HH: p2(d.getHours()), H: String(d.getHours()), hh: p2(h12), h: String(h12),
+      mm: p2(d.getMinutes()), m: String(d.getMinutes()), ss: p2(d.getSeconds()), s: String(d.getSeconds()),
+      A: d.getHours() < 12 ? "AM" : "PM", a: d.getHours() < 12 ? "am" : "pm",
+    };
+    return f.replace(/\[([^\]]*)\]|YYYY|YY|MMMM|MMM|MM|M|DD|D|dddd|ddd|HH|H|hh|h|mm|m|ss|s|A|a/g, (t, lit) => (lit !== undefined ? lit : map[t]));
+  }
+  const addDays = (ms, n) => {
+    const d = new Date(ms);
+    d.setDate(d.getDate() + n);
+    return d.getTime();
+  };
+
+  // word -> what it means. `fmt` is the optional {{date:FORMAT}} part.
+  const WORDS = Object.freeze({ today: "date", date: "date", now: "datetime", datetime: "datetime", time: "time", tomorrow: "tomorrow", yesterday: "yesterday", weekday: "weekday", title: "title" });
+  const AT_WORDS = ["today", "now", "tomorrow", "yesterday", "date", "time", "datetime", "weekday"];
+  // "+3d", "-2d", "+1w", "+2m", "+1y" -> a date that far from today; "monday" ... "sunday" (or mon ... sun) -> the next
+  // such day after today. Dates written this way are plain ISO text afterwards, which Notes recognises as a date.
+  const DAY_KEYS = DAYS.map((d) => d.slice(0, 3).toLowerCase());
+  function offsetDate(word, now) {
+    const w = String(word).toLowerCase();
+    let m = /^([+-])(\d{1,3})([dwmy])$/.exec(w);
+    if (m) {
+      const n = (m[1] === "-" ? -1 : 1) * parseInt(m[2], 10);
+      const d = new Date(now);
+      if (m[3] === "d") d.setDate(d.getDate() + n);
+      else if (m[3] === "w") d.setDate(d.getDate() + 7 * n);
+      else if (m[3] === "m") d.setMonth(d.getMonth() + n);
+      else d.setFullYear(d.getFullYear() + n);
+      return d.getTime();
+    }
+    m = /^(mon|tue|wed|thu|fri|sat|sun)[a-z]*$/.exec(w);
+    if (m && (w.length === 3 || DAYS.some((d) => d.toLowerCase() === w))) {
+      const want = DAY_KEYS.indexOf(m[1]);
+      const ahead = ((want - new Date(now).getDay() + 6) % 7) + 1; // 1..7: never today
+      return addDays(now, ahead);
+    }
+    return null;
+  }
+  function resolve(word, fmt, ctx = {}) {
+    const now = Number.isFinite(ctx.now) ? ctx.now : Date.now();
+    const dateFmt = ctx.dateFormat || DEFAULT_DATE;
+    const timeFmt = ctx.timeFormat || DEFAULT_TIME;
+    const kind = WORDS[String(word || "").toLowerCase()];
+    if (!kind) {
+      const at = offsetDate(word, now);
+      return at === null ? null : formatDate(at, fmt || dateFmt);
+    }
+    switch (kind) {
+      case "date": return formatDate(now, fmt || dateFmt);
+      case "time": return formatDate(now, fmt || timeFmt);
+      case "datetime": return fmt ? formatDate(now, fmt) : formatDate(now, dateFmt) + " " + formatDate(now, timeFmt);
+      case "tomorrow": return formatDate(addDays(now, 1), fmt || dateFmt);
+      case "yesterday": return formatDate(addDays(now, -1), fmt || dateFmt);
+      case "weekday": return formatDate(now, fmt || "dddd");
+      case "title": return String(ctx.title || "");
+      default: return null;
+    }
+  }
+
+  // Is `pos` inside a fenced block or an inline code span? (A shortcut typed in code stays as typed.)
+  function inCode(value, pos) {
+    const head = String(value).slice(0, pos);
+    let fenced = false;
+    for (const line of head.split("\n").slice(0, -1)) if (/^\s{0,3}(```|~~~)/.test(line)) fenced = !fenced;
+    if (fenced) return true;
+    const cur = head.slice(head.lastIndexOf("\n") + 1);
+    if (/^\s{0,3}(```|~~~)/.test(cur)) return true;
+    return (cur.match(/`/g) || []).length % 2 === 1;
+  }
+
+  const BRACE_RE = /\{\{\s*([A-Za-z]+)\s*(?::([^{}\n]{1,40}))?\}\}$/;
+  const EXTRA = "[+-]\\d{1,3}[dwmy]|(?:mon|tues?|wed(?:nes)?|thu(?:rs)?|fri|sat(?:ur)?|sun)(?:day)?";
+  const AT_RE = new RegExp("(^|[\\s(\\[>\"'])@(" + AT_WORDS.join("|") + "|" + EXTRA + ")$", "i");
+  const SLASH_RE = new RegExp("(^|[\\s(])\\/(" + AT_WORDS.join("|") + "|" + EXTRA + ")$", "i");
+
+  // value: the text after the keystroke; caret: where the caret is now; typed: the character that was typed
+  // ("}" , " " or "\n"); ctx: { now, dateFormat, timeFormat, title }; families: "all" | "braces" | "off".
+  // Returns { start, end, text, selStart, selEnd } (the shape applyEdit takes) or null.
+  function expandTyped(value, caret, typed, ctx = {}, families = "all") {
+    if (families === "off" || typeof value !== "string" || !typed) return null;
+    if (typed === "}") {
+      const before = value.slice(Math.max(0, caret - 90), caret);
+      const m = BRACE_RE.exec(before);
+      if (!m || !WORDS[m[1].toLowerCase()]) return null;
+      const start = caret - m[0].length;
+      if (inCode(value, start)) return null;
+      const text = resolve(m[1], m[2] && m[2].trim(), ctx);
+      if (text === null) return null;
+      return { start, end: caret, text, selStart: start + text.length, selEnd: start + text.length };
+    }
+    if (families !== "all" || (typed !== " " && typed !== "\n")) return null;
+    const tokenEnd = caret - 1; // the space or the newline that was just typed
+    const before = value.slice(Math.max(0, tokenEnd - 30), tokenEnd);
+    const m = AT_RE.exec(before) || SLASH_RE.exec(before);
+    if (!m) return null;
+    const start = tokenEnd - (m[0].length - m[1].length);
+    if (inCode(value, start)) return null;
+    const text = resolve(m[2], null, ctx);
+    if (text === null) return null;
+    return { start, end: tokenEnd, text, selStart: start + text.length + 1, selEnd: start + text.length + 1 };
+  }
+
+  // The list shown in docs/MARKDOWN_FLAVORS.md section N and in the in-app help: what you type, what you get.
+  const SHORTCUTS = Object.freeze([
+    { family: "braces", typed: "{{date}}", gives: "today, YYYY-MM-DD", app: "Obsidian Templates" },
+    { family: "braces", typed: "{{time}}", gives: "now, HH:mm", app: "Obsidian Templates" },
+    { family: "braces", typed: "{{date:DD.MM.YYYY}}", gives: "today in your own format", app: "Obsidian Templates" },
+    { family: "braces", typed: "{{time:hh:mm A}}", gives: "now in your own format", app: "Obsidian Templates" },
+    { family: "braces", typed: "{{title}}", gives: "the note title", app: "Obsidian Templates" },
+    { family: "braces", typed: "{{datetime}} {{now}} {{today}} {{tomorrow}} {{yesterday}} {{weekday}}", gives: "date and time / today / next day / previous day / day name", app: "ours" },
+    { family: "at", typed: "@today  @date", gives: "today, YYYY-MM-DD", app: "Notion" },
+    { family: "at", typed: "@now  @datetime", gives: "date and time", app: "Notion" },
+    { family: "at", typed: "@time", gives: "now, HH:mm", app: "ours" },
+    { family: "at", typed: "@tomorrow  @yesterday  @weekday", gives: "next day / previous day / day name", app: "Notion" },
+    { family: "at", typed: "@+3d  @-2d  @+1w  @+1m  @+1y", gives: "a date that far from today", app: "ours (for reminders)" },
+    { family: "at", typed: "@monday ... @sunday  (@mon ... @sun)", gives: "the next such day after today", app: "ours (for reminders)" },
+    { family: "slash", typed: "/today  /date  /now  /time  /tomorrow  /yesterday  /weekday", gives: "the same as @ (also /+3d, /monday)", app: "Logseq" },
+  ]);
+
+  const api = { formatDate, resolve, expandTyped, inCode, WORDS, AT_WORDS, SHORTCUTS, DEFAULT_DATE, DEFAULT_TIME };
+  if (typeof module === "object" && module.exports) module.exports = api;
+  if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-shortcuts", () => api);
+})();
+
+},
+};
+  const texts = {
+
+};
+  const definitions = new Map(),
+    files = new Map(),
+    sourceById = new Map(),
+    components = new Map();
+  let loadingSource = null,
+    destroyed = false;
+  // Same shape of check as the full loader: only embedded repo paths resolve.
+  const safePath = (path) =>
+    /^(?:additional)\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*(?:\.uc|\.sys)?\.(?:js|mjs|css|json)$/.test(
+      path,
+    );
+  const rootURI = (() => {
+    try {
+      return Services.io.newURI("./", null, Services.io.newURI(__BUNDLE_URL__))
+        .spec;
+    } catch (error) {
+      console.error("[Zentral standalone] cannot resolve install folder", error);
+      return "";
+    }
+  })();
+  const loader = {
+    standalone: true,
+    rootURI,
+    define(id, factory) {
+      if (definitions.has(id)) throw new Error("Duplicate component: " + id);
+      definitions.set(id, factory);
+      sourceById.set(id, loadingSource);
+    },
+    load(path, { optional = false, owner = "core" } = {}) {
+      if (destroyed) throw new Error("Loader destroyed: " + path);
+      if (!safePath(path) || !/\.(?:js|mjs)$/.test(path))
+        throw new Error("Unsafe module path: " + path);
+      const existing = files.get(path);
+      if (existing?.state === "loaded") return true;
+      if (existing?.state === "failed") {
+        if (optional) return false;
+        throw new Error(
+          "Required source unavailable: " + path + ": " + existing.error,
+        );
+      }
+      const run = sources[path];
+      if (typeof run !== "function") {
+        // Not part of this package (for example the Zentral settings UI).
+        const error = "not included in the standalone package";
+        files.set(path, { file: path, owner, phase: "load", state: "failed", error });
+        if (optional) return false;
+        throw new Error("Required source unavailable: " + path + ": " + error);
+      }
+      const row = { file: path, owner, phase: "load", state: "loading" };
+      files.set(path, row);
+      const previousSource = loadingSource;
+      loadingSource = path;
+      const priorDefinitions = new Set(definitions.keys());
+      try {
+        run(window);
+        row.state = "loaded";
+        return true;
+      } catch (error) {
+        for (const id of definitions.keys())
+          if (!priorDefinitions.has(id) && sourceById.get(id) === path) {
+            definitions.delete(id);
+            sourceById.delete(id);
+          }
+        row.state = "failed";
+        row.error = String(error) + (error?.stack ? "\n" + error.stack : "");
+        console.error("[Zentral source]", path, error);
+        if (!optional) throw error;
+        return false;
+      } finally {
+        loadingSource = previousSource;
+      }
+    },
+    readText(path, owner = "core") {
+      if (!safePath(path)) throw new Error("Unsafe resource path: " + path);
+      if (typeof texts[path] !== "string" || !texts[path])
+        throw new Error("Resource unavailable: " + path);
+      files.set(path, { file: path, owner, phase: "resource", state: "loaded" });
+      return texts[path];
+    },
+    create(id, args, { optional = false } = {}) {
+      const file = sourceById.get(id);
+      try {
+        const factory = this.require(id);
+        if (typeof factory !== "function")
+          throw new Error("Invalid factory: " + id);
+        const value = factory(args);
+        const component = components.get(id) || { id, file, constructions: 0 };
+        component.state = "initialized";
+        component.constructions++;
+        delete component.error;
+        components.set(id, component);
+        return value;
+      } catch (error) {
+        components.set(id, { id, file, state: "failed", error: String(error) });
+        const row = file && files.get(file);
+        if (row) {
+          row.state = "failed";
+          row.phase = "factory";
+          row.component = id;
+          row.error = String(error) + (error?.stack ? "\n" + error.stack : "");
+        }
+        console.error("[Zentral component]", file || id, error);
+        if (!optional) throw error;
+        return null;
+      }
+    },
+    require(id) {
+      if (
+        !definitions.has(id) ||
+        files.get(sourceById.get(id))?.state === "failed"
+      )
+        throw new Error("Component did not register: " + id);
+      return definitions.get(id);
+    },
+    has: (id) =>
+      definitions.has(id) && files.get(sourceById.get(id))?.state !== "failed",
+    sources: () => [...files.values()].map((row) => ({ ...row })),
+    report() {
+      return {
+        standalone: true,
+        sources: this.sources(),
+        components: [...components.values()].map((row) => ({ ...row })),
+      };
+    },
+    destroy() {
+      destroyed = true;
+      definitions.clear();
+      components.clear();
+      files.clear();
+      sourceById.clear();
+      if (window.__zentralNotesLoader === loader) delete window.__zentralNotesLoader;
+    },
+  };
+  return loader;
+})();
+
+window.__zentralNotesLoader?.destroy?.(); // live re-run replaces the old instance
+window.__zentralNotesLoader = __zentralEmbeddedLoader;
+const __zentralExtras = [
+
+];
+const __zentralRegister = __zentralShim.register;
+__zentralShim.register = function (def) {
+  return __zentralRegister({
+    ...def,
+    init(args) {
+      const stops = [];
+      const stopAll = () => {
+        for (const stop of stops.splice(0).reverse()) {
+          try { stop(); } catch (error) { console.warn("[Zentral standalone] cleanup", error); }
+        }
+        __zentralEmbeddedLoader.destroy();
+      };
+      try {
+        for (const start of __zentralExtras) {
+          const stop = start(window, args.runtime, args.lifecycle);
+          if (typeof stop === "function") stops.push(stop);
+        }        const base = def.init(args);
+        stops.push(typeof base === "function" ? base : () => base?.destroy?.());
+      } catch (error) {
+        stopAll();
+        throw error;
+      }
+      return stopAll;
+    },
+  });
+};
 /*
  * ZENTRAL FILE GUIDE - additional/notes/ZentralNotes.uc.js
  *
@@ -643,6 +1416,23 @@ function nativeSidebarSide() {
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
   const ZentralRuntime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
+  // The Markdown flavor modes and the typing shortcuts live in their own files (additional/notes/flavors). The full
+  // pack loads them through the module loader, the standalone bundle embeds them; a test may hand them over in
+  // window.__zentralNotesParts. Without them Notes behaves as plain "mixed" and no shortcut expands.
+  const loadPart = (path, name) => {
+    try {
+      const loader = window.__zentralNotesLoader;
+      if (loader) {
+        loader.load(path, { owner: "notes" });
+        return loader.create(name);
+      }
+    } catch (error) {
+      console.warn("[ZentralNotes] could not load " + name, error);
+    }
+    return window.__zentralNotesParts?.[name] || null;
+  };
+  const FLAVORS_PART = loadPart("additional/notes/flavors/ZentralNotesFlavors.js", "notes-flavors");
+  const SHORTCUTS_PART = loadPart("additional/notes/flavors/ZentralNotesShortcuts.js", "notes-shortcuts");
 
   function standaloneReady(start) {
     let started = false;
@@ -768,6 +1558,12 @@ function nativeSidebarSide() {
       BACKLINKS_PANEL: "zen.workspace.zentral.notes.backlinks_panel",
       HIDDEN_MENU: "zen.workspace.zentral.notes.hidden_tools_menu",
       DATE_MODE: "zen.workspace.zentral.notes.date_notes_mode",
+      MD_FLAVOR: "zen.workspace.zentral.notes.markdown_flavor",
+      TILDE: "zen.workspace.zentral.notes.single_tilde",
+      IGNORE_SYNTAX: "zen.workspace.zentral.notes.ignore_syntax",
+      TEXT_SHORTCUTS: "zen.workspace.zentral.notes.text_shortcuts",
+      SHORTCUT_DATE: "zen.workspace.zentral.notes.shortcut_date_format",
+      SHORTCUT_TIME: "zen.workspace.zentral.notes.shortcut_time_format",
       HISTORY_ON: "zen.workspace.zentral.notes.history_enabled",
       HISTORY_KEEP: "zen.workspace.zentral.notes.history_keep",
       HISTORY_MINUTES: "zen.workspace.zentral.notes.history_minutes",
@@ -825,6 +1621,7 @@ function nativeSidebarSide() {
       "color",
       "label",
       "pinned",
+      "flavor",
       "trashed",
       "folder",
       "remind",
@@ -904,6 +1701,7 @@ function nativeSidebarSide() {
         label: cleanLabel(meta.label),
         folder: cleanFolder(meta.folder),
         pinned: meta.pinned === "true",
+        flavor: meta.flavor && FLAVORS_PART && FLAVORS_PART.MODES.includes(meta.flavor) ? meta.flavor : "",
         trashed: meta.trashed ? toTime(meta.trashed, mtime) : 0,
         remind: meta.remind ? cleanRemind(toTime(meta.remind, 0)) : 0,
         reminded: meta.reminded ? toTime(meta.reminded, 0) : 0,
@@ -922,6 +1720,7 @@ function nativeSidebarSide() {
       if (cleanLabel(n.label)) lines.push("label: " + cleanLabel(n.label));
       if (cleanFolder(n.folder)) lines.push("folder: " + cleanFolder(n.folder));
       if (n.pinned) lines.push("pinned: true");
+      if (n.flavor && FLAVORS_PART && FLAVORS_PART.MODES.includes(n.flavor)) lines.push("flavor: " + n.flavor);
       if (n.trashed) lines.push("trashed: " + iso(n.trashed));
       if (n.remind > 0) {
         lines.push("remind: " + iso(n.remind));
@@ -1278,9 +2077,9 @@ function nativeSidebarSide() {
         "~~(?=\\S)([\\s\\S]+?)(?<=\\S)~~", // 10 strike
         "(?<![\\w*])\\*([^\\s*](?:[\\s\\S]*?[^\\s*])?)\\*(?![\\w*])", // 11 italic
         "(?<![\\w_])_([^\\s_](?:[\\s\\S]*?[^\\s_])?)_(?![\\w_])", // 12 italic
-        "\\[((?:!\\[[^\\]\\n]*\\]\\([^\\s)]+\\)|[^\\]\\n])+)\\]\\(([^\\s)]+)(?:\\s+\\x22([^\\x22]*)\\x22)?\\)", // 13 text, 14 href, 15 "title" (tooltip)
+        "\\[((?:!\\[[^\\]\\n]*\\]\\([^\\s)]+\\)|[^\\]\\n])+)\\]\\((<[^<>\\n]*>|(?:[^\\s()]|\\([^\\s()]*\\))+)(?:\\s+\\x22([^\\x22]*)\\x22)?\\)", // 13 text, 14 href, 15 "title" (tooltip)
         "<?(https?:\\/\\/[^\\s<>\"')\\]]+)>?", // 16 bare url, or <url>
-        "!\\[([^\\]\\n]*)\\]\\(([^\\s)]+)(?:\\s+\\x22([^\\x22]*)\\x22)?\\)", // 17 alt, 18 src, 19 "title" (image)
+        "!\\[([^\\]\\n]*)\\]\\((<[^<>\\n]*>|(?:[^\\s()]|\\([^\\s()]*\\))+)(?:\\s+\\x22([^\\x22]*)\\x22)?\\)", // 17 alt, 18 src, 19 "title" (image)
         "(?<!~)~([^\\s~]+)~(?!~)", // 20 subscript  H~2~O
         "\\^([^\\s^]+)\\^", // 21 superscript  X^2^
         "<[kK][bB][dD]>([^<\\n]+)<\\/[kK][bB][dD]>", // 22 keyboard key
@@ -1289,6 +2088,24 @@ function nativeSidebarSide() {
         "(?<![\\w/])mailto:([^\\s<>@\\x22]+@[^\\s<>@\\x22]+\\.[^\\s<>@\\x22,;)\\]]+)", // 26 bare mailto:user@host.tld
         "(?<![\\w$])\\$([^\\s$](?:[^$\\n]*?[^\\s$])?)\\$(?![\\d$\\w])", // 27 $math$ (not "$5 and $10": no space inside, no digit after)
         "\\[\\^([^\\]\\s]{1,40})\\]", // 28 footnote reference [^1] (see FOOTS)
+        // 29 and up: rules that other apps read differently or that we added from the flavor table. Each one is gated by
+        // inlineOff() (feature id in the comment), so a mode that does not know the syntax leaves it as plain text.
+        "\\$\\$([^$\\n]+?)\\$\\$", // 29 $$x$$ inline (I03)
+        "!\\[([^\\]\\n]*)\\]\\[([^\\]\\n]*)\\]", // 30 alt, 31 label: image reference (B18)
+        "(?<![\\w/.@])(www\\.[^\\s<>\\x22')\\]]+\\.[A-Za-z]{2,}[^\\s<>\\x22')\\]]*)", // 32 www.x.com (B12)
+        "(?<=\\w)\\*([^\\s*](?:[^*\\n]*?[^\\s*])?)\\*(?=\\w)", // 33 a*b*c (A05)
+        "(?<![\\w:]):([a-z0-9_+-]{1,32}):(?![\\w:])", // 34 :smile: (L05, known names only)
+        "%%([^%\\n]+?)%%", // 35 comment (A31)
+        "<!--([\\s\\S]*?)-->", // 36 HTML comment (A32)
+        "\\[([^\\]\\n]+)\\](?![\\[(:])", // 37 [text] with a [text]: url line (B09)
+        "\\^\\(([^()\\n]+)\\)", // 38 Reddit superscript group (A17)
+        "\\^([^\\s^()]+)", // 39 Reddit superscript word (A17)
+        ">!([^!\\n]+?)!<", // 40 Reddit spoiler (A27)
+        "(?<![|\\w])\\|\\|([^|\\n]+?)\\|\\|(?![|\\w])", // 41 Discord spoiler (A29)
+        "\\+\\+(?=\\S)([^+\\n]+?)(?<=\\S)\\+\\+", // 42 ++underline++ (A20)
+        "(?<![\\w&/#>])#([A-Za-z_\\u00C0-\\uFFFF][\\w\\u00C0-\\uFFFF/-]*)", // 43 #tag (C14)
+        "(?<![\\w./-])(\\d{4})-(\\d{2})-(\\d{2})(?:[ T](\\d{2}):(\\d{2}))?(?![\\w-]|:\\d)", // 44 year 45 month 46 day 47 hour 48 minute: a date (L07)
+        "(?<![\\w/])\\/?([ur])\\/([A-Za-z0-9_-]{2,30})(?![\\w/])", // 49 kind, 50 name: u/name r/sub (L04)
       ].join("|"),
       "g",
     );
@@ -1474,6 +2291,67 @@ function nativeSidebarSide() {
     // Reference definitions ("[ref]: https://... "title"") of the document being parsed. Set by
     // parseBlocks for the duration of one parse; null outside it (references then stay text).
     let REFS = null;
+    // The Markdown flavor gate for the parse in progress (see additional/notes/flavors). Rules that other apps read
+    // differently ask FLAVOR.on("A10") first. Without the flavors file only the rules every app agrees on are on.
+    const FLAVOR_DEFAULT_OFF = new Set(["A09", "A17", "D02", "G05", "L04", "M24"]);
+    const flavorGate = (mode, o = {}) => (FLAVORS_PART ? FLAVORS_PART.gate(mode, o) : { mode: "mixed", only: false, flavor: null, on: (id) => !FLAVOR_DEFAULT_OFF.has(id) });
+    // The "ignore syntax" setting, parsed once per distinct text.
+    let ignoreMemo = { raw: "", value: { ids: new Set(), literals: [] } };
+    function parseIgnoreCached(raw) {
+      raw = String(raw || "");
+      if (!raw) return ignoreMemo.value.literals.length || ignoreMemo.value.ids.size ? (ignoreMemo = { raw, value: { ids: new Set(), literals: [] } }).value : ignoreMemo.value;
+      if (ignoreMemo.raw !== raw) ignoreMemo = { raw, value: FLAVORS_PART ? FLAVORS_PART.parseIgnore(raw) : { ids: new Set(), literals: [] } };
+      return ignoreMemo.value;
+    }
+    // Line-for-line rewrites done before the blocks are read (the line count never changes, so task lines and scroll
+    // positions stay right): "[ ] a" and "• a" become list items (E12, E19), \[ ... \] becomes a $$ block (I05), and the
+    // pieces of syntax the person listed under "ignore syntax" get a backslash in front of every symbol so they show as text.
+    const IGNORE_ESC = /[\\`*_{}[\]()#+\-.!|=~<>^$]/g;
+    // ">[!info]" also finds "> [!info]": a leading > matches the spaces after it.
+    let ignoreMemoRes = { key: "", list: [] };
+    function ignoreRes(literals) {
+      const key = literals.join("\u0000");
+      if (ignoreMemoRes.key !== key)
+        ignoreMemoRes = { key, list: literals.map((lit) => new RegExp((lit[0] === ">" ? ">[ \\t]*" : "") + (lit[0] === ">" ? lit.slice(1) : lit).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) };
+      return ignoreMemoRes.list;
+    }
+    function prepareLines(lines, literals) {
+      const bullets = FLAVOR.on("E19"), boxes = FLAVOR.on("E12"), brackets = FLAVOR.on("I05");
+      if (!bullets && !boxes && !brackets && !literals.length) return lines;
+      let fence = "";
+      let inMath = false;
+      return lines.map((line) => {
+        const f = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+        if (f) {
+          if (!fence) fence = f[1][0];
+          else if (f[1][0] === fence) fence = "";
+          return line;
+        }
+        if (fence) return line;
+        let out = line;
+        if (bullets) out = out.replace(/^(\s*)[\u2022\u00b7\u25e6\u25aa\u2023]\s+(?=\S)/, "$1- ");
+        if (boxes) out = out.replace(/^(\s*)\[( |x|X)\]\s+(?=\S)/, "$1- [$2] ");
+        if (brackets) {
+          const one = /^\s*\\\[(.+)\\\]\s*$/.exec(out);
+          if (one) out = "$$ " + one[1].trim() + " $$";
+          else if (!inMath && /^\s*\\\[\s*$/.test(out)) (inMath = true), (out = "$$");
+          else if (inMath && /^\s*\\\]\s*$/.test(out)) (inMath = false), (out = "$$");
+        }
+        if (literals.length && out.trim()) {
+          out = out
+            .split(/(`+[^`]*`+)/)
+            .map((seg, i) => {
+              if (i % 2) return seg;
+              for (const re of ignoreRes(literals)) seg = seg.replace(re, (hit) => hit.replace(IGNORE_ESC, "\\$&"));
+              return seg;
+            })
+            .join("");
+        }
+        return out;
+      });
+    }
+    const cleanFlavor = (v) => (FLAVORS_PART ? FLAVORS_PART.cleanMode(v) : "mixed");
+    let FLAVOR = flavorGate("mixed");
     const refKey = (label) => String(label).trim().replace(/\s+/g, " ").toLowerCase();
     const REF_DEF_RE = /^ {0,3}\[([^\]\n]+)\]:\s+<?([^\s>]+)>?(?:\s+(?:"([^"]*)"|'([^']*)'|\(([^)]*)\)))?\s*$/;
     // Takes the definition lines out (blanked, so line numbers stay true) and returns them.
@@ -1629,6 +2507,76 @@ function nativeSidebarSide() {
       return out;
     }
 
+    // True when the match belongs to a rule the current flavor does not read (then it stays text and the scan goes on
+    // one character later). Rules 29 and up are new; the others are old rules that now ask the gate.
+    const validYmd = (y, mo, d, hh, mi) => {
+      const dt = new Date(+y, +mo - 1, +d);
+      return dt.getFullYear() === +y && dt.getMonth() === +mo - 1 && dt.getDate() === +d && (hh === undefined || (+hh < 24 && +mi < 60));
+    };
+    function inlineOff(m) {
+      if (m[9] !== undefined) return !FLAVOR.on(m[8] ? "A11" : "A10");
+      if (m[20] !== undefined) return !FLAVOR.on("A09") && !FLAVOR.on("A13");
+      if (m[21] !== undefined) return !FLAVOR.on("A15");
+      if (m[27] !== undefined) return !FLAVOR.on("I01");
+      if (m[29] !== undefined) return !FLAVOR.on("I03");
+      if (m[30] !== undefined) return !FLAVOR.on("B18") || !REFS?.has(refKey(m[31] || m[30]));
+      if (m[32] !== undefined) return !FLAVOR.on("B12");
+      if (m[33] !== undefined) return !FLAVOR.on("A05");
+      if (m[34] !== undefined) return !FLAVOR.on("L05") || !FLAVORS_PART?.EMOJI[m[34]];
+      if (m[35] !== undefined) return !FLAVOR.on("A31");
+      if (m[36] !== undefined) return !FLAVOR.on("A32");
+      if (m[37] !== undefined) return !FLAVOR.on("B09") || !REFS?.has(refKey(m[37]));
+      if (m[38] !== undefined || m[39] !== undefined) return !FLAVOR.on("A17");
+      if (m[40] !== undefined) return !FLAVOR.on("A27");
+      if (m[41] !== undefined) return !FLAVOR.on("A29");
+      if (m[42] !== undefined) return !FLAVOR.on("A20");
+      if (m[43] !== undefined) return !FLAVOR.on("C14");
+      if (m[44] !== undefined) return !FLAVOR.on("L07") || !validYmd(m[44], m[45], m[46], m[47], m[48]);
+      if (m[49] !== undefined) return !FLAVOR.on("L04");
+      return false;
+    }
+    const unAngle = (u) => (u && u[0] === "<" ? u.slice(1, -1) : u);
+    function extraInline(m, depth) {
+      if (m[29] !== undefined) return [{ t: "math", c: texNodes(m[29]) }];
+      if (m[30] !== undefined) {
+        const def = REFS?.get(refKey(m[31] || m[30]));
+        const href = def && safeHref(def.href, false);
+        return href ? [{ t: "img", alt: m[30], href }] : [{ t: "text", s: m[0] }];
+      }
+      if (m[32] !== undefined) {
+        let url = m[32],
+          trail = "";
+        const tm = /[.,;:!?]+$/.exec(url);
+        if (tm) {
+          trail = tm[0];
+          url = url.slice(0, -trail.length);
+        }
+        const href = safeHref("https://" + url);
+        return href ? [{ t: "a", href, c: [{ t: "text", s: url }] }, ...(trail ? [{ t: "text", s: trail }] : [])] : [{ t: "text", s: m[0] }];
+      }
+      if (m[33] !== undefined) return [{ t: "i", c: parseInline(m[33], depth + 1) }];
+      if (m[34] !== undefined) return [{ t: "text", s: FLAVORS_PART.EMOJI[m[34]] }];
+      if (m[35] !== undefined || m[36] !== undefined) return []; // comments: in the file, not on the screen
+      if (m[37] !== undefined) {
+        const def = REFS.get(refKey(m[37]));
+        const href = def && safeHref(def.href);
+        if (!href) return [{ t: "text", s: m[0] }];
+        const a = { t: "a", href, c: parseInline(m[37], depth + 1) };
+        if (def.title) a.title = def.title;
+        return [a];
+      }
+      if (m[38] !== undefined || m[39] !== undefined) return [{ t: "sup", c: parseInline(m[38] ?? m[39], depth + 1) }];
+      if (m[40] !== undefined || m[41] !== undefined) return [{ t: "spoiler", c: parseInline(m[40] ?? m[41], depth + 1) }];
+      if (m[42] !== undefined) return [{ t: "u", c: parseInline(m[42], depth + 1) }];
+      if (m[43] !== undefined) return [{ t: "tag", s: "#" + m[43] }];
+      if (m[44] !== undefined)
+        return [{ t: "date", s: m[0], ymd: m[44] + "-" + m[45] + "-" + m[46], time: m[47] !== undefined ? m[47] + ":" + m[48] : "" }];
+      if (m[49] !== undefined) {
+        const href = safeHref("https://www.reddit.com/" + (m[49] === "u" ? "user" : "r") + "/" + m[50]);
+        return href ? [{ t: "a", href, c: [{ t: "text", s: m[0].replace(/^\//, "") }] }] : [{ t: "text", s: m[0] }];
+      }
+      return [{ t: "text", s: m[0] }];
+    }
     function parseInlineRaw(text, depth = 0, noHtml = false) {
       text = String(text);
       if (depth > 4 || text.length > MAX_INLINE_CHARS)
@@ -1642,10 +2590,15 @@ function nativeSidebarSide() {
           re.lastIndex++;
           continue;
         }
+        if (inlineOff(m)) {
+          re.lastIndex = m.index + 1;
+          continue;
+        }
         if (m.index > last)
           out.push({ t: "text", s: text.slice(last, m.index) });
         last = m.index + m[0].length;
-        if (m[1] !== undefined || m[2] !== undefined)
+        if (m.length > 29 && m.slice(29).some((x) => x !== undefined)) out.push(...extraInline(m, depth));
+        else if (m[1] !== undefined || m[2] !== undefined)
           out.push({ t: "b", c: [{ t: "i", c: parseInline(m[1] ?? m[2], depth + 1) }] });
         else if (m[3] !== undefined) out.push({ t: "text", s: m[3] }); // ==== and =={red}== stay literal
         else if (m[4] !== undefined) out.push({ t: "b", c: parseInline(m[4], depth + 1) });
@@ -1663,15 +2616,20 @@ function nativeSidebarSide() {
         else if (m[11] !== undefined || m[12] !== undefined)
           out.push({ t: "i", c: parseInline(m[11] ?? m[12], depth + 1) });
         else if (m[17] !== undefined) {
-          const asset = parseAssetLink(m[18]);
-          const href = asset ? null : safeHref(m[18], false);
-          if (asset) out.push({ t: "img", alt: m[17], asset: asset.rel, width: asset.width, align: asset.align });
-          else if (href) out.push({ t: "img", alt: m[17], href });
+          const src = unAngle(m[18]);
+          const asset = parseAssetLink(src);
+          const href = asset ? null : safeHref(src, false);
+          // ![alt|100](url) and ![alt|100x50](url): Obsidian's size, kept out of the alt text (B17).
+          const size = FLAVOR.on("B17") ? /\|(\d{1,4})(?:x(\d{1,4}))?$/.exec(m[17]) : null;
+          const alt = size ? m[17].slice(0, size.index) : m[17];
+          if (asset) out.push({ t: "img", alt, asset: asset.rel, width: size ? +size[1] : asset.width, align: asset.align });
+          else if (href) out.push(size ? { t: "img", alt, href, width: +size[1] } : { t: "img", alt, href });
           else out.push({ t: "text", s: m[0] });
         } else if (m[13] !== undefined) {
-          const parts = noteLinkParts(m[14]);
+          const target = unAngle(m[14]);
+          const parts = noteLinkParts(target);
           const noteId = parts?.id || null;
-          const href = noteId ? null : safeHref(m[14]);
+          const href = noteId ? null : safeHref(target);
           if (noteId) {
             const a = { t: "nl", id: noteId, c: parseInline(m[13], depth + 1) };
             if (parts.heading) a.heading = parts.heading;
@@ -1682,13 +2640,13 @@ function nativeSidebarSide() {
             if (m[15]) a.title = m[15];
             out.push(a);
           } else out.push({ t: "text", s: m[0] });
-        } else if (m[20] !== undefined) out.push({ t: "sub", c: parseInline(m[20], depth + 1) });
+        } else if (m[20] !== undefined) out.push({ t: FLAVOR.on("A09") ? "s" : "sub", c: parseInline(m[20], depth + 1) });
         else if (m[21] !== undefined) out.push({ t: "sup", c: parseInline(m[21], depth + 1) });
         else if (m[22] !== undefined) out.push({ t: "kbd", s: m[22] });
         else if (m[27] !== undefined) out.push({ t: "math", c: texNodes(m[27]) });
         else if (m[28] !== undefined) {
           // Only a label that has a definition becomes a footnote; anything else stays the text it was.
-          if (FOOTS && FOOTS.has(m[28]) && (FOOT_ORDER.includes(m[28]) || FOOT_ORDER.length < FOOT_MAX)) {
+          if (FOOTS && FLAVOR.on("J01") && FOOTS.has(m[28]) && (FOOT_ORDER.includes(m[28]) || FOOT_ORDER.length < FOOT_MAX)) {
             let k = FOOT_ORDER.indexOf(m[28]);
             if (k < 0) k = FOOT_ORDER.push(m[28]) - 1;
             out.push({ t: "fn", label: m[28], n: k + 1 });
@@ -1729,8 +2687,8 @@ function nativeSidebarSide() {
     // the same node objects Markdown produces, `style` keeps only a short list of harmless properties, and
     // everything else stays visible text.
     // ======================================================================
-    const HTML_INLINE_RE = /<(?:b|strong|i|em|u|s|del|strike|mark|small|sub|sup|kbd|code|a|br|img)(?:\s[^<>]*)?\/?>/i;
-    const HTML_INLINE_OPEN_RE = /<(b|strong|i|em|u|s|del|strike|mark|small|sub|sup|kbd|code|a|br|img)(\s[^<>]*)?\/?>/gi;
+    const HTML_INLINE_RE = /<(?:b|strong|i|em|u|ins|s|del|strike|mark|small|span|big|font|abbr|q|cite|var|samp|tt|sub|sup|kbd|code|a|br|img)(?:\s[^<>]*)?\/?>/i;
+    const HTML_INLINE_OPEN_RE = /<(b|strong|i|em|u|ins|s|del|strike|mark|small|span|big|font|abbr|q|cite|var|samp|tt|sub|sup|kbd|code|a|br|img)(\s[^<>]*)?\/?>/gi;
     const HTML_BLOCK_RE = /^\s*<(h[1-6]|p|div|center|table|hr)(\s[^<>]*)?\/?>/i;
     const HTML_ALIGNS = Object.freeze(["left", "center", "right"]);
     const HTML_MAX_ROWS = 200,
@@ -1826,9 +2784,18 @@ function nativeSidebarSide() {
               const href = safeHref(htmlAttr(attrs, "href") || "");
               node = href ? { t: "a", href, c: parseInline(inner, depth + 1) } : { t: "span", c: parseInline(inner, depth + 1) };
             } else {
-              const t = { strong: "b", em: "i", del: "s", strike: "s", mark: "hl" }[tag] || tag;
-              node = { t, c: parseInline(inner, depth + 1) };
-              if (t === "hl") node.color = "yellow";
+              let t = { strong: "b", em: "i", del: "s", strike: "s", mark: "hl" }[tag] || tag;
+              // <ins> is underline (A19); <span style>, <big>, <abbr> ... keep their text and lose the tag (A25, A26).
+              if (tag === "ins") t = FLAVOR.on("A19") ? "u" : null;
+              else if (["span", "big", "font", "abbr", "q", "cite", "var", "samp", "tt"].includes(tag)) {
+                // Only tags with harmless attributes lose the tag; <span onclick=...> stays visible text.
+                const plain = attrs.replace(/\s(?:style|title|class|color|face|size|lang|dir)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>]+)/gi, "").replace(/\/$/, "").trim() === "";
+                t = plain && FLAVOR.on(tag === "span" ? "A25" : "A26") ? "span" : null;
+              }
+              if (t) {
+                node = { t, c: parseInline(inner, depth + 1) };
+                if (t === "hl") node.color = "yellow";
+              }
             }
           }
         }
@@ -1923,8 +2890,32 @@ function nativeSidebarSide() {
     // Backslash escapes: \* \# \[ ... show the character itself. They are swapped for private-use
     // characters before parsing and swapped back in the finished text (so they cannot start markup).
     const ESC_CHARS = "\\`*_{}[]()#+-.!|=~<>^$";
+    // HTML entities in text (J13): the common named ones and &#169; / &#xA9;. Decoded once, in text only (never in code).
+    const ENTITIES = Object.freeze({ amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0", copy: "\u00a9", reg: "\u00ae", trade: "\u2122", hellip: "\u2026", mdash: "\u2014", ndash: "\u2013", laquo: "\u00ab", raquo: "\u00bb", larr: "\u2190", rarr: "\u2192", uarr: "\u2191", darr: "\u2193", times: "\u00d7", divide: "\u00f7", deg: "\u00b0", plusmn: "\u00b1", euro: "\u20ac", pound: "\u00a3", yen: "\u00a5", cent: "\u00a2", bull: "\u2022", middot: "\u00b7", ne: "\u2260", le: "\u2264", ge: "\u2265", infin: "\u221e", check: "\u2713" });
+    const decodeEntities = (str) =>
+      str.replace(/&(#\d{1,6}|#[xX][\da-fA-F]{1,6}|[A-Za-z]{2,8});/g, (all, name) => {
+        if (name[0] === "#") {
+          const code = name[1] === "x" || name[1] === "X" ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
+          return code > 31 && code < 0x110000 && !(code >= 0xd800 && code < 0xe000) ? String.fromCodePoint(code) : all;
+        }
+        return ENTITIES[name] ?? all;
+      });
+    function decodeNodes(nodes) {
+      for (const n of nodes) {
+        if (n.t === "text" && n.s.includes("&")) n.s = decodeEntities(n.s);
+        else if (n.c && n.t !== "math") decodeNodes(n.c);
+      }
+      return nodes;
+    }
     function parseInline(text, depth = 0) {
+      const nodes = parseInlineEsc(text, depth);
+      return depth === 0 && FLAVOR.on("J13") ? decodeNodes(nodes) : nodes;
+    }
+    function parseInlineEsc(text, depth = 0) {
       text = String(text);
+      // \( x^2 \) is what ChatGPT and Gemini write for inline math (I04): read it as $x^2$.
+      if (depth === 0 && text.includes("\\(") && FLAVOR.on("I04"))
+        text = text.replace(/\\\((?=\S)([^\n]*?\S)\\\)/g, (all, x) => (x.includes("$") ? all : "$" + x + "$"));
       if (depth > 0 || !text.includes("\\")) return parseInlineRaw(text, depth);
       const swapped = text.replace(/\\([\\`*_{}[\]()#+\-.!|=~<>^$])/g, (_m, ch) => String.fromCharCode(0xe000 + ESC_CHARS.indexOf(ch)));
       const back = (str, keepSlash) => str.replace(/[\ue000-\ue015]/g, (c) => (keepSlash ? "\\" : "") + ESC_CHARS[c.charCodeAt(0) - 0xe000]);
@@ -1943,7 +2934,8 @@ function nativeSidebarSide() {
       return fix(parseInlineRaw(swapped, 0));
     }
 
-    const LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(?:\[( |x|X|-|\/|\?|!)\]\s+)?(.*)$/;
+    const LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(?:\[( |x|X|-|\/|\?|!|>|<|\*|i|b|"|l|p|c|f|I|S|n)\]\s+)?(.*)$/;
+    const TASK_ORIGINAL = new Set(["-", "/", "?", "!"]); // the four extra states we had first (E09); the rest is E10
     // GitHub-style tables: a header row, a delimiter row with pipes (| --- | :-: |), body rows.
     const TABLE_DELIM_RE = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
     // Raw cells with their offsets in the line: { text (untrimmed), s, e }. splitRow trims them; the task-box
@@ -2046,8 +3038,10 @@ function nativeSidebarSide() {
     // source line they start on (used by linked scrolling; not part of the block's signature).
     function parseBlocks(text, nested = false, opts = {}) {
       if (nested) return parseBlocksIn(text, true, opts);
-      const lines = normalizeNewlines(text).split("\n");
-      const before = REFS, beforeFoots = FOOTS, beforeOrder = FOOT_ORDER;
+      const before = REFS, beforeFoots = FOOTS, beforeOrder = FOOT_ORDER, beforeFlavor = FLAVOR;
+      const ignore = parseIgnoreCached(opts.ignore);
+      FLAVOR = flavorGate(opts.flavor, { tilde: opts.tilde, ignore: ignore.ids });
+      const lines = prepareLines(normalizeNewlines(text).split("\n"), ignore.literals);
       FOOTS = collectFootnotes(lines); // before the reference links: "[^1]: text" must not be read as one
       FOOT_ORDER = [];
       REFS = collectRefs(lines);
@@ -2060,6 +3054,7 @@ function nativeSidebarSide() {
         REFS = before;
         FOOTS = beforeFoots;
         FOOT_ORDER = beforeOrder;
+        FLAVOR = beforeFlavor;
       }
     }
     // <details> ... </details> with an optional <summary>: a collapsible block. Only these two tags (and
@@ -2115,12 +3110,29 @@ function nativeSidebarSide() {
       return null;
     }
     const SETEXT_RE = /^\s{0,3}(=+|-+)\s*$/;
+    // ```lang, ````lang, ~~~lang, ```js title="a" {1,3}: the first word is the language, the rest is ignored (G02, G03, G04).
+    const FENCE_RE = /^ {0,3}(`{3,}|~{3,})[ \t]*([\w+#.-]*)((?:[ \t{][^\n]*)?)$/;
+    function fenceReadable(m, line) {
+      const mark = m[1];
+      if (mark[0] === "`" && line.slice(line.indexOf(mark) + mark.length).includes("`")) return false;
+      if (mark[0] === "~" && !FLAVOR.on("G03")) return false;
+      if (mark.length > 3 && !FLAVOR.on("G02")) return false;
+      if (m[3] && m[3].trim() && !FLAVOR.on("G04")) return false;
+      return true;
+    }
+    const unsupportedNotice = (lang) => ({
+      type: "quote",
+      callout: { kind: "danger", title: lang[0].toUpperCase() + lang.slice(1) + " is not supported" },
+      blocks: [{ type: "p", c: [{ t: "text", s: "Notes cannot draw " + lang + " diagrams. The source is shown as code below." }] }],
+    });
     function parseBlocksIn(text, nested, opts) {
       const lines = normalizeNewlines(text).split("\n");
       const blocks = [];
       let i = 0;
       const startsBlock = (l) =>
-        /^```/.test(l) ||
+        /^ {0,3}(```|~~~)/.test(l) ||
+        (FLAVOR.on("O04") && /^:::\s*[A-Za-z]/.test(l)) ||
+        (FLAVOR.on("D02") && /^#{1,6}[^#\s]/.test(l)) ||
         HTML_BLOCK_RE.test(l) ||
         /^#{1,6}\s+\S/.test(l) ||
         /^>/.test(l) ||
@@ -2150,20 +3162,27 @@ function nativeSidebarSide() {
         } else if (/^\s*\$\$/.test(line) && (m = parseMathBlock(lines, i))) {
           blocks.push(m.block);
           i = m.next;
-        } else if ((m = /^```([\w+#.-]*)\s*$/.exec(line))) {
+        } else if ((m = FENCE_RE.exec(line)) && fenceReadable(m, line)) {
+          const mark = m[1];
+          const closing = new RegExp("^ {0,3}" + (mark[0] === "`" ? "`" : "~") + "{" + mark.length + ",}[ \\t]*$");
           const buf = [];
           i++;
-          while (i < lines.length && !/^```\s*$/.test(lines[i]))
-            buf.push(lines[i++]);
+          while (i < lines.length && !closing.test(lines[i])) buf.push(lines[i++]);
           i++; // closing fence (or end of text)
-          const code = { type: "code", text: buf.join("\n") };
-          if (m[1]) code.lang = m[1].toLowerCase();
-          blocks.push(code);
-        } else if ((m = /^(#{1,6})\s+(.*\S)\s*$/.exec(line))) {
+          const lang = (m[2] || "").toLowerCase();
+          if (lang === "math" && FLAVOR.on("G08")) blocks.push({ type: "math", c: texNodes(buf.join(" ").trim()) });
+          else {
+            // A diagram language we cannot draw: say so above the code, which stays readable.
+            if (lang && FLAVORS_PART?.UNSUPPORTED_FENCES.includes(lang)) blocks.push(unsupportedNotice(lang));
+            const code = { type: "code", text: buf.join("\n") };
+            if (lang) code.lang = lang;
+            blocks.push(code);
+          }
+        } else if ((m = /^(#{1,6})\s+(.*\S)\s*$/.exec(line)) || (FLAVOR.on("D02") && (m = /^(#{1,6})(?!#)(\S.*)$/.exec(line)))) {
           blocks.push({
             type: "h",
             level: m[1].length,
-            c: parseInline(m[2]),
+            c: parseInline(FLAVOR.on("D03") ? m[2].replace(/\s+#+\s*$/, "") || m[2] : m[2]),
             line: nested ? -1 : i,
           });
           i++;
@@ -2178,9 +3197,13 @@ function nativeSidebarSide() {
           const quote = { type: "quote", blocks: inner };
           // > [!NOTE] Title  ->  a callout (note, tip, important, warning, caution, info)
           const first = inner[0]?.type === "p" ? inner[0].c[0] : null;
-          const cm = first && first.t === "text" ? /^\[!(note|tip|important|warning|caution|info)\][ \t]*(.*)$/i.exec(first.s) : null;
-          if (cm) {
-            quote.callout = { kind: cm[1].toLowerCase(), title: cm[2].trim() };
+          const cm = first && first.t === "text" ? /^\[!([A-Za-z][\w-]{0,30})\]([+-]?)[ \t]*(.*)$/.exec(first.s) : null;
+          const ck = cm ? (FLAVORS_PART ? FLAVORS_PART.calloutKind(cm[1], FLAVOR) : /^(note|tip|important|warning|caution|info)$/i.test(cm[1]) ? { kind: cm[1].toLowerCase(), type: cm[1].toLowerCase(), known: true } : null) : null;
+          if (ck) {
+            const own = cm[3].trim();
+            // [!summary] shows "Summary", an unknown [!bingo] shows "Bingo"; [!note]- is folded, [!note]+ is open (F22).
+            quote.callout = { kind: ck.kind, title: own || (ck.type !== ck.kind || !ck.known ? ck.type[0].toUpperCase() + ck.type.slice(1) : "") };
+            if (cm[2] && FLAVOR.on("F22")) quote.callout.fold = cm[2] === "-" ? "closed" : "open";
             inner[0].c.splice(0, inner[0].c[1]?.t === "br" ? 2 : 1);
             if (!inner[0].c.length) inner.shift();
           }
@@ -2188,11 +3211,19 @@ function nativeSidebarSide() {
         } else if ((m = LIST_RE.exec(line))) {
           const items = [];
           const counters = []; // running number per nesting level, for ordered lists
+          const indents = []; // [{ n: indent in spaces, level }] of the open levels
           let lastIndent = 0;
           while (i < lines.length) {
             if ((m = LIST_RE.exec(lines[i]))) {
               lastIndent = m[1].replace(/\t/g, "  ").length;
-              const level = Math.min(4, Math.floor(lastIndent / 2));
+              // A deeper indent of two or more spaces opens one level, whatever the width (2, 3 or 4 spaces, a tab): E05, E07.
+              while (indents.length && indents[indents.length - 1].n > lastIndent) indents.pop();
+              const top = indents[indents.length - 1];
+              let level;
+              if (!top) level = Math.min(4, Math.floor(lastIndent / 2));
+              else if (lastIndent - top.n >= 2) level = Math.min(4, top.level + 1);
+              else level = top.level;
+              if (!top || top.n !== lastIndent) indents.push({ n: lastIndent, level });
               counters.length = level + 1;
               let marker = "\u2022";
               if (/^\d/.test(m[2])) {
@@ -2200,12 +3231,22 @@ function nativeSidebarSide() {
                 counters[level] = n;
                 marker = n + m[2].slice(-1);
               } else counters[level] = undefined;
+              let box = m[3],
+                itemText = m[4];
+              if (box !== undefined) {
+                const plain = box === " " || box === "x" || box === "X";
+                // A box this flavor does not know is ordinary text: "- [-] a" stays "[-] a".
+                if (!(plain ? FLAVOR.on("E08") : FLAVOR.on(TASK_ORIGINAL.has(box) ? "E09" : "E10") && FLAVOR.on("E08"))) {
+                  itemText = "[" + box + "] " + itemText;
+                  box = undefined;
+                }
+              }
               items.push({
                 level,
                 marker,
-                checked: m[3] === undefined ? null : m[3] === "x" || m[3] === "X",
-                status: m[3] === undefined || m[3] === " " || m[3] === "x" || m[3] === "X" ? "" : m[3], // extended: - / ? !
-                c: parseInline(m[4]),
+                checked: box === undefined ? null : box === "x" || box === "X",
+                status: box === undefined || box === " " || box === "x" || box === "X" ? "" : box, // extended: - / ? ! and the Obsidian theme set
+                c: parseInline(itemText),
                 line: nested ? -1 : i,
               });
               i++;
@@ -2229,6 +3270,34 @@ function nativeSidebarSide() {
           const t = parseTable(lines, i, nested);
           blocks.push(t.block);
           i = t.next;
+        } else if (FLAVOR.on("O01") && /^-#\s+\S/.test(line)) {
+          // Discord: "-# small text" is a line of small print.
+          blocks.push({ type: "p", c: [{ t: "small", c: parseInline(line.replace(/^-#\s+/, "")) }] });
+          i++;
+        } else if (FLAVOR.on("O04") && /^:::\s*[A-Za-z][\w-]*/.test(line)) {
+          // markdown-it / VitePress / Docusaurus container: ::: warning Title ... :::  becomes the callout of that name.
+          const head = /^:::\s*([A-Za-z][\w-]*)[ \t]*(.*)$/.exec(line);
+          const buf = [];
+          let j = i + 1;
+          while (j < lines.length && !/^:::\s*$/.test(lines[j])) buf.push(lines[j++]);
+          const type = head[1].toLowerCase() === "details" ? "note" : head[1].toLowerCase();
+          const ck = FLAVORS_PART ? FLAVORS_PART.calloutKind(type, FLAVOR) : null;
+          if (ck && j < lines.length) {
+            const title = head[2].replace(/\s*:::\s*$/, "").trim();
+            const inner = parseBlocks(buf.join("\n"), true, opts);
+            const callout = { kind: ck.kind, title: title || (head[1].toLowerCase() === "details" ? "Details" : ck.type[0].toUpperCase() + ck.type.slice(1)) };
+            if (head[1].toLowerCase() === "details" && FLAVOR.on("F22")) callout.fold = "closed";
+            blocks.push({ type: "quote", blocks: inner, callout });
+            i = j + 1;
+          } else {
+            blocks.push({ type: "p", c: parseInline(line) });
+            i++;
+          }
+        } else if (FLAVOR.on("G05") && /^(?: {4}|\t)\S/.test(line)) {
+          // Four spaces or a tab: code. Only the Reddit flavors read it that way (G05).
+          const buf = [];
+          while (i < lines.length && (/^(?: {4}|\t)/.test(lines[i]) || (!lines[i].trim() && /^(?: {4}|\t)/.test(lines.slice(i + 1).find((x) => x.trim()) || "")))) buf.push(lines[i++].replace(/^(?: {4}|\t)/, ""));
+          blocks.push({ type: "code", text: buf.join("\n").replace(/\s+$/, "") });
         } else {
           const buf = [];
           while (
@@ -2251,8 +3320,15 @@ function nativeSidebarSide() {
             i++; // the underline
           } else {
             const c = [];
+            let forced = false;
             buf.forEach((l, idx) => {
-              if (idx) c.push(opts.joinLines ? { t: "text", s: " " } : { t: "br" });
+              if (idx) c.push(opts.joinLines && !forced ? { t: "text", s: " " } : { t: "br" });
+              forced = false;
+              // A single backslash at the end of the line is a hard break (J09).
+              if (idx < buf.length - 1 && FLAVOR.on("J09") && /(^|[^\\])\\$/.test(l)) {
+                l = l.slice(0, -1);
+                forced = true;
+              }
               c.push(...parseInline(l));
             });
             blocks.push({ type: "p", c });
@@ -2294,10 +3370,24 @@ function nativeSidebarSide() {
       java: "java", csharp: "cs", "c#": "cs", cs: "cs", go: "go", golang: "go", rust: "rust", rs: "rust",
       bash: "sh", sh: "sh", shell: "sh", zsh: "sh", console: "sh", sql: "sql", json: "json", jsonc: "json",
       css: "css", html: "html", xml: "html", svg: "html", xhtml: "html",
+      diff: "diff", patch: "diff",
     };
     const codeLangKey = (lang) => LANG_ALIAS[String(lang || "").toLowerCase()] || null;
     function highlightCode(text, lang) {
       text = String(text);
+      // ```diff: added lines green, removed lines red, headers dimmed (G07).
+      if (codeLangKey(lang) === "diff" && FLAVOR.on("G07") && text.length <= MAX_HIGHLIGHT_CHARS) {
+        const out = [];
+        text.split("\n").forEach((line, i, all) => {
+          const k = /^(\+\+\+|---|@@|diff |index )/.test(line) ? "com" : line[0] === "+" ? "add" : line[0] === "-" ? "del" : "";
+          const piece = i < all.length - 1 ? line + "\n" : line;
+          const last = out[out.length - 1];
+          if (!piece) return;
+          if (last && last.k === k) last.s += piece;
+          else out.push({ k, s: piece });
+        });
+        return out;
+      }
       const spec = LANG_SPECS[codeLangKey(lang)];
       if (!spec || text.length > MAX_HIGHLIGHT_CHARS) return text ? [{ k: "", s: text }] : [];
       const out = [];
@@ -2579,6 +3669,9 @@ function nativeSidebarSide() {
           out += '<a href="' + escHtml(n.href) + '"' + (n.title ? ' title="' + escHtml(n.title) + '"' : "") + (bare ? " data-bare" : "") + ' rel="noopener noreferrer">' + inlineHtml(n.c) + "</a>";
         }
         else if (n.t === "span") out += inlineHtml(n.c);
+        else if (n.t === "spoiler") out += '<span class="spoiler">' + inlineHtml(n.c) + "</span>";
+        else if (n.t === "tag") out += '<span class="tag">' + escHtml(n.s) + "</span>";
+        else if (n.t === "date") out += '<time datetime="' + escHtml(n.ymd + (n.time ? "T" + n.time : "")) + '">' + escHtml(n.s) + "</time>";
         else if (n.t === "nl") out += '<span class="note-link">' + inlineHtml(n.c) + "</span>"; // no address: a single exported note cannot reach the others
         else if (n.t === "kbd") out += "<kbd>" + escHtml(n.s) + "</kbd>";
         else if (n.t === "fn") out += '<sup class="fn"><a href="#fn-' + n.n + '" id="fnref-' + n.n + '">' + n.n + "</a></sup>";
@@ -2681,7 +3774,7 @@ function nativeSidebarSide() {
     function inlineText(nodes) {
       let out = "";
       for (const n of nodes) {
-        if (n.t === "text" || n.t === "code" || n.t === "kbd") out += n.s;
+        if (n.t === "text" || n.t === "code" || n.t === "kbd" || n.t === "tag" || n.t === "date") out += n.s;
         else if (n.t === "br") out += "\n";
         else if (n.t === "task") out += n.on ? "[x] " : "[ ] ";
         else if (n.t === "img") out += n.alt ? "[image: " + n.alt + "]" : "[image]";
@@ -2879,8 +3972,9 @@ function nativeSidebarSide() {
 
     // Extended task states (Obsidian-style, plain text in the file). Other apps show them as `[-]` text.
     const TASK_STATUSES = Object.freeze([[" ", "To do"], ["x", "Done"], ["-", "Cancelled"], ["/", "In progress"], ["?", "Question"], ["!", "Important"]]);
-    const TASK_STATUS_NAMES = Object.freeze({ "-": "Cancelled", "/": "In progress", "?": "Question", "!": "Important" });
-    const TASK_STATUS_MARKS = Object.freeze({ "-": "\u2715", "/": "\u25D0", "?": "?", "!": "!" });
+    // The first four are in the state picker; the rest is the Obsidian theme set (E10): shown, never cycled.
+    const TASK_STATUS_NAMES = Object.freeze({ "-": "Cancelled", "/": "In progress", "?": "Question", "!": "Important", ">": "Forwarded", "<": "Scheduled", "*": "Star", i: "Information", b: "Bookmark", '"': "Quote", l: "Location", p: "Pro", c: "Con", f: "Fire", I: "Idea", S: "Amount", n: "Note" });
+    const TASK_STATUS_MARKS = Object.freeze({ "-": "\u2715", "/": "\u25D0", "?": "?", "!": "!", ">": "\u2192", "<": "\u25F7", "*": "\u2605", i: "i", b: "\u2690", '"': "\u275D", l: "\u2316", p: "+", c: "\u2212", f: "\u2668", I: "\u2736", S: "$", n: "\u270E" });
     // Read mode: one task line gets a given state, or the next one in the cycle (like a Minesweeper flag:
     // [ ] -> [?] -> [!] -> [/] -> [-] -> [ ]; a done [x] goes back to [ ]). Only a line that already is a task is touched.
     const TASK_CYCLE = Object.freeze([" ", "?", "!", "/", "-"]);
@@ -3333,6 +4427,13 @@ function nativeSidebarSide() {
           { id: "defaultView", label: "A panel opens in", pref: PREF.DEFAULT_VIEW, kind: "choice", def: "last", choices: [["last", "The view used last"], ["edit", "Editor"], ["read", "Preview"], ["split", "Split: editor and preview"]] },
           { id: "hubDesc", label: "Hub notes show a short description for each linked note", pref: PREF.HUB_DESC, kind: "bool", def: true },
           { id: "wikiAuto", label: "Suggest notes while typing [[", pref: PREF.WIKI_COMPLETE, kind: "bool", def: true },
+          { kind: "heading", label: "Markdown mode and shortcuts" },
+          { id: "mdFlavor", label: "Markdown mode (a note can set its own in its menu)", pref: PREF.MD_FLAVOR, kind: "choice", def: "mixed", choices: FLAVORS_PART ? FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]]) : [["mixed", "Mixed"]] },
+          { id: "singleTilde", label: "One tilde, ~a~, in the mixed modes", pref: PREF.TILDE, kind: "choice", def: "sub", choices: [["sub", "Subscript (H~2~O)"], ["strike", "Strikethrough (as on GitHub)"]] },
+          { id: "ignoreSyntax", label: "Show as plain text (spaces between): >[!info] <mark> == or a rule id such as A10", pref: PREF.IGNORE_SYNTAX, kind: "text", def: "" },
+          { id: "textShortcuts", label: "Typing shortcuts: {{date}}  @today  /tomorrow  @+3d  @monday", pref: PREF.TEXT_SHORTCUTS, kind: "choice", def: "all", choices: [["all", "All: {{ }}, @ and /"], ["braces", "Only {{date}} style"], ["off", "Off"]] },
+          { id: "shortcutDate", label: "Date format of the shortcuts", pref: PREF.SHORTCUT_DATE, kind: "text", def: "YYYY-MM-DD" },
+          { id: "shortcutTime", label: "Time format of the shortcuts", pref: PREF.SHORTCUT_TIME, kind: "text", def: "HH:mm" },
           { id: "linkedStrip", label: "Show \"Linked from\" under the read view", pref: PREF.BACKLINKS_PANEL, kind: "bool", def: false },
           { id: "hiddenMenu", label: "Hidden tools stay reachable in More", pref: PREF.HIDDEN_MENU, kind: "bool", def: true },
           { id: "dateMode", label: "Date notes", pref: PREF.DATE_MODE, kind: "choice", def: "separate", choices: [["separate", "One note per day"], ["single", "All in one Journal note"]] },
@@ -4512,6 +5613,15 @@ function nativeSidebarSide() {
           const note = notes.get(id);
           if (!note || !NOTE_COLORS.includes(color) || note.color === color) return;
           note.color = color;
+          if (note.body.trim() || note._onDisk) markDirty(id);
+          emit("change", id, { meta: true });
+        },
+        // The note's own Markdown mode ("" = follow the setting). Written to the front matter as `flavor:`.
+        setFlavor(id, flavor) {
+          const note = notes.get(id);
+          const next = FLAVORS_PART && FLAVORS_PART.MODES.includes(flavor) ? flavor : "";
+          if (!note || (note.flavor || "") === next) return;
+          note.flavor = next;
           if (note.body.trim() || note._onDisk) markDirty(id);
           emit("change", id, { meta: true });
         },
@@ -5709,6 +6819,7 @@ function nativeSidebarSide() {
 
     if (window.__zentralNotesTestSeam) {
       window.__zentralNotesTestSeam.core = {
+        flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART,
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
@@ -5938,9 +7049,26 @@ function nativeSidebarSide() {
           btn.addEventListener("click", (e) => {
             e.stopPropagation();
             const img = h("img", { class: "zn-img-loaded", alt: n.alt, src: n.href, loading: "lazy" });
+            if (n.width) img.style.width = n.width + "px"; // ![alt|100](url)
             btn.replaceWith(img);
           });
           parent.append(btn);
+        } else if (n.t === "spoiler") {
+          // Reddit >!text!< and Discord ||text||: hidden until it is clicked.
+          const sp = h("span", { class: "zn-spoiler", role: "button", tabindex: "0", title: "Click to show or hide" });
+          renderInline(sp, n.c, env);
+          const flip = () => sp.classList.toggle("is-shown");
+          sp.addEventListener("click", flip);
+          sp.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } });
+          parent.append(sp);
+        } else if (n.t === "tag") {
+          parent.append(h("span", { class: "zn-tag" }, n.s));
+        } else if (n.t === "date") {
+          // A date (2026-11-07, optionally with HH:mm). Only recognised for now; reminders and the calendar use data-ymd.
+          const d = h("span", { class: "zn-date", title: n.time ? "Date and time" : "Date" }, n.s);
+          d.dataset.ymd = n.ymd;
+          if (n.time) d.dataset.time = n.time;
+          parent.append(d);
         } else if (n.t === "code" || n.t === "kbd") {
           const c = h(n.t === "kbd" ? "kbd" : "code");
           c.textContent = n.s;
@@ -6095,7 +7223,18 @@ function nativeSidebarSide() {
           const node = h("blockquote", { class: b.callout ? "zn-quote zn-callout" : "zn-quote" });
           if (b.callout) {
             node.dataset.kind = b.callout.kind;
-            node.append(h("div", { class: "zn-callout-title" }, b.callout.title || b.callout.kind[0].toUpperCase() + b.callout.kind.slice(1)));
+            const title = h("div", { class: "zn-callout-title" }, b.callout.title || b.callout.kind[0].toUpperCase() + b.callout.kind.slice(1));
+            if (b.callout.fold) {
+              // > [!note]- starts closed, > [!note]+ starts open; the title is the switch.
+              node.dataset.fold = b.callout.fold;
+              title.classList.add("zn-fold-title");
+              title.setAttribute("role", "button");
+              title.setAttribute("tabindex", "0");
+              const flip = () => { node.dataset.fold = node.dataset.fold === "closed" ? "open" : "closed"; };
+              title.addEventListener("click", flip);
+              title.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } });
+            }
+            node.append(title);
           }
           renderBlocks(node, b.blocks, env, onToggle);
           parent.append(node);
@@ -6491,7 +7630,9 @@ function nativeSidebarSide() {
           return;
         }
         if (readEmpty) resetRead();
-        const blocks = parseBlocks(readBody(n.body), false, env.readOpts?.() || {});
+        const readOpts = { ...(env.readOpts?.() || {}) };
+        if (n.flavor) readOpts.flavor = n.flavor; // the note's own mode wins over the setting
+        const blocks = parseBlocks(readBody(n.body, readOpts.flavor), false, readOpts);
         const sigs = blocks.map(blockSig);
         const { prefix, suffix } = diffSigs(readSigs, sigs);
         if (prefix === readSigs.length && prefix === sigs.length) {
@@ -6627,7 +7768,7 @@ function nativeSidebarSide() {
         el.scrollIntoView?.({ block: "center" });
         el.focus?.({ preventScroll: true });
       }
-      const readBody = (body) => expandWikiLinks(body, (t) => resolveNoteTitle(store.list().concat(store.list({ trashed: true })), t));
+      const readBody = (body, flavor) => (flavorGate(flavor).on("C01") ? expandWikiLinks(body, (t) => resolveNoteTitle(store.list().concat(store.list({ trashed: true })), t)) : body);
       function newNote(folderId) {
         const folder = typeof folderId === "string" ? cleanFolder(folderId) : "";
         if (folder && store.meta.folders.find((f) => f.id === folder)?.collapsed) store.setFolderCollapsed(folder, false);
@@ -7433,6 +8574,7 @@ function nativeSidebarSide() {
           { icon: "folder", label: "Move to folder\u2026", action: () => queueMicrotask(() => askMoveNote(n)) },
           { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body, n.folder); store.setColor(c.id, n.color); store.setLabel(c.id, n.label); scheduleList(); } },
           { label: "Colour", group: NOTE_COLORS.map((c) => ({ label: c, action: () => { store.setColor(n.id, c); scheduleList(); } })) },
+          ...(FLAVORS_PART ? [{ label: "Markdown mode", group: [["", "Follow the setting"], ...FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]])].map(([m, label]) => ({ label: (n.flavor || "") === m ? "\u2713 " + label : label, action: () => { store.setFlavor(n.id, m); scheduleList(); } })) }] : []),
           { icon: "link", label: "Copy link", action: () => { env.copyText?.("[[" + (titleOf(n.body) || "Untitled note") + "]]"); flash("Link copied"); } },
           { sep: true },
           { icon: "trash", label: "Move to trash", danger: true, action: () => { store.trash(n.id); if (n.id === currentId) currentId = ""; scheduleList(); } },
@@ -8957,6 +10099,7 @@ function nativeSidebarSide() {
           { sep: true },
           { icon: "folder", label: "Open notes folder", action: () => env.revealFolder(store.dir) },
           { icon: "folder", label: "Move to folder\u2026", action: () => askNoteFolder() },
+          ...(FLAVORS_PART ? [{ icon: "sliders", label: "Markdown mode", group: [["", "Follow the setting"], ...FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]])].map(([m, label]) => ({ label: (n.flavor || "") === m ? "\u2713 " + label : label, action: () => { store.setFlavor(n.id, m); renderRead(); } })) }] : []),
           { icon: "sliders", label: "Quick settings\u2026", action: () => askSettings() },
           { icon: "sliders", label: "All settings\u2026", action: () => askAllSettings() },
           ...(adapter.geoKey ? [{ icon: "restore", label: "Reset position and size", action: () => resetGeo() }] : []),
@@ -9468,7 +10611,28 @@ function nativeSidebarSide() {
         if (e.shiftKey || e.key === "Shift") scheduleChrome();
       });
       listen(ta, "mouseup", () => { if (getPref(PREF.FOOTER_COUNTER, false) === true) scheduleChrome(); });
-      listen(ta, "input", () => {
+      // {{date}}, @today, /tomorrow ...: swapped for the real date the moment the last character is typed (see
+      // additional/notes/flavors/ZentralNotesShortcuts.js). The note keeps plain text, so every other app reads it too.
+      function expandShortcut(ev) {
+        const how = getPref(PREF.TEXT_SHORTCUTS, "all");
+        if (!SHORTCUTS_PART || how === "off" || mode === "read" || ta.readOnly || ta.selectionStart !== ta.selectionEnd || ev?.isComposing) return;
+        const typed = ev?.inputType === "insertLineBreak" ? "\n" : ev?.inputType === "insertText" && typeof ev.data === "string" && ev.data.length === 1 ? ev.data : "";
+        if (!typed) return;
+        const edit = SHORTCUTS_PART.expandTyped(
+          ta.value,
+          ta.selectionStart,
+          typed,
+          { now: env.now ? env.now() : Date.now(), dateFormat: getPref(PREF.SHORTCUT_DATE, "YYYY-MM-DD"), timeFormat: getPref(PREF.SHORTCUT_TIME, "HH:mm"), title: titleOf(ta.value) },
+          how,
+        );
+        if (edit) applyEdit(edit);
+      }
+      listen(ta, "input", (ev) => {
+        try {
+          expandShortcut(ev);
+        } catch (error) {
+          console.warn("[ZentralNotes] shortcut failed", error);
+        }
         updateWiki();
         taAnchY = null;
         readAnchY = null;
@@ -11228,6 +12392,9 @@ function nativeSidebarSide() {
         joinLines: prefStr(PREF.LINE_BREAKS, "break") === "join",
         keepBlanks: prefStr(PREF.BLANK_LINES, "collapse") === "keep",
         setext: prefBool(PREF.SETEXT, false),
+        flavor: cleanFlavor(prefStr(PREF.MD_FLAVOR, "mixed")),
+        tilde: prefStr(PREF.TILDE, "sub") === "strike" ? "strike" : "sub",
+        ignore: prefStr(PREF.IGNORE_SYNTAX, ""),
       });
       // One typed accessor pair for the sheets' quick settings and shortcut editor.
       const getPref = (k, d) => (typeof d === "boolean" ? prefBool(k, d) : typeof d === "number" ? prefInt(k, d) : prefStr(k, d));
