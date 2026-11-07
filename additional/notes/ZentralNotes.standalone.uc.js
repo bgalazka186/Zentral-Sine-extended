@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.27
+// @version 3.1.29
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.27, the numeric-preference list and
+ * Placeholders replaced by the build: 3.1.29, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.27";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.29";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -714,7 +714,6 @@ function nativeSidebarSide() {
       CARD_ENTRY_REVEAL: "zen.workspace.zentral.notes.card_window_entry_reveal",
       CARD_SIDEBAR_GUARD: "zen.workspace.zentral.notes.card_sidebar_guard",
       CARD_PILL_BORDER: "zen.workspace.zentral.notes.card_pill_border",
-      REVEAL_STRIP: "zen.workspace.zentral.notes.reveal_strip",
       REVEAL_HEIGHT: "zen.workspace.zentral.notes.reveal_height_px",
       REVEAL_DELAY: "zen.workspace.zentral.notes.reveal_delay_ms",
       PUSH_PANEL_PERCENT: "zen.workspace.zentral.notes.push_panel_percent",
@@ -785,7 +784,7 @@ function nativeSidebarSide() {
     // Integer look prefs: -1 (or anything out of range) keeps the theme's own value.
     const LOOK_NUM_PREFS = new Set([PREF.LOOK_RADIUS, PREF.LOOK_BORDER, PREF.LOOK_PADDING, PREF.LOOK_OPACITY, PREF.LOOK_SHADOW_BLUR, PREF.LOOK_SHADOW_Y, PREF.LOOK_SHADOW_ALPHA, PREF.LOOK_BTN_SIZE, PREF.LOOK_BTN_RADIUS]);
     const VIEW_PREFS = new Set([PREF.WRAP, PREF.FONT_SIZE, PREF.LINE_HEIGHT, PREF.READ_COPY, PREF.THEME, ...LOOK_PREFS]);
-    const WINDOW_PREFS = new Set([PREF.HOVER_REVEAL, PREF.PUSH_PAGE, PREF.CARD_AUTOHIDE, PREF.CARD_ENTRY_REVEAL, PREF.CARD_SIDEBAR_GUARD, PREF.CARD_PILL_BORDER, PREF.PUSH_PANEL_PERCENT, PREF.WIDE_PERCENT, PREF.REVEAL_STRIP, PREF.REVEAL_HEIGHT, PREF.REVEAL_DELAY, PREF.AVOID_SIDEBAR]);
+    const WINDOW_PREFS = new Set([PREF.HOVER_REVEAL, PREF.PUSH_PAGE, PREF.CARD_AUTOHIDE, PREF.CARD_ENTRY_REVEAL, PREF.CARD_SIDEBAR_GUARD, PREF.CARD_PILL_BORDER, PREF.PUSH_PANEL_PERCENT, PREF.WIDE_PERCENT, PREF.REVEAL_HEIGHT, PREF.REVEAL_DELAY, PREF.AVOID_SIDEBAR]);
     const READ_PREFS = new Set([PREF.BLANK_LINES, PREF.LINE_BREAKS, PREF.SETEXT, PREF.HUB_DESC, PREF.BACKLINKS_PANEL]);
     const OBS_TOPIC = "zentral-notes-changed";
     const IDLE_SAVE_MS = 800; // pause after the last keystroke
@@ -3271,9 +3270,8 @@ function nativeSidebarSide() {
           { id: "push", label: "Push the page aside while the standalone card is docked to an edge (a sheet in a panel always takes its own slot)", pref: PREF.PUSH_PAGE, kind: "bool", def: false },
           { id: "cardHide", label: "Standalone card docked to an edge: hide it there, show it on hover", pref: PREF.CARD_AUTOHIDE, kind: "bool", def: false },
           S("pushPct", "Share of the panel height the sheet takes", PREF.PUSH_PANEL_PERCENT, 20, 80, "%", 45),
-          { kind: "heading", label: "Reveal strip" },
-          { id: "strip", label: "Strip at the top of an open panel opens Notes on hover", pref: PREF.REVEAL_STRIP, kind: "bool", def: false },
-          S("stripH", "Strip height", PREF.REVEAL_HEIGHT, 2, 24, "px", 10),
+          { kind: "heading", label: "Hover reveal" },
+          S("stripH", "Hidden sheet: height of the strip that brings it back", PREF.REVEAL_HEIGHT, 2, 24, "px", 10),
           S("stripD", "Hover delay", PREF.REVEAL_DELAY, 0, 1000, "ms", 100),
           { id: "hover", label: "Hide on an outside click instead of closing; bring back from the top edge", pref: PREF.HOVER_REVEAL, kind: "bool", def: false },
           { kind: "heading", label: "Split view" },
@@ -4020,7 +4018,8 @@ function nativeSidebarSide() {
     // and moves into the panel as soon as the bar exists.
     function chooseHost({ panelOpen = false, triple = false, kinds = [], want = "", focused = "", last = "" } = {}) {
       if (!panelOpen || !kinds.length) return "";
-      if (triple) return want === "super" && kinds.includes("super") ? "super" : kinds.includes("triple") ? "triple" : "";
+      // Triple View: Notes lives ONLY between the two cards, whoever asks (S6 B2). Never on a card of its own.
+      if (triple) return kinds.includes("triple") ? "triple" : "";
       for (const k of [want, focused, last, "primary", "super"]) if (k && kinds.includes(k) && (k !== "triple" || k === want)) return k;
       return "";
     }
@@ -4118,7 +4117,7 @@ function nativeSidebarSide() {
       const dirty = new Set();
       const listeners = new Set();
       const backedUp = new Set();
-      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, gapSplit: -1, cardDock: "", cardW: 0 };
+      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, gapSplit: -1, cardDock: "", cardW: 0 };
       let meta = { ...DEFAULT_META };
       let dir = null;
       let chain = Promise.resolve();
@@ -4186,6 +4185,8 @@ function nativeSidebarSide() {
           if (typeof raw.syncScroll === "boolean") meta.syncScroll = raw.syncScroll;
           if (typeof raw.pinned === "boolean") meta.pinned = raw.pinned;
           if (DOCK_MODES.includes(raw.dock)) meta.dock = raw.dock;
+          if (raw.hideTrigger === "click" || raw.hideTrigger === "leave") meta.hideTrigger = raw.hideTrigger;
+          if (typeof raw.hideOverlay === "boolean") meta.hideOverlay = raw.hideOverlay;
           else if (raw.pinned === false) meta.dock = "hover";
           if (raw.geo && typeof raw.geo === "object")
             for (const key of GEO_KEYS) {
@@ -4959,7 +4960,9 @@ function nativeSidebarSide() {
     // ---- V4-R2: window modes + hover timing (pure) ------------------------------------------------------
     // pin = stays open over the panel (overlay, no push); hover = a thin real strip, opens on hover and closes
     // after a grace; dock = stays open and keeps its own slot (pushes the page / panels).
-    const DOCK_MODES = Object.freeze(["pin", "hover", "dock"]);
+    // click = like pin, but a press outside the sheet closes it. hover = autohide (meta.hideTrigger: "leave" = when the
+    // pointer is away, "click" = on a press outside; meta.hideOverlay = fold over the panel instead of pushing it).
+    const DOCK_MODES = Object.freeze(["pin", "hover", "dock", "click"]);
     // Where Notes was open when the window closed (restored with "Open on Startup"): the bar kind, or "" = closed.
     const OPEN_IN_KINDS = Object.freeze(["", "primary", "triple", "super"]);
     const cleanDockMode = (v, fallback = "dock") => (DOCK_MODES.includes(v) ? v : fallback);
@@ -5787,6 +5790,7 @@ function nativeSidebarSide() {
       bookmark: "m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z",
       hover: "M4 4l7.07 16.97 2.51-7.39 7.39-2.51L4 4z",
       dock: "M3 4h18v16H3z M3 14h18",
+      outside: "M3 3h11v11H3z M14 14l7 7 M21 15v6h-6",
       push: "M3 4h5v16H3z M12 12h9 M18 8l4 4-4 4",
       move: "M12 2v20 M2 12h20 M8 6l4-4 4 4 M8 18l4 4 4-4 M6 8l-4 4 4 4 M18 8l4 4-4 4",
       noteBetween: "M5 3h14 M5 21h14 M5 8h14v8H5z M9 12h6",
@@ -6215,6 +6219,7 @@ function nativeSidebarSide() {
       // Panel docking modes (same wording as the panel's own docking / autohide buttons).
       const btnHover = iconButton("hover", "Autohide: show Notes on hover at its docked edge", "zn-hover-btn");
       const btnDock = iconButton("dock", "Dock: Notes keeps its own space", "zn-dock-btn");
+      const btnClick = iconButton("outside", "Close on outside click: Notes closes when something outside is clicked", "zn-click-btn");
       const colorDot = h("span", { class: "zn-dot" });
       const btnColor = h("button", {
         type: "button",
@@ -6230,7 +6235,7 @@ function nativeSidebarSide() {
       labelEl.hidden = true;
       const remindEl = h("button", { type: "button", class: "zn-remind", title: "Reminder" });
       remindEl.hidden = true;
-      const head = h("div", { class: "zn-head" }, btnList, titleEl, labelEl, remindEl, btnPin, btnColor, btnKeep, btnHover, btnDock, btnSize, btnMore, btnClose);
+      const head = h("div", { class: "zn-head" }, btnList, titleEl, labelEl, remindEl, btnPin, btnColor, btnKeep, btnHover, btnDock, btnClick, btnSize, btnMore, btnClose);
 
       const tBold = iconButton("bold", "Bold (Ctrl+B)");
       const tItalic = iconButton("italic", "Italic (Ctrl+I)");
@@ -6376,22 +6381,24 @@ function nativeSidebarSide() {
         root.dataset.geo = adapter.geoKey ? "on" : "off";
         root.dataset.slot = adapter.slotKind?.() || "";
         const panelHosted = !!adapter.pushPanel;
-        btnHover.hidden = btnDock.hidden = !panelHosted;
+        btnHover.hidden = btnDock.hidden = btnClick.hidden = !panelHosted;
         if (panelHosted) {
           const dm = dockMode();
           root.dataset.dock = dm;
           root.dataset.placement = adapter.placement?.() || "overlay";
-          for (const [btn, on] of [[btnKeep, dm === "pin"], [btnHover, dm === "hover"], [btnDock, dm === "dock"]]) {
+          for (const [btn, on] of [[btnKeep, dm === "pin"], [btnHover, dm === "hover"], [btnDock, dm === "dock"], [btnClick, dm === "click"]]) {
             btn.classList.toggle("is-on", on);
             btn.setAttribute("aria-pressed", on ? "true" : "false");
           }
           btnKeep.title = "Pin: stays open over the panel without moving it (hold: reset position)";
+          btnHover.title = dm !== "hover" ? "Autohide: hides when the pointer is away (click again: hides on an outside click instead)" : store.meta.hideTrigger === "click" ? "Autohide on an outside click (click: turn autohide off)" : "Autohide when the pointer is away (click: hide on an outside click instead)";
+          btnDock.title = "Dock: Notes keeps its own space and stays open";
         } else {
           delete root.dataset.dock;
           delete root.dataset.placement;
-          btnKeep.classList.toggle("is-on", store.meta.pinned !== false);
-          btnKeep.setAttribute("aria-pressed", store.meta.pinned !== false ? "true" : "false");
-          btnKeep.title = store.meta.pinned !== false ? "Kept open: click to close on an outside click (hold: reset position)" : "Closes on an outside click: click to keep open (hold: reset position)";
+          btnKeep.classList.toggle("is-on", keptOpen());
+          btnKeep.setAttribute("aria-pressed", keptOpen() ? "true" : "false");
+          btnKeep.title = store.meta.pinned === false && keptOpen() ? "Autohide keeps the card open when something outside is clicked (acts as pinned)" : keptOpen() ? "Kept open: click to close on an outside click (hold: reset position)" : "Closes on an outside click: click to keep open (hold: reset position)";
         }
         tSync.hidden = mode !== "split";
         tSync.classList.toggle("is-on", !!store.meta.syncScroll);
@@ -8951,6 +8958,7 @@ function nativeSidebarSide() {
           { icon: "sliders", label: "Quick settings\u2026", action: () => askSettings() },
           { icon: "sliders", label: "All settings\u2026", action: () => askAllSettings() },
           ...(adapter.geoKey ? [{ icon: "restore", label: "Reset position and size", action: () => resetGeo() }] : []),
+          ...(adapter.pushPanel && dockMode() === "hover" && adapter.placement?.() !== "between" ? [{ icon: "hover", label: store.meta.hideOverlay ? "Autohide: push the panel (now: overlay)" : "Autohide: overlay the panel (now: push)", action: () => { store.setMeta({ hideOverlay: !store.meta.hideOverlay }); applyState(); if (collapsed) expand(false); scheduleLayout(); } }] : []),
           { sep: true },
         ];
         if (n.trashed) {
@@ -8994,7 +9002,7 @@ function nativeSidebarSide() {
       const dockMode = () => (adapter.pushPanel ? cleanDockMode(store.meta.dock, getPref(PREF.HOVER_REVEAL, false) ? "hover" : "dock") : "pin");
       function setDock(next) {
         const m = cleanDockMode(next);
-        store.setMeta({ dock: m, pinned: m !== "hover" });
+        store.setMeta({ dock: m, pinned: m !== "hover" && m !== "click" });
         if (m !== "hover") {
           window.clearTimeout(graceTimer);
           graceTimer = 0;
@@ -9048,8 +9056,24 @@ function nativeSidebarSide() {
       }
       holdButton(btnSize, toggleLarger, toggleSpan);
       holdButton(btnKeep, toggleKeep, resetGeo);
-      listen(btnHover, "click", () => setDock(dockMode() === "hover" ? "dock" : "hover"));
+      // Autohide button: off -> hide when the pointer is away -> hide on an outside click -> off.
+      listen(btnHover, "click", () => {
+        if (dockMode() !== "hover") {
+          store.setMeta({ hideTrigger: "leave" });
+          return setDock("hover");
+        }
+        if (store.meta.hideTrigger !== "click") {
+          store.setMeta({ hideTrigger: "click" });
+          openedByHover = false;
+          window.clearTimeout(graceTimer);
+          graceTimer = 0;
+          applyState();
+          return;
+        }
+        setDock("dock");
+      });
       listen(btnDock, "click", () => setDock("dock"));
+      listen(btnClick, "click", () => setDock(dockMode() === "click" ? "dock" : "click"));
 
       // Drag the title bar, resize from any edge or corner. The area is measured once when the gesture
       // starts; pointer events only remember the latest position and one frame paints it. The result is
@@ -9618,7 +9642,7 @@ function nativeSidebarSide() {
           root.style.pointerEvents = "";
         }
         // A card being moved or resized is placed by the gesture; a layout pass now would snap it back to the old place.
-        if (adapter.cardMode && gesture && gesture.active && !gesture.slot) return;
+        if (gesture && gesture.active && !gesture.slot) return;
         const a = adapter.getArea({ wide: mode === "split", span: store.meta.size === "span", dock: store.meta.cardDock, dockW: store.meta.cardW });
         if (!a || a.width < 40 || a.height < 40) return;
         const size = a.fill ? "full" : store.meta.size;
@@ -9686,7 +9710,8 @@ function nativeSidebarSide() {
         // The standalone card pushes the page only while it is DOCKED to an edge (a loose card never does),
         // from the side it is docked to, and only at its normal size (the big sizes cover the page).
         const docked = adapter.cardMode ? cleanCardDock(store.meta.cardDock) : "";
-        const on = panelHosted ? dockMode() !== "pin" || between : !!getPref(PREF.PUSH_PAGE, false) && store.meta.size === "peek" && (!adapter.cardMode || !!docked);
+        const dm = panelHosted ? dockMode() : "";
+        const on = panelHosted ? dm === "dock" || (dm === "hover" && !hidesOverlay()) || between : !!getPref(PREF.PUSH_PAGE, false) && store.meta.size === "peek" && (!adapter.cardMode || !!docked);
         const want = !!adapter.push && on;
         if (want) pushed = adapter.push({ left, width: w, side: docked }) || false;
         else if (pushed || adapter.push) {
@@ -9694,7 +9719,7 @@ function nativeSidebarSide() {
           pushed = false;
         }
         if (panelHosted) {
-          const strip = isOpen && collapsed ? hoverStripPx(getPref(PREF.REVEAL_HEIGHT, 10)) : 0;
+          const strip = on && isOpen && collapsed ? hoverStripPx(getPref(PREF.REVEAL_HEIGHT, 10)) : 0;
           // While the edge is being dragged the live share wins over the remembered one.
           const dragShare = gesture && gesture.slot && gesture.active && gesture.share > 0 ? gesture.share : 0;
           const share =
@@ -9853,8 +9878,9 @@ function nativeSidebarSide() {
         set("size", { on: big, title: big ? "Back to the normal size" : "Fill the whole area" });
         pillBtn.size.replaceChildren(panelIcon(big ? "collapse" : "expand"));
         set("hide", { on: !!docked && !!getPref(PREF.CARD_AUTOHIDE, false), off: !docked, title: docked ? "Autohide: hide at the edge, show on hover" : "Autohide is unavailable while the card is detached. Dock it first." });
-        const kept = store.meta.pinned !== false;
-        set("pin", { on: kept, title: kept ? "Pinned: stays open when something outside is clicked. Click to unpin." : "Click to pin: keep the card open when something outside is clicked." });
+        const kept = keptOpen();
+        const autoKept = kept && store.meta.pinned === false;
+        set("pin", { on: kept, off: autoKept, title: autoKept ? "Autohide keeps the card open when something outside is clicked (it acts as pinned)." : kept ? "Pinned: stays open when something outside is clicked. Click to unpin." : "Click to pin: keep the card open when something outside is clicked." });
         set("close", { title: "Close notes (Esc)" });
         // The same look settings as the panel's pill: surface opacity and the idle mini dot.
         if (getPref(PREF.CARD_PILL_BORDER, true)) delete pillEl.dataset.noborder;
@@ -9899,8 +9925,25 @@ function nativeSidebarSide() {
       // Opening waits an open delay; folding away waits a grace of at least 600 ms and never happens while
       // focus is inside, a menu or dialog is open, a drag runs or the pointer is down.
       // Autohide: a panel-hosted sheet in hover mode, or a card docked to an edge with card_autohide on.
-      const cardHides = () => !!adapter.cardMode && !!cleanCardDock(store.meta.cardDock) && !!getPref(PREF.CARD_AUTOHIDE, false) && store.meta.size !== "span";
+      function cardHides() {
+        return !!adapter.cardMode && !!cleanCardDock(store.meta.cardDock) && !!getPref(PREF.CARD_AUTOHIDE, false) && store.meta.size !== "span";
+      }
+      // The card counts as pinned while it autohides: a card folded away cannot be seen, so closing it for a click
+      // elsewhere would only be confusing (the panel does the same). The saved pin comes back when autohide is off.
+      function keptOpen() {
+        return store.meta.pinned !== false || cardHides();
+      }
       const hoverMode = () => (!!adapter.pushPanel && dockMode() === "hover") || cardHides();
+      // Autohide over the panel (no push). Triple View keeps its slot between the cards whatever this says.
+      function hidesOverlay() {
+        return !!adapter.pushPanel && dockMode() === "hover" && !!store.meta.hideOverlay && adapter.placement?.() !== "between";
+      }
+      // "leave": folds when the pointer has been away for the grace; "click": folds on a press outside (and a sheet
+      // that was brought back by hovering also folds when the pointer leaves it again).
+      const hideTrigger = () => (adapter.pushPanel && store.meta.hideTrigger === "click" ? "click" : "leave");
+      let openedByHover = false;
+      let ptrDownAt = 0;
+      let collapsedAt = 0;
       // The panel's own hover settings win when the user set them (the card should react like the panel does);
       // otherwise the Notes settings apply.
       const userSet = (k) => {
@@ -9962,24 +10005,52 @@ function nativeSidebarSide() {
       };
       function placeReveal() {
         if (!revealEl) return;
-        const band = adapter.cardMode ? adapter.edgeBand(cleanCardDock(store.meta.cardDock), revealPx()) : adapter.bandRect?.();
+        const band = adapter.cardMode ? adapter.edgeBand(cleanCardDock(store.meta.cardDock), revealPx()) : adapter.bandRect?.() || (hidesOverlay() ? adapter.overlayBand?.(hoverStripPx(getPref(PREF.REVEAL_HEIGHT, 10))) : null);
         const off = hostOffset();
         if (!band || !off) return;
         if (adapter.cardMode) revealEl.dataset.edge = cleanCardDock(store.meta.cardDock);
         revealEl.style.position = adapter.position;
-        revealEl.style.left = Math.round(band.left - off.ox) + "px";
+        // Anchored by `right` on the right edge (the panel's own reveal edge does the same): a strip placed from
+        // innerWidth - px can lie wholly outside the window when the width is rounded (fractional scaling).
+        if (typeof band.right === "number") {
+          revealEl.style.left = "auto";
+          revealEl.style.right = Math.round(band.right) + "px";
+        } else {
+          revealEl.style.right = "auto";
+          revealEl.style.left = Math.round(band.left - off.ox) + "px";
+        }
         revealEl.style.top = Math.round(band.top - off.oy) + "px";
         revealEl.style.width = Math.round(band.width) + "px";
         revealEl.style.height = Math.round(band.height) + "px";
       }
+      let panelWasHidden = false;
       function armGrace() {
         window.clearTimeout(graceTimer);
         graceTimer = 0;
         if (!hoverMode() || !isOpen || collapsed || destroyed || ptrInside) return;
+        if (hideTrigger() === "click" && !openedByHover) return;
         graceTimer = window.setTimeout(() => {
           graceTimer = 0;
           if (!hoverMode() || !isOpen || collapsed || destroyed || ptrInside) return;
-          const may = hoverMayClose({ focusInside: focusInside(), menuOpen: !!menu, dialogOpen: !!dialog, pointerDown: ptrDown, gesture: !!gesture, pointerInside: ptrInside }) && !chromeBusy();
+          // S6 B5: a Zentral panel slid away by ITS autohide takes the focus out of the sheet (it moves it to the
+          // page) and the pointer is outside by definition: that must not fold Notes into its own hidden state
+          // (the panel came back with a minimised Notes, and the strip then opened it again a moment later).
+          // While the panel is hidden the sheet just waits; when the panel is back it gets one fresh grace.
+          if (adapter.panelHidden?.()) {
+            panelWasHidden = true;
+            armGrace();
+            return;
+          }
+          if (panelWasHidden) {
+            panelWasHidden = false;
+            armGrace();
+            return;
+          }
+          // A mouseup that happens over web content of a panel never reaches us: a press older than 1.5 s without a gesture is stale.
+          if (ptrDown && !gesture && Date.now() - ptrDownAt > 1500) ptrDown = false;
+          // Autohide "when the pointer is away" ignores where the keyboard focus is (typing does not pin it open).
+          const focusHeld = adapter.pushPanel && hideTrigger() === "leave" ? false : focusInside();
+          const may = hoverMayClose({ focusInside: focusHeld, menuOpen: !!menu, dialogOpen: !!dialog, pointerDown: ptrDown, gesture: !!gesture, pointerInside: ptrInside }) && !chromeBusy();
           if (may) collapse();
           else armGrace();
         }, timing().graceMs);
@@ -9987,6 +10058,8 @@ function nativeSidebarSide() {
       function collapse() {
         if (collapsed || !isOpen || destroyed || !hoverMode()) return;
         collapsed = true;
+        collapsedAt = Date.now();
+        openedByHover = false;
         window.clearTimeout(graceTimer);
         graceTimer = 0;
         closeMenu();
@@ -10001,6 +10074,9 @@ function nativeSidebarSide() {
         document.documentElement.addEventListener("mouseenter", onWinEnter, true);
         revealEl = h("div", { class: "zentral-notes-reveal", "aria-hidden": "true" });
         revealEl.addEventListener("mouseenter", () => {
+          // The strip appears under the pointer the moment the sheet folds: that is not a request to reopen it
+          // (the sheet used to fold and spring back ~100 ms later, with the apps above and below resizing twice).
+          if (Date.now() - collapsedAt < 450) return;
           window.clearTimeout(openTimer);
           openTimer = window.setTimeout(() => expand(true), timing().openMs);
         });
@@ -10046,7 +10122,10 @@ function nativeSidebarSide() {
         raise();
         scheduleLayout();
         // Opened by hovering: do not steal the focus; fold away again if the pointer never reaches the sheet.
-        if (fromHover) armGrace();
+        if (fromHover) {
+          openedByHover = true;
+          armGrace();
+        }
       }
       const scheduleLayout = () => {
         if (!rafLayout) rafLayout = window.requestAnimationFrame(layout);
@@ -10127,14 +10206,22 @@ function nativeSidebarSide() {
         // A press on the Notes button / browser chrome is not the user moving to a web field.
         if (!isExempt(e.target, path)) outsideClaim = true;
         drop();
-        // A panel-hosted sheet follows its mode (pin / dock stay, hover folds away when the pointer leaves).
-        if (adapter.pushPanel) return;
-        if (store.meta.pinned !== false) return;
+        // A panel-hosted sheet follows its mode: pin / dock stay, "click" closes, autohide on an outside click folds.
+        if (adapter.pushPanel) {
+          if (isExempt(e.target, path)) return;
+          const dm = dockMode();
+          if (dm === "click") close();
+          else if (dm === "hover" && hideTrigger() === "click") collapse();
+          return;
+        }
+        if (keptOpen()) return;
         if (isExempt(e.target, path)) return;
         close();
       };
       const onPress = () => {
         ptrDown = true;
+        ptrDownAt = Date.now();
+        openedByHover = false;
       };
       const onRelease = () => {
         ptrDown = false;
@@ -10502,6 +10589,12 @@ function nativeSidebarSide() {
           const panelBottom = SLOT.quad ? NaN : document.getElementById("zen-app-panel-root")?.getBoundingClientRect?.()?.bottom;
           return { left: bb.left, top: dockBandTop({ pageBottom: bb.bottom, panelBottom }), width: bb.width, height: SLOT.px };
         },
+        // Autohide OVER the panel (no slot): the hover strip sits along the bottom edge of the panel's page.
+        overlayBand(px) {
+          const a = api.baseArea({});
+          if (!a || !(a.width > 40) || a.fill) return null;
+          return { left: a.left, top: a.top + a.height - px, width: a.width, height: px };
+        },
         // Split view widens the sheet beyond the panel: it grows from the panel's inner edge toward the
         // middle of the window and may cover part of the page (the panel and its bar stay visible).
         getArea({ span = false, wide = false } = {}) {
@@ -10572,6 +10665,11 @@ function nativeSidebarSide() {
           };
         },
         rewatch: () => observeAll(),
+        // True while the Zentral panel is slid away by its own "hide when not hovered" (its bars stay in the DOM).
+        panelHidden() {
+          const r = document.documentElement;
+          return r.hasAttribute("bgalazka-hover-panel-enabled") && r.hasAttribute("bgalazka-hover-panel-hidden");
+        },
         setActive(on, { strip = false } = {}) {
           if (!on) {
             if (!strip) api.pushPanel(0);
@@ -10646,6 +10744,21 @@ function nativeSidebarSide() {
         left = Math.max(0, Math.min(left, vw));
         return { left, right: Math.max(left + 1, Math.min(right, vw)) };
       }
+      // How far the Zentral apps bar reaches into the window from `side` (0 = not there, or hidden by its own
+      // autohide: then the bezel itself is the target). Same measure as the panel's getAppsBarPanelBounds.
+      function appsBarInset(side) {
+        const ui = document.documentElement;
+        const bar = document.getElementById("zentral-apps-vertical-bar");
+        if (!bar?.isConnected || ui.getAttribute("zentral-apps-placement") !== "vertical-bar" || ui.getAttribute("zentral-apps-autohide") === "true") return 0;
+        const tr = toolbox()?.getBoundingClientRect();
+        const sidebarRight = !!tr && tr.width > 0 && tr.left + tr.width / 2 > window.innerWidth / 2;
+        const barRight = !sidebarRight;
+        if ((side === "right") !== barRight) return 0;
+        const br = bar.getBoundingClientRect();
+        if (!(br.width > 0)) return 0;
+        const inset = barRight ? window.innerWidth - br.left : br.right;
+        return Number.isFinite(inset) && inset > 0 && inset < window.innerWidth / 3 ? Math.round(inset) : 0;
+      }
       // The page area measured WITHOUT our own push. The push is a margin that animates, so a rectangle read
       // mid-animation (or while the previous push is still applied) is not where the page edge really is. The
       // margin we added is the difference to the margin the area has when nothing is pushed.
@@ -10701,8 +10814,12 @@ function nativeSidebarSide() {
         // The thin band at a docked edge where the hidden (autohide) card is revealed again.
         edgeBand(side, px) {
           const v = this.view();
-          // Like the panel's reveal edge: anchored to the WINDOW edge (the sidebar never pushes it away).
-          return { left: side === "right" ? window.innerWidth - px : 0, top: v.top, width: px, height: v.height };
+          // Like the panel's reveal edge: anchored to the WINDOW edge (the sidebar never pushes it away), except
+          // where the Zentral apps bar stands (it sits on the side opposite the sidebar, so mostly the RIGHT edge):
+          // there the strip goes beside the bar, as the panel's `updateRevealEdgeGeometry` does. A strip under / on
+          // the bar never received the pointer, which is why the card would not come back from the right edge.
+          const inset = appsBarInset(side);
+          return side === "right" ? { left: window.innerWidth - inset - px, right: inset, top: v.top, width: px, height: v.height } : { left: inset, top: v.top, width: px, height: v.height };
         },
         getArea({ wide = false, span = false, dock = "", dockW = 0 } = {}) {
           const sr = sidebarRect();
@@ -11805,9 +11922,6 @@ function nativeSidebarSide() {
         const adapter = createBarAdapter({ kind, barEl: el, button, widePercent: () => Math.max(1.3, Math.min(3, prefInt(PREF.WIDE_PERCENT, 200) / 100)) });
         adapter.syncMode?.();
         let sheet = null;
-        let strip = null;
-        let stripTimer = 0;
-        let stripPosSet = false;
         const binding = {
           el,
           kind,
@@ -11833,43 +11947,6 @@ function nativeSidebarSide() {
             return opened;
           },
           close: () => sheet?.close(),
-          // Strip along the top of the panel's bar: hovering it opens the sheet over the panel. It is thin,
-          // sits inside the panel (never at the window's edge, so the browser's own top bar is not
-          // triggered) and is only there while the panel is shown and the sheet is closed.
-          syncReveal() {
-            // ONE hover target for the whole window (Triple View has two bars plus the folded sheet's own band):
-            // only the bar Notes would open on gets a strip, and none while a sheet is open or folded anywhere.
-            const want = prefBool(PREF.REVEAL_STRIP, false) && !disposed && binding.visible() && !binding.isOpen() && revealWants(binding);
-            if (!want) {
-              window.clearTimeout(stripTimer);
-              strip?.remove();
-              strip = null;
-              if (stripPosSet) el.style.position = "";
-              stripPosSet = false;
-              return;
-            }
-            if (!strip) {
-              strip = h("div", { class: "zentral-notes-reveal-strip", "aria-hidden": "true" });
-              strip.addEventListener("mouseenter", () => {
-                window.clearTimeout(stripTimer);
-                stripTimer = window.setTimeout(() => {
-                  if (!binding.isOpen()) Promise.resolve(binding.open()).catch(warn);
-                }, Math.max(0, Math.min(1000, prefInt(PREF.REVEAL_DELAY, 100))));
-              });
-              strip.addEventListener("mouseleave", () => window.clearTimeout(stripTimer));
-              strip.addEventListener("mousedown", (e) => e.stopPropagation());
-            }
-            strip.style.height = Math.max(2, Math.min(24, prefInt(PREF.REVEAL_HEIGHT, 10))) + "px";
-            if (strip.parentNode !== el) {
-              try {
-                if (window.getComputedStyle(el).position === "static") {
-                  el.style.position = "relative";
-                  stripPosSet = true;
-                }
-              } catch (_) {}
-              el.appendChild(strip);
-            }
-          },
           toggle() {
             const host = routeFor(kind).host;
             if (host) return host.isOpen() ? host.close() : binding.open();
@@ -11882,9 +11959,6 @@ function nativeSidebarSide() {
               sheet?.destroy();
             } catch (_) {}
             sheet = null;
-            window.clearTimeout(stripTimer);
-            strip?.remove();
-            strip = null;
             button.remove();
           },
         };
@@ -11954,7 +12028,37 @@ function nativeSidebarSide() {
         await f.open();
         return f;
       }
-      async function openFrom(want = "") {
+      // Requests run one after the other: a panel sync, a shortcut and a button press arriving together used to
+      // each pick a host while the others were still opening, which could leave two Notes open (S6 B2).
+      let openChain = Promise.resolve();
+      function openFrom(want = "") {
+        const run = openChain.then(() => openFromNow(want), () => openFromNow(want));
+        openChain = run.then(() => {}, () => {});
+        return run;
+      }
+      // Never more than one Notes: when a panel rebuild (Triple View <-> one panel) leaves a second sheet open, the
+      // one in use (last used, else the routed host, else the first) stays and the rest are closed.
+      function enforceSingle() {
+        if (disposed || adopting) return;
+        const open = [...bindings.values()].filter((b) => b.isOpen());
+        const cardOpen = !!floating?.held();
+        if (open.length + (cardOpen ? 1 : 0) < 2) return;
+        const routed = routeFor("").host;
+        const tripleOn = document.documentElement.hasAttribute("bgalazka-triple-view");
+        const keep = (tripleOn && routed && open.includes(routed) ? routed : null) || (lastUsed && open.includes(lastUsed) ? lastUsed : null) || (routed && open.includes(routed) ? routed : null) || open[0] || floating;
+        closeOthers(keep);
+      }
+      // Triple View: a Notes left open on the main panel (or the card) when the second panel appeared moves between the cards.
+      function enforceTripleHost() {
+        if (disposed || adopting || !document.documentElement.hasAttribute("bgalazka-triple-view")) return;
+        const tri = [...bindings.values()].find((b) => b.kind === "triple" && b.present());
+        if (!tri) return;
+        const stray = [...bindings.values()].some((b) => b !== tri && b.isOpen());
+        if (!stray) return;
+        if (tri.isOpen()) closeOthers(tri);
+        else Promise.resolve(openFrom("triple")).catch(warn);
+      }
+      async function openFromNow(want = "") {
         let route = routeFor(want);
         if (!route.host) return openCard();
         if (panelsHidden()) {
@@ -12038,7 +12142,9 @@ function nativeSidebarSide() {
             b.sheet()?.layout();
           }
         }
-        syncAllReveals(); // after the loop: which bar owns the strip depends on every bar being known
+        syncAllReveals();
+        enforceTripleHost();
+        enforceSingle();
         adoptCard();
         maybeRestore();
         maybeFollow();
@@ -12159,24 +12265,9 @@ function nativeSidebarSide() {
         const r = document.documentElement;
         return r.hasAttribute("bgalazka-hover-panel-enabled") && r.hasAttribute("bgalazka-hover-panel-hidden");
       }
-      // The one bar that carries the reveal strip: the bar used last, else the main panel bar, else the first
-      // visible one; nobody while any sheet is open (folded or not), because the strip would open a second one.
-      function revealOwner() {
-        const list = [...bindings.values()].filter((b) => b.visible());
-        if (!list.length || list.some((b) => b.isOpen())) return null;
-        if (lastUsed && list.includes(lastUsed)) return lastUsed;
-        return list.find((b) => b.kind === "primary") || list[0];
-      }
-      // Triple View has two bars, each with its own strip (top = free-floating window, bottom = between the panels);
-      // otherwise only the owner bar has one. Never while any sheet, including the floating one, is open.
-      function revealWants(b) {
-        const list = [...bindings.values()].filter((x) => x.visible());
-        if (!list.length || list.some((x) => x.isOpen()) || floating?.isOpen()) return false;
-        if (document.documentElement.hasAttribute("bgalazka-triple-view") && (b.kind === "primary" || b.kind === "triple")) return true;
-        return revealOwner() === b;
-      }
+      // (The old "reveal strip" along the top of a panel is gone: hover reveal now lives in the hidden sheet's own
+      // band and in the Zentral panel's hover zone, and a second hover system made a second Notes appear, S6 B2.)
       function syncAllReveals() {
-        for (const b of bindings.values()) b.syncReveal();
         syncRedirectButtons();
       }
       function pickBinding() {
@@ -12423,7 +12514,6 @@ function nativeSidebarSide() {
               const sh = typeof b?.sheet === "function" ? b.sheet() : b?.sheet;
               sh?.applyState?.();
               sh?.layout?.();
-              b?.syncReveal?.();
             }
           }
           else if (name === PREF.FOLDER) {

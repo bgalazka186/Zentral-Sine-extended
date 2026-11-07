@@ -41,14 +41,14 @@ when the ordering rules below are broken.
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | `#zentral-settings-modal` | extension/settings/styles/ZentralSettingsFoundation.css:31 |
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | `#zentral-settings-modal` | extension/settings/styles/ZentralSettingsInjected.css:47 |
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | inline style: `"position:fixed;inset:8%;overflow:auto;z-index:2147483647;padding:20px` | loader/Zentral.uc.js:215 |
-| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zentral-notes-toast` | additional/notes/ZentralNotes.css:778 |
-| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zentral-notes-pill` | additional/notes/ZentralNotes.css:1064 |
+| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zentral-notes-toast` | additional/notes/ZentralNotes.css:779 |
+| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zentral-notes-pill` | additional/notes/ZentralNotes.css:1063 |
 | 2147483646 | RSS reader card (fallback only; see Top layer) | `#bgalazka-rss-card` | additional/rss/ZentralRssDisplay.css:110 |
 | 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-sheet[data-host="float"], .zentral-notes-sheet[data-host="dock"]` | additional/notes/ZentralNotes.css:95 |
-| 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-reveal` | additional/notes/ZentralNotes.css:712 |
-| 2147483643 | Big Preview (fallback only; see Top layer) | `.zentral-notes-shield` | additional/notes/ZentralNotes.css:1055 |
+| 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-reveal` | additional/notes/ZentralNotes.css:713 |
+| 2147483643 | Big Preview (fallback only; see Top layer) | `.zentral-notes-shield` | additional/notes/ZentralNotes.css:1054 |
 | 2147483643 | Big Preview (fallback only; see Top layer) | `#zentral-video-preview#zentral-video-preview[data-enlarged]` | additional/video/ZentralVideoPreview.css:522 |
-| 2147483642 | Dock ghost while a floating panel is dragged | `.zentral-notes-ghost` | additional/notes/ZentralNotes.css:1049 |
+| 2147483642 | Dock ghost while a floating panel is dragged | `.zentral-notes-ghost` | additional/notes/ZentralNotes.css:1048 |
 | 2147483642 | Dock ghost while a floating panel is dragged | `:root[zentral-geometry-dragging] #zentral-dock-ghost` | extension/panels/floating/ZentralFloatingPanels.css:285 |
 | 2147483640 | Reveal edge and invisible drag shields | `#bgalazka-panel-reveal-edge` | extension/appearance/ZentralAppearance.css:208 |
 | 2147483640 | Reveal edge and invisible drag shields | `.bgalazka-pill-drag-shield` | extension/panels/browsers/ZentralBrowserIntegrations.css:662 |
@@ -74,17 +74,16 @@ when the ordering rules below are broken.
 Ordering inside one component. Listed by file; values only matter relative to siblings.
 
 <details>
-<summary>56 local z-index declarations</summary>
+<summary>55 local z-index declarations</summary>
 
 | File | Line | z-index | Selector / code |
 | --- | ---: | ---: | --- |
 | additional/notes/ZentralNotes.css | 73 | 40 | `.zentral-notes-sheet` |
 | additional/notes/ZentralNotes.css | 132 | 6 | `.zentral-notes-sheet .zn-rz` |
-| additional/notes/ZentralNotes.css | 496 | 5 | `.zentral-notes-sheet .zn-menu` |
-| additional/notes/ZentralNotes.css | 588 | 5 | `.zentral-notes-sheet .zn-dialog` |
-| additional/notes/ZentralNotes.css | 813 | 3 | `.zentral-notes-reveal-strip` |
-| additional/notes/ZentralNotes.css | 980 | 0 | `.zentral-notes-sheet .zn-findlayer` |
-| additional/notes/ZentralNotes.css | 985 | 1 | `.zentral-notes-sheet[data-hl="on"] .zn-editor` |
+| additional/notes/ZentralNotes.css | 497 | 5 | `.zentral-notes-sheet .zn-menu` |
+| additional/notes/ZentralNotes.css | 589 | 5 | `.zentral-notes-sheet .zn-dialog` |
+| additional/notes/ZentralNotes.css | 979 | 0 | `.zentral-notes-sheet .zn-findlayer` |
+| additional/notes/ZentralNotes.css | 984 | 1 | `.zentral-notes-sheet[data-hl="on"] .zn-editor` |
 | additional/video/controllers/ZentralVideoSidebar.js | 213 | 5 | `"position:absolute;inset:0;z-index:5;background:var(--zl-video-canvas,` |
 | additional/video/ZentralVideoPreview.css | 132 | 3 | `#zentral-video-preview .zentral-video-preview-subtitles` |
 | additional/video/ZentralVideoPreview.css | 301 | 2 | `#zentral-video-preview canvas` |

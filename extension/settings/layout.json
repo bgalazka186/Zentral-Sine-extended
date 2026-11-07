@@ -1028,7 +1028,6 @@
     "zen.workspace.zentral.notes.hover_reveal",
     "zen.workspace.zentral.notes.push_page",
     "zen.workspace.zentral.notes.push_panel_percent",
-    "zen.workspace.zentral.notes.reveal_strip",
     "zen.workspace.zentral.notes.reveal_height_px",
     "zen.workspace.zentral.notes.reveal_delay_ms",
     "zen.workspace.zentral.notes.wide_percent",
@@ -1044,6 +1043,10 @@
     "zen.workspace.zentral.notes.hidden_tools_menu",
     "zen.workspace.zentral.notes.date_notes_mode",
     "zen.workspace.zentral.notes.default_view",
+    "zen.workspace.zentral.notes.card_autohide",
+    "zen.workspace.zentral.notes.card_window_entry_reveal",
+    "zen.workspace.zentral.notes.card_sidebar_guard",
+    "zen.workspace.zentral.notes.card_pill_border",
     {
       "type": "text",
       "label": "**Notes · Capture**",

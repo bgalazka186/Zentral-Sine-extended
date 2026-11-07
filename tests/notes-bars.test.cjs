@@ -121,24 +121,16 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.ok([...disk.keys()].some((k) => k.startsWith("/profile/zentral-notes/") && k.endsWith(".md")), "note saved to the profile folder, not prefs");
   });
 
-  await test("R3 reveal strip: appears on the panel bar when enabled, hovering opens the sheet, it leaves while open and returns on close", async () => {
+  await test("R3 the old reveal strip is gone (S6 B2): even with the stale pref set no strip is created and nothing opens on hover", async () => {
     const P = "zen.workspace.zentral.notes.";
     const strips = () => toolbar.children.filter((e) => e._classes.has("zentral-notes-reveal-strip"));
-    assert.equal(strips().length, 0, "off by default");
     prefs.set(P + "reveal_delay_ms", 0);
     prefs.set(P + "reveal_strip", true);
     prefObservers.forEach((o) => o.observe(null, "nsPref:changed", P + "reveal_strip"));
-    assert.equal(strips().length, 1);
-    strips()[0].dispatchEvent(new Ev("mouseenter"));
     await sleep(30); await flush();
-    assert.equal(sheetsIn(slider)[0].hidden, false, "hover opened the sheet");
-    assert.equal(strips().length, 0, "strip is gone while the sheet is open");
-    toolbar.firstElementChild.click();
-    await flush();
-    assert.equal(strips().length, 1, "strip is back after closing");
+    assert.equal(strips().length, 0, "no strip, whatever the old pref says");
     prefs.set(P + "reveal_strip", false);
     prefObservers.forEach((o) => o.observe(null, "nsPref:changed", P + "reveal_strip"));
-    assert.equal(strips().length, 0, "turned off again");
   });
 
   await test("R2 push page in a panel: the sheet takes a share of the panel height through the reserve variable, released on close", async () => {
@@ -281,7 +273,7 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(sheetsIn(slider).length, 1);
   });
 
-  await test("reveal strip: with two bars (Triple View) only one carries the strip, and none while a sheet is open", async () => {
+  await test("Triple View <-> one panel (S6 B2): no hover strips, and Notes is never open on two bars at once", async () => {
     const P = "zen.workspace.zentral.notes.";
     const box = new El("div"), bar = new El("div");
     bar.className = "bgalazka-super-bar";
@@ -293,27 +285,22 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     for (const b of [toolbar.firstElementChild, bar.firstElementChild]) if (b.dataset.active === "true") b.click(); // earlier tests may leave a sheet open
     await flush();
     prefs.set(P + "reveal_delay_ms", 0);
-    prefs.set(P + "reveal_strip", true);
-    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", P + "reveal_strip"));
     const strips = () => [toolbar, bar].reduce((n, b) => n + b.children.filter((e) => e._classes.has("zentral-notes-reveal-strip")).length, 0);
-    assert.equal(strips(), 1, "one hover strip for two bars, not one per bar");
-    toolbar.firstElementChild.click(); await sleep(30); await flush();
-    assert.equal(strips(), 0, "no strip anywhere while a sheet is open");
-    toolbar.firstElementChild.click(); await flush();
-    assert.equal(strips(), 1, "one strip again after closing");
-    // Triple View: each bar has its own strip; both open the sheet between the cards, none while it is open
+    assert.equal(strips(), 0, "no hover strip on any bar");
+    const openSheets = () => sheetsIn(slider).filter((x) => x.hidden === false).length;
+    // Triple View: the request from either bar lands between the cards; hammering both buttons never opens two
     document.documentElement.setAttribute("bgalazka-triple-view", "true");
-    toolbar.firstElementChild.click(); await sleep(30); await flush();
-    toolbar.firstElementChild.click(); await sleep(30); await flush();
-    assert.equal(strips(), 2, "Triple View: a hover strip on each bar");
-    toolbar.firstElementChild.click(); await sleep(30); await flush();
-    assert.equal(strips(), 0, "no strip while Notes is open between the cards");
-    toolbar.firstElementChild.click(); await sleep(30); await flush();
-    assert.equal(strips(), 2, "both strips back after closing it");
+    toolbar.firstElementChild.click();
+    bar.firstElementChild.click();
+    await sleep(60); await flush();
+    assert.ok(openSheets() <= 1, "at most one open sheet after two quick requests in Triple View");
+    // back to one panel
     document.documentElement.removeAttribute("bgalazka-triple-view");
-    prefs.set(P + "reveal_strip", false);
-    prefObservers.forEach((o) => o.observe(null, "nsPref:changed", P + "reveal_strip"));
-    assert.equal(strips(), 0);
+    await sleep(60); await flush();
+    assert.ok(openSheets() <= 1, "at most one open sheet after leaving Triple View");
+    assert.equal(strips(), 0, "still no strips");
+    for (const b of [toolbar.firstElementChild, bar.firstElementChild]) if (b.dataset.active === "true") b.click();
+    await flush();
     box.remove();
     mutationCallbacks.slice().forEach((cb) => cb([{ addedNodes: [], removedNodes: [box] }]));
     await sleep(120);
@@ -791,6 +778,8 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(readMeta().cardW, w0 + 80);
   });
 
+  const readMetaPinned = () => { try { return readMeta().pinned; } catch (_) { return undefined; } };
+
   await test("S6 card-as-panel: autohide folds a docked card to an edge strip and a hover brings it back; push is released while it is hidden", async () => {
     const card = floatCard();
     const html = document.documentElement;
@@ -815,6 +804,17 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     await flush();
     assert.equal(card.dataset.collapsed, undefined, "pressing the strip reveals the card at once");
     assert.equal(html.getAttribute("zentral-notes-push"), "right");
+    // autohide acts as pinned: an UNPINNED docked card is not closed by a press elsewhere while autohide is on
+    const keepBtn = card.querySelector(".zn-keep-btn");
+    if (keepBtn.classList.contains("is-on") && readMetaPinned() !== false) {
+      // the header pin shows the saved pin; turn the saved pin off through the pill's pin button
+      const pillNow = html.all().find((c) => c._classes.has("zentral-notes-pill"));
+      pillNow.querySelectorAll("button").find((b) => b.dataset.id === "pin")?.click();
+      await flush();
+    }
+    outside(page);
+    await flush();
+    assert.equal(card.hidden, false, "autohide on: an outside press does not close an unpinned card (it acts as pinned)");
     // switching autohide off keeps it shown
     prefs.set("zen.workspace.zentral.notes.card_autohide", false);
     prefs.set("zen.workspace.zentral.notes.push_page", false);

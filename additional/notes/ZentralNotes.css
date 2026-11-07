@@ -147,6 +147,7 @@
 .zentral-notes-sheet .zn-rz[data-h="se"] { bottom: 0; right: 0; cursor: nwse-resize; }
 .zentral-notes-sheet .zn-keep-btn.is-on,
 .zentral-notes-sheet .zn-hover-btn.is-on,
+.zentral-notes-sheet .zn-click-btn.is-on,
 .zentral-notes-sheet .zn-dock-btn.is-on { color: var(--zn-text); }
 .zentral-notes-sheet *,
 .zentral-notes-sheet *::before,
@@ -810,8 +811,6 @@
 .zentral-notes-sheet .zn-hex { max-width: 9em; font-family: ui-monospace, Consolas, monospace; }
 
 /* ---- reveal strip: thin hover zone along the top of an open panel's bar ----------------------------- */
-.zentral-notes-reveal-strip { position: absolute; top: 0; left: 0; right: 0; z-index: 3; background: transparent; cursor: default; -moz-window-dragging: no-drag; }
-.zentral-notes-reveal-strip:hover { background: color-mix(in srgb, var(--zentral-notes-ov-accent, #6aa7ff) 45%, transparent); }
 
 /* V4-R3: a split / span sheet is wider than the Zentral panel and visually spills over the page. The clip and
    slider stop clipping while the root attribute is set; the transparent wrappers stay click-through

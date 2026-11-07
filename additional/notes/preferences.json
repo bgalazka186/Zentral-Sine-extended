@@ -54,14 +54,8 @@
     "placeholder": "45"
   },
   {
-    "property": "zen.workspace.zentral.notes.reveal_strip",
-    "label": "Reveal strip: a thin strip along the top of an open panel opens Notes when hovered",
-    "type": "checkbox",
-    "defaultValue": false
-  },
-  {
     "property": "zen.workspace.zentral.notes.reveal_height_px_text",
-    "label": "Reveal strip height (px, 2–24) [2 to 24 px]",
+    "label": "Hidden Notes: height of the strip that brings it back on hover (px, 2–24) [2 to 24 px]",
     "type": "string",
     "defaultValue": "10",
     "placeholder": "10"

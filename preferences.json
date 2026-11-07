@@ -2244,14 +2244,8 @@
     "placeholder": "45"
   },
   {
-    "property": "zen.workspace.zentral.notes.reveal_strip",
-    "label": "Reveal strip: a thin strip along the top of an open panel opens Notes when hovered",
-    "type": "checkbox",
-    "defaultValue": false
-  },
-  {
     "property": "zen.workspace.zentral.notes.reveal_height_px_text",
-    "label": "Reveal strip height (px, 2–24) [2 to 24 px]",
+    "label": "Hidden Notes: height of the strip that brings it back on hover (px, 2–24) [2 to 24 px]",
     "type": "string",
     "defaultValue": "10",
     "placeholder": "10"
@@ -2419,6 +2413,30 @@
       }
     ],
     "property": "zen.workspace.zentral.notes.default_view"
+  },
+  {
+    "property": "zen.workspace.zentral.notes.card_autohide",
+    "label": "Standalone card docked to an edge: hide it there and show it again on hover",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.card_window_entry_reveal",
+    "label": "Standalone card hidden at an edge: also reveal it when the pointer leaves the window through that edge and comes back",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.card_sidebar_guard",
+    "label": "Standalone card with autohide: never fold it away while the sidebar, the compact sidebar / top bar, a menu or the address bar is being used",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.notes.card_pill_border",
+    "label": "Standalone card: draw a 1 px border around the pill menu so it stays visible on any page",
+    "type": "checkbox",
+    "defaultValue": true
   },
   {
     "type": "text",
@@ -4072,29 +4090,5 @@
     "label": "Base Mod Diagnostic Log Folder (absolute path)",
     "type": "string",
     "defaultValue": ""
-  },
-  {
-    "property": "zen.workspace.zentral.notes.card_autohide",
-    "label": "Standalone card docked to an edge: hide it there and show it again on hover",
-    "type": "checkbox",
-    "defaultValue": false
-  },
-  {
-    "property": "zen.workspace.zentral.notes.card_window_entry_reveal",
-    "label": "Standalone card hidden at an edge: also reveal it when the pointer leaves the window through that edge and comes back",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.notes.card_sidebar_guard",
-    "label": "Standalone card with autohide: never fold it away while the sidebar, the compact sidebar / top bar, a menu or the address bar is being used",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
-    "property": "zen.workspace.zentral.notes.card_pill_border",
-    "label": "Standalone card: draw a 1 px border around the pill menu so it stays visible on any page",
-    "type": "checkbox",
-    "defaultValue": true
   }
 ]

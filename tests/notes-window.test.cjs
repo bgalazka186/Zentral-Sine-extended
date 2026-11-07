@@ -195,7 +195,7 @@ const same = (a, b, msg) => assert.equal(canon(a), canon(b), msg);
     assert.equal(h({ panelOpen: true, triple: true, kinds: ["primary", "triple"] }), "triple", "shortcut too");
     assert.equal(h({ panelOpen: true, triple: true, kinds: ["primary", "triple"], last: "primary", focused: "primary" }), "triple");
     assert.equal(h({ panelOpen: true, triple: true, kinds: ["primary"] }), "", "Triple View without its middle bar: card until it exists (never the old quad slot)");
-    assert.equal(h({ panelOpen: true, triple: true, kinds: ["primary", "triple", "super"], want: "super" }), "super", "Super Pin is its own panel");
+    assert.equal(h({ panelOpen: true, triple: true, kinds: ["primary", "triple", "super"], want: "super" }), "triple", "Triple View: even a Super Pin request lands between the cards (S6 B2)");
     assert.equal(h({ panelOpen: true, triple: false, kinds: ["primary", "triple"] }), "primary", "a stray middle bar is not picked unasked outside Triple View");
     assert.equal(h({ panelOpen: true, triple: false, kinds: ["primary", "triple"], want: "triple" }), "triple", "but its own button works");
   });
