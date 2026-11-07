@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.1.31
+// @version 3.1.33
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.1.31, the numeric-preference list and
+ * Placeholders replaced by the build: 3.1.33, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.1.31";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.1.33";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -6190,6 +6190,8 @@ function nativeSidebarSide() {
       let dialog = null; // export notice
       let collapsed = false; // hover mode: open but folded away; only the thin real strip stays in layout
       let revealEl = null;
+      let panelHiddenObserver = null;
+      let foldedByParentPanel = false;
       let openTimer = 0; // armed only while the pointer rests on the strip
       let graceTimer = 0; // armed only while a hover-opened sheet waits to fold away
       let ptrDown = false;
@@ -9617,6 +9619,9 @@ function nativeSidebarSide() {
       function layout() {
         rafLayout = 0;
         if (!isOpen || destroyed || root.hidden) return;
+        // MutationObserver delivery can lag a layout frame; read the authoritative parent state here too.
+        syncParentPanelHidden();
+        if (foldedByParentPanel) return;
         // Autohide switched off (or the card undocked / enlarged) while folded away: bring it back.
         if (collapsed && !hoverMode()) expand(false);
         if (collapsed) {
@@ -9719,7 +9724,7 @@ function nativeSidebarSide() {
           pushed = false;
         }
         if (panelHosted) {
-          const strip = on && isOpen && collapsed ? hoverStripPx(getPref(PREF.REVEAL_HEIGHT, 10)) : 0;
+          const strip = on && isOpen && collapsed && !foldedByParentPanel ? hoverStripPx(getPref(PREF.REVEAL_HEIGHT, 10)) : 0;
           // While the edge is being dragged the live share wins over the remembered one.
           const dragShare = gesture && gesture.slot && gesture.active && gesture.share > 0 ? gesture.share : 0;
           const share =
@@ -10024,6 +10029,75 @@ function nativeSidebarSide() {
         revealEl.style.height = Math.round(band.height) + "px";
       }
       let panelWasHidden = false;
+      // Pointer-away autohide for a panel-hosted sheet belongs to the parent panel. The sheet must
+      // fold at the same time as that panel, but must NOT create its own edge/reveal strip: the
+      // panel already has the one and only target that brings this host back.
+      function foldWithParentPanel() {
+        if (!isOpen || destroyed || foldedByParentPanel) return;
+        foldedByParentPanel = true;
+        collapsed = true;
+        collapsedAt = Date.now();
+        openedByHover = false;
+        ptrInside = false;
+        ptrDown = false;
+        window.clearTimeout(graceTimer);
+        graceTimer = 0;
+        window.clearTimeout(openTimer);
+        openTimer = 0;
+        closeMenu();
+        closeDialog();
+        drop();
+        try {
+          if (root.contains(document.activeElement)) document.activeElement.blur();
+        } catch (_) {}
+        root.dataset.collapsed = "true";
+        if (pillEl) pillEl.hidden = true;
+        // A previously folded outside-click sheet may still have its own strip. Remove it while
+        // the parent is hidden so there is never a second hover/reveal target inside the panel.
+        dropReveal();
+        adapter.setActive(false, { strip: true });
+        applyPush(0, 0);
+        scheduleLayout();
+      }
+      function restoreFromParentPanel() {
+        if (!foldedByParentPanel || destroyed || !isOpen) return;
+        foldedByParentPanel = false;
+        // Revealing the parent panel is not a request to reveal Notes. Keep the sheet folded
+        // and expose one local hover target inside the now-visible panel. The parent's edge
+        // target only brings the panel back; the Notes target is what opens this sheet again.
+        if (collapsed) {
+          collapsedAt = Date.now();
+          ensureRevealTarget();
+          adapter.setActive(false);
+          applyPush(0, 0);
+          placeReveal();
+          scheduleLayout();
+        } else {
+          adapter.setActive(true);
+          applyPush(0, 0);
+          scheduleLayout();
+        }
+      }
+      function syncParentPanelHidden() {
+        if (!adapter.pushPanel) return;
+        const parentHidden = !!adapter.panelHidden?.();
+        if (parentHidden && hideTrigger() === "leave") foldWithParentPanel();
+        else if (!parentHidden) restoreFromParentPanel();
+      }
+      function watchParentPanelHidden() {
+        if (!adapter.pushPanel || panelHiddenObserver || typeof MutationObserver !== "function") return;
+        panelHiddenObserver = new MutationObserver(syncParentPanelHidden);
+        panelHiddenObserver.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["bgalazka-hover-panel-enabled", "bgalazka-hover-panel-hidden"],
+        });
+        syncParentPanelHidden();
+      }
+      function unwatchParentPanelHidden() {
+        panelHiddenObserver?.disconnect();
+        panelHiddenObserver = null;
+        foldedByParentPanel = false;
+      }
       function armGrace() {
         window.clearTimeout(graceTimer);
         graceTimer = 0;
@@ -10076,12 +10150,19 @@ function nativeSidebarSide() {
         } catch (_) {}
         root.dataset.collapsed = "true";
         if (pillEl) pillEl.hidden = true;
+        ensureRevealTarget();
+        adapter.setActive(false, { strip: true });
+        applyPush(0, 0);
+        placeReveal();
+        scheduleLayout();
+      }
+      function ensureRevealTarget() {
+        if (revealEl || !collapsed || foldedByParentPanel || destroyed) return;
         document.documentElement.addEventListener("mouseleave", onWinLeave, true);
         document.documentElement.addEventListener("mouseenter", onWinEnter, true);
         revealEl = h("div", { class: "zentral-notes-reveal", "aria-hidden": "true" });
         revealEl.addEventListener("mouseenter", () => {
-          // The strip appears under the pointer the moment the sheet folds: that is not a request to reopen it
-          // (the sheet used to fold and spring back ~100 ms later, with the apps above and below resizing twice).
+          // Ignore the strip appearing under the pointer during a collapse / parent-panel reveal.
           if (Date.now() - collapsedAt < 450) return;
           window.clearTimeout(openTimer);
           openTimer = window.setTimeout(() => expand(true), timing().openMs);
@@ -10102,10 +10183,6 @@ function nativeSidebarSide() {
           openTimer = window.setTimeout(() => expand(true), Math.min(timing().openMs, 40));
         });
         (adapter.host || root.parentNode || document.documentElement).appendChild(revealEl);
-        adapter.setActive(false, { strip: true });
-        applyPush(0, 0);
-        placeReveal();
-        scheduleLayout();
       }
       function dropReveal() {
         window.clearTimeout(openTimer);
@@ -10266,6 +10343,7 @@ function nativeSidebarSide() {
         window.addEventListener("mousedown", onPress, true);
         window.addEventListener("mouseup", onRelease, true);
         adapter.setActive(true);
+        watchParentPanelHidden();
         raise();
         try {
           await ensureStore();
@@ -10290,6 +10368,7 @@ function nativeSidebarSide() {
         if (!isOpen) return;
         isOpen = false;
         collapsed = false;
+        unwatchParentPanelHidden();
         delete root.dataset.collapsed;
         dropReveal();
         dropPill();

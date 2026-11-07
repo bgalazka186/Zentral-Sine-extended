@@ -485,11 +485,25 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(first.dataset.collapsed, undefined, "pointer-away alone does not fold Notes inside the panel");
     assert.equal(slider.children.filter((e) => e._classes.has("zentral-notes-reveal")).length, 0, "no second Notes reveal target");
 
+    const syncPanelVisibility = () => mutationCallbacks.slice().forEach((cb) => cb([{ type: "attributes", attributeName: "bgalazka-hover-panel-hidden", addedNodes: [], removedNodes: [] }]));
     html.setAttribute("bgalazka-hover-panel-enabled", "true");
     html.setAttribute("bgalazka-hover-panel-hidden", "true");
+    syncPanelVisibility();
     await sleep(30);
-    assert.equal(first.dataset.collapsed, undefined, "Notes remains part of the whole panel while it is hidden");
+    assert.equal(first.dataset.collapsed, "true", "Notes enters its hidden state with the parent panel");
+    assert.equal(slider.children.filter((e) => e._classes.has("zentral-notes-reveal")).length, 0, "the parent panel remains the only reveal target");
     html.removeAttribute("bgalazka-hover-panel-hidden");
+    syncPanelVisibility();
+    await sleep(30);
+    assert.equal(first.dataset.collapsed, "true", "Notes stays collapsed after the parent panel is revealed");
+    const notesReveal = slider.children.find((e) => e._classes.has("zentral-notes-reveal"));
+    assert.ok(notesReveal, "the collapsed Notes sheet gets one local hover target inside the now-visible panel");
+    assert.equal(slider.children.filter((e) => e._classes.has("zentral-notes-reveal")).length, 1, "there is only one Notes reveal target");
+    await sleep(500); // Ignore the reveal target being inserted under the pointer during the panel's own reveal.
+    notesReveal.dispatchEvent(new Ev("mouseenter", { bubbles: true }));
+    await sleep(160); await flush();
+    assert.equal(first.dataset.collapsed, undefined, "hovering the Notes reveal target opens the sheet");
+    assert.equal(slider.children.filter((e) => e._classes.has("zentral-notes-reveal")).length, 0, "the Notes reveal target is removed after opening");
     html.removeAttribute("bgalazka-hover-panel-enabled");
 
     hover.click(); // Switch the same mode to outside-click.

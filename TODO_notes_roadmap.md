@@ -1,6 +1,6 @@
 # Zentral Notes: what is NOT done yet
 
-**LEFT TO DO: 33 open items** (rows 3-35 below; the "Housekeeping" block is not counted). Rule for the AI: after every chunk of work, delete or mark the rows you finished, recount, and rewrite this number and the date. Last update: 2026-11-07, notes 3.1.31 (panel-owned pointer-away autohide, outside-click persistence, single-instance Triple View handling, and standalone right-edge reveal fixed in code and regression-tested; treated as done per the live-check rule).
+**LEFT TO DO: 33 open items** (rows 3-35 below; the "Housekeeping" block is not counted). Rule for the AI: after every chunk of work, delete or mark the rows you finished, recount, and rewrite this number and the date. Last update: 2026-11-07, notes 3.1.32 (panel-hosted pointer-away Notes now folds with the parent panel and restores on reveal, without a second reveal target; outside-click behavior retained and regression-tested).
 
 Finished work and the long history live in `docs/LEGACY_notes_roadmap.md` (frozen). Row references like "Cycle G #26" or "S6 W4" point into that file for the original owner wording and details.
 
@@ -53,6 +53,8 @@ Ground rules for this list:
 
 - S6 W5 is closed. Owner decision 2026-11-06: the seamless hand-over of the Notes card with a Zentral panel is NOT wanted; sharing more old panel keys stays optional polish.
 - 3.1.31: Panel-hosted Notes no longer creates its own pointer-away reveal strip; outside-click folding remains folded through panel sync because a folded sheet still owns the active Notes instance. Triple View binding/host enforcement counts folded sheets, preventing a second Notes window or hover strip. Standalone card reveal bands now align with the resolved safe-area edge (including a right-side native sidebar) instead of the outer window edge.
+- 3.1.32: Pointer-away mode began watching the parent panel hidden state so Notes folds with it. The first restore behavior was incorrect and is corrected in 3.1.33.
+- 3.1.33: When the parent panel is revealed, pointer-away Notes stays collapsed and creates exactly one Notes hover target inside the visible panel. Hovering that target opens Notes; the parent panel edge remains the only target while the panel itself is hidden. Outside-click autohide and Triple View single-instance behavior remain unchanged.
 
 - B1 (middle-click unload) is fixed in code since 3.1.19; W3 (table cell checkboxes) and W9 (`default_view`) are done. If B1 ever returns, log which tab is selected after the click (suspect Zen's `explicitUnloadTabs`).
 - A table cell only knows `[ ]` / `[x]`; `<br>` in a cell is a line break everywhere (was literal text).
@@ -66,11 +68,11 @@ Ground rules for this list:
 2. Pure function first, exported through `__zentralNotesTestSeam`, fixture test red, then implement. Parser changes go in `parseBlocks` / the inline parser; keep `exportHtml` and `exportText` in step.
 3. Release loop: `node tools/build-standalone.cjs --bump`, `node tools/build-preferences.cjs`, `node tools/build-z-map.cjs`, `node tools/build-standalone.cjs --check`, then `for t in tests/*.test.cjs; do node $t || echo FAIL $t; done`.
 
-## NEXT SESSION HANDOFF (last updated at 3.1.31; edit in place, keep it short)
+## NEXT SESSION HANDOFF (last updated at 3.1.33; edit in place, keep it short)
 
 **Rule for every AI session: before you finish, update (1) the State line, (2) the ranked table (remove what you finished, recount the counter), (3) Known debts, (4) the version in this heading. Do not append a new handoff block.**
 
-State: 3.1.31 (S6 B5/B2 and standalone right-edge reveal fix done in code; next pick is S6 B3). Current chunk: parent-panel autohide owns pointer-away behavior for hosted Notes; outside-click collapse survives the ensuing panel MutationObserver sync; folded sheets count as active for single-instance and Triple View host enforcement; standalone reveal strip shares the card safe-area edge. Regression coverage is in `tests/notes-bars.test.cjs`; fake-DOM tests and standalone build checks pass.
+State: 3.1.33 (S6 B5/B2 and standalone right-edge reveal fix done in code; next pick is S6 B3). Current chunk: hosted pointer-away Notes folds with the parent panel; after the panel is revealed, Notes remains collapsed until its single local hover target is hovered. The local target exists only while the panel is visible. Outside-click collapse and Triple View single-instance behavior remain intact. Regression coverage is in `tests/notes-bars.test.cjs`; Notes tests and standalone build checks pass.
 
 Next pick: the top row of the ranked table that is not done.
 
