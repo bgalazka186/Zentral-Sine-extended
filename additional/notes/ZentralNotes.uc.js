@@ -2589,11 +2589,14 @@
     // Read mode: one task line gets a given state, or the next one in the cycle (like a Minesweeper flag:
     // [ ] -> [?] -> [!] -> [/] -> [-] -> [ ]; a done [x] goes back to [ ]). Only a line that already is a task is touched.
     const TASK_CYCLE = Object.freeze([" ", "?", "!", "/", "-"]);
+    // The second kind of task state (E10 theme set: [f] [b] [i] ...): not offered by the left-hold menu, not cycled, and a plain
+    // click or right click leaves it alone. It changes only through a hold (read view) so it is harder to knock off by accident.
+    const isExtendedTaskStatus = (ch) => !!ch && ch !== "x" && ch !== "X" && !TASK_STATUSES.some(([k]) => k === ch);
     function setLineTaskStatus(body, lineIndex, ch) {
-      if (!TASK_STATUSES.some(([k]) => k === ch)) return body;
+      if (!TASK_PICKER.some(([k]) => k === ch)) return body;
       const lines = normalizeNewlines(body).split("\n");
       if (lineIndex < 0 || lineIndex >= lines.length) return body;
-      lines[lineIndex] = lines[lineIndex].replace(/^(\s*(?:[-*+]|\d+[.)])\s+)\[[ xX\-/?!]\](?=\s)/, "$1[" + ch + "]");
+      lines[lineIndex] = lines[lineIndex].replace(/^(\s*(?:[-*+]|\d+[.)])\s+)\[[^\]\n]\](?=\s)/, "$1[" + ch + "]");
       return lines.join("\n");
     }
     function cycleTaskStatus(body, lineIndex) {
@@ -2607,6 +2610,8 @@
     // any other line loses its list / heading / quote prefix first. Same range rules as toggleLinePrefix.
     // Everything the hold menu of the checklist button offers: the six classic states, then the Obsidian theme set (E10).
     const TASK_PICKER = Object.freeze([...TASK_STATUSES, ...Object.entries(TASK_STATUS_NAMES).filter(([k]) => !TASK_STATUSES.some(([c]) => c === k))]);
+    // Only the extended ones: what a right-button hold lists in read view.
+    const TASK_EXTENDED = Object.freeze(TASK_PICKER.filter(([k]) => isExtendedTaskStatus(k)));
     function setTaskStatus(value, s, e, ch) {
       if (!TASK_PICKER.some(([k]) => k === ch)) return { start: s, end: e, text: value.slice(s, e), selStart: s, selEnd: e };
       const ls = value.lastIndexOf("\n", s - 1) + 1;
@@ -5462,7 +5467,7 @@
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
-        wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
+        wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
@@ -5899,17 +5904,39 @@
                 marker.textContent = TASK_STATUS_MARKS[item.status] || "";
               }
               if (item.status === "-") marker.setAttribute("aria-checked", "mixed");
-              marker.title = (item.status ? (TASK_STATUS_NAMES[item.status] || "") + ". " : "") + "Click: done. Right-click: next state. Hold: pick a state.";
+              // A second-kind state ([f], [b], ...) ignores a plain click and a right click: only a hold changes it.
+              const sticky = isExtendedTaskStatus(item.status);
+              marker.title = (item.status ? (TASK_STATUS_NAMES[item.status] || "") + ". " : "") + (sticky ? "Hold left: pick a state. Hold right: other extra states." : "Click: done. Right-click: next state. Hold left: pick a state. Hold right: extra states.");
+              if (sticky) marker.dataset.sticky = "true";
               if (item.line < 0) marker.disabled = true;
               else {
                 // Tap = done / not done (as before). Right click cycles ? ! / - (like flags in Minesweeper). Holding the
-                // button opens the list of states. The click that ends a hold is swallowed by createHoldAction.
-                const hold = createHoldAction({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), onTap: () => onToggle(item.line), onHold: () => env.taskMenu?.(item.line, marker) });
+                // left button opens the list of the classic states, holding the right button the extra ones. The click that
+                // ends a hold is swallowed by createHoldAction.
+                const hold = createHoldAction({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), onTap: () => { if (!sticky) onToggle(item.line); }, onHold: () => env.taskMenu?.(item.line, marker) });
                 marker.addEventListener("pointerdown", (e) => { if (e.button === undefined || e.button === 0) hold.press(); });
                 marker.addEventListener("pointerup", () => hold.release());
                 marker.addEventListener("pointerleave", () => hold.cancel());
                 marker.addEventListener("click", () => hold.click());
-                marker.addEventListener("contextmenu", (e) => { e.preventDefault(); hold.cancel(); env.taskCycle?.(item.line); });
+                // Right button: a short press cycles (not for a second-kind state), a long press opens the extra states.
+                // The context menu event comes before the release on some systems and after it on others, so the action
+                // runs on the release and the event only keeps the native menu away (a keyboard-opened one still cycles).
+                let rightSeen = false;
+                const rightHold = createHoldAction({ setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), onTap: () => {}, onHold: () => env.taskMenuMore?.(item.line, marker) });
+                marker.addEventListener("pointerdown", (e) => { if (e.button === 2) { rightSeen = true; rightHold.cancel(); rightHold.press(); } });
+                marker.addEventListener("pointerup", (e) => {
+                  if (e.button !== 2) return;
+                  const held = rightHold.release();
+                  rightHold.cancel();
+                  if (!held && !sticky) env.taskCycle?.(item.line);
+                });
+                marker.addEventListener("pointerleave", () => { rightHold.cancel(); rightSeen = false; });
+                marker.addEventListener("contextmenu", (e) => {
+                  e.preventDefault();
+                  hold.cancel();
+                  if (rightSeen) { rightSeen = false; return; }
+                  if (!sticky) env.taskCycle?.(item.line);
+                });
               }
             }
             const text = h("span", { class: "zn-li-text" });
@@ -6368,6 +6395,11 @@
         taskMenu: (line, anchor) => {
           if (note()?.trashed) return;
           showMenu(anchor, TASK_STATUSES.map(([ch, name]) => ({ icon: "check", label: "[" + ch + "]  " + name, action: () => setBody(setLineTaskStatus(note().body, line, ch)) })));
+        },
+        // Right-button hold: the states the left-hold menu does not offer (the second kind of checkmark).
+        taskMenuMore: (line, anchor) => {
+          if (note()?.trashed) return;
+          showMenu(anchor, TASK_EXTENDED.map(([ch, name]) => ({ icon: "check", label: "[" + ch + "]  " + name, action: () => setBody(setLineTaskStatus(note().body, line, ch)) })));
         },
         jumpFootnote: (label, back, from) => jumpFootnote(label, back, from),
         openNoteLink: (id, heading = "") => {

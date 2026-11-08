@@ -503,6 +503,16 @@ test("read mode: cycling and picking a state on one task line (Minesweeper-style
   assert.equal(c.setLineTaskStatus("- [x] b", 0, "q"), "- [x] b", "unknown state ignored");
   assert.equal(c.setLineTaskStatus("a\n- [ ] b", 1, "x"), "a\n- [x] b");
   assert.equal(c.setLineTaskStatus("- [ ]b", 0, "?"), "- [ ]b", "needs a space after the box, like the parser");
+  // Second kind of checkmark ([f], [b] ...): reachable from the hold menus, never from a tap or the cycle.
+  assert.equal(c.setLineTaskStatus("- [ ] b", 0, "f"), "- [f] b", "an extended state can be set on a plain task");
+  assert.equal(c.setLineTaskStatus("- [f] b", 0, "x"), "- [x] b", "and a classic one on an extended task");
+  assert.equal(c.setLineTaskStatus("- [f] b", 0, "b"), "- [b] b", "extended to another extended state");
+  assert.equal(c.cycleTaskStatus("- [f] b", 0), "- [f] b", "the cycle never touches an extended state");
+  assert.equal(c.isExtendedTaskStatus("f"), true);
+  assert.equal(c.isExtendedTaskStatus("?"), false);
+  assert.equal(c.isExtendedTaskStatus("x"), false);
+  assert.equal(c.isExtendedTaskStatus(""), false);
+  assert.ok(c.TASK_EXTENDED.length >= 10 && c.TASK_EXTENDED.every(([k]) => !c.TASK_STATUSES.some(([q]) => q === k)), "the right-hold list is exactly the states the left-hold list lacks");
 });
 
 // W3: the owner's bingo card keeps [ ] inside table cells (and after <br>), not only at the start of a list line.

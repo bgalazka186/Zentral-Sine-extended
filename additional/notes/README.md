@@ -138,6 +138,7 @@ Tests: `node tests/notes.test.cjs` (store, autosave, sync, recovery), `node test
 - **Theme** (Quick settings or Zentral settings): Zentral (follows the Zen look), Recommended (like the RSS card), Light, Dark, Paper.
 
 - **Hold in the editor toolbar**: holding *Quote* or the *More* caret lists the callout kinds (Note, Tip, Important, Warning, Caution, Info); a tap does what it always did.
+- **Checkmarks in read view**: a click toggles done, a right click cycles the main states (`[?] [!] [/] [-]`), holding the left button lists the classic states and holding the right button lists the extra ones (`[f] [b] [i] [*]` ...). An extra state is a second kind of checkmark: a click or right click leaves it alone and only a hold changes it.
 
 ## Notes in the Zen sidebar (pinned NOTES folder)
 
