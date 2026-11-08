@@ -19,6 +19,7 @@
  *   .bgalazka-triple-drag-shield; .zen-app-btn; .zen-app-dual-view-btn; .zen-app-tile
  * Attribute selectors used: bgalazka-addon-host; bgalazka-addon-host-fallback; bgalazka-addon-host-folder;
  *   bgalazka-addon-tab-id-bridge; bgalazka-corner-tiles; bgalazka-hover-panel-hidden;
+ *   zen-pinned-changed;
  *   bgalazka-opposite-docking; bgalazka-panel-side; bgalazka-push-page; bgalazka-secondary-toolbar-close;
  *   bgalazka-secondary-toolbar-swap; bgalazka-show-addon-host-folder; bgalazka-super-pin;
  *   bgalazka-tab-panel-launcher; bgalazka-translucency; bgalazka-triple-inward-toolbars;
@@ -355,6 +356,33 @@
 .bgalazka-panel-icon-host {
   position: relative !important;
 }
+/* Zen anchors a changed pinned tab's icon stack over the first (favicon) slot,
+ * independently of the reset-and-pin control in the tab-content flow. Keep
+ * that native geometry when the stack also hosts Zentral's panel launcher;
+ * otherwise the relative host is laid out after the reset button and the app
+ * icon visibly shifts to the right. The 16px host preserves the native icon
+ * slot while the child launcher remains centered by the rule below. */
+:root[bgalazka-corner-tiles="true"]
+  .tabbrowser-tab[zen-pinned-changed="true"][bgalazka-tab-panel-launcher="true"]:not(
+    [zen-essential]
+  )
+  > .tab-stack
+  > .tab-content
+  > .bgalazka-panel-icon-host {
+  position: absolute !important;
+  top: 50% !important;
+  left: 8px !important;
+  right: auto !important;
+  transform: translateY(-50%) !important;
+  width: 16px !important;
+  min-width: 16px !important;
+  max-width: 16px !important;
+  height: 16px !important;
+  min-height: 16px !important;
+  max-height: 16px !important;
+  margin: 0 !important;
+  pointer-events: none !important;
+}
 :root[bgalazka-corner-tiles="true"]
   :is(
     .tabbrowser-tab,
@@ -482,7 +510,8 @@
 }
 /* Pseudo Triple View: a plain panel with Notes open keeps its page on top and a clean band below it, inside the
  * panel (same padding mechanism as Quad View, no Triple View needed). Set by the Notes bar adapter. */
-:root[bgalazka-notes-pseudo="true"][bgalazka-quad-view="true"] #zen-app-panel-slider {
+:root[bgalazka-notes-pseudo="true"][bgalazka-quad-view="true"]
+  #zen-app-panel-slider {
   box-sizing: border-box !important;
   padding-bottom: var(--zentral-notes-panel-reserve, 0px) !important;
 }
@@ -825,5 +854,13 @@
 
 /* Super Pin owns its independent shell, not the hidden primary surface. */
 :root[bgalazka-super-pin="true"] #bgalazka-super-panel,
-:root[bgalazka-super-pin="true"] #bgalazka-super-panel :is(browser,button,input,.bgalazka-second-grip,.bgalazka-second-resize) {pointer-events:auto !important;-moz-window-dragging:no-drag !important;}
-:root[bgalazka-super-pin="true"] #bgalazka-super-panel browser {height:auto !important;flex:1 1 auto !important;}
+:root[bgalazka-super-pin="true"]
+  #bgalazka-super-panel
+  :is(browser, button, input, .bgalazka-second-grip, .bgalazka-second-resize) {
+  pointer-events: auto !important;
+  -moz-window-dragging: no-drag !important;
+}
+:root[bgalazka-super-pin="true"] #bgalazka-super-panel browser {
+  height: auto !important;
+  flex: 1 1 auto !important;
+}

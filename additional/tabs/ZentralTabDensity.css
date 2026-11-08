@@ -15,7 +15,7 @@
  *   bgalazka-addon-host-folder; bgalazka-corner-tiles; bgalazka-density-essentials; bgalazka-density-icons;
  *   bgalazka-density-newtab; bgalazka-density-urlbar; bgalazka-panel-black-switching;
  *   bgalazka-rss-compact-headers; bgalazka-rss-live-folder; bgalazka-tabbar-compact; breakout-extend;
- *   collapsed; hidden; pending; pinned; selected; style; zen-essential
+ *   collapsed; hidden; pending; pinned; selected; style; zen-essential; zen-pinned-changed
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
  * contracts from this source, not a promise that every collaborator is enabled at runtime.
@@ -76,6 +76,214 @@
   margin-block: 0 !important;
   align-self: stretch !important;
 }
+/* Changed-pinned tabs with a Zentral launcher get a real, ordered compact row:
+ * app/favicon first, reset-and-pin second, then the flexible title and trailing
+ * controls. The tab-content element is a XUL hbox, so set both the legacy
+ * ordinal group and modern order property. Only the title is allowed to shrink. */
+:root[bgalazka-tabbar-compact="true"][bgalazka-corner-tiles="true"]
+  .tabbrowser-tab[zen-pinned-changed="true"][bgalazka-tab-panel-launcher="true"]:not(
+    [zen-essential]
+  )
+  > .tab-stack
+  > .tab-content {
+  min-width: 0 !important;
+}
+:root[bgalazka-tabbar-compact="true"][bgalazka-corner-tiles="true"]
+  .tabbrowser-tab[zen-pinned-changed="true"][bgalazka-tab-panel-launcher="true"]:not(
+    [zen-essential]
+  )
+  > .tab-stack
+  > .tab-content
+  > .tab-icon-stack.bgalazka-panel-icon-host {
+  -moz-box-ordinal-group: 1 !important;
+  order: 1 !important;
+  position: relative !important;
+  inset: auto !important;
+  transform: none !important;
+  box-sizing: border-box !important;
+  -moz-box-flex: 0 !important;
+  flex: 0 0 18px !important;
+  width: 18px !important;
+  min-width: 18px !important;
+  max-width: 18px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  max-height: 18px !important;
+  margin-inline: 0 4px !important;
+  overflow: visible !important;
+  pointer-events: none !important;
+}
+:root[bgalazka-tabbar-compact="true"][bgalazka-corner-tiles="true"]
+  .tabbrowser-tab[zen-pinned-changed="true"][bgalazka-tab-panel-launcher="true"]:not(
+    [zen-essential]
+  )
+  > .tab-stack
+  > .tab-content
+  > .tab-reset-pin-button {
+  -moz-box-ordinal-group: 2 !important;
+  order: 2 !important;
+  box-sizing: border-box !important;
+  -moz-box-flex: 0 !important;
+  flex: 0 0 18px !important;
+  width: 18px !important;
+  min-width: 18px !important;
+  max-width: 18px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  max-height: 18px !important;
+  margin-inline: 0 4px !important;
+  padding: 0 !important;
+}
+:root[bgalazka-tabbar-compact="true"][bgalazka-corner-tiles="true"]
+  .tabbrowser-tab[zen-pinned-changed="true"][bgalazka-tab-panel-launcher="true"]:not(
+    [zen-essential]
+  )
+  > .tab-stack
+  > .tab-content
+  > .tab-reset-pin-button
+  > image {
+  -moz-box-flex: 0 !important;
+  flex: 0 0 12px !important;
+  width: 12px !important;
+  min-width: 12px !important;
+  max-width: 12px !important;
+  height: 12px !important;
+  min-height: 12px !important;
+  max-height: 12px !important;
+  opacity: 1 !important;
+}
+:root[bgalazka-tabbar-compact="true"][bgalazka-corner-tiles="true"]
+  .tabbrowser-tab[zen-pinned-changed="true"][bgalazka-tab-panel-launcher="true"]:not(
+    [zen-essential]
+  )
+  > .tab-stack
+  > .tab-content
+  > .tab-reset-pin-button::after {
+  width: 1.5px !important;
+  height: 10px !important;
+}
+:root[bgalazka-tabbar-compact="true"][bgalazka-corner-tiles="true"]
+  .tabbrowser-tab[zen-pinned-changed="true"][bgalazka-tab-panel-launcher="true"]:not(
+    [zen-essential]
+  )
+  > .tab-stack
+  > .tab-content
+  > .tab-audio-button {
+  -moz-box-ordinal-group: 3 !important;
+  order: 3 !important;
+  -moz-box-flex: 0 !important;
+  flex: 0 0 auto !important;
+}
+:root[bgalazka-tabbar-compact="true"][bgalazka-corner-tiles="true"]
+  .tabbrowser-tab[zen-pinned-changed="true"][bgalazka-tab-panel-launcher="true"]:not(
+    [zen-essential]
+  )
+  > .tab-stack
+  > .tab-content
+  > .tab-label-container {
+  -moz-box-ordinal-group: 4 !important;
+  order: 4 !important;
+  -moz-box-flex: 1 !important;
+  flex: 1 1 0% !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+}
+:root[bgalazka-tabbar-compact="true"][bgalazka-corner-tiles="true"]
+  .tabbrowser-tab[zen-pinned-changed="true"][bgalazka-tab-panel-launcher="true"]:not(
+    [zen-essential]
+  )
+  > .tab-stack
+  > .tab-content
+  > .tab-label-container
+  > .tab-label {
+  display: block !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+:root[bgalazka-tabbar-compact="true"][bgalazka-corner-tiles="true"]
+  .tabbrowser-tab[zen-pinned-changed="true"][bgalazka-tab-panel-launcher="true"]:not(
+    [zen-essential]
+  )
+  > .tab-stack
+  > .tab-content
+  > .tab-note-icon {
+  -moz-box-ordinal-group: 5 !important;
+  order: 5 !important;
+  -moz-box-flex: 0 !important;
+  flex: 0 0 auto !important;
+}
+:root[bgalazka-tabbar-compact="true"][bgalazka-corner-tiles="true"]
+  .tabbrowser-tab[zen-pinned-changed="true"][bgalazka-tab-panel-launcher="true"]:not(
+    [zen-essential]
+  )
+  > .tab-stack
+  > .tab-content
+  > .tab-close-button {
+  -moz-box-ordinal-group: 6 !important;
+  order: 6 !important;
+  box-sizing: border-box !important;
+  -moz-box-flex: 0 !important;
+  flex: 0 0 18px !important;
+  width: 18px !important;
+  min-width: 18px !important;
+  max-width: 18px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  max-height: 18px !important;
+  margin-inline-start: 4px !important;
+  padding: 0 !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+:root[bgalazka-tabbar-compact="true"][bgalazka-corner-tiles="true"]
+  .tabbrowser-tab[zen-pinned-changed="true"][bgalazka-tab-panel-launcher="true"]:not(
+    [zen-essential]
+  )
+  > .tab-stack
+  > .tab-content
+  > .tab-reset-button {
+  -moz-box-ordinal-group: 7 !important;
+  order: 7 !important;
+  -moz-box-flex: 0 !important;
+  flex: 0 0 18px !important;
+  width: 18px !important;
+  min-width: 18px !important;
+  max-width: 18px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  max-height: 18px !important;
+}
+
+/* In compact changed-pinned rows, the launcher is the favicon. Do not let
+ * hover-only corner-tile mode swap it back to the hidden native favicon. */
+:root[bgalazka-tabbar-compact="true"][bgalazka-corner-tiles="true"]
+  :is(
+    .tabbrowser-tab,
+    #zen-essentials-container .tabbrowser-tab,
+    [zen-essential="true"]
+  )[zen-pinned-changed="true"][bgalazka-tab-panel-launcher="true"]:not(
+    :hover
+  ):not(:focus-visible):not(:has(:focus-visible))
+  .bgalazka-panel-icon-host
+  > .zen-app-tile.bgalazka-tab-icon-panel {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+:root[bgalazka-tabbar-compact="true"][bgalazka-corner-tiles="true"]
+  .tabbrowser-tab[zen-pinned-changed="true"][bgalazka-tab-panel-launcher="true"]
+  .bgalazka-panel-icon-host
+  .tab-icon-image {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 /* Reserve a distinct icon slot. The panel launcher owns its wider icon host. */
 :root[bgalazka-tabbar-compact="true"]
   :is(tab, .tabbrowser-tab):not([pinned]):not([zen-essential]):not(
