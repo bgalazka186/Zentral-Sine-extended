@@ -9236,6 +9236,16 @@ __zentralShim.register = function (def) {
         return card;
       }
       const chip = (label, on = false) => h("button", { type: "button", class: "zn-chip" + (on ? " is-on" : "") }, label);
+      // A choice row with more than three options, or with long option names, is a dropdown: a row of chips for those wraps
+      // and overflows at larger text sizes. Short sets (On/Off, Plain/Filled/Outlined) stay chips.
+      const choiceIsDropdown = (choices) => choices.length > 3 || choices.some(([, text]) => String(text).length > 16);
+      const choiceDropdown = (o, value, onPick) => {
+        const select = h("select", { class: "zn-select", "aria-label": o.label });
+        for (const [v, text] of o.choices) select.append(h("option", { value: String(v) }, text));
+        select.value = String(value);
+        select.addEventListener("change", () => onPick(select.value));
+        return select;
+      };
       const field = (label, value, placeholder = "") => {
         const input = h("input", { type: "text", class: "zn-field", spellcheck: "false", "aria-label": label, placeholder });
         input.value = value;
@@ -9838,10 +9848,15 @@ __zentralShim.register = function (def) {
               plus.addEventListener("click", () => write(o, stepOption(o, value, 1)));
               row.append(minus, h("span", { class: "zn-quick-value" }, `${value}${o.unit}`), plus);
             } else {
-              for (const [v, text] of o.choices) {
-                const b = chip(text, value === v);
-                b.addEventListener("click", () => write(o, v));
-                row.append(b);
+              if (choiceIsDropdown(o.choices)) {
+                row.dataset.dropdown = "true";
+                row.append(choiceDropdown(o, value, (v) => write(o, v)));
+              } else {
+                for (const [v, text] of o.choices) {
+                  const b = chip(text, value === v);
+                  b.addEventListener("click", () => write(o, v));
+                  row.append(b);
+                }
               }
             }
             body.append(row);
@@ -9991,16 +10006,26 @@ __zentralShim.register = function (def) {
             input.addEventListener("change", () => setPref(o.pref, input.value.trim()));
             row.append(input);
           } else {
-            const group = h("div", { class: "zn-set-chips" });
-            for (const [v, text] of o.choices) {
-              const b = chip(text, value === v);
-              b.addEventListener("click", () => {
-                writeValue(o, v);
-                redraw();
-              });
-              group.append(b);
+            if (choiceIsDropdown(o.choices)) {
+              row.dataset.dropdown = "true";
+              row.append(
+                choiceDropdown(o, value, (v) => {
+                  writeValue(o, v);
+                  redraw();
+                }),
+              );
+            } else {
+              const group = h("div", { class: "zn-set-chips" });
+              for (const [v, text] of o.choices) {
+                const b = chip(text, value === v);
+                b.addEventListener("click", () => {
+                  writeValue(o, v);
+                  redraw();
+                });
+                group.append(b);
+              }
+              row.append(group);
             }
-            row.append(group);
           }
           return row;
         }

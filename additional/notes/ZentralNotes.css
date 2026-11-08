@@ -373,11 +373,40 @@
 }
 .zentral-notes-sheet .zn-check:disabled { cursor: default; opacity: 0.6; }
 .zentral-notes-sheet .zn-cell-check { display: inline-block; vertical-align: -3px; margin: 0 2px 0 0; }
-.zentral-notes-sheet .zn-check[data-status] { display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; line-height: 1; color: var(--zn-muted); }
-.zentral-notes-sheet .zn-check[data-status="/"] { color: #e0a030; border-color: #e0a030; }
-.zentral-notes-sheet .zn-check[data-status="!"] { color: #e5534b; border-color: #e5534b; }
-.zentral-notes-sheet .zn-check[data-status="?"] { color: #5b9bd5; border-color: #5b9bd5; }
-.zentral-notes-sheet .zn-check[data-on="true"] { background: var(--zn-accent); border-color: var(--zn-accent); }
+/* Task states: every state has its own hue (one custom property, --st). Glyph = hue pulled toward the text colour, so it stays
+   readable on light, dark, paper and tinted Zen themes; fill = a faint wash of the same hue. */
+.zentral-notes-sheet .zn-check[data-status] {
+  --st: var(--zn-muted);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; line-height: 1;
+  color: color-mix(in srgb, var(--st) 72%, var(--zn-text));
+  border-color: var(--st);
+  background: color-mix(in srgb, var(--st) 16%, transparent);
+}
+.zentral-notes-sheet .zn-check[data-status="-"] { --st: #8793a5; } /* cancelled   slate  */
+.zentral-notes-sheet .zn-check[data-status="!"] { --st: #e5534b; } /* important   red    */
+.zentral-notes-sheet .zn-check[data-status="f"] { --st: #f06a2c; } /* fire        vermilion */
+.zentral-notes-sheet .zn-check[data-status="/"] { --st: #e0a030; } /* in progress amber  */
+.zentral-notes-sheet .zn-check[data-status="*"] { --st: #e3c21b; } /* star         yellow */
+.zentral-notes-sheet .zn-check[data-status="p"] { --st: #a6c93a; } /* pro          lime   */
+.zentral-notes-sheet .zn-check[data-status="b"] { --st: #5cb85c; } /* bookmark     leaf green */
+.zentral-notes-sheet .zn-check[data-status=">"] { --st: #19a890; } /* forwarded    teal   */
+.zentral-notes-sheet .zn-check[data-status="l"] { --st: #22b8d4; } /* location     cyan   */
+.zentral-notes-sheet .zn-check[data-status="i"] { --st: #3fa2e8; } /* information  sky    */
+.zentral-notes-sheet .zn-check[data-status="?"] { --st: #6a86f0; } /* question     blue   */
+.zentral-notes-sheet .zn-check[data-status="<"] { --st: #8174f0; } /* scheduled    indigo */
+.zentral-notes-sheet .zn-check[data-status="\""] { --st: #a46cf0; } /* quote       violet */
+.zentral-notes-sheet .zn-check[data-status="I"] { --st: #c35fe0; } /* idea         purple */
+.zentral-notes-sheet .zn-check[data-status="n"] { --st: #e05cc4; } /* note         orchid */
+.zentral-notes-sheet .zn-check[data-status="c"] { --st: #e0508b; } /* con          rose   */
+.zentral-notes-sheet .zn-check[data-status="S"] { --st: #b5835a; } /* amount       bronze */
+/* Done: a fixed green badge, not the theme accent (on a green Zen theme the accent made the tick vanish). The ring uses the
+   text colour so the badge also separates from a green or any other tinted surface. */
+.zentral-notes-sheet .zn-check[data-on="true"] {
+  background: #1fae5f;
+  border-color: #1fae5f;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--zn-text) 38%, transparent);
+}
 .zentral-notes-sheet .zn-check[data-on="true"]::after {
   content: "";
   position: absolute;
@@ -388,6 +417,7 @@
   border: solid #fff;
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.55));
 }
 .zentral-notes-sheet .zn-hl {
   padding: 0 0.15em;
@@ -633,10 +663,31 @@
 .zentral-notes-sheet .zn-read .zn-callout[data-fold="closed"] .zn-fold-title::before { content: "\25B8\00a0"; }
 .zentral-notes-sheet .zn-read .zn-callout[data-fold="closed"] > :not(.zn-callout-title) { display: none; }
 /* spoilers (Reddit >!a!<, Discord ||a||), #tags and dates written as 2026-11-07 */
-.zentral-notes-sheet .zn-read .zn-spoiler { cursor: pointer; border-radius: 3px; background: currentColor; color: transparent; }
+/* Spoiler: currentColor cannot be the fill here (the element's own colour is transparent, which made it invisible), so the bar
+   is built from the theme text colour: a solid bar with a dotted frame, lighter on hover, a soft wash once revealed. */
+.zentral-notes-sheet .zn-read .zn-spoiler {
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 0.3em;
+  color: transparent;
+  background: color-mix(in srgb, var(--zn-text) 72%, transparent);
+  outline: 1px dotted color-mix(in srgb, var(--zn-text) 60%, transparent);
+  outline-offset: 1px;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  user-select: none;
+}
 .zentral-notes-sheet .zn-read .zn-spoiler > * { color: transparent; }
-.zentral-notes-sheet .zn-read .zn-spoiler.is-shown { background: color-mix(in srgb, currentColor 14%, transparent); color: inherit; }
+.zentral-notes-sheet .zn-read .zn-spoiler:hover,
+.zentral-notes-sheet .zn-read .zn-spoiler:focus-visible { background: color-mix(in srgb, var(--zn-text) 56%, transparent); }
+.zentral-notes-sheet .zn-read .zn-spoiler.is-shown {
+  color: inherit;
+  background: color-mix(in srgb, var(--zn-accent) 18%, transparent);
+  outline-style: dashed;
+  outline-color: color-mix(in srgb, var(--zn-accent) 60%, transparent);
+  user-select: auto;
+}
 .zentral-notes-sheet .zn-read .zn-spoiler.is-shown > * { color: inherit; }
+/* #tags and dates written as 2026-11-07 */
 .zentral-notes-sheet .zn-read .zn-tag { color: var(--zn-accent, #6aa7ff); background: color-mix(in srgb, var(--zn-accent, #6aa7ff) 14%, transparent); border-radius: 999px; padding: 0 6px; }
 .zentral-notes-sheet .zn-read .zn-date { border-bottom: 1px dotted color-mix(in srgb, currentColor 55%, transparent); }
 
@@ -824,6 +875,18 @@
 .zentral-notes-sheet .zn-set-heading { margin-top: 8px; color: var(--zn-muted); font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; }
 .zentral-notes-sheet .zn-set-row { display: flex; align-items: center; gap: 8px; min-height: 28px; }
 .zentral-notes-sheet .zn-set-row .zn-quick-label { flex: 1 1 40%; }
+/* Dropdown choice rows (settings window and quick settings): label on its own line, the select below it at full width. */
+.zentral-notes-sheet .zn-select {
+  flex: 1 1 100%; min-width: 0; max-width: 100%; box-sizing: border-box;
+  padding: 4px 8px; border: 1px solid var(--zn-line); border-radius: 6px;
+  background: color-mix(in srgb, var(--zn-text) 6%, transparent); color: var(--zn-text); color-scheme: inherit; font: inherit; outline: none; cursor: pointer;
+}
+.zentral-notes-sheet .zn-select:focus { border-color: var(--zn-accent); }
+.zentral-notes-sheet .zn-select option { background: var(--zn-surface); color: var(--zn-text); }
+.zentral-notes-sheet .zn-set-row[data-dropdown="true"],
+.zentral-notes-sheet .zn-quick-row[data-dropdown="true"] { flex-wrap: wrap; gap: 3px 8px; }
+.zentral-notes-sheet .zn-set-row[data-dropdown="true"] .zn-quick-label,
+.zentral-notes-sheet .zn-quick-row[data-dropdown="true"] .zn-quick-label { flex: 1 1 100%; }
 .zentral-notes-sheet .zn-set-chips { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
 .zentral-notes-sheet .zn-range { flex: 1 1 90px; min-width: 60px; height: 8px; margin: 0; accent-color: var(--zn-accent); }
 .zentral-notes-sheet .zn-set-row .zn-quick-value { min-width: 3.6em; }
