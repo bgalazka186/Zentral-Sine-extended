@@ -74,18 +74,18 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
   });
 
   await test("More menu: Notes by date opens/creates today's note in the Daily folder, once; Journal mode keeps one note", async () => {
-    openMore(); click(menuItem("Notes by date")); await tick();
+    openMore(); click(menuItem("Links & dates")); click(menuItem("Notes by date")); await tick();
     const today = c.ymdOf(Date.now());
     click(q(".zn-menu").querySelectorAll("button").find((b) => b.textContent.includes(today) && b.textContent.startsWith("Today")));
     await flushRaf();
     const made = store.list().filter((x) => c.dateOfNote(x) === today);
     assert.equal(made.length, 1);
     assert.equal(made[0].folder, "daily");
-    openMore(); click(menuItem("Notes by date")); await tick();
+    openMore(); click(menuItem("Links & dates")); click(menuItem("Notes by date")); await tick();
     click(q(".zn-menu").querySelectorAll("button").find((b) => b.textContent.startsWith("Today")));
     assert.equal(store.list().filter((x) => c.dateOfNote(x) === today).length, 1, "second time opens the same note");
     prefs.set("zen.workspace.zentral.notes.date_notes_mode", "single");
-    openMore(); click(menuItem("Notes by date")); await tick();
+    openMore(); click(menuItem("Links & dates")); click(menuItem("Notes by date")); await tick();
     click(q(".zn-menu").querySelectorAll("button").find((b) => b.textContent.startsWith("Tomorrow")));
     await flushRaf();
     const j = store.list().filter(c.isJournal);
@@ -126,14 +126,13 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     }
   });
 
-  await test("outline (#27): More > Outline lists the headings, marks the one under the caret and jumps to the chosen one", async () => {
+  await test("outline (#27): the Table of contents button lists the headings, marks the one under the caret and jumps to the chosen one", async () => {
     const body = "Title line\n\n## Install\nsteps\n\n### Linux\nmore\n\n## Usage\nrun it\n";
     const o = store.create(body); await flushRaf(); sheet.openNoteById(o.id); await flushRaf();
     const ta = q(".zn-editor"); dom.state.activeElement = ta;
     ta.selectionStart = ta.selectionEnd = body.indexOf("more");
-    openMore();
-    assert.ok(menuItem("Outline"), "More lists Outline");
-    click(menuItem("Outline")); await tick();
+    assert.ok(byTitle("Table of contents"), "the toolbar has a Table of contents button");
+    click(byTitle("Table of contents")); await tick();
     const labels = () => q(".zn-menu").querySelectorAll("button").map((b) => b.textContent);
     assert.deepEqual(labels(), ["Install", "\u2003Linux", "Usage"]);
     const btns = q(".zn-menu").querySelectorAll("button");
@@ -141,7 +140,7 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     click(btns[2]); await flushRaf();
     assert.equal(ta.selectionStart, body.indexOf("## Usage"), "the caret moved to the heading line");
     const plain = store.create("no headings here"); await flushRaf(); sheet.openNoteById(plain.id); await flushRaf();
-    openMore(); click(menuItem("Outline")); await tick();
+    click(byTitle("Table of contents")); await tick();
     assert.match(q(".zn-menu").textContent, /No headings in this note/, "a note without headings says so");
     assert.equal(q(".zn-menu").querySelectorAll("button").length, 0, "and nothing in it is clickable");
     openMore();
@@ -177,7 +176,7 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     const mk = (body, label) => { const n = store.create(body); store.setLabel(n.id, label); return n; };
     const n1 = mk("Lbl one\nx", "zzwork"), n2 = mk("Lbl two\nx", "zzWork"), n3 = mk("Lbl three\nx", "zzhome");
     await flushRaf(); sheet.openNoteById(n3.id); await flushRaf();
-    openMore(); click(menuItem("Labels")); await tick();
+    openMore(); click(menuItem("Labels")); click(menuItem("Manage all labels")); await tick();
     const rows = () => sheet.root.all().filter((e) => e._classes?.has("zn-labels-row"));
     // spellings differing only in case are one label; which one is shown depends on a same-millisecond tie, so compare case-insensitively
     const rowOf = (name) => rows().find((r) => r.querySelector(".zn-labels-name").textContent.toLowerCase() === name.toLowerCase());
@@ -200,15 +199,15 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     click(sheet.root.all().find((e) => e._classes?.has("zn-chip") && e.textContent === "Close")); await tick();
   });
 
-  await test("demo notes (#3): More > Install demo notes creates four notes in the Help folder, opens the tour, and a second run adds nothing", async () => {
+  await test("demo notes (#3): More > Install demo notes creates six notes in the Help folder, opens the tour, and a second run adds nothing", async () => {
     const helpCount = () => store.list().filter((n) => n.folder === "help").length;
     const before = helpCount();
-    openMore(); click(menuItem("Install demo notes")); await flushRaf();
-    assert.equal(helpCount(), before + 4);
+    openMore(); click(menuItem("Settings & help")); click(menuItem("Install demo notes")); await flushRaf();
+    assert.equal(helpCount(), before + 6);
     assert.equal(store.meta.folders.find((f) => f.id === "help")?.label, "Help");
     assert.equal(q(".zn-title").textContent, "Notes syntax tour", "the tour opens");
-    openMore(); click(menuItem("Install demo notes")); await flushRaf();
-    assert.equal(helpCount(), before + 4, "second run adds nothing");
+    openMore(); click(menuItem("Settings & help")); click(menuItem("Install demo notes")); await flushRaf();
+    assert.equal(helpCount(), before + 6, "second run adds nothing");
     assert.match(q(".zn-flash")?.textContent ?? sheet.root.textContent, /already installed/);
   });
 

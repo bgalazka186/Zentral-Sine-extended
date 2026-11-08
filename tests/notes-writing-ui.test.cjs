@@ -26,17 +26,24 @@ const WRITING_UI = {
   codeBlock: bar("Code block"), link: bar("Link\u2026"), noteLink: bar("Link to another note"), image: bar("Image"), heading: bar("Heading"),
   bullet: bar("Bulleted list"), numbered: bar("Numbered list"), check: bar("Checklist"), quote: bar("Quote"), table: bar("Table"),
   rule: bar("Horizontal rule"), indent: bar("Nest in"), outdent: bar("Nest out"),
-  sup: { at: "insert", label: "Superscript" }, sub: { at: "insert", label: "Subscript" }, kbd: { at: "insert", label: "Keyboard key" },
+  sup: { at: "insert", via: "More text styles", label: "Superscript" }, sub: { at: "insert", via: "More text styles", label: "Subscript" }, kbd: { at: "insert", via: "More text styles", label: "Keyboard key" },
+  underline: { at: "insert", via: "More text styles", label: "Underline" }, spoiler: { at: "insert", via: "More text styles", label: "Spoiler" }, comment: { at: "insert", via: "More text styles", label: "Hidden comment" },
+  mathInline: { at: "insert", via: "Math", label: "Inline math" }, mathBlock: { at: "insert", via: "Math", label: "Math block" },
+  details: { at: "insert", via: "Blocks and notes", label: "Collapsible section" },
+  insertDate: { at: "insert", via: "Date and time", label: "Today's date" }, insertTime: { at: "insert", via: "Date and time", label: "The time" },
+  calloutAbstract: { at: "insert", via: "Callout", label: "Abstract" }, calloutTodo: { at: "insert", via: "Callout", label: "Todo" }, calloutSuccess: { at: "insert", via: "Callout", label: "Success" },
+  calloutQuestion: { at: "insert", via: "Callout", label: "Question" }, calloutFailure: { at: "insert", via: "Callout", label: "Failure" }, calloutDanger: { at: "insert", via: "Callout", label: "Danger" },
+  calloutBug: { at: "insert", via: "Callout", label: "Bug" }, calloutExample: { at: "insert", via: "Callout", label: "Example" }, calloutQuote: { at: "insert", via: "Callout", label: "Quote" },
   calloutNote: { at: "insert", via: "Callout", label: "Note" }, calloutWarning: { at: "insert", via: "Callout", label: "Warning" }, calloutTip: { at: "insert", via: "Callout", label: "Tip" },
   calloutImportant: { at: "insert", via: "Callout", label: "Important" }, calloutCaution: { at: "insert", via: "Callout", label: "Caution" }, calloutInfo: { at: "insert", via: "Callout", label: "Info" },
   pastePicture: { at: "insert", label: "Paste picture from clipboard" }, pictureOptions: { at: "insert", label: "Picture options" },
-  footnote: { at: "insert", label: "Footnote" }, hubList: { at: "insert", label: "Hub list of notes" },
-  dateToday: { at: "more", label: "Notes by date" }, dateTomorrow: { at: "more", label: "Notes by date" }, dateNext: { at: "more", label: "Notes by date" }, dateList: { at: "more", label: "Notes by date" },
-  history: { at: "more", label: "Version history" }, outline: { at: "more", label: "Outline" },
+  footnote: { at: "insert", via: "Blocks and notes", label: "Footnote" }, hubList: { at: "insert", via: "Blocks and notes", label: "Hub list of notes" },
+  dateToday: { at: "more", via: "Links & dates", label: "Notes by date" }, dateTomorrow: { at: "more", via: "Links & dates", label: "Notes by date" }, dateNext: { at: "more", via: "Links & dates", label: "Notes by date" }, dateList: { at: "more", via: "Links & dates", label: "Notes by date" },
+  history: { at: "more", label: "Version history" }, outline: bar("Table of contents"),
   find: { at: "more", label: "Find in notes" }, remind: { at: "more", label: "Remind me" }, newNote: { at: "more", label: "New note" },
   list: { at: "head", label: "All notes" }, mode: bar("Read"), split: bar("Split view"), settings: bar("Quick settings"),
   recent: { at: "list", label: "Recent" }, notePin: { at: "head", label: "Pin note to the top" }, keepOpen: { at: "head", label: "Kept open" },
-  larger: { at: "head", label: "Larger" }, span: { at: "more", label: "Fill the whole area" }, resetGeo: { at: "more", label: "Reset position and size" },
+  larger: { at: "head", label: "Larger" }, span: { at: "more", via: "Window", label: "Fill the whole area" }, resetGeo: { at: "more", via: "Window", label: "Reset position and size" },
   // Global actions work outside the sheet; each has a visible equivalent, named here.
   quickNew: { at: "global", label: "Notes button (opens the card) and More > New note" },
   openFloating: { at: "global", label: "Notes button" },
@@ -87,7 +94,7 @@ const WRITING_UI = {
       if (ui.at === "global") continue;
       if (ui.at === "bar" || ui.at === "head") { const b = find(ui.label); assert.ok(b, `${id}: no button "${ui.label}"`); assert.ok(labelOf(b).length > 2, id + " has an accessible name"); assert.ok(b.title, id + " has a tooltip"); }
       else if (ui.at === "insert") { click(find("More: pictures")); if (ui.via) { assert.ok(menuHas(ui.via), `${id}: no \"${ui.via}\" entry`); click(menuBtns().find((b) => b.textContent.startsWith(ui.via))); await new Promise((r) => setImmediate(r)); } assert.ok(menuHas(ui.label), `${id}: not in the Insert menu: ${menuBtns().map((b) => b.textContent)}`); }
-      else if (ui.at === "more") { click(find("More")); assert.ok(menuHas(ui.label), `${id}: not in the More menu: ${menuBtns().map((b) => b.textContent)}`); }
+      else if (ui.at === "more") { click(find("More")); if (ui.via) { assert.ok(menuHas(ui.via), `${id}: no "${ui.via}" group`); click(menuBtns().find((b) => b.textContent.startsWith(ui.via))); } assert.ok(menuHas(ui.label), `${id}: not in the More menu: ${menuBtns().map((b) => b.textContent)}`); }
       else if (ui.at === "list") { assert.ok(sheet.root.all().some((e) => e._classes.has("zn-chip") && e.textContent === ui.label), id); }
       closeAny();
     }
@@ -129,6 +136,7 @@ const WRITING_UI = {
     assert.equal(find("Bold").hidden, true);
     assert.equal(find("Link to another note").hidden, true);
     click(find("More: pictures"));
+    click(menuBtns().find((b) => b.textContent.startsWith("More text styles")));
     assert.ok(!menuHas("Superscript") && menuHas("Subscript"), "hidden entry leaves the Insert menu, the others stay");
     closeAny();
     prep("word", 0, 4); key(ta, "b", { ctrlKey: true, code: "KeyB" });

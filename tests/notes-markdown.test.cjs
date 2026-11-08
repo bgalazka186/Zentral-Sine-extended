@@ -374,8 +374,9 @@ test("C2.2 table alignment, image + link, code languages, callouts, hidden tools
   assert.equal("> [!NOTE]\n> hi".slice(0, swap.start) + swap.text + "> [!NOTE]\n> hi".slice(swap.end), "> [!CAUTION]\n> hi", "only the kind changes");
   assert.equal(c.insertCallout("x", 0, 1, "nonsense").text.split("\n")[0], "> [!NOTE]");
   for (const [kind] of c.CALLOUT_KINDS) {
-    const [q] = c.parseBlocks(c.insertCallout("body", 0, 4, kind).text);
-    assert.equal(q.callout.kind, kind);
+    // Without the flavor part the plain fallback reads only the six GitHub / classic kinds; tests/notes-flavors.test.cjs
+    // checks all of them with the part loaded.
+    if (c.CALLOUT_KINDS.findIndex(([k]) => k === kind) < 6) assert.equal(c.parseBlocks(c.insertCallout("body", 0, 4, kind).text)[0].callout.kind, kind);
     assert.ok(c.SHORTCUT_ACTIONS.some((s) => s.id === c.calloutId(kind) && s.edit), "shortcut action for " + kind);
   }
   assert.equal(c.SHORTCUT_ACTIONS.find((s) => s.id === "calloutNote").def, "Ctrl+Shift+2");

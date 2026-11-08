@@ -14,9 +14,9 @@ Desktop.ini
 .idea/
 
 # Local documentation & reference artifacts (not needed to run the mod)
-docs/
+docs/*
+!docs/MARKDOWN_FLAVORS.md
 patches/
-tools/
 zentral/upstream/
 
 # Local notes

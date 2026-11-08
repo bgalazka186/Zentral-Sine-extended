@@ -174,10 +174,10 @@ async function test(name, fn) {
   });
   await test("demo notes (#3): valid fixed ids, every [[link]] points at another demo note, all render and export", () => {
     const demos = Array.from(c.DEMO_NOTES);
-    assert.equal(demos.length, 4);
-    assert.equal(new Set(demos.map((d) => d.id)).size, 4, "ids are unique");
+    assert.equal(demos.length, 6);
+    assert.equal(new Set(demos.map((d) => d.id)).size, 6, "ids are unique");
     const titles = demos.map((d) => c.demoTitle(d));
-    assert.deepEqual(titles, ["Notes syntax tour", "Linking notes demo", "Callouts and reminders", "Torture test (placeholder)"]);
+    assert.deepEqual(titles, ["Notes syntax tour", "Linking notes demo", "Callouts and reminders", "Markdown flavors showcase", "Typing shortcuts and where things are", "Torture test (placeholder)"]);
     for (const d of demos) {
       assert.match(d.id, /^[A-Za-z0-9_][A-Za-z0-9_ .-]{0,120}$/, d.id + " passes the note id rule");
       for (const m of d.body.replace(/`[^`\n]*`/g, "").matchAll(/\[\[([^\]\n]+)\]\]/g)) assert.ok(titles.includes(m[1]) || /^embed$/.test(m[1]) || /^Note#Heading$/.test(m[1]), `${d.id}: [[${m[1]}]] has no demo target`);

@@ -2605,8 +2605,10 @@
     }
     // Every non-empty line of the selection becomes a task with the given state: a task line only changes its state,
     // any other line loses its list / heading / quote prefix first. Same range rules as toggleLinePrefix.
+    // Everything the hold menu of the checklist button offers: the six classic states, then the Obsidian theme set (E10).
+    const TASK_PICKER = Object.freeze([...TASK_STATUSES, ...Object.entries(TASK_STATUS_NAMES).filter(([k]) => !TASK_STATUSES.some(([c]) => c === k))]);
     function setTaskStatus(value, s, e, ch) {
-      if (!TASK_STATUSES.some(([k]) => k === ch)) return { start: s, end: e, text: value.slice(s, e), selStart: s, selEnd: e };
+      if (!TASK_PICKER.some(([k]) => k === ch)) return { start: s, end: e, text: value.slice(s, e), selStart: s, selEnd: e };
       const ls = value.lastIndexOf("\n", s - 1) + 1;
       let le = value.indexOf("\n", e);
       if (le === -1) le = value.length;
@@ -2617,7 +2619,7 @@
         .split("\n")
         .map((l) => {
           if (!l.trim()) return l;
-          const m = /^(\s*[-*+]\s+)\[[ xX\-/?!]\](\s)/.exec(l);
+          const m = /^(\s*[-*+]\s+)\[[^\]\n]\](\s)/.exec(l);
           if (m) return m[1] + "[" + ch + "]" + l.slice(m[0].length - 1);
           return l.replace(STRIP_PREFIX, "$1").replace(/^(\s*)/, "$1- [" + ch + "] ");
         })
@@ -2739,19 +2741,24 @@
     // on a block that already starts with a callout line only the kind changes.
     const CALLOUT_KINDS = Object.freeze([
       ["note", "Note"], ["tip", "Tip"], ["important", "Important"], ["warning", "Warning"], ["caution", "Caution"], ["info", "Info"],
+      ["abstract", "Abstract"], ["todo", "Todo"], ["success", "Success"], ["question", "Question"], ["failure", "Failure"],
+      ["danger", "Danger"], ["bug", "Bug"], ["example", "Example"], ["quote", "Quote"],
     ]);
     const calloutId = (kind) => "callout" + kind[0].toUpperCase() + kind.slice(1);
-    function insertCallout(value, s, e, kind) {
+    function insertCallout(value, s, e, kind, fold = "") {
       kind = CALLOUT_KINDS.some((k) => k[0] === kind) ? kind : "note";
-      const head = "> [!" + kind.toUpperCase() + "]";
+      fold = fold === "-" || fold === "+" ? fold : ""; // F22: "-" starts closed, "+" starts open
+      const head = "> [!" + kind.toUpperCase() + "]" + fold;
       const ls = value.lastIndexOf("\n", s - 1) + 1;
       let le = value.indexOf("\n", e > s ? e - 1 : e);
       if (le === -1) le = value.length;
       const lines = value.slice(ls, le).split("\n");
       let text;
-      const already = /^>\s*\[!(?:note|tip|important|warning|caution|info)\]/i.exec(lines[0]);
+      const already = /^>\s*\[!(?:[a-z][\w-]*)\]/i.exec(lines[0]);
       if (already) {
-        lines[0] = head + lines[0].slice(already[0].length);
+        let rest = lines[0].slice(already[0].length);
+        if (fold) rest = rest.replace(/^[+-]/, ""); // asking for a fold replaces the old one; a plain kind change keeps it
+        lines[0] = head + rest;
         text = lines.join("\n");
       } else if (!lines.join("").trim()) text = head + "\n> ";
       else text = head + "\n" + lines.map((l) => (l.trim() ? "> " + l : ">")).join("\n");
@@ -2788,12 +2795,22 @@
       { id: "sup", label: "Superscript", def: "", edit: true },
       { id: "sub", label: "Subscript", def: "", edit: true },
       { id: "kbd", label: "Keyboard key", def: "", edit: true },
+      { id: "underline", label: "Underline", def: "", edit: true },
+      { id: "spoiler", label: "Spoiler  ||text||", def: "", edit: true },
+      { id: "comment", label: "Hidden comment  %%text%%", def: "", edit: true },
+      { id: "mathInline", label: "Inline math  $x$", def: "", edit: true },
+      { id: "mathBlock", label: "Math block  $$", def: "", edit: true },
+      { id: "details", label: "Collapsible section  <details>", def: "", edit: true },
+      { id: "insertDate", label: "Insert today's date", def: "", edit: true },
+      { id: "insertTime", label: "Insert the time", def: "", edit: true },
       { id: "calloutNote", label: "Callout: note", def: "Ctrl+Shift+2", edit: true },
       { id: "calloutWarning", label: "Callout: warning", def: "Ctrl+Shift+3", edit: true },
       { id: "calloutTip", label: "Callout: tip", def: "", edit: true },
       { id: "calloutImportant", label: "Callout: important", def: "", edit: true },
       { id: "calloutCaution", label: "Callout: caution", def: "", edit: true },
       { id: "calloutInfo", label: "Callout: info", def: "", edit: true },
+      // The other kinds of Obsidian's list (no default key; assign one under Keyboard shortcuts).
+      ...CALLOUT_KINDS.slice(6).map(([k, label]) => ({ id: calloutId(k), label: "Callout: " + label.toLowerCase(), def: "", edit: true })),
       { id: "pastePicture", label: "Paste picture from clipboard", def: "", edit: true },
       { id: "pictureOptions", label: "Picture options\u2026 (size, alignment)", def: "", edit: true },
       { id: "find", label: "Find in this note and other notes", def: "Ctrl+F" },
@@ -2802,7 +2819,7 @@
       { id: "dateTomorrow", label: "Open tomorrow's note", def: "" },
       { id: "dateNext", label: "Open the next work day's note", def: "" },
       { id: "dateList", label: "Notes by date\u2026", def: "" },
-      { id: "outline", label: "Outline of this note (headings)\u2026", def: "" },
+      { id: "outline", label: "Table of contents of this note (headings)\u2026", def: "" },
       { id: "history", label: "Version history of this note\u2026", def: "" },
       { id: "newNote", label: "New note", def: "Ctrl+N" },
       { id: "list", label: "All notes and search", def: "Ctrl+K" },
@@ -2832,6 +2849,8 @@
       ["codeBlock", "Code block"], ["link", "Link"], ["noteLink", "Link to another note"], ["image", "Image"], ["table", "Table"],
       ...CALLOUT_KINDS.map(([k, label]) => [calloutId(k), "Callout: " + label.toLowerCase()]),
       ["sup", "Superscript"], ["sub", "Subscript"], ["kbd", "Keyboard key"], ["footnote", "Footnote"], ["hubList", "Hub list of notes"],
+      ["underline", "Underline"], ["spoiler", "Spoiler"], ["comment", "Hidden comment"], ["mathInline", "Inline math"], ["mathBlock", "Math block"],
+      ["details", "Collapsible section"], ["insertDate", "Insert date"], ["insertTime", "Insert time"], ["outline", "Table of contents"],
     ]);
     const HIDEABLE_IDS = new Set(HIDEABLE_TOOLS.map((t) => t[0]));
     // Preference text "bold,sup" -> Set of valid ids (unknown words are ignored).
@@ -2922,8 +2941,8 @@
       { id: "setext", label: "Text over === or --- is a heading", pref: PREF.SETEXT, kind: "bool", def: false },
       { id: "theme", label: "Theme", pref: PREF.THEME, kind: "choice", def: "zentral", choices: NOTE_THEMES.map(([k, t]) => [k, t]) },
     ]);
-    const QUICK_IDS = Object.freeze(["font", "lineHeight", "wrap", "blank", "breaks", "sync", "copy", "theme"]);
-    const QUICK_OPTIONS = Object.freeze(WRITING_OPTIONS.filter((o) => QUICK_IDS.includes(o.id)));
+    const QUICK_IDS = Object.freeze(["font", "lineHeight", "wrap", "blank", "breaks", "sync", "copy", "mdFlavor", "theme"]);
+    // QUICK_OPTIONS is built after SETTINGS_TABS (below): the Markdown mode lives in a settings tab, not in WRITING_OPTIONS.
     const stepOption = (opt, current, dir) => clampInt((Number(current) || opt.def) + dir * opt.step, opt.min, opt.max);
 
     // ---- colour maths for the in-app picker (hex <-> HSL, no native colour dialog: its popup counts as an
@@ -2967,6 +2986,17 @@
     const C = (id, label, pref, seed) => ({ id, label, pref, kind: "color", seed, theme: true });
     const SETTINGS_TABS = Object.freeze([
       { id: "writing", label: "Writing", items: WRITING_OPTIONS },
+      {
+        id: "markdown", label: "Markdown", items: [
+          { kind: "heading", label: "Which syntax is read (a note can choose its own in its More menu)" },
+          { id: "mdFlavor", label: "Markdown mode (a note can set its own in its menu)", pref: PREF.MD_FLAVOR, kind: "choice", def: "mixed", choices: FLAVORS_PART ? FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]]) : [["mixed", "Mixed"]] },
+          { id: "singleTilde", label: "One tilde, ~a~, in the mixed modes", pref: PREF.TILDE, kind: "choice", def: "sub", choices: [["sub", "Subscript (H~2~O)"], ["strike", "Strikethrough (as on GitHub)"]] },
+          { id: "ignoreSyntax", label: "Show as plain text (spaces between): >[!info] <mark> == or a rule id such as A10", pref: PREF.IGNORE_SYNTAX, kind: "text", def: "" },
+          { id: "textShortcuts", label: "Typing shortcuts: {{date}}  @today  /tomorrow  @+3d  @monday", pref: PREF.TEXT_SHORTCUTS, kind: "choice", def: "all", choices: [["all", "All: {{ }}, @ and /"], ["braces", "Only {{date}} style"], ["off", "Off"]] },
+          { id: "shortcutDate", label: "Date format of the shortcuts", pref: PREF.SHORTCUT_DATE, kind: "text", def: "YYYY-MM-DD" },
+          { id: "shortcutTime", label: "Time format of the shortcuts", pref: PREF.SHORTCUT_TIME, kind: "text", def: "HH:mm" },
+        ],
+      },
       {
         id: "window", label: "Window", items: [
           { id: "dock", label: "Dock to the sidebar", pref: PREF.DOCK_SIDEBAR, kind: "bool", def: false },
@@ -3038,13 +3068,6 @@
           { id: "defaultView", label: "A panel opens in", pref: PREF.DEFAULT_VIEW, kind: "choice", def: "last", choices: [["last", "The view used last"], ["edit", "Editor"], ["read", "Preview"], ["split", "Split: editor and preview"]] },
           { id: "hubDesc", label: "Hub notes show a short description for each linked note", pref: PREF.HUB_DESC, kind: "bool", def: true },
           { id: "wikiAuto", label: "Suggest notes while typing [[", pref: PREF.WIKI_COMPLETE, kind: "bool", def: true },
-          { kind: "heading", label: "Markdown mode and shortcuts" },
-          { id: "mdFlavor", label: "Markdown mode (a note can set its own in its menu)", pref: PREF.MD_FLAVOR, kind: "choice", def: "mixed", choices: FLAVORS_PART ? FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]]) : [["mixed", "Mixed"]] },
-          { id: "singleTilde", label: "One tilde, ~a~, in the mixed modes", pref: PREF.TILDE, kind: "choice", def: "sub", choices: [["sub", "Subscript (H~2~O)"], ["strike", "Strikethrough (as on GitHub)"]] },
-          { id: "ignoreSyntax", label: "Show as plain text (spaces between): >[!info] <mark> == or a rule id such as A10", pref: PREF.IGNORE_SYNTAX, kind: "text", def: "" },
-          { id: "textShortcuts", label: "Typing shortcuts: {{date}}  @today  /tomorrow  @+3d  @monday", pref: PREF.TEXT_SHORTCUTS, kind: "choice", def: "all", choices: [["all", "All: {{ }}, @ and /"], ["braces", "Only {{date}} style"], ["off", "Off"]] },
-          { id: "shortcutDate", label: "Date format of the shortcuts", pref: PREF.SHORTCUT_DATE, kind: "text", def: "YYYY-MM-DD" },
-          { id: "shortcutTime", label: "Time format of the shortcuts", pref: PREF.SHORTCUT_TIME, kind: "text", def: "HH:mm" },
           { id: "linkedStrip", label: "Show \"Linked from\" under the read view", pref: PREF.BACKLINKS_PANEL, kind: "bool", def: false },
           { id: "hiddenMenu", label: "Hidden tools stay reachable in More", pref: PREF.HIDDEN_MENU, kind: "bool", def: true },
           { id: "dateMode", label: "Date notes", pref: PREF.DATE_MODE, kind: "choice", def: "separate", choices: [["separate", "One note per day"], ["single", "All in one Journal note"]] },
@@ -3072,6 +3095,9 @@
         ],
       },
     ]);
+    const QUICK_OPTIONS = Object.freeze(
+      QUICK_IDS.map((id) => [...WRITING_OPTIONS, ...SETTINGS_TABS.flatMap((t) => t.items || [])].find((o) => o.id === id)).filter(Boolean),
+    );
 
     // ======================================================================
     // Pure core: appearance overrides (Notes appearance menu)
@@ -4853,7 +4879,7 @@
         "## Links and footnotes", "",
         "A [web link](https://example.com), a link to another note: [[Linking notes demo]], and a footnote.[^1]", "",
         "[^1]: Footnotes are collected at the bottom of the read view.", "",
-        "---", "", "Next: [[Callouts and reminders]]", ""].join("\n") },
+        "---", "", "Next: [[Callouts and reminders]], [[Markdown flavors showcase]], [[Typing shortcuts and where things are]]", ""].join("\n") },
       { id: "zn-demo-links", body: [
         "# Linking notes demo", "",
         "Write `[[` and start typing a note's title to link to it. Links work in both directions:", "",
@@ -4862,15 +4888,17 @@
         "## Jump inside a note", "",
         "[Go to Section B](#section-b) scrolls to the heading below.", "",
         "## Section A", "", "Some text.", "",
-        "## Section B", "", "You landed here. Try More > Outline to see every heading of this note.", ""].join("\n") },
+        "## Section B", "", "You landed here. Try the Table of contents button on the toolbar to see every heading of this note.", ""].join("\n") },
       { id: "zn-demo-callouts", body: [
         "# Callouts and reminders", "",
-        "> [!NOTE]", "> A note callout. Insert one from the caret menu next to the toolbar: Callout.", "",
+        "> [!NOTE]", "> A note callout. Insert one from the caret menu at the end of the toolbar: Callout.", "",
         "> [!TIP] A tip with its own title", "> Tips can have several lines.", "> Second line.", "",
         "> [!IMPORTANT]", "> Important.", "", "> [!WARNING]", "> Warning.", "", "> [!CAUTION]", "> Caution.", "", "> [!INFO]", "> Info.", "",
         "## Reminders", "",
-        "Open More > Remind me..., pick a time (to the minute) and a bell chip appears beside the title when it is set.",
+        "Open More > Remind me\u2026, pick a time (to the minute) and a bell chip appears beside the title when it is set.",
         "Try a time two minutes from now to see the notification.", ""].join("\n") },
+      { id: "zn-demo-flavors", body: ["# Markdown flavors showcase", "", "Syntax from GitHub, Obsidian and Reddit in one note (Settings > Markdown: the mode decides which spelling wins where they differ). Every entry below has a button: open the caret menu at the end of the toolbar.", "", "## Text styles", "", "**bold**, *italic*, ***both***, ~~strike~~, ==highlight==, =={green}green==, `code`, <u>underline</u>, ||spoiler||, X^2^, H~2~O, <kbd>Ctrl</kbd>.", "", "A %%hidden comment%% sits between these words and shows only while editing.", "", "## Callouts", "", "> [!NOTE]", "> GitHub kinds: note, tip, important, warning, caution.", "", "> [!QUESTION] Obsidian kinds, with a title", "> abstract, info, todo, success, question, failure, danger, bug, example, quote.", "", "> [!FAQ]- Foldable, closed", "> Click the title to open. Use + instead of - to start open.", "", "## Tasks", "", "- [ ] to do", "- [x] done", "- [/] in progress", "- [-] cancelled", "- [?] question", "- [!] important", "- [>] forwarded", "- [*] star", "(hold the Checklist button to pick a state)", "", "## Math", "", "Inline: $E = mc^2$. Block:", "", "$$", "\\int_0^1 x^2 \\, dx = \\frac{1}{3}", "$$", "", "## Collapsible section", "", "<details>", "<summary>Click to open</summary>", "", "Hidden text with **formatting**.", "", "</details>", "", "## Code", "", "```diff", "- removed line", "+ added line", "```", "", "## Table with line breaks", "", "| Item | Note |", "| --- | --- |", "| one | first line<br>second line |", "", "## Dates and tags", "", "Today is {{date}}. Insert it from the caret menu: Date and time. Tags like #demo/flavors are recognised.", "", "## Footnote", "", "A claim with a footnote.[^1]", "", "[^1]: Insert > Blocks and notes > Footnote.", "", "Related: [[Typing shortcuts and where things are]], [[Notes syntax tour]]", ""].join("\n") },
+      { id: "zn-demo-shortcuts", body: ["# Typing shortcuts and where things are", "", "## Type a word, get a value", "", "Settings > Markdown switches these on or off and sets the date and time format.", "", "- `{{date}}`, `{{time}}`, `{{title}}`: replaced when you type the closing braces.", "- `@today`, `@tomorrow`, `@yesterday`, `@weekday`, `@now`: replaced on Space or Enter.", "- `@+3d`, `@-2d`, `@+1w`, `@monday`: a date that far away.", "- `/today`, `/time`, `/tomorrow`: the same with a slash.", "", "No typing needed: Insert caret menu > Date and time, or give it a key under Keyboard shortcuts.", "", "## Where is everything", "", "- **Toolbar**: bold, italic, strike, highlight, headings, lists, checklist (hold: task states), quote, nest in/out, rule, code, links, image, table, **Table of contents**.", "- **Caret menu at the end of the toolbar**: pictures, callouts (all kinds, foldable), more text styles (underline, spoiler, hidden comment, sup, sub, key, line break), math, collapsible section, footnote, hub list, date and time.", "- **Quick settings** (sliders button): text size, wrapping, Markdown mode, theme.", "- **Settings**: Writing, Markdown, Window, Appearance, Capture, Links & history.", "- **More (three dots)**: import and export, labels, reminder, templates, links and dates, version history, window, settings and help.", "", "Back to [[Notes syntax tour]].", ""].join("\n") },
       { id: "zn-demo-torture", body: [
         "# Torture test (placeholder)", "",
         "These lines poke at edge cases. Each should render without breaking the layout; the owner's own torture test should replace or extend this note.", "",
@@ -5434,7 +5462,7 @@
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
-        wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
+        wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
@@ -5473,6 +5501,7 @@
     const ICONS = {
       note: "M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z M15 3v6h6",
       list: "M4 6h16M4 12h16M4 18h16",
+      toc: "M4 6h16 M9 12h11 M9 18h11 M4 12h.01 M4 18h.01",
       plus: "M12 5v14M5 12h14",
       x: "M18 6 6 18M6 6l12 12",
       pin: "M12 17v5 M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z",
@@ -6010,6 +6039,7 @@
       const tImage = iconButton("image", "Image");
       const tNumbered = iconButton("numbered", "Numbered list");
       const tTable = iconButton("table", "Table\u2026");
+      const tToc = iconButton("toc", "Table of contents of this note");
       const tInsert = iconButton("caret", "More: pictures, callouts, superscript, subscript, keyboard key (hold: callout kinds)", "zn-caret");
       const tSettings = iconButton("sliders", "Quick settings", "zn-mode-btn");
       const tSync = iconButton("link", "Linked scrolling", "zn-mode-btn zn-sync-btn");
@@ -6021,7 +6051,7 @@
         [tNumbered, "Numbered list", "numbered"], [tCheck, "Checklist", "check"], [tQuote, "Quote (nest deeper with the indent button)", "quote"],
         [tOutdent, "Nest out: list or quote one level up", "outdent"], [tIndent, "Nest in: list or quote one level deeper", "indent"],
         [tRule, "Horizontal rule", "rule"], [tCode, "Inline code", "code"], [tCodeBlock, "Code block", "codeBlock"],
-        [tLink, "Link\u2026", "link"], [tNoteLink, "Link to another note\u2026", "noteLink"], [tImage, "Image", "image"], [tTable, "Table\u2026", "table"], [tSettings, "Quick settings", "settings"],
+        [tLink, "Link\u2026", "link"], [tNoteLink, "Link to another note\u2026", "noteLink"], [tImage, "Image", "image"], [tTable, "Table\u2026", "table"], [tToc, "Table of contents", "outline"], [tSettings, "Quick settings", "settings"],
       ];
       const getPref = (k, d) => (env.getPref ? env.getPref(k, d) : d);
       const setPref = (k, v) => env.setPref?.(k, v);
@@ -6040,7 +6070,7 @@
         "div",
         { class: "zn-tools" },
         tBold, tItalic, tStrike, tHl, tHlMenu, tHeading, tBullet, tNumbered, tCheck, tQuote, tOutdent, tIndent, tRule,
-        tCode, tCodeBlock, tLink, tNoteLink, tImage, tTable, tInsert,
+        tCode, tCodeBlock, tLink, tNoteLink, tImage, tTable, tToc, tInsert,
         h("span", { class: "zn-grow" }),
         tSettings,
         tSync,
@@ -7262,6 +7292,13 @@
       }
       const sel = () => [ta.selectionStart, ta.selectionEnd];
       const hlOpen = () => (store.meta.highlight === "yellow" ? "==" : `=={${store.meta.highlight}}`);
+      // Today's date / the time as plain text, in the format of the typing shortcuts (settings: date and time format).
+      function insertStamp(kind) {
+        if (!SHORTCUTS_PART) return flash("Typing shortcuts are not available in this install");
+        const text = SHORTCUTS_PART.formatDate(env.now ? env.now() : Date.now(), kind === "date" ? getPref(PREF.SHORTCUT_DATE, "YYYY-MM-DD") : getPref(PREF.SHORTCUT_TIME, "HH:mm"));
+        const [a, b] = sel();
+        applyEdit({ start: a, end: b, text, selStart: a + text.length, selEnd: a + text.length });
+      }
       const fmt = {
         code: () => applyEdit(wrapSelection(ta.value, ...sel(), "`")),
         codeBlock: () => askCodeBlock(),
@@ -7271,6 +7308,14 @@
         sup: () => applyEdit(wrapSelection(ta.value, ...sel(), "^")),
         sub: () => applyEdit(wrapSelection(ta.value, ...sel(), "~")),
         kbd: () => applyEdit(wrapSelection(ta.value, ...sel(), "<kbd>", "</kbd>")),
+        underline: () => applyEdit(wrapSelection(ta.value, ...sel(), "<u>", "</u>")),
+        spoiler: () => applyEdit(wrapSelection(ta.value, ...sel(), "||")),
+        comment: () => applyEdit(wrapSelection(ta.value, ...sel(), "%%")),
+        mathInline: () => applyEdit(wrapSelection(ta.value, ...sel(), "$")),
+        mathBlock: () => applyEdit(wrapSelection(ta.value, ...sel(), "$$\n", "\n$$")),
+        details: () => applyEdit(wrapSelection(ta.value, ...sel(), "<details>\n<summary>Title</summary>\n\n", "\n\n</details>")),
+        insertDate: () => insertStamp("date"),
+        insertTime: () => insertStamp("time"),
         link: () => askLink(),
         noteLink: () => askNoteLink(),
         footnote: () => applyEdit(insertFootnote(ta.value, ...sel())),
@@ -7287,6 +7332,7 @@
         indent: () => applyEdit(nestLines(ta.value, ...sel(), 1)),
         outdent: () => applyEdit(nestLines(ta.value, ...sel(), -1)),
       };
+      fmt.outline = () => showOutline(); // reachable from "Hidden tools" too
       for (const [kind] of CALLOUT_KINDS) fmt[calloutId(kind)] = () => applyEdit(insertCallout(ta.value, ...sel(), kind));
       const needEdit = (fn) => () => {
         if (mode === "read") setMode("edit");
@@ -7304,7 +7350,7 @@
         // Quote and the "More" caret: a tap is what it always was, holding lists the callout kinds (a callout is a quote with a marker).
         [tQuote, fmt.quote, calloutVariants],
         [tInsert, () => showInsertMenu(), calloutVariants, true],
-        [tCheck, fmt.check, () => TASK_STATUSES.map(([ch, name]) => ({ icon: "check", label: "[" + ch + "]  " + name, action: needEdit(() => applyEdit(setTaskStatus(ta.value, ...sel(), ch))) }))],
+        [tCheck, fmt.check, () => TASK_PICKER.map(([ch, name]) => ({ icon: "check", label: "[" + ch + "]  " + name, action: needEdit(() => applyEdit(setTaskStatus(ta.value, ...sel(), ch))) }))],
         [tHeading, fmt.heading, () => [1, 2, 3, 4, 5, 6].map((n) => ({ icon: "heading", label: "Heading " + n + "  (" + "#".repeat(n) + ")", action: needEdit(() => applyEdit(setHeadingLevel(ta.value, ...sel(), n))) }))],
       ]) {
         listen(btn, "mousedown", (e) => e.preventDefault());
@@ -7390,25 +7436,51 @@
       listen(tRule, "click", needEdit(fmt.rule));
       // The "More" menu. Opened by a tap on the caret (see the hold list above: holding it lists the callouts instead).
       function showInsertMenu() {
+        const keep = (it) => !it.id || !hiddenTools().has(it.id);
+        const group = (ic, label, items) => {
+          const g = items.filter(keep);
+          return g.length ? { icon: ic, label, group: g } : null;
+        };
         showMenu(tInsert, [
           { icon: "image", label: "Paste picture from clipboard", action: needEdit(pastePictureFromClipboard) },
           { icon: "image", label: "Picture options\u2026 (size, alignment)", action: needEdit(askPictureOptions) },
           { sep: true },
-          ...(CALLOUT_KINDS.some(([k]) => !hiddenTools().has(calloutId(k))) ? [{ label: "Callout\u2026", action: () => queueMicrotask(showCalloutMenu) }] : []),
-          { sep: true },
-          { label: "Superscript  X^2^", action: needEdit(fmt.sup), id: "sup" },
-          { label: "Subscript  H~2~O", action: needEdit(fmt.sub), id: "sub" },
-          { label: "Keyboard key  <kbd>", action: needEdit(fmt.kbd), id: "kbd" },
-          { sep: true },
-          { label: "Footnote  [^1]", action: needEdit(fmt.footnote), id: "footnote" },
-          { label: "Hub list of notes\u2026", action: needEdit(fmt.hubList), id: "hubList" },
-        ].filter((it) => !it.id || !hiddenTools().has(it.id)));
+          ...(CALLOUT_KINDS.some(([k]) => !hiddenTools().has(calloutId(k))) ? [{ icon: "quote", label: "Callout\u2026", action: () => queueMicrotask(showCalloutMenu) }] : []),
+          group("bold", "More text styles", [
+            { label: "Underline  <u>", action: needEdit(fmt.underline), id: "underline" },
+            { label: "Spoiler  ||text||", action: needEdit(fmt.spoiler), id: "spoiler" },
+            { label: "Hidden comment  %%text%%", action: needEdit(fmt.comment), id: "comment" },
+            { label: "Superscript  X^2^", action: needEdit(fmt.sup), id: "sup" },
+            { label: "Subscript  H~2~O", action: needEdit(fmt.sub), id: "sub" },
+            { label: "Keyboard key  <kbd>", action: needEdit(fmt.kbd), id: "kbd" },
+          ]),
+          group("code", "Math", [
+            { label: "Inline math  $x^2$", action: needEdit(fmt.mathInline), id: "mathInline" },
+            { label: "Math block  $$", action: needEdit(fmt.mathBlock), id: "mathBlock" },
+          ]),
+          group("note", "Blocks and notes", [
+            { label: "Collapsible section  <details>", action: needEdit(fmt.details), id: "details" },
+            { label: "Footnote  [^1]", action: needEdit(fmt.footnote), id: "footnote" },
+            { label: "Hub list of notes\u2026", action: needEdit(fmt.hubList), id: "hubList" },
+          ]),
+          group("bell", "Date and time", [
+            { label: "Today's date", action: needEdit(fmt.insertDate), id: "insertDate" },
+            { label: "The time", action: needEdit(fmt.insertTime), id: "insertTime" },
+          ]),
+        ].filter(Boolean));
       }
       // Cycle F #11: one "Callout..." entry instead of six; this menu lists the kinds (hidden ones stay out).
       function showCalloutMenu() {
-        showMenu(tInsert, CALLOUT_KINDS.filter(([k]) => !hiddenTools().has(calloutId(k))).map(([k, label]) => ({ label, action: needEdit(fmt[calloutId(k)]) })));
+        showMenu(tInsert, [
+          ...CALLOUT_KINDS.filter(([k]) => !hiddenTools().has(calloutId(k))).map(([k, label]) => ({ label, action: needEdit(fmt[calloutId(k)]) })),
+          { sep: true },
+          { label: "Foldable, closed  [!note]-", action: needEdit(() => applyEdit(insertCallout(ta.value, ...sel(), "note", "-"))) },
+          { label: "Foldable, open  [!note]+", action: needEdit(() => applyEdit(insertCallout(ta.value, ...sel(), "note", "+"))) },
+        ]);
       }
       listen(tSettings, "click", () => askSettings());
+      listen(tToc, "mousedown", (e) => e.preventDefault());
+      listen(tToc, "click", () => showOutline(tToc));
 
       // ---- menus -----------------------------------------------------------------
       function closeMenu() {
@@ -8033,7 +8105,7 @@
         }
       }
       // ---- outline (Cycle F #27): a menu of the note's headings; choosing one scrolls both panes to it ----
-      function showOutline() {
+      function showOutline(anchor = btnMore) {
         const n = note();
         if (!n || view !== "editor") return;
         const caret = mode !== "read" ? lineOfOffset(ta.value, ta.selectionStart || 0) : -1;
@@ -8043,9 +8115,9 @@
           label: "\u2003".repeat(x.level - 1) + x.text,
           action: () => goHeading(x.slug),
         }));
-        if (!items.length) items.push({ label: "No headings in this note (lines starting with #)", disabled: true });
+        if (!items.length) items.push({ label: "No headings in this note yet (start a line with #)", disabled: true });
         if (o.more) items.push({ label: `\u2026and ${o.more} more headings`, disabled: true });
-        showMenu(btnMore, items);
+        showMenu(anchor, items);
       }
       // ---- version history -----------------------------------------------------------------------------------------
       async function askHistory() {
@@ -8674,6 +8746,8 @@
       const moreItems = () => {
         const n = note();
         if (!n) return [];
+        // Grouped by what a person is trying to do: files, labels, links, window, settings. Everything that has its own
+        // button (table of contents, quick settings, search, split view) stays out of here, or sits one step down.
         const items = [
           { icon: "save", label: "Import & export", group: [
             { icon: "save", label: "Save as Markdown\u2026", action: () => env.exportNote(n, "md") },
@@ -8684,19 +8758,25 @@
             { icon: "save", label: "Export all notes\u2026", action: () => env.exportAll(store.list()) },
             { icon: "save", label: "Export all as zip\u2026", action: () => askExport("zip", async () => { const k = await env.exportZip(store.list()); if (k) flash(`Zipped ${k} notes`); }) },
             { icon: "folder", label: "Import .md folder\u2026", action: async () => { const k = await env.importFolder(store); flash(k ? `Imported ${k} notes` : "Nothing imported"); if (view === "list") scheduleList(); } },
+            { sep: true },
+            { icon: "folder", label: "Open notes folder", action: () => env.revealFolder(store.dir) },
           ] },
           { icon: "copy", label: "Copy text", action: () => env.copyText(n.body) },
-          ...(n.trashed ? [] : [{ icon: "bookmark", label: n.label ? "Edit label\u2026" : "Add label\u2026", action: () => askLabel() }]),
-          { icon: "bookmark", label: "Labels\u2026", action: () => queueMicrotask(askLabels) },
-          { icon: "link", label: "Check links\u2026", action: () => queueMicrotask(askLinkCheck) },
-          { icon: "note", label: "Install demo notes", action: () => installDemoNotes() },
-          { icon: "note", label: "New from template\u2026", action: () => queueMicrotask(() => showTemplateMenu(btnMore)) },
-          ...(n.trashed ? [] : [{ icon: "duplicate", label: "Save as template", action: () => saveAsTemplate() }]),
+          { icon: "bookmark", label: "Labels", group: [
+            ...(n.trashed ? [] : [{ icon: "bookmark", label: n.label ? "Edit label of this note\u2026" : "Add label to this note\u2026", action: () => askLabel() }]),
+            { icon: "bookmark", label: "Manage all labels\u2026", action: () => queueMicrotask(askLabels) },
+          ] },
           ...(n.trashed ? [] : [{ icon: "bell", label: n.remind ? "Reminder: " + reminderText(n.remind) + "\u2026" : "Remind me\u2026", action: () => askReminder() }]),
+          { icon: "note", label: "Templates", group: [
+            { icon: "note", label: "New from template\u2026", action: () => queueMicrotask(() => showTemplateMenu(btnMore)) },
+            ...(n.trashed ? [] : [{ icon: "duplicate", label: "Save this note as template", action: () => saveAsTemplate() }]),
+          ] },
+          { icon: "link", label: "Links & dates", group: [
+            { icon: "link", label: "Notes that link here\u2026", action: () => queueMicrotask(showBacklinks) },
+            { icon: "link", label: "Check links\u2026", action: () => queueMicrotask(askLinkCheck) },
+            { icon: "bell", label: "Notes by date\u2026", action: () => queueMicrotask(showDateMenu) },
+          ] },
           ...(n.trashed ? [] : [{ icon: "search", label: "Find in notes (Ctrl+F)", action: () => openFind() }]),
-          { icon: "link", label: "Notes that link here\u2026", action: () => queueMicrotask(showBacklinks) },
-          { icon: "bell", label: "Notes by date\u2026", action: () => queueMicrotask(showDateMenu) },
-          ...(n.trashed ? [] : [{ icon: "note", label: "Outline\u2026", action: () => queueMicrotask(showOutline) }]),
           ...(n.trashed ? [] : [{ icon: "restore", label: "Version history\u2026", action: () => askHistory() }]),
           ...(getPref(PREF.HIDDEN_MENU, true) && hiddenTools().size && !n.trashed ? [{ icon: "sliders", label: "Hidden tools\u2026", action: () => queueMicrotask(showHiddenTools) }] : []),
           ...(zenMode() === "selected" && !n.trashed
@@ -8704,17 +8784,21 @@
                 ? { icon: "folder", label: "Remove from Notes (tabbar)", action: () => { store.setFolder(n.id, ""); applyState(); flash("Moved out of the Zen sidebar folder"); } }
                 : { icon: "folder", label: "Move to Notes (tabbar)", action: () => { store.ensureTabbarFolder(); store.setFolder(n.id, TABBAR_FOLDER); applyState(); flash("Shown in the Zen sidebar folder"); } }]
             : []),
-          { icon: "plus", label: "New note", action: () => newNote() },
-          ...(adapter.geoKey || adapter.pushPanel ? [{ icon: "maximize", label: store.meta.size === "span" ? "Back to normal size" : "Fill the whole area", action: () => toggleSpan() }] : []),
-          { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body); store.setColor(c.id, n.color); store.setLabel(c.id, n.label); openNote(c.id); } },
           { sep: true },
-          { icon: "folder", label: "Open notes folder", action: () => env.revealFolder(store.dir) },
+          { icon: "plus", label: "New note", action: () => newNote() },
+          { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body); store.setColor(c.id, n.color); store.setLabel(c.id, n.label); openNote(c.id); } },
           { icon: "folder", label: "Move to folder\u2026", action: () => askNoteFolder() },
           ...(FLAVORS_PART ? [{ icon: "sliders", label: "Markdown mode", group: [["", "Follow the setting"], ...FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]])].map(([m, label]) => ({ label: (n.flavor || "") === m ? "\u2713 " + label : label, action: () => { store.setFlavor(n.id, m); renderRead(); } })) }] : []),
-          { icon: "sliders", label: "Quick settings\u2026", action: () => askSettings() },
-          { icon: "sliders", label: "All settings\u2026", action: () => askAllSettings() },
-          ...(adapter.geoKey ? [{ icon: "restore", label: "Reset position and size", action: () => resetGeo() }] : []),
-          ...(adapter.pushPanel && dockMode() === "hover" && adapter.placement?.() !== "between" ? [{ icon: "hover", label: store.meta.hideOverlay ? "Autohide: push the panel (now: overlay)" : "Autohide: overlay the panel (now: push)", action: () => { store.setMeta({ hideOverlay: !store.meta.hideOverlay }); applyState(); if (collapsed) expand(false); scheduleLayout(); } }] : []),
+          ...(adapter.geoKey || adapter.pushPanel ? [{ icon: "maximize", label: "Window", group: [
+            ...(adapter.geoKey || adapter.pushPanel ? [{ icon: "maximize", label: store.meta.size === "span" ? "Back to normal size" : "Fill the whole area", action: () => toggleSpan() }] : []),
+            ...(adapter.geoKey ? [{ icon: "restore", label: "Reset position and size", action: () => resetGeo() }] : []),
+            ...(adapter.pushPanel && dockMode() === "hover" && adapter.placement?.() !== "between" ? [{ icon: "hover", label: store.meta.hideOverlay ? "Autohide: push the panel (now: overlay)" : "Autohide: overlay the panel (now: push)", action: () => { store.setMeta({ hideOverlay: !store.meta.hideOverlay }); applyState(); if (collapsed) expand(false); scheduleLayout(); } }] : []),
+          ] }] : []),
+          { icon: "sliders", label: "Settings & help", group: [
+            { icon: "sliders", label: "Quick settings\u2026", action: () => askSettings() },
+            { icon: "sliders", label: "All settings\u2026", action: () => askAllSettings() },
+            { icon: "note", label: "Install demo notes", action: () => installDemoNotes() },
+          ] },
           { sep: true },
         ];
         if (n.trashed) {
@@ -9290,7 +9374,7 @@
       });
 
       const ACTIONS = {
-        ...Object.fromEntries(["bold", "italic", "strike", "highlight", "code", "codeBlock", "link", "noteLink", "image", "heading", "bullet", "numbered", "check", "quote", "table", "rule", "indent", "outdent", "sup", "sub", "kbd", "footnote", "hubList", ...CALLOUT_KINDS.map(([k]) => calloutId(k))].map((id) => [id, () => fmt[id]()])),
+        ...Object.fromEntries(["bold", "italic", "strike", "highlight", "code", "codeBlock", "link", "noteLink", "image", "heading", "bullet", "numbered", "check", "quote", "table", "rule", "indent", "outdent", "sup", "sub", "kbd", "underline", "spoiler", "comment", "mathInline", "mathBlock", "details", "insertDate", "insertTime", "footnote", "hubList", ...CALLOUT_KINDS.map(([k]) => calloutId(k))].map((id) => [id, () => fmt[id]()])),
         newNote: () => newNote(),
         outline: () => showOutline(),
         find: () => openFind(),

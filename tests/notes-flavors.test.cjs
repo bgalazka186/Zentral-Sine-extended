@@ -292,4 +292,41 @@ test("shortcuts: never in code, off and braces-only settings, formatDate tokens"
   assert.equal(shortcuts.formatDate(NOW, "YY/M/D h:m:s a"), "26/11/7 2:5:9 pm");
   assert.ok(shortcuts.SHORTCUTS.length >= 10);
 });
+test("GUI: every callout kind of the toolbar menu is read back as itself, and the new insert actions are real actions", () => {
+  for (const [kind] of c.CALLOUT_KINDS) {
+    const q = blocks(c.insertCallout("body", 0, 4, kind).text)[0];
+    assert.equal(q.callout.kind, kind, "callout " + kind);
+  }
+  const ids = new Set(c.SHORTCUT_ACTIONS.map((a) => a.id));
+  for (const id of ["underline", "spoiler", "comment", "mathInline", "mathBlock", "details", "insertDate", "insertTime", "outline"]) {
+    assert.ok(ids.has(id), id + " is an action");
+    assert.ok(c.HIDEABLE_TOOLS.some((t) => t[0] === id), id + " can be hidden");
+  }
+  // What the entries write is read by the parser of the same mode.
+  assert.ok(deep(inl("a ||secret|| b"), "spoiler"), "spoiler");
+  assert.ok(!flat(inl("a %%hidden%% b")).includes("hidden"), "hidden comment");
+  assert.ok(deep(inl("a <u>x</u> b"), "u"), "underline");
+  assert.ok(deep(inl("a $x^2$ b"), "math"), "inline math");
+  assert.equal(blocks("$$\nx^2\n$$")[0].type, "math", "math block");
+  assert.equal(blocks("<details>\n<summary>Title</summary>\n\ntext\n\n</details>")[0].type, "details", "collapsible section");
+});
+
+test("GUI: foldable callouts and the extra task states can be made from the toolbar", () => {
+  assert.equal(c.insertCallout("body", 0, 4, "note", "-").text, "> [!NOTE]-\n> body");
+  assert.equal(c.insertCallout("body", 0, 4, "tip", "+").text, "> [!TIP]+\n> body");
+  assert.equal(c.insertCallout("> [!NOTE]-\n> hi", 3, 3, "tip").text, "> [!TIP]-", "a kind change keeps the fold (only the first line is replaced)");
+  assert.equal(c.insertCallout("> [!NOTE]-\n> hi", 3, 3, "note", "+").text, "> [!NOTE]+", "a fold request replaces the fold");
+  assert.equal(c.setTaskStatus("- [ ] a", 0, 0, ">").text, "- [>] a");
+  assert.equal(c.setTaskStatus("- [>] a", 0, 0, "x").text, "- [x] a", "an extended state can be left again");
+  assert.equal(c.setTaskStatus("- [ ] a", 0, 7, "Z").text, "- [ ] a", "unknown states are refused");
+  assert.ok(c.TASK_PICKER.length >= 19, "classic six plus the Obsidian set");
+});
+
+test("demo notes: the flavors showcase is read as callouts, math, details and a table", () => {
+  const showcase = c.DEMO_NOTES.find((d) => d.id === "zn-demo-flavors");
+  const bl = blocks(showcase.body);
+  assert.ok(bl.filter((b) => b.type === "callout" || b.callout).length >= 3, "callouts are read");
+  assert.ok(bl.some((b) => b.type === "math") && bl.some((b) => b.type === "details") && bl.some((b) => b.type === "table"), "math, details and table blocks");
+});
+
 console.log(`\n${passed} flavor tests passed`);

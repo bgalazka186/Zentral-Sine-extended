@@ -104,7 +104,9 @@ test("R1 colour maths round-trips and every Settings item names a real pref, id 
     assert.ok(!seen.has(o.id), "unique id " + o.id); seen.add(o.id);
     if (o.kind === "slider") assert.ok(o.min < o.max && o.seed >= o.min && o.seed <= o.max, o.id);
   }
-  for (const id of c.QUICK_IDS) assert.ok(c.WRITING_OPTIONS.some((o) => o.id === id), id);
+  for (const id of c.QUICK_IDS) assert.ok([...c.WRITING_OPTIONS, ...c.SETTINGS_TABS.flatMap((t) => t.items)].some((o) => o.id === id), id);
+  assert.equal(JSON.stringify(c.QUICK_OPTIONS.map((o) => o.id)), JSON.stringify([...c.QUICK_IDS]), "every quick id resolves to one option, in order");
+  assert.ok(c.QUICK_IDS.includes("mdFlavor"), "the Markdown mode is in the quick settings");
   assert.ok(c.QUICK_IDS.length <= 9, "the quick menu stays short");
 });
 

@@ -171,6 +171,7 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     store.create(`points [h](${t3.id}.md)`);
     sheet.openNoteById(t3.id); await flushRaf();
     click(byTitle("More"));
+    click(q(".zn-menu").querySelectorAll("button").find((b) => b.textContent.startsWith("Links & dates")));
     const item = q(".zn-menu").querySelectorAll("button").find((b) => b.textContent.startsWith("Notes that link here"));
     assert.ok(item);
     click(item); await new Promise((r) => setImmediate(r));
