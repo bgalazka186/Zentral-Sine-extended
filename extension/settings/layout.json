@@ -1053,6 +1053,8 @@
     "zen.workspace.zentral.notes.text_shortcuts",
     "zen.workspace.zentral.notes.shortcut_date_format",
     "zen.workspace.zentral.notes.shortcut_time_format",
+    "zen.workspace.zentral.notes.tool_arm_mode",
+    "zen.workspace.zentral.notes.zen_note_favicons",
     {
       "type": "text",
       "label": "**Notes · Capture**",

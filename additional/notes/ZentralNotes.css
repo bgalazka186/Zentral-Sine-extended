@@ -1243,3 +1243,27 @@
 .zentral-notes-reveal[data-edge]:hover { background: transparent; }
 .zentral-notes-reveal[data-edge]:hover::after { opacity: 1; }
 .zentral-notes-pill[popover] { inset: auto; margin: 0; padding: 0; border: 0; overflow: visible; background: transparent; color: var(--zl-popup-text, var(--zen-colors-tertiary-text, #fff)); }
+
+/* Armed formatting tool (click with nothing selected, then type): a soft pulse so it is not mistaken for "on" */
+.zentral-notes-sheet .zn-btn.is-armed {
+  color: var(--zn-accent, var(--zn-text));
+  box-shadow: inset 0 0 0 1px var(--zn-accent, currentColor);
+  animation: zn-armed-pulse 1.4s ease-in-out infinite;
+}
+@keyframes zn-armed-pulse { 50% { background: color-mix(in srgb, var(--zn-accent, currentColor) 28%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .zentral-notes-sheet .zn-btn.is-armed { animation: none; } }
+
+/* Folder colour / emoji (S6 W2) */
+.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon { color: var(--zn-fc); }
+.zentral-notes-sheet .zn-frow-emoji { font-size: 13px; line-height: 14px; }
+.zentral-notes-sheet .zn-fstyle-colors { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color]:not([data-color=""]) { border-left: 3px solid var(--zn-fc, currentColor); }
+.zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="yellow"] { --zn-fc: #f5c542; }
+.zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="green"] { --zn-fc: #4cc38a; }
+.zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="blue"] { --zn-fc: #5aa9ff; }
+.zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="pink"] { --zn-fc: #ff7eb6; }
+.zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="purple"] { --zn-fc: #a78bfa; }
+.zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="orange"] { --zn-fc: #ff9f43; }
+.zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="red"] { --zn-fc: #ff6b6b; }
+.zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="teal"] { --zn-fc: #2ec4b6; }
+.zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="gray"] { --zn-fc: #9aa0a6; }

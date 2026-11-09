@@ -38,7 +38,7 @@ test("idempotent rebuild: applying the plan then diffing again is empty; stale a
   assert.deepEqual(d.remove.sort(), ["n:n1#dup", "n:zzz"]);
   assert.equal(d.relabel[0].key, "n:n1");
   const d2 = J(c.diffProjection(want, want));
-  assert.deepEqual(d2, { add: [], remove: [], relabel: [], move: [] });
+  assert.deepEqual(d2, { add: [], remove: [], relabel: [], move: [], restyle: [] });
 });
 test("cleanup only ever targets tabs that carry the Notes marker; ordinary tabs are never listed", () => {
   const tabs = [{ id: 1, attrs: {} }, { id: 2, attrs: { [c.NOTES_ATTR]: "n1" } }, { id: 3, attrs: { pinned: "true" }, url: "https://x.org" }, { id: 4, attrs: { [c.NOTES_ATTR]: "" } }];

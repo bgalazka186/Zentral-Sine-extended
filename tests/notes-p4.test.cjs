@@ -245,7 +245,7 @@ const note = (id, body, extra = {}) => ({ id, body, folder: "", updated: 1_700_0
     const { store, api, zen } = await zenSetup({}, "all");
     store.addFolder("Work"); store.create("Task", "work");
     zen.runNow();
-    assert.ok(api.items.has("f:work") && api.items.has("n:" + store.list()[0].id));
+    assert.ok(api.items.has("f:" + store.folderUid("work")) && api.items.has("n:" + store.list()[0].id), "a folder is keyed by its uid, not its path");
     const flat = await zenSetup({ nesting: false }, "all");
     flat.store.addFolder("Work"); const t = flat.store.create("Task", "work");
     flat.zen.runNow();
@@ -282,7 +282,7 @@ const note = (id, body, extra = {}) => ({ id, body, folder: "", updated: 1_700_0
     z.zen.runNow();
     const last = z.api.buttons[z.api.buttons.length - 1];
     assert.equal(last.on, true);
-    assert.deepEqual(J(last.keys).sort(), ["f:work", "f:work/deep"], "every sub-folder, nested ones included");
+    assert.deepEqual(J(last.keys).sort(), ["f:" + z.store.folderUid("work"), "f:" + z.store.folderUid("work/deep")].sort(), "every sub-folder, nested ones included");
     z.state.buttons = false; z.zen.runNow();
     assert.equal(z.api.buttons[z.api.buttons.length - 1].on, false, "off is passed on so the entries can leave");
   });
@@ -290,11 +290,12 @@ const note = (id, body, extra = {}) => ({ id, body, folder: "", updated: 1_700_0
     const z = await zenSetup({}, "all");
     z.store.addFolder("Work"); const t = z.store.create("T", "work");
     z.zen.runNow();
-    z.api.items.get("f:work").parent = "?misplaced"; // what the real list() reports for a folder outside its parent
+    const wk = "f:" + z.store.folderUid("work");
+    z.api.items.get(wk).parent = "?misplaced"; // what the real list() reports for a folder outside its parent
     z.api.log.length = 0; z.zen.runNow();
-    assert.deepEqual(z.api.log.map((e) => e[0] + ":" + e[1]), ["move:f:work"]);
+    assert.deepEqual(z.api.log.map((e) => e[0] + ":" + e[1]), ["move:" + wk]);
     z.api.log.length = 0; flushT(); // move schedules one follow-up run that creates it again
-    assert.ok(z.api.items.has("f:work") && z.api.items.has("n:" + t.id));
+    assert.ok(z.api.items.has(wk) && z.api.items.has("n:" + t.id));
   });
   await test("zen order: entries follow the sheet's tree order for every tree_order value, parents first", () => {
     const folders = [{ id: "b", label: "Beta", order: 1, collapsed: false }, { id: "a", label: "Alpha", order: 0, collapsed: false }];

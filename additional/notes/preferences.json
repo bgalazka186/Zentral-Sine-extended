@@ -758,6 +758,18 @@
     "defaultValue": "HH:mm"
   },
   {
+    "label": "Colored note icons in the Zen sidebar folder (one per note color)",
+    "type": "checkbox",
+    "defaultValue": true,
+    "property": "zen.workspace.zentral.notes.zen_note_favicons"
+  },
+  {
+    "label": "Formatting buttons wait for the text (click Bold with nothing selected, then type or select)",
+    "type": "checkbox",
+    "defaultValue": true,
+    "property": "zen.workspace.zentral.notes.tool_arm_mode"
+  },
+  {
     "label": "Show word, character and reading-time count under the note",
     "type": "checkbox",
     "defaultValue": false,
