@@ -2249,3 +2249,63 @@
   accent-color: var(--zl-video-progress) !important;
   color-scheme: var(--zl-video-scheme) !important;
 }
+
+/* ---- Native Zen folders (Detailed appearance > Tabs, folders & launchers) -----------------------------------------------
+   Zen's zen-folders.css defines --zen-folder-behind-bgcolor / -front-bgcolor / -stroke on `:root, zen-folder`, i.e. on every folder
+   element itself, so a value on :root alone never reaches a folder icon. Each rule below therefore targets the folders too, and is
+   only switched on by ZentralAppearance.js (flag in bgalazka-look-folder) when the person changed something. It has no !important
+   so a color set on one folder (the Notes folders) still wins. The fallbacks are Zen's own formulas, so the transparency slider
+   works on the original color as well. */
+:root[bgalazka-look-folder~="behind"],
+:root[bgalazka-look-folder~="behind"] zen-folder {
+  --zen-folder-behind-bgcolor: color-mix(
+    in srgb,
+    var(
+      --bgalazka-look-folder-behind,
+      light-dark(
+        color-mix(in srgb, var(--zen-primary-color) 60%, gray),
+        color-mix(in srgb, var(--zen-primary-color) 60%, #c1c1c1)
+      )
+    )
+      var(--bgalazka-look-folder-behind-alpha, 100%),
+    transparent
+  );
+}
+:root[bgalazka-look-folder~="front"],
+:root[bgalazka-look-folder~="front"] zen-folder {
+  --zen-folder-front-bgcolor: color-mix(
+    in srgb,
+    var(
+      --bgalazka-look-folder-front,
+      light-dark(
+        color-mix(in srgb, var(--zen-primary-color), white 70%),
+        color-mix(in srgb, var(--zen-primary-color), black 40%)
+      )
+    )
+      var(--bgalazka-look-folder-front-alpha, 100%),
+    transparent
+  );
+}
+:root[bgalazka-look-folder~="stroke"],
+:root[bgalazka-look-folder~="stroke"] zen-folder {
+  --zen-folder-stroke: color-mix(
+    in srgb,
+    var(
+      --bgalazka-look-folder-stroke,
+      light-dark(
+        color-mix(in srgb, var(--zen-primary-color) 50%, black),
+        color-mix(in srgb, var(--zen-colors-primary) 15%, #ebebeb)
+      )
+    )
+      var(--bgalazka-look-folder-stroke-alpha, 100%),
+    transparent
+  );
+}
+/* Zen sets the label color with !important in a nested rule; the longer selector wins over it. */
+:root[bgalazka-look-folder~="label"] zen-folder > .tab-group-label-container > label {
+  color: var(--bgalazka-look-folder-label) !important;
+}
+/* "Tighter folder rows": Zen gives .tab-group-label a fixed line-height; dropping it makes folder rows a bit tighter. */
+:root[bgalazka-look-folder~="tight"] #tabbrowser-tabs[orient="vertical"] .tab-group-label {
+  line-height: unset !important;
+}

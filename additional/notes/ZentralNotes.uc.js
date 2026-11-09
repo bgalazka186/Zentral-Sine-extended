@@ -185,6 +185,8 @@
       ZEN_MODE: "zen.workspace.zentral.notes.zen_folder",
       ZEN_NEW_BUTTON: "zen.workspace.zentral.notes.zen_folder_new_button",
       ZEN_FAVICONS: "zen.workspace.zentral.notes.zen_note_favicons",
+      ZEN_ROOT_COLOR: "zen.workspace.zentral.notes.zen_root_color",
+      ZEN_ROOT_ICON: "zen.workspace.zentral.notes.zen_root_icon",
       ZEN_TOP: "zen.workspace.zentral.notes.zen_folder_top",
       CAPTURE_FORMAT: "zen.workspace.zentral.notes.quick_capture_format",
       DEBUG_PERF: "zen.workspace.zentral.notes.debug_perf",
@@ -949,6 +951,47 @@
         "--tab-group-text-color": "#1b1b1f",
         "--tab-group-text-color-invert": "#ffffff",
         "--tab-group-background-color-hover": "color-mix(in srgb, " + hex + " 85%, white)",
+      };
+    }
+    // Every sub-folder in the Zen sidebar gets a static id made from its key, like the NOTES folder itself. Zen's session restore
+    // brings a folder back with its id and label but NOT with our attributes; without the id a restored sub-folder was not
+    // recognised and a second one was made on every restart. Folder keys are "f:" + segments of [a-z0-9-] joined by "/", so "_"
+    // (not allowed in a segment) stands for "/" and the key can be read back from the id.
+    const NOTES_ZEN_ROOT_ID = "bgalazka-zentral-notes";
+    const NOTES_ZEN_SUB_PREFIX = NOTES_ZEN_ROOT_ID + "-sub_";
+    const notesSubId = (key) => NOTES_ZEN_SUB_PREFIX + String(key).replace(/^f:/, "").replace(/\//g, "_");
+    const notesKeyFromId = (id) => (typeof id === "string" && id.startsWith(NOTES_ZEN_SUB_PREFIX) && id.length > NOTES_ZEN_SUB_PREFIX.length ? "f:" + id.slice(NOTES_ZEN_SUB_PREFIX.length).replace(/_/g, "/") : "");
+    // A restored sub-folder (our id, none of our attributes) is taken back: the attributes are set again from its id, its label
+    // and where it sits. Returns how many were adopted.
+    function adoptNotesSubfolders(root) {
+      let n = 0;
+      if (!root?.querySelectorAll) return n;
+      const parentOf = (el) => { try { return el.parentElement?.closest?.("zen-folder") || null; } catch (_) { return null; } };
+      for (const el of [...root.querySelectorAll("zen-folder")]) {
+        if (el === root || el.hasAttribute("bgalazka-notes-subfolder")) continue;
+        const key = notesKeyFromId(el.id);
+        if (!key) continue;
+        const up = parentOf(el);
+        const upKey = up && up !== root ? up.getAttribute("bgalazka-notes-subfolder") || notesKeyFromId(up.id) : "";
+        el.setAttribute("bgalazka-notes-subfolder", key);
+        el.setAttribute("bgalazka-notes-label", el.getAttribute("label") || el.label || "");
+        el.setAttribute("bgalazka-notes-parent", upKey || "");
+        n++;
+      }
+      return n;
+    }
+    // Zen draws its folder icon from three custom properties that zen-folders.css defines on `:root, zen-folder`. The rule sits
+    // on every folder itself, so a value set on :root never reaches the icon, only a value on the folder does. The formulas
+    // are Zen's own with the palette colour in place of --zen-primary-color. No colour = nothing set (Zen's own colours, or
+    // the Appearance overrides, apply).
+    const ZEN_FOLDER_VARS = Object.freeze(["--zen-folder-behind-bgcolor", "--zen-folder-front-bgcolor", "--zen-folder-stroke"]);
+    function folderZenVars(name) {
+      const hex = TINT_HEX[name];
+      if (!hex) return {};
+      return {
+        "--zen-folder-behind-bgcolor": "light-dark(color-mix(in srgb, " + hex + " 60%, gray), color-mix(in srgb, " + hex + " 60%, #c1c1c1))",
+        "--zen-folder-front-bgcolor": "light-dark(color-mix(in srgb, " + hex + ", white 70%), color-mix(in srgb, " + hex + ", black 40%))",
+        "--zen-folder-stroke": "light-dark(color-mix(in srgb, " + hex + " 50%, black), color-mix(in srgb, " + hex + " 15%, #ebebeb))",
       };
     }
     // The favicon of a note tab: a small page with a folded corner in the note's colour (gray when the note has none).
@@ -3206,6 +3249,8 @@
           { id: "newChooser", label: "The + button asks: blank note, today, tomorrow or a date", pref: PREF.NEW_CHOOSER, kind: "bool", def: false },
           { id: "pinStrip", label: "Pinned notes strip and Recent menu under the title", pref: PREF.PIN_STRIP, kind: "bool", def: false },
           { id: "zenFavicons", label: "Colored note icons in the Zen sidebar folder", pref: PREF.ZEN_FAVICONS, kind: "bool", def: true },
+          { id: "zenRootColor", label: "Color of the NOTES folder in the Zen sidebar", pref: PREF.ZEN_ROOT_COLOR, kind: "choice", def: "", choices: [["", "Zen's own color"], ...FOLDER_COLORS.map((c) => [c, c[0].toUpperCase() + c.slice(1)])] },
+          { id: "zenRootIcon", label: "Emoji on the NOTES folder in the Zen sidebar (one emoji, empty = Zen's icon)", pref: PREF.ZEN_ROOT_ICON, kind: "text", def: "" },
           { id: "toolArm", label: "Formatting buttons wait for the text: click Bold with nothing selected, then type or select", pref: PREF.TOOL_ARM, kind: "bool", def: true },
           { id: "footerCount", label: "Footer shows characters and reading time (and counts the selection)", pref: PREF.FOOTER_COUNTER, kind: "bool", def: false },
           { id: "treeOrder", label: "Order in the notes tree", pref: PREF.TREE_ORDER, kind: "choice", def: "folders-first", choices: [["folders-first", "Folders first"], ["notes-first", "Notes first"], ["mixed-by-name", "Mixed, by name"]] },
@@ -5555,6 +5600,9 @@
     function applyNotesFolderStyle(el, color, icon, { doc, warn = () => {} } = {}) {
       try {
         for (const [k, v] of Object.entries(folderTint(color))) el.style.setProperty(k, v);
+        // What Zen's icon really reads (see folderZenVars); removed again when the folder has no colour.
+        const zv = folderZenVars(color);
+        for (const k of ZEN_FOLDER_VARS) { if (zv[k]) el.style.setProperty(k, zv[k]); else el.style.removeProperty(k); }
         if (color) el.setAttribute("bgalazka-notes-color", color);
         else el.removeAttribute("bgalazka-notes-color");
         const g = el.querySelector?.(".tab-group-folder-icon g.icon");
@@ -5654,6 +5702,7 @@
         if (!api.ready()) return;
         if (mode === "selected") store.ensureTabbarFolder();
         if (!api.ensureRoot()) return;
+        api.styleRoot?.();
         if (api.sweepStrays) api.sweepStrays(); // our tabs that ended up outside the NOTES folder (unpinned, essential, dragged away, restored)
         const notes = store.list();
         let want = projectZen(notes, store.meta.folders, mode, getOrder());
@@ -5723,7 +5772,7 @@
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
-        makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, folderTint, noteFaviconUri, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
+        makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
@@ -11737,7 +11786,7 @@
 
       // ---- Zen sidebar folder (EXPERIMENT, pref zen_folder = off | selected | all; not verified in a live Zen) ----
       // The browser is reached only here. Every call is wrapped by createZenFolder's kill switch.
-      const ZEN_ROOT_ID = "bgalazka-zentral-notes";
+      const ZEN_ROOT_ID = NOTES_ZEN_ROOT_ID;
       const zenMode = () => cleanZenMode(prefStr(PREF.ZEN_MODE, "off"));
       const zenRootEl = () => {
         const el = document.querySelector('zen-folder[bgalazka-notes-folder="true"]') || document.getElementById(ZEN_ROOT_ID);
@@ -11748,7 +11797,13 @@
       let zenMoveBroken = false;
       const zenTabs = (root) => [...(root?.querySelectorAll?.("tab") || [])].filter((t) => /^(n:|root$|new:)/.test(t.getAttribute(NOTES_ATTR) || ""));
       const zenByKey = (root, key) => zenTabs(root).filter((t) => t.getAttribute(NOTES_ATTR) === key);
-      const zenFolderByKey = (root, key) => [...(root?.querySelectorAll?.("zen-folder[bgalazka-notes-subfolder]") || [])].find((f) => f.getAttribute("bgalazka-notes-subfolder") === key) || null;
+      const zenSubId = notesSubId;
+      const zenAdoptSubfolders = adoptNotesSubfolders;
+      const zenFolderByKey = (root, key) => {
+        if (!root?.querySelectorAll) return null;
+        zenAdoptSubfolders(root);
+        return [...root.querySelectorAll("zen-folder[bgalazka-notes-subfolder]")].find((f) => f.getAttribute("bgalazka-notes-subfolder") === key) || null;
+      };
       // A tab is ours only when it carries our mark AND sits inside our own NOTES folder. Every Zen-side rule below
       // starts from this test, so no other tab, folder or menu is ever touched (a leftover marked tab is just a tab).
       const isOurTab = (tab) => {
@@ -11857,7 +11912,7 @@
       let zenDiagDone = false;
       function zenMakeSubfolder(e, parentEl) {
         const diag = [];
-        const opts = { label: e.label, renameFolder: false, collapsed: false, workspaceId: window.gZenWorkspaces?.activeWorkspace };
+        const opts = { id: zenSubId(e.key), label: e.label, renameFolder: false, collapsed: false, workspaceId: window.gZenWorkspaces?.activeWorkspace };
         const tries = [
           // 1: the tab is put inside the parent first, so the new folder is made where the tab is
           ["seed in parent", () => { const sd = zenNewTab(zenNewUrl(e.id), "new:" + e.id); if (!zenPlace(sd, parentEl)) { zenRemoveTab(sd); return null; } return { seed: sd, el: window.gZenFolders.createFolder([sd], opts) }; }],
@@ -11930,6 +11985,34 @@
       const zenSetTabIcon = (tab, color) => setNotesTabIcon(tab, color, { gBrowser: window.gBrowser, on: zenFaviconsOn(), warn });
       const zenTabColor = (tab) => notesTabColor(tab, zenFaviconsOn());
       const zenApplyFolderStyle = (el, color, icon) => applyNotesFolderStyle(el, color, icon, { doc: document, warn });
+      // A freshly made (or moved) note tab loads about:blank AFTER we set its icon, and the browser clears the icon when that
+      // load finishes, so the favicon was lost whenever a note changed folder. The icon is therefore checked again on
+      // `TabAttrModified` (image) and a few times after the tab is made. `zenIconBusy` stops our own setIcon from looping.
+      let zenIconBusy = false;
+      const zenEnsureIcon = (tab) => {
+        try {
+          if (disposed || zenIconBusy || !zenFaviconsOn() || !tab?.isConnected || !/^n:/.test(tab.getAttribute(NOTES_ATTR) || "")) return;
+          const want = noteFaviconUri(tab.getAttribute("bgalazka-notes-color") || "");
+          if ((tab.getAttribute("image") || "") === want) return;
+          zenIconBusy = true;
+          try { zenSetTabIcon(tab, tab.getAttribute("bgalazka-notes-color") || ""); } finally { zenIconBusy = false; }
+        } catch (_) {}
+      };
+      const zenIconTimers = new Set();
+      const zenIconRetry = (tab) => {
+        for (const ms of [200, 900, 3000]) {
+          const id = window.setTimeout(() => { zenIconTimers.delete(id); zenEnsureIcon(tab); }, ms);
+          zenIconTimers.add(id);
+        }
+      };
+      onCleanup(() => { for (const id of zenIconTimers) window.clearTimeout(id); zenIconTimers.clear(); });
+      const onZenAttr = (ev) => {
+        const tab = ev.target;
+        if (disposed || zenIconBusy || tab?.localName !== "tab" || !tab.hasAttribute?.(NOTES_ATTR)) return;
+        const changed = ev.detail?.changed;
+        if (Array.isArray(changed) && !changed.includes("image")) return;
+        window.setTimeout(() => zenEnsureIcon(tab), 0);
+      };
       const zenFolderIcon = notesFolderIcon;
       const zenApi = {
         busy(on) { zenBusy = on; if (!on) zenQuietUntil = Date.now() + 500; },
@@ -11954,6 +12037,7 @@
         },
         list() {
           const root = zenRootEl();
+          zenAdoptSubfolders(root);
           const out = [];
           // The parent counts as "where it really is": an entry that is not inside the folder it belongs to
           // reports a wrong parent, so the plan moves it (removed now, created again in the right folder).
@@ -11986,11 +12070,13 @@
             tab.setAttribute("bgalazka-notes-parent", e.parent);
             tab.setAttribute("label", e.label);
             zenSetTabIcon(tab, e.color || "");
+            zenIconRetry(tab);
             return true;
           }
           const made = zenMakeSubfolder(e, parentEl);
           if (!made) return false; // nesting not available: the controller switches to path labels
           const { el, seed } = made;
+          if (el.id !== zenSubId(e.key)) { try { el.id = zenSubId(e.key); } catch (_) {} }
           el.setAttribute("bgalazka-notes-subfolder", e.key);
           el.setAttribute("bgalazka-notes-label", e.label);
           el.setAttribute("bgalazka-notes-parent", e.parent);
@@ -12020,6 +12106,11 @@
         move(key) { zenApi.remove(key, false); }, // removed now, added again by the next run under its new parent
         // One "New note" entry in the root and in every sub-folder (on), or none where the folder has other content (off).
         // An entry that is the only thing keeping a folder alive is never removed.
+        // The NOTES root folder's own colour and emoji (prefs), drawn the same way as a sub-folder's. Cheap and idempotent.
+        styleRoot() {
+          const root = zenRootEl();
+          if (root) zenApplyFolderStyle(root, cleanFolderColor(prefStr(PREF.ZEN_ROOT_COLOR, "")), cleanFolderIcon(prefStr(PREF.ZEN_ROOT_ICON, "")));
+        },
         syncNewButtons(folders, on) {
           const root = zenRootEl();
           if (!root) return;
@@ -12132,7 +12223,7 @@
         try {
           const label = tab.getAttribute("bgalazka-notes-label");
           if (label && tab.getAttribute("label") !== label) tab.setAttribute("label", label);
-          if (/^n:/.test(tab.getAttribute(NOTES_ATTR) || "")) zenSetTabIcon(tab, tab.getAttribute("bgalazka-notes-color") || "");
+          if (/^n:/.test(tab.getAttribute(NOTES_ATTR) || "")) { zenSetTabIcon(tab, tab.getAttribute("bgalazka-notes-color") || ""); zenIconRetry(tab); }
           if (tab.getAttribute(NOTES_ATTR) && !tab._zentralNotesUrl) tab._zentralNotesUrl = ZEN_URL_PREFIX + "note:" + encodeURIComponent((tab.getAttribute(NOTES_ATTR) || "").slice(2));
         } catch (_) {}
       }
@@ -12221,6 +12312,7 @@
         const act = on ? "addEventListener" : "removeEventListener";
         for (const ty of ["mousedown", "click", "mouseup", "auxclick"]) window[act](ty, onZenMouse, true);
         for (const ty of ZEN_TAB_EVENTS) window[act](ty, onZenTabEvent, true);
+        window[act]("TabAttrModified", onZenAttr, true);
         window[act]("TabSelect", onZenSelect, true);
         for (const ty of ["dragover", "drop"]) window[act](ty, onZenDrop, true);
         window[act]("popupshowing", onTabMenuShowing, true);
@@ -12908,6 +13000,9 @@
           else if (name === PREF.ZEN_MODE) {
             if (zenMode() === "off") zenTeardown();
             else zenSoon();
+          }
+          else if (name === PREF.ZEN_ROOT_COLOR || name === PREF.ZEN_ROOT_ICON) {
+            if (zenMode() !== "off") zenSoon(); // the NOTES folder is restyled at once
           }
           else if (name === PREF.ZEN_NEW_BUTTON) {
             if (zenMode() !== "off") zenSoon(); // entries appear in (or leave) every folder at once

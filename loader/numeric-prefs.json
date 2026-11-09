@@ -175,6 +175,27 @@
     "def": 100
   },
   {
+    "key": "zen.workspace.bgalazka.look.folder_behind_opacity",
+    "text": "zen.workspace.bgalazka.look.folder_behind_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.folder_front_opacity",
+    "text": "zen.workspace.bgalazka.look.folder_front_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
+    "key": "zen.workspace.bgalazka.look.folder_stroke_opacity",
+    "text": "zen.workspace.bgalazka.look.folder_stroke_opacity_text",
+    "min": 0,
+    "max": 100,
+    "def": 100
+  },
+  {
     "key": "zen.workspace.bgalazka.look.popup_opacity",
     "text": "zen.workspace.bgalazka.look.popup_opacity_text",
     "min": 0,

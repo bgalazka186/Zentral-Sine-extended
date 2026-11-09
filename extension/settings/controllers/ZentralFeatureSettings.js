@@ -2252,6 +2252,7 @@
               LOOK_PREFS.DENSITY_NEWTAB,
               LOOK_PREFS.DENSITY_URLBAR,
               LOOK_PREFS.DENSITY_ESSENTIALS,
+              LOOK_PREFS.FOLDER_TIGHT_LABELS,
               ctx.EXT_PREFS.RSS_HIDE_EMPTY,
               ctx.EXT_PREFS.RSS_COMPACT_HEADERS,
               ctx.EXT_PREFS.RSS_READER_CARD,
@@ -3536,6 +3537,7 @@
               key,
               themeVariable,
               fallback,
+              { rss = true, resetLabel = "Theme", resetTitle = "Follow the current theme color" } = {},
             ) => {
               const row = document.createElement("div");
               row.className = "zs-row";
@@ -3581,18 +3583,20 @@
               reset.className = "zs-reset-btn";
               reset.style.cssText =
                 "margin:0;padding:4px 10px;font-size:11.5px;align-self:center;";
-              reset.textContent = "Theme";
-              reset.title = "Follow the current theme color";
+              reset.textContent = resetLabel;
+              reset.title = resetTitle;
               reset.addEventListener("click", () => write(""));
               controls.append(input, reset);
               row.append(leftBox, controls);
               lookCategory.subContent.append(row);
-              rssCardLookRows.push({
-                row,
-                input,
-                key,
-                themeValue: themeValue(),
-              });
+              // Reader-card rows follow the card's on/off state; other optional colors stay editable.
+              if (rss)
+                rssCardLookRows.push({
+                  row,
+                  input,
+                  key,
+                  themeValue: themeValue(),
+                });
               return row;
             };
             rssCardLookSlider(
@@ -3737,6 +3741,47 @@
               "--zl-button-text",
               "#d4d8d9",
             );
+            // Native Zen folders: colors of the folder icon (back, front, outline and glyph) and of the label, each with its own
+            // transparency. Empty = Zen's own color. Detailed palette mode only, like the other fine controls.
+            addLookHeading("Native Zen folders");
+            const folderLook = { rss: false, resetLabel: "Zen", resetTitle: "Use Zen's own folder color" };
+            const folderColor = (label, description, key, fallback) => {
+              const row = addLookOptionalColor(label, description, key, "--zen-primary-color", fallback, folderLook);
+              row.dataset.paletteDetail = "true";
+              return row;
+            };
+            const folderTransparency = (label, description, key) => {
+              const invert = (value) => 100 - value;
+              const control = createSliderRow(label, description, key, 0, 100, LOOK_DEFAULTS[key], "%", invert, invert, "any");
+              control.row.dataset.paletteDetail = "true";
+              lookCategory.subContent.append(control.row);
+              lookControls.push({ input: control.input, badge: control.badge, suffix: "%", key, inverted: true });
+              return control;
+            };
+            folderColor(
+              "Folder icon: back color",
+              "The back sheet of the folder icon. Applies to every normal folder; a folder with its own color (Notes) keeps it.",
+              LOOK_PREFS.FOLDER_BEHIND,
+              "#8a8f98",
+            );
+            folderTransparency("Folder icon: back transparency", "0% is solid. Works on Zen's own color too.", LOOK_PREFS.FOLDER_BEHIND_OPACITY);
+            folderColor("Folder icon: front color", "The front flap of the folder icon.", LOOK_PREFS.FOLDER_FRONT, "#d9dbe0");
+            folderTransparency("Folder icon: front transparency", "0% is solid. Works on Zen's own color too.", LOOK_PREFS.FOLDER_FRONT_OPACITY);
+            folderColor("Folder icon: outline and glyph color", "The edge of the folder icon and the small picture or dots on it.", LOOK_PREFS.FOLDER_STROKE, "#3b3f46");
+            folderTransparency("Folder icon: outline and glyph transparency", "0% is solid. Works on Zen's own color too.", LOOK_PREFS.FOLDER_STROKE_OPACITY);
+            folderColor("Folder label color", "The folder name in the sidebar.", LOOK_PREFS.FOLDER_LABEL, "#e2e2e2");
+            {
+              const tight = createToggleRow(
+                "Tighter folder rows",
+                "Drops the fixed line height of folder labels, so folders and the tabs under them sit a little closer together.",
+                LOOK_PREFS.FOLDER_TIGHT_LABELS,
+                "bgalazka-folder-tight",
+                false,
+              );
+              tight.row.dataset.paletteDetail = "true";
+              lookCategory.subContent.append(tight.row);
+              panel._toggles.push({ input: tight.input, pref: LOOK_PREFS.FOLDER_TIGHT_LABELS, def: false });
+            }
             syncRssCardLookRows();
             addLookHeading("Existing appearance");
             lookCategory.subContent.append(

@@ -817,6 +817,60 @@
       "property": "zen.workspace.zentral.notes.zen_note_favicons"
     },
     {
+      "label": "Color of the NOTES folder in the Zen sidebar",
+      "type": "dropdown",
+      "defaultValue": "",
+      "options": [
+        {
+          "label": "Zen's own color",
+          "value": ""
+        },
+        {
+          "label": "Yellow",
+          "value": "yellow"
+        },
+        {
+          "label": "Green",
+          "value": "green"
+        },
+        {
+          "label": "Blue",
+          "value": "blue"
+        },
+        {
+          "label": "Pink",
+          "value": "pink"
+        },
+        {
+          "label": "Purple",
+          "value": "purple"
+        },
+        {
+          "label": "Orange",
+          "value": "orange"
+        },
+        {
+          "label": "Red",
+          "value": "red"
+        },
+        {
+          "label": "Teal",
+          "value": "teal"
+        },
+        {
+          "label": "Gray",
+          "value": "gray"
+        }
+      ],
+      "property": "zen.workspace.zentral.notes.zen_root_color"
+    },
+    {
+      "label": "Emoji on the NOTES folder in the Zen sidebar (one emoji, empty = Zen's icon)",
+      "type": "string",
+      "defaultValue": "",
+      "property": "zen.workspace.zentral.notes.zen_root_icon"
+    },
+    {
       "label": "Formatting buttons wait for the text (click Bold with nothing selected, then type or select)",
       "type": "checkbox",
       "defaultValue": true,
@@ -1380,6 +1434,16 @@
       "owner": "notes"
     },
     "zen.workspace.zentral.notes.zen_note_favicons": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.zen_root_color": {
+      "category": "notes",
+      "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.zen_root_icon": {
       "category": "notes",
       "section": "Quick notes",
       "owner": "notes"

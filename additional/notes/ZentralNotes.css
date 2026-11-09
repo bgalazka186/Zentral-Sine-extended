@@ -688,7 +688,13 @@
 }
 .zentral-notes-sheet .zn-read .zn-spoiler.is-shown > * { color: inherit; }
 /* #tags and dates written as 2026-11-07 */
-.zentral-notes-sheet .zn-read .zn-tag { color: var(--zn-accent, #6aa7ff); background: color-mix(in srgb, var(--zn-accent, #6aa7ff) 14%, transparent); border-radius: 999px; padding: 0 6px; }
+.zentral-notes-sheet .zn-read .zn-tag {
+  /* mostly the text colour, only a hint of the accent: a dark primary colour must not make the tag unreadable */
+  color: color-mix(in srgb, var(--zn-text) 82%, var(--zn-accent, #6aa7ff));
+  background: color-mix(in srgb, var(--zn-text) 12%, var(--zn-accent, #6aa7ff) 14%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--zn-text) 22%, transparent);
+  border-radius: 999px; padding: 0 6px;
+}
 .zentral-notes-sheet .zn-read .zn-date { border-bottom: 1px dotted color-mix(in srgb, currentColor 55%, transparent); }
 
 /* ---- B2: code colors, sub/superscript, keys, dialogs, copy in read view ----------------- */
@@ -1244,13 +1250,18 @@
 .zentral-notes-reveal[data-edge]:hover::after { opacity: 1; }
 .zentral-notes-pill[popover] { inset: auto; margin: 0; padding: 0; border: 0; overflow: visible; background: transparent; color: var(--zl-popup-text, var(--zen-colors-tertiary-text, #fff)); }
 
-/* Armed formatting tool (click with nothing selected, then type): a soft pulse so it is not mistaken for "on" */
+/* Armed formatting tool (click with nothing selected, then type): a soft pulse so it is not mistaken for "on".
+   The icon keeps the normal text colour and the ring and pulse are made of that same colour: the accent
+   (Zen's primary colour) can be as dark as the toolbar in some themes, so it is never used as a text or ring
+   colour here, only as a faint tint behind the icon. */
 .zentral-notes-sheet .zn-btn.is-armed {
-  color: var(--zn-accent, var(--zn-text));
-  box-shadow: inset 0 0 0 1px var(--zn-accent, currentColor);
+  color: var(--zn-text);
+  opacity: 1;
+  background: color-mix(in srgb, var(--zn-text) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--zn-text) 55%, transparent);
   animation: zn-armed-pulse 1.4s ease-in-out infinite;
 }
-@keyframes zn-armed-pulse { 50% { background: color-mix(in srgb, var(--zn-accent, currentColor) 28%, transparent); } }
+@keyframes zn-armed-pulse { 50% { background: color-mix(in srgb, var(--zn-text) 28%, var(--zn-accent) 12%); } }
 @media (prefers-reduced-motion: reduce) { .zentral-notes-sheet .zn-btn.is-armed { animation: none; } }
 
 /* Folder colour / emoji (S6 W2) */

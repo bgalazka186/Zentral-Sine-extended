@@ -262,5 +262,46 @@ const seq = (n) => { let i = 0; return () => ((i++ * 7 + n) % 36) / 36; };
     const node = store.tree().children.find((n) => n.id === "work"); assert.equal(node.color, "teal"); assert.equal(node.icon, "📓");
     const row = all().find((e) => e.getAttribute("data-fid") === "work"); assert.equal(row.dataset.color, "teal"); assert.ok(row.textContent.includes("📓"));
   });
+  // ------------------------------------------------------------------ live-test fixes (3.2.2)
+  await test("folder icon: the three --zen-folder-* variables Zen's icon reads are set on the folder, per colour, and removed again", () => {
+    const z = sb(); const f = z.folder("Sub");
+    const zenDefault = f.cssVar("--zen-folder-front-bgcolor"); assert.ok(zenDefault.includes("--zen-primary-color"), "Zen's own rule applies before any override");
+    c.applyNotesFolderStyle(f, "purple", "", { doc: document });
+    for (const k of c.ZEN_FOLDER_VARS) assert.ok(f.style.getPropertyValue(k).includes(c.TINT_HEX.purple), k + " uses the palette colour");
+    assert.ok(f.style.getPropertyValue("--zen-folder-front-bgcolor").includes("white 70%"), "Zen's own formula, palette colour in place of the primary colour");
+    c.applyNotesFolderStyle(f, "", "", { doc: document });
+    for (const k of c.ZEN_FOLDER_VARS) assert.equal(f.style.getPropertyValue(k), "", k + " removed");
+    assert.equal(f.cssVar("--zen-folder-front-bgcolor"), zenDefault, "back to Zen's own colours");
+    eq(J(c.folderZenVars("")), {}); eq(J(c.folderZenVars("nope")), {});
+    // the real icon shapes read these variables through inline styles, so a value on the folder is what reaches them
+    for (const sel of [".back", ".front", ".dots"]) assert.ok(f.querySelector(".tab-group-folder-icon " + sel).getAttribute("style").includes("var(--zen-folder-"), sel);
+    z.ws.remove();
+  });
+  await test("restart: a restored sub-folder (static id, no attributes) is adopted, not duplicated; keys round-trip through the id", () => {
+    for (const key of ["f:work", "f:work/deep-1", "f:a/b/c"]) assert.equal(c.notesKeyFromId(c.notesSubId(key)), key);
+    assert.equal(c.notesKeyFromId("some-other-folder"), ""); assert.equal(c.notesKeyFromId(c.NOTES_ZEN_ROOT_ID), ""); assert.equal(c.notesKeyFromId(c.NOTES_ZEN_ROOT_ID + "-sub_"), "");
+    const z = sb();
+    const root = z.folder("NOTES", { id: c.NOTES_ZEN_ROOT_ID, attrs: { "bgalazka-notes-folder": "true" } });
+    // what Zen restores: id and label, none of our attributes
+    const work = z.folder("Work", { id: c.notesSubId("f:work"), parent: root.querySelector(".tab-group-container") });
+    root.addFolder(work);
+    const deep = z.folder("Deep", { id: c.notesSubId("f:work/deep") }); work.addFolder(deep);
+    const mine = z.folder("My own folder", { id: "person-made" }); root.addFolder(mine);
+    assert.equal(c.adoptNotesSubfolders(root), 2);
+    assert.equal(work.getAttribute("bgalazka-notes-subfolder"), "f:work"); assert.equal(work.getAttribute("bgalazka-notes-parent"), ""); assert.equal(work.getAttribute("bgalazka-notes-label"), "Work");
+    assert.equal(deep.getAttribute("bgalazka-notes-subfolder"), "f:work/deep"); assert.equal(deep.getAttribute("bgalazka-notes-parent"), "f:work");
+    assert.equal(mine.hasAttribute("bgalazka-notes-subfolder"), false, "a folder the person made inside NOTES is never claimed");
+    assert.equal(c.adoptNotesSubfolders(root), 0, "idempotent");
+    z.ws.remove();
+  });
+  await test("contrast: an armed tool and a #tag never use the accent (Zen's primary colour, can be near-black) as text or ring colour", () => {
+    const block = (sel) => { const i = css.indexOf(sel + " {"); assert.ok(i >= 0, sel); return css.slice(i, css.indexOf("}", i)); };
+    for (const sel of [".zentral-notes-sheet .zn-btn.is-armed", ".zentral-notes-sheet .zn-read .zn-tag"]) {
+      const b = block(sel);
+      assert.ok(!/(^|[^-])color:\s*var\(--zn-accent/.test(b), sel + " text colour is not the bare accent");
+      assert.ok(!/box-shadow:[^;]*var\(--zn-accent\)/.test(b), sel + " ring is not the bare accent");
+      assert.ok(/--zn-text/.test(b), sel + " is built from the text colour");
+    }
+  });
   console.log(`\n${passed} folder identity / style tests passed`);
 })().catch((e) => { console.error("FAIL", e); process.exit(1); });

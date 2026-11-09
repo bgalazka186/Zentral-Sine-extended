@@ -881,6 +881,57 @@
     ]
   },
   {
+    "property": "zen.workspace.bgalazka.look.folder_behind",
+    "label": "Native folder icon: back color (empty follows Zen)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.folder_behind_opacity_text",
+    "label": "Native folder icon: back opacity (%) [0 to 100 %]",
+    "type": "string",
+    "defaultValue": "100",
+    "placeholder": "100"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.folder_front",
+    "label": "Native folder icon: front color (empty follows Zen)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.folder_front_opacity_text",
+    "label": "Native folder icon: front opacity (%) [0 to 100 %]",
+    "type": "string",
+    "defaultValue": "100",
+    "placeholder": "100"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.folder_stroke",
+    "label": "Native folder icon: outline and glyph color (empty follows Zen)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.folder_stroke_opacity_text",
+    "label": "Native folder icon: outline and glyph opacity (%) [0 to 100 %]",
+    "type": "string",
+    "defaultValue": "100",
+    "placeholder": "100"
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.folder_label",
+    "label": "Native folder label color (empty follows Zen)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.bgalazka.look.folder_tight_labels",
+    "label": "Tighter folder rows (drop the fixed label line height)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
     "type": "text",
     "label": "**Detailed appearance · Menus & feedback**",
     "size": "16px"
@@ -2539,6 +2590,60 @@
     "type": "checkbox",
     "defaultValue": true,
     "property": "zen.workspace.zentral.notes.zen_note_favicons"
+  },
+  {
+    "label": "Color of the NOTES folder in the Zen sidebar",
+    "type": "dropdown",
+    "defaultValue": "",
+    "options": [
+      {
+        "label": "Zen's own color",
+        "value": ""
+      },
+      {
+        "label": "Yellow",
+        "value": "yellow"
+      },
+      {
+        "label": "Green",
+        "value": "green"
+      },
+      {
+        "label": "Blue",
+        "value": "blue"
+      },
+      {
+        "label": "Pink",
+        "value": "pink"
+      },
+      {
+        "label": "Purple",
+        "value": "purple"
+      },
+      {
+        "label": "Orange",
+        "value": "orange"
+      },
+      {
+        "label": "Red",
+        "value": "red"
+      },
+      {
+        "label": "Teal",
+        "value": "teal"
+      },
+      {
+        "label": "Gray",
+        "value": "gray"
+      }
+    ],
+    "property": "zen.workspace.zentral.notes.zen_root_color"
+  },
+  {
+    "label": "Emoji on the NOTES folder in the Zen sidebar (one emoji, empty = Zen's icon)",
+    "type": "string",
+    "defaultValue": "",
+    "property": "zen.workspace.zentral.notes.zen_root_icon"
   },
   {
     "type": "text",

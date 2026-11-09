@@ -38,6 +38,7 @@ function matchChain(el, chain, scope, i = chain.length - 1) {
 // ---- A generic copy of the Zen sidebar structure (shape taken from a real Zen DOM dump; every label and id here is made up) ----
 // workspace > arrowscrollbox > vbox.zen-workspace-pinned-tabs-section > zen-folder > (hbox.tab-group-label-container, div.tab-group-container)
 const ZEN_DEFAULT_TINT = { "--tab-group-color": "var(--tab-group-zen-workspace-color)", "--tab-group-color-invert": "var(--tab-group-zen-workspace-color-invert)", "--tab-group-color-pale": "var(--tab-group-zen-workspace-color-pale)", "--tab-group-background-color": "var(--tab-group-zen-workspace-color)", "--tab-group-text-color": "var(--tab-group-zen-workspace-color-text)", "--tab-group-text-color-invert": "var(--tab-group-zen-workspace-color-text-invert)", "--tab-group-background-color-hover": "var(--tab-group-zen-workspace-color-hover)" };
+const ZEN_FOLDER_DEFAULT_VARS = { "--zen-folder-behind-bgcolor": "light-dark(color-mix(in srgb, var(--zen-primary-color) 60%, gray), color-mix(in srgb, var(--zen-primary-color) 60%, #c1c1c1))", "--zen-folder-front-bgcolor": "light-dark(color-mix(in srgb, var(--zen-primary-color), white 70%), color-mix(in srgb, var(--zen-primary-color), black 40%))", "--zen-folder-stroke": "light-dark(color-mix(in srgb, var(--zen-primary-color) 50%, black), color-mix(in srgb, var(--zen-colors-primary) 15%, #ebebeb))" };
 function makeZenSidebar({ El, document }) {
   const mk = (tag, cls = "", attrs = {}) => { const e = new El(tag); if (cls) e.className = cls; for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; };
   const ws = mk("zen-workspace", "", { id: "{00000000-0000-4000-8000-000000000001}" });
@@ -51,14 +52,32 @@ function makeZenSidebar({ El, document }) {
     t.append(mk("stack", "tab-stack")); t.querySelector(".tab-stack").append(mk("hbox", "tab-content")); t.querySelector(".tab-content").append(mk("stack", "tab-icon-stack")); t.querySelector(".tab-icon-stack").append(img);
     return t;
   };
-  // a folder with Zen's real inner structure; `iconHref` is the chrome:// icon Zen draws
+  // A folder with Zen's real inner structure, copied from a runtime dump of a Zen window (labels and ids are made up).
+  // Real Zen draws the icon with inline `fill: var(--zen-folder-...)` styles on the svg shapes, and zen-folders.css defines those
+  // three variables on `:root, zen-folder`, i.e. on every folder element itself (so only a value on the folder, or a rule that
+  // targets zen-folder, reaches the icon; a value on :root alone does not). `iconHref` is the chrome:// icon Zen draws.
+  // Tag names are kept short ("div" is "html:div" in the real DOM) so the fake selector matcher can stay simple.
   const folder = (label, { id, parent = pinned, attrs = {}, iconHref = "chrome://browser/skin/zen-icons/selectable/squares.svg" } = {}) => {
     const f = mk("zen-folder", "", { id: id || "f-" + label.toLowerCase().replace(/\W+/g, "-"), label, "zen-workspace-id": ws.id, ...attrs });
     for (const [k, v] of Object.entries(ZEN_DEFAULT_TINT)) f.style.setProperty(k, v);
-    const head = mk("hbox", "tab-group-label-container");
-    const iconBox = mk("div", "tab-group-folder-icon"); const svg = mk("svg"); const g = mk("g", "icon"); g.append(mk("image", "", { href: iconHref }));
-    svg.append(g); iconBox.append(svg); head.append(iconBox);
-    const lab = mk("label", "tab-group-label", { role: "button" }); lab.textContent = label; head.append(lab);
+    // what zen-folders.css gives every folder (before any override)
+    f.zenCssVars = { ...ZEN_FOLDER_DEFAULT_VARS }; // from the stylesheet, not inline; cssVar() is the "computed" value: inline wins over the rule
+    f.cssVar = (k) => f.style.getPropertyValue(k) || f.zenCssVars[k] || "";
+    const head = mk("hbox", "tab-group-label-container zen-squircle-before zen-drop-target", { pack: "center", context: "zenFolderActions" });
+    const iconBox = mk("div", "tab-group-folder-icon");
+    const svg = mk("svg", "", { width: "28", height: "28", viewBox: "0 0 27 27", fill: "none" });
+    const defs = mk("defs");
+    for (const gid of ["gradient-0", "gradient-1"]) { const lg = mk("linearGradient", "", { id: gid, gradientUnits: "userSpaceOnUse" }); lg.append(mk("stop", "", { offset: "0", style: "stop-color: rgb(255, 255, 255)" })); lg.append(mk("stop", "", { offset: "1", style: "stop-color: rgb(0% 0% 0%)" })); defs.append(lg); }
+    svg.append(defs);
+    svg.append(mk("path", "back", { style: "fill: var(--zen-folder-behind-bgcolor);" }));
+    svg.append(mk("path", "back", { style: "stroke-width: 1.5px; stroke: var(--zen-folder-stroke);" }));
+    svg.append(mk("rect", "front", { style: "fill: var(--zen-folder-front-bgcolor);" }));
+    svg.append(mk("rect", "front", { style: "stroke-width: 1.5px; stroke: var(--zen-folder-stroke);" }));
+    const g = mk("g", "icon"); g.append(mk("image", "", { href: iconHref, height: "11", width: "11" })); svg.append(g);
+    const dots = mk("g", "dots", { style: "fill: var(--zen-folder-stroke);" }); for (const cx of ["10", "14", "18"]) dots.append(mk("ellipse", "", { cx, cy: "16", rx: "1.25", ry: "1.25" })); svg.append(dots);
+    iconBox.append(svg); head.append(iconBox);
+    const lab = mk("label", "tab-group-label", { role: "button", "aria-level": "1", "aria-expanded": "true" }); lab.textContent = label; head.append(lab);
+    head.append(mk("image", "tab-reset-button reset-icon", { role: "button" }));
     const body = mk("div", "tab-group-container");
     f.append(head); f.append(body);
     f.delete = () => f.remove();
@@ -152,6 +171,7 @@ class El {
   replaceWith(n) { const p = this.parent; if (!p) return; const i = p.children.indexOf(this); this.parent = null; p.children.splice(i, 1); p._adopt(n); p.children.splice(i, 0, n); }
   get firstElementChild() { return this.children.find((c) => c.tag !== "#text") || null; }
   insertBefore(n, ref) { this._adopt(n); const i = ref ? this.children.indexOf(ref) : -1; if (i < 0) this.children.push(n); else this.children.splice(i, 0, n); return n; }
+  get parentElement() { return this.parent; } // like the real DOM: the Notes code walks up with it
   closest(sel) { const chains = parseSelector(sel); for (let x = this; x; x = x.parent) if (chains.some((c) => matchChain(x, c, null))) return x; return null; }
 }
 const document = {

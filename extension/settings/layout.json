@@ -723,6 +723,14 @@
     "zen.workspace.bgalazka.rss.compact_headers",
     "zen.workspace.bgalazka.look.tile_opacity",
     "zen.workspace.bgalazka.look.tile_style",
+    "zen.workspace.bgalazka.look.folder_behind",
+    "zen.workspace.bgalazka.look.folder_behind_opacity",
+    "zen.workspace.bgalazka.look.folder_front",
+    "zen.workspace.bgalazka.look.folder_front_opacity",
+    "zen.workspace.bgalazka.look.folder_stroke",
+    "zen.workspace.bgalazka.look.folder_stroke_opacity",
+    "zen.workspace.bgalazka.look.folder_label",
+    "zen.workspace.bgalazka.look.folder_tight_labels",
     {
       "type": "text",
       "label": "**Detailed appearance · Menus & feedback**",
@@ -1055,6 +1063,8 @@
     "zen.workspace.zentral.notes.shortcut_time_format",
     "zen.workspace.zentral.notes.tool_arm_mode",
     "zen.workspace.zentral.notes.zen_note_favicons",
+    "zen.workspace.zentral.notes.zen_root_color",
+    "zen.workspace.zentral.notes.zen_root_icon",
     {
       "type": "text",
       "label": "**Notes · Capture**",

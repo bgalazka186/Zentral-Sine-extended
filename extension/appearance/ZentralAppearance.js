@@ -144,6 +144,15 @@
       RSS_CARD_BUTTON_BACKGROUND:
         "zen.workspace.bgalazka.look.rss_card_button_background",
       RSS_CARD_BUTTON_TEXT: "zen.workspace.bgalazka.look.rss_card_button_text",
+      // Native Zen folders (not the Notes folder): colors of the folder icon and of the folder label.
+      FOLDER_BEHIND: "zen.workspace.bgalazka.look.folder_behind",
+      FOLDER_BEHIND_OPACITY: "zen.workspace.bgalazka.look.folder_behind_opacity",
+      FOLDER_FRONT: "zen.workspace.bgalazka.look.folder_front",
+      FOLDER_FRONT_OPACITY: "zen.workspace.bgalazka.look.folder_front_opacity",
+      FOLDER_STROKE: "zen.workspace.bgalazka.look.folder_stroke",
+      FOLDER_STROKE_OPACITY: "zen.workspace.bgalazka.look.folder_stroke_opacity",
+      FOLDER_LABEL: "zen.workspace.bgalazka.look.folder_label",
+      FOLDER_TIGHT_LABELS: "zen.workspace.bgalazka.look.folder_tight_labels",
     });
     const LOOK_DEFAULTS = Object.freeze({
       [LOOK_PREFS.VIDEO_CONTROLS_WRAP]: false,
@@ -230,6 +239,14 @@
       [LOOK_PREFS.RSS_CARD_BORDER_COLOR]: "",
       [LOOK_PREFS.RSS_CARD_BUTTON_BACKGROUND]: "",
       [LOOK_PREFS.RSS_CARD_BUTTON_TEXT]: "",
+      [LOOK_PREFS.FOLDER_BEHIND]: "",
+      [LOOK_PREFS.FOLDER_BEHIND_OPACITY]: 100,
+      [LOOK_PREFS.FOLDER_FRONT]: "",
+      [LOOK_PREFS.FOLDER_FRONT_OPACITY]: 100,
+      [LOOK_PREFS.FOLDER_STROKE]: "",
+      [LOOK_PREFS.FOLDER_STROKE_OPACITY]: 100,
+      [LOOK_PREFS.FOLDER_LABEL]: "",
+      [LOOK_PREFS.FOLDER_TIGHT_LABELS]: false,
       [LOOK_PREFS.VIDEO_RADIUS]: 0,
       [LOOK_PREFS.PANEL_BORDER]: 1,
       [LOOK_PREFS.TOOLBAR_SURFACE]: "#202224",
@@ -560,9 +577,12 @@
       "BUTTON_BACKGROUND",
       "BUTTON_TEXT",
     ]);
-    const LOOK_OPTIONAL_COLORS = new Set(
-      RSS_CARD_COLOR_NAMES.map((name) => LOOK_PREFS["RSS_CARD_" + name]),
-    );
+    // Native Zen folder colors (same rule: empty = Zen's own colors).
+    const FOLDER_COLOR_NAMES = Object.freeze(["BEHIND", "FRONT", "STROKE", "LABEL"]);
+    const LOOK_OPTIONAL_COLORS = new Set([
+      ...RSS_CARD_COLOR_NAMES.map((name) => LOOK_PREFS["RSS_CARD_" + name]),
+      ...FOLDER_COLOR_NAMES.map((name) => LOOK_PREFS["FOLDER_" + name]),
+    ]);
     // The reader card is painted from root custom properties only. The
     // stylesheet keeps the theme fallback, so an unset preference removes the
     // property and the active Look palette wins again.
@@ -642,6 +662,9 @@
       [LOOK_PREFS.RSS_CARD_BUTTON_RADIUS]: [0, 100],
       [LOOK_PREFS.RSS_CARD_GAP]: [0, 100],
       [LOOK_GROUP_PREFS.LABEL_OPACITY]: [0, 100],
+      [LOOK_PREFS.FOLDER_BEHIND_OPACITY]: [0, 100],
+      [LOOK_PREFS.FOLDER_FRONT_OPACITY]: [0, 100],
+      [LOOK_PREFS.FOLDER_STROKE_OPACITY]: [0, 100],
       [ctx.BGALAZKA_EXT_PREFS.PANEL_BLACK_OPACITY]: [0, 100],
       [ctx.BGALAZKA_EXT_PREFS.OPACITY_UNPINNED]: [10, 100],
       [ctx.BGALAZKA_EXT_PREFS.OPACITY_PINNED_FOCUS]: [10, 100],
@@ -1615,6 +1638,32 @@
         if (/^#[0-9a-fA-F]{6}$/.test(value))
           root.style.setProperty(property, value);
         else root.style.removeProperty(property);
+      }
+      // Native Zen folders. Zen defines --zen-folder-* on every zen-folder, so ZentralAppearance.css overrides them there; this only
+      // publishes the picked colors and the flags that switch each override on. An untouched setting writes nothing, so Zen's own
+      // folder colors stay exactly as they are.
+      {
+        const flags = [];
+        for (const name of FOLDER_COLOR_NAMES) {
+          const part = name.toLowerCase();
+          const color = String(ctx.getPref(LOOK_PREFS["FOLDER_" + name], "") || "").trim();
+          const hex = /^#[0-9a-fA-F]{6}$/.test(color);
+          const property = "--bgalazka-look-folder-" + part;
+          if (hex) root.style.setProperty(property, color);
+          else root.style.removeProperty(property);
+          let alpha = 100;
+          const opacityPref = LOOK_PREFS["FOLDER_" + name + "_OPACITY"];
+          if (opacityPref) {
+            const raw = Number(ctx.getPref(opacityPref, 100));
+            alpha = Number.isFinite(raw) ? Math.max(0, Math.min(100, Math.round(raw))) : 100;
+            root.style.setProperty(property + "-alpha", alpha + "%");
+          }
+          if (hex || alpha < 100) flags.push(part);
+        }
+        if (ctx.getPref(LOOK_PREFS.FOLDER_TIGHT_LABELS, false) === true)
+          flags.push("tight");
+        if (flags.length) root.setAttribute("bgalazka-look-folder", flags.join(" "));
+        else root.removeAttribute("bgalazka-look-folder");
       }
       for (const [name, table] of [
         ["SHADOW", RSS_CARD_SHADOWS],
