@@ -764,51 +764,9 @@
     "property": "zen.workspace.zentral.notes.zen_note_favicons"
   },
   {
-    "label": "Color of the NOTES folder in the Zen sidebar",
-    "type": "dropdown",
+    "label": "Color of the NOTES folder in the Zen sidebar (palette name or #rrggbb; easier: Notes list > folder button)",
+    "type": "string",
     "defaultValue": "",
-    "options": [
-      {
-        "label": "Zen's own color",
-        "value": ""
-      },
-      {
-        "label": "Yellow",
-        "value": "yellow"
-      },
-      {
-        "label": "Green",
-        "value": "green"
-      },
-      {
-        "label": "Blue",
-        "value": "blue"
-      },
-      {
-        "label": "Pink",
-        "value": "pink"
-      },
-      {
-        "label": "Purple",
-        "value": "purple"
-      },
-      {
-        "label": "Orange",
-        "value": "orange"
-      },
-      {
-        "label": "Red",
-        "value": "red"
-      },
-      {
-        "label": "Teal",
-        "value": "teal"
-      },
-      {
-        "label": "Gray",
-        "value": "gray"
-      }
-    ],
     "property": "zen.workspace.zentral.notes.zen_root_color"
   },
   {
@@ -816,6 +774,12 @@
     "type": "string",
     "defaultValue": "",
     "property": "zen.workspace.zentral.notes.zen_root_icon"
+  },
+  {
+    "label": "Quick colors saved in the Notes color pickers (up to 8, #rrggbb separated by commas)",
+    "type": "string",
+    "defaultValue": "",
+    "property": "zen.workspace.zentral.notes.custom_colors"
   },
   {
     "label": "Formatting buttons wait for the text (click Bold with nothing selected, then type or select)",

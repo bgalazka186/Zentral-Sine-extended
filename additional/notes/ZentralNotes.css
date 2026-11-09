@@ -9,7 +9,7 @@
  *   same black backing under the sheet, so notes stay readable on translucent panels.
  * Local interface selectors: .zentral-notes-btn; .zentral-notes-sheet; .zn-*
  * Local interface selectors (dock): .zentral-notes-sidebar-btn
- * Attribute selectors used: bgalazka-force-panel-black; data-active; data-color; data-dragging; data-geo; data-h; data-slot;
+ * Attribute selectors used: bgalazka-force-panel-black; bgalazka-notes-icon; data-active; data-color; data-dragging; data-geo; data-h; data-slot;
  *   data-collapsed; data-dock; data-host; data-mode; data-placement; data-settled; data-size; popover; data-split; data-state; data-trashed; data-view
  *
  * Navigation: ARCHITECTURE.md and FILE_GUIDE.json map the whole tree. Symbols below are static
@@ -1278,3 +1278,31 @@
 .zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="red"] { --zn-fc: #ff6b6b; }
 .zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="teal"] { --zn-fc: #2ec4b6; }
 .zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="gray"] { --zn-fc: #9aa0a6; }
+
+/* ---- Custom colors (T3.6): data-color="custom" + the color in --zn-cc (set inline by the script, always a validated #rrggbb) ---- */
+.zentral-notes-sheet[data-color="custom"] { --zn-note: var(--zn-cc); }
+.zentral-notes-sheet .zn-dot[data-color="custom"] { background: var(--zn-cc); border-color: var(--zn-cc); }
+.zentral-notes-sheet .zn-hl-dot[data-color="custom"] { background: var(--zn-cc); }
+.zentral-notes-sheet .zn-hl[data-color="custom"] { background: color-mix(in srgb, var(--zn-cc) 45%, transparent); }
+.zentral-notes-sheet .zn-item[data-color="custom"] .zn-item-bar { background: var(--zn-cc); }
+.zentral-notes-sheet .zn-swatch[data-color="custom"] { background: var(--zn-cc); }
+.zentral-notes-sheet .zn-frow[data-color="custom"] .zn-frow-icon { color: var(--zn-cc); }
+.zentral-notes-sheet .zn-swatches-custom { margin-top: 4px; }
+.zentral-notes-sheet .zn-swatch-add { display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px dashed currentColor; color: inherit; line-height: 1; }
+.zentral-notes-sheet .zn-color-picker { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+.zentral-notes-sheet .zn-color-picker-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.zentral-notes-sheet .zn-color-input { width: 36px; height: 28px; padding: 0; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 6px; background: transparent; cursor: pointer; }
+.zentral-notes-sheet .zn-hex-field { width: 92px; font-family: monospace; }
+.zentral-notes-sheet .zn-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ---- Emoji icon of a Notes folder in the Zen sidebar: drawn by CSS from the folder's attribute, so it does not depend on Zen's
+   icon SVG internals (sub-folders showed none). The SVG <text> the script also adds is hidden to avoid a double icon. ---- */
+zen-folder[bgalazka-notes-icon] .tab-group-folder-icon { position: relative; }
+zen-folder[bgalazka-notes-icon] .tab-group-folder-icon g.dots { display: none; }
+zen-folder[bgalazka-notes-icon] .tab-group-folder-icon svg g.icon text { display: none; }
+zen-folder[bgalazka-notes-icon] .tab-group-folder-icon svg g.icon image { display: none; }
+zen-folder[bgalazka-notes-icon] .tab-group-folder-icon::after {
+  content: attr(bgalazka-notes-icon);
+  position: absolute; left: 52%; top: 61%; transform: translate(-50%, -50%);
+  font-size: 11px; line-height: 1; pointer-events: none;
+}

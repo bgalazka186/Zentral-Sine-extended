@@ -187,6 +187,7 @@
       ZEN_FAVICONS: "zen.workspace.zentral.notes.zen_note_favicons",
       ZEN_ROOT_COLOR: "zen.workspace.zentral.notes.zen_root_color",
       ZEN_ROOT_ICON: "zen.workspace.zentral.notes.zen_root_icon",
+      CUSTOM_COLORS: "zen.workspace.zentral.notes.custom_colors",
       ZEN_TOP: "zen.workspace.zentral.notes.zen_folder_top",
       CAPTURE_FORMAT: "zen.workspace.zentral.notes.quick_capture_format",
       DEBUG_PERF: "zen.workspace.zentral.notes.debug_perf",
@@ -312,7 +313,7 @@
         body,
         created: toTime(meta.created, mtime),
         updated: toTime(meta.updated, mtime),
-        color: NOTE_COLORS.includes(meta.color) ? meta.color : "none",
+        color: cleanNoteColor(meta.color),
         label: cleanLabel(meta.label),
         folder: cleanFolder(meta.folder),
         pinned: meta.pinned === "true",
@@ -331,7 +332,7 @@
         "created: " + iso(n.created),
         "updated: " + iso(n.updated),
       ];
-      if (n.color && n.color !== "none") lines.push("color: " + n.color);
+      if (n.color && n.color !== "none") lines.push("color: " + (cleanHex(n.color) ? '"' + cleanHex(n.color) + '"' : n.color));
       if (cleanLabel(n.label)) lines.push("label: " + cleanLabel(n.label));
       if (cleanFolder(n.folder)) lines.push("folder: " + cleanFolder(n.folder));
       if (n.pinned) lines.push("pinned: true");
@@ -371,7 +372,41 @@
     // Folder colour: the palette of the notes without "none" ("" = the normal look). Folder icon: ONE emoji (also a flag, a keycap
     // or a skin-tone / joined sequence); anything else, text included, is refused so a label can never smuggle markup into the tab bar.
     const FOLDER_COLORS = Object.freeze(NOTE_COLORS.filter((c) => c !== "none"));
-    const cleanFolderColor = (v) => (FOLDER_COLORS.includes(v) ? v : "");
+    // Custom colours (T3.6): anywhere a palette name is accepted, a `#rrggbb` value is accepted too. It is always validated by
+    // cleanHex (six hex digits, lower-cased), so a colour can never carry anything else into a style or a file.
+    const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+    const cleanHex = (v) => (typeof v === "string" && HEX_COLOR_RE.test(v.trim()) ? v.trim().toLowerCase() : "");
+    const QUICK_COLORS_MAX = 8;
+    const parseQuickColors = (raw) => {
+      const out = [];
+      for (const part of String(raw || "").split(/[\s,;]+/)) {
+        const hex = cleanHex(part);
+        if (hex && !out.includes(hex)) out.push(hex);
+        if (out.length >= QUICK_COLORS_MAX) break;
+      }
+      return out;
+    };
+    const addQuickColor = (list, hex) => {
+      const h0 = cleanHex(hex);
+      return h0 ? [h0, ...list.filter((c) => c !== h0)].slice(0, QUICK_COLORS_MAX) : list.slice();
+    };
+    const cleanNoteColor = (v) => {
+      const s0 = String(v ?? "").trim().replace(/^["']|["']$/g, "");
+      return NOTE_COLORS.includes(s0) ? s0 : cleanHex(s0) || "none";
+    };
+    const cleanHighlightColor = (v) => (HIGHLIGHT_COLORS.includes(v) ? v : cleanHex(v) || "");
+    // The element carries `data-color="custom"` plus the colour in --zn-cc (the sheet CSS reads it); a palette name stays a name.
+    function setColorData(el, color) {
+      const hex = cleanHex(color);
+      if (hex) {
+        el.dataset.color = "custom";
+        el.style.setProperty("--zn-cc", hex);
+      } else {
+        el.dataset.color = color || "none";
+        el.style.removeProperty("--zn-cc");
+      }
+    }
+    const cleanFolderColor = (v) => (FOLDER_COLORS.includes(v) ? v : cleanHex(v));
     const EMOJI_ONE = /^(?:\p{Extended_Pictographic}(?:\uFE0F|[\u{1F3FB}-\u{1F3FF}])?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|[\u{1F3FB}-\u{1F3FF}])?)*|[\u{1F1E6}-\u{1F1FF}]{2}|[0-9#*]\uFE0F?\u20E3)$/u;
     const cleanFolderIcon = (v) => (typeof v === "string" && v.length <= 24 && EMOJI_ONE.test(v) ? v : "");
     function cleanFolder(v) {
@@ -636,7 +671,7 @@
       return rows;
     }
 
-    const MARKERS_RE = /\*\*|==(?:\{\w+\})?|~~|`/g;
+    const MARKERS_RE = /\*\*|==(?:\{(?:\w+|#[0-9a-fA-F]{6})\})?|~~|`/g;
     const LEAD_RE =
       /^\s*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX\-/?!]\]\s+)?|\d+[.)]\s+|>\s*)/;
     function cleanLine(raw) {
@@ -736,11 +771,11 @@
       [
         "\\*\\*\\*([^\\s*](?:[\\s\\S]*?[^\\s*])?)\\*\\*\\*", // 1 bold + italic
         "(?<![\\w_])___([^\\s_](?:[\\s\\S]*?[^\\s_])?)___(?![\\w_])", // 2 bold + italic
-        "(={4,}|==\\{\\w+\\}==)", // 3 empty highlight: kept as text
+        "(={4,}|==\\{(?:\\w+|#[0-9a-fA-F]{6})\\}==)", // 3 empty highlight: kept as text
         "(?<![\\w_])__([^\\s_](?:[\\s\\S]*?[^\\s_])?)__(?![\\w_])", // 4 bold (underscores)
         "(`+)([\\s\\S]*?[^`])\\5(?!`)", // 5,6 code
         "\\*\\*(?=\\S)([\\s\\S]+?)(?<=\\S)\\*\\*", // 7 bold
-        "==(?:\\{(\\w+)\\})?([\\s\\S]+?)==", // 8 color, 9 highlight
+        "==(?:\\{(\\w+|#[0-9a-fA-F]{6})\\})?([\\s\\S]+?)==", // 8 color (name or #rrggbb), 9 highlight
         "~~(?=\\S)([\\s\\S]+?)(?<=\\S)~~", // 10 strike
         "(?<![\\w*])\\*([^\\s*](?:[\\s\\S]*?[^\\s*])?)\\*(?![\\w*])", // 11 italic
         "(?<![\\w_])_([^\\s_](?:[\\s\\S]*?[^\\s_])?)_(?![\\w_])", // 12 italic
@@ -940,8 +975,9 @@
       "--tab-group-text-color-invert": "var(--tab-group-zen-workspace-color-text-invert)",
       "--tab-group-background-color-hover": "var(--tab-group-zen-workspace-color-hover)",
     });
+    const colorHex = (name) => TINT_HEX[name] || cleanHex(name);
     function folderTint(name) {
-      const hex = TINT_HEX[name];
+      const hex = colorHex(name);
       if (!hex) return { ...ZEN_TINT_DEFAULT };
       return {
         "--tab-group-color": hex,
@@ -986,7 +1022,7 @@
     // the Appearance overrides, apply).
     const ZEN_FOLDER_VARS = Object.freeze(["--zen-folder-behind-bgcolor", "--zen-folder-front-bgcolor", "--zen-folder-stroke"]);
     function folderZenVars(name) {
-      const hex = TINT_HEX[name];
+      const hex = colorHex(name);
       if (!hex) return {};
       return {
         "--zen-folder-behind-bgcolor": "light-dark(color-mix(in srgb, " + hex + " 60%, gray), color-mix(in srgb, " + hex + " 60%, #c1c1c1))",
@@ -997,7 +1033,7 @@
     // The favicon of a note tab: a small page with a folded corner in the note's colour (gray when the note has none).
     // A data: URI so it needs no file and survives a restart; `fill` is always one of our palette values, never free text.
     function noteFaviconUri(color) {
-      const hex = TINT_HEX[color] || TINT_HEX.gray;
+      const hex = colorHex(color) || TINT_HEX.gray;
       const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M3.5 1.5h6l3 3v9a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1z" fill="' + hex + '"/><path d="M9.5 1.5v3h3z" fill="#000" fill-opacity=".28"/><path d="M5 7.5h6M5 9.5h6M5 11.5h4" stroke="#000" stroke-opacity=".45" stroke-width="1" stroke-linecap="round"/></svg>';
       return "data:image/svg+xml," + encodeURIComponent(svg);
     }
@@ -1367,7 +1403,7 @@
         else if (m[9] !== undefined)
           out.push({
             t: "hl",
-            color: HIGHLIGHT_COLORS.includes(m[8]) ? m[8] : "yellow",
+            color: cleanHighlightColor(m[8]) || "yellow",
             c: parseInline(m[9], depth + 1),
           });
         else if (m[10] !== undefined)
@@ -3249,7 +3285,8 @@
           { id: "newChooser", label: "The + button asks: blank note, today, tomorrow or a date", pref: PREF.NEW_CHOOSER, kind: "bool", def: false },
           { id: "pinStrip", label: "Pinned notes strip and Recent menu under the title", pref: PREF.PIN_STRIP, kind: "bool", def: false },
           { id: "zenFavicons", label: "Colored note icons in the Zen sidebar folder", pref: PREF.ZEN_FAVICONS, kind: "bool", def: true },
-          { id: "zenRootColor", label: "Color of the NOTES folder in the Zen sidebar", pref: PREF.ZEN_ROOT_COLOR, kind: "choice", def: "", choices: [["", "Zen's own color"], ...FOLDER_COLORS.map((c) => [c, c[0].toUpperCase() + c.slice(1)])] },
+          { id: "zenRootColor", label: "Color of the NOTES folder in the Zen sidebar (palette name or #rrggbb)", pref: PREF.ZEN_ROOT_COLOR, kind: "text", def: "" },
+          { id: "customColors", label: "Quick colors for the color pickers (up to 8 #rrggbb, comma separated)", pref: PREF.CUSTOM_COLORS, kind: "text", def: "" },
           { id: "zenRootIcon", label: "Emoji on the NOTES folder in the Zen sidebar (one emoji, empty = Zen's icon)", pref: PREF.ZEN_ROOT_ICON, kind: "text", def: "" },
           { id: "toolArm", label: "Formatting buttons wait for the text: click Bold with nothing selected, then type or select", pref: PREF.TOOL_ARM, kind: "bool", def: true },
           { id: "footerCount", label: "Footer shows characters and reading time (and counts the selection)", pref: PREF.FOOTER_COUNTER, kind: "bool", def: false },
@@ -4108,7 +4145,7 @@
           if (typeof raw.lastNoteId === "string") meta.lastNoteId = raw.lastNoteId;
           if (raw.size === "full" || raw.size === "peek" || raw.size === "span") meta.size = raw.size;
           if (raw.mode === "read" || raw.mode === "edit" || raw.mode === "split") meta.mode = raw.mode;
-          if (HIGHLIGHT_COLORS.includes(raw.highlight)) meta.highlight = raw.highlight;
+          if (cleanHighlightColor(raw.highlight)) meta.highlight = cleanHighlightColor(raw.highlight);
           if (typeof raw.syncScroll === "boolean") meta.syncScroll = raw.syncScroll;
           if (typeof raw.pinned === "boolean") meta.pinned = raw.pinned;
           if (DOCK_MODES.includes(raw.dock)) meta.dock = raw.dock;
@@ -4438,8 +4475,8 @@
         },
         setColor(id, color) {
           const note = notes.get(id);
-          if (!note || !NOTE_COLORS.includes(color) || note.color === color) return;
-          note.color = color;
+          if (!note || cleanNoteColor(color) !== (cleanHex(color) || color) || note.color === (cleanHex(color) || color)) return;
+          note.color = cleanHex(color) || color;
           if (note.body.trim() || note._onDisk) markDirty(id);
           emit("change", id, { meta: true });
         },
@@ -5772,7 +5809,7 @@
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
-        makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
+        makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
@@ -6030,7 +6067,7 @@
           if (n.t === "math") node.className = "zn-math";
           else if (n.t === "hl") {
             node.className = "zn-hl";
-            node.dataset.color = n.color;
+            setColorData(node, n.color);
           } else if (n.t === "a") {
             // No href attribute: a real link inside browser chrome could
             // navigate the window. Clicks go through env.openLink instead.
@@ -6435,12 +6472,13 @@
       const chipRecent = h("button", { type: "button", class: "zn-chip" }, "Recent");
       const chipTrash = h("button", { type: "button", class: "zn-chip" }, "Trash");
       const chipEmpty = h("button", { type: "button", class: "zn-chip zn-chip-danger" }, "Empty trash");
+      const btnRoot = iconButton("folder", "NOTES folder in the Zen sidebar: color and icon\u2026 (also: right-click Notes)", "zn-rootstyle");
       const listItems = h("div", { class: "zn-items", role: "list" });
       const listEl = h(
         "div",
         { class: "zn-list" },
         h("div", { class: "zn-list-head" }, h("span", { class: "zn-search-wrap" }, icon("search", 13), search), btnFolder, btnNew),
-        h("div", { class: "zn-chips" }, chipAll, chipRecent, chipTrash, h("span", { class: "zn-grow" }), chipEmpty),
+        h("div", { class: "zn-chips" }, chipAll, chipRecent, chipTrash, btnRoot, h("span", { class: "zn-grow" }), chipEmpty),
         listItems,
       );
       // Find "highlight every match" layer (pref find_highlight = backdrop): sits under the transparent textarea.
@@ -6485,7 +6523,7 @@
         labelEl.textContent = n?.label || "";
         paintReminderChip(n);
         paintFindState();
-                root.dataset.color = n?.color || "none";
+                setColorData(root, n?.color || "none");
         root.dataset.trashed = n?.trashed ? "true" : "false";
         titleEl.textContent =
           view === "list" ? (filter === "trash" ? "Trash" : "All notes") : titleOf(n?.body || "") || "Untitled note";
@@ -6493,7 +6531,7 @@
         btnPin.classList.toggle("is-on", !!n?.pinned);
         btnPin.title = n?.pinned ? "Unpin note" : "Pin note to the top of the list";
         btnPin.setAttribute("aria-pressed", n?.pinned ? "true" : "false");
-        colorDot.dataset.color = n?.color || "none";
+        setColorData(colorDot, n?.color || "none");
         const big = store.meta.size !== "peek";
         btnSize.replaceChildren(icon(big ? "minimize" : "maximize"));
         btnSize.title = big ? "Smaller (hold: fill the whole area)" : "Larger (hold: fill the whole area)";
@@ -6528,7 +6566,7 @@
         tSplit.title = mode === "split" ? "Close split view" : "Split view: editor and preview";
         tMode.replaceChildren(icon(mode === "read" ? "edit" : "eye"));
         tMode.title = mode === "read" ? "Edit (Ctrl+E)" : "Read (Ctrl+E)";
-        hlDot.dataset.color = store.meta.highlight;
+        setColorData(hlDot, store.meta.highlight);
         const gone = hiddenTools();
         for (const [btn, base, id] of TOOL_TITLES) {
           const combo = shortcutList().find((x) => x.id === id)?.combo;
@@ -7213,7 +7251,7 @@
         });
         item.addEventListener("dragend", () => (dragNoteId = ""));
       }
-      item.dataset.color = n.color;
+      setColorData(item, n.color);
       item.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -7321,9 +7359,9 @@
           h("span", { class: "zn-item-actions" }, add, more),
         );
         row.style.setProperty("--d", String(depth));
-        if (node.color && TINT_HEX[node.color]) {
-          row.dataset.color = node.color;
-          row.style.setProperty("--zn-fc", TINT_HEX[node.color]);
+        if (node.color && colorHex(node.color)) {
+          setColorData(row, node.color);
+          row.style.setProperty("--zn-fc", colorHex(node.color));
         }
         const toggle = () => store.setFolderCollapsed(node.id, open);
         chev.addEventListener("click", (e) => {
@@ -7430,7 +7468,7 @@
       }
       // Small dialogs for folder actions (one text field, a confirm, a target picker).
       // Colour and icon of a folder: shown in this tree and on the folder in the Zen sidebar. The icon is one emoji.
-      function askFolderStyle(node) {
+      function askFolderStyle(node, save, title) {
         let color = node.color || "";
         const f = field("Icon (one emoji, empty = folder)", node.icon || "", "e.g. \uD83D\uDCD3");
         f.input.maxLength = 24;
@@ -7446,9 +7484,14 @@
           paint();
           return b;
         });
+        // Any color (T3.6): the picker, a #rrggbb field and the saved quick colors.
+        const picker = colorPicker(cleanHex(color), (v) => {
+          color = v;
+          for (const x of dots) x._paint();
+        });
         const ok = chip("Save", true);
         const cancel = chip("Cancel");
-        openCard("Folder color and icon", h("div", { class: "zn-fstyle" }, h("div", { class: "zn-fstyle-colors" }, ...dots), f.row), h("div", { class: "zn-dialog-actions" }, cancel, ok));
+        openCard(title || "Folder color and icon", h("div", { class: "zn-fstyle" }, h("div", { class: "zn-fstyle-colors" }, ...dots), picker.el, f.row), h("div", { class: "zn-dialog-actions" }, cancel, ok));
         ok.addEventListener("click", () => {
           const icon = f.input.value.trim();
           if (icon && !cleanFolderIcon(icon)) {
@@ -7457,8 +7500,83 @@
             return;
           }
           closeDialog();
-          store.setFolderStyle(node.id, { color, icon });
+          if (cleanHex(color)) saveQuickColor(cleanHex(color));
+          if (save) save(color, icon);
+          else store.setFolderStyle(node.id, { color, icon });
           scheduleList();
+        });
+        cancel.addEventListener("click", closeDialog);
+      }
+      // The NOTES folder itself in the Zen sidebar (the root of every note): its color and emoji are two preferences.
+      function askRootStyle() {
+        askFolderStyle(
+          { id: "", label: "Notes", color: cleanFolderColor(String(getPref(PREF.ZEN_ROOT_COLOR, "") || "")), icon: cleanFolderIcon(String(getPref(PREF.ZEN_ROOT_ICON, "") || "")) },
+          (c, i) => { setPref(PREF.ZEN_ROOT_COLOR, c); setPref(PREF.ZEN_ROOT_ICON, i); },
+          "NOTES folder in the Zen sidebar",
+        );
+      }
+      // ---- custom colors (T3.6) -------------------------------------------------------------------
+      // Quick colors live in one preference (up to 8 `#rrggbb`, newest first). Choosing a custom color anywhere adds it there;
+      // right-click on a quick color removes it.
+      const quickColors = () => parseQuickColors(getPref(PREF.CUSTOM_COLORS, ""));
+      const saveQuickColor = (hex) => setPref(PREF.CUSTOM_COLORS, addQuickColor(quickColors(), hex).join(","));
+      const removeQuickColor = (hex) => setPref(PREF.CUSTOM_COLORS, quickColors().filter((c) => c !== hex).join(","));
+      // One reusable block: the system color picker, a #rrggbb field, "Save" and the quick colors. `onChange(hex)` fires on every valid change.
+      function colorPicker(value, onChange) {
+        let cur = cleanHex(value) || "#6aa7ff";
+        const native = h("input", { type: "color", class: "zn-color-input", "aria-label": "Pick a color", title: "Pick a color" });
+        native.value = cur;
+        const hexField = h("input", { type: "text", class: "zn-field zn-hex-field", spellcheck: "false", maxlength: "7", placeholder: "#rrggbb", "aria-label": "Color as #rrggbb" });
+        hexField.value = cur;
+        const quick = h("div", { class: "zn-quick" });
+        const set = (hex) => {
+          cur = hex;
+          native.value = hex;
+          hexField.value = hex;
+          delete hexField.dataset.bad;
+          onChange(hex);
+        };
+        const paintQuick = () => {
+          quick.replaceChildren();
+          for (const c of quickColors()) {
+            const b = h("button", { type: "button", class: "zn-swatch", title: c + " (right-click removes it)", "aria-label": "Quick color " + c });
+            setColorData(b, c);
+            b.addEventListener("click", () => set(c));
+            b.addEventListener("contextmenu", (e) => {
+              e.preventDefault();
+              removeQuickColor(c);
+              paintQuick();
+            });
+            quick.append(b);
+          }
+        };
+        native.addEventListener("input", () => set(cleanHex(native.value) || cur));
+        hexField.addEventListener("input", () => {
+          const raw = hexField.value.trim();
+          const hex = cleanHex(raw.startsWith("#") ? raw : "#" + raw);
+          if (hex) set(hex);
+          else hexField.dataset.bad = "true";
+        });
+        const keep = chip("Save as quick color");
+        keep.addEventListener("click", () => {
+          saveQuickColor(cur);
+          paintQuick();
+        });
+        paintQuick();
+        const el = h("div", { class: "zn-color-picker" }, h("div", { class: "zn-color-picker-row" }, native, hexField, keep), quick);
+        return { el, value: () => cur };
+      }
+      function askCustomColor(title, current, onOk) {
+        let chosen = cleanHex(current) || "";
+        const picker = colorPicker(current, (v) => { chosen = v; });
+        const ok = chip("Use color", true);
+        const cancel = chip("Cancel");
+        openCard(title, picker.el, h("div", { class: "zn-dialog-actions" }, cancel, ok));
+        ok.addEventListener("click", () => {
+          const v = chosen || picker.value();
+          closeDialog();
+          saveQuickColor(v);
+          onOk(v);
         });
         cancel.addEventListener("click", closeDialog);
       }
@@ -7595,7 +7713,7 @@
           { sep: true },
           { icon: "folder", label: "Move to folder\u2026", action: () => queueMicrotask(() => askMoveNote(n)) },
           { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body, n.folder); store.setColor(c.id, n.color); store.setLabel(c.id, n.label); scheduleList(); } },
-          { label: "Colour", group: NOTE_COLORS.map((c) => ({ label: c, action: () => { store.setColor(n.id, c); scheduleList(); } })) },
+          { label: "Colour", group: [...NOTE_COLORS.map((c) => ({ label: c, action: () => { store.setColor(n.id, c); scheduleList(); } })), ...quickColors().map((c) => ({ label: c, action: () => { store.setColor(n.id, c); scheduleList(); } })), { label: "Custom color\u2026", action: () => queueMicrotask(() => askCustomColor("Custom note color", cleanHex(n.color), (v) => { store.setColor(n.id, v); scheduleList(); })) }] },
           ...(FLAVORS_PART ? [{ label: "Markdown mode", group: [["", "Follow the setting"], ...FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]])].map(([m, label]) => ({ label: (n.flavor || "") === m ? "\u2713 " + label : label, action: () => { store.setFlavor(n.id, m); scheduleList(); } })) }] : []),
           { icon: "link", label: "Copy link", action: () => { env.copyText?.("[[" + (titleOf(n.body) || "Untitled note") + "]]"); flash("Link copied"); } },
           { sep: true },
@@ -7990,6 +8108,32 @@
                 row.append(b);
               }
               m.append(row);
+              if (it.custom) {
+                // Quick colors the person saved, then "+" for the picker (T3.6).
+                const crow = h("div", { class: "zn-swatches zn-swatches-custom" });
+                for (const c of quickColors()) {
+                  const b = h("button", { type: "button", class: "zn-swatch", title: c + " (right-click removes it from the quick colors)", "aria-label": "Custom color " + c });
+                  setColorData(b, c);
+                  if (c === cleanHex(it.current)) b.classList.add("is-on");
+                  b.addEventListener("click", () => {
+                    closeMenu();
+                    it.pick(c);
+                  });
+                  b.addEventListener("contextmenu", (e) => {
+                    e.preventDefault();
+                    removeQuickColor(c);
+                    b.remove();
+                  });
+                  crow.append(b);
+                }
+                const add = h("button", { type: "button", class: "zn-swatch zn-swatch-add", title: "Custom color\u2026", "aria-label": "Custom color" }, "+");
+                add.addEventListener("click", () => {
+                  closeMenu();
+                  queueMicrotask(() => askCustomColor(it.customTitle || "Custom color", cleanHex(it.current), (v) => it.pick(v)));
+                });
+                crow.append(add);
+                m.append(crow);
+              }
             } else if (it.disabled) {
               // A heading or a note ("No other note links here"): not a button, never focused or clicked.
               m.append(h("div", { class: "zn-menu-item zn-menu-head", role: "presentation", "aria-disabled": "true" }, it.label));
@@ -9290,11 +9434,11 @@
       listen(btnColor, "click", () => {
         const n = note();
         if (n && !n.trashed)
-          showMenu(btnColor, [{ swatches: NOTE_COLORS, current: n.color, pick: (c) => { store.setColor(n.id, c); applyState(); } }]);
+          showMenu(btnColor, [{ swatches: NOTE_COLORS, custom: true, customTitle: "Custom note color", current: n.color, pick: (c) => { store.setColor(n.id, c); applyState(); } }]);
       });
       listen(tHlMenu, "mousedown", (e) => e.preventDefault());
       listen(tHlMenu, "click", () =>
-        showMenu(tHlMenu, [{ swatches: HIGHLIGHT_COLORS, current: store.meta.highlight, pick: (c) => { store.setMeta({ highlight: c }); applyState(); needEdit(fmt.highlight)(); } }]),
+        showMenu(tHlMenu, [{ swatches: HIGHLIGHT_COLORS, custom: true, customTitle: "Custom highlight color", current: store.meta.highlight, pick: (c) => { store.setMeta({ highlight: c }); applyState(); needEdit(fmt.highlight)(); } }]),
       );
 
       // ---- events ----------------------------------------------------------------
@@ -9696,6 +9840,11 @@
       }
       listen(btnNew, "click", () => newNoteChooser());
       listen(btnFolder, "click", () => askFolderName("New folder", "", (name) => store.addFolder(name, "")));
+      listen(btnRoot, "click", () => askRootStyle());
+      listen(chipAll, "contextmenu", (e) => {
+        e.preventDefault();
+        askRootStyle();
+      });
       // A note dropped on empty list space goes back to the top level.
       listen(listItems, "dragover", (e) => {
         if (dragNoteId && treeMode()) e.preventDefault();

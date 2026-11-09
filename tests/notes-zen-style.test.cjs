@@ -81,7 +81,7 @@ const seq = (n) => { let i = 0; return () => ((i++ * 7 + n) % 36) / 36; };
   await test("icon: exactly one emoji is accepted (also flags, keycaps, joined and skin-tone sequences); text and markup are refused", () => {
     for (const ok of ["📓", "🗂️", "👨‍👩‍👧", "🇵🇱", "1️⃣", "👍🏽", "❤️"]) assert.equal(c.cleanFolderIcon(ok), ok, ok);
     for (const bad of ["", "a", "ab", "<b>", "📓📓", "📓 x", "javascript:1", "x".repeat(30), 5, null]) assert.equal(c.cleanFolderIcon(bad), "", String(bad));
-    assert.equal(c.cleanFolderColor("teal"), "teal"); assert.equal(c.cleanFolderColor("none"), ""); assert.equal(c.cleanFolderColor("#ff0000"), "");
+    assert.equal(c.cleanFolderColor("teal"), "teal"); assert.equal(c.cleanFolderColor("none"), ""); assert.equal(c.cleanFolderColor("#FF0000"), "#ff0000"); assert.equal(c.cleanFolderColor("#ff00"), ""); assert.equal(c.cleanFolderColor("red;x"), "");
   });
   await test("style: setFolderStyle stores colour and icon on the folder, the tree shows them, bad values are refused, uid unchanged", async () => {
     disk.clear();
@@ -302,6 +302,22 @@ const seq = (n) => { let i = 0; return () => ((i++ * 7 + n) % 36) / 36; };
       assert.ok(!/box-shadow:[^;]*var\(--zn-accent\)/.test(b), sel + " ring is not the bare accent");
       assert.ok(/--zn-text/.test(b), sel + " is built from the text colour");
     }
+  });
+  await test("custom colours (T3.6): #rrggbb is accepted everywhere a palette name is, quick colours are capped and deduplicated, nothing else passes", async () => {
+    assert.equal(c.cleanHex(" #AABBCC "), "#aabbcc"); for (const bad of ["#abc", "red", "#gggggg", "#aabbccdd", "url(x)", null, 5]) assert.equal(c.cleanHex(bad), "", String(bad));
+    assert.equal(c.cleanNoteColor('"#FF8800"'), "#ff8800"); assert.equal(c.cleanNoteColor("teal"), "teal"); assert.equal(c.cleanNoteColor("evil;"), "none");
+    assert.equal(c.cleanHighlightColor("#00ff00"), "#00ff00"); assert.equal(c.cleanHighlightColor("nope"), "");
+    const many = Array.from({ length: 12 }, (_, i) => "#00000" + i.toString(16)).join(",");
+    assert.equal(c.parseQuickColors(many + ",#000000").length, c.QUICK_COLORS_MAX);
+    assert.equal(JSON.stringify(c.addQuickColor(["#111111", "#222222"], "#222222")), JSON.stringify(["#222222", "#111111"]));
+    assert.ok(c.colorHex("#12ab34") === "#12ab34" && c.colorHex("teal") === "#2ec4b6" && !c.colorHex("x"));
+    const inline = c.parseInline("a =={#ff0000}red== b =={green}g== c =={#zzz}x==");
+    assert.equal(inline.find((n) => n.t === "hl" && n.color === "#ff0000").c[0].s, "red");
+    assert.ok(inline.some((n) => n.t === "hl" && n.color === "green"));
+    const st = mkstore(); await st.open(); const n = st.create("hello"); st.setColor(n.id, "#ABCDEF"); assert.equal(st.get(n.id).color, "#abcdef"); st.setColor(n.id, "bad"); assert.equal(st.get(n.id).color, "#abcdef");
+    const s2 = await reopen(st); assert.equal(s2.get(n.id).color, "#abcdef", "a custom note colour survives the file round trip");
+    assert.equal(c.folderZenVars("#336699")["--zen-folder-front-bgcolor"].includes("#336699"), true);
+    assert.ok(/data-color="custom"\]/.test(css) && /zen-folder\[bgalazka-notes-icon\]/.test(css));
   });
   console.log(`\n${passed} folder identity / style tests passed`);
 })().catch((e) => { console.error("FAIL", e); process.exit(1); });

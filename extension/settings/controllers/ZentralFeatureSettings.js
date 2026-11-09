@@ -3754,6 +3754,19 @@
               const invert = (value) => 100 - value;
               const control = createSliderRow(label, description, key, 0, 100, LOOK_DEFAULTS[key], "%", invert, invert, "any");
               control.row.dataset.paletteDetail = "true";
+              // Reset to default (0% = solid), next to the value badge.
+              const resetAlpha = document.createElement("button");
+              resetAlpha.type = "button";
+              resetAlpha.className = "zs-reset-btn";
+              resetAlpha.style.cssText = "margin:0 0 0 8px;padding:2px 10px;font-size:11.5px;";
+              resetAlpha.textContent = "Reset";
+              resetAlpha.title = "Back to the default (solid)";
+              resetAlpha.addEventListener("click", () => {
+                ctx.setPref(key, LOOK_DEFAULTS[key]);
+                control.input.value = invert(LOOK_DEFAULTS[key]);
+                control.badge.textContent = control.input.value + "%";
+              });
+              (control.badge.parentElement || control.row).append(resetAlpha);
               lookCategory.subContent.append(control.row);
               lookControls.push({ input: control.input, badge: control.badge, suffix: "%", key, inverted: true });
               return control;

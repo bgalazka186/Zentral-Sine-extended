@@ -1065,6 +1065,7 @@
     "zen.workspace.zentral.notes.zen_note_favicons",
     "zen.workspace.zentral.notes.zen_root_color",
     "zen.workspace.zentral.notes.zen_root_icon",
+    "zen.workspace.zentral.notes.custom_colors",
     {
       "type": "text",
       "label": "**Notes · Capture**",

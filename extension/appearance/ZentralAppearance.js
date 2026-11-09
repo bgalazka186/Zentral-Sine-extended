@@ -1233,6 +1233,60 @@
       if (lookFrame !== null) window.cancelAnimationFrame(lookFrame);
       lookFrame = null;
     });
+    // Zen's own rules for --zen-folder-* can out-rank a stylesheet override (only a value written on the folder itself, like the Notes
+    // folder colors, was seen to work). So the overrides are ALSO written inline, with !important, on every folder, and kept up to date
+    // for folders created later. A folder with its own color (bgalazka-notes-color) is left alone. Cleared when the flag goes away.
+    const FOLDER_INLINE = {
+      behind: ["--zen-folder-behind-bgcolor", "color-mix(in srgb, var(--bgalazka-look-folder-behind, light-dark(color-mix(in srgb, var(--zen-primary-color) 60%, gray), color-mix(in srgb, var(--zen-primary-color) 60%, #c1c1c1))) var(--bgalazka-look-folder-behind-alpha, 100%), transparent)"],
+      front: ["--zen-folder-front-bgcolor", "color-mix(in srgb, var(--bgalazka-look-folder-front, light-dark(color-mix(in srgb, var(--zen-primary-color), white 70%), color-mix(in srgb, var(--zen-primary-color), black 40%))) var(--bgalazka-look-folder-front-alpha, 100%), transparent)"],
+      stroke: ["--zen-folder-stroke", "color-mix(in srgb, var(--bgalazka-look-folder-stroke, light-dark(color-mix(in srgb, var(--zen-primary-color) 50%, black), color-mix(in srgb, var(--zen-colors-primary) 15%, #ebebeb))) var(--bgalazka-look-folder-stroke-alpha, 100%), transparent)"],
+    };
+    let folderInlineFlags = [];
+    let folderInlineObserver = null;
+    let folderInlineQueued = false;
+    const paintFolderInline = () => {
+      folderInlineQueued = false;
+      for (const el of document.querySelectorAll("zen-folder")) {
+        const own = el.hasAttribute("bgalazka-notes-color");
+        const set = (el.getAttribute("bgalazka-look-inline") || "").split(" ").filter(Boolean);
+        for (const part of Object.keys(FOLDER_INLINE)) {
+          const [prop, value] = FOLDER_INLINE[part];
+          if (!own && folderInlineFlags.includes(part)) {
+            if (el.style.getPropertyValue(prop) !== value || el.style.getPropertyPriority(prop) !== "important")
+              el.style.setProperty(prop, value, "important");
+            if (!set.includes(part)) set.push(part);
+          } else if (set.includes(part)) {
+            el.style.removeProperty(prop);
+            set.splice(set.indexOf(part), 1);
+          }
+        }
+        if (set.length) el.setAttribute("bgalazka-look-inline", set.join(" "));
+        else el.removeAttribute("bgalazka-look-inline");
+      }
+    };
+    const queueFolderInline = () => {
+      if (folderInlineQueued) return;
+      folderInlineQueued = true;
+      requestAnimationFrame(paintFolderInline);
+    };
+    function applyFolderInline(flags) {
+      folderInlineFlags = flags;
+      const wanted = flags.some((f) => f in FOLDER_INLINE);
+      if (wanted && !folderInlineObserver && typeof MutationObserver === "function") {
+        folderInlineObserver = new MutationObserver((records) => {
+          for (const r of records) {
+            if (r.type === "attributes") return queueFolderInline();
+            for (const n of r.addedNodes) if (n.nodeType === 1 && (n.localName === "zen-folder" || n.querySelector?.("zen-folder"))) return queueFolderInline();
+          }
+        });
+        folderInlineObserver.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["bgalazka-notes-color"] });
+        ctx.registerCleanup?.(() => { folderInlineObserver?.disconnect(); folderInlineObserver = null; });
+      } else if (!wanted && folderInlineObserver) {
+        folderInlineObserver.disconnect();
+        folderInlineObserver = null;
+      }
+      paintFolderInline();
+    }
     const applyLook = () => {
       {
         const style = document.documentElement.style;
@@ -1664,6 +1718,7 @@
           flags.push("tight");
         if (flags.length) root.setAttribute("bgalazka-look-folder", flags.join(" "));
         else root.removeAttribute("bgalazka-look-folder");
+        applyFolderInline(flags);
       }
       for (const [name, table] of [
         ["SHADOW", RSS_CARD_SHADOWS],
