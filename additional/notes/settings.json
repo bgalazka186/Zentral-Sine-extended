@@ -33,7 +33,7 @@
     },
     {
       "property": "zen.workspace.zentral.notes.autosave_seconds",
-      "label": "Longest time between saves while typing (seconds, 2–60)",
+      "label": "Longest time between saves while typing (seconds, 2\u201360)",
       "type": "input",
       "defaultValue": 5,
       "numeric": {
@@ -56,7 +56,7 @@
     },
     {
       "property": "zen.workspace.zentral.notes.font_size",
-      "label": "Text size (px, 8–40)",
+      "label": "Text size (px, 8\u201340)",
       "type": "input",
       "defaultValue": 13,
       "options": [
@@ -101,7 +101,7 @@
     },
     {
       "property": "zen.workspace.zentral.notes.line_height",
-      "label": "Line height (%, 100–300)",
+      "label": "Line height (%, 100\u2013300)",
       "type": "input",
       "defaultValue": 160,
       "options": [
@@ -143,11 +143,11 @@
       "defaultValue": "collapse",
       "options": [
         {
-          "label": "Collapse – any number of blank lines is one paragraph break",
+          "label": "Collapse \u2013 any number of blank lines is one paragraph break",
           "value": "collapse"
         },
         {
-          "label": "Keep – every extra blank line adds empty space",
+          "label": "Keep \u2013 every extra blank line adds empty space",
           "value": "keep"
         }
       ]
@@ -159,11 +159,11 @@
       "defaultValue": "break",
       "options": [
         {
-          "label": "Break – a new line stays a new line",
+          "label": "Break \u2013 a new line stays a new line",
           "value": "break"
         },
         {
-          "label": "Join – a new line is a space (standard Markdown)",
+          "label": "Join \u2013 a new line is a space (standard Markdown)",
           "value": "join"
         }
       ]
@@ -187,7 +187,7 @@
       "defaultValue": "ask",
       "options": [
         {
-          "label": "Ask – offer to create a link",
+          "label": "Ask \u2013 offer to create a link",
           "value": "ask"
         },
         {
@@ -202,13 +202,13 @@
     },
     {
       "property": "zen.workspace.zentral.notes.shortcuts",
-      "label": "Changed editor shortcuts (set in Notes → Quick settings → Keyboard shortcuts; empty = defaults)",
+      "label": "Changed editor shortcuts (set in Notes \u2192 Quick settings \u2192 Keyboard shortcuts; empty = defaults)",
       "type": "string",
       "defaultValue": ""
     },
     {
       "property": "zen.workspace.zentral.notes.hidden_tools",
-      "label": "Hidden editor buttons and shortcuts (set in Notes → Quick settings → Toolbar buttons; empty = all shown)",
+      "label": "Hidden editor buttons and shortcuts (set in Notes \u2192 Quick settings \u2192 Toolbar buttons; empty = all shown)",
       "type": "string",
       "defaultValue": ""
     },
@@ -250,7 +250,7 @@
     },
     {
       "property": "zen.workspace.zentral.notes.push_panel_percent",
-      "label": "Push page in a panel: share of the panel height the Notes sheet takes (%, 20–80)",
+      "label": "Push page in a panel: share of the panel height the Notes sheet takes (%, 20\u201380)",
       "type": "input",
       "defaultValue": 45,
       "numeric": {
@@ -262,7 +262,7 @@
     },
     {
       "property": "zen.workspace.zentral.notes.reveal_height_px",
-      "label": "Hidden Notes: height of the strip that brings it back on hover (px, 2–24)",
+      "label": "Hidden Notes: height of the strip that brings it back on hover (px, 2\u201324)",
       "type": "input",
       "defaultValue": 10,
       "numeric": {
@@ -274,7 +274,7 @@
     },
     {
       "property": "zen.workspace.zentral.notes.reveal_delay_ms",
-      "label": "Hover open delay (ms, 0–1000)",
+      "label": "Hover open delay (ms, 0\u20131000)",
       "type": "input",
       "defaultValue": 100,
       "numeric": {
@@ -286,7 +286,7 @@
     },
     {
       "property": "zen.workspace.zentral.notes.wide_percent",
-      "label": "Split view: width of the Notes sheet compared with normal (%, 130–300); it may reach beyond the panel and over the page",
+      "label": "Split view: width of the Notes sheet compared with normal (%, 130\u2013300); it may reach beyond the panel and over the page",
       "type": "input",
       "defaultValue": 200,
       "numeric": {
@@ -303,11 +303,11 @@
       "defaultValue": "zentral",
       "options": [
         {
-          "label": "Zentral – follows the Zen look",
+          "label": "Zentral \u2013 follows the Zen look",
           "value": "zentral"
         },
         {
-          "label": "Recommended – like the RSS card",
+          "label": "Recommended \u2013 like the RSS card",
           "value": "recommended"
         },
         {
@@ -326,7 +326,7 @@
     },
     {
       "property": "zen.workspace.zentral.notes.look_radius",
-      "label": "Notes card corner radius (px, 0–60; -1 = theme default)",
+      "label": "Notes card corner radius (px, 0\u201360; -1 = theme default)",
       "type": "input",
       "defaultValue": -1,
       "control": "slider",
@@ -338,7 +338,7 @@
     },
     {
       "property": "zen.workspace.zentral.notes.look_border",
-      "label": "Notes card border width (px, 0–8; -1 = theme default)",
+      "label": "Notes card border width (px, 0\u20138; -1 = theme default)",
       "type": "input",
       "defaultValue": -1,
       "control": "slider",
@@ -350,7 +350,7 @@
     },
     {
       "property": "zen.workspace.zentral.notes.look_shadow_blur",
-      "label": "Notes card shadow blur (px, 0–120; -1 = theme default)",
+      "label": "Notes card shadow blur (px, 0\u2013120; -1 = theme default)",
       "type": "input",
       "defaultValue": -1,
       "control": "slider",
@@ -362,7 +362,7 @@
     },
     {
       "property": "zen.workspace.zentral.notes.look_shadow_y",
-      "label": "Notes card shadow offset down (px, 0–60; -1 = theme default)",
+      "label": "Notes card shadow offset down (px, 0\u201360; -1 = theme default)",
       "type": "input",
       "defaultValue": -1,
       "control": "slider",
@@ -374,7 +374,7 @@
     },
     {
       "property": "zen.workspace.zentral.notes.look_shadow_alpha",
-      "label": "Notes card shadow strength (0 = no shadow) (%, 0–100; -1 = theme default)",
+      "label": "Notes card shadow strength (0 = no shadow) (%, 0\u2013100; -1 = theme default)",
       "type": "input",
       "defaultValue": -1,
       "control": "slider",
@@ -386,7 +386,7 @@
     },
     {
       "property": "zen.workspace.zentral.notes.look_opacity",
-      "label": "Notes card background opacity (%, 0–100; -1 = theme default)",
+      "label": "Notes card background opacity (%, 0\u2013100; -1 = theme default)",
       "type": "input",
       "defaultValue": -1,
       "control": "slider",
@@ -398,7 +398,7 @@
     },
     {
       "property": "zen.workspace.zentral.notes.look_padding",
-      "label": "Notes card inner padding (px, 0–64; -1 = theme default)",
+      "label": "Notes card inner padding (px, 0\u201364; -1 = theme default)",
       "type": "input",
       "defaultValue": -1,
       "control": "slider",
@@ -461,7 +461,7 @@
     },
     {
       "property": "zen.workspace.zentral.notes.look_btn_size",
-      "label": "Notes button size (px, 14–56; -1 = theme default)",
+      "label": "Notes button size (px, 14\u201356; -1 = theme default)",
       "type": "input",
       "defaultValue": -1,
       "control": "slider",
@@ -473,7 +473,7 @@
     },
     {
       "property": "zen.workspace.zentral.notes.look_btn_radius",
-      "label": "Notes button corner radius (px, 0–50; -1 = theme default)",
+      "label": "Notes button corner radius (px, 0\u201350; -1 = theme default)",
       "type": "input",
       "defaultValue": -1,
       "control": "slider",

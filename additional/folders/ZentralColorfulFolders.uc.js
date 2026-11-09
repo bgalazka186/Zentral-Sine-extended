@@ -30,6 +30,7 @@
     DATA: PREFIX + "data",
     SALT: PREFIX + "salt",
     THEMES: PREFIX + "themes",
+    OPACITY_SCHEMA: PREFIX + "opacity_schema",
   });
   const PARTS = Object.freeze([
     "back",
@@ -51,6 +52,9 @@
   });
   const PART_PREFS = Object.freeze(
     Object.fromEntries(PARTS.map((part) => [part, PREFIX + "default_" + part])),
+  );
+  const OPACITY_PREFS = Object.freeze(
+    Object.fromEntries(PARTS.map((part) => [part, PREFIX + "default_" + part + "_opacity"])),
   );
   const PART_PROPS = Object.freeze({
     back: ["--zen-folder-behind-bgcolor"],
@@ -74,9 +78,9 @@
   const MAX_DATA_LENGTH = 1024 * 1024;
   const XHTML = "http://www.w3.org/1999/xhtml";
 
-  // These preferences used to be applied by ZentralAppearance. Their keys are
-  // deliberately unchanged: moving their schema owner preserves existing
-  // profiles without a preference migration.
+  // These preferences used to be applied by ZentralAppearance. The one-time
+  // migration copies existing user values to the new visible schema and clears
+  // their retired keys; they remain as a read-only fallback if migration fails.
   const LEGACY_DEFAULTS = Object.freeze({
     back: "zen.workspace.bgalazka.look.folder_behind",
     backOpacity: "zen.workspace.bgalazka.look.folder_behind_opacity",
@@ -98,22 +102,42 @@
     typeof value === "string" && HASH_RE.test(value) ? value : "";
   const cleanDetail = (raw) => {
     const out = {};
-    if (raw && typeof raw === "object")
+    if (raw && typeof raw === "object" && !Array.isArray(raw))
       for (const part of PARTS) {
         const value = cleanHex(raw[part]);
         if (value) out[part] = value;
       }
     return out;
   };
+  const cleanOpacity = (raw) => {
+    const out = {};
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      for (const part of PARTS) {
+        const value = Number(raw[part]);
+        if (
+          raw[part] !== undefined &&
+          raw[part] !== null &&
+          Number.isFinite(value) &&
+          Number.isInteger(value) &&
+          value >= 0 &&
+          value <= 100
+        ) {
+          out[part] = value;
+        }
+      }
+    }
+    return out;
+  };
   const hasColor = (record) =>
     !!record &&
-    (!!cleanHex(record.b) || PARTS.some((part) => cleanHex(record.d?.[part])));
+    (!!cleanHex(record.b) || PARTS.some((part) => cleanHex(record.d?.[part])) || Object.keys(cleanOpacity(record.o)).length > 0);
   function cleanRecord(raw) {
     if (!raw || typeof raw !== "object") return null;
     const record = {
       i: cleanHash(raw.i),
       b: cleanHex(raw.b),
       d: cleanDetail(raw.d),
+      o: cleanOpacity(raw.o),
       u: Number.isFinite(raw.u) ? Math.max(0, Math.floor(raw.u)) : 0,
     };
     if (!record.i || !hasColor(record)) return null;
@@ -144,7 +168,8 @@
     const b = cleanHex(raw.b);
     const d = cleanDetail(raw.d);
     if (!name || (!b && !Object.keys(d).length)) return null;
-    return { n: name, b, d };
+    const o = cleanOpacity(raw.o);
+    return { n: name, b, d, o };
   }
   function parseThemes(raw) {
     try {
@@ -211,11 +236,17 @@
     if (out.accent && accent) out.accentText = textOn(accent);
     return out;
   }
-  function declarations(parts) {
+  function declarations(parts, opacity = {}) {
     const out = {};
+    const alpha = cleanOpacity(opacity);
+    const withOpacity = (value, part) => {
+      const pct = alpha[part];
+      return pct === undefined || pct >= 100 ? value : `color-mix(in srgb, ${value} ${pct}%, transparent)`;
+    };
     for (const part of PARTS) {
-      const value = parts?.[part];
-      if (!value) continue;
+      const rawValue = parts?.[part];
+      if (!rawValue) continue;
+      const value = withOpacity(rawValue, part);
       if (part === "accent") {
         const on = parts.accentText || "#ffffff";
         const off = on === "#ffffff" ? "#1b1b1f" : "#ffffff";
@@ -303,31 +334,78 @@
     {
       group: "Dark folders",
       items: [
-        { n: "Graphite", b: "#343a40", d: {} },
-        { n: "Midnight", b: "#202b3b", d: {} },
-        { n: "Deep forest", b: "#234236", d: {} },
-        { n: "Plum shadow", b: "#493047", d: {} },
+        { n: "Graphite", b: "#343a40", d: {}, o: {} },
+        { n: "Midnight", b: "#202b3b", d: {}, o: {} },
+        { n: "Deep forest", b: "#234236", d: {}, o: {} },
+        { n: "Plum shadow", b: "#493047", d: {}, o: {} },
       ],
     },
     {
       group: "High contrast",
       items: [
-        { n: "Amber", b: "#d97706", d: { front: "#ffe0a3", stroke: "#3b2100" } },
-        { n: "Aqua", b: "#087e8b", d: { front: "#b9f4f4", stroke: "#032f36" } },
-        { n: "Rose", b: "#be3455", d: { front: "#ffd2df", stroke: "#3d0716" } },
-        { n: "Electric blue", b: "#2557d6", d: { front: "#d8e5ff", stroke: "#071b50" } },
+        { n: "Amber", b: "#d97706", d: { front: "#ffe0a3", stroke: "#3b2100" }, o: {} },
+        { n: "Aqua", b: "#087e8b", d: { front: "#b9f4f4", stroke: "#032f36" }, o: {} },
+        { n: "Rose", b: "#be3455", d: { front: "#ffd2df", stroke: "#3d0716" }, o: {} },
+        { n: "Electric blue", b: "#2557d6", d: { front: "#d8e5ff", stroke: "#071b50" }, o: {} },
       ],
     },
     {
       group: "Colorful",
       items: [
-        { n: "Coral", b: "#ff8066", d: {} },
-        { n: "Mint", b: "#40b99a", d: {} },
-        { n: "Lavender", b: "#9c83e6", d: {} },
-        { n: "Sunflower", b: "#e5bd38", d: {} },
+        { n: "Coral", b: "#ff8066", d: {}, o: {} },
+        { n: "Mint", b: "#40b99a", d: {}, o: {} },
+        { n: "Lavender", b: "#9c83e6", d: {}, o: {} },
+        { n: "Sunflower", b: "#e5bd38", d: {}, o: {} },
       ],
     },
   ]);
+
+  // Place a floating editor beside its anchor without covering that folder.
+  // If horizontal space is tight, it uses the larger vertical gap; only on an
+  // exceptionally tiny viewport does it fall back to the least-overlapping corner.
+  function placePanel(anchor, requestedWidth, requestedHeight, viewportWidth, viewportHeight) {
+    const margin = 8, gap = 12;
+    const width = Math.max(1, Math.min(requestedWidth, viewportWidth - margin * 2));
+    const height = Math.max(1, Math.min(requestedHeight, viewportHeight - margin * 2));
+    if (!anchor) return { left: margin, top: margin, width, height, overlaps: false };
+    const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+    const candidates = [];
+    const add = (left, top, w, h, rank) => {
+      if (w < 160 || h < 100) return;
+      const r = { left, top, right: left + w, bottom: top + h };
+      const overlapW = Math.max(0, Math.min(r.right, anchor.right) - Math.max(r.left, anchor.left));
+      const overlapH = Math.max(0, Math.min(r.bottom, anchor.bottom) - Math.max(r.top, anchor.top));
+      candidates.push({ left, top, width: w, height: h, area: w * h, overlap: overlapW * overlapH, rank });
+    };
+    const maxH = viewportHeight - margin * 2;
+    const rightW = viewportWidth - anchor.right - gap - margin;
+    const leftW = anchor.left - gap - margin;
+    if (rightW >= 160) add(anchor.right + gap, clamp(anchor.top, margin, viewportHeight - margin - height), Math.min(width, rightW), height, 0);
+    if (leftW >= 160) add(anchor.left - gap - Math.min(width, leftW), clamp(anchor.top, margin, viewportHeight - margin - height), Math.min(width, leftW), height, 1);
+    const belowH = viewportHeight - anchor.bottom - gap - margin;
+    const aboveH = anchor.top - gap - margin;
+    if (belowH >= 100) add(clamp(anchor.left, margin, viewportWidth - margin - width), anchor.bottom + gap, width, Math.min(height, belowH), 2);
+    if (aboveH >= 100) add(clamp(anchor.left, margin, viewportWidth - margin - width), anchor.top - gap - Math.min(height, aboveH), width, Math.min(height, aboveH), 3);
+    const clear = candidates.filter((c) => c.overlap === 0);
+    const pool = clear.length ? clear : candidates;
+    if (pool.length) {
+      pool.sort((a, b) => b.area - a.area || a.rank - b.rank);
+      const best = pool[0];
+      return { left: best.left, top: best.top, width: best.width, height: best.height, overlaps: best.overlap > 0 };
+    }
+    const corners = [
+      [margin, margin],
+      [viewportWidth - margin - width, margin],
+      [margin, viewportHeight - margin - height],
+      [viewportWidth - margin - width, viewportHeight - margin - height],
+    ].map(([left, top], rank) => {
+      const overlapW = Math.max(0, Math.min(left + width, anchor.right) - Math.max(left, anchor.left));
+      const overlapH = Math.max(0, Math.min(top + height, anchor.bottom) - Math.max(top, anchor.top));
+      return { left, top, width, height, overlap: overlapW * overlapH, rank };
+    }).sort((a, b) => a.overlap - b.overlap || a.rank - b.rank);
+    const best = corners[0];
+    return { left: best.left, top: best.top, width, height, overlaps: best.overlap > 0 };
+  }
 
   // ---------------------------------------------- privileged-window integration
   function start({ lifecycle, runtime }) {
@@ -347,10 +425,82 @@
     const setString = (name, value) => {
       try { pref.setStringPref(name, String(value)); return true; } catch (_) { return false; }
     };
+    // -1 is the explicit "inherit" sentinel; 0..100 are real opacity values.
+    const setInt = (name, value) => {
+      try {
+        const number = Number(value);
+        if (!Number.isInteger(number) || number < -1 || number > 100) return false;
+        pref.setIntPref(name, number);
+        return true;
+      } catch (_) { return false; }
+    };
     const enabled = () => getBool(P.ENABLED, true);
     const menuEnabled = () => getBool(P.MENU, true);
     const mode = () => getString(P.MODE, "simple") === "detailed" ? "detailed" : "simple";
 
+    const previousFolderColorPresets = window.__zentralFolderColorPresets;
+    const publishedFolderColorPresets = BUILTIN_THEMES.map((group) => ({
+      group: group.group,
+      items: group.items.map((theme) => ({ n: theme.n, b: theme.b, d: { ...theme.d }, o: { ...theme.o } })),
+    }));
+    window.__zentralFolderColorPresets = publishedFolderColorPresets;
+    window.dispatchEvent?.(new Event("zentral-folder-color-presets-ready"));
+    lifecycle.own(() => {
+      if (window.__zentralFolderColorPresets !== publishedFolderColorPresets) return;
+      if (previousFolderColorPresets) window.__zentralFolderColorPresets = previousFolderColorPresets;
+      else delete window.__zentralFolderColorPresets;
+      window.dispatchEvent?.(new Event("zentral-folder-color-presets-gone"));
+    });
+    // Migration 2 transfers the former Appearance folder colors into this
+    // module's visible controls. The old keys are cleared only after their
+    // value has been copied, so the retired painter cannot silently reclaim
+    // ownership after a Reset. Version 1 also reserved -1 for inherit and made
+    // a true 0% transparency selectable.
+    const previousOpacitySchema = getInt(P.OPACITY_SCHEMA, 0);
+    if (previousOpacitySchema < 2) {
+      let migratedLegacyDetails = false;
+      const legacyColors = [
+        ["back", LEGACY_DEFAULTS.back],
+        ["front", LEGACY_DEFAULTS.front],
+        ["stroke", LEGACY_DEFAULTS.stroke],
+        ["label", LEGACY_DEFAULTS.label],
+      ];
+      for (const [part, legacyKey] of legacyColors) {
+        const current = cleanHex(getString(PART_PREFS[part], ""));
+        const legacy = cleanHex(getString(legacyKey, ""));
+        if (!current && legacy && setString(PART_PREFS[part], legacy))
+          migratedLegacyDetails = true;
+      }
+      if (previousOpacitySchema < 1) {
+        for (const part of PARTS) {
+          const current = getInt(OPACITY_PREFS[part], -1);
+          if (current === 0) {
+            // Before schema 1, zero was the inherit placeholder and was not selectable.
+            setInt(OPACITY_PREFS[part], -1);
+          }
+        }
+      }
+      for (const [part, legacyKey] of [
+        ["back", LEGACY_DEFAULTS.backOpacity],
+        ["front", LEGACY_DEFAULTS.frontOpacity],
+        ["stroke", LEGACY_DEFAULTS.strokeOpacity],
+      ]) {
+        if (getInt(OPACITY_PREFS[part], -1) !== -1) continue;
+        const legacy = getInt(legacyKey, 100);
+        if (legacy >= 0 && legacy < 100 && setInt(OPACITY_PREFS[part], legacy))
+          migratedLegacyDetails = true;
+      }
+      if (migratedLegacyDetails) setString(P.MODE, "detailed");
+      for (const key of Object.values(LEGACY_DEFAULTS)) {
+        try { if (pref.prefHasUserValue(key)) pref.clearUserPref(key); } catch (_) {}
+      }
+      try { pref.setIntPref(P.OPACITY_SCHEMA, 2); } catch (_) {}
+    }
+    // Materialize the shared mode preference so Notes never guesses a
+    // different default while both owners initialize in either order.
+    try {
+      if (!pref.prefHasUserValue(P.MODE)) pref.setStringPref(P.MODE, "simple");
+    } catch (_) {}
     const state = {
       salt: getString(P.SALT, ""),
       dataRaw: getString(P.DATA, ""),
@@ -371,6 +521,7 @@
     let observer = null;
     let settingsUnregister = null;
     let editor = null;
+    let editorHost = null;
     let editorAbort = null;
 
     function randomSalt() {
@@ -410,11 +561,86 @@
       return [...new Set(out)];
     }
     function isNotesOwned(folder) {
-      return [
+      const id = String(folder?.getAttribute?.("id") || folder?.id || "");
+      const marked = [
         "bgalazka-notes-color",
         "bgalazka-notes-folder",
         "bgalazka-notes-subfolder",
       ].some((attr) => folder?.hasAttribute?.(attr));
+      if (marked) return true;
+      // Zen keeps native folder ids when Notes releases a folder containing a
+      // person's own tabs. Once Notes is unloaded those folders become normal
+      // folders again; ID alone must not make Colorful Folders skip them forever.
+      return !!notesBridge() && (
+        id === "bgalazka-zentral-notes" ||
+        id.startsWith("bgalazka-zentral-notes-sub_")
+      );
+    }
+    function notesBridge() {
+      const bridge = window.__zentralNotesFolderColorBridge;
+      return bridge && bridge.version === 1 &&
+        typeof bridge.read === "function" && typeof bridge.write === "function"
+        ? bridge
+        : null;
+    }
+    function waitForNotesBridge(timeout = 2500) {
+      const ready = notesBridge();
+      if (ready) return Promise.resolve(ready);
+      return new Promise((resolve) => {
+        let settled = false;
+        let timer = null;
+        const finish = (value) => {
+          if (settled) return;
+          settled = true;
+          if (timer !== null) lifecycle.clearTimeout(timer);
+          window.removeEventListener("zentral-notes-folder-color-bridge-ready", onReady);
+          resolve(value);
+        };
+        const onReady = () => finish(notesBridge());
+        window.addEventListener("zentral-notes-folder-color-bridge-ready", onReady, { once: true });
+        const started = Date.now();
+        const poll = () => {
+          const bridge = notesBridge();
+          if (bridge) return finish(bridge);
+          if (!lifecycle.active || Date.now() - started >= timeout) return finish(null);
+          timer = lifecycle.setTimeout(poll, 100);
+        };
+        timer = lifecycle.setTimeout(poll, 100);
+      });
+    }
+    function readNotesFolderFallback(folder) {
+      const folderId = String(folder?.getAttribute?.("id") || folder?.id || "");
+      const isRoot = folder?.hasAttribute?.("bgalazka-notes-folder") || folderId === "bgalazka-zentral-notes";
+      const readString = (key) => { try { return pref.getStringPref(key, ""); } catch (_) { return ""; } };
+      const readObject = (key) => {
+        try {
+          const value = JSON.parse(readString(key) || "{}");
+          return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+        } catch (_) { return {}; }
+      };
+      const colorHex = (value) => {
+        const named = {
+          yellow: "#f5c542", green: "#4cc38a", blue: "#5aa9ff", pink: "#ff7eb6",
+          purple: "#a78bfa", orange: "#ff9f43", red: "#ff6b6b", teal: "#2ec4b6", gray: "#9aa0a6",
+        };
+        return cleanHex(value) || named[String(value || "").toLowerCase()] || "";
+      };
+      if (isRoot) return {
+        b: colorHex(readString("zen.workspace.zentral.notes.zen_root_color")),
+        d: cleanDetail(readObject("zen.workspace.zentral.notes.zen_root_parts")),
+        o: cleanOpacity(readObject("zen.workspace.zentral.notes.zen_root_part_opacity")),
+      };
+      return {
+        b: colorHex(folder?.getAttribute?.("bgalazka-notes-color") || ""),
+        d: cleanDetail(readObjectFromAttribute(folder, "bgalazka-notes-parts")),
+        o: cleanOpacity(readObjectFromAttribute(folder, "bgalazka-notes-parts-opacity")),
+      };
+    }
+    function readObjectFromAttribute(folder, name) {
+      try {
+        const value = JSON.parse(folder?.getAttribute?.(name) || "{}");
+        return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+      } catch (_) { return {}; }
     }
     function uniqueRecordFor(folder) {
       const identity = folderIdentity(folder);
@@ -440,6 +666,7 @@
         i: identity.i || matched?.i || "",
         b: raw ? cleanHex(raw.b) : "",
         d: raw ? cleanDetail(raw.d) : {},
+        o: raw ? cleanOpacity(raw.o) : {},
         u: Date.now(),
       });
       const remove = new Set();
@@ -456,13 +683,17 @@
     }
     function defaultRecord() {
       const detail = {};
+      const opacity = {};
       for (const part of PARTS) {
         const value = cleanHex(getString(PART_PREFS[part], ""));
         if (value) detail[part] = value;
+        const alpha = getInt(OPACITY_PREFS[part], -1);
+        if (alpha >= 0 && alpha <= 100) opacity[part] = alpha;
       }
       return {
         b: cleanHex(getString(P.BASE, "")),
         d: detail,
+        o: opacity,
       };
     }
     function opacityColor(value, opacity) {
@@ -470,6 +701,19 @@
       if (!color) return "";
       const pct = Math.max(0, Math.min(100, Math.round(Number(opacity))));
       return pct >= 100 ? color : `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+    }
+    function defaultOpacity() {
+      const opacity = { ...defaultRecord().o };
+      for (const [part, legacy] of [
+        ["back", LEGACY_DEFAULTS.backOpacity],
+        ["front", LEGACY_DEFAULTS.frontOpacity],
+        ["stroke", LEGACY_DEFAULTS.strokeOpacity],
+      ]) {
+        if (opacity[part] !== undefined) continue;
+        const value = getInt(legacy, 100);
+        if (value >= 0 && value < 100) opacity[part] = value;
+      }
+      return opacity;
     }
     function defaultParts() {
       const parts = partsFor(defaultRecord(), mode());
@@ -494,11 +738,55 @@
       if (parts.accent && !parts.accentText) parts.accentText = textOn(cleanHex(parts.accent) || "#202020");
       return parts;
     }
+    function resolveStyle(rawRecord = null) {
+      const defaults = defaultRecord();
+      const record = rawRecord && typeof rawRecord === "object" ? rawRecord : {};
+      const base = cleanHex(record.b || record.color) || defaults.b;
+      const detail = { ...defaults.d, ...cleanDetail(record.d || record.parts) };
+      const effective = { b: base, d: detail };
+      const parts = partsFor(effective, mode());
+      // Retain the legacy Appearance values only when no new base or part owns
+      // that layer. This path is read-only and disappears after migration.
+      if (!base) {
+        for (const [part, key, opacityKey] of [
+          ["back", LEGACY_DEFAULTS.back, LEGACY_DEFAULTS.backOpacity],
+          ["front", LEGACY_DEFAULTS.front, LEGACY_DEFAULTS.frontOpacity],
+          ["stroke", LEGACY_DEFAULTS.stroke, LEGACY_DEFAULTS.strokeOpacity],
+        ]) {
+          if (!parts[part] && !detail[part]) {
+            const legacy = cleanHex(getString(key, ""));
+            if (legacy) parts[part] = opacityColor(legacy, getInt(opacityKey, 100));
+          }
+        }
+        if (!parts.label && !detail.label) {
+          const legacy = cleanHex(getString(LEGACY_DEFAULTS.label, ""));
+          if (legacy) parts.label = legacy;
+        }
+      }
+      const accent = cleanHex(parts.accent) || base;
+      if (accent) parts.accentText = textOn(accent);
+      const opacity = { ...defaultOpacity(), ...cleanOpacity(record.o || record.opacity) };
+      return { base, parts, opacity, properties: declarations(parts, opacity) };
+    }
     function styleMapFor(folder) {
       if (isNotesOwned(folder)) return {};
-      const record = readFolderRecord(folder);
-      return record ? declarations(partsFor(record, mode())) : declarations(defaultParts());
+      return resolveStyle(readFolderRecord(folder)).properties;
     }
+    const previousStyleBridge = window.__zentralFolderColorStyleBridge;
+    const folderColorStyleBridge = Object.freeze({
+      version: 1,
+      resolve: (record) => resolveStyle(record),
+      defaults: () => resolveStyle(null),
+    });
+    window.__zentralFolderColorStyleBridge = folderColorStyleBridge;
+    window.dispatchEvent?.(new Event("zentral-folder-color-style-bridge-ready"));
+    lifecycle.own(() => {
+      if (window.__zentralFolderColorStyleBridge === folderColorStyleBridge) {
+        if (previousStyleBridge) window.__zentralFolderColorStyleBridge = previousStyleBridge;
+        else delete window.__zentralFolderColorStyleBridge;
+        window.dispatchEvent?.(new Event("zentral-folder-color-style-bridge-gone"));
+      }
+    });
 
     function rememberAndSet(folder, property, value) {
       let map = owned.get(folder);
@@ -508,7 +796,7 @@
       }
       const previous = map.get(property) || {
         value: folder.style.getPropertyValue(property),
-        priority: folder.style.getPropertyPriority(property),
+        priority: folder.style.getPropertyPriority?.(property) || "",
         ours: "",
         oursPriority: "important",
       };
@@ -518,7 +806,7 @@
         map.set(property, previous);
       } else if (map.has(property)) {
         const current = folder.style.getPropertyValue(property);
-        const currentPriority = folder.style.getPropertyPriority(property);
+        const currentPriority = folder.style.getPropertyPriority?.(property) || "";
         if (current === previous.ours && currentPriority === previous.oursPriority) {
           if (previous.value) folder.style.setProperty(property, previous.value, previous.priority);
           else folder.style.removeProperty(property);
@@ -536,11 +824,13 @@
     function paintFolder(folder) {
       if (!folder || folder.localName !== "zen-folder") return;
       if (isNotesOwned(folder)) {
-        // Notes may have just written these same properties. Relinquish visual
-        // ownership without restoring our pre-paint snapshot over Notes; keep
-        // the snapshot so a later Notes release can hand the folder back cleanly.
-        folder.removeAttribute?.(MARK);
-        painted.delete(folder);
+        // Notes is the source of truth for its projected folders. Always ask
+        // its bridge to reapply the current values after removing any stale
+        // paint from this module; this also handles Notes starting after us.
+        clearFolderPaint(folder);
+        try { notesBridge()?.refresh?.(folder); } catch (error) {
+          console.warn("[Zentral Colorful Folders] Notes hand-off failed:", error);
+        }
         return;
       }
       if (!enabled()) {
@@ -595,20 +885,32 @@
       :root zen-folder[${MARK}] > .tab-group-label-container > label {
         color: var(--bgalazka-fc-label) !important;
       }
-      .zcf-panel { position: fixed; z-index: 2147483000; width: 330px; max-width: calc(100vw - 20px);
+      .zcf-panel { position: relative; z-index: 2147483647; width: 330px; max-width: calc(100vw - 20px);
         max-height: min(82vh, 680px); overflow: auto; box-sizing: border-box; padding: 12px; border-radius: 12px;
-        background: Canvas; color: CanvasText; color-scheme: light dark; font: menu;
+        background: Canvas; color: CanvasText; color-scheme: light dark; font: menu; pointer-events: auto;
         border: 1px solid color-mix(in srgb, CanvasText 22%, transparent); box-shadow: 0 8px 28px rgba(0,0,0,.35); }
-      .zcf-panel h3 { margin: 0 0 8px; font-size: 14px; }
+      .zcf-header { display:flex; align-items:center; gap:8px; margin:0 0 8px; cursor:grab; user-select:none; touch-action:none; }
+      .zcf-header:active { cursor:grabbing; }
+      .zcf-header h3 { flex:1; min-width:0; margin:0; font-size:14px; }
+      .zcf-close { border:1px solid color-mix(in srgb, CanvasText 25%, transparent); border-radius:7px; padding:2px 7px; background:transparent; color:inherit; cursor:pointer; }
       .zcf-panel h4 { margin: 10px 0 4px; font-size: 11px; opacity: .7; text-transform: uppercase; }
       .zcf-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
       .zcf-row > span { flex: 1; min-width: 0; font-size: 12px; }
       .zcf-row input[type=color] { width: 36px; height: 26px; padding: 0; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); border-radius: 6px; background: transparent; }
       .zcf-row input[type=text] { width: 82px; min-width: 0; }
+      .zcf-opacity { display:flex; align-items:center; gap:5px; min-width:112px; }
+      .zcf-opacity input { width:72px; }
+      .zcf-opacity output { width:34px; text-align:right; font:11px monospace; }
+      .zcf-showcase { display:grid; grid-template-columns:repeat(auto-fit,minmax(104px,1fr)); gap:7px; margin:8px 0 12px; }
+      .zcf-showcase button { display:flex; flex-direction:column; align-items:center; gap:5px; min-height:58px; padding:8px 6px; border:1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius:9px; background:color-mix(in srgb, Canvas 94%, CanvasText 6%); color:inherit; cursor:pointer; }
+      .zcf-showcase-icon { width:40px; height:25px; display:block; border:1px solid color-mix(in srgb, CanvasText 40%, transparent); border-radius:6px 6px 4px 4px; background:linear-gradient(135deg,var(--zcf-back) 0 50%,var(--zcf-front) 50% 100%); box-shadow:inset 0 -3px 0 var(--zcf-stroke); }
+      .zcf-showcase small { font-size:11px; }
+      .zcf-status { min-height:1.4em; font-size:11px; color:color-mix(in srgb, CanvasText 70%, transparent); }
       .zcf-row button, .zcf-btns button { border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); border-radius: 7px; padding: 4px 8px; background: color-mix(in srgb, Canvas 90%, CanvasText 10%); color: inherit; }
       .zcf-swatches { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0; }
       .zcf-swatch { min-width: 0; border: 1px solid color-mix(in srgb, CanvasText 30%, transparent); border-radius: 6px; padding: 5px 7px; color: CanvasText; font-size: 11px; }
       .zcf-list-row { display: grid; grid-template-columns: 18px minmax(0,1fr) auto auto; gap: 7px; align-items: center; padding: 5px 0; border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, transparent); }
+      .zcf-default-color { width:32px; height:24px; padding:0; border:1px solid color-mix(in srgb, CanvasText 25%, transparent); border-radius:6px; background:transparent; }
       .zcf-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
       .zcf-preview { width: 15px; height: 15px; border-radius: 4px; border: 1px solid color-mix(in srgb, CanvasText 28%, transparent); }
       .zcf-muted { font-size: 11px; opacity: .7; }
@@ -622,9 +924,9 @@
     document.documentElement.appendChild(style);
 
     const previewBackground = (record) => {
-      const parts = partsFor(record, "detailed");
-      const back = cleanHex(parts.back) || cleanHex(parts.accent) || "#707780";
-      const front = cleanHex(parts.front) || cleanHex(parts.accent) || "#a0a8b0";
+      const parts = resolveStyle(record || null).parts;
+      const back = parts.back || parts.accent || "#707780";
+      const front = parts.front || parts.accent || "#a0a8b0";
       return `linear-gradient(135deg, ${back} 50%, ${front} 50%)`;
     };
     function defaultTarget() {
@@ -632,23 +934,98 @@
         title: "All folders (default look)",
         read: () => defaultRecord(),
         write: (record) => {
-          setString(P.BASE, record ? cleanHex(record.b) : "");
-          for (const part of PARTS)
-            setString(PART_PREFS[part], record ? cleanHex(record.d?.[part]) : "");
+          const next = record ? { b: cleanHex(record.b), d: cleanDetail(record.d), o: cleanOpacity(record.o) } : null;
+          if (!setString(P.BASE, next?.b || "")) return false;
+          if (next && (Object.keys(next.d).length || Object.keys(next.o).length))
+            setString(P.MODE, "detailed");
+          for (const part of PARTS) {
+            if (!setString(PART_PREFS[part], next?.d?.[part] || "")) return false;
+            if (!setInt(OPACITY_PREFS[part], next?.o?.[part] ?? -1)) return false;
+          }
           schedulePaint();
+          return true;
         },
       };
     }
     function folderTarget(folder) {
+      const title = String(folder.getAttribute("label") || folder.label || "Folder");
+      if (isNotesOwned(folder)) {
+        return {
+          title,
+          notesOwned: true,
+          available: true,
+          prepare: async () => {
+            const isRoot = String(folder.id || folder.getAttribute?.("id") || "") === "bgalazka-zentral-notes" || folder.hasAttribute?.("bgalazka-notes-folder");
+            let bridge = notesBridge();
+            // The root is preference-backed and remains editable before Notes
+            // has published its bridge. A subfolder, however, must load Notes'
+            // metadata store before its style can safely be edited.
+            if (!bridge && !isRoot) bridge = await waitForNotesBridge();
+            if (bridge?.prepare) await bridge.prepare();
+            return !!bridge || isRoot;
+          },
+          read: () => {
+            try { return notesBridge()?.read(folder) || readNotesFolderFallback(folder); }
+            catch (error) {
+              console.warn("[Zentral Colorful Folders] could not read Notes folder style:", error);
+              return readNotesFolderFallback(folder);
+            }
+          },
+          write: async (record) => {
+            const next = record ? { b: cleanHex(record.b), d: cleanDetail(record.d), o: cleanOpacity(record.o) } : null;
+            let bridge = notesBridge();
+            if (!bridge && (folder.hasAttribute?.("bgalazka-notes-folder") || String(folder.id || "") === "bgalazka-zentral-notes")) {
+              // NOTES root appearance is preference-backed, so it can be edited
+              // even before the Notes UI has published its richer bridge.
+              try {
+                pref.setStringPref("zen.workspace.zentral.notes.zen_root_color", next?.b || "");
+                pref.setStringPref("zen.workspace.zentral.notes.zen_root_parts", JSON.stringify(next?.d || {}));
+                pref.setStringPref("zen.workspace.zentral.notes.zen_root_part_opacity", JSON.stringify(next?.o || {}));
+                const value = next ? { b: next.b, d: next.d, o: next.o } : { b: "", d: {}, o: {} };
+                const colors = declarations(partsFor(value, mode()), value.o);
+                for (const property of Object.keys(PART_PROPS).flatMap((part) => PART_PROPS[part])) {
+                  if (colors[property]) folder.style.setProperty(property, colors[property], "important");
+                  else folder.style.removeProperty(property);
+                }
+                return true;
+              } catch (error) {
+                console.warn("[Zentral Colorful Folders] NOTES root save failed:", error);
+                return false;
+              }
+            }
+            if (!bridge) bridge = await waitForNotesBridge();
+            if (!bridge) return false;
+            return bridge.write(folder, next);
+          },
+        };
+      }
       return {
-        title: String(folder.getAttribute("label") || folder.label || "Folder"),
+        title,
+        available: true,
         read: () => readFolderRecord(folder),
         write: (record) => setFolderRecord(folder, record),
       };
     }
 
+    function openTargetEditor(target, anchor) {
+      if (typeof target.prepare !== "function") return openEditor(target, anchor);
+      Promise.resolve(target.prepare()).then((ready) => {
+        target.available = !!ready;
+        openEditor(target, anchor);
+        if (!ready && editor) {
+          const status = editor.querySelector?.(".zcf-status");
+          if (status) status.textContent = "Notes storage is not ready yet. Open Notes once, then Apply.";
+        }
+      }).catch((error) => {
+        console.warn("[Zentral Colorful Folders] Notes folder preparation failed:", error);
+        openEditor(target, anchor);
+      });
+    }
     function closeEditor() {
       if (editorAbort) { editorAbort(); editorAbort = null; }
+      try { editorHost?.hidePopup?.(); } catch (_) {}
+      editorHost?.remove?.();
+      editorHost = null;
       editor?.remove();
       editor = null;
     }
@@ -671,23 +1048,31 @@
         "aria-label": "Folder colors",
       });
       editor = element;
-      let record = target.read() || { b: "", d: {} };
-      record = { b: cleanHex(record.b), d: cleanDetail(record.d) };
+      let record = target.read() || { b: "", d: {}, o: {} };
+      record = { b: cleanHex(record.b), d: cleanDetail(record.d), o: cleanOpacity(record.o) };
+      const header = createElement("div", { class: "zcf-header" });
       const heading = createElement("h3", { text: `Colors · ${target.title}` });
-      const baseLabel = createElement("div", { class: "zcf-muted", text: "One base color keeps the folder parts balanced. Fine tuning can override individual parts." });
+      const close = createElement("button", { type: "button", class: "zcf-close", text: "×", "aria-label": "Close color editor" });
+      header.append(heading, close);
+      close.addEventListener("click", closeEditor);
+      const baseLabel = createElement("div", { class: "zcf-muted", text: "Choose a coordinated base style, then fine tune individual layers and transparency. Changes are saved only when you press Apply." });
       const baseRow = createElement("div", { class: "zcf-row" });
       const base = createElement("input", { type: "color", "aria-label": "Folder base color" });
-      base.value = record.b || "#667788";
-      const baseHex = createElement("input", { type: "text", maxlength: "7", spellcheck: "false", "aria-label": "Base color as hex" });
+      base.value = record.b || defaultRecord().b || "#667788";
+      const baseHex = createElement("input", { type: "text", maxlength: "7", spellcheck: "false", "aria-label": "Base color as hex", placeholder: "auto" });
       baseHex.value = record.b;
       const autoBase = createElement("button", { type: "button", text: "Auto" });
       baseRow.append(createElement("span", { text: "Base color" }), base, baseHex, autoBase);
+      const partInputs = new Map();
       const setBase = (value) => {
         const color = cleanHex(value);
         if (!color) return;
         record.b = color;
         base.value = color;
         baseHex.value = color;
+        for (const [part, input] of partInputs) {
+          if (!record.d[part]) input.color.value = color;
+        }
       };
       base.addEventListener("input", () => setBase(base.value));
       baseHex.addEventListener("input", () => {
@@ -696,40 +1081,56 @@
         if (value) setBase(value);
       });
       autoBase.addEventListener("click", () => { record.b = ""; baseHex.value = ""; });
-      element.append(heading, baseLabel, baseRow);
+      element.append(header, baseLabel, baseRow);
 
+      const syncPartInputs = () => {
+        for (const [part, input] of partInputs) {
+          input.hex.value = record.d[part] || "";
+          input.color.value = record.d[part] || record.b || defaultRecord().d[part] || defaultRecord().b || "#667788";
+          input.opacity.value = String(record.o[part] === undefined ? 100 : record.o[part]);
+          input.opacityValue.textContent = record.o[part] === undefined ? "Auto" : record.o[part] + "%";
+        }
+      };
       const builtins = createElement("div", { class: "zcf-swatches" });
       for (const group of BUILTIN_THEMES)
         for (const theme of group.items) {
-          const button = createElement("button", { type: "button", class: "zcf-swatch", text: theme.n });
+          const button = createElement("button", { type: "button", class: "zcf-swatch", text: theme.n, title: group.group + " · " + theme.n });
           button.style.background = previewBackground(theme);
           button.addEventListener("click", () => {
-            record = { b: theme.b, d: cleanDetail(theme.d) };
+            if (Object.keys(theme.d || {}).length || Object.keys(theme.o || {}).length)
+              setString(P.MODE, "detailed");
+            record = { b: theme.b, d: cleanDetail(theme.d), o: cleanOpacity(theme.o) };
             setBase(theme.b);
-            for (const [part, input] of partInputs) {
-              input.hex.value = record.d[part] || "";
-              input.color.value = record.d[part] || theme.b;
-            }
+            syncPartInputs();
           });
           builtins.appendChild(button);
         }
-      element.append(createElement("h4", { text: "Quick palette" }), builtins);
+      element.append(createElement("h4", { text: "Shared quick palette" }), builtins);
 
       const detail = createElement("details", { class: "zcf-detail" });
-      const summary = createElement("summary", { text: "Fine tune each part" });
+      const summary = createElement("summary", { text: "Fine tune each layer · color and transparency" });
       const detailRows = createElement("div", {});
       detail.append(summary, detailRows);
-      const partInputs = new Map();
       for (const part of PARTS) {
         const row = createElement("div", { class: "zcf-row" });
+        row.style.flexWrap = "wrap";
         const color = createElement("input", { type: "color", "aria-label": PART_LABELS[part] });
-        color.value = record.d[part] || record.b || "#667788";
+        color.value = record.d[part] || record.b || defaultRecord().d[part] || defaultRecord().b || "#667788";
         const hex = createElement("input", { type: "text", maxlength: "7", spellcheck: "false", placeholder: "auto", "aria-label": PART_LABELS[part] + " as hex" });
         hex.value = record.d[part] || "";
+        const opacityBox = createElement("span", { class: "zcf-opacity" });
+        const opacity = createElement("input", { type: "range", min: "0", max: "100", step: "1", "aria-label": PART_LABELS[part] + " transparency" });
+        opacity.value = String(record.o[part] === undefined ? 100 : record.o[part]);
+        const opacityValue = createElement("output", { text: record.o[part] === undefined ? "Auto" : record.o[part] + "%" });
+        opacityBox.append(createElement("span", { text: "Opacity (0% = transparent)" }), opacity, opacityValue);
         const auto = createElement("button", { type: "button", text: "Auto" });
+        const ensureDetailedMode = () => {
+          if (mode() !== "detailed") setString(P.MODE, "detailed");
+        };
         const setPart = (value) => {
           const clean = cleanHex(value);
           if (!clean) return;
+          ensureDetailedMode();
           record.d[part] = clean;
           color.value = clean;
           hex.value = clean;
@@ -740,12 +1141,24 @@
           const value = cleanHex(raw.startsWith("#") ? raw : "#" + raw);
           if (value) setPart(value);
         });
-        auto.addEventListener("click", () => { delete record.d[part]; hex.value = ""; });
-        row.append(createElement("span", { text: PART_LABELS[part] }), color, hex, auto);
+        opacity.addEventListener("input", () => {
+          ensureDetailedMode();
+          record.o[part] = Number(opacity.value);
+          opacityValue.textContent = opacity.value + "%";
+        });
+        auto.addEventListener("click", () => {
+          delete record.d[part];
+          delete record.o[part];
+          hex.value = "";
+          color.value = record.b || defaultRecord().d[part] || defaultRecord().b || "#667788";
+          opacity.value = "100";
+          opacityValue.textContent = "Auto";
+        });
+        row.append(createElement("span", { text: PART_LABELS[part] }), color, hex, opacityBox, auto);
         detailRows.appendChild(row);
-        partInputs.set(part, { color, hex });
+        partInputs.set(part, { color, hex, opacity, opacityValue });
       }
-      if (mode() === "detailed" && Object.keys(record.d).length) detail.open = true;
+      if (mode() === "detailed" && (Object.keys(record.d).length || Object.keys(record.o).length)) detail.open = true;
       element.appendChild(detail);
 
       const themeRow = createElement("div", { class: "zcf-row" });
@@ -753,7 +1166,7 @@
       const saveThemeButton = createElement("button", { type: "button", text: "Save as quick theme" });
       saveThemeButton.addEventListener("click", () => {
         const name = themeName.value.trim();
-        if (!saveTheme({ n: name, b: record.b, d: record.d })) {
+        if (!saveTheme({ n: name, b: record.b, d: record.d, o: record.o })) {
           themeName.focus?.();
           themeName.setAttribute("aria-invalid", "true");
         } else {
@@ -764,40 +1177,130 @@
       themeRow.append(themeName, saveThemeButton);
       element.appendChild(themeRow);
 
+      const status = createElement("div", { class: "zcf-status", role: "status" });
+      element.appendChild(status);
       const actions = createElement("div", { class: "zcf-btns" });
       const reset = createElement("button", { type: "button", text: "Reset" });
       const cancel = createElement("button", { type: "button", text: "Cancel" });
       const save = createElement("button", { type: "button", text: "Apply" });
-      reset.addEventListener("click", () => {
-        target.write(null);
-        closeEditor();
-      });
+      const writeAndClose = (value) => {
+        let result;
+        try { result = target.write(value); }
+        catch (error) {
+          if (editor === element) status.textContent = "Could not save: " + (error?.message || error);
+          return;
+        }
+        Promise.resolve(result).then((ok) => {
+          // A Notes write may finish after another folder's editor was opened.
+          // Never let an older async save dismiss or overwrite the newer UI.
+          if (editor !== element) return;
+          if (ok === false) {
+            status.textContent = target.available === false ? "Notes is not ready yet. Open Notes once, then retry." : "Could not save this folder style.";
+            return;
+          }
+          closeEditor();
+        }).catch((error) => {
+          if (editor === element) status.textContent = "Could not save: " + (error?.message || error);
+        });
+      };
+      reset.addEventListener("click", () => writeAndClose(null));
       cancel.addEventListener("click", closeEditor);
-      save.addEventListener("click", () => {
-        target.write({ b: record.b, d: record.d });
-        closeEditor();
-      });
+      save.addEventListener("click", () => writeAndClose({ b: record.b, d: record.d, o: record.o }));
       actions.append(reset, cancel, save);
       element.appendChild(actions);
-      document.documentElement.appendChild(element);
+
+      // Use the browser's native popup layer. A normal fixed HTML child can sit
+      // underneath Zen's sidebar/popups even with a huge z-index, which makes
+      // Apply/Close appear dead. A XUL panel is reliably topmost and keeps the
+      // editor's controls hit-testable; the div fallback is for test harnesses.
+      try {
+        const popupSet = document.getElementById("mainPopupSet");
+        if (popupSet && document.createXULElement) {
+          const host = document.createXULElement("panel");
+          host.setAttribute("noautohide", "true");
+          host.setAttribute("level", "top");
+          host.setAttribute("role", "dialog");
+          host.style.cssText = "-moz-appearance:none!important;padding:0!important;border:0!important;background:transparent!important;overflow:visible!important;";
+          host.appendChild(element);
+          popupSet.appendChild(host);
+          editorHost = host;
+        } else {
+          document.documentElement.appendChild(element);
+          element.style.position = "fixed";
+        }
+      } catch (_) {
+        document.documentElement.appendChild(element);
+        element.style.position = "fixed";
+      }
+
+      // Position beside the target folder and do not place the panel over it
+      // when any usable side/vertical gap exists. The helper also bounds it to
+      // the current viewport and is covered by unit tests.
       try {
         const rect = anchor?.getBoundingClientRect?.();
         const width = window.innerWidth || 1200;
         const height = window.innerHeight || 800;
-        const left = rect
-          ? Math.min(Math.max(8, rect.right + 8), Math.max(8, width - 350))
-          : 80;
-        const top = rect
-          ? Math.min(Math.max(8, rect.top), Math.max(8, height - 180))
-          : 80;
-        element.style.left = left + "px";
-        element.style.top = top + "px";
+        const placement = placePanel(
+          rect,
+          Math.min(380, width - 16),
+          Math.min(element.scrollHeight || 620, height - 16),
+          width,
+          height,
+        );
+        element.style.width = placement.width + "px";
+        element.style.maxHeight = placement.height + "px";
+        if (!editorHost) {
+          element.style.left = placement.left + "px";
+          element.style.top = placement.top + "px";
+        }
+        if (editorHost) {
+          const screenX = Number(window.mozInnerScreenX ?? window.screenX ?? 0);
+          const screenY = Number(window.mozInnerScreenY ?? window.screenY ?? 0);
+          editorHost.openPopupAtScreen?.(Math.round(screenX + placement.left), Math.round(screenY + placement.top), false);
+        }
       } catch (_) {}
+
+      let drag = null;
+      const onPointerDown = (event) => {
+        if (event.button !== 0 || event.target?.closest?.("button,input")) return;
+        const rect = element.getBoundingClientRect();
+        drag = { x: event.clientX, y: event.clientY, left: rect.left, top: rect.top, id: event.pointerId };
+        try { header.setPointerCapture(event.pointerId); } catch (_) {}
+        event.preventDefault();
+      };
+      const onPointerMove = (event) => {
+        if (!drag || event.pointerId !== drag.id) return;
+        const maxLeft = Math.max(8, (window.innerWidth || 1200) - element.offsetWidth - 8);
+        const maxTop = Math.max(8, (window.innerHeight || 800) - 40);
+        const left = Math.max(8, Math.min(maxLeft, drag.left + event.clientX - drag.x));
+        const top = Math.max(8, Math.min(maxTop, drag.top + event.clientY - drag.y));
+        if (editorHost?.moveTo) {
+          const screenX = Number(window.mozInnerScreenX ?? window.screenX ?? 0);
+          const screenY = Number(window.mozInnerScreenY ?? window.screenY ?? 0);
+          editorHost.moveTo(Math.round(screenX + left), Math.round(screenY + top));
+        } else {
+          element.style.left = left + "px";
+          element.style.top = top + "px";
+        }
+      };
+      const onPointerUp = (event) => {
+        if (drag && event.pointerId === drag.id) drag = null;
+      };
+      header.addEventListener("pointerdown", onPointerDown);
+      header.addEventListener("pointermove", onPointerMove);
+      header.addEventListener("pointerup", onPointerUp);
+      header.addEventListener("pointercancel", onPointerUp);
       const onKey = (event) => {
         if (event.key === "Escape") closeEditor();
       };
       window.addEventListener("keydown", onKey, true);
-      editorAbort = () => window.removeEventListener("keydown", onKey, true);
+      editorAbort = () => {
+        window.removeEventListener("keydown", onKey, true);
+        header.removeEventListener("pointerdown", onPointerDown);
+        header.removeEventListener("pointermove", onPointerMove);
+        header.removeEventListener("pointerup", onPointerUp);
+        header.removeEventListener("pointercancel", onPointerUp);
+      };
     }
 
     function makeSwatchIcon(theme) {
@@ -816,16 +1319,17 @@
       const menu = xul("menu", { label: "Folder colors" });
       const submenu = document.createXULElement("menupopup");
       menu.appendChild(submenu);
-      if (isNotesOwned(folder)) {
-        submenu.appendChild(xul("menuitem", {
-          label: "Managed by Notes · change colors in Notes",
-          disabled: "true",
-        }));
-        popup.appendChild(menu);
-        return;
-      }
-      const apply = (theme) =>
-        setFolderRecord(folder, { b: theme.b || "", d: theme.d || {} });
+      const apply = (theme) => {
+        const target = folderTarget(folder);
+        if (Object.keys(theme.d || {}).length || Object.keys(theme.o || {}).length)
+          setString(P.MODE, "detailed");
+        Promise.resolve(target.write({ b: theme.b || "", d: theme.d || {}, o: theme.o || {} }))
+          .then((ok) => {
+            if (ok === false) console.warn("[Zentral Colorful Folders] Could not apply palette to", target.title);
+            else schedulePaint();
+          })
+          .catch((error) => console.warn("[Zentral Colorful Folders] Palette apply failed:", error));
+      };
       const addGroup = (label, items) => {
         const group = document.createXULElement("menu");
         group.setAttribute("label", label);
@@ -846,10 +1350,49 @@
         submenu.appendChild(addGroup("My quick themes", state.themes));
       submenu.appendChild(xul("menuseparator"));
       const more = xul("menuitem", { label: "More colors…" });
-      more.addEventListener("command", () => openEditor(folderTarget(folder), folder));
+      more.addEventListener("command", () => {
+        const open = () => openTargetEditor(folderTarget(folder), folder);
+        let opened = false;
+        let attempts = 0;
+        const isClosed = () => {
+          const state = String(popup.state || "").toLowerCase();
+          return state === "closed" || popup.hidden === true || popup.isConnected === false;
+        };
+        const afterHidden = (event) => {
+          // A nested submenu can emit popuphidden before its owner. Do not use
+          // {once:true}: that would consume the listener on the wrong popup.
+          if (event && event.target !== popup) return;
+          if (opened || !isClosed()) return;
+          opened = true;
+          popup.removeEventListener("popuphidden", afterHidden, true);
+          lifecycle.setTimeout(() => lifecycle.setTimeout(open, 0), 40);
+        };
+        const waitUntilClosed = () => {
+          if (opened || !lifecycle.active) return;
+          if (isClosed()) return afterHidden();
+          // Keep nudging the native popup closed while its XUL hide transition
+          // runs. Only open the floating editor after the context menu is gone.
+          if (attempts % 8 === 0) {
+            try { popup.hidePopup?.(); } catch (_) {}
+          }
+          if (attempts++ >= 120) {
+            popup.removeEventListener("popuphidden", afterHidden, true);
+            console.warn("[Zentral Colorful Folders] native color menu did not close; editor was not opened over it");
+            return;
+          }
+          lifecycle.setTimeout(waitUntilClosed, 25);
+        };
+        popup.addEventListener("popuphidden", afterHidden, true);
+        try { popup.hidePopup?.(); } catch (_) {}
+        lifecycle.setTimeout(waitUntilClosed, 0);
+      });
       submenu.appendChild(more);
       const reset = xul("menuitem", { label: "Reset to default" });
-      reset.addEventListener("command", () => setFolderRecord(folder, null));
+      reset.addEventListener("command", () => {
+        Promise.resolve(folderTarget(folder).write(null)).catch((error) =>
+          console.warn("[Zentral Colorful Folders] folder reset failed:", error),
+        );
+      });
       submenu.appendChild(reset);
       popup.appendChild(menu);
     }
@@ -859,14 +1402,25 @@
       try {
         for (const old of [...popup.querySelectorAll?.("[" + MENU_MARK + "]") || []]) old.remove();
         if (!enabled() || !menuEnabled()) return;
-        const trigger = popup.triggerNode || event.originalTarget;
-        const folder = trigger?.closest?.("zen-folder");
+        const candidates = [popup.triggerNode, event.originalTarget, popup.anchorNode];
+        const findFolder = (node) => {
+          try {
+            const closest = node?.closest?.("zen-folder");
+            if (closest) return closest;
+            for (let current = node; current && current !== popup; current = current.parentNode || current.host)
+              if (current.localName === "zen-folder") return current;
+          } catch (_) {}
+          return null;
+        };
+        const folder = candidates.map(findFolder).find(Boolean);
         if (folder) buildMenu(popup, folder);
       } catch (error) {
         console.warn("[Zentral Colorful Folders] context menu failed:", error);
       }
     }
     lifecycle.listen(window, "popupshowing", onPopupShowing, true);
+    lifecycle.listen(window, "zentral-notes-folder-color-bridge-ready", schedulePaint);
+    lifecycle.listen(window, "zentral-notes-folder-color-bridge-gone", schedulePaint);
     lifecycle.own(() => {
       try {
         for (const node of [...document.querySelectorAll?.("[" + MENU_MARK + "]") || []]) node.remove();
@@ -920,49 +1474,131 @@
       schedulePaint();
     });
     lifecycle.preference("zen.workspace.bgalazka.look.folder_", schedulePaint);
-    lifecycle.preference(PREFIX + "default_", schedulePaint);
+    lifecycle.preference(PREFIX + "default_", (_subject, _topic, name) => {
+      const key = String(name || "");
+      if (key !== P.BASE && mode() !== "detailed") {
+        const isOpacity = key.endsWith("_opacity");
+        const active = isOpacity
+          ? getInt(key, -1) >= 0
+          : !!cleanHex(getString(key, ""));
+        if (active) setString(P.MODE, "detailed");
+      }
+      schedulePaint();
+    });
+    lifecycle.preference(P.MODE, schedulePaint);
     lifecycle.preference(P.ENABLED, schedulePaint);
 
     settingsUnregister = runtime?.registerSettingsHook?.("colorful-folders", 31, () => {
       const modal = document.getElementById("zentral-settings-modal");
-      if (!modal || modal.querySelector("#zentral-colorful-folders-list")) return;
+      if (!modal) return;
+
+      // Appearance > Colorful folders > Defaults: the showcase applies one
+      // consistent style to every ordinary Zen folder and to Notes folders
+      // that do not have their own per-folder overrides.
+      const defaultsSection = runtime.ensureSettingsSection?.(modal, "folder-colors", "Defaults");
+      if (defaultsSection && !defaultsSection.querySelector("#zentral-colorful-folders-showcase")) {
+        const showcase = createElement("div", { id: "zentral-colorful-folders-showcase" });
+        showcase.appendChild(createElement("p", {
+          class: "zcf-muted",
+          text: "Choose a coordinated showcase for every folder, including Notes. Use the color picker for the linked base color or open the detailed editor to tune all seven layers and their transparency.",
+        }));
+        const defaultPickerRow = createElement("div", { class: "zcf-row" });
+        const defaultPicker = createElement("input", { type: "color", class: "zcf-default-color", "aria-label": "Default color for all folders" });
+        defaultPicker.value = defaultRecord().b || "#667788";
+        defaultPicker.addEventListener("input", () => {
+          const current = defaultRecord();
+          // The direct picker is the linked-color/simple control. It clears
+          // individual color overrides but retains explicit transparency.
+          defaultTarget().write({ b: defaultPicker.value, d: {}, o: current.o });
+          setString(P.MODE, "simple");
+        });
+        defaultPickerRow.append(
+          createElement("span", { text: "Default color for all folders" }),
+          defaultPicker,
+        );
+        showcase.appendChild(defaultPickerRow);
+        const defaultActions = createElement("div", { class: "zcf-btns" });
+        const editDefaults = createElement("button", { type: "button", text: "Customize all seven layers and transparency…" });
+        editDefaults.addEventListener("click", () => openEditor(defaultTarget(), modal));
+        defaultActions.appendChild(editDefaults);
+        showcase.appendChild(defaultActions);
+        for (const group of BUILTIN_THEMES) {
+          showcase.appendChild(createElement("h4", { text: group.group }));
+          const grid = createElement("div", { class: "zcf-showcase" });
+          for (const theme of group.items) {
+            const parts = partsFor(theme, "detailed");
+            const back = cleanHex(theme.d?.back) || theme.b;
+            const front = cleanHex(theme.d?.front) || theme.b;
+            const stroke = cleanHex(theme.d?.stroke) || theme.b;
+            const button = createElement("button", { type: "button", title: `Apply ${theme.n} to all default folders` });
+            const icon = createElement("span", { class: "zcf-showcase-icon", "aria-hidden": "true" });
+            icon.style.setProperty("--zcf-back", back);
+            icon.style.setProperty("--zcf-front", front);
+            icon.style.setProperty("--zcf-stroke", stroke);
+            button.append(icon, createElement("small", { text: theme.n }));
+            button.addEventListener("click", () => {
+              const ok = defaultTarget().write(theme);
+              if (ok) {
+                defaultPicker.value = theme.b;
+                showcase.dataset.active = theme.n;
+                for (const item of grid.querySelectorAll("button")) item.dataset.active = item === button ? "true" : "false";
+              }
+            });
+            grid.appendChild(button);
+          }
+          showcase.appendChild(grid);
+        }
+        defaultsSection.appendChild(showcase);
+      }
+
       const section = runtime.ensureSettingsSection?.(modal, "folder-colors", "Your folders");
-      if (!section) return;
+      if (!section || section.querySelector("#zentral-colorful-folders-list")) return;
       const list = createElement("div", { id: "zentral-colorful-folders-list" });
-      const makeRow = (name, target, folder, record, managed = false) => {
+      const makeRow = (name, target, folder, record, notesOwned = false) => {
         const preview = createElement("span", { class: "zcf-preview", "aria-hidden": "true" });
         preview.style.background = previewBackground(record || {});
-        const edit = createElement("button", { type: "button", text: managed ? "Managed by Notes" : "Colors…" });
+        const edit = createElement("button", { type: "button", text: "Colors…" });
         const reset = createElement("button", { type: "button", text: "Reset" });
-        edit.disabled = managed;
-        reset.disabled = managed || !record;
-        edit.addEventListener("click", () => openEditor(target, folder || modal));
-        reset.addEventListener("click", () => { target.write(null); fill(); });
+        edit.disabled = target.available === false;
+        edit.title = notesOwned ? "Edit this Notes folder; Notes storage will be synchronized automatically" : "Edit this folder's colors";
+        reset.disabled = !hasColor(record || {});
+        edit.addEventListener("click", () => openTargetEditor(target, folder || modal));
+        reset.addEventListener("click", () => {
+          Promise.resolve(target.write(null)).then((ok) => {
+            if (ok !== false) fill();
+          }).catch((error) => console.warn("[Zentral Colorful Folders] reset failed:", error));
+        });
         return createElement(
           "div",
           { class: "zcf-list-row" },
           preview,
-          createElement("span", { class: "zcf-name", text: name }),
+          createElement("span", { class: "zcf-name", text: notesOwned ? name + " · Notes" : name }),
           edit,
           reset,
         );
       };
-      const fill = () => {
+      let fillGeneration = 0;
+      const fill = async () => {
+        const generation = ++fillGeneration;
+        let notesBridgeReady = notesBridge();
+        if (!notesBridgeReady) notesBridgeReady = await waitForNotesBridge(900);
+        if (notesBridgeReady?.prepare) {
+          try { await notesBridgeReady.prepare(); } catch (error) { console.warn("[Zentral Colorful Folders] Notes style load failed:", error); }
+        }
+        if (generation !== fillGeneration || list.isConnected === false || !lifecycle.active) return;
         list.replaceChildren();
-        list.appendChild(makeRow("All folders (default look)", defaultTarget(), null, defaultRecord()));
+        const defaults = defaultRecord();
+        const defaultRow = makeRow("All folders (default look)", defaultTarget(), null, defaults);
+        list.appendChild(defaultRow);
         const folders = liveFolders();
         if (!folders.length)
           list.appendChild(createElement("p", { class: "zcf-muted", text: "No native folders are currently visible in this window." }));
         for (const folder of folders) {
-          const managed = isNotesOwned(folder);
-          const title = String(folder.getAttribute("label") || folder.label || "Folder");
-          list.appendChild(makeRow(
-            title,
-            folderTarget(folder),
-            folder,
-            managed ? null : readFolderRecord(folder),
-            managed,
-          ));
+          const notesOwned = isNotesOwned(folder);
+          const title = String(folder.getAttribute("label") || folder.label || (folder.id === "bgalazka-zentral-notes" ? "NOTES" : "Folder"));
+          const target = folderTarget(folder);
+          const record = target.read() || {};
+          list.appendChild(makeRow(title, target, folder, record, notesOwned));
         }
         const refresh = createElement("button", { type: "button", text: "Refresh list" });
         refresh.addEventListener("click", fill);
@@ -970,6 +1606,12 @@
       };
       fill();
       section.appendChild(list);
+      lifecycle.listen(window, "zentral-notes-folder-color-bridge-ready", () => fill());
+      lifecycle.listen(window, "zentral-notes-folder-style-changed", () => {
+        schedulePaint();
+        fill();
+      });
+      lifecycle.listen(window, "zentral-folder-color-presets-ready", () => fill());
     });
     lifecycle.own(() => {
       settingsUnregister?.();
@@ -992,6 +1634,7 @@
       cleanHex,
       cleanRecord,
       cleanDetail,
+      cleanOpacity,
       parseData,
       serializeData,
       parseThemes,
@@ -999,6 +1642,7 @@
       derive,
       partsFor,
       declarations,
+      placePanel,
       sha256Hex,
       hashKey,
       BUILTIN_THEMES,

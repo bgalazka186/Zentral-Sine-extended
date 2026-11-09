@@ -112,7 +112,7 @@
       "group": "Appearance",
       "owner": "colorful-folders",
       "icon": "folder",
-      "description": "Default colors and per-folder palettes for native Zen folders. Notes folders keep their own settings and are not overwritten.",
+      "description": "Shared palettes, global default folder colors and per-folder customization for native Zen and Notes folders. Notes remains the storage owner for its own folder records.",
       "sections": [
         {
           "label": "Behavior",
@@ -124,7 +124,8 @@
         },
         {
           "label": "Your folders",
-          "icon": "folder"
+          "icon": "folder",
+          "virtual": true
         }
       ]
     },
@@ -811,6 +812,13 @@
     "zen.workspace.zentral.folder_colors.default_accent",
     "zen.workspace.zentral.folder_colors.default_tint",
     "zen.workspace.zentral.folder_colors.default_hover",
+    "zen.workspace.zentral.folder_colors.default_back_opacity",
+    "zen.workspace.zentral.folder_colors.default_front_opacity",
+    "zen.workspace.zentral.folder_colors.default_stroke_opacity",
+    "zen.workspace.zentral.folder_colors.default_label_opacity",
+    "zen.workspace.zentral.folder_colors.default_accent_opacity",
+    "zen.workspace.zentral.folder_colors.default_tint_opacity",
+    "zen.workspace.zentral.folder_colors.default_hover_opacity",
     {
       "type": "text",
       "label": "**Layout**",

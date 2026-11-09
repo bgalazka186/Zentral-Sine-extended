@@ -219,6 +219,21 @@ const seq = (n) => { let i = 0; return () => ((i++ * 7 + n) % 36) / 36; };
     z.ws.remove();
   });
 
+  await test("folder style: per-layer opacity includes 0%, and all values are retained on the projected folder", () => {
+    const z = sb(); const f = z.folder("Transparent detail");
+    const parts = { back: "#112233", front: "#445566", stroke: "#778899", label: "#abcdef", accent: "#ffffff", tint: "#102030", hover: "#203040" };
+    const opacity = { back: 0, front: 35, stroke: 50, label: 60, accent: 70, tint: 80, hover: 90 };
+    c.applyNotesFolderStyle(f, "#336699", "", { doc: document, parts, opacity });
+    assert.equal(f.style.getPropertyValue("--zen-folder-behind-bgcolor"), "color-mix(in srgb, #112233 0%, transparent)");
+    assert.equal(f.style.getPropertyValue("--zen-folder-front-bgcolor"), "color-mix(in srgb, #445566 35%, transparent)");
+    assert.equal(f.style.getPropertyValue("--zen-folder-stroke"), "color-mix(in srgb, #778899 50%, transparent)");
+    assert.equal(f.style.getPropertyValue("--bgalazka-fc-label"), "color-mix(in srgb, #abcdef 60%, transparent)");
+    assert.equal(f.style.getPropertyValue("--tab-group-background-color"), "color-mix(in srgb, #ffffff 70%, transparent)");
+    assert.equal(f.style.getPropertyValue("--tab-group-color-pale"), "color-mix(in srgb, color-mix(in srgb, #102030 22%, transparent) 80%, transparent)");
+    assert.equal(f.style.getPropertyValue("--tab-group-background-color-hover"), "color-mix(in srgb, #203040 90%, transparent)");
+    assert.equal(f.getAttribute("bgalazka-notes-parts-opacity"), JSON.stringify(opacity));
+    z.ws.remove();
+  });
   // ------------------------------------------------------------------ never lose what the person put in a folder
   await test("dedupe: of several NOTES roots the first is adopted, one holding only our tabs is deleted, one with the person's tab is released and keeps it", () => {
     const z = sb(); const mark = { "bgalazka-notes-folder": "true" };
@@ -270,12 +285,23 @@ const seq = (n) => { let i = 0; return () => ((i++ * 7 + n) % 36) / 36; };
     const input = all().find((e) => e.tag === "input" && e.maxLength === 24 || (e.tag === "input" && e.attrs.get("placeholder")?.startsWith("e.g.") && e.maxLength === 24));
     assert.ok(input, "emoji field");
     const chipBtn = (label) => all().find((e) => e.tag === "button" && e.textContent === label);
-    click(chipBtn("Teal") || all().find((e) => e.tag === "button" && e.dataset.color === "teal"));
+    click(chipBtn("Mint"));
     input.value = "not an emoji"; click(chipBtn("Save")); await flush();
     assert.equal(input.dataset.bad, "true"); assert.equal(store.tree().children.find((n) => n.id === "work").icon, "", "refused, nothing stored");
     input.value = "📓"; click(chipBtn("Save")); await flush();
-    const node = store.tree().children.find((n) => n.id === "work"); assert.equal(node.color, "teal"); assert.equal(node.icon, "📓");
-    const row = all().find((e) => e.getAttribute("data-fid") === "work"); assert.equal(row.dataset.color, "teal"); assert.ok(row.textContent.includes("📓"));
+    const node = store.tree().children.find((n) => n.id === "work"); assert.equal(node.color, "#40b99a"); assert.equal(node.icon, "📓");
+    let row = all().find((e) => e.getAttribute("data-fid") === "work"); assert.equal(row.dataset.color, "custom"); assert.ok(row.textContent.includes("📓"));
+    assert.ok(row.style.getPropertyValue("--zn-frow-back"), "Notes All notes row derives the same seven layer model as the browser folder");
+
+    // Simulate the Colorful Folders RMB bridge writing the same Notes-owned
+    // record from the Zen sidebar while the All Notes tree is already open.
+    assert.equal(store.setFolderStyle("work", {
+      color: "#336699", icon: "📓", parts: { front: "#abcdef", label: "#202020" }, opacity: { front: 25 },
+    }), true);
+    await flush();
+    row = all().find((e) => e.getAttribute("data-fid") === "work");
+    assert.ok(row.style.getPropertyValue("--zn-frow-front").includes("#abcdef"), "external Notes metadata writes redraw the open All Notes folder row");
+    assert.ok(row.style.getPropertyValue("--zn-frow-front").includes("25%"), "the Notes tree uses the same per-layer opacity as the Zen sidebar");
   });
   // ------------------------------------------------------------------ live-test fixes (3.2.2)
   await test("folder icon: the three --zen-folder-* variables Zen's icon reads are set on the folder, per colour, and removed again", () => {
@@ -333,6 +359,29 @@ const seq = (n) => { let i = 0; return () => ((i++ * 7 + n) % 36) / 36; };
     const s2 = await reopen(st); assert.equal(s2.get(n.id).color, "#abcdef", "a custom note colour survives the file round trip");
     assert.equal(c.folderZenVars("#336699")["--zen-folder-front-bgcolor"].includes("#336699"), true);
     assert.ok(/data-color="custom"\]/.test(css) && /zen-folder\[bgalazka-notes-icon\]/.test(css));
+  });
+  await test("Notes and native folders expose the same shared quick palettes", () => {
+    const folderSource = fs.readFileSync(path.resolve(__dirname, "../additional/folders/ZentralColorfulFolders.uc.js"), "utf8");
+    const paletteWindow = { ZentralRuntime: { register() {} } };
+    vm.runInNewContext(folderSource, { window: paletteWindow, globalThis: { Services: { prefs: {} } }, ChromeUtils: {}, TextEncoder, Uint8Array, Uint32Array, DataView, Object, Array, String, Number, Math, JSON, Date, Set, Map, RegExp, Error, TypeError, console });
+    eq(J(c.FALLBACK_FOLDER_COLOR_PRESETS), J(paletteWindow.__zentralColorfulFoldersTestSeam.BUILTIN_THEMES), "Notes fallback mirrors Colorful Folders until the shared preset bridge loads");
+    assert.match(source, /window\.__zentralNotesFolderColorBridge = notesFolderColorBridge/);
+    assert.match(source, /setFolderStyle\(metaFolder\.id/);
+    assert.match(source, /PREF\.ZEN_ROOT_PART_OPACITY/);
+    assert.match(source, /zentral-notes-folder-style-changed/);
+    assert.match(source, /zentral-notes-folder-color-bridge-gone/);
+    assert.match(source, /const hasVisual = Object\.keys\(resolved\.properties \\|\| \{\}\)\.length > 0/);
+    assert.match(source, /function useDetailedFolderMode\(\)/);
+    assert.match(source, /migrateColorfulOpacityDefaults/);
+    assert.match(source, /previousVersion >= 2/);
+    assert.match(source, /allowDetails = !effectiveColor \|\| defaults\.mode === "detailed"/);
+    assert.match(source, /allowDetails = !baseColor \|\| defaults\.mode === "detailed"/);
+    assert.match(source, /setFolderStyle\(metaFolder\.id/);
+    assert.match(css, /background: var\(--zn-frow-tint,/);
+    assert.match(source, /zn-frow-icon" \+ \(node\.icon \? " is-emoji" : " is-folder"\)/);
+    assert.match(css, /is-folder::before[\s\S]*?var\(--zn-frow-back/);
+    assert.match(css, /is-folder::after[\s\S]*?var\(--zn-frow-front/);
+    assert.match(css, /border: 1px solid var\(--zn-frow-stroke/);
   });
   console.log(`\n${passed} folder identity / style tests passed`);
 })().catch((e) => { console.error("FAIL", e); process.exit(1); });

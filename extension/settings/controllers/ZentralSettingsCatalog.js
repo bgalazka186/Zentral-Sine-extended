@@ -209,6 +209,7 @@
             (section) =>
               category.external ||
               category.virtual ||
+              section.virtual ||
               section.properties.length,
           ),
       }))

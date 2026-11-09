@@ -259,6 +259,55 @@
     "def": 6
   },
   {
+    "key": "zen.workspace.zentral.folder_colors.default_back_opacity",
+    "text": "zen.workspace.zentral.folder_colors.default_back_opacity_text",
+    "min": -1,
+    "max": 100,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.folder_colors.default_front_opacity",
+    "text": "zen.workspace.zentral.folder_colors.default_front_opacity_text",
+    "min": -1,
+    "max": 100,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.folder_colors.default_stroke_opacity",
+    "text": "zen.workspace.zentral.folder_colors.default_stroke_opacity_text",
+    "min": -1,
+    "max": 100,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.folder_colors.default_label_opacity",
+    "text": "zen.workspace.zentral.folder_colors.default_label_opacity_text",
+    "min": -1,
+    "max": 100,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.folder_colors.default_accent_opacity",
+    "text": "zen.workspace.zentral.folder_colors.default_accent_opacity_text",
+    "min": -1,
+    "max": 100,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.folder_colors.default_tint_opacity",
+    "text": "zen.workspace.zentral.folder_colors.default_tint_opacity_text",
+    "min": -1,
+    "max": 100,
+    "def": -1
+  },
+  {
+    "key": "zen.workspace.zentral.folder_colors.default_hover_opacity",
+    "text": "zen.workspace.zentral.folder_colors.default_hover_opacity_text",
+    "min": -1,
+    "max": 100,
+    "def": -1
+  },
+  {
     "key": "zen.workspace.bgalazka.look.essentials_height",
     "text": "zen.workspace.bgalazka.look.essentials_height_text",
     "min": 16,

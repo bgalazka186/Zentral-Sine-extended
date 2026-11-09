@@ -2174,6 +2174,7 @@
         segment.hidden =
           !category.external &&
           !category.virtual &&
+          !definition?.virtual &&
           !definition?.properties.some((property) =>
             settingsItemAvailable({ property }),
           );

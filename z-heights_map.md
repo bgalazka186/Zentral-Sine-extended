@@ -34,6 +34,7 @@ when the ordering rules below are broken.
 
 | z-index | Role | Where | File:line |
 | ---: | --- | --- | --- |
+| 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | inline style: `.zcf-panel { position: relative; z-index: 2147483647; width: 330px; ma` | additional/folders/ZentralColorfulFolders.uc.js:888 |
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | inline style: `? "position:fixed;right:12px;bottom:12px;width:320px;height:180px;z-in` | additional/video/content/ZentralVideoFrame.js:301 |
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | inline style: `"position:fixed;inset:8%;overflow:auto;z-index:2147483647;padding:20px` | additional/video/ZentralVideoPreview.uc.js:267 |
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | `:root[bgalazka-corner-tiles="true"] :is( .tabbrowser-tab, #zen-essentials-container .tabbrowser-tab, [zen-essential="true"] ) .zen-app-tile` | extension/panels/corner-tiles/ZentralCornerPanels.css:65 |
@@ -64,7 +65,6 @@ when the ordering rules below are broken.
 | 2147483550 | Vertical-bar apps toolbar | `:root[zentral-apps-placement="vertical-bar"] #zentral-apps-vertical-bar-trigger` | zentral/apps/styles/ZentralVerticalBarPresentation.css:366 |
 | 2147483500 | Autohidden vertical bar | `:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"] #zentral-apps-vertical-bar` | zentral/apps/styles/ZentralAppsInjected.css:1383 |
 | 2147483500 | Autohidden vertical bar | `:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"] #zentral-apps-vertical-bar` | zentral/apps/styles/ZentralVerticalBarLayout.css:121 |
-| 2147483000 |  | inline style: `.zcf-panel { position: fixed; z-index: 2147483000; width: 330px; max-w` | additional/folders/ZentralColorfulFolders.uc.js:598 |
 | 999999 | Opposite-docking panel overlays | `:root[bgalazka-opposite-docking="true"] #zen-app-panel-root[data-panel-side="right"] #zen-app-panel-pill` | extension/panels/ZentralPanels.css:383 |
 | 999999 | Opposite-docking panel overlays | `:root[bgalazka-opposite-docking="true"] #zen-app-panel-root[data-panel-side="left"] #zen-app-panel-pill` | extension/panels/ZentralPanels.css:499 |
 | 1000 |  | `#zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-menu` | extension/settings/styles/ZentralSettingsFoundation.css:1223 |
@@ -75,7 +75,7 @@ when the ordering rules below are broken.
 Ordering inside one component. Listed by file; values only matter relative to siblings.
 
 <details>
-<summary>55 local z-index declarations</summary>
+<summary>57 local z-index declarations</summary>
 
 | File | Line | z-index | Selector / code |
 | --- | ---: | ---: | --- |
@@ -85,6 +85,8 @@ Ordering inside one component. Listed by file; values only matter relative to si
 | additional/notes/ZentralNotes.css | 619 | 5 | `.zentral-notes-sheet .zn-dialog` |
 | additional/notes/ZentralNotes.css | 1073 | 0 | `.zentral-notes-sheet .zn-findlayer` |
 | additional/notes/ZentralNotes.css | 1078 | 1 | `.zentral-notes-sheet[data-hl="on"] .zn-editor` |
+| additional/notes/ZentralNotes.css | 1286 | 1 | `.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon.is-folder::before` |
+| additional/notes/ZentralNotes.css | 1300 | 2 | `.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon.is-folder::after` |
 | additional/video/controllers/ZentralVideoSidebar.js | 213 | 5 | `"position:absolute;inset:0;z-index:5;background:var(--zl-video-canvas,` |
 | additional/video/ZentralVideoPreview.css | 132 | 3 | `#zentral-video-preview .zentral-video-preview-subtitles` |
 | additional/video/ZentralVideoPreview.css | 301 | 2 | `#zentral-video-preview canvas` |

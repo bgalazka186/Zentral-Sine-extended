@@ -33,49 +33,141 @@
       "property": "zen.workspace.zentral.folder_colors.default_base",
       "label": "Default folder base color (empty follows Zen)",
       "type": "string",
-      "defaultValue": ""
+      "defaultValue": "",
+      "control": "color"
     },
     {
       "property": "zen.workspace.zentral.folder_colors.default_back",
       "label": "Default Folder icon · back (optional detail override)",
       "type": "string",
-      "defaultValue": ""
+      "defaultValue": "",
+      "control": "color"
     },
     {
       "property": "zen.workspace.zentral.folder_colors.default_front",
       "label": "Default Folder icon · front (optional detail override)",
       "type": "string",
-      "defaultValue": ""
+      "defaultValue": "",
+      "control": "color"
     },
     {
       "property": "zen.workspace.zentral.folder_colors.default_stroke",
       "label": "Default Folder icon · outline and glyph (optional detail override)",
       "type": "string",
-      "defaultValue": ""
+      "defaultValue": "",
+      "control": "color"
     },
     {
       "property": "zen.workspace.zentral.folder_colors.default_label",
       "label": "Default Folder name (optional detail override)",
       "type": "string",
-      "defaultValue": ""
+      "defaultValue": "",
+      "control": "color"
     },
     {
       "property": "zen.workspace.zentral.folder_colors.default_accent",
       "label": "Default Group accent and line (optional detail override)",
       "type": "string",
-      "defaultValue": ""
+      "defaultValue": "",
+      "control": "color"
     },
     {
       "property": "zen.workspace.zentral.folder_colors.default_tint",
       "label": "Default Soft background tint (optional detail override)",
       "type": "string",
-      "defaultValue": ""
+      "defaultValue": "",
+      "control": "color"
     },
     {
       "property": "zen.workspace.zentral.folder_colors.default_hover",
       "label": "Default Hover background (optional detail override)",
       "type": "string",
-      "defaultValue": ""
+      "defaultValue": "",
+      "control": "color"
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.default_back_opacity",
+      "label": "Default Folder icon back transparency (-1 = inherit; 0% = transparent, 100% = solid)",
+      "type": "input",
+      "defaultValue": -1,
+      "control": "slider",
+      "numeric": {
+        "min": -1,
+        "max": 100,
+        "unit": "%"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.default_front_opacity",
+      "label": "Default Folder icon front transparency (-1 = inherit; 0% = transparent, 100% = solid)",
+      "type": "input",
+      "defaultValue": -1,
+      "control": "slider",
+      "numeric": {
+        "min": -1,
+        "max": 100,
+        "unit": "%"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.default_stroke_opacity",
+      "label": "Default Folder icon outline and glyph transparency (-1 = inherit; 0% = transparent, 100% = solid)",
+      "type": "input",
+      "defaultValue": -1,
+      "control": "slider",
+      "numeric": {
+        "min": -1,
+        "max": 100,
+        "unit": "%"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.default_label_opacity",
+      "label": "Default Folder name transparency (-1 = inherit; 0% = transparent, 100% = solid)",
+      "type": "input",
+      "defaultValue": -1,
+      "control": "slider",
+      "numeric": {
+        "min": -1,
+        "max": 100,
+        "unit": "%"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.default_accent_opacity",
+      "label": "Default Group accent and line transparency (-1 = inherit; 0% = transparent, 100% = solid)",
+      "type": "input",
+      "defaultValue": -1,
+      "control": "slider",
+      "numeric": {
+        "min": -1,
+        "max": 100,
+        "unit": "%"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.default_tint_opacity",
+      "label": "Default Soft background tint transparency (-1 = inherit; 0% = transparent, 100% = solid)",
+      "type": "input",
+      "defaultValue": -1,
+      "control": "slider",
+      "numeric": {
+        "min": -1,
+        "max": 100,
+        "unit": "%"
+      }
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.default_hover_opacity",
+      "label": "Default Hover background transparency (-1 = inherit; 0% = transparent, 100% = solid)",
+      "type": "input",
+      "defaultValue": -1,
+      "control": "slider",
+      "numeric": {
+        "min": -1,
+        "max": 100,
+        "unit": "%"
+      }
     }
   ],
   "settings": {
@@ -130,6 +222,41 @@
       "owner": "colorful-folders"
     },
     "zen.workspace.zentral.folder_colors.default_hover": {
+      "category": "folder-colors",
+      "section": "Defaults",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.default_back_opacity": {
+      "category": "folder-colors",
+      "section": "Defaults",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.default_front_opacity": {
+      "category": "folder-colors",
+      "section": "Defaults",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.default_stroke_opacity": {
+      "category": "folder-colors",
+      "section": "Defaults",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.default_label_opacity": {
+      "category": "folder-colors",
+      "section": "Defaults",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.default_accent_opacity": {
+      "category": "folder-colors",
+      "section": "Defaults",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.default_tint_opacity": {
+      "category": "folder-colors",
+      "section": "Defaults",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.default_hover_opacity": {
       "category": "folder-colors",
       "section": "Defaults",
       "owner": "colorful-folders"

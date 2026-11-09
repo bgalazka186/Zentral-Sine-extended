@@ -1265,9 +1265,59 @@
 @media (prefers-reduced-motion: reduce) { .zentral-notes-sheet .zn-btn.is-armed { animation: none; } }
 
 /* Folder colour / emoji (S6 W2) */
-.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon { color: var(--zn-fc); }
+.zentral-notes-sheet .zn-frow[data-color] {
+  background: var(--zn-frow-tint, color-mix(in srgb, var(--zn-fc) 12%, transparent));
+  border-inline-start: 2px solid var(--zn-frow-accent, var(--zn-fc));
+}
+.zentral-notes-sheet .zn-frow .zn-frow-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 17px;
+}
+.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon { color: var(--zn-frow-front, var(--zn-frow-back, var(--zn-fc))); }
+.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon.is-folder > svg { display: none; }
+.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon.is-folder::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: 1px;
+  top: 1px;
+  width: 9px;
+  height: 5px;
+  box-sizing: border-box;
+  border: 1px solid var(--zn-frow-stroke, var(--zn-fc));
+  border-bottom: 0;
+  border-radius: 2px 3px 0 0;
+  background: var(--zn-frow-back, var(--zn-fc));
+}
+.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon.is-folder::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset: 5px 0 0;
+  box-sizing: border-box;
+  border: 1px solid var(--zn-frow-stroke, var(--zn-fc));
+  border-radius: 2px 2px 3px 3px;
+  background: var(--zn-frow-front, var(--zn-fc));
+}
+.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon.is-emoji { color: var(--zn-frow-front, var(--zn-frow-back, var(--zn-fc))); }
+.zentral-notes-sheet .zn-frow[data-color] .zn-item-title { color: var(--zn-frow-label, inherit); }
+.zentral-notes-sheet .zn-frow[data-color] .zn-item-time { color: var(--zn-frow-accent, var(--zn-fc)); }
+.zentral-notes-sheet .zn-frow[data-color]:hover { background: var(--zn-frow-hover, color-mix(in srgb, var(--zn-fc) 18%, transparent)); }
 .zentral-notes-sheet .zn-frow-emoji { font-size: 13px; line-height: 14px; }
 .zentral-notes-sheet .zn-fstyle-colors { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.zentral-notes-sheet .zn-fstyle-presets { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 10px; }
+.zentral-notes-sheet .zn-fstyle-group-label { margin-top: 4px; font-size: 11px; font-weight: 700; opacity: .75; }
+.zentral-notes-sheet .zn-fstyle-presets .zn-chip { border: 1px solid color-mix(in srgb, currentColor 22%, transparent); }
+.zentral-notes-sheet .zn-fstyle-part { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 8px 0; }
+.zentral-notes-sheet .zn-fstyle-part > span:first-child { flex: 1 1 140px; font-size: 12px; }
+.zentral-notes-sheet .zn-fstyle-opacity { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }
+.zentral-notes-sheet .zn-fstyle-opacity input { width: 94px; }
+.zentral-notes-sheet .zn-fstyle-opacity-value { display: inline-block; width: 42px; text-align: right; font-family: monospace; }
 .zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color]:not([data-color=""]) { border-left: 3px solid var(--zn-fc, currentColor); }
 .zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="yellow"] { --zn-fc: #f5c542; }
 .zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="green"] { --zn-fc: #4cc38a; }
@@ -1308,7 +1358,9 @@ zen-folder[bgalazka-notes-icon] .tab-group-folder-icon::after {
 }
 
 /* Per-part label color belongs to Notes-owned Zen folders; generic Colorful Folders skips them. */
-zen-folder[bgalazka-notes-parts] > .tab-group-label-container > label {
+zen-folder[bgalazka-notes-folder] > .tab-group-label-container > label,
+zen-folder[bgalazka-notes-subfolder] > .tab-group-label-container > label,
+zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > label {
   color: var(--bgalazka-fc-label) !important;
 }
 .zn-fstyle-details { margin-top: 8px; border-top: 1px solid var(--zn-line, currentColor); padding-top: 7px; }

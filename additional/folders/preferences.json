@@ -84,5 +84,65 @@
     "label": "Default Hover background (optional detail override)",
     "type": "string",
     "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_back_opacity_text",
+    "label": "Default Folder icon back transparency (-1 = inherit; 0% = transparent, 100% = solid) [-1 to 100 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_front_opacity_text",
+    "label": "Default Folder icon front transparency (-1 = inherit; 0% = transparent, 100% = solid) [-1 to 100 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_stroke_opacity_text",
+    "label": "Default Folder icon outline and glyph transparency (-1 = inherit; 0% = transparent, 100% = solid) [-1 to 100 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_label_opacity_text",
+    "label": "Default Folder name transparency (-1 = inherit; 0% = transparent, 100% = solid) [-1 to 100 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_accent_opacity_text",
+    "label": "Default Group accent and line transparency (-1 = inherit; 0% = transparent, 100% = solid) [-1 to 100 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_tint_opacity_text",
+    "label": "Default Soft background tint transparency (-1 = inherit; 0% = transparent, 100% = solid) [-1 to 100 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_hover_opacity_text",
+    "label": "Default Hover background transparency (-1 = inherit; 0% = transparent, 100% = solid) [-1 to 100 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "type": "text",
+    "label": "**Notes folder integration**",
+    "size": "16px"
+  },
+  {
+    "label": "Color of the NOTES folder in the Zen sidebar (palette name or #rrggbb; easier: Notes list > folder button)",
+    "type": "string",
+    "defaultValue": "",
+    "property": "zen.workspace.zentral.notes.zen_root_color"
   }
 ]
