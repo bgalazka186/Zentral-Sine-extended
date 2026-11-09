@@ -145,13 +145,6 @@
         "zen.workspace.bgalazka.look.rss_card_button_background",
       RSS_CARD_BUTTON_TEXT: "zen.workspace.bgalazka.look.rss_card_button_text",
       // Native Zen folders (not the Notes folder): colors of the folder icon and of the folder label.
-      FOLDER_BEHIND: "zen.workspace.bgalazka.look.folder_behind",
-      FOLDER_BEHIND_OPACITY: "zen.workspace.bgalazka.look.folder_behind_opacity",
-      FOLDER_FRONT: "zen.workspace.bgalazka.look.folder_front",
-      FOLDER_FRONT_OPACITY: "zen.workspace.bgalazka.look.folder_front_opacity",
-      FOLDER_STROKE: "zen.workspace.bgalazka.look.folder_stroke",
-      FOLDER_STROKE_OPACITY: "zen.workspace.bgalazka.look.folder_stroke_opacity",
-      FOLDER_LABEL: "zen.workspace.bgalazka.look.folder_label",
       FOLDER_TIGHT_LABELS: "zen.workspace.bgalazka.look.folder_tight_labels",
     });
     const LOOK_DEFAULTS = Object.freeze({
@@ -239,13 +232,6 @@
       [LOOK_PREFS.RSS_CARD_BORDER_COLOR]: "",
       [LOOK_PREFS.RSS_CARD_BUTTON_BACKGROUND]: "",
       [LOOK_PREFS.RSS_CARD_BUTTON_TEXT]: "",
-      [LOOK_PREFS.FOLDER_BEHIND]: "",
-      [LOOK_PREFS.FOLDER_BEHIND_OPACITY]: 100,
-      [LOOK_PREFS.FOLDER_FRONT]: "",
-      [LOOK_PREFS.FOLDER_FRONT_OPACITY]: 100,
-      [LOOK_PREFS.FOLDER_STROKE]: "",
-      [LOOK_PREFS.FOLDER_STROKE_OPACITY]: 100,
-      [LOOK_PREFS.FOLDER_LABEL]: "",
       [LOOK_PREFS.FOLDER_TIGHT_LABELS]: false,
       [LOOK_PREFS.VIDEO_RADIUS]: 0,
       [LOOK_PREFS.PANEL_BORDER]: 1,
@@ -577,12 +563,9 @@
       "BUTTON_BACKGROUND",
       "BUTTON_TEXT",
     ]);
-    // Native Zen folder colors (same rule: empty = Zen's own colors).
-    const FOLDER_COLOR_NAMES = Object.freeze(["BEHIND", "FRONT", "STROKE", "LABEL"]);
-    const LOOK_OPTIONAL_COLORS = new Set([
-      ...RSS_CARD_COLOR_NAMES.map((name) => LOOK_PREFS["RSS_CARD_" + name]),
-      ...FOLDER_COLOR_NAMES.map((name) => LOOK_PREFS["FOLDER_" + name]),
-    ]);
+    const LOOK_OPTIONAL_COLORS = new Set(
+      RSS_CARD_COLOR_NAMES.map((name) => LOOK_PREFS["RSS_CARD_" + name]),
+    );
     // The reader card is painted from root custom properties only. The
     // stylesheet keeps the theme fallback, so an unset preference removes the
     // property and the active Look palette wins again.
@@ -662,9 +645,6 @@
       [LOOK_PREFS.RSS_CARD_BUTTON_RADIUS]: [0, 100],
       [LOOK_PREFS.RSS_CARD_GAP]: [0, 100],
       [LOOK_GROUP_PREFS.LABEL_OPACITY]: [0, 100],
-      [LOOK_PREFS.FOLDER_BEHIND_OPACITY]: [0, 100],
-      [LOOK_PREFS.FOLDER_FRONT_OPACITY]: [0, 100],
-      [LOOK_PREFS.FOLDER_STROKE_OPACITY]: [0, 100],
       [ctx.BGALAZKA_EXT_PREFS.PANEL_BLACK_OPACITY]: [0, 100],
       [ctx.BGALAZKA_EXT_PREFS.OPACITY_UNPINNED]: [10, 100],
       [ctx.BGALAZKA_EXT_PREFS.OPACITY_PINNED_FOCUS]: [10, 100],
@@ -1233,60 +1213,6 @@
       if (lookFrame !== null) window.cancelAnimationFrame(lookFrame);
       lookFrame = null;
     });
-    // Zen's own rules for --zen-folder-* can out-rank a stylesheet override (only a value written on the folder itself, like the Notes
-    // folder colors, was seen to work). So the overrides are ALSO written inline, with !important, on every folder, and kept up to date
-    // for folders created later. A folder with its own color (bgalazka-notes-color) is left alone. Cleared when the flag goes away.
-    const FOLDER_INLINE = {
-      behind: ["--zen-folder-behind-bgcolor", "color-mix(in srgb, var(--bgalazka-look-folder-behind, light-dark(color-mix(in srgb, var(--zen-primary-color) 60%, gray), color-mix(in srgb, var(--zen-primary-color) 60%, #c1c1c1))) var(--bgalazka-look-folder-behind-alpha, 100%), transparent)"],
-      front: ["--zen-folder-front-bgcolor", "color-mix(in srgb, var(--bgalazka-look-folder-front, light-dark(color-mix(in srgb, var(--zen-primary-color), white 70%), color-mix(in srgb, var(--zen-primary-color), black 40%))) var(--bgalazka-look-folder-front-alpha, 100%), transparent)"],
-      stroke: ["--zen-folder-stroke", "color-mix(in srgb, var(--bgalazka-look-folder-stroke, light-dark(color-mix(in srgb, var(--zen-primary-color) 50%, black), color-mix(in srgb, var(--zen-colors-primary) 15%, #ebebeb))) var(--bgalazka-look-folder-stroke-alpha, 100%), transparent)"],
-    };
-    let folderInlineFlags = [];
-    let folderInlineObserver = null;
-    let folderInlineQueued = false;
-    const paintFolderInline = () => {
-      folderInlineQueued = false;
-      for (const el of document.querySelectorAll("zen-folder")) {
-        const own = el.hasAttribute("bgalazka-notes-color");
-        const set = (el.getAttribute("bgalazka-look-inline") || "").split(" ").filter(Boolean);
-        for (const part of Object.keys(FOLDER_INLINE)) {
-          const [prop, value] = FOLDER_INLINE[part];
-          if (!own && folderInlineFlags.includes(part)) {
-            if (el.style.getPropertyValue(prop) !== value || el.style.getPropertyPriority(prop) !== "important")
-              el.style.setProperty(prop, value, "important");
-            if (!set.includes(part)) set.push(part);
-          } else if (set.includes(part)) {
-            el.style.removeProperty(prop);
-            set.splice(set.indexOf(part), 1);
-          }
-        }
-        if (set.length) el.setAttribute("bgalazka-look-inline", set.join(" "));
-        else el.removeAttribute("bgalazka-look-inline");
-      }
-    };
-    const queueFolderInline = () => {
-      if (folderInlineQueued) return;
-      folderInlineQueued = true;
-      requestAnimationFrame(paintFolderInline);
-    };
-    function applyFolderInline(flags) {
-      folderInlineFlags = flags;
-      const wanted = flags.some((f) => f in FOLDER_INLINE);
-      if (wanted && !folderInlineObserver && typeof MutationObserver === "function") {
-        folderInlineObserver = new MutationObserver((records) => {
-          for (const r of records) {
-            if (r.type === "attributes") return queueFolderInline();
-            for (const n of r.addedNodes) if (n.nodeType === 1 && (n.localName === "zen-folder" || n.querySelector?.("zen-folder"))) return queueFolderInline();
-          }
-        });
-        folderInlineObserver.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["bgalazka-notes-color"] });
-        ctx.registerCleanup?.(() => { folderInlineObserver?.disconnect(); folderInlineObserver = null; });
-      } else if (!wanted && folderInlineObserver) {
-        folderInlineObserver.disconnect();
-        folderInlineObserver = null;
-      }
-      paintFolderInline();
-    }
     const applyLook = () => {
       {
         const style = document.documentElement.style;
@@ -1693,33 +1619,12 @@
           root.style.setProperty(property, value);
         else root.style.removeProperty(property);
       }
-      // Native Zen folders. Zen defines --zen-folder-* on every zen-folder, so ZentralAppearance.css overrides them there; this only
-      // publishes the picked colors and the flags that switch each override on. An untouched setting writes nothing, so Zen's own
-      // folder colors stay exactly as they are.
-      {
-        const flags = [];
-        for (const name of FOLDER_COLOR_NAMES) {
-          const part = name.toLowerCase();
-          const color = String(ctx.getPref(LOOK_PREFS["FOLDER_" + name], "") || "").trim();
-          const hex = /^#[0-9a-fA-F]{6}$/.test(color);
-          const property = "--bgalazka-look-folder-" + part;
-          if (hex) root.style.setProperty(property, color);
-          else root.style.removeProperty(property);
-          let alpha = 100;
-          const opacityPref = LOOK_PREFS["FOLDER_" + name + "_OPACITY"];
-          if (opacityPref) {
-            const raw = Number(ctx.getPref(opacityPref, 100));
-            alpha = Number.isFinite(raw) ? Math.max(0, Math.min(100, Math.round(raw))) : 100;
-            root.style.setProperty(property + "-alpha", alpha + "%");
-          }
-          if (hex || alpha < 100) flags.push(part);
-        }
-        if (ctx.getPref(LOOK_PREFS.FOLDER_TIGHT_LABELS, false) === true)
-          flags.push("tight");
-        if (flags.length) root.setAttribute("bgalazka-look-folder", flags.join(" "));
-        else root.removeAttribute("bgalazka-look-folder");
-        applyFolderInline(flags);
-      }
+      // Folder row density stays in Appearance; folder colors are owned by
+      // the independent Colorful Folders module so only one feature paints
+      // native Zen folders.
+      if (ctx.getPref(LOOK_PREFS.FOLDER_TIGHT_LABELS, false) === true)
+        root.setAttribute("bgalazka-look-folder", "tight");
+      else root.removeAttribute("bgalazka-look-folder");
       for (const [name, table] of [
         ["SHADOW", RSS_CARD_SHADOWS],
         ["FONT", RSS_CARD_FONTS],

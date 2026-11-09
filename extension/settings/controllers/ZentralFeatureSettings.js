@@ -3741,48 +3741,7 @@
               "--zl-button-text",
               "#d4d8d9",
             );
-            // Native Zen folders: colors of the folder icon (back, front, outline and glyph) and of the label, each with its own
-            // transparency. Empty = Zen's own color. Detailed palette mode only, like the other fine controls.
-            addLookHeading("Native Zen folders");
-            const folderLook = { rss: false, resetLabel: "Zen", resetTitle: "Use Zen's own folder color" };
-            const folderColor = (label, description, key, fallback) => {
-              const row = addLookOptionalColor(label, description, key, "--zen-primary-color", fallback, folderLook);
-              row.dataset.paletteDetail = "true";
-              return row;
-            };
-            const folderTransparency = (label, description, key) => {
-              const invert = (value) => 100 - value;
-              const control = createSliderRow(label, description, key, 0, 100, LOOK_DEFAULTS[key], "%", invert, invert, "any");
-              control.row.dataset.paletteDetail = "true";
-              // Reset to default (0% = solid), next to the value badge.
-              const resetAlpha = document.createElement("button");
-              resetAlpha.type = "button";
-              resetAlpha.className = "zs-reset-btn";
-              resetAlpha.style.cssText = "margin:0 0 0 8px;padding:2px 10px;font-size:11.5px;";
-              resetAlpha.textContent = "Reset";
-              resetAlpha.title = "Back to the default (solid)";
-              resetAlpha.addEventListener("click", () => {
-                ctx.setPref(key, LOOK_DEFAULTS[key]);
-                control.input.value = invert(LOOK_DEFAULTS[key]);
-                control.badge.textContent = control.input.value + "%";
-              });
-              (control.badge.parentElement || control.row).append(resetAlpha);
-              lookCategory.subContent.append(control.row);
-              lookControls.push({ input: control.input, badge: control.badge, suffix: "%", key, inverted: true });
-              return control;
-            };
-            folderColor(
-              "Folder icon: back color",
-              "The back sheet of the folder icon. Applies to every normal folder; a folder with its own color (Notes) keeps it.",
-              LOOK_PREFS.FOLDER_BEHIND,
-              "#8a8f98",
-            );
-            folderTransparency("Folder icon: back transparency", "0% is solid. Works on Zen's own color too.", LOOK_PREFS.FOLDER_BEHIND_OPACITY);
-            folderColor("Folder icon: front color", "The front flap of the folder icon.", LOOK_PREFS.FOLDER_FRONT, "#d9dbe0");
-            folderTransparency("Folder icon: front transparency", "0% is solid. Works on Zen's own color too.", LOOK_PREFS.FOLDER_FRONT_OPACITY);
-            folderColor("Folder icon: outline and glyph color", "The edge of the folder icon and the small picture or dots on it.", LOOK_PREFS.FOLDER_STROKE, "#3b3f46");
-            folderTransparency("Folder icon: outline and glyph transparency", "0% is solid. Works on Zen's own color too.", LOOK_PREFS.FOLDER_STROKE_OPACITY);
-            folderColor("Folder label color", "The folder name in the sidebar.", LOOK_PREFS.FOLDER_LABEL, "#e2e2e2");
+            // Native folder colors live in the dedicated Colorful folders feature.
             {
               const tight = createToggleRow(
                 "Tighter folder rows",

@@ -55,6 +55,7 @@
       },
       { owner: "theme-service", file: "additional/theme/theme-settings.json" },
       { owner: "library-resize", file: "additional/library/settings.json" },
+      { owner: "colorful-folders", file: "additional/folders/settings.json" },
       {
         owner: "compact-hover",
         file: "additional/tabs/compact-hover/settings.json",

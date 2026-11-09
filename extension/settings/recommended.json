@@ -202,13 +202,6 @@
     "zen.workspace.bgalazka.look.rss_card_text": "",
     "zen.workspace.bgalazka.look.rss_card_url": "",
     "zen.workspace.bgalazka.look.rss_card_border_color": "",
-    "zen.workspace.bgalazka.look.folder_behind": "",
-    "zen.workspace.bgalazka.look.folder_behind_opacity": 100,
-    "zen.workspace.bgalazka.look.folder_front": "",
-    "zen.workspace.bgalazka.look.folder_front_opacity": 100,
-    "zen.workspace.bgalazka.look.folder_stroke": "",
-    "zen.workspace.bgalazka.look.folder_stroke_opacity": 100,
-    "zen.workspace.bgalazka.look.folder_label": "",
     "zen.workspace.bgalazka.look.folder_tight_labels": false,
     "zen.workspace.bgalazka.look.rss_card_button_background": "",
     "zen.workspace.bgalazka.look.rss_card_button_text": "",
@@ -389,6 +382,18 @@
     "zen.workspace.zentral.video_preview.button_size_px": 26,
     "zen.workspace.zentral.video_preview.button_icon_color": "",
     "zen.workspace.zentral.video_preview.button_fill_color": "",
-    "zen.workspace.zentral.video_preview.button_border_color": ""
+    "zen.workspace.zentral.video_preview.button_border_color": "",
+    "zen.workspace.zentral.modules.colorful-folders.enabled": true,
+    "zen.workspace.zentral.folder_colors.enabled": true,
+    "zen.workspace.zentral.folder_colors.menu": true,
+    "zen.workspace.zentral.folder_colors.mode": "simple",
+    "zen.workspace.zentral.folder_colors.default_base": "",
+    "zen.workspace.zentral.folder_colors.default_back": "",
+    "zen.workspace.zentral.folder_colors.default_front": "",
+    "zen.workspace.zentral.folder_colors.default_stroke": "",
+    "zen.workspace.zentral.folder_colors.default_label": "",
+    "zen.workspace.zentral.folder_colors.default_accent": "",
+    "zen.workspace.zentral.folder_colors.default_tint": "",
+    "zen.workspace.zentral.folder_colors.default_hover": ""
   }
 }

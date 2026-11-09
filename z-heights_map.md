@@ -64,6 +64,7 @@ when the ordering rules below are broken.
 | 2147483550 | Vertical-bar apps toolbar | `:root[zentral-apps-placement="vertical-bar"] #zentral-apps-vertical-bar-trigger` | zentral/apps/styles/ZentralVerticalBarPresentation.css:366 |
 | 2147483500 | Autohidden vertical bar | `:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"] #zentral-apps-vertical-bar` | zentral/apps/styles/ZentralAppsInjected.css:1383 |
 | 2147483500 | Autohidden vertical bar | `:root[zentral-apps-autohide="true"][zentral-apps-placement="vertical-bar"] #zentral-apps-vertical-bar` | zentral/apps/styles/ZentralVerticalBarLayout.css:121 |
+| 2147483000 |  | inline style: `.zcf-panel { position: fixed; z-index: 2147483000; width: 330px; max-w` | additional/folders/ZentralColorfulFolders.uc.js:598 |
 | 999999 | Opposite-docking panel overlays | `:root[bgalazka-opposite-docking="true"] #zen-app-panel-root[data-panel-side="right"] #zen-app-panel-pill` | extension/panels/ZentralPanels.css:383 |
 | 999999 | Opposite-docking panel overlays | `:root[bgalazka-opposite-docking="true"] #zen-app-panel-root[data-panel-side="left"] #zen-app-panel-pill` | extension/panels/ZentralPanels.css:499 |
 | 1000 |  | `#zentral-settings-modal #zs-panel-bgalazka .zs-custom-select-menu` | extension/settings/styles/ZentralSettingsFoundation.css:1223 |

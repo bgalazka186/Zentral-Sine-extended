@@ -1306,3 +1306,13 @@ zen-folder[bgalazka-notes-icon] .tab-group-folder-icon::after {
   position: absolute; left: 52%; top: 61%; transform: translate(-50%, -50%);
   font-size: 11px; line-height: 1; pointer-events: none;
 }
+
+/* Per-part label color belongs to Notes-owned Zen folders; generic Colorful Folders skips them. */
+zen-folder[bgalazka-notes-parts] > .tab-group-label-container > label {
+  color: var(--bgalazka-fc-label) !important;
+}
+.zn-fstyle-details { margin-top: 8px; border-top: 1px solid var(--zn-line, currentColor); padding-top: 7px; }
+.zn-fstyle-details > summary { cursor: pointer; font-size: 12px; }
+.zn-fstyle-part { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+.zn-fstyle-part > span { flex: 1; min-width: 0; font-size: 12px; }
+.zn-fstyle-part input[type=color] { width: 36px; height: 26px; padding: 0; }

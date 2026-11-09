@@ -1,0 +1,138 @@
+{
+  "owner": "colorful-folders",
+  "schema": [
+    {
+      "property": "zen.workspace.zentral.folder_colors.enabled",
+      "label": "Enable Colorful Folders",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.menu",
+      "label": "Add folder colors to right-click menus",
+      "type": "checkbox",
+      "defaultValue": true
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.mode",
+      "label": "Color editor mode",
+      "type": "dropdown",
+      "defaultValue": "simple",
+      "options": [
+        {
+          "label": "Simple — one color controls all folder parts",
+          "value": "simple"
+        },
+        {
+          "label": "Detailed — edit each part separately",
+          "value": "detailed"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.default_base",
+      "label": "Default folder base color (empty follows Zen)",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.default_back",
+      "label": "Default Folder icon · back (optional detail override)",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.default_front",
+      "label": "Default Folder icon · front (optional detail override)",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.default_stroke",
+      "label": "Default Folder icon · outline and glyph (optional detail override)",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.default_label",
+      "label": "Default Folder name (optional detail override)",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.default_accent",
+      "label": "Default Group accent and line (optional detail override)",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.default_tint",
+      "label": "Default Soft background tint (optional detail override)",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.default_hover",
+      "label": "Default Hover background (optional detail override)",
+      "type": "string",
+      "defaultValue": ""
+    }
+  ],
+  "settings": {
+    "zen.workspace.zentral.folder_colors.enabled": {
+      "category": "folder-colors",
+      "section": "Behavior",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.menu": {
+      "category": "folder-colors",
+      "section": "Behavior",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.mode": {
+      "category": "folder-colors",
+      "section": "Behavior",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.default_base": {
+      "category": "folder-colors",
+      "section": "Defaults",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.default_back": {
+      "category": "folder-colors",
+      "section": "Defaults",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.default_front": {
+      "category": "folder-colors",
+      "section": "Defaults",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.default_stroke": {
+      "category": "folder-colors",
+      "section": "Defaults",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.default_label": {
+      "category": "folder-colors",
+      "section": "Defaults",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.default_accent": {
+      "category": "folder-colors",
+      "section": "Defaults",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.default_tint": {
+      "category": "folder-colors",
+      "section": "Defaults",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.default_hover": {
+      "category": "folder-colors",
+      "section": "Defaults",
+      "owner": "colorful-folders"
+    }
+  }
+}

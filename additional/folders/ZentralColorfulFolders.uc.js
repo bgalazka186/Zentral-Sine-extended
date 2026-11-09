@@ -1,0 +1,1016 @@
+/*
+ * Zentral Colorful Folders
+ *
+ * Owns the colour of ordinary Zen sidebar folders. It never creates, deletes,
+ * moves, renames, reorders or reparents tabs/folders. A folder is painted only
+ * by writing its colour custom properties and the private marker below.
+ *
+ * Notes owns its projected Notes folders. Those carry one of the
+ * bgalazka-notes-* ownership attributes; we clear only our own prior paint
+ * and leave the folder to Notes. This attribute contract is independent of
+ * script load order, so Notes and this module cannot race over one folder.
+ *
+ * Stored records contain only a salted SHA-256 hash of a folder id, not the
+ * folder id or its label. We deliberately do not store a label hash: even a
+ * salted name hash can be guessed offline if a profile's prefs are exposed.
+ * The random salt is profile-local; preference data is bounded and validated.
+ */
+(function () {
+  "use strict";
+
+  const Services =
+    globalThis.Services ||
+    ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
+  const PREFIX = "zen.workspace.zentral.folder_colors.";
+  const P = Object.freeze({
+    ENABLED: PREFIX + "enabled",
+    MENU: PREFIX + "menu",
+    MODE: PREFIX + "mode",
+    BASE: PREFIX + "default_base",
+    DATA: PREFIX + "data",
+    SALT: PREFIX + "salt",
+    THEMES: PREFIX + "themes",
+  });
+  const PARTS = Object.freeze([
+    "back",
+    "front",
+    "stroke",
+    "label",
+    "accent",
+    "tint",
+    "hover",
+  ]);
+  const PART_LABELS = Object.freeze({
+    back: "Icon: back",
+    front: "Icon: front",
+    stroke: "Icon: outline and glyph",
+    label: "Folder label",
+    accent: "Accent and group line",
+    tint: "Soft background tint",
+    hover: "Hover background",
+  });
+  const PART_PREFS = Object.freeze(
+    Object.fromEntries(PARTS.map((part) => [part, PREFIX + "default_" + part])),
+  );
+  const PART_PROPS = Object.freeze({
+    back: ["--zen-folder-behind-bgcolor"],
+    front: ["--zen-folder-front-bgcolor"],
+    stroke: ["--zen-folder-stroke"],
+    label: ["--bgalazka-fc-label"],
+    accent: [
+      "--tab-group-color",
+      "--tab-group-background-color",
+      "--tab-group-color-invert",
+      "--tab-group-text-color",
+      "--tab-group-text-color-invert",
+    ],
+    tint: ["--tab-group-color-pale"],
+    hover: ["--tab-group-background-color-hover"],
+  });
+  const MARK = "bgalazka-folder-colors";
+  const MENU_MARK = "bgalazka-fc-menu";
+  const MAX_RECORDS = 400;
+  const MAX_THEMES = 24;
+  const MAX_DATA_LENGTH = 1024 * 1024;
+  const XHTML = "http://www.w3.org/1999/xhtml";
+
+  // These preferences used to be applied by ZentralAppearance. Their keys are
+  // deliberately unchanged: moving their schema owner preserves existing
+  // profiles without a preference migration.
+  const LEGACY_DEFAULTS = Object.freeze({
+    back: "zen.workspace.bgalazka.look.folder_behind",
+    backOpacity: "zen.workspace.bgalazka.look.folder_behind_opacity",
+    front: "zen.workspace.bgalazka.look.folder_front",
+    frontOpacity: "zen.workspace.bgalazka.look.folder_front_opacity",
+    stroke: "zen.workspace.bgalazka.look.folder_stroke",
+    strokeOpacity: "zen.workspace.bgalazka.look.folder_stroke_opacity",
+    label: "zen.workspace.bgalazka.look.folder_label",
+  });
+
+  // ---------------------------------------------- pure, testable colour/data core
+  const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+  const HASH_RE = /^[0-9a-f]{64}$/;
+  const cleanHex = (value) =>
+    typeof value === "string" && HEX_RE.test(value.trim())
+      ? value.trim().toLowerCase()
+      : "";
+  const cleanHash = (value) =>
+    typeof value === "string" && HASH_RE.test(value) ? value : "";
+  const cleanDetail = (raw) => {
+    const out = {};
+    if (raw && typeof raw === "object")
+      for (const part of PARTS) {
+        const value = cleanHex(raw[part]);
+        if (value) out[part] = value;
+      }
+    return out;
+  };
+  const hasColor = (record) =>
+    !!record &&
+    (!!cleanHex(record.b) || PARTS.some((part) => cleanHex(record.d?.[part])));
+  function cleanRecord(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    const record = {
+      i: cleanHash(raw.i),
+      b: cleanHex(raw.b),
+      d: cleanDetail(raw.d),
+      u: Number.isFinite(raw.u) ? Math.max(0, Math.floor(raw.u)) : 0,
+    };
+    if (!record.i || !hasColor(record)) return null;
+    return record;
+  }
+  function parseData(raw) {
+    try {
+      const text = String(raw || "");
+      if (text.length > MAX_DATA_LENGTH) return [];
+      const parsed = JSON.parse(text);
+      if (!parsed || ![1, 2].includes(parsed.v) || !Array.isArray(parsed.r)) return [];
+      return parsed.r.map(cleanRecord).filter(Boolean).slice(0, MAX_RECORDS);
+    } catch (_) {
+      return [];
+    }
+  }
+  function serializeData(records) {
+    const clean = (Array.isArray(records) ? records : [])
+      .map(cleanRecord)
+      .filter(Boolean)
+      .sort((a, b) => b.u - a.u)
+      .slice(0, MAX_RECORDS);
+    return JSON.stringify({ v: 2, r: clean });
+  }
+  function cleanTheme(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    const name = String(raw.n || "").replace(/[\r\n\t]+/g, " ").trim().slice(0, 36);
+    const b = cleanHex(raw.b);
+    const d = cleanDetail(raw.d);
+    if (!name || (!b && !Object.keys(d).length)) return null;
+    return { n: name, b, d };
+  }
+  function parseThemes(raw) {
+    try {
+      const text = String(raw || "");
+      if (text.length > 65536) return [];
+      const parsed = JSON.parse(text);
+      if (!Array.isArray(parsed)) return [];
+      const seen = new Set();
+      const out = [];
+      for (const item of parsed) {
+        const theme = cleanTheme(item);
+        if (!theme || seen.has(theme.n.toLocaleLowerCase())) continue;
+        seen.add(theme.n.toLocaleLowerCase());
+        out.push(theme);
+        if (out.length >= MAX_THEMES) break;
+      }
+      return out;
+    } catch (_) {
+      return [];
+    }
+  }
+  const luminance = (hex) => {
+    const n = parseInt(hex.slice(1), 16);
+    const linear = (value) => {
+      const s = value / 255;
+      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    };
+    return (
+      0.2126 * linear((n >> 16) & 255) +
+      0.7152 * linear((n >> 8) & 255) +
+      0.0722 * linear(n & 255)
+    );
+  };
+  const textOn = (hex) =>
+    luminance(hex) > 0.4 ? "#1b1b1f" : "#ffffff";
+  const mix = (hex, percent, other) =>
+    `color-mix(in srgb, ${hex} ${percent}%, ${other})`;
+  function derive(base) {
+    const color = cleanHex(base);
+    if (!color) return {};
+    return {
+      back: `light-dark(${mix(color, 60, "gray")}, ${mix(color, 60, "#c1c1c1")})`,
+      front: `light-dark(color-mix(in srgb, ${color}, white 70%), color-mix(in srgb, ${color}, black 40%))`,
+      stroke: `light-dark(${mix(color, 50, "black")}, ${mix(color, 15, "#ebebeb")})`,
+      label: `light-dark(${mix(color, 55, "black")}, ${mix(color, 55, "white")})`,
+      accent: color,
+      tint: mix(color, 22, "transparent"),
+      hover: mix(color, 85, "white"),
+    };
+  }
+  function partsFor(record, mode = "simple") {
+    if (!record) return {};
+    const base = cleanHex(record.b);
+    const detail = cleanDetail(record.d);
+    const out = base ? derive(base) : {};
+    if (!base || mode === "detailed")
+      for (const part of PARTS)
+        if (detail[part])
+          out[part] =
+            part === "tint" ? mix(detail[part], 22, "transparent") : detail[part];
+    const accent = cleanHex(
+      !base || mode === "detailed" ? detail.accent || base : base,
+    );
+    if (out.accent && accent) out.accentText = textOn(accent);
+    return out;
+  }
+  function declarations(parts) {
+    const out = {};
+    for (const part of PARTS) {
+      const value = parts?.[part];
+      if (!value) continue;
+      if (part === "accent") {
+        const on = parts.accentText || "#ffffff";
+        const off = on === "#ffffff" ? "#1b1b1f" : "#ffffff";
+        out["--tab-group-color"] = value;
+        out["--tab-group-background-color"] = value;
+        out["--tab-group-color-invert"] = off;
+        out["--tab-group-text-color"] = on;
+        out["--tab-group-text-color-invert"] = off;
+      } else {
+        for (const property of PART_PROPS[part]) out[property] = value;
+      }
+    }
+    return out;
+  }
+
+  // Small synchronous SHA-256. The browser's Web Crypto is asynchronous; this
+  // keeps lookup and save operations synchronous in both Gecko and Node tests.
+  const K256 = Object.freeze([
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
+    0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+    0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+    0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+    0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
+    0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819,
+    0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08,
+    0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f,
+    0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+  ]);
+  function sha256Hex(text) {
+    const bytes = new TextEncoder().encode(String(text));
+    const length = bytes.length;
+    const total = Math.ceil((length + 9) / 64) * 64;
+    const buffer = new Uint8Array(total);
+    buffer.set(bytes);
+    buffer[length] = 0x80;
+    const view = new DataView(buffer.buffer);
+    const bits = length * 8;
+    view.setUint32(total - 8, Math.floor(bits / 0x100000000));
+    view.setUint32(total - 4, bits >>> 0);
+    const hash = [
+      0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+      0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+    ];
+    const words = new Uint32Array(64);
+    const rotr = (value, count) =>
+      (value >>> count) | (value << (32 - count));
+    for (let offset = 0; offset < total; offset += 64) {
+      for (let i = 0; i < 16; i++) words[i] = view.getUint32(offset + i * 4);
+      for (let i = 16; i < 64; i++) {
+        const a = words[i - 15];
+        const b = words[i - 2];
+        const s0 = rotr(a, 7) ^ rotr(a, 18) ^ (a >>> 3);
+        const s1 = rotr(b, 17) ^ rotr(b, 19) ^ (b >>> 10);
+        words[i] = (words[i - 16] + s0 + words[i - 7] + s1) >>> 0;
+      }
+      let [a, b, c, d, e, f, g, h] = hash;
+      for (let i = 0; i < 64; i++) {
+        const s1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+        const choice = (e & f) ^ (~e & g);
+        const t1 = (h + s1 + choice + K256[i] + words[i]) >>> 0;
+        const s0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+        const majority = (a & b) ^ (a & c) ^ (b & c);
+        const t2 = (s0 + majority) >>> 0;
+        h = g; g = f; f = e; e = (d + t1) >>> 0;
+        d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+      }
+      hash[0] = (hash[0] + a) >>> 0;
+      hash[1] = (hash[1] + b) >>> 0;
+      hash[2] = (hash[2] + c) >>> 0;
+      hash[3] = (hash[3] + d) >>> 0;
+      hash[4] = (hash[4] + e) >>> 0;
+      hash[5] = (hash[5] + f) >>> 0;
+      hash[6] = (hash[6] + g) >>> 0;
+      hash[7] = (hash[7] + h) >>> 0;
+    }
+    return hash.map((n) => n.toString(16).padStart(8, "0")).join("");
+  }
+  const hashKey = (salt, kind, value) =>
+    value ? sha256Hex(salt + "\u0000" + kind + "\u0000" + value) : "";
+
+  const BUILTIN_THEMES = Object.freeze([
+    {
+      group: "Dark folders",
+      items: [
+        { n: "Graphite", b: "#343a40", d: {} },
+        { n: "Midnight", b: "#202b3b", d: {} },
+        { n: "Deep forest", b: "#234236", d: {} },
+        { n: "Plum shadow", b: "#493047", d: {} },
+      ],
+    },
+    {
+      group: "High contrast",
+      items: [
+        { n: "Amber", b: "#d97706", d: { front: "#ffe0a3", stroke: "#3b2100" } },
+        { n: "Aqua", b: "#087e8b", d: { front: "#b9f4f4", stroke: "#032f36" } },
+        { n: "Rose", b: "#be3455", d: { front: "#ffd2df", stroke: "#3d0716" } },
+        { n: "Electric blue", b: "#2557d6", d: { front: "#d8e5ff", stroke: "#071b50" } },
+      ],
+    },
+    {
+      group: "Colorful",
+      items: [
+        { n: "Coral", b: "#ff8066", d: {} },
+        { n: "Mint", b: "#40b99a", d: {} },
+        { n: "Lavender", b: "#9c83e6", d: {} },
+        { n: "Sunflower", b: "#e5bd38", d: {} },
+      ],
+    },
+  ]);
+
+  // ---------------------------------------------- privileged-window integration
+  function start({ lifecycle, runtime }) {
+    if (!lifecycle || typeof lifecycle.own !== "function")
+      throw new Error("Colorful folders requires the Zentral lifecycle scope");
+
+    const pref = Services.prefs;
+    const getString = (name, fallback = "") => {
+      try { return pref.getStringPref(name, fallback); } catch (_) { return fallback; }
+    };
+    const getBool = (name, fallback = false) => {
+      try { return pref.getBoolPref(name, fallback); } catch (_) { return fallback; }
+    };
+    const getInt = (name, fallback = 100) => {
+      try { return pref.getIntPref(name, fallback); } catch (_) { return fallback; }
+    };
+    const setString = (name, value) => {
+      try { pref.setStringPref(name, String(value)); return true; } catch (_) { return false; }
+    };
+    const enabled = () => getBool(P.ENABLED, true);
+    const menuEnabled = () => getBool(P.MENU, true);
+    const mode = () => getString(P.MODE, "simple") === "detailed" ? "detailed" : "simple";
+
+    const state = {
+      salt: getString(P.SALT, ""),
+      dataRaw: getString(P.DATA, ""),
+      data: parseData(getString(P.DATA, "")),
+      themesRaw: getString(P.THEMES, ""),
+      themes: parseThemes(getString(P.THEMES, "")),
+    };
+    // Canonicalize any prototype v1 records on startup. This strips the old
+    // label-hash field from stored preferences while preserving ID/color data.
+    if (state.data.length) {
+      const canonical = serializeData(state.data);
+      if (canonical !== state.dataRaw && setString(P.DATA, canonical))
+        state.dataRaw = canonical;
+    }
+    const painted = new Set();
+    const owned = new WeakMap();
+    let paintTimer = null;
+    let observer = null;
+    let settingsUnregister = null;
+    let editor = null;
+    let editorAbort = null;
+
+    function randomSalt() {
+      try {
+        const bytes = new Uint8Array(24);
+        window.crypto.getRandomValues(bytes);
+        return Array.from(bytes, (n) => n.toString(16).padStart(2, "0")).join("");
+      } catch (_) {
+        return "";
+      }
+    }
+    function ensureSalt() {
+      if (/^[0-9a-f]{48}$/.test(state.salt)) return state.salt;
+      // If a profile has records but its salt was manually removed, do not
+      // silently re-key them. Keep the records inert rather than misapply them.
+      if (state.data.length) return "";
+      const next = randomSalt();
+      if (!next || !setString(P.SALT, next)) return "";
+      state.salt = next;
+      return next;
+    }
+    function folderIdentity(folder) {
+      const id = String(folder?.getAttribute?.("id") || folder?.id || "").trim();
+      const salt = ensureSalt();
+      if (!salt || !id) return { i: "" };
+      return { i: hashKey(salt, "id", id) };
+    }
+    function liveFolders() {
+      const root =
+        document.getElementById("tabbrowser-tabs") ||
+        window.gBrowser?.tabContainer ||
+        document.querySelector?.("#tabbrowser-tabs");
+      if (!root) return [];
+      const out = [];
+      if (root.localName === "zen-folder") out.push(root);
+      out.push(...(root.querySelectorAll?.("zen-folder") || []));
+      return [...new Set(out)];
+    }
+    function isNotesOwned(folder) {
+      return [
+        "bgalazka-notes-color",
+        "bgalazka-notes-folder",
+        "bgalazka-notes-subfolder",
+      ].some((attr) => folder?.hasAttribute?.(attr));
+    }
+    function uniqueRecordFor(folder) {
+      const identity = folderIdentity(folder);
+      return identity.i
+        ? state.data.find((record) => record.i === identity.i) || null
+        : null;
+    }
+    function readFolderRecord(folder) {
+      return uniqueRecordFor(folder) || null;
+    }
+    function writeData() {
+      const next = serializeData(state.data);
+      if (next.length > MAX_DATA_LENGTH || !setString(P.DATA, next)) return false;
+      state.dataRaw = next;
+      state.data = parseData(next);
+      return true;
+    }
+    function setFolderRecord(folder, raw) {
+      const identity = folderIdentity(folder);
+      if (!identity.i) return false;
+      const matched = uniqueRecordFor(folder);
+      const next = cleanRecord({
+        i: identity.i || matched?.i || "",
+        b: raw ? cleanHex(raw.b) : "",
+        d: raw ? cleanDetail(raw.d) : {},
+        u: Date.now(),
+      });
+      const remove = new Set();
+      if (identity.i) state.data.forEach((r, index) => { if (r.i === identity.i) remove.add(index); });
+      if (matched) {
+        const at = state.data.indexOf(matched);
+        if (at >= 0) remove.add(at);
+      }
+      state.data = state.data.filter((_r, index) => !remove.has(index));
+      if (next) state.data.unshift(next);
+      const ok = writeData();
+      schedulePaint();
+      return ok;
+    }
+    function defaultRecord() {
+      const detail = {};
+      for (const part of PARTS) {
+        const value = cleanHex(getString(PART_PREFS[part], ""));
+        if (value) detail[part] = value;
+      }
+      return {
+        b: cleanHex(getString(P.BASE, "")),
+        d: detail,
+      };
+    }
+    function opacityColor(value, opacity) {
+      const color = cleanHex(value);
+      if (!color) return "";
+      const pct = Math.max(0, Math.min(100, Math.round(Number(opacity))));
+      return pct >= 100 ? color : `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+    }
+    function defaultParts() {
+      const parts = partsFor(defaultRecord(), mode());
+      // Preserve old Appearance values only for components the new defaults do
+      // not explicitly own. A newly chosen base color must remain authoritative.
+      const record = defaultRecord();
+      if (!record.b) {
+        for (const [part, key, opacityKey] of [
+          ["back", LEGACY_DEFAULTS.back, LEGACY_DEFAULTS.backOpacity],
+          ["front", LEGACY_DEFAULTS.front, LEGACY_DEFAULTS.frontOpacity],
+          ["stroke", LEGACY_DEFAULTS.stroke, LEGACY_DEFAULTS.strokeOpacity],
+        ]) {
+          if (record.d[part]) continue;
+          const color = cleanHex(getString(key, ""));
+          if (color) parts[part] = opacityColor(color, getInt(opacityKey, 100));
+        }
+        if (!record.d.label) {
+          const label = cleanHex(getString(LEGACY_DEFAULTS.label, ""));
+          if (label) parts.label = label;
+        }
+      }
+      if (parts.accent && !parts.accentText) parts.accentText = textOn(cleanHex(parts.accent) || "#202020");
+      return parts;
+    }
+    function styleMapFor(folder) {
+      if (isNotesOwned(folder)) return {};
+      const record = readFolderRecord(folder);
+      return record ? declarations(partsFor(record, mode())) : declarations(defaultParts());
+    }
+
+    function rememberAndSet(folder, property, value) {
+      let map = owned.get(folder);
+      if (!map) {
+        map = new Map();
+        owned.set(folder, map);
+      }
+      const previous = map.get(property) || {
+        value: folder.style.getPropertyValue(property),
+        priority: folder.style.getPropertyPriority(property),
+        ours: "",
+        oursPriority: "important",
+      };
+      if (value) {
+        folder.style.setProperty(property, value, "important");
+        previous.ours = value;
+        map.set(property, previous);
+      } else if (map.has(property)) {
+        const current = folder.style.getPropertyValue(property);
+        const currentPriority = folder.style.getPropertyPriority(property);
+        if (current === previous.ours && currentPriority === previous.oursPriority) {
+          if (previous.value) folder.style.setProperty(property, previous.value, previous.priority);
+          else folder.style.removeProperty(property);
+        }
+        map.delete(property);
+      }
+      if (!map.size) owned.delete(folder);
+    }
+    function clearFolderPaint(folder) {
+      const map = owned.get(folder);
+      if (map) for (const property of [...map.keys()]) rememberAndSet(folder, property, "");
+      if (folder.hasAttribute?.(MARK)) folder.removeAttribute(MARK);
+      painted.delete(folder);
+    }
+    function paintFolder(folder) {
+      if (!folder || folder.localName !== "zen-folder") return;
+      if (isNotesOwned(folder)) {
+        // Notes may have just written these same properties. Relinquish visual
+        // ownership without restoring our pre-paint snapshot over Notes; keep
+        // the snapshot so a later Notes release can hand the folder back cleanly.
+        folder.removeAttribute?.(MARK);
+        painted.delete(folder);
+        return;
+      }
+      if (!enabled()) {
+        clearFolderPaint(folder);
+        return;
+      }
+      const values = styleMapFor(folder);
+      const map = owned.get(folder) || new Map();
+      const previousKeys = [...map.keys()];
+      for (const property of previousKeys)
+        if (!Object.prototype.hasOwnProperty.call(values, property))
+          rememberAndSet(folder, property, "");
+      for (const [property, value] of Object.entries(values))
+        rememberAndSet(folder, property, value);
+      if (Object.keys(values).length) {
+        folder.setAttribute(MARK, "true");
+        painted.add(folder);
+      } else {
+        folder.removeAttribute(MARK);
+        painted.delete(folder);
+      }
+    }
+    function paintAll() {
+      paintTimer = null;
+      const folders = liveFolders();
+      for (const folder of folders) paintFolder(folder);
+      for (const folder of [...painted])
+        if (!folder.isConnected || !folders.includes(folder)) clearFolderPaint(folder);
+    }
+    function schedulePaint() {
+      if (paintTimer !== null || !lifecycle.active) return;
+      paintTimer = lifecycle.setTimeout(() => {
+        paintTimer = null;
+        paintAll();
+      }, 0);
+    }
+
+    function createElement(tag, attrs = {}, ...children) {
+      const element = document.createElementNS(XHTML, tag);
+      for (const [key, value] of Object.entries(attrs)) {
+        if (key === "class") element.className = value;
+        else if (key === "text") element.textContent = String(value);
+        else if (value === true) element.setAttribute(key, "");
+        else if (value !== false && value != null) element.setAttribute(key, String(value));
+      }
+      for (const child of children.flat())
+        if (child != null)
+          element.append(child?.nodeType ? child : document.createTextNode(String(child)));
+      return element;
+    }
+    const css = `
+      :root zen-folder[${MARK}] > .tab-group-label-container > label {
+        color: var(--bgalazka-fc-label) !important;
+      }
+      .zcf-panel { position: fixed; z-index: 2147483000; width: 330px; max-width: calc(100vw - 20px);
+        max-height: min(82vh, 680px); overflow: auto; box-sizing: border-box; padding: 12px; border-radius: 12px;
+        background: Canvas; color: CanvasText; color-scheme: light dark; font: menu;
+        border: 1px solid color-mix(in srgb, CanvasText 22%, transparent); box-shadow: 0 8px 28px rgba(0,0,0,.35); }
+      .zcf-panel h3 { margin: 0 0 8px; font-size: 14px; }
+      .zcf-panel h4 { margin: 10px 0 4px; font-size: 11px; opacity: .7; text-transform: uppercase; }
+      .zcf-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+      .zcf-row > span { flex: 1; min-width: 0; font-size: 12px; }
+      .zcf-row input[type=color] { width: 36px; height: 26px; padding: 0; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); border-radius: 6px; background: transparent; }
+      .zcf-row input[type=text] { width: 82px; min-width: 0; }
+      .zcf-row button, .zcf-btns button { border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); border-radius: 7px; padding: 4px 8px; background: color-mix(in srgb, Canvas 90%, CanvasText 10%); color: inherit; }
+      .zcf-swatches { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0; }
+      .zcf-swatch { min-width: 0; border: 1px solid color-mix(in srgb, CanvasText 30%, transparent); border-radius: 6px; padding: 5px 7px; color: CanvasText; font-size: 11px; }
+      .zcf-list-row { display: grid; grid-template-columns: 18px minmax(0,1fr) auto auto; gap: 7px; align-items: center; padding: 5px 0; border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, transparent); }
+      .zcf-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+      .zcf-preview { width: 15px; height: 15px; border-radius: 4px; border: 1px solid color-mix(in srgb, CanvasText 28%, transparent); }
+      .zcf-muted { font-size: 11px; opacity: .7; }
+      .zcf-btns { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-top: 10px; }
+      .zcf-detail { border-top: 1px solid color-mix(in srgb, CanvasText 15%, transparent); margin-top: 8px; padding-top: 7px; }
+      .zcf-detail summary { cursor: pointer; font-size: 12px; }
+    `;
+    const style = createElement("style", { id: "zentral-colorful-folders-style" });
+    style.textContent = css;
+    lifecycle.own(() => style.remove());
+    document.documentElement.appendChild(style);
+
+    const previewBackground = (record) => {
+      const parts = partsFor(record, "detailed");
+      const back = cleanHex(parts.back) || cleanHex(parts.accent) || "#707780";
+      const front = cleanHex(parts.front) || cleanHex(parts.accent) || "#a0a8b0";
+      return `linear-gradient(135deg, ${back} 50%, ${front} 50%)`;
+    };
+    function defaultTarget() {
+      return {
+        title: "All folders (default look)",
+        read: () => defaultRecord(),
+        write: (record) => {
+          setString(P.BASE, record ? cleanHex(record.b) : "");
+          for (const part of PARTS)
+            setString(PART_PREFS[part], record ? cleanHex(record.d?.[part]) : "");
+          schedulePaint();
+        },
+      };
+    }
+    function folderTarget(folder) {
+      return {
+        title: String(folder.getAttribute("label") || folder.label || "Folder"),
+        read: () => readFolderRecord(folder),
+        write: (record) => setFolderRecord(folder, record),
+      };
+    }
+
+    function closeEditor() {
+      if (editorAbort) { editorAbort(); editorAbort = null; }
+      editor?.remove();
+      editor = null;
+    }
+    function saveTheme(raw) {
+      const theme = cleanTheme(raw);
+      if (!theme) return false;
+      const key = theme.n.toLocaleLowerCase();
+      state.themes = [theme, ...state.themes.filter((item) => item.n.toLocaleLowerCase() !== key)].slice(0, MAX_THEMES);
+      const next = JSON.stringify(state.themes);
+      if (!setString(P.THEMES, next)) return false;
+      state.themesRaw = next;
+      schedulePaint();
+      return true;
+    }
+    function openEditor(target, anchor) {
+      closeEditor();
+      const element = createElement("div", {
+        class: "zcf-panel",
+        role: "dialog",
+        "aria-label": "Folder colors",
+      });
+      editor = element;
+      let record = target.read() || { b: "", d: {} };
+      record = { b: cleanHex(record.b), d: cleanDetail(record.d) };
+      const heading = createElement("h3", { text: `Colors · ${target.title}` });
+      const baseLabel = createElement("div", { class: "zcf-muted", text: "One base color keeps the folder parts balanced. Fine tuning can override individual parts." });
+      const baseRow = createElement("div", { class: "zcf-row" });
+      const base = createElement("input", { type: "color", "aria-label": "Folder base color" });
+      base.value = record.b || "#667788";
+      const baseHex = createElement("input", { type: "text", maxlength: "7", spellcheck: "false", "aria-label": "Base color as hex" });
+      baseHex.value = record.b;
+      const autoBase = createElement("button", { type: "button", text: "Auto" });
+      baseRow.append(createElement("span", { text: "Base color" }), base, baseHex, autoBase);
+      const setBase = (value) => {
+        const color = cleanHex(value);
+        if (!color) return;
+        record.b = color;
+        base.value = color;
+        baseHex.value = color;
+      };
+      base.addEventListener("input", () => setBase(base.value));
+      baseHex.addEventListener("input", () => {
+        const raw = baseHex.value.trim();
+        const value = cleanHex(raw.startsWith("#") ? raw : "#" + raw);
+        if (value) setBase(value);
+      });
+      autoBase.addEventListener("click", () => { record.b = ""; baseHex.value = ""; });
+      element.append(heading, baseLabel, baseRow);
+
+      const builtins = createElement("div", { class: "zcf-swatches" });
+      for (const group of BUILTIN_THEMES)
+        for (const theme of group.items) {
+          const button = createElement("button", { type: "button", class: "zcf-swatch", text: theme.n });
+          button.style.background = previewBackground(theme);
+          button.addEventListener("click", () => {
+            record = { b: theme.b, d: cleanDetail(theme.d) };
+            setBase(theme.b);
+            for (const [part, input] of partInputs) {
+              input.hex.value = record.d[part] || "";
+              input.color.value = record.d[part] || theme.b;
+            }
+          });
+          builtins.appendChild(button);
+        }
+      element.append(createElement("h4", { text: "Quick palette" }), builtins);
+
+      const detail = createElement("details", { class: "zcf-detail" });
+      const summary = createElement("summary", { text: "Fine tune each part" });
+      const detailRows = createElement("div", {});
+      detail.append(summary, detailRows);
+      const partInputs = new Map();
+      for (const part of PARTS) {
+        const row = createElement("div", { class: "zcf-row" });
+        const color = createElement("input", { type: "color", "aria-label": PART_LABELS[part] });
+        color.value = record.d[part] || record.b || "#667788";
+        const hex = createElement("input", { type: "text", maxlength: "7", spellcheck: "false", placeholder: "auto", "aria-label": PART_LABELS[part] + " as hex" });
+        hex.value = record.d[part] || "";
+        const auto = createElement("button", { type: "button", text: "Auto" });
+        const setPart = (value) => {
+          const clean = cleanHex(value);
+          if (!clean) return;
+          record.d[part] = clean;
+          color.value = clean;
+          hex.value = clean;
+        };
+        color.addEventListener("input", () => setPart(color.value));
+        hex.addEventListener("input", () => {
+          const raw = hex.value.trim();
+          const value = cleanHex(raw.startsWith("#") ? raw : "#" + raw);
+          if (value) setPart(value);
+        });
+        auto.addEventListener("click", () => { delete record.d[part]; hex.value = ""; });
+        row.append(createElement("span", { text: PART_LABELS[part] }), color, hex, auto);
+        detailRows.appendChild(row);
+        partInputs.set(part, { color, hex });
+      }
+      if (mode() === "detailed" && Object.keys(record.d).length) detail.open = true;
+      element.appendChild(detail);
+
+      const themeRow = createElement("div", { class: "zcf-row" });
+      const themeName = createElement("input", { type: "text", maxlength: "36", placeholder: "Theme name", "aria-label": "Theme name" });
+      const saveThemeButton = createElement("button", { type: "button", text: "Save as quick theme" });
+      saveThemeButton.addEventListener("click", () => {
+        const name = themeName.value.trim();
+        if (!saveTheme({ n: name, b: record.b, d: record.d })) {
+          themeName.focus?.();
+          themeName.setAttribute("aria-invalid", "true");
+        } else {
+          themeName.value = "";
+          themeName.removeAttribute("aria-invalid");
+        }
+      });
+      themeRow.append(themeName, saveThemeButton);
+      element.appendChild(themeRow);
+
+      const actions = createElement("div", { class: "zcf-btns" });
+      const reset = createElement("button", { type: "button", text: "Reset" });
+      const cancel = createElement("button", { type: "button", text: "Cancel" });
+      const save = createElement("button", { type: "button", text: "Apply" });
+      reset.addEventListener("click", () => {
+        target.write(null);
+        closeEditor();
+      });
+      cancel.addEventListener("click", closeEditor);
+      save.addEventListener("click", () => {
+        target.write({ b: record.b, d: record.d });
+        closeEditor();
+      });
+      actions.append(reset, cancel, save);
+      element.appendChild(actions);
+      document.documentElement.appendChild(element);
+      try {
+        const rect = anchor?.getBoundingClientRect?.();
+        const width = window.innerWidth || 1200;
+        const height = window.innerHeight || 800;
+        const left = rect
+          ? Math.min(Math.max(8, rect.right + 8), Math.max(8, width - 350))
+          : 80;
+        const top = rect
+          ? Math.min(Math.max(8, rect.top), Math.max(8, height - 180))
+          : 80;
+        element.style.left = left + "px";
+        element.style.top = top + "px";
+      } catch (_) {}
+      const onKey = (event) => {
+        if (event.key === "Escape") closeEditor();
+      };
+      window.addEventListener("keydown", onKey, true);
+      editorAbort = () => window.removeEventListener("keydown", onKey, true);
+    }
+
+    function makeSwatchIcon(theme) {
+      const color = cleanHex(theme.b) || cleanHex(theme.d?.accent) || "#858585";
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect x="2" y="2" width="12" height="12" rx="3" fill="${color}" stroke="#000" stroke-opacity=".35"/></svg>`;
+      return "data:image/svg+xml," + encodeURIComponent(svg);
+    }
+    function buildMenu(popup, folder) {
+      const xul = (tag, attrs = {}) => {
+        const node = document.createXULElement(tag);
+        for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value));
+        node.setAttribute(MENU_MARK, "true");
+        return node;
+      };
+      popup.appendChild(xul("menuseparator"));
+      const menu = xul("menu", { label: "Folder colors" });
+      const submenu = document.createXULElement("menupopup");
+      menu.appendChild(submenu);
+      if (isNotesOwned(folder)) {
+        submenu.appendChild(xul("menuitem", {
+          label: "Managed by Notes · change colors in Notes",
+          disabled: "true",
+        }));
+        popup.appendChild(menu);
+        return;
+      }
+      const apply = (theme) =>
+        setFolderRecord(folder, { b: theme.b || "", d: theme.d || {} });
+      const addGroup = (label, items) => {
+        const group = document.createXULElement("menu");
+        group.setAttribute("label", label);
+        const pop = document.createXULElement("menupopup");
+        for (const theme of items) {
+          const item = document.createXULElement("menuitem");
+          item.setAttribute("label", theme.n);
+          item.setAttribute("class", "menuitem-iconic");
+          item.setAttribute("image", makeSwatchIcon(theme));
+          item.addEventListener("command", () => apply(theme));
+          pop.appendChild(item);
+        }
+        group.appendChild(pop);
+        return group;
+      };
+      for (const group of BUILTIN_THEMES) submenu.appendChild(addGroup(group.group, group.items));
+      if (state.themes.length)
+        submenu.appendChild(addGroup("My quick themes", state.themes));
+      submenu.appendChild(xul("menuseparator"));
+      const more = xul("menuitem", { label: "More colors…" });
+      more.addEventListener("command", () => openEditor(folderTarget(folder), folder));
+      submenu.appendChild(more);
+      const reset = xul("menuitem", { label: "Reset to default" });
+      reset.addEventListener("command", () => setFolderRecord(folder, null));
+      submenu.appendChild(reset);
+      popup.appendChild(menu);
+    }
+    function onPopupShowing(event) {
+      const popup = event.target;
+      if (!popup || popup.id !== "zenFolderActions") return;
+      try {
+        for (const old of [...popup.querySelectorAll?.("[" + MENU_MARK + "]") || []]) old.remove();
+        if (!enabled() || !menuEnabled()) return;
+        const trigger = popup.triggerNode || event.originalTarget;
+        const folder = trigger?.closest?.("zen-folder");
+        if (folder) buildMenu(popup, folder);
+      } catch (error) {
+        console.warn("[Zentral Colorful Folders] context menu failed:", error);
+      }
+    }
+    lifecycle.listen(window, "popupshowing", onPopupShowing, true);
+    lifecycle.own(() => {
+      try {
+        for (const node of [...document.querySelectorAll?.("[" + MENU_MARK + "]") || []]) node.remove();
+      } catch (_) {}
+    });
+
+    // Observe only the native tab tree, never the whole browser document. The
+    // bounded first passes cover session-restore timing; subsequent folders,
+    // renames and Notes ownership changes are handled by this narrow observer.
+    const root =
+      document.getElementById("tabbrowser-tabs") ||
+      window.gBrowser?.tabContainer ||
+      document.querySelector?.("#tabbrowser-tabs");
+    if (root && typeof MutationObserver === "function") {
+      observer = new MutationObserver(() => schedulePaint());
+      observer.observe(root, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: [
+          "id",
+          "label",
+          "bgalazka-notes-color",
+          "bgalazka-notes-folder",
+          "bgalazka-notes-subfolder",
+        ],
+      });
+      lifecycle.own(() => {
+        observer?.disconnect();
+        observer = null;
+      });
+    }
+    for (const type of ["TabOpen", "TabClose", "TabAttrModified", "aftercustomization"])
+      lifecycle.listen(window, type, schedulePaint, true);
+    for (const delay of [0, 800, 2500, 7000]) lifecycle.setTimeout(schedulePaint, delay);
+
+    lifecycle.preference(PREFIX, (_subject, _topic, name) => {
+      if (name === P.DATA) {
+        const raw = getString(P.DATA, "");
+        if (raw !== state.dataRaw) {
+          state.dataRaw = raw;
+          state.data = parseData(raw);
+        }
+      } else if (name === P.THEMES) {
+        const raw = getString(P.THEMES, "");
+        if (raw !== state.themesRaw) {
+          state.themesRaw = raw;
+          state.themes = parseThemes(raw);
+        }
+      }
+      schedulePaint();
+    });
+    lifecycle.preference("zen.workspace.bgalazka.look.folder_", schedulePaint);
+    lifecycle.preference(PREFIX + "default_", schedulePaint);
+    lifecycle.preference(P.ENABLED, schedulePaint);
+
+    settingsUnregister = runtime?.registerSettingsHook?.("colorful-folders", 31, () => {
+      const modal = document.getElementById("zentral-settings-modal");
+      if (!modal || modal.querySelector("#zentral-colorful-folders-list")) return;
+      const section = runtime.ensureSettingsSection?.(modal, "folder-colors", "Your folders");
+      if (!section) return;
+      const list = createElement("div", { id: "zentral-colorful-folders-list" });
+      const makeRow = (name, target, folder, record, managed = false) => {
+        const preview = createElement("span", { class: "zcf-preview", "aria-hidden": "true" });
+        preview.style.background = previewBackground(record || {});
+        const edit = createElement("button", { type: "button", text: managed ? "Managed by Notes" : "Colors…" });
+        const reset = createElement("button", { type: "button", text: "Reset" });
+        edit.disabled = managed;
+        reset.disabled = managed || !record;
+        edit.addEventListener("click", () => openEditor(target, folder || modal));
+        reset.addEventListener("click", () => { target.write(null); fill(); });
+        return createElement(
+          "div",
+          { class: "zcf-list-row" },
+          preview,
+          createElement("span", { class: "zcf-name", text: name }),
+          edit,
+          reset,
+        );
+      };
+      const fill = () => {
+        list.replaceChildren();
+        list.appendChild(makeRow("All folders (default look)", defaultTarget(), null, defaultRecord()));
+        const folders = liveFolders();
+        if (!folders.length)
+          list.appendChild(createElement("p", { class: "zcf-muted", text: "No native folders are currently visible in this window." }));
+        for (const folder of folders) {
+          const managed = isNotesOwned(folder);
+          const title = String(folder.getAttribute("label") || folder.label || "Folder");
+          list.appendChild(makeRow(
+            title,
+            folderTarget(folder),
+            folder,
+            managed ? null : readFolderRecord(folder),
+            managed,
+          ));
+        }
+        const refresh = createElement("button", { type: "button", text: "Refresh list" });
+        refresh.addEventListener("click", fill);
+        list.appendChild(createElement("div", { class: "zcf-btns" }, refresh));
+      };
+      fill();
+      section.appendChild(list);
+    });
+    lifecycle.own(() => {
+      settingsUnregister?.();
+      settingsUnregister = null;
+      closeEditor();
+      document.getElementById("zentral-colorful-folders-list")?.remove();
+    });
+    lifecycle.own(() => {
+      if (paintTimer !== null) lifecycle.clearTimeout(paintTimer);
+      paintTimer = null;
+      for (const folder of [...painted]) clearFolderPaint(folder);
+    });
+    schedulePaint();
+  }
+
+  // Test seam: pure functions only; production behaviour still enters through
+  // the same registration and lifecycle path as every other Zentral feature.
+  try {
+    window.__zentralColorfulFoldersTestSeam = Object.freeze({
+      cleanHex,
+      cleanRecord,
+      cleanDetail,
+      parseData,
+      serializeData,
+      parseThemes,
+      cleanTheme,
+      derive,
+      partsFor,
+      declarations,
+      sha256Hex,
+      hashKey,
+      BUILTIN_THEMES,
+      PARTS,
+      PART_LABELS,
+      MARK,
+      MENU_MARK,
+    });
+  } catch (_) {}
+
+  (window.ZentralRuntime || window.__zentralStandaloneRuntime).register({
+    id: "colorful-folders",
+    init: start,
+  });
+})();

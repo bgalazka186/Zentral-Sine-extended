@@ -3390,63 +3390,6 @@
       ]
     },
     {
-      "property": "zen.workspace.bgalazka.look.folder_behind",
-      "label": "Native folder icon: back color (empty follows Zen)",
-      "type": "string",
-      "defaultValue": ""
-    },
-    {
-      "property": "zen.workspace.bgalazka.look.folder_behind_opacity",
-      "label": "Native folder icon: back opacity (%)",
-      "type": "input",
-      "defaultValue": 100,
-      "numeric": {
-        "min": 0,
-        "max": 100,
-        "unit": "%"
-      }
-    },
-    {
-      "property": "zen.workspace.bgalazka.look.folder_front",
-      "label": "Native folder icon: front color (empty follows Zen)",
-      "type": "string",
-      "defaultValue": ""
-    },
-    {
-      "property": "zen.workspace.bgalazka.look.folder_front_opacity",
-      "label": "Native folder icon: front opacity (%)",
-      "type": "input",
-      "defaultValue": 100,
-      "numeric": {
-        "min": 0,
-        "max": 100,
-        "unit": "%"
-      }
-    },
-    {
-      "property": "zen.workspace.bgalazka.look.folder_stroke",
-      "label": "Native folder icon: outline and glyph color (empty follows Zen)",
-      "type": "string",
-      "defaultValue": ""
-    },
-    {
-      "property": "zen.workspace.bgalazka.look.folder_stroke_opacity",
-      "label": "Native folder icon: outline and glyph opacity (%)",
-      "type": "input",
-      "defaultValue": 100,
-      "numeric": {
-        "min": 0,
-        "max": 100,
-        "unit": "%"
-      }
-    },
-    {
-      "property": "zen.workspace.bgalazka.look.folder_label",
-      "label": "Native folder label color (empty follows Zen)",
-      "type": "string",
-      "defaultValue": ""
-    },
-    {
       "property": "zen.workspace.bgalazka.look.folder_tight_labels",
       "label": "Tighter folder rows (drop the fixed label line height)",
       "type": "checkbox",
@@ -5218,41 +5161,6 @@
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.tile_style": {
-      "category": "theme-details",
-      "section": "Tabs, folders & launchers",
-      "owner": "extension-settings"
-    },
-    "zen.workspace.bgalazka.look.folder_behind": {
-      "category": "theme-details",
-      "section": "Tabs, folders & launchers",
-      "owner": "extension-settings"
-    },
-    "zen.workspace.bgalazka.look.folder_behind_opacity": {
-      "category": "theme-details",
-      "section": "Tabs, folders & launchers",
-      "owner": "extension-settings"
-    },
-    "zen.workspace.bgalazka.look.folder_front": {
-      "category": "theme-details",
-      "section": "Tabs, folders & launchers",
-      "owner": "extension-settings"
-    },
-    "zen.workspace.bgalazka.look.folder_front_opacity": {
-      "category": "theme-details",
-      "section": "Tabs, folders & launchers",
-      "owner": "extension-settings"
-    },
-    "zen.workspace.bgalazka.look.folder_stroke": {
-      "category": "theme-details",
-      "section": "Tabs, folders & launchers",
-      "owner": "extension-settings"
-    },
-    "zen.workspace.bgalazka.look.folder_stroke_opacity": {
-      "category": "theme-details",
-      "section": "Tabs, folders & launchers",
-      "owner": "extension-settings"
-    },
-    "zen.workspace.bgalazka.look.folder_label": {
       "category": "theme-details",
       "section": "Tabs, folders & launchers",
       "owner": "extension-settings"
