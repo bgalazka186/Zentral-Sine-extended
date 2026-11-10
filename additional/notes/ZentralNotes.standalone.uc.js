@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.2.11
+// @version 3.2.13
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.2.11, the numeric-preference list and
+ * Placeholders replaced by the build: 3.2.13, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.2.11";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.2.13";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1752,26 +1752,233 @@ __zentralShim.register = function (def) {
     // Folder colour: the palette of the notes without "none" ("" = the normal look). Folder icon: ONE emoji (also a flag, a keycap
     // or a skin-tone / joined sequence); anything else, text included, is refused so a label can never smuggle markup into the tab bar.
     const FOLDER_COLORS = Object.freeze(NOTE_COLORS.filter((c) => c !== "none"));
-    const FALLBACK_FOLDER_COLOR_PRESETS = Object.freeze([
-      { group: "Dark folders", items: [
-        { n: "Graphite", b: "#343a40", d: {}, o: {} },
-        { n: "Midnight", b: "#202b3b", d: {}, o: {} },
-        { n: "Deep forest", b: "#234236", d: {}, o: {} },
-        { n: "Plum shadow", b: "#493047", d: {}, o: {} },
-      ] },
-      { group: "High contrast", items: [
-        { n: "Amber", b: "#d97706", d: { front: "#ffe0a3", stroke: "#3b2100" }, o: {} },
-        { n: "Aqua", b: "#087e8b", d: { front: "#b9f4f4", stroke: "#032f36" }, o: {} },
-        { n: "Rose", b: "#be3455", d: { front: "#ffd2df", stroke: "#3d0716" }, o: {} },
-        { n: "Electric blue", b: "#2557d6", d: { front: "#d8e5ff", stroke: "#071b50" }, o: {} },
-      ] },
-      { group: "Colorful", items: [
-        { n: "Coral", b: "#ff8066", d: {}, o: {} },
-        { n: "Mint", b: "#40b99a", d: {}, o: {} },
-        { n: "Lavender", b: "#9c83e6", d: {}, o: {} },
-        { n: "Sunflower", b: "#e5bd38", d: {}, o: {} },
-      ] },
-    ]);
+    // <<FOLDER-STYLE-CORE v3
+    // One implementation of "which colors does a folder get". The same text sits in ZentralColorfulFolders.uc.js and
+    // ZentralNotes.uc.js (tests/colorful-folders.test.cjs compares the two copies), so the Zen sidebar, the All notes tree and a
+    // Notes-only install can never disagree. Pure: no DOM, no preferences, no timers.
+    //   record  = { b: primary "#rrggbb", d: per-layer colors, o: per-layer opacity 0..100 }
+    //   Simple mode: only `b` (primary) and `d.stroke` (secondary = outline) are read; every other layer is derived from them.
+    //   Detailed mode: `d` layers override the derived ones.
+    //   Precedence for one folder: its own record > the default of its level (1 = root, up to 5) > the all-levels default.
+    //   A folder that has its own colors never inherits default colors or default opacity (a default can not overwrite it).
+    const FOLDER_STYLE = (() => {
+      const PARTS = Object.freeze(["back", "front", "stroke", "label", "accent", "tint", "hover"]);
+      const MAX_DEPTH = 5;
+      const HEX = /^#[0-9a-fA-F]{6}$/;
+      const hex = (v) => (typeof v === "string" && HEX.test(v.trim()) ? v.trim().toLowerCase() : "");
+      const detail = (raw) => {
+        const out = {};
+        if (raw && typeof raw === "object" && !Array.isArray(raw))
+          for (const p of PARTS) {
+            const h = hex(raw[p]);
+            if (h) out[p] = h;
+          }
+        return out;
+      };
+      const opacity = (raw) => {
+        const out = {};
+        if (raw && typeof raw === "object" && !Array.isArray(raw))
+          for (const p of PARTS) {
+            const n = Number(raw[p]);
+            if (raw[p] !== undefined && raw[p] !== null && Number.isInteger(n) && n >= 0 && n <= 100) out[p] = n;
+          }
+        return out;
+      };
+      const norm = (raw) => {
+        const r = raw && typeof raw === "object" ? raw : {};
+        return { b: hex(r.b ?? r.color), d: detail(r.d ?? r.parts), o: opacity(r.o ?? r.opacity) };
+      };
+      const hasColor = (r) => !!r && (!!r.b || Object.keys(r.d).length > 0);
+      const lum = (h) => {
+        const n = parseInt(h.slice(1), 16);
+        const lin = (v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+        return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+      };
+      const textOn = (h) => (lum(h) > 0.4 ? "#1b1b1f" : "#ffffff");
+      const contrast = (a, b) => {
+        const x = hex(a), y = hex(b);
+        if (!x || !y) return 21;
+        const l1 = lum(x), l2 = lum(y);
+        return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+      };
+      const mix = (c, pct, other) => `color-mix(in srgb, ${c} ${pct}%, ${other})`;
+      function derive(base, secondary) {
+        const color = hex(base);
+        if (!color) return {};
+        const edge = hex(secondary);
+        return {
+          back: `light-dark(${mix(color, 60, "gray")}, ${mix(color, 60, "#c1c1c1")})`,
+          front: `light-dark(color-mix(in srgb, ${color}, white 70%), color-mix(in srgb, ${color}, black 40%))`,
+          stroke: edge || `light-dark(${mix(color, 50, "black")}, ${mix(color, 15, "#ebebeb")})`,
+          label: `light-dark(${mix(color, 55, "black")}, ${mix(color, 55, "white")})`,
+          accent: color,
+          tint: mix(color, 16, "transparent"),
+          hover: mix(color, 30, "transparent"),
+        };
+      }
+      function partsFor(rec, mode) {
+        const r = norm(rec);
+        const out = r.b ? derive(r.b, r.d.stroke) : {};
+        if (!r.b || mode === "detailed")
+          for (const p of PARTS) if (r.d[p]) out[p] = p === "tint" ? mix(r.d.tint, 22, "transparent") : r.d[p];
+        return out;
+      }
+      function declarations(parts, op) {
+        const out = {};
+        const alpha = opacity(op);
+        const fade = (value, p) => (alpha[p] === undefined || alpha[p] >= 100 ? value : mix(value, alpha[p], "transparent"));
+        for (const p of PARTS) {
+          if (!parts || !parts[p]) continue;
+          const value = fade(parts[p], p);
+          if (p === "back") out["--zen-folder-behind-bgcolor"] = value;
+          else if (p === "front") out["--zen-folder-front-bgcolor"] = value;
+          else if (p === "stroke") out["--zen-folder-stroke"] = value;
+          else if (p === "label") out["--bgalazka-fc-label"] = value;
+          else if (p === "accent") {
+            const on = parts.accentText || "#ffffff";
+            const off = on === "#ffffff" ? "#1b1b1f" : "#ffffff";
+            out["--tab-group-color"] = value;
+            out["--tab-group-background-color"] = value;
+            out["--tab-group-color-invert"] = off;
+            out["--tab-group-text-color"] = on;
+            out["--tab-group-text-color-invert"] = off;
+            out["--bgalazka-fc-accent"] = value;
+          } else if (p === "tint") {
+            out["--tab-group-color-pale"] = value;
+            out["--bgalazka-fc-tint"] = value;
+          } else if (p === "hover") {
+            out["--tab-group-background-color-hover"] = value;
+            out["--bgalazka-fc-hover"] = value;
+          }
+        }
+        return out;
+      }
+      // Every custom property a painter may set; a painter removes the ones a style does not produce.
+      const OWNED = Object.freeze([
+        "--zen-folder-behind-bgcolor", "--zen-folder-front-bgcolor", "--zen-folder-stroke", "--bgalazka-fc-label",
+        "--tab-group-color", "--tab-group-background-color", "--tab-group-color-invert", "--tab-group-text-color",
+        "--tab-group-text-color-invert", "--tab-group-color-pale", "--tab-group-background-color-hover",
+        "--bgalazka-fc-accent", "--bgalazka-fc-tint", "--bgalazka-fc-hover",
+      ]);
+      const clampDepth = (depth) => Math.max(1, Math.min(MAX_DEPTH, Math.floor(Number(depth)) || 1));
+      function parseLayers(raw) {
+        try {
+          const text = String(raw || "");
+          if (!text || text.length > 32768) return {};
+          const parsed = JSON.parse(text);
+          const src = parsed && typeof parsed === "object" ? parsed.l || parsed : {};
+          const out = {};
+          for (let n = 1; n <= MAX_DEPTH; n++) {
+            const r = norm(src[n]);
+            if (hasColor(r) || Object.keys(r.o).length) out[n] = r;
+          }
+          return out;
+        } catch (_) {
+          return {};
+        }
+      }
+      function serializeLayers(layers) {
+        const l = {};
+        for (let n = 1; n <= MAX_DEPTH; n++) {
+          const r = norm(layers && layers[n]);
+          if (hasColor(r) || Object.keys(r.o).length) l[n] = r;
+        }
+        return JSON.stringify({ v: 1, l });
+      }
+      // Level of a folder element = number of zen-folder elements from it up to the root (1 = top level).
+      function elementDepth(el) {
+        let n = 0;
+        for (let c = el; c && n < 64; c = c.parentElement || c.parentNode || c.parent) if (c.localName === "zen-folder" || c.tag === "zen-folder") n++;
+        return clampDepth(n);
+      }
+      // env = { mode, defaults: record, layers: { 1..5: record }, ignoreLabel }
+      function resolve(raw, depth, env) {
+        const e = env && typeof env === "object" ? env : {};
+        const mode = e.mode === "detailed" ? "detailed" : "simple";
+        const own = norm(raw);
+        const level = clampDepth(depth);
+        let source, from;
+        if (hasColor(own)) {
+          source = own;
+          from = "folder";
+        } else {
+          const layer = norm(e.layers && (e.layers[level] ?? e.layers[String(level)]));
+          const global = norm(e.defaults);
+          const pick = hasColor(layer) ? layer : global;
+          from = hasColor(layer) ? "level" : hasColor(global) ? "default" : "none";
+          source = { b: pick.b, d: pick.d, o: { ...pick.o, ...own.o } };
+        }
+        const parts = partsFor(source, mode);
+        if (e.ignoreLabel) delete parts.label;
+        const accent = hex(parts.accent) || source.b;
+        if (accent) parts.accentText = textOn(accent);
+        return { base: source.b, parts, opacity: source.o, properties: declarations(parts, source.o), from, depth: level, mode };
+      }
+      // Collections: ordered groups of looks. Applying a collection to the defaults gives level 1 the first look, level 2 the
+      // second, and so on (cycling), so a root folder, a subfolder and a sub-subfolder stay recognisable but different.
+      // A look keeps to `b`, `d.stroke` (secondary) and `o` wherever it can, so it also works in Simple mode.
+      const COLLECTIONS = Object.freeze([
+        { group: "Classic yellow folders", items: [
+          { n: "Kraft paper", b: "#c8a165", d: { back: "#a98147", front: "#e6c993", stroke: "#5c4120" }, o: {} },
+          { n: "Honey", b: "#f2a900", d: { back: "#d48a00", front: "#ffd26a", stroke: "#6b4300" }, o: {} },
+          { n: "Manila", b: "#e8b923", d: { back: "#c99a1c", front: "#f6d567", stroke: "#7a5a05" }, o: {} },
+          { n: "Butter", b: "#f0cf4a", d: { back: "#d1b232", front: "#fbe88a", stroke: "#75600b" }, o: {} },
+          { n: "Lemon", b: "#f4e04d", d: { back: "#d6c12f", front: "#fff59a", stroke: "#6f6410" }, o: {} },
+        ] },
+        { group: "Dark glass", items: [
+          { n: "Slate glass", b: "#3b4452", d: { stroke: "#8fa3bd" }, o: { back: 55, front: 40 } },
+          { n: "Ink glass", b: "#1f2a44", d: { stroke: "#7f95c9" }, o: { back: 55, front: 38 } },
+          { n: "Moss glass", b: "#23392f", d: { stroke: "#7fb69a" }, o: { back: 55, front: 40 } },
+          { n: "Wine glass", b: "#3b2230", d: { stroke: "#c487a6" }, o: { back: 55, front: 40 } },
+          { n: "Ember glass", b: "#3a2a1f", d: { stroke: "#d9a066" }, o: { back: 55, front: 40 } },
+        ] },
+        { group: "Sticky notes", items: [
+          { n: "Canary", b: "#ffe066", d: { back: "#e9c93a", front: "#fff1a8", stroke: "#8a6d00" }, o: {} },
+          { n: "Pink slip", b: "#ff8fb3", d: { back: "#ec6f98", front: "#ffc2d6", stroke: "#8c2149" }, o: {} },
+          { n: "Mint note", b: "#7be0b5", d: { back: "#52c796", front: "#b9f3da", stroke: "#0f6a47" }, o: {} },
+          { n: "Sky memo", b: "#7cc4ff", d: { back: "#52a8ec", front: "#c1e3ff", stroke: "#124d82" }, o: {} },
+          { n: "Peach", b: "#ffb27a", d: { back: "#ef9558", front: "#ffd6b8", stroke: "#8a4310" }, o: {} },
+        ] },
+        { group: "Neon outline", items: [
+          { n: "Cyan line", b: "#12202b", d: { stroke: "#2fd8ec" }, o: { back: 70, front: 55 } },
+          { n: "Magenta line", b: "#26122b", d: { stroke: "#e45be0" }, o: { back: 70, front: 55 } },
+          { n: "Lime line", b: "#1b2612", d: { stroke: "#a6dd3c" }, o: { back: 70, front: 55 } },
+          { n: "Orange line", b: "#2b1d10", d: { stroke: "#f0922a" }, o: { back: 70, front: 55 } },
+          { n: "Violet line", b: "#1c1530", d: { stroke: "#9b83f2" }, o: { back: 70, front: 55 } },
+        ] },
+        { group: "Dark folders", items: [
+          { n: "Graphite", b: "#343a40", d: {}, o: {} },
+          { n: "Midnight", b: "#202b3b", d: {}, o: {} },
+          { n: "Deep forest", b: "#234236", d: {}, o: {} },
+          { n: "Plum shadow", b: "#493047", d: {}, o: {} },
+        ] },
+        { group: "High contrast", items: [
+          { n: "Amber", b: "#d97706", d: { front: "#ffe0a3", stroke: "#3b2100" }, o: {} },
+          { n: "Aqua", b: "#087e8b", d: { front: "#b9f4f4", stroke: "#032f36" }, o: {} },
+          { n: "Rose", b: "#be3455", d: { front: "#ffd2df", stroke: "#3d0716" }, o: {} },
+          { n: "Electric blue", b: "#2557d6", d: { front: "#d8e5ff", stroke: "#071b50" }, o: {} },
+        ] },
+        { group: "Colorful", items: [
+          { n: "Coral", b: "#ff8066", d: {}, o: {} },
+          { n: "Mint", b: "#40b99a", d: {}, o: {} },
+          { n: "Lavender", b: "#9c83e6", d: {}, o: {} },
+          { n: "Sunflower", b: "#e5bd38", d: {}, o: {} },
+        ] },
+      ]);
+      // A look needs Detailed mode only when it sets a layer other than the secondary (outline) color.
+      const needsDetailed = (look) => Object.keys(detail(look && look.d)).some((p) => p !== "stroke");
+      // Collection -> { 1: look, 2: look, ... } for the five default levels.
+      function spreadCollection(group) {
+        const items = (group && Array.isArray(group.items) ? group.items : []).map(norm).filter(hasColor);
+        const out = {};
+        if (!items.length) return out;
+        for (let n = 1; n <= MAX_DEPTH; n++) out[n] = items[(n - 1) % items.length];
+        return out;
+      }
+      return Object.freeze({ PARTS, MAX_DEPTH, OWNED, COLLECTIONS, hex, detail, opacity, norm, hasColor, lum, textOn, contrast, derive, partsFor, declarations, clampDepth, parseLayers, serializeLayers, elementDepth, resolve, needsDetailed, spreadCollection });
+    })();
+    // FOLDER-STYLE-CORE>>
+    const FALLBACK_FOLDER_COLOR_PRESETS = FOLDER_STYLE.COLLECTIONS;
     function folderColorPresets() {
       const supplied = window.__zentralFolderColorPresets;
       if (!Array.isArray(supplied)) return FALLBACK_FOLDER_COLOR_PRESETS;
@@ -2461,6 +2668,13 @@ __zentralShim.register = function (def) {
         Services.prefs.setIntPref(versionKey, 2);
       } catch (_) {}
     }
+    function setFolderMode(next) {
+      try {
+        const key = COLORFUL_FOLDER_PREF + "mode";
+        const value = next === "simple" ? "simple" : "detailed";
+        if (Services.prefs.getStringPref(key, "") !== value) Services.prefs.setStringPref(key, value);
+      } catch (_) {}
+    }
     function useDetailedFolderMode() {
       try {
         const key = COLORFUL_FOLDER_PREF + "mode";
@@ -2492,6 +2706,8 @@ __zentralShim.register = function (def) {
         // In that case keep the Notes editor's full per-layer colors usable; when
         // the shared module is present its explicit simple/detailed choice wins.
         mode: readString(COLORFUL_FOLDER_PREF + "mode") === "simple" ? "simple" : "detailed",
+        layers: FOLDER_STYLE.parseLayers(readString(COLORFUL_FOLDER_PREF + "default_layers")),
+        ignoreLabel: (() => { try { return Services.prefs.getBoolPref(COLORFUL_FOLDER_PREF + "ignore_label", false); } catch (_) { return false; } })(),
       };
     }
 
@@ -2554,66 +2770,24 @@ __zentralShim.register = function (def) {
       "--tab-group-background-color-hover": "var(--tab-group-zen-workspace-color-hover)",
     });
     const colorHex = (name) => TINT_HEX[name] || cleanHex(name);
-    function resolveFolderVisual(raw = {}) {
+    // `depth` = nesting level in the Zen sidebar: the NOTES root is level 1, so a top-level folder of the All notes tree is 2.
+    function resolveFolderVisual(raw = {}, depth = 2) {
+      const record = { b: colorHex(raw.b ?? raw.color) || "", d: cleanFolderParts(raw.d ?? raw.parts), o: cleanFolderOpacity(raw.o ?? raw.opacity) };
       const shared = window.__zentralFolderColorStyleBridge;
-      if (shared?.version === 1 && typeof shared.resolve === "function") {
+      if (shared?.version === 1 && shared.revision >= 3 && typeof shared.resolve === "function") {
         try {
-          const resolved = shared.resolve({
-            b: colorHex(raw.b ?? raw.color) || "",
-            d: cleanFolderParts(raw.d ?? raw.parts),
-            o: cleanFolderOpacity(raw.o ?? raw.opacity),
-          });
+          const resolved = shared.resolve(record, depth);
           if (resolved && resolved.properties && resolved.opacity) return resolved;
         } catch (_) {}
       }
+      // Notes-only install (or an older shared module): the same core, fed from the shared preferences.
       const defaults = colorfulFolderDefaults();
-      const base = colorHex(raw.b ?? raw.color) || defaults.b;
-      const detail = { ...defaults.d, ...cleanFolderParts(raw.d ?? raw.parts) };
-      const layers = base ? {
-        back: `light-dark(color-mix(in srgb, ${base} 60%, gray), color-mix(in srgb, ${base} 60%, #c1c1c1))`,
-        front: `light-dark(color-mix(in srgb, ${base}, white 70%), color-mix(in srgb, ${base}, black 40%))`,
-        stroke: `light-dark(color-mix(in srgb, ${base} 50%, black), color-mix(in srgb, ${base} 15%, #ebebeb))`,
-        label: `light-dark(color-mix(in srgb, ${base} 55%, black), color-mix(in srgb, ${base} 55%, white))`,
-        accent: base,
-        tint: `color-mix(in srgb, ${base} 22%, transparent)`,
-        hover: `color-mix(in srgb, ${base} 85%, white)`,
-      } : {};
-      const effectiveColor = base;
-      const allowDetails = !effectiveColor || defaults.mode === "detailed";
-      if (allowDetails) {
-        Object.assign(layers, detail);
-        // The tint layer stores its source hex; both the shared module and this
-        // standalone Notes fallback project it as a translucent surface.
-        if (detail.tint) layers.tint = `color-mix(in srgb, ${detail.tint} 22%, transparent)`;
-      }
-      const opacity = { ...defaults.o, ...cleanFolderOpacity(raw.o ?? raw.opacity) };
-      const applyAlpha = (value, part) => opacity[part] === undefined ? value : folderOpacityValue(value, opacity[part]);
-      const properties = {};
-      for (const [part, property] of [
-        ["back", "--zen-folder-behind-bgcolor"], ["front", "--zen-folder-front-bgcolor"],
-        ["stroke", "--zen-folder-stroke"], ["label", "--bgalazka-fc-label"],
-        ["tint", "--tab-group-color-pale"], ["hover", "--tab-group-background-color-hover"],
-      ]) {
-        if (!layers[part]) continue;
-        // `layers.tint` is already the translucent derived surface above;
-        // apply only its independent transparency setting here.
-        properties[property] = applyAlpha(layers[part], part);
-      }
-      const accent = cleanHex(layers.accent);
-      if (accent) {
-        const n = parseInt(accent.slice(1), 16);
-        const linear = (v) => { const x = v / 255; return x <= .03928 ? x / 12.92 : Math.pow((x + .055) / 1.055, 2.4); };
-        const lum = .2126 * linear((n >> 16) & 255) + .7152 * linear((n >> 8) & 255) + .0722 * linear(n & 255);
-        const text = lum > .4 ? "#1b1b1f" : "#ffffff";
-        const invert = text === "#ffffff" ? "#1b1b1f" : "#ffffff";
-        const value = applyAlpha(accent, "accent");
-        properties["--tab-group-color"] = value;
-        properties["--tab-group-background-color"] = value;
-        properties["--tab-group-color-invert"] = invert;
-        properties["--tab-group-text-color"] = text;
-        properties["--tab-group-text-color-invert"] = invert;
-      }
-      return { base, parts: layers, opacity, properties };
+      return FOLDER_STYLE.resolve(record, depth, {
+        mode: defaults.mode,
+        defaults: { b: defaults.b, d: defaults.d, o: defaults.o },
+        layers: defaults.layers,
+        ignoreLabel: defaults.ignoreLabel,
+      });
     }
     function folderTint(name) {
       const hex = colorHex(name) || colorfulFolderDefaults().b;
@@ -7278,10 +7452,7 @@ __zentralShim.register = function (def) {
     function applyNotesFolderStyle(el, color, icon, { doc, warn = () => {}, parts = {}, opacity = {} } = {}) {
       try {
         if (!el?.style) return;
-        const defaults = colorfulFolderDefaults();
-        const baseColor = colorHex(color) || defaults.b;
-        const allowDetails = !baseColor || defaults.mode === "detailed";
-        const resolved = resolveFolderVisual({ b: colorHex(color) || "", d: allowDetails ? parts : {}, o: opacity });
+        const resolved = resolveFolderVisual({ b: colorHex(color) || "", d: parts, o: opacity }, FOLDER_STYLE.elementDepth(el));
         const properties = { ...(resolved.properties || {}) };
         // Clearing a folder override restores Zen's native workspace tokens
         // for any layer not currently supplied by global Colorful Folders defaults.
@@ -7289,13 +7460,7 @@ __zentralShim.register = function (def) {
           for (const [property, value] of Object.entries(ZEN_TINT_DEFAULT))
             if (!properties[property]) properties[property] = value;
         }
-        const ownedProperties = [
-          "--zen-folder-behind-bgcolor", "--zen-folder-front-bgcolor", "--zen-folder-stroke",
-          "--bgalazka-fc-label", "--tab-group-color", "--tab-group-background-color",
-          "--tab-group-color-invert", "--tab-group-text-color", "--tab-group-text-color-invert",
-          "--tab-group-color-pale", "--tab-group-background-color-hover",
-        ];
-        for (const property of ownedProperties) {
+        for (const property of FOLDER_STYLE.OWNED) {
           const value = properties[property] || "";
           if (value) {
             if (el.style.getPropertyValue(property) !== value || (el.style.getPropertyPriority?.(property) || "") !== "important")
@@ -7311,6 +7476,8 @@ __zentralShim.register = function (def) {
           } else if (el.hasAttribute?.(name)) el.removeAttribute(name);
         };
         setAttr("bgalazka-notes-color", color || "");
+        // The layers the stylesheet may draw (accent line, soft tint, hover); an unlisted layer stays Zen's own.
+        setAttr("bgalazka-fc-layers", [["--bgalazka-fc-accent", "accent"], ["--bgalazka-fc-tint", "tint"], ["--bgalazka-fc-hover", "hover"]].filter(([property]) => properties[property]).map(([, name]) => name).join(" "));
         const cleanParts = cleanFolderParts(parts);
         const cleanOpacity = cleanFolderOpacity(opacity);
         setAttr("bgalazka-notes-parts", Object.keys(cleanParts).length ? serializeFolderParts(cleanParts) : "");
@@ -8100,6 +8267,9 @@ __zentralShim.register = function (def) {
         [tLink, "Link\u2026", "link"], [tNoteLink, "Link to another note\u2026", "noteLink"], [tImage, "Image", "image"], [tTable, "Table\u2026", "table"], [tToc, "Table of contents", "outline"], [tSettings, "Quick settings", "settings"],
       ];
       const getPref = (k, d) => (env.getPref ? env.getPref(k, d) : d);
+      // The NOTES root style code below reads string preferences with this; it used to name a helper that only exists in the
+      // controller scope, so clicking the root style button threw a ReferenceError and did nothing.
+      const prefStr = (k, d) => String(getPref(k, d) ?? d);
       const setPref = (k, v) => env.setPref?.(k, v);
       let shortcutCache = { raw: null, hid: null, list: [] };
       const hiddenTools = () => parseHidden(getPref(PREF.HIDDEN_TOOLS, ""));
@@ -8144,13 +8314,12 @@ __zentralShim.register = function (def) {
       const chipRecent = h("button", { type: "button", class: "zn-chip" }, "Recent");
       const chipTrash = h("button", { type: "button", class: "zn-chip" }, "Trash");
       const chipEmpty = h("button", { type: "button", class: "zn-chip zn-chip-danger" }, "Empty trash");
-      const btnRoot = iconButton("folder", "NOTES folder in the Zen sidebar: color and icon\u2026 (also: right-click Notes)", "zn-rootstyle");
       const listItems = h("div", { class: "zn-items", role: "list" });
       const listEl = h(
         "div",
         { class: "zn-list" },
         h("div", { class: "zn-list-head" }, h("span", { class: "zn-search-wrap" }, icon("search", 13), search), btnFolder, btnNew),
-        h("div", { class: "zn-chips" }, chipAll, chipRecent, chipTrash, btnRoot, h("span", { class: "zn-grow" }), chipEmpty),
+        h("div", { class: "zn-chips" }, chipAll, chipRecent, chipTrash, h("span", { class: "zn-grow" }), chipEmpty),
         listItems,
       );
       // Find "highlight every match" layer (pref find_highlight = backdrop): sits under the transparent textarea.
@@ -9016,6 +9185,24 @@ __zentralShim.register = function (def) {
         allFolderIds([...store.tree().notes, ...store.list()], store.meta.folders)
           .filter((id) => !exclude || !(id === exclude || id.startsWith(exclude + "/")))
           .sort();
+      function buildRootRow() {
+        const emoji = cleanFolderIcon(String(getPref(PREF.ZEN_ROOT_ICON, "") || ""));
+        const edit = iconButton("palette" in ICONS ? "palette" : "more", "Colors and icon of the NOTES folder\u2026", "zn-rootstyle");
+        const row = h("div", { class: "zn-rootrow", role: "treeitem", tabindex: "0", "aria-level": "1", title: "NOTES folder in the Zen sidebar: click for colors and icon" },
+          h("span", { class: "zn-frow-icon" + (emoji ? " is-emoji" : " is-folder") }, emoji ? h("span", { class: "zn-frow-emoji" }, emoji) : icon("folder", 14)),
+          h("span", { class: "zn-rootrow-name" }, "NOTES"), edit);
+        const resolved = resolveFolderVisual({ b: colorHex(prefStr(PREF.ZEN_ROOT_COLOR, "")) || "", d: parseFolderParts(prefStr(PREF.ZEN_ROOT_PARTS, "{}")), o: parseFolderOpacity(prefStr(PREF.ZEN_ROOT_PART_OPACITY, "{}")) }, 1);
+        for (const [target, source] of [["--zn-frow-back", "--zen-folder-behind-bgcolor"], ["--zn-frow-front", "--zen-folder-front-bgcolor"], ["--zn-frow-stroke", "--zen-folder-stroke"], ["--zn-frow-label", "--bgalazka-fc-label"], ["--zn-frow-accent", "--tab-group-color"], ["--zn-frow-tint", "--tab-group-color-pale"], ["--zn-frow-hover", "--tab-group-background-color-hover"]]) {
+          const value = resolved.properties?.[source] || "";
+          if (value) row.style.setProperty(target, value);
+        }
+        if (Object.keys(resolved.properties || {}).length) setColorData(row, resolved.base || "custom");
+        const open = (e) => { e.preventDefault?.(); e.stopPropagation?.(); askRootStyle(); };
+        row.addEventListener("click", open);
+        row.addEventListener("contextmenu", open);
+        row.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") open(e); });
+        return row;
+      }
       function buildFolderRow(node, depth, count) {
         const open = !node.collapsed;
         const chev = iconButton("caret", open ? "Collapse" : "Expand", "zn-chev");
@@ -9031,7 +9218,7 @@ __zentralShim.register = function (def) {
           h("span", { class: "zn-item-actions" }, add, more),
         );
         row.style.setProperty("--d", String(depth));
-        const resolved = resolveFolderVisual({ b: node.color, d: node.parts, o: node.opacity });
+        const resolved = resolveFolderVisual({ b: node.color, d: node.parts, o: node.opacity }, depth + 2);
         const visualParts = resolved.parts || {};
         const rowColor = resolved.base || cleanHex(visualParts.accent) || cleanHex(visualParts.front) || cleanHex(visualParts.back) || cleanHex(visualParts.label) || "";
         const hasVisual = Object.keys(resolved.properties || {}).length > 0;
@@ -9150,6 +9337,9 @@ __zentralShim.register = function (def) {
           listItems.append(h("p", { class: "zn-empty" }, "No notes yet. Press + to create one."));
           return;
         }
+        // The NOTES folder itself (level 1 in the Zen sidebar): its own row at the top of the tree, so its colors are one
+        // click away (click, or the palette button) instead of a small icon next to Trash.
+        if (rows.length || treeMode()) listItems.append(buildRootRow());
         let shown = 0;
         for (const r of rows) {
           if (shown >= MAX_LIST_ROWS) break;
@@ -9164,12 +9354,22 @@ __zentralShim.register = function (def) {
       }
       // Small dialogs for folder actions (one text field, a confirm, a target picker).
       // Colour and icon of a folder: shown in this tree and on the folder in the Zen sidebar. The icon is one emoji.
-      function askFolderStyle(node, save, title) {
+      function askFolderStyle(node, save, title, level = 2) {
+        // Same controls and rules as the Zen sidebar editor of Colorful Folders: Simple = a primary color (the folder) and
+        // a secondary color (its outline), Detailed = every layer with its own transparency. In Simple, choosing a color or
+        // a look drops the Detailed layers (Simple overrides Detailed); a Detailed layer left on Auto follows the primary.
         let color = node.color || "";
         let parts = cleanFolderParts(node.parts);
         let opacity = cleanFolderOpacity(node.opacity);
+        let editMode = colorfulFolderDefaults().mode;
         const f = field("Icon (one emoji, empty = folder)", node.icon || "", "e.g. 📓");
         f.input.maxLength = 24;
+        const status = h("div", { class: "zn-fstyle-status", role: "status", "aria-live": "polite" });
+        const edgeOnly = () => (parts.stroke ? { stroke: parts.stroke } : {});
+
+        const simpleTab = chip("Simple");
+        const detailTab = chip("Detailed");
+        const modes = h("div", { class: "zn-fstyle-modes", role: "tablist" }, simpleTab, detailTab);
 
         const palette = h("div", { class: "zn-fstyle-presets" });
         const presetButtons = [];
@@ -9183,17 +9383,15 @@ __zentralShim.register = function (def) {
             const button = chip(theme.n);
             button._theme = theme;
             button.title = group.group + " · " + theme.n;
-            button.style.background = "linear-gradient(135deg, " + (theme.d?.back || theme.b) + " 0 35%, " + (theme.d?.front || theme.b) + " 35% 70%, " + (theme.d?.accent || theme.b) + " 70% 100%)";
-            button.style.borderColor = theme.b;
+            button.style.background = "linear-gradient(135deg, " + (theme.d?.back || theme.b) + " 0 35%, " + (theme.d?.front || theme.b) + " 35% 70%, " + (theme.d?.stroke || theme.b) + " 70% 100%)";
+            button.style.borderColor = theme.d?.stroke || theme.b;
             button.addEventListener("click", () => {
-              if (Object.keys(theme.d || {}).length || Object.keys(theme.o || {}).length)
-                useDetailedFolderMode();
               color = theme.b;
               parts = cleanFolderParts(theme.d);
               opacity = cleanFolderOpacity(theme.o);
-              syncDetails();
-              syncPalette();
-              picker?.sync?.(color);
+              if (FOLDER_STYLE.needsDetailed(theme)) setMode("detailed");
+              else if (editMode === "simple") parts = edgeOnly();
+              syncAll();
             });
             presetButtons.push(button);
             row.append(button);
@@ -9201,73 +9399,136 @@ __zentralShim.register = function (def) {
           palette.append(row);
         }
 
+        // primary color: the shared picker (system picker, #rrggbb, saved quick colors)
         const picker = colorPicker(colorHex(color) || cleanHex(color), (v) => {
           color = v;
+          if (editMode === "simple") parts = edgeOnly();
+          syncAll(true);
+        });
+        const primaryAuto = chip("Auto (follow Zen)");
+        primaryAuto.addEventListener("click", () => { color = ""; syncAll(); });
+        const primaryBox = h("div", {}, h("div", { class: "zn-fstyle-group-label" }, "Primary color (the folder)"), picker.el, primaryAuto);
+
+        // secondary color: the outline
+        const edgeInput = h("input", { type: "color", class: "zn-color-input", "aria-label": "Secondary outline color" });
+        const edgeHex = h("input", { type: "text", class: "zn-hex-field", maxlength: "7", spellcheck: "false", placeholder: "auto", "aria-label": "Secondary outline color hex" });
+        const edgeAuto = chip("Auto");
+        const edgeWarn = h("div", { class: "zn-fstyle-warn", role: "status" });
+        const setEdge = (value) => {
+          const hex = cleanHex(value);
+          if (!hex) return;
+          parts.stroke = hex;
+          syncAll(false, true);
+        };
+        edgeInput.addEventListener("input", () => setEdge(edgeInput.value));
+        edgeHex.addEventListener("input", () => { const raw = edgeHex.value.trim(); setEdge(raw.startsWith("#") ? raw : "#" + raw); });
+        edgeAuto.addEventListener("click", () => { delete parts.stroke; syncAll(); });
+        const edgeRow = h("div", { class: "zn-fstyle-edge" }, h("span", {}, "Secondary color (outline)"), edgeInput, edgeHex, edgeAuto);
+
+        // folder transparency (simple): one slider for the two big layers
+        const bodyAlpha = h("input", { type: "range", min: "0", max: "100", step: "1", "aria-label": "Folder transparency" });
+        const bodyAlphaValue = h("output", { class: "zn-fstyle-opacity-value" }, "Auto");
+        bodyAlpha.addEventListener("input", () => {
+          const v = Number(bodyAlpha.value);
+          if (v >= 100) { delete opacity.back; delete opacity.front; } else { opacity.back = v; opacity.front = v; }
+          bodyAlphaValue.textContent = v >= 100 ? "Auto" : v + "%";
           syncPalette();
         });
-        const detail = h("details", { class: "zn-fstyle-details" }, h("summary", {}, "Fine tune each folder layer · color and transparency"));
+        const alphaRow = h("div", { class: "zn-fstyle-edge" }, h("span", {}, "Folder opacity (0% = transparent)"), bodyAlpha, bodyAlphaValue);
+
+        const detail = h("div", { class: "zn-fstyle-details" });
         const partInputs = new Map();
         const partLabels = {
           back: "Icon: back", front: "Icon: front", stroke: "Icon: outline and glyph",
           label: "Folder name", accent: "Accent and group line", tint: "Soft tint", hover: "Hover background",
         };
-        const syncDetails = () => {
+        for (const part of FOLDER_PARTS) {
+          const input = h("input", { type: "color", class: "zn-color-input", "aria-label": partLabels[part] });
+          const hex = h("input", { type: "text", class: "zn-hex-field", maxlength: "7", spellcheck: "false", placeholder: "auto", "aria-label": partLabels[part] + " hex" });
+          const alpha = h("input", { type: "range", min: "0", max: "100", step: "1", "aria-label": partLabels[part] + " opacity" });
+          const opacityValue = h("output", { class: "zn-fstyle-opacity-value" }, "Auto");
+          const auto = chip("Auto");
+          const opacityRow = h("span", { class: "zn-fstyle-opacity" }, h("span", {}, "Opacity"), alpha, opacityValue);
+          const line = h("div", { class: "zn-fstyle-part" }, h("span", {}, partLabels[part]), input, hex, opacityRow, auto);
+          const setPart = (raw) => {
+            const value = cleanHex(raw.startsWith("#") || raw === "" ? raw : "#" + raw);
+            if (value) { parts[part] = value; syncAll(false, false, part); }
+          };
+          input.addEventListener("input", () => setPart(input.value));
+          hex.addEventListener("input", () => setPart(hex.value.trim()));
+          alpha.addEventListener("input", () => {
+            opacity[part] = Number(alpha.value);
+            opacityValue.textContent = alpha.value + "%";
+            syncPalette();
+          });
+          auto.addEventListener("click", () => { delete parts[part]; delete opacity[part]; syncAll(); });
+          detail.append(line);
+          partInputs.set(part, { input, hex, opacity: alpha, opacityValue });
+        }
+        function syncAll(skipPrimary = false, skipEdge = false, skipPart = "") {
+          if (!skipPrimary) picker.sync(colorHex(color) || "#667788");
+          const edge = parts.stroke || "";
+          if (!skipEdge) { edgeInput.value = edge || colorHex(color) || "#667788"; edgeHex.value = edge; }
+          edgeWarn.textContent = colorHex(color) && edge && FOLDER_STYLE.contrast(colorHex(color), edge) < 1.6 ? "Outline and folder colors are very close; the outline will be hard to see." : "";
+          const a = opacity.back === undefined ? 100 : opacity.back;
+          bodyAlpha.value = String(a);
+          bodyAlphaValue.textContent = opacity.back === undefined ? "Auto" : a + "%";
           for (const [part, controls] of partInputs) {
+            if (part === skipPart) continue;
             controls.input.value = parts[part] || colorHex(color) || "#667788";
             controls.hex.value = parts[part] || "";
             controls.opacity.value = String(opacity[part] === undefined ? 100 : opacity[part]);
             controls.opacityValue.textContent = opacity[part] === undefined ? "Auto" : opacity[part] + "%";
           }
-        };
-        for (const part of FOLDER_PARTS) {
-          const input = h("input", { type: "color", class: "zn-color-input", "aria-label": partLabels[part] });
-          const hex = h("input", { type: "text", class: "zn-hex-field", maxlength: "7", spellcheck: "false", placeholder: "auto", "aria-label": partLabels[part] + " hex" });
-          const alpha = h("input", { type: "range", min: "0", max: "100", step: "1", "aria-label": partLabels[part] + " opacity" });
-          const opacityValue = h("output", { class: "zn-fstyle-opacity-value" }, opacity[part] === undefined ? "Auto" : opacity[part] + "%");
-          const auto = chip("Auto");
-          const opacityRow = h("span", { class: "zn-fstyle-opacity" }, h("span", {}, "Opacity (0% = transparent)"), alpha, opacityValue);
-          const line = h("div", { class: "zn-fstyle-part" }, h("span", {}, partLabels[part]), input, hex, opacityRow, auto);
-          input.addEventListener("input", () => {
-            const value = cleanHex(input.value);
-            if (value) { useDetailedFolderMode(); parts[part] = value; hex.value = value; syncPalette(); }
-          });
-          hex.addEventListener("input", () => {
-            const raw = hex.value.trim();
-            const value = cleanHex(raw.startsWith("#") ? raw : "#" + raw);
-            if (value) { useDetailedFolderMode(); parts[part] = value; input.value = value; syncPalette(); }
-          });
-          alpha.addEventListener("input", () => {
-            useDetailedFolderMode();
-            opacity[part] = Number(alpha.value);
-            opacityValue.textContent = alpha.value + "%";
-            syncPalette();
-          });
-          auto.addEventListener("click", () => {
-            delete parts[part];
-            delete opacity[part];
-            syncDetails();
-            syncPalette();
-          });
-          detail.append(line);
-          partInputs.set(part, { input, hex, opacity: alpha, opacityValue });
+          syncPalette();
         }
-        syncDetails();
-        syncPalette();
-        const ok = chip("Save", true);
-        const cancel = chip("Cancel");
-        openCard(title || "Folder color and icon", h("div", { class: "zn-fstyle" }, palette, picker.el, detail, f.row), h("div", { class: "zn-dialog-actions" }, cancel, ok));
-        ok.addEventListener("click", () => {
+        function setMode(next) {
+          editMode = next === "simple" ? "simple" : "detailed";
+          simpleTab.classList.toggle("is-on", editMode === "simple");
+          detailTab.classList.toggle("is-on", editMode === "detailed");
+          simpleTab.setAttribute("aria-selected", String(editMode === "simple"));
+          detailTab.setAttribute("aria-selected", String(editMode === "detailed"));
+          detail.hidden = editMode !== "detailed";
+          alphaRow.hidden = editMode !== "simple";
+          syncAll();
+        }
+        simpleTab.addEventListener("click", () => setMode("simple"));
+        detailTab.addEventListener("click", () => setMode("detailed"));
+
+        const ignoreBox = h("input", { type: "checkbox", "aria-label": "Ignore my folder label color" });
+        ignoreBox.checked = colorfulFolderDefaults().ignoreLabel;
+        ignoreBox.addEventListener("change", () => { try { Services.prefs.setBoolPref(COLORFUL_FOLDER_PREF + "ignore_label", ignoreBox.checked); } catch (_) {} });
+        const ignoreRow = h("label", { class: "zn-fstyle-check" }, ignoreBox, h("span", {}, "Ignore my folder label color (let the Zen theme decide, keeps names readable when a theme changes)"));
+
+        setMode(editMode);
+        const apply = chip("Apply");
+        const ok = chip("Apply and close", true);
+        const reset = chip("Reset");
+        const cancel = chip("Close");
+        openCard(
+          title || "Folder color and icon",
+          h("div", { class: "zn-fstyle" }, modes, primaryBox, edgeRow, edgeWarn, alphaRow, detail, h("div", { class: "zn-fstyle-group-label" }, "Collections"), palette, ignoreRow, f.row, status),
+          h("div", { class: "zn-dialog-actions" }, reset, cancel, apply, ok),
+        );
+        const commit = (closeAfter) => {
           const icon = f.input.value.trim();
           if (icon && !cleanFolderIcon(icon)) {
             f.input.dataset.bad = "true";
             f.input.focus?.();
             return;
           }
-          closeDialog();
-          if (save) save(color, icon, parts, opacity);
-          else store.setFolderStyle(node.id, { color, icon, parts, opacity });
+          // The shared Simple/Detailed mode is written only when the person applies.
+          setFolderMode(editMode);
+          const out = editMode === "simple" ? edgeOnly() : parts;
+          if (save) save(color, icon, out, opacity);
+          else store.setFolderStyle(node.id, { color, icon, parts: out, opacity });
           scheduleList();
-        });
+          if (closeAfter) closeDialog();
+          else status.textContent = "Applied.";
+        };
+        apply.addEventListener("click", () => commit(false));
+        ok.addEventListener("click", () => commit(true));
+        reset.addEventListener("click", () => { color = ""; parts = {}; opacity = {}; syncAll(); commit(false); status.textContent = "Reset."; });
         cancel.addEventListener("click", closeDialog);
       }
       // The NOTES root folder in the Zen sidebar uses the same per-layer schema.
@@ -9279,8 +9540,14 @@ __zentralShim.register = function (def) {
             setPref(PREF.ZEN_ROOT_ICON, i);
             setPref(PREF.ZEN_ROOT_PARTS, serializeFolderParts(p));
             setPref(PREF.ZEN_ROOT_PART_OPACITY, serializeFolderOpacity(o));
+            // Repaint the sidebar folder now instead of waiting for a preference observer.
+            try {
+              const rootFolder = document.querySelector?.('zen-folder[bgalazka-notes-folder="true"]');
+              if (rootFolder) window.__zentralNotesFolderColorBridge?.refresh?.(rootFolder);
+            } catch (_) {}
           },
           "NOTES folder in the Zen sidebar",
+          1,
         );
       }
       // ---- custom colors (T3.6) -------------------------------------------------------------------
@@ -11607,7 +11874,6 @@ __zentralShim.register = function (def) {
       }
       listen(btnNew, "click", () => newNoteChooser());
       listen(btnFolder, "click", () => askFolderName("New folder", "", (name) => store.addFolder(name, "")));
-      listen(btnRoot, "click", () => askRootStyle());
       listen(chipAll, "contextmenu", (e) => {
         e.preventDefault();
         askRootStyle();
@@ -14141,6 +14407,12 @@ __zentralShim.register = function (def) {
       };
       window.__zentralNotesFolderColorBridge = notesFolderColorBridge;
       const onSharedFolderStyleChange = () => {
+        // A changed default restyles folders whose own record did not change, so repaint every Notes folder.
+        try {
+          for (const folder of document.querySelectorAll?.("zen-folder") || [])
+            if (folder.id === NOTES_ZEN_ROOT_ID || notesKeyFromId(folder.id) || folder.hasAttribute?.("bgalazka-notes-folder") || folder.hasAttribute?.("bgalazka-notes-subfolder"))
+              notesFolderColorBridge.refresh(folder);
+        } catch (_) {}
         if (zenMode() !== "off") zenSoon();
         for (const binding of [...bindings.values(), floating]) {
           const sheet = typeof binding?.sheet === "function" ? binding.sheet() : binding?.sheet;
@@ -14148,9 +14420,11 @@ __zentralShim.register = function (def) {
         }
       };
       window.addEventListener("zentral-folder-color-style-bridge-ready", onSharedFolderStyleChange);
+      window.addEventListener("zentral-folder-color-defaults-changed", onSharedFolderStyleChange);
       window.addEventListener("zentral-folder-color-style-bridge-gone", onSharedFolderStyleChange);
       onCleanup(() => {
         window.removeEventListener("zentral-folder-color-style-bridge-ready", onSharedFolderStyleChange);
+        window.removeEventListener("zentral-folder-color-defaults-changed", onSharedFolderStyleChange);
         window.removeEventListener("zentral-folder-color-style-bridge-gone", onSharedFolderStyleChange);
       });
       window.dispatchEvent?.(new Event("zentral-notes-folder-color-bridge-ready"));
@@ -14341,6 +14615,29 @@ __zentralShim.register = function (def) {
         }
         if (zenCtxTab) document.documentElement.setAttribute("zentral-notes-ctx", "item");
       };
+      // T3.4: right-click on a Notes folder in the Zen sidebar gets "New note in this folder". (Colors and icon come from
+      // the Colorful Folders menu entry; the folder id is read from the folder's own attributes, never from its label.)
+      const onFolderMenuShowing = (ev) => {
+        const menu = ev.target;
+        if (menu?.id !== "zenFolderActions") return;
+        for (const own of [...menu.querySelectorAll?.("[zentral-notes-folder-own]") || []]) own.remove();
+        let folder = null;
+        for (const node of [menu.triggerNode, ev.originalTarget, menu.anchorNode]) {
+          folder = node?.closest?.("zen-folder") || null;
+          if (folder) break;
+        }
+        if (!folder) return;
+        const isRoot = folder === zenRootEl() || folder.id === NOTES_ZEN_ROOT_ID || folder.hasAttribute?.("bgalazka-notes-folder");
+        const key = isRoot ? "" : folder.getAttribute?.("bgalazka-notes-subfolder") || notesKeyFromId(folder.id);
+        if (!isRoot && !key) return;
+        const meta = isRoot ? null : store.meta?.folders?.find((item) => key === "f:" + item.uid || key === "f:" + item.id);
+        if (!isRoot && !meta) return;
+        const item = document.createXULElement("menuitem");
+        item.setAttribute("label", "New note in this folder");
+        item.setAttribute("zentral-notes-folder-own", "new");
+        item.addEventListener("command", () => { store.create("", isRoot ? (zenMode() === "selected" ? TABBAR_FOLDER : "") : meta.id); });
+        menu.append(item);
+      };
       const onTabMenuHidden = (ev) => {
         if (ev.target?.id === "tabContextMenu") { document.documentElement.removeAttribute("zentral-notes-ctx"); zenCtxTab = null; }
       };
@@ -14356,10 +14653,11 @@ __zentralShim.register = function (def) {
         window[act]("TabSelect", onZenSelect, true);
         for (const ty of ["dragover", "drop"]) window[act](ty, onZenDrop, true);
         window[act]("popupshowing", onTabMenuShowing, true);
+        window[act]("popupshowing", onFolderMenuShowing, true);
         window[act]("popuphidden", onTabMenuHidden, true);
         if (!on) {
           document.documentElement.removeAttribute("zentral-notes-ctx");
-          document.querySelectorAll?.("[zentral-notes-own]").forEach((n) => n.remove());
+          document.querySelectorAll?.("[zentral-notes-own],[zentral-notes-folder-own]").forEach((n) => n.remove());
         }
       }
       onCleanup(() => bindZen(false));

@@ -49,6 +49,7 @@ Sine pulls later updates from this repository; every change raises the module's 
 | **[Sidebar Video Preview](https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/video)**              | Shows a playing video from any tab in the sidebar. Play/pause, mute, seek and resize it, show mirrored subtitles, and double-click to enlarge it into a draggable, resizable Big Preview. | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/video`              |
 | **[Notes](https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/notes)**                              | Quick notes that open over the panel you are using: several notes, highlights, checklists, search, trash and Save to file. Stored as plain Markdown files, not in preferences.            | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/notes`              |
 | **[RSS Display](https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/rss)**                          | Cleaner display for Zen live-folder RSS items, plus a hover reader card with Open, Dismiss and Dismiss all.                                                                               | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/rss`                |
+| **[Colorful Folders](https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/folders)** | Right-click any Zen folder to change its colors: a primary and a secondary (outline) color, or every layer with its own transparency. Style collections (classic yellow, dark glass, sticky notes, neon outline), saved quick themes and separate defaults for each nesting level. Stays in sync with the Notes folders. |
 | **[Library Resize](https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/library)**                   | Makes Zen's native Library behave like a side panel: overlay the page or resize it, with an optional custom (or Arc 2.0-matched) Library background.                                      | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/library`            |
 | **[Tab Unload](https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/tabs/unloading)**                | Middle-click a loaded tab to unload it instead of closing it. Already unloaded tabs close normally.                                                                                       | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/tabs/unloading`     |
 | **[Background Tab Drag](https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/tabs/dragging)**        | Reorder background tabs, folders and split-view groups without switching to them first.                                                                                                   | `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/tabs/dragging`      |
@@ -246,6 +247,26 @@ Keyboard shortcuts and image-click playback can be disabled separately. Text fie
 
 Big Preview is an in-browser player. Capture support, captions and playback commands can vary by site and Zen version. It is still being refined.
 
+### 🎨 Colorful folders
+
+Every Zen folder, including the NOTES folder and its subfolders, can have its own look. Right-click a folder, choose **Folder colors**, and pick a look from a collection or open the editor.
+
+- **Simple:** two colors. The *primary* color is the folder, the *secondary* color is its outline; everything else (back, front, label, accent, tint, hover) is derived with safe contrast.
+- **Detailed:** every layer has its own color and transparency (0% is fully transparent). Simple always overrides Detailed when you pick a Simple color, so Simple is the quick first step and Detailed the fine tuning.
+- **Collections:** *Classic yellow folders*, *Dark glass* (semi-transparent with calm, contrasty outlines), *Sticky notes*, *Neon outline*, plus dark, high-contrast and colorful sets. A collection can be spread over folder levels: top-level folders, subfolders, second subfolders and so on (up to 5 levels), each with its own look.
+- **Your own themes:** save any look as a quick theme; it appears in the right-click menu and in the editor.
+- **Safe by design:** a folder's color is stored under a salted hash, never its name; a folder with its own colors is never changed by defaults; folders are never created, moved or removed by this module.
+- **Works with Notes:** one shared style model, so the Zen sidebar and the All notes tree always match.
+
+<p align="center">
+  <img src="../assets/PLACEHOLDER-colorful-folders-menu.png" alt="Folder colors right-click menu (picture coming soon)" width="260" />
+  <img src="../assets/PLACEHOLDER-colorful-folders-editor.png" alt="Folder color editor, Simple and Detailed (picture coming soon)" width="260" />
+</p>
+<p align="center">
+  <img src="../assets/PLACEHOLDER-colorful-folders-collections.png" alt="Collections: yellow, dark glass, sticky notes (picture coming soon)" width="260" />
+  <img src="../assets/PLACEHOLDER-colorful-folders-levels.png" alt="Different looks per folder level (picture coming soon)" width="260" />
+</p>
+
 ### Appearance
 
 The appearance system (palettes, translucency, Atelier/Classic settings) is an Extended addition and is not part of the Zentral 1.1.0 base.
@@ -331,6 +352,12 @@ For sidebar resizing problems, mention whether the sidebar is on the left or rig
   <img src="../assets/Groups.jpg" alt="Groups" width="180" />
   <img src="../assets/Settings.png" alt="Settings" width="180" />
   <img src="../assets/Zentral.jpg" alt="Zentral" width="180" />
+</p>
+
+<p align="center">
+  <img src="../assets/PLACEHOLDER-notes.png" alt="Notes (picture coming soon)" width="180" />
+  <img src="../assets/PLACEHOLDER-colorful-folders.png" alt="Colorful folders (picture coming soon)" width="180" />
+  <img src="../assets/PLACEHOLDER-tabbar-widgets.png" alt="Tab bar widgets, planned (picture coming soon)" width="180" />
 </p>
 
 <p align="center">

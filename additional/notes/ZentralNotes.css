@@ -1368,3 +1368,27 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zn-fstyle-part { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
 .zn-fstyle-part > span { flex: 1; min-width: 0; font-size: 12px; }
 .zn-fstyle-part input[type=color] { width: 36px; height: 26px; padding: 0; }
+
+/* Accent line, soft tint and hover layers of a Notes folder in the Zen sidebar. Zen hides its own group line and draws folders
+   from its own variables, so these layers need rules of their own; a layer is drawn only when the folder lists it in
+   bgalazka-fc-layers (the same attribute and rules Colorful Folders uses for ordinary folders). */
+zen-folder[bgalazka-fc-layers~="accent"] > .tab-group-container { box-shadow: inset 2px 0 0 0 var(--bgalazka-fc-accent) !important; }
+zen-folder[bgalazka-fc-layers~="accent"] .tab-group-line { background-color: var(--bgalazka-fc-accent) !important; }
+zen-folder[bgalazka-fc-layers~="tint"] > .tab-group-label-container,
+zen-folder[bgalazka-fc-layers~="tint"] > .tab-group-container { background-color: var(--bgalazka-fc-tint) !important; border-radius: 8px; }
+zen-folder[bgalazka-fc-layers~="hover"] > .tab-group-label-container:hover { background-color: var(--bgalazka-fc-hover) !important; }
+
+/* Folder style dialog: Simple / Detailed switch, status line, root style row. */
+.zentral-notes-sheet .zn-fstyle-modes { display: flex; gap: 0; margin: 6px 0; }
+.zentral-notes-sheet .zn-fstyle-modes .zn-chip { flex: 1; border-radius: 0; }
+.zentral-notes-sheet .zn-fstyle-modes .zn-chip:first-child { border-radius: 8px 0 0 8px; }
+.zentral-notes-sheet .zn-fstyle-modes .zn-chip:last-child { border-radius: 0 8px 8px 0; }
+.zentral-notes-sheet .zn-fstyle-status { min-height: 1.3em; font-size: 11px; opacity: .8; }
+.zentral-notes-sheet .zn-fstyle-check { display: flex; align-items: flex-start; gap: 7px; margin: 8px 0; font-size: 12px; cursor: pointer; }
+.zentral-notes-sheet .zn-fstyle-edge { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 8px 0; }
+.zentral-notes-sheet .zn-fstyle-edge > span:first-child { flex: 1 1 140px; font-size: 12px; }
+.zentral-notes-sheet .zn-fstyle-warn:empty { display: none; }
+.zentral-notes-sheet .zn-fstyle-warn { font-size: 11px; opacity: .85; }
+.zentral-notes-sheet .zn-rootrow { display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin: 2px 0 4px; border-radius: 8px; cursor: pointer; }
+.zentral-notes-sheet .zn-rootrow .zn-frow-icon { color: var(--zn-frow-stroke, currentColor); }
+.zentral-notes-sheet .zn-rootrow .zn-rootrow-name { flex: 1; min-width: 0; font-weight: 700; font-size: 12px; letter-spacing: .04em; }

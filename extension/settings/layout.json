@@ -799,6 +799,7 @@
     "zen.workspace.zentral.folder_colors.enabled",
     "zen.workspace.zentral.folder_colors.menu",
     "zen.workspace.zentral.folder_colors.mode",
+    "zen.workspace.zentral.folder_colors.ignore_label",
     {
       "type": "text",
       "label": "**Colorful folders · Defaults**",

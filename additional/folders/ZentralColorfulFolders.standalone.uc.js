@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Colorful Folders
 // @include chrome://browser/content/browser.xhtml
-// @version 3.2.14
+// @version 3.2.16
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.2.14, the numeric-preference list and
+ * Placeholders replaced by the build: 3.2.16, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.2.14";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.2.16";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -634,6 +634,233 @@ function nativeSidebarSide() {
 (function () {
   "use strict";
 
+  // <<FOLDER-STYLE-CORE v3
+  // One implementation of "which colors does a folder get". The same text sits in ZentralColorfulFolders.uc.js and
+  // ZentralNotes.uc.js (tests/colorful-folders.test.cjs compares the two copies), so the Zen sidebar, the All notes tree and a
+  // Notes-only install can never disagree. Pure: no DOM, no preferences, no timers.
+  //   record  = { b: primary "#rrggbb", d: per-layer colors, o: per-layer opacity 0..100 }
+  //   Simple mode: only `b` (primary) and `d.stroke` (secondary = outline) are read; every other layer is derived from them.
+  //   Detailed mode: `d` layers override the derived ones.
+  //   Precedence for one folder: its own record > the default of its level (1 = root, up to 5) > the all-levels default.
+  //   A folder that has its own colors never inherits default colors or default opacity (a default can not overwrite it).
+  const FOLDER_STYLE = (() => {
+    const PARTS = Object.freeze(["back", "front", "stroke", "label", "accent", "tint", "hover"]);
+    const MAX_DEPTH = 5;
+    const HEX = /^#[0-9a-fA-F]{6}$/;
+    const hex = (v) => (typeof v === "string" && HEX.test(v.trim()) ? v.trim().toLowerCase() : "");
+    const detail = (raw) => {
+      const out = {};
+      if (raw && typeof raw === "object" && !Array.isArray(raw))
+        for (const p of PARTS) {
+          const h = hex(raw[p]);
+          if (h) out[p] = h;
+        }
+      return out;
+    };
+    const opacity = (raw) => {
+      const out = {};
+      if (raw && typeof raw === "object" && !Array.isArray(raw))
+        for (const p of PARTS) {
+          const n = Number(raw[p]);
+          if (raw[p] !== undefined && raw[p] !== null && Number.isInteger(n) && n >= 0 && n <= 100) out[p] = n;
+        }
+      return out;
+    };
+    const norm = (raw) => {
+      const r = raw && typeof raw === "object" ? raw : {};
+      return { b: hex(r.b ?? r.color), d: detail(r.d ?? r.parts), o: opacity(r.o ?? r.opacity) };
+    };
+    const hasColor = (r) => !!r && (!!r.b || Object.keys(r.d).length > 0);
+    const lum = (h) => {
+      const n = parseInt(h.slice(1), 16);
+      const lin = (v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+      return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+    };
+    const textOn = (h) => (lum(h) > 0.4 ? "#1b1b1f" : "#ffffff");
+    const contrast = (a, b) => {
+      const x = hex(a), y = hex(b);
+      if (!x || !y) return 21;
+      const l1 = lum(x), l2 = lum(y);
+      return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    };
+    const mix = (c, pct, other) => `color-mix(in srgb, ${c} ${pct}%, ${other})`;
+    function derive(base, secondary) {
+      const color = hex(base);
+      if (!color) return {};
+      const edge = hex(secondary);
+      return {
+        back: `light-dark(${mix(color, 60, "gray")}, ${mix(color, 60, "#c1c1c1")})`,
+        front: `light-dark(color-mix(in srgb, ${color}, white 70%), color-mix(in srgb, ${color}, black 40%))`,
+        stroke: edge || `light-dark(${mix(color, 50, "black")}, ${mix(color, 15, "#ebebeb")})`,
+        label: `light-dark(${mix(color, 55, "black")}, ${mix(color, 55, "white")})`,
+        accent: color,
+        tint: mix(color, 16, "transparent"),
+        hover: mix(color, 30, "transparent"),
+      };
+    }
+    function partsFor(rec, mode) {
+      const r = norm(rec);
+      const out = r.b ? derive(r.b, r.d.stroke) : {};
+      if (!r.b || mode === "detailed")
+        for (const p of PARTS) if (r.d[p]) out[p] = p === "tint" ? mix(r.d.tint, 22, "transparent") : r.d[p];
+      return out;
+    }
+    function declarations(parts, op) {
+      const out = {};
+      const alpha = opacity(op);
+      const fade = (value, p) => (alpha[p] === undefined || alpha[p] >= 100 ? value : mix(value, alpha[p], "transparent"));
+      for (const p of PARTS) {
+        if (!parts || !parts[p]) continue;
+        const value = fade(parts[p], p);
+        if (p === "back") out["--zen-folder-behind-bgcolor"] = value;
+        else if (p === "front") out["--zen-folder-front-bgcolor"] = value;
+        else if (p === "stroke") out["--zen-folder-stroke"] = value;
+        else if (p === "label") out["--bgalazka-fc-label"] = value;
+        else if (p === "accent") {
+          const on = parts.accentText || "#ffffff";
+          const off = on === "#ffffff" ? "#1b1b1f" : "#ffffff";
+          out["--tab-group-color"] = value;
+          out["--tab-group-background-color"] = value;
+          out["--tab-group-color-invert"] = off;
+          out["--tab-group-text-color"] = on;
+          out["--tab-group-text-color-invert"] = off;
+          out["--bgalazka-fc-accent"] = value;
+        } else if (p === "tint") {
+          out["--tab-group-color-pale"] = value;
+          out["--bgalazka-fc-tint"] = value;
+        } else if (p === "hover") {
+          out["--tab-group-background-color-hover"] = value;
+          out["--bgalazka-fc-hover"] = value;
+        }
+      }
+      return out;
+    }
+    // Every custom property a painter may set; a painter removes the ones a style does not produce.
+    const OWNED = Object.freeze([
+      "--zen-folder-behind-bgcolor", "--zen-folder-front-bgcolor", "--zen-folder-stroke", "--bgalazka-fc-label",
+      "--tab-group-color", "--tab-group-background-color", "--tab-group-color-invert", "--tab-group-text-color",
+      "--tab-group-text-color-invert", "--tab-group-color-pale", "--tab-group-background-color-hover",
+      "--bgalazka-fc-accent", "--bgalazka-fc-tint", "--bgalazka-fc-hover",
+    ]);
+    const clampDepth = (depth) => Math.max(1, Math.min(MAX_DEPTH, Math.floor(Number(depth)) || 1));
+    function parseLayers(raw) {
+      try {
+        const text = String(raw || "");
+        if (!text || text.length > 32768) return {};
+        const parsed = JSON.parse(text);
+        const src = parsed && typeof parsed === "object" ? parsed.l || parsed : {};
+        const out = {};
+        for (let n = 1; n <= MAX_DEPTH; n++) {
+          const r = norm(src[n]);
+          if (hasColor(r) || Object.keys(r.o).length) out[n] = r;
+        }
+        return out;
+      } catch (_) {
+        return {};
+      }
+    }
+    function serializeLayers(layers) {
+      const l = {};
+      for (let n = 1; n <= MAX_DEPTH; n++) {
+        const r = norm(layers && layers[n]);
+        if (hasColor(r) || Object.keys(r.o).length) l[n] = r;
+      }
+      return JSON.stringify({ v: 1, l });
+    }
+    // Level of a folder element = number of zen-folder elements from it up to the root (1 = top level).
+    function elementDepth(el) {
+      let n = 0;
+      for (let c = el; c && n < 64; c = c.parentElement || c.parentNode || c.parent) if (c.localName === "zen-folder" || c.tag === "zen-folder") n++;
+      return clampDepth(n);
+    }
+    // env = { mode, defaults: record, layers: { 1..5: record }, ignoreLabel }
+    function resolve(raw, depth, env) {
+      const e = env && typeof env === "object" ? env : {};
+      const mode = e.mode === "detailed" ? "detailed" : "simple";
+      const own = norm(raw);
+      const level = clampDepth(depth);
+      let source, from;
+      if (hasColor(own)) {
+        source = own;
+        from = "folder";
+      } else {
+        const layer = norm(e.layers && (e.layers[level] ?? e.layers[String(level)]));
+        const global = norm(e.defaults);
+        const pick = hasColor(layer) ? layer : global;
+        from = hasColor(layer) ? "level" : hasColor(global) ? "default" : "none";
+        source = { b: pick.b, d: pick.d, o: { ...pick.o, ...own.o } };
+      }
+      const parts = partsFor(source, mode);
+      if (e.ignoreLabel) delete parts.label;
+      const accent = hex(parts.accent) || source.b;
+      if (accent) parts.accentText = textOn(accent);
+      return { base: source.b, parts, opacity: source.o, properties: declarations(parts, source.o), from, depth: level, mode };
+    }
+    // Collections: ordered groups of looks. Applying a collection to the defaults gives level 1 the first look, level 2 the
+    // second, and so on (cycling), so a root folder, a subfolder and a sub-subfolder stay recognisable but different.
+    // A look keeps to `b`, `d.stroke` (secondary) and `o` wherever it can, so it also works in Simple mode.
+    const COLLECTIONS = Object.freeze([
+      { group: "Classic yellow folders", items: [
+        { n: "Kraft paper", b: "#c8a165", d: { back: "#a98147", front: "#e6c993", stroke: "#5c4120" }, o: {} },
+        { n: "Honey", b: "#f2a900", d: { back: "#d48a00", front: "#ffd26a", stroke: "#6b4300" }, o: {} },
+        { n: "Manila", b: "#e8b923", d: { back: "#c99a1c", front: "#f6d567", stroke: "#7a5a05" }, o: {} },
+        { n: "Butter", b: "#f0cf4a", d: { back: "#d1b232", front: "#fbe88a", stroke: "#75600b" }, o: {} },
+        { n: "Lemon", b: "#f4e04d", d: { back: "#d6c12f", front: "#fff59a", stroke: "#6f6410" }, o: {} },
+      ] },
+      { group: "Dark glass", items: [
+        { n: "Slate glass", b: "#3b4452", d: { stroke: "#8fa3bd" }, o: { back: 55, front: 40 } },
+        { n: "Ink glass", b: "#1f2a44", d: { stroke: "#7f95c9" }, o: { back: 55, front: 38 } },
+        { n: "Moss glass", b: "#23392f", d: { stroke: "#7fb69a" }, o: { back: 55, front: 40 } },
+        { n: "Wine glass", b: "#3b2230", d: { stroke: "#c487a6" }, o: { back: 55, front: 40 } },
+        { n: "Ember glass", b: "#3a2a1f", d: { stroke: "#d9a066" }, o: { back: 55, front: 40 } },
+      ] },
+      { group: "Sticky notes", items: [
+        { n: "Canary", b: "#ffe066", d: { back: "#e9c93a", front: "#fff1a8", stroke: "#8a6d00" }, o: {} },
+        { n: "Pink slip", b: "#ff8fb3", d: { back: "#ec6f98", front: "#ffc2d6", stroke: "#8c2149" }, o: {} },
+        { n: "Mint note", b: "#7be0b5", d: { back: "#52c796", front: "#b9f3da", stroke: "#0f6a47" }, o: {} },
+        { n: "Sky memo", b: "#7cc4ff", d: { back: "#52a8ec", front: "#c1e3ff", stroke: "#124d82" }, o: {} },
+        { n: "Peach", b: "#ffb27a", d: { back: "#ef9558", front: "#ffd6b8", stroke: "#8a4310" }, o: {} },
+      ] },
+      { group: "Neon outline", items: [
+        { n: "Cyan line", b: "#12202b", d: { stroke: "#2fd8ec" }, o: { back: 70, front: 55 } },
+        { n: "Magenta line", b: "#26122b", d: { stroke: "#e45be0" }, o: { back: 70, front: 55 } },
+        { n: "Lime line", b: "#1b2612", d: { stroke: "#a6dd3c" }, o: { back: 70, front: 55 } },
+        { n: "Orange line", b: "#2b1d10", d: { stroke: "#f0922a" }, o: { back: 70, front: 55 } },
+        { n: "Violet line", b: "#1c1530", d: { stroke: "#9b83f2" }, o: { back: 70, front: 55 } },
+      ] },
+      { group: "Dark folders", items: [
+        { n: "Graphite", b: "#343a40", d: {}, o: {} },
+        { n: "Midnight", b: "#202b3b", d: {}, o: {} },
+        { n: "Deep forest", b: "#234236", d: {}, o: {} },
+        { n: "Plum shadow", b: "#493047", d: {}, o: {} },
+      ] },
+      { group: "High contrast", items: [
+        { n: "Amber", b: "#d97706", d: { front: "#ffe0a3", stroke: "#3b2100" }, o: {} },
+        { n: "Aqua", b: "#087e8b", d: { front: "#b9f4f4", stroke: "#032f36" }, o: {} },
+        { n: "Rose", b: "#be3455", d: { front: "#ffd2df", stroke: "#3d0716" }, o: {} },
+        { n: "Electric blue", b: "#2557d6", d: { front: "#d8e5ff", stroke: "#071b50" }, o: {} },
+      ] },
+      { group: "Colorful", items: [
+        { n: "Coral", b: "#ff8066", d: {}, o: {} },
+        { n: "Mint", b: "#40b99a", d: {}, o: {} },
+        { n: "Lavender", b: "#9c83e6", d: {}, o: {} },
+        { n: "Sunflower", b: "#e5bd38", d: {}, o: {} },
+      ] },
+    ]);
+    // A look needs Detailed mode only when it sets a layer other than the secondary (outline) color.
+    const needsDetailed = (look) => Object.keys(detail(look && look.d)).some((p) => p !== "stroke");
+    // Collection -> { 1: look, 2: look, ... } for the five default levels.
+    function spreadCollection(group) {
+      const items = (group && Array.isArray(group.items) ? group.items : []).map(norm).filter(hasColor);
+      const out = {};
+      if (!items.length) return out;
+      for (let n = 1; n <= MAX_DEPTH; n++) out[n] = items[(n - 1) % items.length];
+      return out;
+    }
+    return Object.freeze({ PARTS, MAX_DEPTH, OWNED, COLLECTIONS, hex, detail, opacity, norm, hasColor, lum, textOn, contrast, derive, partsFor, declarations, clampDepth, parseLayers, serializeLayers, elementDepth, resolve, needsDetailed, spreadCollection });
+  })();
+  // FOLDER-STYLE-CORE>>
+
   const Services =
     globalThis.Services ||
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs").Services;
@@ -647,16 +874,10 @@ function nativeSidebarSide() {
     SALT: PREFIX + "salt",
     THEMES: PREFIX + "themes",
     OPACITY_SCHEMA: PREFIX + "opacity_schema",
+    LAYERS: PREFIX + "default_layers",
+    IGNORE_LABEL: PREFIX + "ignore_label",
   });
-  const PARTS = Object.freeze([
-    "back",
-    "front",
-    "stroke",
-    "label",
-    "accent",
-    "tint",
-    "hover",
-  ]);
+  const PARTS = FOLDER_STYLE.PARTS;
   const PART_LABELS = Object.freeze({
     back: "Icon: back",
     front: "Icon: front",
@@ -672,22 +893,8 @@ function nativeSidebarSide() {
   const OPACITY_PREFS = Object.freeze(
     Object.fromEntries(PARTS.map((part) => [part, PREFIX + "default_" + part + "_opacity"])),
   );
-  const PART_PROPS = Object.freeze({
-    back: ["--zen-folder-behind-bgcolor"],
-    front: ["--zen-folder-front-bgcolor"],
-    stroke: ["--zen-folder-stroke"],
-    label: ["--bgalazka-fc-label"],
-    accent: [
-      "--tab-group-color",
-      "--tab-group-background-color",
-      "--tab-group-color-invert",
-      "--tab-group-text-color",
-      "--tab-group-text-color-invert",
-    ],
-    tint: ["--tab-group-color-pale"],
-    hover: ["--tab-group-background-color-hover"],
-  });
   const MARK = "bgalazka-folder-colors";
+  const LAYERS_ATTR = "bgalazka-fc-layers";
   const MENU_MARK = "bgalazka-fc-menu";
   const MAX_RECORDS = 400;
   const MAX_THEMES = 24;
@@ -710,40 +917,11 @@ function nativeSidebarSide() {
   // ---------------------------------------------- pure, testable colour/data core
   const HEX_RE = /^#[0-9a-fA-F]{6}$/;
   const HASH_RE = /^[0-9a-f]{64}$/;
-  const cleanHex = (value) =>
-    typeof value === "string" && HEX_RE.test(value.trim())
-      ? value.trim().toLowerCase()
-      : "";
+  const cleanHex = FOLDER_STYLE.hex;
   const cleanHash = (value) =>
     typeof value === "string" && HASH_RE.test(value) ? value : "";
-  const cleanDetail = (raw) => {
-    const out = {};
-    if (raw && typeof raw === "object" && !Array.isArray(raw))
-      for (const part of PARTS) {
-        const value = cleanHex(raw[part]);
-        if (value) out[part] = value;
-      }
-    return out;
-  };
-  const cleanOpacity = (raw) => {
-    const out = {};
-    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-      for (const part of PARTS) {
-        const value = Number(raw[part]);
-        if (
-          raw[part] !== undefined &&
-          raw[part] !== null &&
-          Number.isFinite(value) &&
-          Number.isInteger(value) &&
-          value >= 0 &&
-          value <= 100
-        ) {
-          out[part] = value;
-        }
-      }
-    }
-    return out;
-  };
+  const cleanDetail = FOLDER_STYLE.detail;
+  const cleanOpacity = FOLDER_STYLE.opacity;
   const hasColor = (record) =>
     !!record &&
     (!!cleanHex(record.b) || PARTS.some((part) => cleanHex(record.d?.[part])) || Object.keys(cleanOpacity(record.o)).length > 0);
@@ -807,76 +985,11 @@ function nativeSidebarSide() {
       return [];
     }
   }
-  const luminance = (hex) => {
-    const n = parseInt(hex.slice(1), 16);
-    const linear = (value) => {
-      const s = value / 255;
-      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
-    };
-    return (
-      0.2126 * linear((n >> 16) & 255) +
-      0.7152 * linear((n >> 8) & 255) +
-      0.0722 * linear(n & 255)
-    );
-  };
-  const textOn = (hex) =>
-    luminance(hex) > 0.4 ? "#1b1b1f" : "#ffffff";
-  const mix = (hex, percent, other) =>
-    `color-mix(in srgb, ${hex} ${percent}%, ${other})`;
-  function derive(base) {
-    const color = cleanHex(base);
-    if (!color) return {};
-    return {
-      back: `light-dark(${mix(color, 60, "gray")}, ${mix(color, 60, "#c1c1c1")})`,
-      front: `light-dark(color-mix(in srgb, ${color}, white 70%), color-mix(in srgb, ${color}, black 40%))`,
-      stroke: `light-dark(${mix(color, 50, "black")}, ${mix(color, 15, "#ebebeb")})`,
-      label: `light-dark(${mix(color, 55, "black")}, ${mix(color, 55, "white")})`,
-      accent: color,
-      tint: mix(color, 22, "transparent"),
-      hover: mix(color, 85, "white"),
-    };
-  }
-  function partsFor(record, mode = "simple") {
-    if (!record) return {};
-    const base = cleanHex(record.b);
-    const detail = cleanDetail(record.d);
-    const out = base ? derive(base) : {};
-    if (!base || mode === "detailed")
-      for (const part of PARTS)
-        if (detail[part])
-          out[part] =
-            part === "tint" ? mix(detail[part], 22, "transparent") : detail[part];
-    const accent = cleanHex(
-      !base || mode === "detailed" ? detail.accent || base : base,
-    );
-    if (out.accent && accent) out.accentText = textOn(accent);
-    return out;
-  }
-  function declarations(parts, opacity = {}) {
-    const out = {};
-    const alpha = cleanOpacity(opacity);
-    const withOpacity = (value, part) => {
-      const pct = alpha[part];
-      return pct === undefined || pct >= 100 ? value : `color-mix(in srgb, ${value} ${pct}%, transparent)`;
-    };
-    for (const part of PARTS) {
-      const rawValue = parts?.[part];
-      if (!rawValue) continue;
-      const value = withOpacity(rawValue, part);
-      if (part === "accent") {
-        const on = parts.accentText || "#ffffff";
-        const off = on === "#ffffff" ? "#1b1b1f" : "#ffffff";
-        out["--tab-group-color"] = value;
-        out["--tab-group-background-color"] = value;
-        out["--tab-group-color-invert"] = off;
-        out["--tab-group-text-color"] = on;
-        out["--tab-group-text-color-invert"] = off;
-      } else {
-        for (const property of PART_PROPS[part]) out[property] = value;
-      }
-    }
-    return out;
-  }
+  const derive = FOLDER_STYLE.derive;
+  const partsFor = FOLDER_STYLE.partsFor;
+  const declarations = FOLDER_STYLE.declarations;
+  const textOn = FOLDER_STYLE.textOn;
+  const mix = (hex, percent, other) => `color-mix(in srgb, ${hex} ${percent}%, ${other})`;
 
   // Small synchronous SHA-256. The browser's Web Crypto is asynchronous; this
   // keeps lookup and save operations synchronous in both Gecko and Node tests.
@@ -946,35 +1059,7 @@ function nativeSidebarSide() {
   const hashKey = (salt, kind, value) =>
     value ? sha256Hex(salt + "\u0000" + kind + "\u0000" + value) : "";
 
-  const BUILTIN_THEMES = Object.freeze([
-    {
-      group: "Dark folders",
-      items: [
-        { n: "Graphite", b: "#343a40", d: {}, o: {} },
-        { n: "Midnight", b: "#202b3b", d: {}, o: {} },
-        { n: "Deep forest", b: "#234236", d: {}, o: {} },
-        { n: "Plum shadow", b: "#493047", d: {}, o: {} },
-      ],
-    },
-    {
-      group: "High contrast",
-      items: [
-        { n: "Amber", b: "#d97706", d: { front: "#ffe0a3", stroke: "#3b2100" }, o: {} },
-        { n: "Aqua", b: "#087e8b", d: { front: "#b9f4f4", stroke: "#032f36" }, o: {} },
-        { n: "Rose", b: "#be3455", d: { front: "#ffd2df", stroke: "#3d0716" }, o: {} },
-        { n: "Electric blue", b: "#2557d6", d: { front: "#d8e5ff", stroke: "#071b50" }, o: {} },
-      ],
-    },
-    {
-      group: "Colorful",
-      items: [
-        { n: "Coral", b: "#ff8066", d: {}, o: {} },
-        { n: "Mint", b: "#40b99a", d: {}, o: {} },
-        { n: "Lavender", b: "#9c83e6", d: {}, o: {} },
-        { n: "Sunflower", b: "#e5bd38", d: {}, o: {} },
-      ],
-    },
-  ]);
+  const BUILTIN_THEMES = FOLDER_STYLE.COLLECTIONS;
 
   // Place a floating editor beside its anchor without covering that folder.
   // If horizontal space is tight, it uses the larger vertical gap; only on an
@@ -1037,6 +1122,9 @@ function nativeSidebarSide() {
     };
     const getInt = (name, fallback = 100) => {
       try { return pref.getIntPref(name, fallback); } catch (_) { return fallback; }
+    };
+    const setBool = (name, value) => {
+      try { pref.setBoolPref(name, !!value); return true; } catch (_) { return false; }
     };
     const setString = (name, value) => {
       try { pref.setStringPref(name, String(value)); return true; } catch (_) { return false; }
@@ -1123,6 +1211,7 @@ function nativeSidebarSide() {
       data: parseData(getString(P.DATA, "")),
       themesRaw: getString(P.THEMES, ""),
       themes: parseThemes(getString(P.THEMES, "")),
+      layersRaw: getString(P.LAYERS, ""),
     };
     // Canonicalize any prototype v1 records on startup. This strips the old
     // label-hash field from stored preferences while preserving ID/color data.
@@ -1297,6 +1386,8 @@ function nativeSidebarSide() {
       schedulePaint();
       return ok;
     }
+    // The all-levels default. The retired Appearance keys (zen.workspace.bgalazka.look.folder_*) only fill layers the
+    // new keys leave empty and only while no base color is set; the one-time migration clears them.
     function defaultRecord() {
       const detail = {};
       const opacity = {};
@@ -1306,93 +1397,59 @@ function nativeSidebarSide() {
         const alpha = getInt(OPACITY_PREFS[part], -1);
         if (alpha >= 0 && alpha <= 100) opacity[part] = alpha;
       }
+      const base = cleanHex(getString(P.BASE, ""));
+      if (!base) {
+        for (const [part, key, opacityKey] of [
+          ["back", LEGACY_DEFAULTS.back, LEGACY_DEFAULTS.backOpacity],
+          ["front", LEGACY_DEFAULTS.front, LEGACY_DEFAULTS.frontOpacity],
+          ["stroke", LEGACY_DEFAULTS.stroke, LEGACY_DEFAULTS.strokeOpacity],
+          ["label", LEGACY_DEFAULTS.label, ""],
+        ]) {
+          const color = cleanHex(getString(key, ""));
+          if (color && !detail[part]) detail[part] = color;
+          if (opacityKey && opacity[part] === undefined) {
+            const legacy = getInt(opacityKey, 100);
+            if (legacy >= 0 && legacy < 100) opacity[part] = legacy;
+          }
+        }
+      }
+      return { b: base, d: detail, o: opacity };
+    }
+    // Level defaults: { 1: record, ... 5: record }. Level 1 is a top-level folder (the NOTES root is level 1).
+    function layerRecords() {
+      return FOLDER_STYLE.parseLayers(state.layersRaw);
+    }
+    function styleEnv() {
       return {
-        b: cleanHex(getString(P.BASE, "")),
-        d: detail,
-        o: opacity,
+        mode: mode(),
+        defaults: defaultRecord(),
+        layers: layerRecords(),
+        ignoreLabel: getBool(P.IGNORE_LABEL, false),
       };
     }
     function opacityColor(value, opacity) {
       const color = cleanHex(value);
       if (!color) return "";
       const pct = Math.max(0, Math.min(100, Math.round(Number(opacity))));
-      return pct >= 100 ? color : `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+      return pct >= 100 ? color : mix(color, pct, "transparent");
     }
-    function defaultOpacity() {
-      const opacity = { ...defaultRecord().o };
-      for (const [part, legacy] of [
-        ["back", LEGACY_DEFAULTS.backOpacity],
-        ["front", LEGACY_DEFAULTS.frontOpacity],
-        ["stroke", LEGACY_DEFAULTS.strokeOpacity],
-      ]) {
-        if (opacity[part] !== undefined) continue;
-        const value = getInt(legacy, 100);
-        if (value >= 0 && value < 100) opacity[part] = value;
-      }
-      return opacity;
+    function resolveStyle(rawRecord = null, depth = 1) {
+      return FOLDER_STYLE.resolve(rawRecord, depth, styleEnv());
     }
-    function defaultParts() {
-      const parts = partsFor(defaultRecord(), mode());
-      // Preserve old Appearance values only for components the new defaults do
-      // not explicitly own. A newly chosen base color must remain authoritative.
-      const record = defaultRecord();
-      if (!record.b) {
-        for (const [part, key, opacityKey] of [
-          ["back", LEGACY_DEFAULTS.back, LEGACY_DEFAULTS.backOpacity],
-          ["front", LEGACY_DEFAULTS.front, LEGACY_DEFAULTS.frontOpacity],
-          ["stroke", LEGACY_DEFAULTS.stroke, LEGACY_DEFAULTS.strokeOpacity],
-        ]) {
-          if (record.d[part]) continue;
-          const color = cleanHex(getString(key, ""));
-          if (color) parts[part] = opacityColor(color, getInt(opacityKey, 100));
-        }
-        if (!record.d.label) {
-          const label = cleanHex(getString(LEGACY_DEFAULTS.label, ""));
-          if (label) parts.label = label;
-        }
-      }
-      if (parts.accent && !parts.accentText) parts.accentText = textOn(cleanHex(parts.accent) || "#202020");
-      return parts;
-    }
-    function resolveStyle(rawRecord = null) {
-      const defaults = defaultRecord();
-      const record = rawRecord && typeof rawRecord === "object" ? rawRecord : {};
-      const base = cleanHex(record.b || record.color) || defaults.b;
-      const detail = { ...defaults.d, ...cleanDetail(record.d || record.parts) };
-      const effective = { b: base, d: detail };
-      const parts = partsFor(effective, mode());
-      // Retain the legacy Appearance values only when no new base or part owns
-      // that layer. This path is read-only and disappears after migration.
-      if (!base) {
-        for (const [part, key, opacityKey] of [
-          ["back", LEGACY_DEFAULTS.back, LEGACY_DEFAULTS.backOpacity],
-          ["front", LEGACY_DEFAULTS.front, LEGACY_DEFAULTS.frontOpacity],
-          ["stroke", LEGACY_DEFAULTS.stroke, LEGACY_DEFAULTS.strokeOpacity],
-        ]) {
-          if (!parts[part] && !detail[part]) {
-            const legacy = cleanHex(getString(key, ""));
-            if (legacy) parts[part] = opacityColor(legacy, getInt(opacityKey, 100));
-          }
-        }
-        if (!parts.label && !detail.label) {
-          const legacy = cleanHex(getString(LEGACY_DEFAULTS.label, ""));
-          if (legacy) parts.label = legacy;
-        }
-      }
-      const accent = cleanHex(parts.accent) || base;
-      if (accent) parts.accentText = textOn(accent);
-      const opacity = { ...defaultOpacity(), ...cleanOpacity(record.o || record.opacity) };
-      return { base, parts, opacity, properties: declarations(parts, opacity) };
+    function folderDepth(folder) {
+      return FOLDER_STYLE.elementDepth(folder);
     }
     function styleMapFor(folder) {
       if (isNotesOwned(folder)) return {};
-      return resolveStyle(readFolderRecord(folder)).properties;
+      return resolveStyle(readFolderRecord(folder), folderDepth(folder)).properties;
     }
     const previousStyleBridge = window.__zentralFolderColorStyleBridge;
     const folderColorStyleBridge = Object.freeze({
       version: 1,
-      resolve: (record) => resolveStyle(record),
-      defaults: () => resolveStyle(null),
+      revision: 3,
+      resolve: (record, depth) => resolveStyle(record, depth),
+      defaults: (depth) => resolveStyle(null, depth),
+      collections: () => FOLDER_STYLE.COLLECTIONS,
     });
     window.__zentralFolderColorStyleBridge = folderColorStyleBridge;
     window.dispatchEvent?.(new Event("zentral-folder-color-style-bridge-ready"));
@@ -1435,6 +1492,7 @@ function nativeSidebarSide() {
       const map = owned.get(folder);
       if (map) for (const property of [...map.keys()]) rememberAndSet(folder, property, "");
       if (folder.hasAttribute?.(MARK)) folder.removeAttribute(MARK);
+      if (folder.hasAttribute?.(LAYERS_ATTR)) folder.removeAttribute(LAYERS_ATTR);
       painted.delete(folder);
     }
     function paintFolder(folder) {
@@ -1463,9 +1521,19 @@ function nativeSidebarSide() {
         rememberAndSet(folder, property, value);
       if (Object.keys(values).length) {
         folder.setAttribute(MARK, "true");
+        // Which extra layers have a value; the stylesheet below only draws a layer that is listed here, so a folder
+        // without a color keeps Zen's own look.
+        const layers = [
+          ["--bgalazka-fc-accent", "accent"],
+          ["--bgalazka-fc-tint", "tint"],
+          ["--bgalazka-fc-hover", "hover"],
+        ].filter(([property]) => values[property]).map(([, name]) => name).join(" ");
+        if (layers) folder.setAttribute(LAYERS_ATTR, layers);
+        else folder.removeAttribute(LAYERS_ATTR);
         painted.add(folder);
       } else {
         folder.removeAttribute(MARK);
+        folder.removeAttribute(LAYERS_ATTR);
         painted.delete(folder);
       }
     }
@@ -1501,6 +1569,22 @@ function nativeSidebarSide() {
       :root zen-folder[${MARK}] > .tab-group-label-container > label {
         color: var(--bgalazka-fc-label) !important;
       }
+      /* Zen draws folders from its own variables and hides the group line, so the accent, soft tint and hover layers need
+         rules of their own. A layer is drawn only when the folder lists it, so an unstyled folder is left to Zen. */
+      zen-folder[${LAYERS_ATTR}~="accent"] > .tab-group-container {
+        box-shadow: inset 2px 0 0 0 var(--bgalazka-fc-accent) !important;
+      }
+      zen-folder[${LAYERS_ATTR}~="accent"] .tab-group-line {
+        background-color: var(--bgalazka-fc-accent) !important;
+      }
+      zen-folder[${LAYERS_ATTR}~="tint"] > .tab-group-label-container,
+      zen-folder[${LAYERS_ATTR}~="tint"] > .tab-group-container {
+        background-color: var(--bgalazka-fc-tint) !important;
+        border-radius: 8px;
+      }
+      zen-folder[${LAYERS_ATTR}~="hover"] > .tab-group-label-container:hover {
+        background-color: var(--bgalazka-fc-hover) !important;
+      }
       .zcf-panel { position: relative; z-index: 2147483647; width: 330px; max-width: calc(100vw - 20px);
         max-height: min(82vh, 680px); overflow: auto; box-sizing: border-box; padding: 12px; border-radius: 12px;
         background: Canvas; color: CanvasText; color-scheme: light dark; font: menu; pointer-events: auto;
@@ -1533,6 +1617,16 @@ function nativeSidebarSide() {
       .zcf-btns { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-top: 10px; }
       .zcf-detail { border-top: 1px solid color-mix(in srgb, CanvasText 15%, transparent); margin-top: 8px; padding-top: 7px; }
       .zcf-detail summary { cursor: pointer; font-size: 12px; }
+      .zcf-modes { gap: 0; }
+      .zcf-modes button { flex: 1; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); padding: 4px 8px; background: transparent; color: inherit; }
+      .zcf-modes button:first-child { border-radius: 7px 0 0 7px; }
+      .zcf-modes button:last-child { border-radius: 0 7px 7px 0; border-inline-start: 0; }
+      .zcf-modes button[aria-selected=true] { background: color-mix(in srgb, Highlight 35%, Canvas); font-weight: 600; }
+      .zcf-check { display: flex; align-items: flex-start; gap: 7px; margin: 8px 0; font-size: 12px; cursor: pointer; }
+      .zcf-contrast:empty { display: none; }
+      .zcf-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; }
+      .zcf-tabs button { border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); border-radius: 7px; padding: 3px 8px; background: transparent; color: inherit; font-size: 11px; }
+      .zcf-tabs button[aria-pressed=true] { background: color-mix(in srgb, Highlight 35%, Canvas); }
     `;
     const style = createElement("style", { id: "zentral-colorful-folders-style" });
     style.textContent = css;
@@ -1545,23 +1639,71 @@ function nativeSidebarSide() {
       const front = parts.front || parts.accent || "#a0a8b0";
       return `linear-gradient(135deg, ${back} 50%, ${front} 50%)`;
     };
-    function defaultTarget() {
+    const LEVEL_NAMES = [
+      "All folders (default look)",
+      "Level 1 · top-level folders",
+      "Level 2 · subfolders",
+      "Level 3 · second subfolders",
+      "Level 4 · third subfolders",
+      "Level 5 · fourth subfolders and deeper",
+    ];
+    function announceDefaultsChanged() {
+      schedulePaint();
+      // Notes redraws its All notes tree when told that the shared style changed.
+      try { window.dispatchEvent?.(new Event("zentral-folder-color-defaults-changed")); } catch (_) {}
+    }
+    function writeAllLevelsDefault(record) {
+      const next = record ? { b: cleanHex(record.b), d: cleanDetail(record.d), o: cleanOpacity(record.o) } : null;
+      if (!setString(P.BASE, next?.b || "")) return false;
+      for (const part of PARTS) {
+        if (!setString(PART_PREFS[part], next?.d?.[part] || "")) return false;
+        if (!setInt(OPACITY_PREFS[part], next?.o?.[part] ?? -1)) return false;
+      }
+      announceDefaultsChanged();
+      return true;
+    }
+    function writeLevelDefault(level, record) {
+      const layers = layerRecords();
+      const next = record ? FOLDER_STYLE.norm(record) : null;
+      if (next && (FOLDER_STYLE.hasColor(next) || Object.keys(next.o).length)) layers[level] = next;
+      else delete layers[level];
+      const raw = FOLDER_STYLE.serializeLayers(layers);
+      if (!setString(P.LAYERS, raw)) return false;
+      state.layersRaw = raw;
+      announceDefaultsChanged();
+      return true;
+    }
+    // level 0 = every level that has no default of its own; 1..5 = that nesting level only.
+    function defaultTarget(level = 0) {
       return {
-        title: "All folders (default look)",
-        read: () => defaultRecord(),
-        write: (record) => {
-          const next = record ? { b: cleanHex(record.b), d: cleanDetail(record.d), o: cleanOpacity(record.o) } : null;
-          if (!setString(P.BASE, next?.b || "")) return false;
-          if (next && (Object.keys(next.d).length || Object.keys(next.o).length))
-            setString(P.MODE, "detailed");
-          for (const part of PARTS) {
-            if (!setString(PART_PREFS[part], next?.d?.[part] || "")) return false;
-            if (!setInt(OPACITY_PREFS[part], next?.o?.[part] ?? -1)) return false;
-          }
-          schedulePaint();
-          return true;
-        },
+        title: LEVEL_NAMES[level] || LEVEL_NAMES[0],
+        depth: Math.max(1, level),
+        level,
+        read: () => (level ? layerRecords()[level] || { b: "", d: {}, o: {} } : defaultRecord()),
+        write: (record) => (level ? writeLevelDefault(level, record) : writeAllLevelsDefault(record)),
       };
+    }
+    // A collection gives level 1 its first look, level 2 its second, and so on.
+    function applyCollectionToLevels(group) {
+      const spread = FOLDER_STYLE.spreadCollection(group);
+      if (!Object.keys(spread).length) return false;
+      const raw = FOLDER_STYLE.serializeLayers(spread);
+      if (!setString(P.LAYERS, raw)) return false;
+      state.layersRaw = raw;
+      if (Object.values(spread).some((look) => FOLDER_STYLE.needsDetailed(look))) setString(P.MODE, "detailed");
+      announceDefaultsChanged();
+      return true;
+    }
+    // One look for every default folder: the all-levels default is replaced and the level defaults are cleared.
+    function applyLookEverywhere(look) {
+      if (FOLDER_STYLE.needsDetailed(look)) setString(P.MODE, "detailed");
+      const ok = writeAllLevelsDefault(look);
+      if (ok) {
+        setString(P.LAYERS, FOLDER_STYLE.serializeLayers({}));
+        state.layersRaw = FOLDER_STYLE.serializeLayers({});
+        announceDefaultsChanged();
+      }
+      return ok;
     }
     function folderTarget(folder) {
       const title = String(folder.getAttribute("label") || folder.label || "Folder");
@@ -1598,8 +1740,8 @@ function nativeSidebarSide() {
                 pref.setStringPref("zen.workspace.zentral.notes.zen_root_parts", JSON.stringify(next?.d || {}));
                 pref.setStringPref("zen.workspace.zentral.notes.zen_root_part_opacity", JSON.stringify(next?.o || {}));
                 const value = next ? { b: next.b, d: next.d, o: next.o } : { b: "", d: {}, o: {} };
-                const colors = declarations(partsFor(value, mode()), value.o);
-                for (const property of Object.keys(PART_PROPS).flatMap((part) => PART_PROPS[part])) {
+                const colors = resolveStyle(value, 1).properties;
+                for (const property of FOLDER_STYLE.OWNED) {
                   if (colors[property]) folder.style.setProperty(property, colors[property], "important");
                   else folder.style.removeProperty(property);
                 }
@@ -1618,6 +1760,7 @@ function nativeSidebarSide() {
       return {
         title,
         available: true,
+        depth: folderDepth(folder),
         read: () => readFolderRecord(folder),
         write: (record) => setFolderRecord(folder, record),
       };
@@ -1656,127 +1799,152 @@ function nativeSidebarSide() {
       schedulePaint();
       return true;
     }
+    // Quick colors are shared with the Notes color pickers (one preference, up to 8 "#rrggbb", newest first).
+    const QUICK_PREF = "zen.workspace.zentral.notes.custom_colors";
+    const quickColors = () => {
+      const out = [];
+      for (const part of getString(QUICK_PREF, "").split(/[\s,;]+/)) {
+        const hex = cleanHex(part);
+        if (hex && !out.includes(hex)) out.push(hex);
+        if (out.length >= 8) break;
+      }
+      return out;
+    };
+    const saveQuickColor = (hex) => {
+      const clean = cleanHex(hex);
+      if (clean) setString(QUICK_PREF, [clean, ...quickColors().filter((c) => c !== clean)].slice(0, 8).join(","));
+    };
+    // Mode rule (the Notes editor follows the same): in Simple, choosing a primary color or a look drops every Detailed
+    // layer except the secondary (outline) color, so Simple overrides Detailed. In Detailed, a layer left on Auto keeps
+    // following the primary color, and the picked layers fine tune it.
     function openEditor(target, anchor) {
       closeEditor();
-      const element = createElement("div", {
-        class: "zcf-panel",
-        role: "dialog",
-        "aria-label": "Folder colors",
-      });
+      const element = createElement("div", { class: "zcf-panel", role: "dialog", "aria-label": "Folder colors" });
       editor = element;
+      const depthOfTarget = Number.isInteger(target.depth) ? target.depth : 1;
       let record = target.read() || { b: "", d: {}, o: {} };
       record = { b: cleanHex(record.b), d: cleanDetail(record.d), o: cleanOpacity(record.o) };
+      let editMode = mode();
       const header = createElement("div", { class: "zcf-header" });
       const heading = createElement("h3", { text: `Colors · ${target.title}` });
       const close = createElement("button", { type: "button", class: "zcf-close", text: "×", "aria-label": "Close color editor" });
       header.append(heading, close);
       close.addEventListener("click", closeEditor);
-      const baseLabel = createElement("div", { class: "zcf-muted", text: "Choose a coordinated base style, then fine tune individual layers and transparency. Changes are saved only when you press Apply." });
-      const baseRow = createElement("div", { class: "zcf-row" });
-      const base = createElement("input", { type: "color", "aria-label": "Folder base color" });
-      base.value = record.b || defaultRecord().b || "#667788";
-      const baseHex = createElement("input", { type: "text", maxlength: "7", spellcheck: "false", "aria-label": "Base color as hex", placeholder: "auto" });
-      baseHex.value = record.b;
-      const autoBase = createElement("button", { type: "button", text: "Auto" });
-      baseRow.append(createElement("span", { text: "Base color" }), base, baseHex, autoBase);
-      const partInputs = new Map();
-      const setBase = (value) => {
-        const color = cleanHex(value);
-        if (!color) return;
-        record.b = color;
-        base.value = color;
-        baseHex.value = color;
-        for (const [part, input] of partInputs) {
-          if (!record.d[part]) input.color.value = color;
-        }
+      element.appendChild(header);
+      const intro = createElement("div", { class: "zcf-muted", text: "Pick a primary color (the folder) and a secondary color (its outline); everything else follows. Detailed lets you fine tune every layer, and a layer on Auto keeps following the primary color. Nothing is saved until you press Apply." });
+      element.appendChild(intro);
+
+      // ---- mode switch
+      const modeRow = createElement("div", { class: "zcf-row zcf-modes", role: "tablist" });
+      const simpleTab = createElement("button", { type: "button", role: "tab", text: "Simple" });
+      const detailTab = createElement("button", { type: "button", role: "tab", text: "Detailed" });
+      modeRow.append(simpleTab, detailTab);
+      element.appendChild(modeRow);
+
+      // ---- simple section: primary + secondary
+      const simpleBox = createElement("div", { class: "zcf-simple" });
+      const colorRow = (label, aria) => {
+        const row = createElement("div", { class: "zcf-row" });
+        const color = createElement("input", { type: "color", "aria-label": aria });
+        const hex = createElement("input", { type: "text", maxlength: "7", spellcheck: "false", placeholder: "auto", "aria-label": aria + " as hex" });
+        const auto = createElement("button", { type: "button", text: "Auto" });
+        row.append(createElement("span", { text: label }), color, hex, auto);
+        return { row, color, hex, auto };
       };
-      base.addEventListener("input", () => setBase(base.value));
-      baseHex.addEventListener("input", () => {
-        const raw = baseHex.value.trim();
-        const value = cleanHex(raw.startsWith("#") ? raw : "#" + raw);
-        if (value) setBase(value);
+      const primary = colorRow("Primary (folder)", "Primary color");
+      const secondary = colorRow("Secondary (outline)", "Secondary outline color");
+      const contrastNote = createElement("div", { class: "zcf-muted zcf-contrast", role: "status" });
+      const quickRow = createElement("div", { class: "zcf-swatches" });
+      // One transparency slider for the two big layers of the folder icon (Simple); Detailed has one per layer.
+      const bodyRow = createElement("div", { class: "zcf-row" });
+      const bodyAlpha = createElement("input", { type: "range", min: "0", max: "100", step: "1", "aria-label": "Folder transparency" });
+      const bodyAlphaValue = createElement("output", { text: "Auto" });
+      bodyAlpha.addEventListener("input", () => {
+        const value = Number(bodyAlpha.value);
+        if (value >= 100) { delete record.o.back; delete record.o.front; }
+        else { record.o.back = value; record.o.front = value; }
+        bodyAlphaValue.textContent = value >= 100 ? "Auto" : value + "%";
       });
-      autoBase.addEventListener("click", () => { record.b = ""; baseHex.value = ""; });
-      element.append(header, baseLabel, baseRow);
+      bodyRow.append(createElement("span", { text: "Folder opacity (0% = transparent)" }), bodyAlpha, bodyAlphaValue);
+      simpleBox.append(primary.row, secondary.row, contrastNote, bodyRow, createElement("h4", { text: "My quick colors" }), quickRow);
+      element.appendChild(simpleBox);
 
-      const syncPartInputs = () => {
-        for (const [part, input] of partInputs) {
-          input.hex.value = record.d[part] || "";
-          input.color.value = record.d[part] || record.b || defaultRecord().d[part] || defaultRecord().b || "#667788";
-          input.opacity.value = String(record.o[part] === undefined ? 100 : record.o[part]);
-          input.opacityValue.textContent = record.o[part] === undefined ? "Auto" : record.o[part] + "%";
-        }
-      };
-      const builtins = createElement("div", { class: "zcf-swatches" });
-      for (const group of BUILTIN_THEMES)
-        for (const theme of group.items) {
-          const button = createElement("button", { type: "button", class: "zcf-swatch", text: theme.n, title: group.group + " · " + theme.n });
-          button.style.background = previewBackground(theme);
-          button.addEventListener("click", () => {
-            if (Object.keys(theme.d || {}).length || Object.keys(theme.o || {}).length)
-              setString(P.MODE, "detailed");
-            record = { b: theme.b, d: cleanDetail(theme.d), o: cleanOpacity(theme.o) };
-            setBase(theme.b);
-            syncPartInputs();
-          });
-          builtins.appendChild(button);
-        }
-      element.append(createElement("h4", { text: "Shared quick palette" }), builtins);
-
-      const detail = createElement("details", { class: "zcf-detail" });
-      const summary = createElement("summary", { text: "Fine tune each layer · color and transparency" });
-      const detailRows = createElement("div", {});
-      detail.append(summary, detailRows);
+      // ---- detailed section: all seven layers
+      const detailBox = createElement("div", { class: "zcf-detailbox" });
+      const partInputs = new Map();
+      const fallbackColor = () => record.b || cleanHex(defaultRecord().b) || "#667788";
       for (const part of PARTS) {
         const row = createElement("div", { class: "zcf-row" });
         row.style.flexWrap = "wrap";
         const color = createElement("input", { type: "color", "aria-label": PART_LABELS[part] });
-        color.value = record.d[part] || record.b || defaultRecord().d[part] || defaultRecord().b || "#667788";
         const hex = createElement("input", { type: "text", maxlength: "7", spellcheck: "false", placeholder: "auto", "aria-label": PART_LABELS[part] + " as hex" });
-        hex.value = record.d[part] || "";
         const opacityBox = createElement("span", { class: "zcf-opacity" });
-        const opacity = createElement("input", { type: "range", min: "0", max: "100", step: "1", "aria-label": PART_LABELS[part] + " transparency" });
-        opacity.value = String(record.o[part] === undefined ? 100 : record.o[part]);
-        const opacityValue = createElement("output", { text: record.o[part] === undefined ? "Auto" : record.o[part] + "%" });
-        opacityBox.append(createElement("span", { text: "Opacity (0% = transparent)" }), opacity, opacityValue);
+        const opacity = createElement("input", { type: "range", min: "0", max: "100", step: "1", "aria-label": PART_LABELS[part] + " opacity" });
+        const opacityValue = createElement("output", { text: "Auto" });
+        opacityBox.append(createElement("span", { text: "Opacity" }), opacity, opacityValue);
         const auto = createElement("button", { type: "button", text: "Auto" });
-        const ensureDetailedMode = () => {
-          if (mode() !== "detailed") setString(P.MODE, "detailed");
-        };
-        const setPart = (value) => {
-          const clean = cleanHex(value);
-          if (!clean) return;
-          ensureDetailedMode();
-          record.d[part] = clean;
-          color.value = clean;
-          hex.value = clean;
-        };
-        color.addEventListener("input", () => setPart(color.value));
+        color.addEventListener("input", () => setPart(part, color.value));
         hex.addEventListener("input", () => {
           const raw = hex.value.trim();
           const value = cleanHex(raw.startsWith("#") ? raw : "#" + raw);
-          if (value) setPart(value);
+          if (value) setPart(part, value);
         });
         opacity.addEventListener("input", () => {
-          ensureDetailedMode();
           record.o[part] = Number(opacity.value);
           opacityValue.textContent = opacity.value + "%";
         });
         auto.addEventListener("click", () => {
           delete record.d[part];
           delete record.o[part];
-          hex.value = "";
-          color.value = record.b || defaultRecord().d[part] || defaultRecord().b || "#667788";
-          opacity.value = "100";
-          opacityValue.textContent = "Auto";
+          syncInputs();
         });
         row.append(createElement("span", { text: PART_LABELS[part] }), color, hex, opacityBox, auto);
-        detailRows.appendChild(row);
+        detailBox.appendChild(row);
         partInputs.set(part, { color, hex, opacity, opacityValue });
       }
-      if (mode() === "detailed" && (Object.keys(record.d).length || Object.keys(record.o).length)) detail.open = true;
-      element.appendChild(detail);
+      element.appendChild(detailBox);
 
+      // ---- collections and quick themes (same palette as the Notes editor)
+      const palette = createElement("div", { class: "zcf-palette" });
+      const presetButtons = [];
+      const addPreset = (host, look, title) => {
+        const button = createElement("button", { type: "button", class: "zcf-swatch", text: look.n, title });
+        button.style.background = previewBackground(look);
+        button.addEventListener("click", () => {
+          record = { b: cleanHex(look.b), d: cleanDetail(look.d), o: cleanOpacity(look.o) };
+          if (FOLDER_STYLE.needsDetailed(look)) setEditMode("detailed");
+          else if (editMode === "simple") record.d = { ...(record.d.stroke ? { stroke: record.d.stroke } : {}) };
+          syncInputs();
+        });
+        presetButtons.push(button);
+        host.appendChild(button);
+      };
+      for (const group of BUILTIN_THEMES) {
+        palette.appendChild(createElement("h4", { text: group.group }));
+        const swatches = createElement("div", { class: "zcf-swatches" });
+        for (const look of group.items) addPreset(swatches, look, group.group + " · " + look.n);
+        palette.appendChild(swatches);
+      }
+      if (state.themes.length) {
+        palette.appendChild(createElement("h4", { text: "My quick themes" }));
+        const swatches = createElement("div", { class: "zcf-swatches" });
+        for (const theme of state.themes) addPreset(swatches, theme, "Saved theme · " + theme.n);
+        palette.appendChild(swatches);
+      }
+      const paletteBox = createElement("details", { class: "zcf-detail" });
+      paletteBox.append(createElement("summary", { text: "Collections and quick themes" }), palette);
+      paletteBox.open = true;
+      element.appendChild(paletteBox);
+
+      // ---- label color opt-out
+      const labelRow = createElement("label", { class: "zcf-check" });
+      const labelBox = createElement("input", { type: "checkbox", "aria-label": "Ignore my folder label color" });
+      labelBox.checked = getBool(P.IGNORE_LABEL, false);
+      labelBox.addEventListener("change", () => setBool(P.IGNORE_LABEL, labelBox.checked));
+      labelRow.append(labelBox, createElement("span", { text: "Ignore my folder label color (let the Zen theme decide, keeps names readable when a theme changes)" }));
+      element.appendChild(labelRow);
+
+      // ---- saved themes
       const themeRow = createElement("div", { class: "zcf-row" });
       const themeName = createElement("input", { type: "text", maxlength: "36", placeholder: "Theme name", "aria-label": "Theme name" });
       const saveThemeButton = createElement("button", { type: "button", text: "Save as quick theme" });
@@ -1795,11 +1963,86 @@ function nativeSidebarSide() {
 
       const status = createElement("div", { class: "zcf-status", role: "status" });
       element.appendChild(status);
+
+      // ---- state helpers
+      function setPart(part, value) {
+        const clean = cleanHex(value);
+        if (!clean) return;
+        record.d[part] = clean;
+        if (part === "stroke" && editMode === "simple") syncInputs();
+        else syncInputs(part);
+      }
+      function setPrimary(value) {
+        const clean = cleanHex(value);
+        if (!clean) return;
+        record.b = clean;
+        if (editMode === "simple") record.d = record.d.stroke ? { stroke: record.d.stroke } : {};
+        syncInputs();
+      }
+      function syncInputs(skipPart) {
+        const shown = record.b || cleanHex(defaultRecord().b) || "#667788";
+        primary.color.value = shown;
+        primary.hex.value = record.b || "";
+        const edge = record.d.stroke || "";
+        secondary.color.value = edge || shown;
+        secondary.hex.value = edge;
+        const ratio = record.b && edge ? FOLDER_STYLE.contrast(record.b, edge) : 21;
+        bodyAlpha.value = String(record.o.back === undefined ? 100 : record.o.back);
+        bodyAlphaValue.textContent = record.o.back === undefined ? "Auto" : record.o.back + "%";
+        bodyRow.hidden = editMode !== "simple";
+        contrastNote.textContent = ratio < 1.6 ? "Outline and folder colors are very close; the outline will be hard to see." : "";
+        for (const [part, input] of partInputs) {
+          if (part === skipPart) continue;
+          input.hex.value = record.d[part] || "";
+          input.color.value = record.d[part] || (FOLDER_STYLE.hex(fallbackColor()) || "#667788");
+          input.opacity.value = String(record.o[part] === undefined ? 100 : record.o[part]);
+          input.opacityValue.textContent = record.o[part] === undefined ? "Auto" : record.o[part] + "%";
+        }
+        for (const button of presetButtons) button.dataset.active = "false";
+      }
+      function setEditMode(next) {
+        editMode = next;
+        simpleTab.setAttribute("aria-selected", String(next === "simple"));
+        detailTab.setAttribute("aria-selected", String(next === "detailed"));
+        detailBox.hidden = next !== "detailed";
+        syncInputs();
+      }
+      simpleTab.addEventListener("click", () => setEditMode("simple"));
+      detailTab.addEventListener("click", () => setEditMode("detailed"));
+      primary.color.addEventListener("input", () => setPrimary(primary.color.value));
+      primary.hex.addEventListener("input", () => {
+        const raw = primary.hex.value.trim();
+        const value = cleanHex(raw.startsWith("#") ? raw : "#" + raw);
+        if (value) setPrimary(value);
+      });
+      primary.auto.addEventListener("click", () => { record.b = ""; syncInputs(); });
+      secondary.color.addEventListener("input", () => setPart("stroke", secondary.color.value));
+      secondary.hex.addEventListener("input", () => {
+        const raw = secondary.hex.value.trim();
+        const value = cleanHex(raw.startsWith("#") ? raw : "#" + raw);
+        if (value) setPart("stroke", value);
+      });
+      secondary.auto.addEventListener("click", () => { delete record.d.stroke; syncInputs(); });
+      for (const color of quickColors()) {
+        const button = createElement("button", { type: "button", class: "zcf-swatch", text: color, title: "Use " + color + " as primary" });
+        button.style.background = color;
+        button.style.color = textOn(color);
+        button.addEventListener("click", () => setPrimary(color));
+        quickRow.appendChild(button);
+      }
+      const keepQuick = createElement("button", { type: "button", text: "Save primary as quick color" });
+      keepQuick.addEventListener("click", () => { saveQuickColor(record.b); status.textContent = record.b ? "Saved " + record.b + " as a quick color." : ""; });
+      quickRow.appendChild(keepQuick);
+
+      // ---- actions: Reset, Cancel, Apply, Apply and close
       const actions = createElement("div", { class: "zcf-btns" });
       const reset = createElement("button", { type: "button", text: "Reset" });
-      const cancel = createElement("button", { type: "button", text: "Cancel" });
-      const save = createElement("button", { type: "button", text: "Apply" });
-      const writeAndClose = (value) => {
+      const cancel = createElement("button", { type: "button", text: "Close" });
+      const apply = createElement("button", { type: "button", text: "Apply" });
+      const applyClose = createElement("button", { type: "button", text: "Apply and close" });
+      const persist = (value, closeAfter) => {
+        // The shared mode is written only when the person applies, never while they browse the tabs.
+        if (value && mode() !== editMode) setString(P.MODE, editMode);
         let result;
         try { result = target.write(value); }
         catch (error) {
@@ -1814,16 +2057,20 @@ function nativeSidebarSide() {
             status.textContent = target.available === false ? "Notes is not ready yet. Open Notes once, then retry." : "Could not save this folder style.";
             return;
           }
-          closeEditor();
+          if (closeAfter) closeEditor();
+          else status.textContent = value ? "Applied." : "Reset.";
         }).catch((error) => {
           if (editor === element) status.textContent = "Could not save: " + (error?.message || error);
         });
       };
-      reset.addEventListener("click", () => writeAndClose(null));
+      const current = () => ({ b: record.b, d: editMode === "simple" ? (record.d.stroke ? { stroke: record.d.stroke } : {}) : record.d, o: record.o });
+      reset.addEventListener("click", () => { record = { b: "", d: {}, o: {} }; syncInputs(); persist(null, false); });
       cancel.addEventListener("click", closeEditor);
-      save.addEventListener("click", () => writeAndClose({ b: record.b, d: record.d, o: record.o }));
-      actions.append(reset, cancel, save);
+      apply.addEventListener("click", () => persist(current(), false));
+      applyClose.addEventListener("click", () => persist(current(), true));
+      actions.append(reset, cancel, apply, applyClose);
       element.appendChild(actions);
+      setEditMode(editMode);
 
       // Use the browser's native popup layer. A normal fixed HTML child can sit
       // underneath Zen's sidebar/popups even with a huge z-index, which makes
@@ -1856,13 +2103,7 @@ function nativeSidebarSide() {
         const rect = anchor?.getBoundingClientRect?.();
         const width = window.innerWidth || 1200;
         const height = window.innerHeight || 800;
-        const placement = placePanel(
-          rect,
-          Math.min(380, width - 16),
-          Math.min(element.scrollHeight || 620, height - 16),
-          width,
-          height,
-        );
+        const placement = placePanel(rect, Math.min(380, width - 16), Math.min(element.scrollHeight || 620, height - 16), width, height);
         element.style.width = placement.width + "px";
         element.style.maxHeight = placement.height + "px";
         if (!editorHost) {
@@ -1937,8 +2178,7 @@ function nativeSidebarSide() {
       menu.appendChild(submenu);
       const apply = (theme) => {
         const target = folderTarget(folder);
-        if (Object.keys(theme.d || {}).length || Object.keys(theme.o || {}).length)
-          setString(P.MODE, "detailed");
+        if (FOLDER_STYLE.needsDetailed(theme)) setString(P.MODE, "detailed");
         Promise.resolve(target.write({ b: theme.b || "", d: theme.d || {}, o: theme.o || {} }))
           .then((ok) => {
             if (ok === false) console.warn("[Zentral Colorful Folders] Could not apply palette to", target.title);
@@ -2090,17 +2330,16 @@ function nativeSidebarSide() {
       schedulePaint();
     });
     lifecycle.preference("zen.workspace.bgalazka.look.folder_", schedulePaint);
+    // Changing a default never flips the mode and never touches a folder's own record: a folder with its own colors
+    // ignores every default (see FOLDER_STYLE.resolve).
     lifecycle.preference(PREFIX + "default_", (_subject, _topic, name) => {
-      const key = String(name || "");
-      if (key !== P.BASE && mode() !== "detailed") {
-        const isOpacity = key.endsWith("_opacity");
-        const active = isOpacity
-          ? getInt(key, -1) >= 0
-          : !!cleanHex(getString(key, ""));
-        if (active) setString(P.MODE, "detailed");
+      if (name === P.LAYERS) {
+        const raw = getString(P.LAYERS, "");
+        if (raw !== state.layersRaw) state.layersRaw = raw;
       }
       schedulePaint();
     });
+    lifecycle.preference(P.IGNORE_LABEL, schedulePaint);
     lifecycle.preference(P.MODE, schedulePaint);
     lifecycle.preference(P.ENABLED, schedulePaint);
 
@@ -2108,41 +2347,66 @@ function nativeSidebarSide() {
       const modal = document.getElementById("zentral-settings-modal");
       if (!modal) return;
 
-      // Appearance > Colorful folders > Defaults: the showcase applies one
-      // consistent style to every ordinary Zen folder and to Notes folders
-      // that do not have their own per-folder overrides.
+      // Appearance > Colorful folders > Defaults. Choose where a look goes (every level, or one nesting level) and click a
+      // look; a collection button spreads its looks over levels 1-5. A folder with its own colors is never touched.
       const defaultsSection = runtime.ensureSettingsSection?.(modal, "folder-colors", "Defaults");
       if (defaultsSection && !defaultsSection.querySelector("#zentral-colorful-folders-showcase")) {
         const showcase = createElement("div", { id: "zentral-colorful-folders-showcase" });
         showcase.appendChild(createElement("p", {
           class: "zcf-muted",
-          text: "Choose a coordinated showcase for every folder, including Notes. Use the color picker for the linked base color or open the detailed editor to tune all seven layers and their transparency.",
+          text: "Defaults apply to folders without their own colors, in Zen and in Notes. Pick a level, then a look. A collection spreads its looks over the levels (top-level folder, subfolder, second subfolder...).",
         }));
+        let scope = 0;
+        const scopeRow = createElement("div", { class: "zcf-tabs", role: "group", "aria-label": "Apply a look to" });
+        const scopeButtons = [];
+        const scopeNames = ["All levels", "Level 1", "Level 2", "Level 3", "Level 4", "Level 5"];
+        const defaultPicker = createElement("input", { type: "color", class: "zcf-default-color", "aria-label": "Default color for the selected level" });
+        const syncScope = () => {
+          scopeButtons.forEach((button, index) => button.setAttribute("aria-pressed", String(index === scope)));
+          defaultPicker.value = defaultTarget(scope).read().b || "#667788";
+        };
+        scopeNames.forEach((name, index) => {
+          const button = createElement("button", { type: "button", text: name, title: LEVEL_NAMES[index] });
+          button.addEventListener("click", () => { scope = index; syncScope(); });
+          scopeButtons.push(button);
+          scopeRow.appendChild(button);
+        });
+        showcase.appendChild(scopeRow);
         const defaultPickerRow = createElement("div", { class: "zcf-row" });
-        const defaultPicker = createElement("input", { type: "color", class: "zcf-default-color", "aria-label": "Default color for all folders" });
-        defaultPicker.value = defaultRecord().b || "#667788";
         defaultPicker.addEventListener("input", () => {
-          const current = defaultRecord();
-          // The direct picker is the linked-color/simple control. It clears
-          // individual color overrides but retains explicit transparency.
-          defaultTarget().write({ b: defaultPicker.value, d: {}, o: current.o });
+          const target = defaultTarget(scope);
+          const current = target.read();
+          // The direct picker is the Simple control: it replaces the layers and keeps only transparency and the outline.
+          target.write({ b: defaultPicker.value, d: current.d?.stroke ? { stroke: current.d.stroke } : {}, o: current.o });
           setString(P.MODE, "simple");
         });
-        defaultPickerRow.append(
-          createElement("span", { text: "Default color for all folders" }),
-          defaultPicker,
-        );
+        defaultPickerRow.append(createElement("span", { text: "Primary color for the selected level" }), defaultPicker);
         showcase.appendChild(defaultPickerRow);
         const defaultActions = createElement("div", { class: "zcf-btns" });
         const editDefaults = createElement("button", { type: "button", text: "Customize all seven layers and transparency…" });
-        editDefaults.addEventListener("click", () => openEditor(defaultTarget(), modal));
-        defaultActions.appendChild(editDefaults);
+        editDefaults.addEventListener("click", () => openEditor(defaultTarget(scope), modal));
+        const resetDefaults = createElement("button", { type: "button", text: "Reset this level" });
+        resetDefaults.addEventListener("click", () => { defaultTarget(scope).write(null); syncScope(); });
+        const resetAll = createElement("button", { type: "button", text: "Reset all defaults" });
+        resetAll.addEventListener("click", () => {
+          for (let level = 0; level <= FOLDER_STYLE.MAX_DEPTH; level++) defaultTarget(level).write(null);
+          syncScope();
+        });
+        defaultActions.append(editDefaults, resetDefaults, resetAll);
         showcase.appendChild(defaultActions);
+        const ignoreRow = createElement("label", { class: "zcf-check" });
+        const ignoreBox = createElement("input", { type: "checkbox", "aria-label": "Ignore my folder label color" });
+        ignoreBox.checked = getBool(P.IGNORE_LABEL, false);
+        ignoreBox.addEventListener("change", () => { setBool(P.IGNORE_LABEL, ignoreBox.checked); schedulePaint(); });
+        ignoreRow.append(ignoreBox, createElement("span", { text: "Ignore my folder label color (let the Zen theme decide; turn on if a theme makes names unreadable)" }));
+        showcase.appendChild(ignoreRow);
         for (const group of BUILTIN_THEMES) {
-          showcase.appendChild(createElement("h4", { text: group.group }));
+          const heading = createElement("h4", { text: group.group });
+          const spread = createElement("button", { type: "button", text: "Spread over levels 1-5", title: `Apply the ${group.group} collection: level 1 gets the first look, level 2 the second...` });
+          spread.addEventListener("click", () => { if (applyCollectionToLevels(group)) { scope = 0; syncScope(); } });
+          showcase.append(heading, createElement("div", { class: "zcf-btns" }, spread));
           const grid = createElement("div", { class: "zcf-showcase" });
           for (const theme of group.items) {
-            const parts = partsFor(theme, "detailed");
             const back = cleanHex(theme.d?.back) || theme.b;
             const front = cleanHex(theme.d?.front) || theme.b;
             const stroke = cleanHex(theme.d?.stroke) || theme.b;
@@ -2153,17 +2417,18 @@ function nativeSidebarSide() {
             icon.style.setProperty("--zcf-stroke", stroke);
             button.append(icon, createElement("small", { text: theme.n }));
             button.addEventListener("click", () => {
-              const ok = defaultTarget().write(theme);
+              if (FOLDER_STYLE.needsDetailed(theme)) setString(P.MODE, "detailed");
+              const ok = scope ? defaultTarget(scope).write(theme) : applyLookEverywhere(theme);
               if (ok) {
-                defaultPicker.value = theme.b;
-                showcase.dataset.active = theme.n;
-                for (const item of grid.querySelectorAll("button")) item.dataset.active = item === button ? "true" : "false";
+                syncScope();
+                for (const item of showcase.querySelectorAll(".zcf-showcase button")) item.dataset.active = item === button ? "true" : "false";
               }
             });
             grid.appendChild(button);
           }
           showcase.appendChild(grid);
         }
+        syncScope();
         defaultsSection.appendChild(showcase);
       }
 
@@ -2206,6 +2471,9 @@ function nativeSidebarSide() {
         const defaults = defaultRecord();
         const defaultRow = makeRow("All folders (default look)", defaultTarget(), null, defaults);
         list.appendChild(defaultRow);
+        const levels = layerRecords();
+        for (let level = 1; level <= FOLDER_STYLE.MAX_DEPTH; level++)
+          if (levels[level]) list.appendChild(makeRow(LEVEL_NAMES[level], defaultTarget(level), null, levels[level]));
         const folders = liveFolders();
         if (!folders.length)
           list.appendChild(createElement("p", { class: "zcf-muted", text: "No native folders are currently visible in this window." }));
@@ -2258,6 +2526,7 @@ function nativeSidebarSide() {
       derive,
       partsFor,
       declarations,
+      FOLDER_STYLE,
       placePanel,
       sha256Hex,
       hashKey,

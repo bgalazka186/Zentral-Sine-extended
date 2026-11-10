@@ -3,7 +3,7 @@
   "themeId": "zentral-colorful-folders",
   "name": "Zentral Colorful Folders",
   "description": "Per-folder colors for native Zen folders, with right-click palettes, simple and detailed editing, saved themes, and Notes-safe ownership. Standalone part of Zentral Extended.",
-  "version": "3.2.14",
+  "version": "3.2.16",
   "entry": "ZentralColorfulFolders.uc.js",
   "output": "ZentralColorfulFolders.standalone.uc.js",
   "settings": "settings.json",
@@ -26,7 +26,9 @@
     "zen.workspace.bgalazka.look.folder_",
     "zen.workspace.zentral.folder_colors.opacity_schema",
     "zen.workspace.zentral.notes.zen_root_parts",
-    "zen.workspace.zentral.notes.zen_root_part_opacity"
+    "zen.workspace.zentral.notes.zen_root_part_opacity",
+    "zen.workspace.zentral.folder_colors.default_layers",
+    "zen.workspace.zentral.notes.custom_colors"
   ],
   "excludePrefs": {
     "properties": [],
@@ -41,6 +43,7 @@
     "zen.workspace.zentral.folder_colors.enabled",
     "zen.workspace.zentral.folder_colors.menu",
     "zen.workspace.zentral.folder_colors.mode",
+    "zen.workspace.zentral.folder_colors.ignore_label",
     {
       "type": "text",
       "label": "**Default folder colors**",

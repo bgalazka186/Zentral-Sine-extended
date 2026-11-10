@@ -20,7 +20,7 @@
       "defaultValue": "simple",
       "options": [
         {
-          "label": "Simple — one color controls all folder parts",
+          "label": "Simple — a primary and a secondary (outline) color",
           "value": "simple"
         },
         {
@@ -28,6 +28,12 @@
           "value": "detailed"
         }
       ]
+    },
+    {
+      "property": "zen.workspace.zentral.folder_colors.ignore_label",
+      "label": "Ignore my folder label color (let the Zen theme decide the name color)",
+      "type": "checkbox",
+      "defaultValue": false
     },
     {
       "property": "zen.workspace.zentral.folder_colors.default_base",
@@ -182,6 +188,11 @@
       "owner": "colorful-folders"
     },
     "zen.workspace.zentral.folder_colors.mode": {
+      "category": "folder-colors",
+      "section": "Behavior",
+      "owner": "colorful-folders"
+    },
+    "zen.workspace.zentral.folder_colors.ignore_label": {
       "category": "folder-colors",
       "section": "Behavior",
       "owner": "colorful-folders"

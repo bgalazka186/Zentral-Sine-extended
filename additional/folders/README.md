@@ -7,9 +7,23 @@ Colorful Folders gives ordinary Zen sidebar folders independent colors and one s
 - **With Zentral Extended:** enable **Load Colorful folders** in Modules & CSS Files. The loader owns the feature and waits for the registration pass; the source does not start itself at evaluation time.
 - **Standalone with Sine:** add this folder as its own mod. Its generated `ZentralColorfulFolders.standalone.uc.js` checks for the full runtime and stands aside when Zentral is installed, so both installations cannot run two painters at once.
 
-## Default appearance and presets
+## Simple and Detailed
 
-The Defaults section's showcase applies a style to all ordinary Zen folders and to Notes folders that do not have a saved per-folder override. The palette is shared with the Notes folder editor, so dark, high-contrast and colorful presets match in both places. The detailed editor exposes color and opacity for seven layers: icon back, icon front, icon outline/glyph, folder label, group accent/line, soft tint and hover background. Opacity is 0% (transparent) through 100% (solid); `-1` in the advanced settings fields means inherit. Editing an individual layer switches the shared mode to Detailed.
+- **Simple** uses two colors: the *primary* color is the folder, the *secondary* color is its outline (stored as the outline layer). Back, front, label, accent line, soft tint and hover are derived from them. The editor warns when the two colors are too close.
+- **Detailed** exposes seven layers, each with a color and its own opacity: icon back, icon front, icon outline and glyph, folder label, accent and group line, soft background tint, hover background. A layer left on Auto keeps following the primary color.
+- **Simple overrides Detailed.** Picking a primary color or a look while in Simple drops the Detailed layers (keeping only the outline); switching to Detailed then fine tunes from there. The mode is saved only when you press **Apply**.
+- **Apply** saves and keeps the editor open, **Apply and close** saves and closes, **Reset** returns the folder to the default look. The editor is draggable and opens beside the folder, not over it.
+- **Ignore my folder label color** (checkbox in the editor and in Behavior settings, off by default) leaves the name color to the Zen theme. Use it if a theme makes names unreadable.
+
+## Defaults, levels and collections
+
+A folder with its own colors is never touched by a default. A folder without colors gets, in this order: the default of its nesting level (1 = top-level folder, the NOTES folder is level 1, up to 5), then the all-levels default, then Zen's own look. Settings > Appearance > Colorful folders > Defaults lets you pick *All levels* or one level, then click a look. **Spread over levels 1-5** gives level 1 the first look of a collection, level 2 the second and so on, so a root folder, a subfolder and a second subfolder look related but different.
+
+Built-in collections: *Classic yellow folders* (Kraft paper, Honey, Manila, Butter, Lemon), *Dark glass*, *Sticky notes*, *Neon outline*, *Dark folders*, *High contrast*, *Colorful*. Saved quick themes appear in the right-click menu and the editor.
+
+## Accent line, soft tint and hover
+
+Zen draws folders from its own variables and hides the group line, so these three layers are drawn by rules of this module: the accent is a thin line on the folder's content area, the tint is a translucent background of the folder, the hover is the header background while the pointer is over it. A folder lists the layers it uses in the `bgalazka-fc-layers` attribute and an unstyled folder is left to Zen. These rules are written against Zen's `zen-folder > .tab-group-label-container / .tab-group-container` structure and have not been run in a real Zen window; if a layer still does nothing, please send a DOM dump of one folder.
 
 ## Ownership and storage
 
