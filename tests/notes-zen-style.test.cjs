@@ -9,7 +9,12 @@ const dom = require("./helpers/fake-dom.cjs")();
 const { Ev, El, document, raf } = dom;
 const win = { document, ZentralRuntime: { register() {} }, __zentralNotesTestSeam: {}, requestAnimationFrame: (fn) => raf.push(fn), cancelAnimationFrame() {}, setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {} };
 win.window = win;
-vm.runInNewContext(source, { window: win, document, Event: Ev, globalThis: { Services: {} }, ChromeUtils: {}, console, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, setTimeout, clearTimeout, navigator: { platform: "Linux" }, Uint8Array, queueMicrotask });
+const testGlobals = { Services: {} };
+const behaviorPrefs = new Map();
+testGlobals.Services.prefs = {
+  getBoolPref(key, fallback = false) { return behaviorPrefs.has(key) ? behaviorPrefs.get(key) : fallback; },
+};
+vm.runInNewContext(source, { window: win, document, Event: Ev, globalThis: testGlobals, ChromeUtils: {}, console, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, WeakMap, setTimeout, clearTimeout, navigator: { platform: "Linux" }, Uint8Array, queueMicrotask });
 const c = win.__zentralNotesTestSeam.core;
 const J = (x) => JSON.parse(JSON.stringify(x));
 const flushRaf = async () => { for (let i = 0; i < 4; i++) { raf.splice(0).forEach((f) => f()); await new Promise((r) => setImmediate(r)); } };
@@ -141,6 +146,26 @@ const seq = (n) => { let i = 0; return () => ((i++ * 7 + n) % 36) / 36; };
     eq(J(c.diffProjection([{ key: "n:1", label: "x", parent: "", color: "?" }, { key: "f:q", label: "F", parent: "", color: "red", icon: "?" }], want).restyle).map((r) => r.key), ["n:1", "f:q"], '"?" means the browser lost it: put it back');
   });
 
+  await test("Notes folder color picker mirrors all global folder behavior switches and widens the opacity-friendly dialog", () => {
+    const options = c.FOLDER_BEHAVIOR_OPTIONS.map(([name, label, fallback]) => ({ name, label, fallback }));
+    eq(J(options.map((x) => x.label)), [
+      "Ignore my folder label color (let the Zen theme decide the name color)",
+      "Color the folder icons (back, front, outline)",
+      "Folder/tab accent colors and native accent-line visibility",
+      "Soft background tint behind the folder name row",
+      "Soft background tint behind the tabs inside a folder",
+      "Hover background on the folder name row",
+      "Click the folder accent line to collapse or expand its folder",
+      "Highlight the folder accent line on hover",
+    ]);
+    assert.equal(options[0].fallback, false);
+    assert.ok(options.slice(1).every((x) => x.fallback === true));
+    assert.match(source, /class: "zn-fstyle-behavior"/);
+    assert.match(source, /kid\?\.classList\?\.contains\?\.\("zn-fstyle"\)/);
+    assert.match(source, /card\.classList\.contains\("zn-folder-style-card"\) \? "760px" : "34em"/);
+    assert.match(css, /\.zn-dialog-card\.zn-folder-style-card \{[^}]*width: min\(760px/);
+  });
+
   // ------------------------------------------------------------------ tint + favicon (pure)
   await test("tint: no colour = Zen's own workspace values; a colour sets all seven properties; unknown names fall back", () => {
     eq(J(c.folderTint("")), J(c.ZEN_TINT_DEFAULT)); eq(J(c.folderTint("nope")), J(c.ZEN_TINT_DEFAULT));
@@ -216,6 +241,39 @@ const seq = (n) => { let i = 0; return () => ((i++ * 7 + n) % 36) / 36; };
     eq(Object.fromEntries(Object.keys(c.ZEN_TINT_DEFAULT).map((k) => [k, f.style.getPropertyValue(k)])), J(c.ZEN_TINT_DEFAULT), "Zen's own values are back");
     assert.equal(f.hasAttribute("bgalazka-notes-color"), false); assert.equal(f.hasAttribute("bgalazka-notes-icon"), false);
     assert.equal(f.querySelector("g.icon text"), null); assert.notEqual(img.style.display, "none"); assert.equal(c.notesFolderIcon(f), "");
+    z.ws.remove();
+  });
+
+  await test("folder background switches restore Zen's original native tokens independently", () => {
+    const z = sb(); const f = z.folder("Native background restoration");
+    const nativePale = f.style.getPropertyValue("--tab-group-color-pale");
+    const tabsPref = "zen.workspace.zentral.folder_colors.style_tint_tabs";
+    const headerPref = "zen.workspace.zentral.folder_colors.style_tint_header";
+
+    behaviorPrefs.set(tabsPref, true);
+    behaviorPrefs.set(headerPref, true);
+    c.applyNotesFolderStyle(f, "purple", "", { doc: document });
+    assert.notEqual(f.style.getPropertyValue("--tab-group-color-pale"), nativePale, "enabled folder color owns the tab tint");
+    assert.ok(f.style.getPropertyValue("--bgalazka-fc-tint"), "enabled folder color paints the name row tint");
+
+    behaviorPrefs.set(tabsPref, false);
+    c.applyNotesFolderStyle(f, "purple", "", { doc: document });
+    assert.equal(f.style.getPropertyValue("--tab-group-color-pale"), nativePale, "turning off tab tint restores Zen's exact native inline token");
+    assert.ok(f.style.getPropertyValue("--bgalazka-fc-tint"), "header tint remains independently enabled");
+
+    behaviorPrefs.set(headerPref, false);
+    c.applyNotesFolderStyle(f, "purple", "", { doc: document });
+    assert.equal(f.style.getPropertyValue("--bgalazka-fc-tint"), "", "turning off header tint removes only our dedicated tint token");
+    assert.equal(f.style.getPropertyValue("--tab-group-color-pale"), nativePale, "tab tint stays native too");
+
+    behaviorPrefs.set(tabsPref, true);
+    behaviorPrefs.set(headerPref, true);
+    c.applyNotesFolderStyle(f, "purple", "", { doc: document });
+    assert.notEqual(f.style.getPropertyValue("--tab-group-color-pale"), nativePale, "re-enabling restores the folder color");
+
+    assert.match(css, /:root:not\(\[bgalazka-fc-no-tint-header\]\) zen-folder\[bgalazka-fc-layers~=\"tint\"\] > \.tab-group-label-container/);
+    assert.match(css, /:root:not\(\[bgalazka-fc-no-tint-tabs\]\) zen-folder\[bgalazka-fc-layers~=\"tint\"\] > \.tab-group-container/);
+    assert.match(css, /bgalazka-fc-line-hover[^\n]*zen-folder[\s\S]*?\.tab-group-line:hover/);
     z.ws.remove();
   });
 

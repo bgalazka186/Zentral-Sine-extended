@@ -445,6 +445,17 @@
         for (const p of PARTS) if (r.d[p]) out[p] = p === "tint" ? mix(r.d.tint, 22, "transparent") : r.d[p];
       return out;
     }
+    // A hover shade keeps the accent hue but moves away from the current theme
+    // contrast: dark accents get lighter; bright accents get darker.
+    function accentHover(value) {
+      const color = hex(value);
+      if (!color) return "";
+      const n = parseInt(color.slice(1), 16);
+      const channels = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+      const toward = lum(color) >= 0.42 ? 0 : 255;
+      const amount = toward === 0 ? 0.28 : 0.38;
+      return "#" + channels.map((channel) => Math.round(channel + (toward - channel) * amount).toString(16).padStart(2, "0")).join("");
+    }
     function declarations(parts, op) {
       const out = {};
       const alpha = opacity(op);
@@ -465,6 +476,8 @@
           out["--tab-group-text-color"] = on;
           out["--tab-group-text-color-invert"] = off;
           out["--bgalazka-fc-accent"] = value;
+          const hover = accentHover(parts.accent);
+          if (hover) out["--bgalazka-fc-accent-hover"] = fade(hover, "accent");
         } else if (p === "tint") {
           out["--tab-group-color-pale"] = value;
           out["--bgalazka-fc-tint"] = value;
@@ -480,7 +493,7 @@
       "--zen-folder-behind-bgcolor", "--zen-folder-front-bgcolor", "--zen-folder-stroke", "--bgalazka-fc-label",
       "--tab-group-color", "--tab-group-background-color", "--tab-group-color-invert", "--tab-group-text-color",
       "--tab-group-text-color-invert", "--tab-group-color-pale", "--tab-group-background-color-hover",
-      "--bgalazka-fc-accent", "--bgalazka-fc-tint", "--bgalazka-fc-hover",
+      "--bgalazka-fc-accent", "--bgalazka-fc-accent-hover", "--bgalazka-fc-tint", "--bgalazka-fc-hover",
     ]);
     const clampDepth = (depth) => Math.max(1, Math.min(MAX_DEPTH, Math.floor(Number(depth)) || 1));
     function parseLayers(raw) {
@@ -651,6 +664,18 @@
     }
     const cleanFolderColor = (v) => (FOLDER_COLORS.includes(v) ? v : cleanHex(v));
     const FOLDER_PARTS = Object.freeze(["back", "front", "stroke", "label", "accent", "tint", "hover"]);
+    // These are shared Colorful Folders Behavior preferences. Keep the same
+    // labels/defaults in the Notes picker so both editors control one setting.
+    const FOLDER_BEHAVIOR_OPTIONS = Object.freeze([
+      ["ignore_label", "Ignore my folder label color (let the Zen theme decide the name color)", false],
+      ["style_icon", "Color the folder icons (back, front, outline)", true],
+      ["style_accent", "Folder/tab accent colors and native accent-line visibility", true],
+      ["style_tint_header", "Soft background tint behind the folder name row", true],
+      ["style_tint_tabs", "Soft background tint behind the tabs inside a folder", true],
+      ["style_hover", "Hover background on the folder name row", true],
+      ["line_click", "Click the folder accent line to collapse or expand its folder", true],
+      ["line_hover", "Highlight the folder accent line on hover", true],
+    ]);
     function cleanFolderParts(raw) {
       const out = {};
       if (raw && typeof raw === "object" && !Array.isArray(raw))
@@ -6071,26 +6096,60 @@
       const uri = on ? noteFaviconUri(c) : "";
       return uri ? ((tab.getAttribute("image") || "") === uri ? c : "?") : c;
     }
+    // Track only inline declarations Notes actually overrides. Zen owns the original
+    // folder variables; when a layer is disabled or reset, restore that exact inline
+    // value/priority rather than deleting it and leaving the folder without its theme.
+    const notesFolderStyleOwners = new WeakMap();
+    function setNotesFolderStyleProperty(el, property, value) {
+      let owned = notesFolderStyleOwners.get(el);
+      if (!owned) {
+        owned = new Map();
+        notesFolderStyleOwners.set(el, owned);
+      }
+      const current = el.style.getPropertyValue(property);
+      const supportsPriority = typeof el.style.getPropertyPriority === "function";
+      const currentPriority = supportsPriority ? (el.style.getPropertyPriority(property) || "") : "";
+      const previous = owned.get(property);
+      if (value) {
+        const baseline = previous || { value: current, priority: currentPriority };
+        // If another owner changed this declaration since our last write, adopt
+        // that value as the new baseline before applying the Notes override again.
+        // Some fixture/minimal CSSStyleDeclaration implementations don't expose
+        // priority; in that case value equality is the strongest available signal.
+        if (previous && (current !== previous.applied || (supportsPriority && currentPriority !== "important"))) {
+          baseline.value = current;
+          baseline.priority = currentPriority;
+        }
+        if (current !== value || currentPriority !== "important")
+          el.style.setProperty(property, value, "important");
+        baseline.applied = value;
+        owned.set(property, baseline);
+      } else if (previous) {
+        if (current === previous.applied && (!supportsPriority || currentPriority === "important")) {
+          if (previous.value) el.style.setProperty(property, previous.value, previous.priority || "");
+          else el.style.removeProperty(property);
+        }
+        owned.delete(property);
+      }
+      if (!owned.size) notesFolderStyleOwners.delete(el);
+    }
+    function notesFolderBehaviorEnabled(name, fallback = true) {
+      try { return Services.prefs.getBoolPref(COLORFUL_FOLDER_PREF + name, fallback); }
+      catch (_) { return fallback; }
+    }
     function applyNotesFolderStyle(el, color, icon, { doc, warn = () => {}, parts = {}, opacity = {} } = {}) {
       try {
         if (!el?.style) return;
         const resolved = resolveFolderVisual({ b: colorHex(color) || "", d: parts, o: opacity }, FOLDER_STYLE.elementDepth(el));
         const properties = { ...(resolved.properties || {}) };
-        // Clearing a folder override restores Zen's native workspace tokens
-        // for any layer not currently supplied by global Colorful Folders defaults.
-        if (!color && !Object.keys(cleanFolderParts(parts)).length && !Object.keys(cleanFolderOpacity(opacity)).length) {
-          for (const [property, value] of Object.entries(ZEN_TINT_DEFAULT))
-            if (!properties[property]) properties[property] = value;
-        }
-        for (const property of FOLDER_STYLE.OWNED) {
-          const value = properties[property] || "";
-          if (value) {
-            if (el.style.getPropertyValue(property) !== value || (el.style.getPropertyPriority?.(property) || "") !== "important")
-              el.style.setProperty(property, value, "important");
-          } else if (el.style.getPropertyValue(property)) {
-            el.style.removeProperty(property);
-          }
-        }
+        // These two switches are independent: the header uses our dedicated tint
+        // token, while Zen itself consumes --tab-group-color-pale for the tab area.
+        // Omitting the disabled declaration lets setNotesFolderStyleProperty restore
+        // Zen's original inline value instead of leaving our color behind.
+        if (!notesFolderBehaviorEnabled("style_tint_header", true)) delete properties["--bgalazka-fc-tint"];
+        if (!notesFolderBehaviorEnabled("style_tint_tabs", true)) delete properties["--tab-group-color-pale"];
+        for (const property of FOLDER_STYLE.OWNED)
+          setNotesFolderStyleProperty(el, property, properties[property] || "");
         const setAttr = (name, value) => {
           const next = value == null ? "" : String(value);
           if (next) {
@@ -6270,7 +6329,7 @@
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
-        makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
+        makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
@@ -8117,10 +8176,16 @@
         simpleTab.addEventListener("click", () => setMode("simple"));
         detailTab.addEventListener("click", () => setMode("detailed"));
 
-        const ignoreBox = h("input", { type: "checkbox", "aria-label": "Ignore my folder label color" });
-        ignoreBox.checked = colorfulFolderDefaults().ignoreLabel;
-        ignoreBox.addEventListener("change", () => { try { Services.prefs.setBoolPref(COLORFUL_FOLDER_PREF + "ignore_label", ignoreBox.checked); } catch (_) {} });
-        const ignoreRow = h("label", { class: "zn-fstyle-check" }, ignoreBox, h("span", {}, "Ignore my folder label color (let the Zen theme decide, keeps names readable when a theme changes)"));
+        const behaviorBox = h("details", { class: "zn-fstyle-behavior" });
+        behaviorBox.open = true;
+        behaviorBox.append(h("summary", {}, "Folder appearance behavior"), h("p", {}, "These are shared global switches. Changes apply to all folders, including this one and Zen sidebar folders."));
+        for (const [name, label, fallback] of FOLDER_BEHAVIOR_OPTIONS) {
+          const checkbox = h("input", { type: "checkbox", "aria-label": label });
+          const prefKey = COLORFUL_FOLDER_PREF + name;
+          checkbox.checked = getPref(prefKey, fallback);
+          checkbox.addEventListener("change", () => setPref(prefKey, checkbox.checked));
+          behaviorBox.append(h("label", { class: "zn-fstyle-check" }, checkbox, h("span", {}, label)));
+        }
 
         setMode(editMode);
         const apply = chip("Apply");
@@ -8129,7 +8194,7 @@
         const cancel = chip("Close");
         openCard(
           title || "Folder color and icon",
-          h("div", { class: "zn-fstyle" }, modes, primaryBox, edgeRow, edgeWarn, alphaRow, detail, h("div", { class: "zn-fstyle-group-label" }, "Collections"), palette, ignoreRow, f.row, status),
+          h("div", { class: "zn-fstyle" }, modes, primaryBox, edgeRow, edgeWarn, alphaRow, detail, h("div", { class: "zn-fstyle-group-label" }, "Collections"), palette, behaviorBox, f.row, status),
           h("div", { class: "zn-dialog-actions" }, reset, cancel, apply, ok),
         );
         const commit = (closeAfter) => {
@@ -8866,7 +8931,10 @@
         for (const k of FIT_PROPS) card.style[k] = "";
         delete dialog.dataset.spill;
         delete root.dataset.dialogSpill;
-        if (viewport.width > 0) card.style.maxWidth = "min(34em, " + Math.max(120, viewport.width - 12) + "px)";
+        if (viewport.width > 0) {
+          const maxCardWidth = card.classList.contains("zn-folder-style-card") ? "760px" : "34em";
+          card.style.maxWidth = "min(" + maxCardWidth + ", " + Math.max(120, viewport.width - 12) + "px)";
+        }
         const size = { width: Math.max(card.offsetWidth || 0, card.scrollWidth || 0), height: Math.max(card.offsetHeight || 0, card.scrollHeight || 0) };
         const sr = root.getBoundingClientRect();
         const sheet = { left: sr.left, top: sr.top, width: sr.width, height: sr.height };
@@ -9092,7 +9160,8 @@
       function openCard(label, ...kids) {
         closeMenu();
         closeDialog();
-        const card = h("div", { class: "zn-dialog-card", role: "dialog", "aria-label": label }, h("strong", {}, label), ...kids);
+        const folderStyleCard = kids.some((kid) => kid?.classList?.contains?.("zn-fstyle"));
+        const card = h("div", { class: "zn-dialog-card" + (folderStyleCard ? " zn-folder-style-card" : ""), role: "dialog", "aria-label": label }, h("strong", {}, label), ...kids);
         dialog = h("div", { class: "zn-dialog" }, card);
         dialog.addEventListener("pointerdown", (e) => {
           if (e.target === dialog) closeDialog();

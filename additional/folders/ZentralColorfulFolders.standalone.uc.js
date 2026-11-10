@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Colorful Folders
 // @include chrome://browser/content/browser.xhtml
-// @version 3.2.23
+// @version 3.2.28
 // ==/UserScript==
 (function () {
   "use strict";
@@ -24,10 +24,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.2.23, the numeric-preference list and
+ * Placeholders replaced by the build: 3.2.28, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.2.23";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.2.28";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -705,6 +705,17 @@ function nativeSidebarSide() {
         for (const p of PARTS) if (r.d[p]) out[p] = p === "tint" ? mix(r.d.tint, 22, "transparent") : r.d[p];
       return out;
     }
+    // A hover shade keeps the accent hue but moves away from the current theme
+    // contrast: dark accents get lighter; bright accents get darker.
+    function accentHover(value) {
+      const color = hex(value);
+      if (!color) return "";
+      const n = parseInt(color.slice(1), 16);
+      const channels = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+      const toward = lum(color) >= 0.42 ? 0 : 255;
+      const amount = toward === 0 ? 0.28 : 0.38;
+      return "#" + channels.map((channel) => Math.round(channel + (toward - channel) * amount).toString(16).padStart(2, "0")).join("");
+    }
     function declarations(parts, op) {
       const out = {};
       const alpha = opacity(op);
@@ -725,6 +736,8 @@ function nativeSidebarSide() {
           out["--tab-group-text-color"] = on;
           out["--tab-group-text-color-invert"] = off;
           out["--bgalazka-fc-accent"] = value;
+          const hover = accentHover(parts.accent);
+          if (hover) out["--bgalazka-fc-accent-hover"] = fade(hover, "accent");
         } else if (p === "tint") {
           out["--tab-group-color-pale"] = value;
           out["--bgalazka-fc-tint"] = value;
@@ -740,7 +753,7 @@ function nativeSidebarSide() {
       "--zen-folder-behind-bgcolor", "--zen-folder-front-bgcolor", "--zen-folder-stroke", "--bgalazka-fc-label",
       "--tab-group-color", "--tab-group-background-color", "--tab-group-color-invert", "--tab-group-text-color",
       "--tab-group-text-color-invert", "--tab-group-color-pale", "--tab-group-background-color-hover",
-      "--bgalazka-fc-accent", "--bgalazka-fc-tint", "--bgalazka-fc-hover",
+      "--bgalazka-fc-accent", "--bgalazka-fc-accent-hover", "--bgalazka-fc-tint", "--bgalazka-fc-hover",
     ]);
     const clampDepth = (depth) => Math.max(1, Math.min(MAX_DEPTH, Math.floor(Number(depth)) || 1));
     function parseLayers(raw) {
@@ -887,8 +900,9 @@ function nativeSidebarSide() {
   // Zen's own custom properties that belong to one switchable part of the styling (see styleToggles()).
   const TOGGLE_PROPERTIES = Object.freeze({
     icon: ["--zen-folder-behind-bgcolor", "--zen-folder-front-bgcolor", "--zen-folder-stroke"],
-    accent: ["--tab-group-color", "--tab-group-background-color", "--tab-group-color-invert", "--tab-group-text-color", "--tab-group-text-color-invert", "--bgalazka-fc-accent"],
-    tint: ["--tab-group-color-pale"],
+    accent: ["--tab-group-color", "--tab-group-background-color", "--tab-group-color-invert", "--tab-group-text-color", "--tab-group-text-color-invert", "--bgalazka-fc-accent", "--bgalazka-fc-accent-hover"],
+    tintHeader: ["--bgalazka-fc-tint"],
+    tintTabs: ["--tab-group-color-pale"],
     hover: ["--tab-group-background-color-hover"],
   });
   const ROOT_FLAGS = Object.freeze({
@@ -909,6 +923,19 @@ function nativeSidebarSide() {
     tint: "Soft background tint",
     hover: "Hover background",
   });
+  // The color editor mirrors the global Behavior controls from Zentral Settings.
+  // These are intentionally shared preferences, not per-folder values: one switch
+  // changes the behavior consistently for native Zen folders and Notes folders.
+  const EDITOR_BEHAVIOR = Object.freeze([
+    [P.IGNORE_LABEL, "Ignore my folder label color (let the Zen theme decide the name color)", false],
+    [P.STYLE_ICON, "Color the folder icons (back, front, outline)", true],
+    [P.STYLE_ACCENT, "Folder/tab accent colors and native accent-line visibility", true],
+    [P.STYLE_TINT_HEADER, "Soft background tint behind the folder name row", true],
+    [P.STYLE_TINT_TABS, "Soft background tint behind the tabs inside a folder", true],
+    [P.STYLE_HOVER, "Hover background on the folder name row", true],
+    [P.LINE_CLICK, "Click the folder accent line to collapse or expand its folder", true],
+    [P.LINE_HOVER, "Highlight the folder accent line on hover", true],
+  ]);
   const PART_PREFS = Object.freeze(
     Object.fromEntries(PARTS.map((part) => [part, PREFIX + "default_" + part])),
   );
@@ -1184,7 +1211,8 @@ function nativeSidebarSide() {
       const off = [];
       if (!toggles.icon) off.push(...TOGGLE_PROPERTIES.icon);
       if (!toggles.accent) off.push(...TOGGLE_PROPERTIES.accent);
-      if (!toggles.tintHeader && !toggles.tintTabs) off.push(...TOGGLE_PROPERTIES.tint);
+      if (!toggles.tintHeader) off.push(...TOGGLE_PROPERTIES.tintHeader);
+      if (!toggles.tintTabs) off.push(...TOGGLE_PROPERTIES.tintTabs);
       if (!toggles.hover) off.push(...TOGGLE_PROPERTIES.hover);
       if (!off.length) return properties;
       const out = { ...properties };
@@ -1202,6 +1230,9 @@ function nativeSidebarSide() {
         if (wanted) { if (root.getAttribute?.(attr) !== "true") root.setAttribute(attr, "true"); }
         else if (root.hasAttribute?.(attr)) root.removeAttribute(attr);
       }
+      // Clear the per-folder hover marker immediately when its setting is switched off.
+      // The stylesheet keys off the folder marker itself, not this root preference flag.
+      if (!toggles.lineHover) clearLineHover();
     }
 
     const previousFolderColorPresets = window.__zentralFolderColorPresets;
@@ -1504,7 +1535,8 @@ function nativeSidebarSide() {
     }
     function styleMapFor(folder) {
       if (isNotesOwned(folder)) return {};
-      return resolveStyle(readFolderRecord(folder), folderDepth(folder)).properties;
+      const resolved = resolveStyle(readFolderRecord(folder), folderDepth(folder));
+      return { ...resolved.properties };
     }
     const previousStyleBridge = window.__zentralFolderColorStyleBridge;
     const folderColorStyleBridge = Object.freeze({
@@ -1664,7 +1696,10 @@ function nativeSidebarSide() {
         if (!isZenFolder(node) || !isAccentFolder(node)) continue;
         const container = lineContainer(node);
         if (!container) continue;
-        if ((onNativeLine && path.includes(container)) || (path.includes(container) && isInsetAccentHit(container, event)))
+        // Zen may mount .tab-group-line as a sibling of .tab-group-container.
+        // It still belongs to this folder when both appear in the composed path;
+        // requiring the container in that path silently disabled native-line hover.
+        if ((onNativeLine && path.includes(node)) || (path.includes(container) && isInsetAccentHit(container, event)))
           return node;
       }
       return null;
@@ -1732,23 +1767,57 @@ function nativeSidebarSide() {
       /* Reuse Zen's existing accent geometry: a 2px inset spine plus its native group-line segment.
          The only interaction is a small hit-test around that exact line; no synthetic tree is drawn. */
       :root:not([bgalazka-fc-no-accent]) zen-folder[${LAYERS_ATTR}~="accent"] > .tab-group-container {
+        /* A positioning context for the transparent hit strip below; it does not
+           change the container's measured size or Zen's native child layout. */
+        position: relative !important;
         box-shadow: inset 2px 0 0 0 var(--bgalazka-fc-accent) !important;
         transition: box-shadow .12s ease;
+      }
+      :root:not([bgalazka-fc-no-accent]) zen-folder[${LAYERS_ATTR}~="accent"] > .tab-group-container::before {
+        content: "";
+        position: absolute;
+        inset-block: 0;
+        inset-inline-start: 0;
+        width: ${LINE_HIT_WIDTH}px;
+        z-index: 2147483647;
+        background: transparent;
+        pointer-events: none;
+        transition: background-color .12s ease, box-shadow .12s ease;
+      }
+      /* The native 8px gutter remains an actual hover/click target when either
+         behavior is enabled. The two preferences can be switched independently. */
+      :root:not([bgalazka-fc-no-accent])[bgalazka-fc-line-click] zen-folder[${LAYERS_ATTR}~="accent"] > .tab-group-container::before {
+        pointer-events: auto;
+        cursor: pointer;
+      }
+      :root:not([bgalazka-fc-no-accent])[bgalazka-fc-line-hover] zen-folder[${LAYERS_ATTR}~="accent"] > .tab-group-container::before {
+        pointer-events: auto;
       }
       :root:not([bgalazka-fc-no-accent]) zen-folder[${LAYERS_ATTR}~="accent"] .tab-group-line {
         background-color: var(--bgalazka-fc-accent) !important;
       }
       :root[bgalazka-fc-line-click] zen-folder[${LAYERS_ATTR}~="accent"] .tab-group-line { cursor: pointer !important; }
-      /* The base accent shadow is !important, so the hot-state shadow must be too.
-         Make the change obvious: the 2px spine widens to 4px and gets a soft inner
-         glow. This is still the same native container/line, not a second connector. */
-      :root[bgalazka-fc-line-hover] zen-folder[${LAYERS_ATTR}~="accent"][${LINE_HOT_ATTR}] > .tab-group-container {
-        box-shadow: inset 4px 0 0 0 var(--bgalazka-fc-accent),
-          inset 8px 0 8px -5px var(--bgalazka-fc-accent) !important;
+      /* Hover changes only the existing connector's color. Keep the inset spine
+         exactly 2px and leave Zen's curved .tab-group-line geometry untouched. */
+      :root:not([bgalazka-fc-no-accent]) zen-folder[${LAYERS_ATTR}~="accent"][${LINE_HOT_ATTR}] > .tab-group-container {
+        box-shadow: inset 2px 0 0 0 var(--bgalazka-fc-accent-hover, var(--bgalazka-fc-accent)) !important;
         cursor: pointer !important;
       }
-      :root[bgalazka-fc-line-hover] zen-folder[${LINE_HOT_ATTR}] .tab-group-line {
-        filter: brightness(1.55) saturate(1.35) drop-shadow(0 0 2px var(--bgalazka-fc-accent)) !important;
+      :root:not([bgalazka-fc-no-accent]) zen-folder[${LAYERS_ATTR}~="accent"] .tab-group-line {
+        transition: background-color .12s ease;
+      }
+      :root:not([bgalazka-fc-no-accent]) zen-folder[${LAYERS_ATTR}~="accent"][${LINE_HOT_ATTR}] .tab-group-line {
+        background-color: var(--bgalazka-fc-accent-hover, var(--bgalazka-fc-accent)) !important;
+      }
+      /* Native CSS hover is a fallback when Firefox's XUL pointer event is
+         retargeted outside the delegated tree. It only recolors the existing
+         curved line (or the 2px inset at the gutter), never the whole row. */
+      :root[bgalazka-fc-line-hover]:not([bgalazka-fc-no-accent]) zen-folder[${LAYERS_ATTR}~="accent"] .tab-group-line:hover {
+        background-color: var(--bgalazka-fc-accent-hover, var(--bgalazka-fc-accent)) !important;
+      }
+      :root[bgalazka-fc-line-hover]:not([bgalazka-fc-no-accent]) zen-folder[${LAYERS_ATTR}~="accent"] > .tab-group-container::before:hover {
+        background: transparent !important;
+        box-shadow: inset 2px 0 0 0 var(--bgalazka-fc-accent-hover, var(--bgalazka-fc-accent)) !important;
       }
       .zcf-panel { position: relative; z-index: 2147483647; width: 760px; max-width: calc(100vw - 20px);
         max-height: min(82vh, 680px); overflow: auto; box-sizing: border-box; padding: 12px; border-radius: 12px;
@@ -1786,6 +1855,8 @@ function nativeSidebarSide() {
       .zcf-btns { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-top: 10px; }
       .zcf-detail { border-top: 1px solid color-mix(in srgb, CanvasText 15%, transparent); margin-top: 8px; padding-top: 7px; }
       .zcf-detail summary { cursor: pointer; font-size: 12px; }
+      .zcf-behavior > .zcf-muted { margin: 5px 0 7px; }
+      .zcf-behavior .zcf-check { margin: 6px 0; }
       .zcf-modes { gap: 0; }
       .zcf-modes button { flex: 1; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); padding: 4px 8px; background: transparent; color: inherit; }
       .zcf-modes button:first-child { border-radius: 7px 0 0 7px; }
@@ -1937,6 +2008,23 @@ function nativeSidebarSide() {
       };
     }
 
+
+    // Read the appearance the user actually sees, not only an explicit per-folder
+    // record. A folder styled by the all-levels or nesting-level default has a real
+    // color look that can be copied even though it has no entry in the folder store.
+    function effectiveFolderRecord(folder) {
+      const own = FOLDER_STYLE.norm(folderTarget(folder).read() || {});
+      if (FOLDER_STYLE.hasColor(own)) return own;
+      const env = styleEnv();
+      const level = FOLDER_STYLE.norm(env.layers?.[folderDepth(folder)] || {});
+      const fallback = FOLDER_STYLE.hasColor(level) ? level : FOLDER_STYLE.norm(env.defaults || {});
+      if (!FOLDER_STYLE.hasColor(fallback)) return null;
+      return {
+        b: fallback.b,
+        d: { ...fallback.d, ...own.d },
+        o: { ...fallback.o, ...own.o },
+      };
+    }
 
     // ---------------------------------------------- one look for a whole folder tree
     function subfolderList(folder) {
@@ -2154,13 +2242,31 @@ function nativeSidebarSide() {
       paletteBox.open = true;
       element.appendChild(paletteBox);
 
-      // ---- label color opt-out
-      const labelRow = createElement("label", { class: "zcf-check" });
-      const labelBox = createElement("input", { type: "checkbox", "aria-label": "Ignore my folder label color" });
-      labelBox.checked = getBool(P.IGNORE_LABEL, false);
-      labelBox.addEventListener("change", () => setBool(P.IGNORE_LABEL, labelBox.checked));
-      labelRow.append(labelBox, createElement("span", { text: "Ignore my folder label color (let the Zen theme decide, keeps names readable when a theme changes)" }));
-      element.appendChild(labelRow);
+      // ---- global folder behavior (the same switches as Zentral Settings)
+      const behaviorBox = createElement("details", { class: "zcf-detail zcf-behavior" });
+      behaviorBox.open = true;
+      behaviorBox.appendChild(createElement("summary", { text: "Folder appearance behavior" }));
+      behaviorBox.appendChild(createElement("div", {
+        class: "zcf-muted",
+        text: "These are global switches. Changes apply to all folders, including this one and Notes folders.",
+      }));
+      for (const [property, label, fallback] of EDITOR_BEHAVIOR) {
+        const row = createElement("label", { class: "zcf-check" });
+        const checkbox = createElement("input", { type: "checkbox", "aria-label": label });
+        checkbox.checked = getBool(property, fallback);
+        checkbox.addEventListener("change", () => {
+          if (!setBool(property, checkbox.checked)) {
+            checkbox.checked = getBool(property, fallback);
+            return;
+          }
+          syncRootFlags();
+          schedulePaint();
+          announceDefaultsChanged();
+        });
+        row.append(checkbox, createElement("span", { text: label }));
+        behaviorBox.appendChild(row);
+      }
+      element.appendChild(behaviorBox);
 
       // ---- saved themes
       const themeRow = createElement("div", { class: "zcf-row" });
@@ -2421,12 +2527,20 @@ function nativeSidebarSide() {
       const xul = (tag, attrs = {}) => {
         const node = document.createXULElement(tag);
         for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, String(value));
+        // Zen/Firefox can reuse XUL menu nodes with stale disabled state. These
+        // are freshly-created palette actions, so start explicitly enabled; only
+        // the copy action below may be disabled when there is truly no style.
+        if (tag === "menu" || tag === "menuitem" || tag === "menupopup") {
+          node.removeAttribute("disabled");
+          node.removeAttribute("aria-disabled");
+          try { node.disabled = false; } catch (_) {}
+        }
         node.setAttribute(MENU_MARK, "true");
         return node;
       };
       popup.appendChild(xul("menuseparator"));
       const menu = xul("menu", { label: "Folder colors" });
-      const submenu = document.createXULElement("menupopup");
+      const submenu = xul("menupopup");
       menu.appendChild(submenu);
       const apply = (theme) => {
         const target = folderTarget(folder);
@@ -2439,14 +2553,10 @@ function nativeSidebarSide() {
           .catch((error) => console.warn("[Zentral Colorful Folders] Palette apply failed:", error));
       };
       const addGroup = (label, items) => {
-        const group = document.createXULElement("menu");
-        group.setAttribute("label", label);
-        const pop = document.createXULElement("menupopup");
+        const group = xul("menu", { label });
+        const pop = xul("menupopup");
         for (const theme of items) {
-          const item = document.createXULElement("menuitem");
-          item.setAttribute("label", theme.n);
-          item.setAttribute("class", "menuitem-iconic");
-          item.setAttribute("image", makeSwatchIcon(theme));
+          const item = xul("menuitem", { label: theme.n, class: "menuitem-iconic", image: makeSwatchIcon(theme) });
           item.addEventListener("command", () => apply(theme));
           pop.appendChild(item);
         }
@@ -2497,30 +2607,30 @@ function nativeSidebarSide() {
       submenu.appendChild(more);
       if (subfolderList(folder).length) {
         const wholeTree = xul("menu", { label: "Whole tree (this folder + subfolders)" });
-        const treePop = document.createXULElement("menupopup");
+        const treePop = xul("menupopup");
         wholeTree.appendChild(treePop);
         const run = (promise) => Promise.resolve(promise).catch((error) =>
           console.warn("[Zentral Colorful Folders] tree apply failed:", error));
         const own = xul("menuitem", { label: "Copy this folder's colors to all subfolders" });
-        const record = folderTarget(folder).read();
-        if (!FOLDER_STYLE.hasColor(FOLDER_STYLE.norm(record || {}))) own.setAttribute("disabled", "true");
+        const initialLook = effectiveFolderRecord(folder);
+        if (!initialLook) {
+          own.setAttribute("data-zcf-disabled-by-design", "true");
+          own.setAttribute("disabled", "true");
+          try { own.disabled = true; } catch (_) {}
+        }
         own.addEventListener("command", () => {
-          const look = FOLDER_STYLE.norm(folderTarget(folder).read() || {});
-          if (FOLDER_STYLE.hasColor(look)) run(applyToTree(folder, () => look, { includeRoot: false }));
+          const look = effectiveFolderRecord(folder);
+          if (look) run(applyToTree(folder, () => look, { includeRoot: false }));
         });
         treePop.appendChild(own);
         treePop.appendChild(xul("menuseparator"));
         const paletteMenu = xul("menu", { label: "Apply a palette to folder and subfolders" });
-        const palettePop = document.createXULElement("menupopup");
+        const palettePop = xul("menupopup");
         for (const group of BUILTIN_THEMES.concat(state.themes.length ? [{ group: "My quick themes", items: state.themes }] : [])) {
-          const groupMenu = document.createXULElement("menu");
-          groupMenu.setAttribute("label", group.group);
-          const groupPop = document.createXULElement("menupopup");
+          const groupMenu = xul("menu", { label: group.group });
+          const groupPop = xul("menupopup");
           for (const theme of group.items) {
-            const item = document.createXULElement("menuitem");
-            item.setAttribute("label", theme.n);
-            item.setAttribute("class", "menuitem-iconic");
-            item.setAttribute("image", makeSwatchIcon(theme));
+            const item = xul("menuitem", { label: theme.n, class: "menuitem-iconic", image: makeSwatchIcon(theme) });
             item.addEventListener("command", () => run(applyToTree(folder, () => theme)));
             groupPop.appendChild(item);
           }
@@ -2530,12 +2640,11 @@ function nativeSidebarSide() {
         paletteMenu.appendChild(palettePop);
         treePop.appendChild(paletteMenu);
         const collectionMenu = xul("menu", { label: "Spread a collection over this tree" });
-        const collectionPop = document.createXULElement("menupopup");
+        const collectionPop = xul("menupopup");
         for (const group of BUILTIN_THEMES) {
           const pick = collectionPicker(group);
           if (!pick) continue;
-          const item = document.createXULElement("menuitem");
-          item.setAttribute("label", group.group);
+          const item = xul("menuitem", { label: group.group });
           item.addEventListener("command", () => run(applyToTree(folder, pick)));
           collectionPop.appendChild(item);
         }
@@ -2551,6 +2660,80 @@ function nativeSidebarSide() {
       });
       submenu.appendChild(reset);
       popup.appendChild(menu);
+      normalizeFolderColorMenu(popup, more);
+      // XUL menu nodes can receive their disabled state during native popup
+      // initialization, after popupshowing capture has already run. Normalize
+      // again after the popup is actually displayed (and after nested menus open).
+      lifecycle.setTimeout(() => normalizeFolderColorMenu(popup, more), 0);
+    }
+    const folderColorMenuObservers = new Map();
+    function normalizeFolderColorMenu(popup, referenceItem = null) {
+      if (!popup) return;
+      let enabledTextColor = "";
+      try { enabledTextColor = window.getComputedStyle?.(referenceItem)?.color || ""; } catch (_) {}
+      if (!enabledTextColor) {
+        try { enabledTextColor = window.getComputedStyle?.(popup)?.color || ""; } catch (_) {}
+      }
+      if (!enabledTextColor) enabledTextColor = "MenuText";
+      for (const node of popup.querySelectorAll?.("[" + MENU_MARK + "]") || []) {
+        if (node.hasAttribute?.("data-zcf-disabled-by-design")) {
+          node.setAttribute?.("disabled", "true");
+          try { node.disabled = true; } catch (_) {}
+          continue;
+        }
+        if (node.hasAttribute?.("disabled")) node.removeAttribute("disabled");
+        if (node.hasAttribute?.("aria-disabled")) node.removeAttribute("aria-disabled");
+        try { if (node.disabled !== false) node.disabled = false; } catch (_) {}
+        // XUL can dim a menuitem through either its own state or a disabled
+        // ancestor <menu>/<menupopup>. Explicitly style every generated level,
+        // including the popup wrappers and actionable rows, from an enabled
+        // reference item instead of styling only the visible category label.
+        try {
+          node.style?.setProperty("color", enabledTextColor, "important");
+          node.style?.setProperty("opacity", "1", "important");
+          node.style?.setProperty("filter", "none", "important");
+        } catch (_) {}
+      }
+    }
+    function folderColorMenuRoot(node) {
+      for (let current = node; current; current = current.parentNode || current.host) {
+        if (current.id === "zenFolderActions") return current;
+      }
+      return null;
+    }
+    function observeFolderColorMenu(root, reference) {
+      if (!root) return;
+      const existing = folderColorMenuObservers.get(root);
+      if (existing) {
+        if (reference) existing.reference = reference;
+        return;
+      }
+      const Observer = window.MutationObserver || globalThis.MutationObserver;
+      if (typeof Observer !== "function") return;
+      try {
+        const state = { observer: null, reference };
+        state.observer = new Observer(() => normalizeFolderColorMenu(root, state.reference));
+        state.observer.observe(root, { subtree: true, attributes: true, attributeFilter: ["disabled", "aria-disabled"] });
+        folderColorMenuObservers.set(root, state);
+      } catch (_) {}
+    }
+    function onFolderColorPopupShown(event) {
+      const root = folderColorMenuRoot(event?.target);
+      if (!root) return;
+      const reference = [...(root.querySelectorAll?.("[" + MENU_MARK + "]") || [])]
+        .find((node) => node.getAttribute?.("label") === "More colors…") || null;
+      const normalize = () => normalizeFolderColorMenu(root, reference);
+      normalize();
+      observeFolderColorMenu(root, reference);
+      lifecycle.setTimeout(normalize, 0);
+      lifecycle.setTimeout(normalize, 40);
+    }
+    function onFolderColorPopupHidden(event) {
+      const root = folderColorMenuRoot(event?.target);
+      if (!root || root !== event.target) return;
+      const state = folderColorMenuObservers.get(root);
+      try { state?.observer?.disconnect(); } catch (_) {}
+      folderColorMenuObservers.delete(root);
     }
     function onPopupShowing(event) {
       const popup = event.target;
@@ -2575,9 +2758,16 @@ function nativeSidebarSide() {
       }
     }
     lifecycle.listen(window, "popupshowing", onPopupShowing, true);
+    lifecycle.listen(window, "popupshowing", onFolderColorPopupShown, true);
+    lifecycle.listen(window, "popupshown", onFolderColorPopupShown, true);
+    lifecycle.listen(window, "popuphidden", onFolderColorPopupHidden, true);
     lifecycle.listen(window, "zentral-notes-folder-color-bridge-ready", schedulePaint);
     lifecycle.listen(window, "zentral-notes-folder-color-bridge-gone", schedulePaint);
     lifecycle.own(() => {
+      for (const state of folderColorMenuObservers.values()) {
+        try { state.observer?.disconnect(); } catch (_) {}
+      }
+      folderColorMenuObservers.clear();
       try {
         for (const node of [...document.querySelectorAll?.("[" + MENU_MARK + "]") || []]) node.remove();
       } catch (_) {}
@@ -2590,11 +2780,21 @@ function nativeSidebarSide() {
       document.getElementById("tabbrowser-tabs") ||
       window.gBrowser?.tabContainer ||
       document.querySelector?.("#tabbrowser-tabs");
-    if (root) {
-      lifecycle.listen(root, "click", onAccentLineClick, true);
-      lifecycle.listen(root, "pointerover", updateLineHover, true);
-      lifecycle.listen(root, "pointermove", updateLineHover, true);
-      lifecycle.listen(root, "pointerleave", clearLineHover, true);
+    // The pinned-folder tree is relocated between Zen's workspace/sidebar
+    // containers (and can cross shadow boundaries). Capture from the document
+    // root instead of assuming #tabbrowser-tabs is always its ancestor.
+    const interactionRoot = document.documentElement || root;
+    if (interactionRoot) {
+      lifecycle.listen(interactionRoot, "click", onAccentLineClick, true);
+      // Firefox's XUL sidebar reliably emits mousemove/mouseover for hover even
+      // when a native folder subtree is hosted through a relocated workspace.
+      // Keep pointer events too for pen/touch-capable platforms; setLineHover is
+      // idempotent, so duplicate notifications are harmless.
+      lifecycle.listen(interactionRoot, "mouseover", updateLineHover, true);
+      lifecycle.listen(interactionRoot, "mousemove", updateLineHover, true);
+      lifecycle.listen(interactionRoot, "pointerover", updateLineHover, true);
+      lifecycle.listen(interactionRoot, "pointermove", updateLineHover, true);
+      lifecycle.listen(interactionRoot, "pointerleave", clearLineHover, true);
       lifecycle.listen(window, "blur", clearLineHover, true);
     }
     if (root && typeof MutationObserver === "function") {
@@ -2848,6 +3048,7 @@ function nativeSidebarSide() {
       BUILTIN_THEMES,
       PARTS,
       PART_LABELS,
+      EDITOR_BEHAVIOR,
       MARK,
       MENU_MARK,
     });

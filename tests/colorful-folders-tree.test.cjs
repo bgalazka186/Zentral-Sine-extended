@@ -17,6 +17,13 @@ function boot({ rtl = false } = {}) {
   const { El, document } = dom;
   const store = new Map();
   const observers = [];
+  const mutationObservers = [];
+  class FakeMutationObserver {
+    constructor(callback) { this.callback = callback; this.target = null; this.options = null; this.disconnected = false; mutationObservers.push(this); }
+    observe(target, options) { this.target = target; this.options = options; }
+    disconnect() { this.disconnected = true; }
+    trigger() { this.callback([], this); }
+  }
   const prefs = {
     getStringPref: (k, d = "") => (store.has(k) ? String(store.get(k)) : d),
     getBoolPref: (k, d = false) => (store.has(k) ? !!store.get(k) : d),
@@ -33,11 +40,12 @@ function boot({ rtl = false } = {}) {
     document, console, Event: class { constructor(type) { this.type = type; } },
     dispatchEvent() {}, addEventListener() {}, removeEventListener() {},
     innerWidth: 1200, innerHeight: 800, crypto: require("node:crypto").webcrypto,
-    getComputedStyle: () => ({ direction: rtl ? "rtl" : "ltr" }),
+    getComputedStyle: () => ({ direction: rtl ? "rtl" : "ltr", color: "rgb(255, 255, 255)" }),
     ZentralRuntime: { register(def) { registration = def; } },
   };
   win.window = win; win.globalThis = { Services: { prefs } };
-  vm.runInNewContext(source, { ...win, window: win, globalThis: win.globalThis, ChromeUtils: {}, TextEncoder, Uint8Array, Uint32Array, DataView, Object, Array, String, Number, Math, JSON, Date, Set, Map, RegExp, Error, TypeError, WeakMap, Promise, Symbol, MutationObserver: undefined, console });
+  win.MutationObserver = FakeMutationObserver;
+  vm.runInNewContext(source, { ...win, window: win, globalThis: win.globalThis, ChromeUtils: {}, TextEncoder, Uint8Array, Uint32Array, DataView, Object, Array, String, Number, Math, JSON, Date, Set, Map, RegExp, Error, TypeError, WeakMap, Promise, Symbol, MutationObserver: FakeMutationObserver, console });
   const lifecycle = {
     active: true, owned: [],
     own(fn) { this.owned.push(fn); },
@@ -79,7 +87,7 @@ function boot({ rtl = false } = {}) {
     inner.c.children[2].querySelector(".tab-stack").getBoundingClientRect = () => rect(6, 120);
   }
   const started = registration.init({ lifecycle, runtime: undefined });
-  return { dom, store, prefs, fire, lifecycle, timers, outer, inner, tabbar, document, win, observers, started };
+  return { dom, store, prefs, fire, lifecycle, timers, outer, inner, tabbar, document, win, observers, mutationObservers, started };
 }
 const flush = (ctx) => { for (let i = 0; i < 8 && ctx.timers.length; i++) { const batch = ctx.timers.splice(0); for (const fn of batch) fn(); } };
 
@@ -170,14 +178,86 @@ test("hover highlights only the hovered folder's native line and clears as the p
   assert.equal(ctx.inner.f.hasAttribute(HOT), false, "the hover switch clears and disables the highlight");
 });
 
-test("the hover treatment overrides the important base accent and is visually distinct", () => {
-  const hotRule = source.match(/:root\[bgalazka-fc-line-hover\] zen-folder\[\$\{LAYERS_ATTR\}~="accent"\]\[\$\{LINE_HOT_ATTR\}\] > \.tab-group-container \{([\s\S]*?)\}/);
-  assert.ok(hotRule, "a dedicated hot-state rule targets only the active folder's accent container");
-  assert.match(hotRule[1], /inset 4px 0 0 0 var\(--bgalazka-fc-accent\)/, "hover widens the stripe from 2px to 4px");
-  assert.match(hotRule[1], /inset 8px 0 8px -5px var\(--bgalazka-fc-accent\)/, "hover adds a visible inner glow");
-  assert.match(hotRule[1], /box-shadow:[\s\S]*!important/, "hover wins over the important base box-shadow");
+test("classic Firefox mouse events also activate and clear the exact accent hit target", () => {
+  const ctx = boot();
+  ctx.prefs.setStringPref(KEY("default_base"), "#3366cc");
+  flush(ctx);
+  send(ctx, "mousemove", ctx.inner.c.children[2], 60);
+  assert.equal(ctx.inner.f.getAttribute(HOT), "true");
+  send(ctx, "mousemove", ctx.inner.c.children[2], 100);
+  assert.equal(ctx.inner.f.hasAttribute(HOT), false);
+  send(ctx, "mouseover", ctx.inner.line, 100);
+  assert.equal(ctx.inner.f.getAttribute(HOT), "true");
+});
+
+test("hover changes only the native connector color and preserves its curved geometry", () => {
+  const hotRule = source.match(/:root:not\(\[bgalazka-fc-no-accent\]\) zen-folder\[\$\{LAYERS_ATTR\}~="accent"\]\[\$\{LINE_HOT_ATTR\}\] > \.tab-group-container \{([\s\S]*?)\}/);
+  assert.ok(hotRule, "a dedicated per-folder hot-state rule targets the active accent container");
+  assert.match(hotRule[1], /inset 2px 0 0 0 var\(--bgalazka-fc-accent-hover, var\(--bgalazka-fc-accent\)\)/, "the original 2px spine only changes color");
+  assert.doesNotMatch(hotRule[1], /inset 4px|inset 8px|background:/, "hover adds no widened stripe, glow or rectangular fill");
   assert.match(hotRule[1], /cursor:\s*pointer\s*!important/, "the clickable stripe advertises its action");
-  assert.match(source, /filter:\s*brightness\(1\.55\) saturate\(1\.35\) drop-shadow\(0 0 2px var\(--bgalazka-fc-accent\)\)\s*!important/);
+  assert.match(source, /\[\$\{LINE_HOT_ATTR\}\] \.tab-group-line \{\s*background-color: var\(--bgalazka-fc-accent-hover, var\(--bgalazka-fc-accent\)\) !important;/, "the native curved line changes to the derived hover color");
+  assert.doesNotMatch(source, /filter:\s*brightness\(1\.7\)|drop-shadow\(0 0 3px var\(--bgalazka-fc-accent\)\)/, "no harsh brightness filter or glow remains");
+  assert.doesNotMatch(source, /\[\$\{LINE_HOT_ATTR\}\] > \.tab-group-container::before \{[\s\S]*?background:/, "the transparent hit area never becomes a rectangle on hover");
+});
+
+test("hover accent is derived in the opposite brightness direction and preserves accent opacity", () => {
+  const ctx = boot();
+  ctx.prefs.setStringPref(KEY("default_base"), "#3366cc");
+  flush(ctx);
+  const darkAccentHover = ctx.outer.f.style.getPropertyValue("--bgalazka-fc-accent-hover");
+  assert.equal(darkAccentHover, "#81a0df", "dark blue gets a lighter blue hover color");
+  ctx.prefs.setStringPref(KEY("default_base"), "#f4e04d");
+  flush(ctx);
+  const brightAccentHover = ctx.outer.f.style.getPropertyValue("--bgalazka-fc-accent-hover");
+  assert.equal(brightAccentHover, "#b0a137", "bright yellow gets a darker yellow hover color");
+  ctx.prefs.setStringPref(KEY("default_base"), "#3366cc");
+  ctx.prefs.setIntPref(KEY("default_accent_opacity"), 45);
+  flush(ctx);
+  assert.equal(ctx.outer.f.style.getPropertyValue("--bgalazka-fc-accent-hover"), "color-mix(in srgb, #81a0df 45%, transparent)", "the hover shade preserves the user's accent opacity");
+});
+
+test("hover and click delegation is attached to the document root, not a replaceable tab-tree wrapper", () => {
+  const ctx = boot();
+  ctx.prefs.setStringPref(KEY("default_base"), "#3366cc");
+  flush(ctx);
+  const delegated = ctx.lifecycle.listeners.filter((item) => ["click", "mouseover", "mousemove", "pointerover", "pointermove"].includes(item.type));
+  assert.ok(delegated.length >= 5);
+  assert.ok(delegated.every((item) => item.target === ctx.document.documentElement), "events survive Zen moving pinned folders between workspace containers");
+  send(ctx, "pointermove", ctx.inner.c.children[2], 60);
+  assert.equal(ctx.inner.f.getAttribute(HOT), "true");
+});
+
+test("a native group line works when Zen places it beside, rather than inside, the content container", () => {
+  const ctx = boot();
+  ctx.prefs.setStringPref(KEY("default_base"), "#3366cc");
+  flush(ctx);
+  const nativeLine = new ctx.dom.El("div");
+  nativeLine.classList.add("tab-group-line");
+  ctx.inner.f.append(nativeLine);
+  send(ctx, "pointermove", nativeLine, 180);
+  assert.equal(ctx.inner.f.getAttribute(HOT), "true", "the native sibling line highlights its owning folder");
+  send(ctx, "click", nativeLine, 180);
+  assert.equal(ctx.inner.f.collapsed, true, "the native sibling line toggles only its owning folder");
+});
+
+test("native :hover fallback recolors the curved connector even when delegated XUL hover events are missed", () => {
+  assert.match(source, /:root\[bgalazka-fc-line-hover\]:not\(\[bgalazka-fc-no-accent\]\) zen-folder\[\$\{LAYERS_ATTR\}~="accent"\] \.tab-group-line:hover\s*\{[^}]*background-color: var\(--bgalazka-fc-accent-hover/);
+  assert.match(source, /:root\[bgalazka-fc-line-hover\]:not\(\[bgalazka-fc-no-accent\]\) zen-folder\[\$\{LAYERS_ATTR\}~="accent"\] > \.tab-group-container::before:hover\s*\{[^}]*background:\s*transparent[^}]*box-shadow:\s*inset 2px 0 0 0 var\(--bgalazka-fc-accent-hover/);
+});
+
+test("the native accent hit strip stays transparent while hover feedback changes connector color only", () => {
+  assert.match(source, /\.tab-group-container::before\s*\{[\s\S]*?pointer-events:\s*none/);
+  assert.match(source, /inset-inline-start:\s*0/);
+  assert.match(source, /\[\$\{LINE_HOT_ATTR\}\] \.tab-group-line[\s\S]*?background-color:\s*var\(--bgalazka-fc-accent-hover/);
+  assert.doesNotMatch(source, /\[\$\{LINE_HOT_ATTR\}\] > \.tab-group-container::before\s*\{[\s\S]*?background:/);
+  assert.match(source, /\[\$\{LINE_HOT_ATTR\}\] \.tab-group-line/);
+});
+
+test("the transparent gutter remains a pointer target when hover is enabled without click", () => {
+  assert.match(source, /\[bgalazka-fc-line-hover\][\s\S]{0,220}pointer-events:\s*auto/);
+  assert.match(source, /\[bgalazka-fc-line-click\][\s\S]{0,220}pointer-events:\s*auto/);
+  assert.match(source, /:root:not\(\[bgalazka-fc-no-accent\]\) zen-folder\[\$\{LAYERS_ATTR\}~="accent"\]\[\$\{LINE_HOT_ATTR\}\]/);
 });
 
 test("accent hit testing mirrors to the right edge in RTL sidebars", () => {
@@ -207,6 +287,13 @@ test("style switches become root flags and unload removes everything", () => {
   assert.equal(root.hasAttribute("bgalazka-fc-line-click"), false);
 });
 
+test("the two tint settings gate their own drawing and restore independent custom properties", () => {
+  assert.match(source, /if \(!toggles\.tintHeader\) off\.push\(\.\.\.TOGGLE_PROPERTIES\.tintHeader\)/);
+  assert.match(source, /if \(!toggles\.tintTabs\) off\.push\(\.\.\.TOGGLE_PROPERTIES\.tintTabs\)/);
+  assert.match(source, /tintHeader:\s*\[\"--bgalazka-fc-tint\"\]/);
+  assert.match(source, /tintTabs:\s*\[\"--tab-group-color-pale\"\]/);
+});
+
 test("style switches remove only their own Zen properties from a painted folder", () => {
   const ctx = boot();
   const key = (n) => "zen.workspace.zentral.folder_colors." + n;
@@ -219,10 +306,12 @@ test("style switches remove only their own Zen properties from a painted folder"
   assert.ok(has("--tab-group-color-pale") && has("--bgalazka-fc-accent"), "tint and our own accent value stay");
   ctx.prefs.setBoolPref(key("style_hover"), false); flush(ctx);
   assert.ok(!has("--tab-group-background-color-hover"));
+  assert.ok(has("--bgalazka-fc-tint") && has("--tab-group-color-pale"));
   ctx.prefs.setBoolPref(key("style_tint_header"), false); flush(ctx);
-  assert.ok(has("--tab-group-color-pale"), "one tint switch alone keeps Zen's tint variable");
+  assert.ok(!has("--bgalazka-fc-tint"), "turning off the header tint removes only its dedicated background token");
+  assert.ok(has("--tab-group-color-pale"), "tab tint remains independent");
   ctx.prefs.setBoolPref(key("style_tint_tabs"), false); flush(ctx);
-  assert.ok(!has("--tab-group-color-pale"));
+  assert.ok(!has("--tab-group-color-pale"), "turning off tab tint restores Zen's own inline token");
   ctx.prefs.setBoolPref(key("style_accent"), false); flush(ctx);
   assert.ok(!has("--tab-group-color") && !has("--tab-group-text-color"));
   ctx.prefs.setBoolPref(key("style_icon"), true); flush(ctx);
@@ -254,6 +343,64 @@ test("a palette can be applied to a folder and all of its subfolders from the ri
   assert.equal(recordCount(ctx), 2, "outer and inner each got their own record");
   assert.ok(ctx.outer.f.style.getPropertyValue("--bgalazka-fc-accent"));
   assert.equal(ctx.outer.f.style.getPropertyValue("--bgalazka-fc-accent"), ctx.inner.f.style.getPropertyValue("--bgalazka-fc-accent"), "same base color all through the tree");
+});
+
+test("copy-to-subfolders is enabled when the parent gets its look from folder-color defaults", async () => {
+  const ctx = boot();
+  flush(ctx);
+  ctx.outer.f.setAttribute("id", "folder-outer"); ctx.inner.f.setAttribute("id", "folder-inner");
+  ctx.prefs.setStringPref(KEY("default_base"), "#3366cc");
+  flush(ctx);
+  const menu = openMenu(ctx, ctx.outer.f);
+  const copy = menu.find("Copy this folder's colors to all subfolders");
+  assert.ok(copy, "the copy action is present");
+  assert.notEqual(copy.getAttribute("disabled"), "true", "a visible default look is a valid source to copy");
+  assert.notEqual(copy.disabled, true, "fresh XUL actions start enabled");
+  copy.listeners.filter((l) => l.type === "command").forEach((l) => l.fn({}));
+  await settle(ctx);
+  assert.equal(recordCount(ctx), 1, "the effective default look is saved on the child folder");
+  assert.equal(ctx.inner.f.style.getPropertyValue("--bgalazka-fc-accent"), "#3366cc");
+});
+
+test("right-click palette category menus stay enabled and use the same text color as enabled actions", () => {
+  const ctx = boot();
+  flush(ctx);
+  ctx.outer.f.setAttribute("id", "folder-outer");
+  const menu = openMenu(ctx, ctx.outer.f);
+  const mint = menu.find("Mint");
+  const classic = menu.find("Classic yellow folders");
+  assert.ok(mint, "a built-in palette option is present");
+  assert.ok(classic, "a built-in category menu is present");
+  assert.equal(mint.getAttribute("disabled"), null, "palette options do not inherit stale disabled attributes");
+  assert.notEqual(mint.disabled, true, "palette command remains enabled");
+  const generated = menu.popup.all().filter((node) => node.hasAttribute("bgalazka-fc-menu"));
+  assert.ok(generated.length > 5, "generated folder-color menus and actions are present");
+  assert.ok(generated.some((node) => node.tag === "menupopup"), "every native submenu wrapper is tracked too");
+  assert.ok(generated.filter((node) => !node.hasAttribute("data-zcf-disabled-by-design")).every((node) => node.getAttribute("disabled") !== "true" && node.disabled !== true), "all palette and submenu options remain enabled after insertion");
+  const observer = ctx.mutationObservers.find((item) => item.target === menu.popup);
+  assert.ok(observer, "the full popup tree is watched for native disabled-state changes");
+
+  // Simulate native popup initialization reapplying disabled to both a category
+  // and its submenu after popupshowing; the observer must re-normalize both.
+  classic.setAttribute("disabled", "true");
+  classic.disabled = true;
+  const submenu = classic.children[0];
+  submenu.setAttribute("disabled", "true");
+  submenu.disabled = true;
+  observer.trigger();
+  ctx.lifecycle.listeners.filter((listener) => listener.type === "popupshown").forEach((listener) => listener.fn({ target: submenu }));
+  flush(ctx);
+  assert.equal(classic.getAttribute("disabled"), null, "the displayed category is re-enabled after native initialization");
+  assert.notEqual(classic.disabled, true, "the displayed category can open its submenu");
+  assert.equal(submenu.getAttribute("disabled"), null, "the submenu wrapper cannot gray or disable its children");
+  assert.notEqual(submenu.disabled, true);
+  assert.equal(classic.style.getPropertyValue("color"), "rgb(255, 255, 255)", "category text uses the same computed color as the enabled action");
+  assert.equal(classic.style.getPropertyValue("opacity"), "1", "category text is not dimmed");
+  assert.equal(submenu.style.getPropertyValue("color"), "rgb(255, 255, 255)", "the popup wrapper inherits the enabled menu color");
+  assert.equal(mint.style.getPropertyValue("color"), "rgb(255, 255, 255)", "actual selectable palette items are not muted either");
+  assert.ok(generated.filter((node) => !node.hasAttribute("data-zcf-disabled-by-design")).every((node) => node.style.getPropertyValue("color") === "rgb(255, 255, 255)" && node.style.getPropertyValue("opacity") === "1"), "every enabled category, submenu wrapper and choice uses the enabled action's readable text color");
+  ctx.lifecycle.listeners.filter((listener) => listener.type === "popuphidden").forEach((listener) => listener.fn({ target: menu.popup }));
+  assert.equal(observer.disconnected, true, "popup observer is released when the menu closes");
 });
 
 test("a collection is spread by depth inside the tree: folder = first look, subfolder = second", async () => {
@@ -307,6 +454,33 @@ test("the editor is twice as wide and its opacity slider has room", () => {
   assert.match(source, /\.zcf-panel \{[^}]*width: 760px/);
   assert.match(source, /placePanel\(rect, Math\.min\(760, width - 16\)/);
   assert.match(source, /\.zcf-opacity \{[^}]*min-width:240px/);
+});
+
+test("the Folder Color selector mirrors all eight global folder behavior switches", () => {
+  const seam = (() => {
+    const dom = makeFakeDom();
+    const store = new Map();
+    const prefs = { getStringPref: (k, d = "") => store.has(k) ? store.get(k) : d, getBoolPref: (_k, d = false) => d, getIntPref: (_k, d = 0) => d, getPrefType: () => 0 };
+    const win = { document: dom.document, console, Event: class { constructor(type) { this.type = type; } }, dispatchEvent() {}, addEventListener() {}, removeEventListener() {}, innerWidth: 1200, innerHeight: 800, crypto: require("node:crypto").webcrypto, getComputedStyle: () => ({ direction: "ltr" }), ZentralRuntime: { register() {} } };
+    win.window = win; win.globalThis = { Services: { prefs } };
+    vm.runInNewContext(source, { ...win, window: win, globalThis: win.globalThis, ChromeUtils: {}, TextEncoder, Uint8Array, Uint32Array, DataView, Object, Array, String, Number, Math, JSON, Date, Set, Map, RegExp, Error, TypeError, WeakMap, Promise, Symbol, MutationObserver: undefined, console });
+    return win.__zentralColorfulFoldersTestSeam.EDITOR_BEHAVIOR;
+  })();
+  const values = Array.from(seam, ([pref, label, fallback]) => ({ pref, label, fallback }));
+  assert.deepEqual(values.map((x) => x.label), [
+    "Ignore my folder label color (let the Zen theme decide the name color)",
+    "Color the folder icons (back, front, outline)",
+    "Folder/tab accent colors and native accent-line visibility",
+    "Soft background tint behind the folder name row",
+    "Soft background tint behind the tabs inside a folder",
+    "Hover background on the folder name row",
+    "Click the folder accent line to collapse or expand its folder",
+    "Highlight the folder accent line on hover",
+  ]);
+  assert.equal(values[0].fallback, false);
+  assert.ok(values.slice(1).every((x) => x.fallback === true));
+  assert.match(source, /behaviorBox\.appendChild\(createElement\("summary", \{ text: \"Folder appearance behavior\" \}\)\)/);
+  assert.match(source, /syncRootFlags\(\);\s*schedulePaint\(\);\s*announceDefaultsChanged\(\);/);
 });
 
 (async () => {
