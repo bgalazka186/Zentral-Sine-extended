@@ -122,7 +122,7 @@ test("simple and detailed modes produce seven independent color parts", () => {
 test("palette ships darker, contrasty and colorful quick themes", () => {
   const groups = c.BUILTIN_THEMES.map((group) => group.group);
   assert.deepEqual(J(groups), ["Classic yellow folders", "Dark glass", "Sticky notes", "Neon outline", "Dark folders", "High contrast", "Colorful"]);
-  assert.ok(c.BUILTIN_THEMES.every((group) => group.items.length >= 3));
+  assert.ok(c.BUILTIN_THEMES.every((group) => group.items.length >= 5), "every built-in collection has at least five looks for the five folder depths");
   assert.ok(c.BUILTIN_THEMES.flatMap((group) => group.items).every((theme) => c.cleanTheme(theme)));
 });
 test("source exposes default color controls, all-layer transparency, showcase presets and draggable editor", () => {

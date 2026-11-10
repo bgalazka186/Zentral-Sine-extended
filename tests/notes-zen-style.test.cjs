@@ -162,8 +162,10 @@ const seq = (n) => { let i = 0; return () => ((i++ * 7 + n) % 36) / 36; };
     assert.ok(options.slice(1).every((x) => x.fallback === true));
     assert.match(source, /class: "zn-fstyle-behavior"/);
     assert.match(source, /kid\?\.classList\?\.contains\?\.\("zn-fstyle"\)/);
-    assert.match(source, /card\.classList\.contains\("zn-folder-style-card"\) \? "760px" : "34em"/);
-    assert.match(css, /\.zn-dialog-card\.zn-folder-style-card \{[^}]*width: min\(760px/);
+    assert.match(source, /if \(card\.classList\.contains\("zn-folder-style-card"\)\)\s*return \{ spill: false/);
+    assert.match(css, /\.zn-dialog-card\.zn-folder-style-card \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*max-width: 100%;[^}]*overflow: auto;/);
+    assert.match(css, /\.zn-fstyle-opacity \{[^}]*flex: 1 1 100%; min-width: 0/);
+    assert.match(css, /\.zn-fstyle-opacity input \{[^}]*min-width: 60px/);
   });
 
   // ------------------------------------------------------------------ tint + favicon (pure)
@@ -260,19 +262,23 @@ const seq = (n) => { let i = 0; return () => ((i++ * 7 + n) % 36) / 36; };
     c.applyNotesFolderStyle(f, "purple", "", { doc: document });
     assert.equal(f.style.getPropertyValue("--tab-group-color-pale"), nativePale, "turning off tab tint restores Zen's exact native inline token");
     assert.ok(f.style.getPropertyValue("--bgalazka-fc-tint"), "header tint remains independently enabled");
+    assert.match(f.getAttribute("bgalazka-fc-layers"), /tint-header/);
+    assert.doesNotMatch(f.getAttribute("bgalazka-fc-layers"), /tint-tabs/);
 
     behaviorPrefs.set(headerPref, false);
     c.applyNotesFolderStyle(f, "purple", "", { doc: document });
     assert.equal(f.style.getPropertyValue("--bgalazka-fc-tint"), "", "turning off header tint removes only our dedicated tint token");
     assert.equal(f.style.getPropertyValue("--tab-group-color-pale"), nativePale, "tab tint stays native too");
+    assert.doesNotMatch(f.getAttribute("bgalazka-fc-layers") || "", /(?:^|\s)tint-(?:header|tabs)(?:\s|$)/, "both tint layers are absent even when accent/hover layers remain");
 
     behaviorPrefs.set(tabsPref, true);
     behaviorPrefs.set(headerPref, true);
     c.applyNotesFolderStyle(f, "purple", "", { doc: document });
     assert.notEqual(f.style.getPropertyValue("--tab-group-color-pale"), nativePale, "re-enabling restores the folder color");
 
-    assert.match(css, /:root:not\(\[bgalazka-fc-no-tint-header\]\) zen-folder\[bgalazka-fc-layers~=\"tint\"\] > \.tab-group-label-container/);
-    assert.match(css, /:root:not\(\[bgalazka-fc-no-tint-tabs\]\) zen-folder\[bgalazka-fc-layers~=\"tint\"\] > \.tab-group-container/);
+    assert.match(css, /:root:not\(\[bgalazka-fc-no-tint-header\]\) zen-folder\[bgalazka-fc-layers~=\"tint-header\"\] > \.tab-group-label-container/);
+    assert.match(css, /:root:not\(\[bgalazka-fc-no-tint-tabs\]\) zen-folder\[bgalazka-fc-layers~=\"tint-tabs\"\] > \.tab-group-container/);
+    assert.match(css, /tab-group-label-container:hover::before[\s\S]*?background-image: none/);
     assert.match(css, /bgalazka-fc-line-hover[^\n]*zen-folder[\s\S]*?\.tab-group-line:hover/);
     z.ws.remove();
   });

@@ -190,6 +190,22 @@ test("classic Firefox mouse events also activate and clear the exact accent hit 
   assert.equal(ctx.inner.f.getAttribute(HOT), "true");
 });
 
+test("line hover survives inner mouseout and clears only when the pointer exits the window", () => {
+  const ctx = boot();
+  ctx.prefs.setStringPref(KEY("default_base"), "#3366cc");
+  flush(ctx);
+  send(ctx, "pointermove", ctx.inner.line, 100);
+  assert.equal(ctx.inner.f.getAttribute(HOT), "true");
+  const moveWithinSidebar = new ctx.dom.Ev("mouseout", { target: ctx.inner.line, relatedTarget: ctx.outer.l, bubbles: true });
+  ctx.inner.line.dispatchEvent(moveWithinSidebar);
+  assert.equal(ctx.inner.f.getAttribute(HOT), "true", "moving between nested sidebar elements does not clear the hot marker prematurely");
+  const leaveWindow = new ctx.dom.Ev("mouseout", { target: ctx.inner.line, relatedTarget: null, bubbles: true });
+  ctx.inner.line.dispatchEvent(leaveWindow);
+  assert.equal(ctx.inner.f.hasAttribute(HOT), false, "a true viewport exit clears the marker");
+  assert.ok(ctx.lifecycle.listeners.some((item) => item.type === "mouseout" && item.target === ctx.document.documentElement));
+  assert.ok(!ctx.lifecycle.listeners.some((item) => item.type === "pointerleave" && item.target === ctx.document.documentElement));
+});
+
 test("hover changes only the native connector color and preserves its curved geometry", () => {
   const hotRule = source.match(/:root:not\(\[bgalazka-fc-no-accent\]\) zen-folder\[\$\{LAYERS_ATTR\}~="accent"\]\[\$\{LINE_HOT_ATTR\}\] > \.tab-group-container \{([\s\S]*?)\}/);
   assert.ok(hotRule, "a dedicated per-folder hot-state rule targets the active accent container");
@@ -198,7 +214,7 @@ test("hover changes only the native connector color and preserves its curved geo
   assert.match(hotRule[1], /cursor:\s*pointer\s*!important/, "the clickable stripe advertises its action");
   assert.match(source, /\[\$\{LINE_HOT_ATTR\}\] \.tab-group-line \{\s*background-color: var\(--bgalazka-fc-accent-hover, var\(--bgalazka-fc-accent\)\) !important;/, "the native curved line changes to the derived hover color");
   assert.doesNotMatch(source, /filter:\s*brightness\(1\.7\)|drop-shadow\(0 0 3px var\(--bgalazka-fc-accent\)\)/, "no harsh brightness filter or glow remains");
-  assert.doesNotMatch(source, /\[\$\{LINE_HOT_ATTR\}\] > \.tab-group-container::before \{[\s\S]*?background:/, "the transparent hit area never becomes a rectangle on hover");
+  assert.doesNotMatch(source, /\[\$\{LINE_HOT_ATTR\}\] > \.tab-group-container::before \{[\s\S]*?(?:background|box-shadow):/, "the transparent hit area never becomes a colored rectangle on hover");
 });
 
 test("hover accent is derived in the opposite brightness direction and preserves accent opacity", () => {
@@ -206,23 +222,23 @@ test("hover accent is derived in the opposite brightness direction and preserves
   ctx.prefs.setStringPref(KEY("default_base"), "#3366cc");
   flush(ctx);
   const darkAccentHover = ctx.outer.f.style.getPropertyValue("--bgalazka-fc-accent-hover");
-  assert.equal(darkAccentHover, "#81a0df", "dark blue gets a lighter blue hover color");
+  assert.equal(darkAccentHover, "#a3bae8", "dark blue gets a clearly lighter blue hover color");
   ctx.prefs.setStringPref(KEY("default_base"), "#f4e04d");
   flush(ctx);
   const brightAccentHover = ctx.outer.f.style.getPropertyValue("--bgalazka-fc-accent-hover");
-  assert.equal(brightAccentHover, "#b0a137", "bright yellow gets a darker yellow hover color");
+  assert.equal(brightAccentHover, "#92862e", "bright yellow gets a clearly darker yellow hover color");
   ctx.prefs.setStringPref(KEY("default_base"), "#3366cc");
   ctx.prefs.setIntPref(KEY("default_accent_opacity"), 45);
   flush(ctx);
-  assert.equal(ctx.outer.f.style.getPropertyValue("--bgalazka-fc-accent-hover"), "color-mix(in srgb, #81a0df 45%, transparent)", "the hover shade preserves the user's accent opacity");
+  assert.equal(ctx.outer.f.style.getPropertyValue("--bgalazka-fc-accent-hover"), "color-mix(in srgb, #a3bae8 45%, transparent)", "the hover shade preserves the user's accent opacity");
 });
 
 test("hover and click delegation is attached to the document root, not a replaceable tab-tree wrapper", () => {
   const ctx = boot();
   ctx.prefs.setStringPref(KEY("default_base"), "#3366cc");
   flush(ctx);
-  const delegated = ctx.lifecycle.listeners.filter((item) => ["click", "mouseover", "mousemove", "pointerover", "pointermove"].includes(item.type));
-  assert.ok(delegated.length >= 5);
+  const delegated = ctx.lifecycle.listeners.filter((item) => ["click", "mouseover", "mousemove", "pointerover", "pointermove", "mouseout"].includes(item.type));
+  assert.ok(delegated.length >= 6);
   assert.ok(delegated.every((item) => item.target === ctx.document.documentElement), "events survive Zen moving pinned folders between workspace containers");
   send(ctx, "pointermove", ctx.inner.c.children[2], 60);
   assert.equal(ctx.inner.f.getAttribute(HOT), "true");
@@ -243,7 +259,8 @@ test("a native group line works when Zen places it beside, rather than inside, t
 
 test("native :hover fallback recolors the curved connector even when delegated XUL hover events are missed", () => {
   assert.match(source, /:root\[bgalazka-fc-line-hover\]:not\(\[bgalazka-fc-no-accent\]\) zen-folder\[\$\{LAYERS_ATTR\}~="accent"\] \.tab-group-line:hover\s*\{[^}]*background-color: var\(--bgalazka-fc-accent-hover/);
-  assert.match(source, /:root\[bgalazka-fc-line-hover\]:not\(\[bgalazka-fc-no-accent\]\) zen-folder\[\$\{LAYERS_ATTR\}~="accent"\] > \.tab-group-container::before:hover\s*\{[^}]*background:\s*transparent[^}]*box-shadow:\s*inset 2px 0 0 0 var\(--bgalazka-fc-accent-hover/);
+  assert.match(source, /zen-folder\[\$\{LAYERS_ATTR\}~="accent"\]\[\$\{LINE_HOT_ATTR\}\] > \.tab-group-container\s*\{/);
+  assert.doesNotMatch(source, /::before:hover/, "pseudo-elements are not followed by invalid :hover selectors");
 });
 
 test("the native accent hit strip stays transparent while hover feedback changes connector color only", () => {
@@ -362,45 +379,57 @@ test("copy-to-subfolders is enabled when the parent gets its look from folder-co
   assert.equal(ctx.inner.f.style.getPropertyValue("--bgalazka-fc-accent"), "#3366cc");
 });
 
-test("right-click palette category menus stay enabled and use the same text color as enabled actions", () => {
+test("right-click palette menu keeps native XUL state and does not install a mutating observer", () => {
   const ctx = boot();
   flush(ctx);
   ctx.outer.f.setAttribute("id", "folder-outer");
   const menu = openMenu(ctx, ctx.outer.f);
   const mint = menu.find("Mint");
   const classic = menu.find("Classic yellow folders");
+  const wholeTree = menu.find("Whole tree (this folder + subfolders)");
   assert.ok(mint, "a built-in palette option is present");
   assert.ok(classic, "a built-in category menu is present");
-  assert.equal(mint.getAttribute("disabled"), null, "palette options do not inherit stale disabled attributes");
-  assert.notEqual(mint.disabled, true, "palette command remains enabled");
+  assert.ok(wholeTree, "the tree submenu is present");
   const generated = menu.popup.all().filter((node) => node.hasAttribute("bgalazka-fc-menu"));
   assert.ok(generated.length > 5, "generated folder-color menus and actions are present");
-  assert.ok(generated.some((node) => node.tag === "menupopup"), "every native submenu wrapper is tracked too");
-  assert.ok(generated.filter((node) => !node.hasAttribute("data-zcf-disabled-by-design")).every((node) => node.getAttribute("disabled") !== "true" && node.disabled !== true), "all palette and submenu options remain enabled after insertion");
-  const observer = ctx.mutationObservers.find((item) => item.target === menu.popup);
-  assert.ok(observer, "the full popup tree is watched for native disabled-state changes");
+  assert.ok(generated.some((node) => node.tag === "menupopup"), "native submenu wrappers are present");
+  assert.ok(generated.every((node) => !node.hasAttribute("disabled") && !node.hasAttribute("aria-disabled") && node.disabled !== true), "new XUL nodes are left in their native enabled state");
 
-  // Simulate native popup initialization reapplying disabled to both a category
-  // and its submenu after popupshowing; the observer must re-normalize both.
+  // Simulate Zen/Firefox reapplying stale disabled state when the popup opens.
+  // Only owned submenu launchers should be repaired; actions retain native state.
+  const folderColors = menu.find("Folder colors");
+  const folderColorsPopup = folderColors.children.find((node) => node.localName === "menupopup");
   classic.setAttribute("disabled", "true");
-  classic.disabled = true;
-  const submenu = classic.children[0];
-  submenu.setAttribute("disabled", "true");
-  submenu.disabled = true;
-  observer.trigger();
-  ctx.lifecycle.listeners.filter((listener) => listener.type === "popupshown").forEach((listener) => listener.fn({ target: submenu }));
-  flush(ctx);
-  assert.equal(classic.getAttribute("disabled"), null, "the displayed category is re-enabled after native initialization");
-  assert.notEqual(classic.disabled, true, "the displayed category can open its submenu");
-  assert.equal(submenu.getAttribute("disabled"), null, "the submenu wrapper cannot gray or disable its children");
-  assert.notEqual(submenu.disabled, true);
-  assert.equal(classic.style.getPropertyValue("color"), "rgb(255, 255, 255)", "category text uses the same computed color as the enabled action");
-  assert.equal(classic.style.getPropertyValue("opacity"), "1", "category text is not dimmed");
-  assert.equal(submenu.style.getPropertyValue("color"), "rgb(255, 255, 255)", "the popup wrapper inherits the enabled menu color");
-  assert.equal(mint.style.getPropertyValue("color"), "rgb(255, 255, 255)", "actual selectable palette items are not muted either");
-  assert.ok(generated.filter((node) => !node.hasAttribute("data-zcf-disabled-by-design")).every((node) => node.style.getPropertyValue("color") === "rgb(255, 255, 255)" && node.style.getPropertyValue("opacity") === "1"), "every enabled category, submenu wrapper and choice uses the enabled action's readable text color");
-  ctx.lifecycle.listeners.filter((listener) => listener.type === "popuphidden").forEach((listener) => listener.fn({ target: menu.popup }));
-  assert.equal(observer.disconnected, true, "popup observer is released when the menu closes");
+  classic.setAttribute("aria-disabled", "true");
+  const wholeTreePopup = wholeTree.children.find((node) => node.localName === "menupopup");
+  const paletteMenu = wholeTreePopup.children.find((node) => node.getAttribute("label") === "Apply a palette to folder and subfolders");
+  paletteMenu.setAttribute("disabled", "true");
+  folderColorsPopup.dispatchEvent(new ctx.dom.Ev("popupshown"));
+  assert.equal(classic.hasAttribute("disabled"), false, "available theme categories are re-enabled when their containing popup opens");
+  assert.equal(classic.hasAttribute("aria-disabled"), false);
+  assert.equal(paletteMenu.hasAttribute("disabled"), true, "a hidden nested launcher is not touched before its parent popup opens");
+  wholeTreePopup.dispatchEvent(new ctx.dom.Ev("popupshown"));
+  assert.equal(paletteMenu.hasAttribute("disabled"), false, "nested palette launcher is repaired as soon as it becomes visible in its parent popup");
+  const palettePopup = paletteMenu.children.find((node) => node.localName === "menupopup");
+  paletteMenu.setAttribute("disabled", "true");
+  palettePopup.dispatchEvent(new ctx.dom.Ev("popupshown"));
+  assert.equal(paletteMenu.hasAttribute("disabled"), false, "its own popup opening also clears a later stale disabled state");
+  assert.ok(!ctx.mutationObservers.some((observer) => observer.target === menu.popup || observer.target === folderColorsPopup), "folder palette does not watch the menu it mutates; the separate native-folder paint observer may remain");
+  assert.ok(!ctx.lifecycle.listeners.some((listener) => ["popupshown", "popuphidden"].includes(listener.type)), "no global popup normalization lifecycle hooks are installed");
+  assert.doesNotMatch(source, /normalizeFolderColorMenu|folderColorMenuObservers|observeFolderColorMenu/);
+  assert.doesNotMatch(source, /getComputedStyle\?\.\(referenceItem\)/, "menu construction performs no repeated style queries");
+  assert.match(source, /node\.addEventListener\("popupshown", enableOwnedMenuLaunchers, true\)/, "each owned menupopup repairs its own launchers once, without a mutation observer");
+});
+
+test("every built-in style collection has at least five distinct looks", () => {
+  const ctx = boot();
+  const collections = ctx.win.__zentralColorfulFoldersTestSeam.BUILTIN_THEMES;
+  assert.ok(collections.length > 0, "built-in collections are available");
+  for (const group of collections) {
+    assert.ok(group.items.length >= 5, `${group.group} has at least five looks`);
+    const names = group.items.map((item) => item.n);
+    assert.equal(new Set(names).size, names.length, `${group.group} has no duplicated look names`);
+  }
 });
 
 test("a collection is spread by depth inside the tree: folder = first look, subfolder = second", async () => {
@@ -416,24 +445,39 @@ test("a collection is spread by depth inside the tree: folder = first look, subf
   assert.ok(outerColor && innerColor && outerColor !== innerColor, "different looks per depth");
 });
 
-test("copying a folder's own colors to its subfolders leaves the folder itself untouched", async () => {
+test("copy-to-subfolders is always enabled: reset stale child overrides without a source, otherwise copy the effective source", async () => {
   const ctx = boot();
   flush(ctx);
   ctx.outer.f.setAttribute("id", "folder-outer"); ctx.inner.f.setAttribute("id", "folder-inner");
-  let menu = openMenu(ctx, ctx.outer.f);
   const copyLabel = "Copy this folder's colors to all subfolders";
-  assert.equal(menu.find(copyLabel).getAttribute("disabled"), "true", "nothing to copy while the folder has no colors of its own");
-  const palette = menu.popup.all().find((e) => e.getAttribute("label") === "Apply a palette to folder and subfolders");
-  palette.all().find((e) => e.getAttribute("label") === "Lavender").listeners.filter((l) => l.type === "command").forEach((l) => l.fn({}));
+
+  // Give only the child a stored style. With no parent/default style the action
+  // must remain enabled and clear the child's stale override.
+  const childMenu = openMenu(ctx, ctx.inner.f);
+  childMenu.command("Lavender");
   await settle(ctx);
-  // restyle only the outer folder, then copy that to the subfolders
-  ctx.inner.f.setAttribute("bgalazka-test-marker", "x");
-  menu = openMenu(ctx, ctx.outer.f);
-  assert.equal(menu.find(copyLabel).hasAttribute("disabled"), false);
-  const before = recordCount(ctx);
+  assert.equal(recordCount(ctx), 1);
+  let menu = openMenu(ctx, ctx.outer.f);
+  const resetAction = menu.find(copyLabel);
+  assert.ok(resetAction, "copy/reset action always exists");
+  assert.equal(resetAction.hasAttribute("disabled"), false);
+  assert.notEqual(resetAction.disabled, true);
   menu.command(copyLabel);
   await settle(ctx);
-  assert.equal(recordCount(ctx), before, "the same two records, no folder lost or duplicated");
+  assert.equal(recordCount(ctx), 0, "without an effective source, stale child records are cleared");
+  assert.equal(ctx.inner.f.style.getPropertyValue("--bgalazka-fc-accent"), "", "child returns to the native/default appearance");
+
+  // Give the parent an explicit look and copy it to the child.
+  menu = openMenu(ctx, ctx.outer.f);
+  menu.command("Mint");
+  await settle(ctx);
+  const parentColor = ctx.outer.f.style.getPropertyValue("--bgalazka-fc-accent");
+  menu = openMenu(ctx, ctx.outer.f);
+  assert.notEqual(menu.find(copyLabel).disabled, true);
+  menu.command(copyLabel);
+  await settle(ctx);
+  assert.equal(recordCount(ctx), 2, "parent and child styles are saved without duplicate records");
+  assert.equal(ctx.inner.f.style.getPropertyValue("--bgalazka-fc-accent"), parentColor, "child receives the parent's effective color");
 });
 
 test("the detailed folder style has seven color layers and no duplicate connector layer", () => {

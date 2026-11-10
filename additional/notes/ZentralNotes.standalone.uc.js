@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.2.17
+// @version 3.3.0
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.2.17, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.0, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.2.17";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.0";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1831,7 +1831,7 @@ __zentralShim.register = function (def) {
       const n = parseInt(color.slice(1), 16);
       const channels = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
       const toward = lum(color) >= 0.42 ? 0 : 255;
-      const amount = toward === 0 ? 0.28 : 0.38;
+      const amount = toward === 0 ? 0.4 : 0.55;
       return "#" + channels.map((channel) => Math.round(channel + (toward - channel) * amount).toString(16).padStart(2, "0")).join("");
     }
     function declarations(parts, op) {
@@ -1964,18 +1964,21 @@ __zentralShim.register = function (def) {
         { n: "Midnight", b: "#202b3b", d: {}, o: {} },
         { n: "Deep forest", b: "#234236", d: {}, o: {} },
         { n: "Plum shadow", b: "#493047", d: {}, o: {} },
+        { n: "Obsidian", b: "#171b22", d: { front: "#59616d", stroke: "#0b0d12" }, o: {} },
       ] },
       { group: "High contrast", items: [
         { n: "Amber", b: "#d97706", d: { front: "#ffe0a3", stroke: "#3b2100" }, o: {} },
         { n: "Aqua", b: "#087e8b", d: { front: "#b9f4f4", stroke: "#032f36" }, o: {} },
         { n: "Rose", b: "#be3455", d: { front: "#ffd2df", stroke: "#3d0716" }, o: {} },
         { n: "Electric blue", b: "#2557d6", d: { front: "#d8e5ff", stroke: "#071b50" }, o: {} },
+        { n: "Signal lime", b: "#65a30d", d: { front: "#ecfccb", stroke: "#1a2e05" }, o: {} },
       ] },
       { group: "Colorful", items: [
         { n: "Coral", b: "#ff8066", d: {}, o: {} },
         { n: "Mint", b: "#40b99a", d: {}, o: {} },
         { n: "Lavender", b: "#9c83e6", d: {}, o: {} },
         { n: "Sunflower", b: "#e5bd38", d: {}, o: {} },
+        { n: "Tangerine", b: "#f28c28", d: {}, o: {} },
       ] },
     ]);
     // A look needs Detailed mode only when it sets a layer other than the secondary (outline) color.
@@ -7536,7 +7539,7 @@ __zentralShim.register = function (def) {
         };
         setAttr("bgalazka-notes-color", color || "");
         // The shared folder stylesheet uses the native accent line, soft tint and hover; unlisted layers stay Zen's own.
-        setAttr("bgalazka-fc-layers", [["--bgalazka-fc-accent", "accent"], ["--bgalazka-fc-tint", "tint"], ["--bgalazka-fc-hover", "hover"]].filter(([property]) => properties[property]).map(([, name]) => name).join(" "));
+        setAttr("bgalazka-fc-layers", [["--bgalazka-fc-accent", "accent"], ["--bgalazka-fc-tint", "tint-header"], ["--tab-group-color-pale", "tint-tabs"], ["--bgalazka-fc-hover", "hover"]].filter(([property]) => properties[property]).map(([, name]) => name).join(" "));
         const cleanParts = cleanFolderParts(parts);
         const cleanOpacity = cleanFolderOpacity(opacity);
         setAttr("bgalazka-notes-parts", Object.keys(cleanParts).length ? serializeFolderParts(cleanParts) : "");
@@ -10309,10 +10312,13 @@ __zentralShim.register = function (def) {
         for (const k of FIT_PROPS) card.style[k] = "";
         delete dialog.dataset.spill;
         delete root.dataset.dialogSpill;
-        if (viewport.width > 0) {
-          const maxCardWidth = card.classList.contains("zn-folder-style-card") ? "760px" : "34em";
-          card.style.maxWidth = "min(" + maxCardWidth + ", " + Math.max(120, viewport.width - 12) + "px)";
-        }
+        // The folder style card is a child of a clipped Notes panel. Do not use the
+        // generic viewport spill positioning: it places the card outside its host.
+        // Its CSS is width:100% with min-width:0 and internal overflow scrolling.
+        if (card.classList.contains("zn-folder-style-card"))
+          return { spill: false, left: 0, top: 0, width: 0, height: 0, scroll: true };
+        if (viewport.width > 0)
+          card.style.maxWidth = "min(34em, " + Math.max(120, viewport.width - 12) + "px)";
         const size = { width: Math.max(card.offsetWidth || 0, card.scrollWidth || 0), height: Math.max(card.offsetHeight || 0, card.scrollHeight || 0) };
         const sr = root.getBoundingClientRect();
         const sheet = { left: sr.left, top: sr.top, width: sr.width, height: sr.height };

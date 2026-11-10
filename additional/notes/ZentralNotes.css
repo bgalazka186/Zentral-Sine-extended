@@ -636,12 +636,18 @@
   background: var(--zn-surface);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
 }
-/* The shared folder color editor needs room for all seven per-layer opacity sliders. */
+/* The color editor lives inside the Notes panel, which clips overflow. Keep the card
+   within the sheet and let its own content scroll; flex rows are allowed to wrap. */
 .zentral-notes-sheet .zn-dialog-card.zn-folder-style-card {
-  width: min(760px, calc(100vw - 24px));
-  min-width: min(620px, calc(100vw - 24px));
-  max-width: min(760px, calc(100vw - 24px));
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: auto;
 }
+.zentral-notes-sheet .zn-dialog-card.zn-folder-style-card .zn-fstyle { min-width: 0; }
+.zentral-notes-sheet .zn-dialog-card.zn-folder-style-card .zn-fstyle-part > * { min-width: 0; max-width: 100%; }
+.zentral-notes-sheet .zn-dialog-card.zn-folder-style-card .zn-dialog-actions { flex-wrap: wrap; }
 .zentral-notes-sheet .zn-dialog-card p { margin: 6px 0 10px; color: var(--zn-muted); line-height: 1.45; }
 .zentral-notes-sheet .zn-dialog-actions { display: flex; justify-content: flex-end; gap: 6px; }
 
@@ -1321,8 +1327,8 @@
 .zentral-notes-sheet .zn-fstyle-presets .zn-chip { border: 1px solid color-mix(in srgb, currentColor 22%, transparent); }
 .zentral-notes-sheet .zn-fstyle-part { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 8px 0; }
 .zentral-notes-sheet .zn-fstyle-part > span:first-child { flex: 1 1 140px; font-size: 12px; }
-.zentral-notes-sheet .zn-fstyle-opacity { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; flex: 1 1 280px; min-width: 240px; }
-.zentral-notes-sheet .zn-fstyle-opacity input { flex: 1 1 auto; width: auto; min-width: 120px; }
+.zentral-notes-sheet .zn-fstyle-opacity { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; flex: 1 1 100%; min-width: 0; }
+.zentral-notes-sheet .zn-fstyle-opacity input { flex: 1 1 auto; width: auto; min-width: 60px; }
 .zentral-notes-sheet .zn-fstyle-opacity-value { display: inline-block; flex: 0 0 42px; width: 42px; text-align: right; font-family: monospace; }
 .zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color]:not([data-color=""]) { border-left: 3px solid var(--zn-fc, currentColor); }
 .zentral-notes-sheet .zn-fstyle-colors .zn-chip[data-color="yellow"] { --zn-fc: #f5c542; }
@@ -1387,28 +1393,29 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
   background-color: var(--bgalazka-fc-accent) !important;
   transition: background-color .12s ease;
 }
-/* Notes' CSS is loaded after the shared module. Keep these two backgrounds
-   independently switchable, and let the tab-area switch restore Zen's own
-   --tab-group-color-pale token in the Notes painter as well. */
-:root:not([bgalazka-fc-no-tint-header]) zen-folder[bgalazka-fc-layers~="tint"] > .tab-group-label-container {
+/* Notes' CSS is loaded after the shared module. Header and tab tint are separate layers:
+   the former uses our own token; the latter uses Zen's native pale group token. */
+:root:not([bgalazka-fc-no-tint-header]) zen-folder[bgalazka-fc-layers~="tint-header"] > .tab-group-label-container {
   background-color: var(--bgalazka-fc-tint) !important;
   border-radius: 8px;
 }
-:root:not([bgalazka-fc-no-tint-tabs]) zen-folder[bgalazka-fc-layers~="tint"] > .tab-group-container {
-  background-color: var(--bgalazka-fc-tint) !important;
+:root:not([bgalazka-fc-no-tint-tabs]) zen-folder[bgalazka-fc-layers~="tint-tabs"] > .tab-group-container {
+  background-color: var(--tab-group-color-pale) !important;
   border-radius: 8px;
 }
-:root:not([bgalazka-fc-no-hover]) zen-folder[bgalazka-fc-layers~="hover"] > .tab-group-label-container:hover {
+:root:not([bgalazka-fc-no-hover]) zen-folder[bgalazka-fc-layers~="hover"] > .tab-group-label-container:hover,
+:root:not([bgalazka-fc-no-hover]) zen-folder[bgalazka-fc-layers~="hover"] > .tab-group-label-container:hover::before {
   background-color: var(--bgalazka-fc-hover) !important;
+  background-image: none !important;
+  --tab-hover-background-color: var(--bgalazka-fc-hover);
 }
-/* Fallback to native :hover in addition to the JS hot marker. This is only a
-   color swap on the existing curved line / 2px inset spine, never a rectangle. */
+/* Use valid selectors: JS owns the precise 8px gutter marker; native :hover is a fallback
+   for Zen's curved .tab-group-line itself. Neither rule paints a rectangle. */
+:root:not([bgalazka-fc-no-accent]) zen-folder[bgalazka-fc-layers~="accent"][bgalazka-fc-line-hot] > .tab-group-container {
+  box-shadow: inset 2px 0 0 0 var(--bgalazka-fc-accent-hover, var(--bgalazka-fc-accent)) !important;
+}
 :root[bgalazka-fc-line-hover]:not([bgalazka-fc-no-accent]) zen-folder[bgalazka-fc-layers~="accent"] .tab-group-line:hover {
   background-color: var(--bgalazka-fc-accent-hover, var(--bgalazka-fc-accent)) !important;
-}
-:root[bgalazka-fc-line-hover]:not([bgalazka-fc-no-accent]) zen-folder[bgalazka-fc-layers~="accent"] > .tab-group-container::before:hover {
-  background: transparent !important;
-  box-shadow: inset 2px 0 0 0 var(--bgalazka-fc-accent-hover, var(--bgalazka-fc-accent)) !important;
 }
 
 /* Folder style dialog: Simple / Detailed switch, status line, root style row. */
