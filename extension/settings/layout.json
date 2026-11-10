@@ -800,6 +800,13 @@
     "zen.workspace.zentral.folder_colors.menu",
     "zen.workspace.zentral.folder_colors.mode",
     "zen.workspace.zentral.folder_colors.ignore_label",
+    "zen.workspace.zentral.folder_colors.style_icon",
+    "zen.workspace.zentral.folder_colors.style_accent",
+    "zen.workspace.zentral.folder_colors.style_tint_header",
+    "zen.workspace.zentral.folder_colors.style_tint_tabs",
+    "zen.workspace.zentral.folder_colors.style_hover",
+    "zen.workspace.zentral.folder_colors.line_click",
+    "zen.workspace.zentral.folder_colors.line_hover",
     {
       "type": "text",
       "label": "**Colorful folders · Defaults**",

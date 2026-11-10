@@ -113,6 +113,8 @@ test("simple and detailed modes produce seven independent color parts", () => {
   assert.notEqual(base.front, "#ffffff", "simple mode derives from base");
   assert.equal(detailed.front, "#ffffff", "detailed override applies");
   assert.equal(detailed.hover, "#101010");
+  assert.equal(detailed.connector, undefined, "there is no separately colored connector layer");
+  assert.equal(c.partsFor({ b: "#336699", d: { connector: "#ff00ff" } }, "detailed").connector, undefined, "retired connector values are ignored");
   const css = c.declarations(detailed);
   for (const prop of ["--zen-folder-behind-bgcolor", "--zen-folder-front-bgcolor", "--zen-folder-stroke", "--bgalazka-fc-label", "--tab-group-color", "--tab-group-background-color", "--tab-group-color-pale", "--tab-group-background-color-hover"])
     assert.ok(css[prop], "mapped CSS property " + prop);
@@ -211,7 +213,8 @@ test("opacity is applied per layer and accent, tint and hover now reach plain pr
   assert.match(r.properties["--zen-folder-behind-bgcolor"], /40%, transparent\)/);
   assert.match(r.properties["--bgalazka-fc-hover"], /0%, transparent\)/, "0% is a real value");
   for (const p of ["--bgalazka-fc-accent", "--bgalazka-fc-tint", "--bgalazka-fc-hover"]) assert.ok(r.properties[p], p);
-  assert.match(source, /zen-folder\[\$\{LAYERS_ATTR\}~="accent"\]/);
+  assert.match(source, /box-shadow: inset 2px 0 0 0 var\(--bgalazka-fc-accent\)/);
+  assert.match(source, /\.tab-group-line[\s\S]{0,180}background-color: var\(--bgalazka-fc-accent\)/);
   assert.match(source, /zen-folder\[\$\{LAYERS_ATTR\}~="hover"\] > \.tab-group-label-container:hover/);
 });
 test("ignore-label option removes only our label color", () => {

@@ -34,7 +34,7 @@ when the ordering rules below are broken.
 
 | z-index | Role | Where | File:line |
 | ---: | --- | --- | --- |
-| 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | inline style: `.zcf-panel { position: relative; z-index: 2147483647; width: 330px; ma` | additional/folders/ZentralColorfulFolders.uc.js:972 |
+| 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | inline style: `.zcf-panel { position: relative; z-index: 2147483647; width: 760px; ma` | additional/folders/ZentralColorfulFolders.uc.js:1132 |
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | inline style: `? "position:fixed;right:12px;bottom:12px;width:320px;height:180px;z-in` | additional/video/content/ZentralVideoFrame.js:301 |
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | inline style: `"position:fixed;inset:8%;overflow:auto;z-index:2147483647;padding:20px` | additional/video/ZentralVideoPreview.uc.js:267 |
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | `:root[bgalazka-corner-tiles="true"] :is( .tabbrowser-tab, #zen-essentials-container .tabbrowser-tab, [zen-essential="true"] ) .zen-app-tile` | extension/panels/corner-tiles/ZentralCornerPanels.css:65 |

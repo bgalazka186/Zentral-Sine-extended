@@ -260,6 +260,28 @@
     OPACITY_SCHEMA: PREFIX + "opacity_schema",
     LAYERS: PREFIX + "default_layers",
     IGNORE_LABEL: PREFIX + "ignore_label",
+    STYLE_ICON: PREFIX + "style_icon",
+    STYLE_ACCENT: PREFIX + "style_accent",
+    STYLE_TINT_HEADER: PREFIX + "style_tint_header",
+    STYLE_TINT_TABS: PREFIX + "style_tint_tabs",
+    STYLE_HOVER: PREFIX + "style_hover",
+    LINE_CLICK: PREFIX + "line_click",
+    LINE_HOVER: PREFIX + "line_hover",
+  });
+  // Zen's own custom properties that belong to one switchable part of the styling (see styleToggles()).
+  const TOGGLE_PROPERTIES = Object.freeze({
+    icon: ["--zen-folder-behind-bgcolor", "--zen-folder-front-bgcolor", "--zen-folder-stroke"],
+    accent: ["--tab-group-color", "--tab-group-background-color", "--tab-group-color-invert", "--tab-group-text-color", "--tab-group-text-color-invert", "--bgalazka-fc-accent"],
+    tint: ["--tab-group-color-pale"],
+    hover: ["--tab-group-background-color-hover"],
+  });
+  const ROOT_FLAGS = Object.freeze({
+    "bgalazka-fc-no-accent": "accent",
+    "bgalazka-fc-no-tint-header": "tintHeader",
+    "bgalazka-fc-no-tint-tabs": "tintTabs",
+    "bgalazka-fc-no-hover": "hover",
+    "bgalazka-fc-line-click": "lineClick",
+    "bgalazka-fc-line-hover": "lineHover",
   });
   const PARTS = FOLDER_STYLE.PARTS;
   const PART_LABELS = Object.freeze({
@@ -267,7 +289,7 @@
     front: "Icon: front",
     stroke: "Icon: outline and glyph",
     label: "Folder label",
-    accent: "Accent and group line",
+    accent: "Folder and tab selection accent",
     tint: "Soft background tint",
     hover: "Hover background",
   });
@@ -279,6 +301,8 @@
   );
   const MARK = "bgalazka-folder-colors";
   const LAYERS_ATTR = "bgalazka-fc-layers";
+  const LINE_HOT_ATTR = "bgalazka-fc-line-hot";
+  let hoveredLineFolder = null;
   const MENU_MARK = "bgalazka-fc-menu";
   const MAX_RECORDS = 400;
   const MAX_THEMES = 24;
@@ -525,6 +549,44 @@
     const enabled = () => getBool(P.ENABLED, true);
     const menuEnabled = () => getBool(P.MENU, true);
     const mode = () => getString(P.MODE, "simple") === "detailed" ? "detailed" : "simple";
+    // Each part of the styling can be switched off on its own; every switch defaults to on.
+    function styleToggles() {
+      return {
+        icon: getBool(P.STYLE_ICON, true),
+        accent: getBool(P.STYLE_ACCENT, true),
+        tintHeader: getBool(P.STYLE_TINT_HEADER, true),
+        tintTabs: getBool(P.STYLE_TINT_TABS, true),
+        hover: getBool(P.STYLE_HOVER, true),
+        lineClick: getBool(P.LINE_CLICK, true),
+        lineHover: getBool(P.LINE_HOVER, true),
+      };
+    }
+    // Drops the properties of every part that is switched off. Used for Zen folders, the NOTES folders (through the shared
+    // style bridge) and the All notes tree, so one switch changes all of them.
+    function filterProperties(properties) {
+      const toggles = styleToggles();
+      const off = [];
+      if (!toggles.icon) off.push(...TOGGLE_PROPERTIES.icon);
+      if (!toggles.accent) off.push(...TOGGLE_PROPERTIES.accent);
+      if (!toggles.tintHeader && !toggles.tintTabs) off.push(...TOGGLE_PROPERTIES.tint);
+      if (!toggles.hover) off.push(...TOGGLE_PROPERTIES.hover);
+      if (!off.length) return properties;
+      const out = { ...properties };
+      for (const property of off) delete out[property];
+      return out;
+    }
+    function syncRootFlags() {
+      const toggles = styleToggles();
+      const root = document.documentElement;
+      if (!root) return;
+      for (const [attr, key] of Object.entries(ROOT_FLAGS)) {
+        const positive = key.startsWith("line");
+        // Style switches are stored as "no-..." flags so an untouched profile has no extra attributes; line switches are positive.
+        const wanted = positive ? !!toggles[key] : !toggles[key];
+        if (wanted) { if (root.getAttribute?.(attr) !== "true") root.setAttribute(attr, "true"); }
+        else if (root.hasAttribute?.(attr)) root.removeAttribute(attr);
+      }
+    }
 
     const previousFolderColorPresets = window.__zentralFolderColorPresets;
     const publishedFolderColorPresets = BUILTIN_THEMES.map((group) => ({
@@ -818,7 +880,8 @@
       return pct >= 100 ? color : mix(color, pct, "transparent");
     }
     function resolveStyle(rawRecord = null, depth = 1) {
-      return FOLDER_STYLE.resolve(rawRecord, depth, styleEnv());
+      const resolved = FOLDER_STYLE.resolve(rawRecord, depth, styleEnv());
+      return { ...resolved, properties: filterProperties(resolved.properties) };
     }
     function folderDepth(folder) {
       return FOLDER_STYLE.elementDepth(folder);
@@ -877,6 +940,8 @@
       if (map) for (const property of [...map.keys()]) rememberAndSet(folder, property, "");
       if (folder.hasAttribute?.(MARK)) folder.removeAttribute(MARK);
       if (folder.hasAttribute?.(LAYERS_ATTR)) folder.removeAttribute(LAYERS_ATTR);
+      if (folder.hasAttribute?.(LINE_HOT_ATTR)) folder.removeAttribute(LINE_HOT_ATTR);
+      if (hoveredLineFolder === folder) hoveredLineFolder = null;
       painted.delete(folder);
     }
     function paintFolder(folder) {
@@ -912,6 +977,10 @@
           ["--bgalazka-fc-tint", "tint"],
           ["--bgalazka-fc-hover", "hover"],
         ].filter(([property]) => values[property]).map(([, name]) => name).join(" ");
+        if (!values["--bgalazka-fc-accent"]) {
+          folder.removeAttribute(LINE_HOT_ATTR);
+          if (hoveredLineFolder === folder) hoveredLineFolder = null;
+        }
         if (layers) folder.setAttribute(LAYERS_ATTR, layers);
         else folder.removeAttribute(LAYERS_ATTR);
         painted.add(folder);
@@ -923,6 +992,7 @@
     }
     function paintAll() {
       paintTimer = null;
+      syncRootFlags();
       const folders = liveFolders();
       for (const folder of folders) paintFolder(folder);
       for (const folder of [...painted])
@@ -935,6 +1005,82 @@
         paintAll();
       }, 0);
     }
+
+
+    // ---------------------------------------------- native folder accent-line interactions
+    // Keep Zen's own line geometry. The two existing visual pieces are the 2px inset
+    // accent on .tab-group-container and Zen's .tab-group-line; we only add hover and
+    // click behavior to those exact hit areas. No SVGs, child-row measuring or DOM edits.
+    const LINE_HIT_WIDTH = 8;
+    const isZenFolder = (node) => node?.localName === "zen-folder" || node?.tagName === "ZEN-FOLDER" || node?.tag === "zen-folder";
+    const hasClass = (node, name) => !!node?.classList?.contains(name);
+    const lineContainer = (folder) =>
+      folder?.groupContainer || [...(folder?.children || [])].find((child) => hasClass(child, "tab-group-container")) || null;
+    function eventPath(event) {
+      try {
+        const path = event.composedPath?.();
+        if (Array.isArray(path) && path.length) return path;
+      } catch (_) {}
+      const path = [];
+      for (let node = event.target; node; node = node.parentNode || node.parentElement) path.push(node);
+      return path;
+    }
+    function isAccentFolder(folder) {
+      if (!folder || !isZenFolder(folder) || folder.localName === "zen-workspace-collapsible-pins") return false;
+      if (!enabled() || !styleToggles().accent) return false;
+      return String(folder.getAttribute?.(LAYERS_ATTR) || "").split(/\s+/).includes("accent");
+    }
+    function isInsetAccentHit(container, event) {
+      if (!container || !container.getBoundingClientRect || !Number.isFinite(Number(event.clientX))) return false;
+      const rect = container.getBoundingClientRect();
+      if (!rect || !(rect.width > 0) || !(rect.height > 0)) return false;
+      let rtl = false;
+      try { rtl = (window.getComputedStyle?.(container)?.direction || document.defaultView?.getComputedStyle?.(container)?.direction) === "rtl"; } catch (_) {}
+      const distance = rtl ? rect.right - Number(event.clientX) : Number(event.clientX) - rect.left;
+      // The visible stripe is 2px. A small 8px hit zone makes it easy to use without
+      // swallowing clicks on the tab labels or the rest of the folder contents.
+      return distance >= -1 && distance <= LINE_HIT_WIDTH;
+    }
+    function accentHitFolder(event) {
+      const path = eventPath(event);
+      const onNativeLine = path.some((node) => hasClass(node, "tab-group-line"));
+      for (const node of path) {
+        if (!isZenFolder(node) || !isAccentFolder(node)) continue;
+        const container = lineContainer(node);
+        if (!container) continue;
+        if ((onNativeLine && path.includes(container)) || (path.includes(container) && isInsetAccentHit(container, event)))
+          return node;
+      }
+      return null;
+    }
+    function setLineHover(folder) {
+      if (hoveredLineFolder === folder) return;
+      if (hoveredLineFolder?.hasAttribute?.(LINE_HOT_ATTR)) hoveredLineFolder.removeAttribute(LINE_HOT_ATTR);
+      hoveredLineFolder = folder || null;
+      if (hoveredLineFolder) hoveredLineFolder.setAttribute(LINE_HOT_ATTR, "true");
+    }
+    function updateLineHover(event) {
+      if (!styleToggles().lineHover || !enabled()) { setLineHover(null); return; }
+      setLineHover(accentHitFolder(event));
+    }
+    function clearLineHover() { setLineHover(null); }
+    function onAccentLineClick(event) {
+      if (event.button !== 0 || !styleToggles().lineClick || !enabled()) return;
+      const folder = accentHitFolder(event);
+      if (!folder) return;
+      // Use Zen's native collapsed setter. Do not repaint, remeasure or rebuild anything
+      // after toggling: the browser owns the folder's child layout and collapse animation.
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      event.stopImmediatePropagation?.();
+      folder.collapsed = !folder.collapsed;
+      clearLineHover();
+    }
+    lifecycle.own(() => {
+      clearLineHover();
+      try { for (const folder of liveFolders()) folder.removeAttribute?.(LINE_HOT_ATTR); } catch (_) {}
+      try { for (const attr of Object.keys(ROOT_FLAGS)) document.documentElement.removeAttribute(attr); } catch (_) {}
+    });
 
     function createElement(tag, attrs = {}, ...children) {
       const element = document.createElementNS(XHTML, tag);
@@ -955,21 +1101,40 @@
       }
       /* Zen draws folders from its own variables and hides the group line, so the accent, soft tint and hover layers need
          rules of their own. A layer is drawn only when the folder lists it, so an unstyled folder is left to Zen. */
-      zen-folder[${LAYERS_ATTR}~="accent"] > .tab-group-container {
-        box-shadow: inset 2px 0 0 0 var(--bgalazka-fc-accent) !important;
-      }
-      zen-folder[${LAYERS_ATTR}~="accent"] .tab-group-line {
-        background-color: var(--bgalazka-fc-accent) !important;
-      }
-      zen-folder[${LAYERS_ATTR}~="tint"] > .tab-group-label-container,
-      zen-folder[${LAYERS_ATTR}~="tint"] > .tab-group-container {
+      /* Each part can be switched off from settings; the switches are flags on the root element. */
+      :root:not([bgalazka-fc-no-tint-header]) zen-folder[${LAYERS_ATTR}~="tint"] > .tab-group-label-container {
         background-color: var(--bgalazka-fc-tint) !important;
         border-radius: 8px;
       }
-      zen-folder[${LAYERS_ATTR}~="hover"] > .tab-group-label-container:hover {
+      :root:not([bgalazka-fc-no-tint-tabs]) zen-folder[${LAYERS_ATTR}~="tint"] > .tab-group-container {
+        background-color: var(--bgalazka-fc-tint) !important;
+        border-radius: 8px;
+      }
+      :root:not([bgalazka-fc-no-hover]) zen-folder[${LAYERS_ATTR}~="hover"] > .tab-group-label-container:hover {
         background-color: var(--bgalazka-fc-hover) !important;
       }
-      .zcf-panel { position: relative; z-index: 2147483647; width: 330px; max-width: calc(100vw - 20px);
+      /* Reuse Zen's existing accent geometry: a 2px inset spine plus its native group-line segment.
+         The only interaction is a small hit-test around that exact line; no synthetic tree is drawn. */
+      :root:not([bgalazka-fc-no-accent]) zen-folder[${LAYERS_ATTR}~="accent"] > .tab-group-container {
+        box-shadow: inset 2px 0 0 0 var(--bgalazka-fc-accent) !important;
+        transition: box-shadow .12s ease;
+      }
+      :root:not([bgalazka-fc-no-accent]) zen-folder[${LAYERS_ATTR}~="accent"] .tab-group-line {
+        background-color: var(--bgalazka-fc-accent) !important;
+      }
+      :root[bgalazka-fc-line-click] zen-folder[${LAYERS_ATTR}~="accent"] .tab-group-line { cursor: pointer !important; }
+      /* The base accent shadow is !important, so the hot-state shadow must be too.
+         Make the change obvious: the 2px spine widens to 4px and gets a soft inner
+         glow. This is still the same native container/line, not a second connector. */
+      :root[bgalazka-fc-line-hover] zen-folder[${LAYERS_ATTR}~="accent"][${LINE_HOT_ATTR}] > .tab-group-container {
+        box-shadow: inset 4px 0 0 0 var(--bgalazka-fc-accent),
+          inset 8px 0 8px -5px var(--bgalazka-fc-accent) !important;
+        cursor: pointer !important;
+      }
+      :root[bgalazka-fc-line-hover] zen-folder[${LINE_HOT_ATTR}] .tab-group-line {
+        filter: brightness(1.55) saturate(1.35) drop-shadow(0 0 2px var(--bgalazka-fc-accent)) !important;
+      }
+      .zcf-panel { position: relative; z-index: 2147483647; width: 760px; max-width: calc(100vw - 20px);
         max-height: min(82vh, 680px); overflow: auto; box-sizing: border-box; padding: 12px; border-radius: 12px;
         background: Canvas; color: CanvasText; color-scheme: light dark; font: menu; pointer-events: auto;
         border: 1px solid color-mix(in srgb, CanvasText 22%, transparent); box-shadow: 0 8px 28px rgba(0,0,0,.35); }
@@ -982,8 +1147,12 @@
       .zcf-row > span { flex: 1; min-width: 0; font-size: 12px; }
       .zcf-row input[type=color] { width: 36px; height: 26px; padding: 0; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); border-radius: 6px; background: transparent; }
       .zcf-row input[type=text] { width: 82px; min-width: 0; }
-      .zcf-opacity { display:flex; align-items:center; gap:5px; min-width:112px; }
-      .zcf-opacity input { width:72px; }
+      .zcf-opacity { display:flex; align-items:center; gap:8px; flex:1 1 280px; min-width:240px; }
+      .zcf-opacity > span { flex:0 0 auto; }
+      .zcf-opacity input { flex:1 1 auto; width:auto; min-width:120px; }
+      .zcf-row input[type=range] { flex:1 1 160px; min-width:120px; }
+      .zcf-tree-box { border-top:1px solid color-mix(in srgb, CanvasText 15%, transparent); margin-top:8px; padding-top:6px; }
+      .zcf-tree-box select { min-width:0; flex:1; }
       .zcf-opacity output { width:34px; text-align:right; font:11px monospace; }
       .zcf-showcase { display:grid; grid-template-columns:repeat(auto-fit,minmax(104px,1fr)); gap:7px; margin:8px 0 12px; }
       .zcf-showcase button { display:flex; flex-direction:column; align-items:center; gap:5px; min-height:58px; padding:8px 6px; border:1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius:9px; background:color-mix(in srgb, Canvas 94%, CanvasText 6%); color:inherit; cursor:pointer; }
@@ -1094,6 +1263,7 @@
       if (isNotesOwned(folder)) {
         return {
           title,
+          folder,
           notesOwned: true,
           available: true,
           prepare: async () => {
@@ -1143,11 +1313,59 @@
       }
       return {
         title,
+        folder,
         available: true,
         depth: folderDepth(folder),
         read: () => readFolderRecord(folder),
         write: (record) => setFolderRecord(folder, record),
       };
+    }
+
+
+    // ---------------------------------------------- one look for a whole folder tree
+    function subfolderList(folder) {
+      const out = [];
+      try {
+        for (const inner of folder.querySelectorAll?.("zen-folder") || [])
+          if (inner !== folder && inner.localName === "zen-folder") out.push(inner);
+      } catch (_) {}
+      return out;
+    }
+    // 0 for the folder the person clicked, 1 for its subfolders, 2 for theirs, and so on.
+    function relativeDepth(root, folder) {
+      let depth = 0;
+      for (let node = folder; node && node !== root; node = node.parentElement?.closest?.("zen-folder")) depth++;
+      return depth;
+    }
+    // Writes one look per folder, one after the other (Notes folders go through a shared store that must not be raced).
+    async function applyToTree(root, pick, { includeRoot = true } = {}) {
+      const folders = [...(includeRoot ? [root] : []), ...subfolderList(root)];
+      let done = 0, failed = 0, detailed = false;
+      for (const folder of folders) {
+        const look = pick(relativeDepth(root, folder), folder);
+        if (!look) continue;
+        if (FOLDER_STYLE.needsDetailed(look)) detailed = true;
+        const target = folderTarget(folder);
+        try {
+          if (typeof target.prepare === "function") await target.prepare();
+          const ok = await target.write({ b: look.b || "", d: look.d || {}, o: look.o || {} });
+          if (ok === false) failed++; else done++;
+        } catch (error) {
+          failed++;
+          console.warn("[Zentral Colorful Folders] tree apply failed for", target.title, error);
+        }
+      }
+      if (detailed) setString(P.MODE, "detailed");
+      schedulePaint();
+      return { done, failed, total: folders.length };
+    }
+    const treeResultText = (result) =>
+      !result.total ? "No subfolders to change."
+        : `Applied to ${result.done} folder${result.done === 1 ? "" : "s"}` + (result.failed ? `, ${result.failed} could not be saved.` : ".");
+    // A collection gives the clicked folder its first look, its subfolders the second, their subfolders the third (cycling).
+    function collectionPicker(group) {
+      const items = (group && Array.isArray(group.items) ? group.items : []).map(FOLDER_STYLE.norm).filter(FOLDER_STYLE.hasColor);
+      return items.length ? (depth) => items[depth % items.length] : null;
     }
 
     function openTargetEditor(target, anchor) {
@@ -1215,7 +1433,7 @@
       header.append(heading, close);
       close.addEventListener("click", closeEditor);
       element.appendChild(header);
-      const intro = createElement("div", { class: "zcf-muted", text: "Pick a primary color (the folder) and a secondary color (its outline); everything else follows. Detailed lets you fine tune every layer, and a layer on Auto keeps following the primary color. Nothing is saved until you press Apply." });
+      const intro = createElement("div", { class: "zcf-muted", text: "Pick a primary color (the folder) and a secondary color (its outline). The folder accent line uses that same primary color; Detailed lets you set its exact color with the Accent layer. Nothing is saved until you press Apply." });
       element.appendChild(intro);
 
       // ---- mode switch
@@ -1418,6 +1636,40 @@
       keepQuick.addEventListener("click", () => { saveQuickColor(record.b); status.textContent = record.b ? "Saved " + record.b + " as a quick color." : ""; });
       quickRow.appendChild(keepQuick);
 
+      // ---- whole tree: copy these colors, or a collection, over the folder's subfolders
+      const treeFolder = target.folder && subfolderList(target.folder).length ? target.folder : null;
+      if (treeFolder) {
+        const box = createElement("div", { class: "zcf-tree-box" });
+        box.appendChild(createElement("h4", { text: "Whole tree" }));
+        const run = (promise) => {
+          status.textContent = "Applying…";
+          Promise.resolve(promise).then((result) => { if (editor === element) status.textContent = treeResultText(result); })
+            .catch((error) => { if (editor === element) status.textContent = "Could not apply: " + (error?.message || error); });
+        };
+        const rowOne = createElement("div", { class: "zcf-row" });
+        const withAll = createElement("button", { type: "button", text: "These colors → folder and all subfolders" });
+        const subsOnly = createElement("button", { type: "button", text: "These colors → subfolders only" });
+        const copy = (includeRoot) => () => {
+          if (mode() !== editMode) setString(P.MODE, editMode);
+          const look = current();
+          run(applyToTree(treeFolder, () => look, { includeRoot }));
+        };
+        withAll.addEventListener("click", copy(true));
+        subsOnly.addEventListener("click", copy(false));
+        rowOne.append(withAll, subsOnly);
+        const rowTwo = createElement("div", { class: "zcf-row" });
+        const pickCollection = createElement("select", { "aria-label": "Collection to spread over this tree" });
+        BUILTIN_THEMES.forEach((group, index) => pickCollection.appendChild(createElement("option", { value: String(index), text: group.group })));
+        const spread = createElement("button", { type: "button", text: "Spread collection over this tree" });
+        spread.addEventListener("click", () => {
+          const pick = collectionPicker(BUILTIN_THEMES[Number(pickCollection.value)]);
+          if (pick) run(applyToTree(treeFolder, pick));
+        });
+        rowTwo.append(pickCollection, spread);
+        box.append(rowOne, rowTwo, createElement("div", { class: "zcf-muted", text: "A collection gives this folder its first look, its subfolders the second, theirs the third, and so on." }));
+        element.appendChild(box);
+      }
+
       // ---- actions: Reset, Cancel, Apply, Apply and close
       const actions = createElement("div", { class: "zcf-btns" });
       const reset = createElement("button", { type: "button", text: "Reset" });
@@ -1487,7 +1739,7 @@
         const rect = anchor?.getBoundingClientRect?.();
         const width = window.innerWidth || 1200;
         const height = window.innerHeight || 800;
-        const placement = placePanel(rect, Math.min(380, width - 16), Math.min(element.scrollHeight || 620, height - 16), width, height);
+        const placement = placePanel(rect, Math.min(760, width - 16), Math.min(element.scrollHeight || 620, height - 16), width, height);
         element.style.width = placement.width + "px";
         element.style.maxHeight = placement.height + "px";
         if (!editorHost) {
@@ -1627,6 +1879,54 @@
         lifecycle.setTimeout(waitUntilClosed, 0);
       });
       submenu.appendChild(more);
+      if (subfolderList(folder).length) {
+        const wholeTree = xul("menu", { label: "Whole tree (this folder + subfolders)" });
+        const treePop = document.createXULElement("menupopup");
+        wholeTree.appendChild(treePop);
+        const run = (promise) => Promise.resolve(promise).catch((error) =>
+          console.warn("[Zentral Colorful Folders] tree apply failed:", error));
+        const own = xul("menuitem", { label: "Copy this folder's colors to all subfolders" });
+        const record = folderTarget(folder).read();
+        if (!FOLDER_STYLE.hasColor(FOLDER_STYLE.norm(record || {}))) own.setAttribute("disabled", "true");
+        own.addEventListener("command", () => {
+          const look = FOLDER_STYLE.norm(folderTarget(folder).read() || {});
+          if (FOLDER_STYLE.hasColor(look)) run(applyToTree(folder, () => look, { includeRoot: false }));
+        });
+        treePop.appendChild(own);
+        treePop.appendChild(xul("menuseparator"));
+        const paletteMenu = xul("menu", { label: "Apply a palette to folder and subfolders" });
+        const palettePop = document.createXULElement("menupopup");
+        for (const group of BUILTIN_THEMES.concat(state.themes.length ? [{ group: "My quick themes", items: state.themes }] : [])) {
+          const groupMenu = document.createXULElement("menu");
+          groupMenu.setAttribute("label", group.group);
+          const groupPop = document.createXULElement("menupopup");
+          for (const theme of group.items) {
+            const item = document.createXULElement("menuitem");
+            item.setAttribute("label", theme.n);
+            item.setAttribute("class", "menuitem-iconic");
+            item.setAttribute("image", makeSwatchIcon(theme));
+            item.addEventListener("command", () => run(applyToTree(folder, () => theme)));
+            groupPop.appendChild(item);
+          }
+          groupMenu.appendChild(groupPop);
+          palettePop.appendChild(groupMenu);
+        }
+        paletteMenu.appendChild(palettePop);
+        treePop.appendChild(paletteMenu);
+        const collectionMenu = xul("menu", { label: "Spread a collection over this tree" });
+        const collectionPop = document.createXULElement("menupopup");
+        for (const group of BUILTIN_THEMES) {
+          const pick = collectionPicker(group);
+          if (!pick) continue;
+          const item = document.createXULElement("menuitem");
+          item.setAttribute("label", group.group);
+          item.addEventListener("command", () => run(applyToTree(folder, pick)));
+          collectionPop.appendChild(item);
+        }
+        collectionMenu.appendChild(collectionPop);
+        treePop.appendChild(collectionMenu);
+        submenu.appendChild(wholeTree);
+      }
       const reset = xul("menuitem", { label: "Reset to default" });
       reset.addEventListener("command", () => {
         Promise.resolve(folderTarget(folder).write(null)).catch((error) =>
@@ -1674,6 +1974,13 @@
       document.getElementById("tabbrowser-tabs") ||
       window.gBrowser?.tabContainer ||
       document.querySelector?.("#tabbrowser-tabs");
+    if (root) {
+      lifecycle.listen(root, "click", onAccentLineClick, true);
+      lifecycle.listen(root, "pointerover", updateLineHover, true);
+      lifecycle.listen(root, "pointermove", updateLineHover, true);
+      lifecycle.listen(root, "pointerleave", clearLineHover, true);
+      lifecycle.listen(window, "blur", clearLineHover, true);
+    }
     if (root && typeof MutationObserver === "function") {
       observer = new MutationObserver(() => schedulePaint());
       observer.observe(root, {
@@ -1723,6 +2030,14 @@
       }
       schedulePaint();
     });
+    // Switches for the individual parts of the folder styling and the native accent-line interactions.
+    const onStyleSwitch = () => {
+      syncRootFlags();
+      schedulePaint();
+      announceDefaultsChanged();
+    };
+    lifecycle.preference(PREFIX + "style_", onStyleSwitch);
+    lifecycle.preference(PREFIX + "line_", onStyleSwitch);
     lifecycle.preference(P.IGNORE_LABEL, schedulePaint);
     lifecycle.preference(P.MODE, schedulePaint);
     lifecycle.preference(P.ENABLED, schedulePaint);

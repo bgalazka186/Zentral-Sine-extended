@@ -1,7 +1,7 @@
 {
   "id": "zentral-colorful-folders",
   "name": "Zentral Colorful Folders",
-  "description": "Per-folder colors for native Zen folders, with right-click palettes, simple and detailed editing, saved themes, and Notes-safe ownership. Standalone part of Zentral Extended.",
+  "description": "Per-folder colors for native Zen folders, using Zen’s own accent line with hover highlighting and click-to-collapse. Includes right-click palettes, simple and detailed editing, saved themes, and Notes-safe ownership. Standalone part of Zentral Extended.",
   "homepage": "https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/folders",
   "supportsUnload": true,
   "style": {
@@ -17,7 +17,7 @@
     }
   },
   "author": "bgalazka186",
-  "version": "3.2.16",
+  "version": "3.2.23",
   "preferences": "preferences.json",
   "tags": [
     "folders",

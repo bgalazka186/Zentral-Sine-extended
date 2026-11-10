@@ -375,231 +375,231 @@
     // or a skin-tone / joined sequence); anything else, text included, is refused so a label can never smuggle markup into the tab bar.
     const FOLDER_COLORS = Object.freeze(NOTE_COLORS.filter((c) => c !== "none"));
     // <<FOLDER-STYLE-CORE v3
-    // One implementation of "which colors does a folder get". The same text sits in ZentralColorfulFolders.uc.js and
-    // ZentralNotes.uc.js (tests/colorful-folders.test.cjs compares the two copies), so the Zen sidebar, the All notes tree and a
-    // Notes-only install can never disagree. Pure: no DOM, no preferences, no timers.
-    //   record  = { b: primary "#rrggbb", d: per-layer colors, o: per-layer opacity 0..100 }
-    //   Simple mode: only `b` (primary) and `d.stroke` (secondary = outline) are read; every other layer is derived from them.
-    //   Detailed mode: `d` layers override the derived ones.
-    //   Precedence for one folder: its own record > the default of its level (1 = root, up to 5) > the all-levels default.
-    //   A folder that has its own colors never inherits default colors or default opacity (a default can not overwrite it).
-    const FOLDER_STYLE = (() => {
-      const PARTS = Object.freeze(["back", "front", "stroke", "label", "accent", "tint", "hover"]);
-      const MAX_DEPTH = 5;
-      const HEX = /^#[0-9a-fA-F]{6}$/;
-      const hex = (v) => (typeof v === "string" && HEX.test(v.trim()) ? v.trim().toLowerCase() : "");
-      const detail = (raw) => {
-        const out = {};
-        if (raw && typeof raw === "object" && !Array.isArray(raw))
-          for (const p of PARTS) {
-            const h = hex(raw[p]);
-            if (h) out[p] = h;
-          }
-        return out;
-      };
-      const opacity = (raw) => {
-        const out = {};
-        if (raw && typeof raw === "object" && !Array.isArray(raw))
-          for (const p of PARTS) {
-            const n = Number(raw[p]);
-            if (raw[p] !== undefined && raw[p] !== null && Number.isInteger(n) && n >= 0 && n <= 100) out[p] = n;
-          }
-        return out;
-      };
-      const norm = (raw) => {
-        const r = raw && typeof raw === "object" ? raw : {};
-        return { b: hex(r.b ?? r.color), d: detail(r.d ?? r.parts), o: opacity(r.o ?? r.opacity) };
-      };
-      const hasColor = (r) => !!r && (!!r.b || Object.keys(r.d).length > 0);
-      const lum = (h) => {
-        const n = parseInt(h.slice(1), 16);
-        const lin = (v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
-        return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
-      };
-      const textOn = (h) => (lum(h) > 0.4 ? "#1b1b1f" : "#ffffff");
-      const contrast = (a, b) => {
-        const x = hex(a), y = hex(b);
-        if (!x || !y) return 21;
-        const l1 = lum(x), l2 = lum(y);
-        return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
-      };
-      const mix = (c, pct, other) => `color-mix(in srgb, ${c} ${pct}%, ${other})`;
-      function derive(base, secondary) {
-        const color = hex(base);
-        if (!color) return {};
-        const edge = hex(secondary);
-        return {
-          back: `light-dark(${mix(color, 60, "gray")}, ${mix(color, 60, "#c1c1c1")})`,
-          front: `light-dark(color-mix(in srgb, ${color}, white 70%), color-mix(in srgb, ${color}, black 40%))`,
-          stroke: edge || `light-dark(${mix(color, 50, "black")}, ${mix(color, 15, "#ebebeb")})`,
-          label: `light-dark(${mix(color, 55, "black")}, ${mix(color, 55, "white")})`,
-          accent: color,
-          tint: mix(color, 16, "transparent"),
-          hover: mix(color, 30, "transparent"),
-        };
-      }
-      function partsFor(rec, mode) {
-        const r = norm(rec);
-        const out = r.b ? derive(r.b, r.d.stroke) : {};
-        if (!r.b || mode === "detailed")
-          for (const p of PARTS) if (r.d[p]) out[p] = p === "tint" ? mix(r.d.tint, 22, "transparent") : r.d[p];
-        return out;
-      }
-      function declarations(parts, op) {
-        const out = {};
-        const alpha = opacity(op);
-        const fade = (value, p) => (alpha[p] === undefined || alpha[p] >= 100 ? value : mix(value, alpha[p], "transparent"));
+  // One implementation of "which colors does a folder get". The same text sits in ZentralColorfulFolders.uc.js and
+  // ZentralNotes.uc.js (tests/colorful-folders.test.cjs compares the two copies), so the Zen sidebar, the All notes tree and a
+  // Notes-only install can never disagree. Pure: no DOM, no preferences, no timers.
+  //   record  = { b: primary "#rrggbb", d: per-layer colors, o: per-layer opacity 0..100 }
+  //   Simple mode: only `b` (primary) and `d.stroke` (secondary = outline) are read; every other layer is derived from them.
+  //   Detailed mode: `d` layers override the derived ones.
+  //   Precedence for one folder: its own record > the default of its level (1 = root, up to 5) > the all-levels default.
+  //   A folder that has its own colors never inherits default colors or default opacity (a default can not overwrite it).
+  const FOLDER_STYLE = (() => {
+    const PARTS = Object.freeze(["back", "front", "stroke", "label", "accent", "tint", "hover"]);
+    const MAX_DEPTH = 5;
+    const HEX = /^#[0-9a-fA-F]{6}$/;
+    const hex = (v) => (typeof v === "string" && HEX.test(v.trim()) ? v.trim().toLowerCase() : "");
+    const detail = (raw) => {
+      const out = {};
+      if (raw && typeof raw === "object" && !Array.isArray(raw))
         for (const p of PARTS) {
-          if (!parts || !parts[p]) continue;
-          const value = fade(parts[p], p);
-          if (p === "back") out["--zen-folder-behind-bgcolor"] = value;
-          else if (p === "front") out["--zen-folder-front-bgcolor"] = value;
-          else if (p === "stroke") out["--zen-folder-stroke"] = value;
-          else if (p === "label") out["--bgalazka-fc-label"] = value;
-          else if (p === "accent") {
-            const on = parts.accentText || "#ffffff";
-            const off = on === "#ffffff" ? "#1b1b1f" : "#ffffff";
-            out["--tab-group-color"] = value;
-            out["--tab-group-background-color"] = value;
-            out["--tab-group-color-invert"] = off;
-            out["--tab-group-text-color"] = on;
-            out["--tab-group-text-color-invert"] = off;
-            out["--bgalazka-fc-accent"] = value;
-          } else if (p === "tint") {
-            out["--tab-group-color-pale"] = value;
-            out["--bgalazka-fc-tint"] = value;
-          } else if (p === "hover") {
-            out["--tab-group-background-color-hover"] = value;
-            out["--bgalazka-fc-hover"] = value;
-          }
+          const h = hex(raw[p]);
+          if (h) out[p] = h;
         }
-        return out;
-      }
-      // Every custom property a painter may set; a painter removes the ones a style does not produce.
-      const OWNED = Object.freeze([
-        "--zen-folder-behind-bgcolor", "--zen-folder-front-bgcolor", "--zen-folder-stroke", "--bgalazka-fc-label",
-        "--tab-group-color", "--tab-group-background-color", "--tab-group-color-invert", "--tab-group-text-color",
-        "--tab-group-text-color-invert", "--tab-group-color-pale", "--tab-group-background-color-hover",
-        "--bgalazka-fc-accent", "--bgalazka-fc-tint", "--bgalazka-fc-hover",
-      ]);
-      const clampDepth = (depth) => Math.max(1, Math.min(MAX_DEPTH, Math.floor(Number(depth)) || 1));
-      function parseLayers(raw) {
-        try {
-          const text = String(raw || "");
-          if (!text || text.length > 32768) return {};
-          const parsed = JSON.parse(text);
-          const src = parsed && typeof parsed === "object" ? parsed.l || parsed : {};
-          const out = {};
-          for (let n = 1; n <= MAX_DEPTH; n++) {
-            const r = norm(src[n]);
-            if (hasColor(r) || Object.keys(r.o).length) out[n] = r;
-          }
-          return out;
-        } catch (_) {
-          return {};
+      return out;
+    };
+    const opacity = (raw) => {
+      const out = {};
+      if (raw && typeof raw === "object" && !Array.isArray(raw))
+        for (const p of PARTS) {
+          const n = Number(raw[p]);
+          if (raw[p] !== undefined && raw[p] !== null && Number.isInteger(n) && n >= 0 && n <= 100) out[p] = n;
+        }
+      return out;
+    };
+    const norm = (raw) => {
+      const r = raw && typeof raw === "object" ? raw : {};
+      return { b: hex(r.b ?? r.color), d: detail(r.d ?? r.parts), o: opacity(r.o ?? r.opacity) };
+    };
+    const hasColor = (r) => !!r && (!!r.b || Object.keys(r.d).length > 0);
+    const lum = (h) => {
+      const n = parseInt(h.slice(1), 16);
+      const lin = (v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+      return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+    };
+    const textOn = (h) => (lum(h) > 0.4 ? "#1b1b1f" : "#ffffff");
+    const contrast = (a, b) => {
+      const x = hex(a), y = hex(b);
+      if (!x || !y) return 21;
+      const l1 = lum(x), l2 = lum(y);
+      return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    };
+    const mix = (c, pct, other) => `color-mix(in srgb, ${c} ${pct}%, ${other})`;
+    function derive(base, secondary) {
+      const color = hex(base);
+      if (!color) return {};
+      const edge = hex(secondary);
+      return {
+        back: `light-dark(${mix(color, 60, "gray")}, ${mix(color, 60, "#c1c1c1")})`,
+        front: `light-dark(color-mix(in srgb, ${color}, white 70%), color-mix(in srgb, ${color}, black 40%))`,
+        stroke: edge || `light-dark(${mix(color, 50, "black")}, ${mix(color, 15, "#ebebeb")})`,
+        label: `light-dark(${mix(color, 55, "black")}, ${mix(color, 55, "white")})`,
+        accent: color,
+        tint: mix(color, 16, "transparent"),
+        hover: mix(color, 30, "transparent"),
+      };
+    }
+    function partsFor(rec, mode) {
+      const r = norm(rec);
+      const out = r.b ? derive(r.b, r.d.stroke) : {};
+      if (!r.b || mode === "detailed")
+        for (const p of PARTS) if (r.d[p]) out[p] = p === "tint" ? mix(r.d.tint, 22, "transparent") : r.d[p];
+      return out;
+    }
+    function declarations(parts, op) {
+      const out = {};
+      const alpha = opacity(op);
+      const fade = (value, p) => (alpha[p] === undefined || alpha[p] >= 100 ? value : mix(value, alpha[p], "transparent"));
+      for (const p of PARTS) {
+        if (!parts || !parts[p]) continue;
+        const value = fade(parts[p], p);
+        if (p === "back") out["--zen-folder-behind-bgcolor"] = value;
+        else if (p === "front") out["--zen-folder-front-bgcolor"] = value;
+        else if (p === "stroke") out["--zen-folder-stroke"] = value;
+        else if (p === "label") out["--bgalazka-fc-label"] = value;
+        else if (p === "accent") {
+          const on = parts.accentText || "#ffffff";
+          const off = on === "#ffffff" ? "#1b1b1f" : "#ffffff";
+          out["--tab-group-color"] = value;
+          out["--tab-group-background-color"] = value;
+          out["--tab-group-color-invert"] = off;
+          out["--tab-group-text-color"] = on;
+          out["--tab-group-text-color-invert"] = off;
+          out["--bgalazka-fc-accent"] = value;
+        } else if (p === "tint") {
+          out["--tab-group-color-pale"] = value;
+          out["--bgalazka-fc-tint"] = value;
+        } else if (p === "hover") {
+          out["--tab-group-background-color-hover"] = value;
+          out["--bgalazka-fc-hover"] = value;
         }
       }
-      function serializeLayers(layers) {
-        const l = {};
-        for (let n = 1; n <= MAX_DEPTH; n++) {
-          const r = norm(layers && layers[n]);
-          if (hasColor(r) || Object.keys(r.o).length) l[n] = r;
-        }
-        return JSON.stringify({ v: 1, l });
-      }
-      // Level of a folder element = number of zen-folder elements from it up to the root (1 = top level).
-      function elementDepth(el) {
-        let n = 0;
-        for (let c = el; c && n < 64; c = c.parentElement || c.parentNode || c.parent) if (c.localName === "zen-folder" || c.tag === "zen-folder") n++;
-        return clampDepth(n);
-      }
-      // env = { mode, defaults: record, layers: { 1..5: record }, ignoreLabel }
-      function resolve(raw, depth, env) {
-        const e = env && typeof env === "object" ? env : {};
-        const mode = e.mode === "detailed" ? "detailed" : "simple";
-        const own = norm(raw);
-        const level = clampDepth(depth);
-        let source, from;
-        if (hasColor(own)) {
-          source = own;
-          from = "folder";
-        } else {
-          const layer = norm(e.layers && (e.layers[level] ?? e.layers[String(level)]));
-          const global = norm(e.defaults);
-          const pick = hasColor(layer) ? layer : global;
-          from = hasColor(layer) ? "level" : hasColor(global) ? "default" : "none";
-          source = { b: pick.b, d: pick.d, o: { ...pick.o, ...own.o } };
-        }
-        const parts = partsFor(source, mode);
-        if (e.ignoreLabel) delete parts.label;
-        const accent = hex(parts.accent) || source.b;
-        if (accent) parts.accentText = textOn(accent);
-        return { base: source.b, parts, opacity: source.o, properties: declarations(parts, source.o), from, depth: level, mode };
-      }
-      // Collections: ordered groups of looks. Applying a collection to the defaults gives level 1 the first look, level 2 the
-      // second, and so on (cycling), so a root folder, a subfolder and a sub-subfolder stay recognisable but different.
-      // A look keeps to `b`, `d.stroke` (secondary) and `o` wherever it can, so it also works in Simple mode.
-      const COLLECTIONS = Object.freeze([
-        { group: "Classic yellow folders", items: [
-          { n: "Kraft paper", b: "#c8a165", d: { back: "#a98147", front: "#e6c993", stroke: "#5c4120" }, o: {} },
-          { n: "Honey", b: "#f2a900", d: { back: "#d48a00", front: "#ffd26a", stroke: "#6b4300" }, o: {} },
-          { n: "Manila", b: "#e8b923", d: { back: "#c99a1c", front: "#f6d567", stroke: "#7a5a05" }, o: {} },
-          { n: "Butter", b: "#f0cf4a", d: { back: "#d1b232", front: "#fbe88a", stroke: "#75600b" }, o: {} },
-          { n: "Lemon", b: "#f4e04d", d: { back: "#d6c12f", front: "#fff59a", stroke: "#6f6410" }, o: {} },
-        ] },
-        { group: "Dark glass", items: [
-          { n: "Slate glass", b: "#3b4452", d: { stroke: "#8fa3bd" }, o: { back: 55, front: 40 } },
-          { n: "Ink glass", b: "#1f2a44", d: { stroke: "#7f95c9" }, o: { back: 55, front: 38 } },
-          { n: "Moss glass", b: "#23392f", d: { stroke: "#7fb69a" }, o: { back: 55, front: 40 } },
-          { n: "Wine glass", b: "#3b2230", d: { stroke: "#c487a6" }, o: { back: 55, front: 40 } },
-          { n: "Ember glass", b: "#3a2a1f", d: { stroke: "#d9a066" }, o: { back: 55, front: 40 } },
-        ] },
-        { group: "Sticky notes", items: [
-          { n: "Canary", b: "#ffe066", d: { back: "#e9c93a", front: "#fff1a8", stroke: "#8a6d00" }, o: {} },
-          { n: "Pink slip", b: "#ff8fb3", d: { back: "#ec6f98", front: "#ffc2d6", stroke: "#8c2149" }, o: {} },
-          { n: "Mint note", b: "#7be0b5", d: { back: "#52c796", front: "#b9f3da", stroke: "#0f6a47" }, o: {} },
-          { n: "Sky memo", b: "#7cc4ff", d: { back: "#52a8ec", front: "#c1e3ff", stroke: "#124d82" }, o: {} },
-          { n: "Peach", b: "#ffb27a", d: { back: "#ef9558", front: "#ffd6b8", stroke: "#8a4310" }, o: {} },
-        ] },
-        { group: "Neon outline", items: [
-          { n: "Cyan line", b: "#12202b", d: { stroke: "#2fd8ec" }, o: { back: 70, front: 55 } },
-          { n: "Magenta line", b: "#26122b", d: { stroke: "#e45be0" }, o: { back: 70, front: 55 } },
-          { n: "Lime line", b: "#1b2612", d: { stroke: "#a6dd3c" }, o: { back: 70, front: 55 } },
-          { n: "Orange line", b: "#2b1d10", d: { stroke: "#f0922a" }, o: { back: 70, front: 55 } },
-          { n: "Violet line", b: "#1c1530", d: { stroke: "#9b83f2" }, o: { back: 70, front: 55 } },
-        ] },
-        { group: "Dark folders", items: [
-          { n: "Graphite", b: "#343a40", d: {}, o: {} },
-          { n: "Midnight", b: "#202b3b", d: {}, o: {} },
-          { n: "Deep forest", b: "#234236", d: {}, o: {} },
-          { n: "Plum shadow", b: "#493047", d: {}, o: {} },
-        ] },
-        { group: "High contrast", items: [
-          { n: "Amber", b: "#d97706", d: { front: "#ffe0a3", stroke: "#3b2100" }, o: {} },
-          { n: "Aqua", b: "#087e8b", d: { front: "#b9f4f4", stroke: "#032f36" }, o: {} },
-          { n: "Rose", b: "#be3455", d: { front: "#ffd2df", stroke: "#3d0716" }, o: {} },
-          { n: "Electric blue", b: "#2557d6", d: { front: "#d8e5ff", stroke: "#071b50" }, o: {} },
-        ] },
-        { group: "Colorful", items: [
-          { n: "Coral", b: "#ff8066", d: {}, o: {} },
-          { n: "Mint", b: "#40b99a", d: {}, o: {} },
-          { n: "Lavender", b: "#9c83e6", d: {}, o: {} },
-          { n: "Sunflower", b: "#e5bd38", d: {}, o: {} },
-        ] },
-      ]);
-      // A look needs Detailed mode only when it sets a layer other than the secondary (outline) color.
-      const needsDetailed = (look) => Object.keys(detail(look && look.d)).some((p) => p !== "stroke");
-      // Collection -> { 1: look, 2: look, ... } for the five default levels.
-      function spreadCollection(group) {
-        const items = (group && Array.isArray(group.items) ? group.items : []).map(norm).filter(hasColor);
+      return out;
+    }
+    // Every custom property a painter may set; a painter removes the ones a style does not produce.
+    const OWNED = Object.freeze([
+      "--zen-folder-behind-bgcolor", "--zen-folder-front-bgcolor", "--zen-folder-stroke", "--bgalazka-fc-label",
+      "--tab-group-color", "--tab-group-background-color", "--tab-group-color-invert", "--tab-group-text-color",
+      "--tab-group-text-color-invert", "--tab-group-color-pale", "--tab-group-background-color-hover",
+      "--bgalazka-fc-accent", "--bgalazka-fc-tint", "--bgalazka-fc-hover",
+    ]);
+    const clampDepth = (depth) => Math.max(1, Math.min(MAX_DEPTH, Math.floor(Number(depth)) || 1));
+    function parseLayers(raw) {
+      try {
+        const text = String(raw || "");
+        if (!text || text.length > 32768) return {};
+        const parsed = JSON.parse(text);
+        const src = parsed && typeof parsed === "object" ? parsed.l || parsed : {};
         const out = {};
-        if (!items.length) return out;
-        for (let n = 1; n <= MAX_DEPTH; n++) out[n] = items[(n - 1) % items.length];
+        for (let n = 1; n <= MAX_DEPTH; n++) {
+          const r = norm(src[n]);
+          if (hasColor(r) || Object.keys(r.o).length) out[n] = r;
+        }
         return out;
+      } catch (_) {
+        return {};
       }
-      return Object.freeze({ PARTS, MAX_DEPTH, OWNED, COLLECTIONS, hex, detail, opacity, norm, hasColor, lum, textOn, contrast, derive, partsFor, declarations, clampDepth, parseLayers, serializeLayers, elementDepth, resolve, needsDetailed, spreadCollection });
-    })();
-    // FOLDER-STYLE-CORE>>
+    }
+    function serializeLayers(layers) {
+      const l = {};
+      for (let n = 1; n <= MAX_DEPTH; n++) {
+        const r = norm(layers && layers[n]);
+        if (hasColor(r) || Object.keys(r.o).length) l[n] = r;
+      }
+      return JSON.stringify({ v: 1, l });
+    }
+    // Level of a folder element = number of zen-folder elements from it up to the root (1 = top level).
+    function elementDepth(el) {
+      let n = 0;
+      for (let c = el; c && n < 64; c = c.parentElement || c.parentNode || c.parent) if (c.localName === "zen-folder" || c.tag === "zen-folder") n++;
+      return clampDepth(n);
+    }
+    // env = { mode, defaults: record, layers: { 1..5: record }, ignoreLabel }
+    function resolve(raw, depth, env) {
+      const e = env && typeof env === "object" ? env : {};
+      const mode = e.mode === "detailed" ? "detailed" : "simple";
+      const own = norm(raw);
+      const level = clampDepth(depth);
+      let source, from;
+      if (hasColor(own)) {
+        source = own;
+        from = "folder";
+      } else {
+        const layer = norm(e.layers && (e.layers[level] ?? e.layers[String(level)]));
+        const global = norm(e.defaults);
+        const pick = hasColor(layer) ? layer : global;
+        from = hasColor(layer) ? "level" : hasColor(global) ? "default" : "none";
+        source = { b: pick.b, d: pick.d, o: { ...pick.o, ...own.o } };
+      }
+      const parts = partsFor(source, mode);
+      if (e.ignoreLabel) delete parts.label;
+      const accent = hex(parts.accent) || source.b;
+      if (accent) parts.accentText = textOn(accent);
+      return { base: source.b, parts, opacity: source.o, properties: declarations(parts, source.o), from, depth: level, mode };
+    }
+    // Collections: ordered groups of looks. Applying a collection to the defaults gives level 1 the first look, level 2 the
+    // second, and so on (cycling), so a root folder, a subfolder and a sub-subfolder stay recognisable but different.
+    // A look keeps to `b`, `d.stroke` (secondary) and `o` wherever it can, so it also works in Simple mode.
+    const COLLECTIONS = Object.freeze([
+      { group: "Classic yellow folders", items: [
+        { n: "Kraft paper", b: "#c8a165", d: { back: "#a98147", front: "#e6c993", stroke: "#5c4120" }, o: {} },
+        { n: "Honey", b: "#f2a900", d: { back: "#d48a00", front: "#ffd26a", stroke: "#6b4300" }, o: {} },
+        { n: "Manila", b: "#e8b923", d: { back: "#c99a1c", front: "#f6d567", stroke: "#7a5a05" }, o: {} },
+        { n: "Butter", b: "#f0cf4a", d: { back: "#d1b232", front: "#fbe88a", stroke: "#75600b" }, o: {} },
+        { n: "Lemon", b: "#f4e04d", d: { back: "#d6c12f", front: "#fff59a", stroke: "#6f6410" }, o: {} },
+      ] },
+      { group: "Dark glass", items: [
+        { n: "Slate glass", b: "#3b4452", d: { stroke: "#8fa3bd" }, o: { back: 55, front: 40 } },
+        { n: "Ink glass", b: "#1f2a44", d: { stroke: "#7f95c9" }, o: { back: 55, front: 38 } },
+        { n: "Moss glass", b: "#23392f", d: { stroke: "#7fb69a" }, o: { back: 55, front: 40 } },
+        { n: "Wine glass", b: "#3b2230", d: { stroke: "#c487a6" }, o: { back: 55, front: 40 } },
+        { n: "Ember glass", b: "#3a2a1f", d: { stroke: "#d9a066" }, o: { back: 55, front: 40 } },
+      ] },
+      { group: "Sticky notes", items: [
+        { n: "Canary", b: "#ffe066", d: { back: "#e9c93a", front: "#fff1a8", stroke: "#8a6d00" }, o: {} },
+        { n: "Pink slip", b: "#ff8fb3", d: { back: "#ec6f98", front: "#ffc2d6", stroke: "#8c2149" }, o: {} },
+        { n: "Mint note", b: "#7be0b5", d: { back: "#52c796", front: "#b9f3da", stroke: "#0f6a47" }, o: {} },
+        { n: "Sky memo", b: "#7cc4ff", d: { back: "#52a8ec", front: "#c1e3ff", stroke: "#124d82" }, o: {} },
+        { n: "Peach", b: "#ffb27a", d: { back: "#ef9558", front: "#ffd6b8", stroke: "#8a4310" }, o: {} },
+      ] },
+      { group: "Neon outline", items: [
+        { n: "Cyan line", b: "#12202b", d: { stroke: "#2fd8ec" }, o: { back: 70, front: 55 } },
+        { n: "Magenta line", b: "#26122b", d: { stroke: "#e45be0" }, o: { back: 70, front: 55 } },
+        { n: "Lime line", b: "#1b2612", d: { stroke: "#a6dd3c" }, o: { back: 70, front: 55 } },
+        { n: "Orange line", b: "#2b1d10", d: { stroke: "#f0922a" }, o: { back: 70, front: 55 } },
+        { n: "Violet line", b: "#1c1530", d: { stroke: "#9b83f2" }, o: { back: 70, front: 55 } },
+      ] },
+      { group: "Dark folders", items: [
+        { n: "Graphite", b: "#343a40", d: {}, o: {} },
+        { n: "Midnight", b: "#202b3b", d: {}, o: {} },
+        { n: "Deep forest", b: "#234236", d: {}, o: {} },
+        { n: "Plum shadow", b: "#493047", d: {}, o: {} },
+      ] },
+      { group: "High contrast", items: [
+        { n: "Amber", b: "#d97706", d: { front: "#ffe0a3", stroke: "#3b2100" }, o: {} },
+        { n: "Aqua", b: "#087e8b", d: { front: "#b9f4f4", stroke: "#032f36" }, o: {} },
+        { n: "Rose", b: "#be3455", d: { front: "#ffd2df", stroke: "#3d0716" }, o: {} },
+        { n: "Electric blue", b: "#2557d6", d: { front: "#d8e5ff", stroke: "#071b50" }, o: {} },
+      ] },
+      { group: "Colorful", items: [
+        { n: "Coral", b: "#ff8066", d: {}, o: {} },
+        { n: "Mint", b: "#40b99a", d: {}, o: {} },
+        { n: "Lavender", b: "#9c83e6", d: {}, o: {} },
+        { n: "Sunflower", b: "#e5bd38", d: {}, o: {} },
+      ] },
+    ]);
+    // A look needs Detailed mode only when it sets a layer other than the secondary (outline) color.
+    const needsDetailed = (look) => Object.keys(detail(look && look.d)).some((p) => p !== "stroke");
+    // Collection -> { 1: look, 2: look, ... } for the five default levels.
+    function spreadCollection(group) {
+      const items = (group && Array.isArray(group.items) ? group.items : []).map(norm).filter(hasColor);
+      const out = {};
+      if (!items.length) return out;
+      for (let n = 1; n <= MAX_DEPTH; n++) out[n] = items[(n - 1) % items.length];
+      return out;
+    }
+    return Object.freeze({ PARTS, MAX_DEPTH, OWNED, COLLECTIONS, hex, detail, opacity, norm, hasColor, lum, textOn, contrast, derive, partsFor, declarations, clampDepth, parseLayers, serializeLayers, elementDepth, resolve, needsDetailed, spreadCollection });
+  })();
+  // FOLDER-STYLE-CORE>>
     const FALLBACK_FOLDER_COLOR_PRESETS = FOLDER_STYLE.COLLECTIONS;
     function folderColorPresets() {
       const supplied = window.__zentralFolderColorPresets;
@@ -6098,7 +6098,7 @@
           } else if (el.hasAttribute?.(name)) el.removeAttribute(name);
         };
         setAttr("bgalazka-notes-color", color || "");
-        // The layers the stylesheet may draw (accent line, soft tint, hover); an unlisted layer stays Zen's own.
+        // The shared folder stylesheet uses the native accent line, soft tint and hover; unlisted layers stay Zen's own.
         setAttr("bgalazka-fc-layers", [["--bgalazka-fc-accent", "accent"], ["--bgalazka-fc-tint", "tint"], ["--bgalazka-fc-hover", "hover"]].filter(([property]) => properties[property]).map(([, name]) => name).join(" "));
         const cleanParts = cleanFolderParts(parts);
         const cleanOpacity = cleanFolderOpacity(opacity);
@@ -8062,7 +8062,7 @@
         const partInputs = new Map();
         const partLabels = {
           back: "Icon: back", front: "Icon: front", stroke: "Icon: outline and glyph",
-          label: "Folder name", accent: "Accent and group line", tint: "Soft tint", hover: "Hover background",
+          label: "Folder name", accent: "Folder and tab selection accent", tint: "Soft tint", hover: "Hover background",
         };
         for (const part of FOLDER_PARTS) {
           const input = h("input", { type: "color", class: "zn-color-input", "aria-label": partLabels[part] });

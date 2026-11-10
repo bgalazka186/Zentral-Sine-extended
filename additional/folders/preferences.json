@@ -39,6 +39,48 @@
     "defaultValue": false
   },
   {
+    "property": "zen.workspace.zentral.folder_colors.style_icon",
+    "label": "Color the folder icons (back, front, outline)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.style_accent",
+    "label": "Folder/tab accent colors and native accent-line visibility",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.style_tint_header",
+    "label": "Soft background tint behind the folder name row",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.style_tint_tabs",
+    "label": "Soft background tint behind the tabs inside a folder",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.style_hover",
+    "label": "Hover background on the folder name row",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.line_click",
+    "label": "Click the folder accent line to collapse or expand its folder",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.line_hover",
+    "label": "Highlight the folder accent line on hover",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
     "type": "text",
     "label": "**Default folder colors**",
     "size": "16px"
@@ -75,7 +117,7 @@
   },
   {
     "property": "zen.workspace.zentral.folder_colors.default_accent",
-    "label": "Default Group accent and line (optional detail override)",
+    "label": "Default Folder and tab selection accent (optional detail override)",
     "type": "string",
     "defaultValue": ""
   },
@@ -121,7 +163,7 @@
   },
   {
     "property": "zen.workspace.zentral.folder_colors.default_accent_opacity_text",
-    "label": "Default Group accent and line transparency (-1 = inherit; 0% = transparent, 100% = solid) [-1 to 100 %]",
+    "label": "Default Folder and tab selection accent transparency (-1 = inherit; 0% = transparent, 100% = solid) [-1 to 100 %]",
     "type": "string",
     "defaultValue": "-1",
     "placeholder": "-1"
