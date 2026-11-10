@@ -1,0 +1,89 @@
+{
+  "id": "colorful-folders",
+  "themeId": "zentral-colorful-folders",
+  "name": "Zentral Colorful Folders",
+  "description": "Per-folder colors for native Zen folders, using Zen’s own accent line with hover highlighting and click-to-collapse. Includes right-click palettes, simple and detailed editing, saved themes, and Notes-safe ownership. Standalone part of Zentral Extended.",
+  "version": "3.3.0",
+  "entry": "ZentralColorfulFolders.uc.js",
+  "output": "ZentralColorfulFolders.standalone.uc.js",
+  "settings": "settings.json",
+  "tags": [
+    "folders",
+    "appearance",
+    "zen"
+  ],
+  "externalPrefs": [
+    "zen.workspace.zentral.folder_colors.data",
+    "zen.workspace.zentral.folder_colors.salt",
+    "zen.workspace.zentral.folder_colors.themes",
+    "zen.workspace.bgalazka.look.folder_behind",
+    "zen.workspace.bgalazka.look.folder_behind_opacity",
+    "zen.workspace.bgalazka.look.folder_front",
+    "zen.workspace.bgalazka.look.folder_front_opacity",
+    "zen.workspace.bgalazka.look.folder_stroke",
+    "zen.workspace.bgalazka.look.folder_stroke_opacity",
+    "zen.workspace.bgalazka.look.folder_label",
+    "zen.workspace.bgalazka.look.folder_",
+    "zen.workspace.zentral.folder_colors.opacity_schema",
+    "zen.workspace.zentral.notes.zen_root_parts",
+    "zen.workspace.zentral.notes.zen_root_part_opacity",
+    "zen.workspace.zentral.folder_colors.default_layers",
+    "zen.workspace.zentral.notes.custom_colors"
+  ],
+  "excludePrefs": {
+    "properties": [],
+    "reason": "No user-facing preferences are excluded."
+  },
+  "preferenceOrder": [
+    {
+      "type": "text",
+      "label": "**Folder colors · Behavior**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.folder_colors.enabled",
+    "zen.workspace.zentral.folder_colors.menu",
+    "zen.workspace.zentral.folder_colors.mode",
+    "zen.workspace.zentral.folder_colors.ignore_label",
+    "zen.workspace.zentral.folder_colors.style_icon",
+    "zen.workspace.zentral.folder_colors.style_accent",
+    "zen.workspace.zentral.folder_colors.style_tint_header",
+    "zen.workspace.zentral.folder_colors.style_tint_tabs",
+    "zen.workspace.zentral.folder_colors.style_hover",
+    "zen.workspace.zentral.folder_colors.line_click",
+    "zen.workspace.zentral.folder_colors.line_hover",
+    {
+      "type": "text",
+      "label": "**Default folder colors**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.folder_colors.default_base",
+    "zen.workspace.zentral.folder_colors.default_back",
+    "zen.workspace.zentral.folder_colors.default_front",
+    "zen.workspace.zentral.folder_colors.default_stroke",
+    "zen.workspace.zentral.folder_colors.default_label",
+    "zen.workspace.zentral.folder_colors.default_accent",
+    "zen.workspace.zentral.folder_colors.default_tint",
+    "zen.workspace.zentral.folder_colors.default_hover",
+    "zen.workspace.zentral.folder_colors.default_back_opacity",
+    "zen.workspace.zentral.folder_colors.default_front_opacity",
+    "zen.workspace.zentral.folder_colors.default_stroke_opacity",
+    "zen.workspace.zentral.folder_colors.default_label_opacity",
+    "zen.workspace.zentral.folder_colors.default_accent_opacity",
+    "zen.workspace.zentral.folder_colors.default_tint_opacity",
+    "zen.workspace.zentral.folder_colors.default_hover_opacity",
+    {
+      "type": "text",
+      "label": "**Notes folder integration**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.notes.zen_root_color"
+  ],
+  "borrowedSettings": [
+    {
+      "from": "additional/notes/settings.json",
+      "properties": [
+        "zen.workspace.zentral.notes.zen_root_color"
+      ]
+    }
+  ]
+}

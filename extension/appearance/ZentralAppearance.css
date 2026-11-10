@@ -2249,3 +2249,8 @@
   accent-color: var(--zl-video-progress) !important;
   color-scheme: var(--zl-video-scheme) !important;
 }
+
+/* Tighter native folder rows remain an Appearance layout option. */
+:root[bgalazka-look-folder~="tight"] #tabbrowser-tabs[orient="vertical"] .tab-group-label {
+  line-height: unset !important;
+}

@@ -758,6 +758,36 @@
     "defaultValue": "HH:mm"
   },
   {
+    "label": "Colored note icons in the Zen sidebar folder (one per note color)",
+    "type": "checkbox",
+    "defaultValue": true,
+    "property": "zen.workspace.zentral.notes.zen_note_favicons"
+  },
+  {
+    "label": "Color of the NOTES folder in the Zen sidebar (palette name or #rrggbb; easier: Notes list > folder button)",
+    "type": "string",
+    "defaultValue": "",
+    "property": "zen.workspace.zentral.notes.zen_root_color"
+  },
+  {
+    "label": "Emoji on the NOTES folder in the Zen sidebar (one emoji, empty = Zen's icon)",
+    "type": "string",
+    "defaultValue": "",
+    "property": "zen.workspace.zentral.notes.zen_root_icon"
+  },
+  {
+    "label": "Quick colors saved in the Notes color pickers (up to 8, #rrggbb separated by commas)",
+    "type": "string",
+    "defaultValue": "",
+    "property": "zen.workspace.zentral.notes.custom_colors"
+  },
+  {
+    "label": "Formatting buttons wait for the text (click Bold with nothing selected, then type or select)",
+    "type": "checkbox",
+    "defaultValue": true,
+    "property": "zen.workspace.zentral.notes.tool_arm_mode"
+  },
+  {
     "label": "Show word, character and reading-time count under the note",
     "type": "checkbox",
     "defaultValue": false,

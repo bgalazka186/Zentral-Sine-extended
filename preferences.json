@@ -881,6 +881,12 @@
     ]
   },
   {
+    "property": "zen.workspace.bgalazka.look.folder_tight_labels",
+    "label": "Tighter folder rows (drop the fixed label line height)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
     "type": "text",
     "label": "**Detailed appearance · Menus & feedback**",
     "size": "16px"
@@ -1113,6 +1119,189 @@
     "label": "Reader card button text color (empty follows the theme)",
     "type": "string",
     "defaultValue": ""
+  },
+  {
+    "type": "text",
+    "label": "**Colorful folders · Behavior**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.enabled",
+    "label": "Enable Colorful Folders",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.menu",
+    "label": "Add folder colors to right-click menus",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.mode",
+    "label": "Color editor mode",
+    "type": "dropdown",
+    "defaultValue": "simple",
+    "options": [
+      {
+        "label": "Simple — a primary and a secondary (outline) color",
+        "value": "simple"
+      },
+      {
+        "label": "Detailed — edit each part separately",
+        "value": "detailed"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.ignore_label",
+    "label": "Ignore my folder label color (let the Zen theme decide the name color)",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.style_icon",
+    "label": "Color the folder icons (back, front, outline)",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.style_accent",
+    "label": "Folder/tab accent colors and native accent-line visibility",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.style_tint_header",
+    "label": "Soft background tint behind the folder name row",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.style_tint_tabs",
+    "label": "Soft background tint behind the tabs inside a folder",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.style_hover",
+    "label": "Hover background on the folder name row",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.line_click",
+    "label": "Click the folder accent line to collapse or expand its folder",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.line_hover",
+    "label": "Highlight the folder accent line on hover",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "type": "text",
+    "label": "**Colorful folders · Defaults**",
+    "size": "16px"
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_base",
+    "label": "Default folder base color (empty follows Zen)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_back",
+    "label": "Default Folder icon · back (optional detail override)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_front",
+    "label": "Default Folder icon · front (optional detail override)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_stroke",
+    "label": "Default Folder icon · outline and glyph (optional detail override)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_label",
+    "label": "Default Folder name (optional detail override)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_accent",
+    "label": "Default Folder and tab selection accent (optional detail override)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_tint",
+    "label": "Default Soft background tint (optional detail override)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_hover",
+    "label": "Default Hover background (optional detail override)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_back_opacity_text",
+    "label": "Default Folder icon back transparency (-1 = inherit; 0% = transparent, 100% = solid) [-1 to 100 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_front_opacity_text",
+    "label": "Default Folder icon front transparency (-1 = inherit; 0% = transparent, 100% = solid) [-1 to 100 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_stroke_opacity_text",
+    "label": "Default Folder icon outline and glyph transparency (-1 = inherit; 0% = transparent, 100% = solid) [-1 to 100 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_label_opacity_text",
+    "label": "Default Folder name transparency (-1 = inherit; 0% = transparent, 100% = solid) [-1 to 100 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_accent_opacity_text",
+    "label": "Default Folder and tab selection accent transparency (-1 = inherit; 0% = transparent, 100% = solid) [-1 to 100 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_tint_opacity_text",
+    "label": "Default Soft background tint transparency (-1 = inherit; 0% = transparent, 100% = solid) [-1 to 100 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
+  },
+  {
+    "property": "zen.workspace.zentral.folder_colors.default_hover_opacity_text",
+    "label": "Default Hover background transparency (-1 = inherit; 0% = transparent, 100% = solid) [-1 to 100 %]",
+    "type": "string",
+    "defaultValue": "-1",
+    "placeholder": "-1"
   },
   {
     "type": "text",
@@ -2527,6 +2716,36 @@
     "label": "Time format of the shortcuts (HH mm ss, hh mm A)",
     "type": "string",
     "defaultValue": "HH:mm"
+  },
+  {
+    "label": "Formatting buttons wait for the text (click Bold with nothing selected, then type or select)",
+    "type": "checkbox",
+    "defaultValue": true,
+    "property": "zen.workspace.zentral.notes.tool_arm_mode"
+  },
+  {
+    "label": "Colored note icons in the Zen sidebar folder (one per note color)",
+    "type": "checkbox",
+    "defaultValue": true,
+    "property": "zen.workspace.zentral.notes.zen_note_favicons"
+  },
+  {
+    "label": "Color of the NOTES folder in the Zen sidebar (palette name or #rrggbb; easier: Notes list > folder button)",
+    "type": "string",
+    "defaultValue": "",
+    "property": "zen.workspace.zentral.notes.zen_root_color"
+  },
+  {
+    "label": "Emoji on the NOTES folder in the Zen sidebar (one emoji, empty = Zen's icon)",
+    "type": "string",
+    "defaultValue": "",
+    "property": "zen.workspace.zentral.notes.zen_root_icon"
+  },
+  {
+    "label": "Quick colors saved in the Notes color pickers (up to 8, #rrggbb separated by commas)",
+    "type": "string",
+    "defaultValue": "",
+    "property": "zen.workspace.zentral.notes.custom_colors"
   },
   {
     "type": "text",
@@ -3950,6 +4169,12 @@
   {
     "property": "zen.workspace.zentral.modules.css.Notes.enabled",
     "label": "Load additional/notes/ZentralNotes.css",
+    "type": "checkbox",
+    "defaultValue": true
+  },
+  {
+    "property": "zen.workspace.zentral.modules.colorful-folders.enabled",
+    "label": "Load Colorful folders",
     "type": "checkbox",
     "defaultValue": true
   },

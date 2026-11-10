@@ -89,6 +89,8 @@ A note saves **0.8 s after you stop typing**, and at least **every 5 seconds whi
 
 ## Settings
 
+The Notes folder color editor mirrors the eight global **Colorful Folders → Behavior** switches, so the same options are available while editing a Notes folder. The folder-style dialog is up to 760px wide to give the Detailed mode opacity sliders enough room; it adapts to narrower windows. These switches are shared with Zen sidebar folders, not saved separately per Notes folder.
+
 Notes → Quick notes (the main switch is also under Start here).
 
 | Preference | Default | Effect |

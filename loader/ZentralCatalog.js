@@ -55,6 +55,13 @@
     // See loader/README.md before changing registration or startup ordering.
     const MANIFEST = [
       {
+        id: "colorful-folders",
+        name: "Colorful folders",
+        file: "additional/folders/ZentralColorfulFolders.uc.js",
+        description:
+          "Per-folder native Zen colors, right-click palettes and saved themes; Notes-owned folders are left to Notes.",
+      },
+      {
         id: "library-resize",
         name: "Experimental Library panel behavior",
         file: "additional/library/ZentralLibraryResize.uc.js",

@@ -1,7 +1,7 @@
 {
   "id": "zentral-sine-extended",
   "name": "Zentral Extended",
-  "description": "Zentral Extended Hybrid \u2014 modular features with documented Zentral 1.1.0 integration",
+  "description": "Zentral Extended Hybrid — modular features with documented Zentral 1.1.0 integration",
   "homepage": "https://github.com/bgalazka186/Zentral-Sine-extended",
   "supportsUnload": true,
   "style": {
@@ -10,14 +10,23 @@
   },
   "scripts": {
     "loader/Zentral.uc.js": {
-      "include": ["chrome://browser/content/browser.xhtml"],
+      "include": [
+        "chrome://browser/content/browser.xhtml"
+      ],
       "loadOrder": 1
     }
   },
   "author": "bgalazka186",
-  "version": "3.1.4",
+  "version": "3.3.0",
   "preferences": "preferences.json",
-  "tags": ["apps", "tabs", "sidebar", "groups"],
-  "fork": ["zen"],
+  "tags": [
+    "apps",
+    "tabs",
+    "sidebar",
+    "groups"
+  ],
+  "fork": [
+    "zen"
+  ],
   "readme": "https://raw.githubusercontent.com/bgalazka186/Zentral-Sine-extended/main/.github/README.md"
 }

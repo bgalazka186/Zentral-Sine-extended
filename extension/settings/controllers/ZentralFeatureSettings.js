@@ -2252,6 +2252,7 @@
               LOOK_PREFS.DENSITY_NEWTAB,
               LOOK_PREFS.DENSITY_URLBAR,
               LOOK_PREFS.DENSITY_ESSENTIALS,
+              LOOK_PREFS.FOLDER_TIGHT_LABELS,
               ctx.EXT_PREFS.RSS_HIDE_EMPTY,
               ctx.EXT_PREFS.RSS_COMPACT_HEADERS,
               ctx.EXT_PREFS.RSS_READER_CARD,
@@ -3536,6 +3537,7 @@
               key,
               themeVariable,
               fallback,
+              { rss = true, resetLabel = "Theme", resetTitle = "Follow the current theme color" } = {},
             ) => {
               const row = document.createElement("div");
               row.className = "zs-row";
@@ -3581,18 +3583,20 @@
               reset.className = "zs-reset-btn";
               reset.style.cssText =
                 "margin:0;padding:4px 10px;font-size:11.5px;align-self:center;";
-              reset.textContent = "Theme";
-              reset.title = "Follow the current theme color";
+              reset.textContent = resetLabel;
+              reset.title = resetTitle;
               reset.addEventListener("click", () => write(""));
               controls.append(input, reset);
               row.append(leftBox, controls);
               lookCategory.subContent.append(row);
-              rssCardLookRows.push({
-                row,
-                input,
-                key,
-                themeValue: themeValue(),
-              });
+              // Reader-card rows follow the card's on/off state; other optional colors stay editable.
+              if (rss)
+                rssCardLookRows.push({
+                  row,
+                  input,
+                  key,
+                  themeValue: themeValue(),
+                });
               return row;
             };
             rssCardLookSlider(
@@ -3737,6 +3741,19 @@
               "--zl-button-text",
               "#d4d8d9",
             );
+            // Native folder colors live in the dedicated Colorful folders feature.
+            {
+              const tight = createToggleRow(
+                "Tighter folder rows",
+                "Drops the fixed line height of folder labels, so folders and the tabs under them sit a little closer together.",
+                LOOK_PREFS.FOLDER_TIGHT_LABELS,
+                "bgalazka-folder-tight",
+                false,
+              );
+              tight.row.dataset.paletteDetail = "true";
+              lookCategory.subContent.append(tight.row);
+              panel._toggles.push({ input: tight.input, pref: LOOK_PREFS.FOLDER_TIGHT_LABELS, def: false });
+            }
             syncRssCardLookRows();
             addLookHeading("Existing appearance");
             lookCategory.subContent.append(

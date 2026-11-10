@@ -3,7 +3,7 @@
   "themeId": "zentral-notes",
   "name": "Zentral Notes",
   "description": "Quick notes as plain Markdown files: multiple notes, highlights, checklists, tables, split-view preview, search, trash, export (Markdown, HTML, text, PDF, zip). Opens from a shortcut anywhere and adds a Notes button to Zentral panel bars when the full pack's panels are present. Standalone part of Zentral Extended.",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "entry": "ZentralNotes.uc.js",
   "output": "ZentralNotes.standalone.uc.js",
   "loader": "__zentralNotesLoader",
@@ -119,6 +119,11 @@
     "zen.workspace.zentral.notes.text_shortcuts",
     "zen.workspace.zentral.notes.shortcut_date_format",
     "zen.workspace.zentral.notes.shortcut_time_format",
+    "zen.workspace.zentral.notes.zen_note_favicons",
+    "zen.workspace.zentral.notes.zen_root_color",
+    "zen.workspace.zentral.notes.zen_root_icon",
+    "zen.workspace.zentral.notes.custom_colors",
+    "zen.workspace.zentral.notes.tool_arm_mode",
     "zen.workspace.zentral.notes.footer_counter",
     "zen.workspace.zentral.notes.new_note_chooser",
     "zen.workspace.zentral.notes.pinned_strip",
@@ -142,7 +147,10 @@
     "zen.workspace.zentral.notes.debug_perf"
   ],
   "externalPrefs": [
-    "zen.workspace.bgalazka.open_at_startup"
+    "zen.workspace.bgalazka.open_at_startup",
+    "zen.workspace.zentral.notes.zen_root_parts",
+    "zen.workspace.zentral.notes.zen_root_part_opacity",
+    "zen.workspace.zentral.folder_colors."
   ],
   "borrowedSettings": [
     {

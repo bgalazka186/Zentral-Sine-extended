@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.2.0
+// @version 3.3.0
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.2.0, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.0, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.2.0";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.0";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1535,6 +1535,7 @@ __zentralShim.register = function (def) {
       // Links, dates, history
       TREE_ORDER: "zen.workspace.zentral.notes.tree_order",
       FOOTER_COUNTER: "zen.workspace.zentral.notes.footer_counter",
+      TOOL_ARM: "zen.workspace.zentral.notes.tool_arm_mode",
       PIN_STRIP: "zen.workspace.zentral.notes.pinned_strip",
       FIND_HL: "zen.workspace.zentral.notes.find_highlight",
       TRASH_DAYS: "zen.workspace.zentral.notes.trash_auto_empty_days",
@@ -1561,6 +1562,12 @@ __zentralShim.register = function (def) {
       // Experiments (off by default, not verified in a live Zen)
       ZEN_MODE: "zen.workspace.zentral.notes.zen_folder",
       ZEN_NEW_BUTTON: "zen.workspace.zentral.notes.zen_folder_new_button",
+      ZEN_FAVICONS: "zen.workspace.zentral.notes.zen_note_favicons",
+      ZEN_ROOT_COLOR: "zen.workspace.zentral.notes.zen_root_color",
+      ZEN_ROOT_ICON: "zen.workspace.zentral.notes.zen_root_icon",
+      ZEN_ROOT_PARTS: "zen.workspace.zentral.notes.zen_root_parts",
+      ZEN_ROOT_PART_OPACITY: "zen.workspace.zentral.notes.zen_root_part_opacity",
+      CUSTOM_COLORS: "zen.workspace.zentral.notes.custom_colors",
       ZEN_TOP: "zen.workspace.zentral.notes.zen_folder_top",
       CAPTURE_FORMAT: "zen.workspace.zentral.notes.quick_capture_format",
       DEBUG_PERF: "zen.workspace.zentral.notes.debug_perf",
@@ -1686,7 +1693,7 @@ __zentralShim.register = function (def) {
         body,
         created: toTime(meta.created, mtime),
         updated: toTime(meta.updated, mtime),
-        color: NOTE_COLORS.includes(meta.color) ? meta.color : "none",
+        color: cleanNoteColor(meta.color),
         label: cleanLabel(meta.label),
         folder: cleanFolder(meta.folder),
         pinned: meta.pinned === "true",
@@ -1705,7 +1712,7 @@ __zentralShim.register = function (def) {
         "created: " + iso(n.created),
         "updated: " + iso(n.updated),
       ];
-      if (n.color && n.color !== "none") lines.push("color: " + n.color);
+      if (n.color && n.color !== "none") lines.push("color: " + (cleanHex(n.color) ? '"' + cleanHex(n.color) + '"' : n.color));
       if (cleanLabel(n.label)) lines.push("label: " + cleanLabel(n.label));
       if (cleanFolder(n.folder)) lines.push("folder: " + cleanFolder(n.folder));
       if (n.pinned) lines.push("pinned: true");
@@ -1729,6 +1736,393 @@ __zentralShim.register = function (def) {
     const FOLDER_MAX_DEPTH = 4;
     const MAX_FOLDERS = 64;
     const FOLDER_LABEL_MAX = 60;
+    // Folder identity (Cycle H #6b): every folder in meta.json carries a `uid` that never changes. The path id changes when a
+    // folder is moved and the label when it is renamed, so anything that has to survive both (the Zen sidebar folder, colour,
+    // icon) is keyed by the uid. A uid is random, never derived from the name, and never given out twice.
+    const FOLDER_UID_RE = /^f[0-9a-z]{8,24}$/;
+    const UID_CHARS = "0123456789abcdefghijklmnopqrstuvwxyz";
+    function makeFolderUid(taken = new Set(), rand = Math.random) {
+      for (let tries = 0; tries < 50; tries++) {
+        let u = "f";
+        for (let i = 0; i < 10; i++) u += UID_CHARS[Math.floor(rand() * UID_CHARS.length) % UID_CHARS.length];
+        if (!taken.has(u)) return u;
+      }
+      return "f" + Date.now().toString(36) + taken.size.toString(36); // practically unreachable; still unique among `taken`
+    }
+    // Folder colour: the palette of the notes without "none" ("" = the normal look). Folder icon: ONE emoji (also a flag, a keycap
+    // or a skin-tone / joined sequence); anything else, text included, is refused so a label can never smuggle markup into the tab bar.
+    const FOLDER_COLORS = Object.freeze(NOTE_COLORS.filter((c) => c !== "none"));
+    // <<FOLDER-STYLE-CORE v3
+  // One implementation of "which colors does a folder get". The same text sits in ZentralColorfulFolders.uc.js and
+  // ZentralNotes.uc.js (tests/colorful-folders.test.cjs compares the two copies), so the Zen sidebar, the All notes tree and a
+  // Notes-only install can never disagree. Pure: no DOM, no preferences, no timers.
+  //   record  = { b: primary "#rrggbb", d: per-layer colors, o: per-layer opacity 0..100 }
+  //   Simple mode: only `b` (primary) and `d.stroke` (secondary = outline) are read; every other layer is derived from them.
+  //   Detailed mode: `d` layers override the derived ones.
+  //   Precedence for one folder: its own record > the default of its level (1 = root, up to 5) > the all-levels default.
+  //   A folder that has its own colors never inherits default colors or default opacity (a default can not overwrite it).
+  const FOLDER_STYLE = (() => {
+    const PARTS = Object.freeze(["back", "front", "stroke", "label", "accent", "tint", "hover"]);
+    const MAX_DEPTH = 5;
+    const HEX = /^#[0-9a-fA-F]{6}$/;
+    const hex = (v) => (typeof v === "string" && HEX.test(v.trim()) ? v.trim().toLowerCase() : "");
+    const detail = (raw) => {
+      const out = {};
+      if (raw && typeof raw === "object" && !Array.isArray(raw))
+        for (const p of PARTS) {
+          const h = hex(raw[p]);
+          if (h) out[p] = h;
+        }
+      return out;
+    };
+    const opacity = (raw) => {
+      const out = {};
+      if (raw && typeof raw === "object" && !Array.isArray(raw))
+        for (const p of PARTS) {
+          const n = Number(raw[p]);
+          if (raw[p] !== undefined && raw[p] !== null && Number.isInteger(n) && n >= 0 && n <= 100) out[p] = n;
+        }
+      return out;
+    };
+    const norm = (raw) => {
+      const r = raw && typeof raw === "object" ? raw : {};
+      return { b: hex(r.b ?? r.color), d: detail(r.d ?? r.parts), o: opacity(r.o ?? r.opacity) };
+    };
+    const hasColor = (r) => !!r && (!!r.b || Object.keys(r.d).length > 0);
+    const lum = (h) => {
+      const n = parseInt(h.slice(1), 16);
+      const lin = (v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+      return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+    };
+    const textOn = (h) => (lum(h) > 0.4 ? "#1b1b1f" : "#ffffff");
+    const contrast = (a, b) => {
+      const x = hex(a), y = hex(b);
+      if (!x || !y) return 21;
+      const l1 = lum(x), l2 = lum(y);
+      return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    };
+    const mix = (c, pct, other) => `color-mix(in srgb, ${c} ${pct}%, ${other})`;
+    function derive(base, secondary) {
+      const color = hex(base);
+      if (!color) return {};
+      const edge = hex(secondary);
+      return {
+        back: `light-dark(${mix(color, 60, "gray")}, ${mix(color, 60, "#c1c1c1")})`,
+        front: `light-dark(color-mix(in srgb, ${color}, white 70%), color-mix(in srgb, ${color}, black 40%))`,
+        stroke: edge || `light-dark(${mix(color, 50, "black")}, ${mix(color, 15, "#ebebeb")})`,
+        label: `light-dark(${mix(color, 55, "black")}, ${mix(color, 55, "white")})`,
+        accent: color,
+        tint: mix(color, 16, "transparent"),
+        hover: mix(color, 30, "transparent"),
+      };
+    }
+    function partsFor(rec, mode) {
+      const r = norm(rec);
+      const out = r.b ? derive(r.b, r.d.stroke) : {};
+      if (!r.b || mode === "detailed")
+        for (const p of PARTS) if (r.d[p]) out[p] = p === "tint" ? mix(r.d.tint, 22, "transparent") : r.d[p];
+      return out;
+    }
+    // A hover shade keeps the accent hue but moves away from the current theme
+    // contrast: dark accents get lighter; bright accents get darker.
+    function accentHover(value) {
+      const color = hex(value);
+      if (!color) return "";
+      const n = parseInt(color.slice(1), 16);
+      const channels = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+      const toward = lum(color) >= 0.42 ? 0 : 255;
+      const amount = toward === 0 ? 0.4 : 0.55;
+      return "#" + channels.map((channel) => Math.round(channel + (toward - channel) * amount).toString(16).padStart(2, "0")).join("");
+    }
+    function declarations(parts, op) {
+      const out = {};
+      const alpha = opacity(op);
+      const fade = (value, p) => (alpha[p] === undefined || alpha[p] >= 100 ? value : mix(value, alpha[p], "transparent"));
+      for (const p of PARTS) {
+        if (!parts || !parts[p]) continue;
+        const value = fade(parts[p], p);
+        if (p === "back") out["--zen-folder-behind-bgcolor"] = value;
+        else if (p === "front") out["--zen-folder-front-bgcolor"] = value;
+        else if (p === "stroke") out["--zen-folder-stroke"] = value;
+        else if (p === "label") out["--bgalazka-fc-label"] = value;
+        else if (p === "accent") {
+          const on = parts.accentText || "#ffffff";
+          const off = on === "#ffffff" ? "#1b1b1f" : "#ffffff";
+          out["--tab-group-color"] = value;
+          out["--tab-group-background-color"] = value;
+          out["--tab-group-color-invert"] = off;
+          out["--tab-group-text-color"] = on;
+          out["--tab-group-text-color-invert"] = off;
+          out["--bgalazka-fc-accent"] = value;
+          const hover = accentHover(parts.accent);
+          if (hover) out["--bgalazka-fc-accent-hover"] = fade(hover, "accent");
+        } else if (p === "tint") {
+          out["--tab-group-color-pale"] = value;
+          out["--bgalazka-fc-tint"] = value;
+        } else if (p === "hover") {
+          out["--tab-group-background-color-hover"] = value;
+          out["--bgalazka-fc-hover"] = value;
+        }
+      }
+      return out;
+    }
+    // Every custom property a painter may set; a painter removes the ones a style does not produce.
+    const OWNED = Object.freeze([
+      "--zen-folder-behind-bgcolor", "--zen-folder-front-bgcolor", "--zen-folder-stroke", "--bgalazka-fc-label",
+      "--tab-group-color", "--tab-group-background-color", "--tab-group-color-invert", "--tab-group-text-color",
+      "--tab-group-text-color-invert", "--tab-group-color-pale", "--tab-group-background-color-hover",
+      "--bgalazka-fc-accent", "--bgalazka-fc-accent-hover", "--bgalazka-fc-tint", "--bgalazka-fc-hover",
+    ]);
+    const clampDepth = (depth) => Math.max(1, Math.min(MAX_DEPTH, Math.floor(Number(depth)) || 1));
+    function parseLayers(raw) {
+      try {
+        const text = String(raw || "");
+        if (!text || text.length > 32768) return {};
+        const parsed = JSON.parse(text);
+        const src = parsed && typeof parsed === "object" ? parsed.l || parsed : {};
+        const out = {};
+        for (let n = 1; n <= MAX_DEPTH; n++) {
+          const r = norm(src[n]);
+          if (hasColor(r) || Object.keys(r.o).length) out[n] = r;
+        }
+        return out;
+      } catch (_) {
+        return {};
+      }
+    }
+    function serializeLayers(layers) {
+      const l = {};
+      for (let n = 1; n <= MAX_DEPTH; n++) {
+        const r = norm(layers && layers[n]);
+        if (hasColor(r) || Object.keys(r.o).length) l[n] = r;
+      }
+      return JSON.stringify({ v: 1, l });
+    }
+    // Level of a folder element = number of zen-folder elements from it up to the root (1 = top level).
+    function elementDepth(el) {
+      let n = 0;
+      for (let c = el; c && n < 64; c = c.parentElement || c.parentNode || c.parent) if (c.localName === "zen-folder" || c.tag === "zen-folder") n++;
+      return clampDepth(n);
+    }
+    // env = { mode, defaults: record, layers: { 1..5: record }, ignoreLabel }
+    function resolve(raw, depth, env) {
+      const e = env && typeof env === "object" ? env : {};
+      const mode = e.mode === "detailed" ? "detailed" : "simple";
+      const own = norm(raw);
+      const level = clampDepth(depth);
+      let source, from;
+      if (hasColor(own)) {
+        source = own;
+        from = "folder";
+      } else {
+        const layer = norm(e.layers && (e.layers[level] ?? e.layers[String(level)]));
+        const global = norm(e.defaults);
+        const pick = hasColor(layer) ? layer : global;
+        from = hasColor(layer) ? "level" : hasColor(global) ? "default" : "none";
+        source = { b: pick.b, d: pick.d, o: { ...pick.o, ...own.o } };
+      }
+      const parts = partsFor(source, mode);
+      if (e.ignoreLabel) delete parts.label;
+      const accent = hex(parts.accent) || source.b;
+      if (accent) parts.accentText = textOn(accent);
+      return { base: source.b, parts, opacity: source.o, properties: declarations(parts, source.o), from, depth: level, mode };
+    }
+    // Collections: ordered groups of looks. Applying a collection to the defaults gives level 1 the first look, level 2 the
+    // second, and so on (cycling), so a root folder, a subfolder and a sub-subfolder stay recognisable but different.
+    // A look keeps to `b`, `d.stroke` (secondary) and `o` wherever it can, so it also works in Simple mode.
+    const COLLECTIONS = Object.freeze([
+      { group: "Classic yellow folders", items: [
+        { n: "Kraft paper", b: "#c8a165", d: { back: "#a98147", front: "#e6c993", stroke: "#5c4120" }, o: {} },
+        { n: "Honey", b: "#f2a900", d: { back: "#d48a00", front: "#ffd26a", stroke: "#6b4300" }, o: {} },
+        { n: "Manila", b: "#e8b923", d: { back: "#c99a1c", front: "#f6d567", stroke: "#7a5a05" }, o: {} },
+        { n: "Butter", b: "#f0cf4a", d: { back: "#d1b232", front: "#fbe88a", stroke: "#75600b" }, o: {} },
+        { n: "Lemon", b: "#f4e04d", d: { back: "#d6c12f", front: "#fff59a", stroke: "#6f6410" }, o: {} },
+      ] },
+      { group: "Dark glass", items: [
+        { n: "Slate glass", b: "#3b4452", d: { stroke: "#8fa3bd" }, o: { back: 55, front: 40 } },
+        { n: "Ink glass", b: "#1f2a44", d: { stroke: "#7f95c9" }, o: { back: 55, front: 38 } },
+        { n: "Moss glass", b: "#23392f", d: { stroke: "#7fb69a" }, o: { back: 55, front: 40 } },
+        { n: "Wine glass", b: "#3b2230", d: { stroke: "#c487a6" }, o: { back: 55, front: 40 } },
+        { n: "Ember glass", b: "#3a2a1f", d: { stroke: "#d9a066" }, o: { back: 55, front: 40 } },
+      ] },
+      { group: "Sticky notes", items: [
+        { n: "Canary", b: "#ffe066", d: { back: "#e9c93a", front: "#fff1a8", stroke: "#8a6d00" }, o: {} },
+        { n: "Pink slip", b: "#ff8fb3", d: { back: "#ec6f98", front: "#ffc2d6", stroke: "#8c2149" }, o: {} },
+        { n: "Mint note", b: "#7be0b5", d: { back: "#52c796", front: "#b9f3da", stroke: "#0f6a47" }, o: {} },
+        { n: "Sky memo", b: "#7cc4ff", d: { back: "#52a8ec", front: "#c1e3ff", stroke: "#124d82" }, o: {} },
+        { n: "Peach", b: "#ffb27a", d: { back: "#ef9558", front: "#ffd6b8", stroke: "#8a4310" }, o: {} },
+      ] },
+      { group: "Neon outline", items: [
+        { n: "Cyan line", b: "#12202b", d: { stroke: "#2fd8ec" }, o: { back: 70, front: 55 } },
+        { n: "Magenta line", b: "#26122b", d: { stroke: "#e45be0" }, o: { back: 70, front: 55 } },
+        { n: "Lime line", b: "#1b2612", d: { stroke: "#a6dd3c" }, o: { back: 70, front: 55 } },
+        { n: "Orange line", b: "#2b1d10", d: { stroke: "#f0922a" }, o: { back: 70, front: 55 } },
+        { n: "Violet line", b: "#1c1530", d: { stroke: "#9b83f2" }, o: { back: 70, front: 55 } },
+      ] },
+      { group: "Dark folders", items: [
+        { n: "Graphite", b: "#343a40", d: {}, o: {} },
+        { n: "Midnight", b: "#202b3b", d: {}, o: {} },
+        { n: "Deep forest", b: "#234236", d: {}, o: {} },
+        { n: "Plum shadow", b: "#493047", d: {}, o: {} },
+        { n: "Obsidian", b: "#171b22", d: { front: "#59616d", stroke: "#0b0d12" }, o: {} },
+      ] },
+      { group: "High contrast", items: [
+        { n: "Amber", b: "#d97706", d: { front: "#ffe0a3", stroke: "#3b2100" }, o: {} },
+        { n: "Aqua", b: "#087e8b", d: { front: "#b9f4f4", stroke: "#032f36" }, o: {} },
+        { n: "Rose", b: "#be3455", d: { front: "#ffd2df", stroke: "#3d0716" }, o: {} },
+        { n: "Electric blue", b: "#2557d6", d: { front: "#d8e5ff", stroke: "#071b50" }, o: {} },
+        { n: "Signal lime", b: "#65a30d", d: { front: "#ecfccb", stroke: "#1a2e05" }, o: {} },
+      ] },
+      { group: "Colorful", items: [
+        { n: "Coral", b: "#ff8066", d: {}, o: {} },
+        { n: "Mint", b: "#40b99a", d: {}, o: {} },
+        { n: "Lavender", b: "#9c83e6", d: {}, o: {} },
+        { n: "Sunflower", b: "#e5bd38", d: {}, o: {} },
+        { n: "Tangerine", b: "#f28c28", d: {}, o: {} },
+      ] },
+    ]);
+    // A look needs Detailed mode only when it sets a layer other than the secondary (outline) color.
+    const needsDetailed = (look) => Object.keys(detail(look && look.d)).some((p) => p !== "stroke");
+    // Collection -> { 1: look, 2: look, ... } for the five default levels.
+    function spreadCollection(group) {
+      const items = (group && Array.isArray(group.items) ? group.items : []).map(norm).filter(hasColor);
+      const out = {};
+      if (!items.length) return out;
+      for (let n = 1; n <= MAX_DEPTH; n++) out[n] = items[(n - 1) % items.length];
+      return out;
+    }
+    return Object.freeze({ PARTS, MAX_DEPTH, OWNED, COLLECTIONS, hex, detail, opacity, norm, hasColor, lum, textOn, contrast, derive, partsFor, declarations, clampDepth, parseLayers, serializeLayers, elementDepth, resolve, needsDetailed, spreadCollection });
+  })();
+  // FOLDER-STYLE-CORE>>
+    const FALLBACK_FOLDER_COLOR_PRESETS = FOLDER_STYLE.COLLECTIONS;
+    function folderColorPresets() {
+      const supplied = window.__zentralFolderColorPresets;
+      if (!Array.isArray(supplied)) return FALLBACK_FOLDER_COLOR_PRESETS;
+      const groups = supplied.map((group) => ({
+        group: String(group?.group || "Folder colors").slice(0, 40),
+        items: (Array.isArray(group?.items) ? group.items : []).map((item) => ({
+          n: String(item?.n || "").slice(0, 36),
+          b: cleanHex(item?.b),
+          d: cleanFolderParts(item?.d),
+          o: cleanFolderOpacity(item?.o),
+        })).filter((item) => item.n && item.b),
+      })).filter((group) => group.items.length);
+      return groups.length ? groups : FALLBACK_FOLDER_COLOR_PRESETS;
+    }
+    // Custom colours (T3.6): anywhere a palette name is accepted, a `#rrggbb` value is accepted too. It is always validated by
+    // cleanHex (six hex digits, lower-cased), so a colour can never carry anything else into a style or a file.
+    const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+    const cleanHex = (v) => (typeof v === "string" && HEX_COLOR_RE.test(v.trim()) ? v.trim().toLowerCase() : "");
+    const QUICK_COLORS_MAX = 8;
+    const parseQuickColors = (raw) => {
+      const out = [];
+      for (const part of String(raw || "").split(/[\s,;]+/)) {
+        const hex = cleanHex(part);
+        if (hex && !out.includes(hex)) out.push(hex);
+        if (out.length >= QUICK_COLORS_MAX) break;
+      }
+      return out;
+    };
+    const addQuickColor = (list, hex) => {
+      const h0 = cleanHex(hex);
+      return h0 ? [h0, ...list.filter((c) => c !== h0)].slice(0, QUICK_COLORS_MAX) : list.slice();
+    };
+    const cleanNoteColor = (v) => {
+      const s0 = String(v ?? "").trim().replace(/^["']|["']$/g, "");
+      return NOTE_COLORS.includes(s0) ? s0 : cleanHex(s0) || "none";
+    };
+    const cleanHighlightColor = (v) => (HIGHLIGHT_COLORS.includes(v) ? v : cleanHex(v) || "");
+    // The element carries `data-color="custom"` plus the colour in --zn-cc (the sheet CSS reads it); a palette name stays a name.
+    function setColorData(el, color) {
+      const hex = cleanHex(color);
+      if (hex) {
+        el.dataset.color = "custom";
+        el.style.setProperty("--zn-cc", hex);
+      } else {
+        el.dataset.color = color || "none";
+        el.style.removeProperty("--zn-cc");
+      }
+    }
+    const cleanFolderColor = (v) => (FOLDER_COLORS.includes(v) ? v : cleanHex(v));
+    const FOLDER_PARTS = Object.freeze(["back", "front", "stroke", "label", "accent", "tint", "hover"]);
+    // These are shared Colorful Folders Behavior preferences. Keep the same
+    // labels/defaults in the Notes picker so both editors control one setting.
+    const FOLDER_BEHAVIOR_OPTIONS = Object.freeze([
+      ["ignore_label", "Ignore my folder label color (let the Zen theme decide the name color)", false],
+      ["style_icon", "Color the folder icons (back, front, outline)", true],
+      ["style_accent", "Folder/tab accent colors and native accent-line visibility", true],
+      ["style_tint_header", "Soft background tint behind the folder name row", true],
+      ["style_tint_tabs", "Soft background tint behind the tabs inside a folder", true],
+      ["style_hover", "Hover background on the folder name row", true],
+      ["line_click", "Click the folder accent line to collapse or expand its folder", true],
+      ["line_hover", "Highlight the folder accent line on hover", true],
+    ]);
+    function cleanFolderParts(raw) {
+      const out = {};
+      if (raw && typeof raw === "object" && !Array.isArray(raw))
+        for (const part of FOLDER_PARTS) {
+          const hex = cleanHex(raw[part]);
+          if (hex) out[part] = hex;
+        }
+      return out;
+    }
+    function serializeFolderParts(raw) {
+      return JSON.stringify(cleanFolderParts(raw));
+    }
+    function parseFolderParts(raw) {
+      try { return cleanFolderParts(typeof raw === "string" ? JSON.parse(raw) : raw); }
+      catch (_) { return {}; }
+    }
+    function cleanFolderOpacity(raw) {
+      const out = {};
+      if (raw && typeof raw === "object" && !Array.isArray(raw))
+        for (const part of FOLDER_PARTS) {
+          const n = Number(raw[part]);
+          if (raw[part] !== undefined && raw[part] !== null && Number.isInteger(n) && n >= 0 && n <= 100) out[part] = n;
+        }
+      return out;
+    }
+    function serializeFolderOpacity(raw) {
+      return JSON.stringify(cleanFolderOpacity(raw));
+    }
+    function parseFolderOpacity(raw) {
+      try { return cleanFolderOpacity(typeof raw === "string" ? JSON.parse(raw) : raw); }
+      catch (_) { return {}; }
+    }
+    function folderOpacityValue(value, opacity) {
+      const n = Number(opacity);
+      return Number.isInteger(n) && n >= 0 && n < 100
+        ? `color-mix(in srgb, ${value} ${n}%, transparent)`
+        : value;
+    }
+    function folderPartsStyle(raw, opacity = {}) {
+      const parts = cleanFolderParts(raw);
+      const alpha = cleanFolderOpacity(opacity);
+      const tint = (value, part) => alpha[part] === undefined ? value : folderOpacityValue(value, alpha[part]);
+      const out = {};
+      if (parts.back) out["--zen-folder-behind-bgcolor"] = tint(parts.back, "back");
+      if (parts.front) out["--zen-folder-front-bgcolor"] = tint(parts.front, "front");
+      if (parts.stroke) out["--zen-folder-stroke"] = tint(parts.stroke, "stroke");
+      if (parts.label) out["--bgalazka-fc-label"] = tint(parts.label, "label");
+      if (parts.tint) out["--tab-group-color-pale"] = tint(`color-mix(in srgb, ${parts.tint} 22%, transparent)`, "tint");
+      if (parts.hover) out["--tab-group-background-color-hover"] = tint(parts.hover, "hover");
+      if (parts.accent) {
+        const accentValue = tint(parts.accent, "accent");
+        const n = parseInt(parts.accent.slice(1), 16);
+        const linear = (v) => { const x = v / 255; return x <= .03928 ? x / 12.92 : Math.pow((x + .055) / 1.055, 2.4); };
+        const lum = .2126 * linear((n >> 16) & 255) + .7152 * linear((n >> 8) & 255) + .0722 * linear(n & 255);
+        const text = lum > .4 ? "#1b1b1f" : "#ffffff";
+        const invert = text === "#ffffff" ? "#1b1b1f" : "#ffffff";
+        out["--tab-group-color"] = accentValue;
+        out["--tab-group-background-color"] = accentValue;
+        out["--tab-group-color-invert"] = invert;
+        out["--tab-group-text-color"] = text;
+        out["--tab-group-text-color-invert"] = invert;
+      }
+      return out;
+    }
+    const EMOJI_ONE = /^(?:\p{Extended_Pictographic}(?:\uFE0F|[\u{1F3FB}-\u{1F3FF}])?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|[\u{1F3FB}-\u{1F3FF}])?)*|[\u{1F1E6}-\u{1F1FF}]{2}|[0-9#*]\uFE0F?\u20E3)$/u;
+    const cleanFolderIcon = (v) => (typeof v === "string" && v.length <= 24 && EMOJI_ONE.test(v) ? v : "");
     function cleanFolder(v) {
       if (typeof v !== "string" || !v) return "";
       const segs = v.split("/").filter(Boolean);
@@ -1756,10 +2150,19 @@ __zentralShim.register = function (def) {
           path = i === 0 ? segs[0] : path + "/" + segs[i];
           const isTarget = i === segs.length - 1 && explicitMeta;
           if (!folderNodes.has(path)) {
-            folderNodes.set(path, { id: path, label: isTarget && explicitMeta.label ? String(explicitMeta.label).slice(0, 60) : segs[i], collapsed: isTarget ? Boolean(explicitMeta.collapsed) : false, children: [], notes: [], _listed: !!isTarget, _order: isTarget && typeof explicitMeta.order === "number" ? explicitMeta.order : 0 });
+            folderNodes.set(path, { id: path, uid: isTarget ? explicitMeta.uid || "" : "", color: isTarget ? cleanFolderColor(explicitMeta.color) : "", icon: isTarget ? cleanFolderIcon(explicitMeta.icon) : "", ...(isTarget && Object.keys(cleanFolderParts(explicitMeta.parts)).length ? { parts: cleanFolderParts(explicitMeta.parts) } : {}), ...(isTarget && Object.keys(cleanFolderOpacity(explicitMeta.opacity)).length ? { opacity: cleanFolderOpacity(explicitMeta.opacity) } : {}), label: isTarget && explicitMeta.label ? String(explicitMeta.label).slice(0, 60) : segs[i], collapsed: isTarget ? Boolean(explicitMeta.collapsed) : false, children: [], notes: [], _listed: !!isTarget, _order: isTarget && typeof explicitMeta.order === "number" ? explicitMeta.order : 0 });
           } else if (isTarget) {
             const existing = folderNodes.get(path);
             if (explicitMeta.label) existing.label = String(explicitMeta.label).slice(0, 60);
+            existing.uid = explicitMeta.uid || existing.uid || "";
+            existing.color = cleanFolderColor(explicitMeta.color);
+            existing.icon = cleanFolderIcon(explicitMeta.icon);
+            const parts = cleanFolderParts(explicitMeta.parts);
+            if (Object.keys(parts).length) existing.parts = parts;
+            else delete existing.parts;
+            const opacity = cleanFolderOpacity(explicitMeta.opacity);
+            if (Object.keys(opacity).length) existing.opacity = opacity;
+            else delete existing.opacity;
             if (typeof explicitMeta.collapsed === "boolean") existing.collapsed = explicitMeta.collapsed;
             if (typeof explicitMeta.order === "number") existing._order = explicitMeta.order;
             existing._listed = true;
@@ -1798,13 +2201,26 @@ __zentralShim.register = function (def) {
     function cleanFolders(raw) {
       const out = [];
       const seen = new Set();
+      const uids = new Set();
       if (!Array.isArray(raw)) return out;
       for (const f of raw) {
         const id = cleanFolder(f && f.id);
         if (!id || seen.has(id) || out.length >= MAX_FOLDERS) continue;
         seen.add(id);
         const label = String((f && f.label) ?? "").replace(/[\r\n\t]+/g, " ").trim().slice(0, FOLDER_LABEL_MAX);
-        out.push({ id, label: label || lastSeg(id), order: Number.isFinite(Number(f && f.order)) ? Math.round(Number(f.order)) : 0, collapsed: !!(f && f.collapsed) });
+        const entry = { id, label: label || lastSeg(id), order: Number.isFinite(Number(f && f.order)) ? Math.round(Number(f.order)) : 0, collapsed: !!(f && f.collapsed) };
+        // uid / colour / icon appear only when set, so a folder without them keeps its old shape in meta.json.
+        const uid = f && typeof f.uid === "string" && FOLDER_UID_RE.test(f.uid) && !uids.has(f.uid) ? f.uid : "";
+        if (uid) { uids.add(uid); entry.uid = uid; }
+        const color = cleanFolderColor(f && f.color);
+        if (color) entry.color = color;
+        const icon = cleanFolderIcon(f && f.icon);
+        if (icon) entry.icon = icon;
+        const parts = cleanFolderParts(f && f.parts);
+        if (Object.keys(parts).length) entry.parts = parts;
+        const opacity = cleanFolderOpacity(f && f.opacity);
+        if (Object.keys(opacity).length) entry.opacity = opacity;
+        out.push(entry);
       }
       return out;
     }
@@ -1846,7 +2262,7 @@ __zentralShim.register = function (def) {
       return { ...note, folder: cleanFolder(folderId) };
     }
     // New folder under `parentId`. Returns {folders, id} or null (invalid parent, too deep, or MAX_FOLDERS).
-    function addFolderMeta(folders, notes, parentId, label) {
+    function addFolderMeta(folders, notes, parentId, label, rand = Math.random) {
       const parent = cleanFolder(parentId);
       if (parentId && !parent) return null;
       if (folderDepth(parent) >= FOLDER_MAX_DEPTH) return null;
@@ -1857,25 +2273,48 @@ __zentralShim.register = function (def) {
       if (!text) return null;
       const id = slugFolder(text, parent, taken);
       const order = list.filter((f) => parentOfFolder(f.id) === parent).reduce((m, f) => Math.max(m, f.order + 1), 0);
-      return { folders: [...list, { id, label: text, order, collapsed: false }], id };
+      const uid = makeFolderUid(new Set(list.map((f) => f.uid).filter(Boolean)), rand);
+      return { folders: [...list, { id, label: text, order, collapsed: false, uid }], id, uid };
     }
     // Rename / collapse change the meta entry only (the id, and so every note file, stays as it is).
-    function patchFolderMeta(folders, id, patch) {
+    function patchFolderMeta(folders, id, patch, rand = Math.random) {
       const fid = cleanFolder(id);
       if (!fid) return null;
       const list = cleanFolders(folders);
       const at = list.findIndex((f) => f.id === fid);
       const next = { ...(at >= 0 ? list[at] : { id: fid, label: lastSeg(fid), order: 0, collapsed: false }) };
+      if (!next.uid) next.uid = makeFolderUid(new Set(list.map((f) => f.uid).filter(Boolean)), rand); // a folder first named by a note gets its uid now
       if (typeof patch.label === "string") {
         const text = patch.label.replace(/[\r\n\t]+/g, " ").trim().slice(0, FOLDER_LABEL_MAX);
         if (!text) return null;
         next.label = text;
       }
       if (typeof patch.collapsed === "boolean") next.collapsed = patch.collapsed;
+      if (typeof patch.color === "string") { const c = cleanFolderColor(patch.color); if (c) next.color = c; else delete next.color; }
+      if (typeof patch.icon === "string") { const i = cleanFolderIcon(patch.icon); if (i) next.icon = i; else delete next.icon; }
+      if (patch.parts && typeof patch.parts === "object") { const parts = cleanFolderParts(patch.parts); if (Object.keys(parts).length) next.parts = parts; else delete next.parts; }
+      if (patch.opacity && typeof patch.opacity === "object") { const opacity = cleanFolderOpacity(patch.opacity); if (Object.keys(opacity).length) next.opacity = opacity; else delete next.opacity; }
       if (at >= 0) list[at] = next;
       else if (list.length < MAX_FOLDERS) list.push(next);
       else return null;
       return list;
+    }
+    // Give every folder that exists a meta entry with a uid: listed folders without one, and folders only a note names (plus their
+    // parents). Existing uids are never touched. Returns {folders, changed}; a folder that does not fit under MAX_FOLDERS stays as it is.
+    function ensureFolderUids(folders, notes, rand = Math.random) {
+      const list = cleanFolders(folders);
+      const taken = new Set(list.map((f) => f.uid).filter(Boolean));
+      let changed = false;
+      for (const f of list) if (!f.uid) { f.uid = makeFolderUid(taken, rand); taken.add(f.uid); changed = true; }
+      const have = new Set(list.map((f) => f.id));
+      for (const id of allFolderIds(notes, list).sort((a, b) => folderDepth(a) - folderDepth(b) || (a < b ? -1 : 1))) {
+        if (have.has(id) || list.length >= MAX_FOLDERS) continue;
+        const uid = makeFolderUid(taken, rand);
+        taken.add(uid);
+        list.push({ id, label: lastSeg(id), order: 0, collapsed: false, uid });
+        changed = true;
+      }
+      return { folders: list, changed };
     }
     // Delete a folder and its subfolders. Notes inside go to the root ("toRoot") or to the trash ("toTrash").
     function deleteFolder(folders, notes, id, mode = "toRoot") {
@@ -1890,7 +2329,7 @@ __zentralShim.register = function (def) {
     }
     // Move a folder (with everything below it) under another folder; the path ids change, so the notes inside
     // are rewritten. Returns {folders, changes, id} or null (cycle, too deep, nothing to do).
-    function reparentFolder(folders, notes, id, newParent) {
+    function reparentFolder(folders, notes, id, newParent, rand = Math.random) {
       const fid = cleanFolder(id);
       const parent = newParent ? cleanFolder(newParent) : "";
       if (!fid || (newParent && !parent) || parent === parentOfFolder(fid)) return null;
@@ -1905,7 +2344,7 @@ __zentralShim.register = function (def) {
       const remap = (x) => newId + x.slice(fid.length);
       const moved = list.map((f) => (inFolder(f.id, fid) ? { ...f, id: remap(f.id) } : f));
       const known = new Set(moved.map((f) => f.id));
-      if (!known.has(newId)) moved.push({ id: newId, label: lastSeg(fid), order: 0, collapsed: false });
+      if (!known.has(newId)) moved.push({ id: newId, label: lastSeg(fid), order: 0, collapsed: false, uid: makeFolderUid(new Set(moved.map((f) => f.uid).filter(Boolean)), rand) });
       const changes = [];
       for (const n of notes || []) {
         const nf = cleanFolder(n && n.folder);
@@ -1958,7 +2397,7 @@ __zentralShim.register = function (def) {
       return rows;
     }
 
-    const MARKERS_RE = /\*\*|==(?:\{\w+\})?|~~|`/g;
+    const MARKERS_RE = /\*\*|==(?:\{(?:\w+|#[0-9a-fA-F]{6})\})?|~~|`/g;
     const LEAD_RE =
       /^\s*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX\-/?!]\]\s+)?|\d+[.)]\s+|>\s*)/;
     function cleanLine(raw) {
@@ -2058,11 +2497,11 @@ __zentralShim.register = function (def) {
       [
         "\\*\\*\\*([^\\s*](?:[\\s\\S]*?[^\\s*])?)\\*\\*\\*", // 1 bold + italic
         "(?<![\\w_])___([^\\s_](?:[\\s\\S]*?[^\\s_])?)___(?![\\w_])", // 2 bold + italic
-        "(={4,}|==\\{\\w+\\}==)", // 3 empty highlight: kept as text
+        "(={4,}|==\\{(?:\\w+|#[0-9a-fA-F]{6})\\}==)", // 3 empty highlight: kept as text
         "(?<![\\w_])__([^\\s_](?:[\\s\\S]*?[^\\s_])?)__(?![\\w_])", // 4 bold (underscores)
         "(`+)([\\s\\S]*?[^`])\\5(?!`)", // 5,6 code
         "\\*\\*(?=\\S)([\\s\\S]+?)(?<=\\S)\\*\\*", // 7 bold
-        "==(?:\\{(\\w+)\\})?([\\s\\S]+?)==", // 8 color, 9 highlight
+        "==(?:\\{(\\w+|#[0-9a-fA-F]{6})\\})?([\\s\\S]+?)==", // 8 color (name or #rrggbb), 9 highlight
         "~~(?=\\S)([\\s\\S]+?)(?<=\\S)~~", // 10 strike
         "(?<![\\w*])\\*([^\\s*](?:[\\s\\S]*?[^\\s*])?)\\*(?![\\w*])", // 11 italic
         "(?<![\\w_])_([^\\s_](?:[\\s\\S]*?[^\\s_])?)_(?![\\w_])", // 12 italic
@@ -2205,14 +2644,109 @@ __zentralShim.register = function (def) {
       );
     }
 
+    // Preferences and migration for the shared Colorful Folders appearance.
+    const COLORFUL_FOLDER_PREF = "zen.workspace.zentral.folder_colors.";
+    const LEGACY_FOLDER_LOOK_PREF = "zen.workspace.bgalazka.look.";
+    const LEGACY_FOLDER_COLORS = Object.freeze({
+      back: "folder_behind",
+      front: "folder_front",
+      stroke: "folder_stroke",
+      label: "folder_label",
+    });
+    let colorfulOpacityMigrationChecked = false;
+    function migrateColorfulOpacityDefaults() {
+      if (colorfulOpacityMigrationChecked) return;
+      colorfulOpacityMigrationChecked = true;
+      const versionKey = COLORFUL_FOLDER_PREF + "opacity_schema";
+      try {
+        const previousVersion = Services.prefs.getIntPref(versionKey, 0);
+        if (previousVersion >= 2) return;
+        const readString = (key) => { try { return Services.prefs.getStringPref(key, ""); } catch (_) { return ""; } };
+        const setString = (key, value) => { try { Services.prefs.setStringPref(key, value); return true; } catch (_) { return false; } };
+        let migratedLegacyDetails = false;
+        for (const [part, oldKey] of Object.entries(LEGACY_FOLDER_COLORS)) {
+          const newKey = COLORFUL_FOLDER_PREF + "default_" + part;
+          const current = cleanHex(readString(newKey));
+          const legacy = cleanHex(readString(LEGACY_FOLDER_LOOK_PREF + oldKey));
+          if (!current && legacy && setString(newKey, legacy)) migratedLegacyDetails = true;
+        }
+        if (previousVersion < 1) {
+          for (const part of FOLDER_PARTS) {
+            const key = COLORFUL_FOLDER_PREF + "default_" + part + "_opacity";
+            // Before schema 1, zero was the no-override sentinel, not a choice.
+            if (Services.prefs.getIntPref(key, -1) === 0)
+              Services.prefs.setIntPref(key, -1);
+          }
+        }
+        for (const [part, oldKey] of [["back", "folder_behind_opacity"], ["front", "folder_front_opacity"], ["stroke", "folder_stroke_opacity"]]) {
+          const key = COLORFUL_FOLDER_PREF + "default_" + part + "_opacity";
+          if (Services.prefs.getIntPref(key, -1) !== -1) continue;
+          const oldAlpha = Services.prefs.getIntPref(LEGACY_FOLDER_LOOK_PREF + oldKey, 100);
+          if (oldAlpha >= 0 && oldAlpha < 100) Services.prefs.setIntPref(key, oldAlpha);
+        }
+        // Clear only user values after migration. Keeping old values behind
+        // would make Default/Reset unexpectedly restore the retired palette.
+        for (const oldKey of [
+          ...Object.values(LEGACY_FOLDER_COLORS),
+          "folder_behind_opacity", "folder_front_opacity", "folder_stroke_opacity",
+        ]) {
+          const key = LEGACY_FOLDER_LOOK_PREF + oldKey;
+          try { if (Services.prefs.prefHasUserValue(key)) Services.prefs.clearUserPref(key); } catch (_) {}
+        }
+        Services.prefs.setIntPref(versionKey, 2);
+      } catch (_) {}
+    }
+    function setFolderMode(next) {
+      try {
+        const key = COLORFUL_FOLDER_PREF + "mode";
+        const value = next === "simple" ? "simple" : "detailed";
+        if (Services.prefs.getStringPref(key, "") !== value) Services.prefs.setStringPref(key, value);
+      } catch (_) {}
+    }
+    function useDetailedFolderMode() {
+      try {
+        const key = COLORFUL_FOLDER_PREF + "mode";
+        if (Services.prefs.getStringPref(key, "simple") !== "detailed")
+          Services.prefs.setStringPref(key, "detailed");
+      } catch (_) {}
+    }
+    function colorfulFolderDefaults() {
+      migrateColorfulOpacityDefaults();
+      const readString = (key) => { try { return Services.prefs.getStringPref(key, ""); } catch (_) { return ""; } };
+      const readInt = (key, fallback = 0) => { try { return Services.prefs.getIntPref(key, fallback); } catch (_) { return fallback; } };
+      const d = {}, o = {};
+      for (const part of FOLDER_PARTS) {
+        const value = cleanHex(readString(COLORFUL_FOLDER_PREF + "default_" + part));
+        if (value) d[part] = value;
+        const alpha = readInt(COLORFUL_FOLDER_PREF + "default_" + part + "_opacity", -1);
+        if (alpha >= 0 && alpha <= 100) o[part] = alpha;
+      }
+      for (const [part, pref] of [["back", "folder_behind_opacity"], ["front", "folder_front_opacity"], ["stroke", "folder_stroke_opacity"]]) {
+        if (o[part] !== undefined) continue;
+        const alpha = readInt("zen.workspace.bgalazka.look." + pref, 100);
+        if (alpha >= 0 && alpha < 100) o[part] = alpha;
+      }
+      return {
+        b: cleanHex(readString(COLORFUL_FOLDER_PREF + "default_base")),
+        d,
+        o,
+        // Notes can run as a Sine standalone package without Colorful Folders.
+        // In that case keep the Notes editor's full per-layer colors usable; when
+        // the shared module is present its explicit simple/detailed choice wins.
+        mode: readString(COLORFUL_FOLDER_PREF + "mode") === "simple" ? "simple" : "detailed",
+        layers: FOLDER_STYLE.parseLayers(readString(COLORFUL_FOLDER_PREF + "default_layers")),
+        ignoreLabel: (() => { try { return Services.prefs.getBoolPref(COLORFUL_FOLDER_PREF + "ignore_label", false); } catch (_) { return false; } })(),
+      };
+    }
+
     // ======================================================================
-    // Pure core: Zen NOTES folder projection (Priority 3 / A groundwork, NOT WIRED to any Zen object)
+    // Pure core: Notes -> ordinary Zen folder projection (live integration below)
     // ======================================================================
-    // The native Zen folder is NOT shipped (see docs/NOTES-ZEN-FOLDER-BLOCKER.md): the proven host-folder code
-    // makes real pinned tabs that Zen Sync can see, and nothing in the repo stops an ordinary tab from being
-    // dropped in. These functions are the part that can be proven without Zen: what the folder should show,
-    // how to reach it from what is there, and what is allowed to happen to a tab. Nothing here touches the
-    // browser, a tab, a preference or Sync, and nothing calls it yet.
+    // The projection is wired through the lifecycle-owned controller below. It uses ordinary pinned tabs
+    // inside normal Zen folders, so Zen Sync sees those tabs as usual; it is NOT a special Sync-excluded
+    // folder object (that separate request remains blocked; see docs/NOTES-ZEN-FOLDER-BLOCKER.md). The
+    // functions in this section remain pure: they decide what the live controller should add, remove,
+    // relabel, move or restyle without directly touching browser objects.
     const NOTES_ATTR = "bgalazka-notes-item"; // the only marker a tab needs to be treated as ours
     const projKey = (kind, id) => (kind === "folder" ? "f:" : "n:") + id;
     // Notes tree -> flat, ordered list of entries. Keys come from note ids and folder ids, never from titles.
@@ -2243,7 +2777,120 @@ __zentralShim.register = function (def) {
       for (const k of have.keys()) if (!want.has(k)) remove.push(k);
       const relabel = wanted.filter((e) => have.has(e.key) && have.get(e.key).label !== e.label).map((e) => ({ key: e.key, label: e.label }));
       const move = wanted.filter((e) => have.has(e.key) && have.get(e.key).parent !== e.parent).map((e) => ({ key: e.key, parent: e.parent }));
-      return { add, remove, relabel, move };
+      // Notes folder color, icon and per-part overrides are compared separately from the
+      // ordinary native-folder painter, which explicitly skips Notes ownership markers.
+      const restyle = wanted
+        .filter((e) => have.has(e.key) && ((have.get(e.key).color || "") !== (e.color || "") || (have.get(e.key).icon || "") !== (e.icon || "") || serializeFolderParts(have.get(e.key).parts) !== serializeFolderParts(e.parts) || serializeFolderOpacity(have.get(e.key).opacity) !== serializeFolderOpacity(e.opacity)))
+        .map((e) => ({ key: e.key, kind: e.kind, color: e.color || "", icon: e.icon || "", ...(Object.keys(cleanFolderParts(e.parts)).length ? { parts: cleanFolderParts(e.parts) } : {}), ...(Object.keys(cleanFolderOpacity(e.opacity)).length ? { opacity: cleanFolderOpacity(e.opacity) } : {}) }));
+      return { add, remove, relabel, move, restyle };
+    }
+    // ---- How a colour looks in the Zen sidebar (S6 W1 / W2) ------------------------------------------------------------
+    // Palette hex values are the same as the notes' own (ZentralNotes.css). "" = leave Zen's workspace colour alone.
+    const TINT_HEX = Object.freeze({ yellow: "#f5c542", green: "#4cc38a", blue: "#5aa9ff", pink: "#ff7eb6", purple: "#a78bfa", orange: "#ff9f43", red: "#ff6b6b", teal: "#2ec4b6", gray: "#9aa0a6" });
+    // The seven custom properties Zen puts inline on every zen-folder. Without a colour they hold Zen's own workspace values.
+    const ZEN_TINT_DEFAULT = Object.freeze({
+      "--tab-group-color": "var(--tab-group-zen-workspace-color)",
+      "--tab-group-color-invert": "var(--tab-group-zen-workspace-color-invert)",
+      "--tab-group-color-pale": "var(--tab-group-zen-workspace-color-pale)",
+      "--tab-group-background-color": "var(--tab-group-zen-workspace-color)",
+      "--tab-group-text-color": "var(--tab-group-zen-workspace-color-text)",
+      "--tab-group-text-color-invert": "var(--tab-group-zen-workspace-color-text-invert)",
+      "--tab-group-background-color-hover": "var(--tab-group-zen-workspace-color-hover)",
+    });
+    const colorHex = (name) => TINT_HEX[name] || cleanHex(name);
+    // `depth` = nesting level in the Zen sidebar: the NOTES root is level 1, so a top-level folder of the All notes tree is 2.
+    function resolveFolderVisual(raw = {}, depth = 2) {
+      const record = { b: colorHex(raw.b ?? raw.color) || "", d: cleanFolderParts(raw.d ?? raw.parts), o: cleanFolderOpacity(raw.o ?? raw.opacity) };
+      const shared = window.__zentralFolderColorStyleBridge;
+      if (shared?.version === 1 && shared.revision >= 3 && typeof shared.resolve === "function") {
+        try {
+          const resolved = shared.resolve(record, depth);
+          if (resolved && resolved.properties && resolved.opacity) return resolved;
+        } catch (_) {}
+      }
+      // Notes-only install (or an older shared module): the same core, fed from the shared preferences.
+      const defaults = colorfulFolderDefaults();
+      return FOLDER_STYLE.resolve(record, depth, {
+        mode: defaults.mode,
+        defaults: { b: defaults.b, d: defaults.d, o: defaults.o },
+        layers: defaults.layers,
+        ignoreLabel: defaults.ignoreLabel,
+      });
+    }
+    function folderTint(name) {
+      const hex = colorHex(name) || colorfulFolderDefaults().b;
+      if (!hex) return { ...ZEN_TINT_DEFAULT };
+      return {
+        "--tab-group-color": hex,
+        "--tab-group-color-invert": "#1b1b1f",
+        "--tab-group-color-pale": "color-mix(in srgb, " + hex + " 22%, transparent)",
+        "--tab-group-background-color": hex,
+        "--tab-group-text-color": "#1b1b1f",
+        "--tab-group-text-color-invert": "#ffffff",
+        "--tab-group-background-color-hover": "color-mix(in srgb, " + hex + " 85%, white)",
+      };
+    }
+    // Every sub-folder in the Zen sidebar gets a static id made from its key, like the NOTES folder itself. Zen's session restore
+    // brings a folder back with its id and label but NOT with our attributes; without the id a restored sub-folder was not
+    // recognised and a second one was made on every restart. Folder keys are "f:" + segments of [a-z0-9-] joined by "/", so "_"
+    // (not allowed in a segment) stands for "/" and the key can be read back from the id.
+    const NOTES_ZEN_ROOT_ID = "bgalazka-zentral-notes";
+    const NOTES_ZEN_SUB_PREFIX = NOTES_ZEN_ROOT_ID + "-sub_";
+    const notesSubId = (key) => NOTES_ZEN_SUB_PREFIX + String(key).replace(/^f:/, "").replace(/\//g, "_");
+    const notesKeyFromId = (id) => (typeof id === "string" && id.startsWith(NOTES_ZEN_SUB_PREFIX) && id.length > NOTES_ZEN_SUB_PREFIX.length ? "f:" + id.slice(NOTES_ZEN_SUB_PREFIX.length).replace(/_/g, "/") : "");
+    // A restored sub-folder (our id, none of our attributes) is taken back: the attributes are set again from its id, its label
+    // and where it sits. Returns how many were adopted.
+    function adoptNotesSubfolders(root) {
+      let n = 0;
+      if (!root?.querySelectorAll) return n;
+      const parentOf = (el) => { try { return el.parentElement?.closest?.("zen-folder") || null; } catch (_) { return null; } };
+      for (const el of [...root.querySelectorAll("zen-folder")]) {
+        if (el === root || el.hasAttribute("bgalazka-notes-subfolder")) continue;
+        const key = notesKeyFromId(el.id);
+        if (!key) continue;
+        const up = parentOf(el);
+        const upKey = up && up !== root ? up.getAttribute("bgalazka-notes-subfolder") || notesKeyFromId(up.id) : "";
+        el.setAttribute("bgalazka-notes-subfolder", key);
+        el.setAttribute("bgalazka-notes-label", el.getAttribute("label") || el.label || "");
+        el.setAttribute("bgalazka-notes-parent", upKey || "");
+        n++;
+      }
+      return n;
+    }
+    // Zen draws its folder icon from three custom properties that zen-folders.css defines on `:root, zen-folder`. The rule sits
+    // on every folder itself, so a value set on :root never reaches the icon, only a value on the folder does. The formulas
+    // are Zen's own with the palette colour in place of --zen-primary-color. No colour = nothing set (Zen's own colours, or
+    // the Appearance overrides, apply).
+    const ZEN_FOLDER_VARS = Object.freeze(["--zen-folder-behind-bgcolor", "--zen-folder-front-bgcolor", "--zen-folder-stroke"]);
+    function folderZenVars(name) {
+      const hex = colorHex(name) || colorfulFolderDefaults().b;
+      if (!hex) return {};
+      return {
+        "--zen-folder-behind-bgcolor": "light-dark(color-mix(in srgb, " + hex + " 60%, gray), color-mix(in srgb, " + hex + " 60%, #c1c1c1))",
+        "--zen-folder-front-bgcolor": "light-dark(color-mix(in srgb, " + hex + ", white 70%), color-mix(in srgb, " + hex + ", black 40%))",
+        "--zen-folder-stroke": "light-dark(color-mix(in srgb, " + hex + " 50%, black), color-mix(in srgb, " + hex + " 15%, #ebebeb))",
+      };
+    }
+    // The favicon of a note tab: a small page with a folded corner in the note's colour (gray when the note has none).
+    // A data: URI so it needs no file and survives a restart; `fill` is always one of our palette values, never free text.
+    function noteFaviconUri(color) {
+      const hex = colorHex(color) || TINT_HEX.gray;
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="M3.5 1.5h6l3 3v9a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1z" fill="' + hex + '"/><path d="M9.5 1.5v3h3z" fill="#000" fill-opacity=".28"/><path d="M5 7.5h6M5 9.5h6M5 11.5h4" stroke="#000" stroke-opacity=".45" stroke-width="1" stroke-linecap="round"/></svg>';
+      return "data:image/svg+xml," + encodeURIComponent(svg);
+    }
+    // More than one folder claims to be the NOTES root (a leftover from a crash, a restored session, a copied profile).
+    // `roots` = [{ours: tabs we made, foreign: tabs somebody else put there, subs: our sub-folders}] in document order.
+    // The first one is adopted. Another is deleted ONLY if every tab in it is ours; one that holds a tab the person put
+    // there is released (it loses our mark and stays a normal folder), so nothing the person added is ever closed.
+    function planRootDedupe(roots) {
+      const adopt = roots.length ? 0 : -1;
+      const remove = [];
+      const release = [];
+      roots.forEach((r, i) => {
+        if (i === adopt) return;
+        (r.foreign > 0 ? release : remove).push(i);
+      });
+      return { adopt, remove, release };
     }
     // Cleanup may only ever remove tabs that carry our marker. Ordinary tabs are never in the plan, whatever
     // their position, folder or title.
@@ -2597,7 +3244,7 @@ __zentralShim.register = function (def) {
         else if (m[9] !== undefined)
           out.push({
             t: "hl",
-            color: HIGHLIGHT_COLORS.includes(m[8]) ? m[8] : "yellow",
+            color: cleanHighlightColor(m[8]) || "yellow",
             c: parseInline(m[9], depth + 1),
           });
         else if (m[10] !== undefined)
@@ -3863,6 +4510,38 @@ __zentralShim.register = function (def) {
       };
     }
 
+    // ---- Armed formatting tools (Cycle G #5) ---------------------------------------------------------------------
+    // Click a wrapping tool (Bold, Italic, Code, Underline ...) with NOTHING selected: instead of leaving an empty
+    // `****` pair behind, the tool is "armed". The next phrase typed (or the next selection made) gets the markers.
+    // Only tools that wrap text can be armed; list, heading and block tools act on the line, so they stay instant.
+    const ARM_TOOLS = Object.freeze(["bold", "italic", "strike", "highlight", "code", "sup", "sub", "kbd", "underline", "spoiler", "comment", "mathInline"]);
+    // True when a click would only drop an empty marker pair at the caret (and so can arm instead). Caret between two
+    // existing markers (the click would remove them) and any real selection keep their normal, instant behaviour.
+    function armPending(value, s, e, open, close = open) {
+      if (s !== e) return false;
+      const edit = wrapSelection(value, s, e, open, close);
+      return edit.text === open + close && edit.start === s && edit.end === e;
+    }
+    // After a character was typed with tools armed. `from` = caret when armed, `caret` = caret now, `pairs` = [[open, close]]
+    // in arming order. Returns null (not an insertion at `from`: disarm), {wait: true} (only spaces so far: stay armed),
+    // {cancel: true} (a line break: the phrase is over) or an edit that puts the markers around what was typed. Leading
+    // spaces stay outside ("** a**" is not bold), trailing ones too.
+    function armedTypeEdit(value, from, caret, pairs) {
+      if (!Array.isArray(pairs) || !pairs.length || !(caret > from) || caret > value.length) return null;
+      const typed = value.slice(from, caret);
+      if (/[\r\n]/.test(typed)) return { cancel: true };
+      const lead = typed.length - typed.trimStart().length;
+      if (lead === typed.length) return { wait: true };
+      const inner = typed.slice(lead).trimEnd();
+      const tail = typed.slice(lead + inner.length);
+      const opens = pairs.map((p) => p[0]).join("");
+      const closes = pairs.map((p) => p[1]).reverse().join("");
+      const start = from + lead;
+      const text = opens + inner + closes + tail;
+      const at = tail ? start + text.length : start + opens.length + inner.length;
+      return { start, end: caret, text, selStart: at, selEnd: at };
+    }
+
     const LINE_KINDS = {
       bullet: { test: /^\s*[-*+]\s+(?!\[[ xX\-/?!]\])/, add: "- " },
       check: { test: /^\s*[-*+]\s+\[[ xX\-/?!]\]\s/, add: "- [ ] " },
@@ -4446,6 +5125,11 @@ __zentralShim.register = function (def) {
         id: "links", label: "Links & history", items: [
           { id: "newChooser", label: "The + button asks: blank note, today, tomorrow or a date", pref: PREF.NEW_CHOOSER, kind: "bool", def: false },
           { id: "pinStrip", label: "Pinned notes strip and Recent menu under the title", pref: PREF.PIN_STRIP, kind: "bool", def: false },
+          { id: "zenFavicons", label: "Colored note icons in the Zen sidebar folder", pref: PREF.ZEN_FAVICONS, kind: "bool", def: true },
+          { id: "zenRootColor", label: "Color of the NOTES folder in the Zen sidebar (palette name or #rrggbb)", pref: PREF.ZEN_ROOT_COLOR, kind: "text", def: "" },
+          { id: "customColors", label: "Quick colors for the color pickers (up to 8 #rrggbb, comma separated)", pref: PREF.CUSTOM_COLORS, kind: "text", def: "" },
+          { id: "zenRootIcon", label: "Emoji on the NOTES folder in the Zen sidebar (one emoji, empty = Zen's icon)", pref: PREF.ZEN_ROOT_ICON, kind: "text", def: "" },
+          { id: "toolArm", label: "Formatting buttons wait for the text: click Bold with nothing selected, then type or select", pref: PREF.TOOL_ARM, kind: "bool", def: true },
           { id: "footerCount", label: "Footer shows characters and reading time (and counts the selection)", pref: PREF.FOOTER_COUNTER, kind: "bool", def: false },
           { id: "treeOrder", label: "Order in the notes tree", pref: PREF.TREE_ORDER, kind: "choice", def: "folders-first", choices: [["folders-first", "Folders first"], ["notes-first", "Notes first"], ["mixed-by-name", "Mixed, by name"]] },
           { id: "defaultView", label: "A panel opens in", pref: PREF.DEFAULT_VIEW, kind: "choice", def: "last", choices: [["last", "The view used last"], ["edit", "Editor"], ["read", "Preview"], ["split", "Split: editor and preview"]] },
@@ -5302,7 +5986,7 @@ __zentralShim.register = function (def) {
           if (typeof raw.lastNoteId === "string") meta.lastNoteId = raw.lastNoteId;
           if (raw.size === "full" || raw.size === "peek" || raw.size === "span") meta.size = raw.size;
           if (raw.mode === "read" || raw.mode === "edit" || raw.mode === "split") meta.mode = raw.mode;
-          if (HIGHLIGHT_COLORS.includes(raw.highlight)) meta.highlight = raw.highlight;
+          if (cleanHighlightColor(raw.highlight)) meta.highlight = cleanHighlightColor(raw.highlight);
           if (typeof raw.syncScroll === "boolean") meta.syncScroll = raw.syncScroll;
           if (typeof raw.pinned === "boolean") meta.pinned = raw.pinned;
           if (DOCK_MODES.includes(raw.dock)) meta.dock = raw.dock;
@@ -5552,6 +6236,7 @@ __zentralShim.register = function (def) {
           dir = await getDir();
           await loadAll();
           await loadMeta();
+          api.ensureFolderUids(); // every folder has its permanent uid before anything (tree, Zen sidebar) is built from it
           await purgeOldTrash();
           await purgeBackups().catch(warn);
           emit("reset");
@@ -5631,8 +6316,8 @@ __zentralShim.register = function (def) {
         },
         setColor(id, color) {
           const note = notes.get(id);
-          if (!note || !NOTE_COLORS.includes(color) || note.color === color) return;
-          note.color = color;
+          if (!note || cleanNoteColor(color) !== (cleanHex(color) || color) || note.color === (cleanHex(color) || color)) return;
+          note.color = cleanHex(color) || color;
           if (note.body.trim() || note._onDisk) markDirty(id);
           emit("change", id, { meta: true });
         },
@@ -5838,7 +6523,7 @@ __zentralShim.register = function (def) {
         // The reserved "tabbar" folder (what the Zen sidebar shows in mode "selected"); created on demand.
         ensureTabbarFolder() {
           if (meta.folders.some((f) => f.id === TABBAR_FOLDER)) return TABBAR_FOLDER;
-          setMeta({ folders: [...meta.folders, { id: TABBAR_FOLDER, label: TABBAR_LABEL, order: 0, collapsed: false }] });
+          setMeta({ folders: [...meta.folders, { id: TABBAR_FOLDER, label: TABBAR_LABEL, order: 0, collapsed: false, uid: makeFolderUid(new Set(meta.folders.map((f) => f.uid).filter(Boolean))) }] });
           emit("tree", TABBAR_FOLDER);
           return TABBAR_FOLDER;
         },
@@ -5848,6 +6533,31 @@ __zentralShim.register = function (def) {
           setMeta({ folders: r.folders });
           emit("tree", r.id);
           return r.id;
+        },
+        // Called once the notes and meta are loaded: every folder gets its permanent uid (also folders that only a note names).
+        ensureFolderUids() {
+          const r = ensureFolderUids(meta.folders, [...notes.values()]);
+          if (!r.changed) return false;
+          setMeta({ folders: r.folders });
+          return true;
+        },
+        // Colour (palette name, "" = none) and icon (one emoji, "" = none) of a folder. The uid does not change.
+        setFolderStyle(id, style = {}) {
+          const patch = {};
+          if (typeof style.color === "string") patch.color = style.color;
+          if (typeof style.icon === "string") patch.icon = style.icon;
+          if (style.parts && typeof style.parts === "object") patch.parts = style.parts;
+          if (style.opacity && typeof style.opacity === "object") patch.opacity = style.opacity;
+          if (patch.icon && !cleanFolderIcon(patch.icon)) return false; // refuse, never store a half valid value
+          if (patch.color && !cleanFolderColor(patch.color)) return false;
+          const list = patchFolderMeta(meta.folders, id, patch);
+          if (!list) return false;
+          setMeta({ folders: list });
+          emit("tree", id);
+          return true;
+        },
+        folderUid(id) {
+          return meta.folders.find((f) => f.id === cleanFolder(id))?.uid || "";
         },
         renameFolder(id, label) {
           const list = patchFolderMeta(meta.folders, id, { label });
@@ -6630,13 +7340,16 @@ __zentralShim.register = function (def) {
       const out = [];
       // Same order as the sheet's tree (childSequence); a parent always comes before its children, and entries that
       // share a parent appear in the order the person sees them in Notes.
-      const walk = (node, parent) => {
+      // A note without a colour of its own takes the colour of the folder it sits in (its favicon in the sidebar, S6 W1).
+      const walk = (node, parent, inherit = "") => {
         for (const m of childSequence(node, order, true)) {
           if (m.folder) {
-            const key = projKey("folder", m.folder.id);
-            out.push({ key, kind: "folder", id: m.folder.id, label: m.folder.label, parent, color: m.folder.color || "" });
-            walk(m.folder, key);
-          } else out.push({ key: projKey("note", m.note.id), kind: "note", id: m.note.id, label: titleOf(m.note.body) || "Untitled note", parent, color: m.note.color || "" });
+            // Keyed by the folder's permanent uid (path id only for a folder that has none yet): a rename or a move keeps the key,
+            // so the Zen sidebar folder is the same folder afterwards. Colour and icon travel with the entry (Cycle H #6b / S6 W2).
+            const key = projKey("folder", m.folder.uid || m.folder.id);
+            out.push({ key, kind: "folder", id: m.folder.id, label: m.folder.label, parent, color: m.folder.color || "", icon: m.folder.icon || "", ...(Object.keys(cleanFolderParts(m.folder.parts)).length ? { parts: cleanFolderParts(m.folder.parts) } : {}), ...(Object.keys(cleanFolderOpacity(m.folder.opacity)).length ? { opacity: cleanFolderOpacity(m.folder.opacity) } : {}) });
+            walk(m.folder, key, m.folder.color || inherit);
+          } else out.push({ key: projKey("note", m.note.id), kind: "note", id: m.note.id, label: titleOf(m.note.body) || "Untitled note", parent, color: m.note.color && m.note.color !== "none" ? m.note.color : inherit });
         }
       };
       walk(root, "");
@@ -6738,6 +7451,156 @@ __zentralShim.register = function (def) {
     // Order of work on every run: read the mode, build the wanted list with projectZen, diff it against what the
     // folder holds (only tabs that carry our marker), apply the difference. Any exception switches the whole
     // controller off (kill switch) and leaves what exists as inert pinned about:blank tabs. Never touches other tabs.
+    // ---- Sidebar helpers that touch the browser's DOM (kept outside start() so the fake DOM can test them) ------------------
+    // Facts from the real Zen DOM: a zen-folder carries its colour as seven inline --tab-group-* properties, its icon is
+    // `.tab-group-folder-icon svg g.icon > image`, a tab's icon is `img.tab-icon-image`, fed by the tab's `image` attribute.
+    function setNotesTabIcon(tab, color, { gBrowser, on = true, warn = () => {} } = {}) {
+      const uri = on ? noteFaviconUri(color) : "";
+      try {
+        if (uri) {
+          if (typeof gBrowser?.setIcon === "function") gBrowser.setIcon(tab, uri, uri);
+          tab.setAttribute("image", uri);
+          const img = tab.querySelector?.(".tab-icon-image");
+          if (img && img.getAttribute("src") !== uri) img.setAttribute("src", uri);
+        } else if ((tab.getAttribute("image") || "").startsWith("data:image/svg+xml,")) {
+          tab.removeAttribute("image");
+          tab.querySelector?.(".tab-icon-image")?.removeAttribute("src");
+        }
+        if (color) tab.setAttribute("bgalazka-notes-color", color);
+        else tab.removeAttribute("bgalazka-notes-color");
+      } catch (error) { warn(error); }
+    }
+    // What list() reports for a note tab: the colour we set, or "?" when the browser has since replaced the icon (a discard,
+    // a session restore), so the next run puts it back.
+    function notesTabColor(tab, on = true) {
+      const c = tab.getAttribute("bgalazka-notes-color") || "";
+      const uri = on ? noteFaviconUri(c) : "";
+      return uri ? ((tab.getAttribute("image") || "") === uri ? c : "?") : c;
+    }
+    // Track only inline declarations Notes actually overrides. Zen owns the original
+    // folder variables; when a layer is disabled or reset, restore that exact inline
+    // value/priority rather than deleting it and leaving the folder without its theme.
+    const notesFolderStyleOwners = new WeakMap();
+    function setNotesFolderStyleProperty(el, property, value) {
+      let owned = notesFolderStyleOwners.get(el);
+      if (!owned) {
+        owned = new Map();
+        notesFolderStyleOwners.set(el, owned);
+      }
+      const current = el.style.getPropertyValue(property);
+      const supportsPriority = typeof el.style.getPropertyPriority === "function";
+      const currentPriority = supportsPriority ? (el.style.getPropertyPriority(property) || "") : "";
+      const previous = owned.get(property);
+      if (value) {
+        const baseline = previous || { value: current, priority: currentPriority };
+        // If another owner changed this declaration since our last write, adopt
+        // that value as the new baseline before applying the Notes override again.
+        // Some fixture/minimal CSSStyleDeclaration implementations don't expose
+        // priority; in that case value equality is the strongest available signal.
+        if (previous && (current !== previous.applied || (supportsPriority && currentPriority !== "important"))) {
+          baseline.value = current;
+          baseline.priority = currentPriority;
+        }
+        if (current !== value || currentPriority !== "important")
+          el.style.setProperty(property, value, "important");
+        baseline.applied = value;
+        owned.set(property, baseline);
+      } else if (previous) {
+        if (current === previous.applied && (!supportsPriority || currentPriority === "important")) {
+          if (previous.value) el.style.setProperty(property, previous.value, previous.priority || "");
+          else el.style.removeProperty(property);
+        }
+        owned.delete(property);
+      }
+      if (!owned.size) notesFolderStyleOwners.delete(el);
+    }
+    function notesFolderBehaviorEnabled(name, fallback = true) {
+      try { return Services.prefs.getBoolPref(COLORFUL_FOLDER_PREF + name, fallback); }
+      catch (_) { return fallback; }
+    }
+    function applyNotesFolderStyle(el, color, icon, { doc, warn = () => {}, parts = {}, opacity = {} } = {}) {
+      try {
+        if (!el?.style) return;
+        const resolved = resolveFolderVisual({ b: colorHex(color) || "", d: parts, o: opacity }, FOLDER_STYLE.elementDepth(el));
+        const properties = { ...(resolved.properties || {}) };
+        // These two switches are independent: the header uses our dedicated tint
+        // token, while Zen itself consumes --tab-group-color-pale for the tab area.
+        // Omitting the disabled declaration lets setNotesFolderStyleProperty restore
+        // Zen's original inline value instead of leaving our color behind.
+        if (!notesFolderBehaviorEnabled("style_tint_header", true)) delete properties["--bgalazka-fc-tint"];
+        if (!notesFolderBehaviorEnabled("style_tint_tabs", true)) delete properties["--tab-group-color-pale"];
+        for (const property of FOLDER_STYLE.OWNED)
+          setNotesFolderStyleProperty(el, property, properties[property] || "");
+        const setAttr = (name, value) => {
+          const next = value == null ? "" : String(value);
+          if (next) {
+            if (el.getAttribute(name) !== next) el.setAttribute(name, next);
+          } else if (el.hasAttribute?.(name)) el.removeAttribute(name);
+        };
+        setAttr("bgalazka-notes-color", color || "");
+        // The shared folder stylesheet uses the native accent line, soft tint and hover; unlisted layers stay Zen's own.
+        setAttr("bgalazka-fc-layers", [["--bgalazka-fc-accent", "accent"], ["--bgalazka-fc-tint", "tint-header"], ["--tab-group-color-pale", "tint-tabs"], ["--bgalazka-fc-hover", "hover"]].filter(([property]) => properties[property]).map(([, name]) => name).join(" "));
+        const cleanParts = cleanFolderParts(parts);
+        const cleanOpacity = cleanFolderOpacity(opacity);
+        setAttr("bgalazka-notes-parts", Object.keys(cleanParts).length ? serializeFolderParts(cleanParts) : "");
+        setAttr("bgalazka-notes-parts-opacity", Object.keys(cleanOpacity).length ? serializeFolderOpacity(cleanOpacity) : "");
+        const g = el.querySelector?.(".tab-group-folder-icon g.icon");
+        if (g) {
+          const old = g.querySelector("text");
+          const img = g.querySelector("image");
+          if (icon) {
+            let t = old;
+            if (!t) {
+              t = doc.createElementNS(SVG_NS, "text");
+              t.setAttribute("bgalazka-notes-emoji", "true");
+              t.setAttribute("x", "14"); t.setAttribute("y", "16.4");
+              t.setAttribute("text-anchor", "middle"); t.setAttribute("dominant-baseline", "central");
+              t.setAttribute("font-size", "10");
+              g.appendChild(t);
+            }
+            if (t.textContent !== icon) t.textContent = icon;
+            if (img && img.style.display !== "none") img.style.display = "none";
+          } else {
+            old?.remove();
+            if (img && img.style.getPropertyValue("display")) img.style.removeProperty("display");
+          }
+        }
+        setAttr("bgalazka-notes-icon", icon || "");
+      } catch (error) { warn(error); }
+    }
+    // The icon a folder reports: "?" when Zen has redrawn its icon and our emoji is gone.
+    function notesFolderIcon(el) {
+      const want = el.getAttribute("bgalazka-notes-icon") || "";
+      return want && !el.querySelector?.(".tab-group-folder-icon text") ? "?" : want;
+    }
+    // Several folders claim to be the NOTES root: adopt the first, remove the others only when everything in them is ours,
+    // release (strip our marks from) one that holds a tab the person put there. See planRootDedupe.
+    function dedupeNotesRoots(doc, { removeTab, warn = () => {} } = {}) {
+      try {
+        const roots = [...(doc.querySelectorAll?.('zen-folder[bgalazka-notes-folder="true"]') || [])];
+        if (roots.length < 2) return;
+        const plan = planRootDedupe(roots.map((r) => {
+          const tabs = [...(r.querySelectorAll?.("tab") || [])];
+          return { ours: tabs.filter((t) => t.hasAttribute(NOTES_ATTR)).length, foreign: tabs.filter((t) => !t.hasAttribute(NOTES_ATTR)).length };
+        }));
+        for (const i of plan.release) releaseNotesFolder(roots[i], removeTab);
+        for (const i of plan.remove) {
+          for (const t of [...(roots[i].querySelectorAll?.("tab") || [])]) removeTab(t);
+          try { roots[i].delete?.(); } catch (_) {}
+        }
+      } catch (error) { warn(error); }
+    }
+    // The folder stays, as an ordinary folder: our marks and our own tabs go, the person's tabs stay.
+    function releaseNotesFolder(f, removeTab) {
+      f.removeAttribute("bgalazka-notes-folder");
+      for (const el of [f, ...(f.querySelectorAll?.("[bgalazka-notes-subfolder]") || [])]) for (const a of ["bgalazka-notes-subfolder", "bgalazka-notes-label", "bgalazka-notes-parent", "bgalazka-notes-color", "bgalazka-notes-icon", "bgalazka-notes-parts", "bgalazka-notes-parts-opacity"]) el.removeAttribute(a);
+      for (const t of [...(f.querySelectorAll?.("tab[" + NOTES_ATTR + "]") || [])]) removeTab(t);
+    }
+    // Switching the feature off: a folder holding a tab the person put there is released, never deleted.
+    function retireNotesFolder(f, removeTab = () => {}) {
+      if ([...(f.querySelectorAll?.("tab") || [])].some((t) => !t.hasAttribute(NOTES_ATTR))) releaseNotesFolder(f, removeTab);
+      else try { f.delete?.(); } catch (_) {}
+    }
     function createZenFolder({ api, store, getMode, getOrder = () => "folders-first", getNewButtons = () => false, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, onKill = () => {} }) {
       let dead = false;
       let orderOk = true; // set to false once if the browser refuses to reorder (we then stop trying, nothing else changes)
@@ -6777,6 +7640,7 @@ __zentralShim.register = function (def) {
         if (!api.ready()) return;
         if (mode === "selected") store.ensureTabbarFolder();
         if (!api.ensureRoot()) return;
+        api.styleRoot?.();
         if (api.sweepStrays) api.sweepStrays(); // our tabs that ended up outside the NOTES folder (unpinned, essential, dragged away, restored)
         const notes = store.list();
         let want = projectZen(notes, store.meta.folders, mode, getOrder());
@@ -6791,6 +7655,7 @@ __zentralShim.register = function (def) {
           if (e.kind === "folder" && flat === null) flat = false;
         }
         for (const r of plan.relabel) api.relabel(r.key, r.label);
+        for (const r of plan.restyle) api.restyle?.(r.key, r);
         for (const m of plan.move) api.move(m.key, m.parent);
         if (plan.move.length && timer === null) timer = setTimer(run, 0);
         // Same order as the sheet's tree. Skipped while moves are pending (the follow-up run does it) and for good
@@ -6845,7 +7710,7 @@ __zentralShim.register = function (def) {
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
-        wrapSelection, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
+        makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
@@ -7103,7 +7968,7 @@ __zentralShim.register = function (def) {
           if (n.t === "math") node.className = "zn-math";
           else if (n.t === "hl") {
             node.className = "zn-hl";
-            node.dataset.color = n.color;
+            setColorData(node, n.color);
           } else if (n.t === "a") {
             // No href attribute: a real link inside browser chrome could
             // navigate the window. Clicks go through env.openLink instead.
@@ -7348,6 +8213,11 @@ __zentralShim.register = function (def) {
         cleanups.push(() => target.removeEventListener(type, fn, opts));
       };
       let currentId = "";
+      let armed = []; // tool ids waiting for text, in the order they were armed
+      let armFrom = -1; // caret when the first tool was armed
+      let armLen = 0; // note length then: typing is a pure insertion at armFrom while the length grows by the caret distance
+      let armNote = "";
+      let armBusy = false;
       let view = "editor"; // editor | list
       let mode = "edit"; // edit | read | split
       let filter = "all"; // all | recent | trash
@@ -7459,6 +8329,9 @@ __zentralShim.register = function (def) {
         [tLink, "Link\u2026", "link"], [tNoteLink, "Link to another note\u2026", "noteLink"], [tImage, "Image", "image"], [tTable, "Table\u2026", "table"], [tToc, "Table of contents", "outline"], [tSettings, "Quick settings", "settings"],
       ];
       const getPref = (k, d) => (env.getPref ? env.getPref(k, d) : d);
+      // The NOTES root style code below reads string preferences with this; it used to name a helper that only exists in the
+      // controller scope, so clicking the root style button threw a ReferenceError and did nothing.
+      const prefStr = (k, d) => String(getPref(k, d) ?? d);
       const setPref = (k, v) => env.setPref?.(k, v);
       let shortcutCache = { raw: null, hid: null, list: [] };
       const hiddenTools = () => parseHidden(getPref(PREF.HIDDEN_TOOLS, ""));
@@ -7553,7 +8426,7 @@ __zentralShim.register = function (def) {
         labelEl.textContent = n?.label || "";
         paintReminderChip(n);
         paintFindState();
-                root.dataset.color = n?.color || "none";
+                setColorData(root, n?.color || "none");
         root.dataset.trashed = n?.trashed ? "true" : "false";
         titleEl.textContent =
           view === "list" ? (filter === "trash" ? "Trash" : "All notes") : titleOf(n?.body || "") || "Untitled note";
@@ -7561,7 +8434,7 @@ __zentralShim.register = function (def) {
         btnPin.classList.toggle("is-on", !!n?.pinned);
         btnPin.title = n?.pinned ? "Unpin note" : "Pin note to the top of the list";
         btnPin.setAttribute("aria-pressed", n?.pinned ? "true" : "false");
-        colorDot.dataset.color = n?.color || "none";
+        setColorData(colorDot, n?.color || "none");
         const big = store.meta.size !== "peek";
         btnSize.replaceChildren(icon(big ? "minimize" : "maximize"));
         btnSize.title = big ? "Smaller (hold: fill the whole area)" : "Larger (hold: fill the whole area)";
@@ -7596,7 +8469,7 @@ __zentralShim.register = function (def) {
         tSplit.title = mode === "split" ? "Close split view" : "Split view: editor and preview";
         tMode.replaceChildren(icon(mode === "read" ? "edit" : "eye"));
         tMode.title = mode === "read" ? "Edit (Ctrl+E)" : "Read (Ctrl+E)";
-        hlDot.dataset.color = store.meta.highlight;
+        setColorData(hlDot, store.meta.highlight);
         const gone = hiddenTools();
         for (const [btn, base, id] of TOOL_TITLES) {
           const combo = shortcutList().find((x) => x.id === id)?.combo;
@@ -7727,6 +8600,7 @@ __zentralShim.register = function (def) {
         scheduleChrome();
       }
       function showNote(id) {
+        if (armed.length) disarm();
         currentId = id;
         const n = note();
         ta.value = n ? n.body : "";
@@ -8280,7 +9154,7 @@ __zentralShim.register = function (def) {
         });
         item.addEventListener("dragend", () => (dragNoteId = ""));
       }
-      item.dataset.color = n.color;
+      setColorData(item, n.color);
       item.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -8373,6 +9247,24 @@ __zentralShim.register = function (def) {
         allFolderIds([...store.tree().notes, ...store.list()], store.meta.folders)
           .filter((id) => !exclude || !(id === exclude || id.startsWith(exclude + "/")))
           .sort();
+      function buildRootRow() {
+        const emoji = cleanFolderIcon(String(getPref(PREF.ZEN_ROOT_ICON, "") || ""));
+        const edit = iconButton("palette" in ICONS ? "palette" : "more", "Colors and icon of the NOTES folder\u2026", "zn-rootstyle");
+        const row = h("div", { class: "zn-rootrow", role: "treeitem", tabindex: "0", "aria-level": "1", title: "NOTES folder in the Zen sidebar: click for colors and icon" },
+          h("span", { class: "zn-frow-icon" + (emoji ? " is-emoji" : " is-folder") }, emoji ? h("span", { class: "zn-frow-emoji" }, emoji) : icon("folder", 14)),
+          h("span", { class: "zn-rootrow-name" }, "NOTES"), edit);
+        const resolved = resolveFolderVisual({ b: colorHex(prefStr(PREF.ZEN_ROOT_COLOR, "")) || "", d: parseFolderParts(prefStr(PREF.ZEN_ROOT_PARTS, "{}")), o: parseFolderOpacity(prefStr(PREF.ZEN_ROOT_PART_OPACITY, "{}")) }, 1);
+        for (const [target, source] of [["--zn-frow-back", "--zen-folder-behind-bgcolor"], ["--zn-frow-front", "--zen-folder-front-bgcolor"], ["--zn-frow-stroke", "--zen-folder-stroke"], ["--zn-frow-label", "--bgalazka-fc-label"], ["--zn-frow-accent", "--tab-group-color"], ["--zn-frow-tint", "--tab-group-color-pale"], ["--zn-frow-hover", "--tab-group-background-color-hover"]]) {
+          const value = resolved.properties?.[source] || "";
+          if (value) row.style.setProperty(target, value);
+        }
+        if (Object.keys(resolved.properties || {}).length) setColorData(row, resolved.base || "custom");
+        const open = (e) => { e.preventDefault?.(); e.stopPropagation?.(); askRootStyle(); };
+        row.addEventListener("click", open);
+        row.addEventListener("contextmenu", open);
+        row.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") open(e); });
+        return row;
+      }
       function buildFolderRow(node, depth, count) {
         const open = !node.collapsed;
         const chev = iconButton("caret", open ? "Collapse" : "Expand", "zn-chev");
@@ -8382,12 +9274,40 @@ __zentralShim.register = function (def) {
           "div",
           { class: "zn-item zn-frow", role: "treeitem", tabindex: "0", "data-fid": node.id, "data-key": "f:" + node.id, "aria-level": String(depth + 1), "aria-expanded": open ? "true" : "false" },
           chev,
-          h("span", { class: "zn-frow-icon" }, icon("folder", 14)),
+          h("span", { class: "zn-frow-icon" + (node.icon ? " is-emoji" : " is-folder") }, node.icon ? h("span", { class: "zn-frow-emoji" }, node.icon) : icon("folder", 14)),
           h("span", { class: "zn-item-main" }, h("span", { class: "zn-item-title" }, node.label)),
           h("span", { class: "zn-item-time" }, String(count)),
           h("span", { class: "zn-item-actions" }, add, more),
         );
         row.style.setProperty("--d", String(depth));
+        const resolved = resolveFolderVisual({ b: node.color, d: node.parts, o: node.opacity }, depth + 2);
+        const visualParts = resolved.parts || {};
+        const rowColor = resolved.base || cleanHex(visualParts.accent) || cleanHex(visualParts.front) || cleanHex(visualParts.back) || cleanHex(visualParts.label) || "";
+        const hasVisual = Object.keys(resolved.properties || {}).length > 0;
+        if (hasVisual) {
+          // A detail-only global palette (for example a custom label color)
+          // still needs the data-color selector so its layer variables apply.
+          setColorData(row, rowColor || "custom");
+          if (rowColor) row.style.setProperty("--zn-fc", rowColor);
+          else row.style.setProperty("--zn-fc", "#707780");
+        } else {
+          row.removeAttribute("data-color");
+          row.style.removeProperty("--zn-fc");
+        }
+        const rowProperties = {
+          "--zn-frow-back": "--zen-folder-behind-bgcolor",
+          "--zn-frow-front": "--zen-folder-front-bgcolor",
+          "--zn-frow-stroke": "--zen-folder-stroke",
+          "--zn-frow-label": "--bgalazka-fc-label",
+          "--zn-frow-accent": "--tab-group-color",
+          "--zn-frow-tint": "--tab-group-color-pale",
+          "--zn-frow-hover": "--tab-group-background-color-hover",
+        };
+        for (const [targetProperty, sourceProperty] of Object.entries(rowProperties)) {
+          const value = resolved.properties?.[sourceProperty] || "";
+          if (value) row.style.setProperty(targetProperty, value);
+          else row.style.removeProperty(targetProperty);
+        }
         const toggle = () => store.setFolderCollapsed(node.id, open);
         chev.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -8459,6 +9379,7 @@ __zentralShim.register = function (def) {
           items.push({ icon: "folder", label: "New subfolder\u2026", action: () => askFolderName("New subfolder", "", (name) => store.addFolder(name, node.id)) });
         items.push(
           { icon: "edit", label: "Rename\u2026", action: () => askFolderName("Rename folder", node.label, (name) => store.renameFolder(node.id, name)) },
+          { icon: "folder", label: "Color and icon\u2026", action: () => queueMicrotask(() => askFolderStyle(node)) },
           { icon: "folder", label: "Move to\u2026", action: () => askFolderMove(node) },
           ...(node.id !== TABBAR_FOLDER && !node.id.startsWith(TABBAR_FOLDER + "/")
             ? [{ icon: "folder", label: "Move to Notes (tabbar)", action: () => { store.ensureTabbarFolder(); const r = store.moveFolder(node.id, TABBAR_FOLDER); flash(r ? "Shown in the Zen sidebar folder" : "Cannot move it there (too deep or name taken)"); scheduleList(); } }]
@@ -8478,6 +9399,9 @@ __zentralShim.register = function (def) {
           listItems.append(h("p", { class: "zn-empty" }, "No notes yet. Press + to create one."));
           return;
         }
+        // The NOTES folder itself (level 1 in the Zen sidebar): its own row at the top of the tree, so its colors are one
+        // click away (click, or the palette button) instead of a small icon next to Trash.
+        if (rows.length || treeMode()) listItems.append(buildRootRow());
         let shown = 0;
         for (const r of rows) {
           if (shown >= MAX_LIST_ROWS) break;
@@ -8491,6 +9415,273 @@ __zentralShim.register = function (def) {
           listItems.append(h("p", { class: "zn-empty" }, `Showing the first ${MAX_LIST_ROWS} of ${rows.length}. Use search to narrow down.`));
       }
       // Small dialogs for folder actions (one text field, a confirm, a target picker).
+      // Colour and icon of a folder: shown in this tree and on the folder in the Zen sidebar. The icon is one emoji.
+      function askFolderStyle(node, save, title, level = 2) {
+        // Same controls and rules as the Zen sidebar editor of Colorful Folders: Simple = a primary color (the folder) and
+        // a secondary color (its outline), Detailed = every layer with its own transparency. In Simple, choosing a color or
+        // a look drops the Detailed layers (Simple overrides Detailed); a Detailed layer left on Auto follows the primary.
+        let color = node.color || "";
+        let parts = cleanFolderParts(node.parts);
+        let opacity = cleanFolderOpacity(node.opacity);
+        let editMode = colorfulFolderDefaults().mode;
+        const f = field("Icon (one emoji, empty = folder)", node.icon || "", "e.g. 📓");
+        f.input.maxLength = 24;
+        const status = h("div", { class: "zn-fstyle-status", role: "status", "aria-live": "polite" });
+        const edgeOnly = () => (parts.stroke ? { stroke: parts.stroke } : {});
+
+        const simpleTab = chip("Simple");
+        const detailTab = chip("Detailed");
+        const modes = h("div", { class: "zn-fstyle-modes", role: "tablist" }, simpleTab, detailTab);
+
+        const palette = h("div", { class: "zn-fstyle-presets" });
+        const presetButtons = [];
+        const syncPalette = () => {
+          for (const button of presetButtons) button.classList.toggle("is-on", button._theme?.b === color && serializeFolderParts(button._theme?.d) === serializeFolderParts(parts) && serializeFolderOpacity(button._theme?.o) === serializeFolderOpacity(opacity));
+        };
+        for (const group of folderColorPresets()) {
+          palette.append(h("div", { class: "zn-fstyle-group-label" }, group.group));
+          const row = h("div", { class: "zn-fstyle-colors" });
+          for (const theme of group.items) {
+            const button = chip(theme.n);
+            button._theme = theme;
+            button.title = group.group + " · " + theme.n;
+            button.style.background = "linear-gradient(135deg, " + (theme.d?.back || theme.b) + " 0 35%, " + (theme.d?.front || theme.b) + " 35% 70%, " + (theme.d?.stroke || theme.b) + " 70% 100%)";
+            button.style.borderColor = theme.d?.stroke || theme.b;
+            button.addEventListener("click", () => {
+              color = theme.b;
+              parts = cleanFolderParts(theme.d);
+              opacity = cleanFolderOpacity(theme.o);
+              if (FOLDER_STYLE.needsDetailed(theme)) setMode("detailed");
+              else if (editMode === "simple") parts = edgeOnly();
+              syncAll();
+            });
+            presetButtons.push(button);
+            row.append(button);
+          }
+          palette.append(row);
+        }
+
+        // primary color: the shared picker (system picker, #rrggbb, saved quick colors)
+        const picker = colorPicker(colorHex(color) || cleanHex(color), (v) => {
+          color = v;
+          if (editMode === "simple") parts = edgeOnly();
+          syncAll(true);
+        });
+        const primaryAuto = chip("Auto (follow Zen)");
+        primaryAuto.addEventListener("click", () => { color = ""; syncAll(); });
+        const primaryBox = h("div", {}, h("div", { class: "zn-fstyle-group-label" }, "Primary color (the folder)"), picker.el, primaryAuto);
+
+        // secondary color: the outline
+        const edgeInput = h("input", { type: "color", class: "zn-color-input", "aria-label": "Secondary outline color" });
+        const edgeHex = h("input", { type: "text", class: "zn-hex-field", maxlength: "7", spellcheck: "false", placeholder: "auto", "aria-label": "Secondary outline color hex" });
+        const edgeAuto = chip("Auto");
+        const edgeWarn = h("div", { class: "zn-fstyle-warn", role: "status" });
+        const setEdge = (value) => {
+          const hex = cleanHex(value);
+          if (!hex) return;
+          parts.stroke = hex;
+          syncAll(false, true);
+        };
+        edgeInput.addEventListener("input", () => setEdge(edgeInput.value));
+        edgeHex.addEventListener("input", () => { const raw = edgeHex.value.trim(); setEdge(raw.startsWith("#") ? raw : "#" + raw); });
+        edgeAuto.addEventListener("click", () => { delete parts.stroke; syncAll(); });
+        const edgeRow = h("div", { class: "zn-fstyle-edge" }, h("span", {}, "Secondary color (outline)"), edgeInput, edgeHex, edgeAuto);
+
+        // folder transparency (simple): one slider for the two big layers
+        const bodyAlpha = h("input", { type: "range", min: "0", max: "100", step: "1", "aria-label": "Folder transparency" });
+        const bodyAlphaValue = h("output", { class: "zn-fstyle-opacity-value" }, "Auto");
+        bodyAlpha.addEventListener("input", () => {
+          const v = Number(bodyAlpha.value);
+          if (v >= 100) { delete opacity.back; delete opacity.front; } else { opacity.back = v; opacity.front = v; }
+          bodyAlphaValue.textContent = v >= 100 ? "Auto" : v + "%";
+          syncPalette();
+        });
+        const alphaRow = h("div", { class: "zn-fstyle-edge" }, h("span", {}, "Folder opacity (0% = transparent)"), bodyAlpha, bodyAlphaValue);
+
+        const detail = h("div", { class: "zn-fstyle-details" });
+        const partInputs = new Map();
+        const partLabels = {
+          back: "Icon: back", front: "Icon: front", stroke: "Icon: outline and glyph",
+          label: "Folder name", accent: "Folder and tab selection accent", tint: "Soft tint", hover: "Hover background",
+        };
+        for (const part of FOLDER_PARTS) {
+          const input = h("input", { type: "color", class: "zn-color-input", "aria-label": partLabels[part] });
+          const hex = h("input", { type: "text", class: "zn-hex-field", maxlength: "7", spellcheck: "false", placeholder: "auto", "aria-label": partLabels[part] + " hex" });
+          const alpha = h("input", { type: "range", min: "0", max: "100", step: "1", "aria-label": partLabels[part] + " opacity" });
+          const opacityValue = h("output", { class: "zn-fstyle-opacity-value" }, "Auto");
+          const auto = chip("Auto");
+          const opacityRow = h("span", { class: "zn-fstyle-opacity" }, h("span", {}, "Opacity"), alpha, opacityValue);
+          const line = h("div", { class: "zn-fstyle-part" }, h("span", {}, partLabels[part]), input, hex, opacityRow, auto);
+          const setPart = (raw) => {
+            const value = cleanHex(raw.startsWith("#") || raw === "" ? raw : "#" + raw);
+            if (value) { parts[part] = value; syncAll(false, false, part); }
+          };
+          input.addEventListener("input", () => setPart(input.value));
+          hex.addEventListener("input", () => setPart(hex.value.trim()));
+          alpha.addEventListener("input", () => {
+            opacity[part] = Number(alpha.value);
+            opacityValue.textContent = alpha.value + "%";
+            syncPalette();
+          });
+          auto.addEventListener("click", () => { delete parts[part]; delete opacity[part]; syncAll(); });
+          detail.append(line);
+          partInputs.set(part, { input, hex, opacity: alpha, opacityValue });
+        }
+        function syncAll(skipPrimary = false, skipEdge = false, skipPart = "") {
+          if (!skipPrimary) picker.sync(colorHex(color) || "#667788");
+          const edge = parts.stroke || "";
+          if (!skipEdge) { edgeInput.value = edge || colorHex(color) || "#667788"; edgeHex.value = edge; }
+          edgeWarn.textContent = colorHex(color) && edge && FOLDER_STYLE.contrast(colorHex(color), edge) < 1.6 ? "Outline and folder colors are very close; the outline will be hard to see." : "";
+          const a = opacity.back === undefined ? 100 : opacity.back;
+          bodyAlpha.value = String(a);
+          bodyAlphaValue.textContent = opacity.back === undefined ? "Auto" : a + "%";
+          for (const [part, controls] of partInputs) {
+            if (part === skipPart) continue;
+            controls.input.value = parts[part] || colorHex(color) || "#667788";
+            controls.hex.value = parts[part] || "";
+            controls.opacity.value = String(opacity[part] === undefined ? 100 : opacity[part]);
+            controls.opacityValue.textContent = opacity[part] === undefined ? "Auto" : opacity[part] + "%";
+          }
+          syncPalette();
+        }
+        function setMode(next) {
+          editMode = next === "simple" ? "simple" : "detailed";
+          simpleTab.classList.toggle("is-on", editMode === "simple");
+          detailTab.classList.toggle("is-on", editMode === "detailed");
+          simpleTab.setAttribute("aria-selected", String(editMode === "simple"));
+          detailTab.setAttribute("aria-selected", String(editMode === "detailed"));
+          detail.hidden = editMode !== "detailed";
+          alphaRow.hidden = editMode !== "simple";
+          syncAll();
+        }
+        simpleTab.addEventListener("click", () => setMode("simple"));
+        detailTab.addEventListener("click", () => setMode("detailed"));
+
+        const behaviorBox = h("details", { class: "zn-fstyle-behavior" });
+        behaviorBox.open = true;
+        behaviorBox.append(h("summary", {}, "Folder appearance behavior"), h("p", {}, "These are shared global switches. Changes apply to all folders, including this one and Zen sidebar folders."));
+        for (const [name, label, fallback] of FOLDER_BEHAVIOR_OPTIONS) {
+          const checkbox = h("input", { type: "checkbox", "aria-label": label });
+          const prefKey = COLORFUL_FOLDER_PREF + name;
+          checkbox.checked = getPref(prefKey, fallback);
+          checkbox.addEventListener("change", () => setPref(prefKey, checkbox.checked));
+          behaviorBox.append(h("label", { class: "zn-fstyle-check" }, checkbox, h("span", {}, label)));
+        }
+
+        setMode(editMode);
+        const apply = chip("Apply");
+        const ok = chip("Apply and close", true);
+        const reset = chip("Reset");
+        const cancel = chip("Close");
+        openCard(
+          title || "Folder color and icon",
+          h("div", { class: "zn-fstyle" }, modes, primaryBox, edgeRow, edgeWarn, alphaRow, detail, h("div", { class: "zn-fstyle-group-label" }, "Collections"), palette, behaviorBox, f.row, status),
+          h("div", { class: "zn-dialog-actions" }, reset, cancel, apply, ok),
+        );
+        const commit = (closeAfter) => {
+          const icon = f.input.value.trim();
+          if (icon && !cleanFolderIcon(icon)) {
+            f.input.dataset.bad = "true";
+            f.input.focus?.();
+            return;
+          }
+          // The shared Simple/Detailed mode is written only when the person applies.
+          setFolderMode(editMode);
+          const out = editMode === "simple" ? edgeOnly() : parts;
+          if (save) save(color, icon, out, opacity);
+          else store.setFolderStyle(node.id, { color, icon, parts: out, opacity });
+          scheduleList();
+          if (closeAfter) closeDialog();
+          else status.textContent = "Applied.";
+        };
+        apply.addEventListener("click", () => commit(false));
+        ok.addEventListener("click", () => commit(true));
+        reset.addEventListener("click", () => { color = ""; parts = {}; opacity = {}; syncAll(); commit(false); status.textContent = "Reset."; });
+        cancel.addEventListener("click", closeDialog);
+      }
+      // The NOTES root folder in the Zen sidebar uses the same per-layer schema.
+      function askRootStyle() {
+        askFolderStyle(
+          { id: "", label: "Notes", color: cleanFolderColor(String(getPref(PREF.ZEN_ROOT_COLOR, "") || "")), icon: cleanFolderIcon(String(getPref(PREF.ZEN_ROOT_ICON, "") || "")), parts: parseFolderParts(prefStr(PREF.ZEN_ROOT_PARTS, "{}")), opacity: parseFolderOpacity(prefStr(PREF.ZEN_ROOT_PART_OPACITY, "{}")) },
+          (c, i, p, o) => {
+            setPref(PREF.ZEN_ROOT_COLOR, c);
+            setPref(PREF.ZEN_ROOT_ICON, i);
+            setPref(PREF.ZEN_ROOT_PARTS, serializeFolderParts(p));
+            setPref(PREF.ZEN_ROOT_PART_OPACITY, serializeFolderOpacity(o));
+            // Repaint the sidebar folder now instead of waiting for a preference observer.
+            try {
+              const rootFolder = document.querySelector?.('zen-folder[bgalazka-notes-folder="true"]');
+              if (rootFolder) window.__zentralNotesFolderColorBridge?.refresh?.(rootFolder);
+            } catch (_) {}
+          },
+          "NOTES folder in the Zen sidebar",
+          1,
+        );
+      }
+      // ---- custom colors (T3.6) -------------------------------------------------------------------
+      // Quick colors live in one preference (up to 8 `#rrggbb`, newest first). Choosing a custom color anywhere adds it there;
+      // right-click on a quick color removes it.
+      const quickColors = () => parseQuickColors(getPref(PREF.CUSTOM_COLORS, ""));
+      const saveQuickColor = (hex) => setPref(PREF.CUSTOM_COLORS, addQuickColor(quickColors(), hex).join(","));
+      const removeQuickColor = (hex) => setPref(PREF.CUSTOM_COLORS, quickColors().filter((c) => c !== hex).join(","));
+      // One reusable block: the system color picker, a #rrggbb field, "Save" and the quick colors. `onChange(hex)` fires on every valid change.
+      function colorPicker(value, onChange) {
+        let cur = cleanHex(value) || "#6aa7ff";
+        const native = h("input", { type: "color", class: "zn-color-input", "aria-label": "Pick a color", title: "Pick a color" });
+        native.value = cur;
+        const hexField = h("input", { type: "text", class: "zn-field zn-hex-field", spellcheck: "false", maxlength: "7", placeholder: "#rrggbb", "aria-label": "Color as #rrggbb" });
+        hexField.value = cur;
+        const quick = h("div", { class: "zn-quick" });
+        const set = (hex) => {
+          cur = hex;
+          native.value = hex;
+          hexField.value = hex;
+          delete hexField.dataset.bad;
+          onChange(hex);
+        };
+        const paintQuick = () => {
+          quick.replaceChildren();
+          for (const c of quickColors()) {
+            const b = h("button", { type: "button", class: "zn-swatch", title: c + " (right-click removes it)", "aria-label": "Quick color " + c });
+            setColorData(b, c);
+            b.addEventListener("click", () => set(c));
+            b.addEventListener("contextmenu", (e) => {
+              e.preventDefault();
+              removeQuickColor(c);
+              paintQuick();
+            });
+            quick.append(b);
+          }
+        };
+        native.addEventListener("input", () => set(cleanHex(native.value) || cur));
+        hexField.addEventListener("input", () => {
+          const raw = hexField.value.trim();
+          const hex = cleanHex(raw.startsWith("#") ? raw : "#" + raw);
+          if (hex) set(hex);
+          else hexField.dataset.bad = "true";
+        });
+        const keep = chip("Save as quick color");
+        keep.addEventListener("click", () => {
+          saveQuickColor(cur);
+          paintQuick();
+        });
+        paintQuick();
+        const el = h("div", { class: "zn-color-picker" }, h("div", { class: "zn-color-picker-row" }, native, hexField, keep), quick);
+        return { el, value: () => cur, sync: (hex) => { const clean = cleanHex(hex); if (clean) set(clean); } };
+      }
+      function askCustomColor(title, current, onOk) {
+        let chosen = cleanHex(current) || "";
+        const picker = colorPicker(current, (v) => { chosen = v; });
+        const ok = chip("Use color", true);
+        const cancel = chip("Cancel");
+        openCard(title, picker.el, h("div", { class: "zn-dialog-actions" }, cancel, ok));
+        ok.addEventListener("click", () => {
+          const v = chosen || picker.value();
+          closeDialog();
+          onOk(v);
+        });
+        cancel.addEventListener("click", closeDialog);
+      }
       function askFolderName(title, initial, onOk) {
         const f = field("Folder name", initial, "e.g. Work");
         f.input.maxLength = FOLDER_LABEL_MAX;
@@ -8624,7 +9815,7 @@ __zentralShim.register = function (def) {
           { sep: true },
           { icon: "folder", label: "Move to folder\u2026", action: () => queueMicrotask(() => askMoveNote(n)) },
           { icon: "duplicate", label: "Duplicate", action: () => { const c = store.create(n.body, n.folder); store.setColor(c.id, n.color); store.setLabel(c.id, n.label); scheduleList(); } },
-          { label: "Colour", group: NOTE_COLORS.map((c) => ({ label: c, action: () => { store.setColor(n.id, c); scheduleList(); } })) },
+          { label: "Colour", group: [...NOTE_COLORS.map((c) => ({ label: c, action: () => { store.setColor(n.id, c); scheduleList(); } })), ...quickColors().map((c) => ({ label: c, action: () => { store.setColor(n.id, c); scheduleList(); } })), { label: "Custom color\u2026", action: () => queueMicrotask(() => askCustomColor("Custom note color", cleanHex(n.color), (v) => { store.setColor(n.id, v); scheduleList(); })) }] },
           ...(FLAVORS_PART ? [{ label: "Markdown mode", group: [["", "Follow the setting"], ...FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]])].map(([m, label]) => ({ label: (n.flavor || "") === m ? "\u2713 " + label : label, action: () => { store.setFlavor(n.id, m); scheduleList(); } })) }] : []),
           { icon: "link", label: "Copy link", action: () => { env.copyText?.("[[" + (titleOf(n.body) || "Untitled note") + "]]"); flash("Link copied"); } },
           { sep: true },
@@ -8709,19 +9900,91 @@ __zentralShim.register = function (def) {
         const [a, b] = sel();
         applyEdit({ start: a, end: b, text, selStart: a + text.length, selEnd: a + text.length });
       }
+      // ---- armed tools (Cycle G #5): click Bold with nothing selected, then type (or select) the text ----------------
+      const WRAP_PAIRS = {
+        bold: () => ["**", "**"], italic: () => ["*", "*"], strike: () => ["~~", "~~"], highlight: () => [hlOpen(), "=="], code: () => ["`", "`"],
+        sup: () => ["^", "^"], sub: () => ["~", "~"], kbd: () => ["<kbd>", "</kbd>"], underline: () => ["<u>", "</u>"], spoiler: () => ["||", "||"],
+        comment: () => ["%%", "%%"], mathInline: () => ["$", "$"],
+      };
+      const armButtons = () => ({ bold: tBold, italic: tItalic, strike: tStrike, highlight: tHl, code: tCode });
+      const armOn = () => getPref(PREF.TOOL_ARM, true) !== false;
+      function paintArmed() {
+        for (const [id, btn] of Object.entries(armButtons())) {
+          const on = armed.includes(id);
+          btn.classList.toggle("is-on", on);
+          btn.classList.toggle("is-armed", on);
+          if (on) btn.setAttribute("aria-pressed", "true");
+          else btn.removeAttribute("aria-pressed");
+        }
+      }
+      function disarm() {
+        if (!armed.length) return;
+        armed = [];
+        armFrom = -1;
+        paintArmed();
+      }
+      // Armed state is only valid for the exact spot and note it was made in.
+      const armStale = () => armed.length && (armNote !== currentId || ta.selectionStart !== armFrom || ta.selectionEnd !== armFrom || ta.value.length !== armLen);
+      const armLabel = (id) => (SHORTCUT_ACTIONS.find((a) => a.id === id)?.label || id).replace(/\s{2,}.*$/, "");
+      function wrapTool(id) {
+        return () => {
+          const [open, close] = WRAP_PAIRS[id]();
+          const [a, b] = sel();
+          if (armOn() && !ta.readOnly) {
+            if (armStale()) disarm();
+            if (a === b && armed.includes(id)) {
+              armed = armed.filter((x) => x !== id); // a second click switches it off again
+              if (!armed.length) armFrom = -1;
+              paintArmed();
+              return;
+            }
+            if (armPending(ta.value, a, b, open, close)) {
+              if (!armed.length) { armFrom = a; armLen = ta.value.length; armNote = currentId; }
+              armed.push(id);
+              paintArmed();
+              ta.focus({ preventScroll: true });
+              if (!armButtons()[id]) flash(armLabel(id) + ": type the text or select it (Esc cancels)", 3000);
+              return;
+            }
+          }
+          disarm();
+          applyEdit(wrapSelection(ta.value, a, b, open, close));
+        };
+      }
+      // The first typed phrase gets the markers; called from the input and compositionend events.
+      function armedInput(ev) {
+        if (!armed.length || armBusy || ev?.isComposing) return false;
+        const caret = ta.selectionStart;
+        if (armNote !== currentId || ta.selectionEnd !== caret || ta.value.length - armLen !== caret - armFrom) { disarm(); return false; }
+        const edit = armedTypeEdit(ta.value, armFrom, caret, armed.map((id) => WRAP_PAIRS[id]()));
+        if (!edit || edit.cancel) { disarm(); return false; }
+        if (edit.wait) return false;
+        armBusy = true;
+        try { disarm(); applyEdit(edit); } finally { armBusy = false; }
+        return true;
+      }
+      // Armed, then a selection: the markers go around it (mouse released, or Shift released after a keyboard selection).
+      function armedSelection() {
+        if (!armed.length || armBusy || ta.readOnly) return;
+        const [a, b] = sel();
+        if (a === b) { if (armStale()) disarm(); return; }
+        const ids = armed.slice();
+        disarm();
+        for (const id of ids) { const [open, close] = WRAP_PAIRS[id](); const [x, y] = sel(); applyEdit(wrapSelection(ta.value, x, y, open, close)); }
+      }
       const fmt = {
-        code: () => applyEdit(wrapSelection(ta.value, ...sel(), "`")),
+        code: wrapTool("code"),
         codeBlock: () => askCodeBlock(),
         numbered: () => applyEdit(toggleLinePrefix(ta.value, ...sel(), "ordered")),
         image: () => askImage(),
         rule: () => applyEdit(insertRule(ta.value, ...sel())),
-        sup: () => applyEdit(wrapSelection(ta.value, ...sel(), "^")),
-        sub: () => applyEdit(wrapSelection(ta.value, ...sel(), "~")),
-        kbd: () => applyEdit(wrapSelection(ta.value, ...sel(), "<kbd>", "</kbd>")),
-        underline: () => applyEdit(wrapSelection(ta.value, ...sel(), "<u>", "</u>")),
-        spoiler: () => applyEdit(wrapSelection(ta.value, ...sel(), "||")),
-        comment: () => applyEdit(wrapSelection(ta.value, ...sel(), "%%")),
-        mathInline: () => applyEdit(wrapSelection(ta.value, ...sel(), "$")),
+        sup: wrapTool("sup"),
+        sub: wrapTool("sub"),
+        kbd: wrapTool("kbd"),
+        underline: wrapTool("underline"),
+        spoiler: wrapTool("spoiler"),
+        comment: wrapTool("comment"),
+        mathInline: wrapTool("mathInline"),
         mathBlock: () => applyEdit(wrapSelection(ta.value, ...sel(), "$$\n", "\n$$")),
         details: () => applyEdit(wrapSelection(ta.value, ...sel(), "<details>\n<summary>Title</summary>\n\n", "\n\n</details>")),
         insertDate: () => insertStamp("date"),
@@ -8731,10 +9994,10 @@ __zentralShim.register = function (def) {
         footnote: () => applyEdit(insertFootnote(ta.value, ...sel())),
         hubList: () => askHubList(),
         table: () => askTable(),
-        bold: () => applyEdit(wrapSelection(ta.value, ...sel(), "**")),
-        italic: () => applyEdit(wrapSelection(ta.value, ...sel(), "*")),
-        strike: () => applyEdit(wrapSelection(ta.value, ...sel(), "~~")),
-        highlight: () => applyEdit(wrapSelection(ta.value, ...sel(), hlOpen(), "==")),
+        bold: wrapTool("bold"),
+        italic: wrapTool("italic"),
+        strike: wrapTool("strike"),
+        highlight: wrapTool("highlight"),
         heading: () => applyEdit(toggleLinePrefix(ta.value, ...sel(), "heading")),
         bullet: () => applyEdit(toggleLinePrefix(ta.value, ...sel(), "bullet")),
         check: () => applyEdit(toggleLinePrefix(ta.value, ...sel(), "check")),
@@ -8947,6 +10210,32 @@ __zentralShim.register = function (def) {
                 row.append(b);
               }
               m.append(row);
+              if (it.custom) {
+                // Quick colors the person saved, then "+" for the picker (T3.6).
+                const crow = h("div", { class: "zn-swatches zn-swatches-custom" });
+                for (const c of quickColors()) {
+                  const b = h("button", { type: "button", class: "zn-swatch", title: c + " (right-click removes it from the quick colors)", "aria-label": "Custom color " + c });
+                  setColorData(b, c);
+                  if (c === cleanHex(it.current)) b.classList.add("is-on");
+                  b.addEventListener("click", () => {
+                    closeMenu();
+                    it.pick(c);
+                  });
+                  b.addEventListener("contextmenu", (e) => {
+                    e.preventDefault();
+                    removeQuickColor(c);
+                    b.remove();
+                  });
+                  crow.append(b);
+                }
+                const add = h("button", { type: "button", class: "zn-swatch zn-swatch-add", title: "Custom color\u2026", "aria-label": "Custom color" }, "+");
+                add.addEventListener("click", () => {
+                  closeMenu();
+                  queueMicrotask(() => askCustomColor(it.customTitle || "Custom color", cleanHex(it.current), (v) => it.pick(v)));
+                });
+                crow.append(add);
+                m.append(crow);
+              }
             } else if (it.disabled) {
               // A heading or a note ("No other note links here"): not a button, never focused or clicked.
               m.append(h("div", { class: "zn-menu-item zn-menu-head", role: "presentation", "aria-disabled": "true" }, it.label));
@@ -9023,7 +10312,13 @@ __zentralShim.register = function (def) {
         for (const k of FIT_PROPS) card.style[k] = "";
         delete dialog.dataset.spill;
         delete root.dataset.dialogSpill;
-        if (viewport.width > 0) card.style.maxWidth = "min(34em, " + Math.max(120, viewport.width - 12) + "px)";
+        // The folder style card is a child of a clipped Notes panel. Do not use the
+        // generic viewport spill positioning: it places the card outside its host.
+        // Its CSS is width:100% with min-width:0 and internal overflow scrolling.
+        if (card.classList.contains("zn-folder-style-card"))
+          return { spill: false, left: 0, top: 0, width: 0, height: 0, scroll: true };
+        if (viewport.width > 0)
+          card.style.maxWidth = "min(34em, " + Math.max(120, viewport.width - 12) + "px)";
         const size = { width: Math.max(card.offsetWidth || 0, card.scrollWidth || 0), height: Math.max(card.offsetHeight || 0, card.scrollHeight || 0) };
         const sr = root.getBoundingClientRect();
         const sheet = { left: sr.left, top: sr.top, width: sr.width, height: sr.height };
@@ -9249,7 +10544,8 @@ __zentralShim.register = function (def) {
       function openCard(label, ...kids) {
         closeMenu();
         closeDialog();
-        const card = h("div", { class: "zn-dialog-card", role: "dialog", "aria-label": label }, h("strong", {}, label), ...kids);
+        const folderStyleCard = kids.some((kid) => kid?.classList?.contains?.("zn-fstyle"));
+        const card = h("div", { class: "zn-dialog-card" + (folderStyleCard ? " zn-folder-style-card" : ""), role: "dialog", "aria-label": label }, h("strong", {}, label), ...kids);
         dialog = h("div", { class: "zn-dialog" }, card);
         dialog.addEventListener("pointerdown", (e) => {
           if (e.target === dialog) closeDialog();
@@ -10247,11 +11543,11 @@ __zentralShim.register = function (def) {
       listen(btnColor, "click", () => {
         const n = note();
         if (n && !n.trashed)
-          showMenu(btnColor, [{ swatches: NOTE_COLORS, current: n.color, pick: (c) => { store.setColor(n.id, c); applyState(); } }]);
+          showMenu(btnColor, [{ swatches: NOTE_COLORS, custom: true, customTitle: "Custom note color", current: n.color, pick: (c) => { store.setColor(n.id, c); applyState(); } }]);
       });
       listen(tHlMenu, "mousedown", (e) => e.preventDefault());
       listen(tHlMenu, "click", () =>
-        showMenu(tHlMenu, [{ swatches: HIGHLIGHT_COLORS, current: store.meta.highlight, pick: (c) => { store.setMeta({ highlight: c }); applyState(); needEdit(fmt.highlight)(); } }]),
+        showMenu(tHlMenu, [{ swatches: HIGHLIGHT_COLORS, custom: true, customTitle: "Custom highlight color", current: store.meta.highlight, pick: (c) => { store.setMeta({ highlight: c }); applyState(); needEdit(fmt.highlight)(); } }]),
       );
 
       // ---- events ----------------------------------------------------------------
@@ -10653,6 +11949,10 @@ __zentralShim.register = function (def) {
       }
       listen(btnNew, "click", () => newNoteChooser());
       listen(btnFolder, "click", () => askFolderName("New folder", "", (name) => store.addFolder(name, "")));
+      listen(chipAll, "contextmenu", (e) => {
+        e.preventDefault();
+        askRootStyle();
+      });
       // A note dropped on empty list space goes back to the top level.
       listen(listItems, "dragover", (e) => {
         if (dragNoteId && treeMode()) e.preventDefault();
@@ -10737,10 +12037,12 @@ __zentralShim.register = function (def) {
         e.stopPropagation();
       }, true);
       listen(ta, "keyup", (e) => {
+        if (e.key === "Shift") armedSelection();
+        else if (armed.length && !e.shiftKey && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(e.key) && armStale()) disarm();
         if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) updateWiki();
         if (e.shiftKey || e.key === "Shift") scheduleChrome();
       });
-      listen(ta, "mouseup", () => { if (getPref(PREF.FOOTER_COUNTER, false) === true) scheduleChrome(); });
+      listen(ta, "mouseup", () => { armedSelection(); if (getPref(PREF.FOOTER_COUNTER, false) === true) scheduleChrome(); });
       // {{date}}, @today, /tomorrow ...: swapped for the real date the moment the last character is typed (see
       // additional/notes/flavors/ZentralNotesShortcuts.js). The note keeps plain text, so every other app reads it too.
       function expandShortcut(ev) {
@@ -10757,9 +12059,10 @@ __zentralShim.register = function (def) {
         );
         if (edit) applyEdit(edit);
       }
+      listen(ta, "compositionend", () => { try { armedInput(); } catch (error) { console.warn("[ZentralNotes] armed tool failed", error); } });
       listen(ta, "input", (ev) => {
         try {
-          expandShortcut(ev);
+          if (!armedInput(ev)) expandShortcut(ev);
         } catch (error) {
           console.warn("[ZentralNotes] shortcut failed", error);
         }
@@ -10793,6 +12096,7 @@ __zentralShim.register = function (def) {
         askLink({ pasted: text.trim(), s, e: en });
       });
       listen(ta, "blur", () => {
+        disarm();
         hideWiki();
         const n = note();
         if (!typed && n && n.body !== ta.value) ta.value = n.body;
@@ -10844,7 +12148,8 @@ __zentralShim.register = function (def) {
         const mod = e.ctrlKey || e.metaKey;
         const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
         if (key === "Escape") {
-          if (dialog) closeDialog();
+          if (armed.length && !dialog && !menu) disarm();
+          else if (dialog) closeDialog();
           else if (menu) closeMenu();
           else if (findOpen) closeFind();
           else if (view === "list") showEditor();
@@ -11732,6 +13037,7 @@ __zentralShim.register = function (def) {
         close,
         destroy,
         refreshRead,
+        refreshList: scheduleList,
         layout: scheduleLayout,
         applyState,
         focus: () => {
@@ -12738,10 +14044,10 @@ __zentralShim.register = function (def) {
 
       // ---- Zen sidebar folder (EXPERIMENT, pref zen_folder = off | selected | all; not verified in a live Zen) ----
       // The browser is reached only here. Every call is wrapped by createZenFolder's kill switch.
-      const ZEN_ROOT_ID = "bgalazka-zentral-notes";
+      const ZEN_ROOT_ID = NOTES_ZEN_ROOT_ID;
       const zenMode = () => cleanZenMode(prefStr(PREF.ZEN_MODE, "off"));
       const zenRootEl = () => {
-        const el = document.querySelector('zen-folder[bgalazka-notes-folder="true"]') || document.getElementById(ZEN_ROOT_ID);
+        const el = document.querySelector?.('zen-folder[bgalazka-notes-folder="true"]') || document.getElementById?.(ZEN_ROOT_ID);
         if (el && el.localName === "zen-folder" && !el.hasAttribute("bgalazka-notes-folder")) el.setAttribute("bgalazka-notes-folder", "true"); // adopt the restored folder
         return el && el.localName === "zen-folder" ? el : null;
       };
@@ -12749,7 +14055,13 @@ __zentralShim.register = function (def) {
       let zenMoveBroken = false;
       const zenTabs = (root) => [...(root?.querySelectorAll?.("tab") || [])].filter((t) => /^(n:|root$|new:)/.test(t.getAttribute(NOTES_ATTR) || ""));
       const zenByKey = (root, key) => zenTabs(root).filter((t) => t.getAttribute(NOTES_ATTR) === key);
-      const zenFolderByKey = (root, key) => [...(root?.querySelectorAll?.("zen-folder[bgalazka-notes-subfolder]") || [])].find((f) => f.getAttribute("bgalazka-notes-subfolder") === key) || null;
+      const zenSubId = notesSubId;
+      const zenAdoptSubfolders = adoptNotesSubfolders;
+      const zenFolderByKey = (root, key) => {
+        if (!root?.querySelectorAll) return null;
+        zenAdoptSubfolders(root);
+        return [...root.querySelectorAll("zen-folder[bgalazka-notes-subfolder]")].find((f) => f.getAttribute("bgalazka-notes-subfolder") === key) || null;
+      };
       // A tab is ours only when it carries our mark AND sits inside our own NOTES folder. Every Zen-side rule below
       // starts from this test, so no other tab, folder or menu is ever touched (a leftover marked tab is just a tab).
       const isOurTab = (tab) => {
@@ -12849,9 +14161,8 @@ __zentralShim.register = function (def) {
         zenSwept = true;
         try {
           for (const t of [...(document.querySelectorAll?.("tab:not([" + NOTES_ATTR + "])") || [])]) if (zenLooksOurs(t)) zenRemoveTab(t);
-          const root = zenRootEl();
-          for (const f of [...(root?.querySelectorAll?.("zen-folder:not([bgalazka-notes-subfolder])") || [])])
-            if (!f.querySelector("tab")) { try { f.delete?.(); } catch (_) {} }
+          // Folders inside NOTES that are not ours are the person's own: never deleted here (Zen removes an empty folder itself).
+          dedupeNotesRoots(document, { removeTab: zenRemoveTab, warn });
         } catch (error) { warn(error); }
       }
       // Several ways to create a sub-folder are tried in turn and each result is checked against the real DOM;
@@ -12859,7 +14170,7 @@ __zentralShim.register = function (def) {
       let zenDiagDone = false;
       function zenMakeSubfolder(e, parentEl) {
         const diag = [];
-        const opts = { label: e.label, renameFolder: false, collapsed: false, workspaceId: window.gZenWorkspaces?.activeWorkspace };
+        const opts = { id: zenSubId(e.key), label: e.label, renameFolder: false, collapsed: false, workspaceId: window.gZenWorkspaces?.activeWorkspace };
         const tries = [
           // 1: the tab is put inside the parent first, so the new folder is made where the tab is
           ["seed in parent", () => { const sd = zenNewTab(zenNewUrl(e.id), "new:" + e.id); if (!zenPlace(sd, parentEl)) { zenRemoveTab(sd); return null; } return { seed: sd, el: window.gZenFolders.createFolder([sd], opts) }; }],
@@ -12927,6 +14238,40 @@ __zentralShim.register = function (def) {
         }
         return true;
       }
+      // ---- colour and icon in the sidebar: the work is done by the top-level functions above createZenFolder ----------------
+      const zenFaviconsOn = () => prefBool(PREF.ZEN_FAVICONS, true);
+      const zenSetTabIcon = (tab, color) => setNotesTabIcon(tab, color, { gBrowser: window.gBrowser, on: zenFaviconsOn(), warn });
+      const zenTabColor = (tab) => notesTabColor(tab, zenFaviconsOn());
+      const zenApplyFolderStyle = (el, color, icon, parts = {}, opacity = {}) => applyNotesFolderStyle(el, color, icon, { doc: document, warn, parts, opacity });
+      // A freshly made (or moved) note tab loads about:blank AFTER we set its icon, and the browser clears the icon when that
+      // load finishes, so the favicon was lost whenever a note changed folder. The icon is therefore checked again on
+      // `TabAttrModified` (image) and a few times after the tab is made. `zenIconBusy` stops our own setIcon from looping.
+      let zenIconBusy = false;
+      const zenEnsureIcon = (tab) => {
+        try {
+          if (disposed || zenIconBusy || !zenFaviconsOn() || !tab?.isConnected || !/^n:/.test(tab.getAttribute(NOTES_ATTR) || "")) return;
+          const want = noteFaviconUri(tab.getAttribute("bgalazka-notes-color") || "");
+          if ((tab.getAttribute("image") || "") === want) return;
+          zenIconBusy = true;
+          try { zenSetTabIcon(tab, tab.getAttribute("bgalazka-notes-color") || ""); } finally { zenIconBusy = false; }
+        } catch (_) {}
+      };
+      const zenIconTimers = new Set();
+      const zenIconRetry = (tab) => {
+        for (const ms of [200, 900, 3000]) {
+          const id = window.setTimeout(() => { zenIconTimers.delete(id); zenEnsureIcon(tab); }, ms);
+          zenIconTimers.add(id);
+        }
+      };
+      onCleanup(() => { for (const id of zenIconTimers) window.clearTimeout(id); zenIconTimers.clear(); });
+      const onZenAttr = (ev) => {
+        const tab = ev.target;
+        if (disposed || zenIconBusy || tab?.localName !== "tab" || !tab.hasAttribute?.(NOTES_ATTR)) return;
+        const changed = ev.detail?.changed;
+        if (Array.isArray(changed) && !changed.includes("image")) return;
+        window.setTimeout(() => zenEnsureIcon(tab), 0);
+      };
+      const zenFolderIcon = notesFolderIcon;
       const zenApi = {
         busy(on) { zenBusy = on; if (!on) zenQuietUntil = Date.now() + 500; },
         sweepStrays: zenSweepStrays,
@@ -12950,6 +14295,7 @@ __zentralShim.register = function (def) {
         },
         list() {
           const root = zenRootEl();
+          zenAdoptSubfolders(root);
           const out = [];
           // The parent counts as "where it really is": an entry that is not inside the folder it belongs to
           // reports a wrong parent, so the plan moves it (removed now, created again in the right folder).
@@ -12965,8 +14311,8 @@ __zentralShim.register = function (def) {
               const pk = el.getAttribute("bgalazka-notes-parent") || "";
               const want = pk ? zenFolderByKey(root, pk) : root;
               // The tab's real label: when the browser rewrote it (a discard, a title update) the entry is relabelled.
-              out.push({ key: k, label: el.getAttribute("label") || el.getAttribute("bgalazka-notes-label") || "", parent: !want || el.closest?.("zen-folder") === want ? pk : "?misplaced" });
-            } else out.push({ key: el.getAttribute("bgalazka-notes-subfolder"), label: el.getAttribute("bgalazka-notes-label") || "", parent: placed(el, el.getAttribute("bgalazka-notes-parent") || "") });
+              out.push({ key: k, label: el.getAttribute("label") || el.getAttribute("bgalazka-notes-label") || "", parent: !want || el.closest?.("zen-folder") === want ? pk : "?misplaced", color: zenTabColor(el) });
+            } else out.push({ key: el.getAttribute("bgalazka-notes-subfolder"), label: el.getAttribute("bgalazka-notes-label") || "", parent: placed(el, el.getAttribute("bgalazka-notes-parent") || ""), color: el.getAttribute("bgalazka-notes-color") || "", icon: zenFolderIcon(el), parts: parseFolderParts(el.getAttribute("bgalazka-notes-parts") || ""), opacity: parseFolderOpacity(el.getAttribute("bgalazka-notes-parts-opacity") || "") });
           }
           return out;
         },
@@ -12981,14 +14327,18 @@ __zentralShim.register = function (def) {
             tab.setAttribute("bgalazka-notes-label", e.label);
             tab.setAttribute("bgalazka-notes-parent", e.parent);
             tab.setAttribute("label", e.label);
+            zenSetTabIcon(tab, e.color || "");
+            zenIconRetry(tab);
             return true;
           }
           const made = zenMakeSubfolder(e, parentEl);
           if (!made) return false; // nesting not available: the controller switches to path labels
           const { el, seed } = made;
+          if (el.id !== zenSubId(e.key)) { try { el.id = zenSubId(e.key); } catch (_) {} }
           el.setAttribute("bgalazka-notes-subfolder", e.key);
           el.setAttribute("bgalazka-notes-label", e.label);
           el.setAttribute("bgalazka-notes-parent", e.parent);
+          zenApplyFolderStyle(el, e.color || "", e.icon || "", e.parts || {}, e.opacity || {});
           zenSettleSeed(seed, el);
           return !zenKeepSeed || !!el.isConnected;
         },
@@ -13005,9 +14355,20 @@ __zentralShim.register = function (def) {
           const f = zenFolderByKey(root, key);
           if (f) { f.setAttribute("bgalazka-notes-label", label); try { f.label = label; } catch (_) {} }
         },
+        restyle(key, st) {
+          const root = zenRootEl();
+          for (const t of zenByKey(root, key)) zenSetTabIcon(t, st.color || "");
+          const f = zenFolderByKey(root, key);
+          if (f) zenApplyFolderStyle(f, st.color || "", st.icon || "", st.parts || {}, st.opacity || {});
+        },
         move(key) { zenApi.remove(key, false); }, // removed now, added again by the next run under its new parent
         // One "New note" entry in the root and in every sub-folder (on), or none where the folder has other content (off).
         // An entry that is the only thing keeping a folder alive is never removed.
+        // The NOTES root folder's own colour and emoji (prefs), drawn the same way as a sub-folder's. Cheap and idempotent.
+        styleRoot() {
+          const root = zenRootEl();
+          if (root) zenApplyFolderStyle(root, cleanFolderColor(prefStr(PREF.ZEN_ROOT_COLOR, "")), cleanFolderIcon(prefStr(PREF.ZEN_ROOT_ICON, "")), parseFolderParts(prefStr(PREF.ZEN_ROOT_PARTS, "{}")), parseFolderOpacity(prefStr(PREF.ZEN_ROOT_PART_OPACITY, "{}")));
+        },
         syncNewButtons(folders, on) {
           const root = zenRootEl();
           if (!root) return;
@@ -13039,11 +14400,121 @@ __zentralShim.register = function (def) {
         removeAll() {
           const root = zenRootEl();
           for (const t of [...(document.querySelectorAll?.("tab[" + NOTES_ATTR + "]") || [])]) zenRemoveTab(t);
-          for (const f of [...(root?.querySelectorAll?.("zen-folder[bgalazka-notes-subfolder]") || [])]) { try { f.delete?.(); } catch (_) {} }
-          try { root?.delete?.(); } catch (_) {}
-          for (const f of [...(document.querySelectorAll?.('zen-folder[bgalazka-notes-folder="true"]') || [])]) { try { f.delete?.(); } catch (_) {} }
+          for (const f of [...(root?.querySelectorAll?.("zen-folder[bgalazka-notes-subfolder]") || [])]) retireNotesFolder(f, zenRemoveTab);
+          // A folder that still holds a tab the person put there is released instead of deleted: it stays a normal folder.
+          if (root) retireNotesFolder(root, zenRemoveTab);
+          for (const f of [...(document.querySelectorAll?.('zen-folder[bgalazka-notes-folder="true"]') || [])]) retireNotesFolder(f, zenRemoveTab);
         },
       };
+      // A narrow, versioned bridge lets Colorful Folders edit Notes-owned Zen
+      // folders without writing a second source of truth or racing Notes' own
+      // projection. Subfolder styles live in Notes meta.json; the NOTES root
+      // remains in its existing preferences.
+      const previousFolderColorBridge = window.__zentralNotesFolderColorBridge;
+      const notesFolderColorBridge = {
+        version: 1,
+        prepare() { return ensureStore().then(() => true); },
+        read(folder) {
+          if (!folder) return { b: "", d: {}, o: {} };
+          const isRoot = folder === zenRootEl() || folder.id === NOTES_ZEN_ROOT_ID || folder.hasAttribute?.("bgalazka-notes-folder");
+          if (isRoot) {
+            return {
+              b: colorHex(prefStr(PREF.ZEN_ROOT_COLOR, "")) || "",
+              d: parseFolderParts(prefStr(PREF.ZEN_ROOT_PARTS, "{}")),
+              o: parseFolderOpacity(prefStr(PREF.ZEN_ROOT_PART_OPACITY, "{}")),
+            };
+          }
+          const root = zenRootEl();
+          if (root) zenAdoptSubfolders(root);
+          const key = folder.getAttribute?.("bgalazka-notes-subfolder") || notesKeyFromId(folder.id);
+          const metaFolder = key ? store.meta?.folders?.find((item) => key === "f:" + item.uid || key === "f:" + item.id) : null;
+          if (metaFolder) return {
+            b: colorHex(metaFolder.color) || "",
+            d: cleanFolderParts(metaFolder.parts),
+            o: cleanFolderOpacity(metaFolder.opacity),
+          };
+          return {
+            b: colorHex(folder.getAttribute?.("bgalazka-notes-color") || "") || "",
+            d: parseFolderParts(folder.getAttribute?.("bgalazka-notes-parts") || ""),
+            o: parseFolderOpacity(folder.getAttribute?.("bgalazka-notes-parts-opacity") || ""),
+          };
+        },
+        async write(folder, record) {
+          if (!folder) return false;
+          const next = record ? {
+            b: cleanHex(record.b) || "",
+            d: cleanFolderParts(record.d),
+            o: cleanFolderOpacity(record.o),
+          } : { b: "", d: {}, o: {} };
+          const isRoot = folder === zenRootEl() || folder.id === NOTES_ZEN_ROOT_ID || folder.hasAttribute?.("bgalazka-notes-folder");
+          if (isRoot) {
+            setPref(PREF.ZEN_ROOT_COLOR, next.b);
+            setPref(PREF.ZEN_ROOT_PARTS, serializeFolderParts(next.d));
+            setPref(PREF.ZEN_ROOT_PART_OPACITY, serializeFolderOpacity(next.o));
+            zenApplyFolderStyle(folder, next.b, cleanFolderIcon(prefStr(PREF.ZEN_ROOT_ICON, "")), next.d, next.o);
+            return true;
+          }
+          await ensureStore();
+          const root = zenRootEl();
+          if (root) zenAdoptSubfolders(root);
+          const key = folder.getAttribute?.("bgalazka-notes-subfolder") || notesKeyFromId(folder.id);
+          const metaFolder = store.meta?.folders?.find((item) => key === "f:" + item.uid || key === "f:" + item.id);
+          if (!metaFolder) return false;
+          const saved = store.setFolderStyle(metaFolder.id, {
+            color: next.b,
+            icon: metaFolder.icon || "",
+            parts: next.d,
+            opacity: next.o,
+          });
+          if (saved) notesFolderColorBridge.refresh(folder);
+          return saved;
+        },
+        refresh(folder) {
+          if (!folder?.isConnected) return false;
+          const style = this.read(folder);
+          if (folder === zenRootEl() || folder.id === NOTES_ZEN_ROOT_ID || folder.hasAttribute?.("bgalazka-notes-folder")) {
+            zenApplyFolderStyle(folder, style.b, cleanFolderIcon(prefStr(PREF.ZEN_ROOT_ICON, "")), style.d, style.o);
+          } else {
+            zenApplyFolderStyle(folder, style.b, zenFolderIcon(folder), style.d, style.o);
+          }
+          return true;
+        },
+      };
+      window.__zentralNotesFolderColorBridge = notesFolderColorBridge;
+      const onSharedFolderStyleChange = () => {
+        // A changed default restyles folders whose own record did not change, so repaint every Notes folder.
+        try {
+          for (const folder of document.querySelectorAll?.("zen-folder") || [])
+            if (folder.id === NOTES_ZEN_ROOT_ID || notesKeyFromId(folder.id) || folder.hasAttribute?.("bgalazka-notes-folder") || folder.hasAttribute?.("bgalazka-notes-subfolder"))
+              notesFolderColorBridge.refresh(folder);
+        } catch (_) {}
+        if (zenMode() !== "off") zenSoon();
+        for (const binding of [...bindings.values(), floating]) {
+          const sheet = typeof binding?.sheet === "function" ? binding.sheet() : binding?.sheet;
+          sheet?.refreshList?.();
+        }
+      };
+      window.addEventListener("zentral-folder-color-style-bridge-ready", onSharedFolderStyleChange);
+      window.addEventListener("zentral-folder-color-defaults-changed", onSharedFolderStyleChange);
+      window.addEventListener("zentral-folder-color-style-bridge-gone", onSharedFolderStyleChange);
+      onCleanup(() => {
+        window.removeEventListener("zentral-folder-color-style-bridge-ready", onSharedFolderStyleChange);
+        window.removeEventListener("zentral-folder-color-defaults-changed", onSharedFolderStyleChange);
+        window.removeEventListener("zentral-folder-color-style-bridge-gone", onSharedFolderStyleChange);
+      });
+      window.dispatchEvent?.(new Event("zentral-notes-folder-color-bridge-ready"));
+      onCleanup(() => {
+        if (window.__zentralNotesFolderColorBridge !== notesFolderColorBridge) return;
+        if (previousFolderColorBridge) window.__zentralNotesFolderColorBridge = previousFolderColorBridge;
+        else delete window.__zentralNotesFolderColorBridge;
+        window.dispatchEvent?.(new Event("zentral-notes-folder-color-bridge-gone"));
+      });
+      // Notes may have loaded after Colorful Folders already cleared its paint.
+      const notesRoot = zenRootEl();
+      if (notesRoot) zenAdoptSubfolders(notesRoot);
+      for (const folder of document.querySelectorAll?.("zen-folder") || [])
+        if (folder.id === NOTES_ZEN_ROOT_ID || notesKeyFromId(folder.id) || folder.hasAttribute?.("bgalazka-notes-folder") || folder.hasAttribute?.("bgalazka-notes-subfolder"))
+          notesFolderColorBridge.refresh(folder);
       const makeZen = () =>
         createZenFolder({
           api: zenApi,
@@ -13070,9 +14541,31 @@ __zentralShim.register = function (def) {
       const zenUnsub = store.on((ev) => {
         if (ev.type === "change" || ev.type === "tree" || ev.type === "remove" || ev.type === "reset") {
           if (zenMode() !== "off" && !zen.dead) zen.schedule();
+          // Color/style edits also redraw every open Notes folder tree and the
+          // Colorful Folders settings list. This is deliberately a notification
+          // only; Notes remains the sole writer for its projected folders.
+          if (ev.type === "tree" || ev.type === "reset")
+            window.dispatchEvent?.(new Event("zentral-notes-folder-style-changed"));
         }
       });
       onCleanup(zenUnsub);
+      // The Colorful Folders default layer values are shared with Notes. A
+      // settings change restyles the Zen projection and redraws open Notes
+      // folder rows; the Notes module remains the only writer for its folders.
+      const colorfulFolderPrefObserver = {
+        observe(_subject, _topic, name) {
+          if (disposed || !String(name || "").startsWith(COLORFUL_FOLDER_PREF)) return;
+          if (zenMode() !== "off") zenSoon();
+          for (const binding of [...bindings.values(), floating]) {
+            const sheet = typeof binding?.sheet === "function" ? binding.sheet() : binding?.sheet;
+            sheet?.refreshList?.();
+          }
+        },
+      };
+      Services.prefs.addObserver(COLORFUL_FOLDER_PREF, colorfulFolderPrefObserver);
+      onCleanup(() => {
+        try { Services.prefs.removeObserver(COLORFUL_FOLDER_PREF, colorfulFolderPrefObserver); } catch (_) {}
+      });
       const zenBoot = window.setTimeout(zenSoon, 6000);
       onCleanup(() => window.clearTimeout(zenBoot));
       // A click (or Enter) on one of our tabs opens the note instead of selecting the tab. Capture phase, our tabs only;
@@ -13119,6 +14612,7 @@ __zentralShim.register = function (def) {
         try {
           const label = tab.getAttribute("bgalazka-notes-label");
           if (label && tab.getAttribute("label") !== label) tab.setAttribute("label", label);
+          if (/^n:/.test(tab.getAttribute(NOTES_ATTR) || "")) { zenSetTabIcon(tab, tab.getAttribute("bgalazka-notes-color") || ""); zenIconRetry(tab); }
           if (tab.getAttribute(NOTES_ATTR) && !tab._zentralNotesUrl) tab._zentralNotesUrl = ZEN_URL_PREFIX + "note:" + encodeURIComponent((tab.getAttribute(NOTES_ATTR) || "").slice(2));
         } catch (_) {}
       }
@@ -13196,6 +14690,29 @@ __zentralShim.register = function (def) {
         }
         if (zenCtxTab) document.documentElement.setAttribute("zentral-notes-ctx", "item");
       };
+      // T3.4: right-click on a Notes folder in the Zen sidebar gets "New note in this folder". (Colors and icon come from
+      // the Colorful Folders menu entry; the folder id is read from the folder's own attributes, never from its label.)
+      const onFolderMenuShowing = (ev) => {
+        const menu = ev.target;
+        if (menu?.id !== "zenFolderActions") return;
+        for (const own of [...menu.querySelectorAll?.("[zentral-notes-folder-own]") || []]) own.remove();
+        let folder = null;
+        for (const node of [menu.triggerNode, ev.originalTarget, menu.anchorNode]) {
+          folder = node?.closest?.("zen-folder") || null;
+          if (folder) break;
+        }
+        if (!folder) return;
+        const isRoot = folder === zenRootEl() || folder.id === NOTES_ZEN_ROOT_ID || folder.hasAttribute?.("bgalazka-notes-folder");
+        const key = isRoot ? "" : folder.getAttribute?.("bgalazka-notes-subfolder") || notesKeyFromId(folder.id);
+        if (!isRoot && !key) return;
+        const meta = isRoot ? null : store.meta?.folders?.find((item) => key === "f:" + item.uid || key === "f:" + item.id);
+        if (!isRoot && !meta) return;
+        const item = document.createXULElement("menuitem");
+        item.setAttribute("label", "New note in this folder");
+        item.setAttribute("zentral-notes-folder-own", "new");
+        item.addEventListener("command", () => { store.create("", isRoot ? (zenMode() === "selected" ? TABBAR_FOLDER : "") : meta.id); });
+        menu.append(item);
+      };
       const onTabMenuHidden = (ev) => {
         if (ev.target?.id === "tabContextMenu") { document.documentElement.removeAttribute("zentral-notes-ctx"); zenCtxTab = null; }
       };
@@ -13207,13 +14724,15 @@ __zentralShim.register = function (def) {
         const act = on ? "addEventListener" : "removeEventListener";
         for (const ty of ["mousedown", "click", "mouseup", "auxclick"]) window[act](ty, onZenMouse, true);
         for (const ty of ZEN_TAB_EVENTS) window[act](ty, onZenTabEvent, true);
+        window[act]("TabAttrModified", onZenAttr, true);
         window[act]("TabSelect", onZenSelect, true);
         for (const ty of ["dragover", "drop"]) window[act](ty, onZenDrop, true);
         window[act]("popupshowing", onTabMenuShowing, true);
+        window[act]("popupshowing", onFolderMenuShowing, true);
         window[act]("popuphidden", onTabMenuHidden, true);
         if (!on) {
           document.documentElement.removeAttribute("zentral-notes-ctx");
-          document.querySelectorAll?.("[zentral-notes-own]").forEach((n) => n.remove());
+          document.querySelectorAll?.("[zentral-notes-own],[zentral-notes-folder-own]").forEach((n) => n.remove());
         }
       }
       onCleanup(() => bindZen(false));
@@ -13894,6 +15413,10 @@ __zentralShim.register = function (def) {
           else if (name === PREF.ZEN_MODE) {
             if (zenMode() === "off") zenTeardown();
             else zenSoon();
+          }
+          else if (name === PREF.ZEN_ROOT_COLOR || name === PREF.ZEN_ROOT_ICON || name === PREF.ZEN_ROOT_PARTS || name === PREF.ZEN_ROOT_PART_OPACITY) {
+            if (zenMode() !== "off") zenSoon(); // the NOTES folder is restyled at once
+            window.dispatchEvent?.(new Event("zentral-notes-folder-style-changed"));
           }
           else if (name === PREF.ZEN_NEW_BUTTON) {
             if (zenMode() !== "off") zenSoon(); // entries appear in (or leave) every folder at once

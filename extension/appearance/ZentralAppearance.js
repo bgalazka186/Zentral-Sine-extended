@@ -144,6 +144,8 @@
       RSS_CARD_BUTTON_BACKGROUND:
         "zen.workspace.bgalazka.look.rss_card_button_background",
       RSS_CARD_BUTTON_TEXT: "zen.workspace.bgalazka.look.rss_card_button_text",
+      // Native Zen folders (not the Notes folder): colors of the folder icon and of the folder label.
+      FOLDER_TIGHT_LABELS: "zen.workspace.bgalazka.look.folder_tight_labels",
     });
     const LOOK_DEFAULTS = Object.freeze({
       [LOOK_PREFS.VIDEO_CONTROLS_WRAP]: false,
@@ -230,6 +232,7 @@
       [LOOK_PREFS.RSS_CARD_BORDER_COLOR]: "",
       [LOOK_PREFS.RSS_CARD_BUTTON_BACKGROUND]: "",
       [LOOK_PREFS.RSS_CARD_BUTTON_TEXT]: "",
+      [LOOK_PREFS.FOLDER_TIGHT_LABELS]: false,
       [LOOK_PREFS.VIDEO_RADIUS]: 0,
       [LOOK_PREFS.PANEL_BORDER]: 1,
       [LOOK_PREFS.TOOLBAR_SURFACE]: "#202224",
@@ -1616,6 +1619,12 @@
           root.style.setProperty(property, value);
         else root.style.removeProperty(property);
       }
+      // Folder row density stays in Appearance; folder colors are owned by
+      // the independent Colorful Folders module so only one feature paints
+      // native Zen folders.
+      if (ctx.getPref(LOOK_PREFS.FOLDER_TIGHT_LABELS, false) === true)
+        root.setAttribute("bgalazka-look-folder", "tight");
+      else root.removeAttribute("bgalazka-look-folder");
       for (const [name, table] of [
         ["SHADOW", RSS_CARD_SHADOWS],
         ["FONT", RSS_CARD_FONTS],

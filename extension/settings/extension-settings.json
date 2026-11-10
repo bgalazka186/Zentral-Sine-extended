@@ -3390,6 +3390,12 @@
       ]
     },
     {
+      "property": "zen.workspace.bgalazka.look.folder_tight_labels",
+      "label": "Tighter folder rows (drop the fixed label line height)",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
       "property": "zen.workspace.bgalazka.look.row_style",
       "label": "Selection row style",
       "type": "dropdown",
@@ -5155,6 +5161,11 @@
       "owner": "extension-settings"
     },
     "zen.workspace.bgalazka.look.tile_style": {
+      "category": "theme-details",
+      "section": "Tabs, folders & launchers",
+      "owner": "extension-settings"
+    },
+    "zen.workspace.bgalazka.look.folder_tight_labels": {
       "category": "theme-details",
       "section": "Tabs, folders & launchers",
       "owner": "extension-settings"

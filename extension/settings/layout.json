@@ -107,6 +107,29 @@
       ]
     },
     {
+      "id": "folder-colors",
+      "label": "Colorful folders",
+      "group": "Appearance",
+      "owner": "colorful-folders",
+      "icon": "folder",
+      "description": "Shared palettes, global default folder colors and per-folder customization for native Zen and Notes folders. Notes remains the storage owner for its own folder records.",
+      "sections": [
+        {
+          "label": "Behavior",
+          "icon": "sliders"
+        },
+        {
+          "label": "Defaults",
+          "icon": "folder"
+        },
+        {
+          "label": "Your folders",
+          "icon": "folder",
+          "virtual": true
+        }
+      ]
+    },
+    {
       "id": "density",
       "label": "Layout & density",
       "group": "Layout",
@@ -723,6 +746,7 @@
     "zen.workspace.bgalazka.rss.compact_headers",
     "zen.workspace.bgalazka.look.tile_opacity",
     "zen.workspace.bgalazka.look.tile_style",
+    "zen.workspace.bgalazka.look.folder_tight_labels",
     {
       "type": "text",
       "label": "**Detailed appearance · Menus & feedback**",
@@ -767,6 +791,42 @@
     "zen.workspace.bgalazka.look.rss_card_border_color",
     "zen.workspace.bgalazka.look.rss_card_button_background",
     "zen.workspace.bgalazka.look.rss_card_button_text",
+    {
+      "type": "text",
+      "label": "**Colorful folders · Behavior**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.folder_colors.enabled",
+    "zen.workspace.zentral.folder_colors.menu",
+    "zen.workspace.zentral.folder_colors.mode",
+    "zen.workspace.zentral.folder_colors.ignore_label",
+    "zen.workspace.zentral.folder_colors.style_icon",
+    "zen.workspace.zentral.folder_colors.style_accent",
+    "zen.workspace.zentral.folder_colors.style_tint_header",
+    "zen.workspace.zentral.folder_colors.style_tint_tabs",
+    "zen.workspace.zentral.folder_colors.style_hover",
+    "zen.workspace.zentral.folder_colors.line_click",
+    "zen.workspace.zentral.folder_colors.line_hover",
+    {
+      "type": "text",
+      "label": "**Colorful folders · Defaults**",
+      "size": "16px"
+    },
+    "zen.workspace.zentral.folder_colors.default_base",
+    "zen.workspace.zentral.folder_colors.default_back",
+    "zen.workspace.zentral.folder_colors.default_front",
+    "zen.workspace.zentral.folder_colors.default_stroke",
+    "zen.workspace.zentral.folder_colors.default_label",
+    "zen.workspace.zentral.folder_colors.default_accent",
+    "zen.workspace.zentral.folder_colors.default_tint",
+    "zen.workspace.zentral.folder_colors.default_hover",
+    "zen.workspace.zentral.folder_colors.default_back_opacity",
+    "zen.workspace.zentral.folder_colors.default_front_opacity",
+    "zen.workspace.zentral.folder_colors.default_stroke_opacity",
+    "zen.workspace.zentral.folder_colors.default_label_opacity",
+    "zen.workspace.zentral.folder_colors.default_accent_opacity",
+    "zen.workspace.zentral.folder_colors.default_tint_opacity",
+    "zen.workspace.zentral.folder_colors.default_hover_opacity",
     {
       "type": "text",
       "label": "**Layout**",
@@ -1053,6 +1113,11 @@
     "zen.workspace.zentral.notes.text_shortcuts",
     "zen.workspace.zentral.notes.shortcut_date_format",
     "zen.workspace.zentral.notes.shortcut_time_format",
+    "zen.workspace.zentral.notes.tool_arm_mode",
+    "zen.workspace.zentral.notes.zen_note_favicons",
+    "zen.workspace.zentral.notes.zen_root_color",
+    "zen.workspace.zentral.notes.zen_root_icon",
+    "zen.workspace.zentral.notes.custom_colors",
     {
       "type": "text",
       "label": "**Notes · Capture**",
@@ -1345,6 +1410,7 @@
     "zen.workspace.zentral.modules.tab-drag.enabled",
     "zen.workspace.zentral.modules.notes.enabled",
     "zen.workspace.zentral.modules.css.Notes.enabled",
+    "zen.workspace.zentral.modules.colorful-folders.enabled",
     {
       "type": "text",
       "label": "**Local Add-ons · Local registrations**",
