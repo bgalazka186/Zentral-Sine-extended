@@ -1,1 +1,4 @@
 * text=auto eol=lf
+patches/ export-ignore
+assets/ export-ignore
+*.patch export-ignore
