@@ -77,7 +77,7 @@ test("journal section + capture: the line lands at the end of that day's section
 
 test("pseudo Triple View CSS exists and the seed/new-button prefs are in the schema", () => {
   const css = fs.readFileSync(path.join(__dirname, "../extension/panels/browsers/ZentralBrowserIntegrations.css"), "utf8");
-  assert.match(css, /bgalazka-notes-pseudo="true"\]\[bgalazka-quad-view="true"\] #zen-app-panel-slider/);
+  assert.match(css, /bgalazka-notes-pseudo="true"\]\[bgalazka-quad-view="true"\]\s+#zen-app-panel-slider/);
   const s = JSON.parse(fs.readFileSync(path.join(__dirname, "../additional/notes/settings.json"), "utf8")).schema;
   const get = (k) => s.find((x) => x.property === "zen.workspace.zentral.notes." + k);
   assert.equal(get("zen_folder_new_button").defaultValue, false);

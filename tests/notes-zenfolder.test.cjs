@@ -58,7 +58,8 @@ test("drop policy: web tab -> captured as a URL note or rejected; Notes entry ca
   for (const t of [web, mine]) for (const into of [true, false]) assert.ok(!["move", "close", "convert"].includes(c.dropDecision({ tab: t, intoNotes: into }).action));
 });
 test("groundwork touches no browser state: no preference, Services or Sync identifiers in the new section", () => {
-  const sec = source.slice(source.indexOf("Pure core: Zen NOTES folder projection"), source.indexOf("The text an export writes for a note"));
+  const sec = source.slice(source.indexOf("Pure core: Notes -> ordinary Zen folder projection"), source.indexOf("The text an export writes for a note"));
+  assert.ok(source.includes("Pure core: Notes -> ordinary Zen folder projection") && source.includes("The text an export writes for a note"));
   assert.ok(sec.length > 500);
   assert.ok(!/Services\.|gBrowser|IOUtils|services\.sync|setBoolPref|setPref|getPref/.test(sec.replace(/\/\/.*$/gm, "")));
 });

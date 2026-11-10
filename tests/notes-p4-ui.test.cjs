@@ -126,6 +126,26 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     }
   });
 
+  await test("T1.8 the Table of contents menu inserts the Markdown block under the title, then offers Update; leaving the editor refreshes it", async () => {
+    const body = "# Doc\n\nintro\n\n## One\n\ntext\n";
+    const o = store.create(body); await flushRaf(); sheet.openNoteById(o.id); await flushRaf();
+    const ta = q(".zn-editor"); dom.state.activeElement = ta;
+    ta.selectionStart = ta.selectionEnd = body.length;
+    click(byTitle("Table of contents")); await tick();
+    const pick = (label) => q(".zn-menu").querySelectorAll("button").find((b) => b.textContent === label);
+    click(pick("Insert table of contents under the title")); await flushRaf();
+    assert.ok(ta.value.startsWith("# Doc\n\n---\n\n## Table of Contents\n\n1. [One](#one)\n\n---\n\nintro"), ta.value);
+    assert.equal(store.get(o.id).body, ta.value, "the stored note has the block too");
+    ta.value += "\n## Two\n";
+    ta.dispatchEvent(new dom.Ev("input", { bubbles: true }));
+    ta.dispatchEvent(new dom.Ev("blur"));
+    await flushRaf();
+    assert.ok(ta.value.includes("2. [Two](#two)"), "blur refreshes an existing block");
+    click(byTitle("Table of contents")); await tick();
+    assert.ok(pick("Update the table of contents block") && !pick("Insert table of contents at the end"));
+    click(byTitle("Table of contents")); await tick(); // closes the menu again
+  });
+
   await test("outline (#27): the Table of contents button lists the headings, marks the one under the caret and jumps to the chosen one", async () => {
     const body = "Title line\n\n## Install\nsteps\n\n### Linux\nmore\n\n## Usage\nrun it\n";
     const o = store.create(body); await flushRaf(); sheet.openNoteById(o.id); await flushRaf();
@@ -134,7 +154,7 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     assert.ok(byTitle("Table of contents"), "the toolbar has a Table of contents button");
     click(byTitle("Table of contents")); await tick();
     const labels = () => q(".zn-menu").querySelectorAll("button").map((b) => b.textContent);
-    assert.deepEqual(labels(), ["Install", "\u2003Linux", "Usage"]);
+    assert.deepEqual(labels(), ["Install", "\u2003Linux", "Usage", "Insert table of contents under the title", "Insert table of contents at the end"]);
     const btns = q(".zn-menu").querySelectorAll("button");
     assert.ok(/is-current|pin/.test(btns[1].innerHTML || btns[1].children.map((x) => x.className || x.tag).join(" ")) || btns[1].children.length > 1, "the current heading carries an icon");
     click(btns[2]); await flushRaf();

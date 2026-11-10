@@ -3238,7 +3238,7 @@ __zentralShim.register = function (def) {
           out.push({ t: "b", c: [{ t: "i", c: parseInline(m[1] ?? m[2], depth + 1) }] });
         else if (m[3] !== undefined) out.push({ t: "text", s: m[3] }); // ==== and =={red}== stay literal
         else if (m[4] !== undefined) out.push({ t: "b", c: parseInline(m[4], depth + 1) });
-        else if (m[5] !== undefined) out.push({ t: "code", s: m[6] });
+        else if (m[5] !== undefined) out.push({ t: "code", s: /^ .*\S.* $/.test(m[6]) ? m[6].slice(1, -1) : m[6] }); // `` `x` `` drops one padding space each side
         else if (m[7] !== undefined)
           out.push({ t: "b", c: parseInline(m[7], depth + 1) });
         else if (m[9] !== undefined)
@@ -3266,7 +3266,12 @@ __zentralShim.register = function (def) {
           const parts = noteLinkParts(target);
           const noteId = parts?.id || null;
           const href = noteId ? null : safeHref(target);
-          if (noteId) {
+          if (!noteId && /^#[A-Za-z0-9_-]+$/.test(target)) {
+            // A link to a heading of this note (the table of contents block writes these): no address, a click scrolls.
+            const a = { t: "al", slug: target.slice(1).toLowerCase(), c: parseInline(m[13], depth + 1) };
+            if (m[15]) a.title = m[15];
+            out.push(a);
+          } else if (noteId) {
             const a = { t: "nl", id: noteId, c: parseInline(m[13], depth + 1) };
             if (parts.heading) a.heading = parts.heading;
             if (m[15]) a.title = m[15];
@@ -3827,8 +3832,37 @@ __zentralShim.register = function (def) {
           i++;
         } else if (/^>/.test(line)) {
           const buf = [];
-          while (i < lines.length && /^>/.test(lines[i]))
-            buf.push(lines[i++].replace(/^>\s?/, ""));
+          let fenceOpen = "";
+          const track = (l) => {
+            const f = /^ {0,3}(`{3,}|~{3,})/.exec(l);
+            if (!f) return;
+            if (!fenceOpen) fenceOpen = f[1];
+            else if (f[1][0] === fenceOpen[0] && f[1].length >= fenceOpen.length && !l.slice(f[0].length).trim()) fenceOpen = "";
+          };
+          while (i < lines.length) {
+            if (/^>/.test(lines[i])) {
+              const l = lines[i++].replace(/^>\s?/, "");
+              track(l);
+              buf.push(l);
+              continue;
+            }
+            // Lazy continuation (T1.1): a text line right under a quoted paragraph still belongs to the quote.
+            const prev = buf[buf.length - 1];
+            if (
+              !fenceOpen &&
+              lines[i].trim() &&
+              prev.trim() &&
+              !startsBlock(lines[i]) &&
+              !isTableStart(lines, i) &&
+              !/^ {0,3}(#{1,6}\s|([-*_])(\s*\2){2,}\s*$)/.test(prev) &&
+              !LIST_RE.test(prev) &&
+              !/^ {0,3}(`{3,}|~{3,})/.test(prev)
+            ) {
+              buf.push(lines[i++]);
+              continue;
+            }
+            break;
+          }
           const inner = parseBlocks(buf.join("\n"), true, opts);
           const quote = { type: "quote", blocks: inner };
           // > [!NOTE] Title  ->  a callout (note, tip, important, warning, caution, info)
@@ -3888,18 +3922,47 @@ __zentralShim.register = function (def) {
               i++;
               continue;
             }
-            // A blank line followed by an indented paragraph continues the previous item.
+            // What may follow an item line: more of the same item (T1.1). Blank lines are allowed before an indented
+            // paragraph or fenced code block; a text line right under the item (no blank) is a lazy continuation.
             let j = i;
             while (j < lines.length && !lines[j].trim()) j++;
-            if (j === i || j >= lines.length || LIST_RE.test(lines[j])) break;
-            if (lines[j].replace(/\t/g, "  ").match(/^ */)[0].length < lastIndent + 2) break;
-            const para = [];
-            while (j < lines.length && lines[j].trim() && !LIST_RE.test(lines[j])) para.push(lines[j++].trim());
+            if (j >= lines.length || LIST_RE.test(lines[j])) break;
             const last = items[items.length - 1];
-            (last.more || (last.more = [])).push(
-              para.flatMap((l, idx) => (idx ? [opts.joinLines ? { t: "text", s: " " } : { t: "br" }, ...parseInline(l)] : parseInline(l))),
-            );
-            i = j;
+            const indentOf = (l) => l.replace(/\t/g, "  ").match(/^ */)[0].length;
+            const deep = indentOf(lines[j]) >= lastIndent + 2;
+            const fenceAt = /^\s*(`{3,}|~{3,})[ \t]*([\w+#.-]*)[ \t]*$/.exec(lines[j]);
+            if (deep && fenceAt) {
+              // Fenced code inside the item: the closing fence needs the same mark; content loses the fence's indent.
+              const mark = fenceAt[1],
+                pad = indentOf(lines[j]);
+              const closing = new RegExp("^\\s*" + (mark[0] === "`" ? "`" : "~") + "{" + mark.length + ",}[ \\t]*$");
+              const buf = [];
+              let k = j + 1;
+              while (k < lines.length && !closing.test(lines[k])) {
+                const l = lines[k++];
+                buf.push(l.replace(/\t/g, "  ").replace(new RegExp("^ {0," + pad + "}"), ""));
+              }
+              const code = { type: "code", text: buf.join("\n") };
+              if (fenceAt[2]) code.lang = fenceAt[2].toLowerCase();
+              (last.more || (last.more = [])).push(code);
+              i = k + 1; // past the closing fence (or the end of the text)
+              continue;
+            }
+            if (j > i) {
+              if (!deep) break;
+              const para = [];
+              while (j < lines.length && lines[j].trim() && !LIST_RE.test(lines[j]) && !/^\s*(`{3,}|~{3,})/.test(lines[j])) para.push(lines[j++].trim());
+              (last.more || (last.more = [])).push(
+                para.flatMap((l, idx) => (idx ? [opts.joinLines ? { t: "text", s: " " } : { t: "br" }, ...parseInline(l)] : parseInline(l))),
+              );
+              i = j;
+              continue;
+            }
+            // j === i: the very next line, no blank. A line that cannot start another block continues the item.
+            if (startsBlock(lines[i]) || isTableStart(lines, i)) break;
+            const target = last.more && Array.isArray(last.more[last.more.length - 1]) ? last.more[last.more.length - 1] : last.c;
+            target.push(opts.joinLines ? { t: "text", s: " " } : { t: "br" }, ...parseInline(lines[i].trim()));
+            i++;
           }
           blocks.push({ type: "list", items });
         } else if (isTableStart(lines, i)) {
@@ -4308,6 +4371,7 @@ __zentralShim.register = function (def) {
         else if (n.t === "spoiler") out += '<span class="spoiler">' + inlineHtml(n.c) + "</span>";
         else if (n.t === "tag") out += '<span class="tag">' + escHtml(n.s) + "</span>";
         else if (n.t === "date") out += '<time datetime="' + escHtml(n.ymd + (n.time ? "T" + n.time : "")) + '">' + escHtml(n.s) + "</time>";
+        else if (n.t === "al") out += '<a href="#' + escHtml(n.slug) + '">' + inlineHtml(n.c) + "</a>";
         else if (n.t === "nl") out += '<span class="note-link">' + inlineHtml(n.c) + "</span>"; // no address: a single exported note cannot reach the others
         else if (n.t === "kbd") out += "<kbd>" + escHtml(n.s) + "</kbd>";
         else if (n.t === "fn") out += '<sup class="fn"><a href="#fn-' + n.n + '" id="fnref-' + n.n + '">' + n.n + "</a></sup>";
@@ -4336,15 +4400,22 @@ __zentralShim.register = function (def) {
           "<li>" +
           (it.checked === null ? "" : it.status ? '<span class="task-status" title="' + (TASK_STATUS_NAMES[it.status] || "") + '">' + (TASK_STATUS_MARKS[it.status] || it.status) + "</span> " : '<input type="checkbox" disabled' + (it.checked ? " checked" : "") + "> ") +
           inlineHtml(it.c) +
-          (it.more || []).map((para) => "<p>" + inlineHtml(para) + "</p>").join("");
+          (it.more || []).map((para) => (Array.isArray(para) ? "<p>" + inlineHtml(para) + "</p>" : "<pre><code>" + escHtml(para.text) + "</code></pre>")).join("");
       }
       while (stack.length) out += "</li></" + stack.pop().tag + ">";
       return out;
     }
+    let htmlSlugs = new Map(); // heading ids of the export being built, same unique slugs as headingsOf
+    function headingId(inline) {
+      const base = headingSlug(inlineText(inline));
+      const k = htmlSlugs.get(base) || 0;
+      htmlSlugs.set(base, k + 1);
+      return k ? base + "-" + k : base;
+    }
     function blocksHtml(blocks) {
       let out = "";
       for (const b of blocks) {
-        if (b.type === "h") out += "<h" + b.level + (b.align ? ' style="text-align:' + b.align + '"' : "") + ">" + inlineHtml(b.c) + "</h" + b.level + ">\n";
+        if (b.type === "h") out += "<h" + b.level + ' id="' + escHtml(headingId(b.c)) + '"' + (b.align ? ' style="text-align:' + b.align + '"' : "") + ">" + inlineHtml(b.c) + "</h" + b.level + ">\n";
         else if (b.type === "box") out += "<div" + (b.align ? ' style="text-align:' + b.align + '"' : "") + ">\n" + blocksHtml(b.blocks) + "</div>\n";
         else if (b.type === "htable") {
           const st = (o) => {
@@ -4402,7 +4473,7 @@ __zentralShim.register = function (def) {
       const title = titleOf(body) || "Note";
       return (
         '<!DOCTYPE html>\n<html><head><meta charset="utf-8"><title>' + escHtml(title) + "</title><style>" + EXPORT_CSS + "</style></head><body>\n" +
-        blocksHtml(parseBlocks(body, false, opts)) +
+        (htmlSlugs = new Map(), blocksHtml(parseBlocks(body, false, opts))) +
         (print ? "<script>addEventListener('load',function(){setTimeout(function(){print()},300)})</script>\n" : "") +
         "</body></html>\n"
       );
@@ -4435,7 +4506,7 @@ __zentralShim.register = function (def) {
         else if (b.type === "list")
           parts.push(
             b.items
-              .map((it) => "  ".repeat(it.level) + (it.checked === null ? (it.marker === "\u2022" ? "-" : it.marker) : it.checked ? "[x]" : it.status ? "[" + it.status + "]" : "[ ]") + " " + inlineText(it.c) + (it.more || []).map((para) => "\n\n" + "  ".repeat(it.level + 1) + inlineText(para)).join(""))
+              .map((it) => "  ".repeat(it.level) + (it.checked === null ? (it.marker === "\u2022" ? "-" : it.marker) : it.checked ? "[x]" : it.status ? "[" + it.status + "]" : "[ ]") + " " + inlineText(it.c) + (it.more || []).map((para) => "\n\n" + (Array.isArray(para) ? "  ".repeat(it.level + 1) + inlineText(para) : para.text.replace(/^/gm, "  ".repeat(it.level + 1) + "    "))).join(""))
               .join("\n"),
           );
         else if (b.type === "table")
@@ -6920,6 +6991,126 @@ __zentralShim.register = function (def) {
       return off;
     };
 
+    // ---- Table of contents as a physical Markdown block (T1.8) ---------------------------------------------------
+    // The block is `---`, `## Table of Contents`, a numbered list of `[Title](#slug)` links, `---`. It is plain Markdown
+    // so exported notes stay navigable elsewhere. `[TOC]` / `[[TOC]]` alone on a line is expanded into it. Slugs come from
+    // headingsOf (ASCII, accents folded), so non-Latin headings may not match GitHub's own slugs.
+    const TOC_TITLE = "Table of Contents";
+    const TOC_HEAD_RE = /^ {0,3}##\s+table of contents\s*#*\s*$/i;
+    const TOC_TOKEN_RE = /^ {0,3}\[\[?TOC\]?\]\s*$/i;
+    const TOC_ITEM_RE = /^\s*(?:\d+[.)]|[-*+])\s+\[.*\]\(#[^)\s]*\)\s*$/;
+    const isDivider = (l) => /^ {0,3}([-*_])(\s*\1){2,}\s*$/.test(l);
+    // The list part only (no dividers, no heading): one line per heading, nested by level, real numbers.
+    function tocList(body, max = 200) {
+      const hs = headingsOf(body).filter((x) => !(TOC_HEAD_RE.test("## " + x.text) && x.level === 2));
+      let list = hs;
+      if (list.length && list[0].level === 1 && list[0].line === String(body ?? "").split("\n").findIndex((l) => l.trim())) list = list.slice(1); // the title
+      list = list.slice(0, max);
+      if (!list.length) return "";
+      const base = Math.min(...list.map((x) => x.level));
+      const counters = [];
+      let depth = 0;
+      return list
+        .map((x) => {
+          const d = Math.min(5, Math.max(0, x.level - base));
+          const lvl = Math.min(d, depth + 1); // a jump of two levels nests only one step
+          depth = lvl;
+          counters.length = lvl + 1;
+          counters[lvl] = (counters[lvl] || 0) + 1;
+          return "   ".repeat(lvl) + counters[lvl] + ". [" + x.text.replace(/([\[\]\\])/g, "\\$1") + "](#" + x.slug + ")";
+        })
+        .join("\n");
+    }
+    function tocBlock(body) {
+      const list = tocList(body);
+      return "---\n\n## " + TOC_TITLE + "\n\n" + (list ? list + "\n\n" : "_No headings yet._\n\n") + "---";
+    }
+    // Where the block is: { from, to } line numbers (to exclusive), or null. Fenced code is skipped.
+    function findToc(body) {
+      const lines = String(body ?? "").split("\n");
+      let fence = false;
+      for (let i = 0; i < lines.length; i++) {
+        if (/^ {0,3}(```|~~~)/.test(lines[i])) fence = !fence;
+        if (fence || !TOC_HEAD_RE.test(lines[i])) continue;
+        let from = i;
+        let k = i - 1;
+        while (k >= 0 && !lines[k].trim()) k--;
+        if (k >= 0 && isDivider(lines[k])) from = k;
+        let to = i + 1;
+        let j = to;
+        for (;;) {
+          while (j < lines.length && !lines[j].trim()) j++;
+          if (j < lines.length && (TOC_ITEM_RE.test(lines[j]) || lines[j] === "_No headings yet._")) {
+            j++;
+            to = j;
+            continue;
+          }
+          break;
+        }
+        if (j < lines.length && isDivider(lines[j]) && from !== i) to = j + 1;
+        else if (from !== i) from = i; // an opening divider without its closing one is not ours
+        return { from, to };
+      }
+      return null;
+    }
+    // Rebuilds the block (or expands a [TOC] line). Returns { body, changed, found }.
+    function updateToc(body) {
+      const text = String(body ?? "");
+      const lines = text.split("\n");
+      let fence = false;
+      const tokenAt = lines.findIndex((l) => {
+        if (/^ {0,3}(```|~~~)/.test(l)) fence = !fence;
+        return !fence && TOC_TOKEN_RE.test(l);
+      });
+      let out = lines;
+      let found = false;
+      if (tokenAt >= 0 && !findToc(text)) {
+        const draft = lines.slice();
+        draft.splice(tokenAt, 1);
+        const block = tocBlock(draft.join("\n")).split("\n");
+        out = lines.slice(0, tokenAt).concat(block, lines.slice(tokenAt + 1));
+        found = true;
+      } else {
+        const at = findToc(text);
+        if (at) {
+          found = true;
+          const rest = lines.slice(0, at.from).concat(lines.slice(at.to));
+          const block = tocBlock(rest.join("\n")).split("\n");
+          // Keep a bare heading (no dividers) bare: only the list is refreshed.
+          const bare = !isDivider(lines[at.from]);
+          const mine = bare ? block.slice(2, -1) : block;
+          out = lines.slice(0, at.from).concat(mine, lines.slice(at.to));
+        }
+      }
+      const next = out.join("\n");
+      return { body: next, changed: next !== text, found };
+    }
+    // Quick create: "top" puts it under the title (or first line), "end" appends. An existing block is only refreshed.
+    function insertToc(body, where = "top") {
+      const text = String(body ?? "");
+      const cur = updateToc(text);
+      if (cur.found) return { body: cur.body, caret: -1, existed: true };
+      const lines = text.split("\n");
+      let at = lines.length;
+      if (where !== "end") {
+        const first = lines.findIndex((l) => l.trim());
+        at = first >= 0 && /^ {0,3}#\s+\S/.test(lines[first]) ? first + 1 : 0;
+        if (first < 0) at = 0;
+      }
+      const draft = lines.slice(0, at).concat(lines.slice(at)).join("\n");
+      const block = tocBlock(draft).split("\n");
+      const before = lines.slice(0, at);
+      const after = lines.slice(at);
+      while (before.length && !before[before.length - 1].trim()) before.pop();
+      while (after.length && !after[0].trim()) after.shift();
+      const parts = [];
+      if (before.length) parts.push(before.join("\n"), "");
+      parts.push(block.join("\n"));
+      if (after.length) parts.push("", after.join("\n"));
+      const out = parts.join("\n");
+      return { body: out.endsWith("\n") ? out : out + "\n", caret: before.length ? before.join("\n").length + 2 : 0, existed: false };
+    }
+
     // What the pinned strip shows (Cycle F #29): up to `max` pinned notes and the recent ones that are not the open note.
     function stripModel(notes, recentIds, currentId, max = 8) {
       const live = (notes || []).filter((n) => n && !n.trashed);
@@ -7733,7 +7924,7 @@ __zentralShim.register = function (def) {
         insertAssetImage, assetImageAt, restyleAssetImage, assetRefs, isAssetNoteId, ASSET_MAX_BYTES, ASSET_MAX_PER_NOTE, ASSET_MIME,
         cleanRemind, ceilStep, dueReminders, nextReminderAt, reminderDelay, reminderPresets, parseRemindInput, remindPreview, remindDateText, remindTimeText,
         createReminderScheduler, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
-        headingSlug, headingsOf, cleanAnchor, noteLinkParts, headingOffset, insertFootnote, nextFootnoteLabel, mentionRe, hasMention, linkFirstMention,
+        headingSlug, headingsOf, cleanAnchor, noteLinkParts, headingOffset, tocBlock, tocList, findToc, updateToc, insertToc, insertFootnote, nextFootnoteLabel, mentionRe, hasMention, linkFirstMention,
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
         HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, BACKUP_DIR, BACKUP_HOURS, backupEntryName, parseBackupName, backupPlan, backupLeft, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
@@ -7881,6 +8072,20 @@ __zentralShim.register = function (def) {
           if (n.line < 0 || !env.tableToggle) box.disabled = true;
           else box.addEventListener("click", () => env.tableToggle(n.line, n.col, n.k));
           parent.append(box, document.createTextNode(" "));
+        } else if (n.t === "al") {
+          const node = h("span", { class: "zn-link zn-anchorlink", role: "link", tabindex: "0" });
+          node.dataset.slug = n.slug;
+          if (n.title) node.title = n.title;
+          const go = (e) => {
+            e.preventDefault();
+            env.goHeading?.(n.slug);
+          };
+          node.addEventListener("click", go);
+          node.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") go(e);
+          });
+          renderInline(node, n.c, env);
+          parent.append(node);
         } else if (n.t === "nl") {
           // Link to another note: no address at all, so nothing can be fetched or navigated. A click opens the note.
           const info = env.noteInfo ? env.noteInfo(n.id) : null;
@@ -8192,6 +8397,17 @@ __zentralShim.register = function (def) {
             row.append(marker, text);
             parent.append(row);
             for (const para of item.more || []) {
+              if (!Array.isArray(para)) {
+                // Fenced code inside the item: the ordinary code renderer, indented like the item's own paragraphs.
+                const before = parent.childNodes.length;
+                renderBlocks(parent, [para], env, onToggle);
+                const node = parent.childNodes[before];
+                if (node && node.style) {
+                  node.classList?.add("zn-li-more");
+                  node.style.setProperty("--lvl", String(item.level));
+                }
+                continue;
+              }
               const more = h("p", { class: "zn-li-more" });
               more.style.setProperty("--lvl", String(item.level));
               renderInline(more, para, env);
@@ -8654,6 +8870,7 @@ __zentralShim.register = function (def) {
           showMenu(anchor, TASK_EXTENDED.map(([ch, name]) => ({ icon: "check", label: "[" + ch + "]  " + name, action: () => setBody(setLineTaskStatus(note().body, line, ch)) })));
         },
         jumpFootnote: (label, back, from) => jumpFootnote(label, back, from),
+        goHeading: (slug) => goHeading(slug),
         openNoteLink: (id, heading = "") => {
           if (!store.get(id)) return flash("That note no longer exists");
           if (id !== currentId) openNote(id, { focus: false });
@@ -8706,6 +8923,7 @@ __zentralShim.register = function (def) {
       }
       function setMode(next) {
         if (mode === next) return;
+        if (next !== "edit" && mode === "edit") refreshToc();
         mode = next;
         if (!note()?.trashed) store.setMeta({ mode });
         if (mode !== "edit") renderRead();
@@ -10833,7 +11051,47 @@ __zentralShim.register = function (def) {
         }));
         if (!items.length) items.push({ label: "No headings in this note yet (start a line with #)", disabled: true });
         if (o.more) items.push({ label: `\u2026and ${o.more} more headings`, disabled: true });
+        // T1.8: the same list as a physical Markdown block that exports with the note.
+        if (o.items.length) {
+          items.push({ sep: true });
+          if (findToc(mode !== "read" ? ta.value : n.body)) items.push({ label: "Update the table of contents block", action: () => tocAction("update") });
+          else {
+            items.push({ label: "Insert table of contents under the title", action: () => tocAction("top") });
+            items.push({ label: "Insert table of contents at the end", action: () => tocAction("end") });
+          }
+        }
         showMenu(anchor, items);
+      }
+      // Applies the block to the open note and keeps the caret where the text around it was.
+      function tocAction(where) {
+        const n = note();
+        if (!n || n.trashed) return;
+        const cur = mode !== "read" ? ta.value : n.body;
+        const r = where === "update" ? updateToc(cur) : insertToc(cur, where);
+        if (r.body === cur) return flash("The table of contents is already up to date");
+        applyTocBody(cur, r.body);
+        flash(where === "update" ? "Table of contents updated" : "Table of contents added");
+      }
+      function applyTocBody(cur, next) {
+        let d = 0;
+        while (d < cur.length && d < next.length && cur[d] === next[d]) d++;
+        const caret = mode !== "read" ? ta.selectionStart || 0 : 0;
+        setBody(next);
+        if (mode !== "read") {
+          const at = caret > d ? Math.max(d, caret + (next.length - cur.length)) : caret;
+          try {
+            ta.setSelectionRange(at, at);
+          } catch (_) {}
+        }
+      }
+      // A note that already has the block keeps it current: refreshed when the editor loses focus or the view switches.
+      function refreshToc() {
+        const n = note();
+        if (!n || n.trashed || ta.readOnly) return;
+        const cur = ta.value;
+        if (!findToc(cur) && !/(^|\n) {0,3}\[\[?TOC\]?\]\s*(\n|$)/i.test(cur)) return;
+        const r = updateToc(cur);
+        if (r.changed) applyTocBody(cur, r.body);
       }
       // ---- version history -----------------------------------------------------------------------------------------
       async function askHistory() {
@@ -12100,6 +12358,11 @@ __zentralShim.register = function (def) {
         hideWiki();
         const n = note();
         if (!typed && n && n.body !== ta.value) ta.value = n.body;
+        try {
+          refreshToc();
+        } catch (error) {
+          console.warn("[ZentralNotes] table of contents refresh failed", error);
+        }
         store.flush();
       });
       listen(root, "mousedown", (e) => e.stopPropagation());

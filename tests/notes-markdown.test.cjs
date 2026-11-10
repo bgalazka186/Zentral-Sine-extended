@@ -616,7 +616,7 @@ test("W4 <table>: rows, th/td, colspan/rowspan, filtered style, attributes; nest
 test("W4 exports: html keeps structure and only filtered style; text export is readable", () => {
   const src = '<h2 align="center">Hi</h2>\n\n<table style="width:100%; background:url(x)"><tr><td style="color:red">a<br>b</td><td>c</td></tr></table>\n\n<div align="center">\n\nbody <u>u</u>\n\n</div>';
   const html = c.exportHtml(src);
-  assert.ok(html.includes('<h2 style="text-align:center">Hi</h2>'), html);
+  assert.ok(html.includes('<h2 id="hi" style="text-align:center">Hi</h2>'), html);
   assert.ok(html.includes('<table style="width:100%">'), "url() style not exported");
   assert.ok(html.includes('<td style="color:red">a<br>b</td>'));
   assert.ok(html.includes('<div style="text-align:center">') && html.includes("<u>u</u>"));
@@ -624,6 +624,107 @@ test("W4 exports: html keeps structure and only filtered style; text export is r
   const txt = c.exportText(src);
   assert.ok(txt.includes("a\nb | c"), txt);
   assert.ok(txt.includes("body u"));
+});
+
+test("T1.1 lazy continuation: a text line right under a list item or a quoted paragraph stays in it", () => {
+  const [l] = c.parseBlocks("- item one\ncontinued lazily\n- item two");
+  assert.equal(l.type, "list");
+  assert.equal(l.items.length, 2);
+  assert.equal(text(l.items[0].c), "item one" + "" + "continued lazily");
+  assert.ok(l.items[0].c.some((n) => n.t === "br"));
+  const nested = c.parseBlocks("- a\n  - b\n    more b\n- c");
+  assert.equal(nested.length, 1);
+  same(nested[0].items.map((i) => text(i.c)), ["a", "bmore b", "c"]);
+  const q = c.parseBlocks("> quote line\nlazy line\n\nafter");
+  assert.equal(q.length, 2);
+  assert.equal(q[0].type, "quote");
+  assert.equal(text(q[0].blocks[0].c), "quote linelazy line");
+  assert.equal(q[1].type, "p");
+  // A block start, a table or a blank line still ends the item / quote.
+  assert.equal(c.parseBlocks("- a\n# H").length, 2);
+  assert.equal(c.parseBlocks("- a\n---").length, 2);
+  assert.equal(c.parseBlocks("> a\n# H")[1].type, "h");
+  assert.equal(c.parseBlocks("- a\n\ntext").length, 2);
+  // An open fence inside a quote never takes lazy lines.
+  const f = c.parseBlocks("> ```\n> x\nout");
+  assert.equal(f[0].type, "quote");
+  assert.equal(f[1].type, "p");
+});
+
+test("T1.1 fenced code inside a list item stays in the item; numbering continues; unindented fence still ends the list", () => {
+  const [l, ...rest] = c.parseBlocks("1. step\n   ```js\n   const a = 1;\n     indented\n   ```\n2. next");
+  assert.equal(rest.length, 0);
+  assert.equal(l.items.length, 2);
+  assert.equal(l.items[1].marker, "2.");
+  const code = l.items[0].more[0];
+  assert.equal(code.type, "code");
+  assert.equal(code.lang, "js");
+  assert.equal(code.text, "const a = 1;\n  indented");
+  // After a blank line, and with a paragraph before it.
+  const m = c.parseBlocks("- a\n\n  para\n\n  ~~~\n  raw\n  ~~~\n- b")[0];
+  assert.equal(m.items.length, 2);
+  assert.equal(m.items[0].more.length, 2);
+  assert.ok(Array.isArray(m.items[0].more[0]) && m.items[0].more[1].type === "code");
+  // A fence at column 0 is not part of the item.
+  const out = c.parseBlocks("1. one\n```\ncode\n```\n2. two");
+  assert.equal(out.length, 3);
+  assert.equal(out[1].type, "code");
+  // An unclosed fence takes the rest of the note without throwing.
+  assert.equal(c.parseBlocks("- a\n  ```\n  x\n  y")[0].items[0].more[0].text, "x\ny");
+});
+
+test("T1.1 exports: code in a list item reaches HTML and plain text", () => {
+  const html = c.exportHtml("1. step\n   ```\n   <b>&\n   ```\n2. next");
+  assert.ok(html.includes("<pre><code>&lt;b&gt;&amp;</code></pre>"), html);
+  assert.ok(html.indexOf("</pre>") < html.indexOf("next"));
+  const txt = c.exportText("1. step\n   ```\n   code line\n   ```\n2. next");
+  assert.ok(txt.includes("code line") && txt.includes("2. next"), txt);
+});
+
+test("T1.2 double-backtick code keeps inner backticks and drops one padding space each side", () => {
+  same(c.parseInline("`` `x` ``").map((n) => [n.t, n.s]), [["code", "`x`"]]);
+  same(c.parseInline("``a`b``").map((n) => [n.t, n.s]), [["code", "a`b"]]);
+  same(c.parseInline("` a `").map((n) => [n.t, n.s]), [["code", "a"]]);
+  same(c.parseInline("`  `").map((n) => [n.t, n.s]), [["code", "  "]], "only spaces stay as they are");
+});
+
+test("T1.8 table of contents block: insert under the title or at the end, nested numbered slug links, idempotent update", () => {
+  const doc = "# My Note\n\nintro\n\n## Alpha\n\n### Alpha one\n\n## Beta\n\n```\n# not a heading\n```\n\n## Alpha\n";
+  const top = c.insertToc(doc, "top");
+  assert.equal(top.existed, false);
+  assert.ok(top.body.startsWith("# My Note\n\n---\n\n## Table of Contents\n\n1. [Alpha](#alpha)\n   1. [Alpha one](#alpha-one)\n2. [Beta](#beta)\n3. [Alpha](#alpha-1)\n\n---\n\nintro"), top.body);
+  assert.ok(!top.body.includes("](#not-a-heading)") && !top.body.includes("[Table of Contents]"));
+  assert.equal(top.body.slice(0, top.caret), "# My Note\n\n".slice(0, top.caret));
+  const end = c.insertToc(doc, "end").body;
+  assert.ok(end.endsWith("---\n") && end.indexOf("## Table of Contents") > end.indexOf("## Alpha\n\n```") - 1);
+  // A new heading is picked up; a second update changes nothing; inserting again only refreshes.
+  const grown = c.updateToc(top.body + "\n## Gamma\n");
+  assert.equal(grown.changed, true);
+  assert.ok(grown.body.includes("4. [Gamma](#gamma)"));
+  assert.equal(c.updateToc(grown.body).changed, false);
+  assert.equal(c.insertToc(grown.body, "end").existed, true);
+  // The block is found even after the user edited the list; text around it is untouched.
+  const lines = c.findToc(grown.body);
+  assert.ok(lines && lines.from < lines.to);
+  assert.equal(c.findToc("# T\n\n```\n## Table of Contents\n```\n"), null, "inside a fence is not a block");
+  // [TOC] and [[TOC]] on their own line become the block; inside code they stay.
+  const tok = c.updateToc("# T\n\n[TOC]\n\n## A\n## B\n").body;
+  assert.ok(tok.includes("## Table of Contents\n\n1. [A](#a)\n2. [B](#b)") && !/\[TOC\]/.test(tok));
+  assert.ok(c.updateToc("```\n[TOC]\n```\n## A\n").body.includes("[TOC]"));
+  // Two levels jump nests one step; a note without headings says so.
+  assert.ok(c.tocList("## A\n#### Deep\n").includes("   1. [Deep](#deep)"));
+  assert.ok(c.tocBlock("plain").includes("_No headings yet._"));
+  assert.equal(c.updateToc(c.insertToc("plain", "top").body).changed, false);
+});
+
+test("T1.8 #slug links are in-note anchors (no address); the HTML export gives headings matching ids", () => {
+  const n = c.parseInline("[Alpha](#Alpha-1) [x](#) [y](#a b)");
+  assert.equal(n[0].t, "al");
+  assert.equal(n[0].slug, "alpha-1");
+  assert.equal(n[2].s, "[x](#)");
+  const html = c.exportHtml("# T\n\n1. [Beta](#beta)\n\n## Beta\n\n## Beta\n");
+  assert.ok(html.includes('<a href="#beta">Beta</a>') && html.includes('<h2 id="beta">Beta</h2>') && html.includes('<h2 id="beta-1">Beta</h2>'), html);
+  assert.equal(c.exportText("[Alpha](#alpha)"), "Alpha\n");
 });
 
 console.log(`\n${passed} markdown tests passed`);
