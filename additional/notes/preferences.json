@@ -668,6 +668,26 @@
     "property": "zen.workspace.zentral.notes.default_view"
   },
   {
+    "label": "Floating table of contents button in a note",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Auto (notes with 3 or more headings)",
+        "value": "auto"
+      },
+      {
+        "label": "Always (notes with a heading)",
+        "value": "always"
+      },
+      {
+        "label": "Off",
+        "value": "off"
+      }
+    ],
+    "property": "zen.workspace.zentral.notes.toc_pill"
+  },
+  {
     "property": "zen.workspace.zentral.notes.markdown_flavor",
     "label": "Markdown mode (a note can set its own in its menu)",
     "type": "dropdown",

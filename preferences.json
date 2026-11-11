@@ -2748,6 +2748,26 @@
     "property": "zen.workspace.zentral.notes.custom_colors"
   },
   {
+    "label": "Floating table of contents button in a note",
+    "type": "dropdown",
+    "defaultValue": "auto",
+    "options": [
+      {
+        "label": "Auto (notes with 3 or more headings)",
+        "value": "auto"
+      },
+      {
+        "label": "Always (notes with a heading)",
+        "value": "always"
+      },
+      {
+        "label": "Off",
+        "value": "off"
+      }
+    ],
+    "property": "zen.workspace.zentral.notes.toc_pill"
+  },
+  {
     "type": "text",
     "label": "**Notes · Capture**",
     "size": "16px"

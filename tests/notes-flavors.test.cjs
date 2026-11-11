@@ -329,4 +329,20 @@ test("demo notes: the flavors showcase is read as callouts, math, details and a 
   assert.ok(bl.some((b) => b.type === "math") && bl.some((b) => b.type === "details") && bl.some((b) => b.type === "table"), "math, details and table blocks");
 });
 
+test("A30/J03 inline footnote ^[text]: numbered with [^1] by first use, same text is one note, off in GitHub/Reddit", () => {
+  const bl = blocks("One.^[Inline note.] Two[^1] again.^[Inline note.] And ^[Other *one*.]\n\n[^1]: Defined.");
+  const refs = [];
+  const walk = (ns) => ns.forEach((n) => { if (n.t === "fn") refs.push(n.n); walk(n.c || []); });
+  walk(bl[0].c);
+  assert.deepEqual(refs, [1, 2, 1, 3], "inline #1, [^1] is #2, the same text reuses #1");
+  const foot = bl.find((b) => b.type === "footnotes");
+  assert.ok(foot && foot.items.length === 3, "three notes at the bottom");
+  assert.equal(deep(inl("a^[x y]", { flavor: "github" }), "fn"), false);
+  assert.equal(flat(inl("a^[x y]", { flavor: "github" })), "a^[x y]", "literal text in GitHub mode");
+  assert.equal(deep(inl("a^[word]", { flavor: "reddit" }), "sup"), true, "Reddit keeps ^[word] as a superscript");
+  assert.equal(deep(inl("a^[word]", { flavor: "mixed" }), "fn"), true);
+  assert.equal(deep(inl("a^[unclosed", {}), "fn"), false);
+  assert.equal(flat(inl("H^[a ^[b]]", {})).includes("^["), false, "a nested note is parsed, not left as text");
+});
+
 console.log(`\n${passed} flavor tests passed`);

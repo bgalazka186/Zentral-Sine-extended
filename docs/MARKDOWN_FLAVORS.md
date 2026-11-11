@@ -114,7 +114,7 @@ These are the only places where a mixed mode cannot just say yes to everything.
 | A27 | Spoiler (Reddit) | `>!a!<` | ❌ | ❌ | ✅ | ✅ HAVE | PICK | typed | COLLISION 3. At the start of a line `>!` is a blockquote that begins with `!` in the other two. Mixed rule: only mid-line `>!text!<` with a closing `!<` on the same paragraph. |
 | A28 | Spoiler (Reddit link) | `[a](/spoiler)` | ❌ | ❌ | ✅ | ❌ NO | OFF | — | Old Reddit only. |
 | A29 | Spoiler (Discord) | `\|\|a\|\|` | ❌ | ❌ | ❌ | ✅ HAVE | ON+guard | Insert caret ▸ More text styles ▸ Spoiler | Discord. Guard: a closed pair on one line, not next to other pipes, so `\|\|` empty table cells are not touched. |
-| A30 | Inline footnote | `text^[note]` | ❌ | ✅ | ❌ | ❌ NO | ON | — |  |
+| A30 | Inline footnote | `text^[note]` | ❌ | ✅ | ❌ | ✅ HAVE | ON | typed | Numbered with the `[^1]` ones in order of first use; the same text twice is one note. In Reddit mode `^[word]` stays a superscript. |
 | A31 | Comment (Obsidian) | `%%hidden%%`, block `%%` ... `%%` | ❌ | ✅ | ❌ | ✅ HAVE | ON+guard | Insert caret ▸ More text styles ▸ Hidden comment | Hidden in reading view, kept in the file. Guard: only a closed pair, `100%% sure` has no closing pair. |
 | A32 | Comment (HTML) | `<!-- hidden -->` | ✅ | ✅ | ❌ | ✅ HAVE | ON | via A31 | Hidden in GitHub and Obsidian. We print it as text. Reddit prints it. |
 | A33 | Emoji (Unicode) | `✅ 🚀` | ✅ | ✅ | ✅ | ✅ HAVE | ON | auto | Plain text, always works. |
@@ -301,7 +301,7 @@ Our math draws a subset of LaTeX (no matrices, aligned, over/under braces).
 |---|---|---|:-:|:-:|:-:|:-:|:-:|---|---|
 | J01 | Footnote | `a[^1]` + `[^1]: text` | ✅ | ✅ | ❌ | ✅ HAVE | ON | Insert caret ▸ Blocks and notes ▸ Footnote | Multi-line definitions with indent work. |
 | J02 | Footnote, named label | `[^note]` | ✅ | ✅ | ❌ | ✅ HAVE | ON | via J01 |  |
-| J03 | Inline footnote | `^[text]` | ❌ | ✅ | ❌ | ❌ NO | ON | — | See A. |
+| J03 | Inline footnote | `^[text]` | ❌ | ✅ | ❌ | ✅ HAVE | ON | typed | See A30. |
 | J04 | Footnote with no definition | `[^1]` alone | ✅ | ✅ | ❌ | ✅ HAVE | ON | auto | Stays text. |
 | J05 | Reference definition | `[1]: url "title"` | ✅ | ✅ | ✅ | ✅ HAVE | ON | typed |  |
 | J06 | YAML front matter | `---` / `key: v` / `---` at the top | ✅ | ✅ | ❌ | ◐ PART | ON | auto | GitHub draws a table; Obsidian shows Properties. We use `remind:` and `color:`; other front matter shows as a rule + text. Mixed: hide or fold it. |

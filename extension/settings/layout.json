@@ -1118,6 +1118,7 @@
     "zen.workspace.zentral.notes.zen_root_color",
     "zen.workspace.zentral.notes.zen_root_icon",
     "zen.workspace.zentral.notes.custom_colors",
+    "zen.workspace.zentral.notes.toc_pill",
     {
       "type": "text",
       "label": "**Notes · Capture**",

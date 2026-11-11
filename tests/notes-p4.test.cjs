@@ -89,7 +89,7 @@ const note = (id, body, extra = {}) => ({ id, body, folder: "", updated: 1_700_0
     assert.deepEqual(J(c.journalDays(j2.body)), ["2026-11-03", "2026-11-04"]);
   });
   await test("[[ completion: trigger only inside an open [[, completion eats the closing ]] and strips |", () => {
-    assert.deepEqual(J(c.wikiTrigger("see [[Pla", 9)), { start: 4, query: "Pla" });
+    assert.deepEqual(J(c.wikiTrigger("see [[Pla", 9)), { start: 4, query: "Pla", title: "Pla", heading: null }); // T1.10 added title and heading
     assert.equal(c.wikiTrigger("see [[Plan]] x", 14), null);
     assert.equal(c.wikiTrigger("[ [x", 4), null);
     const t = c.wikiTrigger("see [[Pla]] z", 9);

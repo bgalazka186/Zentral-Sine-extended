@@ -165,6 +165,7 @@
       SPELL_MAX: "zen.workspace.zentral.notes.spellcheck_max_chars",
       NEW_CHOOSER: "zen.workspace.zentral.notes.new_note_chooser",
       DEFAULT_VIEW: "zen.workspace.zentral.notes.default_view",
+      TOC_PILL: "zen.workspace.zentral.notes.toc_pill",
       HUB_DESC: "zen.workspace.zentral.notes.hub_descriptions",
       WIKI_COMPLETE: "zen.workspace.zentral.notes.wiki_complete",
       BACKLINKS_PANEL: "zen.workspace.zentral.notes.backlinks_panel",
@@ -199,7 +200,7 @@
     const LOOK_NUM_PREFS = new Set([PREF.LOOK_RADIUS, PREF.LOOK_BORDER, PREF.LOOK_PADDING, PREF.LOOK_OPACITY, PREF.LOOK_SHADOW_BLUR, PREF.LOOK_SHADOW_Y, PREF.LOOK_SHADOW_ALPHA, PREF.LOOK_BTN_SIZE, PREF.LOOK_BTN_RADIUS]);
     const VIEW_PREFS = new Set([PREF.WRAP, PREF.FONT_SIZE, PREF.LINE_HEIGHT, PREF.READ_COPY, PREF.THEME, ...LOOK_PREFS]);
     const WINDOW_PREFS = new Set([PREF.HOVER_REVEAL, PREF.PUSH_PAGE, PREF.CARD_AUTOHIDE, PREF.CARD_ENTRY_REVEAL, PREF.CARD_SIDEBAR_GUARD, PREF.CARD_PILL_BORDER, PREF.PUSH_PANEL_PERCENT, PREF.WIDE_PERCENT, PREF.REVEAL_HEIGHT, PREF.REVEAL_DELAY, PREF.AVOID_SIDEBAR]);
-    const READ_PREFS = new Set([PREF.BLANK_LINES, PREF.LINE_BREAKS, PREF.SETEXT, PREF.HUB_DESC, PREF.BACKLINKS_PANEL]);
+    const READ_PREFS = new Set([PREF.TOC_PILL, PREF.BLANK_LINES, PREF.LINE_BREAKS, PREF.SETEXT, PREF.HUB_DESC, PREF.BACKLINKS_PANEL]);
     const OBS_TOPIC = "zentral-notes-changed";
     const IDLE_SAVE_MS = 800; // pause after the last keystroke
     const DEFAULT_MAX_SAVE_SECONDS = 5; // longest gap while still typing
@@ -1131,7 +1132,7 @@
         "<?(https?:\\/\\/[^\\s<>\"')\\]]+)>?", // 16 bare url, or <url>
         "!\\[([^\\]\\n]*)\\]\\((<[^<>\\n]*>|(?:[^\\s()]|\\([^\\s()]*\\))+)(?:\\s+\\x22([^\\x22]*)\\x22)?\\)", // 17 alt, 18 src, 19 "title" (image)
         "(?<!~)~([^\\s~]+)~(?!~)", // 20 subscript  H~2~O
-        "\\^([^\\s^]+)\\^", // 21 superscript  X^2^
+        "\\^(?!\\[)([^\\s^]+)\\^", // 21 superscript  X^2^ ("^[" starts an inline footnote, group 51)
         "<[kK][bB][dD]>([^<\\n]+)<\\/[kK][bB][dD]>", // 22 keyboard key
         "\\[([^\\]\\n]+)\\]\\[([^\\]\\n]*)\\]", // 23 text, 24 label (reference link, see REFS)
         "<(?:mailto:)?([^\\s<>@\\x22]+@[^\\s<>@\\x22]+\\.[^\\s<>@\\x22]+)>", // 25 <user@host.tld>
@@ -1149,13 +1150,14 @@
         "<!--([\\s\\S]*?)-->", // 36 HTML comment (A32)
         "\\[([^\\]\\n]+)\\](?![\\[(:])", // 37 [text] with a [text]: url line (B09)
         "\\^\\(([^()\\n]+)\\)", // 38 Reddit superscript group (A17)
-        "\\^([^\\s^()]+)", // 39 Reddit superscript word (A17)
+        "\\^(?!\\[)([^\\s^()]+)", // 39 Reddit superscript word (A17; "^[" is an inline footnote, group 51, which falls back to this in Reddit mode)
         ">!([^!\\n]+?)!<", // 40 Reddit spoiler (A27)
         "(?<![|\\w])\\|\\|([^|\\n]+?)\\|\\|(?![|\\w])", // 41 Discord spoiler (A29)
         "\\+\\+(?=\\S)([^+\\n]+?)(?<=\\S)\\+\\+", // 42 ++underline++ (A20)
         "(?<![\\w&/#>])#([A-Za-z_\\u00C0-\\uFFFF][\\w\\u00C0-\\uFFFF/-]*)", // 43 #tag (C14)
         "(?<![\\w./-])(\\d{4})-(\\d{2})-(\\d{2})(?:[ T](\\d{2}):(\\d{2}))?(?![\\w-]|:\\d)", // 44 year 45 month 46 day 47 hour 48 minute: a date (L07)
         "(?<![\\w/])\\/?([ur])\\/([A-Za-z0-9_-]{2,30})(?![\\w/])", // 49 kind, 50 name: u/name r/sub (L04)
+        "\\^\\[((?:[^\\[\\]\\n]|\\[[^\\[\\]\\n]*\\])+)\\]", // 51 inline footnote ^[text] (J03 / A30), numbered with the [^1] ones
       ].join("|"),
       "g",
     );
@@ -1229,15 +1231,81 @@
       return hits.length ? { id: hits[0].id, ambiguous: hits.length > 1 } : null;
     }
     const WIKI_RE = /\[\[([^\[\]\n|]{1,120})(?:\|([^\[\]\n]{1,120}))?\]\]/g;
+    // T1.10: [[Title]], [[Title|alias]], [[Title#Heading]], [[Title#Heading|alias]], [[#Heading]] (this note) and
+    // [[Folder/Title]]. The first `#` starts the heading (a nested [[Note#H1#H2]] uses the last part); the text before
+    // it is tried whole first (a title may contain "/" like TCP/IP), then as folder labels + title.
+    function parseWikiTarget(raw) {
+      let rest = String(raw ?? "").trim();
+      let heading = "";
+      const hash = rest.indexOf("#");
+      if (hash >= 0) {
+        heading = rest.slice(hash + 1).split("#").map((x) => x.trim()).filter(Boolean).pop() || "";
+        rest = rest.slice(0, hash).trim();
+      }
+      const segs = rest.split("/").map((x) => x.trim()).filter(Boolean);
+      const title = segs.pop() || "";
+      return { whole: rest, path: segs, title, heading, self: !rest && hash >= 0 };
+    }
+    // Labels of the folders a note sits in, outermost first: the label from meta.json when the folder is listed, else its path segment.
+    function folderLabels(folders, folderId) {
+      const id = cleanFolder(folderId);
+      if (!id) return [];
+      const byId = new Map((folders || []).filter((f) => f && f.id).map((f) => [f.id, f]));
+      const segs = id.split("/");
+      return segs.map((seg, i) => {
+        const f = byId.get(segs.slice(0, i + 1).join("/"));
+        return String((f && f.label) || seg);
+      });
+    }
+    const labelsEndWith = (labels, path) => path.length <= labels.length && path.every((p, i) => labels[labels.length - path.length + i].toLowerCase() === p.toLowerCase());
+    // Target of a wiki link: { id, ambiguous, heading } or null. `heading` is the slug of the heading in the target note
+    // ("" = the whole note; a heading that does not exist keeps its slug so the broken-link check can report it).
+    function resolveWikiTarget(notes, folders, parts, { allow = {} } = {}) {
+      if (parts.heading && allow.heading === false) return null;
+      if (parts.path.length && allow.path === false) return null;
+      let hit = null;
+      if (parts.whole) {
+        const byTitle = (t) => notes.filter((n) => !n.trashed && titleOf(n.body).toLowerCase() === t.toLowerCase());
+        let hits = byTitle(parts.whole);
+        if (!hits.length && parts.path.length) hits = byTitle(parts.title).filter((n) => labelsEndWith(folderLabels(folders, n.folder), parts.path));
+        hits.sort((x, y) => y.updated - x.updated || (x.id < y.id ? -1 : 1));
+        if (hits.length) hit = { id: hits[0].id, ambiguous: hits.length > 1, note: hits[0] };
+      }
+      if (!hit) return null;
+      let heading = "";
+      let headingText = "";
+      if (parts.heading) {
+        heading = headingSlug(parts.heading);
+        headingText = (headingsOf(hit.note.body).find((x) => x.slug === heading) || {}).text || parts.heading;
+      }
+      return { id: hit.id, ambiguous: hit.ambiguous, heading, headingText };
+    }
+    // The resolver expandWikiLinks / noteLinksIn / findBacklinks use. `selfBody` (the note being drawn) answers [[#Heading]].
+    function wikiResolver(notes, folders, opts = {}) {
+      return (_title, parts) => (parts ? resolveWikiTarget(notes, folders, parts, opts) : resolveNoteTitle(notes, _title));
+    }
     // "unresolved": "keep" leaves [[x]] as typed (editing view); "text" writes the plain words (export).
-    function expandWikiLinks(text, resolve, { unresolved = "keep" } = {}) {
+    // `self`: { body } of the note the text belongs to, for [[#Heading]]. `allow`: { heading, self, path } switch the extended
+    // forms off (the Markdown mode); a form that is off stays as typed.
+    function expandWikiLinks(text, resolve, { unresolved = "keep", self = null, allow = {} } = {}) {
       if (!String(text).includes("[[")) return String(text);
       return mapOutsideCode(text, (seg) =>
-        seg.replace(WIKI_RE, (all, title, alias) => {
-          const hit = resolve(title.trim());
+        seg.replace(WIKI_RE, (all, target, alias) => {
+          const parts = parseWikiTarget(target);
+          const plain = () => (unresolved === "text" ? (alias || (parts.self ? parts.heading : parts.title + (parts.heading ? " > " + parts.heading : ""))).trim() : all);
+          if (parts.self) {
+            if (!self || allow.self === false || !parts.heading) return plain();
+            const slug = headingSlug(parts.heading);
+            const found = headingsOf(self.body).find((x) => x.slug === slug);
+            return found ? "[" + cleanLinkLabel(alias || found.text) + "](#" + slug + ")" : plain();
+          }
+          if (!parts.title) return plain();
+          const hit = resolve(parts.title, parts);
           const id = hit && typeof hit === "object" ? hit.id : hit;
-          if (id) return buildNoteLink(id, alias || title);
-          return unresolved === "text" ? (alias || title).trim() : all;
+          if (!id) return plain();
+          const heading = hit && typeof hit === "object" ? hit.heading || "" : "";
+          const headingText = hit && typeof hit === "object" ? hit.headingText || "" : "";
+          return buildNoteLink(id, alias || (heading ? parts.title + " > " + headingText : parts.title), heading);
         }),
       );
     }
@@ -1530,12 +1598,12 @@
     const urlNoteBody = (title, url) => cleanLinkLabel(title || url) + "\n\n" + buildLink(cleanLinkLabel(title || url), url) + "\n";
     // The text an export writes for a note: [[shorthand]] becomes the canonical link (or plain words when
     // nothing matches), and links to exported notes point at the exported file names (`names`: id -> file).
-    const exportBody = (n, all, names = new Map()) =>
-      rewriteNoteLinks(expandWikiLinks(n.body, (t) => resolveNoteTitle(all, t), { unresolved: "text" }), names);
+    const exportBody = (n, all, names = new Map(), folders = []) =>
+      rewriteNoteLinks(expandWikiLinks(n.body, wikiResolver(all, folders), { unresolved: "text", self: n }), names);
     // Notes that link here (linked) and notes that mention the title without linking (mentions).
-    function findBacklinks(notes, target) {
+    function findBacklinks(notes, target, folders = []) {
       const title = titleOf(target.body);
-      const resolve = (t) => resolveNoteTitle(notes, t);
+      const resolve = wikiResolver(notes, folders);
       const mention = mentionRe(title);
       const linked = [];
       const mentions = [];
@@ -1771,6 +1839,27 @@
       const dt = new Date(+y, +mo - 1, +d);
       return dt.getFullYear() === +y && dt.getMonth() === +mo - 1 && dt.getDate() === +d && (hh === undefined || (+hh < 24 && +mi < 60));
     };
+    // ^[text]: a footnote written where it is used. It gets a label no [^label] can have (it holds a space), the next number in
+    // order of first use, and its text joins the notes at the bottom. The same text twice is one note. Where the mode does not
+    // know it (GitHub, Reddit) it stays text, except that Reddit reads ^[word] as a superscript.
+    function inlineFootnote(m) {
+      const text = m[51].trim();
+      if (FOOTS && FLAVOR.on("J03") && text) {
+        let label = FOOT_INLINE.get(text);
+        if (!label && FOOT_ORDER.length < FOOT_MAX) {
+          label = "inline " + (FOOT_INLINE.size + 1);
+          FOOT_INLINE.set(text, label);
+          FOOTS.set(label, text);
+        }
+        if (label) {
+          let k = FOOT_ORDER.indexOf(label);
+          if (k < 0) k = FOOT_ORDER.push(label) - 1;
+          return [{ t: "fn", label, n: k + 1 }];
+        }
+      }
+      if (FLAVOR.on("A17") && /^[^\s^()]+$/.test(m[51])) return [{ t: "sup", c: parseInline("[" + m[51] + "]", 1) }];
+      return [{ t: "text", s: m[0] }];
+    }
     function inlineOff(m) {
       if (m[9] !== undefined) return !FLAVOR.on(m[8] ? "A11" : "A10");
       if (m[20] !== undefined) return !FLAVOR.on("A09") && !FLAVOR.on("A13");
@@ -1829,6 +1918,7 @@
       if (m[43] !== undefined) return [{ t: "tag", s: "#" + m[43] }];
       if (m[44] !== undefined)
         return [{ t: "date", s: m[0], ymd: m[44] + "-" + m[45] + "-" + m[46], time: m[47] !== undefined ? m[47] + ":" + m[48] : "" }];
+      if (m[51] !== undefined) return inlineFootnote(m);
       if (m[49] !== undefined) {
         const href = safeHref("https://www.reddit.com/" + (m[49] === "u" ? "user" : "r") + "/" + m[50]);
         return href ? [{ t: "a", href, c: [{ t: "text", s: m[0].replace(/^\//, "") }] }] : [{ t: "text", s: m[0] }];
@@ -2301,12 +2391,13 @@
     // source line they start on (used by linked scrolling; not part of the block's signature).
     function parseBlocks(text, nested = false, opts = {}) {
       if (nested) return parseBlocksIn(text, true, opts);
-      const before = REFS, beforeFoots = FOOTS, beforeOrder = FOOT_ORDER, beforeFlavor = FLAVOR;
+      const before = REFS, beforeFoots = FOOTS, beforeOrder = FOOT_ORDER, beforeInline = FOOT_INLINE, beforeFlavor = FLAVOR;
       const ignore = parseIgnoreCached(opts.ignore);
       FLAVOR = flavorGate(opts.flavor, { tilde: opts.tilde, ignore: ignore.ids });
       const lines = prepareLines(normalizeNewlines(text).split("\n"), ignore.literals);
       FOOTS = collectFootnotes(lines); // before the reference links: "[^1]: text" must not be read as one
       FOOT_ORDER = [];
+      FOOT_INLINE = new Map();
       REFS = collectRefs(lines);
       try {
         const blocks = parseBlocksIn(lines.join("\n"), false, opts);
@@ -2317,6 +2408,7 @@
         REFS = before;
         FOOTS = beforeFoots;
         FOOT_ORDER = beforeOrder;
+        FOOT_INLINE = beforeInline;
         FLAVOR = beforeFlavor;
       }
     }
@@ -3826,6 +3918,7 @@
           { id: "footerCount", label: "Footer shows characters and reading time (and counts the selection)", pref: PREF.FOOTER_COUNTER, kind: "bool", def: false },
           { id: "treeOrder", label: "Order in the notes tree", pref: PREF.TREE_ORDER, kind: "choice", def: "folders-first", choices: [["folders-first", "Folders first"], ["notes-first", "Notes first"], ["mixed-by-name", "Mixed, by name"]] },
           { id: "defaultView", label: "A panel opens in", pref: PREF.DEFAULT_VIEW, kind: "choice", def: "last", choices: [["last", "The view used last"], ["edit", "Editor"], ["read", "Preview"], ["split", "Split: editor and preview"]] },
+          { id: "tocPill", label: "Floating table of contents button", pref: PREF.TOC_PILL, kind: "choice", def: "auto", choices: [["auto", "Auto (3+ headings)"], ["always", "Always"], ["off", "Off"]] },
           { id: "hubDesc", label: "Hub notes show a short description for each linked note", pref: PREF.HUB_DESC, kind: "bool", def: true },
           { id: "wikiAuto", label: "Suggest notes while typing [[", pref: PREF.WIKI_COMPLETE, kind: "bool", def: true },
           { id: "linkedStrip", label: "Show \"Linked from\" under the read view", pref: PREF.BACKLINKS_PANEL, kind: "bool", def: false },
@@ -5568,7 +5661,7 @@
     // kind: "missing-note" (no such note, or a [[title]] nobody has), "trashed" (the target is in the Trash),
     // "missing-heading" (the note exists, the #heading does not). Links inside code are ignored. Missing assets are NOT checked here.
     const BROKEN_MAX = 500;
-    function findBrokenLinks(notes) {
+    function findBrokenLinks(notes, folders = []) {
       const all = new Map(notes.map((n) => [n.id, n]));
       const live = notes.filter((n) => !n.trashed);
       const out = [];
@@ -5592,8 +5685,16 @@
             else if (parts.heading && !headingsOf(target.body).some((x) => x.slug === parts.heading)) add({ ...base, kind: "missing-heading", title: titleOf(target.body) || parts.id });
           }
           for (const m of seg.matchAll(new RegExp(WIKI_RE.source, "g"))) {
-            const title = m[1].trim();
-            if (!resolveNoteTitle(notes, title)) add({ line, raw: m[0], label: (m[2] || title).trim(), targetId: "", anchor: "", title, kind: "missing-note" });
+            const parts = parseWikiTarget(m[1]);
+            const label = (m[2] || (parts.self ? parts.heading : parts.title)).trim();
+            if (parts.self) {
+              // [[#Heading]]: the heading must exist in this very note.
+              if (parts.heading && !headingsOf(n.body).some((x) => x.slug === headingSlug(parts.heading))) add({ line, raw: m[0], label, targetId: n.id, anchor: headingSlug(parts.heading), title: titleOf(n.body) || n.id, kind: "missing-heading" });
+              continue;
+            }
+            const hit = parts.title ? resolveWikiTarget(notes, folders, parts) : null;
+            if (!hit) add({ line, raw: m[0], label, targetId: "", anchor: "", title: parts.whole || parts.title, kind: "missing-note" });
+            else if (hit.heading && !headingsOf(all.get(hit.id).body).some((x) => x.slug === hit.heading)) add({ line, raw: m[0], label, targetId: hit.id, anchor: hit.heading, title: titleOf(all.get(hit.id).body) || hit.id, kind: "missing-heading" });
           }
           return seg;
         });
@@ -5857,11 +5958,26 @@
       all.forEach((x, i) => { if (caretLine >= 0 && x.line <= caretLine) cur = i; });
       return { items: all.slice(0, max).map((x, i) => ({ level: x.level - top + 1, text: x.text, slug: x.slug, line: x.line, current: i === cur })), more: Math.max(0, all.length - max) };
     }
+    // T1.8: the floating table-of-contents button. "auto" shows it from three headings on (a short note does not need it),
+    // "always" from one, "off" never. It reads the same heading model as the outline menu (outlineItems), so the docked
+    // outline panel (T1.9) can share it.
+    const TOC_PILL_MODES = Object.freeze(["auto", "always", "off"]);
+    const TOC_PILL_AUTO_MIN = 3;
+    const cleanTocPill = (v) => (TOC_PILL_MODES.includes(v) ? v : "auto");
+    const tocPillShown = (mode, headings) => (mode === "off" ? false : mode === "always" ? headings >= 1 : headings >= TOC_PILL_AUTO_MIN);
+    // Which heading is the reader at? `tops` = the top of every heading in the scrolled pane, in order. The last heading whose
+    // top has reached (the scroll position + slack) is current; -1 while the first heading is still below the top edge.
+    function scrolledHeading(tops, scrollTop, slack = 24) {
+      let cur = -1;
+      for (let i = 0; i < tops.length; i++) if (tops[i] <= scrollTop + slack) cur = i;
+      return cur;
+    }
     // ---- footnotes: [^1] in the text, [^1]: the note, at any line -------------------------------------
     const FOOT_DEF_RE = /^ {0,3}\[\^([^\]\s]{1,40})\]:\s*(.*)$/;
     const FOOT_MAX = 200;
     let FOOTS = null; // label -> text, set for the duration of one parseBlocks
     let FOOT_ORDER = null; // labels in the order of first use (that is the number shown)
+    let FOOT_INLINE = new Map(); // text -> label of the ^[inline footnotes] met in this parseBlocks
     // Takes the definition lines out (blanked, so line numbers stay true). An indented line right after one
     // continues it. Only one level: a definition cannot contain blocks.
     function collectFootnotes(lines) {
@@ -6104,15 +6220,19 @@
     }
 
     // ---- [[ completion while typing ------------------------------------------------------------------------
+    // `title` is the text before a "#" (a heading is being typed when `heading` is a string, "" right after the "#").
     function wikiTrigger(value, caret) {
       const before = String(value).slice(Math.max(0, caret - 130), caret);
       const m = /\[\[([^\[\]\n|]{0,120})$/.exec(before);
-      return m ? { start: caret - m[0].length, query: m[1] } : null;
+      if (!m) return null;
+      const hash = m[1].indexOf("#");
+      return { start: caret - m[0].length, query: m[1], title: hash >= 0 ? m[1].slice(0, hash) : m[1], heading: hash >= 0 ? m[1].slice(hash + 1).split("#").pop() : null };
     }
-    function wikiComplete(value, trigger, caret, title) {
-      const t = cleanLinkLabel(title).replace(/\|/g, "/"); // a pipe would start the alias part
+    function wikiComplete(value, trigger, caret, title, heading = "") {
+      const t = String(title ?? "").trim() ? cleanLinkLabel(title).replace(/\|/g, "/") : ""; // a pipe would start the alias part
+      const hd = String(heading ?? "").replace(/[\[\]|#\n]+/g, " ").replace(/\s+/g, " ").trim();
       const end = String(value).slice(caret, caret + 2) === "]]" ? caret + 2 : caret;
-      const text = "[[" + t + "]]";
+      const text = "[[" + (t || (hd ? "" : "note")) + (hd ? "#" + hd : "") + "]]";
       return { start: trigger.start, end, text, selStart: trigger.start + text.length, selEnd: trigger.start + text.length };
     }
 
@@ -6522,10 +6642,10 @@
         flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART,
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
-        wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
+        wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
         makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
-        projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
+        projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
         highlightCode, codeLangKey, texNodes, mapPosition, mergeAnchors, insertCodeBlock, buildLink, insertLink,
         pastedLink, fragmentLabel, insertImage, makeTable, insertTable, SHORTCUT_ACTIONS, formatCombo,
@@ -7225,7 +7345,11 @@
       // Find "highlight every match" layer (pref find_highlight = backdrop): sits under the transparent textarea.
       const hlInner = h("div", { class: "zn-findlayer-inner" });
       const hlEl = h("div", { class: "zn-findlayer", "aria-hidden": "true", hidden: true }, hlInner);
-      const body = h("div", { class: "zn-body" }, hlEl, ta, readEl, listEl);
+      // T1.8: a small button in the corner of the text area that stays put while the note scrolls; it opens the outline menu.
+      const tocPill = h("button", { type: "button", class: "zn-tocpill", "aria-label": "Table of contents", "aria-haspopup": "menu", title: "Table of contents" }, icon("toc", 14));
+      tocPill.hidden = true;
+      tocPill.addEventListener("mousedown", (ev) => ev.preventDefault()); // keep the caret and the selection in the editor
+      const body = h("div", { class: "zn-body" }, hlEl, ta, readEl, listEl, tocPill);
       const statusEl = h("span", { class: "zn-status", "aria-live": "polite" });
       const countEl = h("span", { class: "zn-count" });
       const foot = h("div", { class: "zn-foot" }, statusEl, h("span", { class: "zn-grow" }), countEl);
@@ -7324,11 +7448,29 @@
         chipTrash.classList.toggle("is-on", filter === "trash");
         chipTrash.textContent = store.trashCount() ? `Trash (${store.trashCount()})` : "Trash";
         chipEmpty.hidden = filter !== "trash" || !store.trashCount();
+        paintTocPill();
+      }
+      // Shows the corner button when the note has enough headings (pref toc_pill); the count is cached per text.
+      let tocSrc = null, tocCount = 0;
+      function paintTocPill() {
+        const how = cleanTocPill(getPref(PREF.TOC_PILL, "auto"));
+        const n = note();
+        let show = false;
+        if (how !== "off" && n && view === "editor") {
+          const src = mode !== "read" ? ta.value : n.body;
+          if (src !== tocSrc) {
+            tocSrc = src;
+            tocCount = headingsOf(src).length;
+          }
+          show = tocPillShown(how, tocCount);
+        }
+        if (tocPill.hidden === show) tocPill.hidden = !show;
       }
       function updateChrome() {
         rafChrome = 0;
         const n = note();
         paintStrip();
+        paintTocPill();
         if (n) {
           titleEl.textContent =
             view === "list" ? titleEl.textContent : titleOf(n.body) || "Untitled note";
@@ -7532,7 +7674,13 @@
         el.scrollIntoView?.({ block: "center" });
         el.focus?.({ preventScroll: true });
       }
-      const readBody = (body, flavor) => (flavorGate(flavor).on("C01") ? expandWikiLinks(body, (t) => resolveNoteTitle(store.list().concat(store.list({ trashed: true })), t)) : body);
+      // [[...]] links drawn as note links. The heading, same-note and folder forms follow the Markdown mode (C03/C06, C04, C08).
+      function readBody(body, flavor) {
+        const gate = flavorGate(flavor);
+        if (!gate.on("C01")) return body;
+        const allow = { heading: gate.on("C03") && gate.on("C06"), self: gate.on("C04"), path: gate.on("C08") };
+        return expandWikiLinks(body, wikiResolver(store.list().concat(store.list({ trashed: true })), store.meta.folders, { allow }), { self: { body }, allow });
+      }
       function newNote(folderId) {
         const folder = typeof folderId === "string" ? cleanFolder(folderId) : "";
         if (folder && store.meta.folders.find((f) => f.id === folder)?.collapsed) store.setFolderCollapsed(folder, false);
@@ -8994,6 +9142,7 @@
       listen(tSettings, "click", () => askSettings());
       listen(tToc, "mousedown", (e) => e.preventDefault());
       listen(tToc, "click", () => showOutline(tToc));
+      listen(tocPill, "click", () => showOutline(tocPill));
 
       // ---- menus -----------------------------------------------------------------
       function closeMenu() {
@@ -9242,7 +9391,7 @@
         const REASON = { "missing-note": "no such note", trashed: "note is in the Trash", "missing-heading": "heading not found" };
         const paint = () => {
           rows.replaceChildren();
-          const list = findBrokenLinks(store.list());
+          const list = findBrokenLinks(store.list(), store.meta.folders);
           if (!list.length) rows.append(h("p", { class: "zn-hint" }, "No broken links found."));
           for (const it of list) {
             const src = store.get(it.noteId);
@@ -9558,7 +9707,7 @@
         linkedEl.replaceChildren();
         linkedEl.hidden = true;
         if (!getPref(PREF.BACKLINKS_PANEL, false) || !n || n.trashed || view !== "editor" || mode === "edit") return;
-        const { linked } = findBacklinks(store.list(), n);
+        const { linked } = findBacklinks(store.list(), n, store.meta.folders);
         if (!linked.length) return;
         linkedEl.append(h("span", { class: "zn-linked-label" }, "Linked from"));
         for (const t of linked.slice(0, 12)) {
@@ -9664,7 +9813,15 @@
       function showOutline(anchor = btnMore) {
         const n = note();
         if (!n || view !== "editor") return;
-        const caret = mode !== "read" ? lineOfOffset(ta.value, ta.selectionStart || 0) : -1;
+        let caret = -1;
+        if (mode !== "read") caret = lineOfOffset(ta.value, ta.selectionStart || 0);
+        else {
+          // In the preview the current heading is the one the reader has scrolled to.
+          const heads = [...readEl.childNodes].filter((nd) => nd.dataset?.slug);
+          const at = heads[scrolledHeading(heads.map((nd) => nd.offsetTop || 0), readEl.scrollTop || 0)];
+          const hit = at && headingsOf(n.body).find((x) => x.slug === at.dataset.slug);
+          if (hit) caret = hit.line;
+        }
         const o = outlineItems(mode !== "read" ? ta.value : n.body, caret);
         const items = o.items.map((x) => ({
           icon: x.current ? "pin" : undefined,
@@ -9814,7 +9971,7 @@
       function showBacklinks() {
         const n = note();
         if (!n) return;
-        const { linked, mentions } = findBacklinks(store.list(), n);
+        const { linked, mentions } = findBacklinks(store.list(), n, store.meta.folders);
         const item = (t) => ({ icon: "note", label: titleOf(t.body) || "Untitled note", action: () => openNote(t.id, { focus: false }) });
         const items = [];
         if (linked.length) items.push({ label: "Linked from", disabled: true }, ...linked.map(item));
@@ -10884,18 +11041,45 @@
       function paintWiki() {
         wikiBar.replaceChildren();
         wikiState.hits.forEach((t, i) => {
-          const b = h("button", { type: "button", class: "zn-wiki-item" + (i === wikiState.idx ? " is-on" : ""), role: "option" }, titleOf(t.body) || "Untitled note");
+          const b = h("button", { type: "button", class: "zn-wiki-item" + (i === wikiState.idx ? " is-on" : ""), role: "option" }, t.label);
           b.addEventListener("mousedown", (ev) => ev.preventDefault()); // keep the caret in the editor
           b.addEventListener("click", () => pickWiki(i));
           wikiBar.append(b);
         });
         wikiBar.hidden = false;
       }
+      // What the strip offers after "[[": notes (a "Folder/" before the words narrows them), or after "#" the headings of the
+      // note named before it (nothing named = this note). Each hit: { label, title, heading }.
+      function wikiHits(trig) {
+        const all = store.list();
+        if (trig.heading !== null) {
+          const parts = parseWikiTarget(trig.title);
+          const target = parts.title ? (() => { const r = resolveWikiTarget(all, store.meta.folders, { ...parts, heading: "" }); return r ? store.get(r.id) : null; })() : note();
+          if (!target) return [];
+          const want = trig.heading.trim().toLowerCase();
+          const own = target.id === currentId;
+          return headingsOf(own ? ta.value : target.body)
+            .filter((x) => !want || x.text.toLowerCase().includes(want))
+            .slice(0, 8)
+            .map((x) => ({ label: "#".repeat(x.level) + " " + x.text, title: own ? "" : trig.title.trim(), heading: x.text }));
+        }
+        const path = trig.query.includes("/") ? trig.query.split("/").slice(0, -1).map((x) => x.trim()).filter(Boolean) : [];
+        const word = trig.query.slice(trig.query.lastIndexOf("/") + 1).trim();
+        let hits = store.list({ query: word }).filter((x) => x.id !== currentId);
+        if (path.length) hits = hits.filter((x) => labelsEndWith(folderLabels(store.meta.folders, x.folder), path));
+        return hits.slice(0, 6).map((x) => {
+          const title = titleOf(x.body) || "Untitled note";
+          // The same title in two places: write the folder too so the link finds the right one.
+          const twin = all.some((o) => o.id !== x.id && !o.trashed && titleOf(o.body).toLowerCase() === title.toLowerCase());
+          const where = folderLabels(store.meta.folders, x.folder);
+          return { label: twin && where.length ? where.join(" / ") + " / " + title : title, title: twin && where.length ? where.join("/") + "/" + title : title, heading: "" };
+        });
+      }
       function updateWiki() {
         if (!getPref(PREF.WIKI_COMPLETE, true) || mode === "read" || ta.readOnly || ta.selectionStart !== ta.selectionEnd) return hideWiki();
         const trig = wikiTrigger(ta.value, ta.selectionStart);
         if (!trig) return hideWiki();
-        const hits = store.list({ query: trig.query.trim() }).filter((x) => x.id !== currentId).slice(0, 6);
+        const hits = wikiHits(trig);
         if (!hits.length) return hideWiki();
         wikiState = { trig, hits, idx: 0 };
         paintWiki();
@@ -10904,7 +11088,7 @@
         const st = wikiState;
         if (!st || !st.hits[i]) return;
         hideWiki();
-        applyEdit(wikiComplete(ta.value, st.trig, ta.selectionStart, titleOf(st.hits[i].body) || "Untitled note"));
+        applyEdit(wikiComplete(ta.value, st.trig, ta.selectionStart, st.hits[i].title, st.hits[i].heading));
       }
       listen(ta, "keydown", (e) => {
         if (!wikiState || e.isComposing) return;
@@ -11915,6 +12099,7 @@
         if (!isOpen || destroyed || view !== "editor") return;
         resetRead();
         if (mode !== "edit") renderRead();
+        paintTocPill();
       }
       return {
         root,
@@ -12735,7 +12920,7 @@
         const file = await pick(Ci.nsIFilePicker.modeSave, "Save note", safeFileName(titleOf(n.body), "note") + "." + info.ext, format);
         if (!file) return;
         try {
-          const body = exportBody(n, allNotesForExport());
+          const body = exportBody(n, allNotesForExport(), new Map(), store.meta.folders);
           const text = format === "html" ? exportHtml(body, readOpts()) : format === "txt" ? exportText(body, readOpts()) : withNewline(body);
           await IOUtils.writeUTF8(file.path, text);
         } catch (error) {
@@ -12750,7 +12935,7 @@
           await IOUtils.makeDirectory(dir, { ignoreExisting: true });
           for (const old of await IOUtils.getChildren(dir).catch(() => [])) await IOUtils.remove(old, { ignoreAbsent: true }).catch(() => {});
           const path = PathUtils.join(dir, safeFileName(titleOf(n.body), "note") + ".html");
-          await IOUtils.writeUTF8(path, exportHtml(exportBody(n, allNotesForExport()), readOpts(), { print: true }));
+          await IOUtils.writeUTF8(path, exportHtml(exportBody(n, allNotesForExport(), new Map(), store.meta.folders), readOpts(), { print: true }));
           window.gBrowser.addTab(PathUtils.toFileURI(path), {
             triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
           });
@@ -12767,7 +12952,7 @@
         for (let i = 0; i < list.length; i++) {
           try {
             // An existing file is never overwritten by an export.
-            await IOUtils.writeUTF8(PathUtils.join(folder.path, names[i]), withNewline(exportBody(list[i], everything, byId)), { mode: "create" });
+            await IOUtils.writeUTF8(PathUtils.join(folder.path, names[i]), withNewline(exportBody(list[i], everything, byId, store.meta.folders)), { mode: "create" });
           } catch (error) {
             warn(error);
           }
@@ -12786,7 +12971,7 @@
           zw.open(file, 0x04 | 0x08 | 0x20); // read/write, create, truncate
           const enc = new TextEncoder();
           for (let i = 0; i < live.length; i++) {
-            const bytes = enc.encode(withNewline(exportBody(live[i], everything, byId)));
+            const bytes = enc.encode(withNewline(exportBody(live[i], everything, byId, store.meta.folders)));
             let bin = "";
             for (let j = 0; j < bytes.length; j += 8192) bin += String.fromCharCode(...bytes.subarray(j, j + 8192));
             const stream = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(Ci.nsIStringInputStream);

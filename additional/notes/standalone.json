@@ -113,6 +113,7 @@
     "zen.workspace.zentral.notes.hub_descriptions",
     "zen.workspace.zentral.notes.tree_order",
     "zen.workspace.zentral.notes.default_view",
+    "zen.workspace.zentral.notes.toc_pill",
     "zen.workspace.zentral.notes.markdown_flavor",
     "zen.workspace.zentral.notes.single_tilde",
     "zen.workspace.zentral.notes.ignore_syntax",
