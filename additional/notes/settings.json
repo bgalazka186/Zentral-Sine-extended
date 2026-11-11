@@ -208,9 +208,9 @@
     },
     {
       "property": "zen.workspace.zentral.notes.hidden_tools",
-      "label": "Hidden editor buttons and shortcuts (set in Notes \u2192 Quick settings \u2192 Toolbar buttons; empty = all shown)",
+      "label": "Hidden editor buttons and shortcuts (set in Notes \u2192 Quick settings \u2192 Toolbar buttons; default hides the table of contents button; empty = all shown)",
       "type": "string",
-      "defaultValue": ""
+      "defaultValue": "outline"
     },
     {
       "property": "zen.workspace.zentral.notes.hover_reveal",

@@ -9,7 +9,8 @@
   "loader": "__zentralNotesLoader",
   "include": [
     "flavors/ZentralNotesFlavors.js",
-    "flavors/ZentralNotesShortcuts.js"
+    "flavors/ZentralNotesShortcuts.js",
+    "calendar/ZentralNotesCalendar.js"
   ],
   "settings": "settings.json",
   "css": "ZentralNotes.css",

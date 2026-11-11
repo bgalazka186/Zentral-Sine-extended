@@ -8,7 +8,7 @@ const dom = require("./helpers/fake-dom.cjs")();
 const { El, Ev, document, raf } = dom;
 document.createRange = () => ({ setStart(n, s) { this.n = n; this.s = s; }, setEnd() {}, getBoundingClientRect() { return { top: this.s * 10, height: 10 }; } });
 const selections = [];
-const win = { document, ZentralRuntime: { register() {} }, __zentralNotesTestSeam: {}, requestAnimationFrame: (fn) => raf.push(fn), cancelAnimationFrame() {}, setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {},
+const win = { __zentralNotesParts: { "notes-calendar": require("../additional/notes/calendar/ZentralNotesCalendar.js") }, document, ZentralRuntime: { register() {} }, __zentralNotesTestSeam: {}, requestAnimationFrame: (fn) => raf.push(fn), cancelAnimationFrame() {}, setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {},
   getSelection: () => ({ removeAllRanges() { selections.length = 0; }, addRange(r) { selections.push(r); } }) };
 win.window = win;
 vm.runInNewContext(source, { window: win, document, Event: Ev, globalThis: { Services: {} }, ChromeUtils: {}, console, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, setTimeout, clearTimeout, navigator: { platform: "Linux" }, Uint8Array });
@@ -200,6 +200,30 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     chipNamed("Clear reminder").click();
     assert.equal(store.get(n.id).remind, 0);
     assert.equal(q(".zn-remind").hidden, true);
+  });
+
+  await test("reminder dialog: Pick day opens a mini calendar that fills the date, arrows move, Today works, second click closes it", async () => {
+    const n = store.create("pick a day"); await flushRaf();
+    sheet.openNoteById(n.id);
+    qa(".zn-btn").find((b) => b.title === "More").click();
+    menuItem("Remind me\u2026").click();
+    assert.ok(!q(".zn-cal"), "closed at first");
+    chipNamed("Pick day\u2026").click();
+    assert.ok(q(".zn-cal"), "opened");
+    assert.equal(qa(".zn-cal-day").length, 42);
+    const day = qa(".zn-cal-day").find((b) => b.getAttribute("data-day") === String(new Date(2026, 10, 20).getTime()));
+    day.click();
+    const [d] = qa(".zn-field").slice(-2);
+    assert.equal(d.value, "2026-11-20");
+    assert.ok(qa(".zn-cal-day").find((b) => b.getAttribute("data-day") === String(new Date(2026, 10, 20).getTime())).classList.contains("is-picked"));
+    const grid = q(".zn-cal-grid");
+    key(grid, "ArrowRight"); key(grid, "Enter");
+    assert.equal(d.value, "2026-11-21");
+    chipNamed("Today").click();
+    assert.equal(d.value, "2026-11-01");
+    chipNamed("Pick day\u2026").click();
+    assert.ok(!q(".zn-cal"), "closed again");
+    chipNamed("Cancel").click();
   });
 
   await test("find highlight (#8): selection mode paints nothing extra; backdrop mode marks every match and the current one, follows scroll, clears on close", async () => {

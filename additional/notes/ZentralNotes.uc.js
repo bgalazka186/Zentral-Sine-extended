@@ -44,6 +44,8 @@
   };
   const FLAVORS_PART = loadPart("additional/notes/flavors/ZentralNotesFlavors.js", "notes-flavors");
   const SHORTCUTS_PART = loadPart("additional/notes/flavors/ZentralNotesShortcuts.js", "notes-shortcuts");
+  // The calendar core (items, parsing, overlap lanes, month grid; roadmap T2.1). Pure logic; a missing file means no calendar.
+  const CALENDAR_PART = loadPart("additional/notes/calendar/ZentralNotesCalendar.js", "notes-calendar");
 
   function standaloneReady(start) {
     let started = false;
@@ -3700,6 +3702,8 @@
       ["details", "Collapsible section"], ["insertDate", "Insert date"], ["insertTime", "Insert time"], ["outline", "Table of contents"],
     ]);
     const HIDEABLE_IDS = new Set(HIDEABLE_TOOLS.map((t) => t[0]));
+    // Buttons that start hidden until the person turns them on (Quick settings \u2192 Toolbar buttons).
+    const DEFAULT_HIDDEN_TOOLS = "outline";
     // Preference text "bold,sup" -> Set of valid ids (unknown words are ignored).
     const parseHidden = (raw) => new Set(String(raw ?? "").split(/[\s,;]+/).filter((x) => HIDEABLE_IDS.has(x)));
     const serializeHidden = (set) => HIDEABLE_TOOLS.map((t) => t[0]).filter((id) => set.has(id)).join(",");
@@ -6639,7 +6643,7 @@
 
     if (window.__zentralNotesTestSeam) {
       window.__zentralNotesTestSeam.core = {
-        flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART,
+        flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART,
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
@@ -6708,6 +6712,8 @@
       duplicate: "M9 9h11v11H9z M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1",
       caret: "m6 9 6 6 6-6",
       chevron: "m9 6 6 6-6 6",
+      chevronLeft: "m15 6-6 6 6 6",
+      chevronRight: "m9 6 6 6-6 6",
       columns: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M12 3v18",
       image: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z M21 15l-5-5L5 21",
       rule: "M4 12h16",
@@ -6727,6 +6733,7 @@
       move: "M12 2v20 M2 12h20 M8 6l4-4 4 4 M8 18l4 4 4-4 M6 8l-4 4 4 4 M18 8l4 4-4 4",
       noteBetween: "M5 3h14 M5 21h14 M5 8h14v8H5z M9 12h6",
       bell: "M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9 M10.3 21a1.94 1.94 0 0 0 3.4 0",
+      calendar: "M4 5h16v16H4z M4 10h16 M8 3v4 M16 3v4",
       sliders: "M4 21v-7 M4 10V3 M12 21v-9 M12 8V3 M20 21v-5 M20 12V3 M1 14h6 M9 8h6 M17 16h6",
     };
     // The Zentral panel's own pill icons (copied from its SVG strings), so the card's pill reads the same.
@@ -7292,10 +7299,10 @@
       const prefStr = (k, d) => String(getPref(k, d) ?? d);
       const setPref = (k, v) => env.setPref?.(k, v);
       let shortcutCache = { raw: null, hid: null, list: [] };
-      const hiddenTools = () => parseHidden(getPref(PREF.HIDDEN_TOOLS, ""));
+      const hiddenTools = () => parseHidden(getPref(PREF.HIDDEN_TOOLS, DEFAULT_HIDDEN_TOOLS));
       function shortcutList() {
         const raw = String(getPref(PREF.SHORTCUTS, "") || "");
-        const hid = String(getPref(PREF.HIDDEN_TOOLS, "") || "");
+        const hid = String(getPref(PREF.HIDDEN_TOOLS, DEFAULT_HIDDEN_TOOLS) ?? "");
         if (shortcutCache.raw !== raw || shortcutCache.hid !== hid) {
           const gone = parseHidden(hid);
           shortcutCache = { raw, hid, list: effectiveShortcuts(parseShortcutMap(raw)).filter((x) => !gone.has(x.id)) };
@@ -8070,6 +8077,52 @@
         remindEl.classList.toggle("is-due", passed);
         remindEl.title = (passed ? "Reminder time passed: " : "Reminder: ") + reminderText(n.remind) + " (click to change)";
       }
+      // Mini calendar (roadmap T2.2): one month grid that fills a date field. `selected` / return values are local-midnight ms.
+      // The model comes from the calendar core (pickerMonth / stepMonth / pickerKey); without that part no picker is offered.
+      function buildMiniCalendar({ selected, items = [], onPick }) {
+        const C = CALENDAR_PART;
+        if (!C) return null;
+        const weekStart = 1;
+        let cursor = selected || C.dayStart(nowMs());
+        let view = { year: new Date(cursor).getFullYear(), month: new Date(cursor).getMonth() };
+        const title = h("div", { class: "zn-cal-title", "aria-live": "polite" });
+        const prev = iconButton("chevronLeft", "Previous month", "zn-cal-nav"), next = iconButton("chevronRight", "Next month", "zn-cal-nav");
+        const todayBtn = chip("Today");
+        const grid = h("div", { class: "zn-cal-grid", role: "grid", tabindex: "0", "aria-label": "Choose a day" });
+        const root = h("div", { class: "zn-cal" }, h("div", { class: "zn-cal-head" }, prev, title, next, todayBtn), grid);
+        const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const draw = () => {
+          const monthName = new Date(view.year, view.month, 1).toLocaleString(undefined, { month: "long", year: "numeric" });
+          title.textContent = monthName;
+          const rows = C.pickerMonth(view.year, view.month, { weekStart, now: nowMs(), selected: cursor, items });
+          grid.replaceChildren(
+            ...Array.from({ length: 7 }, (_, i) => h("span", { class: "zn-cal-dow" }, names[(weekStart + i) % 7])),
+            ...rows.flat().map((c) => {
+              const b = h("button", { type: "button", class: "zn-cal-day", "data-day": String(c.day), tabindex: "-1", "aria-label": new Date(c.day).toDateString() + (c.count ? ", " + c.count + " item" + (c.count > 1 ? "s" : "") : "") }, String(c.date));
+              if (!c.inMonth) b.classList.add("is-out");
+              if (c.today) b.classList.add("is-today");
+              if (c.day === (selected ? C.dayStart(selected) : 0)) b.classList.add("is-picked");
+              if (c.day === cursor) { b.classList.add("is-cursor"); b.setAttribute("aria-selected", "true"); }
+              if (c.count) b.append(h("i", { class: "zn-cal-dot" }));
+              b.addEventListener("click", () => { cursor = c.day; selected = c.day; onPick?.(c.day); draw(); });
+              return b;
+            }),
+          );
+        };
+        const go = (delta) => { view = C.stepMonth(view.year, view.month, delta); cursor = new Date(view.year, view.month, Math.min(new Date(cursor).getDate(), 28)).getTime(); draw(); };
+        prev.addEventListener("click", () => go(-1));
+        next.addEventListener("click", () => go(1));
+        todayBtn.addEventListener("click", () => { cursor = selected = C.dayStart(nowMs()); view = { year: new Date(cursor).getFullYear(), month: new Date(cursor).getMonth() }; onPick?.(cursor); draw(); });
+        grid.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); selected = cursor; onPick?.(cursor); draw(); return; }
+          const moved = C.pickerKey(cursor, e.key, weekStart);
+          if (moved === cursor) return;
+          e.preventDefault(); e.stopPropagation();
+          cursor = moved; view = { year: new Date(cursor).getFullYear(), month: new Date(cursor).getMonth() }; draw();
+        });
+        draw();
+        return root;
+      }
       function askReminder() {
         const n = note();
         if (!n || n.trashed) return;
@@ -8091,6 +8144,19 @@
         });
         for (const f of [d, t]) f.input.addEventListener("input", paintPreview);
         paintPreview();
+        // The calendar button next to the date opens a mini calendar that fills the date field (roadmap T2.2).
+        let miniCal = null;
+        const pickBtn = chip("Pick day\u2026");
+        pickBtn.title = "Pick the day in a calendar";
+        quick.push(pickBtn);
+        pickBtn.addEventListener("click", () => {
+          if (miniCal) { miniCal.remove(); miniCal = null; return; }
+          const typed = parseRemindInput(d.input.value, "00:00");
+          const reminders = store.list({ trashed: false }).filter((x) => x.remind > 0).map((x) => CALENDAR_PART.cleanItem({ id: x.id, summary: titleOf(x.body) || "Note", start: { dateTime: new Date(x.remind).toISOString() }, x: { kind: "reminder", noteId: x.id } }, nowMs())).filter(Boolean);
+          miniCal = buildMiniCalendar({ selected: typed ? CALENDAR_PART.dayStart(typed) : 0, items: reminders, onPick: (day) => { d.input.value = remindDateText(day); paintPreview(); } });
+          if (miniCal) (t.row.parentNode || t.row.parent).insertBefore(miniCal, t.row);
+        });
+        if (!CALENDAR_PART) pickBtn.hidden = true;
         const ok = chip("Set reminder", true), cancel = chip("Cancel");
         const buttons = [cancel];
         if (n.remind) {

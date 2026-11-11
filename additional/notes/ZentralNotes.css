@@ -1455,3 +1455,17 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-rootrow { display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin: 2px 0 4px; border-radius: 8px; cursor: pointer; }
 .zentral-notes-sheet .zn-rootrow .zn-frow-icon { color: var(--zn-frow-stroke, currentColor); }
 .zentral-notes-sheet .zn-rootrow .zn-rootrow-name { flex: 1; min-width: 0; font-weight: 700; font-size: 12px; letter-spacing: .04em; }
+
+/* Mini calendar (date picker, roadmap T2.2) */
+.zentral-notes-sheet .zn-cal { margin: 4px 0 8px; padding: 6px; border: 1px solid var(--zn-line); border-radius: 8px; }
+.zentral-notes-sheet .zn-cal-head { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.zentral-notes-sheet .zn-cal-title { flex: 1; text-align: center; font-weight: 600; text-transform: capitalize; }
+.zentral-notes-sheet .zn-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; outline: none; }
+.zentral-notes-sheet .zn-cal-dow { text-align: center; font-size: 0.75em; color: var(--zn-muted); padding: 2px 0; }
+.zentral-notes-sheet .zn-cal-day { position: relative; min-width: 0; aspect-ratio: 1; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--zn-text); font: inherit; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-day:hover { background: var(--zn-hover); }
+.zentral-notes-sheet .zn-cal-day.is-out { color: var(--zn-muted); }
+.zentral-notes-sheet .zn-cal-day.is-today { border-color: var(--zn-accent); }
+.zentral-notes-sheet .zn-cal-day.is-picked { background: color-mix(in srgb, var(--zn-accent) 28%, transparent); }
+.zentral-notes-sheet .zn-cal-grid:focus-visible .zn-cal-day.is-cursor, .zentral-notes-sheet .zn-cal-day.is-cursor:focus-visible { outline: 2px solid var(--zn-accent); outline-offset: -2px; }
+.zentral-notes-sheet .zn-cal-dot { position: absolute; left: 50%; bottom: 3px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--zn-accent); }
