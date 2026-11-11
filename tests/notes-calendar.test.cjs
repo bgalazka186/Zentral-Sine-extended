@@ -3,7 +3,8 @@
 const assert = require("node:assert/strict"), path = require("node:path");
 const cal = require(path.join(__dirname, "..", "additional/notes/calendar/ZentralNotesCalendar.js"));
 let passed = 0;
-function test(name, fn) { fn(); passed++; console.log("ok -", name); }
+const queue = [];
+function test(name, fn) { queue.push([name, fn]); }
 const NOW = new Date(2026, 10, 11, 10, 0).getTime(); // Wed 2026-11-11 10:00 local
 const day = (y, m, d) => new Date(y, m - 1, d).getTime();
 const at = (y, m, d, h, mi = 0) => new Date(y, m - 1, d, h, mi).getTime();
@@ -24,7 +25,53 @@ test("parseDateText: ISO, dotted, day-month rolls to next year, @words, offsets,
   assert.equal(cal.parseDateText("nonsense", NOW), null);
 });
 
+test("parseDateText: extended numeric and English, German, Polish month-name formats", () => {
+  const cases = [
+    ["11-11-2026", day(2026, 11, 11)],
+    ["11/11/2026", day(2026, 11, 11)],
+    ["2026/11/11", day(2026, 11, 11)],
+    ["11.11.26", day(2026, 11, 11)],
+    ["11.11.99", day(1999, 11, 11)],
+    ["11 Nov 2026", day(2026, 11, 11)],
+    ["Nov 11, 2026", day(2026, 11, 11)],
+    ["11. November 2026", day(2026, 11, 11)],
+    ["11 listopada 2026", day(2026, 11, 11)],
+    ["11. März 2026", day(2026, 3, 11)],
+    ["11 marca 2026", day(2026, 3, 11)],
+    ["15/12", day(2026, 12, 15)],
+    ["15 listopada", day(2026, 11, 15)],
+  ];
+  for (const [input, expected] of cases) assert.equal(cal.parseDateText(input, NOW), expected, input);
+  assert.equal(cal.parseDateText("31/02/2026", NOW), null, "invalid dates are not rolled into another month");
+  assert.equal(cal.parseDateText("31 listopada 2026", NOW), null, "month names are calendar-validated");
+  assert.equal(cal.parseDateText("29.02.", NOW), day(2028, 2, 29), "yearless leap day finds the next valid year");
+  const textual = cal.parseLine("- 25 listopada 2026 Dentist", NOW);
+  assert.deepEqual([textual.day, textual.summary, textual.yearless], [day(2026, 11, 25), "Dentist", false]);
+  const noYear = cal.parseLine("- 15 grudnia Call mom", NOW);
+  assert.deepEqual([noYear.day, noYear.summary, noYear.yearless], [day(2026, 12, 15), "Call mom", true]);
+  const annual = cal.extractNoteItems("%%calendar: Birthdays%%\n- 15 listopada Birthday", "annual-pl", NOW)[0];
+  assert.deepEqual(annual.recurrence, ["RRULE:FREQ=YEARLY"], "a yearless month-name line repeats annually");
+});
+
+test("inlineDateTokens: visible date forms, relative tokens, time suffix and ambiguous clock protection", () => {
+  const tokens = cal.inlineDateTokens("@today 2026-11-03 10-08 03.12. 03.12 03:12 25 listopada 2026 November 25, 2026 2026-11-04 14:37", NOW);
+  assert.deepEqual(tokens.map((x) => [x.raw, x.ymd, x.time]), [
+    ["@today", "2026-11-11", ""],
+    ["2026-11-03", "2026-11-03", ""],
+    ["10-08", "2027-08-10", ""],
+    ["03.12.", "2026-12-03", ""],
+    ["25 listopada 2026", "2026-11-25", ""],
+    ["November 25, 2026", "2026-11-25", ""],
+    ["2026-11-04 14:37", "2026-11-04", "14:37"],
+  ]);
+  assert.equal(cal.inlineDateTokens("03.12 and 25 listopada 2026", NOW).at(-1)?.raw, "25 listopada 2026", "an invalid month-like phrase must not consume the next valid date");
+  assert.deepEqual(cal.ignoredDateTokens("text %%zn-date-ignore:10-08%% and %%zn-date-ignore:%402%2B3d%%"), ["10-08", "@2+3d"]);
+  assert.equal(cal.stripDateIgnoreMarks("text%%zn-date-ignore:10-08%%"), "text");
+});
+
 test("parseTimeRange and parseLine", () => {
+  assert.equal(cal.parseLine("- 03.12. Anna", NOW).day, day(2026, 12, 3), "trailing dot = day-month, not 03:12");
+  assert.deepEqual([cal.parseLine("- 03.12 Anna", NOW)?.startMin, cal.parseLine("- 03:12 Anna", NOW, day(2026, 11, 12))?.startMin], [undefined, 192], "without the dot it stays a clock time");
   assert.deepEqual(cal.parseTimeRange("06:00-14:00"), { startMin: 360, endMin: 840 });
   assert.deepEqual(cal.parseTimeRange("6:00 \u2013 14:30"), { startMin: 360, endMin: 870 });
   assert.deepEqual(cal.parseTimeRange("14:30"), { startMin: 870, endMin: -1 });
@@ -210,4 +257,132 @@ test("picker model: flags, counts, month stepping, keyboard", () => {
   assert.equal(cal.pickerKey(day(2026, 11, 11), "x"), day(2026, 11, 11));
 });
 
-console.log(passed + " passed");
+
+const BODY = [
+  "# Team", "",
+  "## Birthdays", "%%calendar: Birthdays%%",
+  "- 10-08 Jan Kowalski \u2014 team lead",
+  "- 03.12. Anna",
+  "- not a date line", "",
+  "## Shifts", "%%calendar: Work%%",
+  "- 2026-11-12 06:00-14:00 Work",
+  "- 2026-11-12 06:00-14:00 Work",
+  "- 2026-11-13 18:00 Call mom", "",
+  "## Notes",
+  "- 2026-11-20 not in a marked section",
+  "```", "%%calendar: Code%%", "- 2026-11-21 in a fence", "```",
+  "## 2026-11-25", "%%calendar: Day%%",
+  "- 09:00-10:00 Standup",
+  "- 14:00 Review",
+  "# Done",
+  "- 2026-11-30 after the section ends",
+].join("\n");
+
+test("extractNoteItems: marked sections only, categories, headings, yearly dates, duplicates, date headings, fences", () => {
+  const list = cal.extractNoteItems(BODY, "note1", NOW);
+  const by = (t) => list.filter((i) => i.summary === t);
+  assert.equal(list.length, 7, "Jan, Anna, Work x2, Call mom, Standup, Review");
+  assert.equal(list.filter((i) => i.x.kind === "reminder").length, 4, "one note can contain multiple independent reminders");
+  const jan = by("Jan Kowalski \u2014 team lead")[0];
+  assert.deepEqual([jan.x.category, jan.x.heading, jan.x.src, jan.x.noteId, jan.x.kind], ["Birthdays", "Birthdays", "list", "note1", "reminder"]);
+  assert.deepEqual(jan.recurrence, ["RRULE:FREQ=YEARLY"]); assert.equal(jan.start.date, "2027-08-10");
+  assert.equal(by("Anna")[0].start.date, "2026-12-03");
+  const work = by("Work");
+  assert.equal(work.length, 2); assert.notEqual(work[0].id, work[1].id, "identical lines stay two items");
+  assert.equal(work[0].x.kind, "event"); assert.equal(cal.itemRange(work[0])[1] - cal.itemRange(work[0])[0], 8 * 3600000);
+  assert.equal(by("Call mom")[0].x.kind, "reminder");
+  assert.equal(by("Standup")[0].x.category, "Day"); assert.equal(cal.ymd(new Date(cal.itemRange(by("Standup")[0])[0])), "2026-11-25", "the heading is the date");
+  assert.ok(!list.some((i) => /not in a marked|in a fence|after the section/.test(i.summary)));
+  assert.deepEqual(cal.extractNoteItems(BODY, "note1", NOW).map((i) => i.id), list.map((i) => i.id), "ids are stable");
+  assert.notEqual(cal.extractNoteItems(BODY, "note2", NOW)[0].id, list[0].id);
+  assert.equal(cal.extractNoteItems("- 2026-11-20 x", "n", NOW).length, 0);
+  const namedHeading = cal.extractNoteItems("## 25 listopada 2026\n%%calendar: Work%%\n- 09:00 Review", "named-heading", NOW);
+  assert.equal(cal.ymd(new Date(cal.itemRange(namedHeading[0])[0])), "2026-11-25", "month-name headings supply the default day");
+});
+
+test("date ignore marks persist through calendar extraction without deleting an event summary", () => {
+  const body = "%%calendar: Work%%\n- 2026-11-12 Dentist 10-08%%zn-date-ignore:10-08%%\n- 10-08 Birthday%%zn-date-ignore:10-08%%";
+  const items = cal.extractNoteItems(body, "ignore", NOW);
+  assert.equal(items.length, 1, "an ignored date in a summary does not remove the dated event, while an ignored leading date removes only that reminder");
+  assert.deepEqual([items[0].summary, items[0].start.date], ["Dentist 10-08", "2026-11-12"]);
+  const timed = cal.extractNoteItems("%%calendar: Work%%\n- 2026-11-12 09:00-10:00 Review%%zn-date-ignore:2026-11-12%2009%3A00%%", "ignore-time", NOW);
+  assert.equal(timed.length, 0, "ignoring a date chip with a time suffix also removes that date-driven list item");
+  assert.deepEqual(cal.ignoredDateTokens("10-08 %%zn-date-ignore:10-08%%"), ["10-08"]);
+});
+
+test("itemsFromNoteReminders shows the old reminder field as read-only items", () => {
+  const r = cal.itemsFromNoteReminders([{ id: "a", body: "Call bank\nmore", remind: at(2026, 11, 12, 9) }, { id: "b", body: "x", remind: 0 }, { id: "c", body: "gone", remind: 5e12, trashed: 1 }]);
+  assert.equal(r.length, 1); assert.deepEqual([r[0].id, r[0].summary, r[0].x.src, r[0].x.noteId, r[0].x.kind], ["remind:a", "Call bank", "note", "a", "reminder"]);
+});
+
+test("item store: file, sync keeps extras and dragged times, removes vanished lines, upsert/remove, reload", async () => {
+  const files = new Map(), timers = [];
+  const io = { join: (...p) => p.join("/"), readUTF8: async (p) => { if (!files.has(p)) throw new Error("nf"); return files.get(p); }, writeUTF8: async (p, t) => { files.set(p, t); } };
+  let clock = NOW;
+  const mk = () => cal.createItemStore({ io, getDir: () => "/n", now: () => clock, setTimer: (fn) => { timers.push(fn); return timers.length; }, clearTimer() {} });
+  const st = mk(); await st.open();
+  const events = []; st.on((k, id) => events.push(k));
+  assert.equal(st.syncNote("n1", "plain text"), false, "no marker, nothing to do");
+  assert.equal(st.syncNote("n1", BODY), true);
+  assert.equal(st.list({ noteId: "n1" }).length, 7); assert.deepEqual(st.categories(), ["Birthdays", "Day", "Work"]);
+  assert.equal(st.syncNote("n1", BODY), false, "same text, no change");
+  // extras and a dragged time survive an edit of another line
+  const call = st.list().find((i) => i.summary === "Call mom");
+  const edited = st.upsert({ ...call, x: { ...call.x, calNote: "bring flowers", moved: "1" }, start: { dateTime: new Date(at(2026, 11, 13, 19)).toISOString() } });
+  assert.equal(edited.x.calNote, "bring flowers");
+  assert.equal(st.syncNote("n1", BODY.replace("- 03.12. Anna", "- 04.12. Anna B")), true);
+  const after = st.get(call.id);
+  assert.equal(after.x.calNote, "bring flowers"); assert.equal(cal.itemRange(after)[0], at(2026, 11, 13, 19), "dragged time kept"); assert.equal(after.x.moved, "1");
+  assert.ok(!st.list().some((i) => i.summary === "Anna") && st.list().some((i) => i.summary === "Anna B"), "an edited line is a new item");
+  // manual item, persistence, reload
+  const manual = st.upsert({ summary: "Dentist", start: { dateTime: new Date(at(2026, 12, 1, 8)).toISOString() }, end: { dateTime: new Date(at(2026, 12, 1, 9)).toISOString() }, x: { kind: "event", category: "Health", calNote: "x-ray" } });
+  assert.equal(manual.x.src, "manual");
+  timers.forEach((f) => f()); await st.flush();
+  assert.ok(files.has("/n/calendar.json")); assert.ok(!/\.md$/.test(cal.ITEMS_FILE), "never looks like a note file");
+  const st2 = mk(); await st2.open();
+  assert.equal(st2.list().length, st.list().length); assert.equal(st2.get(manual.id).x.calNote, "x-ray");
+  // removing the marker removes the listed items but not the manual ones
+  assert.equal(st2.syncNote("n1", "# Team\n\nnothing"), true);
+  assert.equal(st2.list({ noteId: "n1" }).length, 0); assert.equal(st2.get(manual.id).summary, "Dentist");
+  assert.equal(st2.upsert({ summary: "bad", start: { date: "no" } }), null);
+  st2.syncNote("n2", "## A\n%%calendar%%\n- 2026-12-02 X");
+  assert.equal(st2.removeNote("n2"), 1); assert.equal(st2.remove(manual.id), true); assert.equal(st2.remove("nope"), false);
+  assert.ok(events.includes("change") && events.includes("reset") === false);
+  // a damaged file opens empty instead of throwing
+  files.set("/n/calendar.json", "{broken"); const st3 = mk(); await st3.open(); assert.equal(st3.list().length, 0);
+});
+
+test("item store: a hidden note (Trash) keeps its items untouched and shows them again on restore", async () => {
+  const files = new Map();
+  const io = { join: (...p) => p.join("/"), readUTF8: async (p) => { if (!files.has(p)) throw new Error("nf"); return files.get(p); }, writeUTF8: async (p, t) => { files.set(p, t); } };
+  const st = cal.createItemStore({ io, getDir: () => "/n", now: () => NOW, setTimer: (fn) => fn, clearTimer() {} });
+  await st.open();
+  st.syncNote("n1", BODY);
+  const call = st.list().find((i) => i.summary === "Call mom");
+  st.upsert({ ...call, x: { ...call.x, calNote: "keep me" } });
+  const manual = st.upsert({ summary: "Loose", start: { date: "2026-12-05" }, x: { kind: "reminder" } });
+  const seen = []; st.on((k) => seen.push(k));
+  assert.equal(st.hideNote("n1"), true); assert.equal(st.hideNote("n1"), false, "already hidden");
+  assert.equal(st.list({ noteId: "n1" }).length, 0); assert.equal(st.get(call.id), null); assert.equal(st.has(call.id), false);
+  assert.deepEqual(st.categories(), [], "hidden categories vanish too");
+  assert.equal(st.get(manual.id).summary, "Loose", "items of no note stay visible");
+  assert.equal(st.showNote("n1"), true);
+  assert.equal(st.get(call.id).x.calNote, "keep me"); assert.equal(st.list({ noteId: "n1" }).length, 7);
+  assert.ok(seen.includes("remove") && seen.includes("change"));
+  st.hideNote("n1"); st.removeNote("n1"); assert.equal(st.isHidden("n1"), false, "removing a note forgets the hidden flag");
+});
+
+
+test("calendar split layout chooses a responsive orientation and falls back to tabs below useful pane sizes", () => {
+  assert.deepEqual(cal.calendarLayoutFor("auto", 1200, 700), { mode: "auto", orientation: "lr", tabs: false, width: 1200, height: 700 });
+  assert.deepEqual(cal.calendarLayoutFor("auto", 420, 720), { mode: "auto", orientation: "tb", tabs: false, width: 420, height: 720 });
+  assert.equal(cal.calendarLayoutFor("lr", 430, 600).tabs, true, "forced side-by-side still falls back when too narrow");
+  assert.equal(cal.calendarLayoutFor("tb", 420, 380).tabs, true, "forced stacked still falls back when too short");
+  assert.equal(cal.calendarLayoutFor("tb", 900, 700).orientation, "tb");
+  assert.equal(cal.cleanCalendarLayout("broken"), "auto");
+  assert.equal(cal.cleanCalendarShare(0.95), 0.8);
+  assert.equal(cal.cleanCalendarShare(0.01), 0.2);
+  assert.equal(cal.cleanCalendarShare("bad", 0.42), 0.42);
+});
+
+(async () => { for (const [name, fn] of queue) { await fn(); passed++; console.log("ok -", name); } console.log(passed + " passed"); })().catch((e) => { console.error(e); process.exit(1); });

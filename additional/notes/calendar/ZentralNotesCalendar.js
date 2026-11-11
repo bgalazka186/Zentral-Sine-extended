@@ -15,7 +15,7 @@
  * ITEM (Google field names; our own fields live under `x`)
  *   { id, summary, description, start: {date}|{dateTime}, end: {date}|{dateTime}|undefined, status, updated, etag,
  *     recurrence: [RRULE...], reminders: { overrides: [{ method, minutes }] },
- *     x: { kind: "event"|"reminder", noteId, heading, category, calNote } }
+ *     x: { kind: "event"|"reminder", noteId, heading, category, tz, src: "list"|"note"|"manual", key, moved, calNote } }
  *   Times: `dateTime` is a UTC ISO string (Google also allows an offset; we always write Z). `date` is a local calendar
  *   day YYYY-MM-DD. An all-day item ends on an EXCLUSIVE date, as in Google. A reminder has a start and NO end.
  */
@@ -25,6 +25,17 @@
   const p2 = (n) => String(n).padStart(2, "0");
   const KINDS = Object.freeze(["event", "reminder"]);
   const MAX_TEXT = 500, MAX_DESC = 20000;
+  const DEFAULT_CATEGORY_NOTIFY = Object.freeze({
+    pre: Object.freeze({ enabled: true, leadMinutes: 5 }),
+    due: Object.freeze({ enabled: true }),
+    followup: Object.freeze({ enabled: true, delayMinutes: 2 }),
+  });
+  const DEFAULT_CATEGORIES = Object.freeze([
+    Object.freeze({ name: "Birthdays", color: "#e58aac" }),
+    Object.freeze({ name: "Deadlines", color: "#e36b68" }),
+    Object.freeze({ name: "Subscriptions", color: "#6c9fe8" }),
+    Object.freeze({ name: "Work", color: "#55ad86" }),
+  ]);
 
   // ---------- dates ----------
   const ymd = (d) => d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate());
@@ -41,25 +52,64 @@
 
   // ---------- parsing ----------
   const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-  // A date as people type it: 2026-11-11, 11.11.2026, 11.11. / 11-11 (day-month, this or next year), @today, @tomorrow,
-  // @+3d / @-2d / @+1w / @+1m, @monday (next such day). Returns local midnight ms or null.
+  // Month aliases are offline and cover English, German and Polish (including Polish genitive forms).
+  const MONTH_ALIASES = Object.create(null);
+  const MONTH_WORDS = [
+    ["january", "jan", "januar", "styczen", "stycznia", "sty"],
+    ["february", "feb", "februar", "luty", "lutego", "lut"],
+    ["march", "mar", "maerz", "marz", "marzec", "marca"],
+    ["april", "apr", "kwiecien", "kwietnia", "kwi"],
+    ["may", "mai", "maj", "maja"],
+    ["june", "jun", "juni", "czerwiec", "czerwca", "cze"],
+    ["july", "jul", "juli", "lipiec", "lipca", "lip"],
+    ["august", "aug", "sierpien", "sierpnia", "sie"],
+    ["september", "sep", "sept", "wrzesien", "wrzesnia", "wrz"],
+    ["october", "oct", "oktober", "okt", "pazdziernik", "pazdziernika", "paz"],
+    ["november", "nov", "listopad", "listopada", "lis"],
+    ["december", "dec", "dezember", "dez", "grudzien", "grudnia", "gru"],
+  ];
+  MONTH_WORDS.forEach((words, i) => words.forEach((word) => { MONTH_ALIASES[word] = i + 1; }));
+  const monthWord = (word) => String(word || "").toLowerCase().replace(/\.$/, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const dateFromParts = (year, month, date) => {
+    if (!Number.isInteger(year) || year < 1 || year > 9999) return null;
+    const d = parseYmd(year + "-" + p2(month) + "-" + p2(date));
+    return d ? d.getTime() : null;
+  };
+  function futureMonthDay(month, date, base) {
+    const year = new Date(base).getFullYear();
+    // Leap-day birthdays must find the next leap year, not just the next calendar year.
+    for (let y = year; y <= year + 8; y++) {
+      const ms = dateFromParts(y, month, date);
+      if (ms !== null && ms >= base) return ms;
+    }
+    return null;
+  }
+  const twoDigitYear = (year) => year < 50 ? 2000 + year : 1900 + year;
+  // A date as people type it: ISO, day/month/year, dotted/dashed/slashed dates, month names, @today, @tomorrow,
+  // @+3d / @-2d / @+1w / @+1m, @monday. Numeric day-first forms are deliberate; no locale-dependent guessing.
+  // Two-digit years use 00-49 => 2000-2049 and 50-99 => 1950-1999.
   function parseDateText(text, now) {
-    const t = String(text || "").trim().toLowerCase().replace(/^[@/]/, "");
+    const t = String(text || "").trim().toLowerCase().replace(/^[@/]/, "").replace(/[,.]$/, "").trim();
     if (!t) return null;
     const base = dayStart(now);
-    let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t);
-    if (m) { const d = parseYmd(m[1] + "-" + p2(m[2]) + "-" + p2(m[3])); return d ? d.getTime() : null; }
-    m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(t);
-    if (m) { const d = parseYmd(m[3] + "-" + p2(m[2]) + "-" + p2(m[1])); return d ? d.getTime() : null; }
-    m = /^(\d{1,2})[.-](\d{1,2})\.?$/.exec(t);
+    let m = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(t);
+    if (m) return dateFromParts(+m[1], +m[2], +m[3]);
+    m = /^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/.exec(t);
+    if (m) return dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], +m[2], +m[1]);
+    m = /^(\d{1,2})\.?\s+([a-z\u00c0-\u024f]+)(?:\s+(\d{2,4}))?$/.exec(t);
     if (m) {
-      const y = new Date(base).getFullYear();
-      for (const yy of [y, y + 1]) {
-        const d = parseYmd(yy + "-" + p2(m[2]) + "-" + p2(m[1]));
-        if (d && d.getTime() >= base) return d.getTime();
-      }
-      return null;
+      const month = MONTH_ALIASES[monthWord(m[2])];
+      if (!month) return null;
+      return m[3] ? dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], month, +m[1]) : futureMonthDay(month, +m[1], base);
     }
+    m = /^([a-z\u00c0-\u024f]+)\s+(\d{1,2})(?:,?\s+(\d{2,4}))?$/.exec(t);
+    if (m) {
+      const month = MONTH_ALIASES[monthWord(m[1])];
+      if (!month) return null;
+      return m[3] ? dateFromParts(m[3].length === 2 ? twoDigitYear(+m[3]) : +m[3], month, +m[2]) : futureMonthDay(month, +m[2], base);
+    }
+    m = /^(\d{1,2})[./-](\d{1,2})\.?$/.exec(t);
+    if (m) return futureMonthDay(+m[2], +m[1], base);
     if (t === "today") return base;
     if (t === "tomorrow") return addDays(base, 1);
     if (t === "yesterday") return addDays(base, -1);
@@ -73,6 +123,66 @@
     }
     const wd = WEEKDAYS.findIndex((w) => w === t || w.slice(0, 3) === t);
     if (wd >= 0) return addDays(base, ((wd - new Date(base).getDay() + 7) % 7) || 7);
+    return null;
+  }
+  // Inline dates are deliberately recognised only in visible plain-text runs by the renderer. This scanner only
+  // supplies candidates; the Markdown renderer decides whether the run is inside code, math or a link.
+  function inlineDateTokens(text, now) {
+    const source = String(text || ""), out = [];
+    const month = "[a-z\\u00c0-\\u024f]+\\.?";
+    const relative = "@(?:today|tomorrow|yesterday|[+-]\\d{1,4}[dwmy]|(?:mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?))";
+    const patterns = [
+      relative,
+      "\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}",
+      "\\d{1,2}[/-]\\d{1,2}(?:[/-]\\d{2,4})?",
+      "\\d{1,2}\\.\\d{1,2}\\.(?:\\d{2,4})?",
+      "\\d{1,2}\\.?\\s+" + month + "(?:\\s+\\d{2,4})?",
+      month + "\\s+\\d{1,2}(?:,?\\s+\\d{2,4})?",
+    ];
+    const re = new RegExp("(?<![\\w/@])(" + patterns.join("|") + ")(?:[ T](\\d{1,2}):(\\d{2}))?(?![\\w/-])", "giu");
+    for (let m; (m = re.exec(source)); ) {
+      const raw = m[1], day = parseDateText(raw, now);
+      // An unknown word can look like a month name (for example "12 and 25 listopada"). Do not let
+      // that rejected candidate consume the next, valid date; resume one character after its start.
+      if (day === null) { re.lastIndex = m.index + 1; continue; }
+      const time = m[2] !== undefined && +m[2] < 24 ? String(+m[2]).padStart(2, "0") + ":" + m[3] : "";
+      if (m[2] !== undefined && !time) continue;
+      out.push({ start: m.index, end: re.lastIndex, raw: m[0], dateText: raw, ymd: ymd(new Date(day)), time });
+    }
+    return out;
+  }
+  const DATE_IGNORE_RE = /%%\s*zn-date-ignore:((?:%[0-9a-f]{2}|[^%]){1,180})\s*%%/gi;
+  function ignoredDateTokens(line) {
+    const out = [];
+    for (const m of String(line || "").matchAll(DATE_IGNORE_RE)) {
+      try { out.push(decodeURIComponent(m[1]).toLowerCase()); } catch (_) { out.push(m[1].toLowerCase()); }
+    }
+    return out;
+  }
+  const stripDateIgnoreMarks = (line) => String(line || "").replace(DATE_IGNORE_RE, "");
+  // A date prefix for list/heading lines; month-name forms can contain spaces.
+  function parseDatePrefix(text, now) {
+    const s = String(text || "").trim();
+    const patterns = [
+      /^(\d{4}[./-]\d{1,2}[./-]\d{1,2})(?=\s|$)/,
+      /^(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})(?=\s|$)/,
+      /^(\d{1,2}[./-]\d{1,2}\.?)(?=\s|$)/,
+      /^(\d{1,2}\.?\s+[a-z\u00c0-\u024f]+\.?\s+\d{2,4})(?=\s|$)/i,
+      /^(\d{1,2}\.?\s+[a-z\u00c0-\u024f]+\.?)(?=\s|$)/i,
+      /^([a-z\u00c0-\u024f]+\.?\s+\d{1,2},?\s+\d{2,4})(?=\s|$)/i,
+      /^([a-z\u00c0-\u024f]+\.?\s+\d{1,2},?)(?=\s|$)/i,
+      /^(\S+)/,
+    ];
+    for (const re of patterns) {
+      const m = re.exec(s);
+      if (!m) continue;
+      const raw = m[1], day = parseDateText(raw, now);
+      // An unknown word can look like a month name (for example "12 and 25 listopada"). Do not let
+      // that rejected candidate consume the next, valid date; resume one character after its start.
+      if (day === null) { re.lastIndex = m.index + 1; continue; }
+      const yearless = /^\d{1,2}[./-]\d{1,2}\.?$/.test(raw) || /^\d{1,2}\.?\s+[a-z\u00c0-\u024f]+\.?$/i.test(raw) || /^[a-z\u00c0-\u024f]+\.?\s+\d{1,2},?$/i.test(raw);
+      return { day, raw, rest: s.slice(raw.length).trim(), yearless };
+    }
     return null;
   }
   // "6:00", "06:00", "14:30" -> minutes after midnight or -1.
@@ -95,16 +205,19 @@
   function parseLine(line, now, defaultDay) {
     let t = String(line || "").replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, "").trim();
     if (!t) return null;
-    let day = defaultDay ?? null, tok = /^(\S+)\s*(.*)$/.exec(t);
-    const d = tok ? parseDateText(tok[1], now) : null;
-    if (d !== null && !/^\d{1,2}[:.]\d{2}/.test(tok[1])) { day = d; t = tok[2]; }
+    let day = defaultDay ?? null, yearless = false;
+    const prefix = parseDatePrefix(t, now);
+    // "03.12." (trailing dot) is a day-month date; "03.12" / "03:12" stay clock times.
+    if (prefix && (!/^\d{1,2}[:.]\d{2}$/.test(prefix.raw) || /^\d{1,2}\.\d{1,2}\.$/.test(prefix.raw))) {
+      day = prefix.day; t = prefix.rest; yearless = prefix.yearless;
+    }
     if (day === null) return null;
     let range = null;
     const tr = /^(\d{1,2}[:.]\d{2}(?:\s*[-\u2013\u2014]\s*\d{1,2}[:.]\d{2})?)\s*(.*)$/.exec(t);
     if (tr) { range = parseTimeRange(tr[1]); if (range) t = tr[2]; }
     t = t.replace(/^[-\u2013\u2014:]\s*/, "").trim();
     if (!t) return null;
-    return { day, startMin: range ? range.startMin : -1, endMin: range ? range.endMin : -1, summary: t.slice(0, MAX_TEXT) };
+    return { day, startMin: range ? range.startMin : -1, endMin: range ? range.endMin : -1, summary: t.slice(0, MAX_TEXT), yearless };
   }
 
   // ---------- item model ----------
@@ -127,6 +240,44 @@
     return null;
   }
   const whenMs = (w) => (w.date ? parseYmd(w.date).getTime() : Date.parse(w.dateTime));
+  const cleanCategoryName = (value) => String(value ?? "").replace(/[\r\n%]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+  const categoryKey = (value) => cleanCategoryName(value).toLocaleLowerCase();
+  const cleanStageRule = (raw, fallback, stage) => {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const out = { enabled: typeof src.enabled === "boolean" ? src.enabled : fallback.enabled !== false };
+    if (stage === "pre") out.leadMinutes = Number.isFinite(+src.leadMinutes) ? Math.max(1, Math.min(10, Math.round(+src.leadMinutes))) : fallback.leadMinutes;
+    if (stage === "followup") out.delayMinutes = Number.isFinite(+src.delayMinutes) ? Math.max(1, Math.min(30, Math.round(+src.delayMinutes))) : fallback.delayMinutes;
+    return out;
+  };
+  function cleanCategoryNotify(raw) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    return {
+      pre: cleanStageRule(src.pre, DEFAULT_CATEGORY_NOTIFY.pre, "pre"),
+      due: cleanStageRule(src.due, DEFAULT_CATEGORY_NOTIFY.due, "due"),
+      followup: cleanStageRule(src.followup, DEFAULT_CATEGORY_NOTIFY.followup, "followup"),
+    };
+  }
+  function cleanNotifyOverrides(raw) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const out = {};
+    for (const stage of ["pre", "due", "followup"]) {
+      const src = raw[stage];
+      if (!src || typeof src !== "object" || Array.isArray(src)) continue;
+      const rule = {};
+      if (typeof src.enabled === "boolean") rule.enabled = src.enabled;
+      if (stage === "pre" && Number.isFinite(+src.leadMinutes)) rule.leadMinutes = Math.max(1, Math.min(10, Math.round(+src.leadMinutes)));
+      if (stage === "followup" && Number.isFinite(+src.delayMinutes)) rule.delayMinutes = Math.max(1, Math.min(30, Math.round(+src.delayMinutes)));
+      if (Object.keys(rule).length) out[stage] = rule;
+    }
+    return out;
+  }
+  function cleanCategory(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    const name = cleanCategoryName(raw.name);
+    if (!name) return null;
+    const color = /^#[0-9a-f]{6}$/i.test(String(raw.color || "")) ? String(raw.color).toLowerCase() : "#7d8da8";
+    return { id: String(raw.id || "cat-" + categoryKey(name).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")).slice(0, 100), name, color, notify: cleanCategoryNotify(raw.notify) };
+  }
   // Validates and normalises anything that claims to be an item. Returns a fresh object or null.
   // An event without a usable end gets one hour (or one day when all-day); a reminder never has an end.
   function cleanItem(raw, now = 0) {
@@ -155,7 +306,7 @@
       reminders: { overrides: minutes },
       x: {
         kind, noteId: String(x.noteId ?? "").slice(0, 120), heading: String(x.heading ?? "").slice(0, MAX_TEXT),
-        category: String(x.category ?? "").slice(0, 80), tz: cleanZone(x.tz), calNote: String(x.calNote ?? "").slice(0, MAX_DESC),
+        category: cleanCategoryName(x.category), tz: cleanZone(x.tz), src: ["list", "note", "manual"].includes(x.src) ? x.src : "manual", key: String(x.key ?? "").slice(0, 60), moved: x.moved ? "1" : "", calNote: String(x.calNote ?? "").slice(0, MAX_DESC), notify: cleanNotifyOverrides(x.notify),
       },
     };
     if (end) item.end = end;
@@ -289,7 +440,7 @@
   // The plain Google event resource for an item (our `x` goes into extendedProperties.private, as Google allows).
   function toGoogle(it) {
     const priv = {};
-    for (const [k, v] of Object.entries(it.x)) if (v !== "") priv["zentral_" + k] = String(v);
+    for (const [k, v] of Object.entries(it.x)) if (v !== "" && v !== undefined && v !== null) priv["zentral_" + k] = k === "notify" ? JSON.stringify(v) : String(v);
     const out = { id: it.id, summary: it.summary, description: it.description, status: it.status, start: it.start, updated: it.updated, extendedProperties: { private: priv } };
     out.end = it.end || it.start;
     if (it.recurrence.length) out.recurrence = it.recurrence;
@@ -300,12 +451,277 @@
     if (!g || typeof g !== "object") return null;
     const priv = g.extendedProperties?.private || {};
     const x = {};
-    for (const k of ["kind", "noteId", "heading", "category", "tz", "calNote"]) if (priv["zentral_" + k] !== undefined) x[k] = priv["zentral_" + k];
+    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "moved", "calNote", "notify"]) if (priv["zentral_" + k] !== undefined) {
+      if (k === "notify") { try { x[k] = JSON.parse(priv["zentral_" + k]); } catch (_) {} }
+      else x[k] = priv["zentral_" + k];
+    }
     const sameEnd = g.end && JSON.stringify(g.end) === JSON.stringify(g.start);
     return cleanItem({ id: g.id, summary: g.summary, description: g.description, status: g.status, start: g.start, end: sameEnd ? undefined : g.end,
       updated: g.updated, recurrence: g.recurrence, reminders: g.reminders, x: { ...x, kind: x.kind || (sameEnd ? "reminder" : "event") } }, 0);
   }
 
+
+  // ---------- items inside a note (roadmap T2.3) ----------
+  // A section of a note becomes calendar items when a marker line `%%calendar: Category%%` stands in it (an Obsidian
+  // comment, so other apps show nothing). The section runs to the next heading of the same or a higher level (or the
+  // next marker; a marker above every heading runs to the end). Every list line in it that starts with a date and/or a
+  // time becomes one item; under a heading that is itself a date (`## 2026-11-25`) the date may be left out.
+  const MARKER_RE = /^\s*%%\s*calendar\s*(?::\s*([^%]*?))?\s*%%\s*$/i;
+  function calendarSectionAt(body, offset = 0) {
+    const text = String(body || ""), pos = Math.max(0, Math.min(text.length, Number(offset) || 0));
+    let lineStart = 0, heading = { level: 0, text: "" }, section = null, fence = "";
+    const lines = text.split("\n");
+    for (const line of lines) {
+      const lineEnd = lineStart + line.length;
+      if (lineStart > pos) break;
+      const f = /^\s*(`{3,}|~{3,})/.exec(line);
+      if (f) {
+        if (pos <= lineEnd) return null; // a caret on a fence delimiter is still inside a code block
+        fence = !fence ? f[1][0] : (f[1][0] === fence ? "" : fence);
+        lineStart = lineEnd + 1;
+        continue;
+      }
+      if (fence) {
+        if (pos <= lineEnd) return null;
+        lineStart = lineEnd + 1;
+        continue;
+      }
+      if (!fence) {
+        const hm = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line);
+        if (hm) {
+          const next = { level: hm[1].length, text: hm[2] };
+          if (section && next.level <= section.level) section = null;
+          heading = next;
+        } else {
+          const mk = MARKER_RE.exec(line);
+          if (mk) section = { category: cleanCategoryName(mk[1] || ""), level: heading.level, lineStart, lineEnd, heading: heading.text };
+        }
+      }
+      if (pos <= lineEnd) return section;
+      lineStart = lineEnd + 1;
+    }
+    return section;
+  }
+  function setCalendarSectionCategory(body, offset, name) {
+    const text = String(body || ""), category = cleanCategoryName(name);
+    if (!category) return null;
+    const section = calendarSectionAt(text, offset);
+    if (!section) {
+      const pos = Math.max(0, Math.min(text.length, Number(offset) || 0));
+      let lineStart = 0, fence = "";
+      for (const line of text.split("\n")) {
+        const lineEnd = lineStart + line.length;
+        if (lineStart > pos) break;
+        const marker = /^\s*(`{3,}|~{3,})/.exec(line);
+        if (marker) fence = !fence ? marker[1][0] : (marker[1][0] === fence ? "" : fence);
+        if (pos <= lineEnd) break;
+        lineStart = lineEnd + 1;
+      }
+      if (fence) return null; // never insert a calendar marker into a code fence
+    }
+    const marker = `%%calendar: ${category}%%`;
+    if (section) {
+      const next = text.slice(0, section.lineStart) + marker + text.slice(section.lineEnd);
+      return { body: next, created: false, category, lineStart: section.lineStart, delta: next.length - text.length };
+    }
+    const pos = Math.max(0, Math.min(text.length, Number(offset) || 0));
+    const lineStart = text.lastIndexOf("\n", Math.max(0, pos - 1)) + 1;
+    const prefix = text.slice(0, lineStart), suffix = text.slice(lineStart);
+    const before = prefix && !prefix.endsWith("\n\n") ? "\n" : "";
+    const insertion = (before ? "\n" : "") + marker + "\n";
+    const next = prefix + (before ? "\n" : "") + insertion.slice(before.length) + suffix;
+    return { body: next, created: true, category, lineStart: lineStart + (before ? 1 : 0), delta: next.length - text.length };
+  }
+  const hashText = (t) => { let h = 2166136261; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
+  function extractNoteItems(body, noteId, now = 0) {
+    const lines = String(body || "").split("\n");
+    const out = [], seen = new Map();
+    let fence = "", heading = { level: 0, text: "" }, sec = null;
+    for (const line of lines) {
+      const f = /^\s*(`{3,}|~{3,})/.exec(line);
+      if (f) { fence = !fence ? f[1][0] : (f[1][0] === fence ? "" : fence); continue; }
+      if (fence) continue;
+      const hm = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line);
+      if (hm) {
+        heading = { level: hm[1].length, text: hm[2] };
+        if (sec && sec.level > 0 && heading.level <= sec.level) sec = null;
+        continue;
+      }
+      const mk = MARKER_RE.exec(line);
+      if (mk) { sec = { category: (mk[1] || "").trim().slice(0, 80), level: heading.level }; continue; }
+      if (!sec) continue;
+      const dayOfHeading = heading.text ? (parseDatePrefix(heading.text, now)?.day ?? null) : null;
+      const ignored = ignoredDateTokens(line);
+      let sourceLine = stripDateIgnoreMarks(line);
+      // If the ignored token is the leading date, it no longer drives the item date. In a dated heading
+      // section the heading remains the date; otherwise the line is ordinary text and is not an item.
+      const listText = sourceLine.replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, "");
+      const prefix = parseDatePrefix(listText, now);
+      if (prefix && ignored.some((raw) => raw === prefix.raw.toLowerCase() || raw.startsWith(prefix.raw.toLowerCase() + " "))) {
+        const at = sourceLine.indexOf(prefix.raw);
+        if (at >= 0) sourceLine = sourceLine.slice(0, at) + sourceLine.slice(at + prefix.raw.length);
+      }
+      const parsed = parseLine(sourceLine, now, dayOfHeading);
+      if (!parsed) continue;
+      const norm = sourceLine.replace(/\s+/g, " ").trim().toLowerCase() + "|" + heading.text;
+      const n = (seen.get(norm) || 0) + 1; seen.set(norm, n);
+      const key = hashText(noteId + "|" + norm) + (n > 1 ? "-" + n : "");
+      const it = itemFromLine(parsed, { noteId, heading: heading.text, category: sec.category, src: "list", key }, now);
+      if (!it) continue;
+      it.id = "l" + hashText(noteId) + key;
+      if (parsed.yearless) it.recurrence = ["RRULE:FREQ=YEARLY"];
+      it.etag = etagOf(it);
+      out.push(it);
+    }
+    return out;
+  }
+  // The old one-reminder-per-note field shown as items (read only; the scheduler still owns it until T2.7).
+  function itemsFromNoteReminders(notes, titleOf = (b) => String(b || "").split("\n")[0]) {
+    const out = [];
+    for (const n of notes || []) {
+      if (!n || n.trashed || !(n.remind > 0)) continue;
+      const it = cleanItem({ id: "remind:" + n.id, summary: titleOf(n.body) || "Note", start: { dateTime: iso(n.remind) }, x: { kind: "reminder", noteId: n.id, src: "note" } }, 0);
+      if (it) out.push(it);
+    }
+    return out;
+  }
+
+  // ---------- item store ----------
+  // All items live in ONE file next to the notes (`calendar.json`), never in the note tree. `io` is the same object the note
+  // store uses (readUTF8, writeUTF8). Items made from a note's marked lists (src "list") are rebuilt by syncNote; the person's
+  // own additions (src "manual") and the extras on a listed item (calendar note, reminders, status, a moved time) survive.
+  const ITEMS_FILE = "calendar.json";
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600 }) {
+    const items = new Map();
+    const categoryDefs = new Map();
+    const hidden = new Set(); // noteIds whose items stay stored but are not shown (note in Trash, or its file is missing)
+    const listeners = new Set();
+    let dirty = false, timer = null, chain = Promise.resolve();
+    const shown = (it) => !it.x.noteId || !hidden.has(it.x.noteId);
+    const emit = (kind, id) => { for (const fn of [...listeners]) { try { fn(kind, id); } catch (e) { warn(e); } } };
+    const schedule = () => { dirty = true; if (timer !== null) clearTimer(timer); timer = setTimer(() => { timer = null; writeNow(); }, delayMs); };
+    function writeNow() {
+      if (timer !== null) { clearTimer(timer); timer = null; }
+      const dir = getDir();
+      if (!dirty || !dir) return Promise.resolve();
+      dirty = false;
+      const text = JSON.stringify({ v: 2, items: [...items.values()], categories: [...categoryDefs.values()] });
+      chain = chain.then(() => io.writeUTF8(io.join(dir, ITEMS_FILE), text, { tmpPath: io.join(dir, ITEMS_FILE + ".tmp") })).catch((e) => warn(e));
+      return chain;
+    }
+    return {
+      async open() {
+        items.clear(); categoryDefs.clear(); hidden.clear();
+        try {
+          const raw = JSON.parse(await io.readUTF8(io.join(getDir(), ITEMS_FILE)));
+          for (const r of Array.isArray(raw.items) ? raw.items : []) { const it = cleanItem(r, 0); if (it && !items.has(it.id)) items.set(it.id, it); }
+          for (const r of Array.isArray(raw.categories) ? raw.categories : []) { const category = cleanCategory(r); if (category) categoryDefs.set(categoryKey(category.name), category); }
+        } catch (_) {}
+        emit("reset");
+      },
+      list({ noteId = "", kind = "", category = "", includeHidden = false } = {}) {
+        // includeHidden is intentionally opt-in: normal calendar views never show Trash items, while
+        // destructive-action confirmations still need to count the reminders that would be removed.
+        return [...items.values()].filter((it) => (includeHidden || shown(it)) && (!noteId || it.x.noteId === noteId) && (!kind || it.x.kind === kind) && (!category || it.x.category === category));
+      },
+      get: (id) => { const it = items.get(id); return it && shown(it) ? it : null; },
+      has: (id) => { const it = items.get(id); return !!it && shown(it); },
+      // `categories()` retains the old live-item view; `categoryList()` is the editable registry used by the UI.
+      categories: () => [...new Set([...items.values()].filter(shown).map((it) => it.x.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+      category(name) {
+        const key = categoryKey(name);
+        if (!key) return null;
+        const saved = categoryDefs.get(key);
+        if (saved) return { ...saved, notify: JSON.parse(JSON.stringify(saved.notify)) };
+        const preset = DEFAULT_CATEGORIES.find((c) => categoryKey(c.name) === key);
+        if (preset) return cleanCategory({ ...preset, notify: DEFAULT_CATEGORY_NOTIFY });
+        const used = [...items.values()].find((it) => categoryKey(it.x.category) === key);
+        return used ? cleanCategory({ name: used.x.category }) : null;
+      },
+      categoryList() {
+        const names = new Map();
+        for (const preset of DEFAULT_CATEGORIES) names.set(categoryKey(preset.name), preset.name);
+        for (const c of categoryDefs.values()) names.set(categoryKey(c.name), c.name);
+        for (const it of items.values()) if (it.x.category) names.set(categoryKey(it.x.category), it.x.category);
+        return [...names.values()].map((name) => this.category(name)).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
+      },
+      upsertCategory(raw) {
+        const category = cleanCategory(raw);
+        if (!category) return null;
+        const key = categoryKey(category.name), old = categoryDefs.get(key);
+        if (old && !raw.id) category.id = old.id;
+        if (old && JSON.stringify(old) === JSON.stringify(category)) return { ...old, notify: JSON.parse(JSON.stringify(old.notify)) };
+        categoryDefs.set(key, category);
+        schedule(); emit("category", key);
+        return { ...category, notify: JSON.parse(JSON.stringify(category.notify)) };
+      },
+      // A trashed note keeps its items (extras, dragged times) out of sight; restoring it brings them back untouched.
+      hideNote(noteId) { if (!noteId || hidden.has(noteId) || ![...items.values()].some((it) => it.x.noteId === noteId)) return false; hidden.add(noteId); emit("remove", noteId); return true; },
+      showNote(noteId) { if (!hidden.delete(noteId)) return false; emit("change", noteId); return true; },
+      isHidden: (noteId) => hidden.has(noteId),
+      upsert(raw) {
+        const it = cleanItem({ ...raw, updated: iso(now()), etag: "" }, now());
+        if (!it) return null;
+        const old = items.get(it.id);
+        if (old && JSON.stringify(old) === JSON.stringify(it)) return old;
+        items.set(it.id, it); schedule(); emit("change", it.id);
+        return it;
+      },
+      remove(id) { if (!items.delete(id)) return false; schedule(); emit("remove", id); return true; },
+      removeNote(noteId) {
+        let n = 0;
+        hidden.delete(noteId);
+        for (const it of [...items.values()]) if (it.x.noteId === noteId) { items.delete(it.id); n++; }
+        if (n) { schedule(); emit("remove", noteId); }
+        return n;
+      },
+      // Rebuilds the items that come from the note's marked lists. Returns true when anything changed.
+      syncNote(noteId, body) {
+        const had = [...items.values()].filter((it) => it.x.noteId === noteId && it.x.src === "list");
+        if (!had.length && !/%%\s*calendar/i.test(String(body || ""))) return false;
+        const fresh = extractNoteItems(body, noteId, now()), keep = new Map(had.map((it) => [it.id, it]));
+        let changed = false;
+        const nextIds = new Set();
+        for (const f of fresh) {
+          nextIds.add(f.id);
+          const old = keep.get(f.id);
+          let next = f;
+          if (old) {
+            // the line is unchanged: keep the extras and the time the person may have dragged it to
+            next = cleanItem({ ...f, start: old.start, end: old.end, status: old.status, reminders: old.reminders, recurrence: old.recurrence.length ? old.recurrence : f.recurrence, updated: old.updated,
+              x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify } }, 0);
+            next.x.heading = f.x.heading; next.x.category = f.x.category;
+            next.etag = etagOf(next);
+          }
+          if (!old || JSON.stringify(old) !== JSON.stringify(next)) { items.set(next.id, next); changed = true; emit("change", next.id); }
+        }
+        for (const it of had) if (!nextIds.has(it.id)) { items.delete(it.id); changed = true; emit("remove", it.id); }
+        if (changed) schedule();
+        return changed;
+      },
+      on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+      flush: writeNow,
+    };
+  }
+
+  // ---------- calendar view layout (roadmap T2.4a) ----------
+  // Keep the orientation decision pure so the sheet can react to its actual available rectangle (not the
+  // browser window alone), and the threshold behavior can be regression-tested without Gecko layout.
+  const CALENDAR_LAYOUT_MODES = Object.freeze(["auto", "lr", "tb"]);
+  function cleanCalendarLayout(value) { return CALENDAR_LAYOUT_MODES.includes(value) ? value : "auto"; }
+  function calendarLayoutFor(mode, width, height) {
+    const w = Math.max(0, Number(width) || 0), h = Math.max(0, Number(height) || 0);
+    const requested = cleanCalendarLayout(mode);
+    const orientation = requested === "auto" ? (w >= h * 1.08 ? "lr" : "tb") : requested;
+    // Two useful minimum panes: tree >= 230px and calendar >= 280px side-by-side; vertically
+    // tree >= 170px and calendar >= 230px. Below that, tabs avoid unusable slivers.
+    const tabs = orientation === "lr" ? (w < 560 || h < 260) : (w < 300 || h < 430);
+    return { mode: requested, orientation, tabs, width: w, height: h };
+  }
+  function cleanCalendarShare(value, fallback = 0.36) {
+    const n = Number(value);
+    return Math.round(Math.max(0.2, Math.min(0.8, Number.isFinite(n) ? n : fallback)) * 1000) / 1000;
+  }
 
   // ---------- all-day strip ----------
   // Items that sit in the strip above the time grid on `day`: all-day events and all-day reminders.
@@ -482,8 +898,9 @@
   }
 
   const api = {
-    KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
-    itemRange, isReminder, isAllDay, itemsInRange, allDayOf, parseRule, expandItem, expandRange, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, daysForward, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
+    cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, calendarSectionAt, setCalendarSectionCategory,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, itemsFromNoteReminders, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, daysForward, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

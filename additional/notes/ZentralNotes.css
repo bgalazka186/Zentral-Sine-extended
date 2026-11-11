@@ -218,6 +218,18 @@
   cursor: pointer;
 }
 .zentral-notes-sheet .zn-title:hover { background: var(--zn-hover); }
+.zentral-notes-sheet .zn-category-btn {
+  gap: 5px;
+  max-width: 122px;
+  min-width: 0;
+  padding-inline: 6px;
+  color: var(--zn-muted);
+  font: inherit;
+  font-size: 0.82em;
+}
+.zentral-notes-sheet .zn-category-btn:hover { color: var(--zn-text); background: var(--zn-hover); }
+.zentral-notes-sheet .zn-category-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet .zn-category-dot { flex: 0 0 10px; width: 10px; height: 10px; }
 .zentral-notes-sheet .zn-dot {
   display: block;
   width: 12px;
@@ -273,13 +285,43 @@
 }
 .zentral-notes-sheet .zn-editor,
 .zentral-notes-sheet .zn-read,
-.zentral-notes-sheet .zn-list {
+.zentral-notes-sheet .zn-all-layout {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   margin: 0;
-  overflow: auto;
-  scrollbar-width: thin;
+  overflow: hidden;
 }
+.zentral-notes-sheet .zn-all-layout { display: flex; flex-direction: column; }
+.zentral-notes-sheet .zn-all-layout[hidden] { display: none !important; }
+.zentral-notes-sheet .zn-all-toolbar { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; padding: 3px 6px; border-bottom: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-all-toolbar .zn-calendar-tab { display: none; }
+.zentral-notes-sheet .zn-all-layout[data-layout="tabs"] .zn-all-toolbar .zn-calendar-tab { display: inline-flex; }
+.zentral-notes-sheet[data-all-notes-active="true"] .zn-all-toolbar .zn-calendar-tab[hidden] { display: none !important; }
+.zentral-notes-sheet .zn-all-panels { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; overflow: hidden; }
+.zentral-notes-sheet .zn-all-panels[data-orientation="tb"] { flex-direction: column; }
+.zentral-notes-sheet .zn-tree-pane,
+.zentral-notes-sheet .zn-calendar-pane { display: flex; flex: 1 1 0; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.zentral-notes-sheet .zn-tree-pane[hidden],
+.zentral-notes-sheet .zn-calendar-pane[hidden] { display: none !important; }
+.zentral-notes-sheet .zn-tree-pane { flex: 0 0 var(--zn-calendar-tree-share, 36%); }
+.zentral-notes-sheet .zn-list { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; scrollbar-width: thin; }
+.zentral-notes-sheet .zn-calendar-splitter { z-index: 1; flex: 0 0 7px; cursor: col-resize; background: var(--zn-line); opacity: 0.45; touch-action: none; outline-offset: -2px; }
+.zentral-notes-sheet .zn-calendar-splitter:hover,
+.zentral-notes-sheet .zn-calendar-splitter:focus-visible { opacity: 1; background: var(--zn-accent); }
+.zentral-notes-sheet .zn-all-panels[data-orientation="tb"] .zn-calendar-splitter { cursor: row-resize; }
+.zentral-notes-sheet .zn-calendar-pane { background: color-mix(in srgb, var(--zn-hover) 22%, transparent); }
+.zentral-notes-sheet .zn-calendar-pane-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-calendar-pane-hint { color: var(--zn-muted); font-size: 0.82em; }
+.zentral-notes-sheet .zn-calendar-pane-content { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 0; padding: 20px; text-align: center; color: var(--zn-muted); }
+.zentral-notes-sheet .zn-calendar-pane-content strong { color: var(--zn-text); }
+.zentral-notes-sheet .zn-calendar-pane-content p { max-width: 34em; margin: 0; }
+.zentral-notes-sheet .zn-all-panels[data-layout="tabs"] { display: flex; }
+.zentral-notes-sheet .zn-all-panels[data-layout="tabs"] .zn-calendar-splitter { display: none; }
+.zentral-notes-sheet .zn-all-panels[data-tree-collapsed="true"] .zn-tree-pane,
+.zentral-notes-sheet .zn-all-panels[data-calendar-collapsed="true"] .zn-calendar-pane { display: none !important; }
+.zentral-notes-sheet .zn-all-panels[data-layout="tabs"][data-tab="tree"] .zn-calendar-pane,
+.zentral-notes-sheet .zn-all-panels[data-layout="tabs"][data-tab="calendar"] .zn-tree-pane { display: none !important; }
 .zentral-notes-sheet .zn-editor {
   appearance: none;
   display: block;
@@ -300,7 +342,7 @@
 .zentral-notes-sheet .zn-read[hidden] { display: none !important; }
 .zentral-notes-sheet[data-view="list"] .zn-editor,
 .zentral-notes-sheet[data-view="list"] .zn-read { display: none !important; }
-.zentral-notes-sheet[data-view="editor"] .zn-list { display: none; }
+.zentral-notes-sheet[data-view="editor"] .zn-all-layout { display: none; }
 
 /* read mode */
 .zentral-notes-sheet .zn-read { padding: 10px 14px; outline: none; line-height: var(--zentral-notes-line-height, 1.6); }
@@ -708,6 +750,8 @@
   border-radius: 999px; padding: 0 6px;
 }
 .zentral-notes-sheet .zn-read .zn-date { border-bottom: 1px dotted color-mix(in srgb, currentColor 55%, transparent); }
+.zentral-notes-sheet .zn-read .zn-date-chip { display: inline; appearance: none; border: 0; border-radius: 3px; padding: 0 1px; margin: 0; color: inherit; background: color-mix(in srgb, var(--zn-accent, currentColor) 9%, transparent); border-bottom: 1px dotted color-mix(in srgb, currentColor 60%, transparent); font: inherit; line-height: inherit; cursor: pointer; }
+.zentral-notes-sheet .zn-read .zn-date-chip:hover, .zentral-notes-sheet .zn-read .zn-date-chip:focus-visible { background: color-mix(in srgb, var(--zn-accent, currentColor) 18%, transparent); outline: 1px solid color-mix(in srgb, currentColor 35%, transparent); outline-offset: 1px; }
 
 /* ---- B2: code colors, sub/superscript, keys, dialogs, copy in read view ----------------- */
 .zentral-notes-sheet .zn-read { --zn-tk-kw: #c792ea; --zn-tk-str: #8bd49c; --zn-tk-num: #f0a46a; --zn-tk-com: color-mix(in srgb, var(--zn-text) 45%, transparent); --zn-tk-fn: #82aaff; --zn-tk-lit: #ff9e80; --zn-tk-prop: #7fd6e8; --zn-tk-tag: #f07178; }
@@ -740,6 +784,14 @@
 .zentral-notes-sheet .zn-field:focus { border-color: var(--zn-accent); }
 .zentral-notes-sheet .zn-field[data-bad="true"] { border-color: #ff6b6b; }
 .zentral-notes-sheet .zn-field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.zentral-notes-sheet .zn-calendar-note-field { display: block; width: 100%; min-height: 7em; box-sizing: border-box; resize: vertical; }
+.zentral-notes-sheet .zn-recurrence-editor { display: grid; gap: 4px; margin: 12px 0; padding-top: 8px; border-top: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-recurrence-interval { grid-template-columns: auto minmax(4em, 7em) auto; align-items: center; justify-content: start; }
+.zentral-notes-sheet .zn-recurrence-interval .zn-field { width: 6em; }
+.zentral-notes-sheet .zn-recurrence-days { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0 8px; }
+.zentral-notes-sheet .zn-recurrence-day { display: inline-flex; align-items: center; gap: 3px; padding: 3px 6px; border: 1px solid var(--zn-line); border-radius: 5px; }
+.zentral-notes-sheet .zn-recurrence-until { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+
 .zentral-notes-sheet .zn-grid { display: grid; grid-template-columns: repeat(var(--cols, 8), 1fr); gap: 3px; margin: 6px 0; }
 .zentral-notes-sheet .zn-gcell { aspect-ratio: 1; min-width: 18px; padding: 0; border: 1px solid var(--zn-line); border-radius: 3px; background: transparent; cursor: pointer; }
 .zentral-notes-sheet .zn-gcell.is-on { background: color-mix(in srgb, var(--zn-accent) 40%, transparent); border-color: var(--zn-accent); }
@@ -1045,6 +1097,9 @@
 .zentral-notes-sheet .zn-remind[hidden] { display: none; }
 .zentral-notes-sheet .zn-remind:hover { background: var(--zn-hover); color: var(--zn-text); }
 .zentral-notes-sheet .zn-remind.is-due { border-color: var(--zn-accent); color: var(--zn-text); }
+.zentral-notes-sheet .zn-category-color { display: flex; flex-direction: column; gap: 6px; }
+.zentral-notes-sheet .zn-category-rule { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.zentral-notes-sheet .zn-category-rule .zn-select { min-width: 88px; }
 
 /* links between notes: same look as links; a missing target is struck through, a trashed one is dimmed */
 .zentral-notes-sheet .zn-read .zn-notelink { cursor: pointer; }
@@ -1469,3 +1524,75 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-day.is-picked { background: color-mix(in srgb, var(--zn-accent) 28%, transparent); }
 .zentral-notes-sheet .zn-cal-grid:focus-visible .zn-cal-day.is-cursor, .zentral-notes-sheet .zn-cal-day.is-cursor:focus-visible { outline: 2px solid var(--zn-accent); outline-offset: -2px; }
 .zentral-notes-sheet .zn-cal-dot { position: absolute; left: 50%; bottom: 3px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--zn-accent); }
+.zentral-notes-sheet .zn-cal-clock { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0 8px; padding: 7px; border: 1px solid var(--zn-line); border-radius: 8px; }
+.zentral-notes-sheet .zn-cal-clock-set { display: inline-flex; flex: 1 1 150px; align-items: center; gap: 4px; min-width: 0; color: var(--zn-muted); font-size: 0.85em; }
+.zentral-notes-sheet .zn-cal-clock-set > span:first-child { flex: 0 0 auto; min-width: 34px; }
+.zentral-notes-sheet .zn-cal-clock-set .zn-select { flex: 1 1 44px; width: 44px; min-width: 0; padding: 4px 3px; text-align: center; }
+
+/* T2.4a: All notes tree/calendar workspace. JS selects side-by-side, stacked or tabs from the
+   measured sheet rectangle and remembers the user's split share independently per orientation. */
+.zentral-notes-sheet .zn-all-toolbar .zn-calendar-tab[aria-selected="true"] { color: var(--zn-text); border-color: var(--zn-accent); background: color-mix(in srgb, var(--zn-accent) 16%, transparent); }
+.zentral-notes-sheet[data-all-notes-active="false"] .zn-all-toolbar { display: none; }
+.zentral-notes-sheet[data-all-notes-active="false"] .zn-calendar-pane,
+.zentral-notes-sheet[data-all-notes-active="false"] .zn-calendar-splitter { display: none !important; }
+.zentral-notes-sheet[data-all-notes-active="false"] .zn-tree-pane { flex: 1 1 auto !important; }
+
+/* T2.4b: month, forward-days and agenda calendar views. */
+.zentral-notes-sheet .zn-calendar-pane-head { flex: 0 0 auto; }
+.zentral-notes-sheet .zn-calendar-controls { display: flex; flex: 0 0 auto; align-items: center; flex-wrap: wrap; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-calendar-controls .zn-chip { flex: 0 1 auto; max-width: 100%; min-width: 0; padding: 4px 7px; white-space: nowrap; }
+.zentral-notes-sheet .zn-calendar-view-select { min-width: 90px; }
+.zentral-notes-sheet .zn-calendar-kind-filter,
+.zentral-notes-sheet .zn-calendar-category-filter { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.zentral-notes-sheet .zn-calendar-days-select[hidden] { display: none !important; }
+.zentral-notes-sheet .zn-calendar-pane-content { flex: 1 1 auto; display: block; min-height: 0; overflow: auto; padding: 8px; text-align: left; scrollbar-width: thin; }
+.zentral-notes-sheet .zn-cal-month-wrap { display: flex; flex-direction: column; min-height: 0; }
+.zentral-notes-sheet .zn-cal-month-dows,
+.zentral-notes-sheet .zn-cal-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.zentral-notes-sheet .zn-cal-month-dows { flex: 0 0 auto; margin-bottom: 3px; }
+.zentral-notes-sheet .zn-cal-month-dows > span { padding: 3px 2px; text-align: center; color: var(--zn-muted); font-size: .76em; font-weight: 650; }
+.zentral-notes-sheet .zn-cal-month-grid { grid-template-rows: repeat(6, minmax(58px, 1fr)); }
+.zentral-notes-sheet .zn-cal-month-cell { position: relative; display: flex; min-width: 0; min-height: 58px; flex-direction: column; gap: 2px; overflow: hidden; padding: 3px; border: 1px solid var(--zn-line); border-radius: 6px; background: color-mix(in srgb, var(--zn-hover) 12%, transparent); }
+.zentral-notes-sheet .zn-cal-month-cell.is-out { opacity: .48; }
+.zentral-notes-sheet .zn-cal-month-cell.is-selected { border-color: var(--zn-accent); background: color-mix(in srgb, var(--zn-accent) 10%, transparent); }
+.zentral-notes-sheet .zn-cal-month-date { align-self: flex-start; min-width: 23px; padding: 1px 4px; border: 0; border-radius: 5px; background: transparent; color: var(--zn-text); font: inherit; font-size: .82em; text-align: center; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-month-date:hover { background: var(--zn-hover); }
+.zentral-notes-sheet .zn-cal-month-cell.is-selected .zn-cal-month-date { background: var(--zn-accent); color: white; }
+.zentral-notes-sheet .zn-cal-month-allday { color: var(--zn-muted); font-size: .63em; line-height: 1; white-space: nowrap; }
+.zentral-notes-sheet .zn-cal-month-items { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.zentral-notes-sheet .zn-cal-month-mark { display: block; min-width: 0; overflow: hidden; padding: 1px 3px; border: 0; border-left: 2px solid var(--zn-cal-item-color, var(--zn-accent)); border-radius: 3px; background: color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 16%, transparent); color: var(--zn-text); font: inherit; font-size: .65em; line-height: 1.25; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-month-mark.is-reminder::before { content: "● "; color: var(--zn-cal-item-color, var(--zn-accent)); }
+.zentral-notes-sheet .zn-cal-month-more { color: var(--zn-muted); font-size: .62em; }
+.zentral-notes-sheet .zn-cal-month-reminder-dot { position: absolute; top: 4px; right: 5px; color: var(--zn-accent); font-size: .55em; }
+.zentral-notes-sheet .zn-cal-day-group { min-width: 0; margin: 4px 0 9px; padding: 7px; border: 1px solid var(--zn-line); border-radius: 8px; }
+.zentral-notes-sheet .zn-cal-day-group.is-selected { border-color: color-mix(in srgb, var(--zn-accent) 70%, var(--zn-line)); }
+.zentral-notes-sheet .zn-cal-day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.zentral-notes-sheet .zn-cal-day-head strong { color: var(--zn-text); font-size: .9em; }
+.zentral-notes-sheet .zn-cal-day-head > span { color: var(--zn-muted); font-size: .72em; white-space: nowrap; }
+.zentral-notes-sheet .zn-cal-all-day-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 3px 0 5px; padding: 4px; border-radius: 5px; background: color-mix(in srgb, var(--zn-accent) 9%, transparent); }
+.zentral-notes-sheet .zn-cal-all-day-label { flex: 0 0 auto; color: var(--zn-muted); font-size: .7em; font-weight: 650; }
+.zentral-notes-sheet .zn-cal-day-items { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.zentral-notes-sheet .zn-cal-item { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; gap: 4px 7px; padding: 4px 6px; border: 0; border-left: 3px solid var(--zn-cal-item-color, var(--zn-accent)); border-radius: 4px; background: color-mix(in srgb, var(--zn-cal-item-color, var(--zn-hover)) 10%, transparent); color: var(--zn-text); font: inherit; text-align: left; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-item:hover { background: color-mix(in srgb, var(--zn-cal-item-color, var(--zn-hover)) 19%, transparent); }
+.zentral-notes-sheet .zn-cal-item.is-reminder .zn-cal-item-time::before { content: "● "; color: var(--zn-cal-item-color, var(--zn-accent)); }
+.zentral-notes-sheet .zn-cal-item-time { flex: 0 0 auto; color: var(--zn-muted); font-size: .75em; font-variant-numeric: tabular-nums; }
+.zentral-notes-sheet .zn-cal-item-title { min-width: 0; flex: 1 1 auto; font-size: .84em; overflow-wrap: anywhere; }
+.zentral-notes-sheet .zn-cal-item-category { color: var(--zn-muted); font-size: .68em; }
+.zentral-notes-sheet .zn-cal-item-note { flex: 1 0 100%; min-width: 0; overflow: hidden; color: var(--zn-muted); font-size: .72em; text-overflow: ellipsis; white-space: nowrap; }
+.zentral-notes-sheet .zn-cal-empty-day { margin: 4px 0; color: var(--zn-muted); font-size: .8em; }
+.zentral-notes-sheet .zn-cal-agenda-row { display: grid; grid-template-columns: minmax(90px, 135px) minmax(0, 1fr); gap: 6px; align-items: start; margin-bottom: 4px; }
+.zentral-notes-sheet .zn-cal-agenda-date { padding: 5px 2px; color: var(--zn-muted); font-size: .76em; }
+.zentral-notes-sheet .zn-cal-compact-list,
+.zentral-notes-sheet .zn-cal-upcoming-list,
+.zentral-notes-sheet .zn-cal-agenda-list { min-width: 0; }
+.zentral-notes-sheet .zn-calendar-pane-content[data-compact="true"] .zn-cal-day-group { margin-bottom: 7px; }
+@media (max-width: 560px) {
+  .zentral-notes-sheet .zn-calendar-controls .zn-chip { font-size: .78em; }
+  .zentral-notes-sheet .zn-calendar-controls .zn-calendar-category-filter { max-width: 130px; }
+  .zentral-notes-sheet .zn-cal-month-grid { grid-template-rows: repeat(6, minmax(44px, 1fr)); }
+  .zentral-notes-sheet .zn-cal-month-cell { min-height: 44px; padding: 2px; }
+  .zentral-notes-sheet .zn-cal-month-mark { font-size: .58em; }
+  .zentral-notes-sheet .zn-cal-agenda-row { grid-template-columns: minmax(0, 1fr); gap: 1px; }
+}
+
+.zentral-notes-sheet .zn-cal-month-cell.is-today { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--zn-accent) 60%, transparent); }

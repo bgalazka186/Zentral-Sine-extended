@@ -4712,7 +4712,9 @@
       const dirty = new Set();
       const listeners = new Set();
       const backedUp = new Set();
-      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, gapSplit: -1, cardDock: "", cardW: 0 };
+      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, gapSplit: -1, cardDock: "", cardW: 0,
+        calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
+        calendarView: "month", calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "" };
       let meta = { ...DEFAULT_META };
       let dir = null;
       let chain = Promise.resolve();
@@ -4721,6 +4723,35 @@
       let metaDirty = false;
       let closed = false;
       const state = { save: "saved", error: "" };
+      // ---- calendar items (roadmap T2.3): ONE file `calendar.json` next to the notes (never matches FILE_RE, so loadAll /
+      // refresh ignore it). Items written as marked lists inside a note are rebuilt from the note text; a note in Trash or
+      // with a missing file only HIDES its items (restoring it brings dragged times and calendar notes back); a note that is
+      // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
+      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn }) : null;
+      function syncItems(id) {
+        if (!items) return;
+        try {
+          const n = notes.get(id);
+          if (!n || n.trashed) { items.hideNote(id); return; }
+          items.showNote(id);
+          items.syncNote(id, n.body);
+        } catch (e) {
+          warn(e);
+        }
+      }
+      function dropItems(id) {
+        try { if (items) items.removeNote(id); } catch (e) { warn(e); }
+      }
+      async function openItems() {
+        if (!items) return;
+        try {
+          await items.open();
+          for (const id of [...notes.keys()]) syncItems(id);
+          for (const noteId of new Set(items.list().map((it) => it.x.noteId))) if (noteId && !notes.has(noteId)) items.hideNote(noteId);
+        } catch (e) {
+          warn(e);
+        }
+      }
 
       const emit = (type, id, extra = {}) => {
         for (const fn of [...listeners]) {
@@ -4802,6 +4833,21 @@
           {
             const v = Number(raw.gapSplit);
             meta.gapSplit = Number.isFinite(v) && v >= 0 && v <= 1 ? Math.round(v * 1000) / 1000 : -1;
+          }
+          if (CALENDAR_PART) {
+            meta.calendarLayout = CALENDAR_PART.cleanCalendarLayout(raw.calendarLayout);
+            meta.calendarSplitLR = CALENDAR_PART.cleanCalendarShare(raw.calendarSplitLR, DEFAULT_META.calendarSplitLR);
+            meta.calendarSplitTB = CALENDAR_PART.cleanCalendarShare(raw.calendarSplitTB, DEFAULT_META.calendarSplitTB);
+            meta.calendarTreeCollapsed = raw.calendarTreeCollapsed === true;
+            meta.calendarPaneCollapsed = raw.calendarPaneCollapsed === true;
+            if (meta.calendarTreeCollapsed && meta.calendarPaneCollapsed) meta.calendarTreeCollapsed = meta.calendarPaneCollapsed = false;
+            meta.calendarTab = raw.calendarTab === "calendar" ? "calendar" : "tree";
+            meta.calendarView = ["month", "upcoming", "agenda"].includes(raw.calendarView) ? raw.calendarView : "month";
+            const daysForward = Number(raw.calendarDaysForward);
+            meta.calendarDaysForward = [3, 7, 14, 30].includes(daysForward) ? daysForward : 7;
+            meta.calendarFilterKind = ["all", "event", "reminder"].includes(raw.calendarFilterKind) ? raw.calendarFilterKind : "all";
+            meta.calendarFilterCategory = typeof raw.calendarFilterCategory === "string" ? raw.calendarFilterCategory.slice(0, 80) : "";
+            meta.calendarCursor = CALENDAR_PART.parseYmd(raw.calendarCursor) ? raw.calendarCursor : "";
           }
         } catch (_) {}
       }
@@ -4937,6 +4983,7 @@
         if (!exists) {
           if (notes.has(id) && !dirty.has(id)) {
             notes.delete(id);
+            syncItems(id);
             emit("remove", id, { remote: true });
           }
           return;
@@ -4945,6 +4992,7 @@
         const fresh = await readNote(file).catch(() => null);
         if (!fresh) return;
         notes.set(id, fresh);
+        syncItems(id);
         emit("change", id, { remote: true });
       }
 
@@ -4993,6 +5041,7 @@
         const note = notes.get(id) || null;
         notes.delete(id);
         dirty.delete(id);
+        dropItems(id);
         const file = fileOf(id);
         return queue(async () => {
           // Pictures go with their note, unless another note (a copy, pasted text) still shows them.
@@ -5017,6 +5066,10 @@
         get dir() {
           return dir;
         },
+        // The calendar item store (null when the calendar part is not loaded).
+        get items() {
+          return items;
+        },
         on(fn) {
           listeners.add(fn);
           return () => listeners.delete(fn);
@@ -5026,6 +5079,7 @@
           dir = await getDir();
           await loadAll();
           await loadMeta();
+          await openItems();
           api.ensureFolderUids(); // every folder has its permanent uid before anything (tree, Zen sidebar) is built from it
           await purgeOldTrash();
           await purgeBackups().catch(warn);
@@ -5068,6 +5122,7 @@
           const note = { id, body, created: t, updated: t, color: "none", label: "", folder: cleanFolder(folder), pinned: false, trashed: 0, remind: 0, reminded: 0, _onDisk: false, _mtime: t };
           notes.set(id, note);
           if (body) markDirty(id);
+          if (body) syncItems(id);
           emit("change", id, { created: true });
           return { note, created: true };
         },
@@ -5092,6 +5147,7 @@
           };
           notes.set(id, note);
           if (body) markDirty(id);
+          if (body) syncItems(id);
           emit("change", id, { created: true });
           return note;
         },
@@ -5102,6 +5158,7 @@
           note.updated = now();
           if (body.trim() || note._onDisk) markDirty(id);
           else dirty.delete(id);
+          syncItems(id);
           emit("change", id, { source });
         },
         setColor(id, color) {
@@ -5370,7 +5427,10 @@
             const note = notes.get(c.id);
             if (!note) continue;
             note.folder = c.folder;
-            if (c.trash) note.trashed = now();
+            if (c.trash) {
+              note.trashed = now();
+              syncItems(c.id); // folder-to-Trash has the same reminder visibility semantics as note.trash()
+            }
             if (note.body.trim() || note._onDisk) markDirty(c.id);
           }
           setMeta({ folders: r.folders });
@@ -5397,11 +5457,13 @@
           if (!note) return;
           if (!note._onDisk && !note.body.trim()) {
             notes.delete(id);
+            dropItems(id);
             emit("remove", id);
             return;
           }
           note.trashed = now();
           markDirty(id);
+          syncItems(id); // hides the note's items (kept, not deleted)
           emit("change", id, { meta: true });
         },
         restore(id) {
@@ -5409,6 +5471,7 @@
           if (!note || !note.trashed) return;
           note.trashed = 0;
           markDirty(id);
+          syncItems(id); // shows the items again and re-reads the note's marked lists
           emit("change", id, { meta: true });
         },
         async deleteForever(id) {
@@ -5456,6 +5519,7 @@
           note._onDisk = false;
           notes.set(id, note);
           markDirty(id);
+          syncItems(id);
           if (io.moveTree) {
             // Pictures keep their folder name (the note text points at it) unless somebody already owns that folder.
             if (await io.exists(io.join(entry, ASSET_DIR)).catch(() => false) && !(await io.exists(io.join(dir, ASSET_DIR, p.id)).catch(() => false)))
@@ -5487,7 +5551,7 @@
         setMeta,
         flush() {
           autosaver.cancel();
-          return Promise.all([flushDirty(), writeMetaNow()]);
+          return Promise.all([flushDirty(), writeMetaNow(), items ? items.flush() : null]);
         },
         // Picks up files added or edited by other apps (sync tools, editors).
         async refresh() {
@@ -5515,6 +5579,7 @@
           for (const [id, n] of [...notes]) {
             if (n._onDisk && !present.has(id) && !dirty.has(id)) {
               notes.delete(id);
+              syncItems(id);
               emit("remove", id, { remote: true });
             }
           }
@@ -6810,10 +6875,46 @@
       });
     }
 
+    function dateChip(parent, raw, ymd, time, env) {
+      if (env.skipDateChips || !env.openDateMenu) { parent.append(document.createTextNode(raw)); return; }
+      const b = h("button", { type: "button", class: "zn-date-chip", title: time ? "Date and time: " + ymd + " " + time : "Date: " + ymd, "aria-label": "Date " + ymd + (time ? " at " + time : "") }, raw);
+      b.dataset.ymd = ymd;
+      b.dataset.raw = raw;
+      if (Number.isInteger(env.dateLine) && env.dateLine >= 0) b.dataset.line = String(env.dateLine);
+      if (time) b.dataset.time = time;
+      const open = (e) => { e.preventDefault(); e.stopPropagation(); env.openDateMenu({ raw, ymd, time: time || "" }, b, env.dateLine); };
+      b.addEventListener("click", open);
+      b.addEventListener("contextmenu", open);
+      parent.append(b);
+    }
+    function appendDateAwareText(parent, text, env) {
+      const source = String(text || "");
+      if (!source || env.skipDateChips || !CALENDAR_PART?.inlineDateTokens || !env.openDateMenu) {
+        parent.append(document.createTextNode(source));
+        return;
+      }
+      const ignored = Number.isInteger(env.dateLine) && env.dateLine >= 0
+        ? CALENDAR_PART.ignoredDateTokens(env.dateLineText?.(env.dateLine) || "")
+        : [];
+      const tokens = CALENDAR_PART.inlineDateTokens(source, env.dateNow?.() ?? Date.now());
+      if (!tokens.length) { parent.append(document.createTextNode(source)); return; }
+      let at = 0;
+      for (const token of tokens) {
+        if (token.start < at) continue;
+        if (token.start > at) parent.append(document.createTextNode(source.slice(at, token.start)));
+        if (ignored.includes(token.raw.toLowerCase())) parent.append(document.createTextNode(token.raw));
+        else dateChip(parent, token.raw, token.ymd, token.time, env);
+        at = token.end;
+      }
+      if (at < source.length) parent.append(document.createTextNode(source.slice(at)));
+    }
     function renderInline(parent, nodes, env) {
       for (const n of nodes) {
-        if (n.t === "text") parent.append(document.createTextNode(n.s));
-        else if (n.t === "br") parent.append(document.createElement("br"));
+        if (n.t === "text") appendDateAwareText(parent, n.s, env);
+        else if (n.t === "br") {
+          parent.append(document.createElement("br"));
+          if (Number.isInteger(env.dateLine) && env.dateLine >= 0) env.dateLine++;
+        }
         else if (n.t === "task") {
           // A task box inside a table cell: a click flips exactly that box in the source (read mode only).
           const box = h("button", { type: "button", class: "zn-check zn-cell-check", role: "checkbox", "aria-checked": n.on ? "true" : "false", "aria-label": "Toggle item" });
@@ -6833,7 +6934,7 @@
           node.addEventListener("keydown", (e) => {
             if (e.key === "Enter" || e.key === " ") go(e);
           });
-          renderInline(node, n.c, env);
+          renderInline(node, n.c, Object.assign(Object.create(env), { skipDateChips: true }));
           parent.append(node);
         } else if (n.t === "nl") {
           // Link to another note: no address at all, so nothing can be fetched or navigated. A click opens the note.
@@ -6849,7 +6950,7 @@
           node.addEventListener("keydown", (e) => {
             if (e.key === "Enter" || e.key === " ") go(e);
           });
-          renderInline(node, n.c, env);
+          renderInline(node, n.c, Object.assign(Object.create(env), { skipDateChips: true }));
           parent.append(node);
         } else if (n.t === "fn") {
           // Footnote number: a click jumps to the footnote at the end of the note (no address, nothing navigates).
@@ -6906,11 +7007,10 @@
         } else if (n.t === "tag") {
           parent.append(h("span", { class: "zn-tag" }, n.s));
         } else if (n.t === "date") {
-          // A date (2026-11-07, optionally with HH:mm). Only recognised for now; reminders and the calendar use data-ymd.
-          const d = h("span", { class: "zn-date", title: n.time ? "Date and time" : "Date" }, n.s);
-          d.dataset.ymd = n.ymd;
-          if (n.time) d.dataset.time = n.time;
-          parent.append(d);
+          const ignored = Number.isInteger(env.dateLine) && env.dateLine >= 0
+            ? CALENDAR_PART?.ignoredDateTokens?.(env.dateLineText?.(env.dateLine) || []) || [] : [];
+          if (ignored.includes(n.s.toLowerCase())) parent.append(document.createTextNode(n.s));
+          else dateChip(parent, n.s, n.ymd, n.time, env);
         } else if (n.t === "code" || n.t === "kbd") {
           const c = h(n.t === "kbd" ? "kbd" : "code");
           c.textContent = n.s;
@@ -6939,17 +7039,19 @@
               if (e.key === "Enter") env.openLink(n.href);
             });
           }
-          renderInline(node, n.c, env);
+          renderInline(node, n.c, n.t === "math" || n.t === "a" ? Object.assign(Object.create(env), { skipDateChips: true }) : env);
           parent.append(node);
         }
       }
     }
     function renderBlocks(parent, blocks, env, onToggle) {
       for (const b of blocks) {
+        const line = Number.isInteger(b.line) ? b.line : Number.isInteger(b.src) ? b.src : -1;
+        const blockEnv = line >= 0 ? Object.assign(Object.create(env), { dateLine: line }) : env;
         if (b.type === "h") {
           const node = h("h" + b.level, { class: "zn-h" });
           if (b.align) node.style.textAlign = b.align;
-          renderInline(node, b.c, env);
+          renderInline(node, b.c, blockEnv);
           node.dataset.slug = env.slugFor ? env.slugFor(node.textContent) : headingSlug(node.textContent);
           parent.append(node);
         } else if (b.type === "footnotes") {
@@ -6973,11 +7075,11 @@
           parent.append(h("hr", { class: "zn-hr" }), list);
         } else if (b.type === "p") {
           const node = h("p", { class: "zn-p" });
-          renderInline(node, b.c, env);
+          renderInline(node, b.c, blockEnv);
           parent.append(node);
         } else if (b.type === "math") {
           const node = h("div", { class: "zn-math zn-math-block" });
-          renderInline(node, b.c, env);
+          renderInline(node, b.c, Object.assign(Object.create(env), { skipDateChips: true }));
           parent.append(node);
         } else if (b.type === "details") {
           // A button + div instead of a native <details>: same behaviour in chrome and in the tests, and the
@@ -6986,7 +7088,7 @@
           const body = h("div", { class: "zn-details-body" });
           const head = h("button", { type: "button", class: "zn-details-sum", "aria-expanded": b.open ? "true" : "false" });
           const label = h("span", { class: "zn-details-label" });
-          if (b.summary.length) renderInline(label, b.summary, env);
+          if (b.summary.length) renderInline(label, b.summary, blockEnv);
           else label.textContent = "Details";
           head.append(h("span", { class: "zn-details-arrow", "aria-hidden": "true" }), label);
           body.hidden = !b.open;
@@ -7138,7 +7240,8 @@
             }
             const text = h("span", { class: "zn-li-text" });
             if (item.checked || item.status === "-") text.dataset.done = "true";
-            renderInline(text, item.c, env);
+            const itemEnv = Number.isInteger(item.line) && item.line >= 0 ? Object.assign(Object.create(env), { dateLine: item.line }) : env;
+            renderInline(text, item.c, itemEnv);
             // A hub entry (a list item that is only a link to another note) shows that note's short description.
             const bare = env.hubDescriptions?.() ? bareNoteLink(item.c) : null;
             const desc = bare && env.noteInfo ? env.noteInfo(bare.id)?.desc : "";
@@ -7159,7 +7262,7 @@
               }
               const more = h("p", { class: "zn-li-more" });
               more.style.setProperty("--lvl", String(item.level));
-              renderInline(more, para, env);
+              renderInline(more, para, itemEnv);
               parent.append(more);
             }
           }
@@ -7207,6 +7310,7 @@
       let readNodes = []; // DOM nodes per drawn block
       let readEmpty = false;
       let dialog = null; // export notice
+      let activeDatePicker = null; // one shared calendar popup per Notes sheet
       let collapsed = false; // hover mode: open but folded away; only the thin real strip stays in layout
       let revealEl = null;
       let panelHiddenObserver = null;
@@ -7249,6 +7353,10 @@
         "aria-label": "Note color",
       });
       btnColor.append(colorDot);
+      const categoryDot = h("span", { class: "zn-dot zn-category-dot", "aria-hidden": "true" });
+      const categoryText = h("span", { class: "zn-category-text" }, "Category");
+      const btnCategory = h("button", { type: "button", class: "zn-btn zn-category-btn", title: "Choose or create a category for the calendar section at the caret", "aria-label": "Calendar category" }, categoryDot, categoryText);
+      btnCategory.hidden = !store.items;
       const btnSize = iconButton("maximize", "Larger (hold: fill the whole area)");
       const btnMore = iconButton("more", "More");
       const btnClose = iconButton("x", "Close notes (Esc)");
@@ -7256,7 +7364,7 @@
       labelEl.hidden = true;
       const remindEl = h("button", { type: "button", class: "zn-remind", title: "Reminder" });
       remindEl.hidden = true;
-      const head = h("div", { class: "zn-head" }, btnList, titleEl, labelEl, remindEl, btnPin, btnColor, btnKeep, btnHover, btnDock, btnClick, btnSize, btnMore, btnClose);
+      const head = h("div", { class: "zn-head" }, btnList, titleEl, labelEl, btnCategory, remindEl, btnPin, btnColor, btnKeep, btnHover, btnDock, btnClick, btnSize, btnMore, btnClose);
 
       const tBold = iconButton("bold", "Bold (Ctrl+B)");
       const tItalic = iconButton("italic", "Italic (Ctrl+I)");
@@ -7349,6 +7457,32 @@
         h("div", { class: "zn-chips" }, chipAll, chipRecent, chipTrash, h("span", { class: "zn-grow" }), chipEmpty),
         listItems,
       );
+      // T2.4a: All notes is a responsive two-pane workspace. The folder tree remains the existing list/tree
+      // renderer; the calendar pane is a stable host for T2.4b/c so filtering, search and Trash keep their old flow.
+      const btnCalendarLayout = iconButton("columns", "Calendar layout: Auto", "zn-calendar-layout-btn");
+      const btnCalendarTree = iconButton("folder", "Hide folder tree", "zn-calendar-tree-toggle");
+      const btnCalendarPane = iconButton("calendar", "Hide calendar", "zn-calendar-pane-toggle");
+      const tabTree = h("button", { type: "button", class: "zn-chip zn-calendar-tab", role: "tab", "aria-selected": "true" }, "Folder tree");
+      const tabCalendar = h("button", { type: "button", class: "zn-chip zn-calendar-tab", role: "tab", "aria-selected": "false" }, "Calendar");
+      const allToolbar = h("div", { class: "zn-all-toolbar" }, btnCalendarLayout, btnCalendarTree, btnCalendarPane, h("span", { class: "zn-grow" }), tabTree, tabCalendar);
+      const treePane = h("section", { class: "zn-tree-pane", "aria-label": "Notes folder tree" }, listEl);
+      const calendarPeriod = h("span", { class: "zn-calendar-pane-hint", "aria-live": "polite" }, "");
+      const calendarHeader = h("div", { class: "zn-calendar-pane-head" }, h("strong", {}, "Calendar"), calendarPeriod);
+      // Zen can close a panel when a native <select> opens its platform popup. Calendar controls therefore use
+      // the same accessible in-sheet menu as the rest of Notes; the selectors remain buttons, never native selects.
+      const calendarViewSelect = h("button", { type: "button", class: "zn-chip zn-calendar-view-select", "aria-label": "Calendar view", "aria-haspopup": "menu" }, "Month");
+      const calendarPrev = h("button", { type: "button", class: "zn-chip zn-calendar-nav", "aria-label": "Previous period", title: "Previous period" }, "‹");
+      const calendarToday = h("button", { type: "button", class: "zn-chip zn-calendar-today", title: "Go to today" }, "Go to today");
+      const calendarNext = h("button", { type: "button", class: "zn-chip zn-calendar-nav", "aria-label": "Next period", title: "Next period" }, "›");
+      const calendarDaysSelect = h("button", { type: "button", class: "zn-chip zn-calendar-days-select", "aria-label": "Number of days forward", "aria-haspopup": "menu" }, "7 days");
+      const calendarKindSelect = h("button", { type: "button", class: "zn-chip zn-calendar-kind-filter", "aria-label": "Filter item type", "aria-haspopup": "menu" }, "All items");
+      const calendarCategorySelect = h("button", { type: "button", class: "zn-chip zn-calendar-category-filter", "aria-label": "Filter category", "aria-haspopup": "menu" }, "All categories");
+      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarPrev, calendarToday, calendarNext, calendarViewSelect, calendarDaysSelect, calendarKindSelect, calendarCategorySelect);
+      const calendarContent = h("div", { class: "zn-calendar-pane-content zn-calendar-view", role: "region", "aria-label": "Calendar items" });
+      const calendarPane = h("section", { class: "zn-calendar-pane", "aria-label": "Calendar" }, calendarHeader, calendarControls, calendarContent);
+      const allSplitter = h("div", { class: "zn-calendar-splitter", role: "separator", tabindex: "0", "aria-label": "Resize folder tree and calendar panes", "aria-orientation": "vertical", "aria-valuemin": "20", "aria-valuemax": "80", "aria-valuenow": "36" });
+      const allPanels = h("div", { class: "zn-all-panels" }, treePane, allSplitter, calendarPane);
+      const allLayout = h("div", { class: "zn-all-layout" }, allToolbar, allPanels);
       // Find "highlight every match" layer (pref find_highlight = backdrop): sits under the transparent textarea.
       const hlInner = h("div", { class: "zn-findlayer-inner" });
       const hlEl = h("div", { class: "zn-findlayer", "aria-hidden": "true", hidden: true }, hlInner);
@@ -7356,7 +7490,7 @@
       const tocPill = h("button", { type: "button", class: "zn-tocpill", "aria-label": "Table of contents", "aria-haspopup": "menu", title: "Table of contents" }, icon("toc", 14));
       tocPill.hidden = true;
       tocPill.addEventListener("mousedown", (ev) => ev.preventDefault()); // keep the caret and the selection in the editor
-      const body = h("div", { class: "zn-body" }, hlEl, ta, readEl, listEl, tocPill);
+      const body = h("div", { class: "zn-body" }, hlEl, ta, readEl, allLayout, tocPill);
       const statusEl = h("span", { class: "zn-status", "aria-live": "polite" });
       const countEl = h("span", { class: "zn-count" });
       const foot = h("div", { class: "zn-foot" }, statusEl, h("span", { class: "zn-grow" }), countEl);
@@ -7385,6 +7519,89 @@
 
       // ---- state -> DOM ----------------------------------------------------
       const note = () => store.get(currentId);
+      let rafAllLayout = 0;
+      let calendarSplitDrag = null;
+      function allLayoutDimensions() {
+        let rect = null;
+        try { rect = allLayout.getBoundingClientRect?.(); } catch (_) {}
+        let area = null;
+        try { area = adapter.getArea?.({ wide: false, span: false }) || null; } catch (_) {}
+        return {
+          width: Math.max(0, Number(allLayout.clientWidth) || Number(rect?.width) || Number(area?.width) || Number(window.innerWidth) || 0),
+          height: Math.max(0, Number(allLayout.clientHeight) || Number(rect?.height) || Number(area?.height) || Number(window.innerHeight) || 0),
+        };
+      }
+      function updateAllLayout() {
+        const active = view === "list" && filter === "all" && !!CALENDAR_PART;
+        allLayout.hidden = view !== "list";
+        allToolbar.hidden = !active;
+        root.dataset.allNotesActive = active ? "true" : "false";
+        const mode = CALENDAR_PART?.cleanCalendarLayout?.(store.meta.calendarLayout) || "auto";
+        const dims = allLayoutDimensions();
+        const picked = CALENDAR_PART?.calendarLayoutFor?.(mode, dims.width, dims.height) || { orientation: "lr", tabs: false };
+        const treeCollapsed = active && store.meta.calendarTreeCollapsed === true;
+        const calendarCollapsed = active && store.meta.calendarPaneCollapsed === true;
+        // A collapsed pane is a deliberate one-pane mode; tabs are only the fallback when both panes
+        // are requested but the available rectangle cannot hold their minimum useful sizes.
+        const tabs = active && !treeCollapsed && !calendarCollapsed && picked.tabs;
+        const tab = store.meta.calendarTab === "calendar" ? "calendar" : "tree";
+        allLayout.dataset.layout = tabs ? "tabs" : "split";
+        allPanels.dataset.orientation = picked.orientation;
+        allPanels.dataset.layout = tabs ? "tabs" : "split";
+        allPanels.dataset.tab = tab;
+        allPanels.dataset.treeCollapsed = treeCollapsed ? "true" : "false";
+        allPanels.dataset.calendarCollapsed = calendarCollapsed ? "true" : "false";
+        treePane.hidden = active && (treeCollapsed || (tabs && tab !== "tree"));
+        calendarPane.hidden = !active || calendarCollapsed || (tabs && tab !== "calendar");
+        allSplitter.hidden = !active || tabs || treeCollapsed || calendarCollapsed;
+        const share = picked.orientation === "lr"
+          ? CALENDAR_PART?.cleanCalendarShare?.(store.meta.calendarSplitLR, 0.36) ?? 0.36
+          : CALENDAR_PART?.cleanCalendarShare?.(store.meta.calendarSplitTB, 0.42) ?? 0.42;
+        treePane.style.flexBasis = `${Math.round(share * 1000) / 10}%`;
+        allSplitter.setAttribute("aria-orientation", picked.orientation === "lr" ? "vertical" : "horizontal");
+        allSplitter.setAttribute("aria-valuenow", String(Math.round(share * 100)));
+        allSplitter.setAttribute("aria-valuetext", `${Math.round(share * 100)} percent for folder tree`);
+        btnCalendarLayout.title = `Calendar layout: ${{ auto: "Auto", lr: "Left / right", tb: "Top / bottom" }[mode]} (currently ${picked.orientation === "lr" ? "left / right" : "top / bottom"}${tabs ? ", tabs at this size" : ""})`;
+        btnCalendarLayout.setAttribute("aria-label", btnCalendarLayout.title);
+        btnCalendarTree.title = treeCollapsed ? "Show folder tree" : "Hide folder tree";
+        btnCalendarTree.setAttribute("aria-label", btnCalendarTree.title);
+        btnCalendarTree.setAttribute("aria-pressed", treeCollapsed ? "false" : "true");
+        btnCalendarPane.title = calendarCollapsed ? "Show calendar" : "Hide calendar";
+        btnCalendarPane.setAttribute("aria-label", btnCalendarPane.title);
+        btnCalendarPane.setAttribute("aria-pressed", calendarCollapsed ? "false" : "true");
+        tabTree.setAttribute("aria-selected", tabs && tab === "tree" ? "true" : "false");
+        tabCalendar.setAttribute("aria-selected", tabs && tab === "calendar" ? "true" : "false");
+        tabTree.classList.toggle("is-on", tabs && tab === "tree");
+        tabCalendar.classList.toggle("is-on", tabs && tab === "calendar");
+        tabTree.hidden = tabCalendar.hidden = !tabs;
+        btnCalendarTree.hidden = btnCalendarPane.hidden = !active || tabs;
+        const calendarViewName = ["month", "upcoming", "agenda"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
+        calendarViewSelect.dataset.value = calendarViewName;
+        calendarViewSelect.textContent = ({ month: "Month", upcoming: "Next days", agenda: "Agenda" })[calendarViewName];
+        calendarDaysSelect.dataset.value = String([3, 7, 14, 30].includes(Number(store.meta.calendarDaysForward)) ? Number(store.meta.calendarDaysForward) : 7);
+        calendarDaysSelect.textContent = calendarDaysSelect.dataset.value + " days";
+        calendarDaysSelect.hidden = calendarViewName !== "upcoming";
+        if (active && !calendarPane.hidden) renderCalendar();
+      }
+      function scheduleAllLayout() {
+        if (rafAllLayout) return;
+        rafAllLayout = window.requestAnimationFrame(() => { rafAllLayout = 0; updateAllLayout(); });
+      }
+      function changeCalendarShare(share) {
+        if (!calendarSplitDrag) return;
+        const clean = CALENDAR_PART.cleanCalendarShare(share, calendarSplitDrag.startShare);
+        calendarSplitDrag.share = clean;
+        treePane.style.flexBasis = `${Math.round(clean * 1000) / 10}%`;
+        allSplitter.setAttribute("aria-valuenow", String(Math.round(clean * 100)));
+        allSplitter.setAttribute("aria-valuetext", `${Math.round(clean * 100)} percent for folder tree`);
+      }
+      function commitCalendarShare() {
+        if (!calendarSplitDrag) return;
+        const drag = calendarSplitDrag;
+        calendarSplitDrag = null;
+        const key = drag.orientation === "lr" ? "calendarSplitLR" : "calendarSplitTB";
+        store.setMeta({ [key]: drag.share });
+      }
       // Split view as two windows: only where the sheet floats over a host and the option is on.
       function applyState() {
         const n = note();
@@ -7393,6 +7610,15 @@
         root.dataset.size = store.meta.size;
         labelEl.hidden = !n?.label || view === "list";
         labelEl.textContent = n?.label || "";
+        btnCategory.hidden = !store.items || !n || !!n.trashed || view !== "editor" || mode === "read";
+        const categorySection = store.items && n && mode !== "read" ? CALENDAR_PART?.calendarSectionAt?.(ta.value, ta.selectionStart) : null;
+        const activeCategory = categorySection?.category || "";
+        const categoryInfo = activeCategory ? store.items?.category?.(activeCategory) : null;
+        categoryText.textContent = activeCategory || "Category";
+        categoryDot.hidden = !categoryInfo;
+        if (categoryInfo) setColorData(categoryDot, categoryInfo.color);
+        else setColorData(categoryDot, "none");
+        btnCategory.title = activeCategory ? `Calendar category: ${activeCategory} (change section category)` : "Choose or create a category for the calendar section at the caret";
         paintReminderChip(n);
         paintFindState();
                 setColorData(root, n?.color || "none");
@@ -7455,6 +7681,7 @@
         chipTrash.classList.toggle("is-on", filter === "trash");
         chipTrash.textContent = store.trashCount() ? `Trash (${store.trashCount()})` : "Trash";
         chipEmpty.hidden = filter !== "trash" || !store.trashCount();
+        updateAllLayout();
         paintTocPill();
       }
       // Shows the corner button when the note has enough headings (pref toc_pill); the count is cached per text.
@@ -7479,6 +7706,13 @@
         paintStrip();
         paintTocPill();
         if (n) {
+          const categorySection = store.items && mode !== "read" ? CALENDAR_PART?.calendarSectionAt?.(ta.value, ta.selectionStart) : null;
+          const activeCategory = categorySection?.category || "";
+          const categoryInfo = activeCategory ? store.items?.category?.(activeCategory) : null;
+          categoryText.textContent = activeCategory || "Category";
+          categoryDot.hidden = !categoryInfo;
+          if (categoryInfo) setColorData(categoryDot, categoryInfo.color); else setColorData(categoryDot, "none");
+          btnCategory.title = activeCategory ? `Calendar category: ${activeCategory} (change section category)` : "Choose or create a category for the calendar section at the caret";
           titleEl.textContent =
             view === "list" ? titleEl.textContent : titleOf(n.body) || "Untitled note";
           const ext = getPref(PREF.FOOTER_COUNTER, false) === true;
@@ -7628,6 +7862,12 @@
       // Delegates to the caller's env (live: later changes to it stay visible) and only adds the two lookups.
       env = Object.assign(Object.create(env), {
         noteInfo,
+        dateNow: () => nowMs(),
+        dateLineText: (line) => {
+          const body = note()?.body || "";
+          return normalizeNewlines(body).split("\n")[line] || "";
+        },
+        openDateMenu: (token, anchor, line) => showInlineDateMenu(token, anchor, line),
         hubDescriptions: () => getPref(PREF.HUB_DESC, true) !== false,
         taskCycle: (line) => { if (!note()?.trashed) setBody(cycleTaskStatus(note().body, line)); },
         tableToggle: (line, col, k) => { if (!note()?.trashed) setBody(toggleTableBox(note().body, line, col, k)); },
@@ -8077,9 +8317,9 @@
         remindEl.classList.toggle("is-due", passed);
         remindEl.title = (passed ? "Reminder time passed: " : "Reminder: ") + reminderText(n.remind) + " (click to change)";
       }
-      // Mini calendar (roadmap T2.2): one month grid that fills a date field. `selected` / return values are local-midnight ms.
-      // The model comes from the calendar core (pickerMonth / stepMonth / pickerKey); without that part no picker is offered.
-      function buildMiniCalendar({ selected, items = [], onPick }) {
+      // Shared date picker (T2.2a): every date surface uses this same Monday-first, keyboard-accessible month grid.
+      // `selected` / return values are local-midnight ms. Optional clock controls are composed separately below.
+      function buildDatePicker({ selected, items = [], onPick }) {
         const C = CALENDAR_PART;
         if (!C) return null;
         const weekStart = 1;
@@ -8104,15 +8344,22 @@
               if (c.day === (selected ? C.dayStart(selected) : 0)) b.classList.add("is-picked");
               if (c.day === cursor) { b.classList.add("is-cursor"); b.setAttribute("aria-selected", "true"); }
               if (c.count) b.append(h("i", { class: "zn-cal-dot" }));
-              b.addEventListener("click", () => { cursor = c.day; selected = c.day; onPick?.(c.day); draw(); });
+              b.addEventListener("click", () => { cursor = c.day; selected = c.day; onPick?.(c.day); draw(); grid.focus({ preventScroll: true }); });
               return b;
             }),
           );
         };
-        const go = (delta) => { view = C.stepMonth(view.year, view.month, delta); cursor = new Date(view.year, view.month, Math.min(new Date(cursor).getDate(), 28)).getTime(); draw(); };
+        const go = (delta) => {
+          const dayOfMonth = new Date(cursor).getDate();
+          view = C.stepMonth(view.year, view.month, delta);
+          const last = new Date(view.year, view.month + 1, 0).getDate();
+          cursor = new Date(view.year, view.month, Math.min(dayOfMonth, last)).getTime();
+          draw();
+          grid.focus({ preventScroll: true });
+        };
         prev.addEventListener("click", () => go(-1));
         next.addEventListener("click", () => go(1));
-        todayBtn.addEventListener("click", () => { cursor = selected = C.dayStart(nowMs()); view = { year: new Date(cursor).getFullYear(), month: new Date(cursor).getMonth() }; onPick?.(cursor); draw(); });
+        todayBtn.addEventListener("click", () => { cursor = selected = C.dayStart(nowMs()); view = { year: new Date(cursor).getFullYear(), month: new Date(cursor).getMonth() }; onPick?.(cursor); draw(); grid.focus({ preventScroll: true }); });
         grid.addEventListener("keydown", (e) => {
           if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); selected = cursor; onPick?.(cursor); draw(); return; }
           const moved = C.pickerKey(cursor, e.key, weekStart);
@@ -8121,6 +8368,270 @@
           cursor = moved; view = { year: new Date(cursor).getFullYear(), month: new Date(cursor).getMonth() }; draw();
         });
         draw();
+        return root;
+      }
+      function closeDatePicker({ restoreFocus = true } = {}) {
+        const current = activeDatePicker;
+        if (!current) return false;
+        activeDatePicker = null;
+        current.node.remove();
+        if (restoreFocus) current.anchor?.focus?.({ preventScroll: true });
+        return true;
+      }
+      function toggleDatePicker(anchor, before, options) {
+        if (activeDatePicker?.anchor === anchor) return closeDatePicker();
+        closeDatePicker({ restoreFocus: false });
+        const node = buildDatePicker(options);
+        const parent = before?.parentNode || before?.parent;
+        if (!node || !parent) return null;
+        parent.insertBefore(node, before);
+        activeDatePicker = { anchor, node };
+        node.addEventListener("keydown", (e) => {
+          if (e.key !== "Escape") return;
+          e.preventDefault(); e.stopPropagation();
+          closeDatePicker();
+        });
+        node.querySelector(".zn-cal-grid")?.focus({ preventScroll: true });
+        return node;
+      }
+      function calendarPickerItems() {
+        if (!CALENDAR_PART) return [];
+        const stored = store.items?.list?.() || [];
+        const legacy = CALENDAR_PART.itemsFromNoteReminders(store.list({ trashed: false }), titleOf);
+        const unique = new Map();
+        for (const item of [...stored, ...legacy]) unique.set(item.id, item);
+        return [...unique.values()];
+      }
+      // T2.4b: the calendar UI uses the same persisted item store as note editing. Recurrences are expanded
+      // before view grouping so month, upcoming and agenda views show each occurrence independently.
+      function calendarBaseItems() {
+        if (!CALENDAR_PART) return [];
+        const unique = new Map();
+        for (const item of calendarPickerItems()) unique.set(item.id, item);
+        return [...unique.values()].filter((item) => item.status !== "cancelled");
+      }
+      function calendarFilteredItems() {
+        const kind = ["all", "event", "reminder"].includes(store.meta.calendarFilterKind) ? store.meta.calendarFilterKind : "all";
+        const category = typeof store.meta.calendarFilterCategory === "string" ? store.meta.calendarFilterCategory : "";
+        return calendarBaseItems().filter((item) => (kind === "all" || item.x.kind === kind) && (!category || item.x.category === category));
+      }
+      function syncCalendarFilterOptions() {
+        const kind = ["all", "event", "reminder"].includes(store.meta.calendarFilterKind) ? store.meta.calendarFilterKind : "all";
+        const categories = store.items?.categoryList?.() || [];
+        const requestedCategory = typeof store.meta.calendarFilterCategory === "string" ? store.meta.calendarFilterCategory : "";
+        const category = categories.some((entry) => entry.name === requestedCategory) ? requestedCategory : "";
+        const view = ["month", "upcoming", "agenda"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
+        const days = [3, 7, 14, 30].includes(Number(store.meta.calendarDaysForward)) ? Number(store.meta.calendarDaysForward) : 7;
+        calendarViewSelect.dataset.value = view;
+        calendarViewSelect.textContent = ({ month: "Month", upcoming: "Next days", agenda: "Agenda" })[view];
+        calendarDaysSelect.dataset.value = String(days);
+        calendarDaysSelect.textContent = days + " days";
+        calendarDaysSelect.hidden = view !== "upcoming";
+        calendarKindSelect.dataset.value = kind;
+        calendarKindSelect.textContent = ({ all: "All items", event: "Events", reminder: "Reminders" })[kind];
+        calendarCategorySelect.dataset.value = category;
+        calendarCategorySelect.textContent = category || "All categories";
+        if (category !== requestedCategory) store.setMeta({ calendarFilterCategory: category });
+      }
+      function calendarChoiceMenu(anchor, entries, current, choose) {
+        showMenu(anchor, entries.map((entry) => ({
+          icon: entry.value === current ? "check" : undefined,
+          label: entry.label,
+          action: () => choose(entry.value),
+        })));
+      }
+      function calendarDayLabel(day, options = {}) {
+        return new Date(day).toLocaleDateString(undefined, { weekday: options.weekday || "long", month: "short", day: "numeric", ...(options.year ? { year: "numeric" } : {}) });
+      }
+      function calendarItemColor(item) {
+        if (!item.x?.category) return "";
+        return store.items?.category?.(item.x.category)?.color || "";
+      }
+      function calendarItemTime(item) {
+        if (CALENDAR_PART.isAllDay(item)) return "All day";
+        const [start, end] = CALENDAR_PART.itemRange(item);
+        const first = CALENDAR_PART.clockIn(start, item.x?.tz);
+        if (CALENDAR_PART.isReminder(item) || !(end > start)) return first;
+        return first + "–" + CALENDAR_PART.clockIn(end, item.x?.tz);
+      }
+      function openCalendarItem(item) {
+        const noteId = item.x?.noteId || "";
+        if (noteId && store.get(noteId)) {
+          env.openNoteLink?.(noteId, item.x?.heading || "");
+          if (item.x?.calNote) flash("Calendar note: " + item.x.calNote.slice(0, 180), 6000);
+          return;
+        }
+        askCalendarItemDetails(item);
+      }
+      function calendarItemButton(item, compact = false) {
+        const reminder = CALENDAR_PART.isReminder(item);
+        const button = h("button", {
+          type: "button",
+          class: "zn-cal-item" + (reminder ? " is-reminder" : " is-event") + (compact ? " is-compact" : ""),
+          title: [item.summary, item.x?.calNote].filter(Boolean).join(" — "),
+          "aria-label": `${reminder ? "Reminder" : "Event"}: ${item.summary}${item.x?.calNote ? ". Calendar note: " + item.x.calNote : ""}`,
+        });
+        const color = calendarItemColor(item);
+        if (color) button.style.setProperty("--zn-cal-item-color", color);
+        button.append(h("span", { class: "zn-cal-item-time" }, calendarItemTime(item)), h("span", { class: "zn-cal-item-title" }, item.summary || "Untitled item"));
+        if (item.x?.category) button.append(h("span", { class: "zn-cal-item-category" }, item.x.category));
+        if (item.x?.calNote) button.append(h("span", { class: "zn-cal-item-note" }, item.x.calNote.slice(0, 110)));
+        button.addEventListener("click", () => openCalendarItem(item));
+        return button;
+      }
+      function calendarDayGroup(day, dayItems, { selected = false, compact = false } = {}) {
+        const section = h("section", { class: "zn-cal-day-group" + (selected ? " is-selected" : "") });
+        const head = h("div", { class: "zn-cal-day-head" }, h("strong", {}, calendarDayLabel(day, { year: true })), h("span", {}, `${dayItems.length} item${dayItems.length === 1 ? "" : "s"}`));
+        section.append(head);
+        const allDay = dayItems.filter((item) => CALENDAR_PART.isAllDay(item));
+        const timed = dayItems.filter((item) => !CALENDAR_PART.isAllDay(item));
+        if (allDay.length) {
+          const strip = h("div", { class: "zn-cal-all-day-strip", "aria-label": "All-day items" }, h("span", { class: "zn-cal-all-day-label" }, "All day"));
+          for (const item of allDay) strip.append(calendarItemButton(item, compact));
+          section.append(strip);
+        }
+        const rows = h("div", { class: "zn-cal-day-items" });
+        for (const item of timed) rows.append(calendarItemButton(item, compact));
+        if (timed.length) section.append(rows);
+        if (!dayItems.length) section.append(h("p", { class: "zn-cal-empty-day" }, "No items"));
+        return section;
+      }
+      function calendarMonthView(items, cursor, compact) {
+        const date = new Date(cursor), year = date.getFullYear(), month = date.getMonth();
+        const grid = CALENDAR_PART.monthGrid(year, month, 1);
+        const first = grid[0][0], afterLast = CALENDAR_PART.addDays(grid[5][6], 1);
+        const expanded = CALENDAR_PART.expandRange(items, first, afterLast);
+        calendarPeriod.textContent = date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+        if (compact) {
+          calendarContent.dataset.compact = "true";
+          const monthStart = new Date(year, month, 1).getTime(), dayCount = new Date(year, month + 1, 0).getDate();
+          const groups = CALENDAR_PART.daysForward(expanded, monthStart, dayCount).filter((group) => group.items.length);
+          const list = h("div", { class: "zn-cal-compact-list", "aria-label": "Month agenda" });
+          if (!groups.length) list.append(h("p", { class: "zn-cal-empty-day" }, "No calendar items this month"));
+          for (const group of groups) list.append(calendarDayGroup(group.day, group.items, { compact: true }));
+          calendarContent.append(list);
+          return;
+        }
+        calendarContent.dataset.compact = "false";
+        const monthWrap = h("div", { class: "zn-cal-month-wrap" });
+        const dows = h("div", { class: "zn-cal-month-dows" }, ...["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((name) => h("span", {}, name)));
+        const cells = h("div", { class: "zn-cal-month-grid", role: "grid", "aria-label": date.toLocaleDateString(undefined, { month: "long", year: "numeric" }) });
+        const selected = CALENDAR_PART.parseYmd(store.meta.calendarCursor) ? CALENDAR_PART.parseYmd(store.meta.calendarCursor).getTime() : CALENDAR_PART.dayStart(nowMs());
+        const today = CALENDAR_PART.dayStart(nowMs());
+        for (const week of grid) for (const day of week) {
+          const inMonth = new Date(day).getMonth() === month;
+          const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
+          const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", "data-day": CALENDAR_PART.ymd(new Date(day)) });
+          const dayButton = h("button", { type: "button", class: "zn-cal-month-date", "aria-label": calendarDayLabel(day, { year: true }), "aria-pressed": day === selected ? "true" : "false" }, String(new Date(day).getDate()));
+          dayButton.addEventListener("click", () => { store.setMeta({ calendarCursor: CALENDAR_PART.ymd(new Date(day)) }); renderCalendar(); });
+          cell.append(dayButton);
+          const allDay = dayItems.filter((item) => CALENDAR_PART.isAllDay(item));
+          const timed = dayItems.filter((item) => !CALENDAR_PART.isAllDay(item));
+          const mini = h("div", { class: "zn-cal-month-items" });
+          for (const item of [...allDay, ...timed].slice(0, 2)) {
+            const mark = h("button", { type: "button", class: "zn-cal-month-mark" + (CALENDAR_PART.isReminder(item) ? " is-reminder" : " is-event"), title: [item.summary, item.x?.calNote].filter(Boolean).join(" — ") }, item.summary || "Untitled");
+            const color = calendarItemColor(item); if (color) mark.style.setProperty("--zn-cal-item-color", color);
+            mark.addEventListener("click", () => openCalendarItem(item));
+            mini.append(mark);
+          }
+          if (dayItems.length > 2) mini.append(h("span", { class: "zn-cal-month-more" }, `+${dayItems.length - 2} more`));
+          if (allDay.length) cell.append(h("span", { class: "zn-cal-month-allday", "aria-label": `${allDay.length} all-day item${allDay.length === 1 ? "" : "s"}` }, "All day"));
+          if (timed.some((item) => CALENDAR_PART.isReminder(item))) cell.append(h("span", { class: "zn-cal-month-reminder-dot", "aria-label": "Reminder" }, "●"));
+          cell.append(mini); cells.append(cell);
+        }
+        monthWrap.append(dows, cells);
+        calendarContent.append(monthWrap);
+        const selectedItems = CALENDAR_PART.itemsInRange(expanded, selected, CALENDAR_PART.addDays(selected, 1));
+        calendarContent.append(calendarDayGroup(selected, selectedItems, { selected: true }));
+      }
+      function calendarUpcomingView(items, cursor, days) {
+        const end = CALENDAR_PART.addDays(cursor, days);
+        const expanded = CALENDAR_PART.expandRange(items, cursor, end);
+        calendarPeriod.textContent = `${calendarDayLabel(cursor, { year: true })} · ${days} days`;
+        const groups = CALENDAR_PART.daysForward(expanded, cursor, days);
+        const list = h("div", { class: "zn-cal-upcoming-list" });
+        for (const group of groups) list.append(calendarDayGroup(group.day, group.items));
+        calendarContent.dataset.compact = "true";
+        calendarContent.append(list);
+      }
+      function calendarAgendaView(items, cursor) {
+        const end = CALENDAR_PART.addDays(cursor, 90);
+        const expanded = CALENDAR_PART.expandRange(items, cursor, end).slice(0, 160);
+        calendarPeriod.textContent = `Agenda · 90 days from ${calendarDayLabel(cursor, { year: true })}`;
+        const list = h("div", { class: "zn-cal-agenda-list" });
+        if (!expanded.length) list.append(h("p", { class: "zn-cal-empty-day" }, "No upcoming calendar items"));
+        for (const item of expanded) {
+          const row = h("div", { class: "zn-cal-agenda-row" }, h("span", { class: "zn-cal-agenda-date" }, calendarDayLabel(CALENDAR_PART.itemRange(item)[0], { year: true })), calendarItemButton(item, true));
+          list.append(row);
+        }
+        calendarContent.dataset.compact = "true";
+        calendarContent.append(list);
+      }
+      function renderCalendar() {
+        if (!CALENDAR_PART || !calendarContent) return;
+        syncCalendarFilterOptions();
+        const view = ["month", "upcoming", "agenda"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
+        const storedCursor = CALENDAR_PART.parseYmd(store.meta.calendarCursor);
+        const cursor = storedCursor ? storedCursor.getTime() : CALENDAR_PART.dayStart(nowMs());
+        const items = calendarFilteredItems();
+        calendarContent.replaceChildren();
+        calendarContent.dataset.view = view;
+        const rect = calendarPane.getBoundingClientRect?.();
+        const width = Math.max(0, Number(calendarPane.clientWidth) || Number(rect?.width) || 0);
+        const compact = view === "month" && width > 0 && width < 470;
+        calendarPrev.title = view === "month" ? "Previous month" : view === "upcoming" ? "Previous range" : "Previous 30 days";
+        calendarNext.title = view === "month" ? "Next month" : view === "upcoming" ? "Next range" : "Next 30 days";
+        if (view === "month") calendarMonthView(items, cursor, compact);
+        else if (view === "upcoming") calendarUpcomingView(items, cursor, Number(store.meta.calendarDaysForward) || 7);
+        else calendarAgendaView(items, cursor);
+      }
+      function changeCalendarCursor(delta) {
+        const C = CALENDAR_PART, stored = C.parseYmd(store.meta.calendarCursor), base = stored ? stored.getTime() : C.dayStart(nowMs());
+        const view = ["month", "upcoming", "agenda"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
+        let next;
+        if (view === "month") {
+          const date = new Date(base), moved = C.stepMonth(date.getFullYear(), date.getMonth(), delta);
+          next = new Date(moved.year, moved.month, 1).getTime();
+        } else next = C.addDays(base, delta * (view === "upcoming" ? Number(store.meta.calendarDaysForward) || 7 : 30));
+        store.setMeta({ calendarCursor: C.ymd(new Date(next)) });
+        renderCalendar();
+      }
+      listen(calendarViewSelect, "click", () => calendarChoiceMenu(calendarViewSelect,
+        [{ value: "month", label: "Month" }, { value: "upcoming", label: "Next days" }, { value: "agenda", label: "Agenda" }],
+        store.meta.calendarView || "month", (value) => { store.setMeta({ calendarView: value }); renderCalendar(); }));
+      listen(calendarPrev, "click", () => changeCalendarCursor(-1));
+      listen(calendarNext, "click", () => changeCalendarCursor(1));
+      listen(calendarToday, "click", () => { store.setMeta({ calendarCursor: CALENDAR_PART.ymd(new Date(nowMs())) }); renderCalendar(); });
+      listen(calendarDaysSelect, "click", () => calendarChoiceMenu(calendarDaysSelect,
+        [3, 7, 14, 30].map((days) => ({ value: String(days), label: days + " days" })),
+        String(store.meta.calendarDaysForward || 7), (value) => { store.setMeta({ calendarDaysForward: Number(value) }); renderCalendar(); }));
+      listen(calendarKindSelect, "click", () => calendarChoiceMenu(calendarKindSelect,
+        [{ value: "all", label: "All items" }, { value: "event", label: "Events" }, { value: "reminder", label: "Reminders" }],
+        store.meta.calendarFilterKind || "all", (value) => { store.setMeta({ calendarFilterKind: value }); renderCalendar(); }));
+      listen(calendarCategorySelect, "click", () => {
+        const categories = store.items?.categoryList?.() || [];
+        calendarChoiceMenu(calendarCategorySelect,
+          [{ value: "", label: "All categories" }, ...categories.map((entry) => ({ value: entry.name, label: entry.name }))],
+          store.meta.calendarFilterCategory || "", (value) => { store.setMeta({ calendarFilterCategory: value }); renderCalendar(); });
+      });
+      // Accessible hour/minute selectors are easier to use than free-form typing and work with keyboards.
+      // Supplying `endValue` + `onEndPick` adds a second clock for event ranges; reminder-only callers omit it.
+      function buildClockPicker({ value = "09:00", onPick, endValue, onEndPick } = {}) {
+        const makeTime = (label, raw, onChange) => {
+          const match = /^(\d{1,2}):(\d{2})$/.exec(String(raw || ""));
+          const hour = h("select", { class: "zn-select zn-cal-clock-hour", "aria-label": label + " hour" });
+          const minute = h("select", { class: "zn-select zn-cal-clock-minute", "aria-label": label + " minute" });
+          for (let i = 0; i < 24; i++) hour.append(h("option", { value: String(i).padStart(2, "0") }, String(i).padStart(2, "0")));
+          for (let i = 0; i < 60; i++) minute.append(h("option", { value: String(i).padStart(2, "0") }, String(i).padStart(2, "0")));
+          hour.value = match ? String(Math.min(23, Number(match[1]))).padStart(2, "0") : "09";
+          minute.value = match ? String(Math.min(59, Number(match[2]))).padStart(2, "0") : "00";
+          const emit = () => onChange?.(hour.value + ":" + minute.value);
+          hour.addEventListener("change", emit);
+          minute.addEventListener("change", emit);
+          return h("label", { class: "zn-cal-clock-set" }, h("span", {}, label), hour, h("span", { "aria-hidden": "true" }, ":"), minute);
+        };
+        const root = h("div", { class: "zn-cal-clock", "aria-label": "Choose time" }, makeTime("Time", value, onPick));
+        if (endValue !== undefined && onEndPick) root.append(makeTime("End", endValue, onEndPick));
         return root;
       }
       function askReminder() {
@@ -8144,17 +8655,25 @@
         });
         for (const f of [d, t]) f.input.addEventListener("input", paintPreview);
         paintPreview();
-        // The calendar button next to the date opens a mini calendar that fills the date field (roadmap T2.2).
-        let miniCal = null;
+        // The shared date picker and Clock chooser fill the same date/time fields used by later item editors.
         const pickBtn = chip("Pick day\u2026");
         pickBtn.title = "Pick the day in a calendar";
+        const clockBtn = chip("Clock\u2026");
+        clockBtn.title = "Choose hour and minute";
         quick.push(pickBtn);
+        quick.push(clockBtn);
         pickBtn.addEventListener("click", () => {
-          if (miniCal) { miniCal.remove(); miniCal = null; return; }
+          if (clockPicker) { clockPicker.remove(); clockPicker = null; }
           const typed = parseRemindInput(d.input.value, "00:00");
-          const reminders = store.list({ trashed: false }).filter((x) => x.remind > 0).map((x) => CALENDAR_PART.cleanItem({ id: x.id, summary: titleOf(x.body) || "Note", start: { dateTime: new Date(x.remind).toISOString() }, x: { kind: "reminder", noteId: x.id } }, nowMs())).filter(Boolean);
-          miniCal = buildMiniCalendar({ selected: typed ? CALENDAR_PART.dayStart(typed) : 0, items: reminders, onPick: (day) => { d.input.value = remindDateText(day); paintPreview(); } });
-          if (miniCal) (t.row.parentNode || t.row.parent).insertBefore(miniCal, t.row);
+          toggleDatePicker(pickBtn, t.row, { selected: typed ? CALENDAR_PART.dayStart(typed) : 0, items: calendarPickerItems(), onPick: (day) => { d.input.value = remindDateText(day); paintPreview(); } });
+        });
+        let clockPicker = null;
+        clockBtn.addEventListener("click", () => {
+          if (clockPicker) { clockPicker.remove(); clockPicker = null; clockBtn.focus({ preventScroll: true }); return; }
+          closeDatePicker({ restoreFocus: false });
+          clockPicker = buildClockPicker({ value: t.input.value, onPick: (value) => { t.input.value = value; paintPreview(); } });
+          (preview.parentNode || preview.parent).insertBefore(clockPicker, preview);
+          clockPicker.querySelector("select")?.focus({ preventScroll: true });
         });
         if (!CALENDAR_PART) pickBtn.hidden = true;
         const ok = chip("Set reminder", true), cancel = chip("Cancel");
@@ -8227,7 +8746,11 @@
         d.addEventListener("click", (e) => {
           e.stopPropagation();
           if (d.dataset.armed) {
-            store.deleteForever(n.id).then(scheduleList);
+            window.clearTimeout(confirmTimer);
+            confirmTimer = 0;
+            delete d.dataset.armed;
+            d.title = "Delete forever";
+            askNoteDeleteForever(n.id, scheduleList);
           } else {
             d.dataset.armed = "true";
             d.title = "Click again to delete forever";
@@ -8249,9 +8772,7 @@
         const t = iconButton("trash", "Move to trash");
         t.addEventListener("click", (e) => {
           e.stopPropagation();
-          store.trash(n.id);
-          if (n.id === currentId) currentId = "";
-          scheduleList();
+          askNoteTrash(n.id, () => { if (n.id === currentId) currentId = ""; scheduleList(); });
         });
         act.append(p, t);
       }
@@ -8736,6 +9257,89 @@
         });
         cancel.addEventListener("click", closeDialog);
       }
+      // T2.3b: category definitions live beside the items (calendar.json), not in note metadata. A section marker
+      // stores only the category name; items retain independent `x.notify` overrides while category defaults evolve.
+      function askCalendarCategory(initial, onSaved) {
+        if (!store.items || !CALENDAR_PART) return;
+        const old = initial || null;
+        const nameField = old ? null : field("Category name", "", "e.g. Birthdays");
+        const color = colorPicker(old?.color || "#7d8da8", () => {});
+        const defaults = CALENDAR_PART.cleanCategoryNotify(old?.notify);
+        const stageChoice = (label, value) => {
+          const select = h("select", { class: "zn-select", "aria-label": label });
+          select.append(h("option", { value: "on" }, "On"), h("option", { value: "off" }, "Off"));
+          select.value = value ? "on" : "off";
+          return { row: h("label", { class: "zn-field-row zn-category-rule" }, h("span", {}, label), select), select };
+        };
+        const lead = h("select", { class: "zn-select", "aria-label": "Pre-alert lead time" });
+        for (const m of [1, 2, 3, 5, 7, 10]) lead.append(h("option", { value: String(m) }, `${m} min`));
+        lead.value = String(defaults.pre.leadMinutes);
+        const pre = stageChoice("Tier 1 · Gentle pre-alert", defaults.pre.enabled);
+        const due = stageChoice("Tier 2 · At due time", defaults.due.enabled);
+        const follow = stageChoice("Tier 3 · Follow-up banner", defaults.followup.enabled);
+        const leadRow = h("label", { class: "zn-field-row zn-category-rule" }, h("span", {}, "Tier 1 lead time"), lead);
+        const ok = chip("Save category", true), cancel = chip("Cancel");
+        const contents = [
+          ...(nameField ? [nameField.row] : [h("p", { class: "zn-empty" }, `Editing defaults for ${old.name}`)]),
+          h("div", { class: "zn-category-color" }, h("span", {}, "Category colour"), color.el),
+          h("strong", {}, "Default reminder stages"),
+          pre.row, leadRow, due.row, follow.row,
+          h("p", { class: "zn-empty" }, "These are category defaults. A reminder can override each stage individually; sound levels and quiet-hour exceptions are configured later in T2.7."),
+          h("div", { class: "zn-dialog-actions" }, cancel, ok),
+        ];
+        openCard(old ? "Category defaults" : "New calendar category", ...contents);
+        const submit = () => {
+          const name = old?.name || CALENDAR_PART.cleanCategoryName(nameField?.input.value);
+          if (!name) { if (nameField) { nameField.input.dataset.bad = "true"; nameField.input.focus(); } return; }
+          const saved = store.items.upsertCategory({
+            ...(old || {}), name, color: color.value(),
+            notify: {
+              pre: { enabled: pre.select.value === "on", leadMinutes: Number(lead.value) },
+              due: { enabled: due.select.value === "on" },
+              followup: { enabled: follow.select.value === "on", delayMinutes: defaults.followup.delayMinutes },
+            },
+          });
+          closeDialog();
+          if (saved) { flash(`Category “${saved.name}” saved`); onSaved?.(saved); }
+        };
+        ok.addEventListener("click", submit);
+        cancel.addEventListener("click", closeDialog);
+        nameField?.input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); submit(); } });
+        if (nameField) { nameField.input.focus?.({ preventScroll: true }); }
+      }
+      function applyCalendarCategory(name) {
+        const n = note();
+        if (!n || n.trashed || !store.items || !CALENDAR_PART) return;
+        const edit = CALENDAR_PART.setCalendarSectionCategory(ta.value, ta.selectionStart, name);
+        if (!edit || edit.body === ta.value) return;
+        const a = ta.selectionStart, b = ta.selectionEnd, nextA = Math.max(0, Math.min(edit.body.length, a + edit.delta)), nextB = Math.max(nextA, Math.min(edit.body.length, b + edit.delta));
+        setBody(edit.body);
+        ta.setSelectionRange(nextA, nextB);
+        scheduleChrome();
+        flash(edit.created ? `Calendar section created · ${name}` : `Category changed to ${name}`);
+      }
+      function openCalendarCategoryMenu() {
+        const n = note();
+        if (!n || n.trashed || !store.items || !CALENDAR_PART) return;
+        const section = CALENDAR_PART.calendarSectionAt(ta.value, ta.selectionStart);
+        const current = section?.category || "";
+        const categories = store.items.categoryList();
+        const menuItems = [
+          { label: section ? `Section category: ${current || "Uncategorised"}` : "No calendar section at the caret", disabled: true },
+          { sep: true },
+          ...categories.map((category) => ({
+            label: (CALENDAR_PART.cleanCategoryName(current).toLowerCase() === category.name.toLowerCase() ? "✓  " : "") + category.name,
+            group: [
+              { label: `Use ${category.name}`, action: () => applyCalendarCategory(category.name) },
+              { label: "Edit colour and reminder defaults…", action: () => queueMicrotask(() => askCalendarCategory(category)) },
+            ],
+          })),
+          { sep: true },
+          { icon: "plus", label: "Create category…", action: () => queueMicrotask(() => askCalendarCategory(null, (category) => applyCalendarCategory(category.name))) },
+        ];
+        showMenu(btnCategory, menuItems);
+      }
+      listen(btnCategory, "click", openCalendarCategoryMenu);
       function askFolderName(title, initial, onOk) {
         const f = field("Folder name", initial, "e.g. Work");
         f.input.maxLength = FOLDER_LABEL_MAX;
@@ -8763,6 +9367,73 @@
         f.input.focus?.({ preventScroll: true });
         f.input.select?.();
       }
+      // T2.3e: count every independently stored reminder, including items hidden because the note is in Trash,
+      // plus the legacy single `remind` field (which is not part of calendar.json).
+      function noteReminderCount(n) {
+        if (!n) return 0;
+        const stored = store.items?.list({ noteId: n.id, kind: "reminder", includeHidden: true }) || [];
+        return stored.length + (n.remind > 0 ? 1 : 0);
+      }
+      function reminderImpact(notes) {
+        const unique = new Map();
+        for (const n of notes || []) if (n && !unique.has(n.id)) unique.set(n.id, n);
+        const affected = [];
+        for (const n of unique.values()) {
+          const count = noteReminderCount(n);
+          if (count) affected.push({ note: n, count });
+        }
+        return { totalNoteCount: unique.size, noteCount: affected.length, reminderCount: affected.reduce((sum, row) => sum + row.count, 0), affected };
+      }
+      function runDestructiveAction(run) {
+        try {
+          const result = run();
+          if (result && typeof result.catch === "function") result.catch((error) => console.warn("[ZentralNotes] destructive action failed", error));
+        } catch (error) { console.warn("[ZentralNotes] destructive action failed", error); }
+      }
+      // Notes without reminders retain their existing no-prompt flow. Bulk prompts count notes that actually
+      // carry reminders, while the reminder count includes every item plus any legacy compatibility reminder.
+      function askReminderImpact(notes, { permanent = false, bulk = false, title = "Confirm", actionLabel = permanent ? "Delete forever" : "Move to Trash", run }) {
+        const impact = reminderImpact(notes);
+        if (!impact.reminderCount) {
+          closeDialog();
+          runDestructiveAction(run);
+          return false;
+        }
+        const plural = (n, one, many = one + "s") => n === 1 ? one : many;
+        let message;
+        if (bulk) {
+          const affectedText = `${impact.noteCount} ${plural(impact.noteCount, "note")} ${impact.noteCount === 1 ? "contains" : "contain"} ${impact.reminderCount} ${plural(impact.reminderCount, "reminder")}`;
+          message = permanent
+            ? `This will permanently delete ${impact.totalNoteCount} ${plural(impact.totalNoteCount, "note")}. ${affectedText}; their calendar reminders will also be removed.`
+            : `This will move ${impact.totalNoteCount} ${plural(impact.totalNoteCount, "note")} to Trash. ${affectedText}; those reminders will be hidden and return when their notes are restored.`;
+        } else if (permanent) {
+          message = `This note has ${impact.reminderCount} ${plural(impact.reminderCount, "reminder")}. Permanently deleting it will also remove those calendar reminders.`;
+        } else {
+          message = `This note has ${impact.reminderCount} ${plural(impact.reminderCount, "reminder")}. They will be hidden while the note is in Trash and will return when you restore it.`;
+        }
+        const cancel = chip("Cancel");
+        const confirm = chip(actionLabel, true);
+        openCard(title, h("p", {}, message), h("div", { class: "zn-dialog-actions" }, cancel, confirm));
+        cancel.addEventListener("click", closeDialog);
+        confirm.addEventListener("click", () => { closeDialog(); runDestructiveAction(run); });
+        cancel.focus?.({ preventScroll: true });
+        return true;
+      }
+      function askNoteTrash(id, after) {
+        const n = store.get(id);
+        if (!n || n.trashed) return;
+        return askReminderImpact([n], { title: "Move note to Trash?", actionLabel: "Move to Trash", run: () => { store.trash(id); after?.(); } });
+      }
+      function askNoteDeleteForever(id, after) {
+        const n = store.get(id);
+        if (!n || !n.trashed) return;
+        return askReminderImpact([n], { permanent: true, title: "Delete note permanently?", actionLabel: "Delete forever", run: () => store.deleteForever(id).then(() => after?.()) });
+      }
+      function askEmptyTrash(after) {
+        const trashed = store.list({ trashed: true });
+        if (!trashed.length) return;
+        return askReminderImpact(trashed, { permanent: true, bulk: true, title: "Empty Trash permanently?", actionLabel: "Empty Trash", run: () => store.emptyTrash().then(() => after?.()) });
+      }
       function askFolderDelete(node) {
         const toRoot = chip("Notes to top level", true);
         const toTrash = chip("Notes to trash");
@@ -8774,8 +9445,14 @@
           store.removeFolder(node.id, "toRoot");
         });
         toTrash.addEventListener("click", () => {
-          closeDialog();
-          store.removeFolder(node.id, "toTrash");
+          const fid = cleanFolder(node.id);
+          const affected = store.list().filter((n) => cleanFolder(n.folder) && inFolder(cleanFolder(n.folder), fid));
+          askReminderImpact(affected, {
+            bulk: true,
+            title: "Move folder notes to Trash?",
+            actionLabel: "Move notes to Trash",
+            run: () => store.removeFolder(node.id, "toTrash"),
+          });
         });
         cancel.focus?.({ preventScroll: true });
       }
@@ -8859,7 +9536,7 @@
           return [
             { icon: "restore", label: "Restore", action: () => { store.restore(n.id); scheduleList(); } },
             { sep: true },
-            { icon: "trash", label: "Delete forever", danger: true, action: () => { store.deleteForever(n.id).then(scheduleList); } },
+            { icon: "trash", label: "Delete forever", danger: true, action: () => askNoteDeleteForever(n.id, scheduleList) },
           ];
         return [
           { icon: "note", label: "Open", action: () => openNote(n.id) },
@@ -8873,13 +9550,13 @@
           ...(FLAVORS_PART ? [{ label: "Markdown mode", group: [["", "Follow the setting"], ...FLAVORS_PART.MODES.map((m) => [m, FLAVORS_PART.MODE_LABELS[m]])].map(([m, label]) => ({ label: (n.flavor || "") === m ? "\u2713 " + label : label, action: () => { store.setFlavor(n.id, m); scheduleList(); } })) }] : []),
           { icon: "link", label: "Copy link", action: () => { env.copyText?.("[[" + (titleOf(n.body) || "Untitled note") + "]]"); flash("Link copied"); } },
           { sep: true },
-          { icon: "trash", label: "Move to trash", danger: true, action: () => { store.trash(n.id); if (n.id === currentId) currentId = ""; scheduleList(); } },
+          { icon: "trash", label: "Move to trash", danger: true, action: () => askNoteTrash(n.id, () => { if (n.id === currentId) currentId = ""; scheduleList(); }) },
         ];
       }
       function trashMenuItems() {
         const days = Number(getPref(PREF.TRASH_DAYS, TRASH_DAYS));
         return [
-          { icon: "trash", label: "Empty trash now", danger: true, disabled: !store.trashCount(), action: () => { store.emptyTrash().then(scheduleList); } },
+          { icon: "trash", label: "Empty trash now", danger: true, disabled: !store.trashCount(), action: () => askEmptyTrash(scheduleList) },
           { icon: "note", label: "Deleted notes backup (" + BACKUP_HOURS + " h)\u2026", action: () => { askBackup(); } },
           { sep: true },
           { label: "Auto-empty after\u2026", group: [[0, "Never"], [7, "7 days"], [14, "14 days"], [30, "30 days"], [90, "90 days"]].map(([v, label]) => ({ label: (v === days ? "\u2713 " : "") + label, action: () => { setPref(PREF.TRASH_DAYS, v); flash(v ? "Applies at the next start: older than " + v + " days" : "Auto-empty is off"); } })) },
@@ -9340,6 +10017,10 @@
       // Export notice: says what each format loses before anything is written.
       function closeDialog() {
         if (!dialog) return;
+        if (activeDatePicker) {
+          activeDatePicker.node.remove();
+          activeDatePicker = null;
+        }
         try {
           cardRO?.disconnect();
         } catch (_) {}
@@ -9828,11 +10509,23 @@
         const { ms, ymd } = dateTarget(kind, Date.now());
         openDay(ms, ymd);
       }
-      function askOtherDate() {
-        const d = field("Date (YYYY-MM-DD)", ymdOf(Date.now()), "2026-11-03");
+      function askOtherDate(initialDate = "") {
+        const d = field("Date (YYYY-MM-DD)", parseYmd(initialDate) ? initialDate : ymdOf(Date.now()), "2026-11-03");
+        const pickBtn = chip("Pick day\u2026");
+        pickBtn.title = "Pick the day in a calendar";
         const ok = chip("Open", true);
         const cancel = chip("Cancel");
-        openCard("Note for a date", d.row, h("div", { class: "zn-dialog-actions" }, ok, cancel));
+        const actions = h("div", { class: "zn-dialog-actions" }, pickBtn, ok, cancel);
+        openCard("Note for a date", d.row, actions);
+        pickBtn.addEventListener("click", () => {
+          const selected = parseYmd(d.input.value);
+          toggleDatePicker(pickBtn, actions, {
+            selected: selected || 0,
+            items: calendarPickerItems(),
+            onPick: (day) => { d.input.value = ymdOf(day); },
+          });
+        });
+        if (!CALENDAR_PART) pickBtn.hidden = true;
         const go = () => {
           const ms = parseYmd(d.input.value);
           if (!ms) return flash("Use the form 2026-11-03");
@@ -9851,6 +10544,234 @@
         const days = dateMode() === "single" ? (store.list().find(isJournal) ? journalDays(store.list().find(isJournal).body).slice(-15).reverse().map((ymd) => ({ ymd })) : []) : listDateNotes(store.list()).slice(0, 15);
         if (days.length) items.push({ label: "Earlier days", disabled: true }, ...days.map((d) => ({ icon: "note", label: d.ymd, action: () => openDay(parseYmd(d.ymd), d.ymd) })));
         showMenu(btnMore, items);
+      }
+      function lineHeading(body, line) {
+        const lines = normalizeNewlines(body || "").split("\n");
+        let found = "";
+        for (let i = 0; i <= Math.max(0, line); i++) {
+          const m = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(lines[i] || "");
+          if (m) found = m[2];
+        }
+        return found;
+      }
+      function calendarItemDate(item) {
+        const start = item?.start;
+        if (start?.date) return String(start.date).slice(0, 10);
+        const value = start?.dateTime;
+        if (!value) return "";
+        const ms = Date.parse(value);
+        if (!Number.isFinite(ms)) return "";
+        const zone = CALENDAR_PART?.cleanZone?.(item.x?.tz) || "";
+        try {
+          const parts = new Intl.DateTimeFormat("en-CA", { timeZone: zone || undefined, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(ms));
+          const part = (type) => parts.find((p) => p.type === type)?.value || "";
+          return part("year") + "-" + part("month") + "-" + part("day");
+        } catch (_) { return new Date(ms).toISOString().slice(0, 10); }
+      }
+      function calendarItemMenuLabel(item) {
+        const day = calendarItemDate(item);
+        const kind = item.x?.kind === "reminder" ? "Reminder" : "Event";
+        const summary = String(item.summary || "Untitled item").replace(/\s+/g, " ").trim().slice(0, 52);
+        return `${kind} · ${day || "No date"} · ${summary}`;
+      }
+      function askCalendarItemDetails(item) {
+        const current = item && store.items?.get(item.id);
+        if (!current) return flash("That calendar item is no longer available");
+        const noteField = h("textarea", { class: "zn-field zn-calendar-note-field", rows: "5", "aria-label": "Calendar note", placeholder: "Additional details shown on the calendar, not in the note tree" });
+        noteField.value = current.x.calNote || "";
+        const headingField = field("Heading jump target", current.x.heading || "", "e.g. Project milestones");
+        const zoneField = field("Time zone (IANA; blank = local)", current.x.tz || "", "e.g. Europe/Warsaw");
+
+        // T2.3d: edit the RRULE on this exact item only. Other reminders/events on the same note remain independent.
+        const currentRule = (current.recurrence || []).map((r) => CALENDAR_PART.parseRule(r)).find(Boolean) || null;
+        const frequency = h("select", { class: "zn-select", "aria-label": "Repeat frequency" });
+        for (const [value, label] of [["NONE", "Does not repeat"], ["DAILY", "Daily"], ["WEEKLY", "Weekly"], ["MONTHLY", "Monthly"], ["YEARLY", "Yearly"]]) frequency.append(h("option", { value }, label));
+        frequency.value = currentRule?.freq || "NONE";
+        const interval = h("input", { class: "zn-field", type: "number", min: "1", max: "999", step: "1", "aria-label": "Repeat interval" });
+        interval.value = String(currentRule?.interval || 1);
+        const intervalRow = h("label", { class: "zn-field-row zn-recurrence-interval" }, h("span", {}, "Repeat every"), interval, h("span", {}, "interval(s)"));
+        const dayCodes = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"], dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        const startMs = current.start?.date ? parseYmd(current.start.date) : Date.parse(current.start?.dateTime || "");
+        const defaultDay = Number.isFinite(startMs) ? new Date(startMs).getDay() : new Date().getDay();
+        const initialDays = currentRule?.byday?.length ? currentRule.byday.map((day) => ["SU", "MO", "TU", "WE", "TH", "FR", "SA"][day]) : [ ["SU", "MO", "TU", "WE", "TH", "FR", "SA"][defaultDay] ];
+        const dayChecks = dayCodes.map((code, i) => {
+          const input = h("input", { type: "checkbox", "aria-label": dayLabels[i] }); input.checked = initialDays.includes(code);
+          return { code, input, node: h("label", { class: "zn-recurrence-day" }, input, h("span", {}, dayLabels[i])) };
+        });
+        const daysRow = h("div", { class: "zn-recurrence-days", "aria-label": "Repeat on weekdays" }, ...dayChecks.map((d) => d.node));
+        const endMode = h("select", { class: "zn-select", "aria-label": "Repeat ending" });
+        endMode.append(h("option", { value: "never" }, "Never"), h("option", { value: "count" }, "After a number of occurrences"), h("option", { value: "until" }, "On a date"));
+        endMode.value = currentRule?.count ? "count" : currentRule?.until ? "until" : "never";
+        const count = h("input", { class: "zn-field", type: "number", min: "1", max: "5000", step: "1", "aria-label": "Repeat occurrence count" }); count.value = String(currentRule?.count || 10);
+        const countRow = h("label", { class: "zn-field-row" }, h("span", {}, "Occurrences"), count);
+        const untilInitial = currentRule?.until ? CALENDAR_PART.ymd(new Date(currentRule.until - 86400000)) : "";
+        const until = field("Last occurrence date", untilInitial, "YYYY-MM-DD");
+        const untilPick = chip("Choose date…");
+        const untilHost = h("div", { class: "zn-recurrence-until" }, until.row, untilPick);
+        untilPick.addEventListener("click", () => {
+          const selected = parseYmd(until.input.value);
+          toggleDatePicker(untilPick, untilHost, { selected: selected || startMs || nowMs(), items: calendarPickerItems(), onPick: (day) => { until.input.value = ymdOf(day); } });
+        });
+        const recurrenceBox = h("div", { class: "zn-recurrence-editor" },
+          h("strong", {}, "Recurrence"),
+          h("label", { class: "zn-field-row" }, h("span", {}, "Repeat"), frequency),
+          intervalRow, daysRow,
+          h("label", { class: "zn-field-row" }, h("span", {}, "Ends"), endMode),
+          countRow, untilHost);
+        const syncRecurrenceVisibility = () => {
+          const active = frequency.value !== "NONE";
+          recurrenceBox.dataset.enabled = active ? "true" : "false";
+          intervalRow.hidden = !active;
+          daysRow.hidden = !active || frequency.value !== "WEEKLY";
+          endMode.parentNode && (endMode.parentNode.hidden = !active);
+          countRow.hidden = !active || endMode.value !== "count";
+          untilHost.hidden = !active || endMode.value !== "until";
+        };
+        frequency.addEventListener("change", syncRecurrenceVisibility);
+        endMode.addEventListener("change", syncRecurrenceVisibility);
+        syncRecurrenceVisibility();
+
+        const ok = chip("Save calendar details", true), cancel = chip("Cancel");
+        const summary = h("p", { class: "zn-empty" }, `${current.summary} · ${calendarItemDate(current)} · ${current.x.kind}`);
+        openCard("Calendar item details", summary, h("label", { class: "zn-field-row zn-calendar-note-row" }, h("span", {}, "Calendar note"), noteField), headingField.row, zoneField.row, recurrenceBox,
+          h("p", { class: "zn-empty" }, "Calendar notes are stored with this item and never appear as separate notes in the sidebar. Recurrence applies only to this item."),
+          h("div", { class: "zn-dialog-actions" }, cancel, ok));
+        const submit = () => {
+          const rawZone = zoneField.input.value.trim();
+          const zone = rawZone ? CALENDAR_PART.cleanZone(rawZone) : "";
+          if (rawZone && !zone) { zoneField.input.dataset.bad = "true"; zoneField.input.focus(); return; }
+          let recurrence = (current.recurrence || []).filter((r) => !CALENDAR_PART.parseRule(r));
+          if (frequency.value !== "NONE") {
+            const every = Number(interval.value);
+            if (!Number.isInteger(every) || every < 1 || every > 999) { interval.dataset.bad = "true"; interval.focus(); return; }
+            const parts = [`FREQ=${frequency.value}`];
+            if (every !== 1) parts.push(`INTERVAL=${every}`);
+            if (frequency.value === "WEEKLY") {
+              const selected = dayChecks.filter((d) => d.input.checked).map((d) => d.code);
+              if (!selected.length) { dayChecks[0].input.focus(); dayChecks[0].input.dataset.bad = "true"; return; }
+              const order = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+              parts.push("BYDAY=" + selected.sort((a, b) => order.indexOf(a) - order.indexOf(b)).join(","));
+            }
+            if (endMode.value === "count") {
+              const n = Number(count.value);
+              if (!Number.isInteger(n) || n < 1 || n > 5000) { count.dataset.bad = "true"; count.focus(); return; }
+              parts.push("COUNT=" + n);
+            } else if (endMode.value === "until") {
+              const endDay = parseYmd(until.input.value);
+              const startDay = parseYmd(calendarItemDate(current));
+              if (!endDay || (startDay && endDay < startDay)) { until.input.dataset.bad = "true"; until.input.focus(); return; }
+              parts.push("UNTIL=" + until.input.value.replace(/-/g, ""));
+            }
+            recurrence.unshift("RRULE:" + parts.join(";"));
+          }
+          const saved = store.items.upsert({ ...current, recurrence, x: { ...current.x, calNote: noteField.value, heading: headingField.input.value.trim(), tz: zone } });
+          if (!saved) return flash("Could not save calendar details");
+          closeDialog();
+          flash("Calendar item details saved");
+        };
+        ok.addEventListener("click", submit);
+        cancel.addEventListener("click", () => { closeDialog(); focusEditor(); });
+      }
+      function showInlineDateMenu(token, anchor, line) {
+        const currentNote = note();
+        if (!currentNote || currentNote.trashed) return;
+        const all = store.items?.list({ noteId: currentNote.id }) || [];
+        const sameDay = all.filter((item) => calendarItemDate(item) === token.ymd);
+        const candidates = sameDay.length ? sameDay : all;
+        const editChoices = candidates.length
+          ? candidates.map((item) => ({ icon: item.x.kind === "reminder" ? "bell" : "calendar", label: calendarItemMenuLabel(item), action: () => queueMicrotask(() => askCalendarItemDetails(item)) }))
+          : [{ label: "No calendar items in this note", disabled: true }];
+        showMenu(anchor, [
+          { icon: "calendar", label: "Open note for " + token.ymd, action: () => openDay(parseYmd(token.ymd), token.ymd) },
+          { icon: "calendar", label: "Choose another date\u2026", action: () => queueMicrotask(() => askOtherDate(token.ymd)) },
+          { label: sameDay.length ? "Edit calendar item for this date…" : "Edit another calendar item…", group: editChoices },
+          { sep: true },
+          { icon: "bell", label: "Mark as reminder\u2026", action: () => queueMicrotask(() => askInlineReminder(token, line)) },
+          { icon: "note", label: "Add link to Tomorrow", action: () => addInlineDateToTomorrow(token, line) },
+          { sep: true },
+          { icon: "ban", label: "Not a date", action: () => ignoreInlineDate(token.raw, line) },
+        ]);
+      }
+      function askInlineReminder(token, line) {
+        const n = note();
+        if (!n || n.trashed || !store.items) return flash("Calendar item storage is unavailable");
+        const d = field("Date (YYYY-MM-DD)", token.ymd, "2026-11-03");
+        const t = field("Alert time (HH:MM, optional)", token.time || "", "09:00");
+        const pick = chip("Pick day\u2026"), clockBtn = chip("Clock\u2026");
+        const add = chip("Add reminder", true), cancel = chip("Cancel");
+        const actions = h("div", { class: "zn-dialog-actions" }, pick, clockBtn, cancel, add);
+        const clockHost = h("div");
+        openCard("Add reminder from date", d.row, t.row, clockHost, actions);
+        pick.addEventListener("click", () => {
+          if (clockHost.firstChild) clockHost.replaceChildren();
+          const selected = parseYmd(d.input.value);
+          toggleDatePicker(pick, clockHost, { selected: selected || 0, items: calendarPickerItems(), onPick: (day) => { d.input.value = ymdOf(day); } });
+        });
+        clockBtn.addEventListener("click", () => {
+          if (clockHost.firstChild) { clockHost.replaceChildren(); clockBtn.focus({ preventScroll: true }); return; }
+          closeDatePicker({ restoreFocus: false });
+          const clock = buildClockPicker({ value: /^\d{1,2}:\d{2}$/.test(t.input.value) ? t.input.value : "09:00", onPick: (value) => { t.input.value = value; } });
+          clockHost.append(clock);
+          clock.querySelector("select")?.focus({ preventScroll: true });
+        });
+        const submit = () => {
+          const day = parseYmd(d.input.value);
+          const rawTime = t.input.value.trim();
+          const minute = rawTime ? CALENDAR_PART.parseClock(rawTime) : -1;
+          if (!day || (rawTime && minute < 0)) { (day ? t : d).input.dataset.bad = "true"; (day ? t : d).input.focus(); return; }
+          const parts = normalizeNewlines(n.body).split("\n");
+          const rawLine = Number.isInteger(line) && line >= 0 ? parts[line] || "" : "";
+          const cleaned = rawLine.replace(/%%\s*zn-date-ignore:[^%]*%%/gi, "").replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "").trim();
+          const summary = (cleaned.replace(token.raw, "").replace(/\s+/g, " ").trim() || titleOf(n.body) || token.raw).slice(0, 500);
+          const heading = lineHeading(n.body, line);
+          let start;
+          if (minute >= 0) {
+            const dt = new Date(day); dt.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
+            start = { dateTime: dt.toISOString() };
+          } else start = { date: ymdOf(day) };
+          const item = CALENDAR_PART.makeItem({ summary, start, x: { kind: "reminder", noteId: n.id, heading, src: "manual" } }, nowMs());
+          const saved = item && store.items.upsert(item);
+          if (!saved) { flash("Could not create the reminder"); return; }
+          closeDialog();
+          flash("Independent reminder added");
+        };
+        add.addEventListener("click", submit);
+        cancel.addEventListener("click", () => { closeDialog(); focusEditor(); });
+        d.input.focus({ preventScroll: true });
+      }
+      function addInlineDateToTomorrow(token, line) {
+        const n = note();
+        if (!n || n.trashed) return;
+        const heading = lineHeading(n.body, line);
+        const linkTitle = titleOf(n.body) || "Untitled note";
+        const link = "[[" + linkTitle + (heading ? "#" + heading : "") + "]]";
+        const entry = "- " + token.ymd + " " + link;
+        const lines = normalizeNewlines(n.body).split("\n");
+        const head = lines.findIndex((x) => /^##\s+Tomorrow\s*#*\s*$/i.test(x));
+        if (head >= 0) {
+          let end = head + 1;
+          while (end < lines.length && !/^#{1,2}\s+/.test(lines[end])) end++;
+          if (lines.slice(head + 1, end).some((x) => x.trim() === entry)) return flash("Already listed under Tomorrow");
+          lines.splice(end, 0, entry);
+        } else lines.push("", "## Tomorrow", entry);
+        setBody(lines.join("\n"));
+        flash("Added a backlink under Tomorrow");
+      }
+      function ignoreInlineDate(raw, line) {
+        const n = note();
+        if (!n || n.trashed) return;
+        const lines = normalizeNewlines(n.body).split("\n");
+        let at = Number.isInteger(line) && line >= 0 && line < lines.length ? line : -1;
+        if (at < 0) at = lines.findIndex((x) => x.includes(raw));
+        if (at < 0) return flash("Could not locate that date in the note");
+        const marker = "%%zn-date-ignore:" + encodeURIComponent(raw) + "%%";
+        if (lines[at].includes(marker)) return flash("That date is already marked as plain text");
+        lines[at] += marker;
+        // The marker is intentionally invisible to Markdown, so the parsed block signature may be unchanged.
+        // Force the read view to rebuild so the chip disappears immediately instead of waiting for another edit.
+        readSigs = [];
+        setBody(lines.join("\n"));
+        flash("Marked as plain text; it will no longer become a date or calendar item");
       }
       // ---- pinned strip + Recent menu (Cycle F #29): off by default, rebuilt only when what it shows changed ----
       let stripSig = "";
@@ -10637,9 +11558,9 @@
         ];
         if (n.trashed) {
           items.push({ icon: "restore", label: "Restore", action: () => { store.restore(n.id); applyState(); } });
-          items.push({ icon: "trash", label: "Delete forever", danger: true, action: () => { const id = n.id; currentId = ""; store.deleteForever(id).then(showEditor); } });
+          items.push({ icon: "trash", label: "Delete forever", danger: true, action: () => askNoteDeleteForever(n.id, () => { currentId = ""; showEditor(); }) });
         } else
-          items.push({ icon: "trash", label: "Move to trash", danger: true, action: () => { const id = n.id; store.trash(id); currentId = ""; showEditor(); } });
+          items.push({ icon: "trash", label: "Move to trash", danger: true, action: () => askNoteTrash(n.id, () => { currentId = ""; showEditor(); }) });
         return items;
       };
       listen(btnMore, "click", () => showMenu(btnMore, moreItems()));
@@ -11052,6 +11973,68 @@
       }
       listen(btnNew, "click", () => newNoteChooser());
       listen(btnFolder, "click", () => askFolderName("New folder", "", (name) => store.addFolder(name, "")));
+      listen(btnCalendarLayout, "click", () => {
+        const mode = CALENDAR_PART?.cleanCalendarLayout?.(store.meta.calendarLayout) || "auto";
+        showMenu(btnCalendarLayout, [
+          { label: (mode === "auto" ? "✓ " : "") + "Auto (wide = side-by-side, tall = stacked)", action: () => { store.setMeta({ calendarLayout: "auto" }); updateAllLayout(); } },
+          { label: (mode === "lr" ? "✓ " : "") + "Left / right", action: () => { store.setMeta({ calendarLayout: "lr" }); updateAllLayout(); } },
+          { label: (mode === "tb" ? "✓ " : "") + "Top / bottom", action: () => { store.setMeta({ calendarLayout: "tb" }); updateAllLayout(); } },
+        ]);
+      });
+      listen(btnCalendarTree, "click", () => {
+        const collapse = store.meta.calendarTreeCollapsed !== true;
+        if (collapse && store.meta.calendarPaneCollapsed === true) store.setMeta({ calendarPaneCollapsed: false });
+        store.setMeta({ calendarTreeCollapsed: collapse });
+        updateAllLayout();
+      });
+      listen(btnCalendarPane, "click", () => {
+        const collapse = store.meta.calendarPaneCollapsed !== true;
+        if (collapse && store.meta.calendarTreeCollapsed === true) store.setMeta({ calendarTreeCollapsed: false });
+        store.setMeta({ calendarPaneCollapsed: collapse });
+        updateAllLayout();
+      });
+      listen(tabTree, "click", () => { store.setMeta({ calendarTab: "tree" }); updateAllLayout(); });
+      listen(tabCalendar, "click", () => { store.setMeta({ calendarTab: "calendar" }); updateAllLayout(); });
+      listen(allSplitter, "pointerdown", (ev) => {
+        if (!CALENDAR_PART || allPanels.dataset.layout === "tabs" || allPanels.dataset.treeCollapsed === "true" || allPanels.dataset.calendarCollapsed === "true" || (ev.button !== undefined && ev.button !== 0)) return;
+        const orientation = allPanels.dataset.orientation === "tb" ? "tb" : "lr";
+        const dims = allLayoutDimensions();
+        const current = orientation === "lr" ? store.meta.calendarSplitLR : store.meta.calendarSplitTB;
+        calendarSplitDrag = { orientation, startShare: CALENDAR_PART.cleanCalendarShare(current, orientation === "lr" ? 0.36 : 0.42), share: CALENDAR_PART.cleanCalendarShare(current, orientation === "lr" ? 0.36 : 0.42), width: dims.width, height: dims.height };
+        try { allSplitter.setPointerCapture?.(ev.pointerId); } catch (_) {}
+        ev.preventDefault();
+      });
+      listen(allSplitter, "pointermove", (ev) => {
+        if (!calendarSplitDrag) return;
+        const rect = allPanels.getBoundingClientRect?.() || { left: 0, top: 0, width: calendarSplitDrag.width, height: calendarSplitDrag.height };
+        const o = calendarSplitDrag.orientation;
+        const extent = o === "lr" ? (rect.width || calendarSplitDrag.width) : (rect.height || calendarSplitDrag.height);
+        const origin = o === "lr" ? (rect.left || 0) : (rect.top || 0);
+        const point = o === "lr" ? ev.clientX : ev.clientY;
+        if (Number.isFinite(point) && extent > 0) changeCalendarShare((point - origin) / extent);
+      });
+      listen(allSplitter, "pointerup", commitCalendarShare);
+      listen(allSplitter, "pointercancel", commitCalendarShare);
+      listen(allSplitter, "keydown", (ev) => {
+        const o = allPanels.dataset.orientation === "tb" ? "tb" : "lr";
+        const relevant = o === "lr" ? ["ArrowLeft", "ArrowRight"] : ["ArrowUp", "ArrowDown"];
+        if (![...relevant, "Home", "End"].includes(ev.key) || allPanels.dataset.layout === "tabs") return;
+        ev.preventDefault();
+        const key = o === "lr" ? "calendarSplitLR" : "calendarSplitTB";
+        const current = CALENDAR_PART?.cleanCalendarShare?.(store.meta[key], o === "lr" ? 0.36 : 0.42) ?? (o === "lr" ? 0.36 : 0.42);
+        const next = ev.key === "Home" ? 0.2 : ev.key === "End" ? 0.8 : current + ((ev.key === "ArrowRight" || ev.key === "ArrowDown") ? 0.02 : -0.02);
+        store.setMeta({ [key]: CALENDAR_PART.cleanCalendarShare(next, current) });
+        updateAllLayout();
+      });
+      listen(window, "resize", scheduleAllLayout);
+      try {
+        const RO = window.ResizeObserver;
+        if (RO) {
+          const splitRO = new RO(scheduleAllLayout);
+          splitRO.observe(allLayout);
+          cleanups.push(() => splitRO.disconnect());
+        }
+      } catch (_) {}
       listen(chipAll, "contextmenu", (e) => {
         e.preventDefault();
         askRootStyle();
@@ -11075,7 +12058,7 @@
         if (chipEmpty.dataset.armed) {
           delete chipEmpty.dataset.armed;
           chipEmpty.textContent = "Empty trash";
-          store.emptyTrash().then(scheduleList);
+          askEmptyTrash(scheduleList);
         } else {
           chipEmpty.dataset.armed = "true";
           chipEmpty.textContent = "Click again to confirm";
@@ -11318,6 +12301,7 @@
         if (!isOpen || destroyed) return;
         if (findOpen && ev.type !== "status") scheduleFindRefresh();
         if (ev.type === "status") return scheduleChrome();
+        if (view === "list" && filter === "all" && ["reset", "change", "remove"].includes(ev.type) && !calendarPane.hidden) renderCalendar();
         if (ev.type === "reset") {
           if (currentId && !store.get(currentId)) currentId = "";
           if (view === "editor") showEditor();
@@ -11348,6 +12332,10 @@
           if (view === "list") scheduleList();
         }
       });
+      const offCalendarItems = store.items?.on?.(() => {
+        if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) renderCalendar();
+      });
+      if (offCalendarItems) cleanups.push(offCalendarItems);
 
       // ---- layout ------------------------------------------------------------------
       function layout() {
@@ -12152,7 +13140,7 @@
         window.clearTimeout(findTimer);
         window.clearTimeout(graceTimer);
         window.clearTimeout(openTimer);
-        for (const id of [rafChrome, rafList, rafLayout, rafSync]) if (id) window.cancelAnimationFrame(id);
+        for (const id of [rafChrome, rafList, rafLayout, rafSync, rafAllLayout]) if (id) window.cancelAnimationFrame(id);
         window.removeEventListener("mousedown", onOutsidePress, true);
         window.removeEventListener("mousedown", onPress, true);
         window.removeEventListener("mouseup", onRelease, true);
@@ -13804,7 +14792,7 @@
       const ZEN_MENU_ITEMS = [
         ["open", "Open note", (tab) => activateZenTab(tab)],
         ["out", "Remove from sidebar folder", (tab) => { const id = (tab.getAttribute(NOTES_ATTR) || "").slice(2); if (id && zenMode() === "selected") { store.setFolder(id, ""); zen.schedule(0); } }],
-        ["trash", "Move note to trash", (tab) => { const id = (tab.getAttribute(NOTES_ATTR) || "").slice(2); if (id) store.trash(id); }],
+        ["trash", "Move note to trash", (tab) => { const id = (tab.getAttribute(NOTES_ATTR) || "").slice(2); if (id) askNoteTrash(id, () => { if (id === currentId) { currentId = ""; showEditor(); } }); }],
       ];
       let zenCtxTab = null;
       const onTabMenuShowing = (ev) => {

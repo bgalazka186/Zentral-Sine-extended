@@ -11,7 +11,7 @@ const selections = [];
 const win = { __zentralNotesParts: { "notes-calendar": require("../additional/notes/calendar/ZentralNotesCalendar.js") }, document, ZentralRuntime: { register() {} }, __zentralNotesTestSeam: {}, requestAnimationFrame: (fn) => raf.push(fn), cancelAnimationFrame() {}, setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {},
   getSelection: () => ({ removeAllRanges() { selections.length = 0; }, addRange(r) { selections.push(r); } }) };
 win.window = win;
-vm.runInNewContext(source, { window: win, document, Event: Ev, globalThis: { Services: {} }, ChromeUtils: {}, console, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, setTimeout, clearTimeout, navigator: { platform: "Linux" }, Uint8Array });
+vm.runInNewContext(source, { window: win, document, Event: Ev, globalThis: { Services: {} }, ChromeUtils: {}, console, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, setTimeout, clearTimeout, queueMicrotask, navigator: { platform: "Linux" }, Uint8Array });
 const c = win.__zentralNotesTestSeam.core;
 const flushRaf = async () => { for (let i = 0; i < 4; i++) { raf.splice(0).forEach((f) => f()); await new Promise((r) => setImmediate(r)); } };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -202,7 +202,7 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(q(".zn-remind").hidden, true);
   });
 
-  await test("reminder dialog: Pick day opens a mini calendar that fills the date, arrows move, Today works, second click closes it", async () => {
+  await test("reminder dialog: shared date picker fills the date, arrows move, Today works, and the shared Clock chooses exact minutes", async () => {
     const n = store.create("pick a day"); await flushRaf();
     sheet.openNoteById(n.id);
     qa(".zn-btn").find((b) => b.title === "More").click();
@@ -213,7 +213,7 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(qa(".zn-cal-day").length, 42);
     const day = qa(".zn-cal-day").find((b) => b.getAttribute("data-day") === String(new Date(2026, 10, 20).getTime()));
     day.click();
-    const [d] = qa(".zn-field").slice(-2);
+    const [d, t] = qa(".zn-field").slice(-2);
     assert.equal(d.value, "2026-11-20");
     assert.ok(qa(".zn-cal-day").find((b) => b.getAttribute("data-day") === String(new Date(2026, 10, 20).getTime())).classList.contains("is-picked"));
     const grid = q(".zn-cal-grid");
@@ -223,7 +223,39 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.equal(d.value, "2026-11-01");
     chipNamed("Pick day\u2026").click();
     assert.ok(!q(".zn-cal"), "closed again");
+    chipNamed("Pick day\u2026").click();
+    const pickerGrid = q(".zn-cal-grid");
+    key(pickerGrid, "Escape");
+    assert.ok(!q(".zn-cal"), "Escape closes the picker");
+    assert.equal(dom.state.activeElement, chipNamed("Pick day\u2026"), "closing returns focus to the opening control");
+    chipNamed("Clock\u2026").click();
+    assert.ok(q(".zn-cal-clock"), "Clock opens its keyboard-accessible hour/minute controls");
+    const hour = q(".zn-cal-clock-hour"), minute = q(".zn-cal-clock-minute");
+    hour.value = "14"; hour.dispatchEvent(new Ev("change", { bubbles: true }));
+    minute.value = "37"; minute.dispatchEvent(new Ev("change", { bubbles: true }));
+    assert.equal(t.value, "14:37", "hour and minute are written back exactly");
+    assert.match(q(".zn-remind-preview").textContent, /14:37/, "the live reminder preview follows the clock");
+    chipNamed("Clock\u2026").click();
+    assert.ok(!q(".zn-cal-clock"), "second click closes the Clock chooser");
     chipNamed("Cancel").click();
+  });
+
+  await test("Notes by date reuses the same date picker as reminders", async () => {
+    qa(".zn-btn").find((b) => b.title === "More").click();
+    menuItem("Links & dates").click();
+    menuItem("Notes by date\u2026").click();
+    await new Promise((r) => setImmediate(r));
+    menuItem("Other date\u2026").click();
+    await new Promise((r) => setImmediate(r));
+    assert.ok(q(".zn-dialog-card"), "the date note dialog is open");
+    chipNamed("Pick day\u2026").click();
+    assert.ok(q(".zn-cal"), "the shared calendar is offered here too");
+    const chosen = new Date(2026, 10, 19).getTime();
+    qa(".zn-cal-day").find((b) => b.getAttribute("data-day") === String(chosen)).click();
+    assert.equal(qa(".zn-field").slice(-1)[0].value, "2026-11-19");
+    chipNamed("Open").click();
+    await flushRaf();
+    assert.ok(store.list().some((x) => c.dateOfNote(x) === "2026-11-19"), "the selected date opens or creates its date note");
   });
 
   await test("find highlight (#8): selection mode paints nothing extra; backdrop mode marks every match and the current one, follows scroll, clears on close", async () => {
@@ -262,6 +294,59 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     }
   });
 
+  await test("T2.3e: moving a note with several calendar and legacy reminders warns, Cancel preserves it, confirm hides the reminders", async () => {
+    const n = store.create("# Reminder-heavy note\n\n## Appointments\n%%calendar: Work%%\n- 2026-11-02 First call\n- 2026-11-03 Second call\n");
+    store.setReminder(n.id, new Date(2026, 10, 4, 9, 0).getTime());
+    sheet.openNoteById(n.id); await flushRaf();
+    qa(".zn-btn").find((b) => b.title === "More").click();
+    menuItem("Move to trash").click();
+    assert.match(q(".zn-dialog-card").textContent, /3 reminders/);
+    assert.match(q(".zn-dialog-card").textContent, /hidden while the note is in Trash/);
+    assert.equal(store.get(n.id).trashed, 0, "the note has not moved before confirmation");
+    chipNamed("Cancel").click();
+    assert.equal(store.get(n.id).trashed, 0, "Cancel keeps the note and all reminders");
+    qa(".zn-btn").find((b) => b.title === "More").click();
+    menuItem("Move to trash").click();
+    chipNamed("Move to Trash").click();
+    assert.ok(store.get(n.id).trashed, "the confirmed note enters Trash");
+    assert.equal(store.items.list({ noteId: n.id }).length, 0, "its calendar items are hidden");
+    assert.equal(store.items.list({ noteId: n.id, includeHidden: true }).length, 2, "both stored items remain for restore/permanent-delete handling");
+  });
+
+  await test("T2.3e: notes without reminders keep the existing no-prompt Trash flow", async () => {
+    const n = store.create("Plain note, no reminders");
+    sheet.openNoteById(n.id); await flushRaf();
+    qa(".zn-btn").find((b) => b.title === "More").click();
+    menuItem("Move to trash").click();
+    assert.ok(store.get(n.id).trashed, "no warning is needed for a note without reminders");
+    assert.equal(q(".zn-dialog-card"), null, "no confirmation dialog was opened");
+  });
+
+  await test("T2.3e: permanent-delete and Empty Trash warnings include reminders hidden inside Trash", async () => {
+    const n = store.create("# Stored reminders\n\n%%calendar: Work%%\n- 2026-11-05 Alpha\n- 2026-11-06 Beta\n");
+    store.trash(n.id); await flushRaf();
+    q(".zn-title").click(); await flushRaf();
+    qa(".zn-chip").find((b) => b.textContent.startsWith("Trash")).click(); await flushRaf();
+    const row = qa(".zn-item").find((el) => el.getAttribute("data-id") === n.id);
+    assert.ok(row, "the reminder-bearing note is in the Trash list");
+    row.dispatchEvent(new Ev("contextmenu", { bubbles: true, clientX: 20, clientY: 20 }));
+    menuItem("Delete forever").click();
+    assert.match(q(".zn-dialog-card").textContent, /2 reminders/);
+    assert.match(q(".zn-dialog-card").textContent, /Permanently deleting it/);
+    chipNamed("Cancel").click();
+    assert.ok(store.get(n.id), "cancel keeps the trashed note");
+
+    const empty = qa(".zn-chip").find((b) => b.textContent === "Empty trash");
+    empty.dispatchEvent(new Ev("contextmenu", { bubbles: true, clientX: 20, clientY: 20 }));
+    menuItem("Empty trash now").click();
+    const message = q(".zn-dialog-card").textContent;
+    assert.match(message, /will permanently delete \d+ notes/);
+    assert.match(message, /2 notes contain 5 reminders/);
+    chipNamed("Cancel").click();
+    assert.ok(store.get(n.id), "cancel keeps the entire Trash contents");
+    sheet.openNoteById(other1.id); await flushRaf(); // leave the following trash-view test in its expected editor state
+  });
+
   await test("trash view (#30): banner says when notes are deleted and follows the pref", async () => {
     const t = store.create("Banner victim\nx"); store.trash(t.id); await flushRaf();
     q(".zn-title").click(); await flushRaf();
@@ -294,6 +379,167 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     } finally {
       prefs.delete(K + "spellcheck"); prefs.delete(K + "spellcheck_max_chars");
     }
+  });
+
+  await test("T2.2b: plain-text dates become accessible chips, while math, code and links stay literal", async () => {
+    const n = store.create("# Dates\nToday @today, ISO 2026-11-03, 10-08, 03.12., 03.12 and 25 listopada 2026.\n\nMath $10-08$;\n\n$$\n10-08\n$$\n\ncode `10-08`; link [10-08](https://example.test/10-08); HTML <a href='https://example.test/10-08'>10-08</a>.");
+    sheet.openNoteById(n.id); await flushRaf();
+    if (q(".zn-read").hidden) key(ta, "e", { ctrlKey: true });
+    await flushRaf();
+    const chips = qa(".zn-date-chip");
+    assert.deepEqual(chips.map((b) => b.dataset.raw), ["@today", "2026-11-03", "10-08", "03.12.", "25 listopada 2026"]);
+    assert.equal(q(".zn-read").textContent.includes("03.12 and"), true, "ambiguous 03.12 remains clock-like/plain text");
+    assert.equal(qa(".zn-link .zn-date-chip").length, 0, "Markdown and HTML link labels are never rewritten into date chips");
+    const iso = chips.find((b) => b.dataset.raw === "2026-11-03");
+    iso.click();
+    assert.ok(menuItem("Open note for 2026-11-03"), "left-click opens the date action menu");
+    menuItem("Open note for 2026-11-03").click();
+    await flushRaf();
+    assert.ok(store.list().some((x) => c.dateOfNote(x) === "2026-11-03"), "opening a date creates or opens its date note");
+  });
+
+  await test("T2.12c: date menu can create an independent reminder with a chosen date and optional time", async () => {
+    const n = store.create("Pay the invoice on 2026-11-05");
+    sheet.openNoteById(n.id); await flushRaf();
+    if (q(".zn-read").hidden) key(ta, "e", { ctrlKey: true });
+    await flushRaf();
+    const chip = qa(".zn-date-chip").find((b) => b.dataset.raw === "2026-11-05");
+    assert.ok(chip, "ISO date is interactive");
+    chip.dispatchEvent(new Ev("contextmenu", { bubbles: true, clientX: 20, clientY: 20 }));
+    menuItem("Mark as reminder\u2026").click();
+    await Promise.resolve();
+    const fields = qa(".zn-field");
+    const dateField = fields[fields.length - 2], timeField = fields[fields.length - 1];
+    assert.equal(dateField.value, "2026-11-05");
+    timeField.value = "15:20";
+    chipNamed("Add reminder").click();
+    const created = store.items.list({ noteId: n.id });
+    assert.equal(created.length, 1, "creates a separate stored item, not the legacy note.remind field");
+    assert.equal(created[0].x.kind, "reminder");
+    assert.equal(created[0].x.src, "manual");
+    assert.equal(new Date(Date.parse(created[0].start.dateTime)).getHours(), 15);
+    assert.equal(new Date(Date.parse(created[0].start.dateTime)).getMinutes(), 20);
+  });
+
+  await test("T2.12c: Not a date persists an ignore mark and keeps an event when the ignored date is only in its summary", async () => {
+    const n = store.create("# Plan\n\n%%calendar: Work%%\n- 2026-11-12 Dentist 10-08\n- 10-08 Birthday\n");
+    sheet.openNoteById(n.id); await flushRaf();
+    if (q(".zn-read").hidden) key(ta, "e", { ctrlKey: true });
+    await flushRaf();
+    const embedded = qa(".zn-date-chip").find((b) => b.dataset.raw === "10-08");
+    embedded.dispatchEvent(new Ev("contextmenu", { bubbles: true, clientX: 20, clientY: 20 }));
+    menuItem("Not a date").click();
+    assert.match(store.get(n.id).body, /10-08%%zn-date-ignore:10-08%%/, "the ignore mark is stored in the note text");
+    assert.equal(store.items.list({ noteId: n.id }).length, 2, "an ignored date inside a summary does not remove the event");
+    assert.equal(qa(".zn-date-chip").some((b) => b.dataset.raw === "10-08" && b.dataset.line === "3"), false, "the ignored occurrence is no longer a chip");
+    const leading = qa(".zn-date-chip").find((b) => b.dataset.raw === "10-08");
+    assert.ok(leading, "the second, independent leading date remains interactive");
+    leading.dispatchEvent(new Ev("contextmenu", { bubbles: true, clientX: 20, clientY: 20 }));
+    menuItem("Not a date").click();
+    assert.equal(store.items.list({ noteId: n.id }).length, 1, "ignoring a date prefix removes only that date-driven item");
+    assert.equal(store.items.list({ noteId: n.id })[0].summary, "Dentist 10-08");
+  });
+
+  await test("T2.12c: Add link to Tomorrow creates a dated backlink under the Tomorrow heading", async () => {
+    const n = store.create("# Source\n\nWe should prepare on 2026-11-06.");
+    sheet.openNoteById(n.id); await flushRaf();
+    if (q(".zn-read").hidden) key(ta, "e", { ctrlKey: true });
+    await flushRaf();
+    qa(".zn-date-chip").find((b) => b.dataset.raw === "2026-11-06").click();
+    menuItem("Add link to Tomorrow").click();
+    assert.match(store.get(n.id).body, /## Tomorrow\n- 2026-11-06 \[\[Source#Source\]\]/);
+  });
+
+  await test("T2.3b: category button creates a category, marks the current calendar section and shows its colour", async () => {
+    const n = store.create("# Project plan\n\n- 2026-11-20 Ship the first milestone\n");
+    sheet.openNoteById(n.id); await flushRaf();
+    if (!q(".zn-read").hidden) key(ta, "e", { ctrlKey: true });
+    await flushRaf();
+    const categoryButton = q(".zn-category-btn");
+    assert.ok(categoryButton && !categoryButton.hidden, "category control is available in the editor");
+    const caret = ta.value.indexOf("Ship the first milestone");
+    ta.setSelectionRange(caret, caret);
+    ta.dispatchEvent(new Ev("keyup", { bubbles: true, key: "ArrowRight" }));
+    await flushRaf();
+    categoryButton.click();
+    assert.ok(menuItem("Create category…"), "menu offers category creation");
+    menuItem("Create category…").click();
+    await Promise.resolve();
+    const nameField = qa(".zn-field").find((input) => input.getAttribute("aria-label") === "Category name");
+    assert.ok(nameField, "new category name field appears");
+    type(nameField, "Projects");
+    chipNamed("Save category").click();
+    await flushRaf();
+    assert.match(store.get(n.id).body, /%%calendar: Projects%%/, "category marker is inserted at the current section");
+    assert.equal(store.items.category("Projects").name, "Projects", "category metadata is saved");
+    assert.equal(categoryButton.textContent.includes("Projects"), true, "header shows the active category");
+  });
+
+  await test("T2.3c: calendar details edit one same-day item without merging its sibling reminder", async () => {
+    const n = store.create("# Plan\n\n%%calendar: Projects%%\n- 2026-11-20 06:00-08:00 Morning shift\n- 2026-11-20 09:00 Follow-up reminder\n");
+    sheet.openNoteById(n.id); await flushRaf();
+    if (q(".zn-read").hidden) key(ta, "e", { ctrlKey: true });
+    await flushRaf();
+    const items = store.items.list({ noteId: n.id });
+    assert.equal(items.length, 2, "both same-day items exist independently");
+    const morning = items.find((item) => item.summary === "Morning shift");
+    assert.ok(morning);
+    const dateChip = qa(".zn-date-chip").find((b) => b.dataset.ymd === "2026-11-20");
+    assert.ok(dateChip, "the source date is interactive");
+    dateChip.click();
+    menuItem("Edit calendar item for this date…").click();
+    const option = qa(".zn-menu-item").find((b) => b.textContent.includes("Morning shift"));
+    assert.ok(option, "the menu lists the individual calendar item");
+    option.click();
+    await new Promise((r) => setImmediate(r));
+    const calendarNote = qa(".zn-calendar-note-field")[0];
+    const heading = qa(".zn-field").find((input) => input.getAttribute("aria-label") === "Heading jump target");
+    const zone = qa(".zn-field").find((input) => input.getAttribute("aria-label") === "Time zone (IANA; blank = local)");
+    assert.ok(calendarNote && heading && zone, "calendar note, heading and time-zone controls are present");
+    type(calendarNote, "Bring the access badge and check the handover notes.");
+    type(heading, "Morning shifts");
+    type(zone, "Europe/Warsaw");
+    const frequency = qa("select").find((select) => select.getAttribute("aria-label") === "Repeat frequency");
+    const interval = qa(".zn-field").find((input) => input.getAttribute("aria-label") === "Repeat interval");
+    const ending = qa("select").find((select) => select.getAttribute("aria-label") === "Repeat ending");
+    const count = qa(".zn-field").find((input) => input.getAttribute("aria-label") === "Repeat occurrence count");
+    assert.ok(frequency && interval && ending && count, "recurrence controls are present in the same item editor");
+    frequency.value = "WEEKLY"; frequency.dispatchEvent(new Ev("change", { bubbles: true }));
+    type(interval, "2");
+    const tuesday = qa("input").find((input) => input.getAttribute("aria-label") === "Tue");
+    const thursday = qa("input").find((input) => input.getAttribute("aria-label") === "Thu");
+    const friday = qa("input").find((input) => input.getAttribute("aria-label") === "Fri");
+    assert.ok(tuesday && thursday && friday);
+    tuesday.checked = true; thursday.checked = true; friday.checked = false;
+    ending.value = "count"; ending.dispatchEvent(new Ev("change", { bubbles: true }));
+    type(count, "6");
+    chipNamed("Save calendar details").click();
+    await flushRaf();
+    const saved = store.items.get(morning.id);
+    assert.equal(saved.x.calNote, "Bring the access badge and check the handover notes.");
+    assert.equal(saved.x.heading, "Morning shifts");
+    assert.equal(saved.x.tz, "Europe/Warsaw");
+    assert.deepEqual(saved.recurrence, ["RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TH;COUNT=6"]);
+
+    // Reopen the same item's editor: recurrence state is loaded, and UNTIL can replace COUNT.
+    dateChip.click(); menuItem("Edit calendar item for this date…").click();
+    qa(".zn-menu-item").find((b) => b.textContent.includes("Morning shift")).click();
+    await new Promise((r) => setImmediate(r));
+    const reopenedFrequency = qa("select").find((select) => select.getAttribute("aria-label") === "Repeat frequency");
+    const reopenedInterval = qa(".zn-field").find((input) => input.getAttribute("aria-label") === "Repeat interval");
+    const reopenedEnding = qa("select").find((select) => select.getAttribute("aria-label") === "Repeat ending");
+    const until = qa(".zn-field").find((input) => input.getAttribute("aria-label") === "Last occurrence date");
+    assert.equal(reopenedFrequency.value, "WEEKLY");
+    assert.equal(reopenedInterval.value, "2");
+    reopenedEnding.value = "until"; reopenedEnding.dispatchEvent(new Ev("change", { bubbles: true }));
+    type(until, "2026-12-31");
+    chipNamed("Save calendar details").click();
+    await flushRaf();
+    assert.deepEqual(store.items.get(morning.id).recurrence, ["RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TH;UNTIL=20261231"]);
+    assert.equal(store.items.get(items[1].id).summary, items[1].summary, "the sibling item is untouched");
+    assert.equal(store.items.list({ noteId: n.id }).length, 2, "editing details does not merge or drop reminders");
+    const invalid = store.items.upsert({ ...store.items.get(morning.id), x: { ...store.items.get(morning.id).x, tz: "Not/A_Real_Zone" } });
+    assert.equal(invalid.x.tz, "", "invalid IANA zones are normalized away by the item model");
   });
 
   console.log(passed + " notes P2 UI tests passed");
