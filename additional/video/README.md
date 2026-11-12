@@ -32,6 +32,14 @@ Send this folder for a change confined to its behavior. Include the specific out
 
 Full installation uses root `theme.json` and `preferences.json`, plus `loader/`; Sine loads `loader/Zentral.uc.js`; a stale main registration can forward through `JS/Zentral.uc.js`. Per-feature settings.json is metadata, not an activation script.
 
+## Install as a standalone Sine feature
+
+In Sine, add this folder as a mod using:
+
+`https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/video`
+
+Enable `sine.allow-unsafe-js` and restart Zen after the first install. Sine pulls later updates from this folder and exposes the feature's settings in Sine preferences. When the full pack is also installed, Zentral Extended owns the feature and the standalone copy stays inactive.
+
 ## Actor loading and failure recovery
 
 The actor resource alias resolves the installed Sine chrome path to its file or JAR location before registration. A separate resolved actor identity avoids reusing an older failed module cache. Registration failures remain visible in video diagnostics.

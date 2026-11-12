@@ -292,6 +292,15 @@
   margin: 0;
   overflow: hidden;
 }
+/* The sheet clips its outer frame, but the editor and rendered note are independent scrollports.
+   Keeping overflow:hidden here makes long notes impossible to scroll with the wheel/trackpad;
+   it also breaks the two-pane split view even though programmatic scrollTop still appears to work. */
+.zentral-notes-sheet .zn-editor,
+.zentral-notes-sheet .zn-read {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
 .zentral-notes-sheet .zn-all-layout { display: flex; flex-direction: column; }
 .zentral-notes-sheet .zn-all-layout[hidden] { display: none !important; }
 .zentral-notes-sheet .zn-all-toolbar { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; padding: 3px 6px; border-bottom: 1px solid var(--zn-line); }
@@ -711,6 +720,98 @@
 .zentral-notes-sheet .zn-read .zn-callout[data-kind="bug"] { --zn-callout: #d6568f; }
 .zentral-notes-sheet .zn-read .zn-callout[data-kind="example"] { --zn-callout: #9a7ae6; }
 .zentral-notes-sheet .zn-read .zn-callout[data-kind="quote"] { --zn-callout: #8b94a3; }
+/* Interactive callouts (T1.6). Their state is ordinary Markdown task markers, so it survives
+   autosave, export and reopening without a parallel metadata store. */
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="bingo"] { --zn-callout: #3fbf83; }
+.zentral-notes-sheet .zn-read .zn-callout[data-kind="poll"] { --zn-callout: #9a7ae6; }
+.zentral-notes-sheet .zn-read .zn-bingo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5em), 1fr));
+  gap: 6px;
+  margin: 6px 0 4px;
+}
+.zentral-notes-sheet .zn-read .zn-bingo-cell {
+  display: flex;
+  min-width: 0;
+  min-height: 3.2em;
+  align-items: center;
+  justify-content: center;
+  padding: 7px;
+  border: 1px solid color-mix(in srgb, var(--zn-callout) 48%, var(--zn-line));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--zn-callout) 7%, var(--zn-panel));
+  color: var(--zn-text);
+  font: inherit;
+  font-size: .9em;
+  text-align: center;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.zentral-notes-sheet .zn-read .zn-bingo-cell:hover,
+.zentral-notes-sheet .zn-read .zn-bingo-cell:focus-visible {
+  border-color: var(--zn-callout);
+  outline: 2px solid color-mix(in srgb, var(--zn-callout) 35%, transparent);
+  outline-offset: 1px;
+}
+.zentral-notes-sheet .zn-read .zn-bingo-cell[data-checked="true"] {
+  background: color-mix(in srgb, var(--zn-callout) 24%, var(--zn-panel));
+  border-color: var(--zn-callout);
+  text-decoration: line-through;
+}
+.zentral-notes-sheet .zn-read .zn-poll-options { display: grid; gap: 6px; margin: 6px 0 4px; }
+.zentral-notes-sheet .zn-read .zn-poll-summary {
+  margin: 0 0 4px;
+  color: var(--zn-muted);
+  font-size: 0.8em;
+}
+.zentral-notes-sheet .zn-read .zn-poll-vote {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(4em, 35%) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--zn-line);
+  border-radius: 7px;
+  background: var(--zn-panel);
+  color: var(--zn-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.zentral-notes-sheet .zn-read .zn-poll-vote:hover,
+.zentral-notes-sheet .zn-read .zn-poll-vote:focus-visible {
+  border-color: var(--zn-callout);
+  outline: 2px solid color-mix(in srgb, var(--zn-callout) 28%, transparent);
+  outline-offset: 1px;
+}
+.zentral-notes-sheet .zn-read .zn-poll-vote[data-checked="true"] {
+  border-color: var(--zn-callout);
+  background: color-mix(in srgb, var(--zn-callout) 8%, var(--zn-panel));
+}
+.zentral-notes-sheet .zn-read .zn-poll-label { min-width: 0; overflow-wrap: anywhere; }
+.zentral-notes-sheet .zn-read .zn-poll-track {
+  display: block;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--zn-muted) 18%, transparent);
+}
+.zentral-notes-sheet .zn-read .zn-poll-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--zn-callout);
+  transition: width 120ms ease-out;
+}
+.zentral-notes-sheet .zn-read .zn-poll-tally {
+  min-width: 2.5em;
+  color: var(--zn-muted);
+  font-size: .75em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
 /* foldable callouts: > [!note]- closed, > [!note]+ open */
 .zentral-notes-sheet .zn-read .zn-callout[data-fold] .zn-fold-title { cursor: pointer; user-select: none; }
 .zentral-notes-sheet .zn-read .zn-callout[data-fold] .zn-fold-title::before { content: "\25BE\00a0"; }
@@ -1085,6 +1186,33 @@
   color: var(--zn-muted);
 }
 
+/* ---- local note transclusions (T1.13) ------------------------------------------- */
+.zentral-notes-sheet .zn-read .zn-embed {
+  display: block;
+  max-width: 100%;
+  margin: 0.65em 0;
+  padding: 0.55em 0.7em;
+  border: 1px solid var(--zn-line);
+  border-inline-start: 3px solid color-mix(in srgb, var(--zn-accent) 55%, var(--zn-line));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--zn-panel) 82%, transparent);
+}
+.zentral-notes-sheet .zn-read .zn-embed-source {
+  margin-bottom: 0.35em;
+  color: var(--zn-muted);
+  font-size: 0.82em;
+  font-weight: 600;
+}
+.zentral-notes-sheet .zn-read .zn-embed-body > :first-child { margin-top: 0; }
+.zentral-notes-sheet .zn-read .zn-embed-body > :last-child { margin-bottom: 0; }
+.zentral-notes-sheet .zn-read .zn-embed-message {
+  color: var(--zn-muted);
+  font-size: 0.9em;
+  font-style: italic;
+}
+.zentral-notes-sheet .zn-read .zn-embed-image { padding: 0.25em; text-align: center; }
+.zentral-notes-sheet .zn-read .zn-embed-img { display: inline-block; max-width: 100%; height: auto; border-radius: 5px; }
+
 /* ---- reminder chip (P2) ---------------------------------------------------------- */
 .zentral-notes-sheet .zn-remind {
   display: inline-flex;
@@ -1146,12 +1274,104 @@
 .zentral-notes-sheet .zn-tocpill:hover,
 .zentral-notes-sheet .zn-tocpill:focus-visible { opacity: 1; }
 .zentral-notes-sheet .zn-tocpill[hidden] { display: none; }
+
+
+/* T1.9: live, docked heading outline. The panel occupies a real side column and
+   never overlays the editor or read pane. */
+.zentral-notes-sheet .zn-body[data-outline-open="true"] {
+  --zn-outline-width: clamp(156px, 23%, 250px);
+  flex-direction: row;
+}
+.zentral-notes-sheet .zn-body[data-outline-open="true"] .zn-tocpill {
+  right: calc(var(--zn-outline-width) + 14px);
+}
+.zentral-notes-sheet .zn-body[data-outline-open="true"] > .zn-editor,
+.zentral-notes-sheet .zn-body[data-outline-open="true"] > .zn-read,
+.zentral-notes-sheet .zn-body[data-outline-open="true"] > .zn-all-layout {
+  flex: 1 1 0;
+  width: 0;
+}
+.zentral-notes-sheet .zn-outline-panel {
+  display: flex;
+  flex: 0 0 var(--zn-outline-width, clamp(156px, 23%, 250px));
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  max-width: 280px;
+  overflow: hidden;
+  border-left: 1px solid var(--zn-line);
+  background: var(--zn-surface);
+}
+.zentral-notes-sheet .zn-outline-panel[hidden] { display: none !important; }
+.zentral-notes-sheet .zn-outline-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 2px 6px 2px 10px;
+  border-bottom: 1px solid var(--zn-line);
+  color: var(--zn-text);
+  font-size: 0.88em;
+}
+.zentral-notes-sheet .zn-outline-close { flex: 0 0 auto; width: 25px; height: 25px; }
+.zentral-notes-sheet .zn-outline-items {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+}
+.zentral-notes-sheet .zn-outline-item {
+  display: block;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 5px 7px 5px calc(7px + (var(--zn-outline-level, 1) - 1) * 11px);
+  border: 0;
+  border-radius: 5px;
+  color: var(--zn-text);
+  background: transparent;
+  font: inherit;
+  font-size: 0.88em;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.zentral-notes-sheet .zn-outline-item:hover { background: color-mix(in srgb, var(--zn-text) 8%, transparent); }
+.zentral-notes-sheet .zn-outline-item.is-current {
+  color: var(--zn-accent);
+  background: color-mix(in srgb, var(--zn-accent) 13%, transparent);
+  font-weight: 650;
+}
+.zentral-notes-sheet .zn-outline-item:focus-visible { outline: 2px solid var(--zn-accent); outline-offset: -2px; }
+.zentral-notes-sheet .zn-outline-empty,
+.zentral-notes-sheet .zn-outline-more {
+  margin: 6px 4px;
+  color: var(--zn-muted);
+  font-size: 0.82em;
+  line-height: 1.4;
+}
+.zentral-notes-sheet .zn-outline-more { text-align: center; }
+@media (max-width: 520px) {
+  .zentral-notes-sheet .zn-body[data-outline-open="true"] { --zn-outline-width: 142px; }
+  .zentral-notes-sheet .zn-body[data-outline-open="true"] > .zn-editor,
+  .zentral-notes-sheet .zn-body[data-outline-open="true"] > .zn-read { min-width: 0; }
+}
 .zentral-notes-sheet .zn-wikibar { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px; border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
 .zentral-notes-sheet .zn-wikibar[hidden], .zentral-notes-sheet .zn-linked[hidden] { display: none; }
 .zentral-notes-sheet .zn-wiki-item { font: inherit; font-size: 0.9em; padding: 2px 8px; border-radius: 999px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); background: transparent; color: inherit; cursor: pointer; }
 .zentral-notes-sheet .zn-wiki-item.is-on { background: color-mix(in srgb, currentColor 16%, transparent); }
 .zentral-notes-sheet .zn-linked { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 8px; border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent); font-size: 0.9em; }
 .zentral-notes-sheet .zn-linked-label { opacity: 0.65; margin-right: 4px; }
+.zentral-notes-sheet .zn-linked-mention { border-style: dashed; }
+.zentral-notes-sheet .zn-linked-more { color: var(--zn-muted); font-size: 0.82em; padding: 2px 4px; }
 .zentral-notes-sheet .zn-pick-head { font: inherit; margin-left: 4px; padding: 0 6px; border-radius: 4px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); background: transparent; color: inherit; cursor: pointer; }
 .zentral-notes-sheet .zn-hist-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 3px 0; }
 .zentral-notes-sheet .zn-hist-when { flex: 1 1 12em; }

@@ -152,6 +152,8 @@
   "F23": ["n", "y", "n", "H", "ON"],
   "F24": ["n", "x", "n", "H", "ON+guard"],
   "F25": ["y", "y", "n", "H", "ON"],
+  "F26": ["n", "x", "n", "H", "ON"],
+  "F27": ["n", "x", "n", "H", "ON"],
   "G01": ["y", "y", "p", "H", "ON"],
   "G02": ["y", "y", "n", "H", "ON"],
   "G03": ["y", "y", "n", "H", "ON"],
@@ -371,8 +373,9 @@
     example: ["example", "F18"],
     quote: ["quote", "F19"], cite: ["quote", "F19"],
     hint: ["tip", "F20"], attention: ["warning", "F20"],
+    bingo: ["bingo", "F26"], poll: ["poll", "F27"],
   });
-  const CALLOUT_LOOKS = Object.freeze(["note", "tip", "important", "warning", "caution", "info", "abstract", "todo", "success", "question", "failure", "danger", "bug", "example", "quote"]);
+  const CALLOUT_LOOKS = Object.freeze(["note", "tip", "important", "warning", "caution", "info", "abstract", "todo", "success", "question", "failure", "danger", "bug", "example", "quote", "bingo", "poll"]);
   // "[!Summary]" -> { kind: "abstract", type: "summary", known: true }. An unknown type is a "note" look that keeps
   // its own name as the title (Obsidian does the same); null when the mode does not read callouts of that type.
   function calloutKind(raw, g) {

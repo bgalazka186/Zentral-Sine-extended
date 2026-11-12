@@ -378,6 +378,52 @@
       const raw = typeof note?.foreign === "string" && note.foreign ? note.foreign : leadingFrontMatter(note?.body)?.raw || "";
       return raw ? parseForeignMeta(raw) : { tags: [], aliases: [] };
     }
+    // T1.14: one tag model for foreign YAML `tags:` and inline #tags. Scan only visible Markdown prose:
+    // headings, fenced/inline code, HTML attributes, link destinations, bare URLs and CSS hex colours are excluded.
+    function inlineTags(body) {
+      const text = normalizeNewlines(hideFrontMatter(String(body ?? "")));
+      const lines = text.split("\n");
+      const found = new Map();
+      mapOutsideCode(text, (segment, lineNo) => {
+        if (/^ {0,3}#{1,6}(?:\s|$)/.test(lines[lineNo] || "")) return segment;
+        let safe = segment
+          .replace(/<[^>]*>/g, " ")
+          .replace(/\]\s*\([^)]{0,4000}\)/g, " ")
+          .replace(/(?:https?:\/\/|www\.)[^\s<>\x22'`]+/gi, " ");
+        const re = /(?<![\w&/#>])#([A-Za-z_\u00C0-\uFFFF][\w\u00C0-\uFFFF-]*(?:\/[A-Za-z_\u00C0-\uFFFF][\w\u00C0-\uFFFF-]*)*)/g;
+        for (let m; (m = re.exec(safe)); ) {
+          const tag = cleanPill(m[1]);
+          if (!tag || /^(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(tag)) continue;
+          const key = tag.toLowerCase();
+          if (!found.has(key) && found.size < MAX_PILLS) found.set(key, tag);
+        }
+        return segment;
+      });
+      return [...found.values()];
+    }
+    function noteTags(note) {
+      const found = new Map();
+      for (const tag of [...frontPills(note).tags, ...inlineTags(note?.body)]) {
+        const clean = cleanPill(String(tag).replace(/^#+/, ""));
+        const key = clean.toLowerCase();
+        if (clean && !found.has(key) && found.size < MAX_PILLS) found.set(key, clean);
+      }
+      return [...found.values()];
+    }
+    // Unified tag index: each live note contributes at most once to each case-insensitive tag.
+    function tagSummary(notes) {
+      const map = new Map();
+      for (const note of notes || []) {
+        if (!note || note.trashed) continue;
+        for (const tag of noteTags(note)) {
+          const key = tag.toLowerCase();
+          const item = map.get(key);
+          if (item) item.count++;
+          else map.set(key, { tag, count: 1 });
+        }
+      }
+      return [...map.values()].sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+    }
 
     // Files without our header (a .md dropped into the folder) are still
     // notes. A leading "---" block only counts as a header when it contains
@@ -1270,6 +1316,7 @@
         "(?<![\\w./-])(\\d{4})-(\\d{2})-(\\d{2})(?:[ T](\\d{2}):(\\d{2}))?(?![\\w-]|:\\d)", // 44 year 45 month 46 day 47 hour 48 minute: a date (L07)
         "(?<![\\w/])\\/?([ur])\\/([A-Za-z0-9_-]{2,30})(?![\\w/])", // 49 kind, 50 name: u/name r/sub (L04)
         "\\^\\[((?:[^\\[\\]\\n]|\\[[^\\[\\]\\n]*\\])+)\\]", // 51 inline footnote ^[text] (J03 / A30), numbered with the [^1] ones
+        "!\\[\\[([^\\[\\]\\n]{1,240})\\]\\]", // 52 Obsidian note / section / block / image transclusion (T1.13)
       ].join("|"),
       "g",
     );
@@ -1342,7 +1389,7 @@
       hits.sort((a, b) => b.updated - a.updated || (a.id < b.id ? -1 : 1));
       return hits.length ? { id: hits[0].id, ambiguous: hits.length > 1 } : null;
     }
-    const WIKI_RE = /\[\[([^\[\]\n|]{1,120})(?:\|([^\[\]\n]{1,120}))?\]\]/g;
+    const WIKI_RE = /(?<!!)\[\[([^\[\]\n|]{1,120})(?:\|([^\[\]\n]{1,120}))?\]\]/g;
     // T1.10: [[Title]], [[Title|alias]], [[Title#Heading]], [[Title#Heading|alias]], [[#Heading]] (this note) and
     // [[Folder/Title]]. The first `#` starts the heading (a nested [[Note#H1#H2]] uses the last part); the text before
     // it is tried whole first (a title may contain "/" like TCP/IP), then as folder labels + title.
@@ -1357,6 +1404,35 @@
       const segs = rest.split("/").map((x) => x.trim()).filter(Boolean);
       const title = segs.pop() || "";
       return { whole: rest, path: segs, title, heading, self: !rest && hash >= 0 };
+    }
+    // T1.13: Obsidian-style transclusion target. A numeric pipe suffix is a bounded image
+    // width; #^id selects a block, #Heading selects a section, and #Heading1#Heading2
+    // follows the same last-heading rule as wiki links. Bare image names are note-local assets.
+    const TRANSCLUSION_IMAGE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.(?:png|jpe?g|gif|webp)$/i;
+    function parseEmbedTarget(raw) {
+      let target = String(raw ?? "").trim();
+      if (!target || target.length > 240 || /[\\\r\n]/.test(target)) return null;
+      let width = 0;
+      const pipe = target.lastIndexOf("|");
+      if (pipe >= 0) {
+        const size = target.slice(pipe + 1).trim();
+        if (/^\d{1,4}$/.test(size)) {
+          width = Math.max(32, Math.min(1600, Number(size)));
+          target = target.slice(0, pipe).trim();
+        }
+      }
+      if (!target) return null;
+      const image = TRANSCLUSION_IMAGE_RE.test(target) ? target : "";
+      const parts = parseWikiTarget(target);
+      let blockId = "";
+      if (parts.heading.startsWith("^") && /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/.test(parts.heading.slice(1))) {
+        blockId = parts.heading.slice(1);
+        parts.heading = "";
+      } else if (!parts.whole && parts.self && /^\^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/.test(parts.heading)) {
+        blockId = parts.heading.slice(1);
+        parts.heading = "";
+      }
+      return { target, width, image, parts, blockId };
     }
     // Labels of the folders a note sits in, outermost first: the label from meta.json when the folder is listed, else its path segment.
     function folderLabels(folders, folderId) {
@@ -1876,7 +1952,8 @@
       let name = "";
       if (/[A-Za-z]/.test(s[ctx.i] || "")) while (/[A-Za-z]/.test(s[ctx.i] || "")) name += s[ctx.i++];
       else name = s[ctx.i++] || "";
-      if (name === "\\") return [{ t: "text", s: " " }];
+      // TeX row separators (\\\\) must survive tokenisation as real display-math line breaks.
+      if (name === "\\") return [{ t: "br" }];
       if (name === "left" || name === "right" || name === "displaystyle" || name === "limits" || name === "nolimits") {
         if (name === "left" || name === "right") {
           if (s[ctx.i] === ".") ctx.i++; // \left. is an invisible delimiter
@@ -2034,6 +2111,10 @@
       if (m[49] !== undefined) {
         const href = safeHref("https://www.reddit.com/" + (m[49] === "u" ? "user" : "r") + "/" + m[50]);
         return href ? [{ t: "a", href, c: [{ t: "text", s: m[0].replace(/^\//, "") }] }] : [{ t: "text", s: m[0] }];
+      }
+      if (m[52] !== undefined) {
+        const target = parseEmbedTarget(m[52]);
+        return target ? [{ t: "embed", target: target.target, width: target.width }] : [{ t: "text", s: m[0] }];
       }
       return [{ t: "text", s: m[0] }];
     }
@@ -2481,7 +2562,7 @@
       if (!head.includes("|") || !delim.includes("|") || !TABLE_DELIM_RE.test(delim)) return false;
       return splitRow(head).length === splitRow(delim).length;
     }
-    function parseTable(lines, start, nested = false) {
+    function parseTable(lines, start, nested = false, lineAt = null) {
       const head = splitRow(lines[start]).slice(0, MAX_TABLE_COLS);
       const align = splitRow(lines[start + 1])
         .slice(0, MAX_TABLE_COLS)
@@ -2491,7 +2572,7 @@
       while (i < lines.length && lines[i].trim() && lines[i].includes("|") && rows.length < MAX_TABLE_ROWS) {
         const cells = splitRow(lines[i]).slice(0, head.length);
         while (cells.length < head.length) cells.push("");
-        rows.push(cells.map((c, col) => cellNodes(c, nested ? -1 : i, col)));
+        rows.push(cells.map((c, col) => cellNodes(c, nested ? (lineAt ? lineAt(i) : -1) : i, col)));
         i++;
       }
       return { block: { type: "table", align, head: head.map((c) => cellNodes(c, -1, 0)), rows }, next: i };
@@ -2592,8 +2673,98 @@
       callout: { kind: "danger", title: lang[0].toUpperCase() + lang.slice(1) + " is not supported" },
       blocks: [{ type: "p", c: [{ t: "text", s: "Notes cannot draw " + lang + " diagrams. The source is shown as code below." }] }],
     });
+    // Block IDs are deliberately a trailing, explicit marker so normal prose such as ^2 is untouched.
+    // The marker is removed from the rendered nodes and kept as metadata on the paragraph, list item or callout.
+    function trailingBlockId(line) {
+      const m = /(?:^|[ \t])\^([A-Za-z0-9][A-Za-z0-9-]{0,63})[ \t]*$/.exec(String(line ?? ""));
+      return m ? m[1] : "";
+    }
+    function stripBlockIdNodes(nodes, id) {
+      if (!Array.isArray(nodes) || !nodes.length) return false;
+      const last = nodes[nodes.length - 1];
+      if (last?.t === "text") {
+        const re = new RegExp("[ \t]+\\^" + String(id).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[ \t]*$");
+        if (!re.test(last.s)) return false;
+        last.s = last.s.replace(re, "");
+        if (!last.s) nodes.pop();
+        return true;
+      }
+      if (last?.t === "sup" && inlineText(last.c || []) === id) {
+        nodes.pop();
+        const before = nodes[nodes.length - 1];
+        if (before?.t === "text") before.s = before.s.replace(/[ \t]+$/, "");
+        if (before?.t === "text" && !before.s) nodes.pop();
+        return true;
+      }
+      return false;
+    }
+    function attachTrailingBlockId(block, id) {
+      if (!block || !id) return false;
+      if (block.type === "p") {
+        if (!stripBlockIdNodes(block.c, id)) return false;
+        block.blockId = id;
+        return true;
+      }
+      if (block.type === "list") {
+        const item = block.items?.[block.items.length - 1];
+        if (!item) return false;
+        let stripped = false;
+        const more = item.more?.[item.more.length - 1];
+        if (Array.isArray(more)) stripped = stripBlockIdNodes(more, id);
+        if (!stripped) stripped = stripBlockIdNodes(item.c, id);
+        if (!stripped && item.blockId !== id) return false;
+        item.blockId = id;
+        return true;
+      }
+      if (block.type === "quote") {
+        const last = block.blocks?.[block.blocks.length - 1];
+        if (last?.blockId === id) delete last.blockId; // the marker belongs to the quote as a whole
+        block.blockId = id;
+        return true;
+      }
+      return false;
+    }
+    function findBlockById(blocks, id) {
+      const wanted = String(id ?? "");
+      if (!wanted || !Array.isArray(blocks)) return null;
+      for (const block of blocks) {
+        if (block.blockId === wanted) return block;
+        if (block.type === "list") {
+          for (const item of block.items || []) {
+            if (item.blockId === wanted) return { type: "list", items: [item] };
+          }
+        }
+        const nested = block.blocks || (block.type === "box" ? block.blocks : null);
+        if (nested) {
+          const hit = findBlockById(nested, wanted);
+          if (hit) return hit;
+        }
+      }
+      return null;
+    }
+    function selectTransclusionBlocks(body, blocks, spec) {
+      if (!spec || !Array.isArray(blocks)) return [];
+      if (spec.blockId) {
+        const hit = findBlockById(blocks, spec.blockId);
+        return hit ? [hit] : [];
+      }
+      const heading = String(spec.parts?.heading || "").trim();
+      if (!heading) return blocks;
+      const slug = headingSlug(heading);
+      const heads = headingsOf(body);
+      const at = heads.findIndex((item) => item.slug === slug);
+      if (at < 0) return [];
+      const current = heads[at];
+      const next = heads.slice(at + 1).find((item) => item.level <= current.level);
+      const end = next ? next.line : normalizeNewlines(body).split("\n").length;
+      return blocks.filter((block) => Number.isInteger(block.src) && block.src >= current.line && block.src < end);
+    }
+
     function parseBlocksIn(text, nested, opts) {
       const lines = normalizeNewlines(text).split("\n");
+      // Nested Markdown normally has no writable source location. Quote bodies are the exception:
+      // keep a map back to the original note so interactive callouts can persist their toggles.
+      const lineAt = (i) => nested ? (Array.isArray(opts._lineMap) && Number.isInteger(opts._lineMap[i]) ? opts._lineMap[i] : -1) : i;
       const blocks = [];
       let i = 0;
       const startsBlock = (l) =>
@@ -2650,7 +2821,7 @@
             type: "h",
             level: m[1].length,
             c: parseInline(FLAVOR.on("D03") ? m[2].replace(/\s+#+\s*$/, "") || m[2] : m[2]),
-            line: nested ? -1 : i,
+            line: lineAt(i),
           });
           i++;
         } else if (/^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(line)) {
@@ -2658,6 +2829,7 @@
           i++;
         } else if (/^>/.test(line)) {
           const buf = [];
+          const bufLines = [];
           let fenceOpen = "";
           const track = (l) => {
             const f = /^ {0,3}(`{3,}|~{3,})/.exec(l);
@@ -2667,9 +2839,11 @@
           };
           while (i < lines.length) {
             if (/^>/.test(lines[i])) {
+              const sourceLine = lineAt(i);
               const l = lines[i++].replace(/^>\s?/, "");
               track(l);
               buf.push(l);
+              bufLines.push(sourceLine);
               continue;
             }
             // Lazy continuation (T1.1): a text line right under a quoted paragraph still belongs to the quote.
@@ -2684,12 +2858,15 @@
               !LIST_RE.test(prev) &&
               !/^ {0,3}(`{3,}|~{3,})/.test(prev)
             ) {
-              buf.push(lines[i++]);
+              buf.push(lines[i]);
+              bufLines.push(lineAt(i));
+              i++;
               continue;
             }
             break;
           }
-          const inner = parseBlocks(buf.join("\n"), true, opts);
+          const interactiveSource = /^\s*\[!(?:bingo|poll)\]/i.test(buf[0] || "");
+          const inner = parseBlocks(buf.join("\n"), true, interactiveSource ? { ...opts, _lineMap: bufLines } : opts);
           const quote = { type: "quote", blocks: inner };
           // > [!NOTE] Title  ->  a callout (note, tip, important, warning, caution, info)
           const first = inner[0]?.type === "p" ? inner[0].c[0] : null;
@@ -2729,6 +2906,8 @@
               } else counters[level] = undefined;
               let box = m[3],
                 itemText = m[4];
+              const itemBlockId = trailingBlockId(itemText);
+              if (itemBlockId) itemText = itemText.replace(/[ \t]+\^[A-Za-z0-9][A-Za-z0-9-]{0,63}[ \t]*$/, "");
               if (box !== undefined) {
                 const plain = box === " " || box === "x" || box === "X";
                 // A box this flavor does not know is ordinary text: "- [-] a" stays "[-] a".
@@ -2743,7 +2922,8 @@
                 checked: box === undefined ? null : box === "x" || box === "X",
                 status: box === undefined || box === " " || box === "x" || box === "X" ? "" : box, // extended: - / ? ! and the Obsidian theme set
                 c: parseInline(itemText),
-                line: nested ? -1 : i,
+                line: lineAt(i),
+                ...(itemBlockId ? { blockId: itemBlockId } : {}),
               });
               i++;
               continue;
@@ -2792,7 +2972,7 @@
           }
           blocks.push({ type: "list", items });
         } else if (isTableStart(lines, i)) {
-          const t = parseTable(lines, i, nested);
+          const t = parseTable(lines, i, nested, lineAt);
           blocks.push(t.block);
           i = t.next;
         } else if (FLAVOR.on("O01") && /^-#\s+\S/.test(line)) {
@@ -2840,7 +3020,7 @@
               type: "h",
               level: under[1][0] === "=" ? 1 : 2,
               c: parseInline(buf.map((l) => l.trim()).join(" ")),
-              line: nested ? -1 : startLine,
+              line: lineAt(startLine),
             });
             i++; // the underline
           } else {
@@ -2858,6 +3038,11 @@
             });
             blocks.push({ type: "p", c });
           }
+        }
+        if (blocks.length > firstNew) {
+          const block = blocks[blocks.length - 1];
+          const id = trailingBlockId(lines[Math.max(startLine, i - 1)]);
+          if (id) attachTrailingBlockId(block, id);
         }
         if (!nested)
           for (let k = firstNew; k < blocks.length; k++) Object.defineProperty(blocks[k], "src", { value: startLine });
@@ -3199,6 +3384,7 @@
         else if (n.t === "date") out += '<time datetime="' + escHtml(n.ymd + (n.time ? "T" + n.time : "")) + '">' + escHtml(n.s) + "</time>";
         else if (n.t === "al") out += '<a href="#' + escHtml(n.slug) + '">' + inlineHtml(n.c) + "</a>";
         else if (n.t === "nl") out += '<span class="note-link">' + inlineHtml(n.c) + "</span>"; // no address: a single exported note cannot reach the others
+        else if (n.t === "embed") out += escHtml("![[" + n.target + (n.width ? "|" + n.width : "") + "]] ").trimEnd();
         else if (n.t === "kbd") out += "<kbd>" + escHtml(n.s) + "</kbd>";
         else if (n.t === "fn") out += '<sup class="fn"><a href="#fn-' + n.n + '" id="fnref-' + n.n + '">' + n.n + "</a></sup>";
         else if (n.t === "hl") out += '<mark data-color="' + escHtml(n.color) + '">' + inlineHtml(n.c) + "</mark>";
@@ -3223,7 +3409,7 @@
           stack.push({ tag, level: it.level });
         }
         out +=
-          "<li>" +
+          "<li" + (it.blockId ? ' data-block-id="' + escHtml(it.blockId) + '"' : "") + ">" +
           (it.checked === null ? "" : it.status ? '<span class="task-status" title="' + (TASK_STATUS_NAMES[it.status] || "") + '">' + (TASK_STATUS_MARKS[it.status] || it.status) + "</span> " : '<input type="checkbox" disabled' + (it.checked ? " checked" : "") + "> ") +
           inlineHtml(it.c) +
           (it.more || []).map((para) => (Array.isArray(para) ? "<p>" + inlineHtml(para) + "</p>" : "<pre><code>" + escHtml(para.text) + "</code></pre>")).join("");
@@ -3253,7 +3439,7 @@
             b.rows.map((r) => "<tr>" + r.map((c) => "<" + (c.th ? "th" : "td") + (c.colspan > 1 ? ' colspan="' + c.colspan + '"' : "") + (c.rowspan > 1 ? ' rowspan="' + c.rowspan + '"' : "") + st(c.style) + ">" + inlineHtml(c.c) + "</" + (c.th ? "th" : "td") + ">").join("") + "</tr>\n").join("") +
             "</table>\n";
         }
-        else if (b.type === "p") out += "<p>" + inlineHtml(b.c) + "</p>\n";
+        else if (b.type === "p") out += "<p" + (b.blockId ? ' data-block-id="' + escHtml(b.blockId) + '"' : "") + ">" + inlineHtml(b.c) + "</p>\n";
         else if (b.type === "hr") out += "<hr>\n";
         else if (b.type === "math") out += '<p class="math-block">' + inlineHtml(b.c) + "</p>\n";
         else if (b.type === "details")
@@ -3261,7 +3447,7 @@
         else if (b.type === "code") out += "<pre><code>" + escHtml(b.text) + "</code></pre>\n";
         else if (b.type === "quote")
           out +=
-            "<blockquote" + (b.callout ? ' class="callout" data-kind="' + b.callout.kind + '"' : "") + ">\n" +
+            "<blockquote" + (b.callout ? ' class="callout" data-kind="' + b.callout.kind + '"' : "") + (b.blockId ? ' data-block-id="' + escHtml(b.blockId) + '"' : "") + ">\n" +
             (b.callout ? "<p><strong>" + escHtml(b.callout.title || b.callout.kind[0].toUpperCase() + b.callout.kind.slice(1)) + "</strong></p>\n" : "") +
             blocksHtml(b.blocks) + "</blockquote>\n";
         else if (b.type === "list") out += listHtml(b.items) + "\n";
@@ -3312,6 +3498,7 @@
         else if (n.t === "task") out += n.on ? "[x] " : "[ ] ";
         else if (n.t === "img") out += n.alt ? "[image: " + n.alt + "]" : "[image]";
         else if (n.t === "fn") out += "[" + n.n + "]";
+        else if (n.t === "embed") out += "![[" + n.target + (n.width ? "|" + n.width : "") + "]]";
         else if (n.t === "a") {
           const label = inlineText(n.c);
           out += label.replace(/\/$/, "") === n.href.replace(/\/$/, "") ? label : label + " (" + n.href + ")";
@@ -3322,17 +3509,21 @@
     function blocksText(blocks) {
       const parts = [];
       for (const b of blocks) {
-        if (b.type === "h" || b.type === "p") parts.push(inlineText(b.c));
+        if (b.type === "h" || b.type === "p") parts.push(inlineText(b.c) + (b.blockId ? " ^" + b.blockId : ""));
         else if (b.type === "hr") parts.push("----------");
         else if (b.type === "math") parts.push(inlineText(b.c));
         else if (b.type === "details") parts.push((b.summary.length ? inlineText(b.summary) + "\n\n" : "") + blocksText(b.blocks));
         else if (b.type === "code") parts.push(b.text.replace(/^/gm, "    "));
-        else if (b.type === "quote")
-          parts.push(((b.callout ? (b.callout.title || b.callout.kind.toUpperCase()) + "\n\n" : "") + blocksText(b.blocks)).replace(/^/gm, "> "));
+        else if (b.type === "quote") {
+          let inner = blocksText(b.blocks);
+          const marker = b.blockId ? " ^" + b.blockId : "";
+          if (marker && inner.endsWith(marker)) inner = inner.slice(0, -marker.length); // avoid duplicate ID on the inner paragraph
+          parts.push(((b.callout ? (b.callout.title || b.callout.kind.toUpperCase()) + "\n\n" : "") + inner + marker).replace(/^/gm, "> "));
+        }
         else if (b.type === "list")
           parts.push(
             b.items
-              .map((it) => "  ".repeat(it.level) + (it.checked === null ? (it.marker === "\u2022" ? "-" : it.marker) : it.checked ? "[x]" : it.status ? "[" + it.status + "]" : "[ ]") + " " + inlineText(it.c) + (it.more || []).map((para) => "\n\n" + (Array.isArray(para) ? "  ".repeat(it.level + 1) + inlineText(para) : para.text.replace(/^/gm, "  ".repeat(it.level + 1) + "    "))).join(""))
+              .map((it) => "  ".repeat(it.level) + (it.checked === null ? (it.marker === "\u2022" ? "-" : it.marker) : it.checked ? "[x]" : it.status ? "[" + it.status + "]" : "[ ]") + " " + inlineText(it.c) + (it.blockId ? " ^" + it.blockId : "") + (it.more || []).map((para) => "\n\n" + (Array.isArray(para) ? "  ".repeat(it.level + 1) + inlineText(para) : para.text.replace(/^/gm, "  ".repeat(it.level + 1) + "    "))).join(""))
               .join("\n"),
           );
         else if (b.type === "table")
@@ -3532,6 +3723,24 @@
       lines[lineIndex] = lines[lineIndex].replace(/\[([ xX\-/?!])\]/, (_m, c) =>
         c === "x" || c === "X" ? "[ ]" : "[x]",
       );
+      return lines.join("\n");
+    }
+    // Interactive callout list rows can start as ordinary bullets. The first click adds a
+    // Markdown task marker; later clicks toggle it. Quote parsing keeps the absolute source line.
+    function toggleCalloutOption(body, lineIndex) {
+      const lines = normalizeNewlines(body).split("\n");
+      if (!Number.isInteger(lineIndex) || lineIndex < 0 || lineIndex >= lines.length) return body;
+      const line = lines[lineIndex];
+      // Strip only the quote prefixes for parsing, then re-attach them byte-for-byte.
+      const quoted = /^(\s*(?:>\s?)*)((?:\s*(?:[-+*]|\d+[.)])\s+)(?:\[([ xX])\]\s*)?(.*))$/.exec(line);
+      if (!quoted) return toggleCheckboxLine(body, lineIndex);
+      const prefix = quoted[1], checked = quoted[3], label = quoted[4];
+      const listPrefix = /^(\s*(?:[-+*]|\d+[.)])\s+)/.exec(quoted[2])[1];
+      if (checked !== undefined) {
+        lines[lineIndex] = prefix + quoted[2].replace(/\[([ xX])\]/, (_m, c) => c === "x" || c === "X" ? "[ ]" : "[x]");
+      } else {
+        lines[lineIndex] = prefix + listPrefix + "[x] " + label;
+      }
       return lines.join("\n");
     }
 
@@ -5860,6 +6069,46 @@
       return { id, heading: hash ? cleanAnchor(hash[1]) : "" };
     }
 
+    // T1.11: add one reciprocal note link at the end of a target heading's section.
+    // The helper is idempotent, skips code fences through headingsOf(), and never creates a
+    // backlink for a missing heading or an unsafe/invalid source ID.
+    function addBacklink(body, targetSlug, sourceId, sourceTitle) {
+      const original = normalizeNewlines(body);
+      const slug = cleanAnchor(targetSlug);
+      const id = String(sourceId ?? "").trim();
+      if (!slug || !NOTE_ID_RE.test(id) || id.includes("..")) return { body: original, added: false, reason: "invalid" };
+      const lines = original.split("\n");
+      const heads = headingsOf(original);
+      const at = heads.findIndex((heading) => heading.slug === slug);
+      if (at < 0) return { body: original, added: false, reason: "missing-heading" };
+      const heading = heads[at];
+      const next = heads.slice(at + 1).find((item) => item.level <= heading.level);
+      const end = next ? next.line : lines.length;
+      const existingLink = /(?<!!)\[[^\]\n]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+      const existingWiki = /\[\[([^\]|#\n]+)(?:#[^\]|\n]+)?(?:\|[^\]\n]+)?\]\]/g;
+      const sourceName = cleanLinkLabel(sourceTitle).toLowerCase();
+      let alreadyLinked = false;
+      const section = lines.slice(heading.line + 1, end).join("\n");
+      mapOutsideCode(section, (segment) => {
+        for (const match of segment.matchAll(existingLink)) if (noteLinkTarget(match[1]) === id) alreadyLinked = true;
+        for (const match of segment.matchAll(existingWiki)) {
+          const targetName = match[1].trim().toLowerCase();
+          if (targetName === id.toLowerCase() || targetName === sourceName || targetName.endsWith("/" + sourceName)) alreadyLinked = true;
+        }
+        return segment;
+      });
+      if (alreadyLinked) return { body: original, added: false, reason: "already-linked" };
+      const backlink = "- " + buildNoteLink(id, sourceTitle);
+      let insertAt = end;
+      while (insertAt > heading.line + 1 && !lines[insertAt - 1].trim()) insertAt--;
+      const before = lines.slice(0, insertAt);
+      const after = lines.slice(insertAt);
+      if (before.length && before[before.length - 1].trim()) before.push("");
+      before.push(backlink);
+      if (after.length && after[0].trim()) before.push("");
+      return { body: before.concat(after).join("\n"), added: true, reason: "added" };
+    }
+
     // Broken links checker (Cycle G #36). Pure, read only: reports links that lead nowhere, never changes a note.
     // kind: "missing-note" (no such note, or a [[title]] nobody has), "trashed" (the target is in the Trash),
     // "missing-heading" (the note exists, the #heading does not). Links inside code are ignored. Missing assets are NOT checked here.
@@ -6845,8 +7094,8 @@
         flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART,
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
-        wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
-        makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
+        wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, trailingBlockId, findBlockById, selectTransclusionBlocks,
+        makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
@@ -7070,6 +7319,13 @@
           });
           renderInline(node, n.c, Object.assign(Object.create(env), { skipDateChips: true }));
           parent.append(node);
+        } else if (n.t === "embed") {
+          // A transclusion is resolved only in the read pane, against the local Notes store. It never creates
+          // a browser URL or fetches a remote resource; the renderer enforces a per-path cycle/depth guard.
+          const box = h("div", { class: "zn-embed", "aria-label": "Embedded content" });
+          parent.append(box);
+          if (env.renderEmbed) env.renderEmbed(box, n, env.embedStack || []);
+          else box.textContent = "Embedded content: " + n.target;
         } else if (n.t === "nl") {
           // Link to another note: no address at all, so nothing can be fetched or navigated. A click opens the note.
           const info = env.noteInfo ? env.noteInfo(n.id) : null;
@@ -7178,7 +7434,7 @@
         }
       }
     }
-    function renderBlocks(parent, blocks, env, onToggle) {
+    function renderBlocks(parent, blocks, env, onToggle, interactiveCallout = "") {
       for (const b of blocks) {
         const line = Number.isInteger(b.line) ? b.line : Number.isInteger(b.src) ? b.src : -1;
         const blockEnv = line >= 0 ? Object.assign(Object.create(env), { dateLine: line }) : env;
@@ -7314,9 +7570,50 @@
             }
             node.append(title);
           }
-          renderBlocks(node, b.blocks, env, onToggle);
+          const interaction = b.callout?.kind === "bingo" || b.callout?.kind === "poll" ? b.callout.kind : "";
+          renderBlocks(node, b.blocks, env, onToggle, interaction);
           parent.append(node);
         } else if (b.type === "list") {
+          if (interactiveCallout === "bingo") {
+            const grid = h("div", { class: "zn-bingo-grid", role: "group", "aria-label": "Bingo cells" });
+            for (const item of b.items) {
+              if (item.level > 0) continue;
+              const cell = h("button", { type: "button", class: "zn-bingo-cell", role: "checkbox", "aria-checked": item.checked ? "true" : "false" });
+              if (item.checked) cell.dataset.checked = "true";
+              if (item.line < 0) cell.disabled = true;
+              else cell.addEventListener("click", () => onToggle(item.line, "bingo"));
+              const label = h("span", { class: "zn-bingo-label" });
+              renderInline(label, item.c, Number.isInteger(item.line) && item.line >= 0 ? Object.assign(Object.create(env), { dateLine: item.line }) : env);
+              cell.append(label);
+              grid.append(cell);
+            }
+            parent.append(grid);
+          } else if (interactiveCallout === "poll") {
+            const options = b.items.filter((item) => item.level === 0);
+            const selected = options.filter((item) => item.checked).length;
+            const list = h("div", { class: "zn-poll-options", role: "group", "aria-label": "Poll options" });
+            list.append(h("p", { class: "zn-poll-summary", "aria-live": "polite" }, selected + " of " + options.length + " selected"));
+            for (const item of options) {
+              const row = h("div", { class: "zn-poll-option" });
+              const vote = h("button", { type: "button", class: "zn-poll-vote", "aria-pressed": item.checked ? "true" : "false" });
+              if (item.checked) vote.dataset.checked = "true";
+              if (item.line < 0) vote.disabled = true;
+              else vote.addEventListener("click", () => onToggle(item.line, "poll"));
+              const label = h("span", { class: "zn-poll-label" });
+              renderInline(label, item.c, Number.isInteger(item.line) && item.line >= 0 ? Object.assign(Object.create(env), { dateLine: item.line }) : env);
+              const count = item.checked ? 1 : 0;
+              const percent = count ? 100 : 0;
+              const bar = h("span", { class: "zn-poll-track", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(percent), "aria-label": count + " selected" });
+              const fill = h("span", { class: "zn-poll-fill" });
+              fill.style.width = percent + "%";
+              bar.append(fill);
+              const tally = h("span", { class: "zn-poll-tally" }, item.checked ? "Selected" : "Not selected");
+              vote.append(label, bar, tally);
+              row.append(vote);
+              list.append(row);
+            }
+            parent.append(list);
+          } else {
           for (const item of b.items) {
             const row = h("div", { class: "zn-li" });
             row.style.setProperty("--lvl", String(item.level));
@@ -7400,6 +7697,7 @@
               parent.append(more);
             }
           }
+          }
         }
       }
     }
@@ -7424,6 +7722,7 @@
       let mode = "edit"; // edit | read | split
       let filter = "all"; // all | recent | trash
       let query = "";
+      let activeTag = "";
       let isOpen = false;
       let typed = false;
       let menu = null;
@@ -7582,13 +7881,14 @@
       const chipAll = h("button", { type: "button", class: "zn-chip" }, "Notes");
       const chipRecent = h("button", { type: "button", class: "zn-chip" }, "Recent");
       const chipTrash = h("button", { type: "button", class: "zn-chip" }, "Trash");
+      const chipTags = h("button", { type: "button", class: "zn-chip", "aria-haspopup": "menu", "aria-label": "Filter notes by tag" }, "Tags");
       const chipEmpty = h("button", { type: "button", class: "zn-chip zn-chip-danger" }, "Empty trash");
       const listItems = h("div", { class: "zn-items", role: "list" });
       const listEl = h(
         "div",
         { class: "zn-list" },
         h("div", { class: "zn-list-head" }, h("span", { class: "zn-search-wrap" }, icon("search", 13), search), btnFolder, btnNew),
-        h("div", { class: "zn-chips" }, chipAll, chipRecent, chipTrash, h("span", { class: "zn-grow" }), chipEmpty),
+        h("div", { class: "zn-chips" }, chipAll, chipRecent, chipTrash, chipTags, h("span", { class: "zn-grow" }), chipEmpty),
         listItems,
       );
       // T2.4a: All notes is a responsive two-pane workspace. The folder tree remains the existing list/tree
@@ -7625,7 +7925,13 @@
       const tocPill = h("button", { type: "button", class: "zn-tocpill", "aria-label": "Table of contents", "aria-haspopup": "menu", title: "Table of contents" }, icon("toc", 14));
       tocPill.hidden = true;
       tocPill.addEventListener("mousedown", (ev) => ev.preventDefault()); // keep the caret and the selection in the editor
-      const body = h("div", { class: "zn-body" }, hlEl, ta, readEl, allLayout, tocPill);
+      const outlineClose = iconButton("x", "Close outline panel", "zn-outline-close");
+      const outlineNav = h("nav", { class: "zn-outline-items", "aria-label": "Note headings" });
+      const outlinePanel = h("aside", { class: "zn-outline-panel", "aria-label": "Note outline", hidden: true },
+        h("div", { class: "zn-outline-head" }, h("strong", {}, "Outline"), h("span", { class: "zn-grow" }), outlineClose),
+        outlineNav
+      );
+      const body = h("div", { class: "zn-body" }, hlEl, ta, readEl, allLayout, tocPill, outlinePanel);
       const statusEl = h("span", { class: "zn-status", "aria-live": "polite" });
       const countEl = h("span", { class: "zn-count" });
       const foot = h("div", { class: "zn-foot" }, statusEl, h("span", { class: "zn-grow" }), countEl);
@@ -7814,6 +8120,10 @@
         chipAll.classList.toggle("is-on", filter === "all");
         chipRecent.classList.toggle("is-on", filter === "recent");
         chipTrash.classList.toggle("is-on", filter === "trash");
+        chipTags.classList.toggle("is-on", !!activeTag);
+        chipTags.textContent = activeTag ? `#${activeTag} ×` : "Tags";
+        chipTags.title = activeTag ? `Filtering by #${activeTag}; click to change or clear` : "Filter All Notes by tag";
+        chipTags.setAttribute("aria-label", activeTag ? `Tag filter: ${activeTag}` : "Filter notes by tag");
         chipTrash.textContent = store.trashCount() ? `Trash (${store.trashCount()})` : "Trash";
         chipEmpty.hidden = filter !== "trash" || !store.trashCount();
         updateAllLayout();
@@ -7840,6 +8150,7 @@
         const n = note();
         paintStrip();
         paintTocPill();
+        scheduleOutline();
         if (n) {
           const categorySection = store.items && mode !== "read" ? CALENDAR_PART?.calendarSectionAt?.(ta.value, ta.selectionStart) : null;
           const activeCategory = categorySection?.category || "";
@@ -7917,6 +8228,7 @@
         renderFront();
         tagHeadings();
         paintLinked();
+        scheduleOutline();
       }
       function renderReadInner() {
         const n = note();
@@ -7942,7 +8254,7 @@
         const fresh = [];
         for (let i = prefix; i < blocks.length - suffix; i++) {
           const tmp = h("div");
-          renderBlocks(tmp, [blocks[i]], env, (line) => setBody(toggleCheckboxLine(note().body, line)));
+          renderBlocks(tmp, [blocks[i]], env, (line, kind) => setBody(kind ? toggleCalloutOption(note().body, line) : toggleCheckboxLine(note().body, line)));
           const nodes = [...tmp.childNodes];
           for (const nd of nodes) readEl.insertBefore(nd, anchor);
           fresh.push(nodes);
@@ -8012,6 +8324,110 @@
         showNote(id);
         if (focus) focusEditor();
       }
+      // T1.11: after following or creating a section link, offer a one-click reciprocal link.
+      // The target heading is resolved against the destination note again at click time so a
+      // rename/delete or a concurrent edit cannot write into the wrong section.
+      function offerBacklink(sourceId, targetId, headingSlug, sourceLabel = "") {
+        const source = store.get(sourceId), target = store.get(targetId);
+        const slug = cleanAnchor(headingSlug);
+        if (!slug || !source || !target || source.trashed || target.trashed || sourceId === targetId) return;
+        const sourceTitle = cleanLinkLabel(sourceLabel || titleOf(source.body) || "Untitled note");
+        const preview = addBacklink(target.body, slug, sourceId, sourceTitle);
+        if (!preview.added) return; // already linked or the heading no longer exists
+        const heading = headingsOf(target.body).find((x) => x.slug === slug);
+        const cancel = chip("Not now"), add = chip("Add link back", true);
+        openCard("Add a link back",
+          h("p", {}, "Add a link to “" + sourceTitle + "” under “" + heading.text + "” in this note?"),
+          h("div", { class: "zn-dialog-actions" }, cancel, add)
+        );
+        cancel.addEventListener("click", closeDialog);
+        add.addEventListener("click", () => {
+          const latest = store.get(targetId);
+          if (!latest || latest.trashed) {
+            closeDialog();
+            flash("The destination note is no longer available");
+            return;
+          }
+          const result = addBacklink(latest.body, slug, sourceId, sourceTitle);
+          closeDialog();
+          if (!result.added) {
+            flash(result.reason === "already-linked" ? "A link back already exists under that heading" : "That heading no longer exists");
+            return;
+          }
+          if (currentId === targetId) setBody(result.body);
+          else store.update(targetId, result.body, null);
+          scheduleChrome();
+          flash("Link back added under “" + heading.text + "”");
+        });
+      }
+      // T1.13: render local note/section/block embeds and note-local image assets. The ancestry is
+      // checked before parsing a target, and depth is bounded, so cyclic notes never recurse forever.
+      function renderEmbed(parent, embed, stack = []) {
+        const spec = parseEmbedTarget(embed?.target);
+        const fail = (message) => {
+          parent.replaceChildren(h("span", { class: "zn-embed-message" }, message));
+          parent.dataset.state = "missing";
+        };
+        if (!spec) return fail("Invalid embedded target");
+        spec.width = Number.isInteger(embed.width) && embed.width > 0 ? Math.min(1600, embed.width) : spec.width;
+        const sourceId = stack.length ? stack[stack.length - 1] : (env.embedNoteId || currentId);
+        if (spec.image) {
+          const rel = assetRel(sourceId, spec.image);
+          if (!parseAssetLink(rel)) return fail("Invalid image asset: " + spec.image);
+          parent.classList.add("zn-embed-image");
+          parent.dataset.state = "loading";
+          Promise.resolve(env.loadAsset ? env.loadAsset(rel) : null).then((got) => {
+            if (!got?.url || destroyed) return fail("Image not found: " + spec.image);
+            const img = h("img", { class: "zn-img-loaded zn-embed-img", alt: spec.image, src: got.url, loading: "lazy" });
+            img.style.maxWidth = "100%";
+            img.style.height = "auto";
+            if (spec.width) img.style.width = spec.width + "px";
+            parent.replaceChildren(img);
+            parent.dataset.state = "ready";
+            if (got.release) env.trackAsset?.(got.release);
+          }).catch(() => fail("Image not found: " + spec.image));
+          return;
+        }
+        const source = store.get(sourceId);
+        const allow = { heading: true, self: true, path: true };
+        const hit = spec.parts.self && source ? { id: sourceId, note: source } : resolveWikiTarget(
+          store.list(), store.meta.folders, { ...spec.parts, heading: spec.blockId ? "" : spec.parts.heading }, { allow },
+        );
+        const target = hit?.note || (hit?.id ? store.get(hit.id) : null);
+        if (!hit || !target || target.trashed) return fail("Embedded note not found: " + spec.target);
+        const ancestry = stack.length ? stack : [sourceId];
+        if (ancestry.includes(target.id)) return fail("Embed cycle detected: " + (titleOf(target.body) || target.id));
+        if (ancestry.length >= 6) return fail("Embed depth limit reached");
+        const flavor = target.flavor || (env.readOpts?.() || {}).flavor;
+        const readOpts = { ...(env.readOpts?.() || {}), flavor };
+        const body = hideFrontMatter(readBody(target.body, flavor));
+        const blocks = parseBlocks(body, false, readOpts);
+        const selected = selectTransclusionBlocks(body, blocks, spec);
+        if (!selected.length) {
+          const kind = spec.blockId ? "Block" : spec.parts.heading ? "Section" : "Content";
+          return fail(kind + " not found in " + (titleOf(target.body) || "note"));
+        }
+        parent.classList.add("zn-embed-note");
+        parent.dataset.state = "ready";
+        const heading = h("div", { class: "zn-embed-source" }, titleOf(target.body) || "Untitled note");
+        const content = h("div", { class: "zn-embed-body" });
+        parent.replaceChildren(heading, content);
+        const targetLines = normalizeNewlines(target.body).split("\n");
+        const childEnv = Object.assign(Object.create(env), {
+          embedNoteId: target.id,
+          embedStack: [...ancestry, target.id],
+          dateLineText: (line) => targetLines[line] || "",
+          slugFor: (() => {
+            const seen = new Map();
+            return (text) => {
+              const base = headingSlug(text), n = seen.get(base) || 0;
+              seen.set(base, n + 1);
+              return n ? base + "-" + n : base;
+            };
+          })(),
+        });
+        renderBlocks(content, selected, childEnv, () => {});
+      }
       // Link support for the read pane: the sheet adds what it alone knows (the open store) to env.
       const noteInfo = (id) => {
         const t = store.get(id);
@@ -8020,6 +8436,7 @@
       // Delegates to the caller's env (live: later changes to it stay visible) and only adds the two lookups.
       env = Object.assign(Object.create(env), {
         noteInfo,
+        renderEmbed,
         dateNow: () => nowMs(),
         dateLineText: (line) => {
           const body = note()?.body || "";
@@ -8042,8 +8459,10 @@
         goHeading: (slug) => goHeading(slug),
         openNoteLink: (id, heading = "") => {
           if (!store.get(id)) return flash("That note no longer exists");
+          const sourceId = currentId;
           if (id !== currentId) openNote(id, { focus: false });
           if (heading) goHeading(heading);
+          if (heading && sourceId && sourceId !== id) offerBacklink(sourceId, id, heading);
         },
       });
       // Heading anchors: the read view tags its top-level headings with the same unique slugs headingsOf gives.
@@ -8109,6 +8528,7 @@
       }
       function showList() {
         view = "list";
+        setOutlineOpen(false);
         applyState();
         renderList();
         window.requestAnimationFrame(() => {
@@ -8128,6 +8548,7 @@
         }
         view = "editor";
         applyState();
+        scheduleOutline();
         focusEditor();
       }
 
@@ -9089,7 +9510,25 @@
         const q = query.trim().toLowerCase();
         return (store.meta.recent || [])
           .map((id) => store.get(id))
-          .filter((n) => n && !n.trashed && (!q || n.body.toLowerCase().includes(q) || (n.label || "").toLowerCase().includes(q)));
+          .filter((n) => n && !n.trashed && (!q || n.body.toLowerCase().includes(q) || (n.label || "").toLowerCase().includes(q)) && (!activeTag || noteTags(n).some((tag) => tag.toLowerCase() === activeTag.toLowerCase())));
+      }
+      function applyTagFilter(tag) {
+        activeTag = cleanPill(tag);
+        filter = "all";
+        if (view !== "list") showList();
+        else { applyState(); renderList(); }
+      }
+      function showTagMenu(anchor = chipTags) {
+        const tags = tagSummary(store.list());
+        const items = [];
+        if (activeTag) items.push({ icon: "x", label: `Clear tag filter (#${activeTag})`, action: () => applyTagFilter("") });
+        if (items.length && tags.length) items.push({ sep: true });
+        for (const item of tags) {
+          const selected = activeTag && activeTag.toLowerCase() === item.tag.toLowerCase();
+          items.push({ icon: selected ? "check" : "hash", label: `#${item.tag} (${item.count})`, action: () => applyTagFilter(selected ? "" : item.tag) });
+        }
+        if (!tags.length) items.push({ label: "No tags in notes", disabled: true });
+        showMenu(anchor, items);
       }
       // One note row. `opts.tree` = drawn inside the folder tree (indented, draggable onto folders).
       function buildItem(n, trashed, opts = {}) {
@@ -9196,7 +9635,7 @@
       }
       // ---- folder tree (D2) ----------------------------------------------------------------------
       let dragNoteId = "";
-      const treeMode = () => filter === "all" && !query.trim();
+      const treeMode = () => filter === "all" && !query.trim() && !activeTag;
       const folderTargets = (exclude = "") =>
         allFolderIds([...store.tree().notes, ...store.list()], store.meta.folders)
           .filter((id) => !exclude || !(id === exclude || id.startsWith(exclude + "/")))
@@ -9960,7 +10399,8 @@
         listItems.setAttribute("role", treeMode() ? "tree" : "list");
         if (treeMode()) renderTree();
         else {
-          const all = filter === "recent" ? recentNotes() : store.list({ query, trashed });
+          let all = filter === "recent" ? recentNotes() : store.list({ query, trashed });
+          if (activeTag && !trashed) all = all.filter((n) => noteTags(n).some((tag) => tag.toLowerCase() === activeTag.toLowerCase()));
           if (trashed) {
             const plan = trashPlan(store.list({ trashed: true }), cleanTrashDays(getPref(PREF.TRASH_DAYS, TRASH_DAYS)), nowMs());
             listItems.append(h("p", { class: "zn-trash-note" }, trashBanner(plan, nowMs())));
@@ -10209,7 +10649,9 @@
       };
       listen(ta, "scroll", linkScroll(ta, readEl));
       listen(ta, "scroll", syncBackdropScroll);
+      listen(ta, "scroll", scheduleOutline);
       listen(readEl, "scroll", linkScroll(readEl, ta));
+      listen(readEl, "scroll", () => scheduleOutline(true));
       listen(tSync, "click", () => {
         store.setMeta({ syncScroll: !store.meta.syncScroll });
         applyState();
@@ -10264,6 +10706,8 @@
       listen(tSettings, "click", () => askSettings());
       listen(tToc, "mousedown", (e) => e.preventDefault());
       listen(tToc, "click", () => showOutline(tToc));
+      listen(outlineClose, "mousedown", (e) => e.preventDefault());
+      listen(outlineClose, "click", () => setOutlineOpen(false));
       listen(tocPill, "click", () => showOutline(tocPill));
 
       // ---- menus -----------------------------------------------------------------
@@ -10772,8 +11216,11 @@
         const cancel = chip("Cancel");
         const card = openCard("Link to another note", q.row, rows, h("div", { class: "zn-dialog-actions" }, cancel));
         const pick = (t, slug = "") => {
+          const sourceId = currentId;
+          const sourceLabel = titleOf(store.get(sourceId)?.body || "") || "Untitled note";
           closeDialog();
           applyEdit(insertNoteLink(ta.value, s, e, t.id, selected || titleOf(t.body) || "Untitled note", slug));
+          if (slug && sourceId && sourceId !== t.id) offerBacklink(sourceId, t.id, slug, sourceLabel);
         };
         // "#" beside a note: choose one of its headings, so the link opens at that place.
         const pickHeading = (t) => {
@@ -10833,16 +11280,37 @@
         linkedEl.replaceChildren();
         linkedEl.hidden = true;
         if (!getPref(PREF.BACKLINKS_PANEL, false) || !n || n.trashed || view !== "editor" || mode === "edit") return;
-        const { linked } = findBacklinks(store.list(), n, store.meta.folders);
-        if (!linked.length) return;
-        linkedEl.append(h("span", { class: "zn-linked-label" }, "Linked from"));
-        for (const t of linked.slice(0, 12)) {
-          const b = h("button", { type: "button", class: "zn-chip" }, titleOf(t.body) || "Untitled note");
-          b.addEventListener("click", () => openNote(t.id, { focus: false }));
-          linkedEl.append(b);
-        }
-        linkedEl.hidden = false;
+        const { linked, mentions } = findBacklinks(store.list(), n, store.meta.folders);
+        const appendNotes = (label, entries, kind) => {
+          if (!entries.length) return;
+          linkedEl.append(h("span", { class: "zn-linked-label" }, label + " (" + entries.length + ")"));
+          for (const t of entries.slice(0, 12)) {
+            const title = titleOf(t.body) || "Untitled note";
+            const button = h("button", {
+              type: "button",
+              class: "zn-chip" + (kind === "mention" ? " zn-linked-mention" : ""),
+              title: kind === "mention" ? "Click to convert the plain mention into a link" : "Open the note that links here",
+            }, title);
+            if (kind === "mention") {
+              button.addEventListener("click", () => {
+                const latest = store.get(t.id);
+                if (!latest || latest.trashed) return flash("That note is no longer available");
+                const out = linkFirstMention(latest.body, titleOf(n.body), n.id);
+                if (out === null) return flash("No plain mention left to link");
+                store.update(t.id, out);
+                paintLinked();
+                flash("Linked in " + title);
+              });
+            } else button.addEventListener("click", () => openNote(t.id, { focus: false }));
+            linkedEl.append(button);
+          }
+          if (entries.length > 12) linkedEl.append(h("span", { class: "zn-linked-more" }, "+" + (entries.length - 12) + " more"));
+        };
+        appendNotes("Linked from", linked, "linked");
+        appendNotes("Mentioned without a link · click to link", mentions, "mention");
+        linkedEl.hidden = !linkedEl.childNodes.length;
       }
+
       // Hub list: a bulleted list of links to notes (all, or one folder), each with the note's short description.
       function askHubList() {
         if (note()?.trashed) return;
@@ -11176,6 +11644,74 @@
         }
       }
       // ---- outline (Cycle F #27): a menu of the note's headings; choosing one scrolls both panes to it ----
+      // T1.9: docked outline reuses outlineItems() and the same scroll/caret heading calculation
+      // as the compact Table of contents menu. It is a sibling of the editor/read pane so it
+      // takes real layout space rather than covering note content.
+      let outlineOpen = false;
+      let outlineRaf = 0;
+      let outlinePreviewRequested = false;
+      function outlineCaretLine(preferPreview = false) {
+        const n = note();
+        if (!n) return -1;
+        const src = mode !== "read" ? ta.value : n.body;
+        const previewIsActive = preferPreview || mode === "read" || (mode === "split" && root.ownerDocument.activeElement !== ta);
+        if (!previewIsActive) return lineOfOffset(src, ta.selectionStart || 0);
+        const heads = [...readEl.childNodes].filter((nd) => nd.dataset?.slug);
+        const at = heads[scrolledHeading(heads.map((nd) => nd.offsetTop || 0), readEl.scrollTop || 0)];
+        const hit = at && headingsOf(src).find((x) => x.slug === at.dataset.slug);
+        return hit ? hit.line : -1;
+      }
+      function paintOutline(preferPreview = false) {
+        if (!outlineOpen) return;
+        const n = note();
+        if (!n || n.trashed || view !== "editor") {
+          outlinePanel.hidden = true;
+          return;
+        }
+        const src = mode !== "read" ? ta.value : n.body;
+        const o = outlineItems(src, outlineCaretLine(preferPreview), 120);
+        outlineNav.replaceChildren();
+        if (!o.items.length) {
+          outlineNav.append(h("p", { class: "zn-outline-empty" }, "No headings yet. Add a line starting with # to build an outline."));
+        } else {
+          for (const item of o.items) {
+            const button = h("button", {
+              type: "button",
+              class: "zn-outline-item" + (item.current ? " is-current" : ""),
+              "aria-current": item.current ? "location" : null,
+              "data-level": String(item.level),
+              title: item.text,
+            }, item.text);
+            button.style.setProperty("--zn-outline-level", String(Math.max(1, item.level)));
+            button.addEventListener("mousedown", (ev) => ev.preventDefault());
+            button.addEventListener("click", () => {
+              goHeading(item.slug);
+              paintOutline();
+            });
+            outlineNav.append(button);
+          }
+          if (o.more) outlineNav.append(h("p", { class: "zn-outline-more" }, "…and " + o.more + " more headings"));
+        }
+      }
+      function scheduleOutline(preferPreview = false) {
+        outlinePreviewRequested = outlinePreviewRequested || !!preferPreview;
+        if (!outlineOpen || outlineRaf) return;
+        outlineRaf = window.requestAnimationFrame(() => {
+          outlineRaf = 0;
+          const fromPreview = outlinePreviewRequested;
+          outlinePreviewRequested = false;
+          paintOutline(fromPreview);
+        });
+      }
+      function setOutlineOpen(open) {
+        outlineOpen = !!open;
+        body.dataset.outlineOpen = outlineOpen ? "true" : "false";
+        outlinePanel.hidden = !outlineOpen;
+        if (outlineOpen) paintOutline();
+      }
+      function toggleOutlinePanel() {
+        setOutlineOpen(!outlineOpen);
+      }
       function showOutline(anchor = btnMore) {
         const n = note();
         if (!n || view !== "editor") return;
@@ -11189,12 +11725,16 @@
           if (hit) caret = hit.line;
         }
         const o = outlineItems(mode !== "read" ? ta.value : n.body, caret);
-        const items = o.items.map((x) => ({
+        const items = [{
+          icon: "list",
+          label: outlineOpen ? "Close Outline panel" : "Open Outline panel",
+          action: toggleOutlinePanel,
+        }, { sep: true }, ...o.items.map((x) => ({
           icon: x.current ? "pin" : undefined,
           label: "\u2003".repeat(x.level - 1) + x.text,
           action: () => goHeading(x.slug),
-        }));
-        if (!items.length) items.push({ label: "No headings in this note yet (start a line with #)", disabled: true });
+        }))];
+        if (!o.items.length) items.push({ label: "No headings in this note yet (start a line with #)", disabled: true });
         if (o.more) items.push({ label: `\u2026and ${o.more} more headings`, disabled: true });
         // T1.8: the same list as a physical Markdown block that exports with the note.
         if (o.items.length) {
@@ -12432,7 +12972,8 @@
       });
       listen(chipAll, "click", () => { filter = "all"; renderList(); });
       listen(chipRecent, "click", () => { filter = "recent"; renderList(); });
-      listen(chipTrash, "click", () => { filter = "trash"; renderList(); });
+      listen(chipTrash, "click", () => { filter = "trash"; activeTag = ""; renderList(); });
+      listen(chipTags, "click", () => showTagMenu(chipTags));
       for (const c of [chipTrash, chipEmpty]) listen(c, "contextmenu", (e) => { e.preventDefault(); showMenu(pointAnchor(e), trashMenuItems()); });
       listen(chipEmpty, "click", () => {
         if (chipEmpty.dataset.armed) {
@@ -12530,12 +13071,15 @@
         e.stopPropagation();
       }, true);
       listen(ta, "keyup", (e) => {
+        scheduleOutline();
         if (e.key === "Shift") armedSelection();
         else if (armed.length && !e.shiftKey && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(e.key) && armStale()) disarm();
         if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) updateWiki();
         if (e.shiftKey || e.key === "Shift") scheduleChrome();
       });
-      listen(ta, "mouseup", () => { armedSelection(); if (getPref(PREF.FOOTER_COUNTER, false) === true) scheduleChrome(); });
+      listen(ta, "mouseup", () => { scheduleOutline(); armedSelection(); if (getPref(PREF.FOOTER_COUNTER, false) === true) scheduleChrome(); });
+      listen(ta, "click", scheduleOutline);
+      listen(ta, "select", scheduleOutline);
       // {{date}}, @today, /tomorrow ...: swapped for the real date the moment the last character is typed (see
       // additional/notes/flavors/ZentralNotesShortcuts.js). The note keeps plain text, so every other app reads it too.
       function expandShortcut(ev) {
@@ -12565,6 +13109,7 @@
         typed = true;
         store.update(currentId, ta.value, token);
         scheduleChrome();
+        scheduleOutline();
         scheduleFindRefresh();
         if (mode === "split") schedulePreview();
       });

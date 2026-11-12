@@ -65,14 +65,12 @@ The card is painted through the Look custom properties that `extension/appearanc
 A color preference stays empty until a value is picked; the appearance owner then removes the property instead of writing a hard-coded color, so the theme keeps control. Numbers are clamped to their limits, and the stylesheet keeps a minimum width, so a bad value can never collapse the card. The card background is the only translucent part: the text always stays readable. Settings live in Detailed appearance → RSS reader card and are copied under New settings.
 
 
-## Install only this feature (standalone, via Sine)
+## Install as a standalone Sine feature
 
-In Sine, install from this folder URL:
+In Sine, add this folder as a mod using:
 
 `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/rss`
 
-Requirements: Sine 2.3+, and Sine's setting for JavaScript from unofficial sources (`sine.allow-unsafe-js`) enabled; without it Sine downloads the mod but never runs the script. Restart Zen after the first install. Sine pulls later updates from this repository (the `version` in this folder's `theme.json` is raised on every change). The mod's stylesheet (`ZentralRssDisplay.css`) is loaded by Sine itself. Settings appear in Sine's preferences for this mod.
-
-Using the full pack instead? Paste the repository root URL. If both are installed, the full pack owns the feature and the standalone copy releases itself, so nothing is hooked twice. Both use the same preference keys, so settings carry over.
+Enable `sine.allow-unsafe-js` and restart Zen after the first install. Sine pulls later updates from this folder, loads the module stylesheet itself, and exposes this feature's settings in Sine preferences. When the full pack is also installed, Zentral Extended owns the feature and the standalone copy stays inactive; both use the same preference keys.
 
 `ZentralRssDisplay.standalone.uc.js`, `theme.json`, `preferences.json` and `standalone.lock.json` are **generated** by `node tools/build-standalone.cjs` from `ZentralRssDisplay.uc.js`; edit the source and rebuild, never the generated files. Status: unit-tested with a simulated window only; not yet verified through a real Sine install (see `docs/SINE-MODULAR-INSTALL.md`, gates 6.1-6.6).

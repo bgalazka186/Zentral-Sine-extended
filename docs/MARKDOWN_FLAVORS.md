@@ -243,6 +243,8 @@ GitHub alerts and Obsidian callouts share the `> [!TYPE]` shape but have differe
 | F23 | Callout nested | `> [!a]` / `> > [!b]` | ❌ | ✅ | ❌ | ✅ HAVE | ON | toolbar: Quote + Nest in |  |
 | F24 | Callout custom type (CSS) | `> [!bingo]` | ❌ | 🔌 | ❌ | ✅ HAVE | ON+guard | typed | Obsidian needs a CSS snippet. Mixed: unknown type = `note` look with the type name as title. |
 | F25 | Callout lower/upper case | `[!NOTE]` = `[!note]` | ✅ | ✅ | ❌ | ✅ HAVE | ON | auto |  |
+| F26 | Interactive bingo callout | `> [!bingo]` with list cells (`- [ ] Cell`) | ❌ | 🔌 | ❌ | ✅ HAVE | ON | typed | Grid cells toggle and save their checked state in the source list. |
+| F27 | Interactive poll callout | `> [!poll]` with list options (`- [ ] Option`) | ❌ | 🔌 | ❌ | ✅ HAVE | ON | typed | Each option is a persistent toggle; tally bars update from the checked options. |
 
 ## G. Code
 

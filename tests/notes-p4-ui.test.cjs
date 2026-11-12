@@ -154,15 +154,17 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     assert.ok(byTitle("Table of contents"), "the toolbar has a Table of contents button");
     click(byTitle("Table of contents")); await tick();
     const labels = () => q(".zn-menu").querySelectorAll("button").map((b) => b.textContent);
-    assert.deepEqual(labels(), ["Install", "\u2003Linux", "Usage", "Insert table of contents under the title", "Insert table of contents at the end"]);
+    assert.deepEqual(labels(), ["Open Outline panel", "Install", "\u2003Linux", "Usage", "Insert table of contents under the title", "Insert table of contents at the end"]);
     const btns = q(".zn-menu").querySelectorAll("button");
-    assert.ok(/is-current|pin/.test(btns[1].innerHTML || btns[1].children.map((x) => x.className || x.tag).join(" ")) || btns[1].children.length > 1, "the current heading carries an icon");
-    click(btns[2]); await flushRaf();
+    assert.ok(/is-current|pin/.test(btns[2].innerHTML || btns[2].children.map((x) => x.className || x.tag).join(" ")) || btns[2].children.length > 1, "the current heading carries an icon");
+    click(btns[3]); await flushRaf();
     assert.equal(ta.selectionStart, body.indexOf("## Usage"), "the caret moved to the heading line");
     const plain = store.create("no headings here"); await flushRaf(); sheet.openNoteById(plain.id); await flushRaf();
     click(byTitle("Table of contents")); await tick();
     assert.match(q(".zn-menu").textContent, /No headings in this note/, "a note without headings says so");
-    assert.equal(q(".zn-menu").querySelectorAll("button").length, 0, "and nothing in it is clickable");
+    const emptyMenuButtons = q(".zn-menu").querySelectorAll("button");
+    assert.equal(emptyMenuButtons.length, 1, "the Outline action remains available without headings");
+    assert.equal(emptyMenuButtons[0].textContent, "Open Outline panel");
     openMore();
   });
 

@@ -3,6 +3,7 @@
  * toc_pill pref and the heading count, opens the outline menu, jumps to a heading). Logic only: NOT layout, NOT real Gecko. */
 const assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
 const source = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
+const css = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.css"), "utf8");
 const dom = require("./helpers/fake-dom.cjs")();
 const { Ev, El, document, raf } = dom;
 const win = { document, ZentralRuntime: { register() {} }, __zentralNotesTestSeam: {}, requestAnimationFrame: (fn) => raf.push(fn), cancelAnimationFrame() {}, setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {} };
@@ -85,6 +86,26 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     assert.ok(items.includes("One") && items.includes("Two") && items.includes("Three"), items.join("|"));
     click(menu.querySelectorAll("button").find((b) => b.textContent.trim() === "Two")); await flushRaf();
     assert.equal(ta.selectionStart, ta.value.indexOf("# Two"));
+  });
+  await test("Outline is a ToC menu option, not a second toolbar button; the menu toggles the docked panel", async () => {
+    const ta = q(".zn-editor");
+    await typeInto(ta, "Doc\n# One\nx\n# Two\ny\n## Three");
+    const buttonLabel = (el) => el.getAttribute("aria-label") || el.title || "";
+    assert.equal(sheet.root.all().some((el) => el.tag === "button" && /Dock outline panel/i.test(buttonLabel(el))), false, "no duplicate Outline toolbar button");
+    click(q(".zn-tocpill"));
+    let menu = q(".zn-menu");
+    let toggle = menu.querySelectorAll("button").find((b) => b.textContent.trim() === "Open Outline panel");
+    assert.ok(toggle, "ToC menu exposes the Outline panel action");
+    click(toggle); await flushRaf();
+    assert.equal(q(".zn-outline-panel").hidden, false, "the panel opens from the ToC menu");
+    click(q(".zn-tocpill"));
+    menu = q(".zn-menu");
+    toggle = menu.querySelectorAll("button").find((b) => b.textContent.trim() === "Close Outline panel");
+    assert.ok(toggle, "the menu action reflects the open state");
+    click(toggle); await flushRaf();
+    assert.equal(q(".zn-outline-panel").hidden, true, "the same menu option closes the panel");
+    assert.match(css, /\.zn-body\[data-outline-open="true"\]\s+\.zn-tocpill\s*\{[^}]*right:\s*calc\(var\(--zn-outline-width\)\s*\+\s*14px\)/s, "the pill moves left of the panel close button");
+    assert.match(css, /--zn-outline-width:\s*142px/, "the overlap fix follows the compact panel width too");
   });
   await test("it is not shown in the note list, and comes back with the note", async () => {
     click(q(".zn-title")); await flushRaf();

@@ -41,7 +41,7 @@ containers; animation watches only Library attributes. Border-box size changes
 and resize events coalesce to at most one update per animation frame. The normal
 mode ignores animation-only style changes. No website document is observed.
 
-Version: 3.3.13. This needs visual testing in Zen, including left/right
+Version: 3.3.19. This needs visual testing in Zen, including left/right
 sidebar, compact mode, opposite-side panels and narrow windows.
 
 ## Library background
@@ -61,16 +61,14 @@ Sine's preferences have no color picker, so the color is a text field.
 
 Also shipped in the standalone package so it is complete on its own: the "Use external Library layout" compatibility switch (pauses this module's Library geometry for ZenLibraryTweaks-style mods).
 
-## Install only this feature (standalone, via Sine)
+## Install as a standalone Sine feature
 
-In Sine, install from this folder URL:
+In Sine, add this folder as a mod using:
 
 `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/library`
 
-Requirements: Sine 2.3+, and Sine's setting for JavaScript from unofficial sources (`sine.allow-unsafe-js`) enabled; without it Sine downloads the mod but never runs the script. Restart Zen after the first install. Sine pulls later updates from this repository (the folder's `theme.json` version is bumped on every change).
+Enable `sine.allow-unsafe-js` and restart Zen after the first install. Sine pulls later updates from this folder. Settings appear in Sine's preferences for this mod: Library layout (mode, minimum width, animation, external-layout switch) and Library background (Arc 2.0 match, custom color, opacity).
 
-Settings appear in Sine's preferences for this mod: Library layout (mode, minimum width, animation, external-layout switch) and Library background (Arc 2.0 match, custom color, opacity).
-
-Using the full pack instead? Paste the repository root URL. If both are installed, the full pack owns the feature and the standalone copy releases itself, so nothing is hooked twice. Both use the same preference keys, so settings carry over.
+The full-pack root URL can be installed instead; when both are present, Zentral Extended owns the feature and the standalone copy stays inactive. Both installations use the same preference keys, so settings carry over.
 
 Files here: `ZentralLibraryResize.uc.js` is the source; `ZentralLibraryResize.standalone.uc.js`, `theme.json`, `preferences.json` and `standalone.lock.json` are **generated** by `node tools/build-standalone.cjs` (never edit them by hand). `node tools/build-standalone.cjs --check` must pass before committing. Status: unit-tested with a simulated window only; not yet verified through a real Sine install (see `docs/SINE-MODULAR-INSTALL.md`, gates 6.1-6.6).

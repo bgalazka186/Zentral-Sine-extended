@@ -143,14 +143,18 @@ test("E08/E09/E10 tasks and states by mode; E12 [ ] without a marker; E19 pasted
   assert.equal(blocks("• a\n• b")[0].items.length, 2);
   assert.equal(blocks("```\n• a\n[ ] b\n```")[0].type, "code", "code is never rewritten");
 });
-test("F05-F20 callout kinds and aliases; F22 fold; F24 unknown kind", () => {
+test("F05-F20 callout kinds and aliases; F22 fold; F24 unknown kind; F26/F27 interactive kinds", () => {
   const kind = (t, o) => blocks("> [!" + t + "]\n> x", o)[0].callout;
   for (const [alias, want] of [["summary", "abstract"], ["tldr", "abstract"], ["done", "success"], ["check", "success"], ["help", "question"], ["faq", "question"], ["fail", "failure"], ["missing", "failure"], ["error", "danger"], ["cite", "quote"], ["hint", "tip"], ["attention", "warning"], ["todo", "todo"], ["bug", "bug"], ["example", "example"]]) {
     assert.equal(kind(alias).kind, want, alias);
   }
   assert.equal(kind("NOTE").title, "");
   assert.equal(kind("summary").title, "Summary");
-  assert.deepEqual(kind("bingo"), { kind: "note", title: "Bingo" });
+  assert.deepEqual(kind("bingo"), { kind: "bingo", title: "" });
+  assert.deepEqual(kind("poll"), { kind: "poll", title: "" });
+  assert.equal(kind("bingo", { flavor: "github" }), undefined);
+  assert.equal(kind("poll", { flavor: "github" }), undefined);
+  assert.equal(kind("bingo", { flavor: "obsidian" }), undefined, "interactive callouts are Zentral-only");
   const f = blocks("> [!tip]- Closed one\n> hidden")[0].callout;
   assert.equal(f.fold, "closed");
   assert.equal(f.title, "Closed one");
@@ -158,9 +162,41 @@ test("F05-F20 callout kinds and aliases; F22 fold; F24 unknown kind", () => {
   assert.equal(kind("info", { flavor: "github" }), undefined, "GitHub has five alerts only");
   assert.equal(kind("warning", { flavor: "github" }).kind, "warning");
   assert.equal(kind("note", { flavor: "reddit" }), undefined);
-  assert.equal(kind("bingo", { flavor: "github" }), undefined);
-  assert.equal(kind("bingo", { flavor: "obsidian" }).kind, "note");
 });
+test("T1.6 bingo/poll callouts map quoted list rows back to writable source lines", () => {
+  const body = [
+    "Intro",
+    "",
+    "> [!bingo] Sample",
+    "> - [ ] Cell one",
+    "> - Cell two",
+    "",
+    "> [!poll] Pick one",
+    "> - [ ] Option A",
+    "> - [x] Option B",
+  ].join("\n");
+  const parsed = blocks(body);
+  assert.equal(parsed[1].callout.kind, "bingo");
+  assert.equal(parsed[2].callout.kind, "poll");
+  assert.deepEqual(parsed[1].blocks[0].items.map((item) => item.line), [3, 4]);
+  assert.deepEqual(parsed[2].blocks[0].items.map((item) => item.line), [7, 8]);
+  assert.equal(parsed[1].blocks[0].items[1].checked, null, "plain bullets start as unmarked cells");
+  const marked = c.toggleCalloutOption(body, 4);
+  assert.match(marked.split("\n")[4], /^> - \[x\] Cell two$/);
+  const unmarked = c.toggleCalloutOption(marked, 4);
+  assert.match(unmarked.split("\n")[4], /^> - \[ \] Cell two$/);
+  assert.equal(c.toggleCalloutOption(body, -1), body);
+  assert.equal(c.toggleCalloutOption(body, 999), body);
+  assert.equal(c.toggleCalloutOption(body, 2), body, "the callout title is not a list option");
+  const moved = c.toggleCalloutOption(body, parsed[2].blocks[0].items[0].line);
+  assert.match(moved.split("\n")[7], /^> - \[x\] Option A$/);
+  assert.match(c.exportText(marked), /Cell two/);
+  assert.match(c.exportHtml(marked), /Cell one/);
+  assert.ok(source.includes("zn-bingo-grid") && source.includes("zn-bingo-cell"));
+  assert.ok(source.includes("zn-poll-options") && source.includes("zn-poll-track"));
+  assert.ok(source.includes('onToggle(item.line, "bingo")') && source.includes('onToggle(item.line, "poll")'));
+});
+
 test("G02/G03/G04 fences: four backticks, tildes, extras after the language; G05 indented code is Reddit only", () => {
   assert.deepEqual(blocks("````md\n```js\nx\n```\n````")[0], { type: "code", text: "```js\nx\n```", lang: "md" });
   assert.deepEqual(blocks("~~~py\nx\n~~~")[0], { type: "code", text: "x", lang: "py" });

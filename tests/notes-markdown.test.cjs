@@ -436,6 +436,23 @@ test("math: LaTeX subset becomes text + sup/sub, unknown commands stay visible",
   assert.ok(tex("x".repeat(5000)).length >= 1, "oversized input stays text");
 });
 
+test("T1.7 display math keeps aligned environment row breaks and ampersand separators", () => {
+  for (const env of ["align", "bmatrix", "pmatrix", "cases", "gather"]) {
+    const source = "\\begin{" + env + "} a &= b \\\\ c &= d \\end{" + env + "}";
+    const nodes = c.texNodes(source);
+    assert.equal(nodes.filter((n) => n.t === "br").length, 1, env + " row separator");
+    assert.ok(flat(nodes).includes("&"), env + " alignment tab remains visible");
+    assert.ok(flat(nodes).includes("a") && flat(nodes).includes("d"), env + " contents survive");
+  }
+  const displaySource = "$$\n\\begin{align} a &= b \\\\ c &= d \\end{align}\n$$";
+  const [display] = c.parseBlocks(displaySource);
+  assert.equal(display.type, "math");
+  assert.equal(display.c.filter((n) => n.t === "br").length, 1);
+  assert.ok(flat(display.c).includes("&"));
+  assert.ok(c.exportHtml(displaySource).includes("<br>"));
+  assert.ok(c.exportText(displaySource).includes("&"));
+});
+
 test("math: $...$ inline and $$ block, prices are not math", () => {
   assert.equal(c.parseInline("area $\\pi r^2$ ok").some((n) => n.t === "math"), true);
   assert.equal(c.parseInline("costs $5 and $10 today").some((n) => n.t === "math"), false);
@@ -686,6 +703,41 @@ test("T1.2 double-backtick code keeps inner backticks and drops one padding spac
   same(c.parseInline("``a`b``").map((n) => [n.t, n.s]), [["code", "a`b"]]);
   same(c.parseInline("` a `").map((n) => [n.t, n.s]), [["code", "a"]]);
   same(c.parseInline("`  `").map((n) => [n.t, n.s]), [["code", "  "]], "only spaces stay as they are");
+});
+
+test("T1.9 docked outline model tracks caret and scrolled section with bounded output", () => {
+  const doc = "# Top\n\n## Alpha\n\ntext\n\n### Child\n\n## Beta\n";
+  const outline = c.outlineItems(doc, 6, 10);
+  same(outline.items.map((x) => [x.text, x.level, x.current]), [
+    ["Top", 1, false], ["Alpha", 2, false], ["Child", 3, true], ["Beta", 2, false],
+  ]);
+  assert.equal(outline.more, 0);
+  const limited = c.outlineItems(doc, 6, 2);
+  assert.equal(limited.items.length, 2);
+  assert.equal(limited.more, 2);
+  assert.equal(limited.items.some((x) => x.current), false, "current item outside the visible cap is not misassigned");
+  same(c.outlineItems("plain text", 0), { items: [], more: 0 });
+  assert.equal(c.scrolledHeading([], 0), -1);
+  assert.equal(c.scrolledHeading([40, 90, 140], 0), -1);
+  assert.equal(c.scrolledHeading([40, 90, 140], 40), 0);
+  assert.equal(c.scrolledHeading([40, 90, 140], 114), 1);
+  assert.equal(c.scrolledHeading([40, 90, 140], 200), 2);
+  assert.equal(c.scrolledHeading([40, 90, 140], 66, 0), 0);
+  const source = fs.readFileSync(path.join(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
+  const styles = fs.readFileSync(path.join(__dirname, "../additional/notes/ZentralNotes.css"), "utf8");
+  assert.ok(source.includes('class: "zn-outline-panel"'));
+  assert.ok(source.includes('class: "zn-outline-items"'));
+  assert.ok(!source.includes("const tDock = iconButton(\"toc\", \"Dock outline panel\""), "the duplicate Outline toolbar button is removed");
+  assert.ok(source.includes('label: outlineOpen ? "Close Outline panel" : "Open Outline panel"'));
+  assert.ok(source.includes('action: toggleOutlinePanel'));
+  assert.ok(source.includes('listen(readEl, "scroll", () => scheduleOutline(true))'));
+  assert.ok(source.includes('listen(ta, "scroll", scheduleOutline)'));
+  assert.ok(source.includes('goHeading(item.slug)'));
+  assert.ok(styles.includes('.zn-body[data-outline-open="true"]'));
+  assert.ok(styles.includes('.zn-body[data-outline-open="true"] .zn-tocpill'));
+  assert.ok(styles.includes('right: calc(var(--zn-outline-width) + 14px)'));
+  assert.ok(styles.includes('--zn-outline-width: 142px'));
+  assert.ok(styles.includes(".zn-outline-item.is-current"));
 });
 
 test("T1.8 table of contents block: insert under the title or at the end, nested numbered slug links, idempotent update", () => {

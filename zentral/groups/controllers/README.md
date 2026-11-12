@@ -1,6 +1,6 @@
 # zentral/groups/controllers
 
-Owner and local file guide for Extended 3.3.13. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.3.19. Original Zentral reference: 1.1.0.
 
 | File                            | Responsibility                                                                             |
 | ------------------------------- | ------------------------------------------------------------------------------------------ |

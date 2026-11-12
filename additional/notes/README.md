@@ -111,14 +111,13 @@ Notes → Quick notes (the main switch is also under Start here).
 
 The sheet uses the existing Look tokens (surface, text, accent and the panel corner radius) with fallbacks, and the **panel black backing** button also darkens the sheet's backdrop, so notes stay readable on translucent panels.
 
-## Install only this feature
+## Install as a standalone Sine feature
 
-Notes works without the rest of Zentral. Add this folder URL in Sine (and enable JavaScript from unofficial sources) as described in the main README:
+Notes works without the rest of Zentral. In Sine, add this folder as a mod using:
 
 `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/notes`
 
-- **Standalone** gives you the shortcut and a floating note card in the corner of the window. The bar buttons live on the full pack's panel URL bars, so they are a full-pack feature.
-- If you later install the full pack, it takes over and this copy steps aside. The notes folder and the settings are the same, so nothing is lost.
+Enable `sine.allow-unsafe-js` and restart Zen after the first install. Sine pulls later updates from this folder. Standalone gives you the shortcut and floating note card; the Notes buttons on Zentral panel URL bars are a full-pack feature. If you later install the full pack, it takes over and this copy steps aside; your notes folder and preference keys stay the same.
 
 ## Files
 
