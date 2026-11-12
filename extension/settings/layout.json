@@ -1102,6 +1102,7 @@
     "zen.workspace.zentral.notes.backlinks_panel",
     "zen.workspace.zentral.notes.hidden_tools_menu",
     "zen.workspace.zentral.notes.date_notes_mode",
+    "zen.workspace.zentral.notes.date_display_format",
     "zen.workspace.zentral.notes.default_view",
     "zen.workspace.zentral.notes.card_autohide",
     "zen.workspace.zentral.notes.card_window_entry_reveal",

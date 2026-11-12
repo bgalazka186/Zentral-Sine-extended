@@ -74,12 +74,74 @@ const test = async (name, fn) => { await fn(); console.log("ok -", name); };
 
 (async () => {
   await store.open();
+  await test("menu model normalizes legacy and current actions, nested groups, stable IDs and disabled reasons", () => {
+    const calls = [];
+    const input = [
+      { id: "save", label: "Save", enabled: true, run: () => calls.push("save") },
+      { id: "save", label: "Unavailable", enabled: false, reason: "Requires a non-empty note", run: () => calls.push("bad") },
+      { label: "Informational heading", disabled: true },
+      { label: "Legacy action", action: () => calls.push("legacy") },
+      { label: "More", group: [{ label: "Nested", action: () => calls.push("nested") }] },
+      { label: "\u2003Linux", action: () => calls.push("linux") },
+    ];
+    const model = c.normalizeContextMenuItems(input, "test");
+    assert.equal(model[0].id, "save");
+    assert.equal(model[0].enabled, true);
+    model[0].run();
+    assert.equal(model[1].id, "save-2", "duplicate IDs are made unique without dropping either item");
+    assert.equal(model[1].enabled, false);
+    assert.equal(model[1].reason, "Requires a non-empty note");
+    assert.equal(model[1].run, null, "a disabled action cannot be invoked by the renderer");
+    assert.equal(model[2].heading, true);
+    assert.equal(model[3].enabled, true, "legacy action descriptors remain compatible");
+    model[3].run();
+    assert.equal(model[4].group[0].enabled, true);
+    model[4].group[0].run();
+    assert.equal(model[5].label, "\u2003Linux", "intentional leading indentation is retained in outline labels");
+    assert.deepEqual(calls, ["save", "legacy", "nested"]);
+    assert.equal(input[0].enabled, true, "normalization leaves caller-owned properties unchanged");
+    assert.equal(input[0].run instanceof Function, true);
+    assert.equal(input[0].id, "save");
+  });
   const sheet = c.createSheet({ store, adapter, env, ensureStore: () => store.open() });
   sheet.root.ownerDocument = document;
   await sheet.open();
   await flushRaf();
   const more = sheet.root.all().find((element) => element.title === "More");
   assert.ok(more, "More menu trigger is available");
+
+  await test("Enter activates a focused submenu action through the shared menu controller", () => {
+    more.click();
+    const first = query(sheet.root, ".zn-menu button");
+    assert.ok(first);
+    const event = new Ev("keydown", { key: "Enter", bubbles: true });
+    first.dispatchEvent(event);
+    assert.equal(event.defaultPrevented, true);
+    assert.match(query(sheet.root, ".zn-menu").textContent, /Save as Markdown/);
+    assert.equal(menuOpen(sheet.root), true, "opening a submenu does not close the parent menu surface");
+    dispatchWindow("pointerdown", sheet.root);
+  });
+
+  await test("disabled actions stay visible, non-focusable and explain why they are unavailable", async () => {
+    const trash = sheet.root.all().find((element) => element.classList?.contains("zn-chip") && element.textContent === "Trash");
+    assert.ok(trash, "Trash filter is available");
+    const event = new Ev("contextmenu", { bubbles: true, clientX: 80, clientY: 80 });
+    trash.dispatchEvent(event);
+    assert.equal(event.defaultPrevented, true);
+    const unavailable = all(sheet.root, ".zn-menu button").find((button) => button.textContent.includes("Empty trash now"));
+    assert.ok(unavailable, "disabled action remains in the menu");
+    assert.equal(unavailable.disabled, true);
+    assert.equal(unavailable.getAttribute("aria-disabled"), "true");
+    assert.match(unavailable.textContent, /Trash is empty/);
+    assert.notEqual(dom.state.activeElement, unavailable, "the first enabled action receives focus instead");
+    assert.match(dom.state.activeElement.textContent, /Deleted notes backup/);
+    const firstEnabled = dom.state.activeElement;
+    firstEnabled.dispatchEvent(new Ev("keydown", { key: "ArrowDown", bubbles: true }));
+    assert.notEqual(dom.state.activeElement, firstEnabled, "ArrowDown skips the disabled action and advances");
+    dom.state.activeElement.dispatchEvent(new Ev("keydown", { key: "Home", bubbles: true }));
+    assert.equal(dom.state.activeElement, firstEnabled, "Home returns to the first enabled action");
+    dispatchWindow("pointerdown", sheet.root);
+  });
 
   await test("outside pointer press closes a menu anywhere in the window without requiring the sheet root", () => {
     more.click();
@@ -226,5 +288,5 @@ const test = async (name, fn) => { await fn(); console.log("ok -", name); };
     assert.equal(win.listenerCount("blur"), 0);
   });
 
-  console.log("11 Notes menu lifecycle tests passed");
+  console.log("14 Notes menu lifecycle tests passed");
 })().catch((error) => { console.error("FAIL", error); process.exit(1); });

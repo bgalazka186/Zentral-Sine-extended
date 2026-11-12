@@ -11,6 +11,7 @@ const ctx = { window: win, document: dom.document, Event: dom.Ev, globalThis: { 
 vm.runInNewContext(source, ctx);
 const c = win.__zentralNotesTestSeam.core;
 const cal = require(path.resolve(__dirname, "../additional/notes/calendar/ZentralNotesCalendar.js"));
+const calendarSource = fs.readFileSync(path.resolve(__dirname, "../additional/notes/calendar/ZentralNotesCalendar.js"), "utf8");
 
 let passed = 0, failed = 0;
 async function test(name, fn) { try { await fn(); passed++; console.log("ok -", name); } catch (e) { failed++; console.error("FAIL " + name + "\n", e); } }
@@ -209,6 +210,137 @@ const BODY = "# Plan\n\n## Shifts\n%%calendar: Work%%\n- 2026-11-12 06:00-14:00 
     await assert.rejects(items.flush(), /protected/);
   });
 
+  await test("T2.16 startup sweep trashes only untouched generated Daily notes and retains the note for restore", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const candidate = st.create("# 2026-11-14 Saturday\n\n", "daily");
+    const unrelated = st.create("# 2026-11-15 Sunday\n\n", "Work");
+    const edited = st.create("# 2026-11-16 Monday\n\n", "daily");
+    st.update(edited.id, edited.body + "x");
+    const trashed = st.purgeBlankDateNotes();
+    assert.deepEqual(Array.from(trashed), [candidate.id]);
+    assert.ok(st.get(candidate.id)?.trashed, "candidate moved into Trash instead of being deleted");
+    assert.ok(st.get(candidate.id), "the note remains restorable");
+    assert.equal(st.get(unrelated.id).trashed, 0, "date-shaped notes outside Daily are not treated as generated notes");
+    assert.equal(st.get(edited.id).trashed, 0, "a note with one typed character is preserved");
+    st.restore(candidate.id);
+    assert.equal(st.get(candidate.id).trashed, 0);
+  });
+
+  await test("T2.16 edit history is sticky across edit-then-undo and survives reload", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const note = st.create("# 2026-11-17 Tuesday\n\n", "daily");
+    const generated = note.body;
+    st.update(note.id, generated + "temporary");
+    st.update(note.id, generated);
+    assert.equal(st.get(note.id).touched, true, "returning to the generated text must not erase the edit history");
+    await st.flush();
+    assert.match(io.files.get("/n/" + note.id + ".md").text, /\ntouched: true\n/);
+    const reopened = mk(io); await reopened.open();
+    assert.equal(reopened.get(note.id).touched, true);
+    assert.deepEqual(Array.from(reopened.purgeBlankDateNotes()), []);
+    assert.equal(reopened.get(note.id).trashed, 0);
+  });
+
+  await test("T2.16 protects date notes referenced by stored calendar items, including hidden items", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const note = st.create("# 2026-11-18 Wednesday\n\n", "daily");
+    const item = cal.makeItem({ id: "manual-note-reference", summary: "Keep this daily note", start: { dateTime: new Date(clock + 3600000).toISOString() }, x: { kind: "reminder", src: "manual", noteId: note.id } }, clock);
+    st.items.upsert(item);
+    assert.deepEqual(Array.from(st.purgeBlankDateNotes()), []);
+    st.trash(note.id);
+    st.restore(note.id);
+    assert.deepEqual(Array.from(st.purgeBlankDateNotes()), [], "even a hidden stored item is a reference");
+    assert.equal(st.get(note.id).trashed, 0);
+  });
+
+  await test("T2.16 protects tagged and linked date notes, including slash-form wiki titles", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const tagged = st.create("# 2026-11-19 Thursday\n\n", "daily");
+    tagged.foreign = "tags: [keep]";
+    const markdownTarget = st.create("# 2026-11-20 Friday\n\n", "daily");
+    st.create("A canonical backlink: " + c.buildNoteLink(markdownTarget.id, "Daily entry"));
+    const slashTarget = st.create("# 20/11/2026\n\n", "daily");
+    st.create("A date title with slashes: [[20/11/2026|open day]]");
+    assert.deepEqual(Array.from(st.purgeBlankDateNotes()), []);
+    assert.equal(tagged.trashed, 0, "foreign YAML tags protect the note even when its body is only the generated heading");
+    assert.equal(markdownTarget.trashed, 0, "canonical Markdown backlinks protect the target");
+    assert.equal(slashTarget.trashed, 0, "slash-form wiki links are recognized even though slash can denote a folder");
+  });
+
+  await test("T2.16 active-sheet ownership protects the current note until the last owner leaves", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const note = st.create("# 2026-11-21 Saturday\n\n", "daily");
+    const first = {}, second = {};
+    st.setActiveNote(first, note.id);
+    st.setActiveNote(second, note.id);
+    assert.deepEqual(Array.from(st.purgeBlankDateNotes()), []);
+    st.setActiveNote(first, "");
+    assert.deepEqual(Array.from(st.purgeBlankDateNotes()), [], "another open sheet still owns the note");
+    st.setActiveNote(second, "");
+    assert.deepEqual(Array.from(st.purgeBlankDateNotes()), [note.id]);
+    assert.ok(st.get(note.id).trashed);
+  });
+
+  await test("T2.16 onlyIds limits a leave-note purge and Notes sheets wire switch, close and startup sweeps", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const first = st.create("# 2026-11-22 Sunday\n\n", "daily");
+    const second = st.create("# 2026-11-23 Monday\n\n", "daily");
+    assert.deepEqual(Array.from(st.purgeBlankDateNotes({ onlyIds: [first.id] })), [first.id]);
+    assert.equal(st.get(second.id).trashed, 0);
+    const code = source;
+    assert.match(code, /function\s+trackOpenNote\s*\([\s\S]*?store\.setActiveNote/);
+    assert.match(code, /function\s+showNote\s*\(id\)\s*\{[\s\S]*?trackOpenNote\(id\)/);
+    assert.match(code, /store\.purgeBlankDateNotes\?\.\(\);\s*\/\/ sweep stale generated date notes/);
+    assert.match(code, /const leavingId = registeredOpenNote \|\| currentId;[\s\S]*?trackOpenNote\(""\);[\s\S]*?purgeBlankDateNotes/);
+  });
+
+  await test("T2.17 revision arbitration rejects a stale calendar-editor snapshot after a note-text edit", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const note = st.create("# Plan\n\n%%calendar: Work%%\n- 2026-11-24 09:00 Call mom\n");
+    const before = st.items.list({ noteId: note.id })[0];
+    const staleEditor = JSON.parse(JSON.stringify(before));
+    const updatedBody = st.get(note.id).body.replace("Call mom", "Call sister");
+    st.update(note.id, updatedBody);
+    const afterText = st.items.get(before.id);
+    assert.equal(afterText.summary, "Call sister", "the Markdown writer updates the visible item text");
+    assert.equal(afterText.rev, before.rev + 1, "the Markdown writer advances the item revision");
+    const rejected = st.items.upsert({ ...staleEditor, summary: "Stale calendar title", x: { ...staleEditor.x, calNote: "stale modal value" } });
+    assert.equal(rejected, null, "older editor snapshots are rejected instead of silently overwriting the newer note edit");
+    assert.equal(st.items.get(before.id).summary, "Call sister");
+    assert.equal(st.items.get(before.id).x.calNote, "");
+  });
+
+  await test("T2.17 newer calendar details survive a later note-text edit and revisions persist", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const note = st.create("# Plan\n\n%%calendar: Work%%\n- 2026-11-25 09:00 Call mom\n");
+    const initial = st.items.list({ noteId: note.id })[0];
+    const edited = st.items.upsert({ ...initial, x: { ...initial.x, calNote: "Bring the documents", moved: "1" } });
+    assert.ok(edited && edited.rev > initial.rev, "a current editor save advances the revision");
+    const body = st.get(note.id).body.replace("Call mom", "Call dad");
+    st.update(note.id, body);
+    const latest = st.items.get(initial.id);
+    assert.equal(latest.summary, "Call dad", "the later note-text edit wins its source-owned title field");
+    assert.equal(latest.x.calNote, "Bring the documents", "calendar-only metadata is retained during Markdown resync");
+    assert.equal(latest.x.moved, "1", "explicitly moved-item metadata is preserved");
+    assert.ok(latest.rev > edited.rev, "the later Markdown writer advances the revision again");
+    await st.flush();
+    const reopened = mk(io); await reopened.open();
+    assert.equal(reopened.items.get(initial.id).rev, latest.rev, "the revision is persisted to calendar.json");
+    assert.equal(reopened.items.get(initial.id).x.calNote, "Bring the documents");
+  });
+
+  await test("T2.17 a fresh calendar editor can save after refreshing the version", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const note = st.create("# Plan\n\n%%calendar: Work%%\n- 2026-11-26 10:00 Review\n");
+    const before = st.items.list({ noteId: note.id })[0];
+    st.update(note.id, st.get(note.id).body.replace("Review", "Review draft"));
+    const fresh = st.items.get(before.id);
+    const saved = st.items.upsert({ ...fresh, x: { ...fresh.x, calNote: "Use version 2" } });
+    assert.ok(saved, "the current version remains editable");
+    assert.equal(saved.x.calNote, "Use version 2");
+    assert.equal(saved.rev, fresh.rev + 1);
+  });
+
   await test("folder-to-Trash hides reminder items but the destructive-action view can still count them", async () => {
     const io = fakeIO(), st = mk(io); await st.open();
     const body = BODY + "- 2026-11-16 Birthday\n";
@@ -222,6 +354,182 @@ const BODY = "# Plan\n\n## Shifts\n%%calendar: Work%%\n- 2026-11-12 06:00-14:00 
     assert.equal(st.items.list({ noteId: n.id, kind: "reminder", includeHidden: true }).length, 2, "delete confirmation can still count hidden reminders");
     st.restore(n.id);
     assert.equal(st.items.list({ noteId: n.id, kind: "reminder" }).length, 2, "restore makes both reminders visible again");
+  });
+
+  await test("T2.7a history store is versioned, append-only, independently persisted and reloadable", async () => {
+    const io = fakeIO();
+    const history = cal.createReminderHistoryStore({ io, getDir: () => "/n", now: () => clock, setTimer: () => 0, clearTimer() {}, warn() {} });
+    assert.equal((await history.open()).state, "missing");
+    const first = history.append({ itemId: "series-1", occurrenceId: "series-1@100", noteId: "note-a", summary: "Call mom", start: { dateTime: new Date(100).toISOString() }, action: "done" });
+    assert.ok(first && first.id);
+    assert.equal(history.stateFor("series-1", "series-1@100"), "done");
+    assert.equal(history.stateFor("series-1", "series-1@200"), "pending", "recurrence occurrences have independent lifecycle state");
+    await history.flush();
+    const raw = JSON.parse(io.files.get("/n/reminder-history.json").text);
+    assert.equal(raw.v, 1);
+    assert.equal(raw.records.length, 1);
+    const reopened = cal.createReminderHistoryStore({ io, getDir: () => "/n", now: () => clock, setTimer: () => 0, clearTimer() {}, warn() {} });
+    assert.equal((await reopened.open()).state, "ready");
+    assert.equal(reopened.list()[0].action, "done");
+    assert.equal(reopened.stateFor("series-1", "series-1@100"), "done");
+  });
+
+  await test("T2.7a lifecycle transitions are independent of snooze/reschedule and Google status", async () => {
+    const io = fakeIO(), history = cal.createReminderHistoryStore({ io, getDir: () => "/n", now: () => clock, setTimer: () => 0, clearTimer() {}, warn() {} });
+    await history.open();
+    const snapshot = { itemId: "r1", occurrenceId: "r1", noteId: "n1", summary: "Submit report", start: { dateTime: new Date(clock).toISOString() } };
+    history.append({ ...snapshot, action: "done", at: clock + 1 });
+    assert.equal(history.stateFor("r1"), "done");
+    history.append({ ...snapshot, action: "snoozed", at: clock + 2 });
+    history.append({ ...snapshot, action: "rescheduled", at: clock + 3 });
+    assert.equal(history.stateFor("r1"), "done", "schedule-only history never changes completion state");
+    history.append({ ...snapshot, action: "reopened", at: clock + 4 });
+    assert.equal(history.stateFor("r1"), "pending");
+    history.append({ ...snapshot, action: "dismissed", at: clock + 5 });
+    assert.equal(history.stateFor("r1"), "dismissed");
+    const listed = history.list({ itemId: "r1", occurrenceId: "r1", noteId: "n1" });
+    assert.deepEqual(listed.map((entry) => entry.action), ["dismissed", "reopened", "rescheduled", "snoozed", "done"]);
+    assert.deepEqual(history.list({ itemId: "r1", limit: 2, offset: 0 }).map((entry) => entry.action), ["dismissed", "reopened"]);
+    assert.deepEqual(history.list({ itemId: "r1", limit: 2, offset: 2 }).map((entry) => entry.action), ["rescheduled", "snoozed"]);
+    assert.deepEqual(history.list({ itemId: "r1", limit: 2, offset: 4 }).map((entry) => entry.action), ["done"]);
+    const copy = listed[0]; copy.summary = "mutated";
+    assert.equal(history.list()[0].summary, "Submit report", "callers cannot mutate stored records");
+    const item = cal.makeItem({ id: "r1", summary: "Submit report", start: { dateTime: new Date(clock).toISOString() }, status: "tentative", x: { kind: "reminder" } }, clock);
+    assert.equal(item.status, "tentative", "Google status remains independent of lifecycle state");
+  });
+
+  await test("T2.7a corrupt history is backed up and protected from accidental overwrite", async () => {
+    const io = fakeIO(); io.files.set("/n/reminder-history.json", { text: '{"v":99,"records":[]}', mtime: clock });
+    const history = cal.createReminderHistoryStore({ io, getDir: () => "/n", now: () => clock, setTimer: () => 0, clearTimer() {}, warn() {} });
+    const state = await history.open();
+    assert.equal(state.state, "corrupt");
+    assert.ok(state.backupPath && io.files.has(state.backupPath));
+    assert.equal(history.append({ itemId: "r1", action: "done", at: clock + 1 }), null, "protected history refuses unpersistable lifecycle actions");
+    await history.flush();
+    assert.equal(io.files.get("/n/reminder-history.json").text, '{"v":99,"records":[]}', "the damaged original is not overwritten");
+  });
+
+  await test("T2.7a protected history refuses a note-reminder lifecycle transition without changing its schedule", async () => {
+    const io = fakeIO(); io.files.set("/n/reminder-history.json", { text: '{"v":1,"records":[broken]}', mtime: clock });
+    const st = mk(io); await st.open();
+    const note = st.create("# Protected reminder");
+    assert.equal(st.setReminder(note.id, clock + 3600000), true, "a first pending reminder needs no transition record");
+    const before = st.get(note.id).remind;
+    assert.equal(st.setReminder(note.id, 0), false, "dismiss cannot proceed when history is unreadable");
+    assert.equal(st.get(note.id).remind, before, "the reminder remains scheduled rather than silently losing its dismissal history");
+  });
+
+  await test("T2.7a reminder item rescheduling appends history without changing calendar status", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const note = st.create("%%calendar: Personal%%\n- 2026-11-28 09:00 Submit report\n");
+    const item = st.items.list({ noteId: note.id })[0];
+    st.items.upsert({ ...item, status: "tentative", start: { dateTime: new Date(clock + 3600000).toISOString() } });
+    assert.equal(st.items.get(item.id).status, "tentative");
+    assert.equal(st.items.history.list({ itemId: item.id }).at(-1)?.action, "rescheduled");
+    assert.equal(st.items.history.stateFor(item.id), "pending");
+    await st.flush();
+    assert.ok(io.files.has("/n/reminder-history.json"));
+    const again = mk(io); await again.open();
+    assert.equal(again.items.history.list({ itemId: item.id }).length, 1);
+  });
+
+  await test("T2.7a legacy note reminders record reschedule, snooze, dismiss and reopen transitions", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const note = st.create("# Appointment\n\nFollow up");
+    const itemId = "note-reminder:" + note.id;
+    assert.equal(st.setReminder(note.id, clock + 3600000), true);
+    assert.equal(st.items.history.list({ itemId }).length, 0, "creating a pending reminder does not fabricate a lifecycle transition");
+    assert.equal(st.setReminder(note.id, clock + 7200000), true);
+    assert.equal(st.items.history.list({ itemId })[0]?.action, "rescheduled");
+    assert.equal(st.snoozeReminder(note.id, 15), true);
+    assert.equal(st.items.history.list({ itemId })[0]?.action, "snoozed");
+    assert.equal(st.items.history.stateFor(itemId), "pending", "snoozing does not complete the reminder");
+    assert.equal(st.setReminder(note.id, 0), true);
+    assert.equal(st.items.history.stateFor(itemId), "dismissed");
+    assert.equal(st.setReminder(note.id, clock + 10800000), true);
+    assert.equal(st.items.history.stateFor(itemId), "pending");
+    assert.deepEqual(st.items.history.list({ itemId }).map((entry) => entry.action), ["reopened", "dismissed", "snoozed", "rescheduled"]);
+    await st.flush();
+    const again = mk(io); await again.open();
+    assert.equal(again.items.history.list({ itemId }).length, 4, "legacy reminder lifecycle survives reload");
+  });
+
+  await test("T2.7a a legacy note reminder recreated after Done reopens instead of inheriting completion", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const note = st.create("# Repeated task");
+    const itemId = "note-reminder:" + note.id;
+    st.setReminder(note.id, clock + 3600000);
+    st.setReminder(note.id, 0, "done");
+    assert.equal(st.items.history.stateFor(itemId), "done");
+    st.setReminder(note.id, clock + 7200000);
+    assert.equal(st.items.history.stateFor(itemId), "pending");
+    assert.deepEqual(st.items.history.list({ itemId }).map((entry) => entry.action), ["reopened", "done"]);
+  });
+
+  await test("T2.7a equal-timestamp transitions preserve append order after reload", async () => {
+    const io = fakeIO(), history = cal.createReminderHistoryStore({ io, getDir: () => "/n", now: () => clock, setTimer: () => 0, clearTimer() {}, warn() {} });
+    await history.open();
+    const base = { itemId: "same-time", occurrenceId: "same-time", at: clock };
+    history.append({ ...base, action: "done" });
+    history.append({ ...base, action: "reopened" });
+    assert.equal(history.stateFor("same-time"), "pending");
+    await history.flush();
+    const again = cal.createReminderHistoryStore({ io, getDir: () => "/n", now: () => clock, setTimer: () => 0, clearTimer() {}, warn() {} });
+    await again.open();
+    assert.equal(again.stateFor("same-time"), "pending");
+    assert.deepEqual(again.list().map((entry) => entry.action), ["reopened", "done"]);
+  });
+
+  await test("T2.19 snoozing a stored reminder records a scheduling action without rewriting its source note", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const body = "%%calendar: Personal%%\n- 2026-11-28 09:00 Follow up with supplier\n";
+    const note = st.create(body);
+    const sourceBefore = st.get(note.id).body;
+    const item = st.items.list({ noteId: note.id })[0];
+    const moved = st.items.upsert({ ...item, start: { dateTime: "2026-11-29T08:00:00.000Z" }, historyAction: "snoozed" });
+    assert.ok(moved);
+    assert.equal(st.get(note.id).body, sourceBefore, "snooze changes the calendar schedule, not Markdown source text");
+    assert.equal(st.items.history.list({ itemId: item.id })[0]?.action, "snoozed");
+    assert.equal(st.items.history.stateFor(item.id), "pending", "snooze never implies completion");
+    await st.flush();
+    const again = mk(io); await again.open();
+    assert.equal(again.items.history.list({ itemId: item.id })[0]?.action, "snoozed");
+  });
+
+  await test("T2.7a reminder right-click actions and history are connected to the shared menu engine", () => {
+    assert.match(source, /function\s+showCalendarItemMenu\s*\([\s\S]*?showMenu\(anchor\s*\|\|\s*\(event\s*\?\s*pointAnchor\(event\)/);
+    assert.match(source, /"mark-done":\s*\(\)\s*=>\s*recordReminderLifecycle\(item,\s*["']done["']\)/);
+    assert.match(source, /dismiss:\s*\(\)\s*=>\s*recordReminderLifecycle\(item,\s*["']dismissed["']\)/);
+    assert.match(source, /reopen:\s*\(\)\s*=>\s*recordReminderLifecycle\(item,\s*["']reopened["']\)/);
+    assert.match(calendarSource, /action\("mark-done",\s*"Mark as done"/);
+    assert.match(calendarSource, /action\("dismiss",\s*"Dismiss"/);
+    assert.match(calendarSource, /action\("reopen",\s*"Reopen"/);
+    assert.match(source, /function\s+openReminderHistory\s*\([\s\S]*?history\?\.list\(\{\s*limit:\s*pageSize,\s*offset\s*\}\)/);
+    assert.ok(source.includes('Load older entries'));
+    assert.ok(source.includes('Showing ${offset} of ${total} entries'));
+    assert.match(source, /label:\s*["']Reminder history…["']/);
+  });
+
+  await test("T2.7a recurring note-derived occurrences receive independent history identities", () => {
+    const ordinary = cal.reminderIdentity({ id: "legacy", x: { src: "note", noteId: "n1" } });
+    assert.deepEqual(ordinary, { itemId: "note-reminder:n1", occurrenceId: "note-reminder:n1", noteId: "n1", legacyNote: true });
+    const recurringMaster = cal.reminderIdentity({ id: "series-1", recurrence: ["RRULE:FREQ=DAILY"], x: { src: "note", noteId: "n1" } });
+    assert.deepEqual(recurringMaster, { itemId: "series-1", occurrenceId: "series-1", noteId: "n1", legacyNote: false });
+    const expanded = cal.reminderIdentity({ id: "series-1@1794502800000", x: { src: "note", noteId: "n1", series: "series-1" } });
+    assert.deepEqual(expanded, { itemId: "series-1", occurrenceId: "series-1@1794502800000", noteId: "n1", legacyNote: false });
+    assert.equal(cal.reminderIdentity({ x: {} }), null);
+    const history = cal.createReminderHistoryStore({ io: fakeIO(), getDir: () => "/n", now: () => clock, setTimer: () => 0, clearTimer() {}, warn() {} });
+    history.append({ ...expanded, action: "done", at: clock + 1 });
+    assert.equal(history.stateFor("series-1", "series-1@1794502800000"), "done");
+    assert.equal(history.stateFor("series-1", "series-1@1794502800001"), "pending");
+  });
+
+  await test("T2.7a history validation rejects invalid action and incomplete identity", () => {
+    const history = cal.createReminderHistoryStore({ io: fakeIO(), getDir: () => "/n", now: () => clock, setTimer: () => 0, clearTimer() {}, warn() {} });
+    assert.equal(history.append({ itemId: "x", action: "unknown", at: clock }), null);
+    assert.equal(history.append({ itemId: "", action: "done", at: clock }), null);
+    assert.equal(history.append({ itemId: "x", action: "done", at: 0 }), null);
+    assert.equal(history.list().length, 0);
   });
 
   console.log(passed + " passed" + (failed ? ", " + failed + " FAILED" : ""));

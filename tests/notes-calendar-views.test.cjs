@@ -83,7 +83,7 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(root.querySelectorAll(".zn-cal-day-group").length, 14, "upcoming view expands exactly the selected number of days");
   assert.ok(root.querySelectorAll(".zn-cal-item").some((el) => el.textContent.includes("Daily check-in")), "recurring reminder occurrences appear in forward view");
 
-  // T2.4c3: finder uses recurring-aware freeSlots; selecting a result opens a small event composer.
+  // T2.4c3/T2.3f: finder uses recurring-aware freeSlots; selecting a result opens the full event composer.
   await chooseMenu(root, ".zn-calendar-tools", "When am I free?…");
   assert.ok(q(root, '.zn-dialog-card[aria-label="When am I free?"]'), "free-slot finder opens an accessible dialog");
   const freeFind = root.querySelectorAll(".zn-dialog-card button").find((el) => el.textContent.trim() === "Find free times");
@@ -97,11 +97,19 @@ const chooseMenu = async (root, triggerSelector, label) => {
   const firstSlot = q(root, ".zn-cal-free-slot");
   assert.ok(firstSlot, "finder shows at least one available slot in the selected week");
   firstSlot.click();
-  const eventTitle = root.querySelector('[aria-label="Event title"]');
-  assert.ok(eventTitle, "choosing a slot opens the event composer");
+  const composer = q(root, ".zn-cal-compose-card");
+  assert.ok(composer, "choosing a slot opens the full event composer");
+  const eventTitle = q(composer, '[aria-label="Title"]');
+  const slotStartDate = q(composer, '[aria-label="Start date"]');
+  const slotStartTime = q(composer, '[aria-label="Start time"]');
+  const slotEndDate = q(composer, '[aria-label="End date (exclusive)"]');
+  const slotEndTime = q(composer, '[aria-label="End time"]');
+  assert.ok(slotStartDate.value && slotStartTime.value && slotEndDate.value && slotEndTime.value, "the selected slot pre-fills both dates and shared-clock times");
   eventTitle.value = "Focus block";
-  root.querySelectorAll(".zn-dialog-card button").find((el) => el.textContent.trim() === "Create event").click();
-  assert.ok(store.items.list().some((item) => item.summary === "Focus block" && item.x.kind === "event"), "chosen free slot creates a standalone timed event");
+  composer.querySelectorAll("button").find((el) => el.textContent.trim() === "Create event").click();
+  const createdFromSlot = store.items.list().find((item) => item.summary === "Focus block" && item.x.kind === "event");
+  assert.ok(createdFromSlot, "chosen free slot creates a standalone timed event");
+  assert.ok(Date.parse(createdFromSlot.end.dateTime) > Date.parse(createdFromSlot.start.dateTime), "the created event preserves a valid positive duration");
   q(root, ".zn-calendar-today").click(); await flushRaf();
   await chooseMenu(root, ".zn-calendar-view-select", "Month");
 

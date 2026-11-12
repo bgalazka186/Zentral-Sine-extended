@@ -241,7 +241,7 @@
   }
   const etagOf = (it) => {
     let h = 5381;
-    const s = JSON.stringify([it.summary, it.description, it.start, it.end, it.status, it.recurrence, it.x]);
+    const s = JSON.stringify([it.summary, it.description, it.start, it.end, it.status, it.recurrence, it.x, it.rev]);
     for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
     return '"' + (h >>> 0).toString(36) + '"';
   };
@@ -314,6 +314,8 @@
       description: String(raw.description ?? "").slice(0, MAX_DESC),
       start, status,
       updated: typeof raw.updated === "string" && Number.isFinite(Date.parse(raw.updated)) ? raw.updated : iso(now || Date.now()),
+      // Monotonic per-record revision breaks same-millisecond write ties across the calendar and Markdown writers.
+      rev: Number.isSafeInteger(raw.rev) && raw.rev >= 0 ? raw.rev : 0,
       recurrence: Array.isArray(raw.recurrence) ? raw.recurrence.filter((r) => typeof r === "string" && /^(RRULE|EXRULE|RDATE|EXDATE):/.test(r)).slice(0, 5) : [],
       reminders: { overrides: minutes },
       x: {
@@ -670,8 +672,167 @@
   // store uses (readUTF8, writeUTF8). Items made from a note's marked lists (src "list") are rebuilt by syncNote; the person's
   // own additions (src "manual") and the extras on a listed item (calendar note, reminders, status, a moved time) survive.
   const ITEMS_FILE = "calendar.json";
+  // Reminder lifecycle is intentionally separate from Google Calendar's `status` field. Records are
+  // immutable snapshots in their own versioned file; history is retained indefinitely (no silent pruning).
+  const REMINDER_HISTORY_FILE = "reminder-history.json";
+  const REMINDER_HISTORY_ACTIONS = Object.freeze(["done", "dismissed", "reopened", "snoozed", "rescheduled"]);
+  function cleanReminderHistoryRecord(raw, fallbackAt = 0) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    const action = REMINDER_HISTORY_ACTIONS.includes(raw.action) ? raw.action : "";
+    const itemId = String(raw.itemId || "").trim().slice(0, 120);
+    const occurrenceId = String(raw.occurrenceId || itemId).trim().slice(0, 160);
+    const stamp = raw.at === undefined || raw.at === null || raw.at === "" ? fallbackAt : raw.at;
+    const at = Number.isFinite(Number(stamp)) && Number(stamp) > 0 ? Math.floor(Number(stamp)) : 0;
+    if (!action || !itemId || !occurrenceId || !at) return null;
+    const start = cleanWhen(raw.start);
+    return {
+      id: String(raw.id || makeId(itemId + "|" + occurrenceId + "|" + action + "|" + at)).slice(0, 140),
+      seq: Number.isSafeInteger(raw.seq) && raw.seq > 0 ? raw.seq : 0,
+      itemId, occurrenceId, noteId: String(raw.noteId || "").slice(0, 120),
+      summary: String(raw.summary || "").slice(0, MAX_TEXT), start: start ? { ...start } : null,
+      action, at,
+    };
+  }
+  function reminderStateAfter(action, current = "pending") {
+    if (action === "done") return "done";
+    if (action === "dismissed") return "dismissed";
+    if (action === "reopened") return "pending";
+    // Snoozing/rescheduling changes only when the reminder is due; it never completes or dismisses it.
+    return current === "done" || current === "dismissed" ? current : "pending";
+  }
+  // Stable history identity: an ordinary legacy note reminder has one namespaced state, while
+  // recurring note-derived occurrences retain the series ID plus their expanded occurrence ID.
+  function reminderIdentity(item) {
+    if (!item || typeof item !== "object") return null;
+    const x = item.x && typeof item.x === "object" ? item.x : {};
+    const noteId = String(x.noteId || "").trim();
+    const recurring = !!String(x.series || "") || (Array.isArray(item.recurrence) && item.recurrence.length > 0);
+    if (x.src === "note" && noteId && !recurring) {
+      const itemId = "note-reminder:" + noteId;
+      return { itemId, occurrenceId: itemId, noteId, legacyNote: true };
+    }
+    const itemId = String(x.series || item.id || "").trim();
+    if (!itemId) return null;
+    return { itemId, occurrenceId: String(item.id || itemId), noteId, legacyNote: false };
+  }
+  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400 }) {
+    const records = [];
+    const lifecycle = new Map();
+    let nextSeq = 1;
+    let dirty = false, timer = null, chain = Promise.resolve(), writeBlocked = false, retryCount = 0;
+    const transitionAction = (action) => ["done", "dismissed", "reopened"].includes(action);
+    const lifecycleKey = (itemId, occurrenceId) => String(itemId) + "\u0000" + String(occurrenceId);
+    const indexTransition = (record) => {
+      if (!transitionAction(record.action)) return;
+      const key = lifecycleKey(record.itemId, record.occurrenceId), old = lifecycle.get(key);
+      if (!old || record.at > old.at || (record.at === old.at && record.seq > old.seq)) lifecycle.set(key, record);
+    };
+    let storage = { state: "unopened", error: "", backupPath: "" };
+    const safeWarn = (error) => { try { warn(error); } catch (_) {} };
+    const state = () => ({ ...storage, dirty, writeBlocked, retryCount, count: records.length });
+    const scheduleTimer = (ms = delayMs) => {
+      if (timer !== null) clearTimer(timer);
+      timer = setTimer(() => { timer = null; writeNow().catch(() => {}); }, ms);
+    };
+    const schedule = () => { dirty = true; if (!writeBlocked) scheduleTimer(); };
+    function writeNow() {
+      if (timer !== null) { clearTimer(timer); timer = null; }
+      const dir = getDir();
+      if (!dirty || !dir) return chain;
+      if (writeBlocked) return Promise.reject(new Error("Reminder history is protected because its existing file could not be read safely."));
+      const text = JSON.stringify({ v: 1, records: records.map((record) => ({ ...record, start: record.start ? { ...record.start } : null })) });
+      dirty = false;
+      const task = chain.catch(() => {}).then(async () => {
+        try {
+          await io.writeUTF8(io.join(dir, REMINDER_HISTORY_FILE), text, { tmpPath: io.join(dir, REMINDER_HISTORY_FILE + ".tmp") });
+          retryCount = 0;
+          if (["unopened", "missing", "recovery-pending"].includes(storage.state)) storage = { ...storage, state: "ready", error: "" };
+          if (dirty && timer === null && !writeBlocked) scheduleTimer();
+          return true;
+        } catch (error) {
+          dirty = true; retryCount++; safeWarn(error);
+          if (retryCount <= 3 && timer === null && !writeBlocked) scheduleTimer(Math.min(delayMs * Math.pow(2, retryCount), 5000));
+          throw error;
+        }
+      });
+      chain = task;
+      return task;
+    }
+    return {
+      async open() {
+        const dir = getDir();
+        if (!dir) return state();
+        const file = io.join(dir, REMINDER_HISTORY_FILE);
+        let text;
+        try { text = await io.readUTF8(file); }
+        catch (error) {
+          const message = String(error?.message || error || "");
+          const missing = error?.code === "ENOENT" || error?.name === "NotFoundError" || /(?:^|\b)(?:nf|not found|no such file|does not exist|NS_ERROR_FILE_NOT_FOUND)(?:\b|$)/i.test(message);
+          let exists = !missing;
+          if (typeof io.exists === "function") { try { exists = await io.exists(file); } catch (_) { exists = true; } }
+          if (!exists || missing) {
+            records.length = 0; lifecycle.clear(); nextSeq = 1; dirty = false; writeBlocked = false; retryCount = 0;
+            storage = { state: "missing", error: "", backupPath: "" };
+          } else {
+            writeBlocked = true; storage = { state: "unreadable", error: String(error?.message || error), backupPath: "" }; safeWarn(error);
+          }
+          return state();
+        }
+        let parsed;
+        try {
+          parsed = JSON.parse(text);
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.v !== 1 || !Array.isArray(parsed.records)) throw new Error("Reminder history has an unsupported or damaged structure.");
+          const clean = parsed.records.map((record) => cleanReminderHistoryRecord(record, now()));
+          if (clean.some((record) => !record)) throw new Error("Reminder history contains an invalid record.");
+          const seen = new Set();
+          if (clean.some((record) => seen.has(record.id) || !seen.add(record.id))) throw new Error("Reminder history contains duplicate record IDs.");
+          clean.forEach((record, index) => { if (!record.seq) record.seq = index + 1; });
+          records.splice(0, records.length, ...clean);
+          lifecycle.clear();
+          for (const record of records) indexTransition(record);
+          nextSeq = records.reduce((max, record) => Math.max(max, record.seq), 0) + 1;
+        } catch (error) {
+          const stamp = Math.max(0, Math.floor(Number(now()) || Date.now()));
+          const base = file + ".corrupt-" + stamp + ".bak";
+          let backupPath = base, suffix = 1;
+          if (typeof io.exists === "function") { try { while (await io.exists(backupPath)) backupPath = base.replace(/\.bak$/, "-" + (++suffix) + ".bak"); } catch (_) {} }
+          let backedUp = false;
+          try { await io.writeUTF8(backupPath, String(text), { tmpPath: backupPath + ".tmp" }); backedUp = true; } catch (backupError) { safeWarn(backupError); }
+          writeBlocked = true; storage = { state: "corrupt", error: String(error?.message || error), backupPath: backedUp ? backupPath : "" }; safeWarn(error);
+          return state();
+        }
+        dirty = false; writeBlocked = false; retryCount = 0; storage = { state: "ready", error: "", backupPath: "" };
+        return state();
+      },
+      storageState: state,
+      append(raw) {
+        if (writeBlocked) return null;
+        const record = cleanReminderHistoryRecord({ ...raw, seq: nextSeq, at: raw?.at ?? now() }, now());
+        if (!record) return null;
+        nextSeq = Math.max(nextSeq + 1, record.seq + 1);
+        // Immutable append: duplicate records are allowed because repeated transitions are meaningful.
+        records.push(record); indexTransition(record); schedule();
+        return { ...record, start: record.start ? { ...record.start } : null };
+      },
+      list({ itemId = "", occurrenceId = "", noteId = "", limit = 0, offset = 0 } = {}) {
+        let out = records.filter((record) => (!itemId || record.itemId === itemId) && (!occurrenceId || record.occurrenceId === occurrenceId) && (!noteId || record.noteId === noteId));
+        out = out.slice().sort((a, b) => b.at - a.at || b.seq - a.seq);
+        const max = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Math.min(10000, Math.floor(Number(limit))) : 0;
+        const skip = Number.isFinite(Number(offset)) ? Math.max(0, Math.min(out.length, Math.floor(Number(offset)))) : 0;
+        return (max ? out.slice(skip, skip + max) : out.slice(skip)).map((record) => ({ ...record, start: record.start ? { ...record.start } : null }));
+      },
+      stateFor(itemId, occurrenceId = itemId) {
+        const latest = lifecycle.get(lifecycleKey(itemId, occurrenceId));
+        // Snooze/reschedule records do not alter lifecycle state; only state transitions enter this index.
+        return latest ? reminderStateAfter(latest.action) : "pending";
+      },
+      flush: writeNow,
+    };
+  }
+
   function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600 }) {
     const items = new Map();
+    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs });
     const categoryDefs = new Map();
     const hidden = new Set(); // noteIds whose items stay stored but are not shown (note in Trash, or its file is missing)
     const listeners = new Set();
@@ -719,6 +880,7 @@
     }
     return {
       async open() {
+        try { await history.open(); } catch (error) { safeWarn(error); }
         const file = io.join(getDir(), ITEMS_FILE);
         let text;
         try {
@@ -831,10 +993,26 @@
       showNote(noteId) { if (!hidden.delete(noteId)) return false; emit("change", noteId); return true; },
       isHidden: (noteId) => hidden.has(noteId),
       upsert(raw) {
-        const it = cleanItem({ ...raw, updated: iso(now()), etag: "" }, now());
+        const stamp = now();
+        const it = cleanItem({ ...raw, updated: raw?.updated || iso(stamp), etag: "" }, stamp);
         if (!it) return null;
         const old = items.get(it.id);
+        if (old) {
+          // A modal may still hold the version it opened. Do not let that older snapshot overwrite a newer edit
+          // made from the note text (or another calendar editor) while the modal was open.
+          if (lwwPick(old, it) !== it) return null;
+          it.rev = Math.min(Number.MAX_SAFE_INTEGER, Math.max(old.rev || 0, it.rev || 0) + 1);
+        } else {
+          it.rev = Math.max(1, it.rev || 0);
+        }
+        it.updated = iso(stamp);
+        it.etag = etagOf(it);
         if (old && JSON.stringify(old) === JSON.stringify(it)) return old;
+        if (old && isReminder(it) && JSON.stringify(old.start) !== JSON.stringify(it.start)) {
+          const action = raw?.historyAction === "snoozed" ? "snoozed" : "rescheduled";
+          const record = history.append({ itemId: it.id, occurrenceId: String(raw?.occurrenceId || it.id), noteId: it.x.noteId, summary: it.summary, start: it.start, action, at: stamp });
+          if (!record) return null; // Never accept a lifecycle transition that cannot be recorded safely.
+        }
         items.set(it.id, it); schedule(); emit("change", it.id);
         return it;
       },
@@ -851,7 +1029,7 @@
       // Rebuild the note-derived items. During upgrade, migrate extras from legacy IDs using the old content/ordinal key.
       // Thereafter exact line IDs win; unique legacy matches are safe, while an unidentified duplicate never inherits
       // another duplicate's metadata.
-      syncNote(noteId, body) {
+      syncNote(noteId, body, { sourceEdit = false, updatedAt = 0 } = {}) {
         const had = [...items.values()].filter((it) => it.x.noteId === noteId && it.x.src === "list");
         if (!had.length && !/%%\s*calendar/i.test(String(body || ""))) return false;
         const fresh = extractNoteItems(body, noteId, now());
@@ -879,11 +1057,18 @@
             else if (duplicate && f._lineId && candidates.length === 1 && !candidates[0].x.legacyKey && candidates[0].x.key === f._legacyKey && oldCounts.get(groupKey) === newCounts.get(groupKey)) old = candidates[0];
           }
           if (old) usedOld.add(old.id);
-          let next = cleanItem(f, 0);
+          // `f.etag` was computed for the parsed revision. Recompute it after applying the store's revision.
+          let next = cleanItem({ ...f, rev: 1, etag: "", updated: Number.isFinite(Number(updatedAt)) && Number(updatedAt) > 0 ? iso(Number(updatedAt)) : f.updated }, 0);
           if (old) {
-            next = cleanItem({ ...f, start: old.start, end: old.end, status: old.status, reminders: old.reminders, recurrence: old.recurrence.length ? old.recurrence : f.recurrence, updated: old.updated,
+            const revision = sourceEdit ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, old.rev || 0) + 1) : Math.max(0, old.rev || 0);
+            const stamp = sourceEdit && Number.isFinite(Number(updatedAt)) && Number(updatedAt) > 0 ? iso(Number(updatedAt)) : old.updated;
+            next = cleanItem({ ...f, start: old.start, end: old.end, status: old.status, reminders: old.reminders, recurrence: old.recurrence.length ? old.recurrence : f.recurrence, updated: stamp, rev: revision, etag: "",
               x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify } }, 0);
             next.x.heading = f.x.heading; next.x.category = f.x.category;
+            // The text writer is a newer logical version whenever a body edit triggered this sync. Otherwise
+            // lwwPick provides the documented equal-version remote-wins tie break while preserving old extras above.
+            const winner = lwwPick(old, next);
+            next = winner;
             next.etag = etagOf(next);
             if (old.id === next.id) retainedOld.add(old.id);
           }
@@ -896,7 +1081,8 @@
         return changed;
       },
       on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-      flush: writeNow,
+      history,
+      flush() { return Promise.all([writeNow(), history.flush()]); },
     };
   }
 
@@ -1177,6 +1363,64 @@
   }
   // Display title of a date-bound note: always derived, never stored as a key.
   const dateNoteTitle = (key, fmt, prefix = "Reminders for ", locale) => { const t = formatDateKey(key, fmt, locale); return t ? prefix + t : ""; };
+  // Read an existing date title / Journal heading back into its immutable local ISO key. The selected format is
+  // tried first to resolve the inherently ambiguous MM/DD vs DD/MM case; every other supported format is then
+  // accepted so changing the display preference never strands older date notes. New generated headings remain ISO.
+  function parseDateKeyText(value, preferredFormat = DEFAULT_DATE_FORMAT, locale) {
+    const text = String(value ?? "").trim();
+    if (!text) return "";
+    const validKey = (year, month, day) => {
+      if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day) || year < 1000 || year > 9999) return "";
+      const key = String(year).padStart(4, "0") + "-" + p2(month) + "-" + p2(day);
+      return parseYmd(key) ? key : "";
+    };
+    let m = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?=$|[\s,])/.exec(text);
+    if (m) return validKey(+m[1], +m[2], +m[3]);
+    const patterns = {
+      "DD-MM-YYYY": /^(\d{1,2})-(\d{1,2})-(\d{4})(?=$|[\s,])/,
+      "YYYY-MM-DD": /^(\d{4})-(\d{1,2})-(\d{1,2})(?=$|[\s,])/,
+      "MM/DD/YYYY": /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?=$|[\s,])/,
+      "DD.MM.YYYY": /^(\d{1,2})\.(\d{1,2})\.(\d{4})(?=$|[\s,])/,
+      "DD/MM/YYYY": /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?=$|[\s,])/,
+    };
+    const formats = [cleanDateFormat(preferredFormat), ...DATE_FORMATS.filter((f) => f !== cleanDateFormat(preferredFormat))];
+    for (const fmt of formats) {
+      const pattern = patterns[fmt];
+      if (!pattern) continue;
+      m = pattern.exec(text);
+      if (!m) continue;
+      const yearFirst = fmt === "YYYY-MM-DD";
+      const a = +m[1], b = +m[2], year = +(yearFirst ? m[1] : m[3]);
+      const month = yearFirst ? b : fmt === "MM/DD/YYYY" ? a : b;
+      const day = yearFirst ? +m[3] : fmt === "MM/DD/YYYY" ? b : a;
+      const key = validKey(year, month, day);
+      if (key) return key;
+    }
+    // `long` follows the active Firefox locale. Read its month lexemes through Intl rather than Date.parse,
+    // which only reliably understands English. Day and year remain numeric in the Intl output.
+    try {
+      const lower = text.toLocaleLowerCase(locale || undefined);
+      const yearMatch = /(?:^|[^0-9])(\d{4})(?:$|[^0-9])/.exec(text);
+      if (!yearMatch) return "";
+      const year = Number(yearMatch[1]);
+      const numbers = [...text.matchAll(/\d{1,4}/g)].map((x) => Number(x[0]));
+      const day = numbers.find((n) => n !== year && n >= 1 && n <= 31);
+      if (!day) return "";
+      const monthNames = new Map();
+      for (let month = 0; month < 12; month++) {
+        for (const sampleDay of [1, 2, 15, 21]) {
+          const parts = new Intl.DateTimeFormat(locale || undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" }).formatToParts(new Date(2026, month, sampleDay));
+          const name = parts.find((part) => part.type === "month")?.value;
+          if (name) monthNames.set(name.toLocaleLowerCase(locale || undefined), month + 1);
+        }
+      }
+      const names = [...monthNames.keys()].sort((a, b) => b.length - a.length);
+      const found = names.find((name) => name && lower.includes(name));
+      return found ? validKey(year, monthNames.get(found), day) : "";
+    } catch (_) {
+      return "";
+    }
+  }
   // Agenda window: today .. today+days-1 (default 4 days = T..T+3). Counts live items per local day (recurrences expanded); `isDone(item)` is supplied by the reminder lifecycle (T2.7a), the item model has no done flag yet.
   const AGENDA_LABELS = Object.freeze(["Today", "Tomorrow", "Day 2", "Day 3"]);
   function agendaBuckets(items, now, days = 4, isDone = () => false) {
@@ -1190,8 +1434,169 @@
     }
     return out;
   }
+  // Per-target context menu model for calendar rows. This stays pure so every calendar surface can
+  // render the same capabilities and reasons without duplicating lifecycle/source rules.
+  function calendarItemMenuModel(item, { state = "pending", historyWritable = false } = {}) {
+    if (!item || typeof item !== "object" || !String(item.id || "")) return [];
+    const reminder = isReminder(item);
+    const source = ["list", "note", "manual"].includes(item.x?.src) ? item.x.src : "manual";
+    const manual = source === "manual";
+    const recurring = !!item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length > 0);
+    const lifecycle = ["pending", "done", "dismissed"].includes(state) ? state : "pending";
+    const action = (id, label, enabled = true, reason = "") => ({ id, command: id, label, enabled: !!enabled, reason: enabled ? "" : String(reason || "Unavailable in the current state") });
+    const rows = [
+      action("open", item.x?.noteId ? "Open source note" : "Show details"),
+      action("edit", "Edit details…"),
+      action("change-time", "Change time…", !recurring && source !== "note", recurring ? "Recurring occurrences need exception support before they can be moved" : "This note reminder is scheduled in its source note"),
+      action("convert", reminder ? "Convert to event" : "Convert to reminder", manual, "Items parsed from a note keep the type defined by their source text"),
+      { sep: true },
+      action("duplicate", "Duplicate as independent item"),
+      action("delete", "Delete item…", manual, "Remove this item from its source note instead of deleting only its calendar copy"),
+    ];
+    if (reminder) {
+      const writable = !!historyWritable;
+      rows.push(
+        { sep: true },
+        { heading: true, label: "Reminder · " + lifecycle },
+        action("mark-done", "Mark as done", writable && lifecycle !== "done", !writable ? "Reminder history storage is protected or unavailable" : "Already done"),
+        action("dismiss", "Dismiss", writable && lifecycle !== "dismissed", !writable ? "Reminder history storage is protected or unavailable" : "Already dismissed"),
+        action("reopen", "Reopen", writable && lifecycle !== "pending", !writable ? "Reminder history storage is protected or unavailable" : "Already pending"),
+        { id: "snooze", command: "snooze", label: "Snooze", group: [
+          action("snooze-1d", "Snooze +1 day", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
+          action("snooze-3d", "Snooze +3 days", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
+          action("snooze-monday", "Snooze until next Monday", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
+          action("snooze-custom", "Custom date and time…", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
+        ] },
+      );
+    }
+    return rows;
+  }
+
   // Snooze helper: whole local days later, keeping the wall-clock time (DST-safe). Returns ms.
   const snoozeDays = (ms, n) => addDays(ms, Math.round(Number(n) || 0));
+  // Convert a wall-clock date/time in an IANA zone to an instant. During a fall-back overlap the earlier
+  // instant wins; during a spring-forward gap the first valid wall minute after the requested time wins.
+  function zonedDateTimeToMs(dateKey, timeText, zone = "") {
+    const day = parseYmd(dateKey), clock = /^(\d{1,2}):(\d{2})$/.exec(String(timeText || "").trim());
+    if (!day || !clock) return null;
+    const hour = Number(clock[1]), minute = Number(clock[2]);
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23 || !Number.isInteger(minute) || minute < 0 || minute > 59) return null;
+    if (!zone) return new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, minute).getTime();
+    const validZone = cleanZone(zone);
+    if (!validZone) return null;
+    const targetWall = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate(), hour, minute);
+    const targetEnd = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+    let formatter;
+    try {
+      formatter = new Intl.DateTimeFormat("en-US", { timeZone: validZone, calendar: "gregory", numberingSystem: "latn", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+    } catch (_) { return null; }
+    let exact = null, next = null, nextWall = Infinity;
+    const from = targetWall - 16 * 60 * MIN, to = targetWall + 16 * 60 * MIN;
+    for (let at = from; at <= to; at += MIN) {
+      const parts = Object.create(null);
+      for (const part of formatter.formatToParts(new Date(at))) if (part.type !== "literal") parts[part.type] = Number(part.value);
+      if (![parts.year, parts.month, parts.day, parts.hour, parts.minute].every(Number.isFinite)) continue;
+      const wall = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+      if (wall === targetWall) { exact = at; break; }
+      if (wall > targetWall && wall < targetEnd && (wall < nextWall || (wall === nextWall && (next === null || at < next)))) { nextWall = wall; next = at; }
+    }
+    return exact === null ? next : exact;
+  }
+  // Turn a date-bearing sentence into a human title without leaving a dangling date preposition.
+  // This is intentionally conservative: only the recognised date token and a trailing connector are removed.
+  function titleFromDateText(text, dateToken) {
+    let value = String(text ?? "").replace(/%%\s*zn-date-ignore:[^%]*%%/gi, "");
+    const token = String(dateToken ?? "").trim();
+    if (token) value = value.replace(token, " ").replace(/\b(?:on|at|by|for)\s*$/i, "");
+    return value.replace(/\s+/g, " ").trim().slice(0, MAX_TEXT);
+  }
+
+  // Source-note colour is authoritative for linked items; category colour is only the fallback.
+  // An empty/"none" note colour deliberately does not mask a useful category colour.
+  function resolveItemColor(noteColor, categoryColor) {
+    const note = typeof noteColor === "string" ? noteColor.trim() : "";
+    const category = typeof categoryColor === "string" ? categoryColor.trim() : "";
+    return note && note !== "none" ? note : category;
+  }
+
+  // Build a complete calendar item from composer fields. Dates are civil YYYY-MM-DD values;
+  // timed values are interpreted in the supplied IANA zone (or the machine's local zone).
+  // A full-day reminder is represented by start.date with no end, while all-day event ends
+  // are exclusive. Returning null is the only failure mode so callers can keep the dialog open.
+  function composeCalendarItem(input = {}, now = Date.now()) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+    const kind = KINDS.includes(input.kind) ? input.kind : "reminder";
+    const allDay = input.allDay === true;
+    const summary = String(input.summary ?? "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, MAX_TEXT);
+    const startDate = String(input.startDate || "").trim();
+    if (!summary || !parseYmd(startDate)) return null;
+    const rawZone = String(input.tz || "").trim();
+    const zone = rawZone ? cleanZone(rawZone) : "";
+    if (rawZone && !zone) return null;
+    const wallTime = (date, time) => {
+      if (!parseYmd(date) || parseClock(time) < 0) return null;
+      return zonedDateTimeToMs(date, String(time), zone);
+    };
+    let start;
+    if (allDay) start = { date: startDate };
+    else {
+      const ms = wallTime(startDate, input.startTime);
+      if (!Number.isFinite(ms)) return null;
+      start = { dateTime: iso(ms) };
+    }
+    let end;
+    if (kind === "event") {
+      if (allDay) {
+        const endDate = String(input.endDate || "").trim();
+        if (!parseYmd(endDate) || endDate <= startDate) return null;
+        end = { date: endDate };
+      } else {
+        const endDate = String(input.endDate || startDate).trim();
+        const endMs = wallTime(endDate, input.endTime);
+        const startMs = Date.parse(start.dateTime);
+        if (!Number.isFinite(endMs) || endMs <= startMs) return null;
+        end = { dateTime: iso(endMs) };
+      }
+    }
+    const previous = input.item && typeof input.item === "object" ? input.item : null;
+    const previousX = previous?.x && typeof previous.x === "object" ? previous.x : {};
+    const noteId = String(input.noteId ?? previousX.noteId ?? "").trim().slice(0, 120);
+    const category = cleanCategoryName(input.category ?? previousX.category ?? "");
+    const recurrence = Array.isArray(input.recurrence) ? input.recurrence : (previous?.recurrence || []);
+    const notify = cleanNotifyOverrides(input.notify === undefined ? previousX.notify : input.notify);
+    const moved = previousX.moved || (previous && JSON.stringify(previous.start) !== JSON.stringify(start) ? "1" : "");
+    const record = {
+      ...(previous || {}),
+      id: String(input.id || previous?.id || "").slice(0, 120) || undefined,
+      summary,
+      description: String(input.description ?? previous?.description ?? "").slice(0, MAX_DESC),
+      start,
+      ...(kind === "event" ? { end } : { end: undefined }),
+      recurrence,
+      x: {
+        ...previousX,
+        kind,
+        noteId,
+        heading: String(input.heading ?? previousX.heading ?? "").trim().slice(0, MAX_TEXT),
+        category,
+        tz: zone,
+        src: previousX.src || "manual",
+        calNote: String(input.calNote ?? previousX.calNote ?? "").slice(0, MAX_DESC),
+        notify,
+        moved,
+      },
+    };
+    return cleanItem(record, now);
+  }
+
+  function snoozedItemStart(item, days = 1, targetMs = 0) {
+    const start = cleanWhen(item?.start);
+    if (!start) return null;
+    const explicit = Number(targetMs);
+    const moved = Number.isFinite(explicit) && explicit > 0 ? Math.floor(explicit) : snoozeDays(whenMs(start), days);
+    if (!Number.isFinite(moved) || moved <= 0) return null;
+    return start.date ? { date: ymd(new Date(dayStart(moved))) } : { dateTime: iso(moved) };
+  }
   // A generated date note counts as untouched (safe to purge) only when its body is nothing but the generated heading.
   // Tags, files, links, any text, or a user-edited heading make it "touched". `touched` is the store's own edit flag.
   function isBlankDateNote(note, key) {
@@ -1205,16 +1610,22 @@
   function lwwPick(local, remote) {
     if (!local) return remote || null;
     if (!remote) return local;
-    const lu = Number(local.updated) || 0, ru = Number(remote.updated) || 0;
+    const stamp = (value) => {
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+      if (typeof value === "string") { const parsed = Date.parse(value); return Number.isFinite(parsed) ? parsed : 0; }
+      return 0;
+    };
+    const revision = (value) => Number.isSafeInteger(value) && value >= 0 ? value : 0;
+    const lu = stamp(local.updated), ru = stamp(remote.updated);
     if (lu !== ru) return lu > ru ? local : remote;
-    const lr = Number(local.rev) || 0, rr = Number(remote.rev) || 0;
-    return lr > rr ? local : remote;
+    const lr = revision(local.rev), rr = revision(remote.rev);
+    return lr > rr ? local : remote; // exact ties deliberately prefer remote
   }
 
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, itemsFromNoteReminders, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, AGENDA_LABELS, agendaBuckets, snoozeDays, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

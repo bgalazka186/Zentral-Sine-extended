@@ -39,7 +39,7 @@ const WRITING_UI = {
   pastePicture: { at: "insert", label: "Paste picture from clipboard" }, pictureOptions: { at: "insert", label: "Picture options" },
   footnote: { at: "insert", via: "Blocks and notes", label: "Footnote" }, hubList: { at: "insert", via: "Blocks and notes", label: "Hub list of notes" },
   dateToday: { at: "more", via: "Links & dates", label: "Notes by date" }, dateTomorrow: { at: "more", via: "Links & dates", label: "Notes by date" }, dateNext: { at: "more", via: "Links & dates", label: "Notes by date" }, dateList: { at: "more", via: "Links & dates", label: "Notes by date" },
-  history: { at: "more", label: "Version history" }, outline: bar("Table of contents"),
+  history: { at: "more", label: "Version history" }, calendarReminder: bar("Create reminder"), outline: bar("Table of contents"),
   find: { at: "more", label: "Find in notes" }, remind: { at: "more", label: "Remind me" }, newNote: { at: "more", label: "New note" },
   list: { at: "head", label: "All notes" }, mode: bar("Read"), split: bar("Split view"), settings: bar("Quick settings"),
   recent: { at: "list", label: "Recent" }, notePin: { at: "head", label: "Pin note to the top" }, keepOpen: { at: "head", label: "Kept open" },

@@ -59,9 +59,10 @@ test("editing the body or our keys never touches the foreign text; trash and col
 });
 
 test("a note without foreign properties serializes exactly as before", () => {
-  const n = c.noteFromFile("n1", "---\n" + OURS + "\n---\nHi", 1);
+  const freshHeader = "id: n1\ncreated: 2026-01-02T00:00:00.000Z\nupdated: 2026-01-02T00:00:00.000Z";
+  const n = c.noteFromFile("n1", "---\n" + freshHeader + "\n---\nHi", 1);
   assert.equal(n.foreign, "");
-  assert.equal(c.serializeNote(n), "---\n" + OURS + "\n---\nHi");
+  assert.equal(c.serializeNote(n), "---\n" + freshHeader + "\n---\nHi");
   const fresh = { id: "n2", body: "x", created: 0, updated: 0, color: "none", label: "", folder: "", pinned: false, trashed: 0, remind: 0, reminded: 0 };
   assert.ok(!/tags|foreign|undefined/.test(c.serializeNote(fresh)));
 });

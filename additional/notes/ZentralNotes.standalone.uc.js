@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.21
+// @version 3.3.28
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.21, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.28, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.21";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.28";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1452,7 +1452,7 @@ const __zentralEmbeddedLoader = (function () {
   }
   const etagOf = (it) => {
     let h = 5381;
-    const s = JSON.stringify([it.summary, it.description, it.start, it.end, it.status, it.recurrence, it.x]);
+    const s = JSON.stringify([it.summary, it.description, it.start, it.end, it.status, it.recurrence, it.x, it.rev]);
     for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
     return '"' + (h >>> 0).toString(36) + '"';
   };
@@ -1525,6 +1525,8 @@ const __zentralEmbeddedLoader = (function () {
       description: String(raw.description ?? "").slice(0, MAX_DESC),
       start, status,
       updated: typeof raw.updated === "string" && Number.isFinite(Date.parse(raw.updated)) ? raw.updated : iso(now || Date.now()),
+      // Monotonic per-record revision breaks same-millisecond write ties across the calendar and Markdown writers.
+      rev: Number.isSafeInteger(raw.rev) && raw.rev >= 0 ? raw.rev : 0,
       recurrence: Array.isArray(raw.recurrence) ? raw.recurrence.filter((r) => typeof r === "string" && /^(RRULE|EXRULE|RDATE|EXDATE):/.test(r)).slice(0, 5) : [],
       reminders: { overrides: minutes },
       x: {
@@ -1881,8 +1883,167 @@ const __zentralEmbeddedLoader = (function () {
   // store uses (readUTF8, writeUTF8). Items made from a note's marked lists (src "list") are rebuilt by syncNote; the person's
   // own additions (src "manual") and the extras on a listed item (calendar note, reminders, status, a moved time) survive.
   const ITEMS_FILE = "calendar.json";
+  // Reminder lifecycle is intentionally separate from Google Calendar's `status` field. Records are
+  // immutable snapshots in their own versioned file; history is retained indefinitely (no silent pruning).
+  const REMINDER_HISTORY_FILE = "reminder-history.json";
+  const REMINDER_HISTORY_ACTIONS = Object.freeze(["done", "dismissed", "reopened", "snoozed", "rescheduled"]);
+  function cleanReminderHistoryRecord(raw, fallbackAt = 0) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    const action = REMINDER_HISTORY_ACTIONS.includes(raw.action) ? raw.action : "";
+    const itemId = String(raw.itemId || "").trim().slice(0, 120);
+    const occurrenceId = String(raw.occurrenceId || itemId).trim().slice(0, 160);
+    const stamp = raw.at === undefined || raw.at === null || raw.at === "" ? fallbackAt : raw.at;
+    const at = Number.isFinite(Number(stamp)) && Number(stamp) > 0 ? Math.floor(Number(stamp)) : 0;
+    if (!action || !itemId || !occurrenceId || !at) return null;
+    const start = cleanWhen(raw.start);
+    return {
+      id: String(raw.id || makeId(itemId + "|" + occurrenceId + "|" + action + "|" + at)).slice(0, 140),
+      seq: Number.isSafeInteger(raw.seq) && raw.seq > 0 ? raw.seq : 0,
+      itemId, occurrenceId, noteId: String(raw.noteId || "").slice(0, 120),
+      summary: String(raw.summary || "").slice(0, MAX_TEXT), start: start ? { ...start } : null,
+      action, at,
+    };
+  }
+  function reminderStateAfter(action, current = "pending") {
+    if (action === "done") return "done";
+    if (action === "dismissed") return "dismissed";
+    if (action === "reopened") return "pending";
+    // Snoozing/rescheduling changes only when the reminder is due; it never completes or dismisses it.
+    return current === "done" || current === "dismissed" ? current : "pending";
+  }
+  // Stable history identity: an ordinary legacy note reminder has one namespaced state, while
+  // recurring note-derived occurrences retain the series ID plus their expanded occurrence ID.
+  function reminderIdentity(item) {
+    if (!item || typeof item !== "object") return null;
+    const x = item.x && typeof item.x === "object" ? item.x : {};
+    const noteId = String(x.noteId || "").trim();
+    const recurring = !!String(x.series || "") || (Array.isArray(item.recurrence) && item.recurrence.length > 0);
+    if (x.src === "note" && noteId && !recurring) {
+      const itemId = "note-reminder:" + noteId;
+      return { itemId, occurrenceId: itemId, noteId, legacyNote: true };
+    }
+    const itemId = String(x.series || item.id || "").trim();
+    if (!itemId) return null;
+    return { itemId, occurrenceId: String(item.id || itemId), noteId, legacyNote: false };
+  }
+  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400 }) {
+    const records = [];
+    const lifecycle = new Map();
+    let nextSeq = 1;
+    let dirty = false, timer = null, chain = Promise.resolve(), writeBlocked = false, retryCount = 0;
+    const transitionAction = (action) => ["done", "dismissed", "reopened"].includes(action);
+    const lifecycleKey = (itemId, occurrenceId) => String(itemId) + "\u0000" + String(occurrenceId);
+    const indexTransition = (record) => {
+      if (!transitionAction(record.action)) return;
+      const key = lifecycleKey(record.itemId, record.occurrenceId), old = lifecycle.get(key);
+      if (!old || record.at > old.at || (record.at === old.at && record.seq > old.seq)) lifecycle.set(key, record);
+    };
+    let storage = { state: "unopened", error: "", backupPath: "" };
+    const safeWarn = (error) => { try { warn(error); } catch (_) {} };
+    const state = () => ({ ...storage, dirty, writeBlocked, retryCount, count: records.length });
+    const scheduleTimer = (ms = delayMs) => {
+      if (timer !== null) clearTimer(timer);
+      timer = setTimer(() => { timer = null; writeNow().catch(() => {}); }, ms);
+    };
+    const schedule = () => { dirty = true; if (!writeBlocked) scheduleTimer(); };
+    function writeNow() {
+      if (timer !== null) { clearTimer(timer); timer = null; }
+      const dir = getDir();
+      if (!dirty || !dir) return chain;
+      if (writeBlocked) return Promise.reject(new Error("Reminder history is protected because its existing file could not be read safely."));
+      const text = JSON.stringify({ v: 1, records: records.map((record) => ({ ...record, start: record.start ? { ...record.start } : null })) });
+      dirty = false;
+      const task = chain.catch(() => {}).then(async () => {
+        try {
+          await io.writeUTF8(io.join(dir, REMINDER_HISTORY_FILE), text, { tmpPath: io.join(dir, REMINDER_HISTORY_FILE + ".tmp") });
+          retryCount = 0;
+          if (["unopened", "missing", "recovery-pending"].includes(storage.state)) storage = { ...storage, state: "ready", error: "" };
+          if (dirty && timer === null && !writeBlocked) scheduleTimer();
+          return true;
+        } catch (error) {
+          dirty = true; retryCount++; safeWarn(error);
+          if (retryCount <= 3 && timer === null && !writeBlocked) scheduleTimer(Math.min(delayMs * Math.pow(2, retryCount), 5000));
+          throw error;
+        }
+      });
+      chain = task;
+      return task;
+    }
+    return {
+      async open() {
+        const dir = getDir();
+        if (!dir) return state();
+        const file = io.join(dir, REMINDER_HISTORY_FILE);
+        let text;
+        try { text = await io.readUTF8(file); }
+        catch (error) {
+          const message = String(error?.message || error || "");
+          const missing = error?.code === "ENOENT" || error?.name === "NotFoundError" || /(?:^|\b)(?:nf|not found|no such file|does not exist|NS_ERROR_FILE_NOT_FOUND)(?:\b|$)/i.test(message);
+          let exists = !missing;
+          if (typeof io.exists === "function") { try { exists = await io.exists(file); } catch (_) { exists = true; } }
+          if (!exists || missing) {
+            records.length = 0; lifecycle.clear(); nextSeq = 1; dirty = false; writeBlocked = false; retryCount = 0;
+            storage = { state: "missing", error: "", backupPath: "" };
+          } else {
+            writeBlocked = true; storage = { state: "unreadable", error: String(error?.message || error), backupPath: "" }; safeWarn(error);
+          }
+          return state();
+        }
+        let parsed;
+        try {
+          parsed = JSON.parse(text);
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || parsed.v !== 1 || !Array.isArray(parsed.records)) throw new Error("Reminder history has an unsupported or damaged structure.");
+          const clean = parsed.records.map((record) => cleanReminderHistoryRecord(record, now()));
+          if (clean.some((record) => !record)) throw new Error("Reminder history contains an invalid record.");
+          const seen = new Set();
+          if (clean.some((record) => seen.has(record.id) || !seen.add(record.id))) throw new Error("Reminder history contains duplicate record IDs.");
+          clean.forEach((record, index) => { if (!record.seq) record.seq = index + 1; });
+          records.splice(0, records.length, ...clean);
+          lifecycle.clear();
+          for (const record of records) indexTransition(record);
+          nextSeq = records.reduce((max, record) => Math.max(max, record.seq), 0) + 1;
+        } catch (error) {
+          const stamp = Math.max(0, Math.floor(Number(now()) || Date.now()));
+          const base = file + ".corrupt-" + stamp + ".bak";
+          let backupPath = base, suffix = 1;
+          if (typeof io.exists === "function") { try { while (await io.exists(backupPath)) backupPath = base.replace(/\.bak$/, "-" + (++suffix) + ".bak"); } catch (_) {} }
+          let backedUp = false;
+          try { await io.writeUTF8(backupPath, String(text), { tmpPath: backupPath + ".tmp" }); backedUp = true; } catch (backupError) { safeWarn(backupError); }
+          writeBlocked = true; storage = { state: "corrupt", error: String(error?.message || error), backupPath: backedUp ? backupPath : "" }; safeWarn(error);
+          return state();
+        }
+        dirty = false; writeBlocked = false; retryCount = 0; storage = { state: "ready", error: "", backupPath: "" };
+        return state();
+      },
+      storageState: state,
+      append(raw) {
+        if (writeBlocked) return null;
+        const record = cleanReminderHistoryRecord({ ...raw, seq: nextSeq, at: raw?.at ?? now() }, now());
+        if (!record) return null;
+        nextSeq = Math.max(nextSeq + 1, record.seq + 1);
+        // Immutable append: duplicate records are allowed because repeated transitions are meaningful.
+        records.push(record); indexTransition(record); schedule();
+        return { ...record, start: record.start ? { ...record.start } : null };
+      },
+      list({ itemId = "", occurrenceId = "", noteId = "", limit = 0, offset = 0 } = {}) {
+        let out = records.filter((record) => (!itemId || record.itemId === itemId) && (!occurrenceId || record.occurrenceId === occurrenceId) && (!noteId || record.noteId === noteId));
+        out = out.slice().sort((a, b) => b.at - a.at || b.seq - a.seq);
+        const max = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Math.min(10000, Math.floor(Number(limit))) : 0;
+        const skip = Number.isFinite(Number(offset)) ? Math.max(0, Math.min(out.length, Math.floor(Number(offset)))) : 0;
+        return (max ? out.slice(skip, skip + max) : out.slice(skip)).map((record) => ({ ...record, start: record.start ? { ...record.start } : null }));
+      },
+      stateFor(itemId, occurrenceId = itemId) {
+        const latest = lifecycle.get(lifecycleKey(itemId, occurrenceId));
+        // Snooze/reschedule records do not alter lifecycle state; only state transitions enter this index.
+        return latest ? reminderStateAfter(latest.action) : "pending";
+      },
+      flush: writeNow,
+    };
+  }
+
   function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600 }) {
     const items = new Map();
+    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs });
     const categoryDefs = new Map();
     const hidden = new Set(); // noteIds whose items stay stored but are not shown (note in Trash, or its file is missing)
     const listeners = new Set();
@@ -1930,6 +2091,7 @@ const __zentralEmbeddedLoader = (function () {
     }
     return {
       async open() {
+        try { await history.open(); } catch (error) { safeWarn(error); }
         const file = io.join(getDir(), ITEMS_FILE);
         let text;
         try {
@@ -2042,10 +2204,26 @@ const __zentralEmbeddedLoader = (function () {
       showNote(noteId) { if (!hidden.delete(noteId)) return false; emit("change", noteId); return true; },
       isHidden: (noteId) => hidden.has(noteId),
       upsert(raw) {
-        const it = cleanItem({ ...raw, updated: iso(now()), etag: "" }, now());
+        const stamp = now();
+        const it = cleanItem({ ...raw, updated: raw?.updated || iso(stamp), etag: "" }, stamp);
         if (!it) return null;
         const old = items.get(it.id);
+        if (old) {
+          // A modal may still hold the version it opened. Do not let that older snapshot overwrite a newer edit
+          // made from the note text (or another calendar editor) while the modal was open.
+          if (lwwPick(old, it) !== it) return null;
+          it.rev = Math.min(Number.MAX_SAFE_INTEGER, Math.max(old.rev || 0, it.rev || 0) + 1);
+        } else {
+          it.rev = Math.max(1, it.rev || 0);
+        }
+        it.updated = iso(stamp);
+        it.etag = etagOf(it);
         if (old && JSON.stringify(old) === JSON.stringify(it)) return old;
+        if (old && isReminder(it) && JSON.stringify(old.start) !== JSON.stringify(it.start)) {
+          const action = raw?.historyAction === "snoozed" ? "snoozed" : "rescheduled";
+          const record = history.append({ itemId: it.id, occurrenceId: String(raw?.occurrenceId || it.id), noteId: it.x.noteId, summary: it.summary, start: it.start, action, at: stamp });
+          if (!record) return null; // Never accept a lifecycle transition that cannot be recorded safely.
+        }
         items.set(it.id, it); schedule(); emit("change", it.id);
         return it;
       },
@@ -2062,7 +2240,7 @@ const __zentralEmbeddedLoader = (function () {
       // Rebuild the note-derived items. During upgrade, migrate extras from legacy IDs using the old content/ordinal key.
       // Thereafter exact line IDs win; unique legacy matches are safe, while an unidentified duplicate never inherits
       // another duplicate's metadata.
-      syncNote(noteId, body) {
+      syncNote(noteId, body, { sourceEdit = false, updatedAt = 0 } = {}) {
         const had = [...items.values()].filter((it) => it.x.noteId === noteId && it.x.src === "list");
         if (!had.length && !/%%\s*calendar/i.test(String(body || ""))) return false;
         const fresh = extractNoteItems(body, noteId, now());
@@ -2090,11 +2268,18 @@ const __zentralEmbeddedLoader = (function () {
             else if (duplicate && f._lineId && candidates.length === 1 && !candidates[0].x.legacyKey && candidates[0].x.key === f._legacyKey && oldCounts.get(groupKey) === newCounts.get(groupKey)) old = candidates[0];
           }
           if (old) usedOld.add(old.id);
-          let next = cleanItem(f, 0);
+          // `f.etag` was computed for the parsed revision. Recompute it after applying the store's revision.
+          let next = cleanItem({ ...f, rev: 1, etag: "", updated: Number.isFinite(Number(updatedAt)) && Number(updatedAt) > 0 ? iso(Number(updatedAt)) : f.updated }, 0);
           if (old) {
-            next = cleanItem({ ...f, start: old.start, end: old.end, status: old.status, reminders: old.reminders, recurrence: old.recurrence.length ? old.recurrence : f.recurrence, updated: old.updated,
+            const revision = sourceEdit ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, old.rev || 0) + 1) : Math.max(0, old.rev || 0);
+            const stamp = sourceEdit && Number.isFinite(Number(updatedAt)) && Number(updatedAt) > 0 ? iso(Number(updatedAt)) : old.updated;
+            next = cleanItem({ ...f, start: old.start, end: old.end, status: old.status, reminders: old.reminders, recurrence: old.recurrence.length ? old.recurrence : f.recurrence, updated: stamp, rev: revision, etag: "",
               x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify } }, 0);
             next.x.heading = f.x.heading; next.x.category = f.x.category;
+            // The text writer is a newer logical version whenever a body edit triggered this sync. Otherwise
+            // lwwPick provides the documented equal-version remote-wins tie break while preserving old extras above.
+            const winner = lwwPick(old, next);
+            next = winner;
             next.etag = etagOf(next);
             if (old.id === next.id) retainedOld.add(old.id);
           }
@@ -2107,7 +2292,8 @@ const __zentralEmbeddedLoader = (function () {
         return changed;
       },
       on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
-      flush: writeNow,
+      history,
+      flush() { return Promise.all([writeNow(), history.flush()]); },
     };
   }
 
@@ -2388,6 +2574,64 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Display title of a date-bound note: always derived, never stored as a key.
   const dateNoteTitle = (key, fmt, prefix = "Reminders for ", locale) => { const t = formatDateKey(key, fmt, locale); return t ? prefix + t : ""; };
+  // Read an existing date title / Journal heading back into its immutable local ISO key. The selected format is
+  // tried first to resolve the inherently ambiguous MM/DD vs DD/MM case; every other supported format is then
+  // accepted so changing the display preference never strands older date notes. New generated headings remain ISO.
+  function parseDateKeyText(value, preferredFormat = DEFAULT_DATE_FORMAT, locale) {
+    const text = String(value ?? "").trim();
+    if (!text) return "";
+    const validKey = (year, month, day) => {
+      if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day) || year < 1000 || year > 9999) return "";
+      const key = String(year).padStart(4, "0") + "-" + p2(month) + "-" + p2(day);
+      return parseYmd(key) ? key : "";
+    };
+    let m = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?=$|[\s,])/.exec(text);
+    if (m) return validKey(+m[1], +m[2], +m[3]);
+    const patterns = {
+      "DD-MM-YYYY": /^(\d{1,2})-(\d{1,2})-(\d{4})(?=$|[\s,])/,
+      "YYYY-MM-DD": /^(\d{4})-(\d{1,2})-(\d{1,2})(?=$|[\s,])/,
+      "MM/DD/YYYY": /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?=$|[\s,])/,
+      "DD.MM.YYYY": /^(\d{1,2})\.(\d{1,2})\.(\d{4})(?=$|[\s,])/,
+      "DD/MM/YYYY": /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?=$|[\s,])/,
+    };
+    const formats = [cleanDateFormat(preferredFormat), ...DATE_FORMATS.filter((f) => f !== cleanDateFormat(preferredFormat))];
+    for (const fmt of formats) {
+      const pattern = patterns[fmt];
+      if (!pattern) continue;
+      m = pattern.exec(text);
+      if (!m) continue;
+      const yearFirst = fmt === "YYYY-MM-DD";
+      const a = +m[1], b = +m[2], year = +(yearFirst ? m[1] : m[3]);
+      const month = yearFirst ? b : fmt === "MM/DD/YYYY" ? a : b;
+      const day = yearFirst ? +m[3] : fmt === "MM/DD/YYYY" ? b : a;
+      const key = validKey(year, month, day);
+      if (key) return key;
+    }
+    // `long` follows the active Firefox locale. Read its month lexemes through Intl rather than Date.parse,
+    // which only reliably understands English. Day and year remain numeric in the Intl output.
+    try {
+      const lower = text.toLocaleLowerCase(locale || undefined);
+      const yearMatch = /(?:^|[^0-9])(\d{4})(?:$|[^0-9])/.exec(text);
+      if (!yearMatch) return "";
+      const year = Number(yearMatch[1]);
+      const numbers = [...text.matchAll(/\d{1,4}/g)].map((x) => Number(x[0]));
+      const day = numbers.find((n) => n !== year && n >= 1 && n <= 31);
+      if (!day) return "";
+      const monthNames = new Map();
+      for (let month = 0; month < 12; month++) {
+        for (const sampleDay of [1, 2, 15, 21]) {
+          const parts = new Intl.DateTimeFormat(locale || undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" }).formatToParts(new Date(2026, month, sampleDay));
+          const name = parts.find((part) => part.type === "month")?.value;
+          if (name) monthNames.set(name.toLocaleLowerCase(locale || undefined), month + 1);
+        }
+      }
+      const names = [...monthNames.keys()].sort((a, b) => b.length - a.length);
+      const found = names.find((name) => name && lower.includes(name));
+      return found ? validKey(year, monthNames.get(found), day) : "";
+    } catch (_) {
+      return "";
+    }
+  }
   // Agenda window: today .. today+days-1 (default 4 days = T..T+3). Counts live items per local day (recurrences expanded); `isDone(item)` is supplied by the reminder lifecycle (T2.7a), the item model has no done flag yet.
   const AGENDA_LABELS = Object.freeze(["Today", "Tomorrow", "Day 2", "Day 3"]);
   function agendaBuckets(items, now, days = 4, isDone = () => false) {
@@ -2401,8 +2645,169 @@ const __zentralEmbeddedLoader = (function () {
     }
     return out;
   }
+  // Per-target context menu model for calendar rows. This stays pure so every calendar surface can
+  // render the same capabilities and reasons without duplicating lifecycle/source rules.
+  function calendarItemMenuModel(item, { state = "pending", historyWritable = false } = {}) {
+    if (!item || typeof item !== "object" || !String(item.id || "")) return [];
+    const reminder = isReminder(item);
+    const source = ["list", "note", "manual"].includes(item.x?.src) ? item.x.src : "manual";
+    const manual = source === "manual";
+    const recurring = !!item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length > 0);
+    const lifecycle = ["pending", "done", "dismissed"].includes(state) ? state : "pending";
+    const action = (id, label, enabled = true, reason = "") => ({ id, command: id, label, enabled: !!enabled, reason: enabled ? "" : String(reason || "Unavailable in the current state") });
+    const rows = [
+      action("open", item.x?.noteId ? "Open source note" : "Show details"),
+      action("edit", "Edit details…"),
+      action("change-time", "Change time…", !recurring && source !== "note", recurring ? "Recurring occurrences need exception support before they can be moved" : "This note reminder is scheduled in its source note"),
+      action("convert", reminder ? "Convert to event" : "Convert to reminder", manual, "Items parsed from a note keep the type defined by their source text"),
+      { sep: true },
+      action("duplicate", "Duplicate as independent item"),
+      action("delete", "Delete item…", manual, "Remove this item from its source note instead of deleting only its calendar copy"),
+    ];
+    if (reminder) {
+      const writable = !!historyWritable;
+      rows.push(
+        { sep: true },
+        { heading: true, label: "Reminder · " + lifecycle },
+        action("mark-done", "Mark as done", writable && lifecycle !== "done", !writable ? "Reminder history storage is protected or unavailable" : "Already done"),
+        action("dismiss", "Dismiss", writable && lifecycle !== "dismissed", !writable ? "Reminder history storage is protected or unavailable" : "Already dismissed"),
+        action("reopen", "Reopen", writable && lifecycle !== "pending", !writable ? "Reminder history storage is protected or unavailable" : "Already pending"),
+        { id: "snooze", command: "snooze", label: "Snooze", group: [
+          action("snooze-1d", "Snooze +1 day", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
+          action("snooze-3d", "Snooze +3 days", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
+          action("snooze-monday", "Snooze until next Monday", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
+          action("snooze-custom", "Custom date and time…", writable && !recurring, !writable ? "Reminder history storage is protected or unavailable" : "Recurring occurrences need exception support before they can be snoozed"),
+        ] },
+      );
+    }
+    return rows;
+  }
+
   // Snooze helper: whole local days later, keeping the wall-clock time (DST-safe). Returns ms.
   const snoozeDays = (ms, n) => addDays(ms, Math.round(Number(n) || 0));
+  // Convert a wall-clock date/time in an IANA zone to an instant. During a fall-back overlap the earlier
+  // instant wins; during a spring-forward gap the first valid wall minute after the requested time wins.
+  function zonedDateTimeToMs(dateKey, timeText, zone = "") {
+    const day = parseYmd(dateKey), clock = /^(\d{1,2}):(\d{2})$/.exec(String(timeText || "").trim());
+    if (!day || !clock) return null;
+    const hour = Number(clock[1]), minute = Number(clock[2]);
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23 || !Number.isInteger(minute) || minute < 0 || minute > 59) return null;
+    if (!zone) return new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, minute).getTime();
+    const validZone = cleanZone(zone);
+    if (!validZone) return null;
+    const targetWall = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate(), hour, minute);
+    const targetEnd = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+    let formatter;
+    try {
+      formatter = new Intl.DateTimeFormat("en-US", { timeZone: validZone, calendar: "gregory", numberingSystem: "latn", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+    } catch (_) { return null; }
+    let exact = null, next = null, nextWall = Infinity;
+    const from = targetWall - 16 * 60 * MIN, to = targetWall + 16 * 60 * MIN;
+    for (let at = from; at <= to; at += MIN) {
+      const parts = Object.create(null);
+      for (const part of formatter.formatToParts(new Date(at))) if (part.type !== "literal") parts[part.type] = Number(part.value);
+      if (![parts.year, parts.month, parts.day, parts.hour, parts.minute].every(Number.isFinite)) continue;
+      const wall = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+      if (wall === targetWall) { exact = at; break; }
+      if (wall > targetWall && wall < targetEnd && (wall < nextWall || (wall === nextWall && (next === null || at < next)))) { nextWall = wall; next = at; }
+    }
+    return exact === null ? next : exact;
+  }
+  // Turn a date-bearing sentence into a human title without leaving a dangling date preposition.
+  // This is intentionally conservative: only the recognised date token and a trailing connector are removed.
+  function titleFromDateText(text, dateToken) {
+    let value = String(text ?? "").replace(/%%\s*zn-date-ignore:[^%]*%%/gi, "");
+    const token = String(dateToken ?? "").trim();
+    if (token) value = value.replace(token, " ").replace(/\b(?:on|at|by|for)\s*$/i, "");
+    return value.replace(/\s+/g, " ").trim().slice(0, MAX_TEXT);
+  }
+
+  // Source-note colour is authoritative for linked items; category colour is only the fallback.
+  // An empty/"none" note colour deliberately does not mask a useful category colour.
+  function resolveItemColor(noteColor, categoryColor) {
+    const note = typeof noteColor === "string" ? noteColor.trim() : "";
+    const category = typeof categoryColor === "string" ? categoryColor.trim() : "";
+    return note && note !== "none" ? note : category;
+  }
+
+  // Build a complete calendar item from composer fields. Dates are civil YYYY-MM-DD values;
+  // timed values are interpreted in the supplied IANA zone (or the machine's local zone).
+  // A full-day reminder is represented by start.date with no end, while all-day event ends
+  // are exclusive. Returning null is the only failure mode so callers can keep the dialog open.
+  function composeCalendarItem(input = {}, now = Date.now()) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+    const kind = KINDS.includes(input.kind) ? input.kind : "reminder";
+    const allDay = input.allDay === true;
+    const summary = String(input.summary ?? "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, MAX_TEXT);
+    const startDate = String(input.startDate || "").trim();
+    if (!summary || !parseYmd(startDate)) return null;
+    const rawZone = String(input.tz || "").trim();
+    const zone = rawZone ? cleanZone(rawZone) : "";
+    if (rawZone && !zone) return null;
+    const wallTime = (date, time) => {
+      if (!parseYmd(date) || parseClock(time) < 0) return null;
+      return zonedDateTimeToMs(date, String(time), zone);
+    };
+    let start;
+    if (allDay) start = { date: startDate };
+    else {
+      const ms = wallTime(startDate, input.startTime);
+      if (!Number.isFinite(ms)) return null;
+      start = { dateTime: iso(ms) };
+    }
+    let end;
+    if (kind === "event") {
+      if (allDay) {
+        const endDate = String(input.endDate || "").trim();
+        if (!parseYmd(endDate) || endDate <= startDate) return null;
+        end = { date: endDate };
+      } else {
+        const endDate = String(input.endDate || startDate).trim();
+        const endMs = wallTime(endDate, input.endTime);
+        const startMs = Date.parse(start.dateTime);
+        if (!Number.isFinite(endMs) || endMs <= startMs) return null;
+        end = { dateTime: iso(endMs) };
+      }
+    }
+    const previous = input.item && typeof input.item === "object" ? input.item : null;
+    const previousX = previous?.x && typeof previous.x === "object" ? previous.x : {};
+    const noteId = String(input.noteId ?? previousX.noteId ?? "").trim().slice(0, 120);
+    const category = cleanCategoryName(input.category ?? previousX.category ?? "");
+    const recurrence = Array.isArray(input.recurrence) ? input.recurrence : (previous?.recurrence || []);
+    const notify = cleanNotifyOverrides(input.notify === undefined ? previousX.notify : input.notify);
+    const moved = previousX.moved || (previous && JSON.stringify(previous.start) !== JSON.stringify(start) ? "1" : "");
+    const record = {
+      ...(previous || {}),
+      id: String(input.id || previous?.id || "").slice(0, 120) || undefined,
+      summary,
+      description: String(input.description ?? previous?.description ?? "").slice(0, MAX_DESC),
+      start,
+      ...(kind === "event" ? { end } : { end: undefined }),
+      recurrence,
+      x: {
+        ...previousX,
+        kind,
+        noteId,
+        heading: String(input.heading ?? previousX.heading ?? "").trim().slice(0, MAX_TEXT),
+        category,
+        tz: zone,
+        src: previousX.src || "manual",
+        calNote: String(input.calNote ?? previousX.calNote ?? "").slice(0, MAX_DESC),
+        notify,
+        moved,
+      },
+    };
+    return cleanItem(record, now);
+  }
+
+  function snoozedItemStart(item, days = 1, targetMs = 0) {
+    const start = cleanWhen(item?.start);
+    if (!start) return null;
+    const explicit = Number(targetMs);
+    const moved = Number.isFinite(explicit) && explicit > 0 ? Math.floor(explicit) : snoozeDays(whenMs(start), days);
+    if (!Number.isFinite(moved) || moved <= 0) return null;
+    return start.date ? { date: ymd(new Date(dayStart(moved))) } : { dateTime: iso(moved) };
+  }
   // A generated date note counts as untouched (safe to purge) only when its body is nothing but the generated heading.
   // Tags, files, links, any text, or a user-edited heading make it "touched". `touched` is the store's own edit flag.
   function isBlankDateNote(note, key) {
@@ -2416,16 +2821,22 @@ const __zentralEmbeddedLoader = (function () {
   function lwwPick(local, remote) {
     if (!local) return remote || null;
     if (!remote) return local;
-    const lu = Number(local.updated) || 0, ru = Number(remote.updated) || 0;
+    const stamp = (value) => {
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+      if (typeof value === "string") { const parsed = Date.parse(value); return Number.isFinite(parsed) ? parsed : 0; }
+      return 0;
+    };
+    const revision = (value) => Number.isSafeInteger(value) && value >= 0 ? value : 0;
+    const lu = stamp(local.updated), ru = stamp(remote.updated);
     if (lu !== ru) return lu > ru ? local : remote;
-    const lr = Number(local.rev) || 0, rr = Number(remote.rev) || 0;
-    return lr > rr ? local : remote;
+    const lr = revision(local.rev), rr = revision(remote.rev);
+    return lr > rr ? local : remote; // exact ties deliberately prefer remote
   }
 
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, itemsFromNoteReminders, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, AGENDA_LABELS, agendaBuckets, snoozeDays, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -3154,6 +3565,7 @@ __zentralShim.register = function (def) {
       BACKLINKS_PANEL: "zen.workspace.zentral.notes.backlinks_panel",
       HIDDEN_MENU: "zen.workspace.zentral.notes.hidden_tools_menu",
       DATE_MODE: "zen.workspace.zentral.notes.date_notes_mode",
+      DATE_DISPLAY: "zen.workspace.zentral.notes.date_display_format",
       MD_FLAVOR: "zen.workspace.zentral.notes.markdown_flavor",
       TILDE: "zen.workspace.zentral.notes.single_tilde",
       IGNORE_SYNTAX: "zen.workspace.zentral.notes.ignore_syntax",
@@ -3220,6 +3632,7 @@ __zentralShim.register = function (def) {
       "id",
       "created",
       "updated",
+      "touched",
       "color",
       "label",
       "pinned",
@@ -3450,6 +3863,8 @@ __zentralShim.register = function (def) {
         body,
         created: toTime(meta.created, mtime),
         updated: toTime(meta.updated, mtime),
+        // Persist the fact that the body was edited even if the user later restores the generated heading verbatim.
+        touched: meta.touched === "true" || toTime(meta.updated, mtime) > toTime(meta.created, mtime),
         color: cleanNoteColor(meta.color),
         label: cleanLabel(meta.label),
         folder: cleanFolder(meta.folder),
@@ -3470,6 +3885,7 @@ __zentralShim.register = function (def) {
         "created: " + iso(n.created),
         "updated: " + iso(n.updated),
       ];
+      if (n.touched) lines.push("touched: true");
       if (n.color && n.color !== "none") lines.push("color: " + (cleanHex(n.color) ? '"' + cleanHex(n.color) + '"' : n.color));
       if (cleanLabel(n.label)) lines.push("label: " + cleanLabel(n.label));
       if (cleanFolder(n.folder)) lines.push("folder: " + cleanFolder(n.folder));
@@ -6974,6 +7390,7 @@ __zentralShim.register = function (def) {
       { id: "pictureOptions", label: "Picture options\u2026 (size, alignment)", def: "", edit: true },
       { id: "find", label: "Find in this note and other notes", def: "Ctrl+F" },
       { id: "remind", label: "Remind me about this note\u2026", def: "" },
+      { id: "calendarReminder", label: "Create calendar reminder\u2026", def: "" },
       { id: "dateToday", label: "Open today's note", def: "" },
       { id: "dateTomorrow", label: "Open tomorrow's note", def: "" },
       { id: "dateNext", label: "Open the next work day's note", def: "" },
@@ -7010,6 +7427,7 @@ __zentralShim.register = function (def) {
       ["sup", "Superscript"], ["sub", "Subscript"], ["kbd", "Keyboard key"], ["footnote", "Footnote"], ["hubList", "Hub list of notes"],
       ["underline", "Underline"], ["spoiler", "Spoiler"], ["comment", "Hidden comment"], ["mathInline", "Inline math"], ["mathBlock", "Math block"],
       ["details", "Collapsible section"], ["insertDate", "Insert date"], ["insertTime", "Insert time"], ["outline", "Table of contents"],
+      ["calendarReminder", "Create calendar reminder"],
     ]);
     const HIDEABLE_IDS = new Set(HIDEABLE_TOOLS.map((t) => t[0]));
     // Buttons that start hidden until the person turns them on (Quick settings \u2192 Toolbar buttons).
@@ -7238,6 +7656,7 @@ __zentralShim.register = function (def) {
           { id: "linkedStrip", label: "Show \"Linked from\" under the read view", pref: PREF.BACKLINKS_PANEL, kind: "bool", def: false },
           { id: "hiddenMenu", label: "Hidden tools stay reachable in More", pref: PREF.HIDDEN_MENU, kind: "bool", def: true },
           { id: "dateMode", label: "Date notes", pref: PREF.DATE_MODE, kind: "choice", def: "separate", choices: [["separate", "One note per day"], ["single", "All in one Journal note"]] },
+          { id: "dateDisplay", label: "Date display format (calendar, chips and Notes by date)", pref: PREF.DATE_DISPLAY, kind: "choice", def: "DD-MM-YYYY", choices: [["DD-MM-YYYY", "14-11-2026 (DD-MM-YYYY)"], ["YYYY-MM-DD", "2026-11-14 (YYYY-MM-DD)"], ["MM/DD/YYYY", "11/14/2026 (MM/DD/YYYY)"], ["DD.MM.YYYY", "14.11.2026 (DD.MM.YYYY)"], ["DD/MM/YYYY", "14/11/2026 (DD/MM/YYYY)"], ["long", "Saturday, November 14, 2026 (long)"]] },
           { kind: "heading", label: "Version history" },
           { id: "histOn", label: "Keep earlier versions", pref: PREF.HISTORY_ON, kind: "bool", def: true },
           S("histKeep", "Versions kept per note", PREF.HISTORY_KEEP, 1, 200, "", 20),
@@ -8019,6 +8438,8 @@ __zentralShim.register = function (def) {
       getHistory = () => ({ on: true, ...HISTORY_DEFAULTS }),
     }) {
       const notes = new Map();
+      // One active-note owner per sheet; a note stays protected while any sheet is displaying it.
+      const activeNotes = new Map();
       const dirty = new Set();
       const listeners = new Set();
       const backedUp = new Set();
@@ -8038,7 +8459,7 @@ __zentralShim.register = function (def) {
       // with a missing file only HIDES its items (restoring it brings dragged times and calendar notes back); a note that is
       // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
       const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn }) : null;
-      function syncItems(id, stabilize = false) {
+      function syncItems(id, stabilize = false, sourceEdit = false) {
         if (!items) return;
         try {
           const n = notes.get(id);
@@ -8054,7 +8475,7 @@ __zentralShim.register = function (def) {
               if (n.body.trim() || n._onDisk) markDirty(id);
             }
           }
-          items.syncNote(id, n.body);
+          items.syncNote(id, n.body, { sourceEdit, updatedAt: n.updated });
         } catch (e) {
           warn(e);
         }
@@ -8307,7 +8728,7 @@ __zentralShim.register = function (def) {
         const fresh = await readNote(file).catch(() => null);
         if (!fresh) return;
         notes.set(id, fresh);
-        syncItems(id, true);
+        syncItems(id, true, true);
         emit("change", id, { remote: true });
       }
 
@@ -8373,6 +8794,62 @@ __zentralShim.register = function (def) {
         });
       }
 
+      function linkedToDateNote(source, target, resolver) {
+        if (!source || !target || source.id === target.id) return false;
+        if (noteLinksIn(source.body || "", resolver).has(target.id)) return true;
+        // Numeric date titles may contain `/`, which the general wiki parser treats as a folder separator.
+        // Exact title matching here preserves those links as a conservative no-delete signal.
+        const title = titleOf(target.body).trim().toLocaleLowerCase();
+        const id = String(target.id).toLocaleLowerCase();
+        if (!title && !id) return false;
+        let found = false;
+        mapOutsideCode(source.body || "", (segment) => {
+          for (const match of segment.matchAll(new RegExp(WIKI_RE.source, "g"))) {
+            const raw = String(match[1] || "").split("#", 1)[0].trim().toLocaleLowerCase();
+            if (raw === title || raw === id || (title && raw.endsWith("/" + title)) || (id && raw.endsWith("/" + id))) {
+              found = true;
+              break;
+            }
+          }
+          return segment;
+        });
+        return found;
+      }
+
+      function purgeBlankDateNotes({ onlyIds = null } = {}) {
+        if (!CALENDAR_PART || typeof CALENDAR_PART.isBlankDateNote !== "function" || !notes.size) return [];
+        const only = Array.isArray(onlyIds) ? new Set(onlyIds.filter((id) => typeof id === "string" && id)) : null;
+        const live = [...notes.values()].filter((note) => note && !note.trashed);
+        if (!live.length) return [];
+        const active = new Set(activeNotes.values());
+        const itemRefs = new Set((items ? items.list({ includeHidden: true }) : []).map((item) => item?.x?.noteId).filter((id) => typeof id === "string" && id));
+        const resolver = wikiResolver(live, meta.folders);
+        const referenced = new Set();
+        const allNotes = [...notes.values()];
+        for (const source of allNotes) {
+          if (!source || !source.body) continue;
+          for (const id of noteLinksIn(source.body, resolver)) referenced.add(id);
+        }
+        const removed = [];
+        for (const note of live) {
+          if (only && !only.has(note.id)) continue;
+          if (active.has(note.id) || itemRefs.has(note.id) || referenced.has(note.id)) continue;
+          // A generated date note is always put in the Daily folder. Do not infer ownership from a date-shaped title alone.
+          if (cleanFolder(note.folder) !== DATE_FOLDER) continue;
+          // Protect all user metadata and attachments, not just the fields understood by the pure predicate.
+          if (note.remind || note.reminded || note.label || note.pinned || note.flavor || (note.color && note.color !== "none")) continue;
+          if (noteTags(note).length || assetRefs(note.body || "").length) continue;
+          if ((Array.isArray(note.files) && note.files.length) || (Array.isArray(note.attachments) && note.attachments.length)) continue;
+          const key = dateOfNote(note);
+          if (!key || !CALENDAR_PART.isBlankDateNote(note, key)) continue;
+          if (allNotes.some((source) => linkedToDateNote(source, note, resolver))) continue;
+          // trash() retains the note and any associated state for the normal restore / retention workflow.
+          api.trash(note.id);
+          removed.push(note.id);
+        }
+        return removed;
+      }
+
       const api = {
         state,
         get meta() {
@@ -8407,6 +8884,13 @@ __zentralShim.register = function (def) {
         get(id) {
           return notes.get(id) || null;
         },
+        setActiveNote(owner, id) {
+          if (!owner || (id && !notes.has(id))) return false;
+          if (id) activeNotes.set(owner, id);
+          else activeNotes.delete(owner);
+          return true;
+        },
+        purgeBlankDateNotes,
         list({ query = "", trashed = false } = {}) {
           const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
           return [...notes.values()]
@@ -8434,7 +8918,7 @@ __zentralShim.register = function (def) {
           const have = notes.get(id);
           if (have) return { note: have, created: false };
           const t = now();
-          const note = { id, body, created: t, updated: t, color: "none", label: "", folder: cleanFolder(folder), pinned: false, trashed: 0, remind: 0, reminded: 0, _onDisk: false, _mtime: t };
+          const note = { id, body, created: t, updated: t, touched: false, color: "none", label: "", folder: cleanFolder(folder), pinned: false, trashed: 0, remind: 0, reminded: 0, _onDisk: false, _mtime: t };
           notes.set(id, note);
           if (body) markDirty(id);
           if (body) syncItems(id, true);
@@ -8450,6 +8934,7 @@ __zentralShim.register = function (def) {
             body,
             created: t,
             updated: t,
+            touched: false,
             color: "none",
             label: "",
             folder: cleanFolder(folder),
@@ -8471,9 +8956,10 @@ __zentralShim.register = function (def) {
           if (!note || note.body === body) return;
           note.body = body;
           note.updated = now();
+          note.touched = true;
           if (body.trim() || note._onDisk) markDirty(id);
           else dirty.delete(id);
-          syncItems(id);
+          syncItems(id, false, true);
           emit("change", id, { source });
         },
         // Commit hidden calendar-line identities after a text editor blur or a non-typing body operation.
@@ -8533,12 +9019,28 @@ __zentralShim.register = function (def) {
         // ---- reminders (P2) ---------------------------------------------------------------------------
         // setReminder(id, time) sets (or with 0 clears) a reminder; the time snaps to 5 minutes and any earlier
         // "announced" stamp is forgotten. snoozeReminder moves it `minutes` ahead from now.
-        setReminder(id, time) {
+        setReminder(id, time, historyAction = "") {
           const note = notes.get(id);
           if (!note) return false;
           const next = time ? cleanRemind(time) : 0;
           if (time && !next) return false;
-          if (note.remind === next && (!next || !note.reminded)) return true;
+          const previous = Number(note.remind) || 0;
+          if (previous === next && (!next || !note.reminded)) return true;
+          // The compatibility one-reminder-per-note scheduler shares the append-only history,
+          // but uses a namespaced ID so it cannot collide with calendar/recurrence occurrences.
+          try {
+            const history = items?.history, itemId = "note-reminder:" + id;
+            if (history) {
+              let action = historyAction;
+              if (!action && previous && !next) action = "dismissed";
+              else if (!action && previous && next && previous !== next) action = "rescheduled";
+              else if (!action && !previous && next && ["done", "dismissed"].includes(history.stateFor(itemId))) action = "reopened";
+              if (action) {
+                const recorded = history.append({ itemId, occurrenceId: itemId, noteId: id, summary: String(note.body || "").split("\n").find((line) => line.trim())?.replace(/^\s*#\s*/, "").trim() || "Note reminder", start: next ? { dateTime: new Date(next).toISOString() } : null, action, at: now() });
+                if (!recorded) return false;
+              }
+            }
+          } catch (error) { warn(error); return false; }
           note.remind = next;
           note.reminded = 0;
           if (note.body.trim() || note._onDisk) markDirty(id);
@@ -8549,7 +9051,7 @@ __zentralShim.register = function (def) {
           const note = notes.get(id);
           const m = Number(minutes);
           if (!note || !(m > 0 && m <= 60 * 24 * 365)) return false;
-          return api.setReminder(id, ceilStep(now() + m * 60000));
+          return api.setReminder(id, ceilStep(now() + m * 60000), "snoozed");
         },
         // Records that the reminder was announced. Re-reads the file first, so a second window that already
         // announced it (and saved that) wins and this one stays silent. Resolves true only when THIS call
@@ -8956,6 +9458,37 @@ __zentralShim.register = function (def) {
         top: Math.round(Math.max(minY, y) - host.top),
         maxHeight,
       };
+    }
+
+    // Normalize every Notes pop-up into one stable action model. The UI may keep accepting older
+    // call sites (`action`, `disabled`, `group`) while new surfaces use `{ id, label, enabled, run }`.
+    // This function is pure: IDs are deterministic within a menu, nested groups are normalized
+    // recursively, and informational rows remain distinguishable from disabled actions.
+    function normalizeContextMenuItems(items, namespace = "menu") {
+      const used = new Set();
+      const slug = (value) => String(value || "item").toLowerCase().normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 36) || "item";
+      return (Array.isArray(items) ? items : []).map((raw, index) => {
+        if (!raw || typeof raw !== "object") return null;
+        if (raw.sep) return { id: `${namespace}-separator-${index + 1}`, sep: true };
+        if (Array.isArray(raw.swatches)) return { ...raw, id: raw.id || `${namespace}-swatches-${index + 1}` };
+        // Preserve deliberate leading Unicode indentation (for example outline depth in headings)
+        // while removing line breaks and trailing whitespace from labels.
+        const rawLabel = String(raw.label ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s+$/g, "");
+        const label = rawLabel.trim() ? rawLabel : "";
+        const run = typeof raw.run === "function" ? raw.run : typeof raw.action === "function" ? raw.action : null;
+        const explicitContract = Object.prototype.hasOwnProperty.call(raw, "enabled") || Object.prototype.hasOwnProperty.call(raw, "run");
+        const heading = raw.heading === true || (raw.disabled === true && !run && !explicitContract);
+        const enabled = !heading && raw.enabled !== false && raw.disabled !== true && !!run;
+        const base = String(raw.id || `${namespace}-${slug(label)}-${index + 1}`);
+        let id = base, suffix = 2;
+        while (used.has(id)) id = `${base}-${suffix++}`;
+        used.add(id);
+        const reason = enabled || heading ? "" : String(raw.reason || raw.disabledReason || (!run ? "Action unavailable" : "Unavailable in the current state")).trim();
+        const item = { ...raw, id, label, enabled, heading, reason, run: enabled ? run : null };
+        if (Array.isArray(raw.group)) item.group = normalizeContextMenuItems(raw.group, id);
+        return item;
+      }).filter(Boolean);
     }
 
     // ---- V4-QS: where a dialog card goes ---------------------------------------------------------------
@@ -9544,30 +10077,40 @@ __zentralShim.register = function (def) {
     }
     const dateHeading = (ms) => ymdOf(ms) + " " + WEEKDAYS[new Date(ms).getDay()];
     const dateNoteBody = (ms) => "# " + dateHeading(ms) + "\n\n";
-    const DATE_TITLE_RE = /^(\d{4}-\d{2}-\d{2})(?:\s|$)/;
-    const dateOfNote = (n) => (n && !n.trashed ? DATE_TITLE_RE.exec(titleOf(n.body))?.[1] || "" : "");
-    function findDateNote(notes, ymd) {
-      const hits = notes.filter((n) => dateOfNote(n) === ymd);
+    // Existing date note titles may have been created under any display preference. Keep their lookup stable
+    // across preference changes; the selected format is used to disambiguate slash dates when possible.
+    const DATE_TITLE_RE = /^(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-./]\d{1,2}[-./]\d{4}|.*\d{1,2}.*\d{4})/;
+    const dateOfNote = (n, fmt = CALENDAR_PART?.DEFAULT_DATE_FORMAT) => {
+      if (!n || n.trashed) return "";
+      const title = titleOf(n.body);
+      if (!DATE_TITLE_RE.test(title)) return "";
+      return CALENDAR_PART?.parseDateKeyText?.(title, fmt) || (/^(\d{4}-\d{2}-\d{2})(?:\s|$)/.exec(title)?.[1] || "");
+    };
+    function findDateNote(notes, ymd, fmt = CALENDAR_PART?.DEFAULT_DATE_FORMAT) {
+      const hits = notes.filter((n) => dateOfNote(n, fmt) === ymd);
       hits.sort((a, b) => b.updated - a.updated || (a.id < b.id ? -1 : 1));
       return hits[0] || null;
     }
-    // Newest date first. "from" / "to" (YYYY-MM-DD) bound the list; a text filter matches the heading.
-    function listDateNotes(notes, { from = "", to = "", text = "" } = {}) {
+    // Newest date first. Keys and bounds remain YYYY-MM-DD, regardless of how the date is displayed.
+    function listDateNotes(notes, { from = "", to = "", text = "", dateFormat = CALENDAR_PART?.DEFAULT_DATE_FORMAT } = {}) {
       const q = foldText(text).trim();
       return notes
-        .map((n) => ({ ymd: dateOfNote(n), note: n }))
+        .map((n) => ({ ymd: dateOfNote(n, dateFormat), note: n }))
         .filter((x) => x.ymd && (!from || x.ymd >= from) && (!to || x.ymd <= to) && (!q || foldText(titleOf(x.note.body)).includes(q)))
         .sort((a, b) => (a.ymd < b.ymd ? 1 : a.ymd > b.ymd ? -1 : b.note.updated - a.note.updated));
     }
-    // "All in one file" mode: one note called Journal, one "## YYYY-MM-DD Weekday" section per day.
+    // "All in one file" mode: one note called Journal, one date section per day. Old display-formatted
+    // headings are normalized to ISO keys for navigation, while newly generated headings remain ISO.
     const JOURNAL_TITLE = "Journal";
     const isJournal = (n) => !!n && !n.trashed && titleOf(n.body).toLowerCase() === JOURNAL_TITLE.toLowerCase();
-    const journalDays = (body) => [...String(body ?? "").matchAll(/^##\s+(\d{4}-\d{2}-\d{2})\b.*$/gm)].map((m) => m[1]);
+    const journalDays = (body, fmt = CALENDAR_PART?.DEFAULT_DATE_FORMAT) => [...String(body ?? "").matchAll(/^##\s+(.+?)\s*$/gm)]
+      .map((m) => CALENDAR_PART?.parseDateKeyText?.(m[1], fmt) || /^(\d{4}-\d{2}-\d{2})(?:\s|$)/.exec(m[1])?.[1] || "")
+      .filter(Boolean);
     // Body with the day's section (added at the end when missing) and the caret position at the end of it.
-    function journalSection(body, ymd, ms) {
+    function journalSection(body, ymd, ms, fmt = CALENDAR_PART?.DEFAULT_DATE_FORMAT) {
       const text = String(body ?? "");
-      const re = new RegExp("^##\\s+" + ymd + "\\b.*$", "m");
-      const m = re.exec(text);
+      const headings = [...text.matchAll(/^##\s+(.+?)\s*$/gm)];
+      const m = headings.find((heading) => (CALENDAR_PART?.parseDateKeyText?.(heading[1], fmt) || /^(\d{4}-\d{2}-\d{2})(?:\s|$)/.exec(heading[1])?.[1]) === ymd) || null;
       if (!m) {
         const base = (text.trim() ? text.replace(/\s+$/, "") : "# " + JOURNAL_TITLE) + "\n\n## " + dateHeading(ms) + "\n\n";
         return { body: base, caret: base.length, created: true };
@@ -10077,7 +10620,7 @@ __zentralShim.register = function (def) {
         makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
-        createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
+        createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition, normalizeContextMenuItems,
         highlightCode, codeLangKey, texNodes, mapPosition, mergeAnchors, insertCodeBlock, buildLink, insertLink,
         pastedLink, richPaste, PASTE_HTML_PART, fragmentLabel, insertImage, makeTable, insertTable, SHORTCUT_ACTIONS, formatCombo,
         normalizeCombo, comboFromEvent, parseShortcutMap, effectiveShortcuts, findShortcutConflict,
@@ -10099,7 +10642,7 @@ __zentralShim.register = function (def) {
         createReminderScheduler, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
         headingSlug, headingsOf, cleanAnchor, noteLinkParts, headingOffset, tocBlock, tocList, findToc, updateToc, insertToc, insertFootnote, nextFootnoteLabel, mentionRe, hasMention, linkFirstMention,
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
-        dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
+        DATE_TITLE_RE, dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
         HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, BACKUP_DIR, BACKUP_HOURS, backupEntryName, parseBackupName, backupPlan, backupLeft, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
         orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, projectZen,
         utf8Bytes, createPerfSampler, createZenFolder,
@@ -10239,7 +10782,9 @@ __zentralShim.register = function (def) {
 
     function dateChip(parent, raw, ymd, time, env) {
       if (env.skipDateChips || !env.openDateMenu) { parent.append(document.createTextNode(raw)); return; }
-      const b = h("button", { type: "button", class: "zn-date-chip", title: time ? "Date and time: " + ymd + " " + time : "Date: " + ymd, "aria-label": "Date " + ymd + (time ? " at " + time : "") }, raw);
+      const dateLabel = typeof env.displayDateKey === "function" ? env.displayDateKey(ymd) : String(ymd || "");
+      const label = dateLabel + (time ? " " + time : "");
+      const b = h("button", { type: "button", class: "zn-date-chip", title: time ? "Date and time: " + label : "Date: " + label, "aria-label": "Date " + label }, label);
       b.dataset.ymd = ymd;
       b.dataset.raw = raw;
       if (Number.isInteger(env.dateLine) && env.dateLine >= 0) b.dataset.line = String(env.dateLine);
@@ -10802,6 +11347,8 @@ __zentralShim.register = function (def) {
       const tTable = iconButton("table", "Table\u2026");
       const tToc = iconButton("toc", "Table of contents of this note");
       const tInsert = iconButton("caret", "More: pictures, callouts, superscript, subscript, keyboard key (hold: callout kinds)", "zn-caret");
+      const btnQuickReminder = iconButton("bell", "Create reminder…", "zn-quick-reminder");
+      btnQuickReminder.hidden = !store.items;
       const tSettings = iconButton("sliders", "Quick settings", "zn-mode-btn");
       const tSync = iconButton("link", "Linked scrolling", "zn-mode-btn zn-sync-btn");
       const tSplit = iconButton("columns", "Split view: editor and preview", "zn-mode-btn");
@@ -10812,7 +11359,8 @@ __zentralShim.register = function (def) {
         [tNumbered, "Numbered list", "numbered"], [tCheck, "Checklist", "check"], [tQuote, "Quote (nest deeper with the indent button)", "quote"],
         [tOutdent, "Nest out: list or quote one level up", "outdent"], [tIndent, "Nest in: list or quote one level deeper", "indent"],
         [tRule, "Horizontal rule", "rule"], [tCode, "Inline code", "code"], [tCodeBlock, "Code block", "codeBlock"],
-        [tLink, "Link\u2026", "link"], [tNoteLink, "Link to another note\u2026", "noteLink"], [tImage, "Image", "image"], [tTable, "Table\u2026", "table"], [tToc, "Table of contents", "outline"], [tSettings, "Quick settings", "settings"],
+        [tLink, "Link\u2026", "link"], [tNoteLink, "Link to another note\u2026", "noteLink"], [tImage, "Image", "image"], [tTable, "Table\u2026", "table"], [tToc, "Table of contents", "outline"],
+        [btnQuickReminder, "Create reminder\u2026", "calendarReminder"], [tSettings, "Quick settings", "settings"],
       ];
       const getPref = (k, d) => (env.getPref ? env.getPref(k, d) : d);
       // The NOTES root style code below reads string preferences with this; it used to name a helper that only exists in the
@@ -10834,7 +11382,7 @@ __zentralShim.register = function (def) {
         "div",
         { class: "zn-tools" },
         tBold, tItalic, tStrike, tHl, tHlMenu, tHeading, tBullet, tNumbered, tCheck, tQuote, tOutdent, tIndent, tRule,
-        tCode, tCodeBlock, tLink, tNoteLink, tImage, tTable, tToc, tInsert,
+        tCode, tCodeBlock, tLink, tNoteLink, tImage, tTable, tToc, tInsert, btnQuickReminder,
         h("span", { class: "zn-grow" }),
         tSettings,
         tSync,
@@ -11270,8 +11818,17 @@ __zentralShim.register = function (def) {
         if (mode !== "edit") renderRead();
         scheduleChrome();
       }
+      let registeredOpenNote = "";
+      function trackOpenNote(id) {
+        const next = typeof id === "string" && store.get(id) ? id : "";
+        const previous = registeredOpenNote;
+        registeredOpenNote = next;
+        store.setActiveNote?.(token, next);
+        if (previous && previous !== next) store.purgeBlankDateNotes?.({ onlyIds: [previous] });
+      }
       function showNote(id) {
         if (armed.length) disarm();
+        trackOpenNote(id);
         currentId = id;
         const n = note();
         ta.value = n ? n.body : "";
@@ -11418,6 +11975,7 @@ __zentralShim.register = function (def) {
       env = Object.assign(Object.create(env), {
         noteInfo,
         renderEmbed,
+        displayDateKey: (key) => displayDateKey(key),
         dateNow: () => nowMs(),
         dateLineText: (line) => {
           const body = note()?.body || "";
@@ -12004,11 +12562,16 @@ __zentralShim.register = function (def) {
         })));
       }
       function calendarDayLabel(day, options = {}) {
-        return new Date(day).toLocaleDateString(undefined, { weekday: options.weekday || "long", month: "short", day: "numeric", ...(options.year ? { year: "numeric" } : {}) });
+        const d = new Date(day);
+        const date = displayDateKey(CALENDAR_PART.localDateKey(day));
+        const weekday = options.weekday === false ? "" : d.toLocaleDateString(undefined, { weekday: options.weekday || "long" });
+        return weekday ? weekday + ", " + date : date;
       }
       function calendarItemColor(item) {
-        if (!item.x?.category) return "";
-        return store.items?.category?.(item.x.category)?.color || "";
+        const linked = item?.x?.noteId ? store.get(item.x.noteId) : null;
+        const category = item?.x?.category ? store.items?.category?.(item.x.category)?.color || "" : "";
+        const resolved = CALENDAR_PART.resolveItemColor(linked?.color || "", category);
+        return colorHex(resolved) || resolved;
       }
       function calendarItemTime(item) {
         if (CALENDAR_PART.isAllDay(item)) return "All day";
@@ -12046,7 +12609,8 @@ __zentralShim.register = function (def) {
         const reminder = CALENDAR_PART.isReminder(item);
         const card = h("aside", { class: "zn-cal-hover-card", id, role: "tooltip", "aria-label": "Calendar item details" });
         card.append(h("strong", { class: "zn-cal-hover-title" }, item.summary || "Untitled item"));
-        card.append(h("div", { class: "zn-cal-hover-meta" }, (reminder ? "Reminder" : "Event") + " · " + calendarItemTime(item)));
+        const itemDay = CALENDAR_PART.itemRange(item)[0];
+        card.append(h("div", { class: "zn-cal-hover-meta" }, (reminder ? "Reminder" : "Event") + " · " + displayDateKey(CALENDAR_PART.localDateKey(itemDay)) + " · " + calendarItemTime(item)));
         if (item.x?.category) card.append(h("div", { class: "zn-cal-hover-meta" }, "Category: " + item.x.category));
         if (item.x?.tz) card.append(h("div", { class: "zn-cal-hover-meta" }, "Time zone: " + item.x.tz));
         if (note) {
@@ -12066,13 +12630,223 @@ __zentralShim.register = function (def) {
         calendarHoverCard = card;
         calendarHoverAnchor = anchor;
       }
+      function reminderHistoryStore() { return store.items?.history || null; }
+      function reminderLifecycleIdentity(item) {
+        return CALENDAR_PART.reminderIdentity(item);
+      }
+      function reminderLifecycleState(item) {
+        if (!CALENDAR_PART.isReminder(item)) return "pending";
+        const identity = reminderLifecycleIdentity(item);
+        return reminderHistoryStore()?.stateFor(identity.itemId, identity.occurrenceId) || "pending";
+      }
+      function recordReminderLifecycle(item, action) {
+        const history = reminderHistoryStore();
+        if (!history || !CALENDAR_PART.isReminder(item)) return false;
+        const identity = reminderLifecycleIdentity(item);
+        if (identity.legacyNote) {
+          // Legacy note reminders are backed by note front matter; keep their actual schedule in sync with
+          // lifecycle actions instead of merely painting a completed state over a still-ringing reminder.
+          const at = CALENDAR_PART.itemRange(item)[0];
+          if (action === "done" || action === "dismissed") return store.setReminder(identity.noteId, 0, action);
+          if (action === "reopened") return store.setReminder(identity.noteId, Math.max(at, nowMs() + 5 * 60000), "reopened");
+        }
+        const record = history.append({ itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.start, action, at: nowMs() });
+        if (!record) return false;
+        renderCalendar();
+        flash(action === "done" ? "Reminder marked done" : action === "dismissed" ? "Reminder dismissed" : action === "reopened" ? "Reminder reopened" : action === "snoozed" ? "Reminder snoozed" : "Reminder rescheduled");
+        return true;
+      }
+      function snoozeReminderItem(item, days, customStart = null) {
+        if (item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length)) return flash("This recurring occurrence needs exception support before it can be snoozed");
+        const start = customStart || CALENDAR_PART.snoozedItemStart(item, days);
+        if (!start) return flash("That reminder time could not be changed");
+        let saved = false;
+        if (item.x?.src === "note" && item.x?.noteId) {
+          const at = start.date ? CALENDAR_PART.parseYmd(start.date)?.getTime() : Date.parse(start.dateTime || "");
+          saved = Number.isFinite(at) && at > 0 && store.setReminder(item.x.noteId, at, "snoozed");
+        } else {
+          const current = store.items?.get(item.id);
+          if (!current) return flash("That reminder is no longer available");
+          saved = !!store.items.upsert({ ...current, start, historyAction: "snoozed" });
+        }
+        if (!saved) return flash("The reminder could not be snoozed. Check its history storage and try again.");
+        renderCalendar();
+        flash("Reminder snoozed");
+        return true;
+      }
+      function askCustomReminderSnooze(item) {
+        if (item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length)) return flash("Recurring occurrences need exception support before they can be snoozed");
+        const startMs = CALENDAR_PART.itemRange(item)[0];
+        const allDay = CALENDAR_PART.isAllDay(item);
+        const dateField = field("New date (YYYY-MM-DD)", CALENDAR_PART.ymd(new Date(startMs)), "YYYY-MM-DD");
+        const datePick = chip("Choose date…");
+        const dateHost = h("div", { class: "zn-cal-snooze-date" }, dateField.row, datePick);
+        datePick.addEventListener("click", () => {
+          const selected = CALENDAR_PART.parseYmd(dateField.input.value);
+          toggleDatePicker(datePick, dateHost, { selected: selected || startMs, items: calendarPickerItems(), onPick: (day) => { dateField.input.value = CALENDAR_PART.ymd(new Date(day)); } });
+        });
+        let selectedTime = allDay ? "" : calendarItemTime(item);
+        const clock = allDay ? null : buildClockPicker({ value: selectedTime, onPick: (value) => { selectedTime = value; } });
+        const summary = h("p", { class: "zn-empty" }, "The source note text is not rewritten. The reminder's scheduled wall-clock time is preserved unless you change it.");
+        const save = chip("Snooze reminder", true), cancel = chip("Cancel");
+        openCard("Custom reminder snooze", summary, dateHost, ...(clock ? [clock] : []), h("div", { class: "zn-dialog-actions" }, cancel, save));
+        const submit = () => {
+          const day = dateField.input.value.trim();
+          if (!CALENDAR_PART.parseYmd(day)) { dateField.input.dataset.bad = "true"; dateField.input.focus(); return; }
+          let targetMs;
+          if (allDay) targetMs = CALENDAR_PART.parseYmd(day).getTime();
+          else targetMs = CALENDAR_PART.zonedDateTimeToMs(day, selectedTime, item.x?.tz || "");
+          if (!Number.isFinite(targetMs) || targetMs <= 0) { dateField.input.dataset.bad = "true"; dateField.input.focus(); return; }
+          const start = CALENDAR_PART.snoozedItemStart(item, 0, targetMs);
+          if (!start) return flash("That reminder date and time is invalid");
+          closeDialog();
+          snoozeReminderItem(item, 0, start);
+        };
+        save.addEventListener("click", submit);
+        cancel.addEventListener("click", closeDialog);
+      }
+      function currentCalendarItem(item) {
+        return item?.id ? store.items?.get(item.id) || null : null;
+      }
+      function askCalendarItemReschedule(item) {
+        const C = CALENDAR_PART, current = currentCalendarItem(item);
+        if (!current) return flash("That calendar item is no longer available");
+        if (current.x?.src === "note") return flash("Change this reminder from its source note");
+        if (current.x?.series || (Array.isArray(current.recurrence) && current.recurrence.length)) return flash("Recurring occurrences need exception support before they can be moved");
+        const range = C.itemRange(current), allDay = C.isAllDay(current);
+        const dateField = field("New date (YYYY-MM-DD)", calendarItemDate(current), "YYYY-MM-DD");
+        const datePick = chip("Choose date…");
+        const dateHost = h("div", { class: "zn-cal-snooze-date" }, dateField.row, datePick);
+        datePick.addEventListener("click", () => {
+          const selected = C.parseYmd(dateField.input.value);
+          toggleDatePicker(datePick, dateHost, { selected: selected || range[0], items: calendarPickerItems(), onPick: (day) => { dateField.input.value = C.ymd(new Date(day)); } });
+        });
+        let selectedTime = allDay ? "" : C.clockIn(range[0], current.x?.tz || "");
+        const clock = allDay ? null : buildClockPicker({ value: selectedTime, onPick: (value) => { selectedTime = value; } });
+        const save = chip("Save new time", true), cancel = chip("Cancel");
+        const note = h("p", { class: "zn-empty" }, allDay
+          ? "The item stays all-day. Multi-day event length is preserved."
+          : "The item's wall-clock time and duration are preserved in its saved time zone.");
+        openCard("Change calendar item time", note, dateHost, ...(clock ? [clock] : []), h("div", { class: "zn-dialog-actions" }, cancel, save));
+        const submit = () => {
+          const key = dateField.input.value.trim(), parsed = C.parseYmd(key);
+          if (!parsed) { dateField.input.dataset.bad = "true"; dateField.input.focus(); return; }
+          let start, end;
+          if (allDay) {
+            const oldStart = C.parseYmd(current.start.date), oldEnd = current.end?.date ? C.parseYmd(current.end.date) : null;
+            const span = oldStart && oldEnd ? Math.max(1, Math.round((oldEnd.getTime() - oldStart.getTime()) / 86400000)) : 1;
+            start = { date: key };
+            if (current.end?.date) end = { date: C.ymd(new Date(C.addDays(parsed.getTime(), span))) };
+          } else {
+            const target = C.zonedDateTimeToMs(key, selectedTime, current.x?.tz || "");
+            if (!Number.isFinite(target) || target <= 0) { dateField.input.dataset.bad = "true"; dateField.input.focus(); return; }
+            start = { dateTime: new Date(target).toISOString() };
+            if (current.end?.dateTime) {
+              const duration = Math.max(5 * 60000, range[1] - range[0]);
+              end = { dateTime: new Date(target + duration).toISOString() };
+            }
+          }
+          const next = { ...current, start, ...(end ? { end } : { end: undefined }), x: { ...current.x, moved: current.x?.src === "list" ? true : current.x?.moved } };
+          const saved = store.items.upsert(next);
+          if (!saved) return flash("This calendar item changed while the dialog was open. Reopen its menu and try again.");
+          closeDialog();
+          renderCalendar();
+          flash("Calendar item time changed");
+        };
+        save.addEventListener("click", submit);
+        cancel.addEventListener("click", closeDialog);
+      }
+      function convertCalendarItem(item) {
+        const current = currentCalendarItem(item);
+        if (!current) return flash("That calendar item is no longer available");
+        if (current.x?.src !== "manual") return flash("Only independent calendar items can be converted");
+        const wasReminder = CALENDAR_PART.isReminder(current);
+        const x = { ...current.x, kind: wasReminder ? "event" : "reminder" };
+        const next = { ...current, x };
+        if (wasReminder) {
+          const [start] = CALENDAR_PART.itemRange(current);
+          next.end = current.start?.date
+            ? { date: CALENDAR_PART.ymd(new Date(CALENDAR_PART.addDays(start, 1))) }
+            : { dateTime: new Date(start + 60 * 60000).toISOString() };
+        } else delete next.end;
+        const saved = store.items.upsert(next);
+        if (!saved) return flash("Could not convert the calendar item");
+        renderCalendar();
+        flash(wasReminder ? "Reminder converted to an event" : "Event converted to a reminder");
+      }
+      function duplicateCalendarItem(item) {
+        const current = currentCalendarItem(item);
+        if (!current) return flash("That calendar item is no longer available");
+        const copy = CALENDAR_PART.makeItem({
+          ...current, id: undefined, summary: (current.summary || "Untitled item").slice(0, 490) + " (copy)",
+          x: { ...current.x, src: "manual", noteId: "", heading: "", key: "", legacyKey: "", moved: false },
+        }, nowMs());
+        const saved = copy && store.items.upsert(copy);
+        if (!saved) return flash("Could not duplicate the calendar item");
+        renderCalendar();
+        flash("Independent copy created");
+      }
+      function askDeleteCalendarItem(item) {
+        const current = currentCalendarItem(item);
+        if (!current) return flash("That calendar item is no longer available");
+        if (current.x?.src !== "manual") return flash("Remove this item from its source note instead");
+        const cancel = chip("Cancel"), remove = chip("Delete item", true);
+        openCard("Delete calendar item?", h("p", { class: "zn-empty" }, `Delete “${current.summary || "Untitled item"}”? This removes the independent calendar item and cannot be undone.`), h("div", { class: "zn-dialog-actions" }, cancel, remove));
+        remove.addEventListener("click", () => {
+          const latest = currentCalendarItem(current);
+          if (!latest || latest.x?.src !== "manual") { closeDialog(); return flash("That calendar item is no longer available"); }
+          if (!store.items.remove(latest.id)) return flash("Could not delete the calendar item");
+          closeDialog();
+          renderCalendar();
+          flash("Calendar item deleted");
+        });
+        cancel.addEventListener("click", closeDialog);
+      }
+      function calendarItemMenuRows(item) {
+        const reminder = CALENDAR_PART.isReminder(item), history = reminderHistoryStore();
+        const lifecycle = reminder ? reminderLifecycleState(item) : "pending";
+        const historyWritable = !!history && !history.storageState().writeBlocked;
+        const model = CALENDAR_PART.calendarItemMenuModel(item, { state: lifecycle, historyWritable });
+        const date = new Date(CALENDAR_PART.itemRange(item)[0]);
+        const nextMonday = (8 - date.getDay()) % 7 || 7;
+        const commands = {
+          open: () => { const latest = currentCalendarItem(item); if (latest) openCalendarItem(latest); },
+          edit: () => { const latest = currentCalendarItem(item); if (latest) askCalendarComposer({ item: latest }); },
+          "change-time": () => { const latest = currentCalendarItem(item); if (latest) askCalendarItemReschedule(latest); },
+          convert: () => convertCalendarItem(item),
+          duplicate: () => duplicateCalendarItem(item),
+          delete: () => askDeleteCalendarItem(item),
+          "mark-done": () => recordReminderLifecycle(item, "done"),
+          dismiss: () => recordReminderLifecycle(item, "dismissed"),
+          reopen: () => recordReminderLifecycle(item, "reopened"),
+          "snooze-1d": () => snoozeReminderItem(item, 1),
+          "snooze-3d": () => snoozeReminderItem(item, 3),
+          "snooze-monday": () => snoozeReminderItem(item, nextMonday),
+          "snooze-custom": () => queueMicrotask(() => askCustomReminderSnooze(item)),
+        };
+        const bind = (rows) => rows.map((row) => {
+          if (!row || row.sep || row.heading) return row;
+          if (Array.isArray(row.group)) return { ...row, group: bind(row.group) };
+          const run = commands[row.command];
+          return { ...row, run: row.enabled && typeof run === "function" ? () => run() : null };
+        });
+        return bind(model);
+      }
+      function showCalendarItemMenu(event, item, anchor = null) {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        const latest = currentCalendarItem(item);
+        if (!latest) return flash("That calendar item is no longer available");
+        showMenu(anchor || (event ? pointAnchor(event) : item), calendarItemMenuRows(latest));
+      }
       function calendarItemButton(item, compact = false) {
         const reminder = CALENDAR_PART.isReminder(item);
+        const lifecycle = reminder ? reminderLifecycleState(item) : "";
         const button = h("button", {
           type: "button",
-          class: "zn-cal-item" + (reminder ? " is-reminder" : " is-event") + (compact ? " is-compact" : ""),
-          title: [item.summary, item.x?.calNote].filter(Boolean).join(" — "),
-          "aria-label": `${reminder ? "Reminder" : "Event"}: ${item.summary}${item.x?.calNote ? ". Calendar note: " + item.x.calNote : ""}`,
+          class: "zn-cal-item" + (reminder ? " is-reminder is-" + lifecycle : " is-event") + (compact ? " is-compact" : ""),
+          title: [item.summary, reminder ? "Reminder: " + lifecycle : "", item.x?.calNote].filter(Boolean).join(" — "),
+          "aria-label": `${reminder ? "Reminder" : "Event"}: ${item.summary}${reminder ? ". State: " + lifecycle : ""}${item.x?.calNote ? ". Calendar note: " + item.x.calNote : ""}`,
         });
         const color = calendarItemColor(item);
         if (color) button.style.setProperty("--zn-cal-item-color", color);
@@ -12084,6 +12858,14 @@ __zentralShim.register = function (def) {
         button.addEventListener("focus", () => showCalendarHoverCard(item, button));
         button.addEventListener("blur", () => hideCalendarHoverCard(button));
         button.addEventListener("click", () => openCalendarItem(item));
+        button.setAttribute("aria-haspopup", "menu");
+        button.addEventListener("contextmenu", (event) => showCalendarItemMenu(event, item));
+        button.addEventListener("keydown", (event) => {
+          if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+          event.preventDefault();
+          event.stopPropagation();
+          showCalendarItemMenu(null, item, button);
+        });
         return button;
       }
       function calendarDayGroup(day, dayItems, { selected = false, compact = false } = {}) {
@@ -12136,9 +12918,17 @@ __zentralShim.register = function (def) {
           const timed = dayItems.filter((item) => !CALENDAR_PART.isAllDay(item));
           const mini = h("div", { class: "zn-cal-month-items" });
           for (const item of [...allDay, ...timed].slice(0, 2)) {
-            const mark = h("button", { type: "button", class: "zn-cal-month-mark" + (CALENDAR_PART.isReminder(item) ? " is-reminder" : " is-event"), title: [item.summary, item.x?.calNote].filter(Boolean).join(" — ") }, item.summary || "Untitled");
+            const reminder = CALENDAR_PART.isReminder(item), lifecycle = reminder ? reminderLifecycleState(item) : "";
+            const mark = h("button", { type: "button", class: "zn-cal-month-mark" + (reminder ? " is-reminder is-" + lifecycle : " is-event"), title: [item.summary, reminder ? "Reminder: " + lifecycle : "", item.x?.calNote].filter(Boolean).join(" — "), "aria-haspopup": "menu" }, item.summary || "Untitled");
             const color = calendarItemColor(item); if (color) mark.style.setProperty("--zn-cal-item-color", color);
             mark.addEventListener("click", () => openCalendarItem(item));
+            mark.addEventListener("contextmenu", (event) => showCalendarItemMenu(event, item));
+            mark.addEventListener("keydown", (event) => {
+              if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+              event.preventDefault();
+              event.stopPropagation();
+              showCalendarItemMenu(null, item, mark);
+            });
             mini.append(mark);
           }
           if (dayItems.length > 2) mini.append(h("span", { class: "zn-cal-month-more" }, `+${dayItems.length - 2} more`));
@@ -12186,7 +12976,7 @@ __zentralShim.register = function (def) {
         const header = h("div", { class: "zn-cal-time-head" });
         header.style.gridTemplateColumns = cols;
         header.append(h("span", { class: "zn-cal-time-corner", "aria-hidden": "true" }));
-        for (const day of days) header.append(h("div", { class: "zn-cal-time-day-head" }, h("strong", {}, new Date(day).toLocaleDateString(undefined, { weekday: mode === "week" ? "short" : "long" })), h("span", {}, new Date(day).toLocaleDateString(undefined, { month: "short", day: "numeric" }))));
+        for (const day of days) header.append(h("div", { class: "zn-cal-time-day-head" }, h("strong", {}, new Date(day).toLocaleDateString(undefined, { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day)))));
         const allDayRow = h("div", { class: "zn-cal-time-allday-row", "aria-label": "All-day events and reminders" });
         allDayRow.style.gridTemplateColumns = cols;
         allDayRow.append(h("span", { class: "zn-cal-time-all-label" }, "All day"));
@@ -12257,34 +13047,344 @@ __zentralShim.register = function (def) {
         calendarContent.dataset.compact = "false";
         calendarContent.append(root);
       }
+      function askCalendarComposer(options = {}) {
+        const C = CALENDAR_PART;
+        if (!C || !store.items) return flash("Calendar item storage is unavailable");
+        const original = options.item && store.items.get(options.item.id) || null;
+        if (options.item && !original) return flash("That calendar item is no longer available");
+        const now = nowMs();
+        const zone = String(original?.x?.tz || options.tz || "").trim();
+        const startDateDefault = original ? calendarItemDate(original) : String(options.date || C.ymd(new Date(now)));
+        const startTimeDefault = original?.start?.dateTime ? C.clockIn(Date.parse(original.start.dateTime), zone) : String(options.startTime || "09:00");
+        const endDateDefault = original?.end?.date ? original.end.date : original?.end?.dateTime ? calendarItemDate({ start: original.end, x: original.x }) : String(options.endDate || startDateDefault);
+        const endTimeDefault = original?.end?.dateTime ? C.clockIn(Date.parse(original.end.dateTime), zone) : String(options.endTime || "10:00");
+        const activeNote = note();
+        const defaultNoteId = original?.x?.noteId || options.noteId || (activeNote && !activeNote.trashed && options.linkCurrent !== false ? activeNote.id : "");
+        const initialKind = original?.x?.kind || (C.KINDS.includes(options.kind) ? options.kind : "reminder");
+        const initialAllDay = original ? C.isAllDay(original) : options.allDay === true;
+        const defaultSummary = original?.summary || options.summary || (defaultNoteId && activeNote?.id === defaultNoteId ? titleOf(activeNote.body) : "") || (initialKind === "event" ? "Event" : "Reminder");
+
+        const title = field("Title", defaultSummary, "A clear, independent event or reminder title");
+        const kind = h("select", { class: "zn-select zn-cal-compose-kind", "aria-label": "Item type" });
+        kind.append(h("option", { value: "event" }, "Event"), h("option", { value: "reminder" }, "Reminder"));
+        kind.value = initialKind;
+        const allDay = h("input", { type: "checkbox", "aria-label": "All-day" }); allDay.checked = initialAllDay;
+        const kindRow = h("label", { class: "zn-field-row zn-cal-compose-kind-row" }, h("span", {}, "Type"), kind);
+        const allDayRow = h("label", { class: "zn-field-row zn-cal-compose-check" }, allDay, h("span", {}, "All day"));
+
+        const startDate = field("Start date", startDateDefault, "YYYY-MM-DD");
+        const endDate = field("End date (exclusive)", endDateDefault, "YYYY-MM-DD");
+        const startTime = field("Start time", startTimeDefault, "HH:MM");
+        const endTime = field("End time", endTimeDefault, "HH:MM");
+        const startDatePick = chip("Pick date…"), endDatePick = chip("Pick end…"), clockPick = chip("Clock…");
+        const startDateHost = h("div", { class: "zn-cal-compose-date-row" }, startDate.row, startDatePick);
+        const endDateHost = h("div", { class: "zn-cal-compose-date-row" }, endDate.row, endDatePick);
+        const startTimeHost = h("div", { class: "zn-cal-compose-date-row" }, startTime.row, h("span", { class: "zn-cal-compose-clock-anchor" }));
+        const endTimeHost = h("div", { class: "zn-cal-compose-date-row" }, endTime.row);
+        const clockHost = h("div", { class: "zn-cal-compose-clock-host" });
+
+        const noteSelect = h("select", { class: "zn-select", "aria-label": "Linked note" });
+        noteSelect.append(h("option", { value: "" }, "No linked note"));
+        const linkedNotes = store.list({ trashed: false }).slice().sort((a, b) => titleOf(a.body).localeCompare(titleOf(b.body)));
+        for (const linked of linkedNotes) noteSelect.append(h("option", { value: linked.id }, titleOf(linked.body) || "Untitled note"));
+        if (defaultNoteId && !linkedNotes.some((n) => n.id === defaultNoteId)) {
+          const linked = store.get(defaultNoteId);
+          if (linked) noteSelect.append(h("option", { value: linked.id }, titleOf(linked.body) || "Untitled note"));
+        }
+        noteSelect.value = defaultNoteId || "";
+        const noteRow = h("label", { class: "zn-field-row" }, h("span", {}, "Linked note"), noteSelect);
+
+        const categorySelect = h("select", { class: "zn-select", "aria-label": "Calendar category" });
+        categorySelect.append(h("option", { value: "" }, "No category"));
+        for (const category of store.items.categoryList()) categorySelect.append(h("option", { value: category.name }, category.name));
+        categorySelect.value = original?.x?.category || options.category || "";
+        const categoryRow = h("label", { class: "zn-field-row" }, h("span", {}, "Category"), categorySelect);
+        const colorPreview = h("span", { class: "zn-cal-compose-color", "aria-hidden": "true" });
+        const colorLabel = h("span", { class: "zn-cal-compose-color-label", "aria-live": "polite" }, "Color follows the linked note, then the category");
+        const colorRow = h("div", { class: "zn-cal-compose-color-row" }, colorPreview, colorLabel);
+
+        const description = h("textarea", { class: "zn-field zn-calendar-note-field", rows: "3", "aria-label": "Description", placeholder: "Description shown in item details" });
+        description.value = original?.description || options.description || "";
+        const descriptionRow = h("label", { class: "zn-field-row" }, h("span", {}, "Description"), description);
+        const calNote = h("textarea", { class: "zn-field zn-calendar-note-field", rows: "3", "aria-label": "Calendar note", placeholder: "Additional context kept with this calendar item" });
+        calNote.value = original?.x?.calNote || options.calNote || "";
+        const calNoteRow = h("label", { class: "zn-field-row" }, h("span", {}, "Calendar note"), calNote);
+        const zoneField = field("Time zone (IANA; blank = local)", zone, "e.g. Europe/Warsaw");
+
+        const currentRule = (original?.recurrence || []).map((r) => C.parseRule(r)).find(Boolean) || null;
+        const frequency = h("select", { class: "zn-select", "aria-label": "Repeat frequency" });
+        for (const [value, label] of [["NONE", "Does not repeat"], ["DAILY", "Daily"], ["WEEKLY", "Weekly"], ["MONTHLY", "Monthly"], ["YEARLY", "Yearly"]]) frequency.append(h("option", { value }, label));
+        frequency.value = currentRule?.freq || "NONE";
+        const interval = h("input", { type: "number", class: "zn-field", min: "1", max: "999", step: "1", "aria-label": "Repeat interval" }); interval.value = String(currentRule?.interval || 1);
+        const intervalRow = h("label", { class: "zn-field-row zn-recurrence-interval" }, h("span", {}, "Repeat every"), interval, h("span", {}, "interval(s)"));
+        const dayCodes = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"], dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        const defaultDay = (C.parseYmd(startDate.input.value) || new Date(now)).getDay();
+        const initialDays = currentRule?.byday?.length ? currentRule.byday.map((day) => ["SU", "MO", "TU", "WE", "TH", "FR", "SA"][day]) : [["SU", "MO", "TU", "WE", "TH", "FR", "SA"][defaultDay]];
+        const dayChecks = dayCodes.map((code, i) => {
+          const input = h("input", { type: "checkbox", "aria-label": dayLabels[i] }); input.checked = initialDays.includes(code);
+          return { code, input, node: h("label", { class: "zn-recurrence-day" }, input, h("span", {}, dayLabels[i])) };
+        });
+        const daysRow = h("div", { class: "zn-recurrence-days", "aria-label": "Repeat on weekdays" }, ...dayChecks.map((d) => d.node));
+        const endMode = h("select", { class: "zn-select", "aria-label": "Repeat ending" });
+        endMode.append(h("option", { value: "never" }, "Never"), h("option", { value: "count" }, "After a number of occurrences"), h("option", { value: "until" }, "On a date"));
+        endMode.value = currentRule?.count ? "count" : currentRule?.until ? "until" : "never";
+        const count = h("input", { type: "number", class: "zn-field", min: "1", max: "5000", step: "1", "aria-label": "Repeat occurrence count" }); count.value = String(currentRule?.count || 10);
+        const countRow = h("label", { class: "zn-field-row" }, h("span", {}, "Occurrences"), count);
+        const until = field("Last occurrence date", currentRule?.until ? C.ymd(new Date(currentRule.until - 86400000)) : "", "YYYY-MM-DD");
+        const untilPick = chip("Choose date…"), untilHost = h("div", { class: "zn-recurrence-until" }, until.row, untilPick);
+        const recurrenceBox = h("div", { class: "zn-recurrence-editor zn-cal-compose-section" },
+          h("strong", {}, "Recurrence"),
+          h("label", { class: "zn-field-row" }, h("span", {}, "Repeat"), frequency),
+          intervalRow, daysRow,
+          h("label", { class: "zn-field-row" }, h("span", {}, "Ends"), endMode),
+          countRow, untilHost);
+        const syncRecurrence = () => {
+          const active = frequency.value !== "NONE";
+          recurrenceBox.dataset.enabled = active ? "true" : "false";
+          intervalRow.hidden = !active;
+          daysRow.hidden = !active || frequency.value !== "WEEKLY";
+          endMode.parentNode && (endMode.parentNode.hidden = !active);
+          countRow.hidden = !active || endMode.value !== "count";
+          untilHost.hidden = !active || endMode.value !== "until";
+        };
+        frequency.addEventListener("change", syncRecurrence);
+        endMode.addEventListener("change", syncRecurrence);
+        syncRecurrence();
+
+        const notifySection = h("div", { class: "zn-recurrence-editor zn-cal-compose-alerts" }, h("strong", {}, "Reminder alerts"));
+        const notifyInputs = {};
+        const notifySelects = {};
+        const categoryDefaults = () => C.cleanCategoryNotify(store.items.category(categorySelect.value)?.notify);
+        const oldNotify = original?.x?.notify || {};
+        const alertRules = [
+          ["pre", "Tier 1 · Gentle pre-alert", "leadMinutes", [1, 2, 3, 5, 7, 10], 5],
+          ["due", "Tier 2 · At due time", null, [], null],
+          ["followup", "Tier 3 · Follow-up banner", "delayMinutes", [1, 2, 3, 5, 10, 15, 30], 2],
+        ];
+        for (const [stage, label, numberKey, choices, fallback] of alertRules) {
+          const defaults = categoryDefaults()[stage];
+          const checked = typeof oldNotify[stage]?.enabled === "boolean" ? oldNotify[stage].enabled : defaults.enabled;
+          const box = h("input", { type: "checkbox", "aria-label": label }); box.checked = checked;
+          const row = h("label", { class: "zn-field-row zn-cal-compose-check" }, box, h("span", {}, label));
+          notifySection.append(row); notifyInputs[stage] = box;
+          if (numberKey) {
+            const select = h("select", { class: "zn-select", "aria-label": stage === "pre" ? "Pre-alert lead time" : "Follow-up delay" });
+            for (const minutes of choices) select.append(h("option", { value: String(minutes) }, `${minutes} min`));
+            select.value = String(oldNotify[stage]?.[numberKey] ?? defaults[numberKey] ?? fallback);
+            notifySection.append(h("label", { class: "zn-field-row zn-category-rule" }, h("span", {}, stage === "pre" ? "Lead time" : "Follow-up delay"), select));
+            notifySelects[stage] = select;
+          }
+        }
+        const preview = h("p", { class: "zn-empty zn-cal-compose-preview", "aria-live": "polite" });
+        const status = h("p", { class: "zn-empty zn-cal-compose-status", role: "status", "aria-live": "polite" });
+        const save = chip(original ? "Save calendar item" : initialKind === "event" ? "Create event" : "Create reminder", true);
+        const cancel = chip("Cancel");
+        const actions = h("div", { class: "zn-dialog-actions" }, cancel, save);
+        const intro = h("p", { class: "zn-empty" }, "The title is independent from the linked note. Calendar notes stay with this item; a full-day reminder has no end time.");
+        const card = openCard(original ? "Edit calendar item" : "Create calendar item", intro, title.row, kindRow, allDayRow,
+          startDateHost, endDateHost, startTimeHost, endTimeHost, clockPick, clockHost,
+          noteRow, categoryRow, colorRow, descriptionRow, calNoteRow, zoneField.row,
+          recurrenceBox, notifySection, preview, status, actions);
+        card.classList.add("zn-cal-compose-card");
+
+        const updateKindRows = () => {
+          const reminder = kind.value === "reminder", fullDay = allDay.checked;
+          endDateHost.hidden = reminder;
+          endTimeHost.hidden = reminder || fullDay;
+          startTimeHost.hidden = fullDay;
+          clockPick.hidden = fullDay;
+          notifySection.hidden = !reminder;
+          if (!fullDay && !startTime.input.value.trim()) startTime.input.value = "09:00";
+          if (!fullDay && !reminder && !endTime.input.value.trim()) endTime.input.value = "10:00";
+          save.textContent = original ? "Save calendar item" : (reminder ? "Create reminder" : "Create event");
+          paintPreview();
+        };
+        function currentColor() {
+          const noteId = noteSelect.value;
+          const linked = noteId ? store.get(noteId) : null;
+          const inherited = linked && linked.color && linked.color !== "none" ? colorHex(linked.color) : "";
+          const categoryColor = store.items.category(categorySelect.value)?.color || "";
+          return inherited || categoryColor || "";
+        }
+        function paintColor() {
+          const color = currentColor();
+          colorPreview.style.backgroundColor = color || "transparent";
+          colorLabel.textContent = color ? `Effective item colour: ${color}` : "No inherited or category colour";
+        }
+        function paintPreview() {
+          const all = allDay.checked, reminder = kind.value === "reminder";
+          const parts = [reminder ? "Reminder" : "Event", startDate.input.value || "Choose a date"];
+          if (all) parts.push("all day");
+          else parts.push(startTime.input.value || "Choose a time");
+          if (!reminder && endDate.input.value) parts.push("through " + endDate.input.value + (all ? " (exclusive end)" : " at " + (endTime.input.value || "Choose an end time")));
+          preview.textContent = parts.join(" · ");
+          paintColor();
+        }
+        let clockOpen = false;
+        clockPick.addEventListener("click", () => {
+          if (clockOpen) { clockHost.replaceChildren(); clockOpen = false; clockPick.focus({ preventScroll: true }); return; }
+          closeDatePicker({ restoreFocus: false });
+          const clock = buildClockPicker({ value: startTime.input.value, onPick: (value) => { startTime.input.value = value; paintPreview(); }, ...(kind.value === "event" ? { endValue: endTime.input.value, onEndPick: (value) => { endTime.input.value = value; paintPreview(); } } : {}) });
+          clockHost.replaceChildren(clock); clockOpen = true;
+          clock.querySelector("select")?.focus({ preventScroll: true });
+        });
+        const bindDatePicker = (button, host, input) => button.addEventListener("click", () => {
+          if (clockOpen) { clockHost.replaceChildren(); clockOpen = false; }
+          const selected = C.parseYmd(input.value);
+          toggleDatePicker(button, host, { selected: selected?.getTime() || 0, items: calendarPickerItems(), onPick: (day) => { input.value = C.ymd(new Date(day)); paintPreview(); } });
+        });
+        bindDatePicker(startDatePick, startDateHost, startDate.input);
+        bindDatePicker(endDatePick, endDateHost, endDate.input);
+        bindDatePicker(untilPick, untilHost, until.input);
+        for (const input of [startDate.input, endDate.input, startTime.input, endTime.input, zoneField.input]) input.addEventListener("input", paintPreview);
+        for (const control of [kind, allDay]) control.addEventListener("change", () => {
+          if (clockOpen) { clockHost.replaceChildren(); clockOpen = false; }
+          if (kind.value === "event" && allDay.checked && (!C.parseYmd(endDate.input.value) || endDate.input.value <= startDate.input.value)) {
+            const startDay = C.parseYmd(startDate.input.value);
+            if (startDay) endDate.input.value = C.ymd(new Date(C.addDays(startDay.getTime(), 1)));
+          }
+          updateKindRows();
+        });
+        categorySelect.addEventListener("change", () => {
+          const defaults = categoryDefaults();
+          for (const [stage, _label, numberKey] of alertRules) {
+            if (!notifyInputs[stage].dataset.userChanged) notifyInputs[stage].checked = defaults[stage].enabled;
+            if (numberKey && !notifySelects[stage].dataset.userChanged) notifySelects[stage].value = String(defaults[stage][numberKey]);
+          }
+          paintPreview();
+        });
+        for (const [stage, input] of Object.entries(notifyInputs)) input.addEventListener("change", () => { input.dataset.userChanged = "true"; });
+        for (const select of Object.values(notifySelects)) select.addEventListener("change", () => { select.dataset.userChanged = "true"; });
+        noteSelect.addEventListener("change", paintColor);
+        startDate.input.addEventListener("change", () => {
+          if (!original && kind.value === "event" && endDate.input.value === startDateDefault) {
+            const startDay = C.parseYmd(startDate.input.value);
+            endDate.input.value = startDay && allDay.checked ? C.ymd(new Date(C.addDays(startDay.getTime(), 1))) : startDate.input.value;
+          }
+          paintPreview();
+        });
+
+        const submit = () => {
+          const date = C.parseYmd(startDate.input.value);
+          const zoneText = zoneField.input.value.trim();
+          const zoneValue = zoneText ? C.cleanZone(zoneText) : "";
+          const recurrence = (original?.recurrence || []).filter((r) => !C.parseRule(r));
+          if (frequency.value !== "NONE") {
+            const every = Number(interval.value);
+            if (!Number.isInteger(every) || every < 1 || every > 999) { interval.dataset.bad = "true"; interval.focus(); status.textContent = "Repeat interval must be from 1 to 999."; return; }
+            const rule = [`FREQ=${frequency.value}`];
+            if (every !== 1) rule.push(`INTERVAL=${every}`);
+            if (frequency.value === "WEEKLY") {
+              const selected = dayChecks.filter((entry) => entry.input.checked).map((entry) => entry.code);
+              if (!selected.length) { dayChecks[0].input.dataset.bad = "true"; dayChecks[0].input.focus(); status.textContent = "Choose at least one weekday."; return; }
+              rule.push("BYDAY=" + selected.join(","));
+            }
+            if (endMode.value === "count") {
+              const n = Number(count.value);
+              if (!Number.isInteger(n) || n < 1 || n > 5000) { count.dataset.bad = "true"; count.focus(); status.textContent = "Occurrence count must be from 1 to 5000."; return; }
+              rule.push("COUNT=" + n);
+            } else if (endMode.value === "until") {
+              const untilDay = C.parseYmd(until.input.value);
+              if (!untilDay || (date && untilDay < date)) { until.input.dataset.bad = "true"; until.input.focus(); status.textContent = "Choose a valid recurrence end date on or after the start date."; return; }
+              rule.push("UNTIL=" + until.input.value.replace(/-/g, ""));
+            }
+            recurrence.unshift("RRULE:" + rule.join(";"));
+          }
+          if (!date || !title.input.value.trim()) {
+            const target = title.input.value.trim() ? startDate.input : title.input;
+            target.dataset.bad = "true"; target.focus(); status.textContent = "Enter a title and a valid start date."; return;
+          }
+          if (zoneText && !zoneValue) { zoneField.input.dataset.bad = "true"; zoneField.input.focus(); status.textContent = "Enter a valid IANA time zone."; return; }
+          const notify = {};
+          if (kind.value === "reminder") {
+            notify.pre = { enabled: notifyInputs.pre.checked, leadMinutes: Number(notifySelects.pre.value) };
+            notify.due = { enabled: notifyInputs.due.checked };
+            notify.followup = { enabled: notifyInputs.followup.checked, delayMinutes: Number(notifySelects.followup.value) };
+          }
+          const item = C.composeCalendarItem({
+            item: original, id: original?.id, kind: kind.value, allDay: allDay.checked,
+            summary: title.input.value, startDate: startDate.input.value, startTime: startTime.input.value,
+            endDate: endDate.input.value, endTime: endTime.input.value,
+            noteId: noteSelect.value, category: categorySelect.value,
+            description: description.value, calNote: calNote.value,
+            heading: original?.x?.heading || options.heading || "", tz: zoneText,
+            recurrence, notify,
+          }, nowMs());
+          if (!item) {
+            const target = kind.value === "event" && !allDay.checked && C.parseClock(endTime.input.value) < 0 ? endTime.input
+              : (kind.value === "event" && allDay.checked && (!C.parseYmd(endDate.input.value) || endDate.input.value <= startDate.input.value) ? endDate.input
+                : (!allDay.checked && C.parseClock(startTime.input.value) < 0 ? startTime.input : startDate.input));
+            target.dataset.bad = "true"; target.focus();
+            status.textContent = kind.value === "event" ? "Check the dates and that the end is after the start." : "Check the date and time.";
+            return;
+          }
+          const saved = store.items.upsert(item);
+          if (!saved) { status.textContent = "Could not save the calendar item. Check calendar storage."; return; }
+          const startMs = item.start.date ? C.parseYmd(item.start.date).getTime() : Date.parse(item.start.dateTime);
+          store.setMeta({ calendarCursor: C.localDateKey(startMs), calendarView: store.meta.calendarView || "month" });
+          closeDialog(); renderCalendar();
+          flash(original ? "Calendar item saved" : (item.x.kind === "reminder" ? "Reminder created" : "Event created"));
+        };
+        kind.addEventListener("change", updateKindRows);
+        updateKindRows();
+        save.addEventListener("click", submit);
+        cancel.addEventListener("click", () => { closeDialog(); focusEditor(); });
+        title.input.addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } });
+        title.input.focus({ preventScroll: true });
+        return card;
+      }
+      function askNotesReminderShortcut() {
+        const C = CALENDAR_PART;
+        if (!C || !store.items) return flash("Calendar item storage is unavailable");
+        const current = note();
+        const selection = ta.value.slice(ta.selectionStart || 0, ta.selectionEnd || 0).trim();
+        const offset = Math.max(0, Math.min(ta.value.length, Number(ta.selectionStart) || 0));
+        const lines = normalizeNewlines(ta.value).split("\n");
+        const lineIndex = lineOfOffset(ta.value, offset);
+        const lineText = lines[lineIndex] || "";
+        const sourceText = selection || lineText;
+        const tokens = C.inlineDateTokens(sourceText, nowMs());
+        let selectedDate = tokens[0]?.ymd || "";
+        if (!selectedDate && sourceText) {
+          const parsed = C.parseDateText(sourceText, nowMs());
+          if (parsed !== null) selectedDate = C.ymd(new Date(parsed));
+        }
+        const sentence = C.titleFromDateText(sourceText, tokens[0]?.raw || "")
+          .replace(/^\s*(?:[-*+] |\d+[.)] )/, "")
+          .replace(/^[#>*\s]+|[#\s]+$/g, "").trim();
+        const heading = current ? lineHeading(current.body, lineIndex) : "";
+        const usefulTitle = (sentence || heading || (current ? titleOf(current.body) : "") || "Reminder").slice(0, 500);
+        const noteId = current && !current.trashed ? current.id : "";
+        const matches = selectedDate && noteId
+          ? store.items.list({ noteId, kind: "reminder" }).filter((item) => calendarItemDate(item) === selectedDate)
+          : [];
+        if (matches.length === 1) return askCalendarComposer({ item: matches[0] });
+        if (matches.length > 1) {
+          const choices = h("div", { class: "zn-cal-reminder-choices", role: "list" });
+          for (const item of matches) {
+            const button = chip(calendarItemMenuLabel(item));
+            button.setAttribute("aria-label", "Edit " + calendarItemMenuLabel(item));
+            button.addEventListener("click", () => { closeDialog(); askCalendarComposer({ item }); });
+            choices.append(button);
+          }
+          const create = chip("Create another reminder on this date");
+          const cancel = chip("Cancel");
+          create.addEventListener("click", () => { closeDialog(); askCalendarComposer({ kind: "reminder", allDay: false, date: selectedDate, summary: usefulTitle, noteId, heading, linkCurrent: false }); });
+          cancel.addEventListener("click", closeDialog);
+          return openCard("Choose the reminder to edit", h("p", { class: "zn-empty" }, `${matches.length} reminders already exist for ${displayDateKey(selectedDate)}. Choose one to edit, or deliberately create another.`), choices, h("div", { class: "zn-dialog-actions" }, cancel, create));
+        }
+        askCalendarComposer({ kind: "reminder", allDay: false, date: selectedDate || undefined, summary: usefulTitle, noteId, heading, linkCurrent: false });
+      }
       function askCalendarSlotEvent(start, end) {
         const C = CALENDAR_PART;
-        if (!store.items) return flash("Calendar item storage is unavailable");
-        const title = field("Event title", "", "What is this time for?");
         const startDate = C.ymd(new Date(start)), endDate = C.ymd(new Date(end));
-        const startLabel = new Date(start).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-        const endLabel = startDate === endDate
-          ? new Date(end).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
-          : new Date(end).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-        const cancel = chip("Cancel"), save = chip("Create event", true);
-        openCard("Use available time", h("p", { class: "zn-empty" }, startLabel + " – " + endLabel), title.row,
-          h("p", { class: "zn-empty" }, "This creates a standalone timed event. You can add a linked note, category, colour and other details in the full item editor."),
-          h("div", { class: "zn-dialog-actions" }, cancel, save));
-        const submit = () => {
-          const summary = title.input.value.trim();
-          if (!summary) { title.input.dataset.bad = "true"; title.input.focus(); return; }
-          const item = C.makeItem({ summary, start: { dateTime: new Date(start).toISOString() }, end: { dateTime: new Date(end).toISOString() }, x: { kind: "event", src: "manual" } }, nowMs());
-          const saved = item && store.items.upsert(item);
-          if (!saved) return flash("Could not create the event");
-          store.setMeta({ calendarCursor: C.ymd(new Date(start)), calendarView: "day" });
-          closeDialog();
-          renderCalendar();
-          flash("Event created");
-        };
-        save.addEventListener("click", submit);
-        cancel.addEventListener("click", closeDialog);
-        title.input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); submit(); } });
-        title.input.focus({ preventScroll: true });
+        askCalendarComposer({ kind: "event", allDay: false, date: startDate, startTime: C.clockIn(start), endDate, endTime: C.clockIn(end), linkCurrent: false });
+      }
+      function askCreateCalendarItem(kind, allDay, date = "") {
+        const selected = date || store.meta.calendarCursor || CALENDAR_PART.ymd(new Date(nowMs()));
+        const startDate = CALENDAR_PART.parseYmd(selected) ? selected : CALENDAR_PART.ymd(new Date(nowMs()));
+        const endDate = allDay ? CALENDAR_PART.ymd(new Date(CALENDAR_PART.addDays(CALENDAR_PART.parseYmd(startDate).getTime(), 1))) : startDate;
+        askCalendarComposer({ kind, allDay, date: startDate, endDate, linkCurrent: false });
       }
       function askCalendarFreeSlots() {
         const C = CALENDAR_PART, start = calendarWeekStart(), end = C.addDays(start, 6);
@@ -12391,7 +13491,56 @@ __zentralShim.register = function (def) {
         const C = CALENDAR_PART, start = calendarWeekStart();
         return { start, text: C.weekText(calendarBaseItems(), start, { category: true }) };
       }
+      function openReminderHistory() {
+        const history = reminderHistoryStore();
+        const rows = h("div", { class: "zn-noteset zn-reminder-history", role: "list" });
+        const pageSize = 500;
+        let offset = 0;
+        const labels = { done: "Marked done", dismissed: "Dismissed", reopened: "Reopened", snoozed: "Snoozed", rescheduled: "Rescheduled" };
+        const status = h("p", { class: "zn-empty", role: "status" });
+        const more = chip("Load older entries");
+        const renderPage = () => {
+          const entries = history?.list({ limit: pageSize, offset }) || [];
+          if (!entries.length && offset === 0) rows.insertBefore(h("p", { class: "zn-empty" }, "No reminder history yet. Lifecycle changes are recorded here."), status);
+          for (const entry of entries) {
+            const row = h("div", { class: "zn-hist-row", role: "listitem" });
+            const info = h("div", { class: "zn-reminder-history-info" });
+            info.append(h("strong", {}, entry.summary || "Untitled reminder"), h("span", { class: "zn-hist-when" }, (labels[entry.action] || entry.action) + " · " + new Date(entry.at).toLocaleString()));
+            if (entry.start) {
+              const when = entry.start.date || entry.start.dateTime;
+              if (when) info.append(h("span", { class: "zn-reminder-history-when" }, "Scheduled: " + String(when).replace("T", " ").replace(/\.\d{3}Z$/, " UTC")));
+            }
+            row.append(info);
+            const source = entry.noteId && store.get(entry.noteId);
+            if (source) {
+              const open = chip("Open note");
+              open.addEventListener("click", () => { closeDialog(); env.openNoteLink?.(entry.noteId); });
+              row.append(open);
+            }
+            rows.insertBefore(row, status);
+          }
+          offset += entries.length;
+          const total = Number(history?.storageState?.().count) || 0;
+          status.textContent = `Showing ${offset} of ${total} entries`;
+          more.hidden = offset >= total || !entries.length;
+        };
+        more.addEventListener("click", renderPage);
+        rows.append(status, more);
+        renderPage();
+        const note = h("p", { class: "zn-hist-note" }, "History is append-only and stored separately from calendar.json. Entries are retained until the profile data is removed; snoozing and rescheduling do not mark a reminder complete.");
+        const close = chip("Close", true);
+        close.addEventListener("click", closeDialog);
+        openCard("Reminder history", rows, note, h("div", { class: "zn-dialog-actions" }, close));
+      }
       listen(calendarToolsSelect, "click", () => showMenu(calendarToolsSelect, [
+        { heading: true, label: "Create" },
+        { icon: "calendar", label: "Create timed event…", action: () => queueMicrotask(() => askCreateCalendarItem("event", false)) },
+        { icon: "calendar", label: "Create all-day event…", action: () => queueMicrotask(() => askCreateCalendarItem("event", true)) },
+        { icon: "bell", label: "Create timed reminder…", action: () => queueMicrotask(() => askCreateCalendarItem("reminder", false)) },
+        { icon: "bell", label: "Create all-day reminder…", action: () => queueMicrotask(() => askCreateCalendarItem("reminder", true)) },
+        { sep: true },
+        { id: "reminder-history", label: "Reminder history…", icon: "history", run: openReminderHistory },
+        { sep: true },
         { icon: "clock", label: "When am I free?…", action: () => queueMicrotask(askCalendarFreeSlots) },
         { sep: true },
         { icon: "copy", label: "Copy this week as Markdown", action: () => { const out = calendarWeekMarkdown(); env.copyText?.(out.text); flash("Week copied as Markdown"); } },
@@ -12487,6 +13636,7 @@ __zentralShim.register = function (def) {
         for (const f of [d, t]) f.input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); submit(); } });
       }
       listen(remindEl, "click", () => askReminder());
+      listen(btnQuickReminder, "click", () => askNotesReminderShortcut());
 
       // ---- list view -----------------------------------------------------------
       // The last opened notes, newest first, narrowed by the search box.
@@ -13290,10 +14440,10 @@ __zentralShim.register = function (def) {
         if (dateMode() === "single") {
           let j = store.list().find(isJournal);
           if (!j) j = store.create("# " + JOURNAL_TITLE + "\n", "");
-          const r = journalSection(j.body, ymd, ms);
+          const r = journalSection(j.body, ymd, ms, dateDisplayFormat());
           return { id: j.id, body: r.body, at: r.caret };
         }
-        let n = findDateNote(store.list(), ymd);
+        let n = findDateNote(store.list(), ymd, dateDisplayFormat());
         if (!n) {
           if (!store.meta.folders.some((f) => f.id === DATE_FOLDER)) store.addFolder("Daily");
           n = store.create(dateNoteBody(ms), DATE_FOLDER);
@@ -13360,7 +14510,7 @@ __zentralShim.register = function (def) {
       function trashMenuItems() {
         const days = Number(getPref(PREF.TRASH_DAYS, TRASH_DAYS));
         return [
-          { icon: "trash", label: "Empty trash now", danger: true, disabled: !store.trashCount(), action: () => askEmptyTrash(scheduleList) },
+          { icon: "trash", label: "Empty trash now", danger: true, enabled: store.trashCount() > 0, reason: store.trashCount() > 0 ? "" : "Trash is empty", action: () => askEmptyTrash(scheduleList) },
           { icon: "note", label: "Deleted notes backup (" + BACKUP_HOURS + " h)\u2026", action: () => { askBackup(); } },
           { sep: true },
           { label: "Auto-empty after\u2026", group: [[0, "Never"], [7, "7 days"], [14, "14 days"], [30, "30 days"], [90, "90 days"]].map(([v, label]) => ({ label: (v === days ? "\u2713 " : "") + label, action: () => { setPref(PREF.TRASH_DAYS, v); flash(v ? "Applies at the next start: older than " + v + " days" : "Auto-empty is off"); } })) },
@@ -13728,6 +14878,11 @@ __zentralShim.register = function (def) {
         if (menu && menu.anchor === anchor) return closeMenu();
         closeMenu();
         const m = h("div", { class: "zn-menu", role: "menu" });
+        const menuItems = normalizeContextMenuItems(items);
+        const focusFirstEnabled = () => {
+          const first = [...m.querySelectorAll("button")].find((button) => !button.disabled && button.getAttribute("aria-disabled") !== "true");
+          first?.focus({ preventScroll: true });
+        };
         // One entry list per level: an item with `group` opens its entries in place (with a Back row) so a long
         // menu stays short; closing the menu from any level runs the chosen action once.
         const fill = (list, parent) => {
@@ -13738,7 +14893,7 @@ __zentralShim.register = function (def) {
             back.addEventListener("click", () => {
               fill(parent.list, parent.parent);
               placeMenu(m, anchor);
-              m.querySelector("button")?.focus({ preventScroll: true });
+              focusFirstEnabled();
             });
             m.append(back, h("div", { class: "zn-sep" }));
           }
@@ -13784,8 +14939,8 @@ __zentralShim.register = function (def) {
                 crow.append(add);
                 m.append(crow);
               }
-            } else if (it.disabled) {
-              // A heading or a note ("No other note links here"): not a button, never focused or clicked.
+            } else if (it.heading) {
+              // Informational rows are not actions and never enter the keyboard focus order.
               m.append(h("div", { class: "zn-menu-item zn-menu-head", role: "presentation", "aria-disabled": "true" }, it.label));
             } else if (it.group) {
               const b = h("button", { type: "button", class: "zn-menu-item zn-menu-group", role: "menuitem", "aria-haspopup": "menu" });
@@ -13794,29 +14949,50 @@ __zentralShim.register = function (def) {
               b.addEventListener("click", () => {
                 fill(it.group, { list, parent });
                 placeMenu(m, anchor);
-                m.querySelector("button")?.focus({ preventScroll: true });
+                focusFirstEnabled();
               });
               m.append(b);
             } else {
-              const b = h("button", { type: "button", class: "zn-menu-item" + (it.danger ? " is-danger" : ""), role: "menuitem" });
+              const b = h("button", { type: "button", class: "zn-menu-item" + (it.danger ? " is-danger" : "") + (!it.enabled ? " is-disabled" : ""), role: "menuitem", "aria-disabled": it.enabled ? "false" : "true", title: it.reason || null });
               if (it.icon) b.append(icon(it.icon));
-              b.append(h("span", {}, it.label));
-              b.addEventListener("click", () => {
-                closeMenu();
-                it.action();
-              });
+              const label = h("span", {}, it.label);
+              b.append(label);
+              if (!it.enabled) {
+                b.disabled = true;
+                if (it.reason) b.append(h("small", { class: "zn-menu-reason" }, it.reason));
+              } else {
+                b.addEventListener("click", () => {
+                  closeMenu();
+                  it.run();
+                });
+              }
               m.append(b);
             }
           }
         };
-        fill(items, null);
-        // Keyboard: Up / Down / Home / End move between the entries (Tab still works, Esc closes).
+        fill(menuItems, null);
+        // Arrow navigation skips disabled actions; Enter activates exactly the focused enabled row.
+        // Escape is also handled by the sheet-level key controller for keyboard focus outside the menu.
         m.addEventListener("keydown", (ev) => {
+          if (ev.key === "Escape") {
+            ev.preventDefault();
+            ev.stopPropagation();
+            closeMenu();
+            return;
+          }
+          if (ev.key === "Enter") {
+            const target = ev.target?.closest?.("button");
+            if (target && m.contains(target) && !target.disabled) {
+              ev.preventDefault();
+              target.click();
+            }
+            return;
+          }
           if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(ev.key)) return;
-          const btns = [...m.querySelectorAll("button")];
+          const btns = [...m.querySelectorAll("button")].filter((button) => !button.disabled && button.getAttribute("aria-disabled") !== "true");
           if (!btns.length) return;
-          const at = btns.indexOf(ev.target);
-          const next = ev.key === "Home" ? 0 : ev.key === "End" ? btns.length - 1 : ev.key === "ArrowDown" ? (at + 1) % btns.length : (at - 1 + btns.length) % btns.length;
+          const at = btns.indexOf(ev.target?.closest?.("button"));
+          const next = ev.key === "Home" ? 0 : ev.key === "End" ? btns.length - 1 : ev.key === "ArrowDown" ? (at + 1 + btns.length) % btns.length : (at - 1 + btns.length) % btns.length;
           ev.preventDefault();
           btns[next].focus({ preventScroll: true });
         });
@@ -13852,7 +15028,7 @@ __zentralShim.register = function (def) {
           const focusMovesToAnchor = activeMenu.anchor === next || !!activeMenu.anchor?.contains?.(next);
           if (!focusRemainsWithMenu && !focusMovesToAnchor) closeMenu();
         });
-        m.querySelector("button")?.focus({ preventScroll: true });
+        focusFirstEnabled();
       }
       // Export notice: says what each format loses before anything is written.
       function closeDialog() {
@@ -14349,11 +15525,17 @@ __zentralShim.register = function (def) {
       }
       // ---- date notes: today / tomorrow / next work day --------------------------------------------------------
       const dateMode = () => cleanDateMode(getPref(PREF.DATE_MODE, "separate"));
+      function dateDisplayFormat() {
+        return CALENDAR_PART?.cleanDateFormat?.(getPref(PREF.DATE_DISPLAY, CALENDAR_PART.DEFAULT_DATE_FORMAT || "DD-MM-YYYY")) || "DD-MM-YYYY";
+      }
+      function displayDateKey(key) {
+        return CALENDAR_PART?.formatDateKey?.(key, dateDisplayFormat()) || String(key || "");
+      }
       function openDay(ms, ymd) {
         if (dateMode() === "single") {
           let j = store.list().find(isJournal);
           if (!j) j = store.create("# " + JOURNAL_TITLE + "\n", "");
-          const r = journalSection(j.body, ymd, ms);
+          const r = journalSection(j.body, ymd, ms, dateDisplayFormat());
           if (r.body !== j.body) store.update(j.id, r.body);
           openNote(j.id);
           if (mode === "read") setMode("edit");
@@ -14362,7 +15544,7 @@ __zentralShim.register = function (def) {
           revealSourceMatch({ start: r.caret, end: r.caret });
           return;
         }
-        let n = findDateNote(store.list(), ymd);
+        let n = findDateNote(store.list(), ymd, dateDisplayFormat());
         if (!n) {
           if (!store.meta.folders.some((f) => f.id === DATE_FOLDER)) store.addFolder("Daily");
           n = store.create(dateNoteBody(ms), DATE_FOLDER);
@@ -14403,10 +15585,11 @@ __zentralShim.register = function (def) {
       }
       function showDateMenu() {
         const now = Date.now();
-        const items = DATE_KINDS.map(([k, label]) => ({ icon: "bell", label: label + "  " + dateTarget(k, now).ymd, action: () => openDateNote(k) }));
+        const items = DATE_KINDS.map(([k, label]) => ({ icon: "bell", label: label + "  " + displayDateKey(dateTarget(k, now).ymd), action: () => openDateNote(k) }));
         items.push({ icon: "bell", label: "Other date\u2026", action: () => queueMicrotask(askOtherDate) }, { sep: true });
-        const days = dateMode() === "single" ? (store.list().find(isJournal) ? journalDays(store.list().find(isJournal).body).slice(-15).reverse().map((ymd) => ({ ymd })) : []) : listDateNotes(store.list()).slice(0, 15);
-        if (days.length) items.push({ label: "Earlier days", disabled: true }, ...days.map((d) => ({ icon: "note", label: d.ymd, action: () => openDay(parseYmd(d.ymd), d.ymd) })));
+        const fmt = dateDisplayFormat();
+        const days = dateMode() === "single" ? (store.list().find(isJournal) ? journalDays(store.list().find(isJournal).body, fmt).slice(-15).reverse().map((ymd) => ({ ymd })) : []) : listDateNotes(store.list(), { dateFormat: fmt }).slice(0, 15);
+        if (days.length) items.push({ label: "Earlier days", disabled: true }, ...days.map((d) => ({ icon: "note", label: displayDateKey(d.ymd), action: () => openDay(parseYmd(d.ymd), d.ymd) })));
         showMenu(btnMore, items);
       }
       function lineHeading(body, line) {
@@ -14430,13 +15613,13 @@ __zentralShim.register = function (def) {
           const parts = new Intl.DateTimeFormat("en-CA", { timeZone: zone || undefined, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(ms));
           const part = (type) => parts.find((p) => p.type === type)?.value || "";
           return part("year") + "-" + part("month") + "-" + part("day");
-        } catch (_) { return new Date(ms).toISOString().slice(0, 10); }
+        } catch (_) { return CALENDAR_PART.ymd(new Date(ms)); }
       }
       function calendarItemMenuLabel(item) {
         const day = calendarItemDate(item);
         const kind = item.x?.kind === "reminder" ? "Reminder" : "Event";
         const summary = String(item.summary || "Untitled item").replace(/\s+/g, " ").trim().slice(0, 52);
-        return `${kind} · ${day || "No date"} · ${summary}`;
+        return `${kind} · ${day ? displayDateKey(day) : "No date"} · ${summary}`;
       }
       function askCalendarItemDetails(item) {
         const current = item && store.items?.get(item.id);
@@ -14529,7 +15712,7 @@ __zentralShim.register = function (def) {
             recurrence.unshift("RRULE:" + parts.join(";"));
           }
           const saved = store.items.upsert({ ...current, recurrence, x: { ...current.x, calNote: noteField.value, heading: headingField.input.value.trim(), tz: zone } });
-          if (!saved) return flash("Could not save calendar details");
+          if (!saved) return flash("This calendar item changed while you were editing. Reopen its details and try again.");
           closeDialog();
           flash("Calendar item details saved");
         };
@@ -14559,49 +15742,21 @@ __zentralShim.register = function (def) {
       function askInlineReminder(token, line) {
         const n = note();
         if (!n || n.trashed || !store.items) return flash("Calendar item storage is unavailable");
-        const d = field("Date (YYYY-MM-DD)", token.ymd, "2026-11-03");
-        const t = field("Alert time (HH:MM, optional)", token.time || "", "09:00");
-        const pick = chip("Pick day\u2026"), clockBtn = chip("Clock\u2026");
-        const add = chip("Add reminder", true), cancel = chip("Cancel");
-        const actions = h("div", { class: "zn-dialog-actions" }, pick, clockBtn, cancel, add);
-        const clockHost = h("div");
-        openCard("Add reminder from date", d.row, t.row, clockHost, actions);
-        pick.addEventListener("click", () => {
-          if (clockHost.firstChild) clockHost.replaceChildren();
-          const selected = parseYmd(d.input.value);
-          toggleDatePicker(pick, clockHost, { selected: selected || 0, items: calendarPickerItems(), onPick: (day) => { d.input.value = ymdOf(day); } });
+        const body = String(ta.value || n.body || "");
+        const parts = normalizeNewlines(body).split("\n");
+        const rawLine = Number.isInteger(line) && line >= 0 ? parts[line] || "" : "";
+        const cleaned = rawLine.replace(/%%\s*zn-date-ignore:[^%]*%%/gi, "").replace(/^\s*(?:[-*+] |\d+[.)] )/, "").trim();
+        const summary = (CALENDAR_PART.titleFromDateText(cleaned, token.raw) || lineHeading(body, line) || titleOf(n.body) || "Reminder").slice(0, 500);
+        askCalendarComposer({
+          kind: "reminder",
+          allDay: !token.time,
+          date: token.ymd,
+          startTime: token.time || "09:00",
+          summary,
+          noteId: n.id,
+          heading: lineHeading(body, line),
+          linkCurrent: false,
         });
-        clockBtn.addEventListener("click", () => {
-          if (clockHost.firstChild) { clockHost.replaceChildren(); clockBtn.focus({ preventScroll: true }); return; }
-          closeDatePicker({ restoreFocus: false });
-          const clock = buildClockPicker({ value: /^\d{1,2}:\d{2}$/.test(t.input.value) ? t.input.value : "09:00", onPick: (value) => { t.input.value = value; } });
-          clockHost.append(clock);
-          clock.querySelector("select")?.focus({ preventScroll: true });
-        });
-        const submit = () => {
-          const day = parseYmd(d.input.value);
-          const rawTime = t.input.value.trim();
-          const minute = rawTime ? CALENDAR_PART.parseClock(rawTime) : -1;
-          if (!day || (rawTime && minute < 0)) { (day ? t : d).input.dataset.bad = "true"; (day ? t : d).input.focus(); return; }
-          const parts = normalizeNewlines(n.body).split("\n");
-          const rawLine = Number.isInteger(line) && line >= 0 ? parts[line] || "" : "";
-          const cleaned = rawLine.replace(/%%\s*zn-date-ignore:[^%]*%%/gi, "").replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "").trim();
-          const summary = (cleaned.replace(token.raw, "").replace(/\s+/g, " ").trim() || titleOf(n.body) || token.raw).slice(0, 500);
-          const heading = lineHeading(n.body, line);
-          let start;
-          if (minute >= 0) {
-            const dt = new Date(day); dt.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
-            start = { dateTime: dt.toISOString() };
-          } else start = { date: ymdOf(day) };
-          const item = CALENDAR_PART.makeItem({ summary, start, x: { kind: "reminder", noteId: n.id, heading, src: "manual" } }, nowMs());
-          const saved = item && store.items.upsert(item);
-          if (!saved) { flash("Could not create the reminder"); return; }
-          closeDialog();
-          flash("Independent reminder added");
-        };
-        add.addEventListener("click", submit);
-        cancel.addEventListener("click", () => { closeDialog(); focusEditor(); });
-        d.input.focus({ preventScroll: true });
       }
       function addInlineDateToTomorrow(token, line) {
         const n = note();
@@ -15183,6 +16338,10 @@ __zentralShim.register = function (def) {
             store.setMeta({ [o.meta]: v });
             applyState();
           } else setPref(o.pref, v);
+          if (o.pref === PREF.DATE_DISPLAY) {
+            if (view === "list" && filter === "all" && !calendarPane.hidden) renderCalendar();
+            if (view === "editor" && mode !== "edit") { resetRead(); renderRead(); }
+          }
         };
         function sliderRow(o) {
           const stored = () => String(getPref(o.pref, o.plain ? o.def : -1));
@@ -16208,6 +17367,7 @@ __zentralShim.register = function (def) {
         outline: () => showOutline(),
         find: () => openFind(),
         remind: () => askReminder(),
+        calendarReminder: () => askNotesReminderShortcut(),
         dateToday: () => openDateNote("today"),
         dateTomorrow: () => openDateNote("tomorrow"),
         dateNext: () => openDateNote("next"),
@@ -17051,6 +18211,7 @@ __zentralShim.register = function (def) {
           return;
         }
         if (!isOpen || destroyed) return;
+        store.purgeBlankDateNotes?.(); // sweep stale generated date notes after the store and calendar items are loaded
         // W9: a forced start view is also stored, so opening another note later keeps whatever the user switches to.
         mode = startMode(getPref(PREF.DEFAULT_VIEW, "last"), store.meta.mode);
         if (mode !== store.meta.mode) store.setMeta({ mode });
@@ -17080,7 +18241,10 @@ __zentralShim.register = function (def) {
         closeDialog();
         window.clearTimeout(previewTimer);
         previewTimer = 0;
+        const leavingId = registeredOpenNote || currentId;
         if (currentId) store.discardIfEmpty(currentId);
+        trackOpenNote("");
+        if (leavingId) store.purgeBlankDateNotes?.({ onlyIds: [leavingId] });
         // Closing by hand forgets "open in", a window or panel going away keeps it (restored with Open on Startup).
         if (adapter.kind && !destroying) store.setMeta({ openIn: "" });
         store.flush();
@@ -17103,6 +18267,7 @@ __zentralShim.register = function (def) {
         if (destroyed) return;
         destroying = true;
         if (isOpen) close();
+        else trackOpenNote("");
         destroyed = true;
         offStore();
         for (const fn of cleanups.splice(0).reverse()) {

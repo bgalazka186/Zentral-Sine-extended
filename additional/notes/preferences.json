@@ -880,6 +880,38 @@
     ]
   },
   {
+    "property": "zen.workspace.zentral.notes.date_display_format",
+    "label": "Date display format (calendar, agenda, date chips and Notes by date)",
+    "type": "dropdown",
+    "defaultValue": "DD-MM-YYYY",
+    "options": [
+      {
+        "label": "Day-Month-Year (14-11-2026)",
+        "value": "DD-MM-YYYY"
+      },
+      {
+        "label": "Year-Month-Day (2026-11-14)",
+        "value": "YYYY-MM-DD"
+      },
+      {
+        "label": "Month/Day/Year (11/14/2026)",
+        "value": "MM/DD/YYYY"
+      },
+      {
+        "label": "Day.Month.Year (14.11.2026)",
+        "value": "DD.MM.YYYY"
+      },
+      {
+        "label": "Day/Month/Year (14/11/2026)",
+        "value": "DD/MM/YYYY"
+      },
+      {
+        "label": "Long localized date",
+        "value": "long"
+      }
+    ]
+  },
+  {
     "property": "zen.workspace.zentral.notes.history_enabled",
     "label": "Keep earlier versions of each note (history/<note id>/ in the notes folder)",
     "type": "checkbox",

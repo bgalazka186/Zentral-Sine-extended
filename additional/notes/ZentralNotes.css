@@ -605,6 +605,10 @@
 .zentral-notes-sheet .zn-menu-item:hover,
 .zentral-notes-sheet .zn-menu-item:focus-visible { background: var(--zn-hover); outline: none; }
 .zentral-notes-sheet .zn-menu-item.is-danger { color: #ff6b6b; }
+.zentral-notes-sheet .zn-menu-item.is-disabled { cursor: not-allowed; opacity: 0.58; text-align: left; flex-wrap: wrap; }
+.zentral-notes-sheet .zn-menu-item.is-disabled:hover,
+.zentral-notes-sheet .zn-menu-item.is-disabled:focus-visible { background: transparent; }
+.zentral-notes-sheet .zn-menu-reason { flex: 1 0 100%; margin-left: 24px; color: var(--zn-muted); font-size: 0.82em; white-space: normal; }
 .zentral-notes-sheet .zn-sep { height: 1px; margin: 4px 2px; background: var(--zn-line); }
 .zentral-notes-sheet .zn-swatches { display: flex; flex-wrap: wrap; gap: 6px; max-width: 128px; padding: 4px 6px; }
 .zentral-notes-sheet .zn-swatch {
@@ -1883,3 +1887,41 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-read .zn-front { display: flex; flex-wrap: wrap; gap: 0.3em 0.4em; margin: 0 0 0.7em; padding: 0; }
 .zentral-notes-sheet .zn-read .zn-front .zn-pill { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.05em 0.6em; border-radius: 999px; font-size: 0.85em; line-height: 1.5; color: var(--zn-text); background: color-mix(in srgb, var(--zn-text) 10%, transparent); border: 1px solid color-mix(in srgb, var(--zn-text) 22%, transparent); }
 .zentral-notes-sheet .zn-read .zn-front .zn-pill-alias { font-style: italic; background: transparent; }
+
+/* T2.7a: lifecycle state is a local reminder concern, separate from Google event status. */
+.zn-cal-item.is-done { opacity: .62; }
+.zn-cal-item.is-done .zn-cal-item-title { text-decoration: line-through; }
+.zn-cal-item.is-dismissed { opacity: .42; }
+.zn-cal-item.is-dismissed .zn-cal-item-title { text-decoration: line-through; }
+ .zn-cal-month-mark.is-done { opacity: .58; text-decoration: line-through; }
+.zn-cal-month-mark.is-dismissed { opacity: .4; text-decoration: line-through; }
+.zn-reminder-history-info { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; }
+.zn-reminder-history-when { color: var(--zen-colors-tertiary); font-size: .9em; }
+
+/* T2.3f: full calendar item composer. Keep every control operable in narrow sheets. */
+.zentral-notes-sheet .zn-dialog-card.zn-cal-compose-card {
+  width: min(46em, 100%);
+  min-width: min(28em, 100%);
+  max-width: 100%;
+  max-height: min(92%, 58em);
+  overflow: auto;
+}
+.zentral-notes-sheet .zn-cal-compose-kind-row { grid-template-columns: minmax(7em, 1fr) minmax(10em, 2fr); align-items: center; }
+.zentral-notes-sheet .zn-cal-compose-check { display: flex; align-items: center; gap: 8px; }
+.zentral-notes-sheet .zn-cal-compose-date-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+.zentral-notes-sheet .zn-cal-compose-date-row .zn-field-row { min-width: 0; }
+.zentral-notes-sheet .zn-cal-compose-date-row .zn-field { width: 100%; box-sizing: border-box; }
+.zentral-notes-sheet .zn-cal-compose-clock-host:empty { display: none; }
+.zentral-notes-sheet .zn-cal-compose-color-row { display: flex; align-items: center; gap: 8px; margin: 5px 0 10px; color: var(--zn-muted); font-size: .85em; }
+.zentral-notes-sheet .zn-cal-compose-color { width: 1em; height: 1em; flex: none; border: 1px solid var(--zn-line); border-radius: 50%; }
+.zentral-notes-sheet .zn-cal-compose-section { min-width: 0; }
+.zentral-notes-sheet .zn-cal-compose-alerts { margin-top: 14px; }
+.zentral-notes-sheet .zn-cal-compose-status[data-error="true"] { color: #ff6b6b; }
+.zentral-notes-sheet .zn-cal-reminder-choices { display: grid; gap: 6px; max-height: 20em; overflow: auto; }
+.zentral-notes-sheet .zn-cal-reminder-choices .zn-chip { text-align: left; white-space: normal; }
+.zentral-notes-sheet .zn-quick-reminder { flex: none; }
+@media (max-width: 520px) {
+  .zentral-notes-sheet .zn-dialog-card.zn-cal-compose-card { min-width: 0; width: 100%; padding: 10px; }
+  .zentral-notes-sheet .zn-cal-compose-date-row { grid-template-columns: minmax(0, 1fr); }
+  .zentral-notes-sheet .zn-cal-compose-date-row > .zn-chip { justify-self: start; }
+}
