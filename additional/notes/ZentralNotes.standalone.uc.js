@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.19
+// @version 3.3.20
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.19, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.20, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.19";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.20";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2367,10 +2367,65 @@ const __zentralEmbeddedLoader = (function () {
     }
   }
 
+  // ---------- date display format, agenda buckets, blank-date-note rule, last-write-wins (roadmap T2.14-T2.17) ----------
+  // Display strings are NEVER keys: the immutable key is always the local "YYYY-MM-DD" (`localDateKey`).
+  const DATE_FORMATS = Object.freeze(["DD-MM-YYYY", "YYYY-MM-DD", "MM/DD/YYYY", "DD.MM.YYYY", "DD/MM/YYYY", "long"]);
+  const DEFAULT_DATE_FORMAT = "DD-MM-YYYY";
+  const cleanDateFormat = (v) => (DATE_FORMATS.includes(v) ? v : DEFAULT_DATE_FORMAT);
+  // Local calendar-day key of an instant; never uses toISOString (UTC shifts a day near midnight).
+  const localDateKey = (ms) => (Number.isFinite(Number(ms)) ? ymd(new Date(Number(ms))) : "");
+  // "YYYY-MM-DD" key -> text in the chosen format; "" for an invalid key. `locale` only matters for "long".
+  function formatDateKey(key, fmt = DEFAULT_DATE_FORMAT, locale) {
+    const d = parseYmd(key);
+    if (!d) return "";
+    const f = cleanDateFormat(fmt);
+    const Y = String(d.getFullYear()).padStart(4, "0"), M = p2(d.getMonth() + 1), D = p2(d.getDate());
+    if (f === "long") {
+      try { return new Intl.DateTimeFormat(locale || undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" }).format(d); }
+      catch (_) { return Y + "-" + M + "-" + D; }
+    }
+    return f.replace("YYYY", Y).replace("MM", M).replace("DD", D);
+  }
+  // Display title of a date-bound note: always derived, never stored as a key.
+  const dateNoteTitle = (key, fmt, prefix = "Reminders for ", locale) => { const t = formatDateKey(key, fmt, locale); return t ? prefix + t : ""; };
+  // Agenda window: today .. today+days-1 (default 4 days = T..T+3). Counts live items per local day (recurrences expanded); `isDone(item)` is supplied by the reminder lifecycle (T2.7a), the item model has no done flag yet.
+  const AGENDA_LABELS = Object.freeze(["Today", "Tomorrow", "Day 2", "Day 3"]);
+  function agendaBuckets(items, now, days = 4, isDone = () => false) {
+    const n = Math.max(1, Math.min(31, Math.floor(Number(days)) || 4));
+    const base = dayStart(now);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const from = addDays(base, i), to = addDays(base, i + 1);
+      const list = expandRange(items, from, to).filter((it) => !isDone(it));
+      out.push({ offset: i, key: localDateKey(from), label: AGENDA_LABELS[i] || "Day " + i, from, to, count: list.length, items: list });
+    }
+    return out;
+  }
+  // Snooze helper: whole local days later, keeping the wall-clock time (DST-safe). Returns ms.
+  const snoozeDays = (ms, n) => addDays(ms, Math.round(Number(n) || 0));
+  // A generated date note counts as untouched (safe to purge) only when its body is nothing but the generated heading.
+  // Tags, files, links, any text, or a user-edited heading make it "touched". `touched` is the store's own edit flag.
+  function isBlankDateNote(note, key) {
+    if (!note || note.touched || (note.tags && note.tags.length) || (note.files && note.files.length) || (note.attachments && note.attachments.length)) return false;
+    const body = String(note.body == null ? "" : note.body).replace(/\r\n?/g, "\n").trim();
+    if (!body) return true;
+    const k = String(key || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp("^#\\s+" + (k || "\\d{4}-\\d{2}-\\d{2}") + "(?:\\s+[A-Za-zÀ-ž]+)?$").test(body);
+  }
+  // Last-write-wins between two versions of one record: newer `updated` wins; equal -> higher `rev`; equal -> `remote`.
+  function lwwPick(local, remote) {
+    if (!local) return remote || null;
+    if (!remote) return local;
+    const lu = Number(local.updated) || 0, ru = Number(remote.updated) || 0;
+    if (lu !== ru) return lu > ru ? local : remote;
+    const lr = Number(local.rev) || 0, rr = Number(remote.rev) || 0;
+    return lr > rr ? local : remote;
+  }
+
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, itemsFromNoteReminders, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, itemsFromNoteReminders, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, AGENDA_LABELS, agendaBuckets, snoozeDays, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
