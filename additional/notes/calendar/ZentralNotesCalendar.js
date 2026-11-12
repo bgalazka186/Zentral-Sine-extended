@@ -717,7 +717,7 @@
   // Reminder lifecycle is intentionally separate from Google Calendar's `status` field. Records are
   // immutable snapshots in their own versioned file; history is retained indefinitely (no silent pruning).
   const REMINDER_HISTORY_FILE = "reminder-history.json";
-  const REMINDER_HISTORY_ACTIONS = Object.freeze(["done", "dismissed", "reopened", "snoozed", "rescheduled"]);
+  const REMINDER_HISTORY_ACTIONS = Object.freeze(["alerted", "done", "dismissed", "reopened", "snoozed", "rescheduled"]);
   function cleanReminderHistoryRecord(raw, fallbackAt = 0) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
     const action = REMINDER_HISTORY_ACTIONS.includes(raw.action) ? raw.action : "";

@@ -1,4 +1,4 @@
-> **Recovery note (2026-11-12):** Earlier handoff text included Track 2 completion claims that must be checked against the actual source and tests before relying on them. This working tree is now version **3.3.31**; its release state is governed by the source, generated-build checks and test suites in this archive, not by older handoff claims.
+> **Recovery note (2026-11-12):** Earlier handoff text included Track 2 completion claims that must be checked against the actual source and tests before relying on them. This working tree is now version **3.3.32**; its release state is governed by the source, generated-build checks and test suites in this archive, not by older handoff claims.
 
 # ZentralNotes — Master TODO & Feature Tracks
 
@@ -200,6 +200,21 @@ _Execute after Tracks 1–3 are complete._
 
 ---
 
+## Hotfix & Audit Backlog (2026-11-12 Owner Bug Report — execute before new features)
+
+> This backlog records the owner's eight live-test findings. Statuses below reflect the 3.3.32 source and focused tests; **PARTIAL** means a concrete follow-up remains open.
+
+| Ref | Track ID | Item | Status | Verification / remaining work |
+| :-- | :-- | :-- | :-- | :-- |
+| Owner #1 | `B3.3.32-1` | Stop standalone Notes freeze when changing a Theme preset | **DONE** | Native select remains mounted in its change callback; reset redraw is deferred; top-layer raise/drop is guarded while an internal select is active. `tests/notes-quick-settings.test.cjs` covers the event path and guard. Live Gecko popup validation remains advisable. |
+| Owner #2 | `B3.3.32-2` | Fix Week grid columns; show Today and Now throughout calendar views | **DONE** | The time-grid row has two tracks (`42px minmax(0,1fr)`), day columns span the remainder, Today classes/badges cover headers/all-day cells/day groups/Agenda rows and the current-time line/dot renders in today's track. `tests/notes-calendar-views.test.cjs` covers Week/Day rendering. Selected IANA display-zone support for work-hours geometry remains tracked under #8. |
+| Owner #3 | `B3.3.32-3` | Open the correlated source note from an event/reminder/history entry | **DONE** | Sheet-level `openNoteByIdAndHeading` opens the note, selects the requested heading or item marker in edit mode, and is used by calendar items and Reminder History; the `env.openNoteLink` adapter retains reciprocal-link behavior. |
+| Owner #4 | `B3.3.32-4` | Schedule reminders stored in `calendar.json` and record notification history | **PARTIAL** | Scheduler now scans stored reminders, expands bounded recurring instances, honors per-item lead-time overrides, appends `alerted` before dispatch and suppresses duplicate alerts for the same saved schedule. Banner actions append lifecycle history. Finish dedicated notification-action tests (Done/Dismiss/Snooze/Open), multi-window claim/race coverage, and live Gecko notification verification. |
+| Owner #5 | `B3.3.32-5` | Make overlapping timed event/reminder labels readable | **DONE** | `--zn-panel` is defined; event/reminder surfaces mix with an opaque surface; timed reminders and events now share one interval/lane layout so same-time reminders cannot overlap their own 20px visual lanes or timed events. |
+| Owner #6 | `B3.3.32-6` | Restore calendar right-click/context menus | **DONE** | Month cells, Upcoming day groups, Week/Day headers, all-day cells, tracks and item buttons have context actions; pseudo-rectangle anchors are not treated as disconnected DOM nodes; legacy virtual note items retain a safe menu fallback. |
+| Owner #7 | `B3.3.32-7` | Protect Daily Notes and connect note-less reminders to an Agenda note | **PARTIAL** | Purge protects today/future Daily Notes and dates occupied by stored calendar items; historical blank notes remain eligible under the existing conservative protections. Still implement creation/linking of a `## Agenda` / `%%calendar%%` block for note-less items, move their line when an item changes date, and replace visible `daily` folder behavior with the virtual `AGENDA` grouping/archive lifecycle. |
+| Owner #8 | `B3.3.32-8` | Fix smaller Calendar/Notes UI and timezone issues | **PARTIAL** | Month date badge opens Day view (owner selected **A**); note-derived items are allowed through Reschedule and set `x.moved`; standalone recommended theme fallbacks are defined. Still update the correlated Agenda Markdown line when rescheduling a note-derived item and wire a user-selected IANA display zone into work-hours, busy-range and Now calculations. |
+
 ## Parking lot — PARKED ideas (not approved; do NOT implement)
 
 _From the owner's second roadmap (2026-11-12). Only the owner can promote a row; promoting means moving it into a Track with an `OPEN` plan. Notes for the future implementer are kept so nothing is researched twice._
@@ -230,14 +245,37 @@ _From the owner's second roadmap (2026-11-12). Only the owner can promote a row;
 2. Pure function first, exported through `__zentralNotesTestSeam`, fixture test red, then implement. Parser changes go in `parseBlocks` / the inline parser; keep `exportHtml` and `exportText` in step.
 3. Release loop: `node tools/build-standalone.cjs --bump`, `node tools/build-preferences.cjs`, `node tools/build-z-map.cjs`, `node tools/build-standalone.cjs --check`, then `for t in tests/*.test.cjs; do node $t || echo FAIL $t; done`.
 
-## NEXT SESSION HANDOFF (main + all standalone modules 3.3.31; edit in place, keep it short)
+## NEXT SESSION HANDOFF (main + all standalone modules 3.3.32; edit in place, keep it short)
 
 **Rule for every AI session: before you finish, update (1) the State line, (2) the tables above (remove what you finished), (3) Known debts, (4) the version in this heading. Do not append a new handoff block.**
 
-State: **3.3.31 — `T2.5e`, `T2.3f`, `T2.3g`, `T2.3h`, `T2.12b` / `T2.12b1`, and `T2.4c` completed; `T2.14`, `T2.16`, `T2.17` and `T2.7a` retained** (2026-11-12; root pack and every standalone package aligned at 3.3.31). This release adds stable recurrence-key IDs, persisted `this` / `following` / `series` exceptions, EXDATE suppression, DST-safe all-day durations, explicit reschedule scope selection, and occurrence-scoped reschedule history. The full composer, shared start/end Clock controls, note-color inheritance, toolbar/keyboard shortcut and free-slot paths remain intact. `T2.18` / `T2.19` remain PARTIAL for Zen Agenda sidebar/day-node surfaces gated by `T2.8`, recurring snooze and pointer-drag integration, and split-view actions gated by `T3.8`.
+State: **3.3.32 — 2026-11-12 hotfix pass applied**. All ten standalone packages and the root loader are aligned at 3.3.32. The Notes patch fixes the standalone native-select lifecycle, the Week/Day time-grid track placement, Today/Now indicators, opaque calendar surfaces, shared event/reminder overlap lanes, calendar RMB menus, Month date-badge navigation (owner choice A), and source-note navigation from calendar items/history. The live reminder scheduler now includes calendar-store reminders and bounded recurrence expansion, records `alerted` history before notification dispatch, and wires calendar alert actions to append lifecycle history. Daily-note purge now protects today/future dates and dates occupied by calendar items. Calendar reschedule no longer rejects source-note-derived items and preserves the moved marker.
 
-Known debts / owner requirements: **Live validation is still required in Zen/Sine**; Node and fake-DOM tests cannot prove native Zen behavior. Recurring pointer drag and recurring snooze stay disabled; their UI preview/undo and history paths must explicitly honor the same exception scope model before being enabled. Next ordered work is `T2.8` Agenda/day UI (which completes `T2.15`) and Zen Agenda sidebar/day-node menu and snooze actions. `T3.8` split-view actions remain blocked until Split View exists. Track 1 remains open at `T1.14`–`T1.19`; keep `T2.13` last. Preserve append-only reminder history and never silently delete its entries. Never reintroduce menu MutationObservers or global disabled-state normalizers.
+Known debts / owner requirements: B3.3.32-4 still needs live Gecko notification-action verification and broader snooze/reopen UI coverage. B3.3.32-7 remains PARTIAL: the purge protections are implemented, but no-linked-note items are not yet automatically assigned to a generated Daily Agenda note, and the old `daily` folder has not yet been replaced by a virtual `AGENDA` grouping/archive lifecycle. B3.3.32-8 remains PARTIAL: note-derived reschedule does not yet rewrite the correlated `%%zn-item-id:...%%` Markdown line, and a user-selectable IANA calendar display zone is not yet wired through work-hours/Now geometry. Owner approved Month date-badge choice **A** (badge opens Day view; rest of cell remains Month selection). Owner approved marking an Agenda checkbox `[x]` when the reminder is marked Done; this checkbox/history two-way sync remains OPEN and must not be claimed complete. Recurring pointer-drag and recurring snooze remain disabled until they use recurrence exceptions and occurrence-scoped history.
 
-Verification (3.3.31): all 59 repository `tests/*.test.cjs` files pass individually. The recurrence suite passes 16 cases covering original-key identity, all move scopes, later split-scope/cancellation preservation, cancel/restore, EXDATE, BYDAY/COUNT/monthly candidates, DST-spanning all-day durations, serialization and forged/stale instance rejection. Calendar-store tests pass 36 cases, including exception reload, source-note title-edit preservation and append-only occurrence-scoped reschedule history. All 84 standalone tests pass; `node tools/build-standalone.cjs --check`, `node tools/check-default-drift.cjs`, `node tools/check-settings-consistency.cjs`, `node tests/z-heights.test.cjs` and the UTF-8 encoding check pass. Root metadata and all ten standalone packages are aligned at 3.3.31. Node and fake-DOM tests cannot prove native Zen behavior.
+Verification (3.3.32): focused calendar store (37), calendar views, Notes P2 core (20), Notes P2 UI (24), Quick Settings, and menu lifecycle (14) suites pass. The shared scheduler tests run with the Notes calendar module loaded and cover ordinary and recurring calendar reminders, `alerted` history, and duplicate-alert suppression. `node tools/build-standalone.cjs --check`, `node tools/build-preferences.cjs`, `node tools/check-default-drift.cjs`, `node tools/check-settings-consistency.cjs`, `node tests/z-heights.test.cjs`, and `node tests/encoding.test.cjs` pass. All 59 repository `tests/*.test.cjs` files pass individually after the final fixture/contract updates; all 84 standalone tests pass. `node --check` passes for the Notes and Calendar source, and standalone build/default/catalog/z-height/encoding release checks pass. Root loader and all ten standalone manifest/lock/theme versions are aligned at 3.3.32. Node/fake-DOM tests do not replace live Zen/Sine validation.
 
-Next action: continue with `T2.8` Agenda/day UI and its Zen sidebar menus, then connect recurring snooze to occurrence exceptions and history without enabling unsafe whole-series shortcuts. Defer `T2.13` until all other Track 2 tasks are done.
+Next action: finish B3.3.32-4 end-to-end notification-action tests, then complete the approved checkbox/history sync and B3.3.32-7 Agenda auto-linking before advancing to new feature work. Defer `T2.13` until all other Track 2 tasks are done.
+
+---
+
+## Temporary Questions, Recommendations & Proposals (2026-11-12 Audit)
+
+### 1. Daily Notes + Agenda + reminders without a linked note
+
+Recommended design for B3.3.32-7 / T2.8:
+
+1. A note-less reminder/event should create or find the Date Note for its start date (`YYYY-MM-DD`), ensure it has a `## Agenda` heading and `%%calendar%%` block, and link `x.noteId` / `x.heading = "Agenda"` to that note.
+2. Agenda lines should carry `%%zn-item-id:<id>%%` tokens. Editing a time/title in the note updates `calendar.json`; moving/rescheduling the calendar item updates that same line and moves it to the destination date's Agenda note. Opening the item opens that Date Note at `## Agenda` or the matching item line.
+3. A generated Date Note for today/future must never be auto-trashed during the session in which it is created. Any Date Note with a linked calendar item, reminder, tag, link/backlink, user edit history, or active sheet owner is protected. Auto-trash/archive should only apply to old, truly untouched, unreferenced generated notes.
+4. Replace the visible `daily` folder with a virtual `AGENDA` grouping in Zen/Notes navigation. Date Notes may be hidden from the ordinary tree behind a setting or shown under one collapsible Agenda node.
+
+### 2. Owner decisions (confirmed)
+
+- **Reminder Done → Agenda checkbox: APPROVED.** Marking a reminder Done from the notification, calendar menu or history should update the corresponding Agenda list marker from `- [ ]` to `- [x]` as well as append the occurrence-scoped `done` history record. Reopen must restore `[ ]`. This should be two-way, idempotent and avoid duplicate history when Markdown sync reflects the calendar action.
+- **Month view click: CHOICE A.** Clicking the `.zn-cal-month-date` badge opens Day view for that date; clicking elsewhere in the cell continues to select the day and show the Month bottom-strip preview. Retain an RMB `Open Day view` action.
+
+### 3. Further recommendation
+
+Do not treat notification delivery as a lifecycle transition: `alerted` is an append-only audit action and leaves the reminder pending. Done, dismissed, reopened and snoozed remain separate per-occurrence history transitions. A recurring occurrence must always use its original recurrence key even after a visible move. Keep recurrence pointer-drag/snooze disabled until the same `this` / `following` / `series` exception scope and undo semantics are implemented.
+

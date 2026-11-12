@@ -2,6 +2,11 @@
 /* T2.4b: month, upcoming-days and Agenda views, filters, category colours, all-day strip and source-note navigation. */
 const assert = require("node:assert/strict"), fs = require("node:fs"), path = require("node:path"), vm = require("node:vm");
 const source = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
+const css = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.css"), "utf8");
+assert.match(css, /--zn-panel:\s*var\(--zn-surface\)/, "calendar panel backgrounds always resolve to an opaque sheet surface");
+assert.match(css, /\.zn-cal-time-columns\s*\{[^}]*grid-column:\s*2\s*\/\s*-1/s, "the nested day grid spans all tracks after the time gutter");
+assert.match(css, /\.zn-cal-now-line/);
+assert.match(css, /\.zn-cal-time-event\s*\{[^}]*var\(--zn-surface\)/s, "timed event text uses an opaque surface mix");
 const dom = require("./helpers/fake-dom.cjs")();
 const { El, Ev, document, raf } = dom;
 const cal = require("../additional/notes/calendar/ZentralNotesCalendar.js");
@@ -46,6 +51,8 @@ const chooseMenu = async (root, triggerSelector, label) => {
   const eventStart = day + 15 * 3600000, eventEnd = day + 16 * 3600000;
   store.items.upsert({ id: "view-event", summary: "Project review", start: { dateTime: new Date(eventStart).toISOString() }, end: { dateTime: new Date(eventEnd).toISOString() }, x: { kind: "event", noteId: note.id, heading: "Tasks", category: "Projects" } });
   store.items.upsert({ id: "view-event-overlap", summary: "Design review", start: { dateTime: new Date(day + 15.5 * 3600000).toISOString() }, end: { dateTime: new Date(day + 16.5 * 3600000).toISOString() }, x: { kind: "event", noteId: note.id, heading: "Tasks", category: "Projects" } });
+  store.items.upsert({ id: "view-reminder-overlap", summary: "Second call", start: { dateTime: new Date(reminderAt + 60000).toISOString() }, x: { kind: "reminder", noteId: note.id, heading: "Tasks", category: "Projects" } });
+  store.items.upsert({ id: "view-event-reminder-overlap", summary: "Reminder-time event", start: { dateTime: new Date(reminderAt + 15 * 60000).toISOString() }, end: { dateTime: new Date(reminderAt + 45 * 60000).toISOString() }, x: { kind: "event", noteId: note.id, heading: "Tasks", category: "Projects" } });
   store.items.upsert({ id: "view-allday", summary: "Focus day", start: { date: ymd }, end: { date: tomorrowYmd }, x: { kind: "event", noteId: note.id, heading: "Tasks", category: "Personal" } });
   store.items.upsert({ id: "view-recurring", summary: "Daily check-in", start: { date: tomorrowYmd }, recurrence: ["RRULE:FREQ=DAILY;COUNT=3"], x: { kind: "reminder", noteId: note.id, heading: "Tasks", category: "Personal" } });
 
@@ -146,6 +153,10 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(root.querySelectorAll(".zn-cal-time-column").length, 7, "week view renders seven day columns");
   assert.ok(root.querySelectorAll(".zn-cal-time-allday-cell .zn-cal-item").some((el) => el.textContent.includes("Focus day")), "week view includes all-day events in the all-day strip");
   assert.ok(root.querySelectorAll(".zn-cal-time-reminder").some((el) => el.textContent.includes("Call Alice")), "week view positions timed reminders as separate markers");
+  const sharedLanes = root.querySelectorAll(".zn-cal-time-reminder, .zn-cal-time-event").filter((el) => /Call Alice|Second call|Reminder-time event/.test(el.textContent));
+  assert.equal(sharedLanes.length, 3, "same-time reminders and events all use the shared overlap layout");
+  assert.equal(new Set(sharedLanes.map((el) => el.style.left)).size, 3, "each colliding reminder/event gets a distinct horizontal lane");
+  assert.ok(sharedLanes.every((el) => el.style.width === "33.333333333333336%" || el.style.width === "33.33333333333333%"), "three colliding items receive one third of the track each");
   assert.ok(root.querySelectorAll(".zn-cal-off-hours").length > 0, "week view shades outside working hours");
   assert.ok(root.querySelectorAll(".zn-cal-busy-range").length > 0, "week view shades occupied time");
   const overlapButtons = root.querySelectorAll(".zn-cal-time-event").filter((el) => /Project review|Design review/.test(el.textContent));
@@ -156,6 +167,15 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(content.dataset.view, "day");
   assert.equal(root.querySelectorAll(".zn-cal-time-column").length, 1, "day view renders one full-width day column");
   assert.ok(root.querySelectorAll(".zn-cal-time-event").some((el) => el.textContent.includes("Project review")), "day view retains timed events");
+  assert.equal(root.querySelectorAll(".zn-cal-now-line").length, 1, "day view draws its current-time indicator");
+  const gridTrack = q(root, ".zn-cal-time-track");
+  gridTrack.dispatchEvent(new Ev("contextmenu", { bubbles: true }));
+  assert.ok(root.querySelectorAll(".zn-menu-item").some((el) => el.textContent.includes("Open Day view")), "hour tracks expose a right-click day menu");
+  root.querySelectorAll(".zn-menu-item").find((el) => el.textContent.trim() === "New reminder…")?.click();
+  await flushRaf();
+  assert.ok(q(root, ".zn-cal-compose-card"), "day context menu can create a reminder for the selected date");
+  q(root, ".zn-dialog-actions .zn-chip")?.click();
+  await flushRaf();
 
   // A source-backed item opens its note at the stored heading target.
   await chooseMenu(root, ".zn-calendar-view-select", "Agenda");

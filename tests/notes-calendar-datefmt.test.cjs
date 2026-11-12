@@ -148,7 +148,7 @@ test("T2.19 exposes quick snooze choices only for supported reminder occurrences
   assert.match(source, /"snooze-monday":\s*\(\)\s*=>\s*snoozeReminderItem\(item,\s*nextMonday\)/);
   assert.match(source, /"snooze-custom":\s*\(\)\s*=>\s*queueMicrotask\(\(\)\s*=>\s*askCustomReminderSnooze\(item\)\)/);
   assert.match(source, /zonedDateTimeToMs\(day,\s*selectedTime,\s*item\.x\?\.tz\s*\|\|\s*["']["']\)/);
-  assert.match(source, /button\.addEventListener\(["']contextmenu["'],\s*\(event\)\s*=>\s*showCalendarItemMenu\(event,\s*item\)\)/);
+  assert.match(source, /button\.addEventListener\(["']contextmenu["'],\s*\(event\)\s*=>\s*showCalendarItemMenu\(event,\s*item,\s*button\)\)/);
 });
 
 test("parseDateKeyText resolves every displayed format to the immutable ISO key", () => {

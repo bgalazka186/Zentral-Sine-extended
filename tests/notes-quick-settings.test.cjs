@@ -5,6 +5,9 @@ const assert = require("node:assert/strict"),
   path = require("node:path"),
   vm = require("node:vm");
 const source = fs.readFileSync(path.resolve(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
+assert.match(source, /choiceDropdown\(o, value, \(v\) => \{[\s\S]*?writeValue\(o, v\);\s*\n\s*\}\),/, "native select changes persist without synchronously replacing the focused select");
+assert.match(source, /active\?\.localName === "select" && root\.contains\(active\)/, "standalone top-layer transitions are suppressed while an internal select owns focus");
+
 const dom = require("./helpers/fake-dom.cjs")();
 const { El, Ev, document, raf } = dom;
 const win = {

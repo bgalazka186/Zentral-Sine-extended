@@ -61,6 +61,7 @@
 .zentral-notes-sheet {
   --zn-accent: var(--zen-primary-color, #83a5ff);
   --zn-surface: var(--bgalazka-look-toolbar-surface, var(--bgalazka-look-surface, #1e1e24));
+  --zn-panel: var(--zn-surface);
   --zn-text: var(--bgalazka-look-text, #e9e9f0);
   --zn-muted: color-mix(in srgb, var(--zn-text) 58%, transparent);
   --zn-line: color-mix(in srgb, var(--zn-text) 14%, transparent);
@@ -979,6 +980,9 @@
 :root[zentral-notes-theme="recommended"] .zentral-notes-sheet {
   --zn-surface: var(--zl-popup, var(--arrowpanel-background, #1f1f24));
   --zn-text: var(--zl-popup-text, var(--arrowpanel-color, #eee));
+  --zn-muted: color-mix(in srgb, var(--zn-text) 62%, transparent);
+  --zn-hover: color-mix(in srgb, var(--zn-text) 10%, transparent);
+  --zn-accent: var(--zen-primary-color, #6aa7ff);
   --zn-line: var(--zl-button-border-color, var(--arrowpanel-border-color, #444));
   --zn-tint: var(--zn-surface);
   --zn-radius: 10px;
@@ -1816,30 +1820,41 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-time-grid-row { display: grid; min-width: 0; }
 .zentral-notes-sheet .zn-cal-time-head { flex: 0 0 auto; align-items: stretch; }
 .zentral-notes-sheet .zn-cal-time-corner { border-bottom: 1px solid var(--zn-line); }
-.zentral-notes-sheet .zn-cal-time-day-head { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 2px; border: 0; border-bottom: 1px solid var(--zn-line); background: transparent; color: var(--zn-text); font: inherit; }
+.zentral-notes-sheet .zn-cal-time-day-head { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 2px; border: 0; border-bottom: 1px solid var(--zn-line); background: transparent; color: var(--zn-text); font: inherit; cursor: pointer; }
+.zentral-notes-sheet .zn-cal-time-day-head.is-today { border-bottom: 2px solid var(--zn-accent); background: color-mix(in srgb, var(--zn-accent) 12%, transparent); }
+.zentral-notes-sheet .zn-cal-time-day-head.is-today strong { color: var(--zn-accent); }
 .zentral-notes-sheet .zn-cal-time-day-head strong { font-size: .78em; }
 .zentral-notes-sheet .zn-cal-time-day-head > span { color: var(--zn-muted); font-size: .7em; }
 .zentral-notes-sheet .zn-cal-time-allday-row { flex: 0 0 auto; align-items: stretch; max-height: 112px; overflow: auto; border-bottom: 1px solid var(--zn-line); }
 .zentral-notes-sheet .zn-cal-time-all-label { align-self: start; padding: 5px 2px 2px 0; color: var(--zn-muted); font-size: .63em; }
 .zentral-notes-sheet .zn-cal-time-allday-cell { display: flex; min-width: 0; min-height: 22px; flex-direction: column; gap: 2px; padding: 2px; border-left: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-cal-time-allday-cell.is-today { background: color-mix(in srgb, var(--zn-accent) 7%, transparent); }
 .zentral-notes-sheet .zn-cal-time-allday-cell .zn-cal-item { padding: 2px 3px; font-size: .66em; }
 .zentral-notes-sheet .zn-cal-time-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-width: thin; }
-.zentral-notes-sheet .zn-cal-time-grid-row { min-height: calc(24 * 54px); align-items: stretch; }
-.zentral-notes-sheet .zn-cal-hour-gutter { display: flex; flex-direction: column; }
-.zentral-notes-sheet .zn-cal-hour-label { box-sizing: border-box; height: 54px; padding: 0 3px 0 0; transform: translateY(-.5em); color: var(--zn-muted); font-size: .62em; font-variant-numeric: tabular-nums; text-align: right; }
-.zentral-notes-sheet .zn-cal-time-columns { display: grid; min-width: 0; }
+.zentral-notes-sheet .zn-cal-time-grid-row { min-height: calc(24 * 54px); align-items: stretch; grid-template-columns: 42px minmax(0, 1fr); }
+.zentral-notes-sheet .zn-cal-hour-gutter { display: flex; flex-direction: column; padding-top: 2px; }
+.zentral-notes-sheet .zn-cal-hour-label { box-sizing: border-box; height: 54px; padding: 0 3px 0 0; transform: translateY(-.45em); color: var(--zn-muted); font-size: .62em; font-variant-numeric: tabular-nums; text-align: right; }
+.zentral-notes-sheet .zn-cal-hour-label:first-child { transform: none; }
+.zentral-notes-sheet .zn-cal-time-columns { grid-column: 2 / -1; display: grid; min-width: 0; width: 100%; }
 .zentral-notes-sheet .zn-cal-time-column { min-width: 0; border-left: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-cal-time-column.is-today { background: color-mix(in srgb, var(--zn-accent) 5%, transparent); }
 .zentral-notes-sheet .zn-cal-time-track { position: relative; min-width: 0; background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(54px - 1px), var(--zn-line) calc(54px - 1px), var(--zn-line) 54px); }
 .zentral-notes-sheet .zn-cal-time-hour-line { position: absolute; right: 0; left: 0; height: 1px; border-top: 1px solid color-mix(in srgb, var(--zn-line) 55%, transparent); pointer-events: none; }
+.zentral-notes-sheet .zn-cal-now-line { position: absolute; z-index: 5; left: 0; right: 0; height: 2px; background: #ff5b5b; pointer-events: none; }
+.zentral-notes-sheet .zn-cal-now-dot { position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: #ff5b5b; }
+.zentral-notes-sheet .zn-cal-today-badge { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 999px; background: color-mix(in srgb, var(--zn-accent) 22%, transparent); color: var(--zn-accent); font-size: .72em; font-weight: 650; }
+.zentral-notes-sheet .zn-cal-day-group.is-today { border-color: var(--zn-accent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--zn-accent) 45%, transparent); }
+.zentral-notes-sheet .zn-cal-agenda-row.is-today .zn-cal-agenda-date { color: var(--zn-accent); font-weight: 650; }
 .zentral-notes-sheet .zn-cal-off-hours { position: absolute; z-index: 0; right: 0; left: 0; background: color-mix(in srgb, var(--zn-hover) 16%, transparent); pointer-events: none; }
 .zentral-notes-sheet .zn-cal-off-hours.is-all-day { top: 0; bottom: 0; }
 .zentral-notes-sheet .zn-cal-busy-range { position: absolute; z-index: 1; right: 0; left: 0; border-top: 1px solid color-mix(in srgb, var(--zn-accent) 16%, transparent); background: color-mix(in srgb, var(--zn-accent) 6%, transparent); pointer-events: none; }
-.zentral-notes-sheet .zn-cal-time-event { position: absolute; box-sizing: border-box; min-width: 0; overflow: hidden; flex-wrap: nowrap; align-items: flex-start; gap: 2px; padding: 2px 3px; border-left-width: 2px; border-radius: 3px; font-size: .68em; line-height: 1.2; }
-.zentral-notes-sheet .zn-cal-time-event .zn-cal-item-time { font-size: .68em; }
-.zentral-notes-sheet .zn-cal-time-event .zn-cal-item-title { min-width: 0; overflow: hidden; font-size: .78em; text-overflow: ellipsis; overflow-wrap: normal; }
+.zentral-notes-sheet .zn-cal-time-event { position: absolute; box-sizing: border-box; min-width: 0; overflow: hidden; display: flex; flex-direction: column; flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; gap: 1px; padding: 2px 4px; border: 1px solid color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 45%, var(--zn-line)); border-left: 3px solid var(--zn-cal-item-color, var(--zn-accent)); border-radius: 4px; background: color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 24%, var(--zn-surface)); font-size: .68em; line-height: 1.15; }
+.zentral-notes-sheet .zn-cal-time-event .zn-cal-item-time { font-size: .66em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.zentral-notes-sheet .zn-cal-time-event .zn-cal-item-title { min-width: 0; width: 100%; overflow: hidden; font-size: .78em; line-height: 1.15; white-space: nowrap; text-overflow: ellipsis; overflow-wrap: normal; }
 .zentral-notes-sheet .zn-cal-time-event .zn-cal-item-category,
 .zentral-notes-sheet .zn-cal-time-event .zn-cal-item-note { display: none; }
-.zentral-notes-sheet .zn-cal-time-reminder { position: absolute; box-sizing: border-box; min-width: 0; max-width: calc(100% - 4px); overflow: hidden; flex-wrap: nowrap; padding: 1px 3px; border-left-width: 2px; border-radius: 3px; background: color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 22%, var(--zn-panel)); font-size: .64em; line-height: 1.2; }
+.zentral-notes-sheet .zn-cal-time-reminder { position: absolute; box-sizing: border-box; min-width: 0; overflow: hidden; display: flex; flex-wrap: nowrap; align-items: center; gap: 3px; padding: 1px 4px; border: 1px solid color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 50%, var(--zn-line)); border-left: 3px solid var(--zn-cal-item-color, var(--zn-accent)); border-radius: 4px; background: color-mix(in srgb, var(--zn-cal-item-color, var(--zn-accent)) 26%, var(--zn-surface)); font-size: .64em; line-height: 1.2; white-space: nowrap; }
+.zentral-notes-sheet .zn-cal-time-reminder .zn-cal-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .zentral-notes-sheet .zn-cal-time-reminder .zn-cal-item-category,
 .zentral-notes-sheet .zn-cal-time-reminder .zn-cal-item-note { display: none; }
 .zentral-notes-sheet .zn-cal-time-view.is-day .zn-cal-time-event { font-size: .76em; }

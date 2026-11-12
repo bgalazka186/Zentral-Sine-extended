@@ -1,7 +1,7 @@
 {
   "id": "zentral-sine-extended",
   "name": "Zentral Extended",
-  "description": "Zentral Extended Hybrid \u2014 modular features with documented Zentral 1.1.0 integration",
+  "description": "Zentral Extended Hybrid — modular features with documented Zentral 1.1.0 integration",
   "homepage": "https://github.com/bgalazka186/Zentral-Sine-extended",
   "supportsUnload": true,
   "style": {
@@ -17,7 +17,7 @@
     }
   },
   "author": "bgalazka186",
-  "version": "3.3.31",
+  "version": "3.3.32",
   "preferences": "preferences.json",
   "tags": [
     "apps",

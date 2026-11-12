@@ -282,9 +282,9 @@ const BODY = "# Plan\n\n## Shifts\n%%calendar: Work%%\n- 2026-11-12 06:00-14:00 
 
   await test("T2.16 startup sweep trashes only untouched generated Daily notes and retains the note for restore", async () => {
     const io = fakeIO(), st = mk(io); await st.open();
-    const candidate = st.create("# 2026-11-14 Saturday\n\n", "daily");
+    const candidate = st.create("# 2026-11-10 Tuesday\n\n", "daily");
     const unrelated = st.create("# 2026-11-15 Sunday\n\n", "Work");
-    const edited = st.create("# 2026-11-16 Monday\n\n", "daily");
+    const edited = st.create("# 2026-11-09 Monday\n\n", "daily");
     st.update(edited.id, edited.body + "x");
     const trashed = st.purgeBlankDateNotes();
     assert.deepEqual(Array.from(trashed), [candidate.id]);
@@ -294,6 +294,18 @@ const BODY = "# Plan\n\n## Shifts\n%%calendar: Work%%\n- 2026-11-12 06:00-14:00 
     assert.equal(st.get(edited.id).trashed, 0, "a note with one typed character is preserved");
     st.restore(candidate.id);
     assert.equal(st.get(candidate.id).trashed, 0);
+  });
+
+  await test("T2.16 never trashes today/future Daily notes and protects dates occupied by note-less calendar items", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const today = st.create("# 2026-11-11 Wednesday\n\n", "daily");
+    const future = st.create("# 2026-11-12 Thursday\n\n", "daily");
+    const occupied = st.create("# 2026-11-10 Tuesday\n\n", "daily");
+    st.items.upsert({ id: "date-only-event", summary: "Busy day", start: { date: "2026-11-10" }, end: { date: "2026-11-11" }, x: { kind: "event", src: "manual" } });
+    assert.deepEqual(Array.from(st.purgeBlankDateNotes()), []);
+    assert.equal(st.get(today.id).trashed, 0, "today's newly generated Daily note stays alive");
+    assert.equal(st.get(future.id).trashed, 0, "a future Daily note is never auto-trashed");
+    assert.equal(st.get(occupied.id).trashed, 0, "a note-less all-day event protects its date note");
   });
 
   await test("T2.16 edit history is sticky across edit-then-undo and survives reload", async () => {
@@ -325,12 +337,12 @@ const BODY = "# Plan\n\n## Shifts\n%%calendar: Work%%\n- 2026-11-12 06:00-14:00 
 
   await test("T2.16 protects tagged and linked date notes, including slash-form wiki titles", async () => {
     const io = fakeIO(), st = mk(io); await st.open();
-    const tagged = st.create("# 2026-11-19 Thursday\n\n", "daily");
+    const tagged = st.create("# 2026-11-06 Friday\n\n", "daily");
     tagged.foreign = "tags: [keep]";
-    const markdownTarget = st.create("# 2026-11-20 Friday\n\n", "daily");
+    const markdownTarget = st.create("# 2026-11-07 Saturday\n\n", "daily");
     st.create("A canonical backlink: " + c.buildNoteLink(markdownTarget.id, "Daily entry"));
-    const slashTarget = st.create("# 20/11/2026\n\n", "daily");
-    st.create("A date title with slashes: [[20/11/2026|open day]]");
+    const slashTarget = st.create("# 08/11/2026\n\n", "daily");
+    st.create("A date title with slashes: [[08/11/2026|open day]]");
     assert.deepEqual(Array.from(st.purgeBlankDateNotes()), []);
     assert.equal(tagged.trashed, 0, "foreign YAML tags protect the note even when its body is only the generated heading");
     assert.equal(markdownTarget.trashed, 0, "canonical Markdown backlinks protect the target");
@@ -339,7 +351,7 @@ const BODY = "# Plan\n\n## Shifts\n%%calendar: Work%%\n- 2026-11-12 06:00-14:00 
 
   await test("T2.16 active-sheet ownership protects the current note until the last owner leaves", async () => {
     const io = fakeIO(), st = mk(io); await st.open();
-    const note = st.create("# 2026-11-21 Saturday\n\n", "daily");
+    const note = st.create("# 2026-11-08 Sunday\n\n", "daily");
     const first = {}, second = {};
     st.setActiveNote(first, note.id);
     st.setActiveNote(second, note.id);
@@ -353,8 +365,8 @@ const BODY = "# Plan\n\n## Shifts\n%%calendar: Work%%\n- 2026-11-12 06:00-14:00 
 
   await test("T2.16 onlyIds limits a leave-note purge and Notes sheets wire switch, close and startup sweeps", async () => {
     const io = fakeIO(), st = mk(io); await st.open();
-    const first = st.create("# 2026-11-22 Sunday\n\n", "daily");
-    const second = st.create("# 2026-11-23 Monday\n\n", "daily");
+    const first = st.create("# 2026-11-07 Saturday\n\n", "daily");
+    const second = st.create("# 2026-11-06 Friday\n\n", "daily");
     assert.deepEqual(Array.from(st.purgeBlankDateNotes({ onlyIds: [first.id] })), [first.id]);
     assert.equal(st.get(second.id).trashed, 0);
     const code = source;
@@ -567,7 +579,7 @@ const BODY = "# Plan\n\n## Shifts\n%%calendar: Work%%\n- 2026-11-12 06:00-14:00 
   });
 
   await test("T2.7a reminder right-click actions and history are connected to the shared menu engine", () => {
-    assert.match(source, /function\s+showCalendarItemMenu\s*\([\s\S]*?showMenu\(anchor\s*\|\|\s*\(event\s*\?\s*pointAnchor\(event\)/);
+    assert.match(source, /function\s+showCalendarItemMenu\s*\([\s\S]*?showMenu\(safeAnchor\s*\|\|\s*\(event\s*&&\s*Number\.isFinite\(event\.clientX\)[\s\S]*?pointAnchor\(event\)/);
     assert.match(source, /"mark-done":\s*\(\)\s*=>\s*recordReminderLifecycle\(item,\s*["']done["']\)/);
     assert.match(source, /dismiss:\s*\(\)\s*=>\s*recordReminderLifecycle\(item,\s*["']dismissed["']\)/);
     assert.match(source, /reopen:\s*\(\)\s*=>\s*recordReminderLifecycle\(item,\s*["']reopened["']\)/);
