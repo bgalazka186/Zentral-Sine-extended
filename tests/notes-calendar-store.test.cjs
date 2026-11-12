@@ -59,6 +59,76 @@ const BODY = "# Plan\n\n## Shifts\n%%calendar: Work%%\n- 2026-11-12 06:00-14:00 
     assert.equal(st2.items.list({ noteId: n.id }).length, 0);
   });
 
+  await test("T2.5e recurrence exceptions persist through calendar.json reload", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const start = new Date(2026, 10, 12, 9, 0).getTime();
+    const master = cal.makeItem({ id: "persisted-recurring-series", summary: "Persisted series",
+      start: { dateTime: new Date(start).toISOString() }, end: { dateTime: new Date(start + 30 * 60000).toISOString() },
+      recurrence: ["RRULE:FREQ=DAILY;COUNT=5"], x: { kind: "event", src: "manual" } }, clock);
+    assert.ok(st.items.upsert(master));
+    const selected = cal.expandItem(master, start, start + 5 * 86400000).find((item) => Number(item.x.recurrenceId) === start + 2 * 86400000);
+    assert.ok(selected);
+    clock += 1000;
+    const changed = cal.moveOccurrence(master, selected, { dateTime: new Date(start + 2 * 86400000 + 2 * 3600000).toISOString() }, "following", clock);
+    assert.ok(changed);
+    assert.ok(st.items.upsert(changed));
+    await st.items.flush();
+    const saved = JSON.parse(io.files.get("/n/calendar.json").text).items.find((item) => item.id === master.id);
+    assert.equal(saved.x.recurrenceExceptions.length, 1);
+    assert.equal(saved.x.recurrenceExceptions[0].scope, "following");
+    const reopened = mk(io); await reopened.open();
+    const reloaded = reopened.items.get(master.id);
+    assert.deepEqual(reloaded.x.recurrenceExceptions, changed.x.recurrenceExceptions);
+    const expanded = cal.expandItem(reloaded, start, start + 5 * 86400000);
+    assert.equal(new Date(cal.itemRange(expanded[2])[0]).getHours(), 11);
+    assert.equal(new Date(cal.itemRange(expanded[4])[0]).getHours(), 11);
+    assert.equal(new Date(cal.itemRange(expanded[1])[0]).getHours(), 9);
+  });
+
+  await test("T2.5e source-note recurrence exceptions survive a Markdown title edit", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const note = st.create("%%calendar: Birthdays%%\n- 15 listopada Birthday");
+    const master = st.items.list({ noteId: note.id })[0];
+    assert.deepEqual(master.recurrence, ["RRULE:FREQ=YEARLY"]);
+    const from = new Date(2027, 10, 1).getTime(), to = new Date(2027, 11, 1).getTime();
+    const occurrence = cal.expandItem(master, from, to)[0];
+    assert.ok(occurrence);
+    const moved = cal.moveOccurrence(master, occurrence, { date: "2027-11-16" }, "this", clock);
+    assert.ok(moved);
+    assert.equal(moved.x.moved, "1", "note-derived recurring items keep the moved marker");
+    assert.ok(st.items.upsert(moved));
+    const body = st.get(note.id).body.replace("- 15 listopada Birthday", "- 15 listopada Birthday updated");
+    st.update(note.id, body);
+    const saved = st.items.get(master.id);
+    assert.equal(saved.summary, "Birthday updated");
+    assert.equal(saved.x.recurrenceExceptions.length, 1);
+    assert.equal(saved.x.moved, "1");
+    assert.equal(cal.expandItem(saved, from, to)[0].start.date, "2027-11-16");
+  });
+
+  await test("T2.5e recurring reminder moves append occurrence-scoped reschedule history", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const start = new Date(2026, 10, 12, 9, 0).getTime();
+    const master = cal.makeItem({ id: "history-recurring-reminder", summary: "Recurring reminder",
+      start: { dateTime: new Date(start).toISOString() }, recurrence: ["RRULE:FREQ=DAILY;COUNT=4"],
+      x: { kind: "reminder", src: "manual" } }, clock);
+    assert.ok(st.items.upsert(master));
+    const occurrence = cal.expandItem(master, start, start + 4 * 86400000)[2];
+    clock += 1000;
+    const target = { dateTime: new Date(cal.itemRange(occurrence)[0] + 3600000).toISOString() };
+    const moved = cal.moveOccurrence(master, occurrence, target, "this", clock);
+    assert.ok(moved);
+    assert.ok(st.items.upsert({ ...moved, historyAction: "rescheduled", occurrenceId: occurrence.id, historyStart: target }));
+    const records = st.items.history.list({ itemId: master.id, occurrenceId: occurrence.id });
+    assert.equal(records.length, 1);
+    assert.equal(records[0].action, "rescheduled");
+    assert.deepEqual(records[0].start, target);
+    await st.items.flush();
+    const reopened = mk(io); await reopened.open();
+    assert.equal(reopened.items.history.list({ itemId: master.id, occurrenceId: occurrence.id })[0].action, "rescheduled");
+    assert.equal(reopened.items.history.stateFor(master.id, occurrence.id), "pending", "schedule history does not change lifecycle state");
+  });
+
   await test("trash hides the items and keeps their extras; restore shows them again; plain notes cost nothing", async () => {
     const io = fakeIO(), st = mk(io); await st.open();
     const plain = st.create("just text"); st.update(plain.id, "still just text");

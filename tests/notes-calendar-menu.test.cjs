@@ -33,7 +33,9 @@ const find = (rows, id) => rows.flatMap((row) => row.group ? [row, ...row.group]
   const recurring = cal.makeItem({ id: "recurring", summary: "Recurring", start: { dateTime: "2026-11-12T12:00:00Z" }, recurrence: ["RRULE:FREQ=DAILY;COUNT=3"], x: { kind: "reminder", src: "manual" } }, 0);
   const recurringMenu = cal.calendarItemMenuModel(recurring, { state: "done", historyWritable: true });
   assert.equal(find(recurringMenu, "change-time").enabled, false);
-  assert.match(find(recurringMenu, "change-time").reason, /exception support/);
+  assert.match(find(recurringMenu, "change-time").reason, /expanded recurrence occurrence/);
+  const recurringOccurrence = cal.expandItem(recurring, Date.parse("2026-11-12T00:00:00"), Date.parse("2026-11-16T00:00:00")).find((item) => item.x?.recurrenceId);
+  assert.equal(find(cal.calendarItemMenuModel(recurringOccurrence, { historyWritable: true }), "change-time").enabled, true, "expanded recurring occurrences offer an explicit scope choice");
   assert.equal(find(recurringMenu, "snooze-3d").enabled, false);
   assert.equal(find(recurringMenu, "mark-done").enabled, false, "already-done lifecycle actions are disabled");
   assert.equal(find(recurringMenu, "reopen").enabled, true);
@@ -169,12 +171,32 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   assert.match(convert.textContent, /source text/);
   assert.match(remove.textContent, /source note/);
 
-  // Shift+F10 opens the same action model, and recurring occurrences expose their safety reason.
+  // Shift+F10 opens the same action model. Recurring moves require an explicit occurrence scope.
   openRowMenu(root, "menu-recurring-reminder", "keydown");
-  const moveRecurring = menuItem(root, "Change time…");
-  assert.ok(moveRecurring?.disabled);
-  assert.match(moveRecurring.textContent, /exception support/);
-  menuItem(root, "Snooze").click();
+  const moveRecurring = menuItem(root, "Change occurrence time…");
+  assert.ok(moveRecurring && !moveRecurring.disabled);
+  moveRecurring.click(); await flush();
+  const recurrenceScope = q(root, '[aria-label="Apply time change to"]');
+  assert.ok(recurrenceScope, "recurring reschedule asks which scope the user intends");
+  assert.deepEqual(recurrenceScope.querySelectorAll("option").map((option) => option.getAttribute("value")), ["this", "following", "series"]);
+  recurrenceScope.value = "this";
+  const recurringDateInput = q(root, '[aria-label="New date (YYYY-MM-DD)"]');
+  const targetOccurrenceDate = cal.ymd(new Date(cal.addDays(day, 2)));
+  const originalMaster = store.items.get("menu-recurring-reminder");
+  const originalFirst = cal.expandItem(originalMaster, day, cal.addDays(day, 4))[0];
+  recurringDateInput.value = targetOccurrenceDate;
+  root.querySelectorAll(".zn-dialog-card button").find((node) => node.textContent.trim() === "Save new time").click(); await flush();
+  const movedMaster = store.items.get("menu-recurring-reminder");
+  assert.equal(movedMaster.x.recurrenceExceptions.length, 1);
+  assert.equal(movedMaster.x.recurrenceExceptions[0].scope, "this");
+  const afterOccurrences = cal.expandItem(movedMaster, day, cal.addDays(day, 5));
+  assert.equal(afterOccurrences.find((item) => item.x.recurrenceId === originalFirst.x.recurrenceId).start.dateTime
+    ? cal.localDateKey(Date.parse(afterOccurrences.find((item) => item.x.recurrenceId === originalFirst.x.recurrenceId).start.dateTime))
+    : afterOccurrences.find((item) => item.x.recurrenceId === originalFirst.x.recurrenceId).start.date, targetOccurrenceDate);
+  assert.equal(afterOccurrences.find((item) => item.x.recurrenceId !== originalFirst.x.recurrenceId).x.recurrenceId, String(originalFirst.x.recurrenceId === "" ? 0 : Number(originalFirst.x.recurrenceId) + 86400000));
+  // Reopen the row menu after rendering; snooze remains separate from recurrence move semantics.
+  openRowMenu(root, "menu-recurring-reminder", "keydown");
+  menuItem(root, "Snooze").click(); await flush();
   const snoozeRecurring = menuItem(root, "Snooze +1 day");
   assert.ok(snoozeRecurring?.disabled);
   assert.match(snoozeRecurring.textContent, /exception support/);

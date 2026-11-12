@@ -9316,52 +9316,81 @@
         cancel.addEventListener("click", closeDialog);
       }
       function currentCalendarItem(item) {
-        return item?.id ? store.items?.get(item.id) || null : null;
+        const id = String(item?.x?.series || item?.id || "");
+        return id ? store.items?.get(id) || null : null;
+      }
+      function currentCalendarOccurrence(item) {
+        if (!item?.x?.series || !item.x.recurrenceId) return currentCalendarItem(item);
+        const master = currentCalendarItem(item);
+        if (!master) return null;
+        const start = CALENDAR_PART.itemRange(item)[0], end = CALENDAR_PART.itemRange(item)[1];
+        const from = start - 2 * 86400000, to = Math.max(start + 1, end) + 2 * 86400000;
+        return CALENDAR_PART.expandItem(master, from, to).find((occurrence) => occurrence.x?.recurrenceId === item.x.recurrenceId) || null;
       }
       function askCalendarItemReschedule(item) {
         const C = CALENDAR_PART, current = currentCalendarItem(item);
         if (!current) return flash("That calendar item is no longer available");
         if (current.x?.src === "note") return flash("Change this reminder from its source note");
-        if (current.x?.series || (Array.isArray(current.recurrence) && current.recurrence.length)) return flash("Recurring occurrences need exception support before they can be moved");
-        const range = C.itemRange(current), allDay = C.isAllDay(current);
-        const dateField = field("New date (YYYY-MM-DD)", calendarItemDate(current), "YYYY-MM-DD");
+        const recurring = (current.recurrence || []).some((rule) => C.parseRule(rule));
+        const occurrence = recurring ? currentCalendarOccurrence(item) : current;
+        if (recurring && (!occurrence || occurrence.x?.series !== current.id || !occurrence.x?.recurrenceId)) return flash("Choose a visible occurrence before changing a recurring item");
+        const scheduled = occurrence || current;
+        const range = C.itemRange(scheduled), allDay = C.isAllDay(scheduled);
+        const dateField = field("New date (YYYY-MM-DD)", calendarItemDate(scheduled), "YYYY-MM-DD");
         const datePick = chip("Choose date…");
         const dateHost = h("div", { class: "zn-cal-snooze-date" }, dateField.row, datePick);
         datePick.addEventListener("click", () => {
           const selected = C.parseYmd(dateField.input.value);
           toggleDatePicker(datePick, dateHost, { selected: selected || range[0], items: calendarPickerItems(), onPick: (day) => { dateField.input.value = C.ymd(new Date(day)); } });
         });
-        let selectedTime = allDay ? "" : C.clockIn(range[0], current.x?.tz || "");
+        let selectedTime = allDay ? "" : C.clockIn(range[0], scheduled.x?.tz || "");
         const clock = allDay ? null : buildClockPicker({ value: selectedTime, onPick: (value) => { selectedTime = value; } });
+        let scopeSelect = null, scopeRow = null;
+        if (recurring) {
+          scopeSelect = h("select", { class: "zn-input", "aria-label": "Apply time change to" },
+            h("option", { value: "this" }, "This occurrence only"),
+            h("option", { value: "following" }, "This and following occurrences"),
+            h("option", { value: "series" }, "Entire series"));
+          scopeSelect.value = "this";
+          scopeRow = h("label", { class: "zn-field-row zn-cal-recurrence-scope" }, h("span", {}, "Apply to"), scopeSelect);
+        }
         const save = chip("Save new time", true), cancel = chip("Cancel");
         const note = h("p", { class: "zn-empty" }, allDay
           ? "The item stays all-day. Multi-day event length is preserved."
           : "The item's wall-clock time and duration are preserved in its saved time zone.");
-        openCard("Change calendar item time", note, dateHost, ...(clock ? [clock] : []), h("div", { class: "zn-dialog-actions" }, cancel, save));
+        openCard(recurring ? "Change recurring occurrence time" : "Change calendar item time", note, dateHost, ...(clock ? [clock] : []), ...(scopeRow ? [scopeRow] : []), h("div", { class: "zn-dialog-actions" }, cancel, save));
         const submit = () => {
           const key = dateField.input.value.trim(), parsed = C.parseYmd(key);
           if (!parsed) { dateField.input.dataset.bad = "true"; dateField.input.focus(); return; }
           let start, end;
           if (allDay) {
-            const oldStart = C.parseYmd(current.start.date), oldEnd = current.end?.date ? C.parseYmd(current.end.date) : null;
+            const oldStart = C.parseYmd(scheduled.start.date), oldEnd = scheduled.end?.date ? C.parseYmd(scheduled.end.date) : null;
             const span = oldStart && oldEnd ? Math.max(1, Math.round((oldEnd.getTime() - oldStart.getTime()) / 86400000)) : 1;
             start = { date: key };
-            if (current.end?.date) end = { date: C.ymd(new Date(C.addDays(parsed.getTime(), span))) };
+            if (scheduled.end?.date) end = { date: C.ymd(new Date(C.addDays(parsed.getTime(), span))) };
           } else {
-            const target = C.zonedDateTimeToMs(key, selectedTime, current.x?.tz || "");
+            const target = C.zonedDateTimeToMs(key, selectedTime, scheduled.x?.tz || "");
             if (!Number.isFinite(target) || target <= 0) { dateField.input.dataset.bad = "true"; dateField.input.focus(); return; }
             start = { dateTime: new Date(target).toISOString() };
-            if (current.end?.dateTime) {
+            if (scheduled.end?.dateTime) {
               const duration = Math.max(5 * 60000, range[1] - range[0]);
               end = { dateTime: new Date(target + duration).toISOString() };
             }
           }
-          const next = { ...current, start, ...(end ? { end } : { end: undefined }), x: { ...current.x, moved: current.x?.src === "list" ? true : current.x?.moved } };
+          let next;
+          if (recurring) next = C.moveOccurrence(current, occurrence, start, scopeSelect?.value || "this", nowMs());
+          else next = { ...current, start, ...(end ? { end } : { end: undefined }), x: { ...current.x, moved: current.x?.src === "list" ? true : current.x?.moved } };
+          if (!next) return flash("That recurrence change is invalid. Reopen the item and try again.");
+          if (recurring && C.isReminder(current)) {
+            next.historyAction = "rescheduled";
+            next.occurrenceId = String(occurrence.id);
+            next.historyStart = start;
+          }
           const saved = store.items.upsert(next);
           if (!saved) return flash("This calendar item changed while the dialog was open. Reopen its menu and try again.");
           closeDialog();
           renderCalendar();
-          flash("Calendar item time changed");
+          flash(recurring ? (scopeSelect.value === "this" ? "Occurrence time changed" : scopeSelect.value === "following" ? "This and following occurrence times changed" : "Entire series time changed") : "Calendar item time changed");
         };
         save.addEventListener("click", submit);
         cancel.addEventListener("click", closeDialog);
@@ -9422,7 +9451,7 @@
         const commands = {
           open: () => { const latest = currentCalendarItem(item); if (latest) openCalendarItem(latest); },
           edit: () => { const latest = currentCalendarItem(item); if (latest) askCalendarComposer({ item: latest }); },
-          "change-time": () => { const latest = currentCalendarItem(item); if (latest) askCalendarItemReschedule(latest); },
+          "change-time": () => { const latest = currentCalendarOccurrence(item); if (latest) askCalendarItemReschedule(latest); },
           convert: () => convertCalendarItem(item),
           duplicate: () => duplicateCalendarItem(item),
           delete: () => askDeleteCalendarItem(item),
@@ -9445,7 +9474,7 @@
       function showCalendarItemMenu(event, item, anchor = null) {
         event?.preventDefault?.();
         event?.stopPropagation?.();
-        const latest = currentCalendarItem(item);
+        const latest = currentCalendarOccurrence(item);
         if (!latest) return flash("That calendar item is no longer available");
         showMenu(anchor || (event ? pointAnchor(event) : item), calendarItemMenuRows(latest));
       }

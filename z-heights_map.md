@@ -94,8 +94,8 @@ Ordering inside one component. Listed by file; values only matter relative to si
 | additional/notes/ZentralNotes.css | 1834 | 0 | `.zentral-notes-sheet .zn-cal-off-hours` |
 | additional/notes/ZentralNotes.css | 1836 | 1 | `.zentral-notes-sheet .zn-cal-busy-range` |
 | additional/notes/ZentralNotes.css | 1861 | 70 | `.zentral-notes-sheet .zn-cal-hover-card` |
-| additional/notes/ZentralNotes.uc.js | 9637 | 2 | `button.style.zIndex = "2";` |
-| additional/notes/ZentralNotes.uc.js | 9649 | 3 | `button.style.zIndex = "3";` |
+| additional/notes/ZentralNotes.uc.js | 9666 | 2 | `button.style.zIndex = "2";` |
+| additional/notes/ZentralNotes.uc.js | 9678 | 3 | `button.style.zIndex = "3";` |
 | additional/video/controllers/ZentralVideoSidebar.js | 213 | 5 | `"position:absolute;inset:0;z-index:5;background:var(--zl-video-canvas,` |
 | additional/video/ZentralVideoPreview.css | 132 | 3 | `#zentral-video-preview .zentral-video-preview-subtitles` |
 | additional/video/ZentralVideoPreview.css | 301 | 2 | `#zentral-video-preview canvas` |
