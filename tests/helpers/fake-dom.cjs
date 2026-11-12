@@ -181,6 +181,11 @@ const document = {
   getElementById: (id) => document.documentElement.all().find((e) => e.id === id) || null,
   querySelectorAll: (sel) => document.documentElement.querySelectorAll(sel),
   body: null,
+  // Document-level listeners (the secondary views and Notes talk through document events).
+  _listeners: [],
+  addEventListener(type, fn) { document._listeners.push({ type, fn }); },
+  removeEventListener(type, fn) { document._listeners = document._listeners.filter((l) => !(l.type === type && l.fn === fn)); },
+  dispatchEvent(ev) { for (const l of [...document._listeners]) if (l.type === ev.type) l.fn(ev); return true; },
 };
 document.body = new El("body");
 document.documentElement.append(document.body);

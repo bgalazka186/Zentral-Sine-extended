@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.8
+// @version 3.3.13
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.8, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.13, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.8";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.13";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1293,6 +1293,19 @@ const __zentralEmbeddedLoader = (function () {
     return null;
   }
   const twoDigitYear = (year) => year < 50 ? 2000 + year : 1900 + year;
+  // Relative month/year arithmetic clamps to the final valid day of the target month instead of overflowing
+  // into a later month (Jan 31 + 1m = Feb 28/29; Feb 29 + 1y = Feb 28).
+  function shiftCalendarDate(base, amount, unit) {
+    const source = new Date(base), first = new Date(base);
+    first.setDate(1);
+    if (unit === "m") first.setMonth(first.getMonth() + amount);
+    else first.setFullYear(first.getFullYear() + amount);
+    const year = first.getFullYear(), month = first.getMonth();
+    if (year < 1 || year > 9999) return null;
+    const lastDate = new Date(first);
+    lastDate.setMonth(month + 1, 0);
+    return new Date(year, month, Math.min(source.getDate(), lastDate.getDate())).getTime();
+  }
   // A date as people type it: ISO, day/month/year, dotted/dashed/slashed dates, month names, @today, @tomorrow,
   // @+3d / @-2d / @+1w / @+1m, @monday. Numeric day-first forms are deliberate; no locale-dependent guessing.
   // Two-digit years use 00-49 => 2000-2049 and 50-99 => 1950-1999.
@@ -1326,8 +1339,7 @@ const __zentralEmbeddedLoader = (function () {
       const n = (m[1] === "-" ? -1 : 1) * +m[2], d = new Date(base);
       if (m[3] === "d") return addDays(base, n);
       if (m[3] === "w") return addDays(base, n * 7);
-      if (m[3] === "m") return new Date(d.getFullYear(), d.getMonth() + n, d.getDate()).getTime();
-      return new Date(d.getFullYear() + n, d.getMonth(), d.getDate()).getTime();
+      if (m[3] === "m" || m[3] === "y") return shiftCalendarDate(base, n, m[3]);
     }
     const wd = WEEKDAYS.findIndex((w) => w === t || w.slice(0, 3) === t);
     if (wd >= 0) return addDays(base, ((wd - new Date(base).getDay() + 7) % 7) || 7);
@@ -1385,9 +1397,9 @@ const __zentralEmbeddedLoader = (function () {
       const m = re.exec(s);
       if (!m) continue;
       const raw = m[1], day = parseDateText(raw, now);
-      // An unknown word can look like a month name (for example "12 and 25 listopada"). Do not let
-      // that rejected candidate consume the next, valid date; resume one character after its start.
-      if (day === null) { re.lastIndex = m.index + 1; continue; }
+      // This is deliberately prefix-only. These patterns are anchored and non-global, so lastIndex cannot
+      // resume a search later in the line; a leading non-date token means this is not a dated list/heading.
+      if (day === null) continue;
       const yearless = /^\d{1,2}[./-]\d{1,2}\.?$/.test(raw) || /^\d{1,2}\.?\s+[a-z\u00c0-\u024f]+\.?$/i.test(raw) || /^[a-z\u00c0-\u024f]+\.?\s+\d{1,2},?$/i.test(raw);
       return { day, raw, rest: s.slice(raw.length).trim(), yearless };
     }
@@ -1514,7 +1526,7 @@ const __zentralEmbeddedLoader = (function () {
       reminders: { overrides: minutes },
       x: {
         kind, noteId: String(x.noteId ?? "").slice(0, 120), heading: String(x.heading ?? "").slice(0, MAX_TEXT),
-        category: cleanCategoryName(x.category), tz: cleanZone(x.tz), src: ["list", "note", "manual"].includes(x.src) ? x.src : "manual", key: String(x.key ?? "").slice(0, 60), moved: x.moved ? "1" : "", calNote: String(x.calNote ?? "").slice(0, MAX_DESC), notify: cleanNotifyOverrides(x.notify),
+        category: cleanCategoryName(x.category), tz: cleanZone(x.tz), src: ["list", "note", "manual"].includes(x.src) ? x.src : "manual", key: String(x.key ?? "").slice(0, 60), legacyKey: String(x.legacyKey ?? "").slice(0, 60), moved: x.moved ? "1" : "", calNote: String(x.calNote ?? "").slice(0, MAX_DESC), notify: cleanNotifyOverrides(x.notify),
       },
     };
     if (end) item.end = end;
@@ -1540,8 +1552,12 @@ const __zentralEmbeddedLoader = (function () {
       else base.x.kind = "reminder";
     } else {
       base.start = { dateTime: iso(startMs) };
-      if (parsed.endMin > parsed.startMin) { base.end = { dateTime: iso(parsed.day + parsed.endMin * MIN) }; base.x.kind = "event"; }
-      else base.x.kind = "reminder";
+      if (parsed.endMin >= 0) {
+        // A range that ends at or before its start crosses midnight. Equal clocks mean a full 24-hour event.
+        const endDay = parsed.endMin <= parsed.startMin ? addDays(parsed.day, 1) : parsed.day;
+        base.end = { dateTime: iso(endDay + parsed.endMin * MIN) };
+        base.x.kind = "event";
+      } else base.x.kind = "reminder";
     }
     return cleanItem(base, now);
   }
@@ -1563,6 +1579,12 @@ const __zentralEmbeddedLoader = (function () {
     const days = [];
     for (let i = 0; i < 42; i++) days.push(new Date(year, month, 1 - lead + i).getTime());
     return Array.from({ length: 6 }, (_, w) => days.slice(w * 7, w * 7 + 7));
+  }
+  // Seven local midnights containing `day`; defaults to Monday-first to match the month view.
+  function weekDays(day, weekStart = 1) {
+    const start = dayStart(day), offset = (new Date(start).getDay() - ((Number(weekStart) || 0) + 7) % 7 + 7) % 7;
+    const first = addDays(start, -offset);
+    return Array.from({ length: 7 }, (_, i) => addDays(first, i));
   }
   // [{ day, items }] for `count` days from `from` (local midnight). Multi-day events appear on every day they cover.
   function daysForward(items, from, count) {
@@ -1603,7 +1625,9 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Merged "taken" ranges [[s,e],...] of timed and all-day events in [from, to); reminders take no time.
   function busyRanges(items, from, to) {
-    const rs = itemsInRange(items, from, to).filter((it) => !isReminder(it)).map((it) => { const [s, e] = itemRange(it); return [Math.max(s, from), Math.min(e, to)]; }).sort((a, b) => a[0] - b[0]);
+    // Expand masters here so callers such as freeSlots cannot accidentally ignore a recurring event. Already-expanded
+    // occurrences carry x.series and are range-filtered without expanding their copied RRULE a second time.
+    const rs = expandRange(items, from, to).filter((it) => !isReminder(it)).map((it) => { const [s, e] = itemRange(it); return [Math.max(s, from), Math.min(e, to)]; }).sort((a, b) => a[0] - b[0]);
     const out = [];
     for (const r of rs) {
       if (out.length && r[0] <= out[out.length - 1][1]) out[out.length - 1][1] = Math.max(out[out.length - 1][1], r[1]);
@@ -1620,7 +1644,7 @@ const __zentralEmbeddedLoader = (function () {
   // ---------- dragging ----------
   const snapTo = (ms, snapMin) => { const st = Math.max(1, Math.round(snapMin || 15)) * MIN; return Math.round(ms / st) * st; };
   // Move an item by deltaMs (snapped to the step). Returns a new item; all-day items move by whole days.
-  function moveItem(it, deltaMs, snapMin = 15) {
+  function moveItem(it, deltaMs, snapMin = 15, now = Date.now()) {
     const copy = JSON.parse(JSON.stringify(it));
     if (isAllDay(it)) {
       const days = Math.round(deltaMs / DAY_MS);
@@ -1632,16 +1656,18 @@ const __zentralEmbeddedLoader = (function () {
       copy.start = { dateTime: iso(ns) };
       if (it.end) copy.end = { dateTime: iso(ns + (e - s)) };
     }
-    return cleanItem({ ...copy, etag: "", updated: iso(Date.now()) }, 0);
+    const stamp = typeof now === "function" ? now() : Number(now);
+    return cleanItem({ ...copy, etag: "", updated: iso(Number.isFinite(stamp) ? stamp : Date.now()) }, 0);
   }
   // Move one edge of an event ("start" or "end"); never shorter than one snap step. Reminders have no end.
-  function resizeItem(it, edge, deltaMs, snapMin = 15) {
+  function resizeItem(it, edge, deltaMs, snapMin = 15, now = Date.now()) {
     if (isReminder(it) || isAllDay(it) || !it.end) return it;
     const [s, e] = itemRange(it), step = Math.max(1, Math.round(snapMin)) * MIN;
     let ns = s, ne = e;
     if (edge === "start") ns = Math.min(snapTo(s + deltaMs, snapMin), e - step);
     else ne = Math.max(snapTo(e + deltaMs, snapMin), s + step);
-    return cleanItem({ ...JSON.parse(JSON.stringify(it)), start: { dateTime: iso(ns) }, end: { dateTime: iso(ne) }, etag: "", updated: iso(Date.now()) }, 0);
+    const stamp = typeof now === "function" ? now() : Number(now);
+    return cleanItem({ ...JSON.parse(JSON.stringify(it)), start: { dateTime: iso(ns) }, end: { dateTime: iso(ne) }, etag: "", updated: iso(Number.isFinite(stamp) ? stamp : Date.now()) }, 0);
   }
 
   // ---------- Google shape ----------
@@ -1659,7 +1685,7 @@ const __zentralEmbeddedLoader = (function () {
     if (!g || typeof g !== "object") return null;
     const priv = g.extendedProperties?.private || {};
     const x = {};
-    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "moved", "calNote", "notify"]) if (priv["zentral_" + k] !== undefined) {
+    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "legacyKey", "moved", "calNote", "notify"]) if (priv["zentral_" + k] !== undefined) {
       if (k === "notify") { try { x[k] = JSON.parse(priv["zentral_" + k]); } catch (_) {} }
       else x[k] = priv["zentral_" + k];
     }
@@ -1741,6 +1767,66 @@ const __zentralEmbeddedLoader = (function () {
     return { body: next, created: true, category, lineStart: lineStart + (before ? 1 : 0), delta: next.length - text.length };
   }
   const hashText = (t) => { let h = 2166136261; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
+  // Inline Obsidian-style comments carry identity for note-derived items without adding visible Markdown. The token
+  // travels with its list line when the owner reorders or edits other lines, so identical entries keep independent extras.
+  const ITEM_ID_RE = /%%\s*zn-item-id:([a-z0-9_-]{4,60})\s*%%/gi;
+  function itemIdTokens(line) { return [...String(line || "").matchAll(ITEM_ID_RE)].map((m) => m[1]); }
+  const stripItemIdMarks = (line) => String(line || "").replace(ITEM_ID_RE, "");
+  function parseMarkedLine(line, heading, now) {
+    const ignored = ignoredDateTokens(line);
+    let sourceLine = stripItemIdMarks(stripDateIgnoreMarks(line));
+    const listText = sourceLine.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)(?:\[[ xX]\]\s+)?/, "");
+    const prefix = parseDatePrefix(listText, now);
+    // Ignoring a leading date disables that trigger; a dated heading may still supply its own date.
+    if (prefix && ignored.some((raw) => raw === prefix.raw.toLowerCase() || raw.startsWith(prefix.raw.toLowerCase() + " "))) {
+      const at = sourceLine.indexOf(prefix.raw);
+      if (at >= 0) sourceLine = sourceLine.slice(0, at) + sourceLine.slice(at + prefix.raw.length);
+    }
+    const dayOfHeading = heading.text ? (parseDatePrefix(heading.text, now)?.day ?? null) : null;
+    return { sourceLine, parsed: parseLine(sourceLine, now, dayOfHeading) };
+  }
+  function visitCalendarListLines(body, now, visit) {
+    const lines = String(body || "").split("\n");
+    let fence = "", heading = { level: 0, text: "" }, sec = null;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i], f = /^\s*(`{3,}|~{3,})/.exec(line);
+      if (f) { fence = !fence ? f[1][0] : (f[1][0] === fence ? "" : fence); continue; }
+      if (fence) continue;
+      const hm = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line);
+      if (hm) {
+        heading = { level: hm[1].length, text: hm[2] };
+        if (sec && sec.level > 0 && heading.level <= sec.level) sec = null;
+        continue;
+      }
+      const mk = MARKER_RE.exec(line);
+      if (mk) { sec = { category: (mk[1] || "").trim().slice(0, 80), level: heading.level }; continue; }
+      if (!sec) continue;
+      const result = parseMarkedLine(line, heading, now);
+      if (result.parsed) visit({ index: i, line, heading, category: sec.category, ...result });
+    }
+    return lines;
+  }
+  function ensureNoteItemIds(body, noteId, now = 0) {
+    const lines = String(body || "").split("\n"), seen = new Set();
+    let changed = false;
+    visitCalendarListLines(body, now, (entry) => {
+      const ids = itemIdTokens(entry.line);
+      let id = ids.find((candidate) => !seen.has(candidate)) || "";
+      if (!id) id = makeId([noteId, entry.index, entry.sourceLine, seen.size].join("|"));
+      // Existing duplicate tokens can happen when a user duplicates a whole Markdown line. Keep the first ID and
+      // generate a fresh one for the copied line so its metadata cannot collide with the original.
+      if (seen.has(id)) id = makeId([noteId, entry.index, entry.sourceLine, seen.size, Math.random()].join("|"));
+      seen.add(id);
+      if (ids.length !== 1 || ids[0] !== id) {
+        const without = stripItemIdMarks(entry.line);
+        const trailing = /\s*$/.exec(without)?.[0] || "";
+        const core = trailing ? without.slice(0, -trailing.length) : without;
+        lines[entry.index] = core + " %%zn-item-id:" + id + "%%" + trailing;
+        changed = true;
+      }
+    });
+    return { body: changed ? lines.join("\n") : String(body || ""), changed, count: seen.size };
+  }
   function extractNoteItems(body, noteId, now = 0) {
     const lines = String(body || "").split("\n");
     const out = [], seen = new Map();
@@ -1758,25 +1844,18 @@ const __zentralEmbeddedLoader = (function () {
       const mk = MARKER_RE.exec(line);
       if (mk) { sec = { category: (mk[1] || "").trim().slice(0, 80), level: heading.level }; continue; }
       if (!sec) continue;
-      const dayOfHeading = heading.text ? (parseDatePrefix(heading.text, now)?.day ?? null) : null;
-      const ignored = ignoredDateTokens(line);
-      let sourceLine = stripDateIgnoreMarks(line);
-      // If the ignored token is the leading date, it no longer drives the item date. In a dated heading
-      // section the heading remains the date; otherwise the line is ordinary text and is not an item.
-      const listText = sourceLine.replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, "");
-      const prefix = parseDatePrefix(listText, now);
-      if (prefix && ignored.some((raw) => raw === prefix.raw.toLowerCase() || raw.startsWith(prefix.raw.toLowerCase() + " "))) {
-        const at = sourceLine.indexOf(prefix.raw);
-        if (at >= 0) sourceLine = sourceLine.slice(0, at) + sourceLine.slice(at + prefix.raw.length);
-      }
-      const parsed = parseLine(sourceLine, now, dayOfHeading);
+      const result = parseMarkedLine(line, heading, now), sourceLine = result.sourceLine, parsed = result.parsed;
       if (!parsed) continue;
       const norm = sourceLine.replace(/\s+/g, " ").trim().toLowerCase() + "|" + heading.text;
       const n = (seen.get(norm) || 0) + 1; seen.set(norm, n);
-      const key = hashText(noteId + "|" + norm) + (n > 1 ? "-" + n : "");
-      const it = itemFromLine(parsed, { noteId, heading: heading.text, category: sec.category, src: "list", key }, now);
+      const legacyKey = hashText(noteId + "|" + norm) + (n > 1 ? "-" + n : "");
+      const lineId = itemIdTokens(line)[0] || "";
+      const key = lineId || legacyKey;
+      const it = itemFromLine(parsed, { noteId, heading: heading.text, category: sec.category, src: "list", key, legacyKey }, now);
       if (!it) continue;
-      it.id = "l" + hashText(noteId) + key;
+      it.id = lineId ? "l" + hashText(noteId) + "-" + lineId : "l" + hashText(noteId) + legacyKey;
+      it._legacyKey = legacyKey;
+      it._lineId = !!lineId;
       if (parsed.yearless) it.recurrence = ["RRULE:FREQ=YEARLY"];
       it.etag = etagOf(it);
       out.push(it);
@@ -1804,28 +1883,120 @@ const __zentralEmbeddedLoader = (function () {
     const categoryDefs = new Map();
     const hidden = new Set(); // noteIds whose items stay stored but are not shown (note in Trash, or its file is missing)
     const listeners = new Set();
-    let dirty = false, timer = null, chain = Promise.resolve();
+    let dirty = false, timer = null, chain = Promise.resolve(), retryCount = 0;
+    let storage = { state: "unopened", error: "", backupPath: "" }, writeBlocked = false;
     const shown = (it) => !it.x.noteId || !hidden.has(it.x.noteId);
-    const emit = (kind, id) => { for (const fn of [...listeners]) { try { fn(kind, id); } catch (e) { warn(e); } } };
-    const schedule = () => { dirty = true; if (timer !== null) clearTimer(timer); timer = setTimer(() => { timer = null; writeNow(); }, delayMs); };
+    const safeWarn = (error) => { try { warn(error); } catch (_) {} };
+    const emit = (kind, id) => { for (const fn of [...listeners]) { try { fn(kind, id); } catch (e) { safeWarn(e); } } };
+    const state = () => ({ ...storage, dirty, writeBlocked, retryCount });
+    const scheduleTimer = (ms = delayMs) => {
+      if (timer !== null) clearTimer(timer);
+      timer = setTimer(() => { timer = null; writeNow().catch(() => {}); }, ms);
+    };
+    const schedule = () => { dirty = true; if (!writeBlocked) scheduleTimer(delayMs); };
     function writeNow() {
       if (timer !== null) { clearTimer(timer); timer = null; }
       const dir = getDir();
-      if (!dirty || !dir) return Promise.resolve();
-      dirty = false;
+      if (!dirty || !dir) return chain;
+      if (writeBlocked) {
+        const error = new Error("Calendar storage is protected because its existing file could not be read safely.");
+        safeWarn(error);
+        return Promise.reject(error);
+      }
       const text = JSON.stringify({ v: 2, items: [...items.values()], categories: [...categoryDefs.values()] });
-      chain = chain.then(() => io.writeUTF8(io.join(dir, ITEMS_FILE), text, { tmpPath: io.join(dir, ITEMS_FILE + ".tmp") })).catch((e) => warn(e));
-      return chain;
+      // Clear only for this snapshot. If I/O fails, restore dirty; if a newer edit arrives while writing, its dirty
+      // flag remains set and the next queued write stores the newer snapshot.
+      dirty = false;
+      const task = chain.catch(() => {}).then(async () => {
+        try {
+          await io.writeUTF8(io.join(dir, ITEMS_FILE), text, { tmpPath: io.join(dir, ITEMS_FILE + ".tmp") });
+          retryCount = 0;
+          if (storage.state === "unopened" || storage.state === "missing" || storage.state === "recovery-pending") storage = { ...storage, state: "ready", error: "" };
+          if (dirty && timer === null && !writeBlocked) scheduleTimer(delayMs);
+          return true;
+        } catch (error) {
+          dirty = true;
+          retryCount++;
+          safeWarn(error);
+          if (retryCount <= 3 && timer === null && !writeBlocked) scheduleTimer(Math.min(delayMs * Math.pow(2, retryCount), 5000));
+          throw error;
+        }
+      });
+      chain = task;
+      return task;
     }
     return {
       async open() {
-        items.clear(); categoryDefs.clear(); hidden.clear();
+        const file = io.join(getDir(), ITEMS_FILE);
+        let text;
         try {
-          const raw = JSON.parse(await io.readUTF8(io.join(getDir(), ITEMS_FILE)));
-          for (const r of Array.isArray(raw.items) ? raw.items : []) { const it = cleanItem(r, 0); if (it && !items.has(it.id)) items.set(it.id, it); }
-          for (const r of Array.isArray(raw.categories) ? raw.categories : []) { const category = cleanCategory(r); if (category) categoryDefs.set(categoryKey(category.name), category); }
-        } catch (_) {}
+          text = await io.readUTF8(file);
+        } catch (error) {
+          const message = String(error?.message || error || "");
+          const missingError = error?.code === "ENOENT" || error?.name === "NotFoundError" || /(?:^|\b)(?:nf|not found|no such file|does not exist|NS_ERROR_FILE_NOT_FOUND)(?:\b|$)/i.test(message);
+          let exists = !missingError;
+          if (typeof io.exists === "function") {
+            try { exists = await io.exists(file); } catch (_) { exists = true; }
+          }
+          if (!exists || missingError) {
+            items.clear(); categoryDefs.clear(); hidden.clear(); dirty = false; writeBlocked = false;
+            storage = { state: "missing", error: "", backupPath: "" };
+          } else {
+            // A permission/I/O error is not an empty store. Keep existing in-memory data and prohibit overwriting
+            // the unreadable file until the caller explicitly resolves the storage problem.
+            writeBlocked = true;
+            storage = { state: "unreadable", error: String(error?.message || error), backupPath: "" };
+            safeWarn(error);
+          }
+          emit("reset");
+          return state();
+        }
+        let raw, parsedItems, parsedCategories;
+        try {
+          raw = JSON.parse(text);
+          if (!raw || typeof raw !== "object" || Array.isArray(raw) || !Array.isArray(raw.items) || (raw.categories !== undefined && !Array.isArray(raw.categories)))
+            throw new Error("Calendar file has an unsupported or damaged structure.");
+          parsedItems = raw.items.map((record) => cleanItem(record, 0));
+          parsedCategories = (Array.isArray(raw.categories) ? raw.categories : []).map(cleanCategory);
+          if (parsedItems.some((item) => !item) || parsedCategories.some((category) => !category))
+            throw new Error("Calendar file contains an invalid item or category record.");
+        } catch (error) {
+          const stamp = Math.max(0, Math.floor(Number(now()) || Date.now()));
+          const baseBackupPath = file + ".corrupt-" + stamp + ".bak";
+          let backupPath = baseBackupPath, suffix = 1;
+          if (typeof io.exists === "function") {
+            try { while (await io.exists(backupPath)) backupPath = baseBackupPath.replace(/\.bak$/, "-" + (++suffix) + ".bak"); } catch (_) {}
+          }
+          let backedUp = false;
+          try {
+            await io.writeUTF8(backupPath, String(text), { tmpPath: backupPath + ".tmp" });
+            backedUp = true;
+          } catch (backupError) { safeWarn(backupError); }
+          writeBlocked = true;
+          storage = { state: "corrupt", error: String(error?.message || error), backupPath: backedUp ? backupPath : "" };
+          safeWarn(error);
+          emit("reset");
+          return state();
+        }
+        items.clear(); categoryDefs.clear(); hidden.clear(); dirty = false; writeBlocked = false; retryCount = 0;
+        for (const it of parsedItems) if (!items.has(it.id)) items.set(it.id, it);
+        for (const category of parsedCategories) categoryDefs.set(categoryKey(category.name), category);
+        storage = { state: "ready", error: "", backupPath: "" };
         emit("reset");
+        return state();
+      },
+      storageState: state,
+      // This intentionally requires an explicit caller decision. The damaged original has already been copied to
+      // `backupPath`; unreadable files (where no backup could be made) cannot be replaced through this API.
+      replaceDamagedStore() {
+        if (!writeBlocked || storage.state !== "corrupt" || !storage.backupPath) return false;
+        writeBlocked = false;
+        storage = { ...storage, state: "recovery-pending", error: "" };
+        retryCount = 0;
+        dirty = true;
+        scheduleTimer(0);
+        emit("recovery");
+        return true;
       },
       list({ noteId = "", kind = "", category = "", includeHidden = false } = {}) {
         // includeHidden is intentionally opt-in: normal calendar views never show Trash items, while
@@ -1883,27 +2054,52 @@ const __zentralEmbeddedLoader = (function () {
         if (n) { schedule(); emit("remove", noteId); }
         return n;
       },
-      // Rebuilds the items that come from the note's marked lists. Returns true when anything changed.
+      // Auto-managed hidden IDs travel with Markdown lines, giving identical repeated rows stable per-line identity.
+      ensureNoteIds(noteId, body) { return ensureNoteItemIds(body, noteId, now()); },
+      // Rebuild the note-derived items. During upgrade, migrate extras from legacy IDs using the old content/ordinal key.
+      // Thereafter exact line IDs win; unique legacy matches are safe, while an unidentified duplicate never inherits
+      // another duplicate's metadata.
       syncNote(noteId, body) {
         const had = [...items.values()].filter((it) => it.x.noteId === noteId && it.x.src === "list");
         if (!had.length && !/%%\s*calendar/i.test(String(body || ""))) return false;
-        const fresh = extractNoteItems(body, noteId, now()), keep = new Map(had.map((it) => [it.id, it]));
+        const fresh = extractNoteItems(body, noteId, now());
+        const exact = new Map(had.map((it) => [it.id, it]));
+        const byLegacy = new Map();
+        for (const it of had) {
+          const k = String(it.x.legacyKey || it.x.key || "");
+          if (!k) continue;
+          if (!byLegacy.has(k)) byLegacy.set(k, []);
+          byLegacy.get(k).push(it);
+        }
+        const group = (key) => String(key || "").replace(/-\d+$/, "");
+        const oldCounts = new Map(), newCounts = new Map();
+        for (const it of had) { const k = group(it.x.legacyKey || it.x.key); oldCounts.set(k, (oldCounts.get(k) || 0) + 1); }
+        for (const it of fresh) { const k = group(it._legacyKey); newCounts.set(k, (newCounts.get(k) || 0) + 1); }
+        const usedOld = new Set(), retainedOld = new Set();
         let changed = false;
-        const nextIds = new Set();
         for (const f of fresh) {
-          nextIds.add(f.id);
-          const old = keep.get(f.id);
-          let next = f;
+          let old = exact.get(f.id) || null;
+          if (old && usedOld.has(old.id)) old = null;
+          if (!old && f._legacyKey) {
+            const candidates = (byLegacy.get(f._legacyKey) || []).filter((it) => !usedOld.has(it.id));
+            const groupKey = group(f._legacyKey), duplicate = (newCounts.get(groupKey) || 0) > 1 || (oldCounts.get(groupKey) || 0) > 1;
+            if (candidates.length === 1 && !duplicate) old = candidates[0];
+            else if (duplicate && f._lineId && candidates.length === 1 && !candidates[0].x.legacyKey && candidates[0].x.key === f._legacyKey && oldCounts.get(groupKey) === newCounts.get(groupKey)) old = candidates[0];
+          }
+          if (old) usedOld.add(old.id);
+          let next = cleanItem(f, 0);
           if (old) {
-            // the line is unchanged: keep the extras and the time the person may have dragged it to
             next = cleanItem({ ...f, start: old.start, end: old.end, status: old.status, reminders: old.reminders, recurrence: old.recurrence.length ? old.recurrence : f.recurrence, updated: old.updated,
               x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify } }, 0);
             next.x.heading = f.x.heading; next.x.category = f.x.category;
             next.etag = etagOf(next);
+            if (old.id === next.id) retainedOld.add(old.id);
           }
           if (!old || JSON.stringify(old) !== JSON.stringify(next)) { items.set(next.id, next); changed = true; emit("change", next.id); }
         }
-        for (const it of had) if (!nextIds.has(it.id)) { items.delete(it.id); changed = true; emit("remove", it.id); }
+        // A legacy item matched during migration may have a different new ID. Its old record must be replaced,
+        // not retained alongside the migrated one.
+        for (const it of had) if (!retainedOld.has(it.id)) { items.delete(it.id); changed = true; emit("remove", it.id); }
         if (changed) schedule();
         return changed;
       },
@@ -1944,57 +2140,120 @@ const __zentralEmbeddedLoader = (function () {
     for (const part of m[1].split(";")) { const [k, v] = part.split("="); if (k && v !== undefined) o[k.toUpperCase()] = v; }
     if (!["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(o.FREQ)) return null;
     const interval = Math.max(1, Math.min(999, parseInt(o.INTERVAL, 10) || 1));
-    const count = o.COUNT ? Math.max(1, Math.min(5000, parseInt(o.COUNT, 10) || 0)) : 0;
+    const count = o.COUNT ? Math.max(1, Math.min(1000000, parseInt(o.COUNT, 10) || 0)) : 0;
     let until = 0;
     if (o.UNTIL) { const u = /^(\d{4})(\d{2})(\d{2})/.exec(o.UNTIL); if (u) until = addDays(new Date(+u[1], +u[2] - 1, +u[3]).getTime(), 1); }
-    const byday = o.BYDAY ? o.BYDAY.split(",").map((d) => DAY_CODES.indexOf(d.slice(-2))).filter((n) => n >= 0) : [];
+    const byday = o.BYDAY ? [...new Set(o.BYDAY.split(",").map((d) => DAY_CODES.indexOf(d.slice(-2))).filter((n) => n >= 0))].sort((a, b) => a - b) : [];
     return { freq: o.FREQ, interval, count, until, byday };
   }
+  // Local calendar-day ordinal, immune to 23/25-hour DST days.
+  function localDayOrdinal(ms) {
+    const d = new Date(ms);
+    return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY_MS);
+  }
+  function recurrencePeriodIndex(rule, base, targetMs) {
+    const target = new Date(targetMs), targetDay = localDayOrdinal(targetMs), baseDay = localDayOrdinal(base.getTime());
+    if (rule.freq === "DAILY") return Math.max(0, Math.floor((targetDay - baseDay) / rule.interval) - 1);
+    if (rule.freq === "WEEKLY") {
+      const targetWeek = targetDay - target.getDay(), baseWeek = baseDay - base.getDay();
+      return Math.max(0, Math.floor((targetWeek - baseWeek) / (7 * rule.interval)) - 1);
+    }
+    if (rule.freq === "MONTHLY") {
+      const months = (target.getFullYear() - base.getFullYear()) * 12 + target.getMonth() - base.getMonth();
+      return Math.max(0, Math.floor(months / rule.interval) - 1);
+    }
+    return Math.max(0, Math.floor((target.getFullYear() - base.getFullYear()) / rule.interval) - 1);
+  }
+  // Occurrence dates for a frequency period. Invalid month/year dates (e.g. the 31st in February) are skipped,
+  // matching the existing rule semantics rather than overflowing into the following month.
+  function recurrencePeriodDates(rule, base, index) {
+    const y = base.getFullYear(), m = base.getMonth(), d = base.getDate();
+    if (rule.freq === "DAILY") return [new Date(y, m, d + index * rule.interval)];
+    if (rule.freq === "WEEKLY") {
+      const week = new Date(y, m, d - base.getDay() + index * 7 * rule.interval);
+      const days = rule.byday.length ? rule.byday : [base.getDay()];
+      return [...days].sort((a, b) => a - b).map((weekday) => new Date(week.getFullYear(), week.getMonth(), week.getDate() + weekday));
+    }
+    if (rule.freq === "MONTHLY") {
+      const first = new Date(y, m + index * rule.interval, 1);
+      const candidate = new Date(first.getFullYear(), first.getMonth(), d);
+      return candidate.getDate() === d ? [candidate] : [];
+    }
+    const candidate = new Date(y + index * rule.interval, m, d);
+    return candidate.getFullYear() === y + index * rule.interval && candidate.getMonth() === m && candidate.getDate() === d ? [candidate] : [];
+  }
+  const gcd = (a, b) => { while (b) [a, b] = [b, a % b]; return Math.abs(a); };
+  // COUNT is ordinal from DTSTART. Compute the number before a fast-forwarded period without replaying the history.
+  // Daily/weekly are arithmetic; monthly/yearly validity repeats on the Gregorian 400-year cycle.
+  function recurrenceCountBefore(rule, base, period) {
+    if (period <= 0 || !rule.count) return 0;
+    if (rule.freq === "DAILY") return period;
+    if (rule.freq === "WEEKLY") {
+      const days = rule.byday.length ? rule.byday : [base.getDay()];
+      const firstWeekCount = days.filter((weekday) => weekday >= base.getDay()).length;
+      return firstWeekCount + (period - 1) * days.length;
+    }
+    const cycle = (rule.freq === "MONTHLY" ? 4800 : 400) / gcd(rule.freq === "MONTHLY" ? 4800 : 400, rule.interval);
+    let fullCycles = Math.floor(period / cycle), remainder = period % cycle;
+    let perCycle = 0, tail = 0;
+    for (let i = 0; i < cycle; i++) if (recurrencePeriodDates(rule, base, i).length) perCycle++;
+    for (let i = 0; i < remainder; i++) if (recurrencePeriodDates(rule, base, i).length) tail++;
+    return fullCycles * perCycle + tail;
+  }
+  function recurrencePeriodAnchor(rule, base, index) {
+    const y = base.getFullYear(), m = base.getMonth(), d = base.getDate();
+    if (rule.freq === "DAILY") return new Date(y, m, d + index * rule.interval).getTime();
+    if (rule.freq === "WEEKLY") return new Date(y, m, d - base.getDay() + index * 7 * rule.interval).getTime();
+    if (rule.freq === "MONTHLY") return new Date(y, m + index * rule.interval, 1).getTime();
+    return new Date(y + index * rule.interval, m, 1).getTime();
+  }
   // Occurrences of a repeating item inside [from, to): copies with id "<id>@<startMs>" and x.series = the original id.
-  // The first occurrence is the item itself. Items without a usable RRULE come back as they are (if they touch the range).
+  // The range is fast-forwarded to just before its first possible overlap. COUNT still counts from DTSTART, but the
+  // number of earlier occurrences is computed without replaying every old daily/weekly period.
   function expandItem(it, from, to) {
     const rule = (it.recurrence || []).map(parseRule).find(Boolean);
     if (!rule) return itemsInRange([it], from, to);
-    const [s0, e0] = itemRange(it), len = e0 - s0, allDay = isAllDay(it);
+    if (!(Number.isFinite(from) && Number.isFinite(to)) || to <= from) return [];
+    const [s0, e0] = itemRange(it), len = Math.max(0, e0 - s0), allDay = isAllDay(it), reminder = isReminder(it);
     const base = new Date(s0), out = [];
-    const starts = [];
-    const push = (ms) => { if (ms >= s0) starts.push(ms); };
-    const at = (d) => (allDay ? d.getTime() : new Date(d.getFullYear(), d.getMonth(), d.getDate(), base.getHours(), base.getMinutes()).getTime());
     const limit = Math.min(to, rule.until || Infinity);
-    let n = 0;
-    for (let i = 0; i < 3000 && n < (rule.count || 5000); i++) {
-      let cand = [];
-      if (rule.freq === "DAILY") cand = [at(new Date(base.getFullYear(), base.getMonth(), base.getDate() + i * rule.interval))];
-      else if (rule.freq === "WEEKLY") {
-        const ws = new Date(base.getFullYear(), base.getMonth(), base.getDate() - base.getDay() + i * 7 * rule.interval);
-        const days = rule.byday.length ? [...rule.byday].sort((a, b) => a - b) : [base.getDay()];
-        cand = days.map((dw) => at(new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + dw)));
-      } else if (rule.freq === "MONTHLY") { const d = new Date(base.getFullYear(), base.getMonth() + i * rule.interval, base.getDate()); cand = d.getDate() === base.getDate() ? [at(d)] : []; }
-      else { const d = new Date(base.getFullYear() + i * rule.interval, base.getMonth(), base.getDate()); cand = d.getDate() === base.getDate() ? [at(d)] : []; }
-      for (const c of cand) {
+    if (limit <= s0) return [];
+    // Events may start before `from` and still overlap it; reminders have no duration and must start in range.
+    const seekFrom = reminder ? from : from - len;
+    let period = recurrencePeriodIndex(rule, base, seekFrom);
+    // Count all occurrences in earlier periods so COUNT remains correct after fast-forwarding.
+    const countBefore = recurrenceCountBefore(rule, base, period);
+    if (rule.count && countBefore >= rule.count) return [];
+    let ordinal = countBefore;
+    const timedAt = (d) => allDay ? new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+      : new Date(d.getFullYear(), d.getMonth(), d.getDate(), base.getHours(), base.getMinutes(), base.getSeconds(), base.getMilliseconds()).getTime();
+    // This is a guard against malformed/extreme inputs, not a historical 3,000-period cap: normal views iterate only
+    // the periods intersecting their requested range. A 100k-period safety boundary is well beyond realistic UI ranges.
+    for (let scanned = 0; scanned < 100000; scanned++, period++) {
+      if (recurrencePeriodAnchor(rule, base, period) >= limit) break;
+      const candidates = recurrencePeriodDates(rule, base, period).map(timedAt).sort((a, b) => a - b);
+      for (const c of candidates) {
         if (c < s0) continue;
-        if (rule.count && n >= rule.count) break;
-        n++;
         if (c >= limit) return out;
-        starts.length = 0; push(c);
+        if (rule.count && ordinal >= rule.count) return out;
+        ordinal++;
         const end = c + len;
-        const touches = isReminder(it) ? c >= from && c < to : c < to && end > from;
-        if (touches) {
-          const occ = JSON.parse(JSON.stringify(it));
-          occ.id = c === s0 ? it.id : it.id + "@" + c;
-          occ.x.series = it.id;
-          occ.start = allDay ? { date: ymd(new Date(c)) } : { dateTime: iso(c) };
-          if (it.end) occ.end = allDay ? { date: ymd(new Date(c + len)) } : { dateTime: iso(c + len) };
-          out.push(occ);
-        }
+        const touches = reminder ? c >= from && c < to : c < to && end > from;
+        if (!touches) continue;
+        const occ = JSON.parse(JSON.stringify(it));
+        occ.id = c === s0 ? it.id : it.id + "@" + c;
+        occ.x.series = it.id;
+        occ.start = allDay ? { date: ymd(new Date(c)) } : { dateTime: iso(c) };
+        if (it.end) occ.end = allDay ? { date: ymd(new Date(c + len)) } : { dateTime: iso(c + len) };
+        out.push(occ);
       }
-      if (cand.length && Math.min(...cand) >= limit) break;
     }
     return out;
   }
   // Like itemsInRange, but repeating items are expanded.
   function expandRange(items, from, to) {
-    return items.filter(live).flatMap((it) => expandItem(it, from, to)).sort((a, b) => itemRange(a)[0] - itemRange(b)[0] || (a.id < b.id ? -1 : 1));
+    return items.filter(live).flatMap((it) => it.x.series ? itemsInRange([it], from, to) : expandItem(it, from, to))
+      .sort((a, b) => itemRange(a)[0] - itemRange(b)[0] || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
 
   // ---------- working hours and free time ----------
@@ -2106,12 +2365,386 @@ const __zentralEmbeddedLoader = (function () {
   }
 
   const api = {
-    KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
+    KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, itemsFromNoteReminders, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, daysForward, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, itemsFromNoteReminders, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
+})();
+
+},
+"additional/notes/paste/ZentralNotesPasteHtml.js": function (window) {
+/*
+ * ZENTRAL FILE GUIDE - additional/notes/paste/ZentralNotesPasteHtml.js
+ *
+ * Purpose: Turns the rich HTML that a browser puts on the clipboard (web pages, AI chat answers) into clean Markdown for
+ *   the Notes editor (roadmap T1.4). Pure logic: no DOM, no preference, no clock, no network.
+ * Interaction / execution: ZentralNotes.uc.js calls htmlToMarkdown(html) from the editor's paste event. A null result means
+ *   "leave the paste alone" (nothing usable, too big, or the clipboard holds no structure worth converting) and the
+ *   browser pastes plain text as before. Shift+Ctrl+V (paste as plain text) never carries text/html, so it bypasses this.
+ * Ownership / failure: the HTML is tokenised by hand and never reaches the chrome document. Only a fixed allow-list of
+ *   tags is understood; every attribute except href / src / alt / title / class / start / checked / open / colspan is
+ *   ignored; <script>, <style>, <iframe>, <object>, <embed>, <svg>, <button>, <form>, <video> and friends are dropped with their
+ *   content; links and images keep only http(s) (links also mailto) addresses. The only raw HTML written into the result is
+ *   <kbd>, <br> (inside table cells), <details> and <summary>, the tags the Notes renderer itself understands.
+ * Registration: notes-paste-html
+ * Loaded/created by: additional/notes/ZentralNotes.uc.js
+ *
+ * LIMITS: input over MAX_HTML characters, trees deeper than MAX_DEPTH (flattened), tables beyond 12 columns x 200 rows
+ *   (cut, `lossy` is set) and lists nested deeper than 8 levels (flattened) keep the result bounded.
+ */
+(function () {
+  "use strict";
+  const MAX_HTML = 2000000, MAX_DEPTH = 120, MAX_TABLE_COLS = 12, MAX_TABLE_ROWS = 200, MAX_LIST_DEPTH = 8, MAX_OUT = 1000000;
+  const VOID = new Set(["br", "hr", "img", "input", "meta", "link", "area", "base", "col", "embed", "source", "track", "wbr"]);
+  const DROP = new Set(["script", "style", "head", "title", "iframe", "object", "embed", "svg", "noscript", "template", "button", "select", "textarea", "nav", "form", "canvas", "audio", "video", "link", "meta", "dialog", "option", "optgroup", "datalist", "frame", "frameset", "applet", "base", "source", "track"]);
+  const BLOCK = new Set(["p", "div", "section", "article", "main", "header", "footer", "aside", "blockquote", "pre", "ul", "ol", "li", "table", "thead", "tbody", "tfoot", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "details", "summary", "figure", "figcaption", "dl", "dt", "dd", "address", "fieldset", "center", "body", "html"]);
+  const NAMED = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", ndash: "–", mdash: "—", hellip: "…", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", copy: "©", reg: "®", trade: "™", times: "×", divide: "÷", middot: "·", bull: "•", laquo: "«", raquo: "»", euro: "€", pound: "£", yen: "¥", cent: "¢", deg: "°", plusmn: "±", larr: "←", rarr: "→", uarr: "↑", darr: "↓", harr: "↔", check: "✓", zwj: "", zwnj: "", shy: "" };
+
+  function decode(s) {
+    return String(s).replace(/&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([A-Za-z][A-Za-z0-9]{1,8}));/g, (m, dec, hex, name) => {
+      if (name) return Object.prototype.hasOwnProperty.call(NAMED, name) ? NAMED[name] : m;
+      const cp = dec ? parseInt(dec, 10) : parseInt(hex, 16);
+      if (!Number.isFinite(cp) || cp <= 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) return "";
+      if (cp < 32 && cp !== 9 && cp !== 10) return "";
+      return String.fromCodePoint(cp);
+    });
+  }
+
+  const ATTR_KEEP = new Set(["href", "src", "alt", "title", "class", "start", "checked", "open", "colspan", "type", "encoding", "aria-hidden"]);
+  function parseAttrs(src) {
+    const out = {};
+    const re = /([^\s=/>"']+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
+    for (let m, n = 0; (m = re.exec(src)) && n < 40; n++) {
+      const k = m[1].toLowerCase();
+      if (!ATTR_KEEP.has(k) || k in out) continue;
+      out[k] = decode(m[2] ?? m[3] ?? m[4] ?? "");
+    }
+    return out;
+  }
+
+  // Tolerant tree builder. Unknown closing tags are ignored, implied end tags (li, p, tr, td, th, dt, dd) are honoured.
+  function parseHtml(html) {
+    const root = { tag: "#root", attrs: {}, kids: [] };
+    const stack = [root];
+    const top = () => stack[stack.length - 1];
+    const push = (node) => { top().kids.push(node); };
+    const closeTo = (names) => {
+      for (let i = stack.length - 1; i > 0; i--) {
+        if (names.includes(stack[i].tag)) { stack.length = i; return true; }
+        if (["ul", "ol", "table", "details", "blockquote"].includes(stack[i].tag)) return false;
+      }
+      return false;
+    };
+    const re = /<!--[\s\S]*?(?:-->|$)|<!\[CDATA\[[\s\S]*?(?:\]\]>|$)|<![^>]*>|<\?[^>]*>|<\/([A-Za-z][A-Za-z0-9:-]*)\s*>|<([A-Za-z][A-Za-z0-9:-]*)((?:"[^"]*"|'[^']*'|[^'">])*?)(\/?)>/g;
+    let last = 0, m, dropDepth = 0, dropTag = "";
+    const text = (s) => { if (s && !dropDepth) push({ text: s }); };
+    while ((m = re.exec(html))) {
+      text(decode(html.slice(last, m.index)));
+      last = re.lastIndex;
+      if (m[1]) {
+        const tag = m[1].toLowerCase();
+        if (dropDepth) { if (tag === dropTag && --dropDepth === 0) dropTag = ""; continue; }
+        if (tag === "br" || VOID.has(tag)) continue;
+        const idx = stack.map((n) => n.tag).lastIndexOf(tag);
+        if (idx > 0) stack.length = idx;
+        continue;
+      }
+      if (!m[2]) continue;
+      const tag = m[2].toLowerCase();
+      if (dropDepth) { if (tag === dropTag && !m[4] && !VOID.has(tag)) dropDepth++; continue; }
+      if (DROP.has(tag)) { if (!m[4] && !VOID.has(tag)) { dropTag = tag; dropDepth = 1; } continue; }
+      if (tag === "li") closeTo(["li"]);
+      else if (tag === "p") closeTo(["p"]);
+      else if (tag === "tr") closeTo(["tr"]);
+      else if (tag === "td" || tag === "th") closeTo(["td", "th"]);
+      else if (tag === "dt" || tag === "dd") closeTo(["dt", "dd"]);
+      const node = { tag, attrs: parseAttrs(m[3] || ""), kids: [] };
+      push(node);
+      if (!m[4] && !VOID.has(tag) && stack.length < MAX_DEPTH) stack.push(node);
+    }
+    text(decode(html.slice(last)));
+    return root;
+  }
+
+  const classes = (n) => String(n.attrs.class || "").toLowerCase().split(/\s+/).filter(Boolean);
+  const hasClass = (n, c) => classes(n).includes(c);
+  function plain(n) {
+    if (n.text !== undefined) return n.text;
+    if (n.tag === "br") return "\n";
+    return n.kids.map(plain).join("");
+  }
+  function find(n, pred) {
+    if (n.text !== undefined) return null;
+    if (pred(n)) return n;
+    for (const k of n.kids) { const r = find(k, pred); if (r) return r; }
+    return null;
+  }
+
+  function safeUrl(raw, mail) {
+    const u = String(raw || "").replace(/[\u0000-\u0020\u007f-\u009f\u200b-\u200f\u2028\u2029\ufeff]+/g, "");
+    if (!u || u.length > 2000) return "";
+    if (/^https?:\/\/[^/?#]/i.test(u)) return u.replace(/[()<>"\\]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+    if (mail && /^mailto:[^\s@]+@[^\s@]+$/i.test(u)) return u.replace(/[()<>"\\]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+    return "";
+  }
+
+  // Characters of plain text that Markdown (or the Notes flavors) would read as syntax get a backslash (all of them are
+  // in the Notes escape set). Line-start markers are handled by escapeLines once a paragraph is complete.
+  function esc(s, ctx) {
+    let t = s.replace(/\\/g, "\\\\").replace(/([*`[\]~^])/g, "\\$1").replace(/(^|[^A-Za-z0-9])_|_(?=[^A-Za-z0-9]|$)/g, (m) => m.replace("_", "\\_"));
+    if ((t.match(/\$/g) || []).length >= 2) t = t.replace(/\$/g, "\\$");
+    t = t.replace(/==/g, "\\=\\=").replace(/\|\|/g, "\\|\\|").replace(/<(?=[A-Za-z/!])/g, "\\<");
+    if (ctx.cell) t = t.replace(/\|/g, "\\|");
+    return t;
+  }
+  function escapeLines(text) {
+    return text.split("\n").map((line) => line
+      .replace(/^(\s*)(#{1,6})(\s|$)/, "$1\\$2$3")
+      .replace(/^(\s*)([>+-])(\s)/, "$1\\$2$3")
+      .replace(/^(\s*)(\d{1,9})([.)])(\s)/, "$1$2\\$3$4")
+      .replace(/^(\s*)(---+|===+|___+)\s*$/, (m, a, b) => a + "\\" + b)).join("\n");
+  }
+
+  function fenceFor(content, ch) {
+    const runs = content.match(new RegExp(ch + "+", "g")) || [];
+    return ch.repeat(Math.max(3, ...runs.map((r) => r.length + 1)));
+  }
+  function codeSpan(raw) {
+    const content = raw.replace(/\s+/g, " ").trim();
+    if (!content) return "";
+    const runs = content.match(/`+/g) || [];
+    const tick = "`".repeat(runs.length ? Math.max(...runs.map((r) => r.length)) + 1 : 1);
+    return tick + (/^`|`$/.test(content) ? " " + content + " " : content) + tick;
+  }
+  function wrapMark(inner, mark) {
+    const m = /^(\s*)([\s\S]*?)(\s*)$/.exec(inner);
+    if (!m[2]) return inner;
+    return m[1] + mark + m[2] + mark + m[3];
+  }
+
+  function inlineList(nodes, ctx) {
+    let out = "";
+    for (const n of nodes) out += inlineNode(n, ctx);
+    return out;
+  }
+  function inlineNode(n, ctx) {
+    if (n.text !== undefined) {
+      if (ctx.pre) return n.text;
+      return esc(n.text.replace(/[\u00a0\u2007\u202f]/g, " ").replace(/[\u200b-\u200d\ufeff]/g, "").replace(/\s+/g, " "), ctx);
+    }
+    const tag = n.tag;
+    if (hasClass(n, "katex-display") || (hasClass(n, "katex") && !ctx.inKatex) || hasClass(n, "math-display")) {
+      const ann = find(n, (k) => k.tag === "annotation" && /tex/i.test(k.attrs.encoding || ""));
+      const tex = ann ? plain(ann).trim() : "";
+      if (tex && tex.length < 2000 && !/[\n]/.test(tex.trim()) ) return hasClass(n, "katex-display") ? "\n\n$$\n" + tex + "\n$$\n\n" : "$" + tex.replace(/\$/g, "\\$") + "$";
+      if (tex) return "\n\n$$\n" + tex + "\n$$\n\n";
+      if (hasClass(n, "katex-html")) return "";
+    }
+    if (hasClass(n, "katex-html") || n.attrs["aria-hidden"] === "true" && hasClass(n, "katex-html")) return "";
+    switch (tag) {
+      case "br": return ctx.cell ? "<br>" : "\u0001\n";
+      case "wbr": case "annotation": case "annotation-xml": return "";
+      case "math": {
+        const ann = find(n, (k) => k.tag === "annotation" && /tex/i.test(k.attrs.encoding || ""));
+        const tex = ann ? plain(ann).trim() : "";
+        return tex && tex.length < 2000 && !/\n/.test(tex) ? "$" + tex.replace(/\$/g, "\\$") + "$" : esc(plain(n).replace(/\s+/g, " "), ctx);
+      }
+      case "b": case "strong": return ctx.bold ? inlineList(n.kids, ctx) : wrapMark(inlineList(n.kids, { ...ctx, bold: true }), "**");
+      case "i": case "em": case "cite": case "dfn": case "var": return ctx.italic ? inlineList(n.kids, ctx) : wrapMark(inlineList(n.kids, { ...ctx, italic: true }), "*");
+      case "s": case "del": case "strike": return ctx.strike ? inlineList(n.kids, ctx) : wrapMark(inlineList(n.kids, { ...ctx, strike: true }), "~~");
+      case "mark": return wrapMark(inlineList(n.kids, ctx), "==");
+      case "u": case "ins": return inlineList(n.kids, ctx);
+      case "sub": { const t = plain(n).trim(); return t && !/\s/.test(t) && t.length <= 40 ? "~" + esc(t, ctx).replace(/\\~/g, "") + "~" : esc(t ? " " + t : "", ctx); }
+      case "sup": { const t = plain(n).trim(); return t && !/\s/.test(t) && t.length <= 40 ? "^" + esc(t, ctx).replace(/\\\^/g, "") + "^" : esc(t ? " " + t : "", ctx); }
+      case "kbd": { const t = plain(n).replace(/\s+/g, " ").trim(); return t ? "<kbd>" + t.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c]) + "</kbd>" : ""; }
+      case "code": case "samp": case "tt": return ctx.code ? plain(n) : codeSpan(plain(n));
+      case "a": {
+        const href = safeUrl(n.attrs.href, true);
+        const inner = inlineList(n.kids, ctx);
+        if (!href || !inner.trim()) return inner;
+        const title = n.attrs.title ? ' "' + n.attrs.title.replace(/["\n\r]+/g, " ").slice(0, 200).trim() + '"' : "";
+        return "[" + noBreak(inner).replace(/\n+/g, " ").trim() + "](" + href + title + ")";
+      }
+      case "img": {
+        const src = safeUrl(n.attrs.src, false);
+        const alt = (n.attrs.alt || "").replace(/[\[\]\n\r]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
+        if (!src) return alt ? esc(alt, ctx) : "";
+        const title = n.attrs.title ? ' "' + n.attrs.title.replace(/["\n\r]+/g, " ").slice(0, 200).trim() + '"' : "";
+        return "![" + alt + "](" + src + title + ")";
+      }
+      case "input":
+        return (n.attrs.type || "").toLowerCase() === "checkbox" ? ("checked" in n.attrs ? "[x] " : "[ ] ") : "";
+      default:
+        if (BLOCK.has(tag)) return "\n\n" + blocks([n], ctx).join("\n\n") + "\n\n";
+        return inlineList(n.kids, ctx);
+    }
+  }
+
+  // A hard line break is written as the sentinel \u0001 + newline while converting, so trailing-space cleanup cannot eat it.
+  const noBreak = (s) => s.replace(/\u0001/g, "");
+  function tidyInline(s) {
+    const t = s.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").replace(/^(?:\s|\u0001)+|(?:\s|\u0001)+$/g, "");
+    return escapeLines(t.replace(/\u0001\n/g, "  \n").replace(/\u0001/g, ""));
+  }
+  const indent = (s, pad) => s.split("\n").map((l) => (l ? pad + l : l)).join("\n");
+
+  function listBlock(n, ctx, depth) {
+    const ordered = n.tag === "ol";
+    let num = ordered ? Math.max(0, Math.min(999999, parseInt(n.attrs.start, 10) || 1)) : 0;
+    const items = [];
+    const nested = depth >= MAX_LIST_DEPTH;
+    for (const li of n.kids) {
+      if (li.text !== undefined) { if (li.text.trim()) items.push({ parts: [esc(li.text.trim(), ctx)], task: "" }); continue; }
+      if (li.tag !== "li") { const r = blocks([li], ctx, depth); if (r.length) items.push({ parts: r, task: "" }); continue; }
+      let task = "";
+      const first = li.kids.find((k) => k.text === undefined || k.text.trim());
+      const box = first && first.tag === "input" && (first.attrs.type || "").toLowerCase() === "checkbox" ? first : null;
+      if (box) task = "checked" in box.attrs ? "[x] " : "[ ] ";
+      const parts = blocks(li.kids.filter((k) => k !== box), { ...ctx, task: false }, depth + 1);
+      if (parts.length) items.push({ parts, task });
+    }
+    const lines = [];
+    let loose = false;
+    for (const it of items) if (it.parts.length > 1 && it.parts.slice(1).some((p) => !/^(\s*)([-*+]|\d+[.)])\s/.test(p) && !p.startsWith("```"))) loose = true;
+    for (const it of items) {
+      const marker = ordered ? (num++) + ". " : "- ";
+      const pad = " ".repeat(marker.length);
+      const head = marker + it.task;
+      const body = it.parts.join(loose ? "\n\n" : "\n");
+      lines.push(head + indent(body, pad).replace(/^\s+/, ""));
+    }
+    if (nested) return [lines.join("\n")];
+    return [lines.join(loose ? "\n\n" : "\n")];
+  }
+
+  function tableBlock(n, ctx, state) {
+    const rows = [];
+    const collect = (node) => {
+      for (const k of node.kids) {
+        if (k.text !== undefined) continue;
+        if (k.tag === "tr") rows.push(k);
+        else if (["thead", "tbody", "tfoot"].includes(k.tag)) collect(k);
+      }
+    };
+    collect(n);
+    if (!rows.length) return [];
+    const grid = [];
+    let head = rows.length > 0 && rows[0].kids.some((c) => c.tag === "th");
+    for (const r of rows.slice(0, MAX_TABLE_ROWS + 1)) {
+      const cells = [];
+      for (const c of r.kids) {
+        if (c.text !== undefined || (c.tag !== "td" && c.tag !== "th")) continue;
+        const raw = noBreak(inlineList(c.kids, { ...ctx, cell: true }));
+        const t = raw.replace(/\s*\n\s*/g, "<br>").replace(/(?:<br>\s*)+$/g, "").replace(/^\s*(?:<br>\s*)+/g, "").replace(/(?:<br>){2,}/g, "<br>").trim();
+        cells.push(t);
+        const span = Math.min(MAX_TABLE_COLS, Math.max(1, parseInt(c.attrs.colspan, 10) || 1));
+        for (let i = 1; i < span; i++) cells.push("");
+      }
+      if (cells.length) grid.push(cells);
+    }
+    if (!grid.length) return [];
+    if (rows.length > MAX_TABLE_ROWS + 1) state.lossy = true;
+    let cols = Math.max(...grid.map((r) => r.length));
+    if (cols > MAX_TABLE_COLS) { cols = MAX_TABLE_COLS; state.lossy = true; }
+    const row = (r) => "| " + Array.from({ length: cols }, (_, i) => r[i] || " ").map((c) => c.trim() || " ").join(" | ") + " |";
+    const header = head ? grid[0] : Array.from({ length: cols }, () => "");
+    const body = head ? grid.slice(1) : grid;
+    return [[row(header), "| " + Array.from({ length: cols }, () => "---").join(" | ") + " |", ...body.map(row)].join("\n")];
+  }
+
+  function codeBlock(n) {
+    const code = find(n, (k) => k.tag === "code");
+    const host = code || n;
+    const cls = classes(host).concat(classes(n));
+    let lang = "";
+    for (const c of cls) { const m = /^(?:language|lang|highlight-source|brush:?)-?([a-z0-9#+_.-]{1,20})$/.exec(c); if (m && m[1] !== "plaintext" && m[1] !== "text") { lang = m[1]; break; } }
+    // Chat UIs put a toolbar ("Copy code") in front of the code; the real text sits in the <code> element.
+    let text = plain(code || n).replace(/\u00a0/g, " ").replace(/\n+$/g, "").replace(/^\n+/g, "");
+    if (!text.trim()) return [];
+    const fence = fenceFor(text, "`");
+    return [fence + lang + "\n" + text + "\n" + fence];
+  }
+
+  function blocks(nodes, ctx, depth = 0, state = ctx.state || (ctx.state = { lossy: false })) {
+    const out = [];
+    let buf = "";
+    const flush = () => {
+      const t = tidyInline(buf);
+      buf = "";
+      if (t) out.push(t);
+    };
+    for (const n of nodes) {
+      if (n.text !== undefined || !BLOCK.has(n.tag)) {
+        if (n.text === undefined && (hasClass(n, "katex-display") || hasClass(n, "math-display"))) { buf += inlineNode(n, ctx); continue; }
+        buf += inlineNode(n, ctx);
+        continue;
+      }
+      switch (n.tag) {
+        case "h1": case "h2": case "h3": case "h4": case "h5": case "h6": {
+          flush();
+          const t = noBreak(inlineList(n.kids, ctx)).replace(/\s*\n\s*/g, " ").trim();
+          if (t) out.push("#".repeat(Number(n.tag[1])) + " " + t);
+          break;
+        }
+        case "hr": flush(); out.push("---"); break;
+        case "pre": flush(); out.push(...codeBlock(n)); break;
+        case "ul": case "ol": flush(); out.push(...listBlock(n, ctx, depth)); break;
+        case "table": flush(); out.push(...tableBlock(n, ctx, state)); break;
+        case "blockquote": {
+          flush();
+          const inner = blocks(n.kids, ctx, depth, state).join("\n\n");
+          if (inner) out.push(inner.split("\n").map((l) => (l ? "> " + l : ">")).join("\n"));
+          break;
+        }
+        case "details": {
+          flush();
+          const sum = n.kids.find((k) => k.tag === "summary");
+          const rest = n.kids.filter((k) => k !== sum);
+          const title = sum ? noBreak(inlineList(sum.kids, ctx)).replace(/\s*\n\s*/g, " ").replace(/[<>]/g, (c) => (c === "<" ? "&lt;" : "&gt;")).trim() : "";
+          const inner = blocks(rest, ctx, depth, state).join("\n\n");
+          out.push("<details" + ("open" in n.attrs ? " open" : "") + ">" + (title ? "\n<summary>" + title + "</summary>" : "") + (inner ? "\n\n" + inner : "") + "\n\n</details>");
+          break;
+        }
+        case "summary": flush(); { const t = noBreak(inlineList(n.kids, ctx)).trim(); if (t) out.push("**" + t + "**"); } break;
+        case "dl": flush(); out.push(...blocks(n.kids, ctx, depth, state)); break;
+        case "dt": flush(); { const t = noBreak(inlineList(n.kids, ctx)).trim(); if (t) out.push(wrapMark(t, "**")); } break;
+        case "dd": flush(); out.push(...blocks(n.kids, ctx, depth, state)); break;
+        case "li": flush(); out.push(...listBlock({ tag: "ul", attrs: {}, kids: [n] }, ctx, depth)); break;
+        case "tr": case "thead": case "tbody": case "tfoot": flush(); out.push(...tableBlock({ kids: n.tag === "tr" ? [n] : [n] }, ctx, state)); break;
+        case "div": case "p": case "section": case "article": case "main": case "header": case "footer": case "aside": case "figure": case "figcaption": case "address": case "fieldset": case "center": case "body": case "html": default:
+          flush();
+          out.push(...blocks(n.kids, ctx, depth, state));
+      }
+    }
+    flush();
+    return out;
+  }
+
+  /** htmlToMarkdown(html) -> { markdown, lossy, structured } | null. `structured` is false when the result is only
+   *  plain paragraphs (the caller then keeps the browser's own plain-text paste). */
+  function htmlToMarkdown(html, opts = {}) {
+    if (typeof html !== "string" || !html.trim() || html.length > (opts.maxHtml || MAX_HTML)) return null;
+    let src = html.replace(/\r\n?/g, "\n");
+    const start = src.search(/<!--\s*StartFragment\s*-->/i), end = src.search(/<!--\s*EndFragment\s*-->/i);
+    if (start >= 0 && end > start) src = src.slice(start, end);
+    let md;
+    const ctx = { state: { lossy: false } };
+    try {
+      md = blocks(parseHtml(src).kids, ctx).join("\n\n").replace(/\n{3,}/g, "\n\n").replace(/^\n+|\s+$/g, "");
+    } catch (_) {
+      return null;
+    }
+    if (!md.trim()) return null;
+    if (md.length > MAX_OUT) { md = md.slice(0, MAX_OUT); ctx.state.lossy = true; }
+    const structured = /^(#{1,6} |>|[-*+] |\d+\. |```|\||<details|---$)/m.test(md) || /\*\*|~~|==|\[[^\]\n]+\]\(|!\[|`|<kbd>|\$/.test(md) || /\n\n/.test(md);
+    return { markdown: md, lossy: !!ctx.state.lossy, structured };
+  }
+
+  const api = { htmlToMarkdown, parseHtml, decode, safeUrl, MAX_HTML };
+  if (typeof module === "object" && module.exports) module.exports = api;
+  if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-paste-html", () => api);
 })();
 
 },
@@ -2334,6 +2967,8 @@ __zentralShim.register = function (def) {
   const SHORTCUTS_PART = loadPart("additional/notes/flavors/ZentralNotesShortcuts.js", "notes-shortcuts");
   // The calendar core (items, parsing, overlap lanes, month grid; roadmap T2.1). Pure logic; a missing file means no calendar.
   const CALENDAR_PART = loadPart("additional/notes/calendar/ZentralNotesCalendar.js", "notes-calendar");
+  // Pasted web / AI-chat HTML becomes clean Markdown (roadmap T1.4). Pure logic; a missing file keeps the plain-text paste.
+  const PASTE_HTML_PART = loadPart("additional/notes/paste/ZentralNotesPasteHtml.js", "notes-paste-html");
 
   function standaloneReady(start) {
     let started = false;
@@ -2573,6 +3208,98 @@ __zentralShim.register = function (def) {
       );
     }
 
+    // ---- Foreign YAML front matter (T1.5) ------------------------------------------------------------------
+    // `---` ... `---` at the very top that holds properties of another app (Obsidian, Jekyll, Hugo ...). With one of our
+    // keys in it the other entries are kept in note.foreign and written back untouched; without one of ours the block
+    // stays in the body (still editable) but the read view hides it and shows tags / aliases as pills.
+    const MAX_FOREIGN_CHARS = 20000;
+    const MAX_PILLS = 50;
+    const YAML_KEY_RE = /^(?:[A-Za-z_][\w .-]{0,60}|"[^"\n]{1,60}"|'[^'\n]{1,60}'):(?:[ \t].*)?$/;
+    const KNOWN_PROPS = new Set(["tags", "tag", "aliases", "alias", "title", "date", "created", "updated", "modified", "author", "authors", "cssclass", "cssclasses", "publish", "permalink", "description", "draft", "type", "status", "source", "url", "category", "categories", "banner", "icon", "lang", "layout", "slug", "link", "links", "rating", "parent", "up", "related", "project", "topic", "keywords", "summary"]);
+    const propName = (line) => {
+      const m = /^(?:([A-Za-z_][\w .-]{0,60})|"([^"\n]{1,60})"|'([^'\n]{1,60})'):/.exec(line);
+      return m ? String(m[1] ?? m[2] ?? m[3]).trim().toLowerCase() : "";
+    };
+    // The front matter block at the top of `text`: { raw (inside the fences), lines (count of the whole block) } or null.
+    // Strict on purpose: every line must look like YAML, and a one-line block must be a well-known property, so a
+    // "---  Note: x  ---" pair of rules around prose is never swallowed.
+    function leadingFrontMatter(text) {
+      const t = normalizeNewlines(String(text ?? "")).replace(/^\uFEFF/, "");
+      if (t.charCodeAt(0) !== 45 || !t.startsWith("---")) return null;
+      const m = /^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/.exec(t);
+      if (!m || m[1].length > MAX_FOREIGN_CHARS) return null;
+      const rows = m[1].split("\n");
+      if (rows.length > 400) return null;
+      let keys = 0, nested = false, known = false;
+      for (const line of rows) {
+        if (!line.trim() || /^\s*#/.test(line)) continue;
+        if (/^\s+\S/.test(line) || /^-(?:\s|$)/.test(line)) { nested = true; continue; }
+        if (!YAML_KEY_RE.test(line)) return null;
+        keys++;
+        if (KNOWN_PROPS.has(propName(line)) || FRONT_KEYS.has(propName(line))) known = true;
+      }
+      if (!keys || (keys < 2 && !nested && !known)) return null;
+      return { raw: m[1], lines: m[0].replace(/\n$/, "").split("\n").length };
+    }
+    // Same text with the front matter block replaced by blank lines (line numbers stay true for checkbox toggling and
+    // linked scrolling). Text without such a block is returned as it is.
+    function hideFrontMatter(text) {
+      const fm = leadingFrontMatter(text);
+      if (!fm) return text;
+      const t = normalizeNewlines(String(text)).replace(/^\uFEFF/, "");
+      return "\n".repeat(fm.lines) + t.split("\n").slice(fm.lines).join("\n");
+    }
+    const cleanPill = (v) => String(v ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+    function yamlItems(value, splitSpaces) {
+      let v = String(value ?? "").trim();
+      if (!v) return [];
+      if (/^\[.*\]$/.test(v)) v = v.slice(1, -1);
+      else if (/^\[|\]$/.test(v)) return [];
+      const out = [];
+      const re = /\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^']|'')*)'|([^,]*))\s*(?:,|$)/g;
+      for (let m, guard = 0; guard < 400 && (m = re.exec(v)) && m[0] !== ""; guard++) {
+        const item = m[1] !== undefined ? m[1].replace(/\\(.)/g, "$1") : m[2] !== undefined ? m[2].replace(/''/g, "'") : m[3];
+        if (m[3] !== undefined && splitSpaces) out.push(...m[3].trim().split(/\s+/));
+        else out.push(item);
+        if (re.lastIndex >= v.length) break;
+      }
+      return out;
+    }
+    // tags / aliases of a block of foreign YAML (the text between the fences). Tolerates inline lists, comma lists,
+    // `- item` lists (indented or not), quotes, a leading # on tags. Caps: 50 items of 60 characters, no duplicates.
+    function parseForeignMeta(raw) {
+      const res = { tags: [], aliases: [] };
+      const rows = String(raw ?? "").replace(/\r\n?/g, "\n").split("\n");
+      for (let i = 0; i < rows.length; i++) {
+        const name = propName(rows[i]);
+        const kind = name === "tags" || name === "tag" ? "tags" : name === "aliases" || name === "alias" ? "aliases" : "";
+        if (!kind) continue;
+        const rest = rows[i].replace(/^[^:]*:/, "").replace(/\s+#.*$/, "");
+        let items = [];
+        if (rest.trim()) items = yamlItems(rest, kind === "tags");
+        else {
+          for (let j = i + 1; j < rows.length; j++) {
+            const it = /^\s*-\s+(.*)$/.exec(rows[j]);
+            if (it) items.push(...yamlItems(it[1].replace(/\s+#.*$/, ""), false).slice(0, 1).concat([]));
+            else if (!rows[j].trim() || /^\s*#/.test(rows[j])) continue;
+            else break;
+          }
+        }
+        for (let it of items) {
+          it = cleanPill(kind === "tags" ? String(it).replace(/^#+/, "") : it);
+          if (!it) continue;
+          const list = res[kind];
+          if (list.length < MAX_PILLS && !list.some((x) => x.toLowerCase() === it.toLowerCase())) list.push(it);
+        }
+      }
+      return res;
+    }
+    // Pills for a note: our extracted `foreign` text, or else a front matter block still sitting in the body.
+    function frontPills(note) {
+      const raw = typeof note?.foreign === "string" && note.foreign ? note.foreign : leadingFrontMatter(note?.body)?.raw || "";
+      return raw ? parseForeignMeta(raw) : { tags: [], aliases: [] };
+    }
+
     // Files without our header (a .md dropped into the folder) are still
     // notes. A leading "---" block only counts as a header when it contains
     // at least one key we own, so other apps' front matter stays visible text.
@@ -2584,16 +3311,29 @@ __zentralShim.register = function (def) {
       if (m) {
         let known = 0;
         const found = {};
+        const foreign = [];
+        // Entry-wise walk: a `key:` line starts an entry, indented / list / blank / comment lines belong to the
+        // entry above. Entries of keys we own are consumed; every other entry is kept verbatim (T1.5).
+        let owner = "";
         for (const line of m[1].split("\n")) {
           const kv = /^([A-Za-z_]+):\s*(.*)$/.exec(line);
           if (kv && FRONT_KEYS.has(kv[1])) {
             found[kv[1]] = kv[2].trim();
             known++;
+            owner = "ours";
+          } else if (YAML_KEY_RE.test(line)) {
+            owner = "foreign";
+            foreign.push(line);
+          } else if (owner === "foreign" || (owner === "" && line.trim())) {
+            foreign.push(line);
           }
         }
         if (known) {
           Object.assign(meta, found);
           body = text.slice(m[0].length);
+          while (foreign.length && !foreign[foreign.length - 1].trim()) foreign.pop();
+          const raw = foreign.join("\n");
+          if (raw && raw.length <= MAX_FOREIGN_CHARS) meta.foreign = raw;
         }
       }
       return { meta, body };
@@ -2614,6 +3354,7 @@ __zentralShim.register = function (def) {
         trashed: meta.trashed ? toTime(meta.trashed, mtime) : 0,
         remind: meta.remind ? cleanRemind(toTime(meta.remind, 0)) : 0,
         reminded: meta.reminded ? toTime(meta.reminded, 0) : 0,
+        foreign: meta.foreign || "",
         _onDisk: true,
         _mtime: mtime,
       };
@@ -2635,6 +3376,8 @@ __zentralShim.register = function (def) {
         lines.push("remind: " + iso(n.remind));
         if (n.reminded > 0) lines.push("reminded: " + iso(n.reminded));
       }
+      // Other apps' properties (Obsidian tags / aliases / cssclasses ...) come back byte for byte, after our own keys.
+      if (typeof n.foreign === "string" && n.foreign.trim() && n.foreign.length <= MAX_FOREIGN_CHARS) lines.push(n.foreign.replace(/\s+$/, ""));
       return "---\n" + lines.join("\n") + "\n---\n" + n.body;
     }
 
@@ -3317,7 +4060,7 @@ __zentralShim.register = function (def) {
       return raw.replace(LEAD_RE, "").replace(MARKERS_RE, "").trim();
     }
     function titleOf(body) {
-      for (const raw of String(body).split("\n")) {
+      for (const raw of String(hideFrontMatter(body)).split("\n")) {
         const line = cleanLine(raw);
         if (line) return line.length > 80 ? line.slice(0, 79) + "\u2026" : line;
       }
@@ -3325,7 +4068,7 @@ __zentralShim.register = function (def) {
     }
     function snippetOf(body) {
       let seenTitle = false;
-      for (const raw of String(body).split("\n")) {
+      for (const raw of String(hideFrontMatter(body)).split("\n")) {
         const line = cleanLine(raw);
         if (!line) continue;
         if (!seenTitle) {
@@ -5477,7 +6220,7 @@ __zentralShim.register = function (def) {
       const title = titleOf(body) || "Note";
       return (
         '<!DOCTYPE html>\n<html><head><meta charset="utf-8"><title>' + escHtml(title) + "</title><style>" + EXPORT_CSS + "</style></head><body>\n" +
-        (htmlSlugs = new Map(), blocksHtml(parseBlocks(body, false, opts))) +
+        (htmlSlugs = new Map(), blocksHtml(parseBlocks(hideFrontMatter(body), false, opts))) +
         (print ? "<script>addEventListener('load',function(){setTimeout(function(){print()},300)})</script>\n" : "") +
         "</body></html>\n"
       );
@@ -5521,7 +6264,7 @@ __zentralShim.register = function (def) {
       }
       return parts.join("\n\n");
     }
-    const exportText = (body, opts = {}) => blocksText(parseBlocks(body, false, opts)) + "\n";
+    const exportText = (body, opts = {}) => blocksText(parseBlocks(hideFrontMatter(body), false, opts)) + "\n";
     // One file name per note, never two the same (case-insensitive), for folder and zip export.
     function uniqueFileNames(notes, ext = "md") {
       const used = new Set();
@@ -5809,6 +6552,18 @@ __zentralShim.register = function (def) {
       return { start: s, end: e, text: md, selStart: s + md.length, selEnd: s + md.length };
     }
     // Pasted text that is one web or mail address (nothing else) -> the safe address, or null.
+    // Markdown for a pasted text/html clipboard flavor, or "" when the browser's own plain-text paste should run.
+    // Not converted: no html, a lone web address (the link dialog owns that), HTML that is only plain paragraphs
+    // (the plain text is then exact, e.g. text copied from a code editor), an oversized or unusable fragment.
+    function richPaste(html, plain) {
+      if (!PASTE_HTML_PART || !html || typeof html !== "string") return "";
+      if (plain && /^https?:\/\/\S+$/.test(String(plain).trim())) return "";
+      let r = null;
+      try { r = PASTE_HTML_PART.htmlToMarkdown(html); } catch (_) { r = null; }
+      if (!r || !r.structured || !r.markdown) return "";
+      return normalizeNewlines(r.markdown);
+    }
+
     function pastedLink(raw) {
       const t = String(raw ?? "").trim();
       if (!t || /\s/.test(t) || t.length > 2000) return null;
@@ -7000,7 +7755,7 @@ __zentralShim.register = function (def) {
       const dirty = new Set();
       const listeners = new Set();
       const backedUp = new Set();
-      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, gapSplit: -1, cardDock: "", cardW: 0,
+      const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, cardDock: "", cardW: 0,
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
         calendarView: "month", calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "" };
       let meta = { ...DEFAULT_META };
@@ -7016,12 +7771,22 @@ __zentralShim.register = function (def) {
       // with a missing file only HIDES its items (restoring it brings dragged times and calendar notes back); a note that is
       // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
       const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn }) : null;
-      function syncItems(id) {
+      function syncItems(id, stabilize = false) {
         if (!items) return;
         try {
           const n = notes.get(id);
           if (!n || n.trashed) { items.hideNote(id); return; }
           items.showNote(id);
+          // Hidden line IDs are inserted only at safe commit points (open/create/restore/editor blur), never on each
+          // keystroke. This prevents moving the caret or inserting text into a marker while somebody is typing.
+          if (stabilize && items.ensureNoteIds) {
+            const prepared = items.ensureNoteIds(id, n.body);
+            if (prepared?.changed && typeof prepared.body === "string") {
+              n.body = prepared.body;
+              n.updated = now();
+              if (n.body.trim() || n._onDisk) markDirty(id);
+            }
+          }
           items.syncNote(id, n.body);
         } catch (e) {
           warn(e);
@@ -7034,7 +7799,7 @@ __zentralShim.register = function (def) {
         if (!items) return;
         try {
           await items.open();
-          for (const id of [...notes.keys()]) syncItems(id);
+          for (const id of [...notes.keys()]) syncItems(id, true);
           for (const noteId of new Set(items.list().map((it) => it.x.noteId))) if (noteId && !notes.has(noteId)) items.hideNote(noteId);
         } catch (e) {
           warn(e);
@@ -7117,11 +7882,6 @@ __zentralShim.register = function (def) {
             const v = Number(raw[k]);
             meta[k] = Number.isFinite(v) && v > 0 ? clampShare(v) : 0;
           }
-          // Fraction of the between-panels gap taken from the upper panel; -1 = shared in proportion.
-          {
-            const v = Number(raw.gapSplit);
-            meta.gapSplit = Number.isFinite(v) && v >= 0 && v <= 1 ? Math.round(v * 1000) / 1000 : -1;
-          }
           if (CALENDAR_PART) {
             meta.calendarLayout = CALENDAR_PART.cleanCalendarLayout(raw.calendarLayout);
             meta.calendarSplitLR = CALENDAR_PART.cleanCalendarShare(raw.calendarSplitLR, DEFAULT_META.calendarSplitLR);
@@ -7130,7 +7890,7 @@ __zentralShim.register = function (def) {
             meta.calendarPaneCollapsed = raw.calendarPaneCollapsed === true;
             if (meta.calendarTreeCollapsed && meta.calendarPaneCollapsed) meta.calendarTreeCollapsed = meta.calendarPaneCollapsed = false;
             meta.calendarTab = raw.calendarTab === "calendar" ? "calendar" : "tree";
-            meta.calendarView = ["month", "upcoming", "agenda"].includes(raw.calendarView) ? raw.calendarView : "month";
+            meta.calendarView = ["month", "upcoming", "agenda", "week", "day"].includes(raw.calendarView) ? raw.calendarView : "month";
             const daysForward = Number(raw.calendarDaysForward);
             meta.calendarDaysForward = [3, 7, 14, 30].includes(daysForward) ? daysForward : 7;
             meta.calendarFilterKind = ["all", "event", "reminder"].includes(raw.calendarFilterKind) ? raw.calendarFilterKind : "all";
@@ -7280,7 +8040,7 @@ __zentralShim.register = function (def) {
         const fresh = await readNote(file).catch(() => null);
         if (!fresh) return;
         notes.set(id, fresh);
-        syncItems(id);
+        syncItems(id, true);
         emit("change", id, { remote: true });
       }
 
@@ -7410,7 +8170,7 @@ __zentralShim.register = function (def) {
           const note = { id, body, created: t, updated: t, color: "none", label: "", folder: cleanFolder(folder), pinned: false, trashed: 0, remind: 0, reminded: 0, _onDisk: false, _mtime: t };
           notes.set(id, note);
           if (body) markDirty(id);
-          if (body) syncItems(id);
+          if (body) syncItems(id, true);
           emit("change", id, { created: true });
           return { note, created: true };
         },
@@ -7435,7 +8195,7 @@ __zentralShim.register = function (def) {
           };
           notes.set(id, note);
           if (body) markDirty(id);
-          if (body) syncItems(id);
+          if (body) syncItems(id, true);
           emit("change", id, { created: true });
           return note;
         },
@@ -7448,6 +8208,13 @@ __zentralShim.register = function (def) {
           else dirty.delete(id);
           syncItems(id);
           emit("change", id, { source });
+        },
+        // Commit hidden calendar-line identities after a text editor blur or a non-typing body operation.
+        stabilizeItems(id) {
+          const note = notes.get(id);
+          if (!note || note.trashed) return note?.body || "";
+          syncItems(id, true);
+          return note.body;
         },
         setColor(id, color) {
           const note = notes.get(id);
@@ -7759,7 +8526,7 @@ __zentralShim.register = function (def) {
           if (!note || !note.trashed) return;
           note.trashed = 0;
           markDirty(id);
-          syncItems(id); // shows the items again and re-reads the note's marked lists
+          syncItems(id, true); // shows the items again, re-reads the note's marked lists and keeps stable line IDs
           emit("change", id, { meta: true });
         },
         async deleteForever(id) {
@@ -7807,7 +8574,7 @@ __zentralShim.register = function (def) {
           note._onDisk = false;
           notes.set(id, note);
           markDirty(id);
-          syncItems(id);
+          syncItems(id, true);
           if (io.moveTree) {
             // Pictures keep their folder name (the note text points at it) unless somebody already owns that folder.
             if (await io.exists(io.join(entry, ASSET_DIR)).catch(() => false) && !(await io.exists(io.join(dir, ASSET_DIR, p.id)).catch(() => false)))
@@ -8998,14 +9765,14 @@ __zentralShim.register = function (def) {
       window.__zentralNotesTestSeam.core = {
         flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART,
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
-        makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf,
+        makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
         wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks,
         makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
         createStore, safeHref, FILE_RE, createSheet, parseShortcut, matchesShortcut, menuPosition,
         highlightCode, codeLangKey, texNodes, mapPosition, mergeAnchors, insertCodeBlock, buildLink, insertLink,
-        pastedLink, fragmentLabel, insertImage, makeTable, insertTable, SHORTCUT_ACTIONS, formatCombo,
+        pastedLink, richPaste, PASTE_HTML_PART, fragmentLabel, insertImage, makeTable, insertTable, SHORTCUT_ACTIONS, formatCombo,
         normalizeCombo, comboFromEvent, parseShortcutMap, effectiveShortcuts, findShortcutConflict,
         matchShortcutAction, assignShortcut, QUICK_OPTIONS, stepOption, PREF,
         alignDelim, buildImage, insertImageMd, pastedWebAddress, CODE_LANGS, CALLOUT_KINDS, calloutId, insertCallout,
@@ -9765,7 +10532,8 @@ __zentralShim.register = function (def) {
       const calendarDaysSelect = h("button", { type: "button", class: "zn-chip zn-calendar-days-select", "aria-label": "Number of days forward", "aria-haspopup": "menu" }, "7 days");
       const calendarKindSelect = h("button", { type: "button", class: "zn-chip zn-calendar-kind-filter", "aria-label": "Filter item type", "aria-haspopup": "menu" }, "All items");
       const calendarCategorySelect = h("button", { type: "button", class: "zn-chip zn-calendar-category-filter", "aria-label": "Filter category", "aria-haspopup": "menu" }, "All categories");
-      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarPrev, calendarToday, calendarNext, calendarViewSelect, calendarDaysSelect, calendarKindSelect, calendarCategorySelect);
+      const calendarToolsSelect = h("button", { type: "button", class: "zn-chip zn-calendar-tools", "aria-label": "Calendar tools", "aria-haspopup": "menu" }, "Tools");
+      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarPrev, calendarToday, calendarNext, calendarViewSelect, calendarDaysSelect, calendarKindSelect, calendarCategorySelect, calendarToolsSelect);
       const calendarContent = h("div", { class: "zn-calendar-pane-content zn-calendar-view", role: "region", "aria-label": "Calendar items" });
       const calendarPane = h("section", { class: "zn-calendar-pane", "aria-label": "Calendar" }, calendarHeader, calendarControls, calendarContent);
       const allSplitter = h("div", { class: "zn-calendar-splitter", role: "separator", tabindex: "0", "aria-label": "Resize folder tree and calendar panes", "aria-orientation": "vertical", "aria-valuemin": "20", "aria-valuemax": "80", "aria-valuenow": "36" });
@@ -9863,9 +10631,9 @@ __zentralShim.register = function (def) {
         tabCalendar.classList.toggle("is-on", tabs && tab === "calendar");
         tabTree.hidden = tabCalendar.hidden = !tabs;
         btnCalendarTree.hidden = btnCalendarPane.hidden = !active || tabs;
-        const calendarViewName = ["month", "upcoming", "agenda"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
+        const calendarViewName = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
         calendarViewSelect.dataset.value = calendarViewName;
-        calendarViewSelect.textContent = ({ month: "Month", upcoming: "Next days", agenda: "Agenda" })[calendarViewName];
+        calendarViewSelect.textContent = ({ month: "Month", upcoming: "Next days", agenda: "Agenda", week: "Week", day: "Day" })[calendarViewName];
         calendarDaysSelect.dataset.value = String([3, 7, 14, 30].includes(Number(store.meta.calendarDaysForward)) ? Number(store.meta.calendarDaysForward) : 7);
         calendarDaysSelect.textContent = calendarDaysSelect.dataset.value + " days";
         calendarDaysSelect.hidden = calendarViewName !== "upcoming";
@@ -10044,8 +10812,30 @@ __zentralShim.register = function (def) {
           } else if (nodes[0] && b.src !== undefined) readAnch.push({ line: b.src, node: nodes[0] });
         });
       }
+      // tags / aliases of other apps' front matter (T1.5) as a pill row on top of the read view; the raw YAML is hidden.
+      let frontEl = null, frontSig = "";
+      function renderFront() {
+        const n = note();
+        const pills = n ? frontPills(n) : { tags: [], aliases: [] };
+        const sig = JSON.stringify([pills.tags, pills.aliases]);
+        const empty = !pills.tags.length && !pills.aliases.length;
+        if (empty) {
+          if (frontEl && frontEl.parentNode) frontEl.remove();
+          frontSig = "";
+          return;
+        }
+        if (!frontEl) frontEl = h("div", { class: "zn-front", "aria-label": "Note properties" });
+        if (sig !== frontSig || !frontEl.childNodes.length) {
+          frontEl.replaceChildren();
+          for (const t of pills.tags) frontEl.append(h("span", { class: "zn-pill zn-pill-tag", title: "Tag" }, "#" + t));
+          for (const a of pills.aliases) frontEl.append(h("span", { class: "zn-pill zn-pill-alias", title: "Alias" }, a));
+          frontSig = sig;
+        }
+        if (readEl.firstChild !== frontEl) readEl.insertBefore(frontEl, readEl.firstChild);
+      }
       function renderRead() {
         renderReadInner();
+        renderFront();
         tagHeadings();
         paintLinked();
       }
@@ -10060,7 +10850,7 @@ __zentralShim.register = function (def) {
         if (readEmpty) resetRead();
         const readOpts = { ...(env.readOpts?.() || {}) };
         if (n.flavor) readOpts.flavor = n.flavor; // the note's own mode wins over the setting
-        const blocks = parseBlocks(readBody(n.body, readOpts.flavor), false, readOpts);
+        const blocks = parseBlocks(readBody(hideFrontMatter(n.body), readOpts.flavor), false, readOpts);
         const sigs = blocks.map(blockSig);
         const { prefix, suffix } = diffSigs(readSigs, sigs);
         if (prefix === readSigs.length && prefix === sigs.length) {
@@ -10101,8 +10891,9 @@ __zentralShim.register = function (def) {
       }
       function setBody(text) {
         store.update(currentId, text, null);
+        const committed = store.stabilizeItems ? store.stabilizeItems(currentId) : (store.get(currentId)?.body ?? text);
         const st = ta.scrollTop;
-        ta.value = text;
+        ta.value = committed;
         ta.scrollTop = st;
         typed = false;
         if (mode !== "edit") renderRead();
@@ -10708,10 +11499,10 @@ __zentralShim.register = function (def) {
         const categories = store.items?.categoryList?.() || [];
         const requestedCategory = typeof store.meta.calendarFilterCategory === "string" ? store.meta.calendarFilterCategory : "";
         const category = categories.some((entry) => entry.name === requestedCategory) ? requestedCategory : "";
-        const view = ["month", "upcoming", "agenda"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
+        const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
         const days = [3, 7, 14, 30].includes(Number(store.meta.calendarDaysForward)) ? Number(store.meta.calendarDaysForward) : 7;
         calendarViewSelect.dataset.value = view;
-        calendarViewSelect.textContent = ({ month: "Month", upcoming: "Next days", agenda: "Agenda" })[view];
+        calendarViewSelect.textContent = ({ month: "Month", upcoming: "Next days", agenda: "Agenda", week: "Week", day: "Day" })[view];
         calendarDaysSelect.dataset.value = String(days);
         calendarDaysSelect.textContent = days + " days";
         calendarDaysSelect.hidden = view !== "upcoming";
@@ -10751,6 +11542,46 @@ __zentralShim.register = function (def) {
         }
         askCalendarItemDetails(item);
       }
+      let calendarHoverCard = null, calendarHoverAnchor = null, calendarHoverSeq = 0;
+      function hideCalendarHoverCard(anchor = null) {
+        if (anchor && calendarHoverAnchor && anchor !== calendarHoverAnchor) return;
+        if (calendarHoverAnchor) calendarHoverAnchor.removeAttribute("aria-describedby");
+        calendarHoverCard?.remove();
+        calendarHoverCard = calendarHoverAnchor = null;
+      }
+      function calendarSourceTitle(note) {
+        const body = String(note?.body || "");
+        const lines = body.split("\n");
+        const heading = lines.find((line) => /^\s*#\s+/.test(line));
+        return (heading || lines.find((line) => line.trim()) || "").replace(/^\s*#\s+/, "").trim() || "Untitled note";
+      }
+      function showCalendarHoverCard(item, anchor) {
+        hideCalendarHoverCard();
+        const noteId = item.x?.noteId || "", note = noteId ? store.get(noteId) : null;
+        const id = "zn-calendar-hover-" + (++calendarHoverSeq);
+        const reminder = CALENDAR_PART.isReminder(item);
+        const card = h("aside", { class: "zn-cal-hover-card", id, role: "tooltip", "aria-label": "Calendar item details" });
+        card.append(h("strong", { class: "zn-cal-hover-title" }, item.summary || "Untitled item"));
+        card.append(h("div", { class: "zn-cal-hover-meta" }, (reminder ? "Reminder" : "Event") + " · " + calendarItemTime(item)));
+        if (item.x?.category) card.append(h("div", { class: "zn-cal-hover-meta" }, "Category: " + item.x.category));
+        if (item.x?.tz) card.append(h("div", { class: "zn-cal-hover-meta" }, "Time zone: " + item.x.tz));
+        if (note) {
+          card.append(h("div", { class: "zn-cal-hover-source" }, "Note: " + calendarSourceTitle(note)));
+          if (item.x?.heading) card.append(h("div", { class: "zn-cal-hover-meta" }, "Section: " + item.x.heading));
+        } else card.append(h("div", { class: "zn-cal-hover-meta" }, "Not linked to an available note"));
+        if (item.description) card.append(h("p", { class: "zn-cal-hover-description" }, item.description));
+        if (item.x?.calNote) card.append(h("p", { class: "zn-cal-hover-note" }, item.x.calNote));
+        const rect = anchor.getBoundingClientRect?.() || { left: 8, top: 8, bottom: 36 };
+        const viewportW = Math.max(320, Number(window.innerWidth) || 1200), viewportH = Math.max(240, Number(window.innerHeight) || 800);
+        const left = Math.max(8, Math.min(viewportW - 368, Number(rect.left) || 8));
+        const below = (Number(rect.bottom) || 36) + 8;
+        card.style.left = left + "px";
+        card.style.top = (below + 150 < viewportH ? below : Math.max(8, (Number(rect.top) || 8) - 170)) + "px";
+        calendarPane.append(card);
+        anchor.setAttribute("aria-describedby", id);
+        calendarHoverCard = card;
+        calendarHoverAnchor = anchor;
+      }
       function calendarItemButton(item, compact = false) {
         const reminder = CALENDAR_PART.isReminder(item);
         const button = h("button", {
@@ -10764,6 +11595,10 @@ __zentralShim.register = function (def) {
         button.append(h("span", { class: "zn-cal-item-time" }, calendarItemTime(item)), h("span", { class: "zn-cal-item-title" }, item.summary || "Untitled item"));
         if (item.x?.category) button.append(h("span", { class: "zn-cal-item-category" }, item.x.category));
         if (item.x?.calNote) button.append(h("span", { class: "zn-cal-item-note" }, item.x.calNote.slice(0, 110)));
+        button.addEventListener("pointerenter", () => showCalendarHoverCard(item, button));
+        button.addEventListener("pointerleave", () => hideCalendarHoverCard(button));
+        button.addEventListener("focus", () => showCalendarHoverCard(item, button));
+        button.addEventListener("blur", () => hideCalendarHoverCard(button));
         button.addEventListener("click", () => openCalendarItem(item));
         return button;
       }
@@ -10855,10 +11690,171 @@ __zentralShim.register = function (def) {
         calendarContent.dataset.compact = "true";
         calendarContent.append(list);
       }
+      const CALENDAR_HOUR_PX = 54;
+      function calendarTimeGridView(items, cursor, mode) {
+        const C = CALENDAR_PART, days = mode === "week" ? C.weekDays(cursor, 1) : [C.dayStart(cursor)];
+        const from = days[0], until = C.addDays(days[days.length - 1], 1);
+        const expanded = C.expandRange(items, from, until);
+        const fmt = (day) => calendarDayLabel(day, { weekday: mode === "week" ? "short" : "long", year: true });
+        calendarPeriod.textContent = mode === "week" ? `${fmt(days[0])} – ${fmt(days[6])}` : fmt(days[0]);
+        const cols = `42px repeat(${days.length}, minmax(0, 1fr))`;
+        const root = h("div", { class: "zn-cal-time-view is-" + mode, "aria-label": mode === "week" ? "Week calendar" : "Day calendar" });
+        const header = h("div", { class: "zn-cal-time-head" });
+        header.style.gridTemplateColumns = cols;
+        header.append(h("span", { class: "zn-cal-time-corner", "aria-hidden": "true" }));
+        for (const day of days) header.append(h("div", { class: "zn-cal-time-day-head" }, h("strong", {}, new Date(day).toLocaleDateString(undefined, { weekday: mode === "week" ? "short" : "long" })), h("span", {}, new Date(day).toLocaleDateString(undefined, { month: "short", day: "numeric" }))));
+        const allDayRow = h("div", { class: "zn-cal-time-allday-row", "aria-label": "All-day events and reminders" });
+        allDayRow.style.gridTemplateColumns = cols;
+        allDayRow.append(h("span", { class: "zn-cal-time-all-label" }, "All day"));
+        for (const day of days) {
+          const cell = h("div", { class: "zn-cal-time-allday-cell" });
+          for (const item of C.allDayOf(expanded, day)) cell.append(calendarItemButton(item, true));
+          allDayRow.append(cell);
+        }
+        const scroll = h("div", { class: "zn-cal-time-scroll", tabindex: "0", "aria-label": "24-hour timeline" });
+        const gridRow = h("div", { class: "zn-cal-time-grid-row" });
+        gridRow.style.gridTemplateColumns = cols;
+        const hours = h("div", { class: "zn-cal-hour-gutter" });
+        for (let hour = 0; hour < 24; hour++) hours.append(h("span", { class: "zn-cal-hour-label" }, String(hour).padStart(2, "0") + ":00"));
+        gridRow.append(hours);
+        const columns = h("div", { class: "zn-cal-time-columns" });
+        columns.style.gridTemplateColumns = `repeat(${days.length}, minmax(0, 1fr))`;
+        const work = C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK);
+        for (const day of days) {
+          const track = h("div", { class: "zn-cal-time-track", "data-day": C.ymd(new Date(day)) });
+          track.style.height = (24 * CALENDAR_HOUR_PX) + "px";
+          for (let hour = 0; hour < 24; hour++) {
+            track.append(h("span", { class: "zn-cal-time-hour-line", style: `top:${hour * CALENDAR_HOUR_PX}px` }));
+          }
+          const workRange = C.workRange(day, work);
+          const workStart = workRange ? Math.max(0, Math.round((workRange[0] - day) / 60000)) : 0;
+          const workEnd = workRange ? Math.min(1440, Math.round((workRange[1] - day) / 60000)) : 0;
+          if (!workRange) {
+            track.append(h("span", { class: "zn-cal-off-hours is-all-day", "aria-hidden": "true" }));
+          } else {
+            if (workStart > 0) track.append(h("span", { class: "zn-cal-off-hours", style: `top:0;height:${workStart / 60 * CALENDAR_HOUR_PX}px`, "aria-hidden": "true" }));
+            if (workEnd < 1440) track.append(h("span", { class: "zn-cal-off-hours", style: `top:${workEnd / 60 * CALENDAR_HOUR_PX}px;bottom:0`, "aria-hidden": "true" }));
+          }
+          const busy = C.busyRanges(expanded.filter((it) => !C.isAllDay(it)), day, C.addDays(day, 1));
+          for (const [start, end] of busy) {
+            const top = Math.max(0, (start - day) / 60000 / 60 * CALENDAR_HOUR_PX);
+            const height = Math.max(1, (end - start) / 60000 / 60 * CALENDAR_HOUR_PX);
+            track.append(h("span", { class: "zn-cal-busy-range", style: `top:${top}px;height:${height}px`, "aria-hidden": "true" }));
+          }
+          for (const entry of C.layoutDay(expanded, day)) {
+            const button = calendarItemButton(entry.item, true);
+            button.classList.add("zn-cal-time-event");
+            const top = entry.startMin / 60 * CALENDAR_HOUR_PX;
+            const height = Math.max(20, (entry.endMin - entry.startMin) / 60 * CALENDAR_HOUR_PX);
+            button.style.top = top + "px";
+            button.style.height = height + "px";
+            button.style.left = (entry.lane * 100 / entry.lanes) + "%";
+            button.style.width = (100 / entry.lanes) + "%";
+            button.style.zIndex = "2";
+            button.setAttribute("aria-label", `${entry.item.summary}, ${C.clockIn(day + entry.startMin * 60000, entry.item.x?.tz)} to ${C.clockIn(day + entry.endMin * 60000, entry.item.x?.tz)}, lane ${entry.lane + 1} of ${entry.lanes}`);
+            track.append(button);
+          }
+          const reminders = C.itemsInRange(expanded, day, C.addDays(day, 1)).filter((it) => C.isReminder(it) && !C.isAllDay(it));
+          for (const reminder of reminders) {
+            const [start] = C.itemRange(reminder), minutes = Math.max(0, Math.min(1439, Math.round((start - day) / 60000)));
+            const button = calendarItemButton(reminder, true);
+            button.classList.add("zn-cal-time-reminder");
+            button.style.top = (minutes / 60 * CALENDAR_HOUR_PX) + "px";
+            button.style.left = "2px";
+            button.style.right = "2px";
+            button.style.zIndex = "3";
+            track.append(button);
+          }
+          columns.append(h("div", { class: "zn-cal-time-column" }, track));
+        }
+        gridRow.append(columns);
+        scroll.append(gridRow);
+        root.append(header, allDayRow, scroll);
+        calendarContent.dataset.compact = "false";
+        calendarContent.append(root);
+      }
+      function askCalendarSlotEvent(start, end) {
+        const C = CALENDAR_PART;
+        if (!store.items) return flash("Calendar item storage is unavailable");
+        const title = field("Event title", "", "What is this time for?");
+        const startDate = C.ymd(new Date(start)), endDate = C.ymd(new Date(end));
+        const startLabel = new Date(start).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+        const endLabel = startDate === endDate
+          ? new Date(end).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+          : new Date(end).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+        const cancel = chip("Cancel"), save = chip("Create event", true);
+        openCard("Use available time", h("p", { class: "zn-empty" }, startLabel + " – " + endLabel), title.row,
+          h("p", { class: "zn-empty" }, "This creates a standalone timed event. You can add a linked note, category, colour and other details in the full item editor."),
+          h("div", { class: "zn-dialog-actions" }, cancel, save));
+        const submit = () => {
+          const summary = title.input.value.trim();
+          if (!summary) { title.input.dataset.bad = "true"; title.input.focus(); return; }
+          const item = C.makeItem({ summary, start: { dateTime: new Date(start).toISOString() }, end: { dateTime: new Date(end).toISOString() }, x: { kind: "event", src: "manual" } }, nowMs());
+          const saved = item && store.items.upsert(item);
+          if (!saved) return flash("Could not create the event");
+          store.setMeta({ calendarCursor: C.ymd(new Date(start)), calendarView: "day" });
+          closeDialog();
+          renderCalendar();
+          flash("Event created");
+        };
+        save.addEventListener("click", submit);
+        cancel.addEventListener("click", closeDialog);
+        title.input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); submit(); } });
+        title.input.focus({ preventScroll: true });
+      }
+      function askCalendarFreeSlots() {
+        const C = CALENDAR_PART, start = calendarWeekStart(), end = C.addDays(start, 6);
+        const from = field("From date (YYYY-MM-DD)", C.ymd(new Date(start)), "2026-11-12");
+        const through = field("Through date (YYYY-MM-DD)", C.ymd(new Date(end)), "2026-11-18");
+        const duration = h("input", { type: "number", class: "zn-field", min: "15", max: "1440", step: "15", "aria-label": "Minimum free time in minutes" });
+        duration.value = "60";
+        const workOnly = h("input", { type: "checkbox", "aria-label": "Only working hours" });
+        workOnly.checked = true;
+        const allDayBusy = h("input", { type: "checkbox", "aria-label": "Count all-day events as busy" });
+        allDayBusy.checked = false;
+        const results = h("div", { class: "zn-cal-free-results", "aria-live": "polite" });
+        const find = chip("Find free times", true), cancel = chip("Close");
+        const options = h("div", { class: "zn-cal-free-options" },
+          h("label", { class: "zn-field-row" }, h("span", {}, "Minimum duration (minutes)"), duration),
+          h("label", { class: "zn-field-row zn-cal-free-check" }, workOnly, h("span", {}, "Only within working hours")),
+          h("label", { class: "zn-field-row zn-cal-free-check" }, allDayBusy, h("span", {}, "Treat all-day events as busy")));
+        openCard("When am I free?", from.row, through.row, options, results, h("div", { class: "zn-dialog-actions" }, cancel, find));
+        const run = () => {
+          const fromDay = C.parseYmd(from.input.value), throughDay = C.parseYmd(through.input.value), min = Number(duration.value);
+          const fromDate = fromDay ? new Date(fromDay) : null, throughDate = throughDay ? new Date(throughDay) : null;
+          const daySpan = fromDate && throughDate ? Math.round((Date.UTC(throughDate.getFullYear(), throughDate.getMonth(), throughDate.getDate()) - Date.UTC(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate())) / 86400000) + 1 : 0;
+          if (!fromDay || !throughDay || throughDay < fromDay || daySpan > 90) {
+            (fromDay ? through : from).input.dataset.bad = "true";
+            (fromDay ? through : from).input.focus();
+            results.textContent = "Choose a valid range of up to 90 days.";
+            return;
+          }
+          if (!Number.isInteger(min) || min < 15 || min > 1440) { duration.dataset.bad = "true"; duration.focus(); return; }
+          const work = workOnly.checked ? C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK) : null;
+          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.addDays(throughDay, 1), min, { work, blockAllDay: allDayBusy.checked });
+          results.replaceChildren();
+          if (!slots.length) { results.append(h("p", { class: "zn-empty" }, "No matching free time was found in this range.")); return; }
+          results.append(h("p", { class: "zn-empty" }, `${slots.length} free slot${slots.length === 1 ? "" : "s"} found · showing up to 20`));
+          for (const [slotStart, slotEnd] of slots.slice(0, 20)) {
+            const date = new Date(slotStart).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+            const crossesDay = C.ymd(new Date(slotStart)) !== C.ymd(new Date(slotEnd));
+            const endLabel = crossesDay ? new Date(slotEnd).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : C.clockIn(slotEnd);
+            const label = `${date} · ${C.clockIn(slotStart)}–${endLabel} · ${Math.round((slotEnd - slotStart) / 60000)} min`;
+            const button = h("button", { type: "button", class: "zn-cal-free-slot" }, label);
+            button.addEventListener("click", () => { closeDialog(); askCalendarSlotEvent(slotStart, slotEnd); });
+            results.append(button);
+          }
+        };
+        find.addEventListener("click", run);
+        cancel.addEventListener("click", closeDialog);
+        run();
+        from.input.focus({ preventScroll: true });
+      }
       function renderCalendar() {
         if (!CALENDAR_PART || !calendarContent) return;
         syncCalendarFilterOptions();
-        const view = ["month", "upcoming", "agenda"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
+        hideCalendarHoverCard();
+        const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
         const storedCursor = CALENDAR_PART.parseYmd(store.meta.calendarCursor);
         const cursor = storedCursor ? storedCursor.getTime() : CALENDAR_PART.dayStart(nowMs());
         const items = calendarFilteredItems();
@@ -10867,25 +11863,26 @@ __zentralShim.register = function (def) {
         const rect = calendarPane.getBoundingClientRect?.();
         const width = Math.max(0, Number(calendarPane.clientWidth) || Number(rect?.width) || 0);
         const compact = view === "month" && width > 0 && width < 470;
-        calendarPrev.title = view === "month" ? "Previous month" : view === "upcoming" ? "Previous range" : "Previous 30 days";
-        calendarNext.title = view === "month" ? "Next month" : view === "upcoming" ? "Next range" : "Next 30 days";
+        calendarPrev.title = view === "month" ? "Previous month" : view === "upcoming" ? "Previous range" : view === "week" ? "Previous week" : view === "day" ? "Previous day" : "Previous 30 days";
+        calendarNext.title = view === "month" ? "Next month" : view === "upcoming" ? "Next range" : view === "week" ? "Next week" : view === "day" ? "Next day" : "Next 30 days";
         if (view === "month") calendarMonthView(items, cursor, compact);
         else if (view === "upcoming") calendarUpcomingView(items, cursor, Number(store.meta.calendarDaysForward) || 7);
-        else calendarAgendaView(items, cursor);
+        else if (view === "agenda") calendarAgendaView(items, cursor);
+        else calendarTimeGridView(items, cursor, view);
       }
       function changeCalendarCursor(delta) {
         const C = CALENDAR_PART, stored = C.parseYmd(store.meta.calendarCursor), base = stored ? stored.getTime() : C.dayStart(nowMs());
-        const view = ["month", "upcoming", "agenda"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
+        const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
         let next;
         if (view === "month") {
           const date = new Date(base), moved = C.stepMonth(date.getFullYear(), date.getMonth(), delta);
           next = new Date(moved.year, moved.month, 1).getTime();
-        } else next = C.addDays(base, delta * (view === "upcoming" ? Number(store.meta.calendarDaysForward) || 7 : 30));
+        } else next = C.addDays(base, delta * (view === "upcoming" ? Number(store.meta.calendarDaysForward) || 7 : view === "week" ? 7 : view === "day" ? 1 : 30));
         store.setMeta({ calendarCursor: C.ymd(new Date(next)) });
         renderCalendar();
       }
       listen(calendarViewSelect, "click", () => calendarChoiceMenu(calendarViewSelect,
-        [{ value: "month", label: "Month" }, { value: "upcoming", label: "Next days" }, { value: "agenda", label: "Agenda" }],
+        [{ value: "month", label: "Month" }, { value: "upcoming", label: "Next days" }, { value: "agenda", label: "Agenda" }, { value: "week", label: "Week" }, { value: "day", label: "Day" }],
         store.meta.calendarView || "month", (value) => { store.setMeta({ calendarView: value }); renderCalendar(); }));
       listen(calendarPrev, "click", () => changeCalendarCursor(-1));
       listen(calendarNext, "click", () => changeCalendarCursor(1));
@@ -10902,6 +11899,21 @@ __zentralShim.register = function (def) {
           [{ value: "", label: "All categories" }, ...categories.map((entry) => ({ value: entry.name, label: entry.name }))],
           store.meta.calendarFilterCategory || "", (value) => { store.setMeta({ calendarFilterCategory: value }); renderCalendar(); });
       });
+      function calendarWeekStart() {
+        const C = CALENDAR_PART, stored = C.parseYmd(store.meta.calendarCursor);
+        return C.weekDays(stored ? stored.getTime() : C.dayStart(nowMs()), 1)[0];
+      }
+      function calendarWeekMarkdown() {
+        const C = CALENDAR_PART, start = calendarWeekStart();
+        return { start, text: C.weekText(calendarBaseItems(), start, { category: true }) };
+      }
+      listen(calendarToolsSelect, "click", () => showMenu(calendarToolsSelect, [
+        { icon: "clock", label: "When am I free?…", action: () => queueMicrotask(askCalendarFreeSlots) },
+        { sep: true },
+        { icon: "copy", label: "Copy this week as Markdown", action: () => { const out = calendarWeekMarkdown(); env.copyText?.(out.text); flash("Week copied as Markdown"); } },
+        { icon: "download", label: "Save this week as Markdown…", action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.exportCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((saved) => { if (saved) flash("Week exported"); }).catch((error) => flash("Week export failed: " + String(error?.message || error))); } },
+        { icon: "printer", label: "Print this week…", action: () => { const out = calendarWeekMarkdown(); Promise.resolve(env.printCalendarWeek?.(out.text, CALENDAR_PART.ymd(new Date(out.start)))).then((printed) => { if (printed) flash("Week opened for printing"); }).catch((error) => flash("Week print failed: " + String(error?.message || error))); } },
+      ]));
       // Accessible hour/minute selectors are easier to use than free-form typing and work with keyboards.
       // Supplying `endValue` + `onEndPick` adds a second clock for event ranges; reminder-only callers omit it.
       function buildClockPicker({ value = "09:00", onPick, endValue, onEndPick } = {}) {
@@ -13875,6 +14887,7 @@ __zentralShim.register = function (def) {
       });
       // ---- size, window pin, geometry -------------------------------------------------------------
       const setSize = (size) => {
+        recenterGap = true;
         store.setMeta({ size });
         applyState();
         if (adapter.pushPanel && isOpen && !collapsed) applyPush(0, 0);
@@ -13905,7 +14918,8 @@ __zentralShim.register = function (def) {
         const key = adapter.geoKey;
         if (!key) return;
         if (adapter.pushPanel) {
-          // A slot sheet has no box to reset: it goes back to the preferred height.
+          // A slot sheet has no box to reset: it goes back to the preferred height, centred on the divider.
+          recenterGap = true;
           store.setMeta({ shareDock: 0, shareGap: 0, size: "peek" });
           applyState();
           if (isOpen && !collapsed) applyPush(0, 0);
@@ -14203,7 +15217,6 @@ __zentralShim.register = function (def) {
           if (g.share > 0) {
             // Remembered per kind of slot, as a share of the pages (so it survives a window resize).
             const patch = { [g.slot === "gap" ? "shareGap" : "shareDock"]: Math.round(g.share * 1000) / 1000, size: "peek" };
-            if (g.slot === "gap" && g.px > 0) patch.gapSplit = Math.round((g.up / g.px) * 1000) / 1000;
             store.setMeta(patch);
             applyState();
             layout();
@@ -14486,21 +15499,50 @@ __zentralShim.register = function (def) {
             return;
           }
         }
+        if (ta.readOnly) return;
         const how = getPref(PREF.PASTE_LINK, "ask");
-        if (how === "off" || ta.readOnly) return;
         const text = e.clipboardData?.getData?.("text/plain") ?? "";
-        const link = pastedLink(text);
-        if (!link) return;
+        const link = how === "off" ? null : pastedLink(text);
         const [s, en] = sel();
-        if (how === "selection" && s === en) return;
-        e.preventDefault();
-        askLink({ pasted: text.trim(), s, e: en });
+        if (link && !(how === "selection" && s === en)) {
+          e.preventDefault();
+          askLink({ pasted: text.trim(), s, e: en });
+          return;
+        }
+        // Rich HTML from a web page or an AI chat: insert it as Markdown. Plain text stays a native paste.
+        const rich = richPaste(e.clipboardData?.getData?.("text/html") ?? "", text);
+        if (rich) {
+          e.preventDefault();
+          applyEdit({ start: s, end: en, text: rich, selStart: s + rich.length, selEnd: s + rich.length });
+        }
       });
       listen(ta, "blur", () => {
         disarm();
         hideWiki();
-        const n = note();
-        if (!typed && n && n.body !== ta.value) ta.value = n.body;
+        const before = ta.value, start = ta.selectionStart, end = ta.selectionEnd, scroll = ta.scrollTop;
+        const normalized = store.stabilizeItems ? store.stabilizeItems(currentId) : note()?.body;
+        if (typeof normalized === "string" && normalized !== before) {
+          // Identity comments are appended at the end of calendar list lines. Keep a selection/caret before the
+          // generated token and shift offsets only for complete lines preceding it.
+          const mapOffset = (offset) => {
+            const oldLines = before.split("\n"), newLines = normalized.split("\n");
+            let oldPos = 0, newPos = 0;
+            for (let i = 0; i < oldLines.length; i++) {
+              const oldEnd = oldPos + oldLines[i].length;
+              if (offset <= oldEnd) return Math.min(normalized.length, newPos + Math.max(0, offset - oldPos));
+              oldPos = oldEnd + 1;
+              newPos += newLines[i].length + 1;
+            }
+            return normalized.length;
+          };
+          ta.value = normalized;
+          try { ta.setSelectionRange(mapOffset(start), mapOffset(end)); } catch (_) {}
+          ta.scrollTop = scroll;
+        } else {
+          const n = note();
+          if (!typed && n && n.body !== ta.value) ta.value = n.body;
+        }
+        typed = false;
         try {
           refreshToc();
         } catch (error) {
@@ -14715,6 +15757,7 @@ __zentralShim.register = function (def) {
       // ---- push page (standalone card): the page makes room instead of being covered ---------------
       const widePct = () => Math.max(1.3, Math.min(3, getPref(PREF.WIDE_PERCENT, 200) / 100));
       let pushed = false;
+      let recenterGap = false;
       function applyPush(left, w) {
         // Slot model (V4-R1/R4): a panel-hosted sheet is a layout slot (normal panel = page + Notes,
         // Triple View = quad, bottom bar of Triple View = the gap between the two panels). Pin mode is the
@@ -14742,7 +15785,10 @@ __zentralShim.register = function (def) {
               ? dragShare || slotShare({ size: store.meta.size, pref: getPref(PREF.PUSH_PANEL_PERCENT, 45), custom: between ? store.meta.shareGap : store.meta.shareDock })
               : 0;
           const gdrag = between && isOpen && !collapsed && gesture && gesture.slot === "gap" && gesture.active && gesture.px > 0 ? gesture : null;
-          const quad = adapter.pushPanel(gdrag ? 0 : share, gdrag ? { strip, px: gdrag.px, up: gdrag.up } : { strip, upFrac: between ? store.meta.gapSplit : -1 });
+          // A size/reset action re-centres the band on the divider; ordinary resizes preserve its live split.
+          const upFrac = between && recenterGap ? 0.5 : -1;
+          recenterGap = false;
+          const quad = adapter.pushPanel(gdrag ? 0 : share, gdrag ? { strip, px: gdrag.px, up: gdrag.up } : { strip, upFrac });
           root.dataset.slot = adapter.slotKind?.() || "";
           if (quad) root.dataset.bgalazkaTripleSlot = "notes";
           else delete root.dataset.bgalazkaTripleSlot;
@@ -15527,6 +16573,19 @@ __zentralShim.register = function (def) {
       }
       let observeAll = () => {};
       const mine = () => SLOT.owner === api && SLOT.px > 0;
+      // The upper part of the gap (px taken from the upper panel). The root variable is the shared truth: the
+      // secondary views flip it when the two panels are swapped, so it is read back instead of trusted from SLOT.
+      function liveGapUp() {
+        const v = parseFloat(document.documentElement.style.getPropertyValue("--zentral-notes-gap-up"));
+        return Number.isFinite(v) && v >= 0 ? v : -1;
+      }
+      // No explicit edge position: an open gap keeps the ratio it has (so a resize or a swap never moves Notes
+      // relative to the panels); a fresh gap is split EVENLY, the divider sits in the middle of Notes and both
+      // panels give (and, on close, take back) the same room.
+      function keptGapUp(px) {
+        const cur = SLOT.owner === api && SLOT.gap && SLOT.px > 0 ? liveGapUp() : -1;
+        return cur >= 0 ? Math.round(px * Math.min(1, cur / SLOT.px)) : Math.round(px / 2);
+      }
       // Union of every visible page of the panel (one in a normal panel, two in Triple View).
       function pageSpan() {
         const rects = [...(slider()?.querySelectorAll(":scope > browser") || [])]
@@ -15576,7 +16635,8 @@ __zentralShim.register = function (def) {
         // What a drag of the slot's edge starts from: its height now and the pages' height without it.
         slotInfo: () => {
           if (!mine()) return null;
-          let up = SLOT.up;
+          let up = SLOT.gap ? liveGapUp() : SLOT.up;
+          if (!(up >= 0)) up = SLOT.up;
           if (SLOT.gap && !(up >= 0)) {
             // Proportional gap: the slider publishes both panels' live heights; the gap was shared in that ratio.
             const cs = slider()?.style;
@@ -15624,7 +16684,7 @@ __zentralShim.register = function (def) {
           if (!wants && SLOT.owner !== api) return false;
           const base = pagesWithoutSlot();
           const px = !wants ? 0 : wantPx > 0 ? clampSlotPx(base, wantPx) : strip > 0 && base > 200 ? Math.round(strip) : slotPx(base, fraction);
-          const up = !between || px <= 0 ? -1 : wantUp >= 0 ? Math.min(Math.round(wantUp), px) : upFrac >= 0 ? Math.round(px * Math.min(1, upFrac)) : -1;
+          const up = !between || px <= 0 ? -1 : wantUp >= 0 ? Math.min(Math.round(wantUp), px) : upFrac >= 0 ? Math.round(px * Math.min(1, upFrac)) : keptGapUp(px);
           const pseudo = !between && px > 0 && pseudoOk;
           const quad = !between && px > 0 && (pseudo || rootEl.hasAttribute("bgalazka-triple-view"));
           const hasQuad = rootEl.hasAttribute("bgalazka-quad-view");
@@ -15728,7 +16788,16 @@ __zentralShim.register = function (def) {
             if (rects.length) {
               const left = Math.min(...rects.map((r) => r.left)), top = Math.min(...rects.map((r) => r.top));
               const right = Math.max(...rects.map((r) => r.right)), bottom = Math.max(...rects.map((r) => r.bottom));
-              return { left, top, width: right - left, height: bottom - top, anchor: "top" };
+              const triple = document.documentElement.hasAttribute("bgalazka-triple-view");
+              return { left, top, width: right - left, height: bottom - top, anchor: "top", ...(triple ? { wideFill: true } : {}) };
+            }
+            // In Triple View, a transition can briefly expose no measurable browser rect. Never fall back to
+            // browserEl() here: it deliberately returns only ONE slot and would cover just the upper/lower page.
+            if (document.documentElement.hasAttribute("bgalazka-triple-view")) {
+              const sr = slider()?.getBoundingClientRect?.();
+              if (sr && sr.width > 40 && sr.height > 40)
+                return { left: sr.left, top: sr.top, width: sr.width, height: sr.height, anchor: "top", wideFill: true };
+              return null;
             }
           }
           const b = browserEl();
@@ -15755,10 +16824,12 @@ __zentralShim.register = function (def) {
           };
           observeAll();
           window.addEventListener("resize", cb);
+          document.addEventListener("zentral-triple-swapped", cb);
           return () => {
             ro.disconnect();
             observeAll = () => {};
             window.removeEventListener("resize", cb);
+            document.removeEventListener("zentral-triple-swapped", cb);
           };
         },
         rewatch: () => observeAll(),
@@ -16285,6 +17356,24 @@ __zentralShim.register = function (def) {
           warn(error);
         }
       }
+      async function exportCalendarWeek(text, weekStart) {
+        const file = await pick(Ci.nsIFilePicker.modeSave, "Save calendar week", "calendar-week-" + weekStart + ".md", "md");
+        if (!file) return false;
+        try {
+          await IOUtils.writeUTF8(file.path, withNewline(String(text || "")));
+          return true;
+        } catch (error) { warn(error); return false; }
+      }
+      async function printCalendarWeek(text, weekStart) {
+        try {
+          const dir = PathUtils.join(PathUtils.tempDir, "zentral-notes-print");
+          await IOUtils.makeDirectory(dir, { ignoreExisting: true });
+          const path = PathUtils.join(dir, "calendar-week-" + weekStart + "-" + Date.now() + ".html");
+          await IOUtils.writeUTF8(path, exportHtml(String(text || ""), readOpts(), { print: true }));
+          window.gBrowser.addTab(PathUtils.toFileURI(path), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+          return true;
+        } catch (error) { warn(error); return false; }
+      }
       async function exportAll(list) {
         const folder = await pick(Ci.nsIFilePicker.modeGetFolder, "Export all notes to a folder");
         if (!folder) return;
@@ -16388,7 +17477,7 @@ __zentralShim.register = function (def) {
         assetUrls.set(rel, url);
         return { url };
       }
-      const env = { openLink, copyText, exportNote, exportAll, exportZip, importFolder, printNote, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now() };
+      const env = { openLink, copyText, exportNote, exportAll, exportZip, importFolder, printNote, exportCalendarWeek, printCalendarWeek, revealFolder, readOpts, getPref, setPref, loadAsset, now: () => Date.now() };
 
       // ---- reminders (P2): ONE coarse timer for the next due note, armed by the scheduler (no polling) ----
       let soundCtx = null;

@@ -85,6 +85,19 @@
     return null;
   }
   const twoDigitYear = (year) => year < 50 ? 2000 + year : 1900 + year;
+  // Relative month/year arithmetic clamps to the final valid day of the target month instead of overflowing
+  // into a later month (Jan 31 + 1m = Feb 28/29; Feb 29 + 1y = Feb 28).
+  function shiftCalendarDate(base, amount, unit) {
+    const source = new Date(base), first = new Date(base);
+    first.setDate(1);
+    if (unit === "m") first.setMonth(first.getMonth() + amount);
+    else first.setFullYear(first.getFullYear() + amount);
+    const year = first.getFullYear(), month = first.getMonth();
+    if (year < 1 || year > 9999) return null;
+    const lastDate = new Date(first);
+    lastDate.setMonth(month + 1, 0);
+    return new Date(year, month, Math.min(source.getDate(), lastDate.getDate())).getTime();
+  }
   // A date as people type it: ISO, day/month/year, dotted/dashed/slashed dates, month names, @today, @tomorrow,
   // @+3d / @-2d / @+1w / @+1m, @monday. Numeric day-first forms are deliberate; no locale-dependent guessing.
   // Two-digit years use 00-49 => 2000-2049 and 50-99 => 1950-1999.
@@ -118,8 +131,7 @@
       const n = (m[1] === "-" ? -1 : 1) * +m[2], d = new Date(base);
       if (m[3] === "d") return addDays(base, n);
       if (m[3] === "w") return addDays(base, n * 7);
-      if (m[3] === "m") return new Date(d.getFullYear(), d.getMonth() + n, d.getDate()).getTime();
-      return new Date(d.getFullYear() + n, d.getMonth(), d.getDate()).getTime();
+      if (m[3] === "m" || m[3] === "y") return shiftCalendarDate(base, n, m[3]);
     }
     const wd = WEEKDAYS.findIndex((w) => w === t || w.slice(0, 3) === t);
     if (wd >= 0) return addDays(base, ((wd - new Date(base).getDay() + 7) % 7) || 7);
@@ -177,9 +189,9 @@
       const m = re.exec(s);
       if (!m) continue;
       const raw = m[1], day = parseDateText(raw, now);
-      // An unknown word can look like a month name (for example "12 and 25 listopada"). Do not let
-      // that rejected candidate consume the next, valid date; resume one character after its start.
-      if (day === null) { re.lastIndex = m.index + 1; continue; }
+      // This is deliberately prefix-only. These patterns are anchored and non-global, so lastIndex cannot
+      // resume a search later in the line; a leading non-date token means this is not a dated list/heading.
+      if (day === null) continue;
       const yearless = /^\d{1,2}[./-]\d{1,2}\.?$/.test(raw) || /^\d{1,2}\.?\s+[a-z\u00c0-\u024f]+\.?$/i.test(raw) || /^[a-z\u00c0-\u024f]+\.?\s+\d{1,2},?$/i.test(raw);
       return { day, raw, rest: s.slice(raw.length).trim(), yearless };
     }
@@ -306,7 +318,7 @@
       reminders: { overrides: minutes },
       x: {
         kind, noteId: String(x.noteId ?? "").slice(0, 120), heading: String(x.heading ?? "").slice(0, MAX_TEXT),
-        category: cleanCategoryName(x.category), tz: cleanZone(x.tz), src: ["list", "note", "manual"].includes(x.src) ? x.src : "manual", key: String(x.key ?? "").slice(0, 60), moved: x.moved ? "1" : "", calNote: String(x.calNote ?? "").slice(0, MAX_DESC), notify: cleanNotifyOverrides(x.notify),
+        category: cleanCategoryName(x.category), tz: cleanZone(x.tz), src: ["list", "note", "manual"].includes(x.src) ? x.src : "manual", key: String(x.key ?? "").slice(0, 60), legacyKey: String(x.legacyKey ?? "").slice(0, 60), moved: x.moved ? "1" : "", calNote: String(x.calNote ?? "").slice(0, MAX_DESC), notify: cleanNotifyOverrides(x.notify),
       },
     };
     if (end) item.end = end;
@@ -332,8 +344,12 @@
       else base.x.kind = "reminder";
     } else {
       base.start = { dateTime: iso(startMs) };
-      if (parsed.endMin > parsed.startMin) { base.end = { dateTime: iso(parsed.day + parsed.endMin * MIN) }; base.x.kind = "event"; }
-      else base.x.kind = "reminder";
+      if (parsed.endMin >= 0) {
+        // A range that ends at or before its start crosses midnight. Equal clocks mean a full 24-hour event.
+        const endDay = parsed.endMin <= parsed.startMin ? addDays(parsed.day, 1) : parsed.day;
+        base.end = { dateTime: iso(endDay + parsed.endMin * MIN) };
+        base.x.kind = "event";
+      } else base.x.kind = "reminder";
     }
     return cleanItem(base, now);
   }
@@ -355,6 +371,12 @@
     const days = [];
     for (let i = 0; i < 42; i++) days.push(new Date(year, month, 1 - lead + i).getTime());
     return Array.from({ length: 6 }, (_, w) => days.slice(w * 7, w * 7 + 7));
+  }
+  // Seven local midnights containing `day`; defaults to Monday-first to match the month view.
+  function weekDays(day, weekStart = 1) {
+    const start = dayStart(day), offset = (new Date(start).getDay() - ((Number(weekStart) || 0) + 7) % 7 + 7) % 7;
+    const first = addDays(start, -offset);
+    return Array.from({ length: 7 }, (_, i) => addDays(first, i));
   }
   // [{ day, items }] for `count` days from `from` (local midnight). Multi-day events appear on every day they cover.
   function daysForward(items, from, count) {
@@ -395,7 +417,9 @@
   }
   // Merged "taken" ranges [[s,e],...] of timed and all-day events in [from, to); reminders take no time.
   function busyRanges(items, from, to) {
-    const rs = itemsInRange(items, from, to).filter((it) => !isReminder(it)).map((it) => { const [s, e] = itemRange(it); return [Math.max(s, from), Math.min(e, to)]; }).sort((a, b) => a[0] - b[0]);
+    // Expand masters here so callers such as freeSlots cannot accidentally ignore a recurring event. Already-expanded
+    // occurrences carry x.series and are range-filtered without expanding their copied RRULE a second time.
+    const rs = expandRange(items, from, to).filter((it) => !isReminder(it)).map((it) => { const [s, e] = itemRange(it); return [Math.max(s, from), Math.min(e, to)]; }).sort((a, b) => a[0] - b[0]);
     const out = [];
     for (const r of rs) {
       if (out.length && r[0] <= out[out.length - 1][1]) out[out.length - 1][1] = Math.max(out[out.length - 1][1], r[1]);
@@ -412,7 +436,7 @@
   // ---------- dragging ----------
   const snapTo = (ms, snapMin) => { const st = Math.max(1, Math.round(snapMin || 15)) * MIN; return Math.round(ms / st) * st; };
   // Move an item by deltaMs (snapped to the step). Returns a new item; all-day items move by whole days.
-  function moveItem(it, deltaMs, snapMin = 15) {
+  function moveItem(it, deltaMs, snapMin = 15, now = Date.now()) {
     const copy = JSON.parse(JSON.stringify(it));
     if (isAllDay(it)) {
       const days = Math.round(deltaMs / DAY_MS);
@@ -424,16 +448,18 @@
       copy.start = { dateTime: iso(ns) };
       if (it.end) copy.end = { dateTime: iso(ns + (e - s)) };
     }
-    return cleanItem({ ...copy, etag: "", updated: iso(Date.now()) }, 0);
+    const stamp = typeof now === "function" ? now() : Number(now);
+    return cleanItem({ ...copy, etag: "", updated: iso(Number.isFinite(stamp) ? stamp : Date.now()) }, 0);
   }
   // Move one edge of an event ("start" or "end"); never shorter than one snap step. Reminders have no end.
-  function resizeItem(it, edge, deltaMs, snapMin = 15) {
+  function resizeItem(it, edge, deltaMs, snapMin = 15, now = Date.now()) {
     if (isReminder(it) || isAllDay(it) || !it.end) return it;
     const [s, e] = itemRange(it), step = Math.max(1, Math.round(snapMin)) * MIN;
     let ns = s, ne = e;
     if (edge === "start") ns = Math.min(snapTo(s + deltaMs, snapMin), e - step);
     else ne = Math.max(snapTo(e + deltaMs, snapMin), s + step);
-    return cleanItem({ ...JSON.parse(JSON.stringify(it)), start: { dateTime: iso(ns) }, end: { dateTime: iso(ne) }, etag: "", updated: iso(Date.now()) }, 0);
+    const stamp = typeof now === "function" ? now() : Number(now);
+    return cleanItem({ ...JSON.parse(JSON.stringify(it)), start: { dateTime: iso(ns) }, end: { dateTime: iso(ne) }, etag: "", updated: iso(Number.isFinite(stamp) ? stamp : Date.now()) }, 0);
   }
 
   // ---------- Google shape ----------
@@ -451,7 +477,7 @@
     if (!g || typeof g !== "object") return null;
     const priv = g.extendedProperties?.private || {};
     const x = {};
-    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "moved", "calNote", "notify"]) if (priv["zentral_" + k] !== undefined) {
+    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "legacyKey", "moved", "calNote", "notify"]) if (priv["zentral_" + k] !== undefined) {
       if (k === "notify") { try { x[k] = JSON.parse(priv["zentral_" + k]); } catch (_) {} }
       else x[k] = priv["zentral_" + k];
     }
@@ -533,6 +559,66 @@
     return { body: next, created: true, category, lineStart: lineStart + (before ? 1 : 0), delta: next.length - text.length };
   }
   const hashText = (t) => { let h = 2166136261; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
+  // Inline Obsidian-style comments carry identity for note-derived items without adding visible Markdown. The token
+  // travels with its list line when the owner reorders or edits other lines, so identical entries keep independent extras.
+  const ITEM_ID_RE = /%%\s*zn-item-id:([a-z0-9_-]{4,60})\s*%%/gi;
+  function itemIdTokens(line) { return [...String(line || "").matchAll(ITEM_ID_RE)].map((m) => m[1]); }
+  const stripItemIdMarks = (line) => String(line || "").replace(ITEM_ID_RE, "");
+  function parseMarkedLine(line, heading, now) {
+    const ignored = ignoredDateTokens(line);
+    let sourceLine = stripItemIdMarks(stripDateIgnoreMarks(line));
+    const listText = sourceLine.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)(?:\[[ xX]\]\s+)?/, "");
+    const prefix = parseDatePrefix(listText, now);
+    // Ignoring a leading date disables that trigger; a dated heading may still supply its own date.
+    if (prefix && ignored.some((raw) => raw === prefix.raw.toLowerCase() || raw.startsWith(prefix.raw.toLowerCase() + " "))) {
+      const at = sourceLine.indexOf(prefix.raw);
+      if (at >= 0) sourceLine = sourceLine.slice(0, at) + sourceLine.slice(at + prefix.raw.length);
+    }
+    const dayOfHeading = heading.text ? (parseDatePrefix(heading.text, now)?.day ?? null) : null;
+    return { sourceLine, parsed: parseLine(sourceLine, now, dayOfHeading) };
+  }
+  function visitCalendarListLines(body, now, visit) {
+    const lines = String(body || "").split("\n");
+    let fence = "", heading = { level: 0, text: "" }, sec = null;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i], f = /^\s*(`{3,}|~{3,})/.exec(line);
+      if (f) { fence = !fence ? f[1][0] : (f[1][0] === fence ? "" : fence); continue; }
+      if (fence) continue;
+      const hm = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line);
+      if (hm) {
+        heading = { level: hm[1].length, text: hm[2] };
+        if (sec && sec.level > 0 && heading.level <= sec.level) sec = null;
+        continue;
+      }
+      const mk = MARKER_RE.exec(line);
+      if (mk) { sec = { category: (mk[1] || "").trim().slice(0, 80), level: heading.level }; continue; }
+      if (!sec) continue;
+      const result = parseMarkedLine(line, heading, now);
+      if (result.parsed) visit({ index: i, line, heading, category: sec.category, ...result });
+    }
+    return lines;
+  }
+  function ensureNoteItemIds(body, noteId, now = 0) {
+    const lines = String(body || "").split("\n"), seen = new Set();
+    let changed = false;
+    visitCalendarListLines(body, now, (entry) => {
+      const ids = itemIdTokens(entry.line);
+      let id = ids.find((candidate) => !seen.has(candidate)) || "";
+      if (!id) id = makeId([noteId, entry.index, entry.sourceLine, seen.size].join("|"));
+      // Existing duplicate tokens can happen when a user duplicates a whole Markdown line. Keep the first ID and
+      // generate a fresh one for the copied line so its metadata cannot collide with the original.
+      if (seen.has(id)) id = makeId([noteId, entry.index, entry.sourceLine, seen.size, Math.random()].join("|"));
+      seen.add(id);
+      if (ids.length !== 1 || ids[0] !== id) {
+        const without = stripItemIdMarks(entry.line);
+        const trailing = /\s*$/.exec(without)?.[0] || "";
+        const core = trailing ? without.slice(0, -trailing.length) : without;
+        lines[entry.index] = core + " %%zn-item-id:" + id + "%%" + trailing;
+        changed = true;
+      }
+    });
+    return { body: changed ? lines.join("\n") : String(body || ""), changed, count: seen.size };
+  }
   function extractNoteItems(body, noteId, now = 0) {
     const lines = String(body || "").split("\n");
     const out = [], seen = new Map();
@@ -550,25 +636,18 @@
       const mk = MARKER_RE.exec(line);
       if (mk) { sec = { category: (mk[1] || "").trim().slice(0, 80), level: heading.level }; continue; }
       if (!sec) continue;
-      const dayOfHeading = heading.text ? (parseDatePrefix(heading.text, now)?.day ?? null) : null;
-      const ignored = ignoredDateTokens(line);
-      let sourceLine = stripDateIgnoreMarks(line);
-      // If the ignored token is the leading date, it no longer drives the item date. In a dated heading
-      // section the heading remains the date; otherwise the line is ordinary text and is not an item.
-      const listText = sourceLine.replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, "");
-      const prefix = parseDatePrefix(listText, now);
-      if (prefix && ignored.some((raw) => raw === prefix.raw.toLowerCase() || raw.startsWith(prefix.raw.toLowerCase() + " "))) {
-        const at = sourceLine.indexOf(prefix.raw);
-        if (at >= 0) sourceLine = sourceLine.slice(0, at) + sourceLine.slice(at + prefix.raw.length);
-      }
-      const parsed = parseLine(sourceLine, now, dayOfHeading);
+      const result = parseMarkedLine(line, heading, now), sourceLine = result.sourceLine, parsed = result.parsed;
       if (!parsed) continue;
       const norm = sourceLine.replace(/\s+/g, " ").trim().toLowerCase() + "|" + heading.text;
       const n = (seen.get(norm) || 0) + 1; seen.set(norm, n);
-      const key = hashText(noteId + "|" + norm) + (n > 1 ? "-" + n : "");
-      const it = itemFromLine(parsed, { noteId, heading: heading.text, category: sec.category, src: "list", key }, now);
+      const legacyKey = hashText(noteId + "|" + norm) + (n > 1 ? "-" + n : "");
+      const lineId = itemIdTokens(line)[0] || "";
+      const key = lineId || legacyKey;
+      const it = itemFromLine(parsed, { noteId, heading: heading.text, category: sec.category, src: "list", key, legacyKey }, now);
       if (!it) continue;
-      it.id = "l" + hashText(noteId) + key;
+      it.id = lineId ? "l" + hashText(noteId) + "-" + lineId : "l" + hashText(noteId) + legacyKey;
+      it._legacyKey = legacyKey;
+      it._lineId = !!lineId;
       if (parsed.yearless) it.recurrence = ["RRULE:FREQ=YEARLY"];
       it.etag = etagOf(it);
       out.push(it);
@@ -596,28 +675,120 @@
     const categoryDefs = new Map();
     const hidden = new Set(); // noteIds whose items stay stored but are not shown (note in Trash, or its file is missing)
     const listeners = new Set();
-    let dirty = false, timer = null, chain = Promise.resolve();
+    let dirty = false, timer = null, chain = Promise.resolve(), retryCount = 0;
+    let storage = { state: "unopened", error: "", backupPath: "" }, writeBlocked = false;
     const shown = (it) => !it.x.noteId || !hidden.has(it.x.noteId);
-    const emit = (kind, id) => { for (const fn of [...listeners]) { try { fn(kind, id); } catch (e) { warn(e); } } };
-    const schedule = () => { dirty = true; if (timer !== null) clearTimer(timer); timer = setTimer(() => { timer = null; writeNow(); }, delayMs); };
+    const safeWarn = (error) => { try { warn(error); } catch (_) {} };
+    const emit = (kind, id) => { for (const fn of [...listeners]) { try { fn(kind, id); } catch (e) { safeWarn(e); } } };
+    const state = () => ({ ...storage, dirty, writeBlocked, retryCount });
+    const scheduleTimer = (ms = delayMs) => {
+      if (timer !== null) clearTimer(timer);
+      timer = setTimer(() => { timer = null; writeNow().catch(() => {}); }, ms);
+    };
+    const schedule = () => { dirty = true; if (!writeBlocked) scheduleTimer(delayMs); };
     function writeNow() {
       if (timer !== null) { clearTimer(timer); timer = null; }
       const dir = getDir();
-      if (!dirty || !dir) return Promise.resolve();
-      dirty = false;
+      if (!dirty || !dir) return chain;
+      if (writeBlocked) {
+        const error = new Error("Calendar storage is protected because its existing file could not be read safely.");
+        safeWarn(error);
+        return Promise.reject(error);
+      }
       const text = JSON.stringify({ v: 2, items: [...items.values()], categories: [...categoryDefs.values()] });
-      chain = chain.then(() => io.writeUTF8(io.join(dir, ITEMS_FILE), text, { tmpPath: io.join(dir, ITEMS_FILE + ".tmp") })).catch((e) => warn(e));
-      return chain;
+      // Clear only for this snapshot. If I/O fails, restore dirty; if a newer edit arrives while writing, its dirty
+      // flag remains set and the next queued write stores the newer snapshot.
+      dirty = false;
+      const task = chain.catch(() => {}).then(async () => {
+        try {
+          await io.writeUTF8(io.join(dir, ITEMS_FILE), text, { tmpPath: io.join(dir, ITEMS_FILE + ".tmp") });
+          retryCount = 0;
+          if (storage.state === "unopened" || storage.state === "missing" || storage.state === "recovery-pending") storage = { ...storage, state: "ready", error: "" };
+          if (dirty && timer === null && !writeBlocked) scheduleTimer(delayMs);
+          return true;
+        } catch (error) {
+          dirty = true;
+          retryCount++;
+          safeWarn(error);
+          if (retryCount <= 3 && timer === null && !writeBlocked) scheduleTimer(Math.min(delayMs * Math.pow(2, retryCount), 5000));
+          throw error;
+        }
+      });
+      chain = task;
+      return task;
     }
     return {
       async open() {
-        items.clear(); categoryDefs.clear(); hidden.clear();
+        const file = io.join(getDir(), ITEMS_FILE);
+        let text;
         try {
-          const raw = JSON.parse(await io.readUTF8(io.join(getDir(), ITEMS_FILE)));
-          for (const r of Array.isArray(raw.items) ? raw.items : []) { const it = cleanItem(r, 0); if (it && !items.has(it.id)) items.set(it.id, it); }
-          for (const r of Array.isArray(raw.categories) ? raw.categories : []) { const category = cleanCategory(r); if (category) categoryDefs.set(categoryKey(category.name), category); }
-        } catch (_) {}
+          text = await io.readUTF8(file);
+        } catch (error) {
+          const message = String(error?.message || error || "");
+          const missingError = error?.code === "ENOENT" || error?.name === "NotFoundError" || /(?:^|\b)(?:nf|not found|no such file|does not exist|NS_ERROR_FILE_NOT_FOUND)(?:\b|$)/i.test(message);
+          let exists = !missingError;
+          if (typeof io.exists === "function") {
+            try { exists = await io.exists(file); } catch (_) { exists = true; }
+          }
+          if (!exists || missingError) {
+            items.clear(); categoryDefs.clear(); hidden.clear(); dirty = false; writeBlocked = false;
+            storage = { state: "missing", error: "", backupPath: "" };
+          } else {
+            // A permission/I/O error is not an empty store. Keep existing in-memory data and prohibit overwriting
+            // the unreadable file until the caller explicitly resolves the storage problem.
+            writeBlocked = true;
+            storage = { state: "unreadable", error: String(error?.message || error), backupPath: "" };
+            safeWarn(error);
+          }
+          emit("reset");
+          return state();
+        }
+        let raw, parsedItems, parsedCategories;
+        try {
+          raw = JSON.parse(text);
+          if (!raw || typeof raw !== "object" || Array.isArray(raw) || !Array.isArray(raw.items) || (raw.categories !== undefined && !Array.isArray(raw.categories)))
+            throw new Error("Calendar file has an unsupported or damaged structure.");
+          parsedItems = raw.items.map((record) => cleanItem(record, 0));
+          parsedCategories = (Array.isArray(raw.categories) ? raw.categories : []).map(cleanCategory);
+          if (parsedItems.some((item) => !item) || parsedCategories.some((category) => !category))
+            throw new Error("Calendar file contains an invalid item or category record.");
+        } catch (error) {
+          const stamp = Math.max(0, Math.floor(Number(now()) || Date.now()));
+          const baseBackupPath = file + ".corrupt-" + stamp + ".bak";
+          let backupPath = baseBackupPath, suffix = 1;
+          if (typeof io.exists === "function") {
+            try { while (await io.exists(backupPath)) backupPath = baseBackupPath.replace(/\.bak$/, "-" + (++suffix) + ".bak"); } catch (_) {}
+          }
+          let backedUp = false;
+          try {
+            await io.writeUTF8(backupPath, String(text), { tmpPath: backupPath + ".tmp" });
+            backedUp = true;
+          } catch (backupError) { safeWarn(backupError); }
+          writeBlocked = true;
+          storage = { state: "corrupt", error: String(error?.message || error), backupPath: backedUp ? backupPath : "" };
+          safeWarn(error);
+          emit("reset");
+          return state();
+        }
+        items.clear(); categoryDefs.clear(); hidden.clear(); dirty = false; writeBlocked = false; retryCount = 0;
+        for (const it of parsedItems) if (!items.has(it.id)) items.set(it.id, it);
+        for (const category of parsedCategories) categoryDefs.set(categoryKey(category.name), category);
+        storage = { state: "ready", error: "", backupPath: "" };
         emit("reset");
+        return state();
+      },
+      storageState: state,
+      // This intentionally requires an explicit caller decision. The damaged original has already been copied to
+      // `backupPath`; unreadable files (where no backup could be made) cannot be replaced through this API.
+      replaceDamagedStore() {
+        if (!writeBlocked || storage.state !== "corrupt" || !storage.backupPath) return false;
+        writeBlocked = false;
+        storage = { ...storage, state: "recovery-pending", error: "" };
+        retryCount = 0;
+        dirty = true;
+        scheduleTimer(0);
+        emit("recovery");
+        return true;
       },
       list({ noteId = "", kind = "", category = "", includeHidden = false } = {}) {
         // includeHidden is intentionally opt-in: normal calendar views never show Trash items, while
@@ -675,27 +846,52 @@
         if (n) { schedule(); emit("remove", noteId); }
         return n;
       },
-      // Rebuilds the items that come from the note's marked lists. Returns true when anything changed.
+      // Auto-managed hidden IDs travel with Markdown lines, giving identical repeated rows stable per-line identity.
+      ensureNoteIds(noteId, body) { return ensureNoteItemIds(body, noteId, now()); },
+      // Rebuild the note-derived items. During upgrade, migrate extras from legacy IDs using the old content/ordinal key.
+      // Thereafter exact line IDs win; unique legacy matches are safe, while an unidentified duplicate never inherits
+      // another duplicate's metadata.
       syncNote(noteId, body) {
         const had = [...items.values()].filter((it) => it.x.noteId === noteId && it.x.src === "list");
         if (!had.length && !/%%\s*calendar/i.test(String(body || ""))) return false;
-        const fresh = extractNoteItems(body, noteId, now()), keep = new Map(had.map((it) => [it.id, it]));
+        const fresh = extractNoteItems(body, noteId, now());
+        const exact = new Map(had.map((it) => [it.id, it]));
+        const byLegacy = new Map();
+        for (const it of had) {
+          const k = String(it.x.legacyKey || it.x.key || "");
+          if (!k) continue;
+          if (!byLegacy.has(k)) byLegacy.set(k, []);
+          byLegacy.get(k).push(it);
+        }
+        const group = (key) => String(key || "").replace(/-\d+$/, "");
+        const oldCounts = new Map(), newCounts = new Map();
+        for (const it of had) { const k = group(it.x.legacyKey || it.x.key); oldCounts.set(k, (oldCounts.get(k) || 0) + 1); }
+        for (const it of fresh) { const k = group(it._legacyKey); newCounts.set(k, (newCounts.get(k) || 0) + 1); }
+        const usedOld = new Set(), retainedOld = new Set();
         let changed = false;
-        const nextIds = new Set();
         for (const f of fresh) {
-          nextIds.add(f.id);
-          const old = keep.get(f.id);
-          let next = f;
+          let old = exact.get(f.id) || null;
+          if (old && usedOld.has(old.id)) old = null;
+          if (!old && f._legacyKey) {
+            const candidates = (byLegacy.get(f._legacyKey) || []).filter((it) => !usedOld.has(it.id));
+            const groupKey = group(f._legacyKey), duplicate = (newCounts.get(groupKey) || 0) > 1 || (oldCounts.get(groupKey) || 0) > 1;
+            if (candidates.length === 1 && !duplicate) old = candidates[0];
+            else if (duplicate && f._lineId && candidates.length === 1 && !candidates[0].x.legacyKey && candidates[0].x.key === f._legacyKey && oldCounts.get(groupKey) === newCounts.get(groupKey)) old = candidates[0];
+          }
+          if (old) usedOld.add(old.id);
+          let next = cleanItem(f, 0);
           if (old) {
-            // the line is unchanged: keep the extras and the time the person may have dragged it to
             next = cleanItem({ ...f, start: old.start, end: old.end, status: old.status, reminders: old.reminders, recurrence: old.recurrence.length ? old.recurrence : f.recurrence, updated: old.updated,
               x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify } }, 0);
             next.x.heading = f.x.heading; next.x.category = f.x.category;
             next.etag = etagOf(next);
+            if (old.id === next.id) retainedOld.add(old.id);
           }
           if (!old || JSON.stringify(old) !== JSON.stringify(next)) { items.set(next.id, next); changed = true; emit("change", next.id); }
         }
-        for (const it of had) if (!nextIds.has(it.id)) { items.delete(it.id); changed = true; emit("remove", it.id); }
+        // A legacy item matched during migration may have a different new ID. Its old record must be replaced,
+        // not retained alongside the migrated one.
+        for (const it of had) if (!retainedOld.has(it.id)) { items.delete(it.id); changed = true; emit("remove", it.id); }
         if (changed) schedule();
         return changed;
       },
@@ -736,57 +932,120 @@
     for (const part of m[1].split(";")) { const [k, v] = part.split("="); if (k && v !== undefined) o[k.toUpperCase()] = v; }
     if (!["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(o.FREQ)) return null;
     const interval = Math.max(1, Math.min(999, parseInt(o.INTERVAL, 10) || 1));
-    const count = o.COUNT ? Math.max(1, Math.min(5000, parseInt(o.COUNT, 10) || 0)) : 0;
+    const count = o.COUNT ? Math.max(1, Math.min(1000000, parseInt(o.COUNT, 10) || 0)) : 0;
     let until = 0;
     if (o.UNTIL) { const u = /^(\d{4})(\d{2})(\d{2})/.exec(o.UNTIL); if (u) until = addDays(new Date(+u[1], +u[2] - 1, +u[3]).getTime(), 1); }
-    const byday = o.BYDAY ? o.BYDAY.split(",").map((d) => DAY_CODES.indexOf(d.slice(-2))).filter((n) => n >= 0) : [];
+    const byday = o.BYDAY ? [...new Set(o.BYDAY.split(",").map((d) => DAY_CODES.indexOf(d.slice(-2))).filter((n) => n >= 0))].sort((a, b) => a - b) : [];
     return { freq: o.FREQ, interval, count, until, byday };
   }
+  // Local calendar-day ordinal, immune to 23/25-hour DST days.
+  function localDayOrdinal(ms) {
+    const d = new Date(ms);
+    return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY_MS);
+  }
+  function recurrencePeriodIndex(rule, base, targetMs) {
+    const target = new Date(targetMs), targetDay = localDayOrdinal(targetMs), baseDay = localDayOrdinal(base.getTime());
+    if (rule.freq === "DAILY") return Math.max(0, Math.floor((targetDay - baseDay) / rule.interval) - 1);
+    if (rule.freq === "WEEKLY") {
+      const targetWeek = targetDay - target.getDay(), baseWeek = baseDay - base.getDay();
+      return Math.max(0, Math.floor((targetWeek - baseWeek) / (7 * rule.interval)) - 1);
+    }
+    if (rule.freq === "MONTHLY") {
+      const months = (target.getFullYear() - base.getFullYear()) * 12 + target.getMonth() - base.getMonth();
+      return Math.max(0, Math.floor(months / rule.interval) - 1);
+    }
+    return Math.max(0, Math.floor((target.getFullYear() - base.getFullYear()) / rule.interval) - 1);
+  }
+  // Occurrence dates for a frequency period. Invalid month/year dates (e.g. the 31st in February) are skipped,
+  // matching the existing rule semantics rather than overflowing into the following month.
+  function recurrencePeriodDates(rule, base, index) {
+    const y = base.getFullYear(), m = base.getMonth(), d = base.getDate();
+    if (rule.freq === "DAILY") return [new Date(y, m, d + index * rule.interval)];
+    if (rule.freq === "WEEKLY") {
+      const week = new Date(y, m, d - base.getDay() + index * 7 * rule.interval);
+      const days = rule.byday.length ? rule.byday : [base.getDay()];
+      return [...days].sort((a, b) => a - b).map((weekday) => new Date(week.getFullYear(), week.getMonth(), week.getDate() + weekday));
+    }
+    if (rule.freq === "MONTHLY") {
+      const first = new Date(y, m + index * rule.interval, 1);
+      const candidate = new Date(first.getFullYear(), first.getMonth(), d);
+      return candidate.getDate() === d ? [candidate] : [];
+    }
+    const candidate = new Date(y + index * rule.interval, m, d);
+    return candidate.getFullYear() === y + index * rule.interval && candidate.getMonth() === m && candidate.getDate() === d ? [candidate] : [];
+  }
+  const gcd = (a, b) => { while (b) [a, b] = [b, a % b]; return Math.abs(a); };
+  // COUNT is ordinal from DTSTART. Compute the number before a fast-forwarded period without replaying the history.
+  // Daily/weekly are arithmetic; monthly/yearly validity repeats on the Gregorian 400-year cycle.
+  function recurrenceCountBefore(rule, base, period) {
+    if (period <= 0 || !rule.count) return 0;
+    if (rule.freq === "DAILY") return period;
+    if (rule.freq === "WEEKLY") {
+      const days = rule.byday.length ? rule.byday : [base.getDay()];
+      const firstWeekCount = days.filter((weekday) => weekday >= base.getDay()).length;
+      return firstWeekCount + (period - 1) * days.length;
+    }
+    const cycle = (rule.freq === "MONTHLY" ? 4800 : 400) / gcd(rule.freq === "MONTHLY" ? 4800 : 400, rule.interval);
+    let fullCycles = Math.floor(period / cycle), remainder = period % cycle;
+    let perCycle = 0, tail = 0;
+    for (let i = 0; i < cycle; i++) if (recurrencePeriodDates(rule, base, i).length) perCycle++;
+    for (let i = 0; i < remainder; i++) if (recurrencePeriodDates(rule, base, i).length) tail++;
+    return fullCycles * perCycle + tail;
+  }
+  function recurrencePeriodAnchor(rule, base, index) {
+    const y = base.getFullYear(), m = base.getMonth(), d = base.getDate();
+    if (rule.freq === "DAILY") return new Date(y, m, d + index * rule.interval).getTime();
+    if (rule.freq === "WEEKLY") return new Date(y, m, d - base.getDay() + index * 7 * rule.interval).getTime();
+    if (rule.freq === "MONTHLY") return new Date(y, m + index * rule.interval, 1).getTime();
+    return new Date(y + index * rule.interval, m, 1).getTime();
+  }
   // Occurrences of a repeating item inside [from, to): copies with id "<id>@<startMs>" and x.series = the original id.
-  // The first occurrence is the item itself. Items without a usable RRULE come back as they are (if they touch the range).
+  // The range is fast-forwarded to just before its first possible overlap. COUNT still counts from DTSTART, but the
+  // number of earlier occurrences is computed without replaying every old daily/weekly period.
   function expandItem(it, from, to) {
     const rule = (it.recurrence || []).map(parseRule).find(Boolean);
     if (!rule) return itemsInRange([it], from, to);
-    const [s0, e0] = itemRange(it), len = e0 - s0, allDay = isAllDay(it);
+    if (!(Number.isFinite(from) && Number.isFinite(to)) || to <= from) return [];
+    const [s0, e0] = itemRange(it), len = Math.max(0, e0 - s0), allDay = isAllDay(it), reminder = isReminder(it);
     const base = new Date(s0), out = [];
-    const starts = [];
-    const push = (ms) => { if (ms >= s0) starts.push(ms); };
-    const at = (d) => (allDay ? d.getTime() : new Date(d.getFullYear(), d.getMonth(), d.getDate(), base.getHours(), base.getMinutes()).getTime());
     const limit = Math.min(to, rule.until || Infinity);
-    let n = 0;
-    for (let i = 0; i < 3000 && n < (rule.count || 5000); i++) {
-      let cand = [];
-      if (rule.freq === "DAILY") cand = [at(new Date(base.getFullYear(), base.getMonth(), base.getDate() + i * rule.interval))];
-      else if (rule.freq === "WEEKLY") {
-        const ws = new Date(base.getFullYear(), base.getMonth(), base.getDate() - base.getDay() + i * 7 * rule.interval);
-        const days = rule.byday.length ? [...rule.byday].sort((a, b) => a - b) : [base.getDay()];
-        cand = days.map((dw) => at(new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + dw)));
-      } else if (rule.freq === "MONTHLY") { const d = new Date(base.getFullYear(), base.getMonth() + i * rule.interval, base.getDate()); cand = d.getDate() === base.getDate() ? [at(d)] : []; }
-      else { const d = new Date(base.getFullYear() + i * rule.interval, base.getMonth(), base.getDate()); cand = d.getDate() === base.getDate() ? [at(d)] : []; }
-      for (const c of cand) {
+    if (limit <= s0) return [];
+    // Events may start before `from` and still overlap it; reminders have no duration and must start in range.
+    const seekFrom = reminder ? from : from - len;
+    let period = recurrencePeriodIndex(rule, base, seekFrom);
+    // Count all occurrences in earlier periods so COUNT remains correct after fast-forwarding.
+    const countBefore = recurrenceCountBefore(rule, base, period);
+    if (rule.count && countBefore >= rule.count) return [];
+    let ordinal = countBefore;
+    const timedAt = (d) => allDay ? new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+      : new Date(d.getFullYear(), d.getMonth(), d.getDate(), base.getHours(), base.getMinutes(), base.getSeconds(), base.getMilliseconds()).getTime();
+    // This is a guard against malformed/extreme inputs, not a historical 3,000-period cap: normal views iterate only
+    // the periods intersecting their requested range. A 100k-period safety boundary is well beyond realistic UI ranges.
+    for (let scanned = 0; scanned < 100000; scanned++, period++) {
+      if (recurrencePeriodAnchor(rule, base, period) >= limit) break;
+      const candidates = recurrencePeriodDates(rule, base, period).map(timedAt).sort((a, b) => a - b);
+      for (const c of candidates) {
         if (c < s0) continue;
-        if (rule.count && n >= rule.count) break;
-        n++;
         if (c >= limit) return out;
-        starts.length = 0; push(c);
+        if (rule.count && ordinal >= rule.count) return out;
+        ordinal++;
         const end = c + len;
-        const touches = isReminder(it) ? c >= from && c < to : c < to && end > from;
-        if (touches) {
-          const occ = JSON.parse(JSON.stringify(it));
-          occ.id = c === s0 ? it.id : it.id + "@" + c;
-          occ.x.series = it.id;
-          occ.start = allDay ? { date: ymd(new Date(c)) } : { dateTime: iso(c) };
-          if (it.end) occ.end = allDay ? { date: ymd(new Date(c + len)) } : { dateTime: iso(c + len) };
-          out.push(occ);
-        }
+        const touches = reminder ? c >= from && c < to : c < to && end > from;
+        if (!touches) continue;
+        const occ = JSON.parse(JSON.stringify(it));
+        occ.id = c === s0 ? it.id : it.id + "@" + c;
+        occ.x.series = it.id;
+        occ.start = allDay ? { date: ymd(new Date(c)) } : { dateTime: iso(c) };
+        if (it.end) occ.end = allDay ? { date: ymd(new Date(c + len)) } : { dateTime: iso(c + len) };
+        out.push(occ);
       }
-      if (cand.length && Math.min(...cand) >= limit) break;
     }
     return out;
   }
   // Like itemsInRange, but repeating items are expanded.
   function expandRange(items, from, to) {
-    return items.filter(live).flatMap((it) => expandItem(it, from, to)).sort((a, b) => itemRange(a)[0] - itemRange(b)[0] || (a.id < b.id ? -1 : 1));
+    return items.filter(live).flatMap((it) => it.x.series ? itemsInRange([it], from, to) : expandItem(it, from, to))
+      .sort((a, b) => itemRange(a)[0] - itemRange(b)[0] || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
 
   // ---------- working hours and free time ----------
@@ -898,9 +1157,9 @@
   }
 
   const api = {
-    KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
+    KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, itemsFromNoteReminders, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, daysForward, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, itemsFromNoteReminders, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

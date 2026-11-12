@@ -44,7 +44,7 @@ const BODY = "# Plan\n\n## Shifts\n%%calendar: Work%%\n- 2026-11-12 06:00-14:00 
     assert.ok(st.items, "item store exposed");
     const n = st.create(BODY);
     assert.equal(st.items.list({ noteId: n.id }).length, 2);
-    st.update(n.id, BODY + "- 2026-11-14 Dentist\n");
+    st.update(n.id, n.body + "- 2026-11-14 Dentist\n");
     assert.equal(st.items.list({ noteId: n.id }).length, 3, "a new line becomes an item on update");
     assert.equal(st.items.list({ noteId: n.id, kind: "reminder" }).length, 2, "one note stores multiple independent reminders");
     await st.flush();
@@ -68,7 +68,7 @@ const BODY = "# Plan\n\n## Shifts\n%%calendar: Work%%\n- 2026-11-12 06:00-14:00 
     st.items.upsert({ ...call, x: { ...call.x, calNote: "flowers" } });
     st.trash(n.id);
     assert.equal(st.items.list().length, 0, "trashed note: nothing on the calendar");
-    st.update(n.id, BODY); // a stray edit while trashed must not bring them back
+    st.update(n.id, st.get(n.id).body + "\nstray edit"); // a stray edit while trashed must not bring them back or strip line IDs
     assert.equal(st.items.list().length, 0);
     st.restore(n.id);
     assert.equal(st.items.list({ noteId: n.id }).length, 2);
@@ -105,12 +105,108 @@ const BODY = "# Plan\n\n## Shifts\n%%calendar: Work%%\n- 2026-11-12 06:00-14:00 
   await test("a file changed by another app is re-read and its items follow (remote reload)", async () => {
     const io = fakeIO(), st = mk(io); await st.open();
     const n = st.create(BODY); await st.flush();
-    io.files.set("/n/" + n.id + ".md", { text: BODY + "- 2026-11-15 Remote line\n", mtime: clock + 60000 });
+    io.files.set("/n/" + n.id + ".md", { text: st.get(n.id).body + "- 2026-11-15 Remote line\n", mtime: clock + 60000 });
     await st.refresh();
+    await st.flush(); // persist auto-managed IDs before simulating a separate external file deletion
     assert.ok(st.items.list().some((i) => i.summary === "Remote line"));
     io.files.delete("/n/" + n.id + ".md"); await st.refresh();
     assert.equal(st.items.list().length, 0, "file gone: items hidden, not deleted");
     assert.ok(st.items.isHidden(n.id));
+  });
+
+  await test("stable hidden line IDs preserve duplicate reminder metadata across reorder, edit and deletion", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const body = "%%calendar: Work%%\n- 2026-11-18 09:00-10:00 Repeated\n- 2026-11-18 09:00-10:00 Repeated\n";
+    const note = st.create(body);
+    let copies = st.items.list({ noteId: note.id }).sort((a, b) => a.x.key.localeCompare(b.x.key));
+    assert.equal(copies.length, 2);
+    assert.notEqual(copies[0].x.key, copies[1].x.key, "each identical row has its own hidden identity token");
+    st.items.upsert({ ...copies[0], start: { dateTime: new Date(new Date(copies[0].start.dateTime).getTime() + 2 * 3600000).toISOString() }, x: { ...copies[0].x, calNote: "belongs to copy one", moved: "1" } });
+    st.items.upsert({ ...copies[1], x: { ...copies[1].x, calNote: "belongs to copy two", notify: { due: { enabled: false } } } });
+    // Reorder the identical text rows; their inline identity comments move with the rows.
+    const lines = st.get(note.id).body.split("\n");
+    const rowIndexes = lines.map((line, i) => line.includes("zn-item-id:") ? i : -1).filter((i) => i >= 0);
+    assert.equal(rowIndexes.length, 2);
+    [lines[rowIndexes[0]], lines[rowIndexes[1]]] = [lines[rowIndexes[1]], lines[rowIndexes[0]]];
+    st.update(note.id, lines.join("\n"));
+    copies = st.items.list({ noteId: note.id });
+    assert.equal(copies.length, 2);
+    assert.equal(copies.find((it) => it.x.key === copies[0].x.key)?.x.calNote, copies[0].x.calNote);
+    assert.deepEqual(copies.map((it) => it.x.calNote).sort(), ["belongs to copy one", "belongs to copy two"]);
+    // Editing the visible title while keeping its marker keeps its exact item ID and extras.
+    const first = copies.find((it) => it.x.calNote === "belongs to copy one");
+    st.update(note.id, st.get(note.id).body.replace("Repeated %%zn-item-id:" + first.x.key, "Renamed %%zn-item-id:" + first.x.key));
+    const renamed = st.items.get(first.id);
+    assert.equal(renamed.summary, "Renamed");
+    assert.equal(renamed.x.calNote, "belongs to copy one");
+    // Deleting the other duplicate leaves this exact row and its metadata intact.
+    const current = st.get(note.id).body.split("\n");
+    const other = st.items.list({ noteId: note.id }).find((it) => it.id !== first.id);
+    st.update(note.id, current.filter((line) => !line.includes("zn-item-id:" + other.x.key)).join("\n"));
+    copies = st.items.list({ noteId: note.id });
+    assert.deepEqual(copies.map((it) => it.id), [first.id]);
+    assert.equal(copies[0].x.calNote, "belongs to copy one");
+    assert.equal(copies[0].x.moved, "1");
+  });
+
+  await test("legacy calendar items migrate to hidden line IDs without losing unambiguous metadata", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const body = "%%calendar: Work%%\n- 2026-11-21 09:00 Dentist\n- 2026-11-22 10:00 Call\n";
+    const note = st.create(body);
+    const before = st.items.list({ noteId: note.id });
+    st.items.upsert({ ...before[0], x: { ...before[0].x, calNote: "keep through upgrade" } });
+    // Simulate a store written by the previous version: remove line tokens from the note but keep item metadata in calendar.json.
+    const legacy = st.get(note.id).body.replace(/\s%%zn-item-id:[^%]+%%/g, "");
+    st.update(note.id, legacy);
+    const migratedBody = st.stabilizeItems(note.id);
+    assert.match(migratedBody, /%%zn-item-id:/, "the editor commit inserts managed IDs");
+    const after = st.items.list({ noteId: note.id });
+    assert.equal(after.length, 2);
+    assert.equal(after.find((it) => it.summary === "Dentist").x.calNote, "keep through upgrade");
+    assert.equal(new Set(after.map((it) => it.x.key)).size, 2, "IDs remain unique");
+  });
+
+  await test("failed calendar writes preserve dirty state and a later flush retries the same data", async () => {
+    const io = fakeIO(), items = cal.createItemStore({ io, getDir: () => "/n", now: () => clock, setTimer: () => 0, clearTimer() {}, warn() {} });
+    await items.open();
+    const write = io.writeUTF8.bind(io); let failOnce = true;
+    io.writeUTF8 = async (...args) => { if (failOnce) { failOnce = false; throw new Error("simulated disk full"); } return write(...args); };
+    items.upsert({ id: "manual-retry", summary: "Retry me", start: { dateTime: new Date(clock + 3600000).toISOString() }, x: { kind: "reminder", src: "manual" } });
+    await assert.rejects(items.flush(), /simulated disk full/);
+    assert.equal(items.storageState().dirty, true, "failed snapshot remains dirty");
+    assert.equal(io.files.has("/n/calendar.json"), false, "failed write did not create a false-success file");
+    await items.flush();
+    assert.equal(items.storageState().dirty, false, "successful retry clears dirty state");
+    assert.equal(items.storageState().state, "ready");
+    assert.equal(JSON.parse(io.files.get("/n/calendar.json").text).items[0].id, "manual-retry");
+  });
+
+  await test("corrupt calendar.json is backed up and protected until explicit recovery", async () => {
+    const io = fakeIO(), damaged = "{ this is not valid JSON";
+    io.files.set("/n/calendar.json", { text: damaged, mtime: clock });
+    const items = cal.createItemStore({ io, getDir: () => "/n", now: () => clock, setTimer: () => 0, clearTimer() {}, warn() {} });
+    const status = await items.open();
+    assert.equal(status.state, "corrupt");
+    assert.ok(status.backupPath && io.files.get(status.backupPath)?.text === damaged, "raw damaged contents are copied before recovery");
+    items.upsert({ id: "manual-after-recovery", summary: "Preserve me", start: { dateTime: new Date(clock + 7200000).toISOString() }, x: { kind: "reminder", src: "manual" } });
+    await assert.rejects(items.flush(), /protected/);
+    assert.equal(io.files.get("/n/calendar.json").text, damaged, "automatic saves never overwrite a damaged source file");
+    assert.equal(items.replaceDamagedStore(), true, "replacement requires and accepts an explicit recovery action");
+    await items.flush();
+    assert.equal(JSON.parse(io.files.get("/n/calendar.json").text).items[0].id, "manual-after-recovery");
+    assert.equal(items.storageState().state, "ready");
+  });
+
+  await test("unreadable calendar file is not treated as missing and cannot be silently replaced", async () => {
+    const io = fakeIO(); io.files.set("/n/calendar.json", { text: JSON.stringify({ v: 2, items: [] }), mtime: clock });
+    io.readUTF8 = async () => { throw new Error("permission denied"); };
+    const items = cal.createItemStore({ io, getDir: () => "/n", now: () => clock, setTimer: () => 0, clearTimer() {}, warn() {} });
+    const status = await items.open();
+    assert.equal(status.state, "unreadable");
+    assert.equal(status.backupPath, "");
+    assert.equal(items.replaceDamagedStore(), false, "unreadable data cannot be replaced without a verified backup");
+    items.upsert({ id: "must-not-overwrite", summary: "Keep file", start: { dateTime: new Date(clock + 3600000).toISOString() }, x: { kind: "reminder" } });
+    await assert.rejects(items.flush(), /protected/);
   });
 
   await test("folder-to-Trash hides reminder items but the destructive-action view can still count them", async () => {

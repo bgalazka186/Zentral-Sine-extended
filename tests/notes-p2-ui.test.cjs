@@ -429,7 +429,7 @@ async function test(name, fn) { await fn(); passed++; console.log("ok -", name);
     const embedded = qa(".zn-date-chip").find((b) => b.dataset.raw === "10-08");
     embedded.dispatchEvent(new Ev("contextmenu", { bubbles: true, clientX: 20, clientY: 20 }));
     menuItem("Not a date").click();
-    assert.match(store.get(n.id).body, /10-08%%zn-date-ignore:10-08%%/, "the ignore mark is stored in the note text");
+    assert.ok(store.get(n.id).body.includes("%%zn-date-ignore:10-08%%"), "the ignore mark is stored in the note text even when a stable line ID is also present");
     assert.equal(store.items.list({ noteId: n.id }).length, 2, "an ignored date inside a summary does not remove the event");
     assert.equal(qa(".zn-date-chip").some((b) => b.dataset.raw === "10-08" && b.dataset.line === "3"), false, "the ignored occurrence is no longer a chip");
     const leading = qa(".zn-date-chip").find((b) => b.dataset.raw === "10-08");

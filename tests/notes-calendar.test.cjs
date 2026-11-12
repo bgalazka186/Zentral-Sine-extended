@@ -53,6 +53,15 @@ test("parseDateText: extended numeric and English, German, Polish month-name for
   assert.deepEqual(annual.recurrence, ["RRULE:FREQ=YEARLY"], "a yearless month-name line repeats annually");
 });
 
+test("relative month/year offsets clamp to the last valid target date", () => {
+  const jan31 = day(2026, 1, 31), leapJan31 = day(2024, 1, 31), leapDay = day(2024, 2, 29), aug31 = day(2026, 8, 31);
+  assert.equal(cal.parseDateText("@+1m", jan31), day(2026, 2, 28), "Jan 31 + one month clamps to Feb 28");
+  assert.equal(cal.parseDateText("@+1m", leapJan31), day(2024, 2, 29), "leap-year February keeps Feb 29");
+  assert.equal(cal.parseDateText("@+1y", leapDay), day(2025, 2, 28), "Feb 29 + one year clamps to Feb 28");
+  assert.equal(cal.parseDateText("@-6m", aug31), day(2026, 2, 28), "negative month offsets clamp too");
+  assert.equal(cal.parseDateText("@+1m", day(2026, 12, 31)), day(2027, 1, 31), "month offsets cross years");
+});
+
 test("inlineDateTokens: visible date forms, relative tokens, time suffix and ambiguous clock protection", () => {
   const tokens = cal.inlineDateTokens("@today 2026-11-03 10-08 03.12. 03.12 03:12 25 listopada 2026 November 25, 2026 2026-11-04 14:37", NOW);
   assert.deepEqual(tokens.map((x) => [x.raw, x.ymd, x.time]), [
@@ -70,6 +79,7 @@ test("inlineDateTokens: visible date forms, relative tokens, time suffix and amb
 });
 
 test("parseTimeRange and parseLine", () => {
+  assert.equal(cal.parseLine("- Call 2026-11-20", NOW), null, "list parsing is intentionally prefix-only; embedded dates do not turn prose into events");
   assert.equal(cal.parseLine("- 03.12. Anna", NOW).day, day(2026, 12, 3), "trailing dot = day-month, not 03:12");
   assert.deepEqual([cal.parseLine("- 03.12 Anna", NOW)?.startMin, cal.parseLine("- 03:12 Anna", NOW, day(2026, 11, 12))?.startMin], [undefined, 192], "without the dot it stays a clock time");
   assert.deepEqual(cal.parseTimeRange("06:00-14:00"), { startMin: 360, endMin: 840 });
@@ -108,6 +118,21 @@ test("itemFromLine: date only = all-day reminder, time = reminder, time range = 
   const t = p("2026-11-20 14:00 Call"); assert.equal(t.x.kind, "reminder"); assert.ok(t.start.dateTime);
   const w = p("2026-11-20 06:00-14:00 Work"); assert.equal(w.x.kind, "event"); assert.deepEqual(cal.itemRange(w).map((v) => v / 3600000 % 24 | 0).length, 2);
   assert.equal(cal.itemRange(w)[1] - cal.itemRange(w)[0], 8 * 3600000);
+});
+
+test("itemFromLine: overnight and equal-clock ranges are events ending on the next day", () => {
+  const overnight = cal.itemFromLine(cal.parseLine("- 2026-11-12 22:00-06:00 Night shift", NOW), { noteId: "n1" }, NOW);
+  assert.equal(overnight.x.kind, "event");
+  assert.equal(cal.itemRange(overnight)[1] - cal.itemRange(overnight)[0], 8 * 60 * 60000);
+  assert.equal(new Date(cal.itemRange(overnight)[1]).getDate(), 13);
+  assert.equal(cal.itemsInRange([overnight], day(2026, 11, 12), day(2026, 11, 13)).length, 1, "visible on its start date");
+  assert.equal(cal.itemsInRange([overnight], day(2026, 11, 13), day(2026, 11, 14)).length, 1, "also visible on the following date");
+  const lanes1 = cal.layoutDay([overnight], day(2026, 11, 12));
+  const lanes2 = cal.layoutDay([overnight], day(2026, 11, 13));
+  assert.deepEqual([lanes1[0].startMin, lanes1[0].endMin], [1320, 1440]);
+  assert.deepEqual([lanes2[0].startMin, lanes2[0].endMin], [0, 360]);
+  const full = cal.itemFromLine(cal.parseLine("- 2026-11-12 09:00-09:00 Full day", NOW), {}, NOW);
+  assert.equal(cal.itemRange(full)[1] - cal.itemRange(full)[0], 24 * 60 * 60000, "equal clocks mean 24 hours");
 });
 
 test("itemsInRange: events overlap, reminders only by start, cancelled hidden", () => {
@@ -155,6 +180,15 @@ test("monthGrid: 6 weeks, Monday or Sunday start, covers the month", () => {
   assert.ok(g.flat().includes(day(2026, 11, 30)));
 });
 
+test("weekDays returns seven Monday-first local midnights containing the selected day", () => {
+  const week = cal.weekDays(day(2026, 11, 11)); // Wednesday
+  assert.equal(week.length, 7);
+  assert.equal(week[0], day(2026, 11, 9));
+  assert.equal(week[3], day(2026, 11, 12));
+  assert.equal(week[6], day(2026, 11, 15));
+  assert.deepEqual(cal.weekDays(day(2026, 11, 11), 0), [day(2026, 11, 8), day(2026, 11, 9), day(2026, 11, 10), day(2026, 11, 11), day(2026, 11, 12), day(2026, 11, 13), day(2026, 11, 14)]);
+});
+
 test("daysForward and upcoming", () => {
   const trip = ev("Trip", at(2026, 11, 12, 20), at(2026, 11, 14, 8));
   const r = cal.makeItem({ summary: "R", start: { date: "2026-11-13" } }, NOW);
@@ -184,6 +218,9 @@ test("moveItem and resizeItem: snapping, duration kept, minimum length, all-day 
   assert.equal(cal.moveItem(rem, 3600000).end, undefined);
   assert.equal(cal.resizeItem(rem, "end", 3600000), rem);
   assert.notEqual(m.etag, e.etag);
+  const fixedNow = at(2026, 11, 12, 18, 45);
+  assert.equal(cal.moveItem(e, 0, 15, fixedNow).updated, new Date(fixedNow).toISOString(), "move accepts an injected timestamp");
+  assert.equal(cal.resizeItem(e, "end", 15 * 60000, 15, () => fixedNow).updated, new Date(fixedNow).toISOString(), "resize accepts an injected clock function");
 });
 
 test("Google round trip keeps kind, note link and calendar note", () => {
@@ -217,6 +254,43 @@ test("recurrence: daily, weekly BYDAY, monthly skip, COUNT, UNTIL, reminders", (
   assert.deepEqual(cal.expandRange([y], day(2026, 8, 1), day(2027, 9, 1)).map((o) => o.start.date), ["2026-08-10", "2027-08-10"]);
   assert.equal(cal.expandRange([cal.makeItem({ summary: "x", start: { date: "2026-11-01" }, recurrence: ["RRULE:FREQ=HOURLY"] }, NOW)], day(2026, 11, 1), day(2026, 12, 1)).length, 1, "unsupported rule = single item");
   assert.equal(cal.parseRule("nope"), null);
+});
+
+test("recurrence fast-forwards old daily series and preserves COUNT", () => {
+  const old = cal.makeItem({ summary: "Daily", start: { dateTime: new Date(at(2010, 1, 1, 9)).toISOString() }, end: { dateTime: new Date(at(2010, 1, 1, 9, 30)).toISOString() }, recurrence: ["RRULE:FREQ=DAILY"], x: { kind: "event" } }, NOW);
+  const current = cal.expandRange([old], day(2026, 11, 11), day(2026, 11, 14));
+  assert.deepEqual(current.map((it) => cal.ymd(new Date(cal.itemRange(it)[0]))), ["2026-11-11", "2026-11-12", "2026-11-13"], "series older than 3,000 daily periods still appears in current range");
+  assert.ok(current[0].id.includes("@"), "current occurrence carries its deterministic occurrence ID");
+  const finite = cal.makeItem({ summary: "Finite", start: { dateTime: new Date(at(2010, 1, 1, 9)).toISOString() }, recurrence: ["RRULE:FREQ=DAILY;COUNT=100"] }, NOW);
+  assert.equal(cal.expandRange([finite], day(2026, 11, 11), day(2026, 11, 14)).length, 0, "COUNT is still measured from DTSTART");
+  const enough = cal.makeItem({ summary: "Enough", start: { dateTime: new Date(at(2010, 1, 1, 9)).toISOString() }, recurrence: ["RRULE:FREQ=DAILY;COUNT=7000"] }, NOW);
+  assert.equal(cal.expandRange([enough], day(2026, 11, 11), day(2026, 11, 14)).length, 3, "a long COUNT series fast-forwards but still includes its current instances");
+  const oldMonthly = cal.makeItem({ summary: "Month end", start: { date: "1800-01-31" }, recurrence: ["RRULE:FREQ=MONTHLY;COUNT=10000"] }, NOW);
+  assert.deepEqual(cal.expandRange([oldMonthly], day(2026, 12, 1), day(2027, 1, 2)).map((it) => it.start.date), ["2026-12-31"], "monthly COUNT uses the Gregorian validity cycle when fast-forwarding old series");
+  const leapYearly = cal.makeItem({ summary: "Leap", start: { date: "2000-02-29" }, recurrence: ["RRULE:FREQ=YEARLY;COUNT=20"] }, NOW);
+  assert.deepEqual(cal.expandRange([leapYearly], day(2024, 1, 1), day(2025, 1, 1)).map((it) => it.start.date), ["2024-02-29"], "yearly COUNT preserves skipped non-leap dates");
+});
+
+test("fast-forward retains weekly BYDAY ordinal, UNTIL and overlapping multi-day events", () => {
+  const weekly = cal.makeItem({ summary: "Workout", start: { dateTime: new Date(at(2010, 1, 4, 8)).toISOString() }, end: { dateTime: new Date(at(2010, 1, 4, 9)).toISOString() }, recurrence: ["RRULE:FREQ=WEEKLY;BYDAY=MO,WE;COUNT=2000"] }, NOW);
+  const occ = cal.expandRange([weekly], day(2026, 11, 9), day(2026, 11, 13));
+  assert.deepEqual(occ.map((it) => cal.ymd(new Date(cal.itemRange(it)[0]))), ["2026-11-09", "2026-11-11"]);
+  const ended = cal.makeItem({ summary: "Ended", start: { date: "2010-01-01" }, recurrence: ["RRULE:FREQ=DAILY;UNTIL=20100110"] }, NOW);
+  assert.equal(cal.expandRange([ended], day(2026, 11, 9), day(2026, 11, 13)).length, 0, "UNTIL prevents occurrences after its inclusive date");
+  const span = cal.makeItem({ summary: "Long meeting", start: { dateTime: new Date(at(2026, 11, 10, 22)).toISOString() }, end: { dateTime: new Date(at(2026, 11, 12, 2)).toISOString() }, recurrence: ["RRULE:FREQ=DAILY;COUNT=4"], x: { kind: "event" } }, NOW);
+  const clipped = cal.expandRange([span], day(2026, 11, 11), day(2026, 11, 12));
+  assert.deepEqual(clipped.map((it) => cal.ymd(new Date(cal.itemRange(it)[0]))), ["2026-11-10", "2026-11-11"], "fast-forward includes events that began before the range but still overlap it");
+});
+
+test("busy ranges and free slots expand recurring events automatically", () => {
+  const daily = cal.makeItem({ summary: "Daily meeting", start: { dateTime: new Date(at(2026, 11, 10, 10)).toISOString() }, end: { dateTime: new Date(at(2026, 11, 10, 11)).toISOString() }, recurrence: ["RRULE:FREQ=DAILY"], x: { kind: "event" } }, NOW);
+  const from = day(2026, 11, 12), to = day(2026, 11, 13);
+  assert.deepEqual(cal.busyRanges([daily], from, to), [[at(2026, 11, 12, 10), at(2026, 11, 12, 11)]], "busy ranges include today's occurrence of an old series");
+  assert.deepEqual(cal.freeSlots([daily], from, to, 60, { work: { days: [4], startMin: 9 * 60, endMin: 12 * 60 } }), [
+    [at(2026, 11, 12, 9), at(2026, 11, 12, 10)], [at(2026, 11, 12, 11), at(2026, 11, 12, 12)],
+  ]);
+  const alreadyExpanded = cal.expandRange([daily], from, to);
+  assert.deepEqual(cal.busyRanges(alreadyExpanded, from, to), [[at(2026, 11, 12, 10), at(2026, 11, 12, 11)]], "already-expanded occurrences are not expanded twice");
 });
 
 test("working hours, free slots and the all-day strip", () => {
@@ -298,6 +372,25 @@ test("extractNoteItems: marked sections only, categories, headings, yearly dates
   assert.equal(cal.extractNoteItems("- 2026-11-20 x", "n", NOW).length, 0);
   const namedHeading = cal.extractNoteItems("## 25 listopada 2026\n%%calendar: Work%%\n- 09:00 Review", "named-heading", NOW);
   assert.equal(cal.ymd(new Date(cal.itemRange(namedHeading[0])[0])), "2026-11-25", "month-name headings supply the default day");
+});
+
+test("ensureNoteItemIds adds hidden stable IDs idempotently, skips fences and repairs copied IDs", () => {
+  const body = "%%calendar: Work%%\n- 2026-11-18 09:00-10:00 Repeated\n- 2026-11-18 09:00-10:00 Repeated\n```\n%%calendar: Code%%\n- 2026-11-19 ignored\n```\n";
+  const prepared = cal.ensureNoteItemIds(body, "stable-note", NOW);
+  assert.equal(prepared.changed, true);
+  assert.equal(prepared.count, 2, "only actual list items receive IDs");
+  assert.equal((prepared.body.match(/zn-item-id:/g) || []).length, 2);
+  const again = cal.ensureNoteItemIds(prepared.body, "stable-note", NOW);
+  assert.equal(again.changed, false, "repeated normalization does not rewrite the note");
+  const items = cal.extractNoteItems(prepared.body, "stable-note", NOW);
+  assert.equal(items.length, 2);
+  assert.equal(new Set(items.map((it) => it.id)).size, 2);
+  assert.ok(items.every((it) => !it.summary.includes("zn-item-id")));
+  const copied = prepared.body.replace(/(%%zn-item-id:[^%]+%%)/, "$1\n- 2026-11-18 09:00-10:00 Repeated $1");
+  const repaired = cal.ensureNoteItemIds(copied, "stable-note", NOW);
+  const repairedItems = cal.extractNoteItems(repaired.body, "stable-note", NOW);
+  assert.equal(repairedItems.length, 3);
+  assert.equal(new Set(repairedItems.map((it) => it.id)).size, 3, "copied duplicate tokens are reassigned");
 });
 
 test("date ignore marks persist through calendar extraction without deleting an event summary", () => {

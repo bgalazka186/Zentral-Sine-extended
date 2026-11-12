@@ -49,6 +49,7 @@
         handleFrame: null,
         pair: null,
         secondURL: null,
+        notesOpen: null,
       };
       ctx.secondarySnapshot = () => ({
         mode: state.mode,
@@ -197,6 +198,16 @@
         rememberPair();
         [pair.top, pair.bottom] = [pair.bottom, pair.top];
         ctx.saveLinkedTriplePairs();
+        // Notes between the panels: the gap's upper part (taken from the upper panel) becomes the lower part,
+        // so the panels trade places at exactly the sizes they had and Notes stays where it is.
+        const gapNow = notesGap(),
+          upNow = notesGapUp();
+        if (gapNow > 0 && upNow >= 0)
+          document.documentElement.style.setProperty(
+            "--zentral-notes-gap-up",
+            `${Math.round(gapNow - upNow)}px`,
+          );
+        state.notesOpen = null; // refreshed by the fit below; a stale pre-swap record must never be committed
         const oldFirst = state.first,
           oldSecond = state.second;
         // discardSecond only removes chrome in Triple View; both live browsers
@@ -215,6 +226,10 @@
         markTiles();
         ctx.updateWebToolbarState();
         fitSecondaryBrowsers();
+        // Notes follows the swap (its band sits above the divider, which just moved).
+        try {
+          document.dispatchEvent(new Event("zentral-triple-swapped"));
+        } catch (_) {}
         ctx.requestPanelActivity();
         refreshViewZenCss(state.first);
         refreshViewZenCss(state.second);
@@ -260,6 +275,13 @@
         const top = Math.max(min, Math.min(usable - min, topPx));
         return up >= 0 && gap > 0 ? (top + Math.min(up, gap)) / (usable + gap) : top / usable;
       }
+      // Pure: the share that puts the divider in the MIDDLE of the Notes band that is closing. `top` = the upper
+      // panel's height while Notes was open, `gap` = the band's height, `total` = both panels plus the band. Both
+      // panels then take back exactly half of it, whatever the edges had been dragged to. No band = unchanged.
+      function tripleShareAfterNotes({ top, gap, total, share = 0.5 }) {
+        if (!(gap > 0) || !(total > 0) || !Number.isFinite(top)) return share;
+        return Math.max(0.05, Math.min(0.95, (top + gap / 2) / total));
+      }
       function fitSecondaryBrowsers() {
         // Keep the live XUL <browser> elements under layout control. Writing
         // width/height attributes or absolute inline sizes can recreate or
@@ -275,15 +297,19 @@
         if (!rect) return;
         const toolbar = document.getElementById("zen-app-panel-toolbar");
         // V4-R2: Notes between the panels opens a gap at the divider; both panels share what is left.
+        const gap = notesGap();
         const usable =
           rect.height -
           (toolbar?.offsetHeight || 0) -
           state.shell.offsetHeight -
           state.divider.offsetHeight -
-          notesGap() -
+          gap -
           panel.clientTop * 2;
         if (usable <= 0) return;
-        const { top } = tripleHeights({ usable, gap: notesGap(), share: state.share, up: notesGapUp() });
+        // What closing Notes needs later (the band is gone by then): the upper panel's height, the band and the
+        // whole stack while it was open.
+        const { top } = tripleHeights({ usable, gap, share: state.share, up: notesGapUp() });
+        state.notesOpen = gap > 0 ? { top, gap, total: usable + gap } : null;
         const topValue = `${Math.round(top)}px`,
           bottomValue = `${Math.round(usable - top)}px`;
         if (panel.style.getPropertyValue("--bgalazka-top-share") !== topValue)
@@ -337,7 +363,16 @@
           }, 250);
       };
       // Notes (bottom bar of Triple View) opens / closes its gap at the divider: fit both panels again.
-      const onNotesGap = () => fitSecondaryBrowsers();
+      // When the band goes away both panels share it equally: the divider returns to the middle of Notes.
+      const onNotesGap = () => {
+        const was = state.notesOpen;
+        if (was && notesGap() === 0 && state.mode === "triple") {
+          state.share = tripleShareAfterNotes({ ...was, share: state.share });
+          state.notesOpen = null;
+          if (state.pair && state.second) rememberPair();
+        }
+        fitSecondaryBrowsers();
+      };
       document.addEventListener("zentral-notes-reserve", onNotesGap);
       ctx.registerCleanup(() => document.removeEventListener("zentral-notes-reserve", onNotesGap));
       window.addEventListener("activate", resumeSecondaryView);
@@ -424,6 +459,7 @@
         const mode = state.mode;
         if (mode === "triple") rememberPair();
         discardSecond();
+        state.notesOpen = null;
         state.mode = null;
         state.first = null;
         state.pair = null;

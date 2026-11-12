@@ -23,7 +23,8 @@ const store = c.createStore({ io, notify() {}, windowId: "cal-views", getDir: as
 const host = new El("div");
 const adapter = { position: "fixed", host, attach: (root) => host.append(root), getArea: () => ({ left: 0, top: 0, width: 1100, height: 720 }), watch: () => () => {}, setActive() {}, rewatch() {} };
 const prefs = new Map();
-const env = { getPref: (k, d) => prefs.has(k) ? prefs.get(k) : d, setPref: (k, v) => prefs.set(k, v), openLink() {}, copyText() {}, exportNote() {}, exportAll() {}, revealFolder() {} };
+const weekExports = [], weekPrints = [], copiedText = [];
+const env = { getPref: (k, d) => prefs.has(k) ? prefs.get(k) : d, setPref: (k, v) => prefs.set(k, v), openLink() {}, copyText(text) { copiedText.push(text); }, exportNote() {}, exportAll() {}, exportCalendarWeek: async (text, week) => { weekExports.push({ text, week }); return true; }, printCalendarWeek: async (text, week) => { weekPrints.push({ text, week }); return true; }, revealFolder() {} };
 const q = (root, selector) => root.querySelector(selector);
 const chooseMenu = async (root, triggerSelector, label) => {
   q(root, triggerSelector).click();
@@ -41,9 +42,10 @@ const chooseMenu = async (root, triggerSelector, label) => {
   store.items.upsertCategory({ name: "Projects", color: "#4a90e2" });
   store.items.upsertCategory({ name: "Personal", color: "#d36aa6" });
   const reminderAt = day + 13 * 3600000 + 15 * 60000;
-  const reminder = store.items.upsert({ id: "view-reminder", summary: "Call Alice", start: { dateTime: new Date(reminderAt).toISOString() }, x: { kind: "reminder", noteId: note.id, heading: "Tasks", category: "Projects", calNote: "Bring the project notes" } });
+  const reminder = store.items.upsert({ id: "view-reminder", summary: "Call Alice", start: { dateTime: new Date(reminderAt).toISOString() }, description: "Call Alice about the release plan", x: { kind: "reminder", noteId: note.id, heading: "Tasks", category: "Projects", tz: "Europe/Warsaw", calNote: "Bring the project notes\nReview the open questions" } });
   const eventStart = day + 15 * 3600000, eventEnd = day + 16 * 3600000;
   store.items.upsert({ id: "view-event", summary: "Project review", start: { dateTime: new Date(eventStart).toISOString() }, end: { dateTime: new Date(eventEnd).toISOString() }, x: { kind: "event", noteId: note.id, heading: "Tasks", category: "Projects" } });
+  store.items.upsert({ id: "view-event-overlap", summary: "Design review", start: { dateTime: new Date(day + 15.5 * 3600000).toISOString() }, end: { dateTime: new Date(day + 16.5 * 3600000).toISOString() }, x: { kind: "event", noteId: note.id, heading: "Tasks", category: "Projects" } });
   store.items.upsert({ id: "view-allday", summary: "Focus day", start: { date: ymd }, end: { date: tomorrowYmd }, x: { kind: "event", noteId: note.id, heading: "Tasks", category: "Personal" } });
   store.items.upsert({ id: "view-recurring", summary: "Daily check-in", start: { date: tomorrowYmd }, recurrence: ["RRULE:FREQ=DAILY;COUNT=3"], x: { kind: "reminder", noteId: note.id, heading: "Tasks", category: "Personal" } });
 
@@ -81,6 +83,41 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(root.querySelectorAll(".zn-cal-day-group").length, 14, "upcoming view expands exactly the selected number of days");
   assert.ok(root.querySelectorAll(".zn-cal-item").some((el) => el.textContent.includes("Daily check-in")), "recurring reminder occurrences appear in forward view");
 
+  // T2.4c3: finder uses recurring-aware freeSlots; selecting a result opens a small event composer.
+  await chooseMenu(root, ".zn-calendar-tools", "When am I free?…");
+  assert.ok(q(root, '.zn-dialog-card[aria-label="When am I free?"]'), "free-slot finder opens an accessible dialog");
+  const freeFind = root.querySelectorAll(".zn-dialog-card button").find((el) => el.textContent.trim() === "Find free times");
+  assert.ok(freeFind, "free-slot dialog offers Find free times");
+  const durationInput = q(root, '[aria-label="Minimum free time in minutes"]');
+  durationInput.value = "1440";
+  freeFind.click();
+  assert.match(q(root, ".zn-cal-free-results").textContent, /No matching free time/, "empty/busy ranges have an accessible empty state");
+  durationInput.value = "60";
+  freeFind.click();
+  const firstSlot = q(root, ".zn-cal-free-slot");
+  assert.ok(firstSlot, "finder shows at least one available slot in the selected week");
+  firstSlot.click();
+  const eventTitle = root.querySelector('[aria-label="Event title"]');
+  assert.ok(eventTitle, "choosing a slot opens the event composer");
+  eventTitle.value = "Focus block";
+  root.querySelectorAll(".zn-dialog-card button").find((el) => el.textContent.trim() === "Create event").click();
+  assert.ok(store.items.list().some((item) => item.summary === "Focus block" && item.x.kind === "event"), "chosen free slot creates a standalone timed event");
+  q(root, ".zn-calendar-today").click(); await flushRaf();
+  await chooseMenu(root, ".zn-calendar-view-select", "Month");
+
+  // Week export actions use the same Monday-first week and the existing print/export host services.
+  await chooseMenu(root, ".zn-calendar-tools", "Copy this week as Markdown");
+  assert.ok(copiedText.at(-1)?.includes("## Monday"), "copy action produces the seven-day Markdown week");
+  assert.ok(copiedText.at(-1)?.includes("Focus block"), "week export includes an event created from a free slot");
+  await chooseMenu(root, ".zn-calendar-tools", "Save this week as Markdown…");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(weekExports.length, 1, "save action delegates to the Notes file-picker service");
+  assert.ok(weekExports[0].text.includes("Focus block"), "saved week text contains the visible event");
+  await chooseMenu(root, ".zn-calendar-tools", "Print this week…");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(weekPrints.length, 1, "print action delegates to the HTML print-tab service");
+  assert.ok(weekPrints[0].text.includes("Project review"), "printed week includes calendar items");
+
   await chooseMenu(root, ".zn-calendar-view-select", "Agenda");
   assert.equal(content.dataset.view, "agenda");
   assert.ok(root.querySelectorAll(".zn-cal-agenda-row").some((el) => el.textContent.includes("Call Alice")), "agenda includes filtered chronological items");
@@ -94,11 +131,39 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(content.dataset.compact, "true", "narrow calendar uses compact list fallback");
   assert.ok(q(root, ".zn-cal-compact-list"), "compact month list is rendered instead of a squeezed 7-column grid");
 
-  // A source-backed item opens its note at the stored heading target.
+  // Week/day time grid: all-day strip, work-hours shading, busy periods, reminders and overlapping lanes.
   calendarPane.getBoundingClientRect = () => ({ left: 400, top: 0, right: 1100, bottom: 700, width: 700, height: 700 });
+  await chooseMenu(root, ".zn-calendar-view-select", "Week");
+  assert.equal(content.dataset.view, "week");
+  assert.equal(root.querySelectorAll(".zn-cal-time-column").length, 7, "week view renders seven day columns");
+  assert.ok(root.querySelectorAll(".zn-cal-time-allday-cell .zn-cal-item").some((el) => el.textContent.includes("Focus day")), "week view includes all-day events in the all-day strip");
+  assert.ok(root.querySelectorAll(".zn-cal-time-reminder").some((el) => el.textContent.includes("Call Alice")), "week view positions timed reminders as separate markers");
+  assert.ok(root.querySelectorAll(".zn-cal-off-hours").length > 0, "week view shades outside working hours");
+  assert.ok(root.querySelectorAll(".zn-cal-busy-range").length > 0, "week view shades occupied time");
+  const overlapButtons = root.querySelectorAll(".zn-cal-time-event").filter((el) => /Project review|Design review/.test(el.textContent));
+  assert.equal(overlapButtons.length, 2, "both overlapping events render");
+  assert.ok(overlapButtons.every((el) => el.style.width === "50%"), "overlapping events get side-by-side 50% lanes");
+
+  await chooseMenu(root, ".zn-calendar-view-select", "Day");
+  assert.equal(content.dataset.view, "day");
+  assert.equal(root.querySelectorAll(".zn-cal-time-column").length, 1, "day view renders one full-width day column");
+  assert.ok(root.querySelectorAll(".zn-cal-time-event").some((el) => el.textContent.includes("Project review")), "day view retains timed events");
+
+  // A source-backed item opens its note at the stored heading target.
   await chooseMenu(root, ".zn-calendar-view-select", "Agenda");
   const callRow = root.querySelectorAll(".zn-cal-item").find((el) => el.textContent.includes("Call Alice"));
   assert.ok(callRow, "source reminder is in the agenda");
+  callRow.dispatchEvent(new Ev("pointerenter", { bubbles: false }));
+  const hover = q(root, ".zn-cal-hover-card");
+  assert.ok(hover, "hovering a reminder opens its detail card");
+  assert.ok(hover.textContent.includes("Calendar source"), "hover card shows the linked note title");
+  assert.ok(hover.textContent.includes("Tasks"), "hover card shows the heading target");
+  assert.ok(hover.textContent.includes("Bring the project notes") && hover.textContent.includes("Review the open questions"), "hover card shows the full calendar note");
+  assert.ok(hover.textContent.includes("Europe/Warsaw"), "hover card shows the reminder time zone");
+  assert.ok(hover.textContent.includes("Call Alice about the release plan"), "hover card shows the item description");
+  assert.equal(callRow.getAttribute("aria-describedby"), hover.getAttribute("id"), "the hover card is linked for assistive technology");
+  callRow.dispatchEvent(new Ev("pointerleave", { bubbles: false }));
+  assert.equal(q(root, ".zn-cal-hover-card"), null, "leaving the reminder closes its detail card");
   callRow.click(); await flushRaf();
   assert.equal(store.meta.lastNoteId, note.id, "clicking a calendar item opens its source note");
 
@@ -110,5 +175,5 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(restored.meta.calendarDaysForward, 14);
   assert.equal(restored.meta.calendarFilterKind, "all");
   sheet.destroy(); await restored.close(); await store.close();
-  console.log("14 calendar views UI assertions passed");
+  console.log("calendar views UI tests passed");
 })().catch((error) => { console.error("FAIL", error); process.exit(1); });
