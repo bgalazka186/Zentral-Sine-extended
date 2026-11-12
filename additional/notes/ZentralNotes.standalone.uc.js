@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.20
+// @version 3.3.21
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.20, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.21, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.20";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.21";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -10642,6 +10642,7 @@ __zentralShim.register = function (def) {
                 marker.addEventListener("pointerleave", () => { rightHold.cancel(); rightSeen = false; });
                 marker.addEventListener("contextmenu", (e) => {
                   e.preventDefault();
+                  e.stopPropagation();
                   hold.cancel();
                   if (rightSeen) { rightSeen = false; return; }
                   if (!sticky) env.taskCycle?.(item.line);
@@ -11295,6 +11296,7 @@ __zentralShim.register = function (def) {
         } catch (_) {}
       }
       function openNote(id, { focus = true } = {}) {
+        closeMenu();
         if (currentId && currentId !== id) store.discardIfEmpty(currentId);
         store.setMeta({ lastNoteId: id, recent: pushRecent(store.meta.recent, id) });
         view = "editor";
@@ -11496,6 +11498,7 @@ __zentralShim.register = function (def) {
       }
       function setMode(next) {
         if (mode === next) return;
+        closeMenu();
         if (next !== "edit" && mode === "edit") refreshToc();
         mode = next;
         if (!note()?.trashed) store.setMeta({ mode });
@@ -11506,6 +11509,7 @@ __zentralShim.register = function (def) {
         else focusEditor();
       }
       function showList() {
+        closeMenu();
         view = "list";
         setOutlineOpen(false);
         applyState();
@@ -11519,6 +11523,7 @@ __zentralShim.register = function (def) {
         });
       }
       function showEditor() {
+        closeMenu();
         if (!currentId || !store.get(currentId)) {
           const id = store.latestId();
           if (id) openNote(id);
@@ -12696,6 +12701,7 @@ __zentralShim.register = function (def) {
         row.addEventListener("click", toggle);
         row.addEventListener("contextmenu", (e) => {
           e.preventDefault();
+          e.stopPropagation();
           showMenu(pointAnchor(e), folderMenuItems(node));
         });
         row.addEventListener("keydown", (e) => {
@@ -13019,6 +13025,7 @@ __zentralShim.register = function (def) {
             b.addEventListener("click", () => set(c));
             b.addEventListener("contextmenu", (e) => {
               e.preventDefault();
+              e.stopPropagation();
               removeQuickColor(c);
               paintQuick();
             });
@@ -13692,8 +13699,14 @@ __zentralShim.register = function (def) {
       // ---- menus -----------------------------------------------------------------
       function closeMenu() {
         if (!menu) return;
-        menu.el.remove();
+        const closing = menu;
         menu = null;
+        for (const stop of (closing.cleanups || []).splice(0).reverse()) {
+          try {
+            stop();
+          } catch (_) {}
+        }
+        closing.el.remove();
       }
       // Keeps a menu fully inside both the sheet and the window: it is right-aligned to its anchor,
       // shifted back in when that would cross an edge, flipped above the anchor when there is no room
@@ -13757,6 +13770,7 @@ __zentralShim.register = function (def) {
                   });
                   b.addEventListener("contextmenu", (e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     removeQuickColor(c);
                     b.remove();
                   });
@@ -13810,12 +13824,36 @@ __zentralShim.register = function (def) {
         root.append(m);
         placeMenu(m, anchor);
         m.style.visibility = "";
-        menu = { el: m, anchor };
+        const activeMenu = (menu = { el: m, anchor, cleanups: [] });
+        const listenMenu = (target, type, fn, opts) => {
+          target.addEventListener(type, fn, opts);
+          activeMenu.cleanups.push(() => target.removeEventListener(type, fn, opts));
+        };
+        // A menu belongs to the sheet, not just to its DOM subtree. Listen at the window so a press
+        // on browser chrome, another panel, or the page dismisses it too. Anchors made from a pointer
+        // coordinate are plain geometry objects, so never assume every anchor has contains().
+        listenMenu(window, "pointerdown", (e) => {
+          if (menu !== activeMenu) return;
+          const path = e.composedPath?.() || [];
+          const within = (node) => !!node && (node === e.target || path.includes(node) || !!node.contains?.(e.target));
+          if (!within(activeMenu.el) && !within(activeMenu.anchor)) closeMenu();
+        }, true);
+        listenMenu(window, "blur", () => {
+          if (menu === activeMenu) closeMenu();
+        });
+        // Tab, programmatic focus changes and focus moving to another control in the same sheet
+        // must not strand an open menu. Escape is handled by the sheet key controller below.
+        listenMenu(m, "focusout", (e) => {
+          if (menu !== activeMenu) return;
+          const next = e.relatedTarget;
+          const focusRemainsWithMenu = activeMenu.el.contains(next);
+          // Keep the menu alive while focus moves back to its trigger: pointer activation fires
+          // the trigger's click after focusout, and that click is what cancels the menu.
+          const focusMovesToAnchor = activeMenu.anchor === next || !!activeMenu.anchor?.contains?.(next);
+          if (!focusRemainsWithMenu && !focusMovesToAnchor) closeMenu();
+        });
         m.querySelector("button")?.focus({ preventScroll: true });
       }
-      listen(root, "pointerdown", (e) => {
-        if (menu && !menu.el.contains(e.target) && !menu.anchor.contains(e.target)) closeMenu();
-      }, true);
       // Export notice: says what each format loses before anything is written.
       function closeDialog() {
         if (!dialog) return;
@@ -15936,6 +15974,7 @@ __zentralShim.register = function (def) {
       } catch (_) {}
       listen(chipAll, "contextmenu", (e) => {
         e.preventDefault();
+        e.stopPropagation();
         askRootStyle();
       });
       // A note dropped on empty list space goes back to the top level.
@@ -15953,7 +15992,7 @@ __zentralShim.register = function (def) {
       listen(chipRecent, "click", () => { filter = "recent"; renderList(); });
       listen(chipTrash, "click", () => { filter = "trash"; activeTag = ""; renderList(); });
       listen(chipTags, "click", () => showTagMenu(chipTags));
-      for (const c of [chipTrash, chipEmpty]) listen(c, "contextmenu", (e) => { e.preventDefault(); showMenu(pointAnchor(e), trashMenuItems()); });
+      for (const c of [chipTrash, chipEmpty]) listen(c, "contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); showMenu(pointAnchor(e), trashMenuItems()); });
       listen(chipEmpty, "click", () => {
         if (chipEmpty.dataset.armed) {
           delete chipEmpty.dataset.armed;
