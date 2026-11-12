@@ -663,6 +663,85 @@
     });
     return { body: changed ? lines.join("\n") : String(body || ""), changed, count: seen.size };
   }
+  // The jump target for note-less items: a `## Agenda` heading in their date note. An existing heading of any level
+  // and letter case is reused; nothing else in the note changes.
+  function ensureAgendaHeading(body) {
+    const text = String(body || "");
+    if (/^#{1,6}\s+agenda\s*#*\s*$/im.test(text)) return { body: text, heading: "Agenda", changed: false };
+    const trimmed = text.replace(/\s+$/, "");
+    return { body: (trimmed ? trimmed + "\n\n" : "") + "## Agenda\n", heading: "Agenda", changed: true };
+  }
+  // ---- Reschedule -> note text ----
+  const pad2c = (n) => String(n).padStart(2, "0");
+  const clockText = (ms) => { const d = new Date(ms); return pad2c(d.getHours()) + ":" + pad2c(d.getMinutes()); };
+  const LINE_HEAD_RE = /^(\s*(?:[-*+]|\d+[.)])\s+(?:\[[^\]]\]\s+)?)(.*)$/s;
+  const LINE_TIME_RE = /^(\d{1,2}[:.]\d{2}(?:\s*[-\u2013\u2014]\s*\d{1,2}[:.]\d{2})?)(?=\s|$)/;
+  // Pure: the list line with its leading date (and time range) replaced by the item's current schedule, written as
+  // ISO `YYYY-MM-DD [HH:MM[-HH:MM]]` in local time. Box, text, hidden id mark and every other character stay.
+  // Returns null when the line has no leading date of its own (the date comes from a heading), carries a date-ignore
+  // mark, or the item has no usable schedule: the caller then leaves the text alone.
+  function rewriteLineSchedule(line, item, now = 0) {
+    const text = String(line || "");
+    if (!item || ignoredDateTokens(text).length || /%%\s*not-date/i.test(text)) return null;
+    const head = LINE_HEAD_RE.exec(text);
+    if (!head) return null;
+    const afterBox = head[2], prefix = parseDatePrefix(stripItemIdMarks(afterBox), now);
+    if (!prefix || afterBox.indexOf(prefix.raw) !== 0 || /^\d{1,2}[:.]\d{2}$/.test(prefix.raw)) return null;
+    let rest = afterBox.slice(prefix.raw.length);
+    const lead = /^\s*/.exec(rest)[0];
+    rest = rest.slice(lead.length);
+    const t = LINE_TIME_RE.exec(rest);
+    if (t) rest = rest.slice(t[1].length);
+    const [startMs, endMs] = itemRange(item);
+    if (!Number.isFinite(startMs) || startMs <= 0) return null;
+    let when = ymd(new Date(startMs));
+    if (!isAllDay(item)) when += " " + clockText(startMs) + (item.end && Number.isFinite(endMs) && endMs > startMs ? "-" + clockText(endMs) : "");
+    const gap = rest && !/^\s/.test(rest) ? " " : "";
+    return head[1] + when + gap + rest;
+  }
+  function setListLineSchedule(body, lineId, item, now = 0) {
+    const lines = String(body || "").split("\n");
+    let found = false, changed = false;
+    visitCalendarListLines(body, now, (entry) => {
+      if (found || itemIdTokens(entry.line)[0] !== lineId) return;
+      found = true;
+      const next = rewriteLineSchedule(entry.line, item, now);
+      if (next === null || next === entry.line) return;
+      lines[entry.index] = next; changed = true;
+    });
+    return { body: changed ? lines.join("\n") : String(body || ""), changed, found };
+  }
+  // ---- Agenda checkbox <-> reminder lifecycle (owner-approved 2026-11-12) ----
+  // The stored item id of a line that carries a hidden `%%zn-item-id:...%%` token (same formula as extractNoteItems).
+  const noteLineItemId = (noteId, lineId) => "l" + hashText(String(noteId)) + "-" + String(lineId);
+  const CHECKBOX_LINE_RE = /^(\s*(?:[-*+]|\d+[.)])\s+\[)([ xX])(\]\s)/;
+  // Map<lineId, boolean> for every calendar-list line that has BOTH a hidden id and a plain `[ ]` / `[x]` box.
+  // Extended task states ([-], [/], [?], [!]) are not a done/pending choice, so they are left out and never rewritten.
+  function listCheckboxStates(body, now = 0) {
+    const out = new Map();
+    visitCalendarListLines(body, now, (entry) => {
+      const id = itemIdTokens(entry.line)[0];
+      const m = id ? CHECKBOX_LINE_RE.exec(entry.line) : null;
+      if (m) out.set(id, m[2] !== " ");
+    });
+    return out;
+  }
+  // Pure, idempotent: returns { body, changed, found }. Only the box character of the one line changes; the hidden
+  // id mark, date, text and every other line stay byte-identical (marker preservation, rule 3a).
+  function setListCheckbox(body, lineId, done, now = 0) {
+    const lines = String(body || "").split("\n");
+    let found = false, changed = false;
+    visitCalendarListLines(body, now, (entry) => {
+      if (found || itemIdTokens(entry.line)[0] !== lineId) return;
+      const m = CHECKBOX_LINE_RE.exec(entry.line);
+      if (!m) return;
+      found = true;
+      if ((m[2] !== " ") === !!done) return;
+      lines[entry.index] = entry.line.replace(CHECKBOX_LINE_RE, "$1" + (done ? "x" : " ") + "$3");
+      changed = true;
+    });
+    return { body: changed ? lines.join("\n") : String(body || ""), changed, found };
+  }
   function extractNoteItems(body, noteId, now = 0) {
     const lines = String(body || "").split("\n");
     const out = [], seen = new Map();
@@ -855,6 +934,40 @@
         // Immutable append: duplicate records are allowed because repeated transitions are meaningful.
         records.push(record); indexTransition(record); schedule();
         return { ...record, start: record.start ? { ...record.start } : null };
+      },
+      // Merge records another window wrote since we last read the file (matched by record id; nothing is dropped or
+      // rewritten). Best effort: a missing or damaged file changes nothing here, `open()` owns recovery.
+      async refresh() {
+        const dir = getDir();
+        if (!dir || writeBlocked) return 0;
+        let parsed;
+        try { parsed = JSON.parse(await io.readUTF8(io.join(dir, REMINDER_HISTORY_FILE))); } catch (_) { return 0; }
+        if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.records)) return 0;
+        const known = new Set(records.map((record) => record.id));
+        let added = 0;
+        for (const raw of parsed.records) {
+          const record = cleanReminderHistoryRecord(raw, now());
+          if (!record || known.has(record.id)) continue;
+          known.add(record.id);
+          record.seq = nextSeq++;
+          records.push(record); indexTransition(record); added++;
+        }
+        if (added) dirty = true;
+        return added;
+      },
+      // Cross-window "alert exactly once per saved schedule": re-read the shared file, skip when ANY window already
+      // alerted this occurrence for this schedule, otherwise append and write immediately so the other window sees it.
+      // The remaining read-to-write gap is a few milliseconds; it can show one extra banner, never lose history.
+      async claimAlert(raw) {
+        if (writeBlocked) return null;
+        try { await this.refresh(); } catch (error) { safeWarn(error); }
+        const same = (a, b) => (a?.date || "") === (b?.date || "") && (a?.dateTime || "") === (b?.dateTime || "");
+        const duplicate = records.some((record) => record.action === "alerted" && record.itemId === raw.itemId && record.occurrenceId === raw.occurrenceId && same(record.start, raw.start));
+        if (duplicate) return null;
+        const record = this.append({ ...raw, action: "alerted" });
+        if (!record) return null;
+        try { await writeNow(); } catch (error) { safeWarn(error); }
+        return record;
       },
       list({ itemId = "", occurrenceId = "", noteId = "", limit = 0, offset = 0 } = {}) {
         let out = records.filter((record) => (!itemId || record.itemId === itemId) && (!occurrenceId || record.occurrenceId === occurrenceId) && (!noteId || record.noteId === noteId));
@@ -1833,7 +1946,7 @@
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

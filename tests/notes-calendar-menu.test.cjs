@@ -287,7 +287,10 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
     card.querySelector('[aria-label="Follow-up delay"]').value = "15";
   });
   const timedEvent = await createFrom("Create timed event…", "Timed event", "event", false);
-  assert.equal(fullDayReminder.x.noteId, "", "standalone creation does not accidentally link the open note");
+  assert.notEqual(fullDayReminder.x.noteId, note.id, "standalone creation does not accidentally link the open note");
+  assert.ok(fullDayReminder.x.noteId, "a note-less reminder is given its date note");
+  assert.equal(fullDayReminder.x.heading, "Agenda");
+  assert.ok(/^## Agenda$/m.test(store.get(fullDayReminder.x.noteId).body), "the date note carries the Agenda heading");
   assert.equal(timedReminder.x.category, "Work");
   assert.equal(timedReminder.description, "A focused description");
   assert.equal(timedReminder.x.calNote, "Calendar-only note");

@@ -4689,6 +4689,33 @@
       if (d.getFullYear() !== y || d.getMonth() !== mo - 1 || d.getDate() !== da) return 0;
       return cleanRemind(d.getTime());
     }
+    // Banner buttons of one fired reminder, as plain data so every action is testable without a browser.
+    // Calendar reminders get Open / Done / Snooze (timed, non-recurring only) / Dismiss; legacy note reminders keep
+    // their original three. Each callback is guarded: a failing store never throws into the notification box.
+    function createReminderAlertActions({ store, note, openNote, showNotes = () => {}, warn = () => {} }) {
+      const guard = (fn) => () => { try { return fn(); } catch (error) { warn(error); return false; } };
+      const calendarItem = note?.__calendarReminder ? note.__calendarItem : null;
+      if (!calendarItem) {
+        return [
+          { id: "open", label: "Open note", callback: guard(() => openNote(note.id)) },
+          { id: "snooze-10", label: "Snooze 10 min", callback: guard(() => store.snoozeReminder(note.id, 10)) },
+          { id: "snooze-60", label: "Snooze 1 hour", callback: guard(() => store.snoozeReminder(note.id, 60)) },
+          { id: "dismiss", label: "Dismiss", callback: guard(() => store.setReminder(note.id, 0)) },
+        ];
+      }
+      const noteId = calendarItem.x?.noteId || "";
+      const recurring = !!calendarItem.x?.series || (Array.isArray(calendarItem.recurrence) && calendarItem.recurrence.length > 0);
+      const actions = [
+        { id: "open", label: "Open linked note", callback: guard(() => (noteId ? openNote(noteId, { heading: calendarItem.x?.heading || "", itemId: calendarItem.id }) : showNotes(""))) },
+        { id: "done", label: "Done", callback: guard(() => store.applyReminderLifecycle(calendarItem, "done")) },
+      ];
+      if (!recurring && !calendarItem.start?.date) {
+        actions.push({ id: "snooze-10", label: "Snooze 10 min", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, 10)) });
+        actions.push({ id: "snooze-60", label: "Snooze 1 hour", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, 60)) });
+      }
+      actions.push({ id: "dismiss", label: "Dismiss", callback: guard(() => store.applyReminderLifecycle(calendarItem, "dismissed")) });
+      return actions;
+    }
     // One timer, armed for the next future reminder. `onDue(notes)` receives every overdue, unannounced
     // reminder as one batch AFTER the store has recorded them as announced (claim), so nothing repeats.
     function createReminderScheduler({ store, now = () => Date.now(), setTimer, clearTimer, onDue }) {
@@ -4762,11 +4789,11 @@
             for (const item of calendar.due) {
               if (destroyed) return;
               const identity = item.__historyIdentity;
-              const record = store.items?.history?.append?.({
-                itemId: identity.itemId, occurrenceId: identity.occurrenceId,
-                noteId: identity.noteId, summary: item.summary, start: item.__scheduledStart,
-                action: "alerted", at: nowAt,
-              });
+              const history = store.items?.history;
+              const entry = { itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.__scheduledStart, at: nowAt };
+              // claimAlert re-reads the shared history first so a second window does not show the same banner.
+              let record = null;
+              try { record = history?.claimAlert ? await history.claimAlert(entry) : history?.append?.({ ...entry, action: "alerted" }); } catch (_) { record = null; }
               if (record) fired.push(item);
             }
             if (calendar.due.length && store.items?.history?.flush) {
@@ -5155,6 +5182,24 @@
         } catch (e) {
           warn(e);
         }
+      }
+      // A person ticking / unticking an Agenda box in the note text records the matching lifecycle once. Only boxes whose
+      // state CHANGED in this edit count (opening an old note full of `[x]` never writes history), and a box that
+      // already agrees with the stored lifecycle appends nothing (no duplicate after our own checkbox write).
+      function reflectCheckboxEdits(noteId, before, body) {
+        try {
+          const history = items?.history;
+          if (!history) return;
+          const after = CALENDAR_PART.listCheckboxStates(body, now());
+          for (const [lineId, checked] of after) {
+            if (!before.has(lineId) || before.get(lineId) === checked) continue;
+            const item = items.get(CALENDAR_PART.noteLineItemId(noteId, lineId));
+            if (!item || item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length) || !CALENDAR_PART.isReminder(item)) continue;
+            const identity = CALENDAR_PART.reminderIdentity(item), state = history.stateFor(identity.itemId, identity.occurrenceId) || "pending";
+            const action = checked && state === "pending" ? "done" : (!checked && (state === "done" || state === "dismissed") ? "reopened" : "");
+            if (action) history.append({ itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.start, action, at: now() });
+          }
+        } catch (e) { warn(e); }
       }
       function dropItems(id) {
         try { if (items) items.removeNote(id); } catch (e) { warn(e); }
@@ -5646,12 +5691,15 @@
         update(id, body, source) {
           const note = notes.get(id);
           if (!note || note.body === body) return;
+          let boxesBefore = null;
+          try { if (items && CALENDAR_PART && source !== "checkbox" && !note.trashed) boxesBefore = CALENDAR_PART.listCheckboxStates(note.body, now()); } catch (_) { boxesBefore = null; }
           note.body = body;
           note.updated = now();
           note.touched = true;
           if (body.trim() || note._onDisk) markDirty(id);
           else dirty.delete(id);
           syncItems(id, false, true);
+          if (boxesBefore) reflectCheckboxEdits(id, boxesBefore, body);
           emit("change", id, { source });
         },
         // Commit hidden calendar-line identities after a text editor blur or a non-typing body operation.
@@ -5738,6 +5786,80 @@
           if (note.body.trim() || note._onDisk) markDirty(id);
           emit("change", id, { meta: true, reminder: true });
           return true;
+        },
+        // ---- Agenda checkbox <-> reminder lifecycle ----
+        // One non-recurring `- [ ]` Agenda line of a source note per item. Recurring series keep their box untouched:
+        // one box cannot represent many independently completed occurrences.
+        _checkboxLineId(item) {
+          if (!CALENDAR_PART || !item || item.x?.src !== "list" || !item.x?.noteId) return "";
+          if (item.x.series || (Array.isArray(item.recurrence) && item.recurrence.length)) return "";
+          const prefix = CALENDAR_PART.noteLineItemId(item.x.noteId, "");
+          return String(item.id || "").startsWith(prefix) ? String(item.id).slice(prefix.length) : "";
+        },
+        // Note-less manual items get a home: the Date Note of their start day (found by its date title, created in the
+        // Daily folder only when missing) with a `## Agenda` heading, recorded as x.noteId / x.heading so the item opens
+        // there. The item stays the single owner of its schedule (no duplicate note-derived line is written).
+        // Recurring and already linked items are left alone. Returns the note id or "".
+        linkItemToAgendaNote(itemId, { fmt } = {}) {
+          const item = items?.get?.(itemId);
+          if (!item || !CALENDAR_PART || item.x?.src !== "manual" || item.x?.noteId) return "";
+          if (item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length)) return "";
+          const startMs = CALENDAR_PART.itemRange(item)[0];
+          if (!Number.isFinite(startMs) || startMs <= 0) return "";
+          const ymd = CALENDAR_PART.localDateKey(startMs);
+          let note = findDateNote([...notes.values()].filter((n) => !n.trashed), ymd, fmt || CALENDAR_PART.DEFAULT_DATE_FORMAT);
+          if (!note) {
+            if (!meta.folders.some((f) => f.id === DATE_FOLDER)) api.addFolder("Daily");
+            note = api.create(dateNoteBody(parseYmd(ymd)), DATE_FOLDER);
+          }
+          const ensured = CALENDAR_PART.ensureAgendaHeading(note.body);
+          if (ensured.changed) api.update(note.id, ensured.body, "agenda");
+          const saved = items.upsert({ ...item, x: { ...item.x, noteId: note.id, heading: ensured.heading } });
+          return saved ? note.id : "";
+        },
+        // After a reschedule of a note-derived item, rewrite ITS line's date/time so the text and the calendar agree
+        // (otherwise a later note edit would silently pull the old time back). Only the leading date/time of the one
+        // line changes; a line whose date comes from a heading is left alone. Idempotent. Returns true when text changed.
+        syncItemScheduleToNote(item) {
+          const lineId = api._checkboxLineId(item), note = lineId ? notes.get(item.x.noteId) : null;
+          if (!note || note.trashed) return false;
+          const result = CALENDAR_PART.setListLineSchedule(note.body, lineId, item, now());
+          if (!result.changed) return false;
+          api.update(note.id, result.body, "checkbox");
+          return true;
+        },
+        // Mirror a lifecycle change into the note text. Idempotent: an already-matching box writes nothing.
+        syncItemCheckbox(item, done) {
+          const lineId = api._checkboxLineId(item), note = lineId ? notes.get(item.x.noteId) : null;
+          if (!note || note.trashed) return false;
+          const result = CALENDAR_PART.setListCheckbox(note.body, lineId, done, now());
+          if (!result.changed) return false;
+          api.update(note.id, result.body, "checkbox");
+          return true;
+        },
+        // The ONE place a calendar reminder changes lifecycle from outside the note text (banner, calendar menu).
+        // Appends the history record, then reflects done/reopened in the Agenda checkbox. Returns the record or false.
+        applyReminderLifecycle(item, action, at = now()) {
+          const history = items?.history, identity = CALENDAR_PART?.reminderIdentity(item);
+          if (!history || !identity || !["done", "dismissed", "reopened"].includes(action)) return false;
+          // Idempotent: repeating the state an occurrence is already in (a double click, a second window) adds no record.
+          const current = history.stateFor(identity.itemId, identity.occurrenceId) || "pending";
+          if ((action === "done" && current === "done") || (action === "dismissed" && current === "dismissed") || (action === "reopened" && current === "pending")) return false;
+          const record = history.append({ itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.start, action, at });
+          if (!record) return false;
+          if (action === "done") api.syncItemCheckbox(item, true);
+          else if (action === "reopened") api.syncItemCheckbox(item, false);
+          history.flush?.().catch?.(warn);
+          return record;
+        },
+        // Banner snooze for a stored timed, non-recurring reminder: moves the schedule, appends `snoozed`.
+        snoozeCalendarReminder(itemId, minutes) {
+          const current = items?.get?.(itemId), m = Number(minutes);
+          if (!current || !CALENDAR_PART || !(m > 0 && m <= 60 * 24 * 365)) return false;
+          if (current.start?.date || current.x?.series || (Array.isArray(current.recurrence) && current.recurrence.length)) return false;
+          const start = CALENDAR_PART.snoozedItemStart(current, 0, now() + m * 60000);
+          if (!start) return false;
+          return !!items.upsert({ ...current, start, historyAction: "snoozed" });
         },
         snoozeReminder(id, minutes) {
           const note = notes.get(id);
@@ -7331,7 +7453,7 @@
         FIND_MAX_MATCHES, FIND_MAX_QUERY, sniffImageMime, checkAssetBytes, assetFileName, parseAssetLink, buildAssetLink, buildAssetImage,
         insertAssetImage, assetImageAt, restyleAssetImage, assetRefs, isAssetNoteId, ASSET_MAX_BYTES, ASSET_MAX_PER_NOTE, ASSET_MIME,
         cleanRemind, ceilStep, dueReminders, nextReminderAt, reminderDelay, reminderPresets, parseRemindInput, remindPreview, remindDateText, remindTimeText,
-        createReminderScheduler, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
+        createReminderScheduler, createReminderAlertActions, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
         headingSlug, headingsOf, cleanAnchor, noteLinkParts, headingOffset, tocBlock, tocList, findToc, updateToc, insertToc, insertFootnote, nextFootnoteLabel, mentionRe, hasMention, linkFirstMention,
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         DATE_TITLE_RE, dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
@@ -9371,7 +9493,9 @@
           if (action === "done" || action === "dismissed") return store.setReminder(identity.noteId, 0, action);
           if (action === "reopened") return store.setReminder(identity.noteId, Math.max(at, nowMs() + 5 * 60000), "reopened");
         }
-        const record = history.append({ itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.start, action, at: nowMs() });
+        const record = ["done", "dismissed", "reopened"].includes(action)
+          ? store.applyReminderLifecycle(item, action, nowMs())
+          : history.append({ itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.start, action, at: nowMs() });
         if (!record) return false;
         renderCalendar();
         flash(action === "done" ? "Reminder marked done" : action === "dismissed" ? "Reminder dismissed" : action === "reopened" ? "Reminder reopened" : action === "snoozed" ? "Reminder snoozed" : "Reminder rescheduled");
@@ -9498,6 +9622,7 @@
           }
           const saved = store.items.upsert(next);
           if (!saved) return flash("This calendar item changed while the dialog was open. Reopen its menu and try again.");
+          if (!recurring && saved.x?.src === "list") { try { store.syncItemScheduleToNote(saved); } catch (error) { warn(error); } }
           closeDialog();
           renderCalendar();
           flash(recurring ? (scopeSelect.value === "this" ? "Occurrence time changed" : scopeSelect.value === "following" ? "This and following occurrence times changed" : "Entire series time changed") : "Calendar item time changed");
@@ -10108,6 +10233,7 @@
           }
           const saved = store.items.upsert(item);
           if (!saved) { status.textContent = "Could not save the calendar item. Check calendar storage."; return; }
+          if (!original && !saved.x?.noteId) { try { store.linkItemToAgendaNote(saved.id, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
           const startMs = item.start.date ? C.parseYmd(item.start.date).getTime() : Date.parse(item.start.dateTime);
           store.setMeta({ calendarCursor: C.localDateKey(startMs), calendarView: store.meta.calendarView || "month" });
           closeDialog(); renderCalendar();
@@ -16115,22 +16241,8 @@
           let shown = false;
           try {
             const box = window.gBrowser.getNotificationBox();
-            const actions = [
-              { label: calendarItem ? "Open linked note" : "Open note", callback: () => { calendarItem ? (noteId ? openReminderNote(noteId, { heading: calendarItem.x?.heading || "", itemId: calendarItem.id }) : showNotes("")) : openReminderNote(n.id); } },
-            ];
-            if (calendarItem) {
-              const identity = n.__historyIdentity;
-              actions.push(
-                { label: "Done", callback: () => { store.items?.history?.append?.({ itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: calendarItem.summary, start: calendarItem.start, action: "done", at: Date.now() }); store.items?.history?.flush?.().catch?.(warn); } },
-                { label: "Dismiss", callback: () => { store.items?.history?.append?.({ itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: calendarItem.summary, start: calendarItem.start, action: "dismissed", at: Date.now() }); store.items?.history?.flush?.().catch?.(warn); } },
-              );
-            } else {
-              actions.push(
-                { label: "Snooze 10 min", callback: () => { store.snoozeReminder(n.id, 10); } },
-                { label: "Snooze 1 hour", callback: () => { store.snoozeReminder(n.id, 60); } },
-                { label: "Dismiss", callback: () => { store.setReminder(n.id, 0); } },
-              );
-            }
+            const actions = createReminderAlertActions({ store, note: n, openNote: openReminderNote, showNotes, warn })
+              .map(({ label, callback }) => ({ label, callback }));
             box.appendNotification("zentral-notes-reminder-" + n.id, { label: "Reminder: " + title, priority: box.PRIORITY_INFO_HIGH }, actions);
             shown = true;
           } catch (error) {
