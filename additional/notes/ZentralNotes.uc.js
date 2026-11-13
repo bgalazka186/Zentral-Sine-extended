@@ -7062,10 +7062,36 @@
       }
       return { prefix: text.slice(0, end), body: text.slice(end) };
     }
+    // Index exact backtick runs by paragraph to avoid repeatedly scanning the
+    // rest of a large note when many code delimiters are unmatched.
+    function indexMarkdownCodeRuns(lines) {
+      const groups = [], byGroup = new Map();
+      let group = 0;
+      for (let row = 0; row < lines.length; row++) {
+        const line = String(lines[row] ?? "");
+        if (!line.trim() || nextMarkdownFence(line, null)) { groups.push(-1); group++; continue; }
+        groups.push(group);
+        for (const match of line.matchAll(/`+/g)) {
+          if (!byGroup.has(group)) byGroup.set(group, new Map());
+          const lengths = byGroup.get(group), length = match[0].length;
+          if (!lengths.has(length)) lengths.set(length, []);
+          lengths.get(length).push({ row, pos: match.index });
+        }
+      }
+      return {
+        next(row, length) {
+          const entries = byGroup.get(groups[row])?.get(length);
+          if (!entries) return null;
+          let low = 0, high = entries.length;
+          while (low < high) { const mid = (low + high) >>> 1; if (entries[mid].row <= row) low = mid + 1; else high = mid; }
+          return entries[low] || null;
+        },
+      };
+    }
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
     function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw) {
-      const lines = String(text).split("\n"), result = [];
+      const lines = String(text).split("\n"), result = [], codeRuns = indexMarkdownCodeRuns(lines);
       let fence = null, comment = false;
       const findClose = (line, run, start) => {
         let close = line.indexOf(run, start);
@@ -7141,10 +7167,9 @@
             let close = findClose(line, run, pos + run.length), endRow = row;
             // A code span may cross lines inside a paragraph, but never crosses
             // a blank line or the start of a new fenced block.
-            if (close < 0) for (let next = row + 1; next < lines.length; next++) {
-              if (!lines[next].trim() || nextMarkdownFence(lines[next], null)) break;
-              const found = findClose(lines[next], run, 0);
-              if (found >= 0) { close = found; endRow = next; break; }
+            if (close < 0) {
+              const next = codeRuns.next(row, run.length);
+              if (next) { close = next.pos; endRow = next.row; }
             }
             if (close >= 0) {
               flush();
@@ -8322,7 +8347,7 @@
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
+        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
