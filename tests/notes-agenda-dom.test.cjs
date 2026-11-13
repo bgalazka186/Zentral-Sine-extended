@@ -30,29 +30,50 @@ async function test(name, fn) { await fn(); console.log("ok - " + name); }
     assert.deepEqual(h.operations, []);
     await h.destroy(); assert.equal(h.seam, undefined);
   });
-  await test("fan-out exposes H1.1 key collision and structural churn rather than concealing it", async () => {
-    for (const item of [make("overnight", date(1, 23), date(2, 1)), make("lead", date(2), null, { agendaWindow: { leadDays: 1 } })]) {
+  await test("fan-out keys are globally unique and all copies stay idempotent", async () => {
+    const allDay = C.makeItem({ id: "all-day", summary: "all-day", start: { date: C.localDateKey(date(1)) }, end: { date: C.localDateKey(date(4)) }, x: { kind: "event", src: "manual" } });
+    for (const [item, count] of [[make("overnight", date(1, 23), date(2, 1)), 2], [make("lead", date(2), null, { agendaWindow: { leadDays: 2 } }), 3], [allDay, 3]]) {
       const h = await host(); h.seam.store.items.upsert(item);
       const projection = h.seam.agendaController.runNow();
       const copies = projection.flatMap((day) => day.items).filter((entry) => entry.itemId === item.id);
-      assert.equal(copies.length, 2); assert.equal(new Set(copies.map((entry) => entry.key)).size, 1, "H1.1: projected copies share a key");
-      h.resetOperations(); h.seam.agendaController.runNow();
-      assert.ok(h.operations.some((op) => op.type === "remove" || op.type === "move"), "H1.1: unchanged fan-out is not yet idempotent");
+      assert.equal(copies.length, count); assert.equal(new Set(copies.map((entry) => entry.key)).size, count);
+      assert.equal(projected(h).length, count);
+      for (const tab of projected(h)) {
+        assert.equal(tab.getAttribute("bgalazka-notes-agenda-item-id"), item.id);
+        assert.ok(tab.getAttribute(MARK).endsWith("@" + tab.closest("zen-folder").getAttribute("bgalazka-notes-agenda-day")));
+      }
+      for (let run = 0; run < 2; run++) { h.resetOperations(); h.seam.agendaController.runNow(); assert.deepEqual(h.operations, []); }
       await h.destroy();
     }
   });
-  // The acceptance gate is deliberately visible as TODO until H1.1 is fixed.
-  // node:test reports the failing assertion without turning the known bug into a false pass.
-  for (const item of [make("gate-overnight", date(1, 23), date(2, 1)), make("gate-lead", date(2), null, { agendaWindow: { leadDays: 1 } })]) {
-    require("node:test").test(`F0.1 idempotence gate: ${item.id}`, { todo: "H1.1 duplicate keys cause churn" }, async () => {
-      const h = await host();
-      try {
-        h.seam.store.items.upsert(item); h.seam.agendaController.runNow();
-        h.resetOperations(); h.seam.agendaController.runNow();
-        assert.equal(h.operations.length, 0, "unchanged projection must perform zero structural operations");
-      } finally { await h.destroy(); }
-    });
-  }
+  await test("real parent is used to repair a tab moved into the wrong day", async () => {
+    const h = await host(); h.seam.store.items.upsert(make("move", date(1, 23), date(2, 1))); h.seam.agendaController.runNow();
+    const tab = projected(h)[0], expected = tab.closest("zen-folder"), other = projected(h)[1].closest("zen-folder");
+    other.addTabs([tab]);
+    const listed = h.seam.agendaApi.list().find((entry) => entry.key === tab.getAttribute(MARK));
+    assert.equal(listed.parent, "day:" + other.getAttribute("bgalazka-notes-agenda-day"));
+    h.seam.agendaController.runNow();
+    assert.equal(projected(h).length, 2); assert.ok(expected.querySelector(`tab[${MARK}]`));
+    h.resetOperations(); h.seam.agendaController.runNow(); assert.deepEqual(h.operations, []); await h.destroy();
+  });
+  await test("old undated keys migrate without touching foreign tabs", async () => {
+    const h = await host(); h.seam.store.items.upsert(make("migrate", date(1), date(1, 13))); h.seam.agendaController.runNow();
+    const old = projected(h)[0]; old.setAttribute(MARK, old.getAttribute(MARK).replace(/@\d{4}-\d{2}-\d{2}$/, ""));
+    const foreign = h.window.gBrowser.addTab("https://example.test/"); dayFolder(h).addTabs([foreign]);
+    h.seam.agendaController.runNow(); assert.equal(old.isConnected, false); assert.equal(foreign.isConnected, true);
+    assert.match(projected(h)[0].getAttribute(MARK), /@\d{4}-\d{2}-\d{2}$/);
+    h.resetOperations(); h.seam.agendaController.runNow(); assert.deepEqual(h.operations, []); await h.destroy();
+  });
+  await test("root positioning next to NOTES does not create repeat DOM moves", async () => {
+    const h = await host({ prefs: { [ZEN_MODE]: "all" } }); h.seam.store.create("Note"); h.seam.zen.runNow();
+    h.seam.store.items.upsert(make("both", date(1), date(1, 13))); h.seam.agendaController.runNow();
+    h.resetOperations(); h.seam.agendaController.runNow(); assert.deepEqual(h.operations, []); await h.destroy();
+  });
+  await test("events caused by reconciliation do not schedule another run", async () => {
+    const h = await host(); h.seam.store.items.upsert(make("event-loop", date(1), date(1, 13)));
+    assert.equal(h.fireTimer(250), true); assert.ok(h.events.some((ev) => ev.type === "TabMove"));
+    assert.equal([...h.timers.values()].some((timer) => timer.ms === 400), false); await h.destroy();
+  });
   await test("foreign tabs survive disable; dragged-out virtual tabs are cleaned and rebuilt", async () => {
     const h = await host(); h.seam.store.items.upsert(make("event", date(1), date(1, 13))); h.seam.agendaController.runNow();
     const foreign = h.window.gBrowser.addTab("https://example.test/"); dayFolder(h).addTabs([foreign]);

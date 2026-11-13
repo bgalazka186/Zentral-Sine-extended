@@ -191,3 +191,21 @@ Measured baseline, ms (500/2000): projection 4d 116/192, 31d 428/1915; expansion
 **Tests / done when:** Unit test that wrapped functions still return the same values and cost nothing when PERF is off.
 
 Per-window sampler records real Agenda reconciliations, reminder candidate/pass timings, calendar rendering and asynchronous calendar/history writes and UTF-8 byte counts only when debug_perf is enabled. Focused tests cover disabled clock avoidance, promise identity/rejections and production paths.
+
+## H1.1 — Completed unique Agenda projection keys (3.3.116)
+
+#### `H1.1` — Unique Agenda tab keys for items shown in several day folders
+**Status:** `DONE` · **Impact:** High · **Effort:** S · **Depends on:** F0.1 (harness) · **Source:** Audit R1 A1 (confirmed by harness)
+
+**Problem:** `agendaZenProjection` fans an item out into every day bucket it touches (multi-day or all-day events, overnight events, any item with `leadDays`/`tailDays` > 0) but every copy gets the same key `item:<itemId>:<occurrenceId>`. `createZenAgenda.runNow` builds `currentByKey`/`desiredByKey` Maps and `agendaApi.agendaTabFor(key)` looks up by key alone, so only one copy can exist. Harness result for a 23:00-01:00 event: run1 adds Today and Tomorrow, run2 removes and re-adds Today, run3 removes and re-adds Tomorrow, forever. In real Zen every remove/add fires `TabClose`/`TabPinned`/`TabMove`, `onAgendaTabEvent` calls `schedule(400)`, which is expected to loop (not yet seen live).
+
+**Plan (do in this order):**
+Enforce the F0.1 known-failing idempotence test in this chunk.
+1. Make the key include the day: `item:<itemId>:<occurrenceId>@<YYYY-MM-DD>` in `agendaZenProjection`; keep `itemId`/`occurrenceId`/`recordId` attributes unchanged for identity checks.
+2. Make `agendaTabFor(key)` and `list()` resolve by key + parent day; `list()` must report the REAL DOM parent, not the `bgalazka-notes-agenda-day` attribute (also needed by `UI4.4`).
+3. Make `onAgendaTabEvent` ignore events raised by the controller's own operations (re-entrancy flag around `runNow`).
+4. Back-off guard: if three consecutive runs perform operations without a store change, stop reconciling for 5 s and `warn` once (prevents any future loop from hammering the UI).
+
+**Tests / done when:** Regression: two-day event, `leadDays=2` reminder, all-day 3-day event: 1st `runNow` adds N tabs, 2nd and 3rd perform zero operations. Keys unique across the whole projection (not only inside one day).
+
+Projection keys include the local day, old undated virtual tabs migrate, real parent folders are inspected, self-generated synchronous tab events are ignored and three repeated mutation runs invoke a five-second back-off reset by store changes. F0.1 overnight, leadDays=2 and three-day all-day assertions are enforced and pass twice after initial projection; live Zen remains unverified.

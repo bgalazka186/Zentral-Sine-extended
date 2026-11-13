@@ -72,7 +72,6 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 
 | Order | ID | Status | Impact | Effort | Depends on | Task |
 | --: | :-- | :-- | :-- | :-- | :-- | :-- |
-| 4 | `H1.1` | `OPEN` | High | S | F0.1 (harness) | Unique Agenda tab keys for items shown in several day folders |
 | 5 | `H1.5` | `OPEN` | High | S-M | none (OW-08 reuses it) | Do not alert all missed stages at once; coalesce due stages (owner bug: copying a played reminder plays every notification at once) |
 | 6 | `H1.2` | `OPEN` | High | S-M | F0.2 optional | Reminder history: merge before write (cross-window lost update) |
 | 7 | `H1.3` | `OPEN` | High | S | H1.2 | Reminder history: salvage instead of blocking everything on one bad record |
@@ -174,20 +173,6 @@ _Nothing below can be proven without these. They change no behaviour._
 ## Phase 1 — Stop loops and data loss
 
 _Defects that can churn the sidebar forever, lose Done/Dismiss state or spam alerts. Highest risk per line of code._
-
-#### `H1.1` — Unique Agenda tab keys for items shown in several day folders
-**Status:** `OPEN` · **Impact:** High · **Effort:** S · **Depends on:** F0.1 (harness) · **Source:** Audit R1 A1 (confirmed by harness)
-
-**Problem:** `agendaZenProjection` fans an item out into every day bucket it touches (multi-day or all-day events, overnight events, any item with `leadDays`/`tailDays` > 0) but every copy gets the same key `item:<itemId>:<occurrenceId>`. `createZenAgenda.runNow` builds `currentByKey`/`desiredByKey` Maps and `agendaApi.agendaTabFor(key)` looks up by key alone, so only one copy can exist. Harness result for a 23:00-01:00 event: run1 adds Today and Tomorrow, run2 removes and re-adds Today, run3 removes and re-adds Tomorrow, forever. In real Zen every remove/add fires `TabClose`/`TabPinned`/`TabMove`, `onAgendaTabEvent` calls `schedule(400)`, which is expected to loop (not yet seen live).
-
-**Plan (do in this order):**
-Enforce the F0.1 known-failing idempotence test in this chunk.
-1. Make the key include the day: `item:<itemId>:<occurrenceId>@<YYYY-MM-DD>` in `agendaZenProjection`; keep `itemId`/`occurrenceId`/`recordId` attributes unchanged for identity checks.
-2. Make `agendaTabFor(key)` and `list()` resolve by key + parent day; `list()` must report the REAL DOM parent, not the `bgalazka-notes-agenda-day` attribute (also needed by `UI4.4`).
-3. Make `onAgendaTabEvent` ignore events raised by the controller's own operations (re-entrancy flag around `runNow`).
-4. Back-off guard: if three consecutive runs perform operations without a store change, stop reconciling for 5 s and `warn` once (prevents any future loop from hammering the UI).
-
-**Tests / done when:** Regression: two-day event, `leadDays=2` reminder, all-day 3-day event: 1st `runNow` adds N tabs, 2nd and 3rd perform zero operations. Keys unique across the whole projection (not only inside one day).
 
 #### `H1.5` — Do not alert all missed stages at once; coalesce due stages (owner bug: copying a played reminder plays every notification at once)
 **Status:** `OPEN` · **Impact:** High · **Effort:** S-M · **Depends on:** none (OW-08 reuses it) · **Source:** Owner 2026-11-14 bug + code reading
@@ -1213,13 +1198,13 @@ Use a disposable Zen profile and back up the profile and Sync data first. Do not
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.115, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.116, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.115.** `F0.1` harness, `F0.2` production-shape budgets and `F0.3` timers are DONE and archived. Per owner, multi-day and leadDays idempotence remain documented TODOs until `H1.1` enforces them.
+State: **3.3.116.** `F0.1`–`F0.3` and `H1.1` are DONE and archived. The fan-out idempotence gates are enforced and pass in the fake Zen harness; live Zen is unavailable.
 
-Completed this session: imported the new instructions, active roadmap and legacy archive. Added a production-host fake Zen harness with structural-operation recording, event dispatch, seed fallback, menus, foreign/dragged-out tabs, disable/re-enable, Notes and two isolated windows over shared persisted input. Single-day projections are idempotent; multi-day and leadDays each reproduce three structural operations on the second unchanged run. Those acceptance assertions are explicitly TODO, not passing. F0.2 measured production-shape 500/2000 projection 31d at 428/1915 ms, scheduler at 2308/10776 ms, expansion 90d at 742/3188 ms and 45000 history queries at 967 ms; CI ceilings retain headroom. F0.3 adds debug-only async write, bytes, Agenda, scheduler and calendar-render sampling.
+Completed this session: imported the new instructions, active roadmap and legacy archive. Added a production-host fake Zen harness with structural-operation recording, event dispatch, seed fallback, menus, foreign/dragged-out tabs, disable/re-enable, Notes and two isolated windows over shared persisted input. H1.1 makes per-day keys unique, migrates old keys, uses the real parent, suppresses self-generated events and backs off repeated reconciliation; overnight, leadDays=2 and three-day all-day projections perform zero structural operations on unchanged follow-up runs. F0.2 measured production-shape 500/2000 projection 31d at 428/1915 ms, scheduler at 2308/10776 ms, expansion 90d at 742/3188 ms and 45000 history queries at 967 ms; CI ceilings retain headroom. After H1.1: 31d projection 385/3124 ms, 90d expansion 704/3317 ms, scheduler 2829/11066 ms, history 976 ms; timing fluctuates. F0.3 adds debug-only async write, bytes, Agenda, scheduler and calendar-render sampling.
 
 Standing owner rules for chunks: no conversational filler; output production-ready code and test suites; process tasks strictly in order (implementation, edge cases, unit tests per task); stop cleanly before output limits so the zip is complete; deliver a zip of only changed files (no `.git`).
 
@@ -1227,4 +1212,4 @@ Known debts / owner requirements: Earlier roadmap DONE claims for `T2.5a–d` we
 
 Calendar density supports persisted Comfortable, Compact and Extra compact in all five views; timeline hour geometry and shading use a shared scale, while narrow Month keeps its list fallback. Live density readability and interaction checks are pending. Calendar/Agenda item menus share a per-item Zen Agenda visibility toggle; it preserves sparse lead/tail overrides, acts on the recurring series, and makes the legacy read-only note-reminder limitation explicit. Calendar remains available to restore an item hidden from the sidebar. Live Zen menu and projection checks remain open.
 
-Next action: implement `H1.1` (enforce both known-failing idempotence tests), `H1.5`, and `H1.2`–`H1.4` in order. Live Zen remains unavailable in the sandbox.
+Next action: implement `H1.5`, then `H1.2`–`H1.4` in order. Live Zen remains unavailable in the sandbox.

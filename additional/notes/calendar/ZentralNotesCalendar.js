@@ -2377,7 +2377,7 @@
         const identity = reminderIdentity(item) || { itemId: item.id, occurrenceId: String(item.x?.recurrenceId || item.id), noteId: item.x?.noteId || "" };
         const details = [item.description, item.x?.calNote, item.x?.sourceNoteTitle ? "Source note: " + item.x.sourceNoteTitle : "", item.x?.heading ? "Heading: " + item.x.heading : "", item.x?.category ? "Category: " + item.x.category : "", item.x?.tz ? "Time zone: " + item.x.tz : ""].filter(Boolean).join("\n");
         return {
-          key: "item:" + identity.itemId + ":" + identity.occurrenceId,
+          key: "item:" + identity.itemId + ":" + identity.occurrenceId + "@" + bucket.key,
           itemId: identity.itemId,
           occurrenceId: identity.occurrenceId,
           recordId: String(item.x?.series || item.id),
@@ -2413,11 +2413,12 @@
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
   function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
-    let dead = false, timer = null, timerAt = Infinity, last = [];
+    let dead = false, timer = null, timerAt = Infinity, last = [], busy = false, consecutiveChanges = 0, blockedUntil = 0;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     function armAt(due) {
       if (dead || !Number.isFinite(due)) return;
       const stamp = Number(now());
+      due = Math.max(due, blockedUntil);
       const wait = Math.max(0, due - (Number.isFinite(stamp) ? stamp : Date.now()));
       if (timer !== null && timerAt <= due) return;
       if (timer !== null) clearTimer(timer);
@@ -2435,7 +2436,13 @@
     }
     function runNow() {
       if (dead) return [];
-      let sourceItems = [];
+      if (busy) return last;
+      const stamp = Number(now());
+      if (blockedUntil && stamp < blockedUntil) return last;
+      if (blockedUntil) { blockedUntil = 0; consecutiveChanges = 0; }
+      busy = true;
+      let sourceItems = [], operations = 0;
+      const revision = api.mutationCount?.() || 0;
       try {
         if (!getEnabled()) { api.removeAll?.(); last = []; clearScheduled(); return []; }
         sourceItems = getItems?.() || [];
@@ -2452,11 +2459,12 @@
         const current = api.list?.() || [], currentByKey = new Map();
         for (const entry of current) if (entry?.key && !currentByKey.has(entry.key)) currentByKey.set(entry.key, entry);
         const desiredByKey = new Map(desired.map((entry) => [entry.key, entry]));
-        for (const entry of current) if (entry?.key && !desiredByKey.has(entry.key)) api.remove?.(entry.key);
+        for (const entry of current) if (entry?.key && !desiredByKey.has(entry.key)) { operations++; api.remove?.(entry.key); }
         for (const entry of desired) {
           const old = currentByKey.get(entry.key);
           if (!old || old.parent !== entry.parent || old.kind !== entry.kind) {
-            if (old) api.remove?.(entry.key);
+            if (old) { operations++; api.remove?.(entry.key); }
+            operations++;
             if (api.add?.(entry) === false) safeWarn("Zen Agenda: could not add " + entry.key);
           } else api.update?.(entry);
         }
@@ -2465,12 +2473,19 @@
           api.reorder?.(day.key, desired.filter((entry) => entry.kind === "item" && entry.parent === day.key).map((entry) => entry.key));
         last = projection;
         scheduleBoundary(sourceItems);
+        if (operations || (api.mutationCount?.() || 0) !== revision) consecutiveChanges++;
+        else consecutiveChanges = 0;
+        if (consecutiveChanges >= 3) {
+          blockedUntil = (Number.isFinite(stamp) ? stamp : Date.now()) + 5000;
+          safeWarn("Zen Agenda: repeated reconciliation changes; back-off for five seconds");
+          clearScheduled(); armAt(blockedUntil);
+        }
         return projection;
       } catch (error) {
         safeWarn(error);
         try { scheduleBoundary(sourceItems); } catch (scheduleError) { safeWarn(scheduleError); }
         return last;
-      }
+      } finally { busy = false; }
     }
     if (perf?.wrap) runNow = perf.wrap("agenda.runNow", runNow);
     function schedule(ms = 250) {
@@ -2481,6 +2496,8 @@
     return {
       runNow,
       schedule,
+      invalidate() { consecutiveChanges = 0; blockedUntil = 0; },
+      get busy() { return busy; },
       get projection() { return last; },
       destroy() { dead = true; clearScheduled(); try { api.removeAll?.(); } catch (error) { safeWarn(error); } },
     };

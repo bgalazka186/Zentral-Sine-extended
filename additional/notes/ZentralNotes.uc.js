@@ -18875,15 +18875,21 @@
         const url = agendaTabUrl(key), tab = window.gBrowser.addTab(url, { skipAnimation: true, triggeringPrincipal: systemPrincipal() });
         tab.setAttribute(AGENDA_ATTR, key); tab._zentralNotesUrl = url; window.gBrowser.pinTab(tab); return tab;
       }
+      let agendaMutationCount = 0;
       function agendaPlaceRoot(root, position) {
         const notesRoot = zenRootEl(), host = notesRoot?.parentElement || root?.parentElement;
         if (!host || !root) return;
+        const siblings = [...host.children], rootIndex = siblings.indexOf(root);
         if (notesRoot && notesRoot.parentElement === host) {
-          if (position === "below") host.insertBefore(root, notesRoot.nextSibling);
-          else host.insertBefore(root, notesRoot);
+          const notesIndex = siblings.indexOf(notesRoot);
+          if (position === "below" && (rootIndex < 0 || rootIndex !== notesIndex + 1)) {
+            host.insertBefore(root, siblings[notesIndex + 1] || null); agendaMutationCount++;
+          } else if (position !== "below" && (rootIndex < 0 || rootIndex + 1 !== notesIndex)) {
+            host.insertBefore(root, notesRoot); agendaMutationCount++;
+          }
         } else if (!notesRoot && position === "above") {
-          const first = [...host.children].find((child) => child !== root && /^(zen-folder|tab)$/i.test(child.localName || ""));
-          if (first) host.insertBefore(root, first);
+          const first = siblings.find((child) => child !== root && /^(zen-folder|tab)$/i.test(child.localName || ""));
+          if (first && rootIndex > siblings.indexOf(first)) { host.insertBefore(root, first); agendaMutationCount++; }
         }
       }
       // Some Zen versions delete a folder as soon as its last tab is removed.
@@ -18953,11 +18959,12 @@
         }
         return true;
       }
-      function agendaTabFor(key) {
-        const root = agendaRootEl();
-        return [...(root?.querySelectorAll?.("tab[" + AGENDA_ATTR + "]") || [])].find((tab) => tab.getAttribute(AGENDA_ATTR) === key) || null;
+      function agendaTabFor(key, parentKey = null) {
+        const root = agendaRootEl(), parent = parentKey ? agendaDayEl(parentKey) : null;
+        return [...(root?.querySelectorAll?.("tab[" + AGENDA_ATTR + "]") || [])].find((tab) => tab.getAttribute(AGENDA_ATTR) === key && (!parentKey || (parent && tab.closest?.("zen-folder") === parent))) || null;
       }
       const agendaApi = {
+        mutationCount: () => agendaMutationCount,
         ensureRoot: agendaEnsureRoot,
         list() {
           const root = agendaRootEl(); if (!root) return [];
@@ -18983,7 +18990,10 @@
               continue;
             }
             if (!root.contains(tab)) continue;
-            out.push({ key, kind: "item", parent: "day:" + (tab.getAttribute("bgalazka-notes-agenda-day") || "") });
+            const actualFolder = tab.closest?.("zen-folder");
+            const actualDay = actualFolder?.getAttribute?.("bgalazka-notes-agenda-day") || "";
+            const actualParent = actualDay && agendaDayEl("day:" + actualDay) === actualFolder ? "day:" + actualDay : "?misplaced";
+            out.push({ key, kind: "item", parent: actualParent });
           }
           if (root.isConnected === false) return [];
           for (const folder of root.querySelectorAll?.("zen-folder") || []) {
@@ -19015,7 +19025,7 @@
             try { folder.label = entry.label; } catch (_) {}
             return true;
           }
-          const tab = agendaTabFor(entry.key); if (!tab) return false;
+          const tab = agendaTabFor(entry.key, entry.parent); if (!tab) return false;
           tab.setAttribute("label", entry.label);
           tab.setAttribute("bgalazka-notes-label", entry.label);
           tab.setAttribute("tooltiptext", entry.tooltip || entry.summary || "");
@@ -19038,14 +19048,14 @@
         reorder(parentKey, keys) {
           const root = agendaRootEl(), parent = parentKey ? agendaDayEl(parentKey) : root;
           if (!parent) return true;
-          const els = keys.map((key) => String(key).startsWith("day:") ? agendaDayEl(key) : agendaTabFor(key)).filter(Boolean);
+          const els = keys.map((key) => String(key).startsWith("day:") ? agendaDayEl(key) : agendaTabFor(key, parentKey)).filter(Boolean);
           if (els.length < 2) return true;
           const host = els[0].parentElement;
           if (!host || els.some((el) => el.parentElement !== host)) return false;
           for (let i = 0; i < els.length; i++) {
             const cur = [...host.children].filter((child) => els.includes(child));
             if (cur[i] === els[i]) continue;
-            try { host.insertBefore(els[i], cur[i]); } catch (_) {}
+            try { host.insertBefore(els[i], cur[i]); agendaMutationCount++; } catch (_) {}
           }
           return true;
         },
@@ -19085,17 +19095,18 @@
       const agendaSoon = () => {
         if (disposed) return;
         bindAgenda(agendaEnabled());
+        agendaController.invalidate?.();
         if (!agendaEnabled()) { agendaController.runNow(); return; }
         ensureStore().then(() => { if (!disposed) agendaController.schedule(); }).catch(warn);
       };
       const agendaItemUnsub = store.items?.on?.((ev) => {
-        if (CALENDAR_PART?.agendaItemEventAffectsProjection(ev) && agendaEnabled()) agendaController.schedule();
+        if (CALENDAR_PART?.agendaItemEventAffectsProjection(ev) && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); }
       });
       const agendaHistoryUnsub = store.items?.history?.on?.(() => {
-        if (!disposed && agendaEnabled()) agendaController.schedule();
+        if (!disposed && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); }
       });
       const agendaNoteUnsub = store.on((ev) => {
-        if (["change", "tree", "remove", "reset"].includes(ev.type) && agendaEnabled()) agendaController.schedule();
+        if (["change", "tree", "remove", "reset"].includes(ev.type) && agendaEnabled()) { agendaController.invalidate?.(); agendaController.schedule(); }
       });
       onCleanup(() => { agendaItemUnsub?.(); agendaHistoryUnsub?.(); agendaNoteUnsub?.(); });
       const agendaBoot = window.setTimeout(agendaSoon, 6500);
@@ -19262,7 +19273,7 @@
         }, 0);
       }
       function onAgendaTabEvent(ev) {
-        if (disposed || !agendaEnabled()) return;
+        if (disposed || !agendaEnabled() || agendaController.busy) return;
         const tab = ev.target;
         if (agendaTabKey(tab) || (ev.type === "SSTabRestored" && /#zn-agenda-/.test(tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || ""))) agendaController.schedule(400);
       }
