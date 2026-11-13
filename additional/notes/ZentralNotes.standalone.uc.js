@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.70
+// @version 3.3.71
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.70, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.71, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.70";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.71";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11415,11 +11415,18 @@ __zentralShim.register = function (def) {
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
     function mapMarkdownForExport(text, fn) {
+      const lines = String(text).split("\n"), result = [];
       let fence = null, comment = false;
-      return String(text).split("\n").map((line) => {
+      const findClose = (line, run, start) => {
+        let close = line.indexOf(run, start);
+        while (close >= 0 && (line[close - 1] === "`" || line[close + run.length] === "`")) close = line.indexOf(run, close + run.length);
+        return close;
+      };
+      for (let row = 0; row < lines.length; row++) {
+        let line = lines[row];
         if (!comment) {
           const wasFenced = !!fence, next = nextMarkdownFence(line, fence);
-          if (wasFenced || next) { fence = next; return line; }
+          if (wasFenced || next) { fence = next; result.push(line); continue; }
         }
         let out = "", visible = "", pos = 0;
         const flush = () => { if (visible) { out += fn(visible); visible = ""; } };
@@ -11432,18 +11439,28 @@ __zentralShim.register = function (def) {
           if (line.startsWith("<!--", pos)) { flush(); comment = true; continue; }
           if (line[pos] === "`") {
             const run = /^`+/.exec(line.slice(pos))[0];
-            let close = line.indexOf(run, pos + run.length);
-            while (close >= 0 && (line[close - 1] === "`" || line[close + run.length] === "`")) close = line.indexOf(run, close + run.length);
+            let close = findClose(line, run, pos + run.length), endRow = row;
+            // A code span may cross lines inside a paragraph, but never crosses
+            // a blank line or the start of a new fenced block.
+            if (close < 0) for (let next = row + 1; next < lines.length; next++) {
+              if (!lines[next].trim() || nextMarkdownFence(lines[next], null)) break;
+              const found = findClose(lines[next], run, 0);
+              if (found >= 0) { close = found; endRow = next; break; }
+            }
             if (close >= 0) {
-              flush(); out += line.slice(pos, close + run.length); pos = close + run.length; continue;
+              flush();
+              if (endRow === row) { out += line.slice(pos, close + run.length); pos = close + run.length; continue; }
+              out += line.slice(pos); result.push(out);
+              for (let k = row + 1; k < endRow; k++) result.push(lines[k]);
+              row = endRow; line = lines[row]; out = line.slice(0, close + run.length); pos = close + run.length; continue;
             }
             visible += run; pos += run.length; continue;
           }
           visible += line[pos++];
         }
-        flush();
-        return out;
-      }).join("\n");
+        flush(); result.push(out);
+      }
+      return result.join("\n");
     }
     // Identify live Zentral extensions without interpreting examples inside code.
     // This reports categories only; it does not modify or export the source.
