@@ -20491,6 +20491,17 @@
         },
         toggle: toggleFromShortcut,
       };
+      // Opt-in test seam: the real per-window coordinator and native adapters,
+      // without opening a Notes sheet or publishing privileged objects normally.
+      if (window.__zentralNotesTestSeam) {
+        const sidebar = { store, ensureStore, zenApi, zen, agendaApi, agendaController,
+          onAgendaMouse, onAgendaSelect, onAgendaTabEvent, onAgendaFolderMenuShowing,
+          onAgendaFolderMenuHidden, onAgendaTabMenuShowing };
+        window.__zentralNotesTestSeam.sidebar = sidebar;
+        onCleanup(() => {
+          if (window.__zentralNotesTestSeam?.sidebar === sidebar) delete window.__zentralNotesTestSeam.sidebar;
+        });
+      }
       window.addEventListener("unload", () => api.destroy(), { once: true });
       return () => api.destroy();
     }

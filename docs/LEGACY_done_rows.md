@@ -143,3 +143,20 @@ Firefox's XUL `<notification>` bar (`gBrowser.getNotificationBox()`) forces butt
    - **Stage 2 (`due`):** Elevated card with stronger surface contrast, countdown/due badge, and full action row.
    - **Stage 3 (`followup` — unanswered after Stages 1 & 2):** High-prominence centered/top-edge card with a larger footprint, distinct high-contrast border/surface tint, and a slow, smooth CSS color shift (`3s ease-in-out infinite alternate` between two calm accent tones, disabled under `@media (prefers-reduced-motion: reduce)` — strictly avoiding rapid flashing/strobing for photosensitive users).
 3. **Cross-Window Dismissal:** Because `createReminderHistoryStore` will emit change events (`B3.3.50-3`), clicking **Done**, **Snooze**, or **Dismiss** in one window immediately closes the alert card in all other open Zen windows.
+
+## F0.1 — Completed harness (3.3.114)
+
+#### `F0.1` — Fake-DOM harness for the Zen sidebar projections (Agenda + Notes pseudo-tabs)
+**Status:** `DONE` · **Impact:** High · **Effort:** M · **Depends on:** none · **Source:** Audit R1 S4
+
+**Problem:** The pure projection (`agendaZenProjection`, `createZenAgenda`) is tested, but the DOM reconcile in `agendaApi` (`ZentralNotes.uc.js`, `agendaEnsureRoot/agendaMakeDay/agendaApi.*`, ~line 18835+) is not, which is why `H1.1` stayed hidden. Nothing can prove the sidebar fixes below without it.
+
+**Plan (do in this order):**
+1. Extend `tests/helpers` (reuse `fake-dom.cjs` built from the owner's real Zen dump) with minimal `zen-folder`, `tab`, `gBrowser.addTab/pinTab/removeTab`, `gZenFolders.createFolder`, `closest`, `querySelectorAll`, `insertBefore`, attribute and event dispatch (`TabClose`, `TabPinned`, `TabMove`, `TabSelect`, `SSTabRestored`, `TabAttrModified`).
+2. Expose the Agenda factory (`agendaApi`, `onAgendaMouse`, `onAgendaSelect`, `onAgendaTabEvent`, menu handlers) through `__zentralNotesTestSeam` so a test can build it without the whole sheet.
+3. Record every DOM operation (add/remove/move) so tests can assert operation counts per `runNow()`.
+4. First scenarios: multi-day event, `leadDays` fan-out, user tab dropped into a day folder, Agenda tab dragged out, restore with stale seed tabs, disabled then re-enabled Agenda, two windows.
+
+**Tests / done when:** New `tests/notes-agenda-dom.test.cjs`. The multi-day case is a documented known failure until `H1.1`; other scenarios pass independently.
+
+The real-host harness passes its standalone scenarios. Multi-day and leadDays idempotence are explicitly TODO pending H1.1; no live Zen was available.

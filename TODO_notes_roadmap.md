@@ -72,10 +72,9 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 
 | Order | ID | Status | Impact | Effort | Depends on | Task |
 | --: | :-- | :-- | :-- | :-- | :-- | :-- |
-| 1 | `F0.1` | `OPEN` | High | M | none | Fake-DOM harness for the Zen sidebar projections (Agenda + Notes pseudo-tabs) |
 | 2 | `F0.2` | `OPEN` | High | S | none | Production-shape performance budget tests |
 | 3 | `F0.3` | `OPEN` | Med | S | none | Performance timers for the hot paths |
-| 4 | `H1.1` | `OPEN` | High | S | F0.1 (test first) | Unique Agenda tab keys for items shown in several day folders |
+| 4 | `H1.1` | `OPEN` | High | S | F0.1 (harness) | Unique Agenda tab keys for items shown in several day folders |
 | 5 | `H1.5` | `OPEN` | High | S-M | none (OW-08 reuses it) | Do not alert all missed stages at once; coalesce due stages (owner bug: copying a played reminder plays every notification at once) |
 | 6 | `H1.2` | `OPEN` | High | S-M | F0.2 optional | Reminder history: merge before write (cross-window lost update) |
 | 7 | `H1.3` | `OPEN` | High | S | H1.2 | Reminder history: salvage instead of blocking everything on one bad record |
@@ -171,19 +170,6 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 
 _Nothing below can be proven without these. They change no behaviour._
 
-#### `F0.1` — Fake-DOM harness for the Zen sidebar projections (Agenda + Notes pseudo-tabs)
-**Status:** `OPEN` · **Impact:** High · **Effort:** M · **Depends on:** none · **Source:** Audit R1 S4
-
-**Problem:** The pure projection (`agendaZenProjection`, `createZenAgenda`) is tested, but the DOM reconcile in `agendaApi` (`ZentralNotes.uc.js`, `agendaEnsureRoot/agendaMakeDay/agendaApi.*`, ~line 18835+) is not, which is why `H1.1` stayed hidden. Nothing can prove the sidebar fixes below without it.
-
-**Plan (do in this order):**
-1. Extend `tests/helpers` (reuse `fake-dom.cjs` built from the owner's real Zen dump) with minimal `zen-folder`, `tab`, `gBrowser.addTab/pinTab/removeTab`, `gZenFolders.createFolder`, `closest`, `querySelectorAll`, `insertBefore`, attribute and event dispatch (`TabClose`, `TabPinned`, `TabMove`, `TabSelect`, `SSTabRestored`, `TabAttrModified`).
-2. Expose the Agenda factory (`agendaApi`, `onAgendaMouse`, `onAgendaSelect`, `onAgendaTabEvent`, menu handlers) through `__zentralNotesTestSeam` so a test can build it without the whole sheet.
-3. Record every DOM operation (add/remove/move) so tests can assert operation counts per `runNow()`.
-4. First scenarios: multi-day event, `leadDays` fan-out, user tab dropped into a day folder, Agenda tab dragged out, restore with stale seed tabs, disabled then re-enabled Agenda, two windows.
-
-**Tests / done when:** New `tests/notes-agenda-dom.test.cjs`. Gate: a second `runNow()` on an unchanged store performs ZERO add/remove/move operations (idempotence).
-
 #### `F0.2` — Production-shape performance budget tests
 **Status:** `OPEN` · **Impact:** High · **Effort:** S · **Depends on:** none · **Source:** Audit R2 P2/P7
 
@@ -194,7 +180,7 @@ _Nothing below can be proven without these. They change no behaviour._
 2. Set budgets as constants (start with generous CI values, tighten after each `PF2.x` lands): projection 4 days, projection 31 days, `expandRange` 31/90 days, scheduler `calendarCandidates` pass, `history.list` loop.
 3. Print the measured numbers in the test output so regressions are visible.
 
-**Tests / done when:** `tests/notes-perf-budget.test.cjs`; must fail today for the scheduler pass and 2000-item projection.
+**Tests / done when:** `tests/notes-perf-budget.test.cjs`; uses baseline ceilings with margin, tightened by the relevant PF2.x tasks.
 
 #### `F0.3` — Performance timers for the hot paths
 **Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** none · **Source:** Audit R2 P7
@@ -214,11 +200,12 @@ _Nothing below can be proven without these. They change no behaviour._
 _Defects that can churn the sidebar forever, lose Done/Dismiss state or spam alerts. Highest risk per line of code._
 
 #### `H1.1` — Unique Agenda tab keys for items shown in several day folders
-**Status:** `OPEN` · **Impact:** High · **Effort:** S · **Depends on:** F0.1 (test first) · **Source:** Audit R1 A1 (confirmed by harness)
+**Status:** `OPEN` · **Impact:** High · **Effort:** S · **Depends on:** F0.1 (harness) · **Source:** Audit R1 A1 (confirmed by harness)
 
 **Problem:** `agendaZenProjection` fans an item out into every day bucket it touches (multi-day or all-day events, overnight events, any item with `leadDays`/`tailDays` > 0) but every copy gets the same key `item:<itemId>:<occurrenceId>`. `createZenAgenda.runNow` builds `currentByKey`/`desiredByKey` Maps and `agendaApi.agendaTabFor(key)` looks up by key alone, so only one copy can exist. Harness result for a 23:00-01:00 event: run1 adds Today and Tomorrow, run2 removes and re-adds Today, run3 removes and re-adds Tomorrow, forever. In real Zen every remove/add fires `TabClose`/`TabPinned`/`TabMove`, `onAgendaTabEvent` calls `schedule(400)`, which is expected to loop (not yet seen live).
 
 **Plan (do in this order):**
+Enforce the F0.1 known-failing idempotence test in this chunk.
 1. Make the key include the day: `item:<itemId>:<occurrenceId>@<YYYY-MM-DD>` in `agendaZenProjection`; keep `itemId`/`occurrenceId`/`recordId` attributes unchanged for identity checks.
 2. Make `agendaTabFor(key)` and `list()` resolve by key + parent day; `list()` must report the REAL DOM parent, not the `bgalazka-notes-agenda-day` attribute (also needed by `UI4.4`).
 3. Make `onAgendaTabEvent` ignore events raised by the controller's own operations (re-entrancy flag around `runNow`).
@@ -1250,13 +1237,13 @@ Use a disposable Zen profile and back up the profile and Sync data first. Do not
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.113, no code changed in the 2026-11-14 planning session; edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.114, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.113.** Roadmap re-planned 2026-11-14: 76 DONE rows moved to `docs/LEGACY_done_rows.md`; 92 tasks remain in the Master Order (phases 0-8).
+State: **3.3.114.** `F0.1` harness is DONE and archived. Per owner, multi-day and leadDays idempotence remain documented TODOs until `H1.1` enforces them.
 
-Completed this session: none in code (planning only). Added: owner list `OW-01..OW-11` and `H1.5`, audit findings `H1.x`, `PF2.x`, `TM3.x`, `UI4.x`, `SB6.x`, `ST7.x`, `F0.x`. Owner rule reversal: Month click selects the day (`OW-06`).
+Completed this session: imported the new instructions, active roadmap and legacy archive. Added a production-host fake Zen harness with structural-operation recording, event dispatch, seed fallback, menus, foreign/dragged-out tabs, disable/re-enable, Notes and two isolated windows over shared persisted input. Single-day projections are idempotent; multi-day and leadDays each reproduce three structural operations on the second unchanged run. Those acceptance assertions are explicitly TODO, not passing.
 
 Standing owner rules for chunks: no conversational filler; output production-ready code and test suites; process tasks strictly in order (implementation, edge cases, unit tests per task); stop cleanly before output limits so the zip is complete; deliver a zip of only changed files (no `.git`).
 
@@ -1264,4 +1251,4 @@ Known debts / owner requirements: Earlier roadmap DONE claims for `T2.5a–d` we
 
 Calendar density supports persisted Comfortable, Compact and Extra compact in all five views; timeline hour geometry and shading use a shared scale, while narrow Month keeps its list fallback. Live density readability and interaction checks are pending. Calendar/Agenda item menus share a per-item Zen Agenda visibility toggle; it preserves sparse lead/tail overrides, acts on the recurring series, and makes the legacy read-only note-reminder limitation explicit. Calendar remains available to restore an item hidden from the sidebar. Live Zen menu and projection checks remain open.
 
-Next action: start at the top of the Master Order: `F0.1` (fake-DOM harness), `F0.2`, `F0.3`, then `H1.1` (unique Agenda keys), `H1.5` (no alert storm on copied/late reminders), `H1.2`-`H1.4` (history merge/salvage). Each in its own chunk with tests. Live-check items stay assumed working (owner decision).
+Next action: implement `F0.2` with measured baseline ceilings and margin, then `F0.3`, then `H1.1` (enforce both known-failing idempotence tests), `H1.5`, and `H1.2`–`H1.4` in order. Live Zen remains unavailable in the sandbox.

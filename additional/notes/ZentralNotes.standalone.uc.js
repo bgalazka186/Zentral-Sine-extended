@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.113
+// @version 3.3.114
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.113, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.114, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.113";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.114";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -24962,6 +24962,17 @@ __zentralShim.register = function (def) {
         },
         toggle: toggleFromShortcut,
       };
+      // Opt-in test seam: the real per-window coordinator and native adapters,
+      // without opening a Notes sheet or publishing privileged objects normally.
+      if (window.__zentralNotesTestSeam) {
+        const sidebar = { store, ensureStore, zenApi, zen, agendaApi, agendaController,
+          onAgendaMouse, onAgendaSelect, onAgendaTabEvent, onAgendaFolderMenuShowing,
+          onAgendaFolderMenuHidden, onAgendaTabMenuShowing };
+        window.__zentralNotesTestSeam.sidebar = sidebar;
+        onCleanup(() => {
+          if (window.__zentralNotesTestSeam?.sidebar === sidebar) delete window.__zentralNotesTestSeam.sidebar;
+        });
+      }
       window.addEventListener("unload", () => api.destroy(), { once: true });
       return () => api.destroy();
     }
