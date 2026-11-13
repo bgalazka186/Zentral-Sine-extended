@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.105
+// @version 3.3.106
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.105, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.106, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.105";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.106";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -15537,8 +15537,20 @@ __zentralShim.register = function (def) {
           { heading: true, label: calendarDayLabel(day, { year: true }) },
           { icon: "calendar", label: "Open Day view", action: chooseView },
           { icon: "bell", label: "New reminder…", action: () => askCalendarComposer({ date: key, kind: "reminder", linkCurrent: false }) },
+          { icon: "bell", label: "New all-day reminder…", action: () => askCalendarComposer({ date: key, kind: "reminder", allDay: true, linkCurrent: false }) },
           { icon: "calendar-plus", label: "New event…", action: () => askCalendarComposer({ date: key, kind: "event", linkCurrent: false }) },
+          { icon: "calendar-plus", label: "New all-day event…", action: () => askCalendarComposer({ date: key, kind: "event", allDay: true, linkCurrent: false }) },
+          { icon: "note", label: "Open or create date note", action: () => openDay(day, key, true) },
+          { sep: true },
+          ...[[-1, "Previous day"], [1, "Next day"]].map(([offset, label]) => ({ icon: "calendar", label, action: () => { store.setMeta({ calendarCursor: CALENDAR_PART.localDateKey(CALENDAR_PART.addDays(day, offset)), calendarView: "day" }); renderCalendar(); } })),
         ]);
+      }
+      function bindCalendarDayContext(anchor, day) {
+        anchor.addEventListener("contextmenu", (event) => showCalendarDayMenu(event, day, anchor));
+        anchor.addEventListener("keydown", (event) => {
+          if (event.target !== anchor || !(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return;
+          event.preventDefault(); event.stopPropagation(); showCalendarDayMenu(null, day, anchor);
+        });
       }
       function calendarItemMenuRows(item) {
         const reminder = CALENDAR_PART.isReminder(item), history = reminderHistoryStore();
@@ -15609,8 +15621,8 @@ __zentralShim.register = function (def) {
       }
       function calendarDayGroup(day, dayItems, { selected = false, compact = false } = {}) {
         const isToday = CALENDAR_PART.localDateKey(day) === CALENDAR_PART.localDateKey(nowMs());
-        const section = h("section", { class: "zn-cal-day-group" + (selected ? " is-selected" : "") + (isToday ? " is-today" : "") });
-        section.addEventListener("contextmenu", (event) => showCalendarDayMenu(event, day, section));
+        const section = h("section", { class: "zn-cal-day-group" + (selected ? " is-selected" : "") + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": calendarDayLabel(day, { year: true }) });
+        bindCalendarDayContext(section, day);
         const head = h("div", { class: "zn-cal-day-head" }, h("strong", {}, calendarDayLabel(day, { year: true })), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, "Today")] : []), h("span", {}, `${dayItems.length} item${dayItems.length === 1 ? "" : "s"}`));
         section.append(head);
         const allDay = dayItems.filter((item) => CALENDAR_PART.isAllDay(item));
@@ -15651,9 +15663,10 @@ __zentralShim.register = function (def) {
         for (const week of grid) for (const day of week) {
           const inMonth = new Date(day).getMonth() === month;
           const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
-          const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", "data-day": CALENDAR_PART.ymd(new Date(day)) });
+          const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-label": "Calendar day " + calendarDayLabel(day, { year: true }), "data-day": CALENDAR_PART.ymd(new Date(day)) });
+          const openDayView = () => { store.setMeta({ calendarCursor: CALENDAR_PART.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); };
           const dayButton = h("button", { type: "button", class: "zn-cal-month-date", "aria-label": "Open Day view for " + calendarDayLabel(day, { year: true }), "aria-pressed": day === selected ? "true" : "false" }, String(new Date(day).getDate()));
-          dayButton.addEventListener("click", (event) => { event.stopPropagation(); store.setMeta({ calendarCursor: CALENDAR_PART.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
+          dayButton.addEventListener("click", (event) => { event.stopPropagation(); openDayView(); });
           cell.append(dayButton);
           const allDay = dayItems.filter((item) => CALENDAR_PART.isAllDay(item));
           const timed = dayItems.filter((item) => !CALENDAR_PART.isAllDay(item));
@@ -15662,7 +15675,7 @@ __zentralShim.register = function (def) {
             const reminder = CALENDAR_PART.isReminder(item), lifecycle = reminder ? reminderLifecycleState(item) : "";
             const mark = h("button", { type: "button", class: "zn-cal-month-mark" + (reminder ? " is-reminder is-" + lifecycle : " is-event"), title: [item.summary, reminder ? "Reminder: " + lifecycle : "", item.x?.calNote].filter(Boolean).join(" — "), "aria-haspopup": "menu" }, item.summary || "Untitled");
             const color = calendarItemColor(item); if (color) mark.style.setProperty("--zn-cal-item-color", color);
-            mark.addEventListener("click", () => openCalendarItem(item));
+            mark.addEventListener("click", (event) => { event.stopPropagation(); openCalendarItem(item); });
             mark.addEventListener("contextmenu", (event) => showCalendarItemMenu(event, item, mark));
             mark.addEventListener("keydown", (event) => {
               if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
@@ -15675,7 +15688,11 @@ __zentralShim.register = function (def) {
           if (dayItems.length > 2) mini.append(h("span", { class: "zn-cal-month-more" }, `+${dayItems.length - 2} more`));
           if (allDay.length) cell.append(h("span", { class: "zn-cal-month-allday", "aria-label": `${allDay.length} all-day item${allDay.length === 1 ? "" : "s"}` }, "All day"));
           if (timed.some((item) => CALENDAR_PART.isReminder(item))) cell.append(h("span", { class: "zn-cal-month-reminder-dot", "aria-label": "Reminder" }, "●"));
-          cell.addEventListener("contextmenu", (event) => showCalendarDayMenu(event, day, cell));
+          cell.addEventListener("click", (event) => { if (!event.target?.closest?.("button, a, input, select, textarea")) openDayView(); });
+          bindCalendarDayContext(cell, day);
+          cell.addEventListener("keydown", (event) => {
+            if (event.target === cell && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); event.stopPropagation(); openDayView(); }
+          });
           cell.append(mini); cells.append(cell);
         }
         monthWrap.append(dows, cells);
@@ -15727,7 +15744,7 @@ __zentralShim.register = function (def) {
           const isToday = C.localDateKey(day) === todayKey;
           const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", Today" : "") }, h("strong", {}, new Date(day).toLocaleDateString(undefined, { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, "Today")] : []));
           dayHead.addEventListener("click", () => { store.setMeta({ calendarCursor: C.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
-          dayHead.addEventListener("contextmenu", (event) => showCalendarDayMenu(event, day, dayHead));
+          bindCalendarDayContext(dayHead, day);
           header.append(dayHead);
         }
         const allDayRow = h("div", { class: "zn-cal-time-allday-row", "aria-label": "All-day events and reminders" });
@@ -15735,8 +15752,8 @@ __zentralShim.register = function (def) {
         allDayRow.append(h("span", { class: "zn-cal-time-all-label" }, "All day"));
         for (const day of days) {
           const isToday = C.localDateKey(day) === todayKey;
-          const cell = h("div", { class: "zn-cal-time-allday-cell" + (isToday ? " is-today" : ""), "data-day": C.ymd(new Date(day)) });
-          cell.addEventListener("contextmenu", (event) => showCalendarDayMenu(event, day, cell));
+          const cell = h("div", { class: "zn-cal-time-allday-cell" + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": "All-day items for " + fmt(day), "data-day": C.ymd(new Date(day)) });
+          bindCalendarDayContext(cell, day);
           for (const item of C.allDayOf(expanded, day)) cell.append(calendarItemButton(item, true));
           allDayRow.append(cell);
         }
@@ -15754,8 +15771,8 @@ __zentralShim.register = function (def) {
           const dayKey = C.localDateKey(day);
           const bounds = C.zonedDayBounds(dayKey, zone) || [day, C.addDays(day, 1)];
           const isToday = dayKey === todayKey;
-          const track = h("div", { class: "zn-cal-time-track", "data-day": C.ymd(new Date(day)) });
-          track.addEventListener("contextmenu", (event) => showCalendarDayMenu(event, day, track));
+          const track = h("div", { class: "zn-cal-time-track", tabindex: "0", "aria-label": "Timeline for " + fmt(day), "data-day": C.ymd(new Date(day)) });
+          bindCalendarDayContext(track, day);
           track.style.height = (24 * CALENDAR_HOUR_PX) + "px";
           for (let hour = 0; hour < 24; hour++) {
             track.append(h("span", { class: "zn-cal-time-hour-line", style: `top:${hour * CALENDAR_HOUR_PX}px` }));
@@ -18624,8 +18641,8 @@ __zentralShim.register = function (def) {
       function displayDateKey(key) {
         return CALENDAR_PART?.formatDateKey?.(key, dateDisplayFormat()) || String(key || "");
       }
-      function openDay(ms, ymd) {
-        if (getPref(PREF.AGENDA_ENABLED, false)) { openAgendaDay(ymd); return; }
+      function openDay(ms, ymd, forceDateNote = false) {
+        if (!forceDateNote && getPref(PREF.AGENDA_ENABLED, false)) { openAgendaDay(ymd); return; }
         if (dateMode() === "single") {
           let j = store.list().find(isJournal);
           if (!j) j = store.create("# " + JOURNAL_TITLE + "\n", "");

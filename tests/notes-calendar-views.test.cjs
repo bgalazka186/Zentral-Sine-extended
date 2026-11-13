@@ -86,6 +86,25 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(sheet.newAgendaDayItem(tomorrowYmd, "wrong"), false);
   root.all().find((el) => el.title === "All notes").click(); await flushRaf();
 
+  let monthCell = root.querySelectorAll(".zn-cal-month-cell").find((cell) => cell.getAttribute("data-day") === tomorrowYmd);
+  assert.ok(monthCell, "tomorrow is in the month grid");
+  monthCell.dispatchEvent(new Ev("click", { bubbles: true }));
+  assert.equal(store.meta.calendarView, "day", "clicking the day cell, not only its number, opens Day view");
+  assert.equal(store.meta.calendarCursor, tomorrowYmd);
+  await chooseMenu(root, ".zn-calendar-view-select", "Month");
+  monthCell = root.querySelectorAll(".zn-cal-month-cell").find((cell) => cell.getAttribute("data-day") === ymd);
+  assert.equal(monthCell.getAttribute("tabindex"), "0", "a day cell supports keyboard navigation");
+  const countBeforeCancel = store.list().length, itemsBeforeCancel = store.items.list().length;
+  const contextKey = new Ev("keydown", { key: "F10", shiftKey: true, bubbles: true });
+  monthCell.dispatchEvent(contextKey);
+  assert.equal(contextKey.defaultPrevented, true);
+  assert.ok(root.querySelectorAll(".zn-menu-item").some((item) => item.textContent.includes("New event")), "keyboard day context menu exposes creation actions");
+  monthCell.dispatchEvent(new Ev("keydown", { key: "Escape", bubbles: true }));
+  assert.equal(store.list().length, countBeforeCancel); assert.equal(store.items.list().length, itemsBeforeCancel, "cancelled day menus do not create notes or items");
+  monthCell.dispatchEvent(new Ev("keydown", { key: "Enter", bubbles: true }));
+  assert.equal(store.meta.calendarView, "day"); assert.equal(store.meta.calendarCursor, ymd);
+  await chooseMenu(root, ".zn-calendar-view-select", "Month");
+
   assert.equal(q(root, ".zn-calendar-view-select").dataset.value, "month");
   assert.equal(content.dataset.view, "month");
   assert.equal(root.querySelectorAll(".zn-cal-month-cell").length, 42, "month view renders six Monday-first weeks");
@@ -93,6 +112,10 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.ok(root.querySelectorAll(".zn-cal-all-day-strip").length > 0, "all-day items are separated into an all-day strip");
   const projectMark = root.querySelectorAll(".zn-cal-month-mark").find((el) => el.textContent.includes("Call Alice"));
   assert.equal(projectMark.style.getPropertyValue("--zn-cal-item-color"), "#4a90e2", "category colour is carried into month markers");
+  projectMark.dispatchEvent(new Ev("click", { bubbles: true })); await flushRaf();
+  assert.equal(store.meta.calendarView, "month", "clicking a linked item does not bubble into the day-cell action");
+  assert.ok(root.querySelectorAll(".zn-editor").some((editor) => editor.value.includes("# Calendar source")), "the linked source note opens");
+  root.all().find((el) => el.title === "All notes").click(); await flushRaf();
 
   await chooseMenu(root, ".zn-calendar-category-filter", "Projects");
   assert.ok(root.querySelectorAll(".zn-cal-month-mark").every((el) => !el.textContent.includes("Focus day")), "category filter excludes other categories");
@@ -105,6 +128,12 @@ const chooseMenu = async (root, triggerSelector, label) => {
   await chooseMenu(root, ".zn-calendar-view-select", "Next days");
   assert.equal(content.dataset.view, "upcoming");
   assert.equal(root.querySelectorAll(".zn-cal-day-group").length, 7, "upcoming view groups the default seven days");
+  const upcomingDay = q(root, ".zn-cal-day-group");
+  assert.equal(upcomingDay.getAttribute("tabindex"), "0");
+  const upcomingKey = new Ev("keydown", { key: "ContextMenu", bubbles: true });
+  upcomingDay.dispatchEvent(upcomingKey); assert.equal(upcomingKey.defaultPrevented, true);
+  assert.ok(root.querySelectorAll(".zn-menu-item").some((item) => item.textContent.includes("New all-day reminder")));
+  upcomingDay.dispatchEvent(new Ev("keydown", { key: "Escape", bubbles: true }));
   await chooseMenu(root, ".zn-calendar-days-select", "14 days");
   assert.equal(store.meta.calendarDaysForward, 14, "N-days setting persists");
   assert.equal(root.querySelectorAll(".zn-cal-day-group").length, 14, "upcoming view expands exactly the selected number of days");
@@ -226,6 +255,15 @@ const chooseMenu = async (root, triggerSelector, label) => {
   const expectedNowTop = cal.zonedMinuteOfDay(Date.now(), zoneKey, zone) / 60 * 54;
   assert.ok(Math.abs(parseFloat(/top:([^;]+)/.exec(q(root, ".zn-cal-now-line").getAttribute("style") || "")?.[1]) - expectedNowTop) < 1, "Now line uses the selected IANA display zone");
   const gridTrack = q(root, ".zn-cal-time-track");
+  assert.equal(gridTrack.getAttribute("tabindex"), "0", "the day track is keyboard reachable");
+  const gridKey = new Ev("keydown", { key: "ContextMenu", bubbles: true });
+  gridTrack.dispatchEvent(gridKey); assert.equal(gridKey.defaultPrevented, true);
+  const allDayEvent = root.querySelectorAll(".zn-menu-item").find((el) => el.textContent.trim() === "New all-day event…");
+  assert.ok(allDayEvent, "keyboard day menu offers all-day creation");
+  allDayEvent.click(); await flushRaf();
+  assert.equal(q(root, '.zn-cal-compose-card [aria-label="All-day"]').checked, true);
+  assert.equal(q(root, ".zn-cal-compose-kind").value, "event");
+  root.querySelectorAll(".zn-dialog-card button").find((node) => node.textContent.trim() === "Cancel").click(); await flushRaf();
   gridTrack.dispatchEvent(new Ev("contextmenu", { bubbles: true }));
   assert.ok(root.querySelectorAll(".zn-menu-item").some((el) => el.textContent.includes("Open Day view")), "hour tracks expose a right-click day menu");
   root.querySelectorAll(".zn-menu-item").find((el) => el.textContent.trim() === "New reminder…")?.click();
@@ -233,6 +271,15 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.ok(q(root, ".zn-cal-compose-card"), "day context menu can create a reminder for the selected date");
   q(root, ".zn-dialog-actions .zn-chip")?.click();
   await flushRaf();
+
+  // Explicit date-note action does not silently redirect to Agenda when the sidebar is enabled.
+  prefs.set(c.PREF.AGENDA_ENABLED, true);
+  gridTrack.dispatchEvent(new Ev("contextmenu", { bubbles: true }));
+  const dateNote = root.querySelectorAll(".zn-menu-item").find((el) => el.textContent.trim() === "Open or create date note");
+  assert.ok(dateNote); dateNote.click(); await flushRaf();
+  assert.ok(store.list().some((entry) => entry.folder === "daily" && entry.body.includes(zoneKey)), "explicit date-note action creates/opens the requested day");
+  prefs.delete(c.PREF.AGENDA_ENABLED);
+  root.all().find((el) => el.title === "All notes").click(); await flushRaf();
 
   // A source-backed item opens its note at the stored heading target.
   await chooseMenu(root, ".zn-calendar-view-select", "Agenda");

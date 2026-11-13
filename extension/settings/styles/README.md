@@ -1,6 +1,6 @@
 # extension/settings/styles
 
-Owner and local file guide for Extended 3.3.105. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.3.106. Original Zentral reference: 1.1.0.
 
 | File                            | Responsibility                                                                      |
 | ------------------------------- | ----------------------------------------------------------------------------------- |

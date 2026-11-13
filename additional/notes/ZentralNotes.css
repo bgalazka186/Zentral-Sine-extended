@@ -2098,3 +2098,6 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
 }
 .zn-reminder-actions button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .zn-reminder-actions button:hover { background: #4b6283; }
+
+/* Keyboard entry points for calendar day context menus. */
+.zentral-notes-sheet :is(.zn-cal-month-cell, .zn-cal-day-group, .zn-cal-time-allday-cell, .zn-cal-time-track):focus-visible { outline: 2px solid var(--zn-accent); outline-offset: -2px; }
