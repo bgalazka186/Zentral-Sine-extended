@@ -7,6 +7,15 @@ assert.match(css, /--zn-panel:\s*var\(--zn-surface\)/, "calendar panel backgroun
 assert.match(css, /\.zn-cal-time-columns\s*\{[^}]*grid-column:\s*2\s*\/\s*-1/s, "the nested day grid spans all tracks after the time gutter");
 assert.match(css, /\.zn-cal-now-line/);
 assert.match(css, /\.zn-cal-time-event\s*\{[^}]*var\(--zn-surface\)/s, "timed event text uses an opaque surface mix");
+// All three day-column grids use the same native scrollbar reservation, even
+// when one row does not currently overflow. Overlay scrollbars reserve zero.
+for (const selector of ["zn-cal-time-head", "zn-cal-time-allday-row", "zn-cal-time-scroll"]) {
+  const match = css.match(new RegExp("^\\.zentral-notes-sheet \\." + selector + " \\{([^}]*)\\}", "m"));
+  assert.ok(match, `dedicated rule for ${selector}`);
+  assert.match(match[1], /scrollbar-gutter:\s*stable/, `${selector} reserves a matching gutter`);
+  assert.match(match[1], /scrollbar-width:\s*thin/, `${selector} uses the same native scrollbar width`);
+  assert.match(match[1], selector === "zn-cal-time-head" ? /overflow:\s*hidden/ : /overflow:\s*auto/, `${selector} preserves its intended scrolling behavior`);
+}
 const dom = require("./helpers/fake-dom.cjs")();
 const { El, Ev, document, raf } = dom;
 const cal = require("../additional/notes/calendar/ZentralNotesCalendar.js");

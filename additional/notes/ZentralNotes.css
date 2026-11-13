@@ -1818,19 +1818,21 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-time-head,
 .zentral-notes-sheet .zn-cal-time-allday-row,
 .zentral-notes-sheet .zn-cal-time-grid-row { display: grid; min-width: 0; }
-.zentral-notes-sheet .zn-cal-time-head { flex: 0 0 auto; align-items: stretch; }
+/* Equal native gutters align headers and all-day cells with the scrolling timeline,
+   whether scrollbars are classic or overlay and whether all-day items overflow. */
+.zentral-notes-sheet .zn-cal-time-head { flex: 0 0 auto; align-items: stretch; overflow: hidden; scrollbar-gutter: stable; scrollbar-width: thin; }
 .zentral-notes-sheet .zn-cal-time-corner { border-bottom: 1px solid var(--zn-line); }
 .zentral-notes-sheet .zn-cal-time-day-head { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 2px; border: 0; border-bottom: 1px solid var(--zn-line); background: transparent; color: var(--zn-text); font: inherit; cursor: pointer; }
 .zentral-notes-sheet .zn-cal-time-day-head.is-today { border-bottom: 2px solid var(--zn-accent); background: color-mix(in srgb, var(--zn-accent) 12%, transparent); }
 .zentral-notes-sheet .zn-cal-time-day-head.is-today strong { color: var(--zn-accent); }
 .zentral-notes-sheet .zn-cal-time-day-head strong { font-size: .78em; }
 .zentral-notes-sheet .zn-cal-time-day-head > span { color: var(--zn-muted); font-size: .7em; }
-.zentral-notes-sheet .zn-cal-time-allday-row { flex: 0 0 auto; align-items: stretch; max-height: 112px; overflow: auto; border-bottom: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-cal-time-allday-row { flex: 0 0 auto; align-items: stretch; max-height: 112px; overflow: auto; scrollbar-gutter: stable; scrollbar-width: thin; border-bottom: 1px solid var(--zn-line); }
 .zentral-notes-sheet .zn-cal-time-all-label { align-self: start; padding: 5px 2px 2px 0; color: var(--zn-muted); font-size: .63em; }
 .zentral-notes-sheet .zn-cal-time-allday-cell { display: flex; min-width: 0; min-height: 22px; flex-direction: column; gap: 2px; padding: 2px; border-left: 1px solid var(--zn-line); }
 .zentral-notes-sheet .zn-cal-time-allday-cell.is-today { background: color-mix(in srgb, var(--zn-accent) 7%, transparent); }
 .zentral-notes-sheet .zn-cal-time-allday-cell .zn-cal-item { padding: 2px 3px; font-size: .66em; }
-.zentral-notes-sheet .zn-cal-time-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-width: thin; }
+.zentral-notes-sheet .zn-cal-time-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-gutter: stable; scrollbar-width: thin; }
 .zentral-notes-sheet .zn-cal-time-grid-row { min-height: calc(24 * 54px); align-items: stretch; grid-template-columns: 42px minmax(0, 1fr); }
 .zentral-notes-sheet .zn-cal-hour-gutter { display: flex; flex-direction: column; padding-top: 2px; }
 .zentral-notes-sheet .zn-cal-hour-label { box-sizing: border-box; height: 54px; padding: 0 3px 0 0; transform: translateY(-.45em); color: var(--zn-muted); font-size: .62em; font-variant-numeric: tabular-nums; text-align: right; }

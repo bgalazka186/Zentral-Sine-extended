@@ -45,7 +45,7 @@ when the ordering rules below are broken.
 | 2147483647 | Highest normal layer: Zentral settings window, corner-tile badges, developer and loader error overlays | inline style: `"position:fixed;inset:8%;overflow:auto;z-index:2147483647;padding:20px` | loader/Zentral.uc.js:215 |
 | 2147483646 | RSS reader card (fallback only; see Top layer) | `.zentral-notes-toast` | additional/notes/ZentralNotes.css:1034 |
 | 2147483646 | RSS reader card (fallback only; see Top layer) | `.zentral-notes-pill` | additional/notes/ZentralNotes.css:1481 |
-| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zn-reminder-stack` | additional/notes/ZentralNotes.css:2028 |
+| 2147483646 | RSS reader card (fallback only; see Top layer) | `.zn-reminder-stack` | additional/notes/ZentralNotes.css:2030 |
 | 2147483646 | RSS reader card (fallback only; see Top layer) | `#bgalazka-rss-card` | additional/rss/ZentralRssDisplay.css:110 |
 | 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-sheet[data-host="float"], .zentral-notes-sheet[data-host="dock"]` | additional/notes/ZentralNotes.css:96 |
 | 2147483645 | Notes floating card (standalone / shortcut) | `.zentral-notes-reveal` | additional/notes/ZentralNotes.css:965 |
@@ -92,10 +92,10 @@ Ordering inside one component. Listed by file; values only matter relative to si
 | additional/notes/ZentralNotes.css | 1402 | 1 | `.zentral-notes-sheet[data-hl="on"] .zn-editor` |
 | additional/notes/ZentralNotes.css | 1610 | 1 | `.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon.is-folder::before` |
 | additional/notes/ZentralNotes.css | 1624 | 2 | `.zentral-notes-sheet .zn-frow[data-color] .zn-frow-icon.is-folder::after` |
-| additional/notes/ZentralNotes.css | 1843 | 5 | `.zentral-notes-sheet .zn-cal-now-line` |
-| additional/notes/ZentralNotes.css | 1848 | 0 | `.zentral-notes-sheet .zn-cal-off-hours` |
-| additional/notes/ZentralNotes.css | 1850 | 1 | `.zentral-notes-sheet .zn-cal-busy-range` |
-| additional/notes/ZentralNotes.css | 1876 | 70 | `.zentral-notes-sheet .zn-cal-hover-card` |
+| additional/notes/ZentralNotes.css | 1845 | 5 | `.zentral-notes-sheet .zn-cal-now-line` |
+| additional/notes/ZentralNotes.css | 1850 | 0 | `.zentral-notes-sheet .zn-cal-off-hours` |
+| additional/notes/ZentralNotes.css | 1852 | 1 | `.zentral-notes-sheet .zn-cal-busy-range` |
+| additional/notes/ZentralNotes.css | 1878 | 70 | `.zentral-notes-sheet .zn-cal-hover-card` |
 | additional/video/controllers/ZentralVideoSidebar.js | 213 | 5 | `"position:absolute;inset:0;z-index:5;background:var(--zl-video-canvas,` |
 | additional/video/ZentralVideoPreview.css | 132 | 3 | `#zentral-video-preview .zentral-video-preview-subtitles` |
 | additional/video/ZentralVideoPreview.css | 301 | 2 | `#zentral-video-preview canvas` |
