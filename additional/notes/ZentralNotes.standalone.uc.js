@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.114
+// @version 3.3.115
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.114, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.115, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.114";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.115";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2380,7 +2380,7 @@ const __zentralEmbeddedLoader = (function () {
     if (!itemId) return null;
     return { itemId, occurrenceId: String(kept || item.id || itemId), noteId, legacyNote: false };
   }
-  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400, onWrite = () => {} }) {
+  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400, onWrite = () => {}, perf = null }) {
     const records = [];
     const listeners = new Set();
     const emit = (event) => { for (const fn of [...listeners]) { try { fn(event); } catch (error) { safeWarn(error); } } };
@@ -2408,6 +2408,7 @@ const __zentralEmbeddedLoader = (function () {
       if (!dirty || !dir) return chain;
       if (writeBlocked) return Promise.reject(new Error("Reminder history is protected because its existing file could not be read safely."));
       const text = JSON.stringify({ v: 1, records: records.map((record) => ({ ...record, start: record.start ? { ...record.start } : null })) });
+      perf?.recordBytes?.("history.bytes", text);
       dirty = false;
       const task = chain.catch(() => {}).then(async () => {
         try {
@@ -2426,6 +2427,7 @@ const __zentralEmbeddedLoader = (function () {
       chain = task;
       return task;
     }
+    if (perf?.wrapAsync) writeNow = perf.wrapAsync("history.write", writeNow);
     return {
       async open() {
         const dir = getDir();
@@ -2535,9 +2537,9 @@ const __zentralEmbeddedLoader = (function () {
     };
   }
 
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {} }) {
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null }) {
     const items = new Map();
-    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite });
+    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf });
     const categoryDefs = new Map();
     const hidden = new Set(); // noteIds whose items stay stored but are not shown (note in Trash, or its file is missing)
     const listeners = new Set();
@@ -2562,6 +2564,7 @@ const __zentralEmbeddedLoader = (function () {
         return Promise.reject(error);
       }
       const text = JSON.stringify({ v: 2, items: [...items.values()], categories: [...categoryDefs.values()] });
+      perf?.recordBytes?.("calendar.bytes", text);
       // Clear only for this snapshot. If I/O fails, restore dirty; if a newer edit arrives while writing, its dirty
       // flag remains set and the next queued write stores the newer snapshot.
       dirty = false;
@@ -2583,6 +2586,7 @@ const __zentralEmbeddedLoader = (function () {
       chain = task;
       return task;
     }
+    if (perf?.wrapAsync) writeNow = perf.wrapAsync("calendar.write", writeNow);
     return {
       async open() {
         try { await history.open(); } catch (error) { safeWarn(error); }
@@ -3619,7 +3623,7 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
-  function createZenAgenda({ api, getItems, getDays = () => 4, getEnabled = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
+  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
     let dead = false, timer = null, timerAt = Infinity, last = [];
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     function armAt(due) {
@@ -3679,6 +3683,7 @@ const __zentralEmbeddedLoader = (function () {
         return last;
       }
     }
+    if (perf?.wrap) runNow = perf.wrap("agenda.runNow", runNow);
     function schedule(ms = 250) {
       if (dead) return;
       const stamp = Number(now()), due = (Number.isFinite(stamp) ? stamp : Date.now()) + Math.max(0, Number(ms) || 0);
@@ -9470,7 +9475,7 @@ __zentralShim.register = function (def) {
     function createReminderScheduler({ store, now = () => Date.now(), setTimer, clearTimer, onDue }) {
       let timer = null, destroyed = false, busy = false, again = false;
       const stop = () => { if (timer !== null) { clearTimer(timer); timer = null; } };
-      const calendarCandidates = (at) => {
+      const calendarCandidates = PERF.wrap("reminders.calendarCandidates", (at) => {
         const itemStore = store.items;
         if (!CALENDAR_PART || !itemStore?.list) return { due: [], next: 0, hasRecurring: false };
         const masters = itemStore.list();
@@ -9520,7 +9525,7 @@ __zentralShim.register = function (def) {
           if (!next || refreshAt < next) next = refreshAt;
         }
         return { due, next, hasRecurring };
-      };
+      });
       async function pass() {
         if (destroyed) return;
         if (busy) { again = true; return; }
@@ -9558,6 +9563,7 @@ __zentralShim.register = function (def) {
           } while (again && !destroyed);
         } finally { busy = false; }
       }
+      pass = PERF.wrapAsync("reminders.pass", pass);
       const run = () => pass().catch(() => {});
       const off = store.on((ev) => {
         if (destroyed) return;
@@ -9915,7 +9921,7 @@ __zentralShim.register = function (def) {
       // refresh ignore it). Items written as marked lists inside a note are rebuilt from the note text; a note in Trash or
       // with a missing file only HIDES its items (restoring it brings dragged times and calendar notes back); a note that is
       // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
-      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
+      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
       function syncItems(id, stabilize = false, sourceEdit = false) {
         if (!items) return;
         try {
@@ -12918,11 +12924,11 @@ __zentralShim.register = function (def) {
     // ---- debug sampler (pref off by default): per-name count / total / max of performance.now() ----------------
     function createPerfSampler({ now = () => (typeof performance !== "undefined" ? performance.now() : Date.now()), enabled = () => false, maxNames = 64 } = {}) {
       const rows = new Map();
-      const add = (name, ms) => {
+      const add = (name, ms, unit = "ms") => {
         let r = rows.get(name);
         if (!r) {
           if (rows.size >= maxNames) return;
-          r = { n: 0, total: 0, max: 0 };
+          r = { n: 0, total: 0, max: 0, unit };
           rows.set(name, r);
         }
         r.n++;
@@ -12941,11 +12947,30 @@ __zentralShim.register = function (def) {
             }
           };
         },
-        rows: () => [...rows].map(([name, r]) => ({ name, n: r.n, total: r.total, avg: r.n ? r.total / r.n : 0, max: r.max })).sort((a, b) => b.total - a.total),
+        wrapAsync(name, fn) {
+          return function (...args) {
+            if (!enabled()) return fn.apply(this, args);
+            const t = now();
+            let result;
+            try { result = fn.apply(this, args); }
+            catch (error) { if (enabled()) add(name, now() - t); throw error; }
+            const done = () => { if (enabled()) add(name, now() - t); };
+            if (result && typeof result.then === "function") result.then(done, done);
+            else done();
+            return result; // preserve both the promise identity and rejection
+          };
+        },
+        recordBytes(name, text) {
+          if (!enabled()) return;
+          let bytes = 0;
+          for (const ch of String(text)) { const c = ch.codePointAt(0); bytes += c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4; }
+          add(name, bytes, "bytes");
+        },
+        rows: () => [...rows].map(([name, r]) => ({ name, n: r.n, total: r.total, avg: r.n ? r.total / r.n : 0, max: r.max, unit: r.unit })).sort((a, b) => b.total - a.total),
         reset: () => rows.clear(),
         report() {
           const list = this.rows();
-          return list.length ? list.map((r) => r.name + ": " + r.n + " calls, avg " + r.avg.toFixed(2) + " ms, max " + r.max.toFixed(2) + " ms, total " + r.total.toFixed(1) + " ms").join("\n") : "(no samples)";
+          return list.length ? list.map((r) => r.name + ": " + r.n + " calls, avg " + r.avg.toFixed(2) + " " + r.unit + ", max " + r.max.toFixed(2) + " " + r.unit + ", total " + r.total.toFixed(1) + " " + r.unit).join("\n") : "(no samples)";
         },
       };
     }
@@ -14191,6 +14216,7 @@ __zentralShim.register = function (def) {
       layout = PERF.wrap("notes.layout", layout);
       moveEvent = PERF.wrap("notes.drag-move", moveEvent);
       renderReadInner = PERF.wrap("notes.read-render", renderReadInner);
+      renderCalendar = PERF.wrap("calendar.render", renderCalendar);
       const strip = h("div", { class: "zn-strip", role: "toolbar", "aria-label": "Pinned and recent notes", hidden: true });
       root.append(head, tools, strip, findBar, wikiBar, body, linkedEl, foot);
       // Eight resize grips (edges and corners); CSS shows them only where the sheet may be moved.
@@ -23509,7 +23535,7 @@ __zentralShim.register = function (def) {
         },
       };
       const agendaController = CALENDAR_PART?.createZenAgenda ? CALENDAR_PART.createZenAgenda({
-        api: agendaApi,
+        api: agendaApi, perf: PERF,
         getItems: () => (store.items?.list?.() || []).map((item) => {
           const note = item.x?.noteId ? store.get(item.x.noteId) : null;
           return { ...item, x: { ...(item.x || {}), sourceNoteTitle: note && !note.trashed ? titleOf(note.body) : "" } };

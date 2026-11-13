@@ -72,7 +72,6 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 
 | Order | ID | Status | Impact | Effort | Depends on | Task |
 | --: | :-- | :-- | :-- | :-- | :-- | :-- |
-| 3 | `F0.3` | `OPEN` | Med | S | none | Performance timers for the hot paths |
 | 4 | `H1.1` | `OPEN` | High | S | F0.1 (harness) | Unique Agenda tab keys for items shown in several day folders |
 | 5 | `H1.5` | `OPEN` | High | S-M | none (OW-08 reuses it) | Do not alert all missed stages at once; coalesce due stages (owner bug: copying a played reminder plays every notification at once) |
 | 6 | `H1.2` | `OPEN` | High | S-M | F0.2 optional | Reminder history: merge before write (cross-window lost update) |
@@ -169,16 +168,6 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 
 _Nothing below can be proven without these. They change no behaviour._
 
-#### `F0.3` — Performance timers for the hot paths
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** none · **Source:** Audit R2 P7
-
-**Problem:** `window.__zentralNotesPerf` exists but nothing wraps the Agenda controller, the reminder scheduler or the calendar render, so real Zen timings are unknown.
-
-**Plan (do in this order):**
-1. Wrap with the existing PERF helper: `agendaController.runNow`, `calendarCandidates` and `pass()`, `renderCalendar`, `createReminderHistoryStore.writeNow` (bytes + ms), `createItemStore` write.
-2. Report through `__zentralNotesPerf.report()`; keep it off unless the debug pref is on.
-
-**Tests / done when:** Unit test that wrapped functions still return the same values and cost nothing when PERF is off.
 
 ---
 
@@ -1224,13 +1213,13 @@ Use a disposable Zen profile and back up the profile and Sync data first. Do not
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.114, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.115, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.114.** `F0.1` harness and `F0.2` production-shape budgets are DONE and archived. Per owner, multi-day and leadDays idempotence remain documented TODOs until `H1.1` enforces them.
+State: **3.3.115.** `F0.1` harness, `F0.2` production-shape budgets and `F0.3` timers are DONE and archived. Per owner, multi-day and leadDays idempotence remain documented TODOs until `H1.1` enforces them.
 
-Completed this session: imported the new instructions, active roadmap and legacy archive. Added a production-host fake Zen harness with structural-operation recording, event dispatch, seed fallback, menus, foreign/dragged-out tabs, disable/re-enable, Notes and two isolated windows over shared persisted input. Single-day projections are idempotent; multi-day and leadDays each reproduce three structural operations on the second unchanged run. Those acceptance assertions are explicitly TODO, not passing. F0.2 measured production-shape 500/2000 projection 31d at 428/1915 ms, scheduler at 2308/10776 ms, expansion 90d at 742/3188 ms and 45000 history queries at 967 ms; CI ceilings retain headroom.
+Completed this session: imported the new instructions, active roadmap and legacy archive. Added a production-host fake Zen harness with structural-operation recording, event dispatch, seed fallback, menus, foreign/dragged-out tabs, disable/re-enable, Notes and two isolated windows over shared persisted input. Single-day projections are idempotent; multi-day and leadDays each reproduce three structural operations on the second unchanged run. Those acceptance assertions are explicitly TODO, not passing. F0.2 measured production-shape 500/2000 projection 31d at 428/1915 ms, scheduler at 2308/10776 ms, expansion 90d at 742/3188 ms and 45000 history queries at 967 ms; CI ceilings retain headroom. F0.3 adds debug-only async write, bytes, Agenda, scheduler and calendar-render sampling.
 
 Standing owner rules for chunks: no conversational filler; output production-ready code and test suites; process tasks strictly in order (implementation, edge cases, unit tests per task); stop cleanly before output limits so the zip is complete; deliver a zip of only changed files (no `.git`).
 
@@ -1238,4 +1227,4 @@ Known debts / owner requirements: Earlier roadmap DONE claims for `T2.5a–d` we
 
 Calendar density supports persisted Comfortable, Compact and Extra compact in all five views; timeline hour geometry and shading use a shared scale, while narrow Month keeps its list fallback. Live density readability and interaction checks are pending. Calendar/Agenda item menus share a per-item Zen Agenda visibility toggle; it preserves sparse lead/tail overrides, acts on the recurring series, and makes the legacy read-only note-reminder limitation explicit. Calendar remains available to restore an item hidden from the sidebar. Live Zen menu and projection checks remain open.
 
-Next action: implement `F0.3`, then `H1.1` (enforce both known-failing idempotence tests), `H1.5`, and `H1.2`–`H1.4` in order. Live Zen remains unavailable in the sandbox.
+Next action: implement `H1.1` (enforce both known-failing idempotence tests), `H1.5`, and `H1.2`–`H1.4` in order. Live Zen remains unavailable in the sandbox.

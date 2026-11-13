@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/Extended-3.3.114-6366f1?style=flat-square" />
+  <img alt="Version" src="https://img.shields.io/badge/Extended-3.3.115-6366f1?style=flat-square" />
   <img alt="Base" src="https://img.shields.io/badge/Zentral%20base-1.1.0-8b5cf6?style=flat-square" />
   <a href="https://github.com/sineorg/sine"><img alt="Requires Sine" src="https://img.shields.io/badge/requires-Sine-0ea5e9?style=flat-square" /></a>
   <a href="../LICENSE"><img alt="License: CC BY-NC-SA 4.0" src="https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-lightgrey?style=flat-square" /></a>
@@ -320,7 +320,7 @@ If something looks wrong with another mod, try turning off the overlapping featu
 
 ## 🏗️ Architecture and updates
 
-Extended 3.3.114 uses Zentral 1.1.0 as its core reference. Original-derived code, Extended integrations and independent features live in separate areas:
+Extended 3.3.115 uses Zentral 1.1.0 as its core reference. Original-derived code, Extended integrations and independent features live in separate areas:
 
 | Location                       | Purpose                                                         |
 | ------------------------------ | --------------------------------------------------------------- |

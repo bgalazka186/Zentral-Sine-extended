@@ -176,3 +176,18 @@ The real-host harness passes its standalone scenarios. Multi-day and leadDays id
 **Tests / done when:** `tests/notes-perf-budget.test.cjs`; uses baseline ceilings with margin, tightened by the relevant PF2.x tasks.
 
 Measured baseline, ms (500/2000): projection 4d 116/192, 31d 428/1915; expansion 31d 243/976, 90d 742/3188; scheduler 2308/10776 with 5000 history records; 45000 history queries 967. CI ceilings retain ~5–7x headroom. PF2.x owns tightening.
+
+## F0.3 — Completed performance instrumentation (3.3.115)
+
+#### `F0.3` — Performance timers for the hot paths
+**Status:** `DONE` · **Impact:** Med · **Effort:** S · **Depends on:** none · **Source:** Audit R2 P7
+
+**Problem:** `window.__zentralNotesPerf` exists but nothing wraps the Agenda controller, the reminder scheduler or the calendar render, so real Zen timings are unknown.
+
+**Plan (do in this order):**
+1. Wrap with the existing PERF helper: `agendaController.runNow`, `calendarCandidates` and `pass()`, `renderCalendar`, `createReminderHistoryStore.writeNow` (bytes + ms), `createItemStore` write.
+2. Report through `__zentralNotesPerf.report()`; keep it off unless the debug pref is on.
+
+**Tests / done when:** Unit test that wrapped functions still return the same values and cost nothing when PERF is off.
+
+Per-window sampler records real Agenda reconciliations, reminder candidate/pass timings, calendar rendering and asynchronous calendar/history writes and UTF-8 byte counts only when debug_perf is enabled. Focused tests cover disabled clock avoidance, promise identity/rejections and production paths.

@@ -4999,7 +4999,7 @@
     function createReminderScheduler({ store, now = () => Date.now(), setTimer, clearTimer, onDue }) {
       let timer = null, destroyed = false, busy = false, again = false;
       const stop = () => { if (timer !== null) { clearTimer(timer); timer = null; } };
-      const calendarCandidates = (at) => {
+      const calendarCandidates = PERF.wrap("reminders.calendarCandidates", (at) => {
         const itemStore = store.items;
         if (!CALENDAR_PART || !itemStore?.list) return { due: [], next: 0, hasRecurring: false };
         const masters = itemStore.list();
@@ -5049,7 +5049,7 @@
           if (!next || refreshAt < next) next = refreshAt;
         }
         return { due, next, hasRecurring };
-      };
+      });
       async function pass() {
         if (destroyed) return;
         if (busy) { again = true; return; }
@@ -5087,6 +5087,7 @@
           } while (again && !destroyed);
         } finally { busy = false; }
       }
+      pass = PERF.wrapAsync("reminders.pass", pass);
       const run = () => pass().catch(() => {});
       const off = store.on((ev) => {
         if (destroyed) return;
@@ -5444,7 +5445,7 @@
       // refresh ignore it). Items written as marked lists inside a note are rebuilt from the note text; a note in Trash or
       // with a missing file only HIDES its items (restoring it brings dragged times and calendar notes back); a note that is
       // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
-      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
+      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, perf: PERF, onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
       function syncItems(id, stabilize = false, sourceEdit = false) {
         if (!items) return;
         try {
@@ -8447,11 +8448,11 @@
     // ---- debug sampler (pref off by default): per-name count / total / max of performance.now() ----------------
     function createPerfSampler({ now = () => (typeof performance !== "undefined" ? performance.now() : Date.now()), enabled = () => false, maxNames = 64 } = {}) {
       const rows = new Map();
-      const add = (name, ms) => {
+      const add = (name, ms, unit = "ms") => {
         let r = rows.get(name);
         if (!r) {
           if (rows.size >= maxNames) return;
-          r = { n: 0, total: 0, max: 0 };
+          r = { n: 0, total: 0, max: 0, unit };
           rows.set(name, r);
         }
         r.n++;
@@ -8470,11 +8471,30 @@
             }
           };
         },
-        rows: () => [...rows].map(([name, r]) => ({ name, n: r.n, total: r.total, avg: r.n ? r.total / r.n : 0, max: r.max })).sort((a, b) => b.total - a.total),
+        wrapAsync(name, fn) {
+          return function (...args) {
+            if (!enabled()) return fn.apply(this, args);
+            const t = now();
+            let result;
+            try { result = fn.apply(this, args); }
+            catch (error) { if (enabled()) add(name, now() - t); throw error; }
+            const done = () => { if (enabled()) add(name, now() - t); };
+            if (result && typeof result.then === "function") result.then(done, done);
+            else done();
+            return result; // preserve both the promise identity and rejection
+          };
+        },
+        recordBytes(name, text) {
+          if (!enabled()) return;
+          let bytes = 0;
+          for (const ch of String(text)) { const c = ch.codePointAt(0); bytes += c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4; }
+          add(name, bytes, "bytes");
+        },
+        rows: () => [...rows].map(([name, r]) => ({ name, n: r.n, total: r.total, avg: r.n ? r.total / r.n : 0, max: r.max, unit: r.unit })).sort((a, b) => b.total - a.total),
         reset: () => rows.clear(),
         report() {
           const list = this.rows();
-          return list.length ? list.map((r) => r.name + ": " + r.n + " calls, avg " + r.avg.toFixed(2) + " ms, max " + r.max.toFixed(2) + " ms, total " + r.total.toFixed(1) + " ms").join("\n") : "(no samples)";
+          return list.length ? list.map((r) => r.name + ": " + r.n + " calls, avg " + r.avg.toFixed(2) + " " + r.unit + ", max " + r.max.toFixed(2) + " " + r.unit + ", total " + r.total.toFixed(1) + " " + r.unit).join("\n") : "(no samples)";
         },
       };
     }
@@ -9720,6 +9740,7 @@
       layout = PERF.wrap("notes.layout", layout);
       moveEvent = PERF.wrap("notes.drag-move", moveEvent);
       renderReadInner = PERF.wrap("notes.read-render", renderReadInner);
+      renderCalendar = PERF.wrap("calendar.render", renderCalendar);
       const strip = h("div", { class: "zn-strip", role: "toolbar", "aria-label": "Pinned and recent notes", hidden: true });
       root.append(head, tools, strip, findBar, wikiBar, body, linkedEl, foot);
       // Eight resize grips (edges and corners); CSS shows them only where the sheet may be moved.
@@ -19038,7 +19059,7 @@
         },
       };
       const agendaController = CALENDAR_PART?.createZenAgenda ? CALENDAR_PART.createZenAgenda({
-        api: agendaApi,
+        api: agendaApi, perf: PERF,
         getItems: () => (store.items?.list?.() || []).map((item) => {
           const note = item.x?.noteId ? store.get(item.x.noteId) : null;
           return { ...item, x: { ...(item.x || {}), sourceNoteTitle: note && !note.trashed ? titleOf(note.body) : "" } };

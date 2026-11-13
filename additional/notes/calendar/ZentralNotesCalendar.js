@@ -1169,7 +1169,7 @@
     if (!itemId) return null;
     return { itemId, occurrenceId: String(kept || item.id || itemId), noteId, legacyNote: false };
   }
-  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400, onWrite = () => {} }) {
+  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400, onWrite = () => {}, perf = null }) {
     const records = [];
     const listeners = new Set();
     const emit = (event) => { for (const fn of [...listeners]) { try { fn(event); } catch (error) { safeWarn(error); } } };
@@ -1197,6 +1197,7 @@
       if (!dirty || !dir) return chain;
       if (writeBlocked) return Promise.reject(new Error("Reminder history is protected because its existing file could not be read safely."));
       const text = JSON.stringify({ v: 1, records: records.map((record) => ({ ...record, start: record.start ? { ...record.start } : null })) });
+      perf?.recordBytes?.("history.bytes", text);
       dirty = false;
       const task = chain.catch(() => {}).then(async () => {
         try {
@@ -1215,6 +1216,7 @@
       chain = task;
       return task;
     }
+    if (perf?.wrapAsync) writeNow = perf.wrapAsync("history.write", writeNow);
     return {
       async open() {
         const dir = getDir();
@@ -1324,9 +1326,9 @@
     };
   }
 
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {} }) {
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {}, perf = null }) {
     const items = new Map();
-    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite });
+    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite, perf });
     const categoryDefs = new Map();
     const hidden = new Set(); // noteIds whose items stay stored but are not shown (note in Trash, or its file is missing)
     const listeners = new Set();
@@ -1351,6 +1353,7 @@
         return Promise.reject(error);
       }
       const text = JSON.stringify({ v: 2, items: [...items.values()], categories: [...categoryDefs.values()] });
+      perf?.recordBytes?.("calendar.bytes", text);
       // Clear only for this snapshot. If I/O fails, restore dirty; if a newer edit arrives while writing, its dirty
       // flag remains set and the next queued write stores the newer snapshot.
       dirty = false;
@@ -1372,6 +1375,7 @@
       chain = task;
       return task;
     }
+    if (perf?.wrapAsync) writeNow = perf.wrapAsync("calendar.write", writeNow);
     return {
       async open() {
         try { await history.open(); } catch (error) { safeWarn(error); }
@@ -2408,7 +2412,7 @@
   }
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
-  function createZenAgenda({ api, getItems, getDays = () => 4, getEnabled = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
+  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
     let dead = false, timer = null, timerAt = Infinity, last = [];
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     function armAt(due) {
@@ -2468,6 +2472,7 @@
         return last;
       }
     }
+    if (perf?.wrap) runNow = perf.wrap("agenda.runNow", runNow);
     function schedule(ms = 250) {
       if (dead) return;
       const stamp = Number(now()), due = (Number.isFinite(stamp) ? stamp : Date.now()) + Math.max(0, Number(ms) || 0);
