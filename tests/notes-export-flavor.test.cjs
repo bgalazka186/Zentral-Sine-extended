@@ -292,4 +292,8 @@ assert.equal(convert(quotedListIds, { flavor: 'mixed' }), '> - one <!-- ^a -->\n
 const repeatedId = '> # Heading ^dup\n>\n> paragraph ^dup\n>\n> end';
 assert.deepEqual(scan(repeatedId, { flavor: 'mixed' }), ['block ID'], 'ambiguous block IDs still trigger a warning');
 assert.equal(convert(repeatedId, { flavor: 'mixed' }), repeatedId, 'ambiguous duplicated markers are not guessed');
+const ambiguousCallout = '::: note Outer\n::: tip Inner\n%% secret %%\n:::\n:::';
+assert.deepEqual(scan(ambiguousCallout, { flavor: 'mixed' }).sort(), ['callout', 'hidden comment']);
+assert.equal(convert(ambiguousCallout, { flavor: 'mixed' }), '::: note Outer\n::: tip Inner\n<!-- %% secret %% -->\n:::\n:::', 'guarded callouts still conceal hidden text');
+assert.deepEqual(scan('::: note Outer\n::: tip Inner\nBody\n:::\n:::', { flavor: 'mixed', ignore: 'O04' }), []);
 console.log('Markdown export flavor tests passed');

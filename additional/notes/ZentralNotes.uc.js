@@ -7090,7 +7090,7 @@
     }
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
-    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}, onMathFence = () => {}, mapBlockId = (marker) => marker, onAmbiguousBlockId = () => {}, mapComment = (comment) => comment) {
+    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}, onMathFence = () => {}, mapBlockId = (marker) => marker, onAmbiguousBlockId = () => {}, mapComment = (comment) => comment, onAmbiguousContainer = () => {}) {
       const lines = String(text).split("\n"), result = [], codeRuns = indexMarkdownCodeRuns(lines);
       const mathOptions = exportScriptOptions(readOptions);
       const hasProtectedDollar = (line) => {
@@ -7148,7 +7148,14 @@
           }
         });
       }
-      let fence = null, comment = false;
+      let fence = null, comment = false, containerGuardEnd = -1;
+      // Find reader-style container closers once, including long containers.
+      const nextContainerClose = Array(lines.length);
+      let nextClose = -1;
+      for (let i = lines.length - 1; i >= 0; i--) {
+        nextContainerClose[i] = nextClose;
+        if (/^:::\s*$/.test(lines[i])) nextClose = i;
+      }
       const findClose = (line, run, start) => {
         let close = line.indexOf(run, start);
         while (close >= 0 && (line[close - 1] === "`" || line[close + run.length] === "`")) close = line.indexOf(run, close + run.length);
@@ -7187,7 +7194,7 @@
       };
       for (let row = 0; row < lines.length; row++) {
         let line = exportLine(row);
-        if (!comment && !fence) {
+        if (!comment && !fence && row > containerGuardEnd) {
           const head = /^:::\s*([A-Za-z][\w-]*)[ \t]*(.*)$/.exec(line);
           const type = head?.[1].toLowerCase() === "details" ? "note" : head?.[1];
           const protectedAt = head ? exportProtectedPositions(line, mathOptions.literals) : null;
@@ -7213,9 +7220,15 @@
               }
             }
             if (!ambiguous && end < lines.length && end - row <= 2000) {
-              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence, mapBlockId, onAmbiguousBlockId, mapComment);
+              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence, mapBlockId, onAmbiguousBlockId, mapComment, onAmbiguousContainer);
               result.push(mapContainer({ open: line, inner, close: lines[end], kind: head[1], title: head[2].replace(/\s*:::\s*$/, "").trim() }));
               row = end; continue;
+            }
+            if (nextContainerClose[row] >= 0) {
+              // The reader treats an inner opening marker as text. Leave the
+              // ambiguous region raw and don't reinterpret that inner marker.
+              containerGuardEnd = nextContainerClose[row];
+              onAmbiguousContainer();
             }
           }
         }
@@ -7504,7 +7517,7 @@
         return segment;
       }, undefined, undefined, (math) => { found.add("math"); return math; }, (container) => {
         found.add("callout"); return container.open + "\n" + container.inner + "\n" + container.close;
-      }, (prefix) => { found.add("small print"); return prefix; }, readOptions, () => found.add("math"), (marker) => { found.add("block ID"); return "<!-- " + marker + " -->"; }, () => found.add("block ID"));
+      }, (prefix) => { found.add("small print"); return prefix; }, readOptions, () => found.add("math"), (marker) => { found.add("block ID"); return "<!-- " + marker + " -->"; }, () => found.add("block ID"), undefined, () => found.add("callout"));
       return [...found];
     }
     // Export is a copy: convert the documented extensions conservatively and

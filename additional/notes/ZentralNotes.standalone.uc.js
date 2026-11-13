@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.93
+// @version 3.3.94
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.93, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.94, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.93";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.94";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11440,7 +11440,7 @@ __zentralShim.register = function (def) {
     }
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
-    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}, onMathFence = () => {}, mapBlockId = (marker) => marker, onAmbiguousBlockId = () => {}, mapComment = (comment) => comment) {
+    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}, onMathFence = () => {}, mapBlockId = (marker) => marker, onAmbiguousBlockId = () => {}, mapComment = (comment) => comment, onAmbiguousContainer = () => {}) {
       const lines = String(text).split("\n"), result = [], codeRuns = indexMarkdownCodeRuns(lines);
       const mathOptions = exportScriptOptions(readOptions);
       const hasProtectedDollar = (line) => {
@@ -11498,7 +11498,14 @@ __zentralShim.register = function (def) {
           }
         });
       }
-      let fence = null, comment = false;
+      let fence = null, comment = false, containerGuardEnd = -1;
+      // Find reader-style container closers once, including long containers.
+      const nextContainerClose = Array(lines.length);
+      let nextClose = -1;
+      for (let i = lines.length - 1; i >= 0; i--) {
+        nextContainerClose[i] = nextClose;
+        if (/^:::\s*$/.test(lines[i])) nextClose = i;
+      }
       const findClose = (line, run, start) => {
         let close = line.indexOf(run, start);
         while (close >= 0 && (line[close - 1] === "`" || line[close + run.length] === "`")) close = line.indexOf(run, close + run.length);
@@ -11537,7 +11544,7 @@ __zentralShim.register = function (def) {
       };
       for (let row = 0; row < lines.length; row++) {
         let line = exportLine(row);
-        if (!comment && !fence) {
+        if (!comment && !fence && row > containerGuardEnd) {
           const head = /^:::\s*([A-Za-z][\w-]*)[ \t]*(.*)$/.exec(line);
           const type = head?.[1].toLowerCase() === "details" ? "note" : head?.[1];
           const protectedAt = head ? exportProtectedPositions(line, mathOptions.literals) : null;
@@ -11563,9 +11570,15 @@ __zentralShim.register = function (def) {
               }
             }
             if (!ambiguous && end < lines.length && end - row <= 2000) {
-              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence, mapBlockId, onAmbiguousBlockId, mapComment);
+              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence, mapBlockId, onAmbiguousBlockId, mapComment, onAmbiguousContainer);
               result.push(mapContainer({ open: line, inner, close: lines[end], kind: head[1], title: head[2].replace(/\s*:::\s*$/, "").trim() }));
               row = end; continue;
+            }
+            if (nextContainerClose[row] >= 0) {
+              // The reader treats an inner opening marker as text. Leave the
+              // ambiguous region raw and don't reinterpret that inner marker.
+              containerGuardEnd = nextContainerClose[row];
+              onAmbiguousContainer();
             }
           }
         }
@@ -11854,7 +11867,7 @@ __zentralShim.register = function (def) {
         return segment;
       }, undefined, undefined, (math) => { found.add("math"); return math; }, (container) => {
         found.add("callout"); return container.open + "\n" + container.inner + "\n" + container.close;
-      }, (prefix) => { found.add("small print"); return prefix; }, readOptions, () => found.add("math"), (marker) => { found.add("block ID"); return "<!-- " + marker + " -->"; }, () => found.add("block ID"));
+      }, (prefix) => { found.add("small print"); return prefix; }, readOptions, () => found.add("math"), (marker) => { found.add("block ID"); return "<!-- " + marker + " -->"; }, () => found.add("block ID"), undefined, () => found.add("callout"));
       return [...found];
     }
     // Export is a copy: convert the documented extensions conservatively and
