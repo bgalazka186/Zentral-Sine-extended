@@ -1803,6 +1803,7 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-calendar-view-select { min-width: 90px; }
 .zentral-notes-sheet .zn-calendar-kind-filter,
 .zentral-notes-sheet .zn-calendar-category-filter { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.zentral-notes-sheet .zn-calendar-snap-select[hidden],
 .zentral-notes-sheet .zn-calendar-days-select[hidden] { display: none !important; }
 .zentral-notes-sheet .zn-calendar-pane-content { flex: 1 1 auto; display: block; min-height: 0; overflow: auto; padding: 8px; text-align: left; scrollbar-width: thin; }
 .zentral-notes-sheet .zn-cal-month-wrap { display: flex; flex-direction: column; min-height: 0; }

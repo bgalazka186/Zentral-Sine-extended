@@ -111,6 +111,7 @@ const chooseMenu = async (root, triggerSelector, label) => {
   await chooseMenu(root, ".zn-calendar-view-select", "Month");
 
   assert.equal(content.dataset.density, "comfortable");
+  assert.equal(q(root, ".zn-calendar-snap-select").hidden, true, "snap is offered only for time-grid views");
   await chooseMenu(root, ".zn-calendar-density-select", "Compact");
   assert.equal(store.meta.calendarDensity, "compact");
   assert.equal(content.dataset.density, "compact");
@@ -328,6 +329,9 @@ const chooseMenu = async (root, triggerSelector, label) => {
     return button;
   };
   const pointer = (type, x, y, id = 7) => new Ev(type, { bubbles: true, button: 0, pointerId: id, clientX: x, clientY: y });
+  assert.equal(store.meta.calendarSnap, 15);
+  await chooseMenu(root, ".zn-calendar-snap-select", "30 minutes");
+  assert.equal(store.meta.calendarSnap, 30);
   let dragButton = setupDrag(), originalDragStart = store.items.get("drag-ui-event").start.dateTime;
   dragButton.dispatchEvent(pointer("pointerdown", 200, 621));
   root.dispatchEvent(pointer("pointermove", 200, 675));
@@ -356,9 +360,9 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(store.items.get("drag-ui-event").start.dateTime, originalDragStart, "a drop outside the timeline is cancelled");
   dragButton = setupDrag();
   dragButton.dispatchEvent(pointer("pointerdown", 200, 621));
-  root.dispatchEvent(pointer("pointermove", 200, 675));
-  root.dispatchEvent(pointer("pointerup", 200, 675));
-  assert.equal(store.items.get("drag-ui-event").start.dateTime, new Date(dragStart + 3600000).toISOString(), "drop moves the event one displayed hour");
+  root.dispatchEvent(pointer("pointermove", 200, 642));
+  root.dispatchEvent(pointer("pointerup", 200, 642));
+  assert.equal(store.items.get("drag-ui-event").start.dateTime, new Date(dragStart + 1800000).toISOString(), "drop uses the selected 30-minute snap");
   assert.equal(q(root, ".zn-calendar-undo-move").hidden, false);
   q(root, ".zn-calendar-undo-move").click();
   assert.equal(store.items.get("drag-ui-event").start.dateTime, originalDragStart, "undo restores the original schedule");
@@ -373,6 +377,27 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(store.items.get("drag-ui-event").summary, "Changed elsewhere", "undo rejects a changed revision");
   assert.equal(store.items.get("drag-ui-event").start.dateTime, movedDrag.start.dateTime);
   store.items.remove("drag-ui-event");
+
+  const crossStart = cal.zonedDateTimeToMs(zoneKey, "11:30", zone);
+  store.items.upsert({ id: "drag-cross-day", summary: "Cross day drag", start: { dateTime: new Date(crossStart).toISOString() }, end: { dateTime: new Date(crossStart + 3600000).toISOString() }, x: { kind: "event", src: "manual" } });
+  await chooseMenu(root, ".zn-calendar-view-select", "Week");
+  const weekTracks = root.querySelectorAll(".zn-cal-time-track");
+  const sourceTrackIndex = weekTracks.findIndex((track) => track.getAttribute("data-day") === zoneKey);
+  const targetTrackIndex = sourceTrackIndex === 6 ? 5 : sourceTrackIndex + 1;
+  assert.ok(sourceTrackIndex >= 0);
+  for (let index = 0; index < weekTracks.length; index++) weekTracks[index].getBoundingClientRect = () => ({ left: index * 100, right: index * 100 + 100, top: 0, bottom: 1296, width: 100, height: 1296 });
+  q(root, ".zn-cal-time-scroll").getBoundingClientRect = () => ({ left: 0, right: 700, top: 0, bottom: 1296, width: 700, height: 1296 });
+  const crossButton = root.querySelectorAll(".zn-cal-time-event").find((el) => el.textContent.includes("Cross day drag"));
+  assert.ok(crossButton); crossButton.setPointerCapture = () => {};
+  const targetKey = weekTracks[targetTrackIndex].getAttribute("data-day");
+  crossButton.dispatchEvent(pointer("pointerdown", sourceTrackIndex * 100 + 50, 621));
+  root.dispatchEvent(pointer("pointermove", targetTrackIndex * 100 + 50, 621));
+  root.dispatchEvent(pointer("pointerup", targetTrackIndex * 100 + 50, 621));
+  assert.equal(store.items.get("drag-cross-day").start.dateTime, new Date(cal.zonedDateTimeToMs(targetKey, "11:30", zone)).toISOString(), "a cross-day drop uses the destination civil date and display zone");
+  q(root, ".zn-calendar-undo-move").click();
+  assert.equal(store.items.get("drag-cross-day").start.dateTime, new Date(crossStart).toISOString());
+  store.items.remove("drag-cross-day");
+  await chooseMenu(root, ".zn-calendar-view-select", "Day");
 
   const linkedNote = store.create(`# Linked drag\n\n%%calendar: Work%%\n- ${zoneKey} 10:00-11:00 Listed drag event`);
   const linkedItem = store.items.list().find((item) => item.x.noteId === linkedNote.id && item.summary.includes("Listed drag event"));
@@ -429,6 +454,7 @@ const chooseMenu = async (root, triggerSelector, label) => {
   await restored.open();
   assert.equal(restored.meta.calendarView, "agenda");
   assert.equal(restored.meta.calendarDensity, "extra-compact", "density survives store reopening");
+  assert.equal(restored.meta.calendarSnap, 30, "calendar snap survives store reopening");
   assert.equal(restored.meta.calendarDaysForward, 14);
   assert.equal(restored.meta.calendarFilterKind, "all");
   assert.equal(restored.meta.calendarDisplayZone, "Europe/Warsaw", "selected display zone persists after reopening the store");
@@ -437,6 +463,7 @@ const chooseMenu = async (root, triggerSelector, label) => {
   const invalid = c.createStore({ io, notify() {}, windowId: "invalid-density", getDir: async () => "/bad-density", getMaxSaveMs: () => 1000, setTimer: setTimeout, clearTimer: clearTimeout });
   await invalid.open();
   assert.equal(invalid.meta.calendarDensity, "comfortable", "invalid stored density falls back safely");
+  assert.equal(invalid.meta.calendarSnap, 15, "missing stored snap defaults to fifteen minutes");
   await invalid.close();
   console.log("calendar views UI tests passed");
 })().catch((error) => { console.error("FAIL", error); process.exit(1); });

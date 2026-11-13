@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name Zentral modular entrypoint
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.109
+// @version 3.3.110
 // ==/UserScript==
 /*
  * ZENTRAL FILE GUIDE - loader/Zentral.uc.js

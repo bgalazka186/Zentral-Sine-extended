@@ -1,12 +1,14 @@
 "use strict";
 const assert = require("node:assert/strict");
 const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
+assert.deepEqual([5, 10, 15, 30, 60, "30", 0, 7, null].map(C.cleanCalendarSnap), [5, 10, 15, 30, 60, 30, 15, 15, 15]);
 const zone = "Europe/Warsaw";
 const time = (date, clock) => C.zonedDateTimeToMs(date, clock, zone);
 const make = (start, end, x = {}) => C.makeItem({ id: "drag-event", summary: "Meeting", start: { dateTime: new Date(start).toISOString() }, end: { dateTime: new Date(end).toISOString() }, x: { kind: "event", src: "manual", ...x } }, 0);
 const original = make(time("2026-03-27", "10:10"), time("2026-03-27", "11:10"));
 const place = C.calendarMovePlacement(original, "2026-03-27", 615, "2026-03-28", 675, zone, 15);
 assert.deepEqual(place, { date: "2026-03-28", minute: 675 });
+assert.deepEqual(C.calendarMovePlacement(original, "2026-03-27", 615, "2026-03-27", 625, zone, 30), { date: "2026-03-27", minute: 630 }, "target follows the configured snap grid");
 const moved = C.calendarMoveTimedEvent(original, place, zone, 1000);
 assert.equal(moved.start.dateTime, new Date(time("2026-03-28", "11:15")).toISOString());
 assert.equal(Date.parse(moved.end.dateTime) - Date.parse(moved.start.dateTime), 3600000);
