@@ -320,4 +320,16 @@ const ambiguousHeaders = '> [!NOTE] Real\n> Body\n> [!NOTE] Literal';
 assert.deepEqual(scan(ambiguousHeaders, { flavor: 'mixed' }), ['callout']);
 assert.equal(convert(ambiguousHeaders, { flavor: 'mixed' }), ambiguousHeaders, 'ambiguous identical markers stay raw');
 assert.equal(convert('>\n> [!NOTE] Header\n> Body', { flavor: 'mixed' }), '>\n> **NOTE** — Header\n> Body');
+const quotedMathFence = '> ```math\n> x^2\n> ```';
+for (const flavor of ['mixed', 'mixed+github', 'mixed+reddit', 'github', 'reddit', 'obsidian']) {
+  const parsed = c.parseBlocks(quotedMathFence, false, { flavor });
+  const active = parsed[0]?.blocks?.[0]?.type === 'math';
+  assert.equal(scan(quotedMathFence, { flavor }).includes('math'), active, `${flavor} quoted math-fence warning matches reader`);
+  assert.equal(convert(quotedMathFence, { flavor }), quotedMathFence);
+}
+assert.deepEqual(scan('> > ```math\n> > x\n> > ```', { flavor: 'mixed' }), ['math']);
+assert.deepEqual(scan(quotedMathFence, { flavor: 'mixed', ignore: 'G08' }), []);
+assert.deepEqual(scan('>      ```math\n>      x\n>      ```', { flavor: 'mixed' }), [], 'excess quote indentation is not a fenced math block');
+assert.deepEqual(scan('> ```text\n> ```math\n> x\n> ```\n> ```', { flavor: 'mixed' }), [], 'math examples inside quoted code do not warn');
+assert.deepEqual(scan(quotedMathFence, { flavor: 'mixed', ignore: '> ```math' }), []);
 console.log('Markdown export flavor tests passed');

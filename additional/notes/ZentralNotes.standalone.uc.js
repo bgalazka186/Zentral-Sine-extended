@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.97
+// @version 3.3.98
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.97, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.98, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.97";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.98";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11587,19 +11587,25 @@ __zentralShim.register = function (def) {
         if (!comment && !fence) {
           // Fences may be nested in blockquotes. Their contents are examples,
           // not live extensions, even when they contain additional > markers.
-          const quote = /^((?:>[ \t]*)+)(.*)$/.exec(line);
+          const quote = /^((?:>[ \t]?)+)(.*)$/.exec(line);
           const depth = quote ? (quote[1].match(/>/g) || []).length : 0;
           if (quoteFence && depth < quoteFenceDepth) { quoteFence = null; quoteFenceDepth = 0; }
           if (quoteFence) {
             let rest = line;
-            for (let d = 0; d < quoteFenceDepth; d++) rest = rest.replace(/^>[ \t]*/, "");
+            for (let d = 0; d < quoteFenceDepth; d++) rest = rest.replace(/^>[ \t]?/, "");
             quoteFence = nextMarkdownFence(rest, quoteFence);
             if (!quoteFence) quoteFenceDepth = 0;
             result.push(line); continue;
           }
           if (quote) {
             const opened = nextMarkdownFence(quote[2], null);
-            if (opened) { quoteFence = opened; quoteFenceDepth = depth; result.push(line); continue; }
+            if (opened) {
+              if (isMathFence(quote[2])) {
+                const hasMath = (block) => block?.type === "math" || (block?.blocks || []).some(hasMath);
+                if (parseBlocks(line, false, readOptions).some(hasMath)) onMathFence(line);
+              }
+              quoteFence = opened; quoteFenceDepth = depth; result.push(line); continue;
+            }
           }
         }
         if (!comment && !fence && row > containerGuardEnd) {

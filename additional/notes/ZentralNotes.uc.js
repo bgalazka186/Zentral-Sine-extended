@@ -7237,19 +7237,25 @@
         if (!comment && !fence) {
           // Fences may be nested in blockquotes. Their contents are examples,
           // not live extensions, even when they contain additional > markers.
-          const quote = /^((?:>[ \t]*)+)(.*)$/.exec(line);
+          const quote = /^((?:>[ \t]?)+)(.*)$/.exec(line);
           const depth = quote ? (quote[1].match(/>/g) || []).length : 0;
           if (quoteFence && depth < quoteFenceDepth) { quoteFence = null; quoteFenceDepth = 0; }
           if (quoteFence) {
             let rest = line;
-            for (let d = 0; d < quoteFenceDepth; d++) rest = rest.replace(/^>[ \t]*/, "");
+            for (let d = 0; d < quoteFenceDepth; d++) rest = rest.replace(/^>[ \t]?/, "");
             quoteFence = nextMarkdownFence(rest, quoteFence);
             if (!quoteFence) quoteFenceDepth = 0;
             result.push(line); continue;
           }
           if (quote) {
             const opened = nextMarkdownFence(quote[2], null);
-            if (opened) { quoteFence = opened; quoteFenceDepth = depth; result.push(line); continue; }
+            if (opened) {
+              if (isMathFence(quote[2])) {
+                const hasMath = (block) => block?.type === "math" || (block?.blocks || []).some(hasMath);
+                if (parseBlocks(line, false, readOptions).some(hasMath)) onMathFence(line);
+              }
+              quoteFence = opened; quoteFenceDepth = depth; result.push(line); continue;
+            }
           }
         }
         if (!comment && !fence && row > containerGuardEnd) {
