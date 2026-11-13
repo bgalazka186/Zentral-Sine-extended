@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.63
+// @version 3.3.64
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.63, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.64, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.63";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.64";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11399,6 +11399,19 @@ __zentralShim.register = function (def) {
       }
       return null;
     }
+    // Identify live Zentral extensions without interpreting examples inside code.
+    // This reports categories only; it does not modify or export the source.
+    function markdownExportWarnings(body) {
+      const found = new Set();
+      mapOutsideCode(String(body ?? ""), (segment) => {
+        if (TOC_TOKEN_RE.test(segment)) found.add("toc");
+        if (/^\s*>\s*\[![A-Za-z][\w-]*\][+-]?/.test(segment)) found.add("callout");
+        if (/!\[\[[^\]\n]+\]\]/.test(segment)) found.add("transclusion");
+        if (/%%(?:calendar(?::[^%\n]*)?|zn-item-id:[\w-]+)%%/i.test(segment)) found.add("calendar");
+        return segment;
+      });
+      return [...found];
+    }
     // Rebuilds the block (or expands a [TOC] line). Returns { body, changed, found }.
     function updateToc(body) {
       const text = String(body ?? "");
@@ -12462,7 +12475,7 @@ __zentralShim.register = function (def) {
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
+        markdownExportWarnings, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,

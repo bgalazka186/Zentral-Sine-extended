@@ -1,0 +1,12 @@
+"use strict";
+const assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
+const window = { __zentralNotesTestSeam: {}, ZentralRuntime: { register() {} } }; window.window = window;
+vm.runInNewContext(fs.readFileSync(require.resolve("../additional/notes/ZentralNotes.uc.js"), "utf8"), { window, globalThis: { Services: {} }, ChromeUtils: {}, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, console });
+const scan = window.__zentralNotesTestSeam.core.markdownExportWarnings;
+assert.equal(typeof scan, "function");
+const source = "# Plan\n[TOC]\n> [!NOTE]- Detail\n> Text\n![[other note]]\n%%calendar%%\n- 2026-11-14 09:00 Reminder %%zn-item-id:abcd1%%\n";
+assert.deepEqual(Array.from(scan(source)).sort(), ["calendar", "callout", "toc", "transclusion"]);
+assert.deepEqual(Array.from(scan("`![[literal]]`\n```md\n[TOC]\n> [!NOTE] demo\n%%calendar%%\n```\nplain text")), [], "examples in code are not live syntax");
+assert.deepEqual(Array.from(scan("ordinary [link](https://example.com)\n- [ ] task\n![image](assets/n1/x.png)")), []);
+assert.equal(source.includes("%%zn-item-id:abcd1%%"), true);
+console.log("Markdown export warning scan passed");
