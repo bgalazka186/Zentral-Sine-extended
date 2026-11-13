@@ -113,3 +113,9 @@ assert.equal(convert({ id: 'note_a', body: linkedLabel }, [target], new Map([['o
 const apostropheLink = "[visit](https://example.test/O'Reilly/==literal==)";
 assert.deepEqual(Array.from(scan(apostropheLink)), []);
 assert.equal(convert({ id: 'note_a', body: apostropheLink }, [], new Map(), []), apostropheLink);
+const chemistry = 'H~2~O and X^2^, `H~2~O`, and [link](https://example.test/X^2^)';
+assert.deepEqual(Array.from(scan(chemistry)), ['subscript / superscript']);
+const chemistryOut = convert({ id: 'note_a', body: chemistry }, [], new Map(), []);
+assert.equal(chemistryOut, 'H<sub>2</sub>O and X<sup>2</sup>, `H~2~O`, and [link](https://example.test/X^2^)');
+assert.deepEqual(Array.from(scan('~~ordinary strikethrough~~ and [^footnote]')), [], 'strikethrough and footnote syntax are not mistaken for sub/superscript');
+assert.equal(convert({ id: 'note_a', body: 'H~2~O and X^2^' }, [], new Map(), []), 'H<sub>2</sub>O and X<sup>2</sup>');

@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.72
+// @version 3.3.73
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.72, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.73, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.72";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.73";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11518,6 +11518,7 @@ __zentralShim.register = function (def) {
         if (/!\[\[[^\]\n]+\]\]/.test(visible)) found.add("transclusion");
         if (/==(?:\{(?:\w+|#[0-9a-f]{6})\})?[^\n=]+==|\+\+[^+\n]+\+\+/i.test(visible)) found.add("formatting");
         if (/\|\|[^|\n]+\|\||>![^!\n]+!</.test(visible)) found.add("spoiler");
+        if (/(?<!~)~[^\s~]+~(?!~)|\^(?!\[)[^\s^]+\^/.test(visible)) found.add("subscript / superscript");
         const task = /^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/.exec(visible);
         if (task && Object.hasOwn(TASK_STATUS_NAMES, task[2])) found.add("extended task");
         return segment;
@@ -11536,6 +11537,7 @@ __zentralShim.register = function (def) {
         segment = segment.replace(/^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/, (whole, prefix, status) => Object.hasOwn(TASK_STATUS_NAMES, status) ? prefix + "[ ] (" + TASK_STATUS_NAMES[status] + ")" : whole);
         segment = segment.replace(/==(?:\{(?:\w+|#[0-9a-f]{6})\})?([^\n=]+)==|\+\+([^+\n]+)\+\+/gi, (_all, mark, underline) => "**" + (mark || underline) + "**");
         segment = segment.replace(/\|\|([^|\n]+)\|\||>!([^!\n]+)!</g, (_all, discord, reddit) => "<details><summary>Spoiler</summary>" + escHtml(discord || reddit) + "</details>");
+        segment = segment.replace(/(?<!~)~([^\s~]+)~(?!~)|\^(?!\[)([^\s^]+)\^/g, (_all, sub, sup) => sub ? "<sub>" + escHtml(sub) + "</sub>" : "<sup>" + escHtml(sup) + "</sup>");
         segment = segment.replace(/!\[\[([^\]\n]+)\]\]/g, (raw, target) => {
           const spec = parseEmbedTarget(target);
           if (!spec) return literal(raw);
@@ -17850,7 +17852,7 @@ __zentralShim.register = function (def) {
         if (!warnings.size) { Promise.resolve(run({})).catch((error) => console.warn("[ZentralNotes] export failed", error)); return; }
         const cancel = chip("Cancel"), raw = chip("Keep raw syntax"), portable = chip("Convert to portable Markdown", true);
         openCard("Markdown export compatibility",
-          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, and spoilers use HTML details. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
+          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, and subscript/superscript use HTML tags. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
           h("div", { class: "zn-dialog-actions" }, cancel, raw, portable));
         const choose = (markdownMode) => { closeDialog(); Promise.resolve(run({ markdownMode })).catch((error) => console.warn("[ZentralNotes] export failed", error)); };
         cancel.addEventListener("click", closeDialog);
