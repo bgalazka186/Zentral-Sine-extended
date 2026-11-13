@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.80
+// @version 3.3.81
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.80, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.81, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.80";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.81";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11589,10 +11589,40 @@ __zentralShim.register = function (def) {
       onEnd({ comment, fence });
       return result.join("\n");
     }
+    // Match the reader's two competing interpretations of single tilde and
+    // Pandoc superscript. Ignored or escaped delimiters remain literal.
+    function exportScriptOptions(readOptions = {}) {
+      const ignored = parseIgnoreCached(readOptions.ignore);
+      return { gate: flavorGate(readOptions.flavor, { tilde: readOptions.tilde, ignore: ignored.ids }), literals: ignored.literals };
+    }
+    function mapExportScripts(segment, options, convert) {
+      const gate = options.gate;
+      if (!gate.on("A09") && !gate.on("A13") && !gate.on("A15")) return segment;
+      const ignored = new Set();
+      for (const re of ignoreRes(options.literals)) {
+        re.lastIndex = 0;
+        for (let match; (match = re.exec(segment));) {
+          for (let i = 0; i < match[0].length; i++) {
+            if (match[0][i] === "~" || match[0][i] === "^") ignored.add(match.index + i);
+          }
+        }
+      }
+      const escaped = (at) => {
+        let n = 0;
+        while (at > 0 && segment[--at] === "\\") n++;
+        return n % 2 === 1;
+      };
+      return segment.replace(/(?<!~)~([^\s~]+)~(?!~)|\^(?!\[)([^\s^]+)\^/g, (raw, sub, sup, offset) => {
+        const end = offset + raw.length - 1;
+        if (ignored.has(offset) || ignored.has(end) || escaped(offset) || escaped(end)) return raw;
+        const kind = sub ? (gate.on("A09") ? "strike" : gate.on("A13") ? "sub" : "") : gate.on("A15") ? "sup" : "";
+        return kind ? convert(raw, kind, sub || sup) : raw;
+      });
+    }
     // Identify live Zentral extensions without interpreting examples inside code.
     // This reports categories only; it does not modify or export the source.
     function markdownExportWarnings(body, readOptions = {}) {
-      const found = new Set();
+      const found = new Set(), scriptOptions = exportScriptOptions(readOptions);
       const content = splitMarkdownExportFrontMatter(body).body;
       mapMarkdownForExport(content, (segment) => {
         const visible = segment.replace(/%%[^%\n]+%%/g, (marker) => {
@@ -11605,7 +11635,7 @@ __zentralShim.register = function (def) {
         if (/!\[\[[^\]\n]+\]\]/.test(visible)) found.add("transclusion");
         if (/==(?:\{(?:\w+|#[0-9a-f]{6})\})?[^\n=]+==|\+\+[^+\n]+\+\+/i.test(visible)) found.add("formatting");
         if (/\|\|[^|\n]+\|\||>![^!\n]+!</.test(visible)) found.add("spoiler");
-        if (/(?<!~)~[^\s~]+~(?!~)|\^(?!\[)[^\s^]+\^/.test(visible)) found.add("subscript / superscript");
+        mapExportScripts(visible, scriptOptions, (raw, kind) => { found.add(kind === "strike" ? "single-tilde strike" : "subscript / superscript"); return raw; });
         if (/\^\[((?:[^\[\]\n]|\[[^\[\]\n]*\])+)\]/.test(visible)) found.add("inline footnote");
         const task = /^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/.exec(visible);
         if (task && Object.hasOwn(TASK_STATUS_NAMES, task[2])) found.add("extended task");
@@ -11620,6 +11650,7 @@ __zentralShim.register = function (def) {
     function portableMarkdownExportBody(note, notes = [], names = new Map(), folders = [], readOptions = {}) {
       const body = String(note?.body ?? ""), parts = splitMarkdownExportFrontMatter(body);
       const effectiveReadOptions = { ...readOptions, flavor: note?.flavor || readOptions.flavor };
+      const scriptOptions = exportScriptOptions(effectiveReadOptions);
       const usedFootnotes = new Set(), footnotes = [];
       let footnoteAppendSafe = true;
       mapMarkdownForExport(parts.body, (segment) => {
@@ -11635,7 +11666,7 @@ __zentralShim.register = function (def) {
         segment = segment.replace(/^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/, (whole, prefix, status) => Object.hasOwn(TASK_STATUS_NAMES, status) ? prefix + "[ ] (" + TASK_STATUS_NAMES[status] + ")" : whole);
         segment = segment.replace(/==(?:\{(?:\w+|#[0-9a-f]{6})\})?([^\n=]+)==|\+\+([^+\n]+)\+\+/gi, (_all, mark, underline) => "**" + (mark || underline) + "**");
         segment = segment.replace(/\|\|([^|\n]+)\|\||>!([^!\n]+)!</g, (_all, discord, reddit) => "<details><summary>Spoiler</summary>" + escHtml(discord || reddit) + "</details>");
-        segment = segment.replace(/(?<!~)~([^\s~]+)~(?!~)|\^(?!\[)([^\s^]+)\^/g, (_all, sub, sup) => sub ? "<sub>" + escHtml(sub) + "</sub>" : "<sup>" + escHtml(sup) + "</sup>");
+        segment = mapExportScripts(segment, scriptOptions, (_raw, kind, content) => kind === "strike" ? "~~" + content + "~~" : "<" + kind + ">" + escHtml(content) + "</" + kind + ">");
         segment = segment.replace(/!\[\[([^\]\n]+)\]\]/g, (raw, target) => {
           const spec = parseEmbedTarget(target);
           if (!spec) return literal(raw);
@@ -17973,7 +18004,7 @@ __zentralShim.register = function (def) {
         if (!warnings.size) { Promise.resolve(run({ markdownReadOpts })).catch((error) => console.warn("[ZentralNotes] export failed", error)); return; }
         const cancel = chip("Cancel"), raw = chip("Keep raw syntax"), portable = chip("Convert to portable Markdown", true);
         openCard("Markdown export compatibility",
-          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, subscript/superscript use HTML tags, inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, and small print becomes ordinary text. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
+          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, subscript/superscript use HTML tags, single-tilde strike uses double tildes, inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, and small print becomes ordinary text. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
           h("div", { class: "zn-dialog-actions" }, cancel, raw, portable));
         const choose = (markdownMode) => { closeDialog(); Promise.resolve(run({ markdownMode, markdownReadOpts })).catch((error) => console.warn("[ZentralNotes] export failed", error)); };
         cancel.addEventListener("click", closeDialog);
