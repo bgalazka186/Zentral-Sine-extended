@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.96
+// @version 3.3.97
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.96, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.97, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.96";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.97";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11440,7 +11440,7 @@ __zentralShim.register = function (def) {
     }
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
-    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}, onMathFence = () => {}, mapBlockId = (marker) => marker, onAmbiguousBlockId = () => {}, mapComment = (comment) => comment, onAmbiguousContainer = () => {}) {
+    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}, onMathFence = () => {}, mapBlockId = (marker) => marker, onAmbiguousBlockId = () => {}, mapComment = (comment) => comment, onAmbiguousContainer = () => {}, onAmbiguousCallout = () => {}) {
       const lines = String(text).split("\n"), result = [], codeRuns = indexMarkdownCodeRuns(lines);
       const mathOptions = exportScriptOptions(readOptions);
       const hasProtectedDollar = (line) => {
@@ -11450,11 +11450,51 @@ __zentralShim.register = function (def) {
       };
       // O01 only starts a block where the Notes parser actually recognizes it;
       // the same characters inside a running paragraph are ordinary text.
-      const smallRows = new Set(), mathFenceRows = new Set(), blockIdRows = new Map();
+      const smallRows = new Set(), mathFenceRows = new Set(), blockIdRows = new Map(), calloutRows = new Set();
+      const quoteHeader = /^((?:>[ \t]*)+)\[!([A-Za-z][\w-]{0,30})\]/;
       const isMathFence = (line) => /^ {0,3}(?:`{3,}|~{3,})[ \t]*math(?:[ \t{]|$)/i.test(line || "");
       const lineId = (row) => trailingBlockId((lines[row] || "").replace(/\r$/, ""));
-      if (lines.some((line) => /^-#[ \t]+\S/.test(line) || isMathFence(line) || trailingBlockId(line.replace(/\r$/, "")))) {
+      if (lines.some((line) => /^-#[ \t]+\S/.test(line) || isMathFence(line) || trailingBlockId(line.replace(/\r$/, "")) || quoteHeader.test(line))) {
         const blocks = parseBlocks(text, false, readOptions).filter((block) => Number.isInteger(block.src));
+        // Treat HTML comments as inert while locating callouts, matching the
+        // export scanner (a fence inside a comment must not swallow later rows).
+        if (lines.some((line) => quoteHeader.test(line))) {
+          const sanitized = text.replace(/<!--[\s\S]*?(?:-->|$)/g, (comment) => comment.replace(/[^\r\n]/g, " "));
+          const quoteBlocks = sanitized === text ? blocks : parseBlocks(sanitized, false, readOptions).filter((block) => Number.isInteger(block.src));
+          const quoteLines = sanitized === text ? lines : sanitized.split("\n");
+          quoteBlocks.forEach((block, index) => {
+            const end = quoteBlocks[index + 1]?.src ?? lines.length;
+            if (block.type === "quote" && /^>/.test(quoteLines[block.src])) {
+              const counts = new Map(), candidates = new Map();
+              const collectCallouts = (node, depth) => {
+                if (node?.type === "quote") {
+                  if (node.callout) {
+                    const key = depth + ":" + node.callout.kind;
+                    counts.set(key, (counts.get(key) || 0) + 1);
+                  }
+                  for (const child of node.blocks || []) collectCallouts(child, depth + 1);
+                } else for (const child of node?.blocks || []) collectCallouts(child, depth);
+              };
+              collectCallouts(block, 1);
+              let hasContainer = false;
+              for (let row = block.src; row < end; row++) {
+                if (/^>(?:[ \t]*>)*[ \t]*:::\s*[A-Za-z]/.test(quoteLines[row])) hasContainer = true;
+                const match = quoteHeader.exec(quoteLines[row]);
+                if (!match) continue;
+                const kind = FLAVORS_PART ? FLAVORS_PART.calloutKind(match[2], mathOptions.gate)?.kind : /^(note|tip|important|warning|caution|info)$/i.test(match[2]) ? match[2].toLowerCase() : "";
+                if (!kind) continue;
+                const key = (match[1].match(/>/g) || []).length + ":" + kind;
+                if (!candidates.has(key)) candidates.set(key, []);
+                candidates.get(key).push(row);
+              }
+              for (const [key, count] of counts) {
+                const rows = candidates.get(key) || [];
+                if (!hasContainer && rows.length === count) for (const row of rows) calloutRows.add(row);
+                else if (rows.length) onAmbiguousCallout();
+              }
+            }
+          });
+        }
         blocks.forEach((block, index) => {
           if (block.type === "p" && block.c?.length === 1 && block.c[0]?.t === "small") smallRows.add(block.src);
           if (block.type === "math" && isMathFence(lines[block.src])) mathFenceRows.add(block.src);
@@ -11588,7 +11628,7 @@ __zentralShim.register = function (def) {
               }
             }
             if (!ambiguous && end < lines.length && end - row <= 2000 && nextContainerClose[row] === end) {
-              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence, mapBlockId, onAmbiguousBlockId, mapComment, onAmbiguousContainer);
+              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence, mapBlockId, onAmbiguousBlockId, mapComment, onAmbiguousContainer, onAmbiguousCallout);
               result.push(mapContainer({ open: line, inner, close: lines[end], kind: head[1], title: head[2].replace(/\s*:::\s*$/, "").trim() }));
               row = end; continue;
             }
@@ -11633,7 +11673,7 @@ __zentralShim.register = function (def) {
         let smallPrefix = !comment && smallRows.has(row) && /^-#[ \t]+(?=\S)/.exec(line)?.[0] || "";
         let separateSmall = false, protectedLine = null;
         let out = "", visible = smallPrefix, pos = smallPrefix.length;
-        const flush = () => { if (visible) { out += fn(visible); visible = ""; } };
+        const flush = () => { if (visible) { out += fn(visible, { readerCallout: calloutRows.has(row) }); visible = ""; } };
         const finishSmallPrint = () => {
           if (smallPrefix && out.startsWith(smallPrefix)) {
             const rest = out.slice(smallPrefix.length);
@@ -11889,7 +11929,7 @@ __zentralShim.register = function (def) {
           found.add(calendar ? "calendar" : "hidden comment"); return "";
         });
         mapExportToc(visible, scriptOptions, (raw) => { found.add("toc"); return raw; });
-        mapExportCallout(visible, scriptOptions, (raw) => { found.add("callout"); return raw; });
+        if (context?.readerCallout) mapExportCallout(visible, scriptOptions, (raw) => { found.add("callout"); return raw; });
         mapExportEmbeds(visible, scriptOptions, (raw) => { found.add("transclusion"); return raw; });
         mapExportFormatting(visible, scriptOptions, (raw) => { found.add("formatting"); return raw; });
         mapExportSpoilers(context?.spoilerToken ? segment : visible, scriptOptions, (raw) => { found.add("spoiler"); return raw; }, context);
@@ -11899,7 +11939,7 @@ __zentralShim.register = function (def) {
         return segment;
       }, undefined, undefined, (math) => { found.add("math"); return math; }, (container) => {
         found.add("callout"); return container.open + "\n" + container.inner + "\n" + container.close;
-      }, (prefix) => { found.add("small print"); return prefix; }, readOptions, () => found.add("math"), (marker) => { found.add("block ID"); return "<!-- " + marker + " -->"; }, () => found.add("block ID"), undefined, () => found.add("callout"));
+      }, (prefix) => { found.add("small print"); return prefix; }, readOptions, () => found.add("math"), (marker) => { found.add("block ID"); return "<!-- " + marker + " -->"; }, () => found.add("block ID"), undefined, () => found.add("callout"), () => found.add("callout"));
       return [...found];
     }
     // Export is a copy: convert the documented extensions conservatively and
@@ -11941,7 +11981,7 @@ __zentralShim.register = function (def) {
         }
         const toc = mapExportToc(segment, scriptOptions, exportToc);
         if (toc !== segment) return toc;
-        segment = mapExportCallout(segment, scriptOptions, (_raw, quote, kind, title) => quote + "**" + kind.toUpperCase() + "**" + (title ? " — " + title : ""));
+        if (context?.readerCallout) segment = mapExportCallout(segment, scriptOptions, (_raw, quote, kind, title) => quote + "**" + kind.toUpperCase() + "**" + (title ? " — " + title : ""));
         segment = mapExportTask(segment, scriptOptions, (_raw, prefix, status) => prefix + "[ ] (" + TASK_STATUS_NAMES[status] + ")");
         segment = mapExportFormatting(segment, scriptOptions, (_raw, content) => "**" + content + "**");
         segment = mapExportScripts(segment, scriptOptions, (_raw, kind, content) => kind === "strike" ? "~~" + content + "~~" : "<" + kind + ">" + escHtml(content) + "</" + kind + ">");

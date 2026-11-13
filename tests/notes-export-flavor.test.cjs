@@ -312,4 +312,12 @@ assert.deepEqual(scan(quoteFenceFeatures, { flavor: 'mixed' }), ['formatting']);
 assert.equal(convert(quoteFenceFeatures, { flavor: 'mixed' }), '> ```md\n> [!NOTE] literal ==highlight== ![[note]] %%hidden%% ^word\n> ```\n\nVisible **highlight**');
 assert.deepEqual(scan('> ```\n> > [!NOTE] example\n> ```', { flavor: 'mixed' }), []);
 assert.deepEqual(scan('> > [!NOTE] Nested\n> > Body', { flavor: 'mixed', ignore: 'F01 F02 F03 F04 F05' }), []);
+for (const literal of ['> Intro\n> [!NOTE] Not a callout\n> Body', '> > Intro\n> > [!TIP] Not a callout']) {
+  assert.deepEqual(scan(literal, { flavor: 'mixed' }), [], 'a marker inside a quote paragraph is not a callout');
+  assert.equal(convert(literal, { flavor: 'mixed' }), literal);
+}
+const ambiguousHeaders = '> [!NOTE] Real\n> Body\n> [!NOTE] Literal';
+assert.deepEqual(scan(ambiguousHeaders, { flavor: 'mixed' }), ['callout']);
+assert.equal(convert(ambiguousHeaders, { flavor: 'mixed' }), ambiguousHeaders, 'ambiguous identical markers stay raw');
+assert.equal(convert('>\n> [!NOTE] Header\n> Body', { flavor: 'mixed' }), '>\n> **NOTE** — Header\n> Body');
 console.log('Markdown export flavor tests passed');
