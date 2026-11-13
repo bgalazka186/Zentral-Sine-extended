@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.117
+// @version 3.3.118
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.117, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.118, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.117";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.118";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2405,16 +2405,51 @@ const __zentralEmbeddedLoader = (function () {
       timer = setTimer(() => { timer = null; writeNow().catch(() => {}); }, ms);
     };
     const schedule = () => { dirty = true; if (!writeBlocked) scheduleTimer(); };
+    // A write must not overwrite an unreadable or damaged file discovered since
+    // open. Background refresh remains best-effort; only the write path is strict.
+    async function mergeStored(dir, strict = false) {
+      const file = io.join(dir, REMINDER_HISTORY_FILE);
+      let text;
+      try { text = await io.readUTF8(file); }
+      catch (error) {
+        const message = String(error?.message || error || "");
+        let missing = error?.code === "ENOENT" || error?.name === "NotFoundError" || /(?:^|\b)(?:nf|not found|no such file|does not exist|NS_ERROR_FILE_NOT_FOUND)(?:\b|$)/i.test(message);
+        if (!missing && typeof io.exists === "function") { try { missing = !(await io.exists(file)); } catch (_) {} }
+        if (missing || !strict) return 0;
+        throw error;
+      }
+      let parsed;
+      try { parsed = JSON.parse(text); } catch (error) { if (strict) throw error; return 0; }
+      if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.records)) {
+        if (strict) throw new Error("Reminder history has an unsupported or damaged structure.");
+        return 0;
+      }
+      const clean = parsed.records.map((raw) => cleanReminderHistoryRecord(raw, now()));
+      if (strict) {
+        const seen = new Set();
+        if (clean.some((record) => !record || seen.has(record.id) || !seen.add(record.id))) throw new Error("Reminder history contains invalid or duplicate records.");
+      }
+      const known = new Set(records.map((record) => record.id));
+      let added = 0;
+      for (const record of clean) {
+        if (!record || known.has(record.id)) continue;
+        known.add(record.id); record.seq = nextSeq++; records.push(record); indexTransition(record); added++;
+      }
+      if (added) { if (!strict) dirty = true; emit({ kind: "refresh", count: added }); }
+      return added;
+    }
     function writeNow() {
       if (timer !== null) { clearTimer(timer); timer = null; }
       const dir = getDir();
       if (!dirty || !dir) return chain;
       if (writeBlocked) return Promise.reject(new Error("Reminder history is protected because its existing file could not be read safely."));
-      const text = JSON.stringify({ v: 1, records: records.map((record) => ({ ...record, start: record.start ? { ...record.start } : null })) });
-      perf?.recordBytes?.("history.bytes", text);
       dirty = false;
       const task = chain.catch(() => {}).then(async () => {
         try {
+          if (writeBlocked) throw new Error("Reminder history is protected because its existing file could not be read safely.");
+          await mergeStored(dir, true);
+          const text = JSON.stringify({ v: 1, records: records.map((record) => ({ ...record, start: record.start ? { ...record.start } : null })) });
+          perf?.recordBytes?.("history.bytes", text);
           await io.writeUTF8(io.join(dir, REMINDER_HISTORY_FILE), text, { tmpPath: io.join(dir, REMINDER_HISTORY_FILE + ".tmp") });
           try { onWrite(dir); } catch (error) { safeWarn(error); }
           retryCount = 0;
@@ -2494,24 +2529,11 @@ const __zentralEmbeddedLoader = (function () {
       async refresh() {
         const dir = getDir();
         if (!dir || writeBlocked) return 0;
-        let parsed;
-        try { parsed = JSON.parse(await io.readUTF8(io.join(dir, REMINDER_HISTORY_FILE))); } catch (_) { return 0; }
-        if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.records)) return 0;
-        const known = new Set(records.map((record) => record.id));
-        let added = 0;
-        for (const raw of parsed.records) {
-          const record = cleanReminderHistoryRecord(raw, now());
-          if (!record || known.has(record.id)) continue;
-          known.add(record.id);
-          record.seq = nextSeq++;
-          records.push(record); indexTransition(record); added++;
-        }
-        if (added) { dirty = true; emit({ kind: "refresh", count: added }); }
-        return added;
+        return mergeStored(dir);
       },
       // Cross-window "alert exactly once per saved schedule": re-read the shared file, skip when ANY window already
       // alerted this occurrence for this schedule, otherwise append and write immediately so the other window sees it.
-      // The remaining read-to-write gap is a few milliseconds; it can show one extra banner, never lose history.
+      // The remaining read-to-write gap is not locked across windows: simultaneous writes can still race.
       async claimAlert(raw) {
         if (writeBlocked) return null;
         try { await this.refresh(); } catch (error) { safeWarn(error); }

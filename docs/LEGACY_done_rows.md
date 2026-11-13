@@ -226,3 +226,19 @@ Projection keys include the local day, old undated virtual tabs migrate, real pa
 **Tests / done when:** Scenarios: copy of an alerted reminder; create a reminder 10 minutes in the past; 2-hour sleep with three stages due; normal on-time pre/due/followup still fire separately.
 
 Overdue stages coalesce into the highest outstanding alert; lower stages are persisted with coalesced=true. New past manual and source-list reminders record skipped stages, including copies; legacy items retain catch-up behavior. Creation timestamps survive storage and Google-shaped conversion. Done state is not inherited by independent copies. Live notification/audio verification remains open; cross-window read-to-write races remain H1.2.
+
+## H1.2 — Completed merge-before-write (3.3.118)
+
+#### `H1.2` — Reminder history: merge before write (cross-window lost update)
+**Status:** `DONE` · **Impact:** High · **Effort:** S-M · **Depends on:** F0.2 optional · **Source:** Audit R2 R1
+
+**Problem:** `createReminderHistoryStore.writeNow` serialises only this window's in-memory `records`. `claimAlert` refreshes before appending, but ordinary appends (done, dismissed, reopened, snooze) do not. Window B marks Done; window A, not yet refreshed, appends a snooze and writes: B's Done is dropped from the file, the reminder returns to the Agenda and can alert again.
+
+**Plan (do in this order):**
+1. Inside `writeNow`, within the existing `chain`, read the file, merge unknown records by id (same rule as `refresh()`), then write.
+2. Keep the atomic tmp-file write; keep `writeBlocked` semantics.
+3. Notify other windows after a write (existing `onWrite` hook) so they `refresh()`.
+
+**Tests / done when:** Two store instances sharing one fake `io`: A and B append in either order, flush both, reopen: all records from both survive and `stateFor` is the later transition.
+
+Sequential writes from stale windows merge unknown IDs inside the queued write; unreadable or malformed remote files are never overwritten, pending local data remains dirty and onWrite still notifies. The filesystem read/write gap is not cross-window locked: truly concurrent writes can still race and need a separate coordination solution.
