@@ -104,3 +104,12 @@ const brokenSpan = '`unfinished\n\n![[Other note]]\n```md\n![[Other note]]\n```\
 assert.deepEqual(Array.from(scan(brokenSpan)), ['transclusion'], 'an unmatched backtick does not mask later paragraphs or fenced examples');
 const brokenOut = convert({ id: 'note_a', body: brokenSpan }, [target], new Map(), []);
 assert.match(brokenOut, /`unfinished\n\n\[Other note\]\(other_id\.md\)\n```md\n!\[\[Other note\]\]\n```/);
+const linkSafety = '[normal](https://example.test/==token==?v=||secret|| "![[title]]") and https://example.test/==path== and <span data-x="||value||">plain</span>\n';
+assert.deepEqual(Array.from(scan(linkSafety)), [], 'syntax-like URL and HTML attributes are not live Markdown extensions');
+assert.equal(convert({ id: 'note_a', body: linkSafety }, [], new Map(), []), linkSafety, 'conversion never rewrites destinations or HTML attributes');
+const linkedLabel = '[==Label==](other_id.md#part "||example||")';
+assert.deepEqual(Array.from(scan(linkedLabel)), ['formatting']);
+assert.equal(convert({ id: 'note_a', body: linkedLabel }, [target], new Map([['other_id', 'Other note.md']]), []), '[**Label**](Other%20note.md#part "||example||")', 'convert visible labels and rewrite note destinations without touching title text');
+const apostropheLink = "[visit](https://example.test/O'Reilly/==literal==)";
+assert.deepEqual(Array.from(scan(apostropheLink)), []);
+assert.equal(convert({ id: 'note_a', body: apostropheLink }, [], new Map(), []), apostropheLink);

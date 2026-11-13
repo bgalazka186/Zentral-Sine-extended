@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.71
+// @version 3.3.72
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.71, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.72, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.71";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.72";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11414,13 +11414,38 @@ __zentralShim.register = function (def) {
     }
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
-    function mapMarkdownForExport(text, fn) {
+    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination) {
       const lines = String(text).split("\n"), result = [];
       let fence = null, comment = false;
       const findClose = (line, run, start) => {
         let close = line.indexOf(run, start);
         while (close >= 0 && (line[close - 1] === "`" || line[close + run.length] === "`")) close = line.indexOf(run, close + run.length);
         return close;
+      };
+      const destinationEnd = (line, start) => {
+        let depth = 0, quote = "", angle = false;
+        for (let i = start; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === "\\") { i++; continue; }
+          if (quote) { if (ch === quote) quote = ""; continue; }
+          if (angle) { if (ch === ">") angle = false; continue; }
+          if (ch === "<") { angle = true; continue; }
+          if ((ch === '"' || ch === "'") && /\s/.test(line[i - 1] || "")) { quote = ch; continue; }
+          if (ch === "(") depth++;
+          if (ch === ")" && --depth === 0) return i + 1;
+        }
+        return -1;
+      };
+      const tagEnd = (line, start) => {
+        if (!/^<(?:\/?[A-Za-z][\w:-]*(?=[\s/>])|https?:\/\/|mailto:)/i.test(line.slice(start))) return -1;
+        let quote = "";
+        for (let i = start + 1; i < line.length; i++) {
+          const ch = line[i];
+          if (quote) { if (ch === quote) quote = ""; continue; }
+          if (ch === '"' || ch === "'") { quote = ch; continue; }
+          if (ch === ">") return i + 1;
+        }
+        return -1;
       };
       for (let row = 0; row < lines.length; row++) {
         let line = lines[row];
@@ -11437,6 +11462,21 @@ __zentralShim.register = function (def) {
             out += line.slice(pos, end + 3); pos = end + 3; comment = false; continue;
           }
           if (line.startsWith("<!--", pos)) { flush(); comment = true; continue; }
+          const spoilerOpen = line.startsWith(">!", pos) ? ">!" : line.startsWith("||", pos) ? "||" : "";
+          if (spoilerOpen) {
+            const endToken = spoilerOpen === ">!" ? "!<" : "||", end = line.indexOf(endToken, pos + 2);
+            if (end >= 0) { flush(); out += fn(line.slice(pos, end + 2)); pos = end + 2; continue; }
+          }
+          if (line[pos] === "(" && pos > 0 && line[pos - 1] === "]") {
+            const end = destinationEnd(line, pos);
+            if (end > pos) { flush(); out += mapDestination(line.slice(pos, end)); pos = end; continue; }
+          }
+          if (line[pos] === "<") {
+            const end = tagEnd(line, pos);
+            if (end > pos) { flush(); out += line.slice(pos, end); pos = end; continue; }
+          }
+          const url = /[hHmM]/.test(line[pos]) ? /^(?:https?:\/\/|mailto:)[^\s<>"']+/i.exec(line.slice(pos)) : null;
+          if (url) { flush(); out += url[0]; pos += url[0].length; continue; }
           if (line[pos] === "`") {
             const run = /^`+/.exec(line.slice(pos))[0];
             let close = findClose(line, run, pos + run.length), endRow = row;
@@ -11516,7 +11556,9 @@ __zentralShim.register = function (def) {
         return segment;
       });
       const resolver = wikiResolver(notes, folders);
-      const rewritten = mapMarkdownForExport(converted, (segment) => rewriteNoteLinks(expandWikiLinks(segment, resolver, { unresolved: "text", self: note }), names));
+      const rewritten = mapMarkdownForExport(converted,
+        (segment) => rewriteNoteLinks(expandWikiLinks(segment, resolver, { unresolved: "text", self: note }), names),
+        (destination) => rewriteNoteLinks("]" + destination, names).slice(1));
       return parts.prefix + rewritten;
     }
     // Freeze the scalar content used by the warning and file writers at the
