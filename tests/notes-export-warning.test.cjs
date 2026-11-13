@@ -68,3 +68,22 @@ const live = [{ id: 'n1', body: 'before', updated: 1 }, { id: 'n2', body: 'secon
 const snapshot = window.__zentralNotesTestSeam.core.markdownExportSnapshot(live);
 live[0].body = 'after'; live.push({ id: 'n3', body: 'new' });
 assert.equal(snapshot[0].body, 'before'); assert.equal(snapshot.length, 2);
+const fileText = window.__zentralNotesTestSeam.core.markdownExportFile;
+assert.equal(typeof fileText, 'function');
+const withMeta = Object.freeze({ id: 'preserved-id', created: 1000, updated: 2000, color: 'none', remind: Date.parse("2026-11-13T10:00:00.000Z"), reminded: Date.parse("2026-11-13T09:00:00.000Z"), foreign: 'tags: [work]\ncustom: preserve me', body: '# Plan\n> [!NOTE] A\n' });
+for (const mode of ['raw', 'portable', '']) {
+  const text = fileText(withMeta, [withMeta], new Map(), [], mode);
+  assert.match(text, /^---\nid: preserved-id\n/);
+  assert.match(text, /\nremind: 2026-11-13T10:00:00\.000Z\n/);
+  assert.match(text, /\nreminded: 2026-11-13T09:00:00\.000Z\n/);
+  assert.match(text, /\ntags: \[work\]\ncustom: preserve me\n---\n/);
+}
+assert.match(fileText(withMeta, [withMeta], new Map(), [], 'raw'), /> \[!NOTE\] A/);
+assert.match(fileText(withMeta, [withMeta], new Map(), [], 'portable'), /> \*\*NOTE\*\* — A/);
+const reread = window.__zentralNotesTestSeam.core.noteFromFile('preserved-id', fileText(withMeta, [withMeta], new Map(), [], 'raw'), 1);
+assert.equal(reread.remind, withMeta.remind); assert.equal(reread.reminded, withMeta.reminded); assert.equal(reread.foreign, withMeta.foreign); assert.equal(reread.body, withMeta.body);
+const nested = { ...withMeta, body: '---\ntitle: Kept\ncustom: Value\n---\n# Content\n' };
+assert.ok(fileText(nested, [nested], new Map(), [], 'portable').endsWith(nested.body), 'existing body front matter stays byte-for-byte intact after the stored header');
+const moduleSource = fs.readFileSync(require.resolve('../additional/notes/ZentralNotes.uc.js'), 'utf8');
+assert.match(moduleSource, /const markdownBody = \(note, all, names, mode\) => markdownExportFile\(/, 'all Markdown writers route through metadata-preserving output');
+assert.match(moduleSource, /format === "md" \? markdownBody\(n, allNotesForExport\(\), new Map\(\), markdownMode\) : exportBody/, 'HTML and text retain their existing body-only formatting');

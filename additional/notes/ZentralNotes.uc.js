@@ -7159,6 +7159,11 @@
       if (mode === "portable") return portableMarkdownExportBody(note, notes, names, folders);
       return exportBody(note, notes, names, folders);
     }
+    // Export the stored note header as well as the selected body so IDs,
+    // reminder timestamps and foreign front matter survive Markdown export.
+    function markdownExportFile(note, notes = [], names = new Map(), folders = [], mode = "") {
+      return serializeNote({ ...note, body: markdownExportBody(note, notes, names, folders, mode) });
+    }
     // Rebuilds the block (or expands a [TOC] line). Returns { body, changed, found }.
     function updateToc(body) {
       const text = String(body ?? "");
@@ -8222,7 +8227,7 @@
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
+        markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
@@ -17354,7 +17359,7 @@
       };
       const withNewline = (t) => (t.endsWith("\n") ? t : t + "\n");
       const allNotesForExport = () => store.list().concat(store.list({ trashed: true }));
-      const markdownBody = (note, all, names, mode) => markdownExportBody(note, all, names, store.meta.folders, mode);
+      const markdownBody = (note, all, names, mode) => markdownExportFile(note, all, names, store.meta.folders, mode);
       async function exportNote(n, format = "md", { markdownMode = "" } = {}) {
         const info = EXPORT_FORMATS[format] || EXPORT_FORMATS.md;
         const file = await pick(Ci.nsIFilePicker.modeSave, "Save note", safeFileName(titleOf(n.body), "note") + "." + info.ext, format);
