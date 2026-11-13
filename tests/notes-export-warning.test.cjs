@@ -84,8 +84,8 @@ assert.equal(reread.remind, withMeta.remind); assert.equal(reread.reminded, with
 const nested = { ...withMeta, body: '---\ntitle: Kept\ncustom: Value\n---\n# Content\n' };
 assert.ok(fileText(nested, [nested], new Map(), [], 'portable').endsWith(nested.body), 'existing body front matter stays byte-for-byte intact after the stored header');
 const moduleSource = fs.readFileSync(require.resolve('../additional/notes/ZentralNotes.uc.js'), 'utf8');
-assert.match(moduleSource, /const markdownBody = \(note, all, names, mode\) => markdownExportFile\(/, 'all Markdown writers route through metadata-preserving output');
-assert.match(moduleSource, /format === "md" \? markdownBody\(n, allNotesForExport\(\), new Map\(\), markdownMode\) : exportBody/, 'HTML and text retain their existing body-only formatting');
+assert.match(moduleSource, /const markdownBody = \(note, all, names, mode, options\) => markdownExportFile\(/, 'all Markdown writers route through metadata-preserving output');
+assert.match(moduleSource, /format === "md" \? markdownBody\(n, allNotesForExport\(\), new Map\(\), markdownMode, markdownReadOpts\) : exportBody/, 'HTML and text retain their existing body-only formatting');
 const inlineTicks = '`do not touch `` ![[hidden target]] ` then ![[Other note]]';
 const inlineOut = convert({ id: 'note_a', body: inlineTicks }, [target], new Map(), []);
 assert.ok(inlineOut.startsWith('`do not touch `` ![[hidden target]] `'), 'longer internal backtick runs do not expose inline-code content');

@@ -7091,13 +7091,13 @@
     const EXPORT_CONTAINER_TYPES = new Set(["details", "note", "tip", "important", "warning", "caution", "info", "abstract", "summary", "tldr", "todo", "success", "check", "done", "question", "help", "faq", "failure", "fail", "missing", "danger", "error", "bug", "example", "quote", "cite", "hint", "attention", "bingo", "poll"]);
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
-    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix) {
+    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}) {
       const lines = String(text).split("\n"), result = [], codeRuns = indexMarkdownCodeRuns(lines);
       // O01 only starts a block where the Notes parser actually recognizes it;
       // the same characters inside a running paragraph are ordinary text.
       const smallRows = new Set();
       if (lines.some((line) => /^-#[ \t]+\S/.test(line))) {
-        for (const block of parseBlocks(text)) {
+        for (const block of parseBlocks(text, false, readOptions)) {
           if (block.type === "p" && block.c?.length === 1 && block.c[0]?.t === "small") smallRows.add(block.src);
         }
       }
@@ -7156,7 +7156,7 @@
               }
             }
             if (!ambiguous && end < lines.length && end - row <= 2000) {
-              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint);
+              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions);
               result.push(mapContainer({ open: line, inner, close: lines[end], kind: head[1], title: head[2].replace(/\s*:::\s*$/, "").trim() }));
               row = end; continue;
             }
@@ -7241,7 +7241,7 @@
     }
     // Identify live Zentral extensions without interpreting examples inside code.
     // This reports categories only; it does not modify or export the source.
-    function markdownExportWarnings(body) {
+    function markdownExportWarnings(body, readOptions = {}) {
       const found = new Set();
       const content = splitMarkdownExportFrontMatter(body).body;
       mapMarkdownForExport(content, (segment) => {
@@ -7262,13 +7262,14 @@
         return segment;
       }, undefined, undefined, (math) => { found.add("math"); return math; }, (container) => {
         found.add("callout"); return container.open + "\n" + container.inner + "\n" + container.close;
-      }, (prefix) => { found.add("small print"); return prefix; });
+      }, (prefix) => { found.add("small print"); return prefix; }, readOptions);
       return [...found];
     }
     // Export is a copy: convert the documented extensions conservatively and
     // keep unresolvable transclusions visible as literal code instead of losing data.
-    function portableMarkdownExportBody(note, notes = [], names = new Map(), folders = []) {
+    function portableMarkdownExportBody(note, notes = [], names = new Map(), folders = [], readOptions = {}) {
       const body = String(note?.body ?? ""), parts = splitMarkdownExportFrontMatter(body);
+      const effectiveReadOptions = { ...readOptions, flavor: note?.flavor || readOptions.flavor };
       const usedFootnotes = new Set(), footnotes = [];
       let footnoteAppendSafe = true;
       mapMarkdownForExport(parts.body, (segment) => {
@@ -7322,7 +7323,7 @@
         // block. A zero-width entity prevents accidental block interpretation.
         const prefix = /^(?:#{1,6}(?:[ \t]|$)|>|[-+*][ \t]+|\d{1,9}[.)][ \t]+|`{3,}|~{3,}|(?:[-*_][ \t]*){3,}$|\[[^\]\n]+\]:|<(?:!--|\/?[A-Za-z]))/.test(rest) ? "&#8203;" : "";
         return { prefix, separate: true };
-      });
+      }, effectiveReadOptions);
       const resolver = wikiResolver(notes, folders);
       const rewritten = mapMarkdownForExport(converted,
         (segment) => rewriteNoteLinks(expandWikiLinks(segment, resolver, { unresolved: "text", self: note }), names),
@@ -7335,15 +7336,15 @@
     function markdownExportSnapshot(notes) {
       return (Array.isArray(notes) ? notes : []).filter(Boolean).map((note) => ({ ...note }));
     }
-    function markdownExportBody(note, notes = [], names = new Map(), folders = [], mode = "") {
+    function markdownExportBody(note, notes = [], names = new Map(), folders = [], mode = "", readOptions = {}) {
       if (mode === "raw") return String(note?.body ?? "");
-      if (mode === "portable") return portableMarkdownExportBody(note, notes, names, folders);
+      if (mode === "portable") return portableMarkdownExportBody(note, notes, names, folders, readOptions);
       return exportBody(note, notes, names, folders);
     }
     // Export the stored note header as well as the selected body so IDs,
     // reminder timestamps and foreign front matter survive Markdown export.
-    function markdownExportFile(note, notes = [], names = new Map(), folders = [], mode = "") {
-      return serializeNote({ ...note, body: markdownExportBody(note, notes, names, folders, mode) });
+    function markdownExportFile(note, notes = [], names = new Map(), folders = [], mode = "", readOptions = {}) {
+      return serializeNote({ ...note, body: markdownExportBody(note, notes, names, folders, mode, readOptions) });
     }
     // Rebuilds the block (or expands a [TOC] line). Returns { body, changed, found }.
     function updateToc(body) {
@@ -13612,16 +13613,19 @@
       // passing it through; no file picker is opened when the user cancels.
       function askMarkdownExport(notes, run) {
         const warnings = new Set();
+        // Freeze the same reader settings used for review and file writing.
+        const markdownReadOpts = { ...(env.readOpts?.() || {}) };
         for (const entry of notes) {
-          for (const name of markdownExportWarnings(entry?.body)) warnings.add(name);
+          const options = { ...markdownReadOpts, flavor: entry?.flavor || markdownReadOpts.flavor };
+          for (const name of markdownExportWarnings(entry?.body, options)) warnings.add(name);
           if (entry?.remind) warnings.add("reminder metadata");
         }
-        if (!warnings.size) { Promise.resolve(run({})).catch((error) => console.warn("[ZentralNotes] export failed", error)); return; }
+        if (!warnings.size) { Promise.resolve(run({ markdownReadOpts })).catch((error) => console.warn("[ZentralNotes] export failed", error)); return; }
         const cancel = chip("Cancel"), raw = chip("Keep raw syntax"), portable = chip("Convert to portable Markdown", true);
         openCard("Markdown export compatibility",
           h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, subscript/superscript use HTML tags, inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, and small print becomes ordinary text. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
           h("div", { class: "zn-dialog-actions" }, cancel, raw, portable));
-        const choose = (markdownMode) => { closeDialog(); Promise.resolve(run({ markdownMode })).catch((error) => console.warn("[ZentralNotes] export failed", error)); };
+        const choose = (markdownMode) => { closeDialog(); Promise.resolve(run({ markdownMode, markdownReadOpts })).catch((error) => console.warn("[ZentralNotes] export failed", error)); };
         cancel.addEventListener("click", closeDialog);
         raw.addEventListener("click", () => choose("raw"));
         portable.addEventListener("click", () => choose("portable"));
@@ -17540,13 +17544,13 @@
       };
       const withNewline = (t) => (t.endsWith("\n") ? t : t + "\n");
       const allNotesForExport = () => store.list().concat(store.list({ trashed: true }));
-      const markdownBody = (note, all, names, mode) => markdownExportFile(note, all, names, store.meta.folders, mode);
-      async function exportNote(n, format = "md", { markdownMode = "" } = {}) {
+      const markdownBody = (note, all, names, mode, options) => markdownExportFile(note, all, names, store.meta.folders, mode, options);
+      async function exportNote(n, format = "md", { markdownMode = "", markdownReadOpts = readOpts() } = {}) {
         const info = EXPORT_FORMATS[format] || EXPORT_FORMATS.md;
         const file = await pick(Ci.nsIFilePicker.modeSave, "Save note", safeFileName(titleOf(n.body), "note") + "." + info.ext, format);
         if (!file) return;
         try {
-          const body = format === "md" ? markdownBody(n, allNotesForExport(), new Map(), markdownMode) : exportBody(n, allNotesForExport(), new Map(), store.meta.folders);
+          const body = format === "md" ? markdownBody(n, allNotesForExport(), new Map(), markdownMode, markdownReadOpts) : exportBody(n, allNotesForExport(), new Map(), store.meta.folders);
           const text = format === "html" ? exportHtml(body, readOpts()) : format === "txt" ? exportText(body, readOpts()) : withNewline(body);
           await IOUtils.writeUTF8(file.path, text);
         } catch (error) {
@@ -17587,7 +17591,7 @@
           return true;
         } catch (error) { warn(error); return false; }
       }
-      async function exportAll(list, { markdownMode = "" } = {}) {
+      async function exportAll(list, { markdownMode = "", markdownReadOpts = readOpts() } = {}) {
         const folder = await pick(Ci.nsIFilePicker.modeGetFolder, "Export all notes to a folder");
         if (!folder) return;
         const names = uniqueFileNames(list);
@@ -17596,13 +17600,13 @@
         for (let i = 0; i < list.length; i++) {
           try {
             // An existing file is never overwritten by an export.
-            await IOUtils.writeUTF8(PathUtils.join(folder.path, names[i]), withNewline(markdownBody(list[i], everything, byId, markdownMode)), { mode: "create" });
+            await IOUtils.writeUTF8(PathUtils.join(folder.path, names[i]), withNewline(markdownBody(list[i], everything, byId, markdownMode, markdownReadOpts)), { mode: "create" });
           } catch (error) {
             warn(error);
           }
         }
       }
-      async function exportZip(list, { markdownMode = "" } = {}) {
+      async function exportZip(list, { markdownMode = "", markdownReadOpts = readOpts() } = {}) {
         const live = list.filter((n) => !n.trashed);
         if (!live.length) return 0;
         const file = await pick(Ci.nsIFilePicker.modeSave, "Save all notes as zip", "zentral-notes.zip", "zip");
@@ -17615,7 +17619,7 @@
           zw.open(file, 0x04 | 0x08 | 0x20); // read/write, create, truncate
           const enc = new TextEncoder();
           for (let i = 0; i < live.length; i++) {
-            const bytes = enc.encode(withNewline(markdownBody(live[i], everything, byId, markdownMode)));
+            const bytes = enc.encode(withNewline(markdownBody(live[i], everything, byId, markdownMode, markdownReadOpts)));
             let bin = "";
             for (let j = 0; j < bytes.length; j += 8192) bin += String.fromCharCode(...bytes.subarray(j, j + 8192));
             const stream = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(Ci.nsIStringInputStream);
