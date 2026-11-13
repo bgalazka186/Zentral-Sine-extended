@@ -57,3 +57,10 @@ assert.equal(C.calendarResizeTimedEvent({ ...original, recurrence: ["RRULE:FREQ=
 assert.equal(C.calendarResizeTimedEvent(original, "wrong", endPlacement, zone), null);
 assert.equal(C.calendarResizePlacement(original, "wrong", "2026-03-27", 0, "2026-03-27", 30, zone), null);
 console.log("calendar timed resize model passed");
+const forwardRange = C.calendarDraftRange("2026-03-27", 615, "2026-03-28", 690, zone, 15);
+assert.deepEqual(forwardRange, { startDate: "2026-03-27", startTime: "10:15", endDate: "2026-03-28", endTime: "11:30" });
+assert.deepEqual(C.calendarDraftRange("2026-03-28", 690, "2026-03-27", 615, zone, 15), forwardRange, "reverse drag selects the same range");
+assert.deepEqual(C.calendarDraftRange("2026-03-29", 150, "2026-03-29", 240, zone, 30), { startDate: "2026-03-29", startTime: "03:00", endDate: "2026-03-29", endTime: "04:00" }, "spring DST gap is resolved consistently");
+assert.equal(C.calendarDraftRange("2026-03-27", 615, "2026-03-27", 615, zone, 15), null, "zero-length selection is refused");
+assert.equal(C.calendarDraftRange("bad", 615, "2026-03-27", 700, zone, 15), null);
+console.log("calendar drag-create model passed");

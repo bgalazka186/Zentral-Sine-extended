@@ -11410,13 +11410,14 @@
         g.active = true;
         g.button.classList.add("is-dragging");
         const point = calendarDragPoint(g, event);
-        const placement = point && (g.allDay ? { date: point.day } : g.edge ? CALENDAR_PART.calendarResizePlacement(g.before, g.edge, g.originDay, g.originMinute, point.day, point.minute, g.zone, g.snap) : CALENDAR_PART.calendarMovePlacement(g.before, g.originDay, g.originMinute, point.day, point.minute, g.zone, g.snap));
+        const placement = point && (g.create ? { date: point.day, minute: point.minute } : g.allDay ? { date: point.day } : g.edge ? CALENDAR_PART.calendarResizePlacement(g.before, g.edge, g.originDay, g.originMinute, point.day, point.minute, g.zone, g.snap) : CALENDAR_PART.calendarMovePlacement(g.before, g.originDay, g.originMinute, point.day, point.minute, g.zone, g.snap));
         g.placement = placement;
         if (!placement) { g.preview?.remove(); g.preview = null; return; }
         if (!g.preview) g.preview = h("div", { class: "zn-cal-drag-preview", "aria-hidden": "true" });
         if (g.preview.parentElement !== point.track) point.track.append(g.preview);
         g.preview.style.top = g.allDay ? "0px" : Math.max(0, point.minute / 60 * g.hourHeight) + "px";
-        g.preview.textContent = g.allDay ? placement.date + " · all day" : placement.date + " " + String(Math.floor(placement.minute / 60)).padStart(2, "0") + ":" + String(placement.minute % 60).padStart(2, "0");
+        const shownMinute = Math.min(1440, Math.round((placement.minute || 0) / g.snap) * g.snap);
+        g.preview.textContent = g.allDay ? placement.date + " · all day" : placement.date + " " + String(Math.floor(shownMinute / 60)).padStart(2, "0") + ":" + String(shownMinute % 60).padStart(2, "0");
         event.preventDefault();
       }
       function commitCalendarDrag(event) {
@@ -11428,6 +11429,12 @@
         // Native click follows pointerup in this task; clear suppression afterwards.
         releaseCalendarSuppressedClick(event);
         if (!placement) return;
+        if (g.create) {
+          const range = CALENDAR_PART.calendarDraftRange(g.originDay, g.originMinute, placement.date, placement.minute, g.zone, g.snap);
+          if (!range) return flash("Select a valid non-empty calendar time range");
+          queueMicrotask(() => { if (isOpen && !destroyed) askCalendarComposer({ date: range.startDate, startTime: range.startTime, endDate: range.endDate, endTime: range.endTime, tz: g.zone, kind: "event", linkCurrent: false }); });
+          return;
+        }
         applyCalendarPlacement(g, placement);
       }
       function applyCalendarPlacement(g, placement) {
@@ -11489,6 +11496,20 @@
         });
         button.addEventListener("lostpointercapture", (event) => { if (calendarDrag?.button === button && calendarDrag.pointerId === event.pointerId) cancelCalendarDrag(); });
       }
+      function bindCalendarCreate(track, columns, scroll, dayKey, hourHeight, zone) {
+        track.addEventListener("pointerdown", (event) => {
+          if (event.target !== track || (event.button !== undefined && event.button !== 0) || calendarDrag || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
+          const rect = track.getBoundingClientRect();
+          calendarDrag = { button: track, pointerId: event.pointerId, x: event.clientX, y: event.clientY, create: true,
+            originDay: dayKey, originMinute: Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / hourHeight)),
+            hourHeight, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, active: false, placement: null, preview: null };
+          try {
+            if (typeof track.setPointerCapture !== "function") { cancelCalendarDrag(); return; }
+            track.setPointerCapture(event.pointerId);
+          } catch (_) { cancelCalendarDrag(); }
+        });
+        track.addEventListener("lostpointercapture", (event) => { if (calendarDrag?.button === track && calendarDrag.pointerId === event.pointerId) cancelCalendarDrag(); });
+      }
       function calendarTimeGridView(items, cursor, mode) {
         const CALENDAR_HOUR_PX = CALENDAR_PART.calendarDensityHourHeight(store.meta.calendarDensity);
         const C = CALENDAR_PART, zone = calendarDisplayZone(), days = mode === "week" ? C.weekDays(cursor, 1) : [C.dayStart(cursor)];
@@ -11541,6 +11562,7 @@
           const isToday = dayKey === todayKey;
           const track = h("div", { class: "zn-cal-time-track", tabindex: "0", "aria-label": "Timeline for " + fmt(day), "data-day": C.ymd(new Date(day)) });
           bindCalendarDayContext(track, day);
+          bindCalendarCreate(track, columns, scroll, dayKey, CALENDAR_HOUR_PX, zone);
           track.style.height = (24 * CALENDAR_HOUR_PX) + "px";
           for (let hour = 0; hour < 24; hour++) {
             track.append(h("span", { class: "zn-cal-time-hour-line", style: `top:${hour * CALENDAR_HOUR_PX}px` }));
