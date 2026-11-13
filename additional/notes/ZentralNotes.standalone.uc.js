@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.60
+// @version 3.3.61
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.60, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.61, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.60";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.61";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -3390,6 +3390,31 @@ const __zentralEmbeddedLoader = (function () {
       tomorrowPreview: "## Tomorrow\n" + (tomorrow.items.length ? tomorrow.items.map(line).join("\n") : "- Nothing scheduled"),
     };
   }
+  // Synchronous preference operations are shared by all browser windows. Keep
+  // this claim independent of the async note/meta writers and calendar history.
+  const DAY_PLAN_CLAIM_PREF = "zen.workspace.zentral.notes." + "last_day_plan_date";
+  function dayPlanNeedsClaim(snapshot, lastKey) {
+    const key = snapshot?.today?.key;
+    return typeof key === "string" && !!parseYmd(key) && key !== lastKey && (Number(snapshot?.today?.count) > 0 || Number(snapshot?.tomorrow?.count) > 0);
+  }
+  function claimDayPlan(snapshot, prefs) {
+    const key = snapshot?.today?.key;
+    try {
+      const previous = prefs.getStringPref(DAY_PLAN_CLAIM_PREF, "");
+      if (!dayPlanNeedsClaim(snapshot, previous)) return null;
+      prefs.setStringPref(DAY_PLAN_CLAIM_PREF, key);
+      let active = true;
+      return { rollback() {
+        if (!active) return;
+        active = false;
+        try {
+          if (prefs.getStringPref(DAY_PLAN_CLAIM_PREF, "") !== key) return;
+          if (previous) prefs.setStringPref(DAY_PLAN_CLAIM_PREF, previous);
+          else prefs.clearUserPref(DAY_PLAN_CLAIM_PREF);
+        } catch (_) {}
+      } };
+    } catch (_) { return null; }
+  }
   // Projection for the virtual Zen Agenda folder. Keys are occurrence-scoped, not
   // display strings or formatted dates, so duplicate summaries remain independent.
   function agendaZenProjection(items, now, days = 4, isDone = () => false, getWindow = null) {
@@ -3768,7 +3793,7 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -21745,10 +21770,15 @@ __zentralShim.register = function (def) {
           const tomorrowText = snapshot.tomorrowPreview.replace(/^## Tomorrow\n/, "").replace(/\n/g, " · ");
           const label = ("Day plan · Today: " + todayText + " · " + snapshot.tomorrowPreview.split("\n")[0] + ": " + tomorrowText).slice(0, 900);
           const box = window.gBrowser.getNotificationBox();
-          box.appendNotification("zentral-notes-day-plan", { label, priority: box.PRIORITY_INFO_LOW }, [
-            { label: "Open today", callback: () => openCalendarDayFromHost(snapshot.today.key) },
-            { label: "Tomorrow", callback: () => openCalendarDayFromHost(snapshot.tomorrow.key) },
-          ]);
+          const claim = CALENDAR_PART.claimDayPlan(snapshot, Services.prefs);
+          if (!claim) return;
+          try {
+            const shown = box.appendNotification("zentral-notes-day-plan", { label, priority: box.PRIORITY_INFO_LOW }, [
+              { label: "Open today", callback: () => openCalendarDayFromHost(snapshot.today.key) },
+              { label: "Tomorrow", callback: () => openCalendarDayFromHost(snapshot.tomorrow.key) },
+            ]);
+            if (shown && typeof shown.then === "function") Promise.resolve(shown).catch((error) => { claim.rollback(); warn(error); });
+          } catch (error) { claim.rollback(); throw error; }
         } catch (error) { warn(error); }
       }
       const alertStack = createReminderAlertStack({

@@ -17420,10 +17420,15 @@
           const tomorrowText = snapshot.tomorrowPreview.replace(/^## Tomorrow\n/, "").replace(/\n/g, " · ");
           const label = ("Day plan · Today: " + todayText + " · " + snapshot.tomorrowPreview.split("\n")[0] + ": " + tomorrowText).slice(0, 900);
           const box = window.gBrowser.getNotificationBox();
-          box.appendNotification("zentral-notes-day-plan", { label, priority: box.PRIORITY_INFO_LOW }, [
-            { label: "Open today", callback: () => openCalendarDayFromHost(snapshot.today.key) },
-            { label: "Tomorrow", callback: () => openCalendarDayFromHost(snapshot.tomorrow.key) },
-          ]);
+          const claim = CALENDAR_PART.claimDayPlan(snapshot, Services.prefs);
+          if (!claim) return;
+          try {
+            const shown = box.appendNotification("zentral-notes-day-plan", { label, priority: box.PRIORITY_INFO_LOW }, [
+              { label: "Open today", callback: () => openCalendarDayFromHost(snapshot.today.key) },
+              { label: "Tomorrow", callback: () => openCalendarDayFromHost(snapshot.tomorrow.key) },
+            ]);
+            if (shown && typeof shown.then === "function") Promise.resolve(shown).catch((error) => { claim.rollback(); warn(error); });
+          } catch (error) { claim.rollback(); throw error; }
         } catch (error) { warn(error); }
       }
       const alertStack = createReminderAlertStack({
