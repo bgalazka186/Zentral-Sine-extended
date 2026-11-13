@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.99
+// @version 3.3.100
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.99, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.100, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.99";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.100";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -16893,20 +16893,21 @@ __zentralShim.register = function (def) {
           if (icon && !cleanFolderIcon(icon)) {
             f.input.dataset.bad = "true";
             f.input.focus?.();
-            return;
+            return false;
           }
-          // The shared Simple/Detailed mode is written only when the person applies.
-          setFolderMode(editMode);
           const out = editMode === "simple" ? edgeOnly() : parts;
-          if (save) save(color, icon, out, opacity);
-          else store.setFolderStyle(node.id, { color, icon, parts: out, opacity });
+          if (save && save(color, icon, out, opacity) === false) { status.textContent = "Folder no longer exists."; return false; }
+          if (!save) store.setFolderStyle(node.id, { color, icon, parts: out, opacity });
+          // The shared Simple/Detailed mode is written only after a successful apply.
+          setFolderMode(editMode);
           scheduleList();
           if (closeAfter) closeDialog();
           else status.textContent = "Applied.";
+          return true;
         };
         apply.addEventListener("click", () => commit(false));
         ok.addEventListener("click", () => commit(true));
-        reset.addEventListener("click", () => { color = ""; parts = {}; opacity = {}; syncAll(); commit(false); status.textContent = "Reset."; });
+        reset.addEventListener("click", () => { color = ""; parts = {}; opacity = {}; syncAll(); if (commit(false)) status.textContent = "Reset."; });
         cancel.addEventListener("click", closeDialog);
       }
       // The NOTES root folder in the Zen sidebar uses the same per-layer schema.
@@ -21414,6 +21415,17 @@ __zentralShim.register = function (def) {
           });
           return true;
         },
+        sidebarFolderStyle: (id = "", uid = "") => {
+          if (!isOpen || destroyed) return false;
+          if (!id) { askRootStyle(); return true; }
+          const folder = store.meta.folders.find((entry) => entry.id === id && entry.uid === uid);
+          if (!folder) return false;
+          askFolderStyle(folder, (color, icon, parts, opacity) => {
+            const current = store.meta.folders.find((entry) => entry.uid === uid);
+            return !!current && store.setFolderStyle(current.id, { color, icon, parts, opacity });
+          });
+          return true;
+        },
         quickCaptureToday: () => {
           if (isOpen && !destroyed) queueMicrotask(() => askQuickCapture(""));
         },
@@ -23549,6 +23561,19 @@ __zentralShim.register = function (def) {
           });
           menu.append(sub);
         }
+        const style = document.createXULElement("menuitem");
+        style.setAttribute("label", "Change color and icon…");
+        style.setAttribute("zentral-notes-folder-own", "style");
+        const styleUid = meta?.uid || "";
+        style.addEventListener("command", () => {
+          showNotes("").then((handle) => {
+            if (disposed || zen.dead || zenMode() === "off") return;
+            const current = isRoot ? null : store.meta.folders.find((folder) => folder.uid === styleUid);
+            if (!isRoot && !current) return;
+            sheetOf(handle)?.sidebarFolderStyle?.(current?.id || "", current?.uid || "");
+          }).catch(warn);
+        });
+        menu.append(style);
       };
       const onTabMenuHidden = (ev) => {
         if (ev.target?.id === "tabContextMenu") { document.documentElement.removeAttribute("zentral-notes-ctx"); zenCtxTab = null; }

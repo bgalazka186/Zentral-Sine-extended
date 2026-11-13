@@ -65,6 +65,33 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     assert.ok(store.meta.folders.some((folder) => folder.id === "top-level-child"));
   });
 
+  await test("T3.4 sidebar folder styling resolves the current folder by stable identity", async () => {
+    const id = store.addFolder("Sidebar colors");
+    const folder = store.meta.folders.find((entry) => entry.id === id);
+    assert.equal(typeof sheet.sidebarFolderStyle, "function");
+    assert.equal(sheet.sidebarFolderStyle(id, folder.uid), true);
+    let dialog = q(".zn-dialog");
+    const icon = dialog.querySelectorAll("input").find((input) => input.getAttribute("placeholder") === "e.g. 📓");
+    assert.ok(icon); icon.value = "📓";
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Apply and close"));
+    assert.equal(store.meta.folders.find((entry) => entry.id === id).icon, "📓");
+    assert.equal(sheet.sidebarFolderStyle(id, folder.uid), true);
+    dialog = q(".zn-dialog");
+    store.removeFolder(id, "toRoot");
+    assert.equal(store.addFolder("Sidebar colors"), id);
+    const replacement = store.meta.folders.find((entry) => entry.id === id);
+    dialog.querySelectorAll("input").find((input) => input.getAttribute("placeholder") === "e.g. 📓").value = "🐈";
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Apply"));
+    assert.equal(store.meta.folders.find((entry) => entry.id === id).uid, replacement.uid);
+    assert.notEqual(store.meta.folders.find((entry) => entry.id === id).icon, "🐈", "never style a replacement folder");
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Close"));
+    assert.equal(sheet.sidebarFolderStyle(id, folder.uid), false);
+    assert.equal(sheet.sidebarFolderStyle("", ""), true, "the NOTES root uses its dedicated style dialog");
+    dialog = q(".zn-dialog");
+    assert.ok(dialog.textContent.includes("NOTES folder in the Zen sidebar"));
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Close"));
+  });
+
   await test("B3.3.50-9 opening a headingless item in read mode reveals its source line", async () => {
     const body = "# Long note\n\nIntro\n- [ ] Reminder %%zn-item-id:abcd1%%\nAfter\n";
     const previousMode = store.meta.mode, n = store.create(body);
