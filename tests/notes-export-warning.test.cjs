@@ -9,7 +9,6 @@ assert.deepEqual(Array.from(scan(source)).sort(), ["calendar", "callout", "toc",
 assert.deepEqual(Array.from(scan("`![[literal]]`\n```md\n[TOC]\n> [!NOTE] demo\n%%calendar%%\n```\nplain text")), [], "examples in code are not live syntax");
 assert.deepEqual(Array.from(scan("ordinary [link](https://example.com)\n- [ ] task\n![image](assets/n1/x.png)")), []);
 assert.equal(source.includes("%%zn-item-id:abcd1%%"), true);
-console.log("Markdown export warning scan passed");
 const convert = window.__zentralNotesTestSeam.core.portableMarkdownExportBody;
 assert.equal(typeof convert, "function");
 const target = Object.freeze({ id: "other_id", body: "# Other note\n\n## Part\nText", updated: 2 });
@@ -171,3 +170,16 @@ assert.match(convert({ id: 'note_a', body: ambiguousContainer }, [], new Map(), 
 const hiddenContainer = '::: note Secret\n%%private%%\n:::\n';
 assert.deepEqual(Array.from(scan(hiddenContainer)).sort(), ['callout', 'hidden comment']);
 assert.match(convert({ id: 'note_a', body: hiddenContainer }, [], new Map(), []), /> <!-- %%private%% -->/);
+const smallPrint = '-# Plain small print with ==highlight==\n-# `code` and ![[Other note]]\n- # regular list item\n';
+assert.deepEqual(Array.from(scan(smallPrint)).sort(), ['formatting', 'small print', 'transclusion']);
+const smallPrintOut = convert({ id: 'note_a', body: smallPrint }, [target], new Map(), []);
+assert.equal(smallPrintOut, 'Plain small print with **highlight**\n`code` and [Other note](other_id.md)\n- # regular list item\n');
+assert.deepEqual(Array.from(scan('```md\n-# Example\n```\n`-# inline`\n<!--\n-# hidden\n-->\n-# \n')), []);
+const multilineSmall = '-# `one\ntwo` and ==bold==\n';
+assert.equal(convert({ id: 'note_a', body: multilineSmall }, [], new Map(), []), '`one\ntwo` and **bold**\n', 'multiline code offsets are preserved');
+assert.match(convert({ id: 'note_a', body: '::: note Title\n-# tiny\n:::\n' }, [], new Map(), []), /> tiny/, 'small print inside a container is converted');
+const blocklikeSmall = '-# # Not a heading\n-# - [/] Not a task\n-# > Not a quote\n-# 1. Not a list\n-# <div>Inline</div>\n';
+assert.deepEqual(Array.from(scan(blocklikeSmall)), ['small print'], 'small-print contents are inline, not task markers');
+assert.equal(convert({ id: 'note_a', body: blocklikeSmall }, [], new Map(), []), '&#8203;# Not a heading\n&#8203;- [/] Not a task\n&#8203;> Not a quote\n&#8203;1. Not a list\n&#8203;<div>Inline</div>\n', 'removed markers do not turn inline text into Markdown blocks');
+assert.equal(convert({ id: 'note_a', body: '-# [ref]: https://example.com\n' }, [], new Map(), []), '&#8203;[ref]: https://example.com\n');
+console.log("Markdown export warning scan passed");

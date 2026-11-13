@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.77
+// @version 3.3.78
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.77, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.78, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.77";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.78";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11441,7 +11441,7 @@ __zentralShim.register = function (def) {
     const EXPORT_CONTAINER_TYPES = new Set(["details", "note", "tip", "important", "warning", "caution", "info", "abstract", "summary", "tldr", "todo", "success", "check", "done", "question", "help", "faq", "failure", "fail", "missing", "danger", "error", "bug", "example", "quote", "cite", "hint", "attention", "bingo", "poll"]);
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
-    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close) {
+    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix) {
       const lines = String(text).split("\n"), result = [], codeRuns = indexMarkdownCodeRuns(lines);
       let fence = null, comment = false;
       const findClose = (line, run, start) => {
@@ -11498,7 +11498,7 @@ __zentralShim.register = function (def) {
               }
             }
             if (!ambiguous && end < lines.length && end - row <= 2000) {
-              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer);
+              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint);
               result.push(mapContainer({ open: line, inner, close: lines[end], kind: head[1], title: head[2].replace(/\s*:::\s*$/, "").trim() }));
               row = end; continue;
             }
@@ -11513,8 +11513,18 @@ __zentralShim.register = function (def) {
           const wasFenced = !!fence, next = nextMarkdownFence(line, fence);
           if (wasFenced || next) { fence = next; result.push(line); continue; }
         }
-        let out = "", visible = "", pos = 0;
+        // Keep source offsets intact for multiline code spans: consume just the
+        // small-print prefix, then scan the rest of the original line normally.
+        let smallPrefix = !comment && /^-#[ \t]+(?=\S)/.exec(line)?.[0] || "";
+        let out = "", visible = smallPrefix, pos = smallPrefix.length;
         const flush = () => { if (visible) { out += fn(visible); visible = ""; } };
+        const finishSmallPrint = () => {
+          if (smallPrefix && out.startsWith(smallPrefix)) {
+            const rest = out.slice(smallPrefix.length);
+            out = mapSmallPrint(smallPrefix, rest) + rest;
+          }
+          smallPrefix = "";
+        };
         while (pos < line.length) {
           if (comment) {
             const end = line.indexOf("-->", pos);
@@ -11553,7 +11563,7 @@ __zentralShim.register = function (def) {
             if (close >= 0) {
               flush();
               if (endRow === row) { out += line.slice(pos, close + run.length); pos = close + run.length; continue; }
-              out += line.slice(pos); result.push(out);
+              out += line.slice(pos); finishSmallPrint(); result.push(out);
               for (let k = row + 1; k < endRow; k++) result.push(lines[k]);
               row = endRow; line = lines[row]; out = line.slice(0, close + run.length); pos = close + run.length; continue;
             }
@@ -11561,7 +11571,7 @@ __zentralShim.register = function (def) {
           }
           visible += line[pos++];
         }
-        flush(); result.push(out);
+        flush(); finishSmallPrint(); result.push(out);
       }
       onEnd({ comment, fence });
       return result.join("\n");
@@ -11589,7 +11599,7 @@ __zentralShim.register = function (def) {
         return segment;
       }, undefined, undefined, (math) => { found.add("math"); return math; }, (container) => {
         found.add("callout"); return container.open + "\n" + container.inner + "\n" + container.close;
-      });
+      }, (prefix) => { found.add("small print"); return prefix; });
       return [...found];
     }
     // Export is a copy: convert the documented extensions conservatively and
@@ -11644,6 +11654,10 @@ __zentralShim.register = function (def) {
         return block ? ticks + "math\n" + math + "\n" + ticks : ticks + math + ticks;
       }, ({ kind, title, inner }) => {
         return "> **" + kind.toUpperCase() + "**" + (title ? " — " + title : "") + "\n" + inner.split("\n").map((line) => line ? "> " + line : ">").join("\n");
+      }, (_prefix, rest) => {
+        // The original text is parsed inline, not as a heading, list or HTML
+        // block. A zero-width entity prevents accidental block interpretation.
+        return /^(?:#{1,6}(?:[ \t]|$)|>|[-+*][ \t]+|\d{1,9}[.)][ \t]+|`{3,}|~{3,}|(?:[-*_][ \t]*){3,}$|\[[^\]\n]+\]:|<(?:!--|\/?[A-Za-z]))/.test(rest) ? "&#8203;" : "";
       });
       const resolver = wikiResolver(notes, folders);
       const rewritten = mapMarkdownForExport(converted,
@@ -17941,7 +17955,7 @@ __zentralShim.register = function (def) {
         if (!warnings.size) { Promise.resolve(run({})).catch((error) => console.warn("[ZentralNotes] export failed", error)); return; }
         const cancel = chip("Cancel"), raw = chip("Keep raw syntax"), portable = chip("Convert to portable Markdown", true);
         openCard("Markdown export compatibility",
-          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, and subscript/superscript use HTML tags, and inline footnotes become numbered references when safe (otherwise literal text), and math becomes literal code. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
+          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, and subscript/superscript use HTML tags, and inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, and small print becomes ordinary text. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
           h("div", { class: "zn-dialog-actions" }, cancel, raw, portable));
         const choose = (markdownMode) => { closeDialog(); Promise.resolve(run({ markdownMode })).catch((error) => console.warn("[ZentralNotes] export failed", error)); };
         cancel.addEventListener("click", closeDialog);
