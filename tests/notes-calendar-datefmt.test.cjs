@@ -53,7 +53,7 @@ test("agendaBuckets counts T..T+3 and skips done and cancelled items", () => {
   const items = [mk("a", 2026, 10, 12, 15), mk("b", 2026, 10, 12, 16), mk("c", 2026, 10, 13, 9), mk("d", 2026, 10, 15, 9), mk("e", 2026, 10, 16, 9)];
   const cancelled = mk("x", 2026, 10, 12, 18); cancelled.status = "cancelled"; items.push(cancelled);
   const b = cal.agendaBuckets(items, now, 4, (it) => it.summary === "b");
-  assert.deepEqual(b.map((x) => x.label), ["Today", "Tomorrow", "Day 2", "Day 3"]);
+  assert.deepEqual(b.map((x) => x.label), ["Today", "Tomorrow", cal.agendaDayLabel(2, b[2].from), cal.agendaDayLabel(3, b[3].from)]);
   assert.deepEqual(b.map((x) => x.key), ["2026-11-12", "2026-11-13", "2026-11-14", "2026-11-15"]);
   assert.deepEqual(b.map((x) => x.count), [1, 1, 0, 1]);
   assert.equal(b[0].items[0].summary, "a");
@@ -62,7 +62,8 @@ test("agendaBuckets clamps the day count and handles an empty list", () => {
   assert.equal(cal.agendaBuckets([], now, 0).length, 4);
   assert.equal(cal.agendaBuckets([], now, 2).length, 2);
   assert.equal(cal.agendaBuckets([], now, 999).length, 31);
-  assert.equal(cal.agendaBuckets([], now, 6)[5].label, "Day 5");
+  const fifth = cal.agendaBuckets([], now, 6)[5];
+  assert.equal(fifth.label, cal.agendaDayLabel(5, fifth.from));
 });
 test("agendaBuckets expands recurring items into each day", () => {
   const it = cal.makeItem({ summary: "daily", start: { dateTime: new Date(2026, 10, 1, 8).toISOString() }, recurrence: ["RRULE:FREQ=DAILY"], x: { kind: "reminder", src: "manual" } }, now);
