@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.92
+// @version 3.3.93
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.92, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.93, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.92";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.93";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11440,7 +11440,7 @@ __zentralShim.register = function (def) {
     }
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
-    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}, onMathFence = () => {}, mapBlockId = (marker) => marker, onAmbiguousBlockId = () => {}) {
+    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}, onMathFence = () => {}, mapBlockId = (marker) => marker, onAmbiguousBlockId = () => {}, mapComment = (comment) => comment) {
       const lines = String(text).split("\n"), result = [], codeRuns = indexMarkdownCodeRuns(lines);
       const mathOptions = exportScriptOptions(readOptions);
       const hasProtectedDollar = (line) => {
@@ -11563,7 +11563,7 @@ __zentralShim.register = function (def) {
               }
             }
             if (!ambiguous && end < lines.length && end - row <= 2000) {
-              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence, mapBlockId, onAmbiguousBlockId);
+              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence, mapBlockId, onAmbiguousBlockId, mapComment);
               result.push(mapContainer({ open: line, inner, close: lines[end], kind: head[1], title: head[2].replace(/\s*:::\s*$/, "").trim() }));
               row = end; continue;
             }
@@ -11615,8 +11615,8 @@ __zentralShim.register = function (def) {
         while (pos < line.length) {
           if (comment) {
             const end = line.indexOf("-->", pos);
-            if (end < 0) { out += line.slice(pos); pos = line.length; continue; }
-            out += line.slice(pos, end + 3); pos = end + 3; comment = false; continue;
+            if (end < 0) { out += mapComment(line.slice(pos)); pos = line.length; continue; }
+            out += mapComment(line.slice(pos, end + 3)); pos = end + 3; comment = false; continue;
           }
           if (line.startsWith("<!--", pos)) { flush(); comment = true; continue; }
           if (line.startsWith("\\(", pos) && (pos === 0 || line[pos - 1] !== "\\") && mathOptions.gate.on("I04") && mathOptions.gate.on("I01")) {
@@ -11872,12 +11872,29 @@ __zentralShim.register = function (def) {
       let footnoteNumber = 1;
       const literal = (text) => "`" + text.replace(/`/g, "") + "`";
       const hiddenSafe = mapMarkdownForExport(parts.body, (segment) => mapExportHidden(segment, scriptOptions, (marker) => "<!-- " + marker.replace(/--/g, "-&#45;") + " -->"), undefined, undefined, undefined, undefined, undefined, effectiveReadOptions);
+      let safeToc = null;
+      const exportToc = () => {
+        if (safeToc !== null) return safeToc;
+        // Headings hidden in comments must never reappear as public ToC labels.
+        // Reuse the code/comment scanner so fences inside comments stay inert.
+        const mask = (comment) => comment.replace(/[^\r]/g, " ");
+        const visible = mapMarkdownForExport(hiddenSafe, (segment, context) => {
+          if (!context?.spoilerToken) return segment;
+          const masked = mapExportSpoilers(segment, scriptOptions, () => "\u0000", context);
+          return masked.replace(/<!--[\s\S]*?(?:-->|$)/g, mask);
+        }, undefined, undefined, undefined, undefined, undefined, effectiveReadOptions, undefined, undefined, undefined, mask);
+        // A spoiler's heading slug would disclose its concealed text too, so
+        // omit that heading instead of generating an unsafe link or a bad one.
+        const tocInput = visible.split("\n").map((line) => line.includes("\u0000") && /^ {0,3}#{1,6}\s/.test(line) ? "" : line.replace(/\u0000/g, "Spoiler")).join("\n");
+        safeToc = tocBlock(parts.prefix + tocInput);
+        return safeToc;
+      };
       const converted = mapMarkdownForExport(hiddenSafe, (segment, context) => {
         if (context?.spoilerToken) {
           const spoiler = mapExportSpoilers(segment, scriptOptions, (_raw, content) => "<details><summary>Spoiler</summary>" + escapeExportSpoiler(content) + "</details>", context);
           if (spoiler !== segment) return spoiler;
         }
-        const toc = mapExportToc(segment, scriptOptions, () => tocBlock(body));
+        const toc = mapExportToc(segment, scriptOptions, exportToc);
         if (toc !== segment) return toc;
         segment = mapExportCallout(segment, scriptOptions, (_raw, quote, kind, title) => quote + "**" + kind.toUpperCase() + "**" + (title ? " — " + title : ""));
         segment = mapExportTask(segment, scriptOptions, (_raw, prefix, status) => prefix + "[ ] (" + TASK_STATUS_NAMES[status] + ")");
@@ -18217,7 +18234,7 @@ __zentralShim.register = function (def) {
         if (!warnings.size) { Promise.resolve(run({ markdownReadOpts })).catch((error) => console.warn("[ZentralNotes] export failed", error)); return; }
         const cancel = chip("Cancel"), raw = chip("Keep raw syntax"), portable = chip("Convert to portable Markdown", true);
         openCard("Markdown export compatibility",
-          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, subscript/superscript use HTML tags, single-tilde strike uses double tildes, inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, block IDs become comments, and small print becomes ordinary text. Block-level links may not transfer. Ignored, disabled or ambiguous syntax may remain as written. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
+          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, subscript/superscript use HTML tags, single-tilde strike uses double tildes, inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, block IDs become comments, and small print becomes ordinary text. Block-level links may not transfer; spoiler headings are omitted from the generated table of contents. Ignored, disabled or ambiguous syntax may remain as written. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
           h("div", { class: "zn-dialog-actions" }, cancel, raw, portable));
         const choose = (markdownMode) => { closeDialog(); Promise.resolve(run({ markdownMode, markdownReadOpts })).catch((error) => console.warn("[ZentralNotes] export failed", error)); };
         cancel.addEventListener("click", closeDialog);
