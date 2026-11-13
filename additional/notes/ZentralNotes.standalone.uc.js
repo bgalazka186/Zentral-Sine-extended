@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.103
+// @version 3.3.104
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.103, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.104, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.103";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.104";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -21468,6 +21468,11 @@ __zentralShim.register = function (def) {
           if (wanted !== store.meta.mode) store.setMeta({ mode: wanted });
           return openNoteByIdAndHeading(id, heading, itemId);
         },
+        newAgendaDayItem: (key, kind) => {
+          if (!isOpen || destroyed || !CALENDAR_PART?.parseYmd?.(key) || !["reminder", "event"].includes(kind) || !store.items) return false;
+          askCalendarComposer({ date: key, kind, linkCurrent: false });
+          return true;
+        },
         openCalendarDay: (key) => {
           if (!isOpen || destroyed) return false;
           outsideClaim = false;
@@ -23179,6 +23184,54 @@ __zentralShim.register = function (def) {
       onCleanup(() => { agendaItemUnsub?.(); agendaHistoryUnsub?.(); agendaNoteUnsub?.(); });
       const agendaBoot = window.setTimeout(agendaSoon, 6500);
       onCleanup(() => window.clearTimeout(agendaBoot));
+      // Resolve XUL labels and shadow-retargeted folder menu triggers without
+      // relying on their display text or on a single Zen DOM version.
+      function zenMenuFolder(menu, event) {
+        const find = (node) => {
+          try {
+            const closest = node?.closest?.("zen-folder");
+            if (closest) return closest;
+            if (node?.group?.localName === "zen-folder") return node.group;
+            for (let current = node; current && current !== menu; current = current.parentNode || current.host)
+              if (current.localName === "zen-folder") return current;
+          } catch (_) {}
+          return null;
+        };
+        for (const node of [menu.triggerNode, event.originalTarget, event.explicitOriginalTarget, menu.anchorNode]) {
+          const folder = find(node);
+          if (folder) return folder;
+        }
+        return null;
+      }
+      function onAgendaFolderMenuShowing(event) {
+        const menu = event.target;
+        if (menu?.id !== "zenFolderActions") return;
+        document.documentElement.removeAttribute("zentral-agenda-folder-ctx");
+        for (const own of [...menu.querySelectorAll?.("[zentral-agenda-folder-own]") || []]) own.remove();
+        const folder = zenMenuFolder(menu, event), root = agendaRootEl();
+        if (!agendaEnabled() || !folder || !root || (folder !== root && !root.contains?.(folder))) return;
+        const date = folder.getAttribute?.("bgalazka-notes-agenda-day") || "";
+        if (folder !== root && (!CALENDAR_PART?.parseYmd?.(date) || agendaDayEl("day:" + date) !== folder)) return;
+        document.documentElement.setAttribute("zentral-agenda-folder-ctx", "true");
+        if (folder === root) return;
+        for (const [id, label] of [["day", "Open Day view"], ["reminder", "Create reminder for this day…"], ["event", "Create event for this day…"]]) {
+          const item = document.createXULElement("menuitem");
+          item.setAttribute("label", label);
+          item.setAttribute("zentral-agenda-folder-own", id);
+          item.addEventListener("command", () => {
+            if (disposed || !agendaEnabled() || agendaDayEl("day:" + date) !== folder) return;
+            if (id === "day") { openCalendarDayFromHost(date); return; }
+            showNotes("").then((handle) => {
+              if (disposed || !agendaEnabled() || agendaDayEl("day:" + date) !== folder) return;
+              sheetOf(handle)?.newAgendaDayItem?.(date, id);
+            }).catch(warn);
+          });
+          menu.append(item);
+        }
+      }
+      function onAgendaFolderMenuHidden(event) {
+        if (event.target?.id === "zenFolderActions") document.documentElement.removeAttribute("zentral-agenda-folder-ctx");
+      }
       let agendaBound = false;
       function bindAgenda(on) {
         if (on === agendaBound) return;
@@ -23186,8 +23239,15 @@ __zentralShim.register = function (def) {
         const act = on ? "addEventListener" : "removeEventListener";
         window[act]("mousedown", onAgendaMouse, true);
         window[act]("TabSelect", onAgendaSelect, true);
+        window[act]("popupshowing", onAgendaFolderMenuShowing, true);
+        window[act]("popuphidden", onAgendaFolderMenuHidden, true);
+        if (!on) {
+          document.documentElement.removeAttribute("zentral-agenda-folder-ctx");
+          document.querySelectorAll?.("[zentral-agenda-folder-own]").forEach((item) => item.remove());
+        }
         for (const ty of ["TabClose", "TabUnpinned", "TabPinned", "TabMove", "SSTabRestored"]) window[act](ty, onAgendaTabEvent, true);
       }
+      onCleanup(() => bindAgenda(false));
       function agendaTabKey(tab) {
         let key = tab?.getAttribute?.(AGENDA_ATTR) || "";
         if (!key) {
@@ -23560,22 +23620,7 @@ __zentralShim.register = function (def) {
         if (menu?.id !== "zenFolderActions") return;
         document.documentElement.removeAttribute("zentral-notes-folder-ctx");
         for (const own of [...menu.querySelectorAll?.("[zentral-notes-folder-own]") || []]) own.remove();
-        let folder = null;
-        const findFolder = (node) => {
-          try {
-            const closest = node?.closest?.("zen-folder");
-            if (closest) return closest;
-            // Zen may retarget a XUL/shadow label to its group or shadow host.
-            if (node?.group?.localName === "zen-folder") return node.group;
-            for (let current = node; current && current !== menu; current = current.parentNode || current.host)
-              if (current.localName === "zen-folder") return current;
-          } catch (_) {}
-          return null;
-        };
-        for (const node of [menu.triggerNode, ev.originalTarget, ev.explicitOriginalTarget, menu.anchorNode]) {
-          folder = findFolder(node);
-          if (folder) break;
-        }
+        const folder = zenMenuFolder(menu, ev);
         if (!folder) return;
         const isRoot = folder === zenRootEl() || folder.id === NOTES_ZEN_ROOT_ID || folder.hasAttribute?.("bgalazka-notes-folder");
         const key = isRoot ? "" : folder.getAttribute?.("bgalazka-notes-subfolder") || notesKeyFromId(folder.id);

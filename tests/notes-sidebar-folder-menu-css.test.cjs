@@ -11,4 +11,11 @@ assert.match(css, /#context_zenFolderChangeIcon, #context_zenFolderNewSubfolder,
 assert.match(source, /setAttribute\("zentral-notes-folder-ctx", "true"\)/);
 assert.match(source, /ev\.target\?\.id === "zenFolderActions"[^\n]*removeAttribute\("zentral-notes-folder-ctx"\)/);
 assert.match(source, /document\.documentElement\.removeAttribute\("zentral-notes-folder-ctx"\)/);
-console.log("Notes sidebar folder menu CSS tests passed");
+const agendaRule = /:root\[zentral-agenda-folder-ctx="true"\]\s+#zenFolderActions\s*>\s*:is\(([\s\S]*?)\)\s*\{\s*display:\s*none\s*!important;?\s*\}/.exec(css);
+assert.ok(agendaRule, "Agenda folder projection uses the same scoped native-action protection");
+for (const id of ["context_zenFolderRename", "context_zenFolderDelete", "context_zenFolderNewSubfolder"]) assert.ok(agendaRule[1].includes("#" + id));
+assert.match(source, /window\[act\]\("popupshowing", onAgendaFolderMenuShowing, true\)/);
+assert.match(source, /window\[act\]\("popuphidden", onAgendaFolderMenuHidden, true\)/);
+assert.match(source, /onCleanup\(\(\) => bindAgenda\(false\)\)/, "Agenda menu listeners are removed on teardown");
+for (const label of ["Open Day view", "Create reminder for this day", "Create event for this day"]) assert.ok(source.includes(label));
+console.log("Notes and Agenda sidebar folder menu CSS tests passed");

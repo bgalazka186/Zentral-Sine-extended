@@ -73,6 +73,17 @@ const chooseMenu = async (root, triggerSelector, label) => {
   panels.getBoundingClientRect = layout.getBoundingClientRect;
   calendarPane.getBoundingClientRect = () => ({ left: 400, top: 0, right: 1100, bottom: 700, width: 700, height: 700 });
   await sheet.open(); await flushRaf();
+  assert.equal(typeof sheet.newAgendaDayItem, "function");
+  for (const kind of ["reminder", "event"]) {
+    assert.equal(sheet.newAgendaDayItem(tomorrowYmd, kind), true);
+    const card = q(root, ".zn-cal-compose-card"); assert.ok(card, `${kind} opens the composer`);
+    assert.equal(q(card, ".zn-cal-compose-kind").value, kind);
+    assert.ok(card.querySelectorAll("input").some((input) => input.value === tomorrowYmd), "the selected Agenda day is prefilled");
+    assert.equal(card.querySelector('[aria-label="Linked note"]').value, "", "sidebar day actions do not link an unrelated active note");
+    card.querySelectorAll("button").find((button) => button.textContent.trim() === "Cancel").click();
+  }
+  assert.equal(sheet.newAgendaDayItem("2026-02-30", "event"), false);
+  assert.equal(sheet.newAgendaDayItem(tomorrowYmd, "wrong"), false);
   root.all().find((el) => el.title === "All notes").click(); await flushRaf();
 
   assert.equal(q(root, ".zn-calendar-view-select").dataset.value, "month");

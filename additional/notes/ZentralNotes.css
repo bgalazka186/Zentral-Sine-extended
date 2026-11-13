@@ -1401,6 +1401,16 @@
   #context_zenFolderChangeIcon, #context_zenFolderNewSubfolder, #context_zenShareFolder
 ) + menuseparator { display: none !important; }
 
+/* Agenda day folders are virtual projections too. Keep other mods' items. */
+:root[zentral-agenda-folder-ctx="true"] #zenFolderActions > :is(
+  #context_zenFolderRename, #context_zenFolderUnpack, #context_zenFolderUnloadAll,
+  #context_zenFolderNewSubfolder, #context_zenFolderDelete, #context_zenFolderToSpace,
+  #context_zenFolderChangeIcon, #context_zenShareFolder, #context_zenChangeFolderSpace
+) { display: none !important; }
+:root[zentral-agenda-folder-ctx="true"] #zenFolderActions > :is(
+  #context_zenFolderChangeIcon, #context_zenFolderNewSubfolder, #context_zenShareFolder
+) + menuseparator { display: none !important; }
+
 /* Reminder dialog: live "Will ring at ..." line (Cycle F #15) */
 .zentral-notes-sheet .zn-remind-preview { margin: 4px 2px 8px; font-size: 0.9em; opacity: 0.85; }
 .zentral-notes-sheet .zn-remind-preview[data-bad="true"] { color: #ff6b6b; opacity: 1; }
