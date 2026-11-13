@@ -38,6 +38,25 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
   const menuItem = (label) => q(".zn-menu").querySelectorAll("button").find((b) => b.textContent.startsWith(label));
   const openMore = () => { if (q(".zn-menu")) click(byTitle("More")); click(byTitle("More")); };
 
+  await test("B3.3.50-9 opening a headingless item in read mode reveals its source line", async () => {
+    const body = "# Long note\n\nIntro\n- [ ] Reminder %%zn-item-id:abcd1%%\nAfter\n";
+    const previousMode = store.meta.mode, n = store.create(body);
+    assert.deepEqual(J(c.itemMarkerLineRange(body, "abcd1")), { start: body.indexOf("- [ ] Reminder"), end: body.indexOf("\nAfter") });
+    assert.equal(c.itemMarkerLineRange(body, "missing"), null);
+    assert.equal(c.itemMarkerLineRange(body, ""), null);
+    prefs.set("zen.workspace.zentral.notes.default_view", "read");
+    try {
+      assert.equal(sheet.openNoteById(n.id, "", "abcd1"), true);
+      await flushRaf();
+      const editor = q(".zn-editor"), start = body.indexOf("- [ ] Reminder"), end = body.indexOf("\n", start);
+      assert.equal(store.meta.mode, "split", "switch to a visible editor to reveal the hidden marker");
+      assert.equal(editor.selectionStart, start); assert.equal(editor.selectionEnd, end);
+      assert.equal(editor.value, body, "navigation never changes the note body");
+      const before = store.meta.mode;
+      sheet.openNoteById(n.id, "", "absent"); assert.equal(store.meta.mode, "read", "missing marker keeps requested read mode");
+    } finally { prefs.delete("zen.workspace.zentral.notes.default_view"); store.setMeta({ mode: previousMode }); }
+  });
+
   await test("[[ completion: strip appears while typing, Arrow+Enter picks, the link is inserted and the strip closes", async () => {
     const a = store.create("Alpha plan\nx"), b = store.create("Alpine notes\nx"), src = store.create("Typing here");
     await flushRaf(); sheet.openNoteById(src.id);

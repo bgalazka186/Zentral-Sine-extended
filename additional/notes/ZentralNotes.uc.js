@@ -8112,7 +8112,7 @@
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
+        itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
@@ -8799,6 +8799,16 @@
     // ======================================================================
     // Sheet: one editor view; many can exist, all bound to the same store
     // ======================================================================
+    // Find the complete source line for a calendar item without changing Markdown.
+    function itemMarkerLineRange(body, itemId) {
+      const id = String(itemId || "").replace(/[^\w-]/g, "");
+      if (!id) return null;
+      const text = String(body || ""), markerAt = text.indexOf(`%%zn-item-id:${id}%%`);
+      if (markerAt < 0) return null;
+      const start = text.lastIndexOf("\n", markerAt - 1) + 1, end = text.indexOf("\n", markerAt);
+      return { start, end: end < 0 ? text.length : end };
+    }
+
     function createSheet({ store, adapter, env, ensureStore }) {
       const token = {};
       const cleanups = [];
@@ -9632,14 +9642,11 @@
           } else goHeading(hit.slug);
           return true;
         }
-        const marker = itemId ? `%%zn-item-id:${String(itemId).replace(/[^\w-]/g, "")}%%` : "";
-        const body = String(target.body || "");
-        const markerAt = marker ? body.indexOf(marker) : -1;
-        if (markerAt >= 0 && mode === "edit") {
-          const lineStart = body.lastIndexOf("\n", markerAt - 1) + 1;
-          const lineEnd = body.indexOf("\n", markerAt);
+        const range = itemMarkerLineRange(target.body, itemId);
+        if (range) {
+          if (mode === "read") setMode("split");
           ta.focus({ preventScroll: true });
-          ta.setSelectionRange(lineStart, lineEnd < 0 ? body.length : lineEnd);
+          revealSourceMatch(range);
         } else if (wanted) goHeading(wanted);
         return true;
       }
