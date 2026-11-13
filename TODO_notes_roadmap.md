@@ -72,7 +72,6 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 
 | Order | ID | Status | Impact | Effort | Depends on | Task |
 | --: | :-- | :-- | :-- | :-- | :-- | :-- |
-| 2 | `F0.2` | `OPEN` | High | S | none | Production-shape performance budget tests |
 | 3 | `F0.3` | `OPEN` | Med | S | none | Performance timers for the hot paths |
 | 4 | `H1.1` | `OPEN` | High | S | F0.1 (harness) | Unique Agenda tab keys for items shown in several day folders |
 | 5 | `H1.5` | `OPEN` | High | S-M | none (OW-08 reuses it) | Do not alert all missed stages at once; coalesce due stages (owner bug: copying a played reminder plays every notification at once) |
@@ -169,18 +168,6 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 ## Phase 0 — Safety net: tests and measurement first
 
 _Nothing below can be proven without these. They change no behaviour._
-
-#### `F0.2` — Production-shape performance budget tests
-**Status:** `OPEN` · **Impact:** High · **Effort:** S · **Depends on:** none · **Source:** Audit R2 P2/P7
-
-**Problem:** Existing 50 ms budget tests exercise the fast path of `agendaZenProjection`, which is only taken when `getWindow` is absent (`fastDefault = !getWindow && !hasItemPolicy`). The real controller always passes `getWindow`, so production uses the slow path. Baseline measured 2026-11-13 in Node (500 daily reminders): projection 4 days 88 ms, 31 days 266 ms; `expandRange` 31 days 295 ms, 90 days 580 ms. 2000 daily reminders: projection 4 days 141 ms, 31 days 1.1 s; `expandRange` 90 days 2.5 s. 5000 history records with 45000 `history.list()` calls (one 90-day scheduler pass): 1.4 s; 20000 records: 9.3 s. History file is about 200 bytes per record (5000 records = 1 MB).
-
-**Plan (do in this order):**
-1. Add a perf test file that calls the production call shapes (`getWindow` supplied, `isDone` through a real history store, categories, exceptions) with 500 and 2000 recurring items.
-2. Set budgets as constants (start with generous CI values, tighten after each `PF2.x` lands): projection 4 days, projection 31 days, `expandRange` 31/90 days, scheduler `calendarCandidates` pass, `history.list` loop.
-3. Print the measured numbers in the test output so regressions are visible.
-
-**Tests / done when:** `tests/notes-perf-budget.test.cjs`; uses baseline ceilings with margin, tightened by the relevant PF2.x tasks.
 
 #### `F0.3` — Performance timers for the hot paths
 **Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** none · **Source:** Audit R2 P7
@@ -1241,9 +1228,9 @@ Use a disposable Zen profile and back up the profile and Sync data first. Do not
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.114.** `F0.1` harness is DONE and archived. Per owner, multi-day and leadDays idempotence remain documented TODOs until `H1.1` enforces them.
+State: **3.3.114.** `F0.1` harness and `F0.2` production-shape budgets are DONE and archived. Per owner, multi-day and leadDays idempotence remain documented TODOs until `H1.1` enforces them.
 
-Completed this session: imported the new instructions, active roadmap and legacy archive. Added a production-host fake Zen harness with structural-operation recording, event dispatch, seed fallback, menus, foreign/dragged-out tabs, disable/re-enable, Notes and two isolated windows over shared persisted input. Single-day projections are idempotent; multi-day and leadDays each reproduce three structural operations on the second unchanged run. Those acceptance assertions are explicitly TODO, not passing.
+Completed this session: imported the new instructions, active roadmap and legacy archive. Added a production-host fake Zen harness with structural-operation recording, event dispatch, seed fallback, menus, foreign/dragged-out tabs, disable/re-enable, Notes and two isolated windows over shared persisted input. Single-day projections are idempotent; multi-day and leadDays each reproduce three structural operations on the second unchanged run. Those acceptance assertions are explicitly TODO, not passing. F0.2 measured production-shape 500/2000 projection 31d at 428/1915 ms, scheduler at 2308/10776 ms, expansion 90d at 742/3188 ms and 45000 history queries at 967 ms; CI ceilings retain headroom.
 
 Standing owner rules for chunks: no conversational filler; output production-ready code and test suites; process tasks strictly in order (implementation, edge cases, unit tests per task); stop cleanly before output limits so the zip is complete; deliver a zip of only changed files (no `.git`).
 
@@ -1251,4 +1238,4 @@ Known debts / owner requirements: Earlier roadmap DONE claims for `T2.5a–d` we
 
 Calendar density supports persisted Comfortable, Compact and Extra compact in all five views; timeline hour geometry and shading use a shared scale, while narrow Month keeps its list fallback. Live density readability and interaction checks are pending. Calendar/Agenda item menus share a per-item Zen Agenda visibility toggle; it preserves sparse lead/tail overrides, acts on the recurring series, and makes the legacy read-only note-reminder limitation explicit. Calendar remains available to restore an item hidden from the sidebar. Live Zen menu and projection checks remain open.
 
-Next action: implement `F0.2` with measured baseline ceilings and margin, then `F0.3`, then `H1.1` (enforce both known-failing idempotence tests), `H1.5`, and `H1.2`–`H1.4` in order. Live Zen remains unavailable in the sandbox.
+Next action: implement `F0.3`, then `H1.1` (enforce both known-failing idempotence tests), `H1.5`, and `H1.2`–`H1.4` in order. Live Zen remains unavailable in the sandbox.

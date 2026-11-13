@@ -160,3 +160,19 @@ Firefox's XUL `<notification>` bar (`gBrowser.getNotificationBox()`) forces butt
 **Tests / done when:** New `tests/notes-agenda-dom.test.cjs`. The multi-day case is a documented known failure until `H1.1`; other scenarios pass independently.
 
 The real-host harness passes its standalone scenarios. Multi-day and leadDays idempotence are explicitly TODO pending H1.1; no live Zen was available.
+
+## F0.2 — Completed production-shape budgets (3.3.114)
+
+#### `F0.2` — Production-shape performance budget tests
+**Status:** `DONE` · **Impact:** High · **Effort:** S · **Depends on:** none · **Source:** Audit R2 P2/P7
+
+**Problem:** Existing 50 ms budget tests exercise the fast path of `agendaZenProjection`, which is only taken when `getWindow` is absent (`fastDefault = !getWindow && !hasItemPolicy`). The real controller always passes `getWindow`, so production uses the slow path. Baseline measured 2026-11-13 in Node (500 daily reminders): projection 4 days 88 ms, 31 days 266 ms; `expandRange` 31 days 295 ms, 90 days 580 ms. 2000 daily reminders: projection 4 days 141 ms, 31 days 1.1 s; `expandRange` 90 days 2.5 s. 5000 history records with 45000 `history.list()` calls (one 90-day scheduler pass): 1.4 s; 20000 records: 9.3 s. History file is about 200 bytes per record (5000 records = 1 MB).
+
+**Plan (do in this order):**
+1. Add a perf test file that calls the production call shapes (`getWindow` supplied, `isDone` through a real history store, categories, exceptions) with 500 and 2000 recurring items.
+2. Set budgets as constants (start with generous CI values, tighten after each `PF2.x` lands): projection 4 days, projection 31 days, `expandRange` 31/90 days, scheduler `calendarCandidates` pass, `history.list` loop.
+3. Print the measured numbers in the test output so regressions are visible.
+
+**Tests / done when:** `tests/notes-perf-budget.test.cjs`; uses baseline ceilings with margin, tightened by the relevant PF2.x tasks.
+
+Measured baseline, ms (500/2000): projection 4d 116/192, 31d 428/1915; expansion 31d 243/976, 90d 742/3188; scheduler 2308/10776 with 5000 history records; 45000 history queries 967. CI ceilings retain ~5–7x headroom. PF2.x owns tightening.
