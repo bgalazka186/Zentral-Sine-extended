@@ -17596,6 +17596,26 @@
           if (first) host.insertBefore(root, first);
         }
       }
+      // Some Zen versions delete a folder as soon as its last tab is removed.
+      // Remember that behavior separately for the root and days, then recreate
+      // the folder with a clearly labelled seed on this and subsequent attempts.
+      const agendaKeepSeed = { root: false, day: false };
+      function agendaSettleSeed(seed, folderEl, kind) {
+        if (!seed) return true;
+        if (agendaKeepSeed[kind]) {
+          seed.setAttribute("bgalazka-notes-agenda-fallback-seed", "true");
+          seed.setAttribute("label", kind === "root" ? "Agenda" : "Agenda items");
+          seed.setAttribute("bgalazka-notes-label", kind === "root" ? "Agenda" : "Agenda items");
+          return true;
+        }
+        zenRemoveTab(seed);
+        if (folderEl?.isConnected === false) {
+          agendaKeepSeed[kind] = true;
+          warn("Zen Agenda folder: keeping a labelled seed because empty folders are removed");
+          return false;
+        }
+        return true;
+      }
       function agendaEnsureRoot(position) {
         if (!window.gBrowser || !window.gZenFolders?.createFolder) return false;
         let root = agendaRootEl();
@@ -17609,7 +17629,7 @@
           root.id = AGENDA_ROOT_ID;
           root.setAttribute("bgalazka-notes-agenda-folder", "true");
           root.setAttribute("label", "Agenda");
-          seed.hidden = true; seed.setAttribute("aria-hidden", "true"); seed.setAttribute("label", "");
+          if (!agendaSettleSeed(seed, root, "root")) return agendaEnsureRoot(position);
         }
         agendaPlaceRoot(root, position);
         return true;
@@ -17639,7 +17659,7 @@
           folder.id = "zentral-notes-agenda-day-" + date;
           folder.setAttribute("bgalazka-notes-agenda-day", date);
           folder.setAttribute("bgalazka-notes-agenda-key", entry.key);
-          seed.hidden = true; seed.setAttribute("aria-hidden", "true"); seed.setAttribute("label", "");
+          if (!agendaSettleSeed(seed, folder, "day")) return agendaMakeDay(entry);
         }
         return true;
       }
@@ -17652,13 +17672,6 @@
         list() {
           const root = agendaRootEl(); if (!root) return [];
           const out = [];
-          for (const folder of root.querySelectorAll?.("zen-folder") || []) {
-            const date = folder.getAttribute("bgalazka-notes-agenda-day") || (folder.id.startsWith("zentral-notes-agenda-day-") ? folder.id.slice("zentral-notes-agenda-day-".length) : "");
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-            folder.setAttribute("bgalazka-notes-agenda-day", date);
-            folder.setAttribute("bgalazka-notes-agenda-key", "day:" + date);
-            out.push({ key: "day:" + date, kind: "day", parent: "" });
-          }
           for (const tab of document.querySelectorAll?.("tab") || []) {
             const url = tab.getAttribute?.(AGENDA_ATTR) ? "" : (tab.linkedBrowser?.currentURI?.spec || tab._zentralNotesUrl || "");
             if (!root.contains(tab) && (tab.hasAttribute?.(AGENDA_ATTR) || /^about:blank#zn-agenda-/.test(url))) zenRemoveTab(tab);
@@ -17667,13 +17680,36 @@
             let key = tab.getAttribute(AGENDA_ATTR) || "";
             const url = tab.linkedBrowser?.currentURI?.spec || tab._zentralNotesUrl || "";
             if (!key && /^about:blank#zn-agenda-/.test(url)) { try { key = decodeURIComponent(url.slice("about:blank#zn-agenda-".length)); tab.setAttribute(AGENDA_ATTR, key); } catch (_) {} }
-            if (!key || key.startsWith("seed:")) continue;
+            if (!key) continue;
+            if (key.startsWith("seed:")) {
+              const kind = key === "seed:root" ? "root" : "day";
+              const folder = tab.closest?.("zen-folder");
+              const validFallback = agendaKeepSeed[kind] && tab.getAttribute("bgalazka-notes-agenda-fallback-seed") === "true" &&
+                (kind === "root" ? folder === root : folder === agendaDayEl("day:" + key.slice(5)));
+              if (!validFallback) {
+                zenRemoveTab(tab);
+                if (folder?.isConnected === false) agendaKeepSeed[kind] = true;
+              }
+              continue;
+            }
+            if (!root.contains(tab)) continue;
             out.push({ key, kind: "item", parent: "day:" + (tab.getAttribute("bgalazka-notes-agenda-day") || "") });
+          }
+          if (root.isConnected === false) return [];
+          for (const folder of root.querySelectorAll?.("zen-folder") || []) {
+            const date = folder.getAttribute("bgalazka-notes-agenda-day") || (folder.id.startsWith("zentral-notes-agenda-day-") ? folder.id.slice("zentral-notes-agenda-day-".length) : "");
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+            folder.setAttribute("bgalazka-notes-agenda-day", date);
+            folder.setAttribute("bgalazka-notes-agenda-key", "day:" + date);
+            out.push({ key: "day:" + date, kind: "day", parent: "" });
           }
           return out;
         },
         add(entry) {
-          if (entry.kind === "day") return agendaMakeDay(entry);
+          if (entry.kind === "day") {
+            if (!agendaRootEl() && !agendaEnsureRoot(agendaPosition())) return false;
+            return agendaMakeDay(entry);
+          }
           const folder = agendaDayEl(entry.parent); if (!folder) return false;
           const tab = agendaNewTab(entry.key);
           if (!zenPlace(tab, folder)) { zenRemoveTab(tab); return false; }

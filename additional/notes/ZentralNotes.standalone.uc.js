@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.50
+// @version 3.3.51
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.50, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.51, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.50";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.51";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -3455,6 +3455,12 @@ const __zentralEmbeddedLoader = (function () {
       }),
     }));
   }
+  // Only days with at least one visible item get a Zen Agenda folder. Empty
+  // days (count === 0) are omitted so no empty Tomorrow / Day N folders are
+  // created, and a day that becomes empty is removed on the next run.
+  function agendaVisibleDays(projection) {
+    return (projection || []).filter((day) => day && day.count > 0);
+  }
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
   function createZenAgenda({ api, getItems, getDays = () => 4, getEnabled = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
@@ -3484,8 +3490,8 @@ const __zentralEmbeddedLoader = (function () {
       try {
         if (!getEnabled()) { api.removeAll?.(); last = []; clearScheduled(); return []; }
         sourceItems = getItems?.() || [];
-        const projection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow);
-        if (!projection.some((day) => day.count > 0)) {
+        const projection = agendaVisibleDays(agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow));
+        if (!projection.length) {
           api.removeAll?.(); last = projection; scheduleBoundary(sourceItems); return projection;
         }
         if (api.ensureRoot?.(getPosition() === "below" ? "below" : "above") === false) { scheduleBoundary(sourceItems); return last; }
@@ -3724,7 +3730,7 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, dayPlanSnapshot, agendaZenProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, dayPlanSnapshot, agendaZenProjection, agendaVisibleDays, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -21877,6 +21883,26 @@ __zentralShim.register = function (def) {
           if (first) host.insertBefore(root, first);
         }
       }
+      // Some Zen versions delete a folder as soon as its last tab is removed.
+      // Remember that behavior separately for the root and days, then recreate
+      // the folder with a clearly labelled seed on this and subsequent attempts.
+      const agendaKeepSeed = { root: false, day: false };
+      function agendaSettleSeed(seed, folderEl, kind) {
+        if (!seed) return true;
+        if (agendaKeepSeed[kind]) {
+          seed.setAttribute("bgalazka-notes-agenda-fallback-seed", "true");
+          seed.setAttribute("label", kind === "root" ? "Agenda" : "Agenda items");
+          seed.setAttribute("bgalazka-notes-label", kind === "root" ? "Agenda" : "Agenda items");
+          return true;
+        }
+        zenRemoveTab(seed);
+        if (folderEl?.isConnected === false) {
+          agendaKeepSeed[kind] = true;
+          warn("Zen Agenda folder: keeping a labelled seed because empty folders are removed");
+          return false;
+        }
+        return true;
+      }
       function agendaEnsureRoot(position) {
         if (!window.gBrowser || !window.gZenFolders?.createFolder) return false;
         let root = agendaRootEl();
@@ -21890,7 +21916,7 @@ __zentralShim.register = function (def) {
           root.id = AGENDA_ROOT_ID;
           root.setAttribute("bgalazka-notes-agenda-folder", "true");
           root.setAttribute("label", "Agenda");
-          seed.hidden = true; seed.setAttribute("aria-hidden", "true"); seed.setAttribute("label", "");
+          if (!agendaSettleSeed(seed, root, "root")) return agendaEnsureRoot(position);
         }
         agendaPlaceRoot(root, position);
         return true;
@@ -21920,7 +21946,7 @@ __zentralShim.register = function (def) {
           folder.id = "zentral-notes-agenda-day-" + date;
           folder.setAttribute("bgalazka-notes-agenda-day", date);
           folder.setAttribute("bgalazka-notes-agenda-key", entry.key);
-          seed.hidden = true; seed.setAttribute("aria-hidden", "true"); seed.setAttribute("label", "");
+          if (!agendaSettleSeed(seed, folder, "day")) return agendaMakeDay(entry);
         }
         return true;
       }
@@ -21933,13 +21959,6 @@ __zentralShim.register = function (def) {
         list() {
           const root = agendaRootEl(); if (!root) return [];
           const out = [];
-          for (const folder of root.querySelectorAll?.("zen-folder") || []) {
-            const date = folder.getAttribute("bgalazka-notes-agenda-day") || (folder.id.startsWith("zentral-notes-agenda-day-") ? folder.id.slice("zentral-notes-agenda-day-".length) : "");
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-            folder.setAttribute("bgalazka-notes-agenda-day", date);
-            folder.setAttribute("bgalazka-notes-agenda-key", "day:" + date);
-            out.push({ key: "day:" + date, kind: "day", parent: "" });
-          }
           for (const tab of document.querySelectorAll?.("tab") || []) {
             const url = tab.getAttribute?.(AGENDA_ATTR) ? "" : (tab.linkedBrowser?.currentURI?.spec || tab._zentralNotesUrl || "");
             if (!root.contains(tab) && (tab.hasAttribute?.(AGENDA_ATTR) || /^about:blank#zn-agenda-/.test(url))) zenRemoveTab(tab);
@@ -21948,13 +21967,36 @@ __zentralShim.register = function (def) {
             let key = tab.getAttribute(AGENDA_ATTR) || "";
             const url = tab.linkedBrowser?.currentURI?.spec || tab._zentralNotesUrl || "";
             if (!key && /^about:blank#zn-agenda-/.test(url)) { try { key = decodeURIComponent(url.slice("about:blank#zn-agenda-".length)); tab.setAttribute(AGENDA_ATTR, key); } catch (_) {} }
-            if (!key || key.startsWith("seed:")) continue;
+            if (!key) continue;
+            if (key.startsWith("seed:")) {
+              const kind = key === "seed:root" ? "root" : "day";
+              const folder = tab.closest?.("zen-folder");
+              const validFallback = agendaKeepSeed[kind] && tab.getAttribute("bgalazka-notes-agenda-fallback-seed") === "true" &&
+                (kind === "root" ? folder === root : folder === agendaDayEl("day:" + key.slice(5)));
+              if (!validFallback) {
+                zenRemoveTab(tab);
+                if (folder?.isConnected === false) agendaKeepSeed[kind] = true;
+              }
+              continue;
+            }
+            if (!root.contains(tab)) continue;
             out.push({ key, kind: "item", parent: "day:" + (tab.getAttribute("bgalazka-notes-agenda-day") || "") });
+          }
+          if (root.isConnected === false) return [];
+          for (const folder of root.querySelectorAll?.("zen-folder") || []) {
+            const date = folder.getAttribute("bgalazka-notes-agenda-day") || (folder.id.startsWith("zentral-notes-agenda-day-") ? folder.id.slice("zentral-notes-agenda-day-".length) : "");
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+            folder.setAttribute("bgalazka-notes-agenda-day", date);
+            folder.setAttribute("bgalazka-notes-agenda-key", "day:" + date);
+            out.push({ key: "day:" + date, kind: "day", parent: "" });
           }
           return out;
         },
         add(entry) {
-          if (entry.kind === "day") return agendaMakeDay(entry);
+          if (entry.kind === "day") {
+            if (!agendaRootEl() && !agendaEnsureRoot(agendaPosition())) return false;
+            return agendaMakeDay(entry);
+          }
           const folder = agendaDayEl(entry.parent); if (!folder) return false;
           const tab = agendaNewTab(entry.key);
           if (!zenPlace(tab, folder)) { zenRemoveTab(tab); return false; }
