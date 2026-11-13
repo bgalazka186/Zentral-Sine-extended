@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.84
+// @version 3.3.85
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.84, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.85, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.84";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.85";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11632,6 +11632,30 @@ __zentralShim.register = function (def) {
       }
       return protectedAt;
     }
+    // A spoiler must never reveal comments when its HTML is opened. Preserve
+    // comment payloads as comments, but sanitize comment-breaking sequences.
+    function escapeExportSpoiler(content) {
+      let out = "", pos = 0;
+      while (pos < content.length) {
+        const start = content.indexOf("<!--", pos);
+        if (start < 0) return out + escHtml(content.slice(pos));
+        out += escHtml(content.slice(pos, start));
+        const end = content.indexOf("-->", start + 4);
+        const inside = content.slice(start + 4, end < 0 ? content.length : end).replace(/--/g, "-&#45;").replace(/>/g, "&gt;");
+        out += "<!--" + inside + "-->";
+        if (end < 0) return out;
+        pos = end + 3;
+      }
+      return out;
+    }
+    // Calendar markers are structural metadata even when a Markdown flavor
+    // does not hide ordinary Obsidian comments.
+    function mapExportHidden(segment, options, convert) {
+      return segment.replace(/%%[^%\n]+%%/g, (marker) => {
+        const calendar = /^%%(?:calendar(?::[^%\n]*)?|zn-item-id:[\w-]+)%%$/i.test(marker);
+        return calendar || options.gate.on("A31") ? convert(marker, calendar) : marker;
+      });
+    }
     function mapExportFormatting(segment, options, convert) {
       const gate = options.gate, protectedAt = exportProtectedPositions(segment, options.literals);
       return segment.replace(/==(?:\{(\w+|#[0-9a-f]{6})\})?([^\n=]+)==|\+\+(?=\S)([^+\n]+?)(?<=\S)\+\+/gi, (raw, color, mark, underline, offset) => {
@@ -11689,16 +11713,14 @@ __zentralShim.register = function (def) {
       const found = new Set(), scriptOptions = exportScriptOptions(readOptions);
       const content = splitMarkdownExportFrontMatter(body).body;
       mapMarkdownForExport(content, (segment, context) => {
-        const visible = segment.replace(/%%[^%\n]+%%/g, (marker) => {
-          if (/^%%(?:calendar(?::[^%\n]*)?|zn-item-id:[\w-]+)%%$/i.test(marker)) found.add("calendar");
-          else found.add("hidden comment");
-          return "";
+        const visible = mapExportHidden(segment, scriptOptions, (_marker, calendar) => {
+          found.add(calendar ? "calendar" : "hidden comment"); return "";
         });
         if (TOC_TOKEN_RE.test(visible)) found.add("toc");
         if (/^\s*>\s*\[![A-Za-z][\w-]*\][+-]?/.test(visible)) found.add("callout");
         if (/!\[\[[^\]\n]+\]\]/.test(visible)) found.add("transclusion");
         mapExportFormatting(visible, scriptOptions, (raw) => { found.add("formatting"); return raw; });
-        mapExportSpoilers(visible, scriptOptions, (raw) => { found.add("spoiler"); return raw; }, context);
+        mapExportSpoilers(context?.spoilerToken ? segment : visible, scriptOptions, (raw) => { found.add("spoiler"); return raw; }, context);
         mapExportScripts(visible, scriptOptions, (raw, kind) => { found.add(kind === "strike" ? "single-tilde strike" : "subscript / superscript"); return raw; });
         mapExportInlineFootnotes(visible, scriptOptions, (raw, kind) => { found.add(kind === "footnote" ? "inline footnote" : "subscript / superscript"); return raw; });
         const task = /^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/.exec(visible);
@@ -11723,10 +11745,10 @@ __zentralShim.register = function (def) {
       }, undefined, ({ comment, fence }) => { footnoteAppendSafe = !comment && !fence; }, undefined, undefined, undefined, effectiveReadOptions);
       let footnoteNumber = 1;
       const literal = (text) => "`" + text.replace(/`/g, "") + "`";
-      const hiddenSafe = mapMarkdownForExport(parts.body, (segment) => segment.replace(/%%[^%\n]+%%/g, (marker) => "<!-- " + marker.replace(/--/g, "-&#45;") + " -->"), undefined, undefined, undefined, undefined, undefined, effectiveReadOptions);
+      const hiddenSafe = mapMarkdownForExport(parts.body, (segment) => mapExportHidden(segment, scriptOptions, (marker) => "<!-- " + marker.replace(/--/g, "-&#45;") + " -->"), undefined, undefined, undefined, undefined, undefined, effectiveReadOptions);
       const converted = mapMarkdownForExport(hiddenSafe, (segment, context) => {
         if (context?.spoilerToken) {
-          const spoiler = mapExportSpoilers(segment, scriptOptions, (_raw, content) => "<details><summary>Spoiler</summary>" + escHtml(content) + "</details>", context);
+          const spoiler = mapExportSpoilers(segment, scriptOptions, (_raw, content) => "<details><summary>Spoiler</summary>" + escapeExportSpoiler(content) + "</details>", context);
           if (spoiler !== segment) return spoiler;
         }
         if (TOC_TOKEN_RE.test(segment)) return tocBlock(body);
