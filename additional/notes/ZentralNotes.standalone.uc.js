@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.57
+// @version 3.3.58
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.57, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.58, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.57";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.58";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11907,20 +11907,62 @@ __zentralShim.register = function (def) {
     // mutate the browser's snapshot (which Firefox also writes separately).
     function filterZenSidebarState(state) {
       if (!state || !Array.isArray(state.windows)) return state;
+      const isPseudo = (tab) => {
+        if (!tab || typeof tab !== "object") return false;
+        const entries = Array.isArray(tab.entries) ? tab.entries : [];
+        const index = Number.isInteger(tab.index) && tab.index > 0 ? tab.index - 1 : entries.length - 1;
+        const current = entries[index]?.url || "";
+        const initial = (!current || current === "about:blank") ? tab._zenPinnedInitialState?.entry?.url || "" : "";
+        return !!pseudoTabCleanupKind({ url: current, sessionUrl: initial }, {});
+      };
+      const managed = (id) => typeof id === "string" && (id === NOTES_ZEN_ROOT_ID || id.startsWith(NOTES_ZEN_SUB_PREFIX) || id === AGENDA_ROOT_ID || id.startsWith("zentral-notes-agenda-day-"));
+      const parents = new Map(), used = new Set(), removedTabIds = new Set(), liveTabIds = new Set();
+      for (const win of state.windows) {
+        for (const folder of (Array.isArray(win?.folders) ? win.folders : [])) if (folder?.id) {
+          if (!parents.has(folder.id)) parents.set(folder.id, folder.parentId || "");
+          if (!managed(folder.id)) used.add(folder.id);
+        }
+        for (const tab of (Array.isArray(win?.tabs) ? win.tabs : [])) {
+          if (!tab) continue;
+          if (isPseudo(tab)) { if (tab.zenSyncId) removedTabIds.add(tab.zenSyncId); }
+          else { if (tab.groupId) used.add(tab.groupId); if (tab.zenSyncId) liveTabIds.add(tab.zenSyncId); }
+        }
+      }
+      // Preserve a managed folder whenever a normal tab or a foreign folder in
+      // any window needs it, including all managed ancestors.
+      for (const id of [...used]) {
+        let next = parents.get(id), remaining = parents.size + 1;
+        while (next && remaining-- > 0 && !used.has(next)) { used.add(next); next = parents.get(next); }
+      }
+      for (const id of liveTabIds) removedTabIds.delete(id);
+      const removedFolders = new Set([...parents.keys()].filter((id) => managed(id) && !used.has(id)));
       let changed = false;
-      const windows = state.windows.map((windowState) => {
-        if (!windowState || !Array.isArray(windowState.tabs)) return windowState;
-        const tabs = windowState.tabs.filter((tab) => {
-          if (!tab || typeof tab !== "object") return true;
-          const entries = Array.isArray(tab.entries) ? tab.entries : [];
-          const index = Number.isInteger(tab.index) && tab.index > 0 ? tab.index - 1 : entries.length - 1;
-          const current = entries[index]?.url || "";
-          const initial = (!current || current === "about:blank") ? tab._zenPinnedInitialState?.entry?.url || "" : "";
-          return !pseudoTabCleanupKind({ url: current, sessionUrl: initial }, {});
-        });
-        if (tabs.length === windowState.tabs.length) return windowState;
-        changed = true;
-        return { ...windowState, tabs };
+      const windows = state.windows.map((win) => {
+        if (!win || typeof win !== "object") return win;
+        let copy = win;
+        if (Array.isArray(win.tabs)) {
+          const tabs = win.tabs.filter((tab) => !isPseudo(tab));
+          if (tabs.length !== win.tabs.length) { copy = { ...copy, tabs }; changed = true; }
+        }
+        if (Array.isArray(win.folders)) {
+          let foldersChanged = false;
+          const folders = [];
+          for (const folder of win.folders) {
+            if (removedFolders.has(folder?.id)) { foldersChanged = true; continue; }
+            let next = folder;
+            if (Array.isArray(folder?.emptyTabIds)) {
+              const ids = folder.emptyTabIds.filter((id) => !removedTabIds.has(id));
+              if (ids.length !== folder.emptyTabIds.length) { next = { ...next, emptyTabIds: ids }; foldersChanged = true; }
+            }
+            const prev = folder?.prevSiblingInfo;
+            if ((prev?.type === "tab" && removedTabIds.has(prev.id)) || (prev?.type === "group" && removedFolders.has(prev.id))) {
+              next = { ...next, prevSiblingInfo: { type: "start", id: null } }; foldersChanged = true;
+            }
+            folders.push(next);
+          }
+          if (foldersChanged) { copy = { ...copy, folders }; changed = true; }
+        }
+        return copy;
       });
       return changed ? { ...state, windows } : state;
     }

@@ -15,6 +15,24 @@ assert.equal(JSON.stringify(state), before, "never mutate native input");
 assert.deepEqual(Array.from(filtered.windows[0].tabs), [normal]);
 assert.equal(filtered.windows[0].folders, state.windows[0].folders, "folder metadata and user folders are not removed");
 assert.equal(c.filterZenSidebarState({ windows: [{ tabs: [normal] }] }).windows[0].tabs[0], normal);
+const folderState = { windows: [
+  { tabs: [{ ...pseudo, zenSyncId: "pseudo" }, { ...agenda, zenSyncId: "agenda" }], folders: [
+    { id: "bgalazka-zentral-notes", parentId: null },
+    { id: "bgalazka-zentral-notes-sub_used", parentId: "bgalazka-zentral-notes" },
+    { id: "zentral-notes-agenda", parentId: null },
+    { id: "zentral-notes-agenda-day-2026-11-13", parentId: "zentral-notes-agenda", emptyTabIds: ["agenda"] },
+    { id: "ordinary-folder", parentId: null, prevSiblingInfo: { type: "group", id: "zentral-notes-agenda" } },
+  ] },
+  { tabs: [{ ...normal, groupId: "bgalazka-zentral-notes-sub_used", zenSyncId: "normal-tab" }], folders: [] },
+] };
+const folderBefore = JSON.stringify(folderState), folderResult = c.filterZenSidebarState(folderState);
+assert.equal(JSON.stringify(folderState), folderBefore);
+assert.deepEqual(Array.from(folderResult.windows[0].folders, x => x.id), ["bgalazka-zentral-notes", "bgalazka-zentral-notes-sub_used", "ordinary-folder"], "empty managed folders are omitted, but parents containing user tabs in another window survive");
+assert.equal(folderResult.windows[0].folders[2].prevSiblingInfo.type, "start", "removed previous sibling is not referenced");
+const foreignTree = { windows: [{ tabs: [pseudo], folders: [{ id: "zentral-notes-agenda" }, { id: "my-private-folder", parentId: "zentral-notes-agenda" }] }] };
+assert.deepEqual(Array.from(c.filterZenSidebarState(foreignTree).windows[0].folders, f => f.id), ["zentral-notes-agenda", "my-private-folder"], "foreign child protects its managed ancestor");
+const oddShape = { windows: [{ tabs: null, folders: {} }] };
+assert.equal(c.filterZenSidebarState(oddShape), oddShape, "unknown state shapes are preserved without mutation");
 let seen = [], native = { saveState(value, soon) { seen.push([this, value, soon]); return "saved"; } }, original = native.saveState;
 const a = c.acquireZenSidebarShield(native), b = c.acquireZenSidebarShield(native);
 assert.ok(a && b); assert.equal(a.isCurrent(), true);
