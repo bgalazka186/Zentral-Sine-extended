@@ -146,6 +146,36 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(content.dataset.compact, "true", "narrow calendar uses compact list fallback");
   assert.ok(q(root, ".zn-cal-compact-list"), "compact month list is rendered instead of a squeezed 7-column grid");
 
+  // The calendar display zone is selected by the user and controls work/busy/Now wall-clock geometry.
+  await chooseMenu(root, ".zn-calendar-tools", "Display time zone: Local");
+  const zoneCard = q(root, '.zn-dialog-card[aria-label="Calendar display time zone"]');
+  assert.ok(zoneCard, "display-zone editor opens from Calendar Tools");
+  const zoneInput = q(zoneCard, '[aria-label="IANA display time zone"]');
+  const applyZone = zoneCard.querySelectorAll("button").find((el) => el.textContent.trim() === "Apply time zone");
+  zoneInput.value = "Mars/Olympus";
+  applyZone.click();
+  assert.equal(store.meta.calendarDisplayZone, "", "invalid IANA identifiers are refused without replacing the current zone");
+  assert.match(zoneCard.textContent, /Enter a valid IANA time zone/);
+  zoneInput.value = "Europe/Warsaw";
+  applyZone.click();
+  await flushRaf();
+  assert.equal(store.meta.calendarDisplayZone, "Europe/Warsaw", "selected IANA display zone is stored in calendar meta");
+  const zone = "Europe/Warsaw", zoneKey = cal.zonedDateKey(Date.now(), zone), zoneDay = cal.parseYmd(zoneKey).getTime();
+  store.setMeta({ calendarCursor: zoneKey, calendarWork: { days: [new Date(zoneDay).getDay()], startMin: 600, endMin: 900 } });
+  const civilParts = (key) => key.split("-").map(Number);
+  const [zy, zm, zd] = civilParts(zoneKey), [iy, im, id] = civilParts(ymd);
+  const displayDayShift = Math.round((Date.UTC(zy, zm - 1, zd) - Date.UTC(iy, im - 1, id)) / 86400000);
+  if (displayDayShift) for (const item of store.items.list()) {
+    const moved = { ...item };
+    if (item.start?.dateTime) moved.start = { ...item.start, dateTime: new Date(Date.parse(item.start.dateTime) + displayDayShift * 86400000).toISOString() };
+    else if (item.start?.date) moved.start = { ...item.start, date: cal.ymd(new Date(cal.addDays(cal.parseYmd(item.start.date).getTime(), displayDayShift))) };
+    if (item.end?.dateTime) moved.end = { ...item.end, dateTime: new Date(Date.parse(item.end.dateTime) + displayDayShift * 86400000).toISOString() };
+    else if (item.end?.date) moved.end = { ...item.end, date: cal.ymd(new Date(cal.addDays(cal.parseYmd(item.end.date).getTime(), displayDayShift))) };
+    store.items.upsert(moved);
+  }
+  const busyStart = cal.zonedDateTimeToMs(zoneKey, "11:30", zone), busyEnd = cal.zonedDateTimeToMs(zoneKey, "12:30", zone);
+  store.items.upsert({ id: "display-zone-busy", summary: "Display-zone busy", start: { dateTime: new Date(busyStart).toISOString() }, end: { dateTime: new Date(busyEnd).toISOString() }, x: { kind: "event" } });
+
   // Week/day time grid: all-day strip, work-hours shading, busy periods, reminders and overlapping lanes.
   calendarPane.getBoundingClientRect = () => ({ left: 400, top: 0, right: 1100, bottom: 700, width: 700, height: 700 });
   await chooseMenu(root, ".zn-calendar-view-select", "Week");
@@ -159,6 +189,11 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.ok(sharedLanes.every((el) => el.style.width === "33.333333333333336%" || el.style.width === "33.33333333333333%"), "three colliding items receive one third of the track each");
   assert.ok(root.querySelectorAll(".zn-cal-off-hours").length > 0, "week view shades outside working hours");
   assert.ok(root.querySelectorAll(".zn-cal-busy-range").length > 0, "week view shades occupied time");
+  const zoneTrack = root.querySelectorAll(".zn-cal-time-track").find((track) => track.getAttribute("data-day") === zoneKey);
+  assert.ok(zoneTrack, "the displayed-zone current date is present in the time grid; expected " + zoneKey + " got " + root.querySelectorAll(".zn-cal-time-track").map((track) => track.getAttribute("data-day")).join(",") + " cursor=" + store.meta.calendarCursor);
+  assert.match(zoneTrack.querySelector(".zn-cal-off-hours")?.getAttribute("style") || "", /height:540px/, "10:00 work-hour start is positioned in Europe/Warsaw wall time");
+  const zoneBusy = zoneTrack.querySelectorAll(".zn-cal-busy-range").find((span) => Math.abs(parseFloat(/top:([^;]+)/.exec(span.getAttribute("style") || "")?.[1]) - 11.5 * 54) < 1);
+  assert.ok(zoneBusy, "busy-range shading starts at 11:30 in the selected display zone");
   const overlapButtons = root.querySelectorAll(".zn-cal-time-event").filter((el) => /Project review|Design review/.test(el.textContent));
   assert.equal(overlapButtons.length, 2, "both overlapping events render");
   assert.ok(overlapButtons.every((el) => el.style.width === "50%"), "overlapping events get side-by-side 50% lanes");
@@ -168,6 +203,8 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(root.querySelectorAll(".zn-cal-time-column").length, 1, "day view renders one full-width day column");
   assert.ok(root.querySelectorAll(".zn-cal-time-event").some((el) => el.textContent.includes("Project review")), "day view retains timed events");
   assert.equal(root.querySelectorAll(".zn-cal-now-line").length, 1, "day view draws its current-time indicator");
+  const expectedNowTop = cal.zonedMinuteOfDay(Date.now(), zoneKey, zone) / 60 * 54;
+  assert.ok(Math.abs(parseFloat(/top:([^;]+)/.exec(q(root, ".zn-cal-now-line").getAttribute("style") || "")?.[1]) - expectedNowTop) < 1, "Now line uses the selected IANA display zone");
   const gridTrack = q(root, ".zn-cal-time-track");
   gridTrack.dispatchEvent(new Ev("contextmenu", { bubbles: true }));
   assert.ok(root.querySelectorAll(".zn-menu-item").some((el) => el.textContent.includes("Open Day view")), "hour tracks expose a right-click day menu");
@@ -194,6 +231,12 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(q(root, ".zn-cal-hover-card"), null, "leaving the reminder closes its detail card");
   callRow.click(); await flushRaf();
   assert.equal(store.meta.lastNoteId, note.id, "clicking a calendar item opens its source note");
+  assert.equal(sheet.openCalendarDay(ymd), true, "Day-Plan action can open a selected day through the sheet API");
+  await flushRaf();
+  assert.equal(store.meta.calendarView, "day");
+  assert.equal(store.meta.calendarCursor, ymd);
+  assert.equal(sheet.openCalendarDay("not-a-day"), false, "invalid Day-Plan dates are refused");
+  await chooseMenu(root, ".zn-calendar-view-select", "Agenda");
 
   // Reopen a new sheet with the same store to verify view, filters and N-day setting are durable.
   await store.flush();
@@ -202,6 +245,7 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(restored.meta.calendarView, "agenda");
   assert.equal(restored.meta.calendarDaysForward, 14);
   assert.equal(restored.meta.calendarFilterKind, "all");
+  assert.equal(restored.meta.calendarDisplayZone, "Europe/Warsaw", "selected display zone persists after reopening the store");
   sheet.destroy(); await restored.close(); await store.close();
   console.log("calendar views UI tests passed");
 })().catch((error) => { console.error("FAIL", error); process.exit(1); });

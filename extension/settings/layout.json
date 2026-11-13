@@ -1165,6 +1165,9 @@
     "zen.workspace.zentral.notes.zen_folder_new_button",
     "zen.workspace.zentral.notes.zen_folder_top",
     "zen.workspace.zentral.notes.debug_perf",
+    "zen.workspace.zentral.notes.agenda_folder",
+    "zen.workspace.zentral.notes.agenda_position",
+    "zen.workspace.zentral.notes.agenda_days",
     {
       "type": "text",
       "label": "**Notes appearance · Size & shape**",

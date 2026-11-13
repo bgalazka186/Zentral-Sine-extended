@@ -3,7 +3,7 @@
   "themeId": "zentral-video-preview",
   "name": "Zentral Sidebar Video Preview",
   "description": "Video preview card in Zen's sidebar: pick a playing video from any tab, see it live, control playback, captions and a temporary enlarged view. Standalone part of Zentral Extended.",
-  "version": "3.3.35",
+  "version": "3.3.46",
   "entry": "ZentralVideoPreview.uc.js",
   "output": "ZentralVideoPreview.standalone.uc.js",
   "settings": "settings.json",
@@ -61,19 +61,19 @@
   "preferenceOrder": [
     {
       "type": "separator",
-      "label": "Start here · Essential features"
+      "label": "Start here \u00b7 Essential features"
     },
     "zen.workspace.zentral.video_preview.enabled",
     {
       "type": "separator",
-      "label": "Video Playback · Playback & captions"
+      "label": "Video Playback \u00b7 Playback & captions"
     },
     "zen.workspace.zentral.video_preview.renderer",
     "zen.workspace.zentral.video_preview.selected_mode_only",
     "zen.workspace.zentral.video_preview.keep_source_visible",
     {
       "type": "separator",
-      "label": "Video Sources · Discovery & source selection"
+      "label": "Video Sources \u00b7 Discovery & source selection"
     },
     "zen.workspace.zentral.video_preview.auto_show_video",
     "zen.workspace.zentral.video_preview.require_audio",
@@ -82,7 +82,7 @@
     "zen.workspace.zentral.video_preview.pinned_discovery_only",
     {
       "type": "separator",
-      "label": "Video Performance · Capture & background work"
+      "label": "Video Performance \u00b7 Capture & background work"
     },
     "zen.workspace.zentral.video_preview.pause_when_compact_hidden",
     "zen.workspace.zentral.video_preview.capture_width_px",
@@ -103,7 +103,7 @@
     "zen.workspace.zentral.video_preview.suspend_when_source_visible",
     {
       "type": "separator",
-      "label": "Video Experiments · Experimental methods & tests"
+      "label": "Video Experiments \u00b7 Experimental methods & tests"
     },
     "zen.workspace.zentral.video_preview.disable_experimental_bridge",
     "zen.workspace.zentral.video_preview.experimental_legacy_capture",
@@ -111,7 +111,7 @@
     "zen.workspace.zentral.video_preview.performance_diagnostics",
     {
       "type": "separator",
-      "label": "Video Playback · Enlarged preview"
+      "label": "Video Playback \u00b7 Enlarged preview"
     },
     "zen.workspace.zentral.video_preview.double_click_enlarge",
     "zen.workspace.zentral.video_preview.enlarged_keyboard_controls",
@@ -123,7 +123,7 @@
     "zen.workspace.zentral.video_preview.enlarged_height",
     {
       "type": "separator",
-      "label": "Video subtitles · Subtitle display"
+      "label": "Video subtitles \u00b7 Subtitle display"
     },
     "zen.workspace.zentral.video_preview.youtube_captions",
     "zen.workspace.zentral.video_preview.caption_placement",
@@ -133,20 +133,20 @@
     "zen.workspace.zentral.video_preview.caption_overflow",
     {
       "type": "separator",
-      "label": "Video subtitles · Subtitle updates"
+      "label": "Video subtitles \u00b7 Subtitle updates"
     },
     "zen.workspace.zentral.video_preview.caption_poll_ms",
     "zen.workspace.zentral.video_preview.caption_events",
     "zen.workspace.zentral.video_preview.slow_caption_recovery",
     {
       "type": "separator",
-      "label": "Video Playback · Enlarged preview"
+      "label": "Video Playback \u00b7 Enlarged preview"
     },
     "zen.workspace.zentral.video_preview.enlarged_remember_position",
     "zen.workspace.zentral.video_preview.enlarged_position",
     {
       "type": "separator",
-      "label": "Appearance & layout · Size & shape"
+      "label": "Appearance & layout \u00b7 Size & shape"
     },
     "zen.workspace.zentral.video_preview.fit_width",
     "zen.workspace.zentral.video_preview.width_percent",
@@ -155,7 +155,7 @@
     "zen.workspace.zentral.video_preview.framing",
     {
       "type": "separator",
-      "label": "Appearance & layout · Toolbar buttons"
+      "label": "Appearance & layout \u00b7 Toolbar buttons"
     },
     "zen.workspace.zentral.video_preview.play_button",
     "zen.workspace.zentral.video_preview.mute_button",
@@ -179,7 +179,7 @@
     "zen.workspace.zentral.video_preview.button_border_color",
     {
       "type": "separator",
-      "label": "Appearance & layout · Colors & backing"
+      "label": "Appearance & layout \u00b7 Colors & backing"
     },
     "zen.workspace.bgalazka.look.video_opacity",
     "zen.workspace.bgalazka.look.video_control_opacity",
@@ -192,7 +192,7 @@
     "zen.workspace.bgalazka.look.video_source_style",
     {
       "type": "separator",
-      "label": "Appearance & layout · Controls & overlay"
+      "label": "Appearance & layout \u00b7 Controls & overlay"
     },
     "zen.workspace.bgalazka.look.video_controls_wrap",
     "zen.workspace.bgalazka.look.video_controls_gap",

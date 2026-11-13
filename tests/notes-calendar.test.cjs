@@ -479,3 +479,25 @@ test("calendar split layout chooses a responsive orientation and falls back to t
 });
 
 (async () => { for (const [name, fn] of queue) { await fn(); passed++; console.log("ok -", name); } console.log(passed + " passed"); })().catch((e) => { console.error(e); process.exit(1); });
+
+test("display-zone day geometry: work, busy ranges, Now and DST use IANA wall time", () => {
+  const zone = "Europe/Warsaw";
+  const spring = cal.zonedDayBounds("2026-03-29", zone);
+  const fall = cal.zonedDayBounds("2026-10-25", zone);
+  assert.equal(spring[1] - spring[0], 23 * 3600000, "spring-forward display day is 23 elapsed hours");
+  assert.equal(fall[1] - fall[0], 25 * 3600000, "fall-back display day is 25 elapsed hours");
+  assert.equal(cal.zonedDateKey(Date.parse("2026-03-28T23:30:00Z"), zone), "2026-03-29", "display date is derived in the selected zone");
+  assert.equal(cal.zonedMinuteOfDay(Date.parse("2026-03-29T07:30:00Z"), "2026-03-29", zone), 570, "Now is 09:30 in Warsaw, not the host zone");
+  const work = cal.workRange(day(2026, 3, 29), { days: [0], startMin: 9 * 60, endMin: 17 * 60 }, zone);
+  assert.deepEqual(work, [Date.parse("2026-03-29T07:00:00Z"), Date.parse("2026-03-29T15:00:00Z")], "working hours resolve in the selected zone");
+  const busy = ev("Busy", Date.parse("2026-03-29T08:15:00Z"), Date.parse("2026-03-29T09:45:00Z"));
+  const ranges = cal.busyRanges([busy], spring[0], spring[1]);
+  assert.equal(cal.zonedMinuteOfDay(ranges[0][0], "2026-03-29", zone), 615, "busy start is 10:15 display time");
+  assert.equal(cal.zonedMinuteOfDay(ranges[0][1], "2026-03-29", zone), 705, "busy end is 11:45 display time");
+  const free = cal.freeSlots([busy], day(2026, 3, 29), cal.addDays(day(2026, 3, 29), 1), 60, { work: { days: [0], startMin: 9 * 60, endMin: 17 * 60 }, zone });
+  assert.deepEqual(free, [[work[0], Date.parse("2026-03-29T08:15:00Z")], [Date.parse("2026-03-29T09:45:00Z"), work[1]]], "free-slot work windows and busy instants share the selected zone");
+  const layout = cal.layoutDay([ev("Display event", Date.parse("2026-03-29T08:00:00Z"), Date.parse("2026-03-29T09:00:00Z"))], day(2026, 3, 29), zone);
+  assert.deepEqual(layout.map((entry) => [entry.startMin, entry.endMin]), [[600, 660]], "event geometry follows the same display zone");
+  assert.equal(cal.zonedMinuteOfDay(Date.parse("2026-10-25T00:30:00Z"), "2026-10-25", zone), 150);
+  assert.equal(cal.zonedMinuteOfDay(Date.parse("2026-10-25T01:30:00Z"), "2026-10-25", zone), 150, "both repeated wall-clock instants map to the repeated displayed hour");
+});

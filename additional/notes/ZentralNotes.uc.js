@@ -197,6 +197,9 @@
       ZEN_ROOT_PART_OPACITY: "zen.workspace.zentral.notes.zen_root_part_opacity",
       CUSTOM_COLORS: "zen.workspace.zentral.notes.custom_colors",
       ZEN_TOP: "zen.workspace.zentral.notes.zen_folder_top",
+      AGENDA_ENABLED: "zen.workspace.zentral.notes.agenda_folder",
+      AGENDA_POSITION: "zen.workspace.zentral.notes.agenda_position",
+      AGENDA_DAYS: "zen.workspace.zentral.notes.agenda_days",
       CAPTURE_FORMAT: "zen.workspace.zentral.notes.quick_capture_format",
       DEBUG_PERF: "zen.workspace.zentral.notes.debug_perf",
     });
@@ -1631,6 +1634,8 @@
     // functions in this section remain pure: they decide what the live controller should add, remove,
     // relabel, move or restyle without directly touching browser objects.
     const NOTES_ATTR = "bgalazka-notes-item"; // the only marker a tab needs to be treated as ours
+    const AGENDA_ATTR = "bgalazka-notes-agenda-item";
+    const AGENDA_ROOT_ID = "zentral-notes-agenda";
     const projKey = (kind, id) => (kind === "folder" ? "f:" : "n:") + id;
     // Notes tree -> flat, ordered list of entries. Keys come from note ids and folder ids, never from titles.
     function projectNotesFolder(notes, folders) {
@@ -4286,6 +4291,10 @@
           { id: "zenMode", label: "Show notes in Zen's pinned-tabs folder tree", pref: PREF.ZEN_MODE, kind: "choice", def: "off", choices: [["off", "Off"], ["selected", "Only Notes (tabbar)"], ["all", "Whole notes tree"]] },
           { id: "zenNewBtn", label: "Keep a \"New note\" entry once in the NOTES folder and in every subfolder (it creates the note in that folder)", pref: PREF.ZEN_NEW_BUTTON, kind: "bool", def: false },
           { id: "zenTop", label: "Put the NOTES folder at the top of the Pinned tabs when it is created", pref: PREF.ZEN_TOP, kind: "bool", def: true },
+          { kind: "heading", label: "Agenda folder" },
+          { id: "agendaEnabled", label: "Show a live Agenda folder in Zen's Pinned tabs", pref: PREF.AGENDA_ENABLED, kind: "bool", def: false },
+          { id: "agendaPosition", label: "Place Agenda relative to NOTES", pref: PREF.AGENDA_POSITION, kind: "choice", def: "above", choices: [["above", "Above NOTES"], ["below", "Below NOTES"]] },
+          S("agendaDays", "Agenda shows Today + next N days", PREF.AGENDA_DAYS, 1, 31, "days", 4),
           { kind: "heading", label: "Diagnostics" },
           { id: "perf", label: "Sample layout / drag timings (read __zentralNotesPerf.report())", pref: PREF.DEBUG_PERF, kind: "bool", def: false },
         ],
@@ -4744,25 +4753,27 @@
           if (!identity) continue;
           const lifecycle = history?.stateFor?.(identity.itemId, identity.occurrenceId) || "pending";
           if (lifecycle === "done" || lifecycle === "dismissed") continue;
-          const start = CALENDAR_PART.itemRange(item)[0];
-          const lead = (item.reminders?.overrides || []).reduce((max, override) => Math.max(max, Number(override?.minutes) || 0), 0);
-          const dueAt = start - lead * 60000;
-          if (!Number.isFinite(dueAt) || dueAt <= 0) continue;
-          // `alerted` is an audit entry, not a lifecycle state. The same occurrence may alert again
-          // after its saved schedule changes (snooze/reschedule), but never twice for one schedule.
+          const category = itemStore.category?.(item.x?.category);
+          const stages = CALENDAR_PART.reminderStagePlan(item, category?.notify, at);
+          if (!stages.length) continue;
+          // Every stage is independently claimed for this saved schedule. A snooze or
+          // reschedule changes `start`, making the new schedule eligible for all stages.
           const priorAlerts = history?.list?.({ itemId: identity.itemId, occurrenceId: identity.occurrenceId }) || [];
-          const sameScheduleAlerted = priorAlerts.some((record) => record.action === "alerted" && record.start?.date === item.start?.date && record.start?.dateTime === item.start?.dateTime);
-          if (sameScheduleAlerted) continue;
-          if (dueAt <= at) due.push({
-            ...item,
-            id: "calendar-reminder:" + identity.itemId + ":" + identity.occurrenceId,
-            body: item.x?.noteId ? (store.get(item.x.noteId)?.body || "") : "",
-            __calendarReminder: true,
-            __calendarItem: item,
-            __historyIdentity: identity,
-            __scheduledStart: item.start,
-          });
-          else if (!next || dueAt < next) next = dueAt;
+          for (const stage of stages) {
+            const already = priorAlerts.some((record) => record.action === "alerted" && record.stage === stage.stage && record.start?.date === item.start?.date && record.start?.dateTime === item.start?.dateTime);
+            if (already || (!stage.stage || stage.at <= 0)) continue;
+            if (stage.at <= at) due.push({
+              ...item,
+              id: "calendar-reminder:" + identity.itemId + ":" + identity.occurrenceId + ":" + stage.stage,
+              body: item.x?.noteId ? (store.get(item.x.noteId)?.body || "") : "",
+              __calendarReminder: true,
+              __calendarItem: item,
+              __historyIdentity: identity,
+              __scheduledStart: item.start,
+              __stage: stage.stage,
+            });
+            else if (!next || stage.at < next) next = stage.at;
+          }
         }
         if (hasRecurring) {
           const refreshAt = at + 12 * 60 * 60 * 1000;
@@ -4790,7 +4801,7 @@
               if (destroyed) return;
               const identity = item.__historyIdentity;
               const history = store.items?.history;
-              const entry = { itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.__scheduledStart, at: nowAt };
+              const entry = { itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.__scheduledStart, stage: item.__stage, at: nowAt };
               // claimAlert re-reads the shared history first so a second window does not show the same banner.
               let record = null;
               try { record = history?.claimAlert ? await history.claimAlert(entry) : history?.append?.({ ...entry, action: "alerted" }); } catch (_) { record = null; }
@@ -5139,6 +5150,7 @@
       clearTimer,
       warn = () => {},
       getHistory = () => ({ on: true, ...HISTORY_DEFAULTS }),
+      getDateFormat = () => "",
     }) {
       const notes = new Map();
       // One active-note owner per sheet; a note stays protected while any sheet is displaying it.
@@ -5148,7 +5160,9 @@
       const backedUp = new Set();
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, cardDock: "", cardW: 0,
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
-        calendarView: "month", calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "" };
+        calendarView: "month", calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "",
+        calendarAlertSettings: CALENDAR_PART ? CALENDAR_PART.cleanAlertSettings(null) : {}, calendarNoteAlertOverrides: {},
+        calendarAgendaDefaults: {}, calendarNoteAgendaOverrides: {} };
       let meta = { ...DEFAULT_META };
       let dir = null;
       let chain = Promise.resolve();
@@ -5305,6 +5319,11 @@
             meta.calendarFilterKind = ["all", "event", "reminder"].includes(raw.calendarFilterKind) ? raw.calendarFilterKind : "all";
             meta.calendarFilterCategory = typeof raw.calendarFilterCategory === "string" ? raw.calendarFilterCategory.slice(0, 80) : "";
             meta.calendarCursor = CALENDAR_PART.parseYmd(raw.calendarCursor) ? raw.calendarCursor : "";
+            meta.calendarDisplayZone = CALENDAR_PART.cleanZone(raw.calendarDisplayZone) || "";
+            meta.calendarAlertSettings = CALENDAR_PART.cleanAlertSettings(raw.calendarAlertSettings);
+            meta.calendarNoteAlertOverrides = CALENDAR_PART.cleanNoteAlertOverrides(raw.calendarNoteAlertOverrides);
+            meta.calendarAgendaDefaults = CALENDAR_PART.cleanAgendaWindow(raw.calendarAgendaDefaults);
+            meta.calendarNoteAgendaOverrides = CALENDAR_PART.cleanNoteAgendaOverrides(raw.calendarNoteAgendaOverrides);
           }
         } catch (_) {}
       }
@@ -5609,6 +5628,10 @@
           await loadAll();
           await loadMeta();
           await openItems();
+          try { // migrate the old generated "Daily" label; a folder the person renamed is left alone
+            const df = meta.folders.find((f) => f.id === DATE_FOLDER);
+            if (df && df.label === "Daily") api.renameFolder(DATE_FOLDER, DATE_FOLDER_LABEL);
+          } catch (error) { warn(error); }
           api.ensureFolderUids(); // every folder has its permanent uid before anything (tree, Zen sidebar) is built from it
           await purgeOldTrash();
           await purgeBackups().catch(warn);
@@ -5796,6 +5819,79 @@
           const prefix = CALENDAR_PART.noteLineItemId(item.x.noteId, "");
           return String(item.id || "").startsWith(prefix) ? String(item.id).slice(prefix.length) : "";
         },
+        // The Date Note of a local YYYY-MM-DD key: found by its date title, created in the Daily folder only when missing.
+        _agendaDateNote(ymd, fmt) {
+          const useFmt = fmt || getDateFormat() || CALENDAR_PART.DEFAULT_DATE_FORMAT;
+          let note = findDateNote([...notes.values()].filter((n) => !n.trashed), ymd, useFmt);
+          if (!note) {
+            api.ensureDateFolder();
+            note = api.create(dateNoteBody(parseYmd(ymd)), DATE_FOLDER);
+          }
+          return note;
+        },
+        // B3.3.32-7: a note-less (or Agenda-linked) manual item becomes a real `%%calendar%%` line in its start day's Date
+        // Note, re-keyed to that line (`mirroredItem`) so every extra and its history identity (x.historyId) stay. The
+        // line is round-trip checked (`agendaMirrorLine`); items a list line cannot express stay linked-only. Idempotent.
+        // Returns the note id or "".
+        mirrorItemToAgendaNote(itemId, { fmt } = {}) {
+          let item = items?.get?.(itemId);
+          if (!item || !CALENDAR_PART || item.x?.src !== "manual" || CALENDAR_PART.isRecurringItem(item)) return "";
+          if (!item.x.noteId && !api.linkItemToAgendaNote(itemId, { fmt })) return "";
+          item = items.get(itemId);
+          const note = item?.x?.noteId ? notes.get(item.x.noteId) : null;
+          if (!note || note.trashed || !/^agenda$/i.test(item.x.heading || "")) return "";
+          const useFmt = fmt || getDateFormat() || CALENDAR_PART.DEFAULT_DATE_FORMAT;
+          if (!dateOfNote(note, useFmt) || dateOfNote(note, useFmt) !== CALENDAR_PART.localDateKey(CALENDAR_PART.itemRange(item)[0])) return "";
+          const identity = CALENDAR_PART.reminderIdentity(item);
+          const done = !!identity && items.history?.stateFor(identity.itemId, identity.occurrenceId) === "done";
+          const mirror = CALENDAR_PART.agendaMirrorLine(item, { done, now: now() });
+          if (!mirror) return "";
+          // The line id is derived from the item id, so a second window that already wrote this line is recognised
+          // here and the line is not written twice; the record is only re-keyed to it.
+          const exists = !!CALENDAR_PART.findAgendaLine(note.body, mirror.lineId);
+          const inserted = exists ? { body: note.body, changed: false } : CALENDAR_PART.insertAgendaLine(note.body, mirror.line, item.x.category);
+          if (!exists && !inserted.changed) return "";
+          // The re-keyed item is stored BEFORE the note text changes, so the note sync finds it by id and keeps its extras.
+          if (!items.upsert(CALENDAR_PART.mirroredItem(item, note.id, mirror.lineId, "Agenda"))) return "";
+          items.remove(item.id);
+          if (inserted.changed) api.update(note.id, inserted.body, "agenda");
+          else items.syncNote(note.id, note.body, { updatedAt: note.updated });
+          return note.id;
+        },
+        // Startup / repair pass: every non-recurring manual item without a note, or still only linked to its Agenda note,
+        // is mirrored. Safe to repeat; items a line cannot express are left as they are.
+        backfillAgendaLinks({ fmt } = {}) {
+          const result = { mirrored: 0, skipped: 0 };
+          if (!items || !CALENDAR_PART) return result;
+          for (const it of [...items.list()]) {
+            if (it.x?.src !== "manual" || CALENDAR_PART.isRecurringItem(it)) continue;
+            if (it.x.noteId && !/^agenda$/i.test(it.x.heading || "")) continue;
+            try { if (api.mirrorItemToAgendaNote(it.id, { fmt })) result.mirrored++; else result.skipped++; } catch (error) { warn(error); result.skipped++; }
+          }
+          return result;
+        },
+        // B3.3.32-7: a rescheduled Agenda line whose day changed follows the day: it leaves its Date Note and joins the
+        // destination day's Agenda section (same hidden id, so identity/extras/history stay). Returns true when moved.
+        _moveAgendaLine(item, { fmt } = {}) {
+          const lineId = api._checkboxLineId(item), note = lineId ? notes.get(item.x.noteId) : null;
+          if (!note || note.trashed || !/^agenda$/i.test(item.x.heading || "")) return false;
+          const useFmt = fmt || getDateFormat() || CALENDAR_PART.DEFAULT_DATE_FORMAT;
+          const noteDay = dateOfNote(note, useFmt), newDay = CALENDAR_PART.localDateKey(CALENDAR_PART.itemRange(item)[0]);
+          if (!noteDay || !newDay || noteDay === newDay) return false;
+          const hit = CALENDAR_PART.findAgendaLine(note.body, lineId);
+          const rewritten = hit ? CALENDAR_PART.rewriteLineSchedule(hit.line, item, now()) : null;
+          if (rewritten === null) return false;
+          const dest = api._agendaDateNote(newDay, fmt);
+          if (!dest || dest.id === note.id) return false;
+          const ensured = CALENDAR_PART.ensureAgendaHeading(dest.body);
+          const inserted = CALENDAR_PART.insertAgendaLine(ensured.body, rewritten, item.x.category);
+          if (!inserted.changed) return false;
+          if (!items.upsert(CALENDAR_PART.mirroredItem(item, dest.id, lineId, "Agenda"))) return false;
+          items.remove(item.id);
+          api.update(dest.id, inserted.body, "agenda");
+          api.update(note.id, CALENDAR_PART.removeAgendaLine(note.body, lineId).body, "agenda");
+          return true;
+        },
         // Note-less manual items get a home: the Date Note of their start day (found by its date title, created in the
         // Daily folder only when missing) with a `## Agenda` heading, recorded as x.noteId / x.heading so the item opens
         // there. The item stays the single owner of its schedule (no duplicate note-derived line is written).
@@ -5806,12 +5902,7 @@
           if (item.x?.series || (Array.isArray(item.recurrence) && item.recurrence.length)) return "";
           const startMs = CALENDAR_PART.itemRange(item)[0];
           if (!Number.isFinite(startMs) || startMs <= 0) return "";
-          const ymd = CALENDAR_PART.localDateKey(startMs);
-          let note = findDateNote([...notes.values()].filter((n) => !n.trashed), ymd, fmt || CALENDAR_PART.DEFAULT_DATE_FORMAT);
-          if (!note) {
-            if (!meta.folders.some((f) => f.id === DATE_FOLDER)) api.addFolder("Daily");
-            note = api.create(dateNoteBody(parseYmd(ymd)), DATE_FOLDER);
-          }
+          const note = api._agendaDateNote(CALENDAR_PART.localDateKey(startMs), fmt);
           const ensured = CALENDAR_PART.ensureAgendaHeading(note.body);
           if (ensured.changed) api.update(note.id, ensured.body, "agenda");
           const saved = items.upsert({ ...item, x: { ...item.x, noteId: note.id, heading: ensured.heading } });
@@ -5820,7 +5911,8 @@
         // After a reschedule of a note-derived item, rewrite ITS line's date/time so the text and the calendar agree
         // (otherwise a later note edit would silently pull the old time back). Only the leading date/time of the one
         // line changes; a line whose date comes from a heading is left alone. Idempotent. Returns true when text changed.
-        syncItemScheduleToNote(item) {
+        syncItemScheduleToNote(item, { fmt } = {}) {
+          if (api._moveAgendaLine(item, { fmt })) return true;
           const lineId = api._checkboxLineId(item), note = lineId ? notes.get(item.x.noteId) : null;
           if (!note || note.trashed) return false;
           const result = CALENDAR_PART.setListLineSchedule(note.body, lineId, item, now());
@@ -6043,6 +6135,14 @@
         },
         folderUid(id) {
           return meta.folders.find((f) => f.id === cleanFolder(id))?.uid || "";
+        },
+        // The date-note folder. Its id comes from the slug of the first label ("Daily" -> `daily`, which every date note
+        // names), so it is created under that label and shown as "Agenda".
+        ensureDateFolder() {
+          if (meta.folders.some((f) => f.id === DATE_FOLDER)) return DATE_FOLDER;
+          if (!api.addFolder("Daily")) return "";
+          api.renameFolder(DATE_FOLDER, DATE_FOLDER_LABEL);
+          return DATE_FOLDER;
         },
         renameFolder(id, label) {
           const list = patchFolderMeta(meta.folders, id, { label });
@@ -6626,7 +6726,6 @@
     const TEMPLATE_FOLDER = "templates";
     const BUILTIN_TEMPLATES = Object.freeze([
       { id: "zn-tpl-meeting", name: "Meeting", body: "# {{title}}\n\n**Date:** {{date}} {{time}}\n**Attendees:** \n\n## Agenda\n\n- {{cursor}}\n\n## Notes\n\n## Decisions\n\n## Action items\n\n- [ ] \n" },
-      { id: "zn-tpl-daily", name: "Daily", body: "# {{date}}\n\n## Plan\n\n- [ ] {{cursor}}\n\n## Notes\n\n## Done\n" },
       { id: "zn-tpl-checklist", name: "Checklist", body: "# {{title}}\n\n- [ ] {{cursor}}\n- [ ] \n- [ ] \n" },
       { id: "zn-tpl-project", name: "Project", body: "# {{title}}\n\n**Started:** {{date}}\n\n## Goal\n\n{{cursor}}\n\n## Milestones\n\n- [ ] \n\n## Tasks\n\n- [ ] \n\n## Links\n\n## Log\n\n- {{date}} created\n" },
     ]);
@@ -6858,6 +6957,8 @@
     // ---- date notes: today / tomorrow / next work day, listed and filtered by date ----------------------
     const WEEKDAYS = Object.freeze(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]);
     const DATE_FOLDER = "daily";
+    // The one date-note grouping is shown as "Agenda" (the id stays `daily` so links and files keep working).
+    const DATE_FOLDER_LABEL = "Agenda";
     const DATE_MODES = Object.freeze(["separate", "single"]);
     const cleanDateMode = (v) => (DATE_MODES.includes(v) ? v : "separate");
     const ymdOf = (ms) => {
@@ -7322,7 +7423,7 @@
       if ([...(f.querySelectorAll?.("tab") || [])].some((t) => !t.hasAttribute(NOTES_ATTR))) releaseNotesFolder(f, removeTab);
       else try { f.delete?.(); } catch (_) {}
     }
-    function createZenFolder({ api, store, getMode, getOrder = () => "folders-first", getNewButtons = () => false, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, onKill = () => {} }) {
+    function createZenFolder({ api, store, getMode, getOrder = () => "folders-first", getNewButtons = () => false, getAgendaEnabled = () => false, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, onKill = () => {} }) {
       let dead = false;
       let orderOk = true; // set to false once if the browser refuses to reorder (we then stop trying, nothing else changes)
       let touches = []; // timestamps of browser-side requests (a tab was closed, moved, unpinned...), see touch()
@@ -7364,7 +7465,10 @@
         api.styleRoot?.();
         if (api.sweepStrays) api.sweepStrays(); // our tabs that ended up outside the NOTES folder (unpinned, essential, dragged away, restored)
         const notes = store.list();
-        let want = projectZen(notes, store.meta.folders, mode, getOrder());
+        const hideDateFolder = !!getAgendaEnabled();
+        const visibleNotes = hideDateFolder ? notes.filter((note) => cleanFolder(note.folder) !== DATE_FOLDER && !cleanFolder(note.folder).startsWith(DATE_FOLDER + "/")) : notes;
+        const visibleFolders = hideDateFolder ? store.meta.folders.filter((folder) => folder.id !== DATE_FOLDER && !folder.id.startsWith(DATE_FOLDER + "/")) : store.meta.folders;
+        let want = projectZen(visibleNotes, visibleFolders, mode, getOrder());
         if (flat === true) want = flatten(want);
         const plan = diffProjection(api.list(), want);
         for (const key of plan.remove) api.remove(key.split("#")[0], key.includes("#dup"));
@@ -7455,7 +7559,7 @@
         cleanRemind, ceilStep, dueReminders, nextReminderAt, reminderDelay, reminderPresets, parseRemindInput, remindPreview, remindDateText, remindTimeText,
         createReminderScheduler, createReminderAlertActions, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
         headingSlug, headingsOf, cleanAnchor, noteLinkParts, headingOffset, tocBlock, tocList, findToc, updateToc, insertToc, insertFootnote, nextFootnoteLabel, mentionRe, hasMention, linkFirstMention,
-        hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
+        hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_FOLDER_LABEL, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         DATE_TITLE_RE, dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
         HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, BACKUP_DIR, BACKUP_HOURS, backupEntryName, parseBackupName, backupPlan, backupLeft, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
         orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, projectZen,
@@ -9405,6 +9509,9 @@
           action: () => choose(entry.value),
         })));
       }
+      function calendarDisplayZone() { return CALENDAR_PART?.cleanZone?.(store.meta.calendarDisplayZone) || ""; }
+      function calendarTodayKey() { return CALENDAR_PART.zonedDateKey(nowMs(), calendarDisplayZone()); }
+      function calendarTodayDay() { return CALENDAR_PART.parseYmd(calendarTodayKey())?.getTime() || CALENDAR_PART.dayStart(nowMs()); }
       function calendarDayLabel(day, options = {}) {
         const d = new Date(day);
         const date = displayDateKey(CALENDAR_PART.localDateKey(day));
@@ -9622,7 +9729,7 @@
           }
           const saved = store.items.upsert(next);
           if (!saved) return flash("This calendar item changed while the dialog was open. Reopen its menu and try again.");
-          if (!recurring && saved.x?.src === "list") { try { store.syncItemScheduleToNote(saved); } catch (error) { warn(error); } }
+          if (!recurring && saved.x?.src === "list") { try { store.syncItemScheduleToNote(saved, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
           closeDialog();
           renderCalendar();
           flash(recurring ? (scopeSelect.value === "this" ? "Occurrence time changed" : scopeSelect.value === "following" ? "This and following occurrence times changed" : "Entire series time changed") : "Calendar item time changed");
@@ -9653,7 +9760,7 @@
         if (!current) return flash("That calendar item is no longer available");
         const copy = CALENDAR_PART.makeItem({
           ...current, id: undefined, summary: (current.summary || "Untitled item").slice(0, 490) + " (copy)",
-          x: { ...current.x, src: "manual", noteId: "", heading: "", key: "", legacyKey: "", moved: false },
+          x: { ...current.x, src: "manual", noteId: "", heading: "", key: "", legacyKey: "", historyId: "", moved: false },
         }, nowMs());
         const saved = copy && store.items.upsert(copy);
         if (!saved) return flash("Could not duplicate the calendar item");
@@ -9794,8 +9901,8 @@
         const monthWrap = h("div", { class: "zn-cal-month-wrap" });
         const dows = h("div", { class: "zn-cal-month-dows" }, ...["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((name) => h("span", {}, name)));
         const cells = h("div", { class: "zn-cal-month-grid", role: "grid", "aria-label": date.toLocaleDateString(undefined, { month: "long", year: "numeric" }) });
-        const selected = CALENDAR_PART.parseYmd(store.meta.calendarCursor) ? CALENDAR_PART.parseYmd(store.meta.calendarCursor).getTime() : CALENDAR_PART.dayStart(nowMs());
-        const today = CALENDAR_PART.dayStart(nowMs());
+        const selected = CALENDAR_PART.parseYmd(store.meta.calendarCursor) ? CALENDAR_PART.parseYmd(store.meta.calendarCursor).getTime() : calendarTodayDay();
+        const today = calendarTodayDay();
         for (const week of grid) for (const day of week) {
           const inMonth = new Date(day).getMonth() === month;
           const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
@@ -9849,7 +9956,7 @@
         if (!expanded.length) list.append(h("p", { class: "zn-cal-empty-day" }, "No upcoming calendar items"));
         for (const item of expanded) {
           const itemDay = CALENDAR_PART.itemRange(item)[0];
-          const isToday = CALENDAR_PART.localDateKey(itemDay) === CALENDAR_PART.localDateKey(nowMs());
+          const isToday = CALENDAR_PART.localDateKey(itemDay) === calendarTodayKey();
           const row = h("div", { class: "zn-cal-agenda-row" + (isToday ? " is-today" : "") }, h("span", { class: "zn-cal-agenda-date" }, calendarDayLabel(itemDay, { year: true }), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, "Today")] : [])), calendarItemButton(item, true));
           list.append(row);
         }
@@ -9858,13 +9965,15 @@
       }
       const CALENDAR_HOUR_PX = 54;
       function calendarTimeGridView(items, cursor, mode) {
-        const C = CALENDAR_PART, days = mode === "week" ? C.weekDays(cursor, 1) : [C.dayStart(cursor)];
-        const from = days[0], until = C.addDays(days[days.length - 1], 1);
+        const C = CALENDAR_PART, zone = calendarDisplayZone(), days = mode === "week" ? C.weekDays(cursor, 1) : [C.dayStart(cursor)];
+        const firstBounds = C.zonedDayBounds(C.localDateKey(days[0]), zone) || [days[0], C.addDays(days[0], 1)];
+        const lastDay = days[days.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.addDays(lastDay, 1)];
+        const from = firstBounds[0], until = lastBounds[1];
         const expanded = C.expandRange(items, from, until);
         const fmt = (day) => calendarDayLabel(day, { weekday: mode === "week" ? "short" : "long", year: true });
         calendarPeriod.textContent = mode === "week" ? `${fmt(days[0])} – ${fmt(days[6])}` : fmt(days[0]);
         const cols = `42px repeat(${days.length}, minmax(0, 1fr))`;
-        const todayKey = C.localDateKey(nowMs());
+        const todayKey = C.zonedDateKey(nowMs(), zone);
         const root = h("div", { class: "zn-cal-time-view is-" + mode, "aria-label": mode === "week" ? "Week calendar" : "Day calendar" });
         const header = h("div", { class: "zn-cal-time-head" });
         header.style.gridTemplateColumns = cols;
@@ -9898,6 +10007,7 @@
         const work = C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK);
         for (const day of days) {
           const dayKey = C.localDateKey(day);
+          const bounds = C.zonedDayBounds(dayKey, zone) || [day, C.addDays(day, 1)];
           const isToday = dayKey === todayKey;
           const track = h("div", { class: "zn-cal-time-track", "data-day": C.ymd(new Date(day)) });
           track.addEventListener("contextmenu", (event) => showCalendarDayMenu(event, day, track));
@@ -9905,29 +10015,29 @@
           for (let hour = 0; hour < 24; hour++) {
             track.append(h("span", { class: "zn-cal-time-hour-line", style: `top:${hour * CALENDAR_HOUR_PX}px` }));
           }
-          const workRange = C.workRange(day, work);
-          const workStart = workRange ? Math.max(0, Math.round((workRange[0] - day) / 60000)) : 0;
-          const workEnd = workRange ? Math.min(1440, Math.round((workRange[1] - day) / 60000)) : 0;
+          const workRange = C.workRange(day, work, zone);
+          const workStart = workRange ? Math.max(0, Math.round(C.zonedMinuteOfDay(workRange[0], dayKey, zone))) : 0;
+          const workEnd = workRange ? Math.min(1440, Math.round(C.zonedMinuteOfDay(workRange[1], dayKey, zone))) : 0;
           if (!workRange) {
             track.append(h("span", { class: "zn-cal-off-hours is-all-day", "aria-hidden": "true" }));
           } else {
             if (workStart > 0) track.append(h("span", { class: "zn-cal-off-hours", style: `top:0;height:${workStart / 60 * CALENDAR_HOUR_PX}px`, "aria-hidden": "true" }));
             if (workEnd < 1440) track.append(h("span", { class: "zn-cal-off-hours", style: `top:${workEnd / 60 * CALENDAR_HOUR_PX}px;bottom:0`, "aria-hidden": "true" }));
           }
-          const busy = C.busyRanges(expanded.filter((it) => !C.isAllDay(it)), day, C.addDays(day, 1));
+          const busy = C.busyRanges(expanded.filter((it) => !C.isAllDay(it)), bounds[0], bounds[1]);
           for (const [start, end] of busy) {
-            const top = Math.max(0, (start - day) / 60000 / 60 * CALENDAR_HOUR_PX);
-            const height = Math.max(1, (end - start) / 60000 / 60 * CALENDAR_HOUR_PX);
+            const top = Math.max(0, C.zonedMinuteOfDay(start, dayKey, zone) / 60 * CALENDAR_HOUR_PX);
+            const bottom = Math.min(1440, C.zonedMinuteOfDay(end, dayKey, zone));
+            const height = Math.max(1, (bottom - C.zonedMinuteOfDay(start, dayKey, zone)) / 60 * CALENDAR_HOUR_PX);
             track.append(h("span", { class: "zn-cal-busy-range", style: `top:${top}px;height:${height}px`, "aria-hidden": "true" }));
           }
           if (isToday) {
-            const now = new Date(nowMs());
-            const nowMinutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+            const nowMinutes = C.zonedMinuteOfDay(nowMs(), dayKey, zone);
             track.append(h("div", { class: "zn-cal-now-line", style: `top:${nowMinutes / 60 * CALENDAR_HOUR_PX}px`, "aria-label": "Current time" }, h("span", { class: "zn-cal-now-dot" })));
           }
           // Events and timed reminders share one overlap layout. A reminder occupies a short
           // visual interval (20px) so it cannot cover an event or another reminder at the same time.
-          const timedItems = C.itemsInRange(expanded, day, C.addDays(day, 1)).filter((it) => !C.isAllDay(it));
+          const timedItems = C.itemsInRange(expanded, bounds[0], bounds[1]).filter((it) => !C.isAllDay(it));
           const originalById = new Map(timedItems.map((item) => [String(item.id), item]));
           const layoutItems = timedItems.map((item) => {
             if (!C.isReminder(item)) return item;
@@ -9935,7 +10045,7 @@
             const displayDuration = Math.max(1, Math.ceil((20 / CALENDAR_HOUR_PX) * 60));
             return { ...item, x: { ...(item.x || {}), kind: "event" }, end: { dateTime: new Date(start + displayDuration * 60000).toISOString() } };
           });
-          for (const entry of C.layoutDay(layoutItems, day)) {
+          for (const entry of C.layoutDay(layoutItems, day, zone)) {
             const original = originalById.get(String(entry.item.id)) || entry.item;
             const reminder = C.isReminder(original);
             const button = calendarItemButton(original, true);
@@ -9947,8 +10057,9 @@
             button.style.left = (entry.lane * 100 / entry.lanes) + "%";
             button.style.width = (100 / entry.lanes) + "%";
             button.style.zIndex = reminder ? "3" : "2";
-            const startLabel = C.clockIn(day + entry.startMin * 60000, original.x?.tz);
-            const endLabel = reminder ? "reminder" : C.clockIn(day + entry.endMin * 60000, original.x?.tz);
+            const [itemStart, itemEnd] = C.itemRange(original);
+            const startLabel = C.clockIn(Math.max(itemStart, bounds[0]), zone);
+            const endLabel = reminder ? "reminder" : C.clockIn(Math.min(itemEnd, bounds[1]), zone);
             button.setAttribute("aria-label", `${original.summary}, ${startLabel}${reminder ? " reminder" : " to " + endLabel}, lane ${entry.lane + 1} of ${entry.lanes}`);
             track.append(button);
           }
@@ -10006,6 +10117,15 @@
         }
         noteSelect.value = defaultNoteId || "";
         const noteRow = h("label", { class: "zn-field-row" }, h("span", {}, "Linked note"), noteSelect);
+        const noteAlertDefaults = chip("Note alert defaults…");
+        const noteAgendaDefaults = chip("Note Agenda defaults…");
+        const noteAlertRow = h("div", { class: "zn-cal-note-alert-row" }, noteAlertDefaults, noteAgendaDefaults);
+        noteAlertDefaults.addEventListener("click", () => { if (noteSelect.value) askNoteAlertDefaults(noteSelect.value); else status.textContent = "Choose a linked note first."; });
+        noteAgendaDefaults.addEventListener("click", () => { if (noteSelect.value) askNoteAgendaDefaults(noteSelect.value); else status.textContent = "Choose a linked note first."; });
+        const agendaWindowEditor = buildAgendaWindowEditor(original?.x?.agendaWindow || {}, { inherit: true });
+        const agendaWindowSection = h("div", { class: "zn-recurrence-editor zn-cal-compose-section" },
+          h("strong", {}, "Agenda visibility (independent of alerts)"), agendaWindowEditor.element,
+          h("p", { class: "zn-empty" }, "Choose whether this item appears in Zen Agenda and how many local calendar days before or after its date it remains visible. Inherited values come from the linked note, category, then global defaults."));
 
         const categorySelect = h("select", { class: "zn-select", "aria-label": "Calendar category" });
         categorySelect.append(h("option", { value: "" }, "No category"));
@@ -10069,6 +10189,7 @@
         const notifySelects = {};
         const categoryDefaults = () => C.cleanCategoryNotify(store.items.category(categorySelect.value)?.notify);
         const oldNotify = original?.x?.notify || {};
+        const alertSoundEditor = buildAlertSoundEditor(oldNotify, { inherit: true });
         const alertRules = [
           ["pre", "Tier 1 · Gentle pre-alert", "leadMinutes", [1, 2, 3, 5, 7, 10], 5],
           ["due", "Tier 2 · At due time", null, [], null],
@@ -10088,6 +10209,7 @@
             notifySelects[stage] = select;
           }
         }
+        notifySection.append(h("strong", {}, "Sound and quiet-hour overrides"), alertSoundEditor.element);
         const preview = h("p", { class: "zn-empty zn-cal-compose-preview", "aria-live": "polite" });
         const status = h("p", { class: "zn-empty zn-cal-compose-status", role: "status", "aria-live": "polite" });
         const save = chip(original ? "Save calendar item" : initialKind === "event" ? "Create event" : "Create reminder", true);
@@ -10096,7 +10218,7 @@
         const intro = h("p", { class: "zn-empty" }, "The title is independent from the linked note. Calendar notes stay with this item; a full-day reminder has no end time.");
         const card = openCard(original ? "Edit calendar item" : "Create calendar item", intro, title.row, kindRow, allDayRow,
           startDateHost, endDateHost, startTimeHost, endTimeHost, clockPick, clockHost,
-          noteRow, categoryRow, colorRow, descriptionRow, calNoteRow, zoneField.row,
+          noteRow, noteAlertRow, agendaWindowSection, categoryRow, colorRow, descriptionRow, calNoteRow, zoneField.row,
           recurrenceBox, notifySection, preview, status, actions);
         card.classList.add("zn-cal-compose-card");
 
@@ -10210,9 +10332,10 @@
           if (zoneText && !zoneValue) { zoneField.input.dataset.bad = "true"; zoneField.input.focus(); status.textContent = "Enter a valid IANA time zone."; return; }
           const notify = {};
           if (kind.value === "reminder") {
-            notify.pre = { enabled: notifyInputs.pre.checked, leadMinutes: Number(notifySelects.pre.value) };
-            notify.due = { enabled: notifyInputs.due.checked };
-            notify.followup = { enabled: notifyInputs.followup.checked, delayMinutes: Number(notifySelects.followup.value) };
+            const sounds = alertSoundEditor.read();
+            notify.pre = { enabled: notifyInputs.pre.checked, leadMinutes: Number(notifySelects.pre.value), ...(sounds.pre || {}) };
+            notify.due = { enabled: notifyInputs.due.checked, ...(sounds.due || {}) };
+            notify.followup = { enabled: notifyInputs.followup.checked, delayMinutes: Number(notifySelects.followup.value), ...(sounds.followup || {}) };
           }
           const item = C.composeCalendarItem({
             item: original, id: original?.id, kind: kind.value, allDay: allDay.checked,
@@ -10221,7 +10344,7 @@
             noteId: noteSelect.value, category: categorySelect.value,
             description: description.value, calNote: calNote.value,
             heading: original?.x?.heading || options.heading || "", tz: zoneText,
-            recurrence, notify,
+            recurrence, notify, agendaWindow: agendaWindowEditor.read(),
           }, nowMs());
           if (!item) {
             const target = kind.value === "event" && !allDay.checked && C.parseClock(endTime.input.value) < 0 ? endTime.input
@@ -10233,7 +10356,7 @@
           }
           const saved = store.items.upsert(item);
           if (!saved) { status.textContent = "Could not save the calendar item. Check calendar storage."; return; }
-          if (!original && !saved.x?.noteId) { try { store.linkItemToAgendaNote(saved.id, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
+          if (!original && !saved.x?.noteId) { try { store.mirrorItemToAgendaNote(saved.id, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
           const startMs = item.start.date ? C.parseYmd(item.start.date).getTime() : Date.parse(item.start.dateTime);
           store.setMeta({ calendarCursor: C.localDateKey(startMs), calendarView: store.meta.calendarView || "month" });
           closeDialog(); renderCalendar();
@@ -10300,6 +10423,26 @@
         const endDate = allDay ? CALENDAR_PART.ymd(new Date(CALENDAR_PART.addDays(CALENDAR_PART.parseYmd(startDate).getTime(), 1))) : startDate;
         askCalendarComposer({ kind, allDay, date: startDate, endDate, linkCurrent: false });
       }
+      function askCalendarDisplayZone() {
+        const C = CALENDAR_PART, current = calendarDisplayZone();
+        const zone = field("IANA display time zone", current, "e.g. Europe/Warsaw; leave blank for system local time");
+        const status = h("p", { class: "zn-empty", role: "status" }, "The display zone controls Week/Day wall-clock geometry, working-hours shading, busy ranges and the Now line. Stored UTC instants and item-specific time zones are not changed.");
+        const save = chip("Apply time zone", true), reset = chip("Use system local time"), cancel = chip("Cancel");
+        const submit = (raw) => {
+          const value = String(raw || "").trim(), valid = value ? C.cleanZone(value) : "";
+          if (value && !valid) { zone.input.dataset.bad = "true"; zone.input.focus(); status.textContent = "Enter a valid IANA time zone, such as Europe/Warsaw."; return; }
+          store.setMeta({ calendarDisplayZone: valid });
+          closeDialog();
+          renderCalendar();
+          flash("Calendar display time zone: " + (valid || "system local"));
+        };
+        save.addEventListener("click", () => submit(zone.input.value));
+        reset.addEventListener("click", () => submit(""));
+        cancel.addEventListener("click", closeDialog);
+        zone.input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); submit(zone.input.value); } });
+        openCard("Calendar display time zone", zone.row, status, h("div", { class: "zn-dialog-actions" }, cancel, reset, save));
+        zone.input.focus({ preventScroll: true });
+      }
       function askCalendarFreeSlots() {
         const C = CALENDAR_PART, start = calendarWeekStart(), end = C.addDays(start, 6);
         const from = field("From date (YYYY-MM-DD)", C.ymd(new Date(start)), "2026-11-12");
@@ -10329,7 +10472,7 @@
           }
           if (!Number.isInteger(min) || min < 15 || min > 1440) { duration.dataset.bad = "true"; duration.focus(); return; }
           const work = workOnly.checked ? C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK) : null;
-          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.addDays(throughDay, 1), min, { work, blockAllDay: allDayBusy.checked });
+          const slots = C.freeSlots(calendarBaseItems(), fromDay, C.addDays(throughDay, 1), min, { work, blockAllDay: allDayBusy.checked, zone: calendarDisplayZone() });
           results.replaceChildren();
           if (!slots.length) { results.append(h("p", { class: "zn-empty" }, "No matching free time was found in this range.")); return; }
           results.append(h("p", { class: "zn-empty" }, `${slots.length} free slot${slots.length === 1 ? "" : "s"} found · showing up to 20`));
@@ -10354,7 +10497,7 @@
         hideCalendarHoverCard();
         const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
         const storedCursor = CALENDAR_PART.parseYmd(store.meta.calendarCursor);
-        const cursor = storedCursor ? storedCursor.getTime() : CALENDAR_PART.dayStart(nowMs());
+        const cursor = storedCursor ? storedCursor.getTime() : calendarTodayDay();
         const items = calendarFilteredItems();
         calendarContent.replaceChildren();
         calendarContent.dataset.view = view;
@@ -10384,7 +10527,7 @@
         store.meta.calendarView || "month", (value) => { store.setMeta({ calendarView: value }); renderCalendar(); }));
       listen(calendarPrev, "click", () => changeCalendarCursor(-1));
       listen(calendarNext, "click", () => changeCalendarCursor(1));
-      listen(calendarToday, "click", () => { store.setMeta({ calendarCursor: CALENDAR_PART.ymd(new Date(nowMs())) }); renderCalendar(); });
+      listen(calendarToday, "click", () => { store.setMeta({ calendarCursor: calendarTodayKey() }); renderCalendar(); });
       listen(calendarDaysSelect, "click", () => calendarChoiceMenu(calendarDaysSelect,
         [3, 7, 14, 30].map((days) => ({ value: String(days), label: days + " days" })),
         String(store.meta.calendarDaysForward || 7), (value) => { store.setMeta({ calendarDaysForward: Number(value) }); renderCalendar(); }));
@@ -10425,10 +10568,13 @@
               if (when) info.append(h("span", { class: "zn-reminder-history-when" }, "Scheduled: " + String(when).replace("T", " ").replace(/\.\d{3}Z$/, " UTC")));
             }
             row.append(info);
-            const source = entry.noteId && store.get(entry.noteId);
+            // A mirrored Agenda line can move to another Date Note after the record was written: follow the live item.
+            const liveItem = store.items?.list?.().find((it) => { const id = CALENDAR_PART.reminderIdentity(it); return id && id.occurrenceId === entry.occurrenceId && id.itemId === entry.itemId; });
+            const sourceId = (liveItem?.x?.noteId && store.get(liveItem.x.noteId) ? liveItem.x.noteId : entry.noteId) || "";
+            const source = sourceId && store.get(sourceId);
             if (source) {
               const open = chip("Open note");
-              open.addEventListener("click", () => { closeDialog(); openNoteByIdAndHeading(entry.noteId, "", entry.occurrenceId); });
+              open.addEventListener("click", () => { closeDialog(); openNoteByIdAndHeading(sourceId, sourceId === liveItem?.x?.noteId ? (liveItem.x.heading || "") : "", entry.occurrenceId); });
               row.append(open);
             }
             rows.insertBefore(row, status);
@@ -10454,7 +10600,10 @@
         { icon: "bell", label: "Create all-day reminder…", action: () => queueMicrotask(() => askCreateCalendarItem("reminder", true)) },
         { sep: true },
         { id: "reminder-history", label: "Reminder history…", icon: "history", run: openReminderHistory },
+        { id: "reminder-alert-settings", label: "Reminder sounds & quiet hours…", icon: "volume-2", run: askCalendarAlertSettings },
+        { id: "agenda-visibility-defaults", label: "Zen Agenda visibility defaults…", icon: "calendar-check", run: askAgendaVisibilityDefaults },
         { sep: true },
+        { icon: "globe", label: "Display time zone: " + (calendarDisplayZone() || "Local"), action: () => queueMicrotask(askCalendarDisplayZone) },
         { icon: "clock", label: "When am I free?…", action: () => queueMicrotask(askCalendarFreeSlots) },
         { sep: true },
         { icon: "copy", label: "Copy this week as Markdown", action: () => { const out = calendarWeekMarkdown(); env.copyText?.(out.text); flash("Week copied as Markdown"); } },
@@ -10835,7 +10984,8 @@
       }
       function renderTree(keep) {
         const root0 = store.tree();
-        const pinned = store.list().filter((n) => n.pinned);
+        if (getPref(PREF.AGENDA_ENABLED, false)) root0.children = root0.children.filter((folder) => folder.id !== DATE_FOLDER && !folder.id.startsWith(DATE_FOLDER + "/"));
+        const pinned = store.list().filter((n) => n.pinned && !(getPref(PREF.AGENDA_ENABLED, false) && (cleanFolder(n.folder) === DATE_FOLDER || cleanFolder(n.folder).startsWith(DATE_FOLDER + "/"))));
         const rows = treeRows(root0, pinned, getPref(PREF.TREE_ORDER, "folders-first"));
         if (!rows.length) {
           listItems.append(h("p", { class: "zn-empty" }, "No notes yet. Press + to create one."));
@@ -11133,6 +11283,8 @@
         const nameField = old ? null : field("Category name", "", "e.g. Birthdays");
         const color = colorPicker(old?.color || "#7d8da8", () => {});
         const defaults = CALENDAR_PART.cleanCategoryNotify(old?.notify);
+        const soundEditor = buildAlertSoundEditor(old?.notify || defaults, { inherit: true });
+        const agendaEditor = buildAgendaWindowEditor(old?.agenda || {}, { inherit: true });
         const stageChoice = (label, value) => {
           const select = h("select", { class: "zn-select", "aria-label": label });
           select.append(h("option", { value: "on" }, "On"), h("option", { value: "off" }, "Off"));
@@ -11152,7 +11304,9 @@
           h("div", { class: "zn-category-color" }, h("span", {}, "Category colour"), color.el),
           h("strong", {}, "Default reminder stages"),
           pre.row, leadRow, due.row, follow.row,
-          h("p", { class: "zn-empty" }, "These are category defaults. A reminder can override each stage individually; sound levels and quiet-hour exceptions are configured later in T2.7."),
+          h("strong", {}, "Sound and quiet-hour bypass defaults"), soundEditor.element,
+          h("strong", {}, "Zen Agenda visibility defaults"), agendaEditor.element,
+          h("p", { class: "zn-empty" }, "These are category defaults. Linked notes and individual items can override Agenda visibility. Global Agenda defaults are in Calendar Tools."),
           h("div", { class: "zn-dialog-actions" }, cancel, ok),
         ];
         openCard(old ? "Category defaults" : "New calendar category", ...contents);
@@ -11161,11 +11315,15 @@
           if (!name) { if (nameField) { nameField.input.dataset.bad = "true"; nameField.input.focus(); } return; }
           const saved = store.items.upsertCategory({
             ...(old || {}), name, color: color.value(),
-            notify: {
-              pre: { enabled: pre.select.value === "on", leadMinutes: Number(lead.value) },
-              due: { enabled: due.select.value === "on" },
-              followup: { enabled: follow.select.value === "on", delayMinutes: defaults.followup.delayMinutes },
-            },
+            notify: (() => {
+              const sounds = soundEditor.read();
+              return {
+                pre: { enabled: pre.select.value === "on", leadMinutes: Number(lead.value), ...(sounds.pre || {}) },
+                due: { enabled: due.select.value === "on", ...(sounds.due || {}) },
+                followup: { enabled: follow.select.value === "on", delayMinutes: defaults.followup.delayMinutes, ...(sounds.followup || {}) },
+              };
+            })(),
+            agenda: agendaEditor.read(),
           });
           closeDialog();
           if (saved) { flash(`Category “${saved.name}” saved`); onSaved?.(saved); }
@@ -11174,6 +11332,174 @@
         cancel.addEventListener("click", closeDialog);
         nameField?.input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); submit(); } });
         if (nameField) { nameField.input.focus?.({ preventScroll: true }); }
+      }
+      function buildAlertSoundEditor(raw, { inherit = false } = {}) {
+        const source = raw?.stages || raw || {};
+        const rows = [], fields = {};
+        for (const stage of ["pre", "due", "followup"]) {
+          const rule = source[stage] && typeof source[stage] === "object" ? source[stage] : {};
+          const soundExplicit = rule.soundSpecified === true || (rule.soundSpecified === undefined && Object.prototype.hasOwnProperty.call(rule, "sound"));
+          const allowExplicit = rule.quietAllowSpecified === true || (rule.quietAllowSpecified === undefined && Object.prototype.hasOwnProperty.call(rule, "quietAllow"));
+          const sound = h("select", { class: "zn-select", "aria-label": stage + " sound level" });
+          if (inherit) sound.append(h("option", { value: "" }, "Inherit"));
+          for (const level of CALENDAR_PART.SOUND_LEVELS) sound.append(h("option", { value: level }, level[0].toUpperCase() + level.slice(1)));
+          sound.value = soundExplicit ? rule.sound : (inherit ? "" : (rule.sound || "normal"));
+          const allowToggle = h("input", { type: "checkbox", "aria-label": stage + " quiet-hours bypass override" });
+          allowToggle.checked = inherit ? allowExplicit : true;
+          const allowChecks = {};
+          const allowRow = h("div", { class: "zn-cal-alert-allow" });
+          for (const level of ["quiet", "normal", "loud"]) {
+            const check = h("input", { type: "checkbox", "aria-label": stage + " allow " + level + " during quiet hours" });
+            check.checked = Array.isArray(rule.quietAllow) && rule.quietAllow.includes(level);
+            check.disabled = inherit && !allowToggle.checked;
+            check.addEventListener("change", () => {});
+            allowChecks[level] = check;
+            allowRow.append(h("label", {}, check, h("span", {}, level)));
+          }
+          allowToggle.addEventListener("change", () => { for (const check of Object.values(allowChecks)) check.disabled = inherit && !allowToggle.checked; });
+          const row = h("div", { class: "zn-cal-alert-rule" },
+            h("label", {}, h("span", {}, stage === "pre" ? "Tier 1 · Pre-alert sound" : stage === "due" ? "Tier 2 · Due sound" : "Tier 3 · Follow-up sound"), sound),
+            h("label", {}, allowToggle, h("span", {}, inherit ? "Override quiet-hours bypass list" : "Quiet-hours bypass sounds")), allowRow);
+          rows.push(row);
+          fields[stage] = { sound, allowToggle, allowChecks };
+        }
+        return {
+          element: h("div", { class: "zn-cal-alert-editor" }, ...rows),
+          read() {
+            const out = {};
+            for (const stage of ["pre", "due", "followup"]) {
+              const field = fields[stage], rule = {};
+              if (field.sound.value) rule.sound = field.sound.value;
+              if (!inherit || field.allowToggle.checked) rule.quietAllow = ["quiet", "normal", "loud"].filter((level) => field.allowChecks[level].checked);
+              if (Object.keys(rule).length) out[stage] = rule;
+            }
+            return out;
+          },
+        };
+      }
+      function buildAgendaWindowEditor(raw, { inherit = true } = {}) {
+        const current = CALENDAR_PART.cleanAgendaWindow(raw);
+        const makeSelect = (label, key, maximum, defaultValue) => {
+          const select = h("select", { class: "zn-select", "aria-label": label });
+          if (inherit) select.append(h("option", { value: "" }, "Inherit"));
+          if (key === "enabled") {
+            select.append(h("option", { value: "on" }, "Show in Agenda"), h("option", { value: "off" }, "Hide from Agenda"));
+            select.value = Object.prototype.hasOwnProperty.call(current, key) ? (current[key] ? "on" : "off") : (inherit ? "" : (defaultValue ? "on" : "off"));
+          } else {
+            select.append(h("option", { value: "0" }, "Same day"));
+            for (let n = 1; n <= maximum; n++) select.append(h("option", { value: String(n) }, n + " day" + (n === 1 ? "" : "s")));
+            select.value = Object.prototype.hasOwnProperty.call(current, key) ? String(current[key]) : (inherit ? "" : String(defaultValue));
+          }
+          return select;
+        };
+        const enabled = makeSelect("Agenda inclusion", "enabled", 0, true);
+        const lead = makeSelect("Days before item to show in Agenda", "leadDays", CALENDAR_PART.AGENDA_WINDOW_MAX_DAYS, 0);
+        const tail = makeSelect("Days after item to keep in Agenda", "tailDays", CALENDAR_PART.AGENDA_WINDOW_MAX_DAYS, 0);
+        const element = h("div", { class: "zn-cal-agenda-window-editor" },
+          h("label", { class: "zn-field-row" }, h("span", {}, "Agenda inclusion"), enabled),
+          h("label", { class: "zn-field-row" }, h("span", {}, "Show before"), lead),
+          h("label", { class: "zn-field-row" }, h("span", {}, "Keep after"), tail));
+        return {
+          element,
+          read() {
+            const out = {};
+            if (enabled.value) out.enabled = enabled.value === "on";
+            if (lead.value !== "") out.leadDays = Number(lead.value);
+            if (tail.value !== "") out.tailDays = Number(tail.value);
+            return CALENDAR_PART.cleanAgendaWindow(out);
+          },
+        };
+      }
+      function askAgendaVisibilityDefaults() {
+        if (!store || !CALENDAR_PART) return;
+        const editor = buildAgendaWindowEditor(store.meta.calendarAgendaDefaults, { inherit: false });
+        const ok = chip("Save Agenda defaults", true), cancel = chip("Cancel");
+        openCard("Zen Agenda visibility defaults", editor.element,
+          h("p", { class: "zn-empty" }, "These values apply when an item, linked note, or category does not set its own value. Offsets use local calendar days; all-day event end dates are exclusive."),
+          h("div", { class: "zn-dialog-actions" }, cancel, ok));
+        ok.addEventListener("click", () => {
+          store.setMeta({ calendarAgendaDefaults: editor.read() });
+          closeDialog(); flash("Zen Agenda defaults saved");
+          agendaController?.schedule?.();
+        });
+        cancel.addEventListener("click", closeDialog);
+      }
+      function askNoteAgendaDefaults(noteId) {
+        const target = store.get(noteId);
+        if (!target || !CALENDAR_PART) return;
+        const all = store.meta.calendarNoteAgendaOverrides || {};
+        const editor = buildAgendaWindowEditor(all[noteId] || {}, { inherit: true });
+        const ok = chip("Save note Agenda defaults", true), clear = chip("Use inherited defaults"), cancel = chip("Cancel");
+        openCard("Zen Agenda · " + (titleOf(target.body) || "Note"), editor.element,
+          h("p", { class: "zn-empty" }, "These visibility rules apply to calendar items linked to this note unless an individual item overrides them. They do not change alert due times, snooze, or recurrence."),
+          h("div", { class: "zn-dialog-actions" }, cancel, clear, ok));
+        ok.addEventListener("click", () => {
+          const next = { ...all }, value = editor.read();
+          if (Object.keys(value).length) next[noteId] = value; else delete next[noteId];
+          store.setMeta({ calendarNoteAgendaOverrides: CALENDAR_PART.cleanNoteAgendaOverrides(next) });
+          closeDialog(); flash("Note Agenda defaults saved");
+          agendaController?.schedule?.();
+        });
+        clear.addEventListener("click", () => {
+          const next = { ...all }; delete next[noteId];
+          store.setMeta({ calendarNoteAgendaOverrides: CALENDAR_PART.cleanNoteAgendaOverrides(next) });
+          closeDialog(); flash("Note now inherits Agenda defaults");
+          agendaController?.schedule?.();
+        });
+        cancel.addEventListener("click", closeDialog);
+      }
+      function askCalendarAlertSettings() {
+        if (!store || !CALENDAR_PART) return;
+        const current = CALENDAR_PART.cleanAlertSettings(store.meta.calendarAlertSettings);
+        const enabled = h("input", { type: "checkbox", "aria-label": "Enable quiet hours" }); enabled.checked = current.quietHours.enabled;
+        const start = h("input", { type: "time", class: "zn-field", "aria-label": "Quiet hours start" }); start.value = current.quietHours.start;
+        const end = h("input", { type: "time", class: "zn-field", "aria-label": "Quiet hours end" }); end.value = current.quietHours.end;
+        const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label, day) => {
+          const input = h("input", { type: "checkbox", "aria-label": "Quiet hours " + label }); input.checked = current.quietHours.days.includes(day);
+          return { day, input, node: h("label", {}, input, h("span", {}, label)) };
+        });
+        const soundEditor = buildAlertSoundEditor(current, { inherit: false });
+        const status = h("p", { class: "zn-empty", role: "status", "aria-live": "polite" }, "Quiet hours are off by default. During an enabled window, only sounds listed for that stage can bypass quiet mode. Visual alerts and due times are unchanged.");
+        const ok = chip("Save alert settings", true), cancel = chip("Cancel");
+        openCard("Reminder sounds and quiet hours",
+          h("label", { class: "zn-field-row" }, enabled, h("span", {}, "Enable quiet hours")),
+          h("div", { class: "zn-field-row" }, h("label", {}, h("span", {}, "Start"), start), h("label", {}, h("span", {}, "End"), end)),
+          h("div", { class: "zn-cal-alert-days" }, ...days.map((d) => d.node)),
+          h("strong", {}, "Global sound and quiet-hour bypass by stage"), soundEditor.element,
+          status, h("div", { class: "zn-dialog-actions" }, cancel, ok));
+        ok.addEventListener("click", () => {
+          if (enabled.checked && (!/^([01]\d|2[0-3]):[0-5]\d$/.test(start.value) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(end.value) || start.value === end.value)) {
+            status.textContent = "Choose valid, different start and end times for quiet hours.";
+            return;
+          }
+          const rules = soundEditor.read(), allowed = {};
+          for (const stage of ["pre", "due", "followup"]) allowed[stage] = rules[stage]?.quietAllow || [];
+          store.setMeta({ calendarAlertSettings: CALENDAR_PART.cleanAlertSettings({ stages: rules, quietHours: { enabled: enabled.checked, start: start.value, end: end.value, days: days.filter((d) => d.input.checked).map((d) => d.day), allowed } }) });
+          closeDialog(); flash("Reminder alert settings saved");
+        });
+        cancel.addEventListener("click", closeDialog);
+      }
+      function askNoteAlertDefaults(noteId) {
+        const target = store.get(noteId);
+        if (!target || !CALENDAR_PART) return;
+        const all = store.meta.calendarNoteAlertOverrides || {};
+        const current = all[noteId] || {};
+        const editor = buildAlertSoundEditor(current, { inherit: true });
+        const ok = chip("Save note defaults", true), clear = chip("Use inherited defaults"), cancel = chip("Cancel");
+        openCard("Reminder sounds · " + (titleOf(target.body) || "Note"), editor.element,
+          h("p", { class: "zn-empty" }, "These sound and quiet-hour bypass rules apply to reminders linked to this note unless an individual reminder overrides them."),
+          h("div", { class: "zn-dialog-actions" }, cancel, clear, ok));
+        ok.addEventListener("click", () => {
+          const next = { ...all }, value = editor.read();
+          if (Object.keys(value).length) next[noteId] = value; else delete next[noteId];
+          store.setMeta({ calendarNoteAlertOverrides: CALENDAR_PART.cleanNoteAlertOverrides(next) });
+          closeDialog(); flash("Note alert defaults saved");
+        });
+        clear.addEventListener("click", () => {
+          const next = { ...all }; delete next[noteId];
+          store.setMeta({ calendarNoteAlertOverrides: next }); closeDialog(); flash("Note now inherits alert defaults");
+        });
+        cancel.addEventListener("click", closeDialog);
       }
       function applyCalendarCategory(name) {
         const n = note();
@@ -11359,7 +11685,7 @@
         }
         let n = findDateNote(store.list(), ymd, dateDisplayFormat());
         if (!n) {
-          if (!store.meta.folders.some((f) => f.id === DATE_FOLDER)) store.addFolder("Daily");
+          store.ensureDateFolder();
           n = store.create(dateNoteBody(ms), DATE_FOLDER);
         }
         return { id: n.id, body: n.body, at: undefined };
@@ -12439,6 +12765,13 @@
       }
       // ---- date notes: today / tomorrow / next work day --------------------------------------------------------
       const dateMode = () => cleanDateMode(getPref(PREF.DATE_MODE, "separate"));
+      function openAgendaDay(key) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(key || ""))) return false;
+        filter = "all"; view = "list";
+        store.setMeta({ calendarCursor: key, calendarView: "day", calendarPaneCollapsed: false, calendarTreeCollapsed: false, calendarTab: "calendar" });
+        showList(); updateAllLayout(); renderCalendar();
+        return true;
+      }
       function dateDisplayFormat() {
         return CALENDAR_PART?.cleanDateFormat?.(getPref(PREF.DATE_DISPLAY, CALENDAR_PART.DEFAULT_DATE_FORMAT || "DD-MM-YYYY")) || "DD-MM-YYYY";
       }
@@ -12446,6 +12779,7 @@
         return CALENDAR_PART?.formatDateKey?.(key, dateDisplayFormat()) || String(key || "");
       }
       function openDay(ms, ymd) {
+        if (getPref(PREF.AGENDA_ENABLED, false)) { openAgendaDay(ymd); return; }
         if (dateMode() === "single") {
           let j = store.list().find(isJournal);
           if (!j) j = store.create("# " + JOURNAL_TITLE + "\n", "");
@@ -12460,7 +12794,7 @@
         }
         let n = findDateNote(store.list(), ymd, dateDisplayFormat());
         if (!n) {
-          if (!store.meta.folders.some((f) => f.id === DATE_FOLDER)) store.addFolder("Daily");
+          store.ensureDateFolder();
           n = store.create(dateNoteBody(ms), DATE_FOLDER);
         }
         openNote(n.id);
@@ -15246,6 +15580,11 @@
           if (wanted !== store.meta.mode) store.setMeta({ mode: wanted });
           return openNoteByIdAndHeading(id, heading, itemId);
         },
+        openCalendarDay: (key) => {
+          if (!isOpen || destroyed) return false;
+          outsideClaim = false;
+          return openAgendaDay(key);
+        },
       };
     }
 
@@ -15947,6 +16286,7 @@
           on: prefBool(PREF.HISTORY_ON, true),
           ...historyOptions({ keep: prefInt(PREF.HISTORY_KEEP, HISTORY_DEFAULTS.keep), minutes: prefInt(PREF.HISTORY_MINUTES, HISTORY_DEFAULTS.minutes), capKB: prefInt(PREF.HISTORY_CAP_KB, HISTORY_DEFAULTS.capKB), warnMB: prefInt(PREF.HISTORY_WARN_MB, HISTORY_DEFAULTS.warnMB) }),
         }),
+        getDateFormat: () => CALENDAR_PART?.cleanDateFormat?.(prefStr(PREF.DATE_DISPLAY, "DD-MM-YYYY")) || "DD-MM-YYYY",
         setTimer: (fn, ms) => window.setTimeout(fn, ms),
         clearTimer: (id) => window.clearTimeout(id),
         warn,
@@ -15963,6 +16303,8 @@
             .open()
             .then(() => {
               if (!disposed) Services.obs.addObserver(remoteObserver, OBS_TOPIC);
+              // Application startup (not the store's own open): note-less items get their Agenda line. Idempotent.
+              try { if (!disposed) store.backfillAgendaLinks(); } catch (error) { warn(error); }
             })
             .catch((error) => {
               storePromise = null;
@@ -16205,24 +16547,31 @@
 
       // ---- reminders (P2): ONE coarse timer for the next due note, armed by the scheduler (no polling) ----
       let soundCtx = null;
-      function playReminderSound() {
+      function playReminderSound(stage = "followup", policy = null) {
+        if (policy && !policy.play) return;
+        const level = policy?.sound || "normal";
+        if (level === "silent") return;
         try {
           const Ctx = window.AudioContext || window.webkitAudioContext;
           if (!Ctx) throw new Error("no audio");
-          soundCtx?.close?.().catch?.(() => {});
-          const ctx = (soundCtx = new Ctx());
-          [0, 0.28].forEach((at) => {
+          const ctx = soundCtx || (soundCtx = new Ctx());
+          if (ctx.state === "suspended") ctx.resume?.().catch?.(() => {});
+          const urgent = stage === "due", gentle = stage === "pre";
+          const pulses = urgent ? [0, 0.16, 0.32] : gentle ? [0] : [0, 0.28];
+          const volume = policy?.volume ?? ({ quiet: 0.08, normal: 0.2, loud: 0.35 })[level] ?? 0.2;
+          pulses.forEach((at) => {
             const osc = ctx.createOscillator(), gain = ctx.createGain();
-            osc.frequency.value = 880;
+            osc.frequency.value = gentle ? 620 : urgent ? 1040 : 880;
             gain.gain.setValueAtTime(0.0001, ctx.currentTime + at);
-            gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + at + 0.02);
-            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + at + 0.22);
+            gain.gain.exponentialRampToValueAtTime(volume, ctx.currentTime + at + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + at + (urgent ? 0.13 : 0.22));
             osc.connect(gain).connect(ctx.destination);
             osc.start(ctx.currentTime + at);
-            osc.stop(ctx.currentTime + at + 0.25);
+            osc.stop(ctx.currentTime + at + (urgent ? 0.16 : 0.25));
           });
         } catch (_) {
-          try { Services.sound.beep(); } catch (error) { warn(error); }
+          // The platform beep has no volume control; never substitute it for a quiet profile.
+          if (level !== "quiet") try { Services.sound.beep(); } catch (error) { warn(error); }
         }
       }
       onCleanup(() => { try { soundCtx?.close?.(); } catch (_) {} soundCtx = null; });
@@ -16231,11 +16580,47 @@
       function openReminderNote(id, { zenTab = false, heading = "", itemId = "" } = {}) {
         return showNotes("").then((h) => sheetOf(h)?.openNoteById?.(id, heading, itemId)).catch(warn);
       }
+      function openCalendarDayFromHost(key) {
+        return showNotes("").then((handle) => sheetOf(handle)?.openCalendarDay?.(key)).catch(warn);
+      }
+      function showDayPlan() {
+        if (disposed || !enabledNow() || !CALENDAR_PART || !store.items?.list) return;
+        try {
+          const snapshot = CALENDAR_PART.dayPlanSnapshot(store.items.list(), Date.now(), (item) => {
+            const identity = CALENDAR_PART.reminderIdentity(item);
+            if (!identity) return false;
+            const state = store.items.history?.stateFor?.(identity.itemId, identity.occurrenceId) || "pending";
+            return state === "done" || state === "dismissed";
+          });
+          if (!snapshot.today.count && !snapshot.tomorrow.count) return;
+          const todayText = snapshot.today.lines.length ? snapshot.today.lines.join(" · ") : "Nothing scheduled";
+          const tomorrowText = snapshot.tomorrowPreview.replace(/^## Tomorrow\n/, "").replace(/\n/g, " · ");
+          const label = ("Day plan · Today: " + todayText + " · " + snapshot.tomorrowPreview.split("\n")[0] + ": " + tomorrowText).slice(0, 900);
+          const box = window.gBrowser.getNotificationBox();
+          box.appendNotification("zentral-notes-day-plan", { label, priority: box.PRIORITY_INFO_LOW }, [
+            { label: "Open today", callback: () => openCalendarDayFromHost(snapshot.today.key) },
+            { label: "Tomorrow", callback: () => openCalendarDayFromHost(snapshot.tomorrow.key) },
+          ]);
+        } catch (error) { warn(error); }
+      }
       function showReminders(list) {
         if (disposed) return;
-        playReminderSound();
-        for (const n of list.slice(0, 5)) {
+        const visible = list.slice(0, 15);
+        const sounds = new Map();
+        for (const entry of visible) {
+          const item = entry.__calendarReminder ? entry.__calendarItem : { x: { noteId: entry.id } };
+          const stage = entry.__stage || "followup";
+          const category = item.x?.category ? store.items?.category?.(item.x.category) : null;
+          const noteNotify = item.x?.noteId ? store.meta.calendarNoteAlertOverrides?.[item.x.noteId] : null;
+          const policy = CALENDAR_PART.resolveAlertPolicy(item, category?.notify, noteNotify, store.meta.calendarAlertSettings, stage, Date.now());
+          if (policy.play) sounds.set(stage + "|" + policy.sound, { stage, policy });
+        }
+        for (const { stage, policy } of sounds.values()) playReminderSound(stage, policy);
+        for (const n of visible) {
           const calendarItem = n.__calendarReminder ? n.__calendarItem : null;
+          const stage = n.__stage || "followup";
+          // Tier 1 and 2 are transient sound cues. Tier 3 is the persistent action banner.
+          if (calendarItem && stage !== "followup") continue;
           const title = calendarItem?.summary || titleOf(n.body) || "Untitled note";
           const noteId = calendarItem?.x?.noteId || n.id;
           let shown = false;
@@ -16263,11 +16648,17 @@
       });
       onCleanup(() => reminders.destroy());
       // The store opens lazily; reminders need it, so open it shortly after startup (not on the critical path).
+      let dayPlanTimer = 0;
       const remindersBoot = window.setTimeout(() => {
         if (disposed || !enabledNow()) return;
-        ensureStore().then(() => (disposed ? null : reminders.start())).catch(warn);
+        ensureStore().then(() => {
+          if (disposed) return;
+          reminders.start();
+          // Give the browser and Notes UI time to settle, then show one compact daily plan.
+          dayPlanTimer = window.setTimeout(showDayPlan, 90000);
+        }).catch(warn);
       }, 4000);
-      onCleanup(() => window.clearTimeout(remindersBoot));
+      onCleanup(() => { window.clearTimeout(remindersBoot); if (dayPlanTimer) window.clearTimeout(dayPlanTimer); });
 
       // ---- Zen sidebar folder (EXPERIMENT, pref zen_folder = off | selected | all; not verified in a live Zen) ----
       // The browser is reached only here. Every call is wrapped by createZenFolder's kill switch.
@@ -16309,12 +16700,13 @@
       // Checked by address, by label, and for pinned/pending tabs by what the session store saved. Cached per tab.
       const zenChecked = new WeakMap();
       function zenLooksOurs(t) {
-        if (!t || t.hasAttribute?.(NOTES_ATTR)) return false;
+        if (!t || t.hasAttribute?.(NOTES_ATTR) || t.hasAttribute?.(AGENDA_ATTR)) return false;
         if (zenChecked.has(t)) return zenChecked.get(t);
         let yes = false;
         try {
           let u = "";
           try { u = t.linkedBrowser?.currentURI?.spec || ""; } catch (_) {}
+          if (/^about:blank#zn-agenda-/.test(u) || /^about:blank#zn-agenda-/.test(t._zentralNotesUrl || "")) return false;
           yes = /^about:blank#zn-/.test(u) || /^about:blank#zn-/.test(t.getAttribute("label") || "") || /^about:blank#zn-/.test(t._zentralNotesUrl || "");
           if (!yes && (t.pinned || t.hasAttribute("pending")) && (u === "" || u === "about:blank") && window.SessionStore?.getTabState) {
             const st = JSON.parse(window.SessionStore.getTabState(t));
@@ -16633,6 +17025,266 @@
           for (const f of [...(document.querySelectorAll?.('zen-folder[bgalazka-notes-folder="true"]') || [])]) retireNotesFolder(f, zenRemoveTab);
         },
       };
+      // ---- Virtual Agenda sibling folder (one tab per item, grouped by local day) ----
+      const agendaEnabled = () => prefBool(PREF.AGENDA_ENABLED, false);
+      const agendaDays = () => Math.max(1, Math.min(31, prefInt(PREF.AGENDA_DAYS, 4)));
+      const agendaPosition = () => prefStr(PREF.AGENDA_POSITION, "above") === "below" ? "below" : "above";
+      const agendaRootEl = () => {
+        const el = document.getElementById?.(AGENDA_ROOT_ID) || document.querySelector?.('zen-folder[bgalazka-notes-agenda-folder="true"]');
+        if (el?.localName === "zen-folder" && !el.hasAttribute("bgalazka-notes-agenda-folder")) el.setAttribute("bgalazka-notes-agenda-folder", "true");
+        return el?.localName === "zen-folder" ? el : null;
+      };
+      const agendaDayEl = (key) => {
+        const date = String(key || "").replace(/^day:/, "");
+        const root = agendaRootEl(); if (!root || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+        let el = [...(root.querySelectorAll?.("zen-folder") || [])].find((folder) => folder.getAttribute("bgalazka-notes-agenda-day") === date || folder.id === "zentral-notes-agenda-day-" + date) || null;
+        if (el && !el.hasAttribute("bgalazka-notes-agenda-day")) { el.setAttribute("bgalazka-notes-agenda-day", date); el.setAttribute("bgalazka-notes-agenda-key", "day:" + date); }
+        return el;
+      };
+      const agendaTabUrl = (key) => "about:blank#zn-agenda-" + encodeURIComponent(String(key || ""));
+      function agendaNewTab(key) {
+        const url = agendaTabUrl(key), tab = window.gBrowser.addTab(url, { skipAnimation: true, triggeringPrincipal: systemPrincipal() });
+        tab.setAttribute(AGENDA_ATTR, key); tab._zentralNotesUrl = url; window.gBrowser.pinTab(tab); return tab;
+      }
+      function agendaPlaceRoot(root, position) {
+        const notesRoot = zenRootEl(), host = notesRoot?.parentElement || root?.parentElement;
+        if (!host || !root) return;
+        if (notesRoot && notesRoot.parentElement === host) {
+          if (position === "below") host.insertBefore(root, notesRoot.nextSibling);
+          else host.insertBefore(root, notesRoot);
+        } else if (!notesRoot && position === "above") {
+          const first = [...host.children].find((child) => child !== root && /^(zen-folder|tab)$/i.test(child.localName || ""));
+          if (first) host.insertBefore(root, first);
+        }
+      }
+      function agendaEnsureRoot(position) {
+        if (!window.gBrowser || !window.gZenFolders?.createFolder) return false;
+        let root = agendaRootEl();
+        if (!root) {
+          const seed = agendaNewTab("seed:root");
+          try {
+            const made = window.gZenFolders.createFolder([seed], { id: AGENDA_ROOT_ID, label: "Agenda", renameFolder: false, collapsed: false, workspaceId: window.gZenWorkspaces?.activeWorkspace });
+            root = (made?.nodeType ? made : null) || document.getElementById?.(AGENDA_ROOT_ID) || seed.closest?.("zen-folder");
+          } catch (error) { warn(error); }
+          if (!root) { zenRemoveTab(seed); return false; }
+          root.id = AGENDA_ROOT_ID;
+          root.setAttribute("bgalazka-notes-agenda-folder", "true");
+          root.setAttribute("label", "Agenda");
+          seed.hidden = true; seed.setAttribute("aria-hidden", "true"); seed.setAttribute("label", "");
+        }
+        agendaPlaceRoot(root, position);
+        return true;
+      }
+      function agendaRetireFolder(folder) {
+        if (!folder) return;
+        const tabs = [...(folder.querySelectorAll?.("tab") || [])];
+        for (const tab of tabs) if (tab.hasAttribute(AGENDA_ATTR)) zenRemoveTab(tab);
+        const userTabs = [...(folder.querySelectorAll?.("tab") || [])].some((tab) => !tab.hasAttribute(AGENDA_ATTR));
+        const userFolders = [...(folder.querySelectorAll?.("zen-folder") || [])].some((child) => !child.hasAttribute("bgalazka-notes-agenda-day") && !child.id.startsWith("zentral-notes-agenda-day-"));
+        if (userTabs || userFolders) {
+          for (const attr of ["bgalazka-notes-agenda-folder", "bgalazka-notes-agenda-day", "bgalazka-notes-agenda-key", "bgalazka-notes-agenda-count", "bgalazka-notes-agenda-label"]) folder.removeAttribute(attr);
+          if (folder.id === AGENDA_ROOT_ID || folder.id.startsWith("zentral-notes-agenda-day-")) folder.id = "zentral-released-" + folder.id;
+        } else { try { folder.delete?.(); } catch (_) {} }
+      }
+      function agendaMakeDay(entry) {
+        const root = agendaRootEl(); if (!root) return false;
+        let folder = agendaDayEl(entry.key);
+        if (!folder) {
+          const date = entry.date, seed = agendaNewTab("seed:" + date);
+          if (!zenPlace(seed, root)) { zenRemoveTab(seed); return false; }
+          try {
+            const made = window.gZenFolders.createFolder([seed], { id: "zentral-notes-agenda-day-" + date, label: entry.label, renameFolder: false, collapsed: false, workspaceId: window.gZenWorkspaces?.activeWorkspace });
+            folder = (made?.nodeType ? made : null) || document.getElementById?.("zentral-notes-agenda-day-" + date) || seed.closest?.("zen-folder");
+          } catch (error) { warn(error); }
+          if (!folder || !zenNest(folder, root)) { zenRemoveTab(seed); if (folder) agendaRetireFolder(folder); return false; }
+          folder.id = "zentral-notes-agenda-day-" + date;
+          folder.setAttribute("bgalazka-notes-agenda-day", date);
+          folder.setAttribute("bgalazka-notes-agenda-key", entry.key);
+          seed.hidden = true; seed.setAttribute("aria-hidden", "true"); seed.setAttribute("label", "");
+        }
+        return true;
+      }
+      function agendaTabFor(key) {
+        const root = agendaRootEl();
+        return [...(root?.querySelectorAll?.("tab[" + AGENDA_ATTR + "]") || [])].find((tab) => tab.getAttribute(AGENDA_ATTR) === key) || null;
+      }
+      const agendaApi = {
+        ensureRoot: agendaEnsureRoot,
+        list() {
+          const root = agendaRootEl(); if (!root) return [];
+          const out = [];
+          for (const folder of root.querySelectorAll?.("zen-folder") || []) {
+            const date = folder.getAttribute("bgalazka-notes-agenda-day") || (folder.id.startsWith("zentral-notes-agenda-day-") ? folder.id.slice("zentral-notes-agenda-day-".length) : "");
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+            folder.setAttribute("bgalazka-notes-agenda-day", date);
+            folder.setAttribute("bgalazka-notes-agenda-key", "day:" + date);
+            out.push({ key: "day:" + date, kind: "day", parent: "" });
+          }
+          for (const tab of document.querySelectorAll?.("tab") || []) {
+            const url = tab.getAttribute?.(AGENDA_ATTR) ? "" : (tab.linkedBrowser?.currentURI?.spec || tab._zentralNotesUrl || "");
+            if (!root.contains(tab) && (tab.hasAttribute?.(AGENDA_ATTR) || /^about:blank#zn-agenda-/.test(url))) zenRemoveTab(tab);
+          }
+          for (const tab of root.querySelectorAll?.("tab") || []) {
+            let key = tab.getAttribute(AGENDA_ATTR) || "";
+            const url = tab.linkedBrowser?.currentURI?.spec || tab._zentralNotesUrl || "";
+            if (!key && /^about:blank#zn-agenda-/.test(url)) { try { key = decodeURIComponent(url.slice("about:blank#zn-agenda-".length)); tab.setAttribute(AGENDA_ATTR, key); } catch (_) {} }
+            if (!key || key.startsWith("seed:")) continue;
+            out.push({ key, kind: "item", parent: "day:" + (tab.getAttribute("bgalazka-notes-agenda-day") || "") });
+          }
+          return out;
+        },
+        add(entry) {
+          if (entry.kind === "day") return agendaMakeDay(entry);
+          const folder = agendaDayEl(entry.parent); if (!folder) return false;
+          const tab = agendaNewTab(entry.key);
+          if (!zenPlace(tab, folder)) { zenRemoveTab(tab); return false; }
+          this.update(entry);
+          return true;
+        },
+        update(entry) {
+          if (entry.kind === "day") {
+            const folder = agendaDayEl(entry.key); if (!folder) return false;
+            folder.setAttribute("bgalazka-notes-agenda-label", entry.label);
+            if (entry.count > 0) folder.setAttribute("bgalazka-notes-agenda-count", String(entry.count)); else folder.removeAttribute("bgalazka-notes-agenda-count");
+            folder.setAttribute("label", entry.label);
+            try { folder.label = entry.label; } catch (_) {}
+            return true;
+          }
+          const tab = agendaTabFor(entry.key); if (!tab) return false;
+          tab.setAttribute("label", entry.label);
+          tab.setAttribute("bgalazka-notes-label", entry.label);
+          tab.setAttribute("tooltiptext", entry.tooltip || entry.summary || "");
+          tab.setAttribute("title", entry.tooltip || entry.summary || "");
+          tab.setAttribute("bgalazka-notes-agenda-day", entry.parent.replace(/^day:/, ""));
+          tab.setAttribute("bgalazka-notes-agenda-item-id", entry.itemId || "");
+          tab.setAttribute("bgalazka-notes-agenda-occurrence-id", entry.occurrenceId || "");
+          tab.setAttribute("bgalazka-notes-agenda-note-id", entry.noteId || "");
+          tab.setAttribute("bgalazka-notes-agenda-heading", entry.heading || "");
+          if (entry.ended) tab.setAttribute("bgalazka-notes-agenda-ended", "true"); else tab.removeAttribute("bgalazka-notes-agenda-ended");
+          return true;
+        },
+        remove(key) {
+          if (String(key).startsWith("day:")) { const folder = agendaDayEl(key); if (folder) agendaRetireFolder(folder); return; }
+          const tab = agendaTabFor(key); if (tab) zenRemoveTab(tab);
+        },
+        reorder(parentKey, keys) {
+          const root = agendaRootEl(), parent = parentKey ? agendaDayEl(parentKey) : root;
+          if (!parent) return true;
+          const els = keys.map((key) => String(key).startsWith("day:") ? agendaDayEl(key) : agendaTabFor(key)).filter(Boolean);
+          if (els.length < 2) return true;
+          const host = els[0].parentElement;
+          if (!host || els.some((el) => el.parentElement !== host)) return false;
+          for (let i = 0; i < els.length; i++) {
+            const cur = [...host.children].filter((child) => els.includes(child));
+            if (cur[i] === els[i]) continue;
+            try { host.insertBefore(els[i], cur[i]); } catch (_) {}
+          }
+          return true;
+        },
+        removeAll() {
+          const root = agendaRootEl();
+          if (root) this.list();
+          for (const tab of [...(document.querySelectorAll?.("tab[" + AGENDA_ATTR + "]") || [])]) zenRemoveTab(tab);
+          if (!root) return;
+          for (const folder of [...(root.querySelectorAll?.("zen-folder[bgalazka-notes-agenda-day]") || [])]) agendaRetireFolder(folder);
+          agendaRetireFolder(root);
+        },
+      };
+      const agendaController = CALENDAR_PART?.createZenAgenda ? CALENDAR_PART.createZenAgenda({
+        api: agendaApi,
+        getItems: () => (store.items?.list?.() || []).map((item) => {
+          const note = item.x?.noteId ? store.get(item.x.noteId) : null;
+          return { ...item, x: { ...(item.x || {}), sourceNoteTitle: note && !note.trashed ? titleOf(note.body) : "" } };
+        }),
+        getDays: agendaDays,
+        getEnabled: agendaEnabled,
+        getPosition: agendaPosition,
+        now: () => Date.now(),
+        getWindow: (item) => {
+          const category = item.x?.category ? store.items?.category?.(item.x.category) : null;
+          const notePolicy = item.x?.noteId ? store.meta.calendarNoteAgendaOverrides?.[item.x.noteId] : null;
+          return CALENDAR_PART.resolveAgendaWindow(item, category?.agenda, notePolicy, store.meta.calendarAgendaDefaults);
+        },
+        isDone: (item) => {
+          const identity = CALENDAR_PART.reminderIdentity(item);
+          if (!identity) return false;
+          const state = store.items.history?.stateFor?.(identity.itemId, identity.occurrenceId) || "pending";
+          return state === "done" || state === "dismissed";
+        },
+        setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (id) => window.clearTimeout(id), warn,
+      }) : { runNow: () => [], schedule() {}, destroy() {} };
+      onCleanup(() => agendaController.destroy());
+      const agendaSoon = () => {
+        if (disposed) return;
+        bindAgenda(agendaEnabled());
+        if (!agendaEnabled()) { agendaController.runNow(); return; }
+        ensureStore().then(() => { if (!disposed) agendaController.schedule(); }).catch(warn);
+      };
+      const agendaItemUnsub = store.items?.on?.((ev) => {
+        if (["change", "remove", "category", "reset", "recovery"].includes(ev.type) && agendaEnabled()) agendaController.schedule();
+      });
+      const agendaNoteUnsub = store.on((ev) => {
+        if (["change", "tree", "remove", "reset"].includes(ev.type) && agendaEnabled()) agendaController.schedule();
+      });
+      onCleanup(() => { agendaItemUnsub?.(); agendaNoteUnsub?.(); });
+      const agendaBoot = window.setTimeout(agendaSoon, 6500);
+      onCleanup(() => window.clearTimeout(agendaBoot));
+      let agendaBound = false;
+      function bindAgenda(on) {
+        if (on === agendaBound) return;
+        agendaBound = on;
+        const act = on ? "addEventListener" : "removeEventListener";
+        window[act]("mousedown", onAgendaMouse, true);
+        window[act]("TabSelect", onAgendaSelect, true);
+        for (const ty of ["TabClose", "TabUnpinned", "TabPinned", "TabMove", "SSTabRestored"]) window[act](ty, onAgendaTabEvent, true);
+      }
+      function agendaTabKey(tab) {
+        let key = tab?.getAttribute?.(AGENDA_ATTR) || "";
+        if (!key) {
+          const url = tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || "";
+          if (/^about:blank#zn-agenda-/.test(url)) try { key = decodeURIComponent(url.slice("about:blank#zn-agenda-".length)); tab.setAttribute(AGENDA_ATTR, key); } catch (_) {}
+        }
+        return key;
+      }
+      function activateAgendaTab(tab) {
+        const itemId = tab.getAttribute("bgalazka-notes-agenda-item-id") || "", noteId = tab.getAttribute("bgalazka-notes-agenda-note-id") || "";
+        const heading = tab.getAttribute("bgalazka-notes-agenda-heading") || "", date = tab.getAttribute("bgalazka-notes-agenda-day") || "";
+        return ensureStore().then(() => {
+          if (noteId && store.get(noteId) && !store.get(noteId).trashed) return openReminderNote(noteId, { heading, itemId });
+          return openCalendarDayFromHost(date);
+        }).catch(warn);
+      }
+      function onAgendaMouse(ev) {
+        if (disposed || !agendaEnabled() || (ev.button !== 0 && ev.button !== 1)) return;
+        let tab = null; try { tab = ev.target?.closest?.("tab[" + AGENDA_ATTR + "]"); } catch (_) {}
+        if (!tab || !agendaRootEl()?.contains?.(tab)) return;
+        ev.preventDefault(); ev.stopImmediatePropagation();
+        if (ev.button === 1) return;
+        if (ev.type === "mousedown" && !ev.target?.closest?.(".tab-close-button, .tab-reset-button, .tab-icon-overlay")) activateAgendaTab(tab);
+      }
+      let agendaSelectTimer = 0;
+      onCleanup(() => window.clearTimeout(agendaSelectTimer));
+      function onAgendaSelect(ev) {
+        const tab = ev.target;
+        if (disposed || !agendaEnabled() || !tab || !agendaTabKey(tab) || !agendaRootEl()?.contains?.(tab)) return;
+        const prev = ev.detail?.previousTab;
+        window.clearTimeout(agendaSelectTimer);
+        agendaSelectTimer = window.setTimeout(() => {
+          agendaSelectTimer = 0;
+          try {
+            if (disposed || window.gBrowser.selectedTab !== tab) return;
+            const back = prev && prev.isConnected && !agendaTabKey(prev) ? prev : [...window.gBrowser.tabs].find((t) => !agendaTabKey(t) && !t.hidden);
+            if (back) window.gBrowser.selectedTab = back;
+            activateAgendaTab(tab);
+          } catch (error) { warn(error); }
+        }, 0);
+      }
+      function onAgendaTabEvent(ev) {
+        if (disposed || !agendaEnabled()) return;
+        const tab = ev.target;
+        if (agendaTabKey(tab) || (ev.type === "SSTabRestored" && /#zn-agenda-/.test(tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || ""))) agendaController.schedule(400);
+      }
+
       // A narrow, versioned bridge lets Colorful Folders edit Notes-owned Zen
       // folders without writing a second source of truth or racing Notes' own
       // projection. Subfolder styles live in Notes meta.json; the NOTES root
@@ -16749,6 +17401,7 @@
           getMode: zenMode,
           getOrder: () => cleanTreeOrder(prefStr(PREF.TREE_ORDER, "folders-first")),
           getNewButtons: () => zenWantsSeed(),
+          getAgendaEnabled: agendaEnabled,
           setTimer: (fn, ms) => window.setTimeout(fn, ms),
           clearTimer: (id) => window.clearTimeout(id),
           warn,
@@ -16763,7 +17416,7 @@
         if (disposed || zenMode() === "off") return;
         if (zen.dead) zen = makeZen(); // toggling the preference revives it after a kill
         bindZen(true);
-        ensureStore().then(() => zen.schedule()).catch(warn);
+        ensureStore().then(() => { zen.schedule(); if (agendaEnabled()) agendaController.schedule(); }).catch(warn);
       };
       const zenUnsub = store.on((ev) => {
         if (ev.type === "change" || ev.type === "tree" || ev.type === "remove" || ev.type === "reset") {
@@ -17640,7 +18293,9 @@
           else if (name === PREF.ZEN_MODE) {
             if (zenMode() === "off") zenTeardown();
             else zenSoon();
+            agendaSoon();
           }
+          else if (name === PREF.AGENDA_ENABLED || name === PREF.AGENDA_POSITION || name === PREF.AGENDA_DAYS) agendaSoon();
           else if (name === PREF.ZEN_ROOT_COLOR || name === PREF.ZEN_ROOT_ICON || name === PREF.ZEN_ROOT_PARTS || name === PREF.ZEN_ROOT_PART_OPACITY) {
             if (zenMode() !== "off") zenSoon(); // the NOTES folder is restyled at once
             window.dispatchEvent?.(new Event("zentral-notes-folder-style-changed"));

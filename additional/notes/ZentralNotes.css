@@ -1940,3 +1940,31 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
   .zentral-notes-sheet .zn-cal-compose-date-row { grid-template-columns: minmax(0, 1fr); }
   .zentral-notes-sheet .zn-cal-compose-date-row > .zn-chip { justify-self: start; }
 }
+
+/* T2.7c: compact per-stage sound and quiet-hour controls. */
+.zentral-notes-sheet .zn-cal-alert-editor { display: grid; gap: 9px; min-width: 0; }
+.zentral-notes-sheet .zn-cal-alert-rule { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; padding: 8px; border: 1px solid var(--zn-line); border-radius: 8px; }
+.zentral-notes-sheet .zn-cal-alert-rule > label { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.zentral-notes-sheet .zn-cal-alert-rule > label:first-child { justify-content: space-between; }
+.zentral-notes-sheet .zn-cal-alert-rule .zn-select { max-width: 12em; }
+.zentral-notes-sheet .zn-cal-alert-allow { display: flex; flex-wrap: wrap; gap: 8px 14px; padding-inline-start: 22px; color: var(--zn-muted); font-size: .9em; }
+.zentral-notes-sheet .zn-cal-alert-allow label { display: inline-flex; align-items: center; gap: 4px; }
+.zentral-notes-sheet .zn-cal-alert-days { display: flex; flex-wrap: wrap; gap: 8px 12px; }
+.zentral-notes-sheet .zn-cal-alert-days label { display: inline-flex; align-items: center; gap: 4px; }
+.zentral-notes-sheet .zn-cal-note-alert-row { display: flex; justify-content: flex-end; margin: -4px 0 6px; }
+
+/* Virtual Zen Agenda folder and occurrence tabs. */
+zen-folder[bgalazka-notes-agenda-day]::after {
+  content: attr(bgalazka-notes-agenda-count);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4em;
+  margin-inline-start: .45em;
+  padding: 0 .35em;
+  border-radius: 999px;
+  font-size: .78em;
+  line-height: 1.5;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }

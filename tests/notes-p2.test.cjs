@@ -289,15 +289,15 @@ test("calendar reminders: scheduler expands stored occurrences, records alerts a
   assert.ok(item);
   await store.items.flush();
   await sched.start(); await settle();
-  assert.deepEqual(J(clk.delays()), [5 * 60000], "calendar store reminder participates in the shared timer");
+  assert.deepEqual(J(clk.delays()), [4 * 60000], "adaptive Tier 1 lead schedules the pre-alert before the due stage");
   await clk.advance(5 * 60000); await settle();
-  assert.equal(fired.length, 1);
-  assert.ok(fired[0].some((id) => id.includes("calendar-live-reminder")), "calendar reminder is sent to the notification callback");
+  assert.equal(fired.length, 2, "pre-alert and due stages are delivered independently");
+  assert.ok(fired.every((batch) => batch.some((id) => id.includes("calendar-live-reminder"))), "calendar stages are sent to the notification callback");
   const history = store.items.history.list({ itemId: item.id, occurrenceId: item.id });
-  assert.equal(history[0]?.action, "alerted", "notification is recorded before dispatch");
+  assert.deepEqual(J(history.filter((record) => record.action === "alerted").map((record) => record.stage).sort()), ["due", "pre"], "each stage is recorded before dispatch");
   assert.equal(store.items.history.stateFor(item.id, item.id), "pending", "alert audit does not complete the reminder");
   await sched.reschedule(); await settle();
-  assert.equal(fired.length, 1, "the same scheduled occurrence is never announced twice");
+  assert.equal(fired.length, 2, "the same scheduled occurrence stages are never announced twice");
   sched.destroy();
 });
 test("calendar reminders: recurrence expansion schedules the next matching occurrence", async () => {
@@ -306,12 +306,12 @@ test("calendar reminders: recurrence expansion schedules the next matching occur
   await store.items.flush();
   await sched.start(); await settle();
   await clk.advance(5 * 60000); await settle();
-  assert.equal(fired.length, 1);
-  assert.equal(store.items.history.list({ itemId: item.id }).filter((record) => record.action === "alerted").length, 1);
-  assert.ok(clk.active >= 1, "next recurrence is scheduled after the first occurrence alerts");
-  await clk.advance(24 * 60 * 60 * 1000); await settle();
-  assert.equal(fired.length, 2, "the second daily occurrence alerts independently");
+  assert.equal(fired.length, 2, "the first occurrence delivers pre and due stages");
   assert.equal(store.items.history.list({ itemId: item.id }).filter((record) => record.action === "alerted").length, 2);
+  assert.ok(clk.active >= 1, "the follow-up and next recurrence are scheduled after the first stages");
+  await clk.advance(24 * 60 * 60 * 1000); await settle();
+  assert.equal(fired.length, 5, "follow-up for occurrence one and pre/due for occurrence two alert independently");
+  assert.equal(store.items.history.list({ itemId: item.id }).filter((record) => record.action === "alerted").length, 5);
   sched.destroy();
 });
 

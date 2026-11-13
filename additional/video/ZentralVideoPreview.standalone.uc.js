@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Sidebar Video Preview
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.35
+// @version 3.3.46
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.35, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.46, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.35";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.46";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||

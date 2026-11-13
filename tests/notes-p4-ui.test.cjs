@@ -84,6 +84,14 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     openMore(); click(menuItem("Links & dates")); click(menuItem("Notes by date")); await tick();
     click(q(".zn-menu").querySelectorAll("button").find((b) => b.textContent.startsWith("Today")));
     assert.equal(store.list().filter((x) => c.dateOfNote(x) === today).length, 1, "second time opens the same note");
+    prefs.set("zen.workspace.zentral.notes.agenda_folder", true);
+    const beforeAgendaCount = store.list().filter((x) => c.dateOfNote(x) === today).length;
+    openMore(); click(menuItem("Links & dates")); click(menuItem("Notes by date")); await tick();
+    click(q(".zn-menu").querySelectorAll("button").find((b) => b.textContent.startsWith("Today")));
+    await flushRaf();
+    assert.equal(store.list().filter((x) => c.dateOfNote(x) === today).length, beforeAgendaCount, "Agenda mode replaces manual New Date Note actions with Day view navigation");
+    assert.equal(store.meta.calendarView, "day");
+    prefs.delete("zen.workspace.zentral.notes.agenda_folder");
     prefs.set("zen.workspace.zentral.notes.date_notes_mode", "single");
     openMore(); click(menuItem("Links & dates")); click(menuItem("Notes by date")); await tick();
     click(q(".zn-menu").querySelectorAll("button").find((b) => b.textContent.startsWith("Tomorrow")));

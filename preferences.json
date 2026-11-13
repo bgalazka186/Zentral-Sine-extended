@@ -3046,6 +3046,37 @@
     "defaultValue": false
   },
   {
+    "property": "zen.workspace.zentral.notes.agenda_folder",
+    "label": "Show a live Agenda folder in Zen's Pinned tabs",
+    "type": "checkbox",
+    "defaultValue": false
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_position",
+    "label": "Place the Agenda folder relative to NOTES",
+    "type": "dropdown",
+    "defaultValue": "above",
+    "options": [
+      {
+        "label": "Above NOTES",
+        "value": "above"
+      },
+      {
+        "label": "Below NOTES",
+        "value": "below"
+      }
+    ]
+  },
+  {
+    "property": "zen.workspace.zentral.notes.agenda_days",
+    "label": "Agenda shows Today + next N days",
+    "type": "number",
+    "defaultValue": 4,
+    "min": 1,
+    "max": 31,
+    "unit": "days"
+  },
+  {
     "type": "text",
     "label": "**Notes appearance · Size & shape**",
     "size": "16px"

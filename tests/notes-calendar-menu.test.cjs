@@ -285,6 +285,9 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
     card.querySelector('[aria-label="Tier 3 · Follow-up banner"]').checked = true;
     card.querySelector('[aria-label="Pre-alert lead time"]').value = "7";
     card.querySelector('[aria-label="Follow-up delay"]').value = "15";
+    card.querySelector('[aria-label="pre sound level"]').value = "loud";
+    card.querySelector('[aria-label="pre quiet-hours bypass override"]').checked = true;
+    card.querySelector('[aria-label="pre allow loud during quiet hours"]').checked = true;
   });
   const timedEvent = await createFrom("Create timed event…", "Timed event", "event", false);
   assert.notEqual(fullDayReminder.x.noteId, note.id, "standalone creation does not accidentally link the open note");
@@ -296,7 +299,10 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   assert.equal(timedReminder.x.calNote, "Calendar-only note");
   assert.equal(timedReminder.x.tz, "Europe/Warsaw");
   assert.equal(timedReminder.recurrence.join("|"), "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,FR;COUNT=4");
-  assert.equal(JSON.stringify(timedReminder.x.notify), JSON.stringify({ pre: { enabled: true, leadMinutes: 7 }, due: { enabled: false }, followup: { enabled: true, delayMinutes: 15 } }));
+  assert.equal(timedReminder.x.notify.pre.sound, "loud");
+  assert.deepEqual(JSON.parse(JSON.stringify(timedReminder.x.notify.pre.quietAllow)), ["loud"]);
+  assert.equal(timedReminder.x.notify.due.enabled, false);
+  assert.equal(timedReminder.x.notify.followup.delayMinutes, 15);
 
   // Existing item edit uses the same composer and preserves identity while changing independent fields.
   openRowMenu(root, timedEvent.id);
@@ -310,6 +316,20 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   saveEdit.click(); await flush();
   assert.equal(store.items.get(timedEvent.id).summary, "Edited timed event");
   assert.equal(store.items.get(timedEvent.id).id, timedEvent.id, "editing keeps the calendar item identity stable");
+
+  // Note-level sound defaults are editable from the composer and persist separately from item overrides.
+  const noteDefaultsComposer = await openCreate("Create timed reminder…");
+  const linkedNoteSelect = noteDefaultsComposer.querySelector('[aria-label="Linked note"]');
+  linkedNoteSelect.value = note.id; linkedNoteSelect.dispatchEvent(new Ev("change"));
+  noteDefaultsComposer.querySelectorAll("button").find((button) => button.textContent.trim() === "Note alert defaults…").click(); await flush();
+  const noteDefaultsDialog = q(root, ".zn-dialog-card");
+  assert.match(noteDefaultsDialog.getAttribute("aria-label"), /Reminder sounds/);
+  noteDefaultsDialog.querySelector('[aria-label="due sound level"]').value = "quiet";
+  noteDefaultsDialog.querySelector('[aria-label="due quiet-hours bypass override"]').checked = true;
+  noteDefaultsDialog.querySelector('[aria-label="due allow quiet during quiet hours"]').checked = true;
+  noteDefaultsDialog.querySelectorAll("button").find((button) => button.textContent.trim() === "Save note defaults").click(); await flush();
+  assert.equal(store.meta.calendarNoteAlertOverrides[note.id].due.sound, "quiet");
+  assert.deepEqual(JSON.parse(JSON.stringify(store.meta.calendarNoteAlertOverrides[note.id].due.quietAllow)), ["quiet"]);
 
   // T2.3g: linked note color overrides category color live; an uncoloured note falls back to its category.
   const colorDate = cal.ymd(new Date(cal.addDays(day, 5)));
@@ -399,6 +419,56 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   await sheet.openNoteById(note.id); await flush();
   assert.equal(quickReminder.hidden, false, "clearing toolbar visibility settings restores the shortcut");
 
+  // T2.7c: global sound profiles and overnight quiet hours are reachable from Calendar Tools.
+  q(root, ".zn-calendar-tools").click(); await flush();
+  const alertSettingsEntry = menuItem(root, "Reminder sounds & quiet hours");
+  assert.ok(alertSettingsEntry, "Calendar Tools exposes reminder sound and quiet-hour settings");
+  alertSettingsEntry.click(); await flush();
+  const alertDialog = q(root, '[aria-label="Reminder sounds and quiet hours"]');
+  assert.ok(alertDialog);
+  const quietEnabled = alertDialog.querySelector('[aria-label="Enable quiet hours"]');
+  assert.equal(quietEnabled.checked, false, "quiet hours default to off");
+  quietEnabled.checked = true;
+  alertDialog.querySelector('[aria-label="Quiet hours start"]').value = "23:00";
+  const quietEnd = alertDialog.querySelector('[aria-label="Quiet hours end"]');
+  quietEnd.value = "23:00";
+  alertDialog.querySelectorAll("button").find((button) => button.textContent.trim() === "Save alert settings").click(); await flush();
+  assert.ok(q(root, '[aria-label="Reminder sounds and quiet hours"]'), "equal quiet-hour bounds are rejected without closing the dialog");
+  quietEnd.value = "06:30";
+  for (const day of ["Sun", "Mon", "Tue", "Wed", "Thu", "Sat"]) alertDialog.querySelector('[aria-label="Quiet hours ' + day + '"]').checked = false;
+  alertDialog.querySelector('[aria-label="Quiet hours Fri"]').checked = true;
+  alertDialog.querySelector('[aria-label="due sound level"]').value = "loud";
+  alertDialog.querySelector('[aria-label="due allow loud during quiet hours"]').checked = true;
+  alertDialog.querySelectorAll("button").find((button) => button.textContent.trim() === "Save alert settings").click(); await flush();
+  assert.equal(store.meta.calendarAlertSettings.quietHours.enabled, true);
+  assert.equal(store.meta.calendarAlertSettings.quietHours.start, "23:00");
+  assert.equal(store.meta.calendarAlertSettings.quietHours.end, "06:30");
+  assert.deepEqual(JSON.parse(JSON.stringify(store.meta.calendarAlertSettings.quietHours.days)), [5]);
+  assert.equal(store.meta.calendarAlertSettings.stages.due.sound, "loud");
+  assert.deepEqual(JSON.parse(JSON.stringify(store.meta.calendarAlertSettings.quietHours.allowed.due)), ["loud"]);
+
+  // Category defaults also expose per-stage sound and quiet-hour bypass controls.
+  await sheet.openNoteById(note.id); await flush();
+  q(root, ".zn-category-btn").click(); await flush();
+  menuItem(root, "Create category").click(); await flush();
+  const categoryDialog = q(root, '[aria-label="New calendar category"]');
+  assert.ok(categoryDialog);
+  categoryDialog.querySelector('[aria-label="Category name"]').value = "Critical";
+  categoryDialog.querySelector('[aria-label="due sound level"]').value = "loud";
+  categoryDialog.querySelector('[aria-label="due quiet-hours bypass override"]').checked = true;
+  categoryDialog.querySelector('[aria-label="due allow loud during quiet hours"]').checked = true;
+  categoryDialog.querySelectorAll("button").find((button) => button.textContent.trim() === "Save category").click(); await flush();
+  assert.equal(store.items.category("Critical").notify.due.sound, "loud");
+  assert.deepEqual(JSON.parse(JSON.stringify(store.items.category("Critical").notify.due.quietAllow)), ["loud"]);
+
+  await store.flush();
+  const restoredStore = core.createStore({ io, notify() {}, windowId: "calendar-menu-reload", getDir: async () => "/calendar-menu", getMaxSaveMs: () => 1000, setTimer: setTimeout, clearTimer: clearTimeout });
+  await restoredStore.open();
+  assert.equal(restoredStore.meta.calendarAlertSettings.quietHours.enabled, true, "global quiet hours survive a meta.json reload");
+  assert.equal(restoredStore.meta.calendarAlertSettings.stages.due.sound, "loud");
+  assert.equal(restoredStore.meta.calendarNoteAlertOverrides[note.id].due.sound, "quiet", "note-level overrides survive a meta.json reload");
+  assert.equal(restoredStore.items.category("Critical").notify.due.sound, "loud", "category sound overrides survive a calendar.json reload");
+  await restoredStore.close();
   sheet.destroy(); await store.close();
   console.log("calendar menu UI tests passed");
 })().catch((error) => { console.error("FAIL", error); process.exit(1); });

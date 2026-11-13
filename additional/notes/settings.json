@@ -1097,6 +1097,37 @@
       "property": "zen.workspace.zentral.notes.zen_folder_top"
     },
     {
+      "property": "zen.workspace.zentral.notes.agenda_folder",
+      "label": "Show a live Agenda folder in Zen's Pinned tabs",
+      "type": "checkbox",
+      "defaultValue": false
+    },
+    {
+      "property": "zen.workspace.zentral.notes.agenda_position",
+      "label": "Place the Agenda folder relative to NOTES",
+      "type": "dropdown",
+      "defaultValue": "above",
+      "options": [
+        {
+          "label": "Above NOTES",
+          "value": "above"
+        },
+        {
+          "label": "Below NOTES",
+          "value": "below"
+        }
+      ]
+    },
+    {
+      "property": "zen.workspace.zentral.notes.agenda_days",
+      "label": "Agenda shows Today + next N days",
+      "type": "number",
+      "defaultValue": 4,
+      "min": 1,
+      "max": 31,
+      "unit": "days"
+    },
+    {
       "property": "zen.workspace.zentral.notes.debug_perf",
       "label": "DEBUG: sample how long Notes layout, drag and read-view work take (performance.now). Read the result with __zentralNotesPerf.report() in the Browser Console",
       "type": "checkbox",
@@ -1587,6 +1618,21 @@
     "zen.workspace.zentral.notes.date_display_format": {
       "category": "notes",
       "section": "Quick notes",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.agenda_folder": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.agenda_position": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
+      "owner": "notes"
+    },
+    "zen.workspace.zentral.notes.agenda_days": {
+      "category": "notes",
+      "section": "Experiments (off by default)",
       "owner": "notes"
     }
   }

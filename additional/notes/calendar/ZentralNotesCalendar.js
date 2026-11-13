@@ -25,10 +25,11 @@
   const p2 = (n) => String(n).padStart(2, "0");
   const KINDS = Object.freeze(["event", "reminder"]);
   const MAX_TEXT = 500, MAX_DESC = 20000;
+  const SOUND_LEVELS = Object.freeze(["silent", "quiet", "normal", "loud"]);
   const DEFAULT_CATEGORY_NOTIFY = Object.freeze({
-    pre: Object.freeze({ enabled: true, leadMinutes: 5 }),
-    due: Object.freeze({ enabled: true }),
-    followup: Object.freeze({ enabled: true, delayMinutes: 2 }),
+    pre: Object.freeze({ enabled: true, leadMinutes: 5, sound: "quiet", quietAllow: Object.freeze([]) }),
+    due: Object.freeze({ enabled: true, sound: "loud", quietAllow: Object.freeze([]) }),
+    followup: Object.freeze({ enabled: true, delayMinutes: 2, sound: "normal", quietAllow: Object.freeze([]) }),
   });
   const DEFAULT_CATEGORIES = Object.freeze([
     Object.freeze({ name: "Birthdays", color: "#e58aac" }),
@@ -301,6 +302,12 @@
     const out = { enabled: typeof src.enabled === "boolean" ? src.enabled : fallback.enabled !== false };
     if (stage === "pre") out.leadMinutes = Number.isFinite(+src.leadMinutes) ? Math.max(1, Math.min(10, Math.round(+src.leadMinutes))) : fallback.leadMinutes;
     if (stage === "followup") out.delayMinutes = Number.isFinite(+src.delayMinutes) ? Math.max(1, Math.min(30, Math.round(+src.delayMinutes))) : fallback.delayMinutes;
+    const soundSpecified = typeof src.soundSpecified === "boolean" ? src.soundSpecified : SOUND_LEVELS.includes(src.sound);
+    if (soundSpecified && SOUND_LEVELS.includes(src.sound)) out.sound = src.sound;
+    if (soundSpecified) out.soundSpecified = true;
+    const quietAllowSpecified = typeof src.quietAllowSpecified === "boolean" ? src.quietAllowSpecified : Array.isArray(src.quietAllow);
+    if (quietAllowSpecified && Array.isArray(src.quietAllow)) out.quietAllow = [...new Set(src.quietAllow.filter((level) => SOUND_LEVELS.includes(level) && level !== "silent"))];
+    if (quietAllowSpecified) out.quietAllowSpecified = true;
     return out;
   };
   function cleanCategoryNotify(raw) {
@@ -321,16 +328,130 @@
       if (typeof src.enabled === "boolean") rule.enabled = src.enabled;
       if (stage === "pre" && Number.isFinite(+src.leadMinutes)) rule.leadMinutes = Math.max(1, Math.min(10, Math.round(+src.leadMinutes)));
       if (stage === "followup" && Number.isFinite(+src.delayMinutes)) rule.delayMinutes = Math.max(1, Math.min(30, Math.round(+src.delayMinutes)));
+      if (SOUND_LEVELS.includes(src.sound) && src.soundSpecified !== false) { rule.sound = src.sound; rule.soundSpecified = true; }
+      if (Array.isArray(src.quietAllow) && src.quietAllowSpecified !== false) { rule.quietAllow = [...new Set(src.quietAllow.filter((level) => SOUND_LEVELS.includes(level) && level !== "silent"))]; rule.quietAllowSpecified = true; }
       if (Object.keys(rule).length) out[stage] = rule;
     }
     return out;
+  }
+  // Tier 1 adapts to how far ahead the reminder was saved: one minute for an imminent
+  // reminder, up to ten minutes for a reminder scheduled at least 100 minutes ahead.
+  // Use the persisted `updated` stamp rather than the current clock so a timer re-arm
+  // cannot move the pre-alert target as the reminder approaches.
+  function adaptiveReminderLeadMinutes(startMs, updated) {
+    const start = Number(startMs), saved = typeof updated === "string" ? Date.parse(updated) : Number(updated);
+    if (!Number.isFinite(start)) return 1;
+    const horizon = Number.isFinite(saved) && saved > 0 ? Math.max(0, start - saved) : 0;
+    return Math.max(1, Math.min(10, Math.ceil(horizon / (10 * MIN))));
+  }
+  // Pure stage planner shared by the scheduler and its tests. Category defaults are
+  // inherited first, then per-item rules override only fields they explicitly carry.
+  function reminderStagePlan(item, categoryNotify = null, now = Date.now()) {
+    if (!item || item.status === "cancelled" || (!isReminder(item) && !(item.reminders?.overrides || []).length)) return [];
+    const start = whenMs(item.start);
+    if (!Number.isFinite(start) || start <= 0) return [];
+    const googleLead = (item.reminders?.overrides || []).reduce((max, override) => Math.max(max, Number(override?.minutes) || 0), 0);
+    const dueAt = start - googleLead * MIN;
+    const category = cleanCategoryNotify(categoryNotify);
+    const overrides = cleanNotifyOverrides(item.x?.notify);
+    const out = [];
+    for (const stage of ["pre", "due", "followup"]) {
+      const rule = { ...category[stage], ...(overrides[stage] || {}) };
+      if (rule.enabled === false) continue;
+      if (stage === "pre") {
+        const adaptive = adaptiveReminderLeadMinutes(start, item.updated);
+        const configured = Math.max(1, Math.min(10, Math.round(Number(rule.leadMinutes) || 5)));
+        const leadMinutes = Math.min(configured, adaptive);
+        out.push({ stage, at: dueAt - leadMinutes * MIN, leadMinutes });
+      } else if (stage === "due") out.push({ stage, at: dueAt, leadMinutes: googleLead });
+      else {
+        const delayMinutes = Math.max(1, Math.min(30, Math.round(Number(rule.delayMinutes) || 2)));
+        out.push({ stage, at: dueAt + delayMinutes * MIN, delayMinutes });
+      }
+    }
+    return out.sort((a, b) => a.at - b.at || ["pre", "due", "followup"].indexOf(a.stage) - ["pre", "due", "followup"].indexOf(b.stage));
+  }
+  const DEFAULT_ALERT_SETTINGS = Object.freeze({
+    stages: Object.freeze({ pre: Object.freeze({ sound: "quiet", quietAllow: Object.freeze([]) }), due: Object.freeze({ sound: "loud", quietAllow: Object.freeze([]) }), followup: Object.freeze({ sound: "normal", quietAllow: Object.freeze([]) }) }),
+    quietHours: Object.freeze({ enabled: false, start: "22:00", end: "07:00", days: Object.freeze([0, 1, 2, 3, 4, 5, 6]), allowed: Object.freeze({ pre: Object.freeze([]), due: Object.freeze([]), followup: Object.freeze([]) }) }),
+  });
+  function cleanSoundRule(raw, fallback = {}) {
+    const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    return {
+      sound: SOUND_LEVELS.includes(src.sound) ? src.sound : (SOUND_LEVELS.includes(fallback.sound) ? fallback.sound : "normal"),
+      soundSpecified: typeof src.soundSpecified === "boolean" ? src.soundSpecified : SOUND_LEVELS.includes(src.sound),
+      quietAllow: Array.isArray(src.quietAllow) ? [...new Set(src.quietAllow.filter((level) => SOUND_LEVELS.includes(level) && level !== "silent"))] : [...(fallback.quietAllow || [])],
+      quietAllowSpecified: typeof src.quietAllowSpecified === "boolean" ? src.quietAllowSpecified : Array.isArray(src.quietAllow),
+    };
+  }
+  function cleanAlertSettings(raw) {
+    const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    const q = src.quietHours && typeof src.quietHours === "object" ? src.quietHours : {};
+    const time = (value, fallback) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || "")) ? String(value) : fallback;
+    const days = Array.isArray(q.days) ? [...new Set(q.days.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))].sort() : [...DEFAULT_ALERT_SETTINGS.quietHours.days];
+    const stages = {};
+    const allowed = {};
+    for (const stage of ["pre", "due", "followup"]) {
+      stages[stage] = cleanSoundRule(src.stages?.[stage], DEFAULT_ALERT_SETTINGS.stages[stage]);
+      const values = q.allowed?.[stage];
+      allowed[stage] = Array.isArray(values) ? [...new Set(values.filter((level) => SOUND_LEVELS.includes(level) && level !== "silent"))] : [...stages[stage].quietAllow];
+      stages[stage].quietAllow = [...allowed[stage]];
+    }
+    return { stages, quietHours: { enabled: q.enabled === true, start: time(q.start, "22:00"), end: time(q.end, "07:00"), days, allowed } };
+  }
+  function quietHoursActive(now, raw) {
+    const q = cleanAlertSettings({ quietHours: raw }).quietHours;
+    if (!q.enabled || !q.days.length || q.start === q.end) return false;
+    const date = new Date(Number(now));
+    if (!Number.isFinite(date.getTime())) return false;
+    const minute = date.getHours() * 60 + date.getMinutes();
+    const start = Number(q.start.slice(0, 2)) * 60 + Number(q.start.slice(3));
+    const end = Number(q.end.slice(0, 2)) * 60 + Number(q.end.slice(3));
+    if (start < end) return minute >= start && minute < end && q.days.includes(date.getDay());
+    if (minute >= start) return q.days.includes(date.getDay());
+    if (minute < end) return q.days.includes((date.getDay() + 6) % 7);
+    return false;
+  }
+  function cleanNoteAlertOverrides(raw) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const out = {};
+    for (const [id, value] of Object.entries(raw).slice(0, 5000)) {
+      const key = String(id || "").trim().slice(0, 120);
+      if (!key || !value || typeof value !== "object" || Array.isArray(value)) continue;
+      const stages = cleanNotifyOverrides(value), clean = {};
+      for (const stage of ["pre", "due", "followup"]) {
+        const rule = stages[stage];
+        if (!rule) continue;
+        const next = {};
+        if (rule.soundSpecified) next.sound = rule.sound;
+        if (rule.quietAllowSpecified) next.quietAllow = rule.quietAllow;
+        if (Object.keys(next).length) clean[stage] = next;
+      }
+      if (Object.keys(clean).length) out[key] = clean;
+    }
+    return out;
+  }
+  function resolveAlertPolicy(item, categoryNotify, noteNotify, globalRaw, stage, now = Date.now()) {
+    if (!["pre", "due", "followup"].includes(stage)) return { sound: "silent", play: false, quiet: false, volume: 0 };
+    const global = cleanAlertSettings(globalRaw);
+    const category = cleanCategoryNotify(categoryNotify)[stage];
+    const note = cleanNotifyOverrides(noteNotify)[stage] || {};
+    const reminder = cleanNotifyOverrides(item?.x?.notify)[stage] || {};
+    const soundSource = [reminder, note, category].find((rule) => rule.soundSpecified === true || (rule.soundSpecified === undefined && SOUND_LEVELS.includes(rule.sound)));
+    const sound = soundSource?.sound || global.stages[stage].sound || "normal";
+    const allowSource = [reminder, note, category].find((rule) => rule.quietAllowSpecified === true || (rule.quietAllowSpecified === undefined && Array.isArray(rule.quietAllow)));
+    const quietAllow = allowSource ? allowSource.quietAllow : global.quietHours.allowed[stage];
+    const quiet = quietHoursActive(now, global.quietHours);
+    const play = sound !== "silent" && (!quiet || quietAllow.includes(sound));
+    const volume = ({ silent: 0, quiet: 0.08, normal: 0.2, loud: 0.35 })[sound];
+    return { sound, play, quiet, volume, quietAllow: [...quietAllow] };
   }
   function cleanCategory(raw) {
     if (!raw || typeof raw !== "object") return null;
     const name = cleanCategoryName(raw.name);
     if (!name) return null;
     const color = /^#[0-9a-f]{6}$/i.test(String(raw.color || "")) ? String(raw.color).toLowerCase() : "#7d8da8";
-    return { id: String(raw.id || "cat-" + categoryKey(name).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")).slice(0, 100), name, color, notify: cleanCategoryNotify(raw.notify) };
+    return { id: String(raw.id || "cat-" + categoryKey(name).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")).slice(0, 100), name, color, notify: cleanCategoryNotify(raw.notify), agenda: cleanAgendaWindow(raw.agenda) };
   }
   // Validates and normalises anything that claims to be an item. Returns a fresh object or null.
   // An event without a usable end gets one hour (or one day when all-day); a reminder never has an end.
@@ -362,7 +483,7 @@
       reminders: { overrides: minutes },
       x: {
         kind, noteId: String(x.noteId ?? "").slice(0, 120), heading: String(x.heading ?? "").slice(0, MAX_TEXT),
-        category: cleanCategoryName(x.category), tz: cleanZone(x.tz), src: ["list", "note", "manual"].includes(x.src) ? x.src : "manual", key: String(x.key ?? "").slice(0, 60), legacyKey: String(x.legacyKey ?? "").slice(0, 60), moved: x.moved ? "1" : "", calNote: String(x.calNote ?? "").slice(0, MAX_DESC), notify: cleanNotifyOverrides(x.notify), recurrenceExceptions: cleanRecurrenceExceptions(x.recurrenceExceptions, allDay),
+        category: cleanCategoryName(x.category), tz: cleanZone(x.tz), historyId: String(x.historyId ?? "").slice(0, 120), src: ["list", "note", "manual"].includes(x.src) ? x.src : "manual", key: String(x.key ?? "").slice(0, 60), legacyKey: String(x.legacyKey ?? "").slice(0, 60), moved: x.moved ? "1" : "", calNote: String(x.calNote ?? "").slice(0, MAX_DESC), notify: cleanNotifyOverrides(x.notify), agendaWindow: cleanAgendaWindow(x.agendaWindow), recurrenceExceptions: cleanRecurrenceExceptions(x.recurrenceExceptions, allDay),
       },
     };
     if (end) item.end = end;
@@ -434,8 +555,9 @@
   }
   // Side-by-side columns for the TIMED events of one day, so overlapping events never hide each other.
   // Returns [{ item, lane, lanes, startMin, endMin }]: `lanes` = columns in the item's overlap cluster (width = 1/lanes).
-  function layoutDay(items, day) {
-    const d0 = day, d1 = addDays(day, 1);
+  function layoutDay(items, day, zone = "") {
+    const dateKey = localDateKey(day), bounds = zone ? zonedDayBounds(dateKey, zone) : [day, addDays(day, 1)];
+    const d0 = bounds[0], d1 = bounds[1];
     const rows = itemsInRange(items, d0, d1).filter((it) => !isReminder(it) && !isAllDay(it)).map((it) => {
       const [s, e] = itemRange(it);
       return { item: it, s: Math.max(s, d0), e: Math.min(e, d1) };
@@ -449,7 +571,9 @@
         if (lane < 0) { lane = laneEnds.length; laneEnds.push(r.e); } else laneEnds[lane] = r.e;
         r.lane = lane;
       }
-      for (const r of cluster) out.push({ item: r.item, lane: r.lane, lanes: laneEnds.length, startMin: Math.round((r.s - d0) / MIN), endMin: Math.round((r.e - d0) / MIN) });
+      for (const r of cluster) out.push({ item: r.item, lane: r.lane, lanes: laneEnds.length,
+        startMin: zone ? Math.round(zonedMinuteOfDay(r.s, dateKey, zone)) : Math.round((r.s - d0) / MIN),
+        endMin: zone ? Math.round(zonedMinuteOfDay(r.e, dateKey, zone)) : Math.round((r.e - d0) / MIN) });
       cluster = []; clusterEnd = -Infinity;
     };
     for (const r of rows) {
@@ -510,7 +634,7 @@
   // The plain Google event resource for an item (our `x` goes into extendedProperties.private, as Google allows).
   function toGoogle(it) {
     const priv = {};
-    for (const [k, v] of Object.entries(it.x)) if (v !== "" && v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) priv["zentral_" + k] = ["notify", "recurrenceExceptions"].includes(k) ? JSON.stringify(v) : String(v);
+    for (const [k, v] of Object.entries(it.x)) if (v !== "" && v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) priv["zentral_" + k] = ["notify", "recurrenceExceptions", "agendaWindow"].includes(k) ? JSON.stringify(v) : String(v);
     const out = { id: it.id, summary: it.summary, description: it.description, status: it.status, start: it.start, updated: it.updated, extendedProperties: { private: priv } };
     out.end = it.end || it.start;
     if (it.recurrence.length) out.recurrence = it.recurrence;
@@ -521,8 +645,8 @@
     if (!g || typeof g !== "object") return null;
     const priv = g.extendedProperties?.private || {};
     const x = {};
-    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "legacyKey", "moved", "calNote", "notify", "recurrenceExceptions"]) if (priv["zentral_" + k] !== undefined) {
-      if (["notify", "recurrenceExceptions"].includes(k)) { try { x[k] = JSON.parse(priv["zentral_" + k]); } catch (_) {} }
+    for (const k of ["kind", "noteId", "heading", "category", "tz", "src", "key", "legacyKey", "moved", "calNote", "notify", "agendaWindow", "recurrenceExceptions", "historyId"]) if (priv["zentral_" + k] !== undefined) {
+      if (["notify", "agendaWindow", "recurrenceExceptions"].includes(k)) { try { x[k] = JSON.parse(priv["zentral_" + k]); } catch (_) {} }
       else x[k] = priv["zentral_" + k];
     }
     const sameEnd = g.end && JSON.stringify(g.end) === JSON.stringify(g.start);
@@ -711,6 +835,103 @@
     });
     return { body: changed ? lines.join("\n") : String(body || ""), changed, found };
   }
+  // ---- Mirror a note-less item as an Agenda list line (B3.3.32-7) ----
+  const AGENDA_HEAD_RE = /^(#{1,6})\s+agenda\s*#*\s*$/i;
+  const LIST_LINE_RE = /^\s*(?:[-*+]|\d+[.)])\s/;
+  const isRecurringItem = (item) => !!item?.x?.series || (Array.isArray(item?.recurrence) && item.recurrence.length > 0);
+  // Pure: the `- [ ] YYYY-MM-DD [HH:MM[-HH:MM]] Summary %%zn-item-id:ID%%` line that represents `item`, or null when a
+  // list line cannot say the same thing (recurring, all-day event, event of 24 h or more, seconds, text the line parser
+  // would read differently). The result is re-parsed with the real extractor and must give back the same summary, kind,
+  // start and end, so mirroring never changes what the calendar shows.
+  function agendaMirrorLine(item, { lineId = "", done = false, now = 0 } = {}) {
+    if (!item || typeof item !== "object" || isRecurringItem(item)) return null;
+    const summary = String(item.summary ?? "").replace(/\s+/g, " ").trim();
+    if (!summary || /%%/.test(summary)) return null;
+    const [startMs, endMs] = itemRange(item);
+    if (!Number.isFinite(startMs) || startMs <= 0) return null;
+    const allDay = isAllDay(item), event = !isReminder(item);
+    let when = ymd(new Date(startMs));
+    if (allDay) { if (event) return null; }
+    else {
+      when += " " + clockText(startMs);
+      if (event) {
+        if (!(item.end && Number.isFinite(endMs) && endMs > startMs && endMs - startMs < 24 * 60 * MIN)) return null;
+        when += "-" + clockText(endMs);
+      }
+    }
+    // Derived from the item id (not random): two windows mirroring the same item produce the same token.
+    const id = /^[a-z0-9_-]{4,60}$/i.test(String(lineId)) ? String(lineId) : "zm" + hashText(String(item.id)).padStart(6, "0");
+    const line = "- [" + (done ? "x" : " ") + "] " + when + " " + summary + " %%zn-item-id:" + id + "%%";
+    const back = extractNoteItems("## Agenda\n%%calendar%%\n" + line, "mirror", now)[0];
+    if (!back || back.summary !== summary || isReminder(back) !== !event || isAllDay(back) !== allDay) return null;
+    const [bs, be] = itemRange(back);
+    if (bs !== startMs || (event && be !== endMs)) return null;
+    return { line, lineId: id };
+  }
+  // Pure: `line` added under the note's `## Agenda` heading (created when missing), inside its `%%calendar%%` section
+  // (created when missing), after the section's last list line. Nothing else in the note changes.
+  function insertAgendaLine(body, line, category = "") {
+    const lines = ensureAgendaHeading(body).body.split("\n");
+    let hi = -1, level = 0, fence = "";
+    for (let i = 0; i < lines.length && hi < 0; i++) {
+      const f = /^\s*(`{3,}|~{3,})/.exec(lines[i]);
+      if (f) { fence = !fence ? f[1][0] : (f[1][0] === fence ? "" : fence); continue; }
+      if (fence) continue;
+      const m = AGENDA_HEAD_RE.exec(lines[i]);
+      if (m) { hi = i; level = m[1].length; }
+    }
+    if (hi < 0) {
+      // The only "Agenda" heading sits inside a code fence (it is not a heading): add a real section at the end.
+      const base = String(body || "").replace(/\s+$/, "");
+      return { body: (base ? base + "\n\n" : "") + "## Agenda\n" + (cleanCategoryName(category) ? "%%calendar: " + cleanCategoryName(category) + "%%" : "%%calendar%%") + "\n" + line + "\n", changed: true };
+    }
+    let end = lines.length;
+    fence = "";
+    for (let j = hi + 1; j < lines.length; j++) {
+      const f = /^\s*(`{3,}|~{3,})/.exec(lines[j]);
+      if (f) { fence = !fence ? f[1][0] : (f[1][0] === fence ? "" : fence); continue; }
+      if (fence) continue;
+      const h = /^(#{1,6})\s/.exec(lines[j]);
+      if (h && h[1].length <= level) { end = j; break; }
+    }
+    // The line joins a section whose marker has the item's category (none = a plain `%%calendar%%`), so the stored
+    // category survives the next note sync; otherwise a new marker for that category is added at the end of the block.
+    const want = cleanCategoryName(category).toLowerCase();
+    let mk = -1;
+    for (let j = hi + 1; j < end && mk < 0; j++) {
+      const m = MARKER_RE.exec(lines[j]);
+      if (m && cleanCategoryName(m[1] || "").toLowerCase() === want) mk = j;
+    }
+    if (mk >= 0) {
+      let pos = mk + 1;
+      while (pos < end && LIST_LINE_RE.test(lines[pos])) pos++;
+      lines.splice(pos, 0, line);
+    } else {
+      let last = hi;
+      for (let j = hi + 1; j < end; j++) if (lines[j].trim()) last = j;
+      const gap = last > hi && LIST_LINE_RE.test(lines[last]) ? [""] : [];
+      lines.splice(last + 1, 0, ...gap, want ? "%%calendar: " + cleanCategoryName(category) + "%%" : "%%calendar%%", line);
+    }
+    return { body: lines.join("\n"), changed: true };
+  }
+  // Pure: the list line that carries the hidden id `lineId` (null when absent) and the body without it.
+  function findAgendaLine(body, lineId) {
+    let hit = null;
+    visitCalendarListLines(body, 0, (entry) => { if (!hit && itemIdTokens(entry.line)[0] === lineId) hit = { index: entry.index, line: entry.line }; });
+    return hit;
+  }
+  function removeAgendaLine(body, lineId) {
+    const hit = findAgendaLine(body, lineId);
+    if (!hit) return { body: String(body || ""), changed: false, line: "" };
+    const lines = String(body || "").split("\n");
+    lines.splice(hit.index, 1);
+    return { body: lines.join("\n"), changed: true, line: hit.line };
+  }
+  // Pure: the stored item re-keyed to its Agenda line. Every extra (calendar note, tz, notify, colour, status, moved,
+  // alert overrides) stays; the original identity moves into x.historyId so history stays attached.
+  function mirroredItem(item, noteId, lineId, heading = "Agenda") {
+    return { ...item, id: noteLineItemId(noteId, lineId), x: { ...item.x, src: "list", noteId, heading, key: lineId, legacyKey: "", historyId: item.x?.historyId || item.id } };
+  }
   // ---- Agenda checkbox <-> reminder lifecycle (owner-approved 2026-11-12) ----
   // The stored item id of a line that carries a hidden `%%zn-item-id:...%%` token (same formula as extractNoteItems).
   const noteLineItemId = (noteId, lineId) => "l" + hashText(String(noteId)) + "-" + String(lineId);
@@ -811,7 +1032,7 @@
       seq: Number.isSafeInteger(raw.seq) && raw.seq > 0 ? raw.seq : 0,
       itemId, occurrenceId, noteId: String(raw.noteId || "").slice(0, 120),
       summary: String(raw.summary || "").slice(0, MAX_TEXT), start: start ? { ...start } : null,
-      action, at,
+      action, stage: ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "", at,
     };
   }
   function reminderStateAfter(action, current = "pending") {
@@ -832,9 +1053,12 @@
       const itemId = "note-reminder:" + noteId;
       return { itemId, occurrenceId: itemId, noteId, legacyNote: true };
     }
-    const itemId = String(x.series || item.id || "").trim();
+    // A note-less item mirrored into an Agenda line gets a new line-based id; `x.historyId` keeps its original
+    // identity so earlier history (done / snoozed / alerted) stays attached. Recurring series never use it.
+    const kept = !recurring ? String(x.historyId || "").trim() : "";
+    const itemId = String(x.series || kept || item.id || "").trim();
     if (!itemId) return null;
-    return { itemId, occurrenceId: String(item.id || itemId), noteId, legacyNote: false };
+    return { itemId, occurrenceId: String(kept || item.id || itemId), noteId, legacyNote: false };
   }
   function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400 }) {
     const records = [];
@@ -962,7 +1186,8 @@
         if (writeBlocked) return null;
         try { await this.refresh(); } catch (error) { safeWarn(error); }
         const same = (a, b) => (a?.date || "") === (b?.date || "") && (a?.dateTime || "") === (b?.dateTime || "");
-        const duplicate = records.some((record) => record.action === "alerted" && record.itemId === raw.itemId && record.occurrenceId === raw.occurrenceId && same(record.start, raw.start));
+        const requestedStage = ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "";
+        const duplicate = records.some((record) => record.action === "alerted" && record.itemId === raw.itemId && record.occurrenceId === raw.occurrenceId && same(record.start, raw.start) && (record.stage === requestedStage || (!record.stage && requestedStage === "due")));
         if (duplicate) return null;
         const record = this.append({ ...raw, action: "alerted" });
         if (!record) return null;
@@ -1120,7 +1345,7 @@
         const key = categoryKey(name);
         if (!key) return null;
         const saved = categoryDefs.get(key);
-        if (saved) return { ...saved, notify: JSON.parse(JSON.stringify(saved.notify)) };
+        if (saved) return { ...saved, notify: JSON.parse(JSON.stringify(saved.notify)), agenda: { ...saved.agenda } };
         const preset = DEFAULT_CATEGORIES.find((c) => categoryKey(c.name) === key);
         if (preset) return cleanCategory({ ...preset, notify: DEFAULT_CATEGORY_NOTIFY });
         const used = [...items.values()].find((it) => categoryKey(it.x.category) === key);
@@ -1138,10 +1363,10 @@
         if (!category) return null;
         const key = categoryKey(category.name), old = categoryDefs.get(key);
         if (old && !raw.id) category.id = old.id;
-        if (old && JSON.stringify(old) === JSON.stringify(category)) return { ...old, notify: JSON.parse(JSON.stringify(old.notify)) };
+        if (old && JSON.stringify(old) === JSON.stringify(category)) return { ...old, notify: JSON.parse(JSON.stringify(old.notify)), agenda: { ...old.agenda } };
         categoryDefs.set(key, category);
         schedule(); emit("category", key);
-        return { ...category, notify: JSON.parse(JSON.stringify(category.notify)) };
+        return { ...category, notify: JSON.parse(JSON.stringify(category.notify)), agenda: { ...category.agenda } };
       },
       // A trashed note keeps its items (extras, dragged times) out of sight; restoring it brings them back untouched.
       hideNote(noteId) { if (!noteId || hidden.has(noteId) || ![...items.values()].some((it) => it.x.noteId === noteId)) return false; hidden.add(noteId); emit("remove", noteId); return true; },
@@ -1170,7 +1395,8 @@
           if (changedStart || changedRecurrence) {
             const action = raw?.historyAction === "snoozed" ? "snoozed" : "rescheduled";
             const historyStart = cleanWhen(raw?.historyStart) || it.start;
-            const record = history.append({ itemId: it.id, occurrenceId: String(raw?.occurrenceId || it.id), noteId: it.x.noteId, summary: it.summary, start: historyStart, action, at: stamp });
+            const ident = it.x.historyId ? reminderIdentity(it) : null;
+            const record = history.append({ itemId: ident?.itemId || it.id, occurrenceId: String(raw?.occurrenceId || ident?.occurrenceId || it.id), noteId: it.x.noteId, summary: it.summary, start: historyStart, action, at: stamp });
             if (!record) return null; // Never accept a lifecycle transition that cannot be recorded safely.
           }
         }
@@ -1224,7 +1450,7 @@
             const revision = sourceEdit ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, old.rev || 0) + 1) : Math.max(0, old.rev || 0);
             const stamp = sourceEdit && Number.isFinite(Number(updatedAt)) && Number(updatedAt) > 0 ? iso(Number(updatedAt)) : old.updated;
             next = cleanItem({ ...f, start: old.start, end: old.end, status: old.status, reminders: old.reminders, recurrence: old.recurrence.length ? old.recurrence : f.recurrence, updated: stamp, rev: revision, etag: "",
-              x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify, recurrenceExceptions: old.x.recurrenceExceptions } }, 0);
+              description: f.description || old.description, x: { ...f.x, tz: old.x.tz, calNote: old.x.calNote, moved: old.x.moved, notify: old.x.notify, agendaWindow: old.x.agendaWindow, recurrenceExceptions: old.x.recurrenceExceptions, historyId: old.x.historyId } }, 0);
             next.x.heading = f.x.heading; next.x.category = f.x.category;
             // The text writer is a newer logical version whenever a body edit triggered this sync. Otherwise
             // lwwPick provides the documented equal-version remote-wins tie break while preserving old extras above.
@@ -1566,19 +1792,35 @@
     return { days, startMin: a, endMin: b };
   }
   // The working range of one local day as [s, e) ms, or null on a day off. Shade everything outside it.
-  function workRange(day, work) {
-    const w = cleanWork(work);
-    if (!w.days.includes(new Date(day).getDay())) return null;
-    return [addDays(day, 0) + w.startMin * MIN, addDays(day, 0) + w.endMin * MIN];
+  function workRange(day, work, zone = "") {
+    const w = cleanWork(work), dateKey = localDateKey(day), date = parseYmd(dateKey);
+    if (!date || !w.days.includes(date.getDay())) return null;
+    if (!zone) return [dayStart(day) + w.startMin * MIN, dayStart(day) + w.endMin * MIN];
+    const valid = cleanZone(zone);
+    if (!valid) return null;
+    const startText = p2(Math.floor(w.startMin / 60)) + ":" + p2(w.startMin % 60);
+    const start = zonedDateTimeToMs(dateKey, startText, valid);
+    const endKey = w.endMin === 1440 ? localDateKey(addDays(day, 1)) : dateKey;
+    const endMinute = w.endMin === 1440 ? 0 : w.endMin;
+    const endText = p2(Math.floor(endMinute / 60)) + ":" + p2(endMinute % 60);
+    const end = zonedDateTimeToMs(endKey, endText, valid);
+    return Number.isFinite(start) && Number.isFinite(end) && end > start ? [start, end] : null;
   }
   // Free gaps of at least `minMin` minutes between `from` and `to`, optionally only inside working hours.
   // Reminders take no time; all-day events block the whole day only when `blockAllDay` is true.
   function freeSlots(items, from, to, minMin = 60, opts = {}) {
-    const busy = busyRanges(items.filter((it) => opts.blockAllDay || !isAllDay(it)), from, to);
+    const zone = cleanZone(opts.zone || "");
+    let rangeFrom = from, rangeTo = to;
+    if (zone) {
+      const fromKey = localDateKey(from), toKey = localDateKey(Math.max(from, to - 1));
+      const first = zonedDayBounds(fromKey, zone), last = zonedDayBounds(toKey, zone);
+      if (first && last) { rangeFrom = first[0]; rangeTo = last[1]; }
+    }
+    const busy = busyRanges(items.filter((it) => opts.blockAllDay || !isAllDay(it)), rangeFrom, rangeTo);
     const windows = [];
     if (opts.work) {
-      for (let d = dayStart(from); d < to; d = addDays(d, 1)) { const r = workRange(d, opts.work); if (r) windows.push([Math.max(r[0], from), Math.min(r[1], to)]); }
-    } else windows.push([from, to]);
+      for (let d = dayStart(from); d < to; d = addDays(d, 1)) { const r = workRange(d, opts.work, zone); if (r) windows.push([Math.max(r[0], rangeFrom), Math.min(r[1], rangeTo)]); }
+    } else windows.push([rangeFrom, rangeTo]);
     const need = Math.max(1, Math.round(minMin)) * MIN, out = [];
     for (const [ws, we] of windows) {
       let cur = ws;
@@ -1599,13 +1841,47 @@
     if (!t) return "";
     try { new Intl.DateTimeFormat("en", { timeZone: t }); return t; } catch (_) { return ""; }
   }
+  function zoneParts(ms, zone = "") {
+    const z = cleanZone(zone), date = new Date(Number(ms));
+    if (!Number.isFinite(date.getTime())) return null;
+    try {
+      const formatter = new Intl.DateTimeFormat("en-US", { ...(z ? { timeZone: z } : {}), calendar: "gregory", numberingSystem: "latn", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+      const parts = Object.create(null);
+      for (const part of formatter.formatToParts(date)) if (part.type !== "literal") parts[part.type] = Number(part.value);
+      if (![parts.year, parts.month, parts.day, parts.hour, parts.minute, parts.second].every(Number.isFinite)) return null;
+      return parts;
+    } catch (_) { return { year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate(), hour: date.getHours(), minute: date.getMinutes(), second: date.getSeconds() }; }
+  }
+  function zonedDateKey(ms, zone = "") {
+    const parts = zoneParts(ms, zone);
+    return parts ? String(parts.year).padStart(4, "0") + "-" + p2(parts.month) + "-" + p2(parts.day) : "";
+  }
+  function zonedDayBounds(dateKey, zone = "") {
+    const date = parseYmd(dateKey);
+    if (!date) return null;
+    if (!zone) return [date.getTime(), addDays(date.getTime(), 1)];
+    const valid = cleanZone(zone);
+    if (!valid) return null;
+    const nextKey = localDateKey(addDays(date.getTime(), 1));
+    const start = zonedDateTimeToMs(dateKey, "00:00", valid), end = zonedDateTimeToMs(nextKey, "00:00", valid);
+    return Number.isFinite(start) && Number.isFinite(end) && end > start ? [start, end] : null;
+  }
+  function zonedMinuteOfDay(ms, dateKey, zone = "") {
+    const date = parseYmd(dateKey);
+    if (!date || !Number.isFinite(Number(ms))) return NaN;
+    if (!zone) return Math.max(0, Math.min(1440, (Number(ms) - date.getTime()) / MIN));
+    const bounds = zonedDayBounds(dateKey, zone);
+    if (!bounds) return NaN;
+    if (ms <= bounds[0]) return 0;
+    if (ms >= bounds[1]) return 1440;
+    const parts = zoneParts(ms, zone);
+    if (!parts || zonedDateKey(ms, zone) !== dateKey) return NaN;
+    return parts.hour * 60 + parts.minute + parts.second / 60;
+  }
   // "HH:MM" of an instant in a zone ("" = the local zone).
   function clockIn(ms, zone) {
-    const z = cleanZone(zone);
-    try {
-      const f = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", ...(z ? { timeZone: z } : {}) });
-      return f.format(new Date(ms));
-    } catch (_) { return p2(new Date(ms).getHours()) + ":" + p2(new Date(ms).getMinutes()); }
+    const parts = zoneParts(ms, zone);
+    return parts ? p2(parts.hour) + ":" + p2(parts.minute) : "--:--";
   }
 
   // ---------- text of a week (print / export) ----------
@@ -1666,6 +1942,7 @@
   // ---------- date display format, agenda buckets, blank-date-note rule, last-write-wins (roadmap T2.14-T2.17) ----------
   // Display strings are NEVER keys: the immutable key is always the local "YYYY-MM-DD" (`localDateKey`).
   const DATE_FORMATS = Object.freeze(["DD-MM-YYYY", "YYYY-MM-DD", "MM/DD/YYYY", "DD.MM.YYYY", "DD/MM/YYYY", "long"]);
+  const AGENDA_WINDOW_MAX_DAYS = 31;
   const DEFAULT_DATE_FORMAT = "DD-MM-YYYY";
   const cleanDateFormat = (v) => (DATE_FORMATS.includes(v) ? v : DEFAULT_DATE_FORMAT);
   // Local calendar-day key of an instant; never uses toISOString (UTC shifts a day near midnight).
@@ -1744,6 +2021,78 @@
   }
   // Agenda window: today .. today+days-1 (default 4 days = T..T+3). Counts live items per local day (recurrences expanded); `isDone(item)` is supplied by the reminder lifecycle (T2.7a), the item model has no done flag yet.
   const AGENDA_LABELS = Object.freeze(["Today", "Tomorrow", "Day 2", "Day 3"]);
+  // Agenda visibility is independent of reminder alerts, snooze and recurrence state.
+  // Each layer is sparse: an omitted field inherits from the next layer.
+  function cleanAgendaWindow(raw) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const out = {};
+    if (typeof raw.enabled === "boolean") out.enabled = raw.enabled;
+    for (const key of ["leadDays", "tailDays"]) {
+      if (raw[key] === "" || raw[key] === null || raw[key] === undefined) continue;
+      const n = Number(raw[key]);
+      if (Number.isFinite(n)) out[key] = Math.max(0, Math.min(AGENDA_WINDOW_MAX_DAYS, Math.round(n)));
+    }
+    return out;
+  }
+  function cleanNoteAgendaOverrides(raw) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const out = {};
+    for (const [id, value] of Object.entries(raw).slice(0, 5000)) {
+      const key = String(id || "").trim().slice(0, 120);
+      if (!key) continue;
+      const policy = cleanAgendaWindow(value);
+      if (Object.keys(policy).length) out[key] = policy;
+    }
+    return out;
+  }
+  function resolveAgendaWindow(item, categoryRaw = null, noteRaw = null, globalRaw = null) {
+    const layers = [
+      cleanAgendaWindow(item?.x?.agendaWindow),
+      cleanAgendaWindow(noteRaw),
+      cleanAgendaWindow(categoryRaw),
+      cleanAgendaWindow(globalRaw),
+    ];
+    const pick = (key, fallback) => {
+      for (const layer of layers) if (Object.prototype.hasOwnProperty.call(layer, key)) return layer[key];
+      return fallback;
+    };
+    return { enabled: pick("enabled", true), leadDays: pick("leadDays", 0), tailDays: pick("tailDays", 0) };
+  }
+  // Return local-midnight [from, to) boundaries. Offsets are civil days rather than
+  // 24-hour durations, so spring/fall DST changes never shift the visible date.
+  function agendaVisibilityRange(item, rawPolicy = {}) {
+    if (!item?.start) return null;
+    const policy = resolveAgendaWindow({ x: { agendaWindow: rawPolicy } });
+    if (!policy.enabled) return null;
+    const start = whenMs(item.start), end = item.end ? whenMs(item.end) : start;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+    const lastVisibleItemDay = dayStart(end > start ? end - 1 : start);
+    return {
+      from: addDays(dayStart(start), -policy.leadDays),
+      to: addDays(lastVisibleItemDay, policy.tailDays + 1),
+    };
+  }
+  // The virtual Agenda is a rolling local-day projection. Refresh only when the next
+  // day can change a visible bucket, or when a far-future window first enters its horizon.
+  // Recurring series are re-evaluated daily because their next occurrence is generated
+  // from the recurrence rule rather than stored as a separate item.
+  function nextAgendaVisibilityBoundary(items, now, days = 4, getWindow = null) {
+    const stamp = Number(now);
+    if (!Number.isFinite(stamp)) return null;
+    const today = dayStart(stamp), count = Math.max(1, Math.min(31, Math.floor(Number(days)) || 4));
+    const tomorrow = addDays(today, 1), horizon = addDays(today, count);
+    let next = Infinity;
+    for (const item of items || []) {
+      const policy = resolveAgendaWindow(item, null, null, getWindow ? getWindow(item) : null);
+      if (!policy.enabled) continue;
+      if (isRecurringItem(item)) { next = Math.min(next, tomorrow); continue; }
+      const range = agendaVisibilityRange(item, policy);
+      if (!range || range.to <= today) continue;
+      const boundary = range.from < horizon ? tomorrow : addDays(range.from, -(count - 1));
+      if (boundary > stamp) next = Math.min(next, boundary);
+    }
+    return Number.isFinite(next) ? next : null;
+  }
   function agendaBuckets(items, now, days = 4, isDone = () => false) {
     const n = Math.max(1, Math.min(31, Math.floor(Number(days)) || 4));
     const base = dayStart(now);
@@ -1754,6 +2103,176 @@
       out.push({ offset: i, key: localDateKey(from), label: AGENDA_LABELS[i] || "Day " + i, from, to, count: list.length, items: list });
     }
     return out;
+  }
+  // Compact startup Day-Plan data. `tomorrowPreview` is a Markdown section suitable
+  // for the transient preview surface; it is not written into a person's date note.
+  function dayPlanSnapshot(items, now, isDone = () => false) {
+    const buckets = agendaBuckets(items, now, 2, isDone);
+    const line = (item) => {
+      if (isAllDay(item)) return "- All day · " + (item.summary || "Untitled");
+      const [start, end] = itemRange(item);
+      const clock = (ms) => { const d = new Date(ms); return p2(d.getHours()) + ":" + p2(d.getMinutes()); };
+      const range = isReminder(item) ? clock(start) : clock(start) + "–" + clock(end);
+      return "- " + range + " · " + (item.summary || "Untitled");
+    };
+    const today = buckets[0] || { key: localDateKey(dayStart(now)), items: [], count: 0 };
+    const tomorrow = buckets[1] || { key: localDateKey(addDays(dayStart(now), 1)), items: [], count: 0 };
+    return {
+      today: { ...today, lines: today.items.map(line) },
+      tomorrow: { ...tomorrow, lines: tomorrow.items.map(line) },
+      tomorrowPreview: "## Tomorrow\n" + (tomorrow.items.length ? tomorrow.items.map(line).join("\n") : "- Nothing scheduled"),
+    };
+  }
+  // Projection for the virtual Zen Agenda folder. Keys are occurrence-scoped, not
+  // display strings or formatted dates, so duplicate summaries remain independent.
+  function agendaZenProjection(items, now, days = 4, isDone = () => false, getWindow = null) {
+    const clock = (ms) => { const d = new Date(ms); return p2(d.getHours()) + ":" + p2(d.getMinutes()); };
+    // Expand the complete local window once, then fan overlapping multi-day events into
+    // each day bucket. Calling expandRange once per day is needlessly O(days * items).
+    const sourceItems = items || [];
+    const n = Math.max(1, Math.min(31, Math.floor(Number(days)) || 4));
+    const base = dayStart(now), baseOrdinal = localDayOrdinal(base), windowEnd = addDays(base, n);
+    // The overwhelmingly common path has no per-item policy and no supplied default
+    // resolver. Preserve the old projection's tight loop instead of normalising four
+    // sparse inheritance layers for every one of thousands of events.
+    const hasItemPolicy = !getWindow && sourceItems.some((item) => {
+      const policy = item?.x?.agendaWindow;
+      return policy && Object.keys(policy).length > 0;
+    });
+    const fastDefault = !getWindow && !hasItemPolicy;
+    let maxLead = 0, maxTail = 0;
+    if (!fastDefault) for (const source of sourceItems) {
+      const policy = resolveAgendaWindow(source, null, null, getWindow ? getWindow(source) : null);
+      if (!policy.enabled) continue;
+      maxLead = Math.max(maxLead, policy.leadDays);
+      maxTail = Math.max(maxTail, policy.tailDays);
+    }
+    const candidateFrom = fastDefault ? base : addDays(base, -maxTail);
+    const candidateTo = fastDefault ? windowEnd : addDays(windowEnd, maxLead);
+    const buckets = Array.from({ length: n }, (_, offset) => {
+      const from = addDays(base, offset), to = addDays(base, offset + 1);
+      return { offset, key: localDateKey(from), label: AGENDA_LABELS[offset] || "Day " + offset, from, to, count: 0, items: [] };
+    });
+    for (const item of expandRange(sourceItems, candidateFrom, candidateTo)) {
+      if (isDone(item)) continue;
+      let first, last;
+      if (fastDefault) {
+        const [start, end] = itemRange(item);
+        first = Math.max(0, localDayOrdinal(start) - baseOrdinal);
+        last = Math.min(n - 1, localDayOrdinal(end > start ? end - 1 : start) - baseOrdinal);
+      } else {
+        const policy = resolveAgendaWindow(item, null, null, getWindow ? getWindow(item) : null);
+        if (!policy.enabled) continue;
+        const visible = agendaVisibilityRange(item, policy);
+        if (!visible) continue;
+        first = Math.max(0, localDayOrdinal(visible.from) - baseOrdinal);
+        last = Math.min(n - 1, localDayOrdinal(visible.to - 1) - baseOrdinal);
+      }
+      for (let offset = first; offset <= last && offset < n; offset++) buckets[offset].items.push(item);
+    }
+    for (const bucket of buckets) bucket.count = bucket.items.length;
+    return buckets.map((bucket) => ({
+      key: "day:" + bucket.key,
+      date: bucket.key,
+      label: bucket.label,
+      count: bucket.count,
+      items: bucket.items.map((item) => {
+        const [start, end] = itemRange(item);
+        const summary = String(item.summary || "Untitled").replace(/[\r\n]+/g, " ").trim();
+        const label = isAllDay(item) ? "All day · " + summary : (isReminder(item) ? clock(start) : clock(start) + "–" + clock(end)) + "  " + summary;
+        const identity = reminderIdentity(item) || { itemId: item.id, occurrenceId: String(item.x?.recurrenceId || item.id), noteId: item.x?.noteId || "" };
+        const details = [item.description, item.x?.calNote, item.x?.sourceNoteTitle ? "Source note: " + item.x.sourceNoteTitle : "", item.x?.heading ? "Heading: " + item.x.heading : "", item.x?.category ? "Category: " + item.x.category : "", item.x?.tz ? "Time zone: " + item.x.tz : ""].filter(Boolean).join("\n");
+        return {
+          key: "item:" + identity.itemId + ":" + identity.occurrenceId,
+          itemId: identity.itemId,
+          occurrenceId: identity.occurrenceId,
+          noteId: item.x?.noteId || identity.noteId || "",
+          heading: item.x?.heading || "",
+          label,
+          summary,
+          details,
+          start,
+          end,
+          allDay: isAllDay(item),
+          reminder: isReminder(item),
+          ended: !isReminder(item) && end > start && end <= Number(now),
+        };
+      }),
+    }));
+  }
+  // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
+  // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
+  function createZenAgenda({ api, getItems, getDays = () => 4, getEnabled = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
+    let dead = false, timer = null, timerAt = Infinity, last = [];
+    const safeWarn = (error) => { try { warn(error); } catch (_) {} };
+    function armAt(due) {
+      if (dead || !Number.isFinite(due)) return;
+      const stamp = Number(now());
+      const wait = Math.max(0, due - (Number.isFinite(stamp) ? stamp : Date.now()));
+      if (timer !== null && timerAt <= due) return;
+      if (timer !== null) clearTimer(timer);
+      timerAt = due;
+      timer = setTimer(() => { timer = null; timerAt = Infinity; runNow(); }, wait);
+    }
+    function clearScheduled() {
+      if (timer !== null) clearTimer(timer);
+      timer = null;
+      timerAt = Infinity;
+    }
+    function scheduleBoundary(items) {
+      const due = nextAgendaVisibilityBoundary(items, now(), getDays(), getWindow);
+      if (due === null) clearScheduled(); else armAt(due);
+    }
+    function runNow() {
+      if (dead) return [];
+      let sourceItems = [];
+      try {
+        if (!getEnabled()) { api.removeAll?.(); last = []; clearScheduled(); return []; }
+        sourceItems = getItems?.() || [];
+        const projection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow);
+        if (!projection.some((day) => day.count > 0)) {
+          api.removeAll?.(); last = projection; scheduleBoundary(sourceItems); return projection;
+        }
+        if (api.ensureRoot?.(getPosition() === "below" ? "below" : "above") === false) { scheduleBoundary(sourceItems); return last; }
+        const desired = [];
+        for (const day of projection) {
+          desired.push({ key: day.key, kind: "day", label: day.label, date: day.date, count: day.count, parent: "" });
+          for (const item of day.items) desired.push({ ...item, kind: "item", parent: day.key, tooltip: item.details });
+        }
+        const current = api.list?.() || [], currentByKey = new Map();
+        for (const entry of current) if (entry?.key && !currentByKey.has(entry.key)) currentByKey.set(entry.key, entry);
+        const desiredByKey = new Map(desired.map((entry) => [entry.key, entry]));
+        for (const entry of current) if (entry?.key && !desiredByKey.has(entry.key)) api.remove?.(entry.key);
+        for (const entry of desired) {
+          const old = currentByKey.get(entry.key);
+          if (!old || old.parent !== entry.parent || old.kind !== entry.kind) {
+            if (old) api.remove?.(entry.key);
+            if (api.add?.(entry) === false) safeWarn("Zen Agenda: could not add " + entry.key);
+          } else api.update?.(entry);
+        }
+        api.reorder?.("", desired.filter((entry) => entry.kind === "day").map((entry) => entry.key));
+        for (const day of desired.filter((entry) => entry.kind === "day"))
+          api.reorder?.(day.key, desired.filter((entry) => entry.kind === "item" && entry.parent === day.key).map((entry) => entry.key));
+        last = projection;
+        scheduleBoundary(sourceItems);
+        return projection;
+      } catch (error) {
+        safeWarn(error);
+        try { scheduleBoundary(sourceItems); } catch (scheduleError) { safeWarn(scheduleError); }
+        return last;
+      }
+    }
+    function schedule(ms = 250) {
+      if (dead) return;
+      const stamp = Number(now()), due = (Number.isFinite(stamp) ? stamp : Date.now()) + Math.max(0, Number(ms) || 0);
+      armAt(due);
+    }
+    return {
+      runNow,
+      schedule,
+      get projection() { return last; },
+      destroy() { dead = true; clearScheduled(); try { api.removeAll?.(); } catch (error) { safeWarn(error); } },
+    };
   }
   // Per-target context menu model for calendar rows. This stays pure so every calendar surface can
   // render the same capabilities and reasons without duplicating lifecycle/source rules.
@@ -1904,6 +2423,7 @@
         src: previousX.src || "manual",
         calNote: String(input.calNote ?? previousX.calNote ?? "").slice(0, MAX_DESC),
         notify,
+        agendaWindow: cleanAgendaWindow(input.agendaWindow === undefined ? previousX.agendaWindow : input.agendaWindow),
         moved,
       },
     };
@@ -1922,7 +2442,10 @@
   // Tags, files, links, any text, or a user-edited heading make it "touched". `touched` is the store's own edit flag.
   function isBlankDateNote(note, key) {
     if (!note || note.touched || (note.tags && note.tags.length) || (note.files && note.files.length) || (note.attachments && note.attachments.length)) return false;
-    const body = String(note.body == null ? "" : note.body).replace(/\r\n?/g, "\n").trim();
+    // Empty Agenda scaffolding (heading + `%%calendar%%` markers with no list line, left behind when its items moved
+    // to another day) does not make a generated date note "used".
+    const body = String(note.body == null ? "" : note.body).replace(/\r\n?/g, "\n").split("\n")
+      .filter((l) => !AGENDA_HEAD_RE.test(l) && !MARKER_RE.test(l)).join("\n").trim();
     if (!body) return true;
     const k = String(key || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     return new RegExp("^#\\s+" + (k || "\\d{4}-\\d{2}-\\d{2}") + "(?:\\s+[A-Za-zÀ-ž]+)?$").test(body);
@@ -1945,8 +2468,8 @@
 
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
-    cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, dayPlanSnapshot, agendaZenProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

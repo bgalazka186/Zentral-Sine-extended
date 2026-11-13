@@ -151,17 +151,18 @@ const boxes = (body) => body.split("\n").filter((l) => /^- /.test(l)).map((l) =>
     const t = await fresh("## A\n%%calendar%%\n- 2026-11-13 09:30 Stand-up\n");
     const item = t.st.items.list({ noteId: t.n.id })[0];
     let timers = [], fired = [];
-    const sched = c.createReminderScheduler({ store: t.st, now: () => clock, setTimer: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimer() {}, onDue: (l) => fired.push(...l.map((x) => x.summary)) });
+    const sched = c.createReminderScheduler({ store: t.st, now: () => clock, setTimer: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimer() {}, onDue: (l) => fired.push(...l.map((x) => x.summary + ":" + (x.__stage || "legacy"))) });
     const run = async () => { sched.reschedule(); await new Promise((r) => setTimeout(r, 15)); };
     await run(); assert.deepEqual(fired, [], "not due yet");
     clock = new Date(2026, 10, 13, 9, 31).getTime();
-    await run(); assert.deepEqual(fired, ["Stand-up"]);
-    await run(); assert.deepEqual(fired, ["Stand-up"], "no repeat for the same schedule");
+    await run(); assert.deepEqual(fired, ["Stand-up:pre", "Stand-up:due"]);
+    await run(); assert.deepEqual(fired, ["Stand-up:pre", "Stand-up:due"], "no repeat for a claimed stage");
     assert.ok(t.st.snoozeCalendarReminder(item.id, 10));
-    clock += 9 * 60000; await run(); assert.deepEqual(fired, ["Stand-up"], "snoozed: quiet until the new time");
-    clock += 2 * 60000; await run(); assert.deepEqual(fired, ["Stand-up", "Stand-up"], "fires again at the snoozed time");
+    clock += 9 * 60000; await run(); assert.deepEqual(fired, ["Stand-up:pre", "Stand-up:due", "Stand-up:pre"], "new schedule gets a new adaptive pre-alert");
+    clock += 2 * 60000; await run(); assert.deepEqual(fired, ["Stand-up:pre", "Stand-up:due", "Stand-up:pre", "Stand-up:due"], "due stage fires at the snoozed time");
+    clock += 2 * 60000; await run(); assert.equal(fired.at(-1), "Stand-up:followup", "follow-up is a distinct delayed stage");
     t.st.applyReminderLifecycle(t.st.items.get(item.id), "done");
-    clock += 3600000; await run(); assert.equal(fired.length, 2, "Done never alerts again");
+    clock += 3600000; await run(); assert.equal(fired.length, 5, "Done never alerts again");
     sched.destroy();
   });
 

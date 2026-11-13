@@ -80,6 +80,8 @@ test("isBlankDateNote purges only untouched generated notes", () => {
   assert.equal(cal.isBlankDateNote(null, "2026-11-14"), false);
   assert.equal(cal.isBlankDateNote({ body: "# 2026-11-14 Saturday" }), true);
   assert.equal(cal.isBlankDateNote({ body: "# Shopping" }), false);
+  assert.equal(cal.isBlankDateNote({ body: "# 2026-11-14 Saturday\n\n## Agenda\n%%calendar%%\n%%calendar: Work%%\n" }, "2026-11-14"), true, "empty Agenda scaffolding");
+  assert.equal(cal.isBlankDateNote({ body: "# 2026-11-14 Saturday\n\n## Agenda\n%%calendar%%\n- [ ] 2026-11-14 09:00 X %%zn-item-id:abcd1%%\n" }, "2026-11-14"), false, "a real line keeps it");
 });
 test("lwwPick prefers newer updated, then higher rev, then remote", () => {
   const a = { id: 1, updated: 10, rev: 1 }, b = { id: 2, updated: 20, rev: 0 };
