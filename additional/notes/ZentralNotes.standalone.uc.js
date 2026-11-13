@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.89
+// @version 3.3.90
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.89, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.90, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.89";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.90";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11440,7 +11440,7 @@ __zentralShim.register = function (def) {
     }
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
-    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}) {
+    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}, onMathFence = () => {}) {
       const lines = String(text).split("\n"), result = [], codeRuns = indexMarkdownCodeRuns(lines);
       const mathOptions = exportScriptOptions(readOptions);
       const hasProtectedDollar = (line) => {
@@ -11450,10 +11450,12 @@ __zentralShim.register = function (def) {
       };
       // O01 only starts a block where the Notes parser actually recognizes it;
       // the same characters inside a running paragraph are ordinary text.
-      const smallRows = new Set();
-      if (lines.some((line) => /^-#[ \t]+\S/.test(line))) {
+      const smallRows = new Set(), mathFenceRows = new Set();
+      const isMathFence = (line) => /^ {0,3}(?:`{3,}|~{3,})[ \t]*math(?:[ \t{]|$)/i.test(line || "");
+      if (lines.some((line) => /^-#[ \t]+\S/.test(line) || isMathFence(line))) {
         for (const block of parseBlocks(text, false, readOptions)) {
           if (block.type === "p" && block.c?.length === 1 && block.c[0]?.t === "small") smallRows.add(block.src);
+          if (block.type === "math" && isMathFence(lines[block.src])) mathFenceRows.add(block.src);
         }
       }
       let fence = null, comment = false;
@@ -11515,7 +11517,7 @@ __zentralShim.register = function (def) {
               }
             }
             if (!ambiguous && end < lines.length && end - row <= 2000) {
-              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions);
+              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence);
               result.push(mapContainer({ open: line, inner, close: lines[end], kind: head[1], title: head[2].replace(/\s*:::\s*$/, "").trim() }));
               row = end; continue;
             }
@@ -11543,7 +11545,10 @@ __zentralShim.register = function (def) {
         }
         if (!comment) {
           const wasFenced = !!fence, next = nextMarkdownFence(line, fence);
-          if (wasFenced || next) { fence = next; result.push(line); continue; }
+          if (wasFenced || next) {
+            if (!wasFenced && next && mathFenceRows.has(row)) onMathFence(line);
+            fence = next; result.push(line); continue;
+          }
         }
         // Keep source offsets intact for multiline code spans: consume just the
         // small-print prefix, then scan the rest of the original line normally.
@@ -11803,7 +11808,7 @@ __zentralShim.register = function (def) {
         return segment;
       }, undefined, undefined, (math) => { found.add("math"); return math; }, (container) => {
         found.add("callout"); return container.open + "\n" + container.inner + "\n" + container.close;
-      }, (prefix) => { found.add("small print"); return prefix; }, readOptions);
+      }, (prefix) => { found.add("small print"); return prefix; }, readOptions, () => found.add("math"));
       return [...found];
     }
     // Export is a copy: convert the documented extensions conservatively and

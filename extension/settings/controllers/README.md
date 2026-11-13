@@ -1,6 +1,6 @@
 # extension/settings/controllers
 
-Owner and local file guide for Extended 3.3.89. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.3.90. Original Zentral reference: 1.1.0.
 
 | File                              | Responsibility                                                                                 |
 | --------------------------------- | ---------------------------------------------------------------------------------------------- |

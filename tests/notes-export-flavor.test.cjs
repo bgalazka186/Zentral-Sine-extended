@@ -249,4 +249,19 @@ assert.equal(convert(latexHidden, { flavor: 'mixed' }), 'Formula `' + String.raw
 assert.deepEqual(scan('`' + latexInline + '`', { flavor: 'mixed' }), []);
 assert.deepEqual(scan(latexLines, { flavor: 'reddit' }), ['subscript / superscript'], 'disabled bracket math does not hide active Reddit scripts');
 assert.equal(convert(latexBlock, { flavor: 'mixed' }, { flavor: 'reddit' }), String.raw`\[ x<sup>2</sup> \]`);
+const mathFence = '```math\nx^2 and %% literal %%\n```\n';
+assert.deepEqual(scan(mathFence, { flavor: 'mixed' }), ['math']);
+assert.deepEqual(scan(mathFence, { flavor: 'github' }), ['math']);
+assert.deepEqual(scan(mathFence, { flavor: 'reddit' }), []);
+assert.deepEqual(scan(mathFence, { flavor: 'mixed', ignore: 'G08' }), []);
+assert.equal(convert(mathFence, { flavor: 'mixed' }), mathFence, 'math fences remain portable literal code');
+assert.deepEqual(scan('````md\n```math\nx\n```\n````', { flavor: 'mixed' }), [], 'math fence examples inside code stay literal');
+assert.deepEqual(scan('<!--\n```math\nx\n```\n-->', { flavor: 'mixed' }), [], 'math fence examples inside comments stay literal');
+for (const flavor of ['mixed', 'mixed+github', 'mixed+reddit', 'github', 'reddit', 'obsidian']) {
+  for (const fenced of ['```math\nx\n```', '````math\nx\n````', '~~~math\nx\n~~~', '```math extra\nx\n```']) {
+    const active = c.parseBlocks(fenced, false, { flavor })[0]?.type === 'math';
+    assert.equal(scan(fenced, { flavor }).includes('math'), active, `${flavor} math-fence warning matches reader`);
+  }
+}
+assert.deepEqual(scan('::: note Title\n```math\nx\n```\n:::', { flavor: 'mixed' }).sort(), ['callout', 'math']);
 console.log('Markdown export flavor tests passed');
