@@ -69,10 +69,18 @@ Headings (`#` to `######`; seven `#` or `#tag` stay text), paragraphs, **bold** 
 - **Customize toolbar**: a Notes button is available in Zen's *Customize toolbar* and opens or closes Notes in the window where it was pressed.
 - **Shortcuts for every action**: the same shortcut editor now also lists Recent, Pin note, Keep open, Larger, Fill, Reset position, and two actions that work anywhere in the window even while Notes is closed: *New note from anywhere* and *Open or close the standalone card*. All start unassigned.
 
-### Export and import
+### Media embeds
+
+- **YouTube**: `![](https://youtu.be/VIDEO_ID)` or `![[https://www.youtube.com/watch?v=VIDEO_ID]]` renders a local poster prompt. No YouTube thumbnail, iframe, or remote media request is made when the note opens. Clicking the prompt creates an iframe on `www.youtube-nocookie.com` with a restrictive sandbox and the browser’s `strict-origin-when-cross-origin` referrer policy (origin only for cross-site requests).
+- **Local video**: put a supported file in `zentral-notes/assets/<note-id>/` and use `![[clip.mp4]]` in that note, or use `![description](assets/<note-id>/clip.mp4)` for an explicit asset reference. Supported containers are MP4/M4V, WebM and Ogg/OGV. The asset path is allow-listed, container bytes are checked against the extension, and files larger than 200 MB are not loaded. Playback uses a native `<video controls>` element backed by a local blob URL; no remote host is contacted.
+- **Dropped attachments**: drag up to 20 files onto the editable text area. Zentral copies them into that note's `assets/<note-id>/` folder (up to 100 MB per file and 200 assets per note), sanitizes their names, and adds a numeric suffix rather than overwriting an existing file. PNG/JPEG/GIF/WebP and MP4/M4V/WebM/Ogg/OGV are inserted as `![[filename]]` embeds only when their bytes match the extension. Other files are inserted as `[filename](assets/<note-id>/filename)` links; they are served as `application/octet-stream` and require an explicit download click, never rendered as active HTML or SVG. HTML/PDF exports replace these links with placeholders and do not bundle the attachment bytes.
+
+Dropped files are saved with the note they were dropped onto. If you switch notes while a large drop is being copied, the files remain in the original note's assets folder and the editor asks you to reopen that note before inserting links.
+
+## Export and import
 
 - **Save as Markdown** writes the note text. **HTML** writes a self-contained page; **plain text** drops all formatting; **PDF** opens the note as a page and your browser's print dialog (choose "Save as PDF"). Each one except Markdown shows what it loses before anything is written.
-- **Export all notes** writes one `.md` file per note to a folder (existing files are never overwritten); **Export all as zip** puts the same files in one archive and skips trashed notes.
+- **Export all notes** writes one `.md` file per note to a folder (existing files are never overwritten); **Export all as zip** puts the same files in one archive and skips trashed notes. HTML/PDF exports show non-playing placeholders for YouTube and local video; local video files are not bundled.
 - **Import .md folder** turns every `.md` file of a folder (not its subfolders, at most 500 files of up to 1 MB) into a new note and leaves the folder unchanged.
 
 ## Where notes are stored

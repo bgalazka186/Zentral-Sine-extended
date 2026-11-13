@@ -132,13 +132,15 @@
 
   function fenceFor(content, ch) {
     const runs = content.match(new RegExp(ch + "+", "g")) || [];
-    return ch.repeat(Math.max(3, ...runs.map((r) => r.length + 1)));
+    const longest = runs.reduce((max, run) => Math.max(max, run.length), 0);
+    return ch.repeat(Math.max(3, longest + 1));
   }
   function codeSpan(raw) {
     const content = raw.replace(/\s+/g, " ").trim();
     if (!content) return "";
     const runs = content.match(/`+/g) || [];
-    const tick = "`".repeat(runs.length ? Math.max(...runs.map((r) => r.length)) + 1 : 1);
+    const longest = runs.reduce((max, run) => Math.max(max, run.length), 0);
+    const tick = "`".repeat(longest ? longest + 1 : 1);
     return tick + (/^`|`$/.test(content) ? " " + content + " " : content) + tick;
   }
   function wrapMark(inner, mark) {
@@ -236,7 +238,8 @@
       const pad = " ".repeat(marker.length);
       const head = marker + it.task;
       const body = it.parts.join(loose ? "\n\n" : "\n");
-      lines.push(head + indent(body, pad).replace(/^\s+/, ""));
+      if (/^(?:`{3,}|~{3,})/.test(it.parts[0] || "")) lines.push(head + "\n" + indent(body, pad));
+      else lines.push(head + indent(body, pad).replace(/^\s+/, ""));
     }
     if (nested) return [lines.join("\n")];
     return [lines.join(loose ? "\n\n" : "\n")];
@@ -269,7 +272,7 @@
     }
     if (!grid.length) return [];
     if (rows.length > MAX_TABLE_ROWS + 1) state.lossy = true;
-    let cols = Math.max(...grid.map((r) => r.length));
+    let cols = grid.reduce((max, row) => Math.max(max, row.length), 0);
     if (cols > MAX_TABLE_COLS) { cols = MAX_TABLE_COLS; state.lossy = true; }
     const row = (r) => "| " + Array.from({ length: cols }, (_, i) => r[i] || " ").map((c) => c.trim() || " ").join(" | ") + " |";
     const header = head ? grid[0] : Array.from({ length: cols }, () => "");

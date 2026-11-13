@@ -157,6 +157,15 @@ test("assets: store saves, persists, re-reads and removes pictures; refuses bad 
   const back = await store.readAsset(saved.rel);
   assert.equal(back.mime, "image/png");
   assert.deepEqual([...back.bytes], [...PNG]);
+  const MP4 = Uint8Array.from([0, 0, 0, 16, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 0, 0]);
+  const videoRel = "assets/" + n.id + "/clip.mp4";
+  io.files.set("/n/" + videoRel, { bytes: MP4, mtime: Date.now() });
+  const videoBack = await store.readAsset(videoRel);
+  assert.equal(videoBack.mime, "video/mp4", "known local video containers are served to the native player");
+  assert.deepEqual([...videoBack.bytes], [...MP4]);
+  const mismatchRel = "assets/" + n.id + "/not-webm.webm";
+  io.files.set("/n/" + mismatchRel, { bytes: MP4, mtime: Date.now() });
+  assert.equal(await store.readAsset(mismatchRel), null, "file extension cannot override the container signature");
   assert.equal(await store.readAsset("assets/../meta.json"), null);
   assert.equal(await store.readAsset("assets/" + n.id + "/nope.png"), null);
   assert.equal((await store.saveAsset(n.id, Uint8Array.from(Buffer.from("MZ......payload...")), "image/png")).reason, "type");

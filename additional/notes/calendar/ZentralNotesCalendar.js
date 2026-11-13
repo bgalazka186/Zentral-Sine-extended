@@ -1615,27 +1615,44 @@
   }
   // Occurrences retain their original recurrence key in the ID even when the visible start is overridden.
   // This keeps reminder history and links stable after a move.
+  function recurrenceCivilDate(ms, zone = "") {
+    const parts = zone ? zoneParts(ms, zone) : null;
+    return parts ? new Date(parts.year, parts.month - 1, parts.day) : new Date(ms);
+  }
+  function recurrenceWallClock(ms, zone = "") {
+    const date = new Date(ms), parts = zone ? zoneParts(ms, zone) : null;
+    return parts ? { hour: parts.hour, minute: parts.minute, second: parts.second, millisecond: date.getUTCMilliseconds() }
+      : { hour: date.getHours(), minute: date.getMinutes(), second: date.getSeconds(), millisecond: date.getMilliseconds() };
+  }
+  function recurrenceCandidateMs(date, wall, zone = "") {
+    if (!zone) return new Date(date.getFullYear(), date.getMonth(), date.getDate(), wall.hour, wall.minute, wall.second, wall.millisecond).getTime();
+    const key = ymd(date), minute = zonedDateTimeToMs(key, p2(wall.hour) + ":" + p2(wall.minute), zone);
+    return Number.isFinite(minute) ? minute + wall.second * 1000 + wall.millisecond : NaN;
+  }
   function expandItem(it, from, to) {
     const rule = (it.recurrence || []).map(parseRule).find(Boolean);
     if (!rule) return itemsInRange([it], from, to);
     if (!(Number.isFinite(from) && Number.isFinite(to)) || to <= from) return [];
     const [s0, e0] = itemRange(it), len = Math.max(0, e0 - s0), allDay = isAllDay(it), reminder = isReminder(it);
     const allDaySpan = allDay ? Math.max(1, localDayOrdinal(e0) - localDayOrdinal(s0)) : 0;
-    const base = new Date(s0), out = [], exceptions = it.x?.recurrenceExceptions || [], exdates = recurrenceExdateSet(it);
+    const zone = allDay ? "" : cleanZone(it.x?.tz);
+    const base = recurrenceCivilDate(s0, zone), wall = recurrenceWallClock(s0, zone);
+    const out = [], exceptions = it.x?.recurrenceExceptions || [], exdates = recurrenceExdateSet(it);
     const margins = recurrenceSearchMargins(it, allDay);
     const limit = Math.min(to + margins.negative, rule.until || Infinity);
     if (limit <= s0) return [];
-    // Events may start before `from` and still overlap it. A forward-shifted exception may originate even earlier.
+    // Recurrence arithmetic is performed on civil dates in the item's IANA zone, not the host OS zone.
     const seekFrom = (reminder ? from : from - len) - margins.positive;
-    let period = recurrencePeriodIndex(rule, base, seekFrom);
+    let period = recurrencePeriodIndex(rule, base, recurrenceCivilDate(seekFrom, zone).getTime());
+    const limitCivil = recurrenceCivilDate(limit, zone).getTime();
     // COUNT is based on original recurrence candidates, never the number remaining after exclusions.
     const countBefore = recurrenceCountBefore(rule, base, period);
     if (rule.count && countBefore >= rule.count) return [];
     let ordinal = countBefore;
     const timedAt = (d) => allDay ? new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-      : new Date(d.getFullYear(), d.getMonth(), d.getDate(), base.getHours(), base.getMinutes(), base.getSeconds(), base.getMilliseconds()).getTime();
+      : recurrenceCandidateMs(d, wall, zone);
     for (let scanned = 0; scanned < 100000; scanned++, period++) {
-      if (recurrencePeriodAnchor(rule, base, period) >= limit) break;
+      if (recurrencePeriodAnchor(rule, base, period) >= limitCivil) break;
       const candidates = recurrencePeriodDates(rule, base, period).map(timedAt).sort((a, b) => a - b);
       for (const recurrenceMs of candidates) {
         if (recurrenceMs < s0) continue;
@@ -1670,14 +1687,16 @@
   function isRecurrenceCandidate(master, recurrenceMs) {
     const rule = (master?.recurrence || []).map(parseRule).find(Boolean);
     if (!rule || !Number.isSafeInteger(recurrenceMs) || recurrenceMs < whenMs(master.start) || recurrenceMs >= (rule.until || Infinity)) return false;
-    const allDay = isAllDay(master), base = new Date(whenMs(master.start));
-    const firstPeriod = recurrencePeriodIndex(rule, base, recurrenceMs);
+    const allDay = isAllDay(master), zone = allDay ? "" : cleanZone(master.x?.tz);
+    const base = recurrenceCivilDate(whenMs(master.start), zone);
+    const firstPeriod = recurrencePeriodIndex(rule, base, recurrenceCivilDate(recurrenceMs, zone).getTime());
     // The search helper deliberately starts one period early so event spans and BYDAY weeks are not missed.
     // Check that period and its successor to find the candidate's actual COUNT ordinal.
     for (let period = firstPeriod; period <= firstPeriod + 1; period++) {
+      const wall = recurrenceWallClock(whenMs(master.start), zone);
       const candidates = recurrencePeriodDates(rule, base, period).map((date) => allDay
         ? new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-        : new Date(date.getFullYear(), date.getMonth(), date.getDate(), base.getHours(), base.getMinutes(), base.getSeconds(), base.getMilliseconds()).getTime()).sort((a, b) => a - b);
+        : recurrenceCandidateMs(date, wall, zone)).sort((a, b) => a - b);
       const index = candidates.findIndex((candidate) => candidate === recurrenceMs);
       if (index < 0) continue;
       const countBefore = recurrenceCountBefore(rule, base, period);
@@ -1695,7 +1714,12 @@
     const allDay = isAllDay(master), [masterStart, masterEnd] = itemRange(master);
     const span = allDay ? Math.max(1, localDayOrdinal(masterEnd) - localDayOrdinal(masterStart)) : Math.max(0, masterEnd - masterStart);
     const exception = (master.x?.recurrenceExceptions || []).find((entry) => entry.scope === "this" && whenMs(entry.recurrenceId) === recurrenceMs);
-    if (exception?.cancelled && !allowCancelled) return false;
+    if (exception?.cancelled) {
+      if (!allowCancelled) return false;
+      // A cancelled occurrence deliberately has no visible start override. Its old rendered object may still
+      // carry the pre-cancellation moved time; stable recurrence identity is sufficient to restore it.
+      return !!occurrence.start && !!occurrence.start.date === allDay && !!occurrence.end === !!master.end;
+    }
     let expectedStart = recurrenceMs + occurrenceShift(master.x?.recurrenceExceptions || [], recurrenceMs, allDay);
     let expectedEnd = allDay ? addDays(expectedStart, span) : expectedStart + span;
     if (exception && !exception.cancelled) {
@@ -1721,14 +1745,17 @@
         : { dateTime: iso(targetMs + duration) }) : null;
       return { recurrenceId, scope, cancelled: false, start: target, ...(end ? { end } : {}) };
     }
-    if (allDay) return { recurrenceId: scope === "series" ? cleanWhen(master.start) : recurrenceId, scope, shiftDays: localDayOrdinal(targetMs) - localDayOrdinal(recurrenceMs) };
-    return { recurrenceId: scope === "series" ? cleanWhen(master.start) : recurrenceId, scope, shiftMs: targetMs - recurrenceMs };
+    const selectedShift = allDay ? localDayOrdinal(selectedStart) - localDayOrdinal(recurrenceMs) : selectedStart - recurrenceMs;
+    const delta = allDay ? localDayOrdinal(targetMs) - localDayOrdinal(selectedStart) : targetMs - selectedStart;
+    if (allDay) return { recurrenceId: scope === "series" ? cleanWhen(master.start) : recurrenceId, scope, shiftDays: selectedShift + delta };
+    return { recurrenceId: scope === "series" ? cleanWhen(master.start) : recurrenceId, scope, shiftMs: selectedShift + delta };
   }
   function moveOccurrence(master, occurrence, targetStart, scope, now = Date.now()) {
     if (!master || !(master.recurrence || []).some((line) => parseRule(line))) return null;
     const record = occurrenceMoveRecord(master, occurrence, targetStart, scope);
     if (!record) return null;
-    const anchor = whenMs(record.recurrenceId), selectedAnchor = whenMs(occurrence.x.recurrenceId);
+    // x.recurrenceId is a millisecond string, not a Google date/dateTime object.
+    const anchor = whenMs(record.recurrenceId), selectedAnchor = Number(occurrence.x.recurrenceId);
     const prior = master.x?.recurrenceExceptions || [];
     const exceptions = prior.filter((entry) => {
       const at = whenMs(entry.recurrenceId);
@@ -1743,7 +1770,7 @@
         : whenMs(targetStart) - whenMs(occurrence.start);
       for (const entry of prior) {
         const at = whenMs(entry.recurrenceId), applies = scope === "series" || at >= anchor;
-        if (!applies || (scope === "following" && at === anchor && entry.scope === "following")) continue;
+        if (!applies || (entry.scope === "this" && at === selectedAnchor) || (scope === "following" && at === anchor && entry.scope === "following")) continue;
         if (entry.scope === "this" && !entry.cancelled) {
           const shiftedStart = allDay ? addDays(whenMs(entry.start), delta) : whenMs(entry.start) + delta;
           const shiftedEnd = entry.end ? (allDay ? addDays(whenMs(entry.end), delta) : whenMs(entry.end) + delta) : 0;
@@ -2153,7 +2180,24 @@
       const from = addDays(base, offset), to = addDays(base, offset + 1);
       return { offset, key: localDateKey(from), label: AGENDA_LABELS[offset] || "Day " + offset, from, to, count: 0, items: [] };
     });
-    for (const item of expandRange(sourceItems, candidateFrom, candidateTo)) {
+    let candidates;
+    if (fastDefault) {
+      // Avoid expandRange's per-item filter/map/single-item arrays and sort comparator work
+      // for the common non-recurring case. Keep recurrence and occurrence semantics identical.
+      candidates = [];
+      for (const source of sourceItems) {
+        if (!live(source)) continue;
+        if (source.x?.series || !(source.recurrence || []).length) {
+          const start = whenMs(source.start), end = source.end ? whenMs(source.end) : start;
+          if (isReminder(source) ? start >= candidateFrom && start < candidateTo : start < candidateTo && end > candidateFrom) candidates.push(source);
+        } else {
+          const expanded = expandItem(source, candidateFrom, candidateTo);
+          for (const occurrence of expanded) candidates.push(occurrence);
+        }
+      }
+      candidates.sort((a, b) => whenMs(a.start) - whenMs(b.start) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    } else candidates = expandRange(sourceItems, candidateFrom, candidateTo);
+    for (const item of candidates) {
       if (isDone(item)) continue;
       let first, last;
       if (fastDefault) {
@@ -2469,7 +2513,7 @@
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, dayPlanSnapshot, agendaZenProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, dayPlanSnapshot, agendaZenProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.46
+// @version 3.3.50
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.46, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.50, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.46";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.50";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2826,27 +2826,44 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Occurrences retain their original recurrence key in the ID even when the visible start is overridden.
   // This keeps reminder history and links stable after a move.
+  function recurrenceCivilDate(ms, zone = "") {
+    const parts = zone ? zoneParts(ms, zone) : null;
+    return parts ? new Date(parts.year, parts.month - 1, parts.day) : new Date(ms);
+  }
+  function recurrenceWallClock(ms, zone = "") {
+    const date = new Date(ms), parts = zone ? zoneParts(ms, zone) : null;
+    return parts ? { hour: parts.hour, minute: parts.minute, second: parts.second, millisecond: date.getUTCMilliseconds() }
+      : { hour: date.getHours(), minute: date.getMinutes(), second: date.getSeconds(), millisecond: date.getMilliseconds() };
+  }
+  function recurrenceCandidateMs(date, wall, zone = "") {
+    if (!zone) return new Date(date.getFullYear(), date.getMonth(), date.getDate(), wall.hour, wall.minute, wall.second, wall.millisecond).getTime();
+    const key = ymd(date), minute = zonedDateTimeToMs(key, p2(wall.hour) + ":" + p2(wall.minute), zone);
+    return Number.isFinite(minute) ? minute + wall.second * 1000 + wall.millisecond : NaN;
+  }
   function expandItem(it, from, to) {
     const rule = (it.recurrence || []).map(parseRule).find(Boolean);
     if (!rule) return itemsInRange([it], from, to);
     if (!(Number.isFinite(from) && Number.isFinite(to)) || to <= from) return [];
     const [s0, e0] = itemRange(it), len = Math.max(0, e0 - s0), allDay = isAllDay(it), reminder = isReminder(it);
     const allDaySpan = allDay ? Math.max(1, localDayOrdinal(e0) - localDayOrdinal(s0)) : 0;
-    const base = new Date(s0), out = [], exceptions = it.x?.recurrenceExceptions || [], exdates = recurrenceExdateSet(it);
+    const zone = allDay ? "" : cleanZone(it.x?.tz);
+    const base = recurrenceCivilDate(s0, zone), wall = recurrenceWallClock(s0, zone);
+    const out = [], exceptions = it.x?.recurrenceExceptions || [], exdates = recurrenceExdateSet(it);
     const margins = recurrenceSearchMargins(it, allDay);
     const limit = Math.min(to + margins.negative, rule.until || Infinity);
     if (limit <= s0) return [];
-    // Events may start before `from` and still overlap it. A forward-shifted exception may originate even earlier.
+    // Recurrence arithmetic is performed on civil dates in the item's IANA zone, not the host OS zone.
     const seekFrom = (reminder ? from : from - len) - margins.positive;
-    let period = recurrencePeriodIndex(rule, base, seekFrom);
+    let period = recurrencePeriodIndex(rule, base, recurrenceCivilDate(seekFrom, zone).getTime());
+    const limitCivil = recurrenceCivilDate(limit, zone).getTime();
     // COUNT is based on original recurrence candidates, never the number remaining after exclusions.
     const countBefore = recurrenceCountBefore(rule, base, period);
     if (rule.count && countBefore >= rule.count) return [];
     let ordinal = countBefore;
     const timedAt = (d) => allDay ? new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-      : new Date(d.getFullYear(), d.getMonth(), d.getDate(), base.getHours(), base.getMinutes(), base.getSeconds(), base.getMilliseconds()).getTime();
+      : recurrenceCandidateMs(d, wall, zone);
     for (let scanned = 0; scanned < 100000; scanned++, period++) {
-      if (recurrencePeriodAnchor(rule, base, period) >= limit) break;
+      if (recurrencePeriodAnchor(rule, base, period) >= limitCivil) break;
       const candidates = recurrencePeriodDates(rule, base, period).map(timedAt).sort((a, b) => a - b);
       for (const recurrenceMs of candidates) {
         if (recurrenceMs < s0) continue;
@@ -2881,14 +2898,16 @@ const __zentralEmbeddedLoader = (function () {
   function isRecurrenceCandidate(master, recurrenceMs) {
     const rule = (master?.recurrence || []).map(parseRule).find(Boolean);
     if (!rule || !Number.isSafeInteger(recurrenceMs) || recurrenceMs < whenMs(master.start) || recurrenceMs >= (rule.until || Infinity)) return false;
-    const allDay = isAllDay(master), base = new Date(whenMs(master.start));
-    const firstPeriod = recurrencePeriodIndex(rule, base, recurrenceMs);
+    const allDay = isAllDay(master), zone = allDay ? "" : cleanZone(master.x?.tz);
+    const base = recurrenceCivilDate(whenMs(master.start), zone);
+    const firstPeriod = recurrencePeriodIndex(rule, base, recurrenceCivilDate(recurrenceMs, zone).getTime());
     // The search helper deliberately starts one period early so event spans and BYDAY weeks are not missed.
     // Check that period and its successor to find the candidate's actual COUNT ordinal.
     for (let period = firstPeriod; period <= firstPeriod + 1; period++) {
+      const wall = recurrenceWallClock(whenMs(master.start), zone);
       const candidates = recurrencePeriodDates(rule, base, period).map((date) => allDay
         ? new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-        : new Date(date.getFullYear(), date.getMonth(), date.getDate(), base.getHours(), base.getMinutes(), base.getSeconds(), base.getMilliseconds()).getTime()).sort((a, b) => a - b);
+        : recurrenceCandidateMs(date, wall, zone)).sort((a, b) => a - b);
       const index = candidates.findIndex((candidate) => candidate === recurrenceMs);
       if (index < 0) continue;
       const countBefore = recurrenceCountBefore(rule, base, period);
@@ -2906,7 +2925,12 @@ const __zentralEmbeddedLoader = (function () {
     const allDay = isAllDay(master), [masterStart, masterEnd] = itemRange(master);
     const span = allDay ? Math.max(1, localDayOrdinal(masterEnd) - localDayOrdinal(masterStart)) : Math.max(0, masterEnd - masterStart);
     const exception = (master.x?.recurrenceExceptions || []).find((entry) => entry.scope === "this" && whenMs(entry.recurrenceId) === recurrenceMs);
-    if (exception?.cancelled && !allowCancelled) return false;
+    if (exception?.cancelled) {
+      if (!allowCancelled) return false;
+      // A cancelled occurrence deliberately has no visible start override. Its old rendered object may still
+      // carry the pre-cancellation moved time; stable recurrence identity is sufficient to restore it.
+      return !!occurrence.start && !!occurrence.start.date === allDay && !!occurrence.end === !!master.end;
+    }
     let expectedStart = recurrenceMs + occurrenceShift(master.x?.recurrenceExceptions || [], recurrenceMs, allDay);
     let expectedEnd = allDay ? addDays(expectedStart, span) : expectedStart + span;
     if (exception && !exception.cancelled) {
@@ -2932,14 +2956,17 @@ const __zentralEmbeddedLoader = (function () {
         : { dateTime: iso(targetMs + duration) }) : null;
       return { recurrenceId, scope, cancelled: false, start: target, ...(end ? { end } : {}) };
     }
-    if (allDay) return { recurrenceId: scope === "series" ? cleanWhen(master.start) : recurrenceId, scope, shiftDays: localDayOrdinal(targetMs) - localDayOrdinal(recurrenceMs) };
-    return { recurrenceId: scope === "series" ? cleanWhen(master.start) : recurrenceId, scope, shiftMs: targetMs - recurrenceMs };
+    const selectedShift = allDay ? localDayOrdinal(selectedStart) - localDayOrdinal(recurrenceMs) : selectedStart - recurrenceMs;
+    const delta = allDay ? localDayOrdinal(targetMs) - localDayOrdinal(selectedStart) : targetMs - selectedStart;
+    if (allDay) return { recurrenceId: scope === "series" ? cleanWhen(master.start) : recurrenceId, scope, shiftDays: selectedShift + delta };
+    return { recurrenceId: scope === "series" ? cleanWhen(master.start) : recurrenceId, scope, shiftMs: selectedShift + delta };
   }
   function moveOccurrence(master, occurrence, targetStart, scope, now = Date.now()) {
     if (!master || !(master.recurrence || []).some((line) => parseRule(line))) return null;
     const record = occurrenceMoveRecord(master, occurrence, targetStart, scope);
     if (!record) return null;
-    const anchor = whenMs(record.recurrenceId), selectedAnchor = whenMs(occurrence.x.recurrenceId);
+    // x.recurrenceId is a millisecond string, not a Google date/dateTime object.
+    const anchor = whenMs(record.recurrenceId), selectedAnchor = Number(occurrence.x.recurrenceId);
     const prior = master.x?.recurrenceExceptions || [];
     const exceptions = prior.filter((entry) => {
       const at = whenMs(entry.recurrenceId);
@@ -2954,7 +2981,7 @@ const __zentralEmbeddedLoader = (function () {
         : whenMs(targetStart) - whenMs(occurrence.start);
       for (const entry of prior) {
         const at = whenMs(entry.recurrenceId), applies = scope === "series" || at >= anchor;
-        if (!applies || (scope === "following" && at === anchor && entry.scope === "following")) continue;
+        if (!applies || (entry.scope === "this" && at === selectedAnchor) || (scope === "following" && at === anchor && entry.scope === "following")) continue;
         if (entry.scope === "this" && !entry.cancelled) {
           const shiftedStart = allDay ? addDays(whenMs(entry.start), delta) : whenMs(entry.start) + delta;
           const shiftedEnd = entry.end ? (allDay ? addDays(whenMs(entry.end), delta) : whenMs(entry.end) + delta) : 0;
@@ -3364,7 +3391,24 @@ const __zentralEmbeddedLoader = (function () {
       const from = addDays(base, offset), to = addDays(base, offset + 1);
       return { offset, key: localDateKey(from), label: AGENDA_LABELS[offset] || "Day " + offset, from, to, count: 0, items: [] };
     });
-    for (const item of expandRange(sourceItems, candidateFrom, candidateTo)) {
+    let candidates;
+    if (fastDefault) {
+      // Avoid expandRange's per-item filter/map/single-item arrays and sort comparator work
+      // for the common non-recurring case. Keep recurrence and occurrence semantics identical.
+      candidates = [];
+      for (const source of sourceItems) {
+        if (!live(source)) continue;
+        if (source.x?.series || !(source.recurrence || []).length) {
+          const start = whenMs(source.start), end = source.end ? whenMs(source.end) : start;
+          if (isReminder(source) ? start >= candidateFrom && start < candidateTo : start < candidateTo && end > candidateFrom) candidates.push(source);
+        } else {
+          const expanded = expandItem(source, candidateFrom, candidateTo);
+          for (const occurrence of expanded) candidates.push(occurrence);
+        }
+      }
+      candidates.sort((a, b) => whenMs(a.start) - whenMs(b.start) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    } else candidates = expandRange(sourceItems, candidateFrom, candidateTo);
+    for (const item of candidates) {
       if (isDone(item)) continue;
       let first, last;
       if (fastDefault) {
@@ -3680,7 +3724,7 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, dayPlanSnapshot, agendaZenProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, dayPlanSnapshot, agendaZenProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -3822,13 +3866,15 @@ const __zentralEmbeddedLoader = (function () {
 
   function fenceFor(content, ch) {
     const runs = content.match(new RegExp(ch + "+", "g")) || [];
-    return ch.repeat(Math.max(3, ...runs.map((r) => r.length + 1)));
+    const longest = runs.reduce((max, run) => Math.max(max, run.length), 0);
+    return ch.repeat(Math.max(3, longest + 1));
   }
   function codeSpan(raw) {
     const content = raw.replace(/\s+/g, " ").trim();
     if (!content) return "";
     const runs = content.match(/`+/g) || [];
-    const tick = "`".repeat(runs.length ? Math.max(...runs.map((r) => r.length)) + 1 : 1);
+    const longest = runs.reduce((max, run) => Math.max(max, run.length), 0);
+    const tick = "`".repeat(longest ? longest + 1 : 1);
     return tick + (/^`|`$/.test(content) ? " " + content + " " : content) + tick;
   }
   function wrapMark(inner, mark) {
@@ -3926,7 +3972,8 @@ const __zentralEmbeddedLoader = (function () {
       const pad = " ".repeat(marker.length);
       const head = marker + it.task;
       const body = it.parts.join(loose ? "\n\n" : "\n");
-      lines.push(head + indent(body, pad).replace(/^\s+/, ""));
+      if (/^(?:`{3,}|~{3,})/.test(it.parts[0] || "")) lines.push(head + "\n" + indent(body, pad));
+      else lines.push(head + indent(body, pad).replace(/^\s+/, ""));
     }
     if (nested) return [lines.join("\n")];
     return [lines.join(loose ? "\n\n" : "\n")];
@@ -3959,7 +4006,7 @@ const __zentralEmbeddedLoader = (function () {
     }
     if (!grid.length) return [];
     if (rows.length > MAX_TABLE_ROWS + 1) state.lossy = true;
-    let cols = Math.max(...grid.map((r) => r.length));
+    let cols = grid.reduce((max, row) => Math.max(max, row.length), 0);
     if (cols > MAX_TABLE_COLS) { cols = MAX_TABLE_COLS; state.lossy = true; }
     const row = (r) => "| " + Array.from({ length: cols }, (_, i) => r[i] || " ").map((c) => c.trim() || " ").join(" | ") + " |";
     const header = head ? grid[0] : Array.from({ length: cols }, () => "");
@@ -4620,13 +4667,15 @@ __zentralShim.register = function (def) {
     // T1.14: one tag model for foreign YAML `tags:` and inline #tags. Scan only visible Markdown prose:
     // headings, fenced/inline code, HTML attributes, link destinations, bare URLs and CSS hex colours are excluded.
     function inlineTags(body) {
-      const text = normalizeNewlines(hideFrontMatter(String(body ?? "")));
+      let text = normalizeNewlines(hideFrontMatter(String(body ?? "")));
+      const blankComment = (value) => value.replace(/[^\n]/g, " ");
+      text = text.replace(/%%[^%\n]*%%/g, blankComment).replace(/<!--[\s\S]*?-->/g, blankComment);
       const lines = text.split("\n");
       const found = new Map();
       mapOutsideCode(text, (segment, lineNo) => {
         if (/^ {0,3}#{1,6}(?:\s|$)/.test(lines[lineNo] || "")) return segment;
         let safe = segment
-          .replace(/<[^>]*>/g, " ")
+          .replace(/<\/?[A-Za-z][^>\n]*>/g, " ")
           .replace(/\]\s*\([^)]{0,4000}\)/g, " ")
           .replace(/(?:https?:\/\/|www\.)[^\s<>\x22'`]+/gi, " ");
         const re = /(?<![\w&/#>])#([A-Za-z_\u00C0-\uFFFF][\w\u00C0-\uFFFF-]*(?:\/[A-Za-z_\u00C0-\uFFFF][\w\u00C0-\uFFFF-]*)*)/g;
@@ -5421,8 +5470,12 @@ __zentralShim.register = function (def) {
     }
 
     const MARKERS_RE = /\*\*|==(?:\{(?:\w+|#[0-9a-fA-F]{6})\})?|~~|`/g;
-    const LEAD_RE =
-      /^\s*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX\-/?!]\]\s+)?|\d+[.)]\s+|>\s*)/;
+    // One source of truth for GitHub/Obsidian task-box states (including the E10 theme markers).
+    const TASK_BOX_CHARS = ' xX\\-/?!><*ib"lpcfISn';
+    const TASK_BOX_ALT = Array.from(TASK_BOX_CHARS, (ch) => ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+    const TASK_BOX_TOKEN = "\\[(?:" + TASK_BOX_ALT + ")\\]";
+    const TASK_BOX_CAPTURE = "\\[(" + TASK_BOX_ALT + ")\\]";
+    const LEAD_RE = new RegExp("^\\s*(?:#{1,6}\\s+|[-*+]\\s+(?:" + TASK_BOX_TOKEN + "\\s+)?|\\d+[.)]\\s+|>\\s*)");
     function cleanLine(raw) {
       return raw.replace(LEAD_RE, "").replace(MARKERS_RE, "").trim();
     }
@@ -5605,19 +5658,27 @@ __zentralShim.register = function (def) {
       const md = buildNoteLink(id, label, heading);
       return { start: s, end: e, text: md, selStart: s + md.length, selEnd: s + md.length };
     }
+    // Shared CommonMark fence state: remember both the delimiter and its opening length.
+    // A shorter fence or a different delimiter cannot close the active block.
+    function nextMarkdownFence(line, fence) {
+      const value = String(line ?? "");
+      if (fence) {
+        const close = new RegExp("^ {0,3}" + (fence.char === "`" ? "`" : "~") + "{" + fence.length + ",}[\\t ]*$");
+        return close.test(value) ? null : fence;
+      }
+      const open = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(value);
+      if (!open || (open[1][0] === "`" && open[2].includes("`"))) return null;
+      return { char: open[1][0], length: open[1].length };
+    }
     // Runs fn over the text OUTSIDE fenced code blocks and `inline code`; line count never changes.
     function mapOutsideCode(text, fn) {
-      let fence = "";
+      let fence = null;
       return String(text)
         .split("\n")
         .map((line, li) => {
-          const f = /^ {0,3}(`{3,}|~{3,})/.exec(line);
-          if (f) {
-            if (!fence) fence = f[1][0];
-            else if (f[1][0] === fence) fence = "";
-            return line;
-          }
-          if (fence) return line;
+          const wasFenced = !!fence;
+          const next = nextMarkdownFence(line, fence);
+          if (wasFenced || next) { fence = next; return line; }
           return line.split(/(`+[^`]*`+)/).map((seg, i) => (i % 2 ? seg : fn(seg, li))).join("");
         })
         .join("\n");
@@ -5647,10 +5708,32 @@ __zentralShim.register = function (def) {
       const title = segs.pop() || "";
       return { whole: rest, path: segs, title, heading, self: !rest && hash >= 0 };
     }
-    // T1.13: Obsidian-style transclusion target. A numeric pipe suffix is a bounded image
-    // width; #^id selects a block, #Heading selects a section, and #Heading1#Heading2
-    // follows the same last-heading rule as wiki links. Bare image names are note-local assets.
+    // T1.13/T1.15: transclusion target. Numeric pipe suffix bounds width; #^id selects a block,
+    // #Heading selects a section; bare image/video names resolve only inside this note’s assets folder.
     const TRANSCLUSION_IMAGE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.(?:png|jpe?g|gif|webp)$/i;
+    const TRANSCLUSION_VIDEO_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.(?:mp4|m4v|webm|ogv|ogg)$/i;
+    // Only the HTTPS watch/short/embed forms on exact YouTube hosts are accepted. IDs are
+    // validated before any embed URL is formed; arbitrary hosts never become frames.
+    function parseYouTubeUrl(raw) {
+      let url;
+      try { url = new URL(String(raw ?? "").trim()); } catch (_) { return null; }
+      if (url.protocol !== "https:" || url.username || url.password || url.port) return null;
+      const host = url.hostname.toLowerCase();
+      let id = "";
+      if (host === "youtu.be") {
+        const parts = url.pathname.split("/").filter(Boolean);
+        if (parts.length !== 1) return null;
+        id = parts[0];
+      } else if (["youtube.com", "www.youtube.com", "m.youtube.com", "youtube-nocookie.com", "www.youtube-nocookie.com"].includes(host)) {
+        if (url.pathname === "/watch") id = url.searchParams.get("v") || "";
+        else {
+          const m = /^\/(?:embed|shorts|live|v)\/([A-Za-z0-9_-]{11})\/?$/.exec(url.pathname);
+          if (m) id = m[1];
+        }
+      } else return null;
+      if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return null;
+      return { id, embedUrl: "https://www.youtube-nocookie.com/embed/" + id };
+    }
     function parseEmbedTarget(raw) {
       let target = String(raw ?? "").trim();
       if (!target || target.length > 240 || /[\\\r\n]/.test(target)) return null;
@@ -5664,7 +5747,10 @@ __zentralShim.register = function (def) {
         }
       }
       if (!target) return null;
+      const youtube = parseYouTubeUrl(target);
+      if (youtube) return { target, width, image: "", videoAsset: "", youtube, parts: { whole: "", path: [], title: "", heading: "", self: false }, blockId: "" };
       const image = TRANSCLUSION_IMAGE_RE.test(target) ? target : "";
+      const videoAsset = TRANSCLUSION_VIDEO_RE.test(target) ? target : "";
       const parts = parseWikiTarget(target);
       let blockId = "";
       if (parts.heading.startsWith("^") && /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/.test(parts.heading.slice(1))) {
@@ -5674,7 +5760,7 @@ __zentralShim.register = function (def) {
         blockId = parts.heading.slice(1);
         parts.heading = "";
       }
-      return { target, width, image, parts, blockId };
+      return { target, width, image, videoAsset, youtube: null, parts, blockId };
     }
     // Labels of the folders a note sits in, outermost first: the label from meta.json when the folder is listed, else its path segment.
     function folderLabels(folders, folderId) {
@@ -6115,13 +6201,11 @@ __zentralShim.register = function (def) {
     // Takes the definition lines out (blanked, so line numbers stay true) and returns them.
     function collectRefs(lines) {
       const refs = new Map();
-      let fence = false;
+      let fence = null;
       for (let i = 0; i < lines.length; i++) {
-        if (/^```/.test(lines[i])) {
-          fence = !fence;
-          continue;
-        }
-        if (fence) continue;
+        const wasFenced = !!fence;
+        const next = nextMarkdownFence(lines[i], fence);
+        if (wasFenced || next) { fence = next; continue; }
         const m = REF_DEF_RE.exec(lines[i]);
         if (!m) continue;
         const key = refKey(m[1]);
@@ -6407,15 +6491,21 @@ __zentralShim.register = function (def) {
           // ![alt|100](url) and ![alt|100x50](url): Obsidian's size, kept out of the alt text (B17).
           const size = FLAVOR.on("B17") ? /\|(\d{1,4})(?:x(\d{1,4}))?$/.exec(m[17]) : null;
           const alt = size ? m[17].slice(0, size.index) : m[17];
+          const videoAsset = parseVideoAssetLink(src);
+          const youtube = parseYouTubeUrl(src);
           if (asset) out.push({ t: "img", alt, asset: asset.rel, width: size ? +size[1] : asset.width, align: asset.align });
+          else if (videoAsset) out.push({ t: "video", alt, asset: videoAsset.rel, width: size ? +size[1] : 0 });
+          else if (youtube) out.push({ t: "youtube", alt, videoId: youtube.id, width: size ? +size[1] : 0 });
           else if (href) out.push(size ? { t: "img", alt, href, width: +size[1] } : { t: "img", alt, href });
           else out.push({ t: "text", s: m[0] });
         } else if (m[13] !== undefined) {
           const target = unAngle(m[14]);
           const parts = noteLinkParts(target);
           const noteId = parts?.id || null;
-          const href = noteId ? null : safeHref(target);
-          if (!noteId && /^#[A-Za-z0-9_-]+$/.test(target)) {
+          const fileAsset = !noteId ? parseFileAssetLink(target) : null;
+          const href = noteId || fileAsset ? null : safeHref(target);
+          if (fileAsset) out.push({ t: "file", asset: fileAsset.rel, file: fileAsset.file, c: parseInline(m[13], depth + 1) });
+          else if (!noteId && /^#[A-Za-z0-9_-]+$/.test(target)) {
             // A link to a heading of this note (the table of contents block writes these): no address, a click scrolls.
             const a = { t: "al", slug: target.slice(1).toLowerCase(), c: parseInline(m[13], depth + 1) };
             if (m[15]) a.title = m[15];
@@ -6724,7 +6814,7 @@ __zentralShim.register = function (def) {
       return fix(parseInlineRaw(swapped, 0));
     }
 
-    const LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(?:\[( |x|X|-|\/|\?|!|>|<|\*|i|b|"|l|p|c|f|I|S|n)\]\s+)?(.*)$/;
+    const LIST_RE = new RegExp("^(\\s*)([-*+]|\\d+[.)])\\s+(?:" + TASK_BOX_CAPTURE + "\\s+)?(.*)$");
     const TASK_ORIGINAL = new Set(["-", "/", "?", "!"]); // the four extra states we had first (E09); the rest is E10
     // GitHub-style tables: a header row, a delimiter row with pipes (| --- | :-: |), body rows.
     const TABLE_DELIM_RE = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
@@ -6962,7 +7052,15 @@ __zentralShim.register = function (def) {
       }
       if (block.type === "quote") {
         const last = block.blocks?.[block.blocks.length - 1];
-        if (last?.blockId === id) delete last.blockId; // the marker belongs to the quote as a whole
+        if (last?.blockId === id) {
+          delete last.blockId;
+        } else if (last?.type === "list") {
+          const item = last.items?.[last.items.length - 1];
+          if (item?.blockId !== id) return false;
+          delete item.blockId;
+        } else {
+          return false;
+        }
         block.blockId = id;
         return true;
       }
@@ -7586,19 +7684,19 @@ __zentralShim.register = function (def) {
         label: "HTML page",
         ext: "html",
         loses:
-          "Highlight colors, tables, links, images, sub/superscript and keys are kept. Code blocks keep their text but lose their syntax colors. Checkboxes become read-only, images load from the web when you open the file, and the note\u2019s color, pin and dates are not included.",
+          "Highlight colors, tables, links, images, sub/superscript and keys are kept. Code blocks keep their text but lose their syntax colors. Checkboxes become read-only, images load from the web when you open the file, and YouTube, local videos and attached files become non-playing placeholders (local asset files are not bundled). The note\u2019s color, pin and dates are not included.",
       },
       txt: {
         label: "Plain text",
         ext: "txt",
         loses:
-          "All formatting is dropped: bold, italic, strikethrough, highlights, sub/superscript and heading sizes disappear. Links are written as text followed by the address, images become [image: description], tables become rows separated by \" | \".",
+          "All formatting is dropped: bold, italic, strikethrough, highlights, sub/superscript and heading sizes disappear. Links are written as text followed by the address, images become [image: description], videos become [video: description], tables become rows separated by \" | \".",
       },
       pdf: {
         label: "PDF (print)",
         ext: "html",
         loses:
-          "The note opens as a page in a tab and your browser\u2019s print dialog appears: choose \u201cSave as PDF\u201d. Page breaks are decided by the browser, images load from the web, checkboxes are read-only, and the note\u2019s color, pin and dates are not included.",
+          "The note opens as a page in a tab and your browser\u2019s print dialog appears: choose \u201cSave as PDF\u201d. Page breaks are decided by the browser, images load from the web, YouTube, local videos and attached files are non-playing placeholders, checkboxes are read-only, and the note\u2019s color, pin and dates are not included.",
       },
       zip: {
         label: "Zip of all notes",
@@ -7617,6 +7715,9 @@ __zentralShim.register = function (def) {
         else if (n.t === "math") out += '<span class="math">' + inlineHtml(n.c) + "</span>";
         else if (n.t === "code") out += "<code>" + escHtml(n.s) + "</code>";
         else if (n.t === "img") out += n.asset ? '<span class="zn-picture">[picture: ' + escHtml(n.alt || "image") + "]</span>" : '<img src="' + escHtml(n.href) + '" alt="' + escHtml(n.alt) + '">';
+        else if (n.t === "youtube") out += '<span class="zn-video-placeholder">[YouTube video: ' + escHtml(n.alt || "video") + ']</span>';
+        else if (n.t === "video") out += '<span class="zn-video-placeholder">[local video: ' + escHtml(n.alt || n.asset || "video") + ']</span>';
+        else if (n.t === "file") out += '<span class="zn-file-placeholder">[file: ' + escHtml(n.file || "attachment") + ']</span>';
         else if (n.t === "a") {
           // data-bare: the visible text already is the address, so the print stylesheet must not repeat it.
           const bare = inlineText(n.c).replace(/\/$/, "") === String(n.href).replace(/\/$/, "");
@@ -7628,7 +7729,12 @@ __zentralShim.register = function (def) {
         else if (n.t === "date") out += '<time datetime="' + escHtml(n.ymd + (n.time ? "T" + n.time : "")) + '">' + escHtml(n.s) + "</time>";
         else if (n.t === "al") out += '<a href="#' + escHtml(n.slug) + '">' + inlineHtml(n.c) + "</a>";
         else if (n.t === "nl") out += '<span class="note-link">' + inlineHtml(n.c) + "</span>"; // no address: a single exported note cannot reach the others
-        else if (n.t === "embed") out += escHtml("![[" + n.target + (n.width ? "|" + n.width : "") + "]] ").trimEnd();
+        else if (n.t === "embed") {
+          const media = parseEmbedTarget(n.target);
+          if (media?.youtube) out += '<span class="zn-video-placeholder">[YouTube video]</span>';
+          else if (media?.videoAsset) out += '<span class="zn-video-placeholder">[local video: ' + escHtml(media.videoAsset) + ']</span>';
+          else out += escHtml("![[" + n.target + (n.width ? "|" + n.width : "") + "]] ").trimEnd();
+        }
         else if (n.t === "kbd") out += "<kbd>" + escHtml(n.s) + "</kbd>";
         else if (n.t === "fn") out += '<sup class="fn"><a href="#fn-' + n.n + '" id="fnref-' + n.n + '">' + n.n + "</a></sup>";
         else if (n.t === "hl") out += '<mark data-color="' + escHtml(n.color) + '">' + inlineHtml(n.c) + "</mark>";
@@ -7741,8 +7847,16 @@ __zentralShim.register = function (def) {
         else if (n.t === "br") out += "\n";
         else if (n.t === "task") out += n.on ? "[x] " : "[ ] ";
         else if (n.t === "img") out += n.alt ? "[image: " + n.alt + "]" : "[image]";
+        else if (n.t === "youtube") out += "[YouTube video: " + (n.alt || "video") + "]";
+        else if (n.t === "video") out += "[video: " + (n.alt || n.asset || "video") + "]";
+        else if (n.t === "file") out += "[file: " + (n.file || "attachment") + "]";
         else if (n.t === "fn") out += "[" + n.n + "]";
-        else if (n.t === "embed") out += "![[" + n.target + (n.width ? "|" + n.width : "") + "]]";
+        else if (n.t === "embed") {
+          const media = parseEmbedTarget(n.target);
+          if (media?.youtube) out += "[YouTube video]";
+          else if (media?.videoAsset) out += "[video: " + media.videoAsset + "]";
+          else out += "![[" + n.target + (n.width ? "|" + n.width : "") + "]]";
+        }
         else if (n.t === "a") {
           const label = inlineText(n.c);
           out += label.replace(/\/$/, "") === n.href.replace(/\/$/, "") ? label : label + " (" + n.href + ")";
@@ -7875,14 +7989,13 @@ __zentralShim.register = function (def) {
     }
 
     const LINE_KINDS = {
-      bullet: { test: /^\s*[-*+]\s+(?!\[[ xX\-/?!]\])/, add: "- " },
-      check: { test: /^\s*[-*+]\s+\[[ xX\-/?!]\]\s/, add: "- [ ] " },
+      bullet: { test: new RegExp("^\\s*[-*+]\\s+(?!" + TASK_BOX_TOKEN + ")"), add: "- " },
+      check: { test: new RegExp("^\\s*[-*+]\\s+" + TASK_BOX_TOKEN + "\\s"), add: "- [ ] " },
       heading: { test: /^#{1,6}\s/, add: "## " },
       quote: { test: /^>\s?/, add: "> " },
       ordered: { test: /^\s*\d+[.)]\s+/, add: (n) => n + ". " },
     };
-    const STRIP_PREFIX =
-      /^(\s*)(?:(?:[-*+]|\d+[.)])\s+(?:\[[ xX\-/?!]\]\s+)?|#{1,6}\s+|>\s?)/;
+    const STRIP_PREFIX = new RegExp("^(\\s*)(?:(?:[-*+]|\\d+[.)])\\s+(?:" + TASK_BOX_TOKEN + "\\s+)?|#{1,6}\\s+|>\\s?)");
     function toggleLinePrefix(value, s, e, kind) {
       const def = LINE_KINDS[kind];
       const ls = value.lastIndexOf("\n", s - 1) + 1;
@@ -7944,7 +8057,7 @@ __zentralShim.register = function (def) {
       if (le === -1) le = value.length;
       const before = value.slice(ls, caret);
       const after = value.slice(caret, le);
-      const m = /^(\s*)(?:([-*+])|(\d+)([.)]))\s+(\[[ xX\-/?!]\]\s+)?/.exec(before);
+      const m = new RegExp("^(\\s*)(?:([-*+])|(\\d+)([.)]))\\s+(" + TASK_BOX_TOKEN + "\\s+)?").exec(before);
       if (!m) return null;
       const rest = before.slice(m[0].length);
       if (!rest.trim() && !after.trim())
@@ -7964,8 +8077,9 @@ __zentralShim.register = function (def) {
     function toggleCheckboxLine(body, lineIndex) {
       const lines = normalizeNewlines(body).split("\n");
       if (lineIndex < 0 || lineIndex >= lines.length) return body;
-      lines[lineIndex] = lines[lineIndex].replace(/\[([ xX\-/?!])\]/, (_m, c) =>
-        c === "x" || c === "X" ? "[ ]" : "[x]",
+      const taskPrefix = new RegExp("^(\\s*(?:>\\s*)*(?:[-*+]|\\d+[.)])\\s+)" + TASK_BOX_CAPTURE + "(?=\\s|$)");
+      lines[lineIndex] = lines[lineIndex].replace(taskPrefix, (_m, prefix, c) =>
+        prefix + (c === "x" || c === "X" ? "[ ]" : "[x]"),
       );
       return lines.join("\n");
     }
@@ -8781,8 +8895,13 @@ __zentralShim.register = function (def) {
     const ASSET_MAX_PER_NOTE = 200;
     const ASSET_MIME = Object.freeze({ "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" });
     const ASSET_EXT_MIME = Object.freeze({ png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" });
+    const VIDEO_EXT_MIME = Object.freeze({ mp4: "video/mp4", m4v: "video/mp4", webm: "video/webm", ogv: "video/ogg", ogg: "video/ogg" });
+    const ASSET_VIDEO_MAX_BYTES = 200 * 1024 * 1024;
+    const ASSET_FILE_MAX_BYTES = 100 * 1024 * 1024;
     const ASSET_ID_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,119}$/;
     const ASSET_LINK_RE = /^assets\/([A-Za-z0-9_][A-Za-z0-9_-]{0,119})\/([A-Za-z0-9][A-Za-z0-9._-]{0,80}\.(png|jpe?g|gif|webp))(?:#([A-Za-z0-9=&]{0,40}))?$/i;
+    const ASSET_VIDEO_LINK_RE = /^assets\/([A-Za-z0-9_][A-Za-z0-9_-]{0,119})\/([A-Za-z0-9][A-Za-z0-9._-]{0,80}\.(mp4|m4v|webm|ogv|ogg))$/i;
+    const ASSET_FILE_LINK_RE = /^assets\/([A-Za-z0-9_][A-Za-z0-9_-]{0,119})\/([A-Za-z0-9][A-Za-z0-9._-]{0,99})$/i;
     const ASSET_ALIGNS = Object.freeze(["left", "center", "right"]);
     const ASSET_W_MIN = 16, ASSET_W_MAX = 2000;
     const isAssetNoteId = (id) => ASSET_ID_RE.test(String(id ?? ""));
@@ -8812,6 +8931,73 @@ __zentralShim.register = function (def) {
     }
     const assetRel = (noteId, file) => ASSET_DIR + "/" + noteId + "/" + file;
     // "assets/<id>/<file>#w=320&a=center" -> { rel, noteId, file, mime, width, align } or null.
+    function parseVideoAssetLink(src) {
+      const m = ASSET_VIDEO_LINK_RE.exec(String(src ?? ""));
+      if (!m || !isAssetNoteId(m[1])) return null;
+      return { rel: ASSET_DIR + "/" + m[1] + "/" + m[2], noteId: m[1], file: m[2], mime: VIDEO_EXT_MIME[m[3].toLowerCase()] };
+    }
+    function sniffVideoMime(bytes, expected = "") {
+      const b = bytes || [];
+      let mime = "";
+      if (b.length >= 12 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) mime = "video/mp4";
+      else if (b.length >= 4 && b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) mime = "video/webm";
+      else if (b.length >= 4 && b[0] === 0x4f && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) mime = "video/ogg";
+      return mime && (!expected || mime === expected) ? mime : "";
+    }
+    // Arbitrary attachments are always served as octet-stream downloads, never rendered as active HTML/SVG.
+    function cleanAssetFileName(raw) {
+      let leaf = String(raw ?? "").replace(/\\/g, "/").split("/").pop() || "";
+      try { leaf = leaf.normalize("NFKD").replace(/[\u0300-\u036f]/g, ""); } catch (_) {}
+      leaf = leaf.replace(/[\u0000-\u001f\u007f]/g, "").trim().replace(/\s+/g, "-").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/-+/g, "-").replace(/^\.+/, "");
+      const dot = leaf.lastIndexOf(".");
+      let base = dot > 0 ? leaf.slice(0, dot) : leaf;
+      let ext = dot > 0 && /^[A-Za-z0-9]{1,12}$/.test(leaf.slice(dot + 1)) ? "." + leaf.slice(dot + 1) : "";
+      base = base.replace(/[._-]+$/g, "").slice(0, 76);
+      if (!base) return "";
+      if (/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(base)) base = "_" + base;
+      ext = ext.toLowerCase();
+      return base + ext;
+    }
+    function uniqueAssetFileName(raw, existing = []) {
+      const safe = cleanAssetFileName(raw);
+      if (!safe) return "";
+      const dot = safe.lastIndexOf(".");
+      const base = dot > 0 ? safe.slice(0, dot) : safe;
+      const ext = dot > 0 ? safe.slice(dot) : "";
+      const taken = new Set((existing || []).map((x) => String(x).toLowerCase()));
+      if (!taken.has(safe.toLowerCase())) return safe;
+      for (let n = 2; n <= 999; n++) {
+        const suffix = "-" + n;
+        const candidate = base.slice(0, Math.max(1, 76 - suffix.length)) + suffix + ext;
+        if (!taken.has(candidate.toLowerCase())) return candidate;
+      }
+      return "";
+    }
+    function parseFileAssetLink(src) {
+      const m = ASSET_FILE_LINK_RE.exec(String(src ?? ""));
+      if (!m || !isAssetNoteId(m[1]) || m[2] === "." || m[2] === "..") return null;
+      const ext = /\.([A-Za-z0-9]{1,12})$/.exec(m[2])?.[1]?.toLowerCase() || "";
+      if (ASSET_EXT_MIME[ext] || VIDEO_EXT_MIME[ext]) return null;
+      return { rel: ASSET_DIR + "/" + m[1] + "/" + m[2], noteId: m[1], file: m[2], mime: "application/octet-stream" };
+    }
+    function droppedAssetMarkup(file, rel) {
+      const name = cleanAssetFileName(file);
+      if (!name || parseFileAssetLink(rel) === null && !parseAssetLink(rel) && !parseVideoAssetLink(rel)) return "";
+      return TRANSCLUSION_IMAGE_RE.test(name) || TRANSCLUSION_VIDEO_RE.test(name) ? "![[" + name + "]]" : "[" + name + "](" + rel + ")";
+    }
+    function insertDroppedAssetLinks(value, start, end, assets) {
+      const text = (assets || []).map((a) => droppedAssetMarkup(a?.file, a?.rel)).filter(Boolean).join("\n");
+      const source = String(value ?? "");
+      const s = Math.max(0, Math.min(source.length, Number(start) || 0));
+      const e = Math.max(s, Math.min(source.length, Number(end) || 0));
+      return { start: s, end: e, text, selStart: s + text.length, selEnd: s + text.length };
+    }
+    function droppedFiles(data, max = 20) {
+      let files = [];
+      try { files = data?.files ? Array.from(data.files) : []; } catch (_) { return []; }
+      const limit = Math.max(0, Math.min(50, Number(max) || 0));
+      return files.filter((file) => file && typeof file.name === "string" && typeof file.arrayBuffer === "function").slice(0, limit);
+    }
     function parseAssetLink(src) {
       const m = ASSET_LINK_RE.exec(String(src ?? ""));
       if (!m) return null;
@@ -8844,6 +9030,9 @@ __zentralShim.register = function (def) {
       return { start: s, end: e, text, selStart: at, selEnd: at };
     }
     const ASSET_IMG_RE = /!\[([^\]\n]*)\]\((assets\/[^\s)]+)\)/g;
+    const ASSET_REF_RE = /!?\[[^\]\n]*\]\((assets\/[^\s)]+)\)/g;
+    const EMBED_IMAGE_REF_RE = /!\[\[([A-Za-z0-9][A-Za-z0-9._-]{0,80}\.(?:png|jpe?g|gif|webp))\]\]/gi;
+    const EMBED_VIDEO_REF_RE = /!\[\[([A-Za-z0-9][A-Za-z0-9._-]{0,80}\.(?:mp4|m4v|webm|ogv|ogg))\]\]/gi;
     // The picture link under the caret (or null): { start, end, alt, link }.
     function assetImageAt(value, caret) {
       ASSET_IMG_RE.lastIndex = 0;
@@ -8860,16 +9049,54 @@ __zentralShim.register = function (def) {
       const md = buildAssetImage(hit.alt, hit.link.rel, opts);
       return { start: hit.start, end: hit.end, text: md, selStart: hit.start + md.length, selEnd: hit.start + md.length };
     }
-    // Every asset file a body refers to, so a cleanup could tell what is still used.
-    function assetRefs(body) {
+    // Every asset file a body refers to. Ignore fenced and inline code: examples are not live references.
+    // Wiki image/video embeds resolve within the note that contains them, just like dropped assets do.
+    function assetRefs(body, noteId = "") {
       const out = new Set();
-      ASSET_IMG_RE.lastIndex = 0;
-      for (let m = ASSET_IMG_RE.exec(String(body ?? "")); m; m = ASSET_IMG_RE.exec(String(body ?? ""))) {
-        const link = parseAssetLink(m[2]);
+      let fence = null;
+      const visible = String(body ?? "").split("\n").map((line) => {
+        const wasFenced = !!fence;
+        const next = nextMarkdownFence(line, fence);
+        if (wasFenced || next) { fence = next; return line.replace(/[^\r]/g, " "); }
+        return line.replace(/(`+)[^`]*?\1/g, (match) => " ".repeat(match.length));
+      }).join("\n").replace(/%%[^%\n]*%%/g, " ").replace(/<!--[\s\S]*?-->/g, (match) => match.replace(/[^\n]/g, " "));
+      const scan = (re, fn) => {
+        re.lastIndex = 0;
+        for (let m = re.exec(visible); m; m = re.exec(visible)) fn(m);
+      };
+      scan(ASSET_REF_RE, (m) => {
+        const link = parseAssetLink(m[1]) || parseVideoAssetLink(m[1]) || parseFileAssetLink(m[1]);
         if (link) out.add(link.rel);
+      });
+      if (isAssetNoteId(noteId)) {
+        scan(EMBED_IMAGE_REF_RE, (m) => out.add(assetRel(noteId, m[1])));
+        scan(EMBED_VIDEO_REF_RE, (m) => out.add(assetRel(noteId, m[1])));
       }
       return out;
     }
+
+    // A filesystem-independent report model. Notes in Trash intentionally count as references so
+    // cleanup cannot destroy files that become live again when a note is restored.
+    function assetIntegrityReport(notes, paths) {
+      const references = new Map();
+      for (const note of Array.isArray(notes) ? notes : []) {
+        const id = String(note?.id ?? "");
+        for (const rel of assetRefs(note?.body ?? "", id)) {
+          if (!references.has(rel)) references.set(rel, new Set());
+          if (id) references.get(rel).add(id);
+        }
+      }
+      const presentSet = new Set();
+      for (const raw of Array.isArray(paths) ? paths : []) {
+        const value = String(raw ?? "");
+        const link = parseAssetLink(value) || parseVideoAssetLink(value) || parseFileAssetLink(value);
+        if (link) presentSet.add(link.rel);
+      }
+      const missing = [...references.keys()].filter((rel) => !presentSet.has(rel)).sort().map((rel) => ({ rel, noteIds: [...references.get(rel)].sort() }));
+      const orphaned = [...presentSet].filter((rel) => !references.has(rel)).sort();
+      return { missing, orphaned, referenced: references.size, present: presentSet.size };
+    }
+
 
     // ======================================================================
     // Pure core: reminders (P2)
@@ -9756,7 +9983,7 @@ __zentralShim.register = function (def) {
         return queue(async () => {
           // Pictures go with their note, unless another note (a copy, pasted text) still shows them.
           const prefix = ASSET_DIR + "/" + id + "/";
-          const shared = [...notes.values()].some((n) => [...assetRefs(n.body)].some((r) => r.startsWith(prefix)));
+          const shared = [...notes.values()].some((n) => [...assetRefs(n.body, n.id)].some((r) => r.startsWith(prefix)));
           await backupNote(id, note, file, !shared).catch(warn);
           for (const p of [file, file + ".bak", file + ".tmp"])
             await io.remove(p).catch(() => {});
@@ -9828,7 +10055,7 @@ __zentralShim.register = function (def) {
           if (cleanFolder(note.folder) !== DATE_FOLDER) continue;
           // Protect all user metadata and attachments, not just the fields understood by the pure predicate.
           if (note.remind || note.reminded || note.label || note.pinned || note.flavor || (note.color && note.color !== "none")) continue;
-          if (noteTags(note).length || assetRefs(note.body || "").length) continue;
+          if (noteTags(note).length || assetRefs(note.body || "", note.id).length) continue;
           if ((Array.isArray(note.files) && note.files.length) || (Array.isArray(note.attachments) && note.attachments.length)) continue;
           const key = dateOfNote(note);
           if (!key || key >= todayKey || protectedDates.has(key) || !CALENDAR_PART.isBlankDateNote(note, key)) continue;
@@ -9898,6 +10125,79 @@ __zentralShim.register = function (def) {
                 ? b.trashed - a.trashed
                 : Number(b.pinned) - Number(a.pinned) || b.updated - a.updated,
             );
+        },
+        // Enumerate only direct regular files under safe assets/<note-id>/ folders. A missing assets
+        // root is a valid empty inventory; any other I/O failure aborts the scan so the UI cannot
+        // mistake a partial/permission-denied listing for a clean vault.
+        async assetInventory() {
+          if (!dir) return [];
+          if (!io.children || !io.filename || !io.stat) throw new Error("Attached-file inventory is unavailable");
+          const root = io.join(dir, ASSET_DIR);
+          if (io.exists) {
+            let rootExists;
+            try { rootExists = await io.exists(root); }
+            catch (error) { throw new Error("Could not inspect the attached-files folder: " + String(error?.message || error)); }
+            if (!rootExists) return [];
+            let rootStat;
+            try { rootStat = await io.stat(root); }
+            catch (error) { throw new Error("Could not inspect the attached-files folder: " + String(error?.message || error)); }
+            if (rootStat?.type !== "directory") throw new Error("The attached-files path is not a regular folder");
+          }
+          let folders;
+          try { folders = await io.children(root); }
+          catch (error) {
+            // IOUtils may report a missing folder between exists() and getChildren(); only that
+            // explicit absence is an empty inventory. Do not swallow access or I/O errors.
+            if (io.exists) {
+              try { if (!(await io.exists(root))) return []; } catch (_) {}
+            }
+            throw new Error("Could not list the attached-files folder: " + String(error?.message || error));
+          }
+          const found = new Set();
+          for (const folder of folders) {
+            const id = io.filename(folder);
+            if (!isAssetNoteId(id)) continue;
+            let folderStat;
+            try { folderStat = await io.stat(folder); }
+            catch (error) { throw new Error("Could not inspect attached-files folder " + id + ": " + String(error?.message || error)); }
+            if (folderStat?.type !== "directory") continue;
+            let children;
+            try { children = await io.children(folder); }
+            catch (error) { throw new Error("Could not list attached files for " + id + ": " + String(error?.message || error)); }
+            for (const child of children) {
+              const rel = ASSET_DIR + "/" + id + "/" + io.filename(child);
+              const parsed = parseAssetLink(rel) || parseVideoAssetLink(rel) || parseFileAssetLink(rel);
+              if (!parsed) continue;
+              let stat;
+              try { stat = await io.stat(child); }
+              catch (error) { throw new Error("Could not inspect attached file " + rel + ": " + String(error?.message || error)); }
+              if (stat?.type !== "regular") continue;
+              found.add(parsed.rel);
+            }
+          }
+          return [...found].sort();
+        },
+        async scanAssetIntegrity() {
+          await api.refresh();
+          return assetIntegrityReport([...notes.values()], await api.assetInventory());
+        },
+        // The UI calls this only after an explicit confirmation. Recheck references at deletion time;
+        // includes Trash and all open windows' latest in-memory note set in this store instance.
+        async removeAsset(rel) {
+          try { await api.refresh(); } catch (_) { return { ok: false, reason: "io" }; }
+          const parsed = parseAssetLink(rel) || parseVideoAssetLink(rel) || parseFileAssetLink(rel);
+          if (!parsed || parsed.rel !== String(rel ?? "") || !dir || !io.remove || !io.stat) return { ok: false, reason: "invalid" };
+          const referenced = new Set();
+          for (const note of notes.values()) for (const ref of assetRefs(note.body, note.id)) referenced.add(ref);
+          if (referenced.has(parsed.rel)) return { ok: false, reason: "referenced" };
+          const path = io.join(dir, ASSET_DIR, parsed.noteId, parsed.file);
+          try {
+            if (io.exists && !(await io.exists(path))) return { ok: false, reason: "missing" };
+            const stat = await io.stat(path);
+            if (stat?.type !== "regular") return { ok: false, reason: "invalid" };
+            await io.remove(path);
+            return { ok: true };
+          } catch (_) { return { ok: false, reason: "io" }; }
         },
         trashCount: () => [...notes.values()].filter((n) => n.trashed).length,
         latestId() {
@@ -10233,14 +10533,61 @@ __zentralShim.register = function (def) {
             return { ok: false, reason: "io" };
           }
         },
-        // Reads a picture named by a note link. Only paths that pass parseAssetLink are ever touched.
+        // Saves an arbitrary dropped file using its sanitized original name; create-only writes and suffixing prevent overwrite.
+        async saveFile(noteId, rawName, bytes) {
+          const note = notes.get(noteId);
+          if (!dir || !note || note.trashed) return { ok: false, reason: "note" };
+          if (!isAssetNoteId(noteId)) return { ok: false, reason: "note-name" };
+          if (!(bytes instanceof Uint8Array) || bytes.length > ASSET_FILE_MAX_BYTES) return { ok: false, reason: "too-big" };
+          const safeName = cleanAssetFileName(rawName);
+          if (!safeName) return { ok: false, reason: "name" };
+          const ext = /\.([A-Za-z0-9]{1,12})$/.exec(safeName)?.[1]?.toLowerCase() || "";
+          if (ASSET_EXT_MIME[ext] && sniffImageMime(bytes) !== ASSET_EXT_MIME[ext]) return { ok: false, reason: "type" };
+          if (VIDEO_EXT_MIME[ext] && !sniffVideoMime(bytes, VIDEO_EXT_MIME[ext])) return { ok: false, reason: "type" };
+          if (!io.makeDir || !io.writeBytes) return { ok: false, reason: "io" };
+          const folder = io.join(dir, ASSET_DIR, noteId);
+          try {
+            await io.makeDir(folder);
+            let existing = [];
+            try { existing = await io.children(folder); } catch (_) {}
+            if (existing.length >= ASSET_MAX_PER_NOTE) return { ok: false, reason: "too-many" };
+            const used = new Set(existing.map((p) => String(io.filename(p)).toLowerCase()));
+            for (let tries = 0; tries < 100; tries++) {
+              const file = uniqueAssetFileName(safeName, [...used]);
+              if (!file) return { ok: false, reason: "name" };
+              const target = io.join(folder, file);
+              try {
+                await io.writeBytes(target, bytes);
+                return { ok: true, rel: assetRel(noteId, file), file, mime: "application/octet-stream" };
+              } catch (error) {
+                const collision = io.exists ? await io.exists(target).catch(() => false) : false;
+                if (!collision) throw error;
+                used.add(file.toLowerCase());
+              }
+            }
+            return { ok: false, reason: "name" };
+          } catch (error) {
+            warn(error);
+            return { ok: false, reason: "io" };
+          }
+        },
+        // Reads only allow-listed local assets. Unknown file formats are forced to octet-stream for download, never executed inline.
         async readAsset(src) {
-          const link = parseAssetLink(src);
+          const image = parseAssetLink(src);
+          const video = image ? null : parseVideoAssetLink(src);
+          const file = image || video ? null : parseFileAssetLink(src);
+          const link = image || video || file;
           if (!link || !dir || !io.readBytes) return null;
           try {
-            const bytes = await io.readBytes(io.join(dir, ASSET_DIR, link.noteId, link.file));
-            const mime = sniffImageMime(bytes);
-            return mime && bytes.length <= ASSET_MAX_BYTES ? { bytes, mime } : null;
+            const filePath = io.join(dir, ASSET_DIR, link.noteId, link.file);
+            const maxBytes = video ? ASSET_VIDEO_MAX_BYTES : file ? ASSET_FILE_MAX_BYTES : ASSET_MAX_BYTES;
+            if (io.stat) {
+              const stat = await io.stat(filePath).catch(() => null);
+              if (Number(stat?.size) > maxBytes) return null;
+            }
+            const bytes = await io.readBytes(filePath);
+            const mime = file ? "application/octet-stream" : video ? sniffVideoMime(bytes, video.mime) : sniffImageMime(bytes);
+            return mime && bytes.length <= maxBytes ? { bytes, mime } : null;
           } catch (_) {
             return null;
           }
@@ -10696,13 +11043,11 @@ __zentralShim.register = function (def) {
     function headingsOf(body) {
       const out = [];
       const seen = new Map();
-      let fence = false;
-      String(body ?? "").split("\n").forEach((line, i) => {
-        if (/^ {0,3}(```|~~~)/.test(line)) {
-          fence = !fence;
-          return;
-        }
-        if (fence) return;
+      let fence = null;
+      normalizeNewlines(hideFrontMatter(String(body ?? ""))).split("\n").forEach((line, i) => {
+        const wasFenced = !!fence;
+        const next = nextMarkdownFence(line, fence);
+        if (wasFenced || next) { fence = next; return; }
         const m = /^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
         if (!m) return;
         const base = headingSlug(m[2]);
@@ -10745,7 +11090,7 @@ __zentralShim.register = function (def) {
       const next = heads.slice(at + 1).find((item) => item.level <= heading.level);
       const end = next ? next.line : lines.length;
       const existingLink = /(?<!!)\[[^\]\n]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
-      const existingWiki = /\[\[([^\]|#\n]+)(?:#[^\]|\n]+)?(?:\|[^\]\n]+)?\]\]/g;
+      const existingWiki = /(?<!!)\[\[([^\]|#\n]+)(?:#[^\]|\n]+)?(?:\|[^\]\n]+)?\]\]/g;
       const sourceName = cleanLinkLabel(sourceTitle).toLowerCase();
       let alreadyLinked = false;
       const section = lines.slice(heading.line + 1, end).join("\n");
@@ -10837,9 +11182,11 @@ __zentralShim.register = function (def) {
     const isDivider = (l) => /^ {0,3}([-*_])(\s*\1){2,}\s*$/.test(l);
     // The list part only (no dividers, no heading): one line per heading, nested by level, real numbers.
     function tocList(body, max = 200) {
-      const hs = headingsOf(body).filter((x) => !(TOC_HEAD_RE.test("## " + x.text) && x.level === 2));
+      const normalized = normalizeNewlines(hideFrontMatter(String(body ?? "")));
+      const hs = headingsOf(normalized).filter((x) => !(TOC_HEAD_RE.test("## " + x.text) && x.level === 2));
       let list = hs;
-      if (list.length && list[0].level === 1 && list[0].line === String(body ?? "").split("\n").findIndex((l) => l.trim())) list = list.slice(1); // the title
+      const firstContentLine = normalized.split("\n").findIndex((l) => l.trim());
+      if (list.length && list[0].level === 1 && list[0].line === firstContentLine) list = list.slice(1); // the title
       list = list.slice(0, max);
       if (!list.length) return "";
       const base = Math.min(...list.map((x) => x.level));
@@ -10863,10 +11210,12 @@ __zentralShim.register = function (def) {
     // Where the block is: { from, to } line numbers (to exclusive), or null. Fenced code is skipped.
     function findToc(body) {
       const lines = String(body ?? "").split("\n");
-      let fence = false;
+      let fence = null;
       for (let i = 0; i < lines.length; i++) {
-        if (/^ {0,3}(```|~~~)/.test(lines[i])) fence = !fence;
-        if (fence || !TOC_HEAD_RE.test(lines[i])) continue;
+        const wasFenced = !!fence;
+        const next = nextMarkdownFence(lines[i], fence);
+        if (wasFenced || next) { fence = next; continue; }
+        if (!TOC_HEAD_RE.test(lines[i])) continue;
         let from = i;
         let k = i - 1;
         while (k >= 0 && !lines[k].trim()) k--;
@@ -10892,10 +11241,12 @@ __zentralShim.register = function (def) {
     function updateToc(body) {
       const text = String(body ?? "");
       const lines = text.split("\n");
-      let fence = false;
-      const tokenAt = lines.findIndex((l) => {
-        if (/^ {0,3}(```|~~~)/.test(l)) fence = !fence;
-        return !fence && TOC_TOKEN_RE.test(l);
+      let fence = null;
+      const tokenAt = lines.findIndex((line) => {
+        const wasFenced = !!fence;
+        const next = nextMarkdownFence(line, fence);
+        if (wasFenced || next) { fence = next; return false; }
+        return TOC_TOKEN_RE.test(line);
       });
       let out = lines;
       let found = false;
@@ -11768,7 +12119,7 @@ __zentralShim.register = function (def) {
         flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART,
         DOCK_MODES, cleanDockMode, hoverStripPx, hoverTiming, hoverMayClose, HOVER_CLOSE_GRACE_MS,
         makeId, parseNoteText, noteFromFile, serializeNote, titleOf, snippetOf, leadingFrontMatter, hideFrontMatter, parseForeignMeta, frontPills, MAX_FOREIGN_CHARS,
-        wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, trailingBlockId, findBlockById, selectTransclusionBlocks,
+        wordCount, counterText, TEMPLATE_FOLDER, BUILTIN_TEMPLATES, templateNeedsTitle, applyTemplate, templateChoices, findBrokenLinks, unlinkBroken, addBacklink, CAPTURE_FORMATS, cleanCaptureFormat, captureLine, insertLineAt, DEMO_NOTES, DEMO_FOLDER, demoTitle, labelSummary, inlineTags, noteTags, tagSummary, NOTE_COLORS, HIGHLIGHT_COLORS, spellcheckOn, outlineItems, TOC_PILL_MODES, cleanTocPill, tocPillShown, scrolledHeading, stripModel, READ_WPM, trashPlan, trashBanner, cleanTrashDays, safeFileName, createAutosaver, parseInline, parseBlocks, parseEmbedTarget, parseYouTubeUrl, parseVideoAssetLink, sniffVideoMime, trailingBlockId, findBlockById, selectTransclusionBlocks,
         makeFolderUid, ensureFolderUids, setNotesTabIcon, notesTabColor, applyNotesFolderStyle, notesFolderIcon, resolveFolderVisual, FOLDER_BEHAVIOR_OPTIONS, folderColorPresets, dedupeNotesRoots, retireNotesFolder, TINT_HEX, ZEN_TINT_DEFAULT, ZEN_FOLDER_VARS, folderTint, folderZenVars, NOTES_ZEN_ROOT_ID, notesSubId, notesKeyFromId, adoptNotesSubfolders, noteFaviconUri, planRootDedupe, FOLDER_COLORS, cleanFolderColor, cleanFolderIcon, FOLDER_PARTS, cleanFolderParts, serializeFolderParts, parseFolderParts, cleanFolderOpacity, serializeFolderOpacity, parseFolderOpacity, folderPartsStyle, folderColorPresets, FALLBACK_FOLDER_COLOR_PRESETS, cleanHex, colorHex, parseQuickColors, addQuickColor, cleanNoteColor, cleanHighlightColor, QUICK_COLORS_MAX, FOLDER_UID_RE, wrapSelection, ARM_TOOLS, armPending, armedTypeEdit, toggleLinePrefix, continueList, toggleCheckboxLine, toggleTableBox, splitRowSpans, cleanStyle, htmlInline, parseHtmlBlock, TASK_STATUSES, TASK_PICKER, TASK_EXTENDED, isExtendedTaskStatus, TASK_CYCLE, setLineTaskStatus, cycleTaskStatus, setTaskStatus, setHeadingLevel, insertRule, nestLines, toggleCalloutOption,
         diffSigs, blockSig, exportHtml, exportText, uniqueFileNames, EXPORT_FORMATS,
         projectNotesFolder, diffProjection, planCleanup, dropDecision, urlNoteBody, NOTES_ATTR, exportBody, noteLinkTarget, buildNoteLink, insertNoteLink, expandWikiLinks, parseWikiTarget, folderLabels, resolveWikiTarget, wikiResolver, rewriteNoteLinks, findBacklinks, noteLinksIn, resolveNoteTitle, mapOutsideCode,
@@ -11789,10 +12140,10 @@ __zentralShim.register = function (def) {
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
         FIND_MAX_MATCHES, FIND_MAX_QUERY, sniffImageMime, checkAssetBytes, assetFileName, parseAssetLink, buildAssetLink, buildAssetImage,
-        insertAssetImage, assetImageAt, restyleAssetImage, assetRefs, isAssetNoteId, ASSET_MAX_BYTES, ASSET_MAX_PER_NOTE, ASSET_MIME,
+        insertAssetImage, assetImageAt, restyleAssetImage, assetRefs, assetIntegrityReport, isAssetNoteId, ASSET_MAX_BYTES, ASSET_VIDEO_MAX_BYTES, ASSET_FILE_MAX_BYTES, ASSET_MAX_PER_NOTE, ASSET_MIME, VIDEO_EXT_MIME, cleanAssetFileName, uniqueAssetFileName, parseFileAssetLink, droppedAssetMarkup, insertDroppedAssetLinks, droppedFiles,
         cleanRemind, ceilStep, dueReminders, nextReminderAt, reminderDelay, reminderPresets, parseRemindInput, remindPreview, remindDateText, remindTimeText,
         createReminderScheduler, createReminderAlertActions, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
-        headingSlug, headingsOf, cleanAnchor, noteLinkParts, headingOffset, tocBlock, tocList, findToc, updateToc, insertToc, insertFootnote, nextFootnoteLabel, mentionRe, hasMention, linkFirstMention,
+        headingSlug, headingsOf, cleanAnchor, noteLinkParts, headingOffset, tocBlock, tocList, findToc, updateToc, insertToc, insertFootnote, nextFootnoteLabel, mentionRe, hasMention, linkFirstMention, collectRefs, attachTrailingBlockId, nextMarkdownFence, TASK_BOX_CHARS, TASK_BOX_TOKEN,
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_FOLDER_LABEL, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         DATE_TITLE_RE, dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
         HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, BACKUP_DIR, BACKUP_HOURS, backupEntryName, parseBackupName, backupPlan, backupLeft, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
@@ -11967,6 +12318,89 @@ __zentralShim.register = function (def) {
       }
       if (at < source.length) parent.append(document.createTextNode(source.slice(at)));
     }
+    // YouTube is never contacted while rendering a note. The accessible poster is local chrome;
+    // only an explicit click creates the youtube-nocookie iframe.
+    function renderYouTubePoster(parent, videoId, label = "", width = 0) {
+      if (!/^[A-Za-z0-9_-]{11}$/.test(String(videoId || ""))) return;
+      const title = String(label || "YouTube video").slice(0, 160);
+      const card = h("div", { class: "zn-video-embed" });
+      if (Number.isInteger(width) && width > 0) card.style.width = width + "px";
+      const poster = h("button", { type: "button", class: "zn-video-poster", title: "Load YouTube video", "aria-label": "Load YouTube video: " + title });
+      poster.append(
+        h("span", { class: "zn-video-play", "aria-hidden": "true" }, "▶"),
+        h("span", { class: "zn-video-poster-title" }, title),
+        h("span", { class: "zn-video-poster-hint" }, "Click to load from YouTube · Privacy Enhanced Mode"),
+      );
+      poster.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const frame = h("iframe", {
+          class: "zn-video-frame",
+          title,
+          src: "https://www.youtube-nocookie.com/embed/" + videoId + "?autoplay=1",
+          loading: "lazy",
+          referrerpolicy: "strict-origin-when-cross-origin",
+          sandbox: "allow-scripts allow-same-origin allow-presentation",
+          allow: "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share",
+          allowfullscreen: true,
+        });
+        frame.style.width = "100%";
+        frame.style.aspectRatio = "16 / 9";
+        frame.style.border = "0";
+        card.replaceChildren(frame);
+        card.dataset.state = "loaded";
+      });
+      card.append(poster);
+      parent.append(card);
+    }
+    function renderLocalVideo(parent, rel, alt = "", width = 0, env = {}) {
+      const holder = h("div", { class: "zn-local-video", "data-state": "loading" }, h("span", { class: "zn-video-status" }, "Loading local video…"));
+      if (Number.isInteger(width) && width > 0) holder.style.width = width + "px";
+      parent.append(holder);
+      // Defer invocation into the promise chain as well: adapters may throw before returning a promise.
+      Promise.resolve().then(() => env.loadAsset ? env.loadAsset(rel) : null).then((got) => {
+        if (!got?.url) {
+          holder.dataset.state = "missing";
+          holder.replaceChildren(h("span", { class: "zn-video-status" }, "Local video not found: " + String(alt || rel).slice(0, 120)));
+          return;
+        }
+        const player = h("video", { class: "zn-video-player", controls: true, preload: "metadata", playsinline: true, "aria-label": String(alt || "Local video").slice(0, 160) });
+        player.setAttribute("src", got.url);
+        player.style.width = "100%";
+        player.addEventListener("error", () => {
+          holder.dataset.state = "missing";
+          holder.replaceChildren(h("span", { class: "zn-video-status" }, "This video could not be played: " + String(alt || rel).slice(0, 120)));
+        }, { once: true });
+        holder.replaceChildren(player);
+        holder.dataset.state = "ready";
+        if (got.release) env.trackAsset?.(got.release);
+      }).catch(() => {
+        holder.dataset.state = "missing";
+        holder.replaceChildren(h("span", { class: "zn-video-status" }, "Could not read local video: " + String(alt || rel).slice(0, 120)));
+      });
+    }
+    // Non-media attachments are loaded only as octet-stream blob URLs and exposed as explicit downloads.
+    function renderLocalFileLink(parent, rel, file, labelNodes = [], env = {}) {
+      const fallback = String(file || "Attachment").slice(0, 120);
+      const holder = h("span", { class: "zn-file-asset", "data-state": "loading" }, fallback + " (loading…)");
+      parent.append(holder);
+      Promise.resolve().then(() => env.loadAsset ? env.loadAsset(rel) : null).then((got) => {
+        if (!got?.url) {
+          holder.dataset.state = "missing";
+          holder.textContent = "Attachment unavailable: " + fallback;
+          return;
+        }
+        const link = h("a", { class: "zn-file-asset-link", download: fallback, title: "Download " + fallback });
+        link.setAttribute("href", got.url);
+        if (Array.isArray(labelNodes) && labelNodes.length) renderInline(link, labelNodes, Object.assign(Object.create(env), { skipDateChips: true }));
+        else link.textContent = fallback;
+        holder.replaceWith(link);
+        if (got.release) env.trackAsset?.(got.release);
+      }).catch(() => {
+        holder.dataset.state = "missing";
+        holder.textContent = "Attachment unavailable: " + fallback;
+      });
+    }
     function renderInline(parent, nodes, env) {
       for (const n of nodes) {
         if (n.t === "text") appendDateAwareText(parent, n.s, env);
@@ -12033,6 +12467,12 @@ __zentralShim.register = function (def) {
           });
           sup.append(a);
           parent.append(sup);
+        } else if (n.t === "youtube") {
+          renderYouTubePoster(parent, n.videoId, n.alt, n.width);
+        } else if (n.t === "video" && n.asset) {
+          renderLocalVideo(parent, n.asset, n.alt, n.width, env);
+        } else if (n.t === "file" && n.asset) {
+          renderLocalFileLink(parent, n.asset, n.file, n.c, env);
         } else if (n.t === "img" && n.asset) {
           // A picture from this note's own asset folder: read through env.loadAsset (validated path, local file),
           // never through a network address. A missing or unreadable file shows a quiet placeholder.
@@ -13061,6 +13501,20 @@ __zentralShim.register = function (def) {
         if (!spec) return fail("Invalid embedded target");
         spec.width = Number.isInteger(embed.width) && embed.width > 0 ? Math.min(1600, embed.width) : spec.width;
         const sourceId = stack.length ? stack[stack.length - 1] : (env.embedNoteId || currentId);
+        if (spec.youtube) {
+          parent.classList.add("zn-embed-video");
+          parent.dataset.state = "ready";
+          renderYouTubePoster(parent, spec.youtube.id, "YouTube video", spec.width);
+          return;
+        }
+        if (spec.videoAsset) {
+          const rel = assetRel(sourceId, spec.videoAsset);
+          if (!parseVideoAssetLink(rel)) return fail("Invalid video asset: " + spec.videoAsset);
+          parent.classList.add("zn-embed-video");
+          parent.dataset.state = "loading";
+          renderLocalVideo(parent, rel, spec.videoAsset, spec.width, env);
+          return;
+        }
         if (spec.image) {
           const rel = assetRel(sourceId, spec.image);
           if (!parseAssetLink(rel)) return fail("Invalid image asset: " + spec.image);
@@ -13555,6 +14009,53 @@ __zentralShim.register = function (def) {
         let bytes;
         try { bytes = new Uint8Array(await file.arrayBuffer()); } catch (_) { return flash("Couldn't read the picture from the clipboard."); }
         return insertPicture(bytes, file.type, sel());
+      }
+      // T1.16: dropped files retain a safe basename, but are always stored below this note's assets folder.
+      const FILE_DROP_ERRORS = {
+        note: "Open a note first.",
+        "note-name": "This note cannot own an assets folder. Duplicate it and try again.",
+        "too-big": "Files larger than 100 MB are not added.",
+        "too-many": "This note already contains 200 assets.",
+        type: "The file contents do not match its image/video extension.",
+        name: "That file name cannot be used safely.",
+        io: "Couldn't save that file in the Notes assets folder.",
+      };
+      async function dropFilesAt(dataFiles, at) {
+        const files = Array.isArray(dataFiles) ? dataFiles : droppedFiles({ files: dataFiles });
+        if (!files.length) return;
+        const owner = note();
+        if (!owner || owner.trashed) return flash(FILE_DROP_ERRORS.note);
+        const ownerId = owner.id;
+        const before = ta.value;
+        const saved = [];
+        const failures = [];
+        for (const file of files) {
+          if (Number(file.size) > ASSET_FILE_MAX_BYTES) { failures.push("too big"); continue; }
+          let bytes;
+          try { bytes = new Uint8Array(await file.arrayBuffer()); } catch (_) { failures.push("could not read"); continue; }
+          if (bytes.length > ASSET_FILE_MAX_BYTES) { failures.push("too big"); continue; }
+          const result = await store.saveFile(ownerId, file.name, bytes);
+          if (destroyed) return;
+          if (result.ok) saved.push({ file: result.file, rel: result.rel });
+          else failures.push(FILE_DROP_ERRORS[result.reason] || FILE_DROP_ERRORS.io);
+        }
+        if (destroyed) return;
+        if (currentId !== ownerId || note()?.id !== ownerId || note()?.trashed) {
+          if (saved.length) flash("Files were saved with their original note. Reopen it to insert the links.");
+          else flash(failures[0] || "No files were added.");
+          return;
+        }
+        if (saved.length) {
+          const [start, end] = ta.value === before ? at : sel();
+          const edit = insertDroppedAssetLinks(ta.value, start, end, saved);
+          if (edit.text) {
+            if (mode === "read") setMode("edit");
+            applyEdit(edit);
+          }
+        }
+        if (saved.length && failures.length) flash(`Added ${saved.length} file${saved.length === 1 ? "" : "s"}; ${failures.length} could not be added.`);
+        else if (saved.length) flash(`Added ${saved.length} file${saved.length === 1 ? "" : "s"}`);
+        else flash(failures[0] || "No files were added.");
       }
       async function pastePictureFromClipboard() {
         if (note()?.trashed) return;
@@ -16662,6 +17163,67 @@ __zentralShim.register = function (def) {
         openCard("Check links", rows, h("div", { class: "zn-dialog-actions" }, close));
         close.addEventListener("click", closeDialog);
       }
+      // More > Import & export > Check attached files. Scanning is read-only; orphan deletion always
+      // requires a second, explicit confirmation and the store rechecks references immediately before removal.
+      async function askAssetIntegrity() {
+        const rows = h("div", { class: "zn-labels zn-linkcheck zn-asset-integrity" });
+        const close = chip("Close");
+        let report = null;
+        const failedReport = () => ({ missing: [], orphaned: [], referenced: 0, present: 0, error: true });
+        const scan = async () => {
+          try { return await store.scanAssetIntegrity(); }
+          catch (_) { return failedReport(); }
+        };
+        const paint = () => {
+          rows.replaceChildren();
+          if (!report) { rows.append(h("p", { class: "zn-hint" }, "Scanning attached files…")); return; }
+          if (report.error) {
+            rows.append(h("p", { class: "zn-hint" }, "Could not scan the attached-files folder. The results may be incomplete; no files were changed."));
+            return;
+          }
+          rows.append(h("p", { class: "zn-hint" }, `${report.referenced} referenced · ${report.present} files found · ${report.missing.length} missing · ${report.orphaned.length} unreferenced`));
+          if (!report.missing.length) rows.append(h("p", { class: "zn-empty" }, "No missing attached files."));
+          for (const item of report.missing) {
+            const open = chip("Open note");
+            open.addEventListener("click", () => { closeDialog(); openNote(item.noteIds[0]); });
+            const owners = item.noteIds.map((id) => titleOf(store.get(id)?.body || "") || id).join(", ");
+            rows.append(h("div", { class: "zn-labels-row zn-linkcheck-row" },
+              h("span", { class: "zn-labels-name", title: item.rel }, item.rel),
+              h("span", { class: "zn-labels-count" }, "Missing · " + owners),
+              h("span", { class: "zn-labels-actions" }, open)));
+          }
+          if (!report.orphaned.length) rows.append(h("p", { class: "zn-empty" }, "No unreferenced files."));
+          for (const rel of report.orphaned) {
+            const remove = chip("Delete…");
+            remove.title = "Permanently delete this unreferenced attachment";
+            remove.addEventListener("click", () => {
+              const cancel = chip("Cancel"), confirm = chip("Delete permanently", true);
+              openCard("Delete unreferenced file?", h("p", {}, rel), h("p", { class: "zn-hint" }, "This cannot be undone. The file will be kept if any note, including a note in Trash, references it."), h("div", { class: "zn-dialog-actions" }, cancel, confirm));
+              cancel.addEventListener("click", () => { closeDialog(); openCard("Check attached files", rows, h("div", { class: "zn-dialog-actions" }, close)); });
+              confirm.addEventListener("click", async () => {
+                confirm.disabled = true;
+                const result = await store.removeAsset(rel).catch(() => ({ ok: false, reason: "io" }));
+                closeDialog();
+                if (!result.ok) flash(result.reason === "referenced" ? "File is now referenced; it was kept" : "Could not delete attachment");
+                else flash("Deleted attachment");
+                report = await scan();
+                paint();
+                openCard("Check attached files", rows, h("div", { class: "zn-dialog-actions" }, close));
+                close.addEventListener("click", closeDialog);
+              });
+            });
+            rows.append(h("div", { class: "zn-labels-row zn-linkcheck-row" },
+              h("span", { class: "zn-labels-name", title: rel }, rel),
+              h("span", { class: "zn-labels-count" }, "Unreferenced"),
+              h("span", { class: "zn-labels-actions" }, remove)));
+          }
+        };
+        openCard("Check attached files", rows, h("div", { class: "zn-dialog-actions" }, close));
+        close.addEventListener("click", closeDialog);
+        paint();
+        report = await scan();
+        paint();
+      }
       function askLabels() {
         const rows = h("div", { class: "zn-labels" });
         const close = chip("Close");
@@ -18092,6 +18654,8 @@ __zentralShim.register = function (def) {
             { icon: "save", label: "Export all as zip\u2026", action: () => askExport("zip", async () => { const k = await env.exportZip(store.list()); if (k) flash(`Zipped ${k} notes`); }) },
             { icon: "folder", label: "Import .md folder\u2026", action: async () => { const k = await env.importFolder(store); flash(k ? `Imported ${k} notes` : "Nothing imported"); if (view === "list") scheduleList(); } },
             { sep: true },
+            { icon: "paperclip", label: "Check attached files…", action: () => queueMicrotask(askAssetIntegrity) },
+            { sep: true },
             { icon: "folder", label: "Open notes folder", action: () => env.revealFolder(store.dir) },
           ] },
           { icon: "copy", label: "Copy text", action: () => env.copyText(n.body) },
@@ -18772,6 +19336,28 @@ __zentralShim.register = function (def) {
         scheduleOutline();
         scheduleFindRefresh();
         if (mode === "split") schedulePreview();
+      });
+      // External file drops are accepted only over the editable text area; ordinary text/URL drags keep native behavior.
+      listen(ta, "dragover", (e) => {
+        if (ta.readOnly || mode === "read") return;
+        const types = Array.from(e.dataTransfer?.types || []);
+        if (!types.includes("Files") && !e.dataTransfer?.files?.length) return;
+        e.preventDefault();
+        ta.classList.add("zn-file-drop-target");
+        try { e.dataTransfer.dropEffect = "copy"; } catch (_) {}
+      });
+      listen(ta, "dragleave", () => ta.classList.remove("zn-file-drop-target"));
+      listen(ta, "drop", (e) => {
+        ta.classList.remove("zn-file-drop-target");
+        if (ta.readOnly || mode === "read") return;
+        const types = Array.from(e.dataTransfer?.types || []);
+        const isFileDrop = types.includes("Files") || !!e.dataTransfer?.files?.length;
+        if (!isFileDrop) return;
+        e.preventDefault(); // A rejected file/directory must not navigate the tab away from the note.
+        const files = droppedFiles(e.dataTransfer);
+        if (!files.length) { flash("No readable files in that drop."); return; }
+        if ((e.dataTransfer?.files?.length || 0) > files.length) flash("Only the first 20 files in a drop are added.");
+        dropFilesAt(files, sel()).catch((error) => console.warn("[ZentralNotes] file drop failed", error));
       });
       // Pasting one web address: offer the "create link" dialog (text to show + address).
       listen(ta, "paste", (e) => {
