@@ -7637,6 +7637,12 @@
           }
           if (foldersChanged) { copy = { ...copy, folders }; changed = true; }
         }
+        // Zen also copies native group metadata independently of its folders.
+        // Drop only groups whose corresponding managed folder was proven unused.
+        if (Array.isArray(win.groups)) {
+          const groups = win.groups.filter((group) => !removedFolders.has(group?.id));
+          if (groups.length !== win.groups.length) { copy = { ...copy, groups }; changed = true; }
+        }
         return copy;
       });
       return changed ? { ...state, windows } : state;

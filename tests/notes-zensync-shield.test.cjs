@@ -29,6 +29,13 @@ const folderBefore = JSON.stringify(folderState), folderResult = c.filterZenSide
 assert.equal(JSON.stringify(folderState), folderBefore);
 assert.deepEqual(Array.from(folderResult.windows[0].folders, x => x.id), ["bgalazka-zentral-notes", "bgalazka-zentral-notes-sub_used", "ordinary-folder"], "empty managed folders are omitted, but parents containing user tabs in another window survive");
 assert.equal(folderResult.windows[0].folders[2].prevSiblingInfo.type, "start", "removed previous sibling is not referenced");
+const nativeGroups = { windows: [
+  { tabs: [{ ...agenda, zenSyncId: "a" }], folders: [{ id: "zentral-notes-agenda" }, { id: "bgalazka-zentral-notes" }], groups: [{ id: "zentral-notes-agenda", label: "virtual" }, { id: "bgalazka-zentral-notes" }, { id: "ordinary", label: "Keep" }] },
+  { tabs: [{ ...normal, groupId: "bgalazka-zentral-notes" }], folders: [] },
+] };
+const groupsBefore = JSON.stringify(nativeGroups), groupsResult = c.filterZenSidebarState(nativeGroups);
+assert.equal(JSON.stringify(nativeGroups), groupsBefore);
+assert.deepEqual(Array.from(groupsResult.windows[0].groups, g => g.id), ["bgalazka-zentral-notes", "ordinary"], "native group for removed virtual folder is not synced; groups needed by real tabs or owned by user are retained");
 const foreignTree = { windows: [{ tabs: [pseudo], folders: [{ id: "zentral-notes-agenda" }, { id: "my-private-folder", parentId: "zentral-notes-agenda" }] }] };
 assert.deepEqual(Array.from(c.filterZenSidebarState(foreignTree).windows[0].folders, f => f.id), ["zentral-notes-agenda", "my-private-folder"], "foreign child protects its managed ancestor");
 const oddShape = { windows: [{ tabs: null, folders: {} }] };
