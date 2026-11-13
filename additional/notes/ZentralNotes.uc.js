@@ -7081,10 +7081,13 @@
           }
           if (line.startsWith("<!--", pos)) { flush(); comment = true; continue; }
           if (line[pos] === "`") {
-            const run = /^`+/.exec(line.slice(pos))[0], close = line.indexOf(run, pos + run.length);
-            if (close >= 0 && line[close + run.length] !== "`") {
+            const run = /^`+/.exec(line.slice(pos))[0];
+            let close = line.indexOf(run, pos + run.length);
+            while (close >= 0 && (line[close - 1] === "`" || line[close + run.length] === "`")) close = line.indexOf(run, close + run.length);
+            if (close >= 0) {
               flush(); out += line.slice(pos, close + run.length); pos = close + run.length; continue;
             }
+            visible += run; pos += run.length; continue;
           }
           visible += line[pos++];
         }

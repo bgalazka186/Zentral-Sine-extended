@@ -87,3 +87,11 @@ assert.ok(fileText(nested, [nested], new Map(), [], 'portable').endsWith(nested.
 const moduleSource = fs.readFileSync(require.resolve('../additional/notes/ZentralNotes.uc.js'), 'utf8');
 assert.match(moduleSource, /const markdownBody = \(note, all, names, mode\) => markdownExportFile\(/, 'all Markdown writers route through metadata-preserving output');
 assert.match(moduleSource, /format === "md" \? markdownBody\(n, allNotesForExport\(\), new Map\(\), markdownMode\) : exportBody/, 'HTML and text retain their existing body-only formatting');
+const inlineTicks = '`do not touch `` ![[hidden target]] ` then ![[Other note]]';
+const inlineOut = convert({ id: 'note_a', body: inlineTicks }, [target], new Map(), []);
+assert.ok(inlineOut.startsWith('`do not touch `` ![[hidden target]] `'), 'longer internal backtick runs do not expose inline-code content');
+assert.match(inlineOut, /then \[Other note\]\(other_id\.md\)/);
+const ticksBefore = '`![[Other note]] then `` text ` and ![[Other note]]';
+const ticksBeforeOut = convert({ id: 'note_a', body: ticksBefore }, [target], new Map(), []);
+assert.ok(ticksBeforeOut.startsWith('`![[Other note]] then `` text `'), 'inline code before a longer backtick run stays literal');
+assert.deepEqual(Array.from(scan('`![[Other note]] then `` text `')), [], 'code examples do not trigger warnings');

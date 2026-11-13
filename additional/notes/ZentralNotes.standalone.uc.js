@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.69
+// @version 3.3.70
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.69, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.70, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.69";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.70";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11431,10 +11431,13 @@ __zentralShim.register = function (def) {
           }
           if (line.startsWith("<!--", pos)) { flush(); comment = true; continue; }
           if (line[pos] === "`") {
-            const run = /^`+/.exec(line.slice(pos))[0], close = line.indexOf(run, pos + run.length);
-            if (close >= 0 && line[close + run.length] !== "`") {
+            const run = /^`+/.exec(line.slice(pos))[0];
+            let close = line.indexOf(run, pos + run.length);
+            while (close >= 0 && (line[close - 1] === "`" || line[close + run.length] === "`")) close = line.indexOf(run, close + run.length);
+            if (close >= 0) {
               flush(); out += line.slice(pos, close + run.length); pos = close + run.length; continue;
             }
+            visible += run; pos += run.length; continue;
           }
           visible += line[pos++];
         }
