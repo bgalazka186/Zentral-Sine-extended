@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.81
+// @version 3.3.82
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.81, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.82, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.81";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.82";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11595,28 +11595,53 @@ __zentralShim.register = function (def) {
       const ignored = parseIgnoreCached(readOptions.ignore);
       return { gate: flavorGate(readOptions.flavor, { tilde: readOptions.tilde, ignore: ignored.ids }), literals: ignored.literals };
     }
-    function mapExportScripts(segment, options, convert) {
-      const gate = options.gate;
-      if (!gate.on("A09") && !gate.on("A13") && !gate.on("A15")) return segment;
-      const ignored = new Set();
-      for (const re of ignoreRes(options.literals)) {
+    function exportProtectedPositions(segment, literals) {
+      const protectedAt = new Set();
+      for (const re of ignoreRes(literals)) {
         re.lastIndex = 0;
         for (let match; (match = re.exec(segment));) {
           for (let i = 0; i < match[0].length; i++) {
-            if (match[0][i] === "~" || match[0][i] === "^") ignored.add(match.index + i);
+            if (ESC_CHARS.includes(match[0][i])) protectedAt.add(match.index + i);
           }
         }
       }
-      const escaped = (at) => {
-        let n = 0;
-        while (at > 0 && segment[--at] === "\\") n++;
-        return n % 2 === 1;
-      };
-      return segment.replace(/(?<!~)~([^\s~]+)~(?!~)|\^(?!\[)([^\s^]+)\^/g, (raw, sub, sup, offset) => {
+      // Mirror parseInlineEsc: an odd run of backslashes escapes the next
+      // Markdown punctuation; an even run leaves that punctuation active.
+      for (let i = 0; i < segment.length; i++) {
+        if (segment[i] === "\\" && i + 1 < segment.length && ESC_CHARS.includes(segment[i + 1])) {
+          protectedAt.add(++i);
+        }
+      }
+      return protectedAt;
+    }
+    function mapExportScripts(segment, options, convert) {
+      const gate = options.gate;
+      if (!gate.on("A09") && !gate.on("A13") && !gate.on("A15") && !gate.on("A17")) return segment;
+      const protectedAt = exportProtectedPositions(segment, options.literals);
+      return segment.replace(/(?<!~)~([^\s~]+)~(?!~)|\^(?!\[)([^\s^]+)\^|\^\(([^()\n]+)\)|\^(?!\[)([^\s^()]+)/g, (raw, sub, sup, group, word, offset) => {
         const end = offset + raw.length - 1;
-        if (ignored.has(offset) || ignored.has(end) || escaped(offset) || escaped(end)) return raw;
-        const kind = sub ? (gate.on("A09") ? "strike" : gate.on("A13") ? "sub" : "") : gate.on("A15") ? "sup" : "";
-        return kind ? convert(raw, kind, sub || sup) : raw;
+        if (protectedAt.has(offset) || ((sub || sup) && protectedAt.has(end))) return raw;
+        if (group || word) {
+          // Escaped or ignored punctuation inside a Reddit expression can alter
+          // its parse; keep such ambiguous expressions unchanged.
+          for (let i = offset; i <= end; i++) if (protectedAt.has(i)) return raw;
+        }
+        const kind = sub ? (gate.on("A09") ? "strike" : gate.on("A13") ? "sub" : "") : sup ? (gate.on("A15") ? "sup" : "") : gate.on("A17") ? "sup" : "";
+        return kind ? convert(raw, kind, sub || sup || group || word) : raw;
+      });
+    }
+    function mapExportInlineFootnotes(segment, options, convert) {
+      const gate = options.gate;
+      if (!gate.on("J03") && !gate.on("A17")) return segment;
+      const protectedAt = exportProtectedPositions(segment, options.literals);
+      return segment.replace(/\^\[((?:[^\[\]\n]|\[[^\[\]\n]*\])+)\]/g, (raw, content, offset) => {
+        // The reader may reinterpret a token when an ignored or escaped symbol
+        // occurs inside it. Keep ambiguous syntax literal instead of guessing.
+        for (let i = offset; i < offset + raw.length; i++) if (protectedAt.has(i)) return raw;
+        const trimmed = content.trim();
+        if (gate.on("J03") && trimmed) return convert(raw, "footnote", trimmed);
+        if (gate.on("A17") && /^[^\s^()]+$/.test(content)) return convert(raw, "sup", "[" + content + "]");
+        return raw;
       });
     }
     // Identify live Zentral extensions without interpreting examples inside code.
@@ -11636,7 +11661,7 @@ __zentralShim.register = function (def) {
         if (/==(?:\{(?:\w+|#[0-9a-f]{6})\})?[^\n=]+==|\+\+[^+\n]+\+\+/i.test(visible)) found.add("formatting");
         if (/\|\|[^|\n]+\|\||>![^!\n]+!</.test(visible)) found.add("spoiler");
         mapExportScripts(visible, scriptOptions, (raw, kind) => { found.add(kind === "strike" ? "single-tilde strike" : "subscript / superscript"); return raw; });
-        if (/\^\[((?:[^\[\]\n]|\[[^\[\]\n]*\])+)\]/.test(visible)) found.add("inline footnote");
+        mapExportInlineFootnotes(visible, scriptOptions, (raw, kind) => { found.add(kind === "footnote" ? "inline footnote" : "subscript / superscript"); return raw; });
         const task = /^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/.exec(visible);
         if (task && Object.hasOwn(TASK_STATUS_NAMES, task[2])) found.add("extended task");
         return segment;
@@ -11684,8 +11709,9 @@ __zentralShim.register = function (def) {
           const title = spec.parts.title + (spec.parts.heading ? " > " + spec.parts.heading : "");
           return buildNoteLink(hit.id, title, hit.heading);
         });
-        segment = segment.replace(/\^\[((?:[^\[\]\n]|\[[^\[\]\n]*\])+)\]/g, (_all, content) => {
-          if (!footnoteAppendSafe) return literal(_all);
+        segment = mapExportInlineFootnotes(segment, scriptOptions, (raw, kind, content) => {
+          if (kind === "sup") return "<sup>" + escHtml(content) + "</sup>";
+          if (!footnoteAppendSafe) return literal(raw);
           let id;
           do { id = "zn-inline-" + footnoteNumber++; } while (usedFootnotes.has(id));
           usedFootnotes.add(id);
@@ -18004,7 +18030,7 @@ __zentralShim.register = function (def) {
         if (!warnings.size) { Promise.resolve(run({ markdownReadOpts })).catch((error) => console.warn("[ZentralNotes] export failed", error)); return; }
         const cancel = chip("Cancel"), raw = chip("Keep raw syntax"), portable = chip("Convert to portable Markdown", true);
         openCard("Markdown export compatibility",
-          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, subscript/superscript use HTML tags, single-tilde strike uses double tildes, inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, and small print becomes ordinary text. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
+          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, subscript/superscript use HTML tags, single-tilde strike uses double tildes, inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, and small print becomes ordinary text. Ignored, disabled or ambiguous syntax may remain as written. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
           h("div", { class: "zn-dialog-actions" }, cancel, raw, portable));
         const choose = (markdownMode) => { closeDialog(); Promise.resolve(run({ markdownMode, markdownReadOpts })).catch((error) => console.warn("[ZentralNotes] export failed", error)); };
         cancel.addEventListener("click", closeDialog);
