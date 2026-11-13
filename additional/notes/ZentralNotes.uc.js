@@ -7577,6 +7577,72 @@
       }
       return removed;
     }
+    // ZenSessionManager.saveState consumes the window snapshots to build its
+    // sidebar/session and Sync projection. Clone only affected windows; do not
+    // mutate the browser's snapshot (which Firefox also writes separately).
+    function filterZenSidebarState(state) {
+      if (!state || !Array.isArray(state.windows)) return state;
+      let changed = false;
+      const windows = state.windows.map((windowState) => {
+        if (!windowState || !Array.isArray(windowState.tabs)) return windowState;
+        const tabs = windowState.tabs.filter((tab) => {
+          if (!tab || typeof tab !== "object") return true;
+          const entries = Array.isArray(tab.entries) ? tab.entries : [];
+          const index = Number.isInteger(tab.index) && tab.index > 0 ? tab.index - 1 : entries.length - 1;
+          const current = entries[index]?.url || "";
+          const initial = (!current || current === "about:blank") ? tab._zenPinnedInitialState?.entry?.url || "" : "";
+          return !pseudoTabCleanupKind({ url: current, sessionUrl: initial }, {});
+        });
+        if (tabs.length === windowState.tabs.length) return windowState;
+        changed = true;
+        return { ...windowState, tabs };
+      });
+      return changed ? { ...state, windows } : state;
+    }
+    // The Zen session manager is a process-wide singleton shared by windows.
+    // Reference count its reversible wrapper; never overwrite newer wrappers.
+    const ZEN_SIDEBAR_SHIELD = Symbol.for("zentral-notes/zen-sidebar-shield/v1");
+    function acquireZenSidebarShield(target, warn = () => {}) {
+      if (!target || (typeof target !== "object" && typeof target !== "function")) return null;
+      try {
+        let record = Object.getOwnPropertyDescriptor(target, ZEN_SIDEBAR_SHIELD)?.value;
+        if (record) {
+          if (!record.active || Object.getOwnPropertyDescriptor(target, "saveState")?.value !== record.wrapper) return null;
+          record.users++;
+        } else {
+          const own = Object.getOwnPropertyDescriptor(target, "saveState");
+          let owner = target, desc = own;
+          while (!desc && (owner = Object.getPrototypeOf(owner))) desc = Object.getOwnPropertyDescriptor(owner, "saveState");
+          if (!desc || typeof desc.value !== "function" || (own && !own.configurable)) return null;
+          record = { active: true, users: 1, own, wrapper: null };
+          const original = desc.value;
+          record.wrapper = function (state, ...args) {
+            let next = state;
+            if (record.active) {
+              try { next = filterZenSidebarState(state); } catch (error) { try { warn(error); } catch (_) {} }
+            }
+            return Reflect.apply(original, this, [next, ...args]);
+          };
+          Object.defineProperty(target, ZEN_SIDEBAR_SHIELD, { value: record, configurable: true });
+          try { Object.defineProperty(target, "saveState", { value: record.wrapper, writable: true, configurable: true, enumerable: desc.enumerable }); }
+          catch (error) { delete target[ZEN_SIDEBAR_SHIELD]; throw error; }
+        }
+        let released = false;
+        const release = () => {
+          if (released) return;
+          released = true;
+          if (--record.users > 0) return;
+          record.active = false;
+          if (Object.getOwnPropertyDescriptor(target, "saveState")?.value === record.wrapper) {
+            if (record.own) Object.defineProperty(target, "saveState", record.own);
+            else delete target.saveState;
+          }
+          if (Object.getOwnPropertyDescriptor(target, ZEN_SIDEBAR_SHIELD)?.value === record) delete target[ZEN_SIDEBAR_SHIELD];
+        };
+        release.isCurrent = () => record.active && Object.getOwnPropertyDescriptor(target, "saveState")?.value === record.wrapper;
+        return release;
+      } catch (error) { try { warn(error); } catch (_) {} return null; }
+    }
     function restoredPseudoFolderKind(folder) {
       if (!folder || folder.localName !== "zen-folder") return "";
       const id = String(folder.id || "");
@@ -8010,7 +8076,7 @@
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_FOLDER_LABEL, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         DATE_TITLE_RE, dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
         HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, BACKUP_DIR, BACKUP_HOURS, backupEntryName, parseBackupName, backupPlan, backupLeft, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
-        orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, pseudoTabCleanupKind, sweepRestoredPseudoTabs, restoredPseudoFolderKind, retireRestoredPseudoFolder, projectZen,
+        orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, pseudoTabCleanupKind, sweepRestoredPseudoTabs, filterZenSidebarState, acquireZenSidebarShield, restoredPseudoFolderKind, retireRestoredPseudoFolder, projectZen,
         utf8Bytes, createPerfSampler, createZenFolder,
       };
     }
@@ -16914,6 +16980,28 @@
       const onCleanup = (fn) => cleanups.push(fn);
       let disposed = false;
       const warn = (error) => console.warn("[ZentralNotes]", error);
+      // Zen's public session manager builds both its sidebar file and the Sync
+      // projection from saveState(). Firefox's separate session file is NOT
+      // covered here; keep the remaining isolation work explicit in the roadmap.
+      let zenSessionManager = null;
+      try { zenSessionManager = ChromeUtils.importESModule?.("resource:///modules/zen/ZenSessionManager.sys.mjs")?.ZenSessionStore || null; } catch (_) {}
+      if (zenSessionManager && lifecycle?.watchNative) {
+        const binding = lifecycle.watchNative({
+          name: "notes-zen-sidebar-session-shield", enabled: () => true,
+          resolve: () => zenSessionManager, events: ["activate"],
+          attach(target, child) {
+            const release = acquireZenSidebarShield(target, warn);
+            if (!release) throw new Error("Zen sidebar session hook is unavailable or already replaced");
+            child.own(release);
+            return { isCurrent: release.isCurrent };
+          },
+        });
+        onCleanup(() => binding.destroy());
+      } else if (zenSessionManager) {
+        const release = acquireZenSidebarShield(zenSessionManager, warn);
+        if (release) onCleanup(release);
+      }
+
       const prefBool = (k, d) => {
         try {
           return Services.prefs.getBoolPref(k, d);
