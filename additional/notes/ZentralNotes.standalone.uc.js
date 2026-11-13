@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.78
+// @version 3.3.79
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.78, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.79, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.78";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.79";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11443,6 +11443,14 @@ __zentralShim.register = function (def) {
     // comments. Comment state spans lines and fences inside a comment are inert.
     function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix) {
       const lines = String(text).split("\n"), result = [], codeRuns = indexMarkdownCodeRuns(lines);
+      // O01 only starts a block where the Notes parser actually recognizes it;
+      // the same characters inside a running paragraph are ordinary text.
+      const smallRows = new Set();
+      if (lines.some((line) => /^-#[ \t]+\S/.test(line))) {
+        for (const block of parseBlocks(text)) {
+          if (block.type === "p" && block.c?.length === 1 && block.c[0]?.t === "small") smallRows.add(block.src);
+        }
+      }
       let fence = null, comment = false;
       const findClose = (line, run, start) => {
         let close = line.indexOf(run, start);
@@ -11515,13 +11523,17 @@ __zentralShim.register = function (def) {
         }
         // Keep source offsets intact for multiline code spans: consume just the
         // small-print prefix, then scan the rest of the original line normally.
-        let smallPrefix = !comment && /^-#[ \t]+(?=\S)/.exec(line)?.[0] || "";
+        let smallPrefix = !comment && smallRows.has(row) && /^-#[ \t]+(?=\S)/.exec(line)?.[0] || "";
+        let separateSmall = false;
         let out = "", visible = smallPrefix, pos = smallPrefix.length;
         const flush = () => { if (visible) { out += fn(visible); visible = ""; } };
         const finishSmallPrint = () => {
           if (smallPrefix && out.startsWith(smallPrefix)) {
             const rest = out.slice(smallPrefix.length);
-            out = mapSmallPrint(smallPrefix, rest) + rest;
+            const replacement = mapSmallPrint(smallPrefix, rest);
+            separateSmall = typeof replacement === "object" && !!replacement.separate;
+            if (separateSmall && result.length && result[result.length - 1] !== "") result.push("");
+            out = (separateSmall ? replacement.prefix : replacement) + rest;
           }
           smallPrefix = "";
         };
@@ -11572,6 +11584,7 @@ __zentralShim.register = function (def) {
           visible += line[pos++];
         }
         flush(); finishSmallPrint(); result.push(out);
+        if (separateSmall && row + 1 < lines.length && lines[row + 1].trim()) result.push("");
       }
       onEnd({ comment, fence });
       return result.join("\n");
@@ -11657,7 +11670,8 @@ __zentralShim.register = function (def) {
       }, (_prefix, rest) => {
         // The original text is parsed inline, not as a heading, list or HTML
         // block. A zero-width entity prevents accidental block interpretation.
-        return /^(?:#{1,6}(?:[ \t]|$)|>|[-+*][ \t]+|\d{1,9}[.)][ \t]+|`{3,}|~{3,}|(?:[-*_][ \t]*){3,}$|\[[^\]\n]+\]:|<(?:!--|\/?[A-Za-z]))/.test(rest) ? "&#8203;" : "";
+        const prefix = /^(?:#{1,6}(?:[ \t]|$)|>|[-+*][ \t]+|\d{1,9}[.)][ \t]+|`{3,}|~{3,}|(?:[-*_][ \t]*){3,}$|\[[^\]\n]+\]:|<(?:!--|\/?[A-Za-z]))/.test(rest) ? "&#8203;" : "";
+        return { prefix, separate: true };
       });
       const resolver = wikiResolver(notes, folders);
       const rewritten = mapMarkdownForExport(converted,
@@ -17955,7 +17969,7 @@ __zentralShim.register = function (def) {
         if (!warnings.size) { Promise.resolve(run({})).catch((error) => console.warn("[ZentralNotes] export failed", error)); return; }
         const cancel = chip("Cancel"), raw = chip("Keep raw syntax"), portable = chip("Convert to portable Markdown", true);
         openCard("Markdown export compatibility",
-          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, and subscript/superscript use HTML tags, and inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, and small print becomes ordinary text. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
+          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, subscript/superscript use HTML tags, inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, and small print becomes ordinary text. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
           h("div", { class: "zn-dialog-actions" }, cancel, raw, portable));
         const choose = (markdownMode) => { closeDialog(); Promise.resolve(run({ markdownMode })).catch((error) => console.warn("[ZentralNotes] export failed", error)); };
         cancel.addEventListener("click", closeDialog);
