@@ -2130,6 +2130,7 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
 
 /* Calendar drag previews never intercept pointer input or hide event controls. */
 .zentral-notes-sheet .zn-calendar-undo-move[hidden] { display: none !important; }
-.zentral-notes-sheet .zn-cal-time-event.is-movable { cursor: grab; touch-action: none; }
-.zentral-notes-sheet .zn-cal-time-event.is-dragging { cursor: grabbing; opacity: .55; }
+.zentral-notes-sheet :is(.zn-cal-time-event, .zn-cal-time-reminder, .zn-cal-time-allday-cell .zn-cal-item).is-movable { cursor: grab; touch-action: none; }
+.zentral-notes-sheet :is(.zn-cal-time-event, .zn-cal-time-reminder, .zn-cal-time-allday-cell .zn-cal-item).is-dragging { cursor: grabbing; opacity: .55; }
 .zentral-notes-sheet .zn-cal-drag-preview { position: absolute; z-index: 6; left: 0; right: 0; padding: 2px 4px; border-top: 2px solid var(--zn-accent); background: var(--zn-surface); color: var(--zn-text); font-size: .7em; pointer-events: none; }
+.zentral-notes-sheet .zn-cal-time-allday-cell { position: relative; }

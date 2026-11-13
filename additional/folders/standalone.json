@@ -3,7 +3,7 @@
   "themeId": "zentral-colorful-folders",
   "name": "Zentral Colorful Folders",
   "description": "Per-folder colors for native Zen folders, using Zen\u2019s own accent line with hover highlighting and click-to-collapse. Includes right-click palettes, simple and detailed editing, saved themes, and Notes-safe ownership. Standalone part of Zentral Extended.",
-  "version": "3.3.110",
+  "version": "3.3.111",
   "entry": "ZentralColorfulFolders.uc.js",
   "output": "ZentralColorfulFolders.standalone.uc.js",
   "settings": "settings.json",

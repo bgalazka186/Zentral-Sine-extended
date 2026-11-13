@@ -11395,10 +11395,10 @@
         if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return null;
         const clip = g.scroll.getBoundingClientRect();
         if (event.clientX < clip.left || event.clientX >= clip.right || event.clientY < clip.top || event.clientY >= clip.bottom) return null;
-        for (const track of g.columns.querySelectorAll(".zn-cal-time-track")) {
+        for (const track of g.columns.querySelectorAll(g.allDay ? ".zn-cal-time-allday-cell" : ".zn-cal-time-track")) {
           const rect = track.getBoundingClientRect();
           if (event.clientX < rect.left || event.clientX >= rect.right || event.clientY < rect.top || event.clientY >= rect.bottom) continue;
-          const minute = Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / g.hourHeight));
+          const minute = g.allDay ? 0 : Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / g.hourHeight));
           return { track, day: track.getAttribute("data-day"), minute };
         }
         return null;
@@ -11410,13 +11410,13 @@
         g.active = true;
         g.button.classList.add("is-dragging");
         const point = calendarDragPoint(g, event);
-        const placement = point && CALENDAR_PART.calendarMovePlacement(g.before, g.originDay, g.originMinute, point.day, point.minute, g.zone, g.snap);
+        const placement = point && (g.allDay ? { date: point.day } : CALENDAR_PART.calendarMovePlacement(g.before, g.originDay, g.originMinute, point.day, point.minute, g.zone, g.snap));
         g.placement = placement;
         if (!placement) { g.preview?.remove(); g.preview = null; return; }
         if (!g.preview) g.preview = h("div", { class: "zn-cal-drag-preview", "aria-hidden": "true" });
         if (g.preview.parentElement !== point.track) point.track.append(g.preview);
-        g.preview.style.top = Math.max(0, point.minute / 60 * g.hourHeight) + "px";
-        g.preview.textContent = placement.date + " " + String(Math.floor(placement.minute / 60)).padStart(2, "0") + ":" + String(placement.minute % 60).padStart(2, "0");
+        g.preview.style.top = g.allDay ? "0px" : Math.max(0, point.minute / 60 * g.hourHeight) + "px";
+        g.preview.textContent = g.allDay ? placement.date + " · all day" : placement.date + " " + String(Math.floor(placement.minute / 60)).padStart(2, "0") + ":" + String(placement.minute % 60).padStart(2, "0");
         event.preventDefault();
       }
       function commitCalendarDrag(event) {
@@ -11430,24 +11430,27 @@
         if (!placement) return;
         const current = store.items.get(g.before.id);
         if (!current || current.rev !== g.before.rev || current.etag !== g.before.etag) return flash("Calendar item changed during the drag; nothing was moved");
-        const next = CALENDAR_PART.calendarMoveTimedEvent(current, placement, g.zone, nowMs());
+        const next = g.allDay ? CALENDAR_PART.calendarMoveAllDayReminder(current, g.originDay, placement.date, nowMs()) : CALENDAR_PART.calendarMoveTimedItem(current, placement, g.zone, nowMs());
         if (!next) return flash("That calendar move is unavailable");
-        if (next.start.dateTime === current.start.dateTime && next.end.dateTime === current.end.dateTime) return;
+        if (JSON.stringify(next.start) === JSON.stringify(current.start) && JSON.stringify(next.end) === JSON.stringify(current.end)) return;
         const before = { start: current.start, end: current.end, moved: current.x?.moved };
         const saved = store.items.upsert(next);
-        if (!saved) return flash("Calendar item changed during the drag; nothing was moved");
+        if (!saved) return flash("Could not move the calendar item; check storage and reminder history");
         if (saved.x?.src === "list") { try { store.syncItemScheduleToNote(saved, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
         const latest = store.items.get(saved.id);
         const linked = latest?.x?.src === "list" && latest.x.noteId ? store.get(latest.x.noteId) : null;
-        calendarMoveUndo = latest ? { id: latest.id, rev: latest.rev, etag: latest.etag, before, noteId: linked?.id || "", noteBody: linked?.body || "" } : null;
+        const identity = latest && CALENDAR_PART.isReminder(latest) ? CALENDAR_PART.reminderIdentity(latest) : null;
+        const historyHead = identity ? store.items.history?.list({ itemId: identity.itemId, occurrenceId: identity.occurrenceId, limit: 1 })[0]?.id || "" : "";
+        calendarMoveUndo = latest ? { id: latest.id, rev: latest.rev, etag: latest.etag, before, noteId: linked?.id || "", noteBody: linked?.body || "", identity, historyHead } : null;
         renderCalendar(); flash("Calendar item moved");
       }
       function undoCalendarMove() {
         const undo = calendarMoveUndo;
         if (!undo) return;
         const current = store.items.get(undo.id), note = undo.noteId ? store.get(undo.noteId) : null;
-        if (!current || current.rev !== undo.rev || current.etag !== undo.etag || (undo.noteId && (!note || note.body !== undo.noteBody))) {
-          calendarMoveUndo = null; renderCalendar(); return flash("Cannot undo: the item or its source note changed");
+        const head = undo.identity ? store.items.history?.list({ itemId: undo.identity.itemId, occurrenceId: undo.identity.occurrenceId, limit: 1 })[0]?.id || "" : "";
+        if (!current || current.rev !== undo.rev || current.etag !== undo.etag || (undo.noteId && (!note || note.body !== undo.noteBody)) || head !== undo.historyHead) {
+          calendarMoveUndo = null; renderCalendar(); return flash("Cannot undo: the item, source note or reminder history changed");
         }
         const restored = store.items.upsert({ ...current, start: undo.before.start, end: undo.before.end, x: { ...current.x, moved: undo.before.moved } });
         if (!restored) return flash("Could not undo the calendar move");
@@ -11461,6 +11464,28 @@
       listen(window, "pointerup", releaseCalendarSuppressedClick, true);
       listen(root, "pointercancel", (event) => { if (calendarDrag && (event.pointerId === undefined || event.pointerId === calendarDrag.pointerId)) cancelCalendarDrag(); releaseCalendarSuppressedClick(event); });
       cleanups.push(() => { cancelCalendarDrag(); window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null; });
+      function bindCalendarDrag(button, item, { track, columns, scroll, dayKey, hourHeight, zone, allDay = false }) {
+        const reminder = CALENDAR_PART.isReminder(item);
+        const writable = !reminder || (!!store.items.history && !store.items.history.storageState().writeBlocked);
+        if (!writable || item.x?.series || (item.recurrence || []).length || item.x?.src === "note") return;
+        button.classList.add("is-movable");
+        button.title += " — Drag to move; use the context menu for keyboard time changes";
+        button.addEventListener("pointerdown", (event) => {
+          if ((event.button !== undefined && event.button !== 0) || calendarDrag || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
+          button._znSuppressDragClick = false;
+          const current = currentCalendarItem(item);
+          if (!current || current.rev !== item.rev || current.etag !== item.etag) return;
+          const rect = track.getBoundingClientRect();
+          calendarDrag = { button, pointerId: event.pointerId, x: event.clientX, y: event.clientY, before: current, originDay: dayKey,
+            originMinute: allDay ? 0 : Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / hourHeight)),
+            hourHeight, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, allDay, active: false, placement: null, preview: null };
+          try {
+            if (typeof button.setPointerCapture !== "function") { cancelCalendarDrag(); return; }
+            button.setPointerCapture(event.pointerId);
+          } catch (_) { cancelCalendarDrag(); }
+        });
+        button.addEventListener("lostpointercapture", (event) => { if (calendarDrag?.button === button && calendarDrag.pointerId === event.pointerId) cancelCalendarDrag(); });
+      }
       function calendarTimeGridView(items, cursor, mode) {
         const CALENDAR_HOUR_PX = CALENDAR_PART.calendarDensityHourHeight(store.meta.calendarDensity);
         const C = CALENDAR_PART, zone = calendarDisplayZone(), days = mode === "week" ? C.weekDays(cursor, 1) : [C.dayStart(cursor)];
@@ -11490,7 +11515,11 @@
           const isToday = C.localDateKey(day) === todayKey;
           const cell = h("div", { class: "zn-cal-time-allday-cell" + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": "All-day items for " + fmt(day), "data-day": C.ymd(new Date(day)) });
           bindCalendarDayContext(cell, day);
-          for (const item of C.allDayOf(expanded, day)) cell.append(calendarItemButton(item, true));
+          for (const item of C.allDayOf(expanded, day)) {
+            const button = calendarItemButton(item, true);
+            if (C.isReminder(item)) bindCalendarDrag(button, item, { track: cell, columns: allDayRow, scroll: allDayRow, dayKey: C.localDateKey(day), hourHeight: CALENDAR_HOUR_PX, zone, allDay: true });
+            cell.append(button);
+          }
           allDayRow.append(cell);
         }
         const scroll = h("div", { class: "zn-cal-time-scroll", tabindex: "0", "aria-label": "24-hour timeline" });
@@ -11559,25 +11588,7 @@
             const startLabel = C.clockIn(Math.max(itemStart, bounds[0]), zone);
             const endLabel = reminder ? "reminder" : C.clockIn(Math.min(itemEnd, bounds[1]), zone);
             button.setAttribute("aria-label", `${original.summary}, ${startLabel}${reminder ? " reminder" : " to " + endLabel}, lane ${entry.lane + 1} of ${entry.lanes}`);
-            if (!reminder && !original.x?.series && !(original.recurrence || []).length && original.x?.src !== "note") {
-              button.classList.add("is-movable");
-              button.title += " — Drag to move; use the context menu for keyboard time changes";
-              button.addEventListener("pointerdown", (event) => {
-                if ((event.button !== undefined && event.button !== 0) || calendarDrag || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
-                button._znSuppressDragClick = false;
-                const current = currentCalendarItem(original);
-                if (!current || current.rev !== original.rev || current.etag !== original.etag) return;
-                const rect = track.getBoundingClientRect();
-                calendarDrag = { button, pointerId: event.pointerId, x: event.clientX, y: event.clientY, before: current, originDay: dayKey,
-                  originMinute: Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / CALENDAR_HOUR_PX)),
-                  hourHeight: CALENDAR_HOUR_PX, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, active: false, placement: null, preview: null };
-                try {
-                  if (typeof button.setPointerCapture !== "function") { cancelCalendarDrag(); return; }
-                  button.setPointerCapture(event.pointerId);
-                } catch (_) { cancelCalendarDrag(); }
-              });
-              button.addEventListener("lostpointercapture", (event) => { if (calendarDrag?.button === button && calendarDrag.pointerId === event.pointerId) cancelCalendarDrag(); });
-            }
+            bindCalendarDrag(button, original, { track, columns, scroll, dayKey, hourHeight: CALENDAR_HOUR_PX, zone });
             track.append(button);
           }
           columns.append(h("div", { class: "zn-cal-time-column" + (isToday ? " is-today" : "") }, track));
