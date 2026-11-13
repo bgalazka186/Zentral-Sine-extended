@@ -7106,6 +7106,10 @@
         if (TOC_TOKEN_RE.test(visible)) found.add("toc");
         if (/^\s*>\s*\[![A-Za-z][\w-]*\][+-]?/.test(visible)) found.add("callout");
         if (/!\[\[[^\]\n]+\]\]/.test(visible)) found.add("transclusion");
+        if (/==(?:\{(?:\w+|#[0-9a-f]{6})\})?[^\n=]+==|\+\+[^+\n]+\+\+/i.test(visible)) found.add("formatting");
+        if (/\|\|[^|\n]+\|\||>![^!\n]+!</.test(visible)) found.add("spoiler");
+        const task = /^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/.exec(visible);
+        if (task && Object.hasOwn(TASK_STATUS_NAMES, task[2])) found.add("extended task");
         return segment;
       });
       return [...found];
@@ -7119,6 +7123,9 @@
       const converted = mapMarkdownForExport(hiddenSafe, (segment) => {
         if (TOC_TOKEN_RE.test(segment)) return tocBlock(body);
         segment = segment.replace(/^(\s*>\s*)\[!([A-Za-z][\w-]*)\][+-]?[ \t]*(.*)$/, (_, quote, kind, title) => quote + "**" + kind.toUpperCase() + "**" + (title ? " — " + title : ""));
+        segment = segment.replace(/^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/, (whole, prefix, status) => Object.hasOwn(TASK_STATUS_NAMES, status) ? prefix + "[ ] (" + TASK_STATUS_NAMES[status] + ")" : whole);
+        segment = segment.replace(/==(?:\{(?:\w+|#[0-9a-f]{6})\})?([^\n=]+)==|\+\+([^+\n]+)\+\+/gi, (_all, mark, underline) => "**" + (mark || underline) + "**");
+        segment = segment.replace(/\|\|([^|\n]+)\|\||>!([^!\n]+)!</g, (_all, discord, reddit) => "<details><summary>Spoiler</summary>" + escHtml(discord || reddit) + "</details>");
         segment = segment.replace(/!\[\[([^\]\n]+)\]\]/g, (raw, target) => {
           const spec = parseEmbedTarget(target);
           if (!spec) return literal(raw);
@@ -13421,7 +13428,7 @@
         if (!warnings.size) { Promise.resolve(run({})).catch((error) => console.warn("[ZentralNotes] export failed", error)); return; }
         const cancel = chip("Cancel"), raw = chip("Keep raw syntax"), portable = chip("Convert to portable Markdown", true);
         openCard("Markdown export compatibility",
-          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Sizing and reminder scheduling may not transfer, and linked assets are not copied."),
+          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, and spoilers use HTML details. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
           h("div", { class: "zn-dialog-actions" }, cancel, raw, portable));
         const choose = (markdownMode) => { closeDialog(); Promise.resolve(run({ markdownMode })).catch((error) => console.warn("[ZentralNotes] export failed", error)); };
         cancel.addEventListener("click", closeDialog);

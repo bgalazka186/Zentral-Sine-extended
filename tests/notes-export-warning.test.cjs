@@ -52,3 +52,15 @@ assert.doesNotMatch(hiddenOut, /`%%/); // hidden text must not become visible li
 const hiddenEmbed = '%%![[Other note]] %%\n%%calendar%%\n';
 assert.deepEqual(Array.from(scan(hiddenEmbed)).sort(), ['calendar', 'hidden comment'], 'hidden examples are not counted as live embeds');
 assert.match(convert({ id: 'note_a', body: hiddenEmbed }, [target], new Map(), []), /<!-- %%!\[\[Other note\]\] %% -->/, 'hidden content is not resolved or rewritten');
+const extended = '# Extended\n=={red}Highlight== and ++underline++\n||private spoiler||\n- [/] Work in progress\n- [x] Completed\n`==literal==`\n';
+assert.deepEqual(Array.from(scan(extended)).sort(), ['extended task', 'formatting', 'spoiler']);
+const extOut = convert({ id: 'note_a', body: extended }, [], new Map(), []);
+assert.match(extOut, /\*\*Highlight\*\* and \*\*underline\*\*/);
+assert.match(extOut, /<details><summary>Spoiler<\/summary>private spoiler<\/details>/);
+assert.match(extOut, /- \[ \] \(In progress\) Work in progress/);
+assert.match(extOut, /- \[x\] Completed/); assert.match(extOut, /`==literal==`/);
+const extra = '>!<script>alert(1)</script>!<\n- [?] Needs review\n- [q] Unknown status\n';
+const extraOut = convert({ id: 'note_a', body: extra }, [], new Map(), []);
+assert.match(extraOut, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/, 'raw spoiler text is escaped in generated HTML');
+assert.match(extraOut, /- \[ \] \(Question\) Needs review/);
+assert.match(extraOut, /- \[q\] Unknown status/, 'unknown task states are not guessed');
