@@ -5863,7 +5863,7 @@
           if (cleanFolder(note.folder) !== DATE_FOLDER) continue;
           // Protect all user metadata and attachments, not just the fields understood by the pure predicate.
           if (note.remind || note.reminded || note.label || note.pinned || note.flavor || (note.color && note.color !== "none")) continue;
-          if (noteTags(note).length || assetRefs(note.body || "", note.id).length) continue;
+          if (noteTags(note).length || assetRefs(note.body || "", note.id).size) continue;
           if ((Array.isArray(note.files) && note.files.length) || (Array.isArray(note.attachments) && note.attachments.length)) continue;
           const key = dateOfNote(note);
           if (!key || key >= todayKey || protectedDates.has(key) || !CALENDAR_PART.isBlankDateNote(note, key)) continue;
