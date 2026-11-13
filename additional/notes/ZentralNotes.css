@@ -1389,6 +1389,18 @@
 /* Zen sidebar experiment: while the right-click target is one of our note tabs, every native item is hidden (never removed). */
 :root[zentral-notes-ctx="item"] #tabContextMenu > :not([zentral-notes-own]) { display: none !important; }
 
+/* Native Zen folder operations would mutate only virtual sidebar projections.
+   Hide those specific actions while a Notes folder menu is open; preserve
+   unrelated extensions' items and never mutate native menu state. */
+:root[zentral-notes-folder-ctx="true"] #zenFolderActions > :is(
+  #context_zenFolderRename, #context_zenFolderUnpack, #context_zenFolderUnloadAll,
+  #context_zenFolderNewSubfolder, #context_zenFolderDelete, #context_zenFolderToSpace,
+  #context_zenFolderChangeIcon, #context_zenShareFolder, #context_zenChangeFolderSpace
+) { display: none !important; }
+:root[zentral-notes-folder-ctx="true"] #zenFolderActions > :is(
+  #context_zenFolderChangeIcon, #context_zenFolderNewSubfolder, #context_zenShareFolder
+) + menuseparator { display: none !important; }
+
 /* Reminder dialog: live "Will ring at ..." line (Cycle F #15) */
 .zentral-notes-sheet .zn-remind-preview { margin: 4px 2px 8px; font-size: 0.9em; opacity: 0.85; }
 .zentral-notes-sheet .zn-remind-preview[data-bad="true"] { color: #ff6b6b; opacity: 1; }

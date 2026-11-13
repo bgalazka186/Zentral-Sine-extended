@@ -1,0 +1,14 @@
+"use strict";
+const assert = require("node:assert/strict"), fs = require("node:fs");
+const css = fs.readFileSync(require.resolve("../additional/notes/ZentralNotes.css"), "utf8");
+const source = fs.readFileSync(require.resolve("../additional/notes/ZentralNotes.uc.js"), "utf8");
+const rule = /:root\[zentral-notes-folder-ctx="true"\]\s+#zenFolderActions\s*>\s*:is\(([\s\S]*?)\)\s*\{\s*display:\s*none\s*!important;?\s*\}/.exec(css);
+assert.ok(rule, "native folder actions are hidden only while a Notes folder popup is open");
+for (const id of ["context_zenFolderRename", "context_zenFolderUnpack", "context_zenFolderUnloadAll", "context_zenFolderNewSubfolder", "context_zenFolderDelete", "context_zenFolderToSpace", "context_zenFolderChangeIcon", "context_zenShareFolder", "context_zenChangeFolderSpace"]) assert.ok(rule[1].includes("#" + id), `hide incompatible native action ${id}`);
+assert.ok(!rule[1].includes("zentral-notes-folder-own"));
+assert.ok(!rule[1].includes("bgalazka-fc"), "other extensions' menu items are not globally hidden");
+assert.match(css, /#context_zenFolderChangeIcon, #context_zenFolderNewSubfolder, #context_zenShareFolder\s*\) \+ menuseparator \{ display: none !important; \}/, "only separators belonging to known native items are hidden");
+assert.match(source, /setAttribute\("zentral-notes-folder-ctx", "true"\)/);
+assert.match(source, /ev\.target\?\.id === "zenFolderActions"[^\n]*removeAttribute\("zentral-notes-folder-ctx"\)/);
+assert.match(source, /document\.documentElement\.removeAttribute\("zentral-notes-folder-ctx"\)/);
+console.log("Notes sidebar folder menu CSS tests passed");

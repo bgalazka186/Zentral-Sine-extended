@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.102
+// @version 3.3.103
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.102, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.103, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.102";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.103";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -23558,10 +23558,22 @@ __zentralShim.register = function (def) {
       const onFolderMenuShowing = (ev) => {
         const menu = ev.target;
         if (menu?.id !== "zenFolderActions") return;
+        document.documentElement.removeAttribute("zentral-notes-folder-ctx");
         for (const own of [...menu.querySelectorAll?.("[zentral-notes-folder-own]") || []]) own.remove();
         let folder = null;
-        for (const node of [menu.triggerNode, ev.originalTarget, menu.anchorNode]) {
-          folder = node?.closest?.("zen-folder") || null;
+        const findFolder = (node) => {
+          try {
+            const closest = node?.closest?.("zen-folder");
+            if (closest) return closest;
+            // Zen may retarget a XUL/shadow label to its group or shadow host.
+            if (node?.group?.localName === "zen-folder") return node.group;
+            for (let current = node; current && current !== menu; current = current.parentNode || current.host)
+              if (current.localName === "zen-folder") return current;
+          } catch (_) {}
+          return null;
+        };
+        for (const node of [menu.triggerNode, ev.originalTarget, ev.explicitOriginalTarget, menu.anchorNode]) {
+          folder = findFolder(node);
           if (folder) break;
         }
         if (!folder) return;
@@ -23570,6 +23582,7 @@ __zentralShim.register = function (def) {
         if (!isRoot && !key) return;
         const meta = isRoot ? null : store.meta?.folders?.find((item) => key === "f:" + item.uid || key === "f:" + item.id);
         if (!isRoot && !meta) return;
+        document.documentElement.setAttribute("zentral-notes-folder-ctx", "true");
         const item = document.createXULElement("menuitem");
         item.setAttribute("label", "New note in this folder");
         item.setAttribute("zentral-notes-folder-own", "new");
@@ -23636,6 +23649,7 @@ __zentralShim.register = function (def) {
       };
       const onTabMenuHidden = (ev) => {
         if (ev.target?.id === "tabContextMenu") { document.documentElement.removeAttribute("zentral-notes-ctx"); zenCtxTab = null; }
+        if (ev.target?.id === "zenFolderActions") document.documentElement.removeAttribute("zentral-notes-folder-ctx");
       };
       // Idle cost: the listeners below exist only while the experiment is on (mode != off).
       let zenBound = false;
@@ -23653,6 +23667,7 @@ __zentralShim.register = function (def) {
         window[act]("popuphidden", onTabMenuHidden, true);
         if (!on) {
           document.documentElement.removeAttribute("zentral-notes-ctx");
+          document.documentElement.removeAttribute("zentral-notes-folder-ctx");
           document.querySelectorAll?.("[zentral-notes-own],[zentral-notes-folder-own]").forEach((n) => n.remove());
         }
       }
