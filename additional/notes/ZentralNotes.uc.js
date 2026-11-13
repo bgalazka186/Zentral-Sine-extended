@@ -7090,7 +7090,7 @@
     }
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
-    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}, onMathFence = () => {}) {
+    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}, onMathFence = () => {}, mapBlockId = (marker) => marker) {
       const lines = String(text).split("\n"), result = [], codeRuns = indexMarkdownCodeRuns(lines);
       const mathOptions = exportScriptOptions(readOptions);
       const hasProtectedDollar = (line) => {
@@ -7100,13 +7100,24 @@
       };
       // O01 only starts a block where the Notes parser actually recognizes it;
       // the same characters inside a running paragraph are ordinary text.
-      const smallRows = new Set(), mathFenceRows = new Set();
+      const smallRows = new Set(), mathFenceRows = new Set(), blockIdRows = new Map();
       const isMathFence = (line) => /^ {0,3}(?:`{3,}|~{3,})[ \t]*math(?:[ \t{]|$)/i.test(line || "");
-      if (lines.some((line) => /^-#[ \t]+\S/.test(line) || isMathFence(line))) {
-        for (const block of parseBlocks(text, false, readOptions)) {
+      const lineId = (row) => trailingBlockId((lines[row] || "").replace(/\r$/, ""));
+      if (lines.some((line) => /^-#[ \t]+\S/.test(line) || isMathFence(line) || trailingBlockId(line.replace(/\r$/, "")))) {
+        const blocks = parseBlocks(text, false, readOptions).filter((block) => Number.isInteger(block.src));
+        blocks.forEach((block, index) => {
           if (block.type === "p" && block.c?.length === 1 && block.c[0]?.t === "small") smallRows.add(block.src);
           if (block.type === "math" && isMathFence(lines[block.src])) mathFenceRows.add(block.src);
-        }
+          const end = blocks[index + 1]?.src ?? lines.length;
+          let last = end - 1;
+          while (last >= block.src && !lines[last].trim()) last--;
+          if (block.blockId && lineId(last) === block.blockId) blockIdRows.set(last, block.blockId);
+          if (block.type === "list") for (const item of block.items || []) {
+            if (!item.blockId) continue;
+            if (Number.isInteger(item.line) && item.line >= 0 && lineId(item.line) === item.blockId) blockIdRows.set(item.line, item.blockId);
+            else if (lineId(last) === item.blockId) blockIdRows.set(last, item.blockId);
+          }
+        });
       }
       let fence = null, comment = false;
       const findClose = (line, run, start) => {
@@ -7139,8 +7150,14 @@
         }
         return -1;
       };
+      const exportLine = (row) => {
+        const original = lines[row], id = !comment && !fence && blockIdRows.get(row);
+        if (!id) return original;
+        const at = original.lastIndexOf("^" + id);
+        return at < 0 ? original : original.slice(0, at) + mapBlockId("^" + id, id) + original.slice(at + id.length + 1);
+      };
       for (let row = 0; row < lines.length; row++) {
-        let line = lines[row];
+        let line = exportLine(row);
         if (!comment && !fence) {
           const head = /^:::\s*([A-Za-z][\w-]*)[ \t]*(.*)$/.exec(line);
           const type = head?.[1].toLowerCase() === "details" ? "note" : head?.[1];
@@ -7167,7 +7184,7 @@
               }
             }
             if (!ambiguous && end < lines.length && end - row <= 2000) {
-              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence);
+              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence, mapBlockId);
               result.push(mapContainer({ open: line, inner, close: lines[end], kind: head[1], title: head[2].replace(/\s*:::\s*$/, "").trim() }));
               row = end; continue;
             }
@@ -7272,7 +7289,7 @@
               if (endRow === row) { out += line.slice(pos, close + run.length); pos = close + run.length; continue; }
               out += line.slice(pos); finishSmallPrint(); result.push(out);
               for (let k = row + 1; k < endRow; k++) result.push(lines[k]);
-              row = endRow; line = lines[row]; protectedLine = null; out = line.slice(0, close + run.length); pos = close + run.length; continue;
+              row = endRow; line = exportLine(row); protectedLine = null; out = line.slice(0, close + run.length); pos = close + run.length; continue;
             }
             visible += run; pos += run.length; continue;
           }
@@ -7458,7 +7475,7 @@
         return segment;
       }, undefined, undefined, (math) => { found.add("math"); return math; }, (container) => {
         found.add("callout"); return container.open + "\n" + container.inner + "\n" + container.close;
-      }, (prefix) => { found.add("small print"); return prefix; }, readOptions, () => found.add("math"));
+      }, (prefix) => { found.add("small print"); return prefix; }, readOptions, () => found.add("math"), (marker) => { found.add("block ID"); return "<!-- " + marker + " -->"; });
       return [...found];
     }
     // Export is a copy: convert the documented extensions conservatively and
@@ -7523,7 +7540,7 @@
         // block. A zero-width entity prevents accidental block interpretation.
         const prefix = /^(?:#{1,6}(?:[ \t]|$)|>|[-+*][ \t]+|\d{1,9}[.)][ \t]+|`{3,}|~{3,}|(?:[-*_][ \t]*){3,}$|\[[^\]\n]+\]:|<(?:!--|\/?[A-Za-z]))/.test(rest) ? "&#8203;" : "";
         return { prefix, separate: true };
-      }, effectiveReadOptions);
+      }, effectiveReadOptions, undefined, (marker) => "<!-- " + marker + " -->");
       const rewritten = rewriteMarkdownExportLinks(converted, note, notes, names, folders, effectiveReadOptions);
       const suffix = footnotes.length ? (rewritten.endsWith("\n\n") ? "" : rewritten.endsWith("\n") ? "\n" : "\n\n") + footnotes.join("\n") + "\n" : "";
       return parts.prefix + rewritten + suffix;
@@ -13821,7 +13838,7 @@
         if (!warnings.size) { Promise.resolve(run({ markdownReadOpts })).catch((error) => console.warn("[ZentralNotes] export failed", error)); return; }
         const cancel = chip("Cancel"), raw = chip("Keep raw syntax"), portable = chip("Convert to portable Markdown", true);
         openCard("Markdown export compatibility",
-          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, subscript/superscript use HTML tags, single-tilde strike uses double tildes, inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, and small print becomes ordinary text. Ignored, disabled or ambiguous syntax may remain as written. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
+          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, subscript/superscript use HTML tags, single-tilde strike uses double tildes, inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, block IDs become comments, and small print becomes ordinary text. Block-level links may not transfer. Ignored, disabled or ambiguous syntax may remain as written. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
           h("div", { class: "zn-dialog-actions" }, cancel, raw, portable));
         const choose = (markdownMode) => { closeDialog(); Promise.resolve(run({ markdownMode, markdownReadOpts })).catch((error) => console.warn("[ZentralNotes] export failed", error)); };
         cancel.addEventListener("click", closeDialog);

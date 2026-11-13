@@ -108,7 +108,7 @@ assert.equal(convert('`==example== ||spoiler||` [link](https://example.test/==x=
 assert.deepEqual(scan('Inline $x$ here', { flavor: 'mixed' }), ['math']);
 assert.equal(convert('Inline $x$ here', { flavor: 'mixed' }), 'Inline `$x$` here');
 assert.deepEqual(scan('Inline $x$ here', { flavor: 'reddit' }), [], 'Reddit leaves inline math literal');
-assert.equal(convert('Inline $x$ and ^word', { flavor: 'reddit' }), 'Inline $x$ and <sup>word</sup>');
+assert.equal(convert('Inline $x$ and ^word', { flavor: 'reddit' }), 'Inline $x$ and <!-- ^word -->');
 assert.deepEqual(scan('Inline $x$ here', { flavor: 'mixed', ignore: 'I01' }), []);
 assert.deepEqual(scan('Inline $$x$$ here', { flavor: 'mixed', ignore: 'I03' }), []);
 assert.equal(convert('Inline $x^2^$', { flavor: 'mixed', ignore: 'I01' }), 'Inline $x<sup>2</sup>$', 'other live syntax inside disabled math is still converted');
@@ -264,4 +264,23 @@ for (const flavor of ['mixed', 'mixed+github', 'mixed+reddit', 'github', 'reddit
   }
 }
 assert.deepEqual(scan('::: note Title\n```math\nx\n```\n:::', { flavor: 'mixed' }).sort(), ['callout', 'math']);
+const blockIds = 'Paragraph ^first\n\n- one ^item-a\n- two ^item-b\n\n> Quoted ^quote-id\n';
+assert.deepEqual(scan(blockIds, { flavor: 'mixed' }), ['block ID']);
+assert.equal(convert(blockIds, { flavor: 'mixed' }), 'Paragraph <!-- ^first -->\n\n- one <!-- ^item-a -->\n- two <!-- ^item-b -->\n\n> Quoted <!-- ^quote-id -->\n');
+assert.deepEqual(scan('Paragraph ^first', { flavor: 'reddit' }), ['block ID'], 'block IDs must not be misread as Reddit superscript');
+assert.equal(convert('Paragraph ^first', { flavor: 'reddit' }), 'Paragraph <!-- ^first -->');
+assert.deepEqual(scan('```\nParagraph ^id\n```\n`example ^id`', { flavor: 'mixed' }), []);
+assert.deepEqual(scan('Paragraph ^id\ncontinued', { flavor: 'mixed' }), [], 'a non-final paragraph line has no block ID');
+assert.equal(convert('Paragraph ^id\ncontinued', { flavor: 'mixed' }), 'Paragraph ^id\ncontinued');
+assert.deepEqual(scan('^solo', { flavor: 'mixed' }), []);
+assert.deepEqual(scan('^solo', { flavor: 'reddit' }), ['block ID'], 'the reader treats a standalone Reddit superscript as a block ID');
+assert.equal(convert('^solo', { flavor: 'reddit' }), '<!-- ^solo -->');
+assert.deepEqual(scan('Paragraph ^id', { flavor: 'mixed', ignore: '^' }), []);
+assert.equal(convert('Paragraph ^id', { flavor: 'mixed', ignore: '^' }), 'Paragraph ^id');
+const multilineCodeAndId = '`example\nend` ^id';
+assert.deepEqual(scan(multilineCodeAndId, { flavor: 'mixed' }), ['block ID']);
+assert.equal(convert(multilineCodeAndId, { flavor: 'mixed' }), '`example\nend` <!-- ^id -->');
+assert.equal(convert('paragraph ^id\ncontinued ^id', { flavor: 'mixed' }), 'paragraph ^id\ncontinued <!-- ^id -->', 'only the reader-owned trailing marker converts');
+assert.equal(convert('Paragraph ^id\r\n', { flavor: 'mixed' }), 'Paragraph <!-- ^id -->\r\n');
+assert.equal(c.markdownExportBody({ id: 'n1', body: 'Paragraph ^id' }, [], new Map(), [], 'raw', { flavor: 'mixed' }), 'Paragraph ^id');
 console.log('Markdown export flavor tests passed');
