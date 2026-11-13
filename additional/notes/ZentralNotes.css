@@ -1411,6 +1411,9 @@
   #context_zenFolderChangeIcon, #context_zenFolderNewSubfolder, #context_zenShareFolder
 ) + menuseparator { display: none !important; }
 
+/* Agenda pseudo-tabs cannot use native tab operations; show their owned menu. */
+:root[zentral-agenda-ctx="item"] #tabContextMenu > :not([zentral-agenda-own]) { display: none !important; }
+
 /* Reminder dialog: live "Will ring at ..." line (Cycle F #15) */
 .zentral-notes-sheet .zn-remind-preview { margin: 4px 2px 8px; font-size: 0.9em; opacity: 0.85; }
 .zentral-notes-sheet .zn-remind-preview[data-bad="true"] { color: #ff6b6b; opacity: 1; }

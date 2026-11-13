@@ -45,6 +45,20 @@ const find = (rows, id) => rows.flatMap((row) => row.group ? [row, ...row.group]
   assert.equal(find(locked, "dismiss").enabled, false);
   assert.match(find(locked, "dismiss").reason, /history storage/);
   assert.equal(find(locked, "snooze-custom").enabled, false);
+  assert.equal(typeof cal.resolveAgendaOccurrence, "function");
+  const recurringStart = Date.parse(recurringOccurrence.start.dateTime);
+  const recurringIdentity = cal.reminderIdentity(recurringOccurrence);
+  assert.equal(cal.resolveAgendaOccurrence([recurring], { ...recurringIdentity, recordId: recurring.id, start: recurringStart, end: recurringStart })?.id, recurringOccurrence.id, "resolve the precise projected recurring occurrence");
+  assert.equal(cal.resolveAgendaOccurrence([recurring], { ...recurringIdentity, recordId: recurring.id, occurrenceId: "wrong", start: recurringStart, end: recurringStart }), null);
+  const projection = cal.agendaZenProjection([recurring], Date.parse("2026-11-12T09:00:00Z"), 2).flatMap((day) => day.items);
+  assert.ok(projection.length);
+  assert.equal(projection[0].recordId, recurring.id, "sidebar projections preserve the underlying record id separately");
+  assert.equal(cal.resolveAgendaOccurrence([recurring], { itemId: projection[0].itemId, occurrenceId: projection[0].occurrenceId, recordId: projection[0].recordId, start: projection[0].start, end: projection[0].end })?.id, recurring.id);
+  assert.equal(cal.resolveAgendaOccurrence([manualEvent], { itemId: manualEvent.id, occurrenceId: manualEvent.id, recordId: manualEvent.id, start: Date.parse(manualEvent.start.dateTime), end: Date.parse(manualEvent.end.dateTime) })?.id, manualEvent.id);
+  const noteIdentity = cal.reminderIdentity(noteReminder);
+  assert.equal(cal.resolveAgendaOccurrence([noteReminder], { ...noteIdentity, recordId: noteReminder.id, start: Date.parse(noteReminder.start.dateTime), end: Date.parse(noteReminder.start.dateTime) })?.id, noteReminder.id, "legacy note reminder uses namespaced history identity");
+  assert.equal(cal.resolveAgendaOccurrence([], { ...noteIdentity, start: 0, end: 0 }), null);
+  assert.equal(cal.resolveAgendaOccurrence([noteReminder], { ...noteIdentity, recordId: "wrong-record", start: Date.parse(noteReminder.start.dateTime), end: Date.parse(noteReminder.start.dateTime) }), null, "history identity cannot redirect an action to a different stored record");
   assert.deepEqual(cal.calendarItemMenuModel(null), []);
   assert.deepEqual(cal.calendarItemMenuModel({ summary: "Missing stable id" }), []);
   console.log("calendar menu pure tests passed");
@@ -109,6 +123,19 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   q(root, ".zn-all-panels").getBoundingClientRect = q(root, ".zn-all-layout").getBoundingClientRect;
   q(root, ".zn-calendar-pane").getBoundingClientRect = () => ({ left: 400, top: 0, right: 1100, bottom: 700, width: 700, height: 700 });
   await sheet.open(); await flush();
+  assert.equal(typeof sheet.runAgendaItemAction, "function");
+  const actionable = store.items.upsert({ id: "agenda-action-test", summary: "Action test", start: { dateTime: new Date(day + 12 * 3600000).toISOString() }, x: { kind: "reminder", src: "manual" } });
+  const actionIdentity = { ...cal.reminderIdentity(actionable), recordId: actionable.id, start: cal.itemRange(actionable)[0], end: cal.itemRange(actionable)[1] };
+  assert.equal(sheet.runAgendaItemAction(actionIdentity, "mark-done"), true);
+  assert.equal(store.items.history.stateFor(actionIdentity.itemId, actionIdentity.occurrenceId), "done");
+  assert.equal(sheet.runAgendaItemAction(actionIdentity, "mark-done"), false, "disabled lifecycle commands are rechecked before execution");
+  assert.equal(sheet.runAgendaItemAction(actionIdentity, "not-a-command"), false);
+  const recurringMaster = store.items.get("menu-recurring-reminder");
+  const recurringOcc = cal.expandItem(recurringMaster, day, cal.addDays(day, 2))[0];
+  const recIdentity = { ...cal.reminderIdentity(recurringOcc), recordId: recurringMaster.id, start: cal.itemRange(recurringOcc)[0], end: cal.itemRange(recurringOcc)[1] };
+  assert.equal(sheet.runAgendaItemAction(recIdentity, "snooze-1d"), false, "unsupported recurring snooze stays disabled");
+  store.items.remove(actionable.id);
+  assert.equal(sheet.runAgendaItemAction(actionIdentity, "dismiss"), false, "removed targets are not acted on");
   root.all().find((el) => el.title === "All notes").click(); await flush();
 
   // Month marks share the exact item menu model and keyboard contract, for events as well as reminders.

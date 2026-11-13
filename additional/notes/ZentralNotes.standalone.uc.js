@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.104
+// @version 3.3.105
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.104, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.105, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.104";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.105";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -3495,6 +3495,7 @@ const __zentralEmbeddedLoader = (function () {
           key: "item:" + identity.itemId + ":" + identity.occurrenceId,
           itemId: identity.itemId,
           occurrenceId: identity.occurrenceId,
+          recordId: String(item.x?.series || item.id),
           noteId: item.x?.noteId || identity.noteId || "",
           heading: item.x?.heading || "",
           label,
@@ -3598,6 +3599,32 @@ const __zentralEmbeddedLoader = (function () {
       destroy() { dead = true; clearScheduled(); try { api.removeAll?.(); } catch (error) { safeWarn(error); } },
     };
   }
+  // Resolve a projected sidebar identity against current records, not against
+  // a stale tab label. Recurring identities refer to the expanded occurrence;
+  // the displayed start/end bounds keep lookup local even for old series.
+  function resolveAgendaOccurrence(items, identity = {}) {
+    const itemId = String(identity.itemId || ""), occurrenceId = String(identity.occurrenceId || ""), recordId = String(identity.recordId || "");
+    if (!itemId || !occurrenceId || !recordId || !Array.isArray(items)) return null;
+    for (const item of items) {
+      if (!item || item.id !== recordId || !live(item)) continue;
+      const key = reminderIdentity(item);
+      if (!key || key.itemId !== itemId) continue;
+      if (!(item.recurrence || []).length || item.x?.series) {
+        if (key.occurrenceId === occurrenceId) return item;
+        continue;
+      }
+      const start = Number(identity.start), end = Number(identity.end);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) continue;
+      const from = start - 2 * 86400000, to = Math.max(start + 1, end) + 2 * 86400000;
+      const occurrence = expandItem(item, from, to).find((candidate) => {
+        const id = reminderIdentity(candidate);
+        return id?.itemId === itemId && id.occurrenceId === occurrenceId;
+      });
+      if (occurrence) return occurrence;
+    }
+    return null;
+  }
+
   // Per-target context menu model for calendar rows. This stays pure so every calendar surface can
   // render the same capabilities and reasons without duplicating lifecycle/source rules.
   function calendarItemMenuModel(item, { state = "pending", historyWritable = false } = {}) {
@@ -3793,7 +3820,7 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -21468,6 +21495,22 @@ __zentralShim.register = function (def) {
           if (wanted !== store.meta.mode) store.setMeta({ mode: wanted });
           return openNoteByIdAndHeading(id, heading, itemId);
         },
+        runAgendaItemAction: (identity, command) => {
+          if (!isOpen || destroyed || !CALENDAR_PART?.resolveAgendaOccurrence || !store.items) return false;
+          const item = CALENDAR_PART.resolveAgendaOccurrence(store.items.list(), identity);
+          if (!item) { flash("That calendar item is no longer available"); return false; }
+          const find = (rows) => {
+            for (const row of rows) {
+              if (row?.command === command && typeof row.run === "function") return row;
+              if (row?.group) { const nested = find(row.group); if (nested) return nested; }
+            }
+            return null;
+          };
+          const action = find(calendarItemMenuRows(item));
+          if (!action) return false;
+          action.run();
+          return true;
+        },
         newAgendaDayItem: (key, kind) => {
           if (!isOpen || destroyed || !CALENDAR_PART?.parseYmd?.(key) || !["reminder", "event"].includes(kind) || !store.items) return false;
           askCalendarComposer({ date: key, kind, linkCurrent: false });
@@ -23110,6 +23153,9 @@ __zentralShim.register = function (def) {
           tab.setAttribute("bgalazka-notes-agenda-day", entry.parent.replace(/^day:/, ""));
           tab.setAttribute("bgalazka-notes-agenda-item-id", entry.itemId || "");
           tab.setAttribute("bgalazka-notes-agenda-occurrence-id", entry.occurrenceId || "");
+          tab.setAttribute("bgalazka-notes-agenda-record-id", entry.recordId || "");
+          tab.setAttribute("bgalazka-notes-agenda-start", String(entry.start));
+          tab.setAttribute("bgalazka-notes-agenda-end", String(entry.end));
           tab.setAttribute("bgalazka-notes-agenda-note-id", entry.noteId || "");
           tab.setAttribute("bgalazka-notes-agenda-heading", entry.heading || "");
           if (entry.ended) tab.setAttribute("bgalazka-notes-agenda-ended", "true"); else tab.removeAttribute("bgalazka-notes-agenda-ended");
@@ -23231,6 +23277,60 @@ __zentralShim.register = function (def) {
       }
       function onAgendaFolderMenuHidden(event) {
         if (event.target?.id === "zenFolderActions") document.documentElement.removeAttribute("zentral-agenda-folder-ctx");
+        if (event.target?.id === "tabContextMenu") document.documentElement.removeAttribute("zentral-agenda-ctx");
+      }
+      function onAgendaTabMenuShowing(event) {
+        const menu = event.target;
+        if (menu?.id !== "tabContextMenu") return;
+        document.documentElement.removeAttribute("zentral-agenda-ctx");
+        for (const own of [...menu.querySelectorAll?.("[zentral-agenda-own]") || []]) own.remove();
+        const tab = window.TabContextMenu?.contextTab, root = agendaRootEl();
+        if (!agendaEnabled() || !tab?.hasAttribute?.(AGENDA_ATTR) || !root?.contains?.(tab)) return;
+        document.documentElement.setAttribute("zentral-agenda-ctx", "item");
+        const key = agendaTabKey(tab);
+        const snapshot = () => ({
+          itemId: tab.getAttribute("bgalazka-notes-agenda-item-id") || "",
+          occurrenceId: tab.getAttribute("bgalazka-notes-agenda-occurrence-id") || "",
+          recordId: tab.getAttribute("bgalazka-notes-agenda-record-id") || "",
+          start: Number(tab.getAttribute("bgalazka-notes-agenda-start")),
+          end: Number(tab.getAttribute("bgalazka-notes-agenda-end")),
+        });
+        const identity = snapshot();
+        const item = key.startsWith("item:") && CALENDAR_PART?.resolveAgendaOccurrence?.(store.items?.list?.() || [], identity);
+        const history = store.items?.history, historyId = item && CALENDAR_PART.reminderIdentity(item);
+        const state = historyId ? history?.stateFor?.(historyId.itemId, historyId.occurrenceId) || "pending" : "pending";
+        const writable = !!history && !history.storageState().writeBlocked;
+        const model = item ? CALENDAR_PART.calendarItemMenuModel(item, { state, historyWritable: writable }) : [];
+        const addRows = (parent, rows, top = false) => {
+          for (const row of rows) {
+            if (row.sep) { const separator = document.createXULElement("menuseparator"); if (top) separator.setAttribute("zentral-agenda-own", "separator"); parent.append(separator); continue; }
+            if (row.group) {
+              const group = document.createXULElement("menu"), popup = document.createXULElement("menupopup");
+              group.setAttribute("label", row.label); if (top) group.setAttribute("zentral-agenda-own", row.id || "group");
+              addRows(popup, row.group); group.append(popup); parent.append(group); continue;
+            }
+            const action = document.createXULElement("menuitem");
+            action.setAttribute("label", row.label || "");
+            if (top) action.setAttribute("zentral-agenda-own", row.id || "heading");
+            if (row.heading || !row.enabled) action.setAttribute("disabled", "true");
+            if (row.reason) action.setAttribute("tooltiptext", row.reason);
+            if (!row.heading && row.enabled) action.addEventListener("command", () => {
+              if (disposed || !agendaEnabled() || tab.isConnected === false || !agendaRootEl()?.contains?.(tab) || agendaTabKey(tab) !== key || JSON.stringify(snapshot()) !== JSON.stringify(identity)) return;
+              showNotes("").then((handle) => {
+                if (disposed || !agendaEnabled() || tab.isConnected === false || !agendaRootEl()?.contains?.(tab) || agendaTabKey(tab) !== key || JSON.stringify(snapshot()) !== JSON.stringify(identity)) return;
+                sheetOf(handle)?.runAgendaItemAction?.(identity, row.command);
+              }).catch(warn);
+            });
+            parent.append(action);
+          }
+        };
+        if (model.length) addRows(menu, model, true);
+        else {
+          const unavailable = document.createXULElement("menuitem");
+          unavailable.setAttribute("zentral-agenda-own", "unavailable");
+          unavailable.setAttribute("label", "Agenda item no longer available");
+          unavailable.setAttribute("disabled", "true"); menu.append(unavailable);
+        }
       }
       let agendaBound = false;
       function bindAgenda(on) {
@@ -23240,10 +23340,12 @@ __zentralShim.register = function (def) {
         window[act]("mousedown", onAgendaMouse, true);
         window[act]("TabSelect", onAgendaSelect, true);
         window[act]("popupshowing", onAgendaFolderMenuShowing, true);
+        window[act]("popupshowing", onAgendaTabMenuShowing, true);
         window[act]("popuphidden", onAgendaFolderMenuHidden, true);
         if (!on) {
           document.documentElement.removeAttribute("zentral-agenda-folder-ctx");
-          document.querySelectorAll?.("[zentral-agenda-folder-own]").forEach((item) => item.remove());
+          document.documentElement.removeAttribute("zentral-agenda-ctx");
+          document.querySelectorAll?.("[zentral-agenda-folder-own],[zentral-agenda-own]").forEach((item) => item.remove());
         }
         for (const ty of ["TabClose", "TabUnpinned", "TabPinned", "TabMove", "SSTabRestored"]) window[act](ty, onAgendaTabEvent, true);
       }

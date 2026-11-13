@@ -17118,6 +17118,22 @@
           if (wanted !== store.meta.mode) store.setMeta({ mode: wanted });
           return openNoteByIdAndHeading(id, heading, itemId);
         },
+        runAgendaItemAction: (identity, command) => {
+          if (!isOpen || destroyed || !CALENDAR_PART?.resolveAgendaOccurrence || !store.items) return false;
+          const item = CALENDAR_PART.resolveAgendaOccurrence(store.items.list(), identity);
+          if (!item) { flash("That calendar item is no longer available"); return false; }
+          const find = (rows) => {
+            for (const row of rows) {
+              if (row?.command === command && typeof row.run === "function") return row;
+              if (row?.group) { const nested = find(row.group); if (nested) return nested; }
+            }
+            return null;
+          };
+          const action = find(calendarItemMenuRows(item));
+          if (!action) return false;
+          action.run();
+          return true;
+        },
         newAgendaDayItem: (key, kind) => {
           if (!isOpen || destroyed || !CALENDAR_PART?.parseYmd?.(key) || !["reminder", "event"].includes(kind) || !store.items) return false;
           askCalendarComposer({ date: key, kind, linkCurrent: false });
@@ -18760,6 +18776,9 @@
           tab.setAttribute("bgalazka-notes-agenda-day", entry.parent.replace(/^day:/, ""));
           tab.setAttribute("bgalazka-notes-agenda-item-id", entry.itemId || "");
           tab.setAttribute("bgalazka-notes-agenda-occurrence-id", entry.occurrenceId || "");
+          tab.setAttribute("bgalazka-notes-agenda-record-id", entry.recordId || "");
+          tab.setAttribute("bgalazka-notes-agenda-start", String(entry.start));
+          tab.setAttribute("bgalazka-notes-agenda-end", String(entry.end));
           tab.setAttribute("bgalazka-notes-agenda-note-id", entry.noteId || "");
           tab.setAttribute("bgalazka-notes-agenda-heading", entry.heading || "");
           if (entry.ended) tab.setAttribute("bgalazka-notes-agenda-ended", "true"); else tab.removeAttribute("bgalazka-notes-agenda-ended");
@@ -18881,6 +18900,60 @@
       }
       function onAgendaFolderMenuHidden(event) {
         if (event.target?.id === "zenFolderActions") document.documentElement.removeAttribute("zentral-agenda-folder-ctx");
+        if (event.target?.id === "tabContextMenu") document.documentElement.removeAttribute("zentral-agenda-ctx");
+      }
+      function onAgendaTabMenuShowing(event) {
+        const menu = event.target;
+        if (menu?.id !== "tabContextMenu") return;
+        document.documentElement.removeAttribute("zentral-agenda-ctx");
+        for (const own of [...menu.querySelectorAll?.("[zentral-agenda-own]") || []]) own.remove();
+        const tab = window.TabContextMenu?.contextTab, root = agendaRootEl();
+        if (!agendaEnabled() || !tab?.hasAttribute?.(AGENDA_ATTR) || !root?.contains?.(tab)) return;
+        document.documentElement.setAttribute("zentral-agenda-ctx", "item");
+        const key = agendaTabKey(tab);
+        const snapshot = () => ({
+          itemId: tab.getAttribute("bgalazka-notes-agenda-item-id") || "",
+          occurrenceId: tab.getAttribute("bgalazka-notes-agenda-occurrence-id") || "",
+          recordId: tab.getAttribute("bgalazka-notes-agenda-record-id") || "",
+          start: Number(tab.getAttribute("bgalazka-notes-agenda-start")),
+          end: Number(tab.getAttribute("bgalazka-notes-agenda-end")),
+        });
+        const identity = snapshot();
+        const item = key.startsWith("item:") && CALENDAR_PART?.resolveAgendaOccurrence?.(store.items?.list?.() || [], identity);
+        const history = store.items?.history, historyId = item && CALENDAR_PART.reminderIdentity(item);
+        const state = historyId ? history?.stateFor?.(historyId.itemId, historyId.occurrenceId) || "pending" : "pending";
+        const writable = !!history && !history.storageState().writeBlocked;
+        const model = item ? CALENDAR_PART.calendarItemMenuModel(item, { state, historyWritable: writable }) : [];
+        const addRows = (parent, rows, top = false) => {
+          for (const row of rows) {
+            if (row.sep) { const separator = document.createXULElement("menuseparator"); if (top) separator.setAttribute("zentral-agenda-own", "separator"); parent.append(separator); continue; }
+            if (row.group) {
+              const group = document.createXULElement("menu"), popup = document.createXULElement("menupopup");
+              group.setAttribute("label", row.label); if (top) group.setAttribute("zentral-agenda-own", row.id || "group");
+              addRows(popup, row.group); group.append(popup); parent.append(group); continue;
+            }
+            const action = document.createXULElement("menuitem");
+            action.setAttribute("label", row.label || "");
+            if (top) action.setAttribute("zentral-agenda-own", row.id || "heading");
+            if (row.heading || !row.enabled) action.setAttribute("disabled", "true");
+            if (row.reason) action.setAttribute("tooltiptext", row.reason);
+            if (!row.heading && row.enabled) action.addEventListener("command", () => {
+              if (disposed || !agendaEnabled() || tab.isConnected === false || !agendaRootEl()?.contains?.(tab) || agendaTabKey(tab) !== key || JSON.stringify(snapshot()) !== JSON.stringify(identity)) return;
+              showNotes("").then((handle) => {
+                if (disposed || !agendaEnabled() || tab.isConnected === false || !agendaRootEl()?.contains?.(tab) || agendaTabKey(tab) !== key || JSON.stringify(snapshot()) !== JSON.stringify(identity)) return;
+                sheetOf(handle)?.runAgendaItemAction?.(identity, row.command);
+              }).catch(warn);
+            });
+            parent.append(action);
+          }
+        };
+        if (model.length) addRows(menu, model, true);
+        else {
+          const unavailable = document.createXULElement("menuitem");
+          unavailable.setAttribute("zentral-agenda-own", "unavailable");
+          unavailable.setAttribute("label", "Agenda item no longer available");
+          unavailable.setAttribute("disabled", "true"); menu.append(unavailable);
+        }
       }
       let agendaBound = false;
       function bindAgenda(on) {
@@ -18890,10 +18963,12 @@
         window[act]("mousedown", onAgendaMouse, true);
         window[act]("TabSelect", onAgendaSelect, true);
         window[act]("popupshowing", onAgendaFolderMenuShowing, true);
+        window[act]("popupshowing", onAgendaTabMenuShowing, true);
         window[act]("popuphidden", onAgendaFolderMenuHidden, true);
         if (!on) {
           document.documentElement.removeAttribute("zentral-agenda-folder-ctx");
-          document.querySelectorAll?.("[zentral-agenda-folder-own]").forEach((item) => item.remove());
+          document.documentElement.removeAttribute("zentral-agenda-ctx");
+          document.querySelectorAll?.("[zentral-agenda-folder-own],[zentral-agenda-own]").forEach((item) => item.remove());
         }
         for (const ty of ["TabClose", "TabUnpinned", "TabPinned", "TabMove", "SSTabRestored"]) window[act](ty, onAgendaTabEvent, true);
       }
