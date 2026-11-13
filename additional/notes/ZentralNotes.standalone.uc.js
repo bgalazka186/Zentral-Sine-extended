@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.101
+// @version 3.3.102
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.101, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.102, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.101";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.102";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -18330,8 +18330,8 @@ __zentralShim.register = function (def) {
 
       // Markdown can carry Zentral-only syntax. Ask before changing it or
       // passing it through; no file picker is opened when the user cancels.
-      function askMarkdownExport(notes, run) {
-        const warnings = new Set();
+      function askMarkdownExport(notes, run, extraWarnings = []) {
+        const warnings = new Set(extraWarnings);
         // Freeze the same reader settings used for review and file writing.
         const markdownReadOpts = { ...(env.readOpts?.() || {}) };
         for (const entry of notes) {
@@ -18342,7 +18342,7 @@ __zentralShim.register = function (def) {
         if (!warnings.size) { Promise.resolve(run({ markdownReadOpts })).catch((error) => console.warn("[ZentralNotes] export failed", error)); return; }
         const cancel = chip("Cancel"), raw = chip("Keep raw syntax"), portable = chip("Convert to portable Markdown", true);
         openCard("Markdown export compatibility",
-          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, subscript/superscript use HTML tags, single-tilde strike uses double tildes, inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, block IDs become comments, and small print becomes ordinary text. Block-level links may not transfer; spoiler headings are omitted from the generated table of contents. Ignored, disabled or ambiguous syntax may remain as written. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
+          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, subscript/superscript use HTML tags, single-tilde strike uses double tildes, inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, block IDs become comments, and small print becomes ordinary text. Block-level links may not transfer; spoiler headings are omitted from the generated table of contents. Ignored, disabled or ambiguous syntax may remain as written. Sizing, formatting and reminder scheduling may not transfer. Folder exports flatten the folder structure; linked assets and notes outside the selection are not copied."),
           h("div", { class: "zn-dialog-actions" }, cancel, raw, portable));
         const choose = (markdownMode) => { closeDialog(); Promise.resolve(run({ markdownMode, markdownReadOpts })).catch((error) => console.warn("[ZentralNotes] export failed", error)); };
         cancel.addEventListener("click", closeDialog);
@@ -21449,6 +21449,15 @@ __zentralShim.register = function (def) {
           askFolderDelete(folder, () => store.meta.folders.find((entry) => entry.uid === uid) || null);
           return true;
         },
+        sidebarFolderExport: (id = "", uid = "") => {
+          if (!isOpen || destroyed) return false;
+          const folder = id ? store.meta.folders.find((entry) => entry.id === id && entry.uid === uid) : null;
+          if (id && !folder) return false;
+          const list = markdownExportSnapshot(store.list().filter((note) => !id || inFolder(cleanFolder(note.folder), id)));
+          if (!list.length) { flash("No notes in this folder to export"); return false; }
+          askMarkdownExport(list, (options) => env.exportAll(list, { ...options, pickerTitle: "Export folder notes" }), ["folder structure and linked assets"]);
+          return true;
+        },
         quickCaptureToday: () => {
           if (isOpen && !destroyed) queueMicrotask(() => askQuickCapture(""));
         },
@@ -22342,8 +22351,8 @@ __zentralShim.register = function (def) {
           return true;
         } catch (error) { warn(error); return false; }
       }
-      async function exportAll(list, { markdownMode = "", markdownReadOpts = readOpts() } = {}) {
-        const folder = await pick(Ci.nsIFilePicker.modeGetFolder, "Export all notes to a folder");
+      async function exportAll(list, { markdownMode = "", markdownReadOpts = readOpts(), pickerTitle = "Export all notes to a folder" } = {}) {
+        const folder = await pick(Ci.nsIFilePicker.modeGetFolder, pickerTitle);
         if (!folder) return;
         const names = uniqueFileNames(list);
         const byId = new Map(list.map((x, i) => [x.id, names[i]]));
@@ -23597,6 +23606,19 @@ __zentralShim.register = function (def) {
           }).catch(warn);
         });
         menu.append(style);
+        const exportItem = document.createXULElement("menuitem");
+        exportItem.setAttribute("label", "Export folder…");
+        exportItem.setAttribute("zentral-notes-folder-own", "export");
+        const exportUid = meta?.uid || "";
+        exportItem.addEventListener("command", () => {
+          showNotes("").then((handle) => {
+            if (disposed || zen.dead || zenMode() === "off" || isRoot && zenMode() !== menuMode) return;
+            const current = isRoot ? store.meta.folders.find((folder) => folder.id === parentId) : store.meta.folders.find((folder) => folder.uid === exportUid);
+            if ((!isRoot || parentId) && !current) return;
+            sheetOf(handle)?.sidebarFolderExport?.(current?.id || "", current?.uid || "");
+          }).catch(warn);
+        });
+        menu.append(exportItem);
         if (!isRoot) {
           const remove = document.createXULElement("menuitem");
           remove.setAttribute("label", "Delete folder…");

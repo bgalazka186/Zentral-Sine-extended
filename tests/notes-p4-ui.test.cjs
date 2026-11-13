@@ -128,6 +128,40 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     assert.ok(store.get(reminderNote.id).trashed && store.get(added.id).trashed);
   });
 
+  await test("T3.4 sidebar folder export snapshots only its live subtree and offers compatibility choices", async () => {
+    const parentId = store.addFolder("Sidebar export"), childId = store.addFolder("Child", parentId);
+    const parent = store.meta.folders.find((folder) => folder.id === parentId);
+    const direct = store.create("# Export parent\n\n[TOC]\n## Part", parentId);
+    const nested = store.create("# Export child", childId), other = store.create("# Other folder");
+    const deleted = store.create("# Trashed", parentId); store.trash(deleted.id);
+    calls.length = 0;
+    assert.equal(typeof sheet.sidebarFolderExport, "function");
+    assert.equal(sheet.sidebarFolderExport(parentId, parent.uid), true);
+    const dialog = q(".zn-dialog"); assert.ok(dialog.textContent.includes("folder structure"));
+    assert.ok(dialog.textContent.includes("assets"));
+    store.update(direct.id, "# Changed after review", "external");
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Keep raw syntax"));
+    const call = calls.at(-1);
+    assert.equal(call[0], "exportAll");
+    assert.deepEqual(J(call[1].map((note) => note.id).sort()), [direct.id, nested.id].sort());
+    assert.equal(call[1].find((note) => note.id === direct.id).body, "# Export parent\n\n[TOC]\n## Part");
+    assert.equal(call[2].markdownMode, "raw");
+    assert.ok(!call[1].some((note) => note.id === other.id || note.id === deleted.id));
+    assert.equal(call[2].pickerTitle, "Export folder notes");
+    calls.length = 0; assert.equal(sheet.sidebarFolderExport(parentId, parent.uid), true);
+    let cancelDialog = q(".zn-dialog");
+    click(cancelDialog.querySelectorAll("button").find((button) => button.textContent === "Cancel"));
+    assert.equal(calls.length, 0, "cancel never opens the destination picker");
+    assert.equal(sheet.sidebarFolderExport("", ""), true, "the all-notes root can export all live notes");
+    cancelDialog = q(".zn-dialog");
+    click(cancelDialog.querySelectorAll("button").find((button) => button.textContent === "Convert to portable Markdown"));
+    assert.equal(calls.at(-1)[2].markdownMode, "portable");
+    assert.ok(calls.at(-1)[1].some((note) => note.id === other.id));
+    assert.ok(!calls.at(-1)[1].some((note) => note.id === deleted.id));
+    store.removeFolder(parentId, "toRoot"); store.addFolder("Sidebar export");
+    assert.equal(sheet.sidebarFolderExport(parentId, parent.uid), false, "a replacement folder is never exported through a stale action");
+  });
+
   await test("B3.3.50-9 opening a headingless item in read mode reveals its source line", async () => {
     const body = "# Long note\n\nIntro\n- [ ] Reminder %%zn-item-id:abcd1%%\nAfter\n";
     const previousMode = store.meta.mode, n = store.create(body);

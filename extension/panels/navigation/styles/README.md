@@ -1,6 +1,6 @@
 # extension/panels/navigation/styles
 
-Owner and local file guide for Extended 3.3.101. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.3.102. Original Zentral reference: 1.1.0.
 
 | File                         | Responsibility                                                              |
 | ---------------------------- | --------------------------------------------------------------------------- |
