@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.67
+// @version 3.3.68
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.67, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.68, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.67";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.68";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11499,6 +11499,11 @@ __zentralShim.register = function (def) {
       const rewritten = mapMarkdownForExport(converted, (segment) => rewriteNoteLinks(expandWikiLinks(segment, resolver, { unresolved: "text", self: note }), names));
       return parts.prefix + rewritten;
     }
+    // Freeze the scalar content used by the warning and file writers at the
+    // same moment. Store records themselves are mutable across windows.
+    function markdownExportSnapshot(notes) {
+      return (Array.isArray(notes) ? notes : []).filter(Boolean).map((note) => ({ ...note }));
+    }
     function markdownExportBody(note, notes = [], names = new Map(), folders = [], mode = "") {
       if (mode === "raw") return String(note?.body ?? "");
       if (mode === "portable") return portableMarkdownExportBody(note, notes, names, folders);
@@ -12567,7 +12572,7 @@ __zentralShim.register = function (def) {
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        markdownExportWarnings, portableMarkdownExportBody, markdownExportBody, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
+        markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
@@ -19104,13 +19109,13 @@ __zentralShim.register = function (def) {
         // button (table of contents, quick settings, search, split view) stays out of here, or sits one step down.
         const items = [
           { icon: "save", label: "Import & export", group: [
-            { icon: "save", label: "Save as Markdown\u2026", action: () => askMarkdownExport([n], (options) => env.exportNote(n, "md", options)) },
+            { icon: "save", label: "Save as Markdown\u2026", action: () => { const [snapshot] = markdownExportSnapshot([n]); askMarkdownExport([snapshot], (options) => env.exportNote(snapshot, "md", options)); } },
             { icon: "save", label: "Export as HTML\u2026", action: () => askExport("html", () => env.exportNote(n, "html")) },
             { icon: "save", label: "Export as plain text\u2026", action: () => askExport("txt", () => env.exportNote(n, "txt")) },
             { icon: "save", label: "Print / save as PDF\u2026", action: () => askExport("pdf", () => env.printNote(n)) },
             { sep: true },
-            { icon: "save", label: "Export all notes\u2026", action: () => { const list = store.list(); askMarkdownExport(list, (options) => env.exportAll(list, options)); } },
-            { icon: "save", label: "Export all as zip\u2026", action: () => { const list = store.list(); askMarkdownExport(list, (options) => askExport("zip", async () => { const k = await env.exportZip(list, options); if (k) flash(`Zipped ${k} notes`); })); } },
+            { icon: "save", label: "Export all notes\u2026", action: () => { const list = markdownExportSnapshot(store.list()); askMarkdownExport(list, (options) => env.exportAll(list, options)); } },
+            { icon: "save", label: "Export all as zip\u2026", action: () => { const list = markdownExportSnapshot(store.list()); askMarkdownExport(list, (options) => askExport("zip", async () => { const k = await env.exportZip(list, options); if (k) flash(`Zipped ${k} notes`); })); } },
             { icon: "folder", label: "Import .md folder\u2026", action: async () => { const k = await env.importFolder(store); flash(k ? `Imported ${k} notes` : "Nothing imported"); if (view === "list") scheduleList(); } },
             { sep: true },
             { icon: "paperclip", label: "Check attached files…", action: () => queueMicrotask(askAssetIntegrity) },

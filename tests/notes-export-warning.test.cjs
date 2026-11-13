@@ -64,3 +64,7 @@ const extraOut = convert({ id: 'note_a', body: extra }, [], new Map(), []);
 assert.match(extraOut, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/, 'raw spoiler text is escaped in generated HTML');
 assert.match(extraOut, /- \[ \] \(Question\) Needs review/);
 assert.match(extraOut, /- \[q\] Unknown status/, 'unknown task states are not guessed');
+const live = [{ id: 'n1', body: 'before', updated: 1 }, { id: 'n2', body: 'second', updated: 2 }];
+const snapshot = window.__zentralNotesTestSeam.core.markdownExportSnapshot(live);
+live[0].body = 'after'; live.push({ id: 'n3', body: 'new' });
+assert.equal(snapshot[0].body, 'before'); assert.equal(snapshot.length, 2);

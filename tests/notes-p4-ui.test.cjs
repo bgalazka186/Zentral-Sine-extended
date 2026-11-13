@@ -67,8 +67,13 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     assert.ok(q(".zn-dialog"), "warning appears before file picker");
     assert.ok(q(".zn-dialog").textContent.includes("callout"));
     click(choice("Cancel")); assert.equal(calls.length, 0, "cancel never exports");
-    await openExport("Save as Markdown"); click(choice("Keep raw syntax"));
+    await openExport("Save as Markdown");
+    const originalBody = note.body;
+    store.update(note.id, originalBody + "Changed in another window\n", "external");
+    click(choice("Keep raw syntax"));
     assert.equal(calls.at(-1)[0], "exportNote"); assert.equal(calls.at(-1)[3].markdownMode, "raw");
+    assert.equal(calls.at(-1)[1].body, originalBody, "the user's choice applies to the same snapshot that was scanned");
+    store.update(note.id, originalBody, "external");
     await openExport("Save as Markdown"); click(choice("Convert to portable Markdown"));
     assert.equal(calls.at(-1)[3].markdownMode, "portable");
     await openExport("Export all notes"); click(choice("Convert to portable Markdown"));
