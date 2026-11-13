@@ -8740,6 +8740,12 @@
       };
     }
 
+    function agendaWindowForItem(item, store) {
+      const category = item?.x?.category ? store.items?.category?.(item.x.category) : null;
+      const notePolicy = item?.x?.noteId ? store.meta?.calendarNoteAgendaOverrides?.[item.x.noteId] : null;
+      return CALENDAR_PART.resolveAgendaWindow(item, category?.agenda, notePolicy, store.meta?.calendarAgendaDefaults);
+    }
+
     if (window.__zentralNotesTestSeam) {
       window.__zentralNotesTestSeam.core = {
         flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART,
@@ -11179,13 +11185,23 @@
         const reminder = CALENDAR_PART.isReminder(item), history = reminderHistoryStore();
         const lifecycle = reminder ? reminderLifecycleState(item) : "pending";
         const historyWritable = !!history && !history.storageState().writeBlocked;
-        const model = CALENDAR_PART.calendarItemMenuModel(item, { state: lifecycle, historyWritable });
+        const agendaVisible = agendaWindowForItem(item, store).enabled;
+        const model = CALENDAR_PART.calendarItemMenuModel(item, { state: lifecycle, historyWritable, agendaVisible, agendaWritable: !!currentCalendarItem(item) });
         const date = new Date(CALENDAR_PART.itemRange(item)[0]);
         const nextMonday = (8 - date.getDay()) % 7 || 7;
         const commands = {
           open: () => { const latest = currentCalendarItem(item); if (latest) openCalendarItem(latest); },
           edit: () => { const latest = currentCalendarItem(item); if (latest) askCalendarComposer({ item: latest }); },
           "change-time": () => { const latest = currentCalendarOccurrence(item); if (latest) askCalendarItemReschedule(latest); },
+          "agenda-visibility": () => {
+            const current = currentCalendarItem(item);
+            if (!current) return flash("That calendar item is no longer available");
+            const enabled = !agendaVisible;
+            if (agendaWindowForItem(current, store).enabled === enabled) return;
+            const policy = { ...CALENDAR_PART.cleanAgendaWindow(current.x?.agendaWindow), enabled };
+            if (!store.items.upsert({ ...current, x: { ...current.x, agendaWindow: policy } })) return flash("Could not update Agenda visibility");
+            renderCalendar(); flash(enabled ? "Shown in Zen Agenda" : "Hidden from Zen Agenda");
+          },
           convert: () => convertCalendarItem(item),
           duplicate: () => duplicateCalendarItem(item),
           delete: () => askDeleteCalendarItem(item),
@@ -18940,7 +18956,7 @@
         const history = store.items?.history, historyId = item && CALENDAR_PART.reminderIdentity(item);
         const state = historyId ? history?.stateFor?.(historyId.itemId, historyId.occurrenceId) || "pending" : "pending";
         const writable = !!history && !history.storageState().writeBlocked;
-        const model = item ? CALENDAR_PART.calendarItemMenuModel(item, { state, historyWritable: writable }) : [];
+        const model = item ? CALENDAR_PART.calendarItemMenuModel(item, { state, historyWritable: writable, agendaVisible: agendaWindowForItem(item, store).enabled }) : [];
         const addRows = (parent, rows, top = false) => {
           for (const row of rows) {
             if (row.sep) { const separator = document.createXULElement("menuseparator"); if (top) separator.setAttribute("zentral-agenda-own", "separator"); parent.append(separator); continue; }

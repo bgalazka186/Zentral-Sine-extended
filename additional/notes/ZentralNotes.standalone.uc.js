@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.106
+// @version 3.3.107
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.106, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.107, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.106";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.107";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -3627,7 +3627,7 @@ const __zentralEmbeddedLoader = (function () {
 
   // Per-target context menu model for calendar rows. This stays pure so every calendar surface can
   // render the same capabilities and reasons without duplicating lifecycle/source rules.
-  function calendarItemMenuModel(item, { state = "pending", historyWritable = false } = {}) {
+  function calendarItemMenuModel(item, { state = "pending", historyWritable = false, agendaVisible, agendaWritable = true } = {}) {
     if (!item || typeof item !== "object" || !String(item.id || "")) return [];
     const reminder = isReminder(item);
     const source = ["list", "note", "manual"].includes(item.x?.src) ? item.x.src : "manual";
@@ -3644,6 +3644,8 @@ const __zentralEmbeddedLoader = (function () {
       action("duplicate", "Duplicate as independent item"),
       action("delete", "Delete item…", manual, "Remove this item from its source note instead of deleting only its calendar copy"),
     ];
+    if (typeof agendaVisible === "boolean") rows.splice(4, 0,
+      action("agenda-visibility", agendaWritable ? (agendaVisible ? "Hide in Zen Agenda" : "Show in Zen Agenda") + (recurring ? " (series)" : "") : "Zen Agenda visibility unavailable", agendaWritable, "This legacy note reminder is not stored as an Agenda item"));
     if (reminder) {
       const writable = !!historyWritable;
       rows.push(
@@ -13117,6 +13119,12 @@ __zentralShim.register = function (def) {
       };
     }
 
+    function agendaWindowForItem(item, store) {
+      const category = item?.x?.category ? store.items?.category?.(item.x.category) : null;
+      const notePolicy = item?.x?.noteId ? store.meta?.calendarNoteAgendaOverrides?.[item.x.noteId] : null;
+      return CALENDAR_PART.resolveAgendaWindow(item, category?.agenda, notePolicy, store.meta?.calendarAgendaDefaults);
+    }
+
     if (window.__zentralNotesTestSeam) {
       window.__zentralNotesTestSeam.core = {
         flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART,
@@ -15556,13 +15564,23 @@ __zentralShim.register = function (def) {
         const reminder = CALENDAR_PART.isReminder(item), history = reminderHistoryStore();
         const lifecycle = reminder ? reminderLifecycleState(item) : "pending";
         const historyWritable = !!history && !history.storageState().writeBlocked;
-        const model = CALENDAR_PART.calendarItemMenuModel(item, { state: lifecycle, historyWritable });
+        const agendaVisible = agendaWindowForItem(item, store).enabled;
+        const model = CALENDAR_PART.calendarItemMenuModel(item, { state: lifecycle, historyWritable, agendaVisible, agendaWritable: !!currentCalendarItem(item) });
         const date = new Date(CALENDAR_PART.itemRange(item)[0]);
         const nextMonday = (8 - date.getDay()) % 7 || 7;
         const commands = {
           open: () => { const latest = currentCalendarItem(item); if (latest) openCalendarItem(latest); },
           edit: () => { const latest = currentCalendarItem(item); if (latest) askCalendarComposer({ item: latest }); },
           "change-time": () => { const latest = currentCalendarOccurrence(item); if (latest) askCalendarItemReschedule(latest); },
+          "agenda-visibility": () => {
+            const current = currentCalendarItem(item);
+            if (!current) return flash("That calendar item is no longer available");
+            const enabled = !agendaVisible;
+            if (agendaWindowForItem(current, store).enabled === enabled) return;
+            const policy = { ...CALENDAR_PART.cleanAgendaWindow(current.x?.agendaWindow), enabled };
+            if (!store.items.upsert({ ...current, x: { ...current.x, agendaWindow: policy } })) return flash("Could not update Agenda visibility");
+            renderCalendar(); flash(enabled ? "Shown in Zen Agenda" : "Hidden from Zen Agenda");
+          },
           convert: () => convertCalendarItem(item),
           duplicate: () => duplicateCalendarItem(item),
           delete: () => askDeleteCalendarItem(item),
@@ -23317,7 +23335,7 @@ __zentralShim.register = function (def) {
         const history = store.items?.history, historyId = item && CALENDAR_PART.reminderIdentity(item);
         const state = historyId ? history?.stateFor?.(historyId.itemId, historyId.occurrenceId) || "pending" : "pending";
         const writable = !!history && !history.storageState().writeBlocked;
-        const model = item ? CALENDAR_PART.calendarItemMenuModel(item, { state, historyWritable: writable }) : [];
+        const model = item ? CALENDAR_PART.calendarItemMenuModel(item, { state, historyWritable: writable, agendaVisible: agendaWindowForItem(item, store).enabled }) : [];
         const addRows = (parent, rows, top = false) => {
           for (const row of rows) {
             if (row.sep) { const separator = document.createXULElement("menuseparator"); if (top) separator.setAttribute("zentral-agenda-own", "separator"); parent.append(separator); continue; }

@@ -2416,7 +2416,7 @@
 
   // Per-target context menu model for calendar rows. This stays pure so every calendar surface can
   // render the same capabilities and reasons without duplicating lifecycle/source rules.
-  function calendarItemMenuModel(item, { state = "pending", historyWritable = false } = {}) {
+  function calendarItemMenuModel(item, { state = "pending", historyWritable = false, agendaVisible, agendaWritable = true } = {}) {
     if (!item || typeof item !== "object" || !String(item.id || "")) return [];
     const reminder = isReminder(item);
     const source = ["list", "note", "manual"].includes(item.x?.src) ? item.x.src : "manual";
@@ -2433,6 +2433,8 @@
       action("duplicate", "Duplicate as independent item"),
       action("delete", "Delete item…", manual, "Remove this item from its source note instead of deleting only its calendar copy"),
     ];
+    if (typeof agendaVisible === "boolean") rows.splice(4, 0,
+      action("agenda-visibility", agendaWritable ? (agendaVisible ? "Hide in Zen Agenda" : "Show in Zen Agenda") + (recurring ? " (series)" : "") : "Zen Agenda visibility unavailable", agendaWritable, "This legacy note reminder is not stored as an Agenda item"));
     if (reminder) {
       const writable = !!historyWritable;
       rows.push(
