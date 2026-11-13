@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.52
+// @version 3.3.53
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.52, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.53, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.52";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.53";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2271,8 +2271,10 @@ const __zentralEmbeddedLoader = (function () {
     if (!itemId) return null;
     return { itemId, occurrenceId: String(kept || item.id || itemId), noteId, legacyNote: false };
   }
-  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400 }) {
+  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400, onWrite = () => {} }) {
     const records = [];
+    const listeners = new Set();
+    const emit = (event) => { for (const fn of [...listeners]) { try { fn(event); } catch (error) { safeWarn(error); } } };
     const lifecycle = new Map();
     let nextSeq = 1;
     let dirty = false, timer = null, chain = Promise.resolve(), writeBlocked = false, retryCount = 0;
@@ -2301,6 +2303,7 @@ const __zentralEmbeddedLoader = (function () {
       const task = chain.catch(() => {}).then(async () => {
         try {
           await io.writeUTF8(io.join(dir, REMINDER_HISTORY_FILE), text, { tmpPath: io.join(dir, REMINDER_HISTORY_FILE + ".tmp") });
+          try { onWrite(dir); } catch (error) { safeWarn(error); }
           retryCount = 0;
           if (["unopened", "missing", "recovery-pending"].includes(storage.state)) storage = { ...storage, state: "ready", error: "" };
           if (dirty && timer === null && !writeBlocked) scheduleTimer();
@@ -2361,6 +2364,7 @@ const __zentralEmbeddedLoader = (function () {
         return state();
       },
       storageState: state,
+      on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
       append(raw) {
         if (writeBlocked) return null;
         const record = cleanReminderHistoryRecord({ ...raw, seq: nextSeq, at: raw?.at ?? now() }, now());
@@ -2368,6 +2372,7 @@ const __zentralEmbeddedLoader = (function () {
         nextSeq = Math.max(nextSeq + 1, record.seq + 1);
         // Immutable append: duplicate records are allowed because repeated transitions are meaningful.
         records.push(record); indexTransition(record); schedule();
+        emit({ kind: "append", action: record.action });
         return { ...record, start: record.start ? { ...record.start } : null };
       },
       // Merge records another window wrote since we last read the file (matched by record id; nothing is dropped or
@@ -2387,7 +2392,7 @@ const __zentralEmbeddedLoader = (function () {
           record.seq = nextSeq++;
           records.push(record); indexTransition(record); added++;
         }
-        if (added) dirty = true;
+        if (added) { dirty = true; emit({ kind: "refresh", count: added }); }
         return added;
       },
       // Cross-window "alert exactly once per saved schedule": re-read the shared file, skip when ANY window already
@@ -2421,9 +2426,9 @@ const __zentralEmbeddedLoader = (function () {
     };
   }
 
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600 }) {
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {} }) {
     const items = new Map();
-    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs });
+    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite });
     const categoryDefs = new Map();
     const hidden = new Set(); // noteIds whose items stay stored but are not shown (note in Trash, or its file is missing)
     const listeners = new Set();
@@ -3464,6 +3469,9 @@ const __zentralEmbeddedLoader = (function () {
     const kind = typeof event === "string" ? event : event?.type;
     return ["change", "remove", "category", "reset", "recovery"].includes(kind);
   }
+  function agendaPendingItems(items, stateFor = () => "pending") {
+    return (items || []).filter((item) => !["done", "dismissed"].includes(stateFor(item)));
+  }
   function agendaVisibleDays(projection) {
     return (projection || []).filter((day) => day && day.count > 0);
   }
@@ -3736,7 +3744,7 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, dayPlanSnapshot, agendaZenProjection, agendaVisibleDays, agendaItemEventAffectsProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, dayPlanSnapshot, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -9648,7 +9656,7 @@ __zentralShim.register = function (def) {
       // refresh ignore it). Items written as marked lists inside a note are rebuilt from the note text; a note in Trash or
       // with a missing file only HIDES its items (restoring it brings dragged times and calendar notes back); a note that is
       // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
-      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn }) : null;
+      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
       function syncItems(id, stabilize = false, sourceEdit = false) {
         if (!items) return;
         try {
@@ -10923,6 +10931,10 @@ __zentralShim.register = function (def) {
             return;
           }
           if (!msg || msg.origin === windowId || !dir) return;
+          if (msg.kind === "reminder-history") {
+            if (msg.dir === dir) items?.history?.refresh?.().catch(warn);
+            return;
+          }
           if (typeof msg.id !== "string" || !/^[\w.-]+$/.test(msg.id)) return;
           reloadFromDisk(msg.id).catch(warn);
         },
@@ -14697,7 +14709,7 @@ __zentralShim.register = function (def) {
       }
       function calendarAgendaView(items, cursor) {
         const end = CALENDAR_PART.addDays(cursor, 90);
-        const expanded = CALENDAR_PART.expandRange(items, cursor, end).slice(0, 160);
+        const expanded = CALENDAR_PART.agendaPendingItems(CALENDAR_PART.expandRange(items, cursor, end), reminderLifecycleState).slice(0, 160);
         calendarPeriod.textContent = `Agenda · 90 days from ${calendarDayLabel(cursor, { year: true })}`;
         const list = h("div", { class: "zn-cal-agenda-list" });
         if (!expanded.length) list.append(h("p", { class: "zn-cal-empty-day" }, "No upcoming calendar items"));
@@ -19549,6 +19561,10 @@ __zentralShim.register = function (def) {
         if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) renderCalendar();
       });
       if (offCalendarItems) cleanups.push(offCalendarItems);
+      const offCalendarHistory = store.items?.history?.on?.(() => {
+        if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) renderCalendar();
+      });
+      if (offCalendarHistory) cleanups.push(offCalendarHistory);
 
       // ---- layout ------------------------------------------------------------------
       function layout() {
@@ -22091,10 +22107,13 @@ __zentralShim.register = function (def) {
       const agendaItemUnsub = store.items?.on?.((ev) => {
         if (CALENDAR_PART?.agendaItemEventAffectsProjection(ev) && agendaEnabled()) agendaController.schedule();
       });
+      const agendaHistoryUnsub = store.items?.history?.on?.(() => {
+        if (!disposed && agendaEnabled()) agendaController.schedule();
+      });
       const agendaNoteUnsub = store.on((ev) => {
         if (["change", "tree", "remove", "reset"].includes(ev.type) && agendaEnabled()) agendaController.schedule();
       });
-      onCleanup(() => { agendaItemUnsub?.(); agendaNoteUnsub?.(); });
+      onCleanup(() => { agendaItemUnsub?.(); agendaHistoryUnsub?.(); agendaNoteUnsub?.(); });
       const agendaBoot = window.setTimeout(agendaSoon, 6500);
       onCleanup(() => window.clearTimeout(agendaBoot));
       let agendaBound = false;

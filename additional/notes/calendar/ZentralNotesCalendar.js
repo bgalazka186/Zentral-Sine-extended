@@ -1060,8 +1060,10 @@
     if (!itemId) return null;
     return { itemId, occurrenceId: String(kept || item.id || itemId), noteId, legacyNote: false };
   }
-  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400 }) {
+  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400, onWrite = () => {} }) {
     const records = [];
+    const listeners = new Set();
+    const emit = (event) => { for (const fn of [...listeners]) { try { fn(event); } catch (error) { safeWarn(error); } } };
     const lifecycle = new Map();
     let nextSeq = 1;
     let dirty = false, timer = null, chain = Promise.resolve(), writeBlocked = false, retryCount = 0;
@@ -1090,6 +1092,7 @@
       const task = chain.catch(() => {}).then(async () => {
         try {
           await io.writeUTF8(io.join(dir, REMINDER_HISTORY_FILE), text, { tmpPath: io.join(dir, REMINDER_HISTORY_FILE + ".tmp") });
+          try { onWrite(dir); } catch (error) { safeWarn(error); }
           retryCount = 0;
           if (["unopened", "missing", "recovery-pending"].includes(storage.state)) storage = { ...storage, state: "ready", error: "" };
           if (dirty && timer === null && !writeBlocked) scheduleTimer();
@@ -1150,6 +1153,7 @@
         return state();
       },
       storageState: state,
+      on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
       append(raw) {
         if (writeBlocked) return null;
         const record = cleanReminderHistoryRecord({ ...raw, seq: nextSeq, at: raw?.at ?? now() }, now());
@@ -1157,6 +1161,7 @@
         nextSeq = Math.max(nextSeq + 1, record.seq + 1);
         // Immutable append: duplicate records are allowed because repeated transitions are meaningful.
         records.push(record); indexTransition(record); schedule();
+        emit({ kind: "append", action: record.action });
         return { ...record, start: record.start ? { ...record.start } : null };
       },
       // Merge records another window wrote since we last read the file (matched by record id; nothing is dropped or
@@ -1176,7 +1181,7 @@
           record.seq = nextSeq++;
           records.push(record); indexTransition(record); added++;
         }
-        if (added) dirty = true;
+        if (added) { dirty = true; emit({ kind: "refresh", count: added }); }
         return added;
       },
       // Cross-window "alert exactly once per saved schedule": re-read the shared file, skip when ANY window already
@@ -1210,9 +1215,9 @@
     };
   }
 
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600 }) {
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {} }) {
     const items = new Map();
-    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs });
+    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite });
     const categoryDefs = new Map();
     const hidden = new Set(); // noteIds whose items stay stored but are not shown (note in Trash, or its file is missing)
     const listeners = new Set();
@@ -2253,6 +2258,9 @@
     const kind = typeof event === "string" ? event : event?.type;
     return ["change", "remove", "category", "reset", "recovery"].includes(kind);
   }
+  function agendaPendingItems(items, stateFor = () => "pending") {
+    return (items || []).filter((item) => !["done", "dismissed"].includes(stateFor(item)));
+  }
   function agendaVisibleDays(projection) {
     return (projection || []).filter((day) => day && day.count > 0);
   }
@@ -2525,7 +2533,7 @@
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, dayPlanSnapshot, agendaZenProjection, agendaVisibleDays, agendaItemEventAffectsProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, dayPlanSnapshot, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

@@ -5355,7 +5355,7 @@
       // refresh ignore it). Items written as marked lists inside a note are rebuilt from the note text; a note in Trash or
       // with a missing file only HIDES its items (restoring it brings dragged times and calendar notes back); a note that is
       // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
-      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn }) : null;
+      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
       function syncItems(id, stabilize = false, sourceEdit = false) {
         if (!items) return;
         try {
@@ -6630,6 +6630,10 @@
             return;
           }
           if (!msg || msg.origin === windowId || !dir) return;
+          if (msg.kind === "reminder-history") {
+            if (msg.dir === dir) items?.history?.refresh?.().catch(warn);
+            return;
+          }
           if (typeof msg.id !== "string" || !/^[\w.-]+$/.test(msg.id)) return;
           reloadFromDisk(msg.id).catch(warn);
         },
@@ -10404,7 +10408,7 @@
       }
       function calendarAgendaView(items, cursor) {
         const end = CALENDAR_PART.addDays(cursor, 90);
-        const expanded = CALENDAR_PART.expandRange(items, cursor, end).slice(0, 160);
+        const expanded = CALENDAR_PART.agendaPendingItems(CALENDAR_PART.expandRange(items, cursor, end), reminderLifecycleState).slice(0, 160);
         calendarPeriod.textContent = `Agenda · 90 days from ${calendarDayLabel(cursor, { year: true })}`;
         const list = h("div", { class: "zn-cal-agenda-list" });
         if (!expanded.length) list.append(h("p", { class: "zn-cal-empty-day" }, "No upcoming calendar items"));
@@ -15256,6 +15260,10 @@
         if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) renderCalendar();
       });
       if (offCalendarItems) cleanups.push(offCalendarItems);
+      const offCalendarHistory = store.items?.history?.on?.(() => {
+        if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) renderCalendar();
+      });
+      if (offCalendarHistory) cleanups.push(offCalendarHistory);
 
       // ---- layout ------------------------------------------------------------------
       function layout() {
@@ -17798,10 +17806,13 @@
       const agendaItemUnsub = store.items?.on?.((ev) => {
         if (CALENDAR_PART?.agendaItemEventAffectsProjection(ev) && agendaEnabled()) agendaController.schedule();
       });
+      const agendaHistoryUnsub = store.items?.history?.on?.(() => {
+        if (!disposed && agendaEnabled()) agendaController.schedule();
+      });
       const agendaNoteUnsub = store.on((ev) => {
         if (["change", "tree", "remove", "reset"].includes(ev.type) && agendaEnabled()) agendaController.schedule();
       });
-      onCleanup(() => { agendaItemUnsub?.(); agendaNoteUnsub?.(); });
+      onCleanup(() => { agendaItemUnsub?.(); agendaHistoryUnsub?.(); agendaNoteUnsub?.(); });
       const agendaBoot = window.setTimeout(agendaSoon, 6500);
       onCleanup(() => window.clearTimeout(agendaBoot));
       let agendaBound = false;
