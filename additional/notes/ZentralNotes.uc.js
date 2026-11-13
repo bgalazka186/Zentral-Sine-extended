@@ -7148,7 +7148,7 @@
           }
         });
       }
-      let fence = null, comment = false, containerGuardEnd = -1;
+      let fence = null, quoteFence = null, quoteFenceDepth = 0, comment = false, containerGuardEnd = -1;
       // Find reader-style container closers once, including long containers.
       const nextContainerClose = Array(lines.length);
       let nextClose = -1;
@@ -7194,6 +7194,24 @@
       };
       for (let row = 0; row < lines.length; row++) {
         let line = exportLine(row);
+        if (!comment && !fence) {
+          // Fences may be nested in blockquotes. Their contents are examples,
+          // not live extensions, even when they contain additional > markers.
+          const quote = /^((?:>[ \t]*)+)(.*)$/.exec(line);
+          const depth = quote ? (quote[1].match(/>/g) || []).length : 0;
+          if (quoteFence && depth < quoteFenceDepth) { quoteFence = null; quoteFenceDepth = 0; }
+          if (quoteFence) {
+            let rest = line;
+            for (let d = 0; d < quoteFenceDepth; d++) rest = rest.replace(/^>[ \t]*/, "");
+            quoteFence = nextMarkdownFence(rest, quoteFence);
+            if (!quoteFence) quoteFenceDepth = 0;
+            result.push(line); continue;
+          }
+          if (quote) {
+            const opened = nextMarkdownFence(quote[2], null);
+            if (opened) { quoteFence = opened; quoteFenceDepth = depth; result.push(line); continue; }
+          }
+        }
         if (!comment && !fence && row > containerGuardEnd) {
           const head = /^:::\s*([A-Za-z][\w-]*)[ \t]*(.*)$/.exec(line);
           const type = head?.[1].toLowerCase() === "details" ? "note" : head?.[1];
@@ -7449,7 +7467,7 @@
       });
     }
     function mapExportCallout(segment, options, convert) {
-      const match = /^(>[ \t]*)\[!([A-Za-z][\w-]{0,30})\]([+-]?)[ \t]*(.*)$/.exec(segment);
+      const match = /^((?:>[ \t]*)+)\[!([A-Za-z][\w-]{0,30})\]([+-]?)[ \t]*(.*)$/.exec(segment);
       if (!match) return segment;
       const kind = match[2];
       const known = FLAVORS_PART ? FLAVORS_PART.calloutKind(kind, options.gate) : /^(note|tip|important|warning|caution|info)$/i.test(kind);
@@ -7503,6 +7521,19 @@
     function markdownExportWarnings(body, readOptions = {}) {
       const found = new Set(), scriptOptions = exportScriptOptions(readOptions);
       const content = splitMarkdownExportFrontMatter(body).body;
+      // Container syntax nested in a quote cannot safely be flattened here.
+      // Confirm a nested callout in the reader's AST before warning, so quoted
+      // examples inside fenced code do not trigger a false positive.
+      if (scriptOptions.gate.on("O04") && /^>(?:[ \t]*>)*[ \t]*:::\s*[A-Za-z]/m.test(content) && /^>(?:[ \t]*>)*[ \t]*:::[ \t\r]*$/m.test(content)) {
+        const lines = normalizeNewlines(content).split("\n");
+        const blocks = parseBlocks(content, false, readOptions).filter((block) => Number.isInteger(block.src));
+        const hasNestedCallout = (node) => (node?.blocks || []).some((child) => !!child.callout || hasNestedCallout(child));
+        blocks.forEach((block, index) => {
+          if (block.type !== "quote" || !hasNestedCallout(block)) return;
+          const end = blocks[index + 1]?.src ?? lines.length;
+          if (lines.slice(block.src, end).some((line) => /^>(?:[ \t]*>)*[ \t]*:::\s*[A-Za-z]/.test(line))) found.add("callout");
+        });
+      }
       mapMarkdownForExport(content, (segment, context) => {
         const visible = mapExportHidden(segment, scriptOptions, (_marker, calendar) => {
           found.add(calendar ? "calendar" : "hidden comment"); return "";
