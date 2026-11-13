@@ -6989,7 +6989,7 @@
     // headingsOf (ASCII, accents folded), so non-Latin headings may not match GitHub's own slugs.
     const TOC_TITLE = "Table of Contents";
     const TOC_HEAD_RE = /^ {0,3}##\s+table of contents\s*#*\s*$/i;
-    const TOC_TOKEN_RE = /^ {0,3}\[\[?TOC\]?\]\s*$/i;
+    const TOC_TOKEN_RE = /^ {0,3}(?:\[TOC\]|\[\[TOC\]\])[ \t\r]*$/i;
     const TOC_ITEM_RE = /^\s*(?:\d+[.)]|[-*+])\s+\[.*\]\(#[^)\s]*\)\s*$/;
     const isDivider = (l) => /^ {0,3}([-*_])(\s*\1){2,}\s*$/.test(l);
     // The list part only (no dividers, no heading): one line per heading, nested by level, real numbers.
@@ -7330,6 +7330,20 @@
         return convert(raw, discord || reddit);
       });
     }
+    function mapExportToc(segment, options, convert) {
+      if (!TOC_TOKEN_RE.test(segment)) return segment;
+      const protectedAt = exportProtectedPositions(segment, options.literals);
+      for (let i = 0; i < segment.length; i++) if ((segment[i] === "[" || segment[i] === "]") && protectedAt.has(i)) return segment;
+      return convert(segment);
+    }
+    function mapExportEmbeds(segment, options, convert) {
+      const protectedAt = exportProtectedPositions(segment, options.literals);
+      return segment.replace(/!\[\[([^\[\]\n]{1,240})\]\]/g, (raw, target, offset) => {
+        for (let i = offset; i < offset + raw.length; i++) if (protectedAt.has(i)) return raw;
+        const spec = parseEmbedTarget(target);
+        return spec ? convert(raw, spec) : raw;
+      });
+    }
     function mapExportCallout(segment, options, convert) {
       const match = /^(>[ \t]*)\[!([A-Za-z][\w-]{0,30})\]([+-]?)[ \t]*(.*)$/.exec(segment);
       if (!match) return segment;
@@ -7389,9 +7403,9 @@
         const visible = mapExportHidden(segment, scriptOptions, (_marker, calendar) => {
           found.add(calendar ? "calendar" : "hidden comment"); return "";
         });
-        if (TOC_TOKEN_RE.test(visible)) found.add("toc");
+        mapExportToc(visible, scriptOptions, (raw) => { found.add("toc"); return raw; });
         mapExportCallout(visible, scriptOptions, (raw) => { found.add("callout"); return raw; });
-        if (/!\[\[[^\]\n]+\]\]/.test(visible)) found.add("transclusion");
+        mapExportEmbeds(visible, scriptOptions, (raw) => { found.add("transclusion"); return raw; });
         mapExportFormatting(visible, scriptOptions, (raw) => { found.add("formatting"); return raw; });
         mapExportSpoilers(context?.spoilerToken ? segment : visible, scriptOptions, (raw) => { found.add("spoiler"); return raw; }, context);
         mapExportScripts(visible, scriptOptions, (raw, kind) => { found.add(kind === "strike" ? "single-tilde strike" : "subscript / superscript"); return raw; });
@@ -7423,14 +7437,13 @@
           const spoiler = mapExportSpoilers(segment, scriptOptions, (_raw, content) => "<details><summary>Spoiler</summary>" + escapeExportSpoiler(content) + "</details>", context);
           if (spoiler !== segment) return spoiler;
         }
-        if (TOC_TOKEN_RE.test(segment)) return tocBlock(body);
+        const toc = mapExportToc(segment, scriptOptions, () => tocBlock(body));
+        if (toc !== segment) return toc;
         segment = mapExportCallout(segment, scriptOptions, (_raw, quote, kind, title) => quote + "**" + kind.toUpperCase() + "**" + (title ? " — " + title : ""));
         segment = mapExportTask(segment, scriptOptions, (_raw, prefix, status) => prefix + "[ ] (" + TASK_STATUS_NAMES[status] + ")");
         segment = mapExportFormatting(segment, scriptOptions, (_raw, content) => "**" + content + "**");
         segment = mapExportScripts(segment, scriptOptions, (_raw, kind, content) => kind === "strike" ? "~~" + content + "~~" : "<" + kind + ">" + escHtml(content) + "</" + kind + ">");
-        segment = segment.replace(/!\[\[([^\]\n]+)\]\]/g, (raw, target) => {
-          const spec = parseEmbedTarget(target);
-          if (!spec) return literal(raw);
+        segment = mapExportEmbeds(segment, scriptOptions, (raw, spec) => {
           if (spec.youtube) return "[YouTube video](https://www.youtube.com/watch?v=" + spec.youtube.id + ")";
           if (spec.image || spec.videoAsset) {
             const file = spec.image || spec.videoAsset;

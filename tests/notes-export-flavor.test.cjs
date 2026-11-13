@@ -200,4 +200,9 @@ for (const flavor of ['mixed', 'mixed+github', 'mixed+reddit', 'github', 'reddit
     assert.equal(scan(line, options).includes('extended task'), active, `${flavor} task ${status} matches reader`);
   }
 }
+assert.deepEqual(scan('![[Other note]]', { flavor: 'mixed', ignore: '![[Other' }), []);
+assert.equal(convert('![[Other note]]', { flavor: 'mixed', ignore: '![[Other' }), '![[Other note]]');
+assert.deepEqual(scan('[TOC]', { flavor: 'mixed', ignore: '[TOC]' }), []);
+assert.equal(convert('[TOC]', { flavor: 'mixed', ignore: '[TOC]' }), '[TOC]');
+assert.equal(convert('[[TOC]', { flavor: 'mixed' }), '[[TOC]');
 console.log('Markdown export flavor tests passed');

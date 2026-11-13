@@ -193,4 +193,14 @@ assert.equal(convert({ id: 'note_a', body: afterHeading }, [], new Map(), []), '
 const afterFence = '```\n-# example\n```\n-# actual\n';
 assert.deepEqual(Array.from(scan(afterFence)), ['small print']);
 assert.equal(convert({ id: 'note_a', body: afterFence }, [], new Map(), []), '```\n-# example\n```\n\nactual\n');
+for (const malformed of ['[[TOC]', '[TOC]]']) {
+  assert.deepEqual(Array.from(scan(malformed)), [], 'unbalanced ToC markers remain literal');
+  assert.equal(convert({ id: 'note_a', body: malformed }, [], new Map(), []), malformed);
+}
+assert.deepEqual(Array.from(scan('[[TOC]]')), ['toc']);
+assert.match(convert({ id: 'note_a', body: '# Title\n[[TOC]]\n## Part' }, [], new Map(), []), /## Table of Contents/);
+assert.deepEqual(Array.from(scan(String.raw`\![[Other note]]`)), [], 'escaped transclusions are literal');
+assert.equal(convert({ id: 'note_a', body: String.raw`\![[Other note]]` }, [target], new Map(), []), String.raw`\![[Other note]]`);
+assert.deepEqual(Array.from(scan('[TOC]\r\n')), ['toc'], 'CRLF notes still recognize balanced ToC markers');
+assert.deepEqual(Array.from(scan('![[bad[nesting]]]')), [], 'malformed nested embeds are not live transclusions');
 console.log("Markdown export warning scan passed");
