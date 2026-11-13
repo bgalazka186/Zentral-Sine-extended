@@ -92,6 +92,42 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
     click(dialog.querySelectorAll("button").find((button) => button.textContent === "Close"));
   });
 
+  await test("T3.4 sidebar folder deletion keeps notes and rejects stale identities", async () => {
+    let id = store.addFolder("Sidebar delete"), folder = store.meta.folders.find((entry) => entry.id === id);
+    const note = store.create("# Preserve", id);
+    assert.equal(typeof sheet.sidebarFolderDelete, "function");
+    assert.equal(sheet.sidebarFolderDelete(id, folder.uid), true);
+    let dialog = q(".zn-dialog");
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Notes to top level"));
+    assert.equal(store.get(note.id).folder, "");
+    assert.ok(!store.get(note.id).trashed);
+    assert.ok(!store.meta.folders.some((entry) => entry.id === id));
+    id = store.addFolder("Sidebar delete"); folder = store.meta.folders.find((entry) => entry.id === id);
+    assert.equal(sheet.sidebarFolderDelete(id, folder.uid), true);
+    dialog = q(".zn-dialog");
+    store.removeFolder(id, "toRoot"); store.addFolder("Sidebar delete");
+    const replacement = store.meta.folders.find((entry) => entry.id === id);
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Notes to top level"));
+    assert.equal(store.meta.folders.find((entry) => entry.id === id).uid, replacement.uid, "a stale dialog cannot delete the replacement folder");
+    assert.equal(sheet.sidebarFolderDelete(id, folder.uid), false);
+    assert.equal(sheet.sidebarFolderDelete("", ""), false, "the NOTES root is not deletable");
+    const reminderNote = store.create("# Reminder", id);
+    assert.equal(store.setReminder(reminderNote.id, Date.now() + 86400000), true);
+    assert.equal(sheet.sidebarFolderDelete(id, replacement.uid), true);
+    dialog = q(".zn-dialog");
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Notes to trash"));
+    dialog = q(".zn-dialog");
+    assert.ok(dialog.textContent.includes("reminder"), "reminder impact is reviewed before trashing");
+    const added = store.create("# Added while reviewing", id);
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Move notes to Trash"));
+    assert.ok(!store.get(reminderNote.id).trashed && !store.get(added.id).trashed, "changed folder contents require a new review");
+    assert.ok(store.meta.folders.some((entry) => entry.id === id));
+    assert.equal(sheet.sidebarFolderDelete(id, replacement.uid), true);
+    dialog = q(".zn-dialog"); click(dialog.querySelectorAll("button").find((button) => button.textContent === "Notes to trash"));
+    dialog = q(".zn-dialog"); click(dialog.querySelectorAll("button").find((button) => button.textContent === "Move notes to Trash"));
+    assert.ok(store.get(reminderNote.id).trashed && store.get(added.id).trashed);
+  });
+
   await test("B3.3.50-9 opening a headingless item in read mode reveals its source line", async () => {
     const body = "# Long note\n\nIntro\n- [ ] Reminder %%zn-item-id:abcd1%%\nAfter\n";
     const previousMode = store.meta.mode, n = store.create(body);

@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.100
+// @version 3.3.101
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.100, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.101, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.100";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.101";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -17347,7 +17347,12 @@ __zentralShim.register = function (def) {
         if (!trashed.length) return;
         return askReminderImpact(trashed, { permanent: true, bulk: true, title: "Empty Trash permanently?", actionLabel: "Empty Trash", run: () => store.emptyTrash().then(() => after?.()) });
       }
-      function askFolderDelete(node) {
+      function askFolderDelete(node, resolve = () => node) {
+        const currentFolder = () => {
+          const current = resolve();
+          if (!current) flash("Folder no longer exists");
+          return current;
+        };
         const toRoot = chip("Notes to top level", true);
         const toTrash = chip("Notes to trash");
         const cancel = chip("Cancel");
@@ -17355,16 +17360,27 @@ __zentralShim.register = function (def) {
         cancel.addEventListener("click", closeDialog);
         toRoot.addEventListener("click", () => {
           closeDialog();
-          store.removeFolder(node.id, "toRoot");
+          const current = currentFolder();
+          if (current) store.removeFolder(current.id, "toRoot");
         });
         toTrash.addEventListener("click", () => {
-          const fid = cleanFolder(node.id);
-          const affected = store.list().filter((n) => cleanFolder(n.folder) && inFolder(cleanFolder(n.folder), fid));
+          const current = currentFolder();
+          if (!current) { closeDialog(); return; }
+          const fid = cleanFolder(current.id);
+          const folderNotes = () => store.list().filter((n) => cleanFolder(n.folder) && inFolder(cleanFolder(n.folder), fid));
+          const affected = folderNotes();
+          const fingerprint = (notes) => JSON.stringify(notes.map((n) => [n.id, noteReminderCount(n)]).sort((a, b) => a[0].localeCompare(b[0])));
+          const reviewed = fingerprint(affected);
           askReminderImpact(affected, {
             bulk: true,
             title: "Move folder notes to Trash?",
             actionLabel: "Move notes to Trash",
-            run: () => store.removeFolder(node.id, "toTrash"),
+            run: () => {
+              const latest = currentFolder();
+              if (!latest) return;
+              if (latest.id !== fid || fingerprint(folderNotes()) !== reviewed) { flash("Folder contents changed; please review again"); return; }
+              store.removeFolder(fid, "toTrash");
+            },
           });
         });
         cancel.focus?.({ preventScroll: true });
@@ -21426,6 +21442,13 @@ __zentralShim.register = function (def) {
           });
           return true;
         },
+        sidebarFolderDelete: (id = "", uid = "") => {
+          if (!isOpen || destroyed || !id) return false;
+          const folder = store.meta.folders.find((entry) => entry.id === id && entry.uid === uid);
+          if (!folder) return false;
+          askFolderDelete(folder, () => store.meta.folders.find((entry) => entry.uid === uid) || null);
+          return true;
+        },
         quickCaptureToday: () => {
           if (isOpen && !destroyed) queueMicrotask(() => askQuickCapture(""));
         },
@@ -23574,6 +23597,20 @@ __zentralShim.register = function (def) {
           }).catch(warn);
         });
         menu.append(style);
+        if (!isRoot) {
+          const remove = document.createXULElement("menuitem");
+          remove.setAttribute("label", "Delete folder…");
+          remove.setAttribute("zentral-notes-folder-own", "delete");
+          const uid = meta.uid;
+          remove.addEventListener("command", () => {
+            showNotes("").then((handle) => {
+              if (disposed || zen.dead || zenMode() === "off") return;
+              const current = store.meta.folders.find((folder) => folder.uid === uid);
+              if (current) sheetOf(handle)?.sidebarFolderDelete?.(current.id, uid);
+            }).catch(warn);
+          });
+          menu.append(remove);
+        }
       };
       const onTabMenuHidden = (ev) => {
         if (ev.target?.id === "tabContextMenu") { document.documentElement.removeAttribute("zentral-notes-ctx"); zenCtxTab = null; }
