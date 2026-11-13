@@ -69,7 +69,7 @@ The video standalone bootstrap mirrors source/construction contracts. Keep both 
 
 ## Notes roadmap handoff
 
-After any change to Zentral Notes, update the "NEXT SESSION HANDOFF" block at the end of `TODO_notes_roadmap.md` in place (old history: `docs/LEGACY_notes_roadmap.md`, frozen) (state, next picks, live checklist, debts, version). It is the only handoff; never add a second one.
+After any change to Zentral Notes, update the "NEXT SESSION HANDOFF" block at the end of `TODO_notes_roadmap.md` in place (old history: `docs/LEGACY_notes_roadmap.md` and `docs/LEGACY_done_rows.md`, frozen; the roadmap contains only work still to do) (state, next picks, live checklist, debts, version). It is the only handoff; never add a second one.
 
 ## .git folder
 
