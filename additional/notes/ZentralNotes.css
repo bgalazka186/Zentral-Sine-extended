@@ -2134,3 +2134,6 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
 .zentral-notes-sheet :is(.zn-cal-time-event, .zn-cal-time-reminder, .zn-cal-time-allday-cell .zn-cal-item).is-dragging { cursor: grabbing; opacity: .55; }
 .zentral-notes-sheet .zn-cal-drag-preview { position: absolute; z-index: 6; left: 0; right: 0; padding: 2px 4px; border-top: 2px solid var(--zn-accent); background: var(--zn-surface); color: var(--zn-text); font-size: .7em; pointer-events: none; }
 .zentral-notes-sheet .zn-cal-time-allday-cell { position: relative; }
+
+.zentral-notes-sheet .zn-cal-resize-handle { position: absolute; z-index: 4; box-sizing: border-box; height: 8px; min-width: 0; padding: 0; border: 0; border-radius: 3px; background: transparent; cursor: ns-resize; touch-action: none; }
+.zentral-notes-sheet .zn-cal-resize-handle:hover, .zentral-notes-sheet .zn-cal-resize-handle:focus-visible { background: var(--zn-accent); outline: 2px solid var(--zn-accent); outline-offset: 1px; }

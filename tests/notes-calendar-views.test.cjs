@@ -416,6 +416,7 @@ const chooseMenu = async (root, triggerSelector, label) => {
   store.items.history.storageState = originalHistoryState;
   await chooseMenu(root, ".zn-calendar-view-select", "Day");
   let reminderButton = setupReminder();
+  assert.equal(root.querySelectorAll(".zn-cal-resize-handle").some((el) => el.getAttribute("data-item-id") === "drag-ui-reminder"), false, "reminders never expose event resize handles");
   reminderButton.dispatchEvent(pointer("pointerdown", 200, 702));
   root.dispatchEvent(pointer("pointermove", 200, 756));
   root.dispatchEvent(pointer("pointerup", 200, 756));
@@ -434,6 +435,39 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(store.items.get("drag-ui-reminder").start.dateTime, new Date(reminderStart + 3600000).toISOString(), "undo refuses to overwrite a newer reminder lifecycle change");
   assert.equal(store.items.history.stateFor("drag-ui-reminder"), "done");
   store.items.remove("drag-ui-reminder");
+
+  const resizeStart = cal.zonedDateTimeToMs(zoneKey, "10:00", zone);
+  store.items.upsert({ id: "resize-ui-event", summary: "Resize event", start: { dateTime: new Date(resizeStart).toISOString() }, end: { dateTime: new Date(resizeStart + 3600000).toISOString() }, x: { kind: "event", src: "manual" } });
+  const setupResize = (edge) => {
+    const track = q(root, ".zn-cal-time-track"), scroll = q(root, ".zn-cal-time-scroll");
+    track.getBoundingClientRect = () => ({ left: 0, right: 400, top: 0, bottom: 1296, width: 400, height: 1296 });
+    scroll.getBoundingClientRect = track.getBoundingClientRect;
+    const handle = root.querySelectorAll(".zn-cal-resize-handle").find((el) => el.getAttribute("data-item-id") === "resize-ui-event" && el.getAttribute("data-edge") === edge);
+    assert.ok(handle, `${edge} edge has an accessible resize handle`); handle.setPointerCapture = () => {};
+    return handle;
+  };
+  let resizeHandle = setupResize("end");
+  resizeHandle.dispatchEvent(pointer("pointerdown", 200, 594));
+  root.dispatchEvent(pointer("pointermove", 200, 621));
+  root.dispatchEvent(pointer("pointerup", 200, 621));
+  assert.equal(store.items.get("resize-ui-event").end.dateTime, new Date(resizeStart + 90 * 60000).toISOString(), "pointer resize honors 30-minute snap");
+  assert.equal(store.items.get("resize-ui-event").start.dateTime, new Date(resizeStart).toISOString(), "end resize preserves the opposite edge");
+  q(root, ".zn-calendar-undo-move").click();
+  assert.equal(store.items.get("resize-ui-event").end.dateTime, new Date(resizeStart + 3600000).toISOString());
+  resizeHandle = setupResize("start");
+  const resizeKey = new Ev("keydown", { key: "ArrowDown", bubbles: true });
+  resizeHandle.dispatchEvent(resizeKey);
+  assert.equal(resizeKey.defaultPrevented, true);
+  assert.equal(store.items.get("resize-ui-event").start.dateTime, new Date(resizeStart + 30 * 60000).toISOString(), "keyboard resize uses the configured snap");
+  assert.equal(document.activeElement.getAttribute("data-edge"), "start", "keyboard resizing restores focus after render");
+  q(root, ".zn-calendar-undo-move").click();
+  assert.equal(store.items.get("resize-ui-event").start.dateTime, new Date(resizeStart).toISOString());
+  resizeHandle = setupResize("end");
+  resizeHandle.dispatchEvent(pointer("pointerdown", 200, 594));
+  root.dispatchEvent(pointer("pointermove", 200, 621));
+  root.dispatchEvent(pointer("pointercancel", 200, 621));
+  assert.equal(store.items.get("resize-ui-event").end.dateTime, new Date(resizeStart + 3600000).toISOString(), "cancelled resize leaves the event intact");
+  store.items.remove("resize-ui-event");
 
   store.items.upsert({ id: "drag-allday-reminder", summary: "All day drag reminder", start: { date: zoneKey }, x: { kind: "reminder", src: "manual" } });
   await chooseMenu(root, ".zn-calendar-view-select", "Week");
@@ -488,6 +522,13 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.match(store.get(linkedNote.id).body, /10:00-11:00/, "undo restores the source list schedule");
   store.items.syncNote(linkedNote.id, store.get(linkedNote.id).body, { sourceEdit: true, updatedAt: Date.now() });
   assert.equal(store.items.get(linkedItem.id).start.dateTime, linkedOldStart, "source resync retains the restored time");
+  const linkedEndHandle = root.querySelectorAll(".zn-cal-resize-handle").find((el) => el.getAttribute("data-item-id") === linkedItem.id && el.getAttribute("data-edge") === "end");
+  assert.ok(linkedEndHandle);
+  linkedEndHandle.dispatchEvent(new Ev("keydown", { key: "ArrowDown", bubbles: true }));
+  assert.match(store.get(linkedNote.id).body, /10:00-11:30/, "resizing a source event updates its list line");
+  assert.equal(store.items.get(linkedItem.id).x.moved, "1");
+  q(root, ".zn-calendar-undo-move").click();
+  assert.match(store.get(linkedNote.id).body, /10:00-11:00/, "resize undo restores the source line");
   store.items.remove(linkedItem.id);
 
   // A source-backed item opens its note at the stored heading target.

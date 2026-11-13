@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.111
+// @version 3.3.112
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.111, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.112, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.111";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.112";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1878,6 +1878,27 @@ const __zentralEmbeddedLoader = (function () {
   }
   function calendarMoveTimedEvent(item, placement, zone = "", now = Date.now()) {
     return !item?.x || isReminder(item) ? null : calendarMoveTimedItem(item, placement, zone, now);
+  }
+  function calendarResizePlacement(item, edge, originKey, originMinute, targetKey, targetMinute, zone = "", snapMin = 15) {
+    if (!item?.x || !item?.start?.dateTime || !item?.end?.dateTime || isReminder(item) || !["start", "end"].includes(edge)
+        || item.x?.src === "note" || item.x?.series || (item.recurrence || []).length) return null;
+    return calendarMovePlacement({ start: item[edge] }, originKey, originMinute, targetKey, targetMinute, zone, snapMin);
+  }
+  function calendarResizeTimedEvent(item, edge, placement, zone = "", snapMin = 15, now = Date.now()) {
+    if (!item?.x || !item?.start?.dateTime || !item?.end?.dateTime || isReminder(item) || !["start", "end"].includes(edge)
+        || item.x?.src === "note" || item.x?.series || (item.recurrence || []).length || !parseYmd(placement?.date)
+        || !Number.isInteger(placement?.minute) || placement.minute < 0 || placement.minute >= 1440 || (zone && !cleanZone(zone))) return null;
+    const [start, end] = itemRange(item);
+    if (!Number.isFinite(start) || !(end > start)) return null;
+    const clock = p2(Math.floor(placement.minute / 60)) + ":" + p2(placement.minute % 60);
+    const target = zonedDateTimeToMs(placement.date, clock, zone);
+    if (!Number.isFinite(target)) return null;
+    const step = cleanCalendarSnap(snapMin) * MIN;
+    const newStart = edge === "start" ? Math.min(target, end - step) : start;
+    const newEnd = edge === "end" ? Math.max(target, start + step) : end;
+    const stamp = typeof now === "function" ? now() : Number(now);
+    return cleanItem({ ...item, start: { dateTime: iso(newStart) }, end: { dateTime: iso(newEnd) },
+      x: { ...item.x, moved: item.x?.src === "list" ? "1" : item.x?.moved }, etag: "", updated: iso(Number.isFinite(stamp) ? stamp : Date.now()) }, 0);
   }
   // Move one edge of an event ("start" or "end"); never shorter than one snap step. Reminders have no end.
   function resizeItem(it, edge, deltaMs, snapMin = 15, now = Date.now()) {
@@ -3874,7 +3895,7 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -14108,7 +14129,7 @@ __zentralShim.register = function (def) {
       const calendarDaysSelect = h("button", { type: "button", class: "zn-chip zn-calendar-days-select", "aria-label": "Number of days forward", "aria-haspopup": "menu" }, "7 days");
       const calendarKindSelect = h("button", { type: "button", class: "zn-chip zn-calendar-kind-filter", "aria-label": "Filter item type", "aria-haspopup": "menu" }, "All items");
       const calendarCategorySelect = h("button", { type: "button", class: "zn-chip zn-calendar-category-filter", "aria-label": "Filter category", "aria-haspopup": "menu" }, "All categories");
-      const calendarUndoMove = h("button", { type: "button", class: "zn-chip zn-calendar-undo-move", "aria-label": "Undo last calendar move", hidden: "true" }, "Undo move");
+      const calendarUndoMove = h("button", { type: "button", class: "zn-chip zn-calendar-undo-move", "aria-label": "Undo last calendar change", hidden: "true" }, "Undo change");
       const calendarToolsSelect = h("button", { type: "button", class: "zn-chip zn-calendar-tools", "aria-label": "Calendar tools", "aria-haspopup": "menu" }, "Tools");
       const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarPrev, calendarToday, calendarNext, calendarViewSelect, calendarDensitySelect, calendarSnapSelect, calendarDaysSelect, calendarKindSelect, calendarCategorySelect, calendarUndoMove, calendarToolsSelect);
       const calendarContent = h("div", { class: "zn-calendar-pane-content zn-calendar-view", role: "region", "aria-label": "Calendar items" });
@@ -15841,7 +15862,7 @@ __zentralShim.register = function (def) {
         g.active = true;
         g.button.classList.add("is-dragging");
         const point = calendarDragPoint(g, event);
-        const placement = point && (g.allDay ? { date: point.day } : CALENDAR_PART.calendarMovePlacement(g.before, g.originDay, g.originMinute, point.day, point.minute, g.zone, g.snap));
+        const placement = point && (g.allDay ? { date: point.day } : g.edge ? CALENDAR_PART.calendarResizePlacement(g.before, g.edge, g.originDay, g.originMinute, point.day, point.minute, g.zone, g.snap) : CALENDAR_PART.calendarMovePlacement(g.before, g.originDay, g.originMinute, point.day, point.minute, g.zone, g.snap));
         g.placement = placement;
         if (!placement) { g.preview?.remove(); g.preview = null; return; }
         if (!g.preview) g.preview = h("div", { class: "zn-cal-drag-preview", "aria-hidden": "true" });
@@ -15859,9 +15880,12 @@ __zentralShim.register = function (def) {
         // Native click follows pointerup in this task; clear suppression afterwards.
         releaseCalendarSuppressedClick(event);
         if (!placement) return;
+        applyCalendarPlacement(g, placement);
+      }
+      function applyCalendarPlacement(g, placement) {
         const current = store.items.get(g.before.id);
         if (!current || current.rev !== g.before.rev || current.etag !== g.before.etag) return flash("Calendar item changed during the drag; nothing was moved");
-        const next = g.allDay ? CALENDAR_PART.calendarMoveAllDayReminder(current, g.originDay, placement.date, nowMs()) : CALENDAR_PART.calendarMoveTimedItem(current, placement, g.zone, nowMs());
+        const next = g.allDay ? CALENDAR_PART.calendarMoveAllDayReminder(current, g.originDay, placement.date, nowMs()) : g.edge ? CALENDAR_PART.calendarResizeTimedEvent(current, g.edge, placement, g.zone, g.snap, nowMs()) : CALENDAR_PART.calendarMoveTimedItem(current, placement, g.zone, nowMs());
         if (!next) return flash("That calendar move is unavailable");
         if (JSON.stringify(next.start) === JSON.stringify(current.start) && JSON.stringify(next.end) === JSON.stringify(current.end)) return;
         const before = { start: current.start, end: current.end, moved: current.x?.moved };
@@ -15873,7 +15897,7 @@ __zentralShim.register = function (def) {
         const identity = latest && CALENDAR_PART.isReminder(latest) ? CALENDAR_PART.reminderIdentity(latest) : null;
         const historyHead = identity ? store.items.history?.list({ itemId: identity.itemId, occurrenceId: identity.occurrenceId, limit: 1 })[0]?.id || "" : "";
         calendarMoveUndo = latest ? { id: latest.id, rev: latest.rev, etag: latest.etag, before, noteId: linked?.id || "", noteBody: linked?.body || "", identity, historyHead } : null;
-        renderCalendar(); flash("Calendar item moved");
+        renderCalendar(); flash(g.edge ? "Calendar item resized" : "Calendar item moved");
       }
       function undoCalendarMove() {
         const undo = calendarMoveUndo;
@@ -15887,7 +15911,7 @@ __zentralShim.register = function (def) {
         if (!restored) return flash("Could not undo the calendar move");
         calendarMoveUndo = null;
         if (restored.x?.src === "list") { try { store.syncItemScheduleToNote(restored, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
-        renderCalendar(); flash("Calendar move undone");
+        renderCalendar(); flash("Calendar change undone");
       }
       listen(calendarUndoMove, "click", undoCalendarMove);
       listen(root, "pointermove", updateCalendarDrag);
@@ -15895,12 +15919,12 @@ __zentralShim.register = function (def) {
       listen(window, "pointerup", releaseCalendarSuppressedClick, true);
       listen(root, "pointercancel", (event) => { if (calendarDrag && (event.pointerId === undefined || event.pointerId === calendarDrag.pointerId)) cancelCalendarDrag(); releaseCalendarSuppressedClick(event); });
       cleanups.push(() => { cancelCalendarDrag(); window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null; });
-      function bindCalendarDrag(button, item, { track, columns, scroll, dayKey, hourHeight, zone, allDay = false }) {
+      function bindCalendarDrag(button, item, { track, columns, scroll, dayKey, hourHeight, zone, allDay = false, edge = "" }) {
         const reminder = CALENDAR_PART.isReminder(item);
         const writable = !reminder || (!!store.items.history && !store.items.history.storageState().writeBlocked);
         if (!writable || item.x?.series || (item.recurrence || []).length || item.x?.src === "note") return;
         button.classList.add("is-movable");
-        button.title += " — Drag to move; use the context menu for keyboard time changes";
+        if (!edge) button.title += " — Drag to move; use the context menu for keyboard time changes";
         button.addEventListener("pointerdown", (event) => {
           if ((event.button !== undefined && event.button !== 0) || calendarDrag || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
           button._znSuppressDragClick = false;
@@ -15909,7 +15933,7 @@ __zentralShim.register = function (def) {
           const rect = track.getBoundingClientRect();
           calendarDrag = { button, pointerId: event.pointerId, x: event.clientX, y: event.clientY, before: current, originDay: dayKey,
             originMinute: allDay ? 0 : Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / hourHeight)),
-            hourHeight, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, allDay, active: false, placement: null, preview: null };
+            hourHeight, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, allDay, edge, active: false, placement: null, preview: null };
           try {
             if (typeof button.setPointerCapture !== "function") { cancelCalendarDrag(); return; }
             button.setPointerCapture(event.pointerId);
@@ -16021,6 +16045,29 @@ __zentralShim.register = function (def) {
             button.setAttribute("aria-label", `${original.summary}, ${startLabel}${reminder ? " reminder" : " to " + endLabel}, lane ${entry.lane + 1} of ${entry.lanes}`);
             bindCalendarDrag(button, original, { track, columns, scroll, dayKey, hourHeight: CALENDAR_HOUR_PX, zone });
             track.append(button);
+            if (!reminder && !original.x?.series && !(original.recurrence || []).length && original.x?.src !== "note") {
+              for (const edge of ["start", "end"]) {
+                if (edge === "start" ? itemStart < bounds[0] || itemStart >= bounds[1] : itemEnd <= bounds[0] || itemEnd > bounds[1]) continue;
+                const handle = h("button", { type: "button", class: "zn-cal-resize-handle is-" + edge,
+                  "aria-label": "Resize " + edge + " of " + (original.summary || "event") + "; use up and down arrows",
+                  "data-item-id": original.id, "data-edge": edge, title: "Drag or use Up/Down to resize " + edge });
+                handle.style.top = (top + (edge === "end" ? height : 0) - 4) + "px";
+                handle.style.left = button.style.left; handle.style.width = button.style.width;
+                bindCalendarDrag(handle, original, { track, columns, scroll, dayKey, hourHeight: CALENDAR_HOUR_PX, zone, edge });
+                handle.addEventListener("keydown", (event) => {
+                  if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+                  event.preventDefault(); event.stopPropagation();
+                  const current = currentCalendarItem(original);
+                  if (!current || current.rev !== original.rev || current.etag !== original.etag) return flash("Calendar item changed; reopen it to resize");
+                  const snap = C.cleanCalendarSnap(store.meta.calendarSnap), delta = event.key === "ArrowUp" ? -snap : snap;
+                  const placement = C.calendarResizePlacement(current, edge, dayKey, 720, dayKey, 720 + delta, zone, snap);
+                  if (!placement) return;
+                  applyCalendarPlacement({ before: current, edge, zone, snap }, placement);
+                  Array.from(calendarContent.querySelectorAll(".zn-cal-resize-handle")).find((node) => node.getAttribute("data-item-id") === current.id && node.getAttribute("data-edge") === edge)?.focus({ preventScroll: true });
+                });
+                track.append(handle);
+              }
+            }
           }
           columns.append(h("div", { class: "zn-cal-time-column" + (isToday ? " is-today" : "") }, track));
         }
