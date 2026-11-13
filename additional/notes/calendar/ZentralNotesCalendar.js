@@ -1035,6 +1035,26 @@
       action, stage: ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "", at,
     };
   }
+  // Display and cross-window retirement rules for occurrence-scoped reminder cards.
+  function reminderAlertPresentation(stage) {
+    const value = ["pre", "due", "followup"].includes(stage) ? stage : "followup";
+    return { stage: value, rank: value === "pre" ? 1 : value === "due" ? 2 : 3,
+      label: value === "pre" ? "Coming up" : value === "due" ? "Due now" : "Reminder overdue" };
+  }
+  function reminderSnoozeTomorrowMinutes(at) {
+    const stamp = Number(at);
+    if (!Number.isFinite(stamp)) return 0;
+    const date = new Date(stamp);
+    date.setDate(date.getDate() + 1);
+    const minutes = Math.round((date.getTime() - stamp) / 60000);
+    return Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
+  }
+  function reminderAlertShouldClose(identity, records, seen = new Set()) {
+    if (!identity?.itemId || !identity?.occurrenceId) return false;
+    return (records || []).some((record) => record && !seen.has(record.id) &&
+      record.itemId === identity.itemId && record.occurrenceId === identity.occurrenceId &&
+      ["done", "dismissed", "snoozed", "rescheduled"].includes(record.action));
+  }
   function reminderStateAfter(action, current = "pending") {
     if (action === "done") return "done";
     if (action === "dismissed") return "dismissed";
@@ -2533,7 +2553,7 @@
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, dayPlanSnapshot, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, dayPlanSnapshot, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

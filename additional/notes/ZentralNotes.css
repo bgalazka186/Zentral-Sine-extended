@@ -2011,3 +2011,63 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
 .zn-file-asset-link { display: inline-flex; align-items: center; gap: .35em; color: var(--zn-link, var(--zen-primary-color)); text-decoration: underline; text-underline-offset: .15em; cursor: pointer; overflow-wrap: anywhere; }
 .zn-file-asset-link:hover { text-decoration-thickness: 2px; }
 .zn-editor.zn-file-drop-target { outline: 2px dashed var(--zn-accent, var(--zen-primary-color)); outline-offset: -3px; background: color-mix(in srgb, var(--zn-accent, var(--zen-primary-color)) 7%, transparent); }
+
+/* B3.3.50-4: one manual top-layer stack; actions wrap instead of clipping. */
+.zn-reminder-stack {
+  position: fixed;
+  inset: 12px 12px auto auto;
+  margin: 0;
+  padding: 0;
+  width: min(380px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  border: 0;
+  background: transparent;
+  color: #f7f7fc;
+  z-index: 2147483646;
+  font: menu;
+}
+.zn-reminder-stack[hidden] { display: none !important; }
+.zn-reminder-stack:has(.zn-reminder-card[data-stage="followup"]) {
+  right: 50%;
+  transform: translateX(50%);
+  width: min(480px, calc(100vw - 24px));
+}
+.zn-reminder-card {
+  box-sizing: border-box;
+  margin: 0 0 8px;
+  padding: 12px;
+  border: 1px solid #8395b8;
+  border-radius: 10px;
+  background: #222936;
+  box-shadow: 0 6px 22px #0008;
+  overflow-wrap: anywhere;
+}
+.zn-reminder-card[data-stage="pre"] { background: rgb(34 41 54 / 92%); border-color: #8395b8; }
+.zn-reminder-card[data-stage="due"] { background: #25354b; border: 2px solid #9bbcf0; }
+.zn-reminder-card[data-stage="followup"] {
+  padding: 16px;
+  background: #3c2632;
+  border: 3px solid #ffb7a8;
+  animation: zn-reminder-calm-accent 3s ease-in-out infinite alternate;
+}
+@keyframes zn-reminder-calm-accent { from { border-color: #ffb7a8; } to { border-color: #ffdea8; } }
+@media (prefers-reduced-motion: reduce) { .zn-reminder-card[data-stage="followup"] { animation: none; } }
+.zn-reminder-stage { font-weight: 700; font-size: .85em; margin-bottom: 4px; }
+.zn-reminder-title { font-weight: 600; line-height: 1.35; }
+.zn-reminder-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.zn-reminder-actions button {
+  flex: 0 1 auto;
+  max-width: 100%;
+  padding: 5px 9px;
+  border: 1px solid #aebbd0;
+  border-radius: 6px;
+  background: #34445c;
+  color: #fff;
+  font: inherit;
+  white-space: normal;
+  cursor: pointer;
+}
+.zn-reminder-actions button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.zn-reminder-actions button:hover { background: #4b6283; }

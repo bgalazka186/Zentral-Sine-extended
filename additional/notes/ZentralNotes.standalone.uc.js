@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.53
+// @version 3.3.54
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.53, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.54, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.53";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.54";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2246,6 +2246,26 @@ const __zentralEmbeddedLoader = (function () {
       action, stage: ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "", at,
     };
   }
+  // Display and cross-window retirement rules for occurrence-scoped reminder cards.
+  function reminderAlertPresentation(stage) {
+    const value = ["pre", "due", "followup"].includes(stage) ? stage : "followup";
+    return { stage: value, rank: value === "pre" ? 1 : value === "due" ? 2 : 3,
+      label: value === "pre" ? "Coming up" : value === "due" ? "Due now" : "Reminder overdue" };
+  }
+  function reminderSnoozeTomorrowMinutes(at) {
+    const stamp = Number(at);
+    if (!Number.isFinite(stamp)) return 0;
+    const date = new Date(stamp);
+    date.setDate(date.getDate() + 1);
+    const minutes = Math.round((date.getTime() - stamp) / 60000);
+    return Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
+  }
+  function reminderAlertShouldClose(identity, records, seen = new Set()) {
+    if (!identity?.itemId || !identity?.occurrenceId) return false;
+    return (records || []).some((record) => record && !seen.has(record.id) &&
+      record.itemId === identity.itemId && record.occurrenceId === identity.occurrenceId &&
+      ["done", "dismissed", "snoozed", "rescheduled"].includes(record.action));
+  }
   function reminderStateAfter(action, current = "pending") {
     if (action === "done") return "done";
     if (action === "dismissed") return "dismissed";
@@ -3744,7 +3764,7 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, dayPlanSnapshot, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, dayPlanSnapshot, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -9202,9 +9222,98 @@ __zentralShim.register = function (def) {
       if (!recurring && !calendarItem.start?.date) {
         actions.push({ id: "snooze-10", label: "Snooze 10 min", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, 10)) });
         actions.push({ id: "snooze-60", label: "Snooze 1 hour", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, 60)) });
+        actions.push({ id: "snooze-tomorrow", label: "Tomorrow", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, CALENDAR_PART.reminderSnoozeTomorrowMinutes(Date.now()))) });
       }
       actions.push({ id: "dismiss", label: "Dismiss", callback: guard(() => store.applyReminderLifecycle(calendarItem, "dismissed")) });
       return actions;
+    }
+    // One manual top-layer stack, with a single delegated listener. All strings
+    // come from textContent; the caller owns the scope and the teardown.
+    function createReminderAlertStack({ document, history, listen, warn = () => {} }) {
+      const cards = new Map();
+      let host = null, stopClick = null, stopped = false;
+      const html = (tag, cls, text) => {
+        const el = document.createElementNS("http://www.w3.org/1999/xhtml", tag);
+        if (cls) el.setAttribute("class", cls);
+        if (text !== undefined) el.textContent = String(text);
+        return el;
+      };
+      const close = (key) => {
+        const card = cards.get(key); if (!card) return;
+        cards.delete(key); card.node.remove();
+        if (!cards.size && host) {
+          try { host.hidePopover?.(); } catch (_) {}
+          host.hidden = true;
+        }
+      };
+      const onHistory = () => {
+        if (stopped) return;
+        for (const [key, card] of [...cards]) {
+          const records = history?.list?.({ itemId: card.identity.itemId, occurrenceId: card.identity.occurrenceId }) || [];
+          if (CALENDAR_PART.reminderAlertShouldClose(card.identity, records, card.seen)) close(key);
+        }
+      };
+      const offHistory = history?.on?.(onHistory);
+      function ensureHost() {
+        if (host) return host;
+        host = html("div", "zn-reminder-stack");
+        host.setAttribute("popover", "manual");
+        host.setAttribute("aria-label", "Reminder alerts");
+        host.setAttribute("role", "region");
+        host.hidden = true;
+        (document.body || document.documentElement).append(host);
+        stopClick = listen(host, "click", (event) => {
+          const button = event.target?.closest?.("button[data-action]");
+          const node = button?.closest?.(".zn-reminder-card");
+          const key = node?.getAttribute("data-key"), card = cards.get(key);
+          if (!card || !button) return;
+          event.preventDefault(); event.stopPropagation();
+          const action = button.getAttribute("data-action");
+          if (action === "close") { close(key); return; }
+          const callback = card.actions.get(action);
+          if (!callback) return;
+          try { if (callback() !== false) close(key); } catch (error) { warn(error); }
+        });
+        return host;
+      }
+      return {
+        show({ identity, title, stage, actions = [] }) {
+          if (stopped || !identity?.itemId || !identity?.occurrenceId) return false;
+          if (["done", "dismissed"].includes(history?.stateFor?.(identity.itemId, identity.occurrenceId))) return false;
+          const presentation = CALENDAR_PART.reminderAlertPresentation(stage);
+          const key = JSON.stringify([identity.itemId, identity.occurrenceId]);
+          const existing = cards.get(key);
+          if (existing && existing.rank > presentation.rank) return true;
+          if (existing) close(key);
+          const parent = ensureHost(), node = html("section", "zn-reminder-card");
+          node.setAttribute("data-key", key);
+          node.setAttribute("data-stage", presentation.stage);
+          node.setAttribute("role", presentation.stage === "followup" ? "alert" : "status");
+          node.append(html("div", "zn-reminder-stage", presentation.label));
+          node.append(html("div", "zn-reminder-title", title || "Untitled reminder"));
+          const row = html("div", "zn-reminder-actions"), callbacks = new Map();
+          for (const action of actions) {
+            if (!action?.id || typeof action.callback !== "function") continue;
+            const button = html("button", "", action.label);
+            button.setAttribute("type", "button"); button.setAttribute("data-action", action.id);
+            callbacks.set(action.id, action.callback); row.append(button);
+          }
+          const closeButton = html("button", "zn-reminder-close", "Close");
+          closeButton.setAttribute("type", "button"); closeButton.setAttribute("data-action", "close");
+          row.append(closeButton); node.append(row);
+          const records = history?.list?.({ itemId: identity.itemId, occurrenceId: identity.occurrenceId }) || [];
+          cards.set(key, { identity: { ...identity }, node, actions: callbacks, rank: presentation.rank, seen: new Set(records.map((record) => record.id)) });
+          parent.append(node); parent.hidden = false;
+          try { if (typeof parent.showPopover === "function") { if (!parent.matches(":popover-open")) parent.showPopover(); } else parent.removeAttribute("popover"); } catch (_) { parent.removeAttribute("popover"); }
+          return true;
+        },
+        destroy() {
+          if (stopped) return;
+          stopped = true; offHistory?.(); stopClick?.(); cards.clear();
+          try { host?.hidePopover?.(); } catch (_) {}
+          host?.remove(); host = null;
+        },
+      };
     }
     // One timer, armed for the next future reminder. `onDue(notes)` receives every overdue, unannounced
     // reminder as one batch AFTER the store has recorded them as announced (claim), so nothing repeats.
@@ -12166,7 +12275,7 @@ __zentralShim.register = function (def) {
         FIND_MAX_MATCHES, FIND_MAX_QUERY, sniffImageMime, checkAssetBytes, assetFileName, parseAssetLink, buildAssetLink, buildAssetImage,
         insertAssetImage, assetImageAt, restyleAssetImage, assetRefs, assetIntegrityReport, isAssetNoteId, ASSET_MAX_BYTES, ASSET_VIDEO_MAX_BYTES, ASSET_FILE_MAX_BYTES, ASSET_MAX_PER_NOTE, ASSET_MIME, VIDEO_EXT_MIME, cleanAssetFileName, uniqueAssetFileName, parseFileAssetLink, droppedAssetMarkup, insertDroppedAssetLinks, droppedFiles,
         cleanRemind, ceilStep, dueReminders, nextReminderAt, reminderDelay, reminderPresets, parseRemindInput, remindPreview, remindDateText, remindTimeText,
-        createReminderScheduler, createReminderAlertActions, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
+        createReminderScheduler, createReminderAlertActions, createReminderAlertStack, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
         headingSlug, headingsOf, cleanAnchor, noteLinkParts, headingOffset, tocBlock, tocList, findToc, updateToc, insertToc, insertFootnote, nextFootnoteLabel, mentionRe, hasMention, linkFirstMention, collectRefs, attachTrailingBlockId, nextMarkdownFence, TASK_BOX_CHARS, TASK_BOX_TOKEN,
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_FOLDER_LABEL, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         DATE_TITLE_RE, dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
@@ -21070,7 +21179,7 @@ __zentralShim.register = function (def) {
           : IOUtils.setPermissions(p, 0o600, false),
     };
 
-    function start() {
+    function start({ lifecycle } = {}) {
       const cleanups = [];
       const onCleanup = (fn) => cleanups.push(fn);
       let disposed = false;
@@ -21451,10 +21560,19 @@ __zentralShim.register = function (def) {
           ]);
         } catch (error) { warn(error); }
       }
+      const alertStack = createReminderAlertStack({
+        document, history: store.items?.history, warn,
+        listen(target, type, fn) {
+          if (lifecycle?.listen) return lifecycle.listen(target, type, fn);
+          target.addEventListener(type, fn);
+          return () => target.removeEventListener(type, fn);
+        },
+      });
+      if (lifecycle?.own) lifecycle.own(() => alertStack.destroy());
+      onCleanup(() => alertStack.destroy());
       function showReminders(list) {
         if (disposed) return;
-        const visible = list.slice(0, 15);
-        const sounds = new Map();
+        const visible = list.slice(0, 15), sounds = new Map();
         for (const entry of visible) {
           const item = entry.__calendarReminder ? entry.__calendarItem : { x: { noteId: entry.id } };
           const stage = entry.__stage || "followup";
@@ -21465,26 +21583,12 @@ __zentralShim.register = function (def) {
         }
         for (const { stage, policy } of sounds.values()) playReminderSound(stage, policy);
         for (const n of visible) {
-          const calendarItem = n.__calendarReminder ? n.__calendarItem : null;
-          const stage = n.__stage || "followup";
-          // Tier 1 and 2 are transient sound cues. Tier 3 is the persistent action banner.
-          if (calendarItem && stage !== "followup") continue;
-          const title = calendarItem?.summary || titleOf(n.body) || "Untitled note";
-          const noteId = calendarItem?.x?.noteId || n.id;
-          let shown = false;
+          const item = n.__calendarReminder ? n.__calendarItem : null;
+          const identity = item ? CALENDAR_PART.reminderIdentity(item) : { itemId: "note-reminder:" + n.id, occurrenceId: "note-reminder:" + n.id };
+          const actions = createReminderAlertActions({ store, note: n, openNote: openReminderNote, showNotes, warn });
           try {
-            const box = window.gBrowser.getNotificationBox();
-            const actions = createReminderAlertActions({ store, note: n, openNote: openReminderNote, showNotes, warn })
-              .map(({ label, callback }) => ({ label, callback }));
-            box.appendNotification("zentral-notes-reminder-" + n.id, { label: "Reminder: " + title, priority: box.PRIORITY_INFO_HIGH }, actions);
-            shown = true;
-          } catch (error) {
-            warn(error);
-          }
-          if (!shown) {
-            if (calendarItem && noteId) openReminderNote(noteId, { heading: calendarItem.x?.heading || "", itemId: calendarItem.id });
-            else if (!calendarItem) openReminderNote(n.id);
-          }
+            alertStack.show({ identity, title: item?.summary || titleOf(n.body) || "Untitled note", stage: n.__stage || "followup", actions });
+          } catch (error) { warn(error); }
         }
       }
       const reminders = createReminderScheduler({
