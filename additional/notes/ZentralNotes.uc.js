@@ -7219,14 +7219,15 @@
                 innerComment = !innerComment; pos = at + marker.length;
               }
             }
-            if (!ambiguous && end < lines.length && end - row <= 2000) {
+            if (!ambiguous && end < lines.length && end - row <= 2000 && nextContainerClose[row] === end) {
               const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence, mapBlockId, onAmbiguousBlockId, mapComment, onAmbiguousContainer);
               result.push(mapContainer({ open: line, inner, close: lines[end], kind: head[1], title: head[2].replace(/\s*:::\s*$/, "").trim() }));
               row = end; continue;
             }
             if (nextContainerClose[row] >= 0) {
-              // The reader treats an inner opening marker as text. Leave the
-              // ambiguous region raw and don't reinterpret that inner marker.
+              // The reader ends at the first bare closer, including in code or
+              // comments, and treats nested openings as text. Keep ambiguous
+              // delimiters raw instead of changing their scope.
               containerGuardEnd = nextContainerClose[row];
               onAmbiguousContainer();
             }
