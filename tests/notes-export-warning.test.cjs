@@ -134,3 +134,12 @@ const unclosedComment = convert({ id: 'note_a', body: 'Intro ^[Important]\n<!-- 
 assert.match(unclosedComment, /Intro `\^\[Important\]`/); assert.doesNotMatch(unclosedComment, /\[\^zn-inline-/);
 const caseCollision = convert({ id: 'note_a', body: '[^ZN-INLINE-1]: Existing\n\n^[New]' }, [], new Map(), []);
 assert.match(caseCollision, /\[\^zn-inline-2\]: New/, 'case-insensitive existing labels are not reused');
+const mathSource = 'Formula $x^2^$ and $$a+b$$. Price $5 and $10.\n\n$$\na^2 + b^2\n%% literal math text %%\n$$\n';
+assert.deepEqual(Array.from(scan(mathSource)), ['math'], 'math is detected without mistaking currency or math-internal formatting for live syntax');
+const mathOut = convert({ id: 'note_a', body: mathSource }, [], new Map(), []);
+assert.match(mathOut, /Formula `\$x\^2\^\$` and `\$\$a\+b\$\$`\. Price \$5 and \$10\./);
+assert.match(mathOut, /```math\n\$\$\na\^2 \+ b\^2\n%% literal math text %%\n\$\$\n```/);
+assert.doesNotMatch(mathOut, /<sup>|<!-- %% literal math text/);
+const mathTicks = convert({ id: 'note_a', body: '$x`y$' }, [], new Map(), []);
+assert.equal(mathTicks, '``$x`y$``', 'math containing backticks uses a longer safe code delimiter');
+assert.deepEqual(Array.from(scan('Cost $5 and $10; code `$x$`; unmatched $$')), [], 'non-math prices, code and unmatched math markers stay unchanged');

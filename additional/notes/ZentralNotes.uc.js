@@ -7064,7 +7064,7 @@
     }
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
-    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}) {
+    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw) {
       const lines = String(text).split("\n"), result = [];
       let fence = null, comment = false;
       const findClose = (line, run, start) => {
@@ -7099,6 +7099,11 @@
       };
       for (let row = 0; row < lines.length; row++) {
         let line = lines[row];
+        if (!comment && !fence && /^\s*\$\$\s*$/.test(line)) {
+          let end = row + 1;
+          while (end < lines.length && end - row < 200 && !/^\s*\$\$\s*$/.test(lines[end])) end++;
+          if (end < lines.length && end - row < 200) { result.push(mapMath(lines.slice(row, end + 1).join("\n"), true)); row = end; continue; }
+        }
         if (!comment) {
           const wasFenced = !!fence, next = nextMarkdownFence(line, fence);
           if (wasFenced || next) { fence = next; result.push(line); continue; }
@@ -7112,6 +7117,10 @@
             out += line.slice(pos, end + 3); pos = end + 3; comment = false; continue;
           }
           if (line.startsWith("<!--", pos)) { flush(); comment = true; continue; }
+          if (line[pos] === "$" && (pos === 0 || !/[\w$]/.test(line[pos - 1]))) {
+            const math = /^(?:\$\$([^$\n]+?)\$\$|\$([^\s$](?:[^$\n]*?[^\s$])?)\$(?![\d$\w]))/.exec(line.slice(pos));
+            if (math) { flush(); out += mapMath(math[0], false); pos += math[0].length; continue; }
+          }
           const spoilerOpen = line.startsWith(">!", pos) ? ">!" : line.startsWith("||", pos) ? "||" : "";
           if (spoilerOpen) {
             const endToken = spoilerOpen === ">!" ? "!<" : "||", end = line.indexOf(endToken, pos + 2);
@@ -7174,7 +7183,7 @@
         const task = /^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/.exec(visible);
         if (task && Object.hasOwn(TASK_STATUS_NAMES, task[2])) found.add("extended task");
         return segment;
-      });
+      }, undefined, undefined, (math) => { found.add("math"); return math; });
       return [...found];
     }
     // Export is a copy: convert the documented extensions conservatively and
@@ -7223,6 +7232,10 @@
           return "[^" + id + "]";
         });
         return segment;
+      }, undefined, undefined, (math, block) => {
+        const maxRun = (math.match(/`+/g) || []).reduce((max, run) => Math.max(max, run.length), 0);
+        const ticks = "`".repeat(Math.max(block ? 3 : 1, maxRun + 1));
+        return block ? ticks + "math\n" + math + "\n" + ticks : ticks + math + ticks;
       });
       const resolver = wikiResolver(notes, folders);
       const rewritten = mapMarkdownForExport(converted,
@@ -13520,7 +13533,7 @@
         if (!warnings.size) { Promise.resolve(run({})).catch((error) => console.warn("[ZentralNotes] export failed", error)); return; }
         const cancel = chip("Cancel"), raw = chip("Keep raw syntax"), portable = chip("Convert to portable Markdown", true);
         openCard("Markdown export compatibility",
-          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, and subscript/superscript use HTML tags, and inline footnotes become numbered references when safe (otherwise literal text). Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
+          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, and subscript/superscript use HTML tags, and inline footnotes become numbered references when safe (otherwise literal text), and math becomes literal code. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
           h("div", { class: "zn-dialog-actions" }, cancel, raw, portable));
         const choose = (markdownMode) => { closeDialog(); Promise.resolve(run({ markdownMode })).catch((error) => console.warn("[ZentralNotes] export failed", error)); };
         cancel.addEventListener("click", closeDialog);
