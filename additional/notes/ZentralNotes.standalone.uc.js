@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.88
+// @version 3.3.89
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.88, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.89, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.88";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.89";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11521,6 +11521,16 @@ __zentralShim.register = function (def) {
             }
           }
         }
+        // I05 first rewrites bracketed LaTeX to dollar block math. Ignore
+        // rules for dollars are applied after that rewrite by the reader.
+        if (!comment && !fence && mathOptions.gate.on("I05") && !hasProtectedDollar("$$")) {
+          if (/^\s*\\\[(.+)\\\]\s*$/.test(line)) { result.push(mapMath(line, true)); continue; }
+          if (/^\s*\\\[\s*$/.test(line)) {
+            let end = row + 1;
+            while (end < lines.length && end - row < 200 && !/^\s*\\\]\s*$/.test(lines[end])) end++;
+            if (end < lines.length && end - row < 200) { result.push(mapMath(lines.slice(row, end + 1).join("\n"), true)); row = end; continue; }
+          }
+        }
         // The reader currently accepts block math in every mode; ignored
         // literal delimiters still prevent it from becoming a math block.
         if (!comment && !fence && /^\s*\$\$(.+?)\$\$\s*$/.test(line) && !hasProtectedDollar(line)) {
@@ -11558,6 +11568,15 @@ __zentralShim.register = function (def) {
             out += line.slice(pos, end + 3); pos = end + 3; comment = false; continue;
           }
           if (line.startsWith("<!--", pos)) { flush(); comment = true; continue; }
+          if (line.startsWith("\\(", pos) && (pos === 0 || line[pos - 1] !== "\\") && mathOptions.gate.on("I04") && mathOptions.gate.on("I01")) {
+            const latex = /^\\\((?=\S)([^\n]*?\S)\\\)/.exec(line.slice(pos));
+            if (latex && !latex[1].includes("$")) {
+              const ignored = exportProtectedPositions(line, mathOptions.literals, false), end = pos + latex[0].length;
+              if (![pos, pos + 1, end - 2, end - 1].some((i) => ignored.has(i))) {
+                flush(); out += mapMath(latex[0], false); pos = end; continue;
+              }
+            }
+          }
           if (line[pos] === "$" && (pos === 0 || !/[\w$]/.test(line[pos - 1]))) {
             const math = /^(?:\$\$([^$\n]+?)\$\$|\$([^\s$](?:[^$\n]*?[^\s$])?)\$(?![\d$\w]))/.exec(line.slice(pos));
             if (math) {
@@ -11616,7 +11635,7 @@ __zentralShim.register = function (def) {
       const ignored = parseIgnoreCached(readOptions.ignore);
       return { gate: flavorGate(readOptions.flavor, { tilde: readOptions.tilde, ignore: ignored.ids }), literals: ignored.literals };
     }
-    function exportProtectedPositions(segment, literals) {
+    function exportProtectedPositions(segment, literals, includeEscapes = true) {
       const protectedAt = new Set();
       for (const re of ignoreRes(literals)) {
         re.lastIndex = 0;
@@ -11628,7 +11647,7 @@ __zentralShim.register = function (def) {
       }
       // Mirror parseInlineEsc: an odd run of backslashes escapes the next
       // Markdown punctuation; an even run leaves that punctuation active.
-      for (let i = 0; i < segment.length; i++) {
+      if (includeEscapes) for (let i = 0; i < segment.length; i++) {
         if (segment[i] === "\\" && i + 1 < segment.length && ESC_CHARS.includes(segment[i + 1])) {
           protectedAt.add(++i);
         }
