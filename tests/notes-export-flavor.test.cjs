@@ -283,4 +283,13 @@ assert.equal(convert(multilineCodeAndId, { flavor: 'mixed' }), '`example\nend` <
 assert.equal(convert('paragraph ^id\ncontinued ^id', { flavor: 'mixed' }), 'paragraph ^id\ncontinued <!-- ^id -->', 'only the reader-owned trailing marker converts');
 assert.equal(convert('Paragraph ^id\r\n', { flavor: 'mixed' }), 'Paragraph <!-- ^id -->\r\n');
 assert.equal(c.markdownExportBody({ id: 'n1', body: 'Paragraph ^id' }, [], new Map(), [], 'raw', { flavor: 'mixed' }), 'Paragraph ^id');
+const nestedBlockIds = '> para ^a\n>\n> other ^b';
+assert.deepEqual(scan(nestedBlockIds, { flavor: 'mixed' }), ['block ID']);
+assert.equal(convert(nestedBlockIds, { flavor: 'mixed' }), '> para <!-- ^a -->\n>\n> other <!-- ^b -->');
+const quotedListIds = '> - one ^a\n> - two ^b\n>\n> after';
+assert.deepEqual(scan(quotedListIds, { flavor: 'mixed' }), ['block ID']);
+assert.equal(convert(quotedListIds, { flavor: 'mixed' }), '> - one <!-- ^a -->\n> - two <!-- ^b -->\n>\n> after');
+const repeatedId = '> # Heading ^dup\n>\n> paragraph ^dup\n>\n> end';
+assert.deepEqual(scan(repeatedId, { flavor: 'mixed' }), ['block ID'], 'ambiguous block IDs still trigger a warning');
+assert.equal(convert(repeatedId, { flavor: 'mixed' }), repeatedId, 'ambiguous duplicated markers are not guessed');
 console.log('Markdown export flavor tests passed');

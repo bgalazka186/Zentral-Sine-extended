@@ -7090,7 +7090,7 @@
     }
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
-    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}, onMathFence = () => {}, mapBlockId = (marker) => marker) {
+    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}, onMathFence = () => {}, mapBlockId = (marker) => marker, onAmbiguousBlockId = () => {}) {
       const lines = String(text).split("\n"), result = [], codeRuns = indexMarkdownCodeRuns(lines);
       const mathOptions = exportScriptOptions(readOptions);
       const hasProtectedDollar = (line) => {
@@ -7111,11 +7111,40 @@
           const end = blocks[index + 1]?.src ?? lines.length;
           let last = end - 1;
           while (last >= block.src && !lines[last].trim()) last--;
-          if (block.blockId && lineId(last) === block.blockId) blockIdRows.set(last, block.blockId);
+          if (block.blockId) {
+            if (lineId(last) === block.blockId) blockIdRows.set(last, block.blockId);
+            else onAmbiguousBlockId();
+          }
           if (block.type === "list") for (const item of block.items || []) {
             if (!item.blockId) continue;
             if (Number.isInteger(item.line) && item.line >= 0 && lineId(item.line) === item.blockId) blockIdRows.set(item.line, item.blockId);
             else if (lineId(last) === item.blockId) blockIdRows.set(last, item.blockId);
+            else onAmbiguousBlockId();
+          }
+          if (block.type === "quote") {
+            // Quote children normally have no writable source line. Match IDs
+            // back only when their source occurrences are unambiguous within
+            // this quote; duplicate example/heading markers remain untouched.
+            const counts = new Map(), candidates = new Map();
+            const collect = (node) => {
+              if (node?.blockId) counts.set(node.blockId, (counts.get(node.blockId) || 0) + 1);
+              for (const item of node?.items || []) if (item.blockId) counts.set(item.blockId, (counts.get(item.blockId) || 0) + 1);
+              for (const child of node?.blocks || []) collect(child);
+            };
+            collect(block);
+            for (let row = block.src; row < end; row++) {
+              if (!/^>/.test(lines[row])) continue;
+              const id = lineId(row);
+              if (id && counts.has(id)) {
+                if (!candidates.has(id)) candidates.set(id, []);
+                candidates.get(id).push(row);
+              }
+            }
+            for (const [id, count] of counts) {
+              const rows = candidates.get(id) || [];
+              if (rows.length === count) for (const row of rows) blockIdRows.set(row, id);
+              else onAmbiguousBlockId();
+            }
           }
         });
       }
@@ -7184,7 +7213,7 @@
               }
             }
             if (!ambiguous && end < lines.length && end - row <= 2000) {
-              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence, mapBlockId);
+              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence, mapBlockId, onAmbiguousBlockId);
               result.push(mapContainer({ open: line, inner, close: lines[end], kind: head[1], title: head[2].replace(/\s*:::\s*$/, "").trim() }));
               row = end; continue;
             }
@@ -7475,7 +7504,7 @@
         return segment;
       }, undefined, undefined, (math) => { found.add("math"); return math; }, (container) => {
         found.add("callout"); return container.open + "\n" + container.inner + "\n" + container.close;
-      }, (prefix) => { found.add("small print"); return prefix; }, readOptions, () => found.add("math"), (marker) => { found.add("block ID"); return "<!-- " + marker + " -->"; });
+      }, (prefix) => { found.add("small print"); return prefix; }, readOptions, () => found.add("math"), (marker) => { found.add("block ID"); return "<!-- " + marker + " -->"; }, () => found.add("block ID"));
       return [...found];
     }
     // Export is a copy: convert the documented extensions conservatively and
