@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.73
+// @version 3.3.74
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.73, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.74, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.73";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.74";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11414,7 +11414,7 @@ __zentralShim.register = function (def) {
     }
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
-    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination) {
+    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}) {
       const lines = String(text).split("\n"), result = [];
       let fence = null, comment = false;
       const findClose = (line, run, start) => {
@@ -11500,6 +11500,7 @@ __zentralShim.register = function (def) {
         }
         flush(); result.push(out);
       }
+      onEnd({ comment, fence });
       return result.join("\n");
     }
     // Identify live Zentral extensions without interpreting examples inside code.
@@ -11519,6 +11520,7 @@ __zentralShim.register = function (def) {
         if (/==(?:\{(?:\w+|#[0-9a-f]{6})\})?[^\n=]+==|\+\+[^+\n]+\+\+/i.test(visible)) found.add("formatting");
         if (/\|\|[^|\n]+\|\||>![^!\n]+!</.test(visible)) found.add("spoiler");
         if (/(?<!~)~[^\s~]+~(?!~)|\^(?!\[)[^\s^]+\^/.test(visible)) found.add("subscript / superscript");
+        if (/\^\[((?:[^\[\]\n]|\[[^\[\]\n]*\])+)\]/.test(visible)) found.add("inline footnote");
         const task = /^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/.exec(visible);
         if (task && Object.hasOwn(TASK_STATUS_NAMES, task[2])) found.add("extended task");
         return segment;
@@ -11529,6 +11531,13 @@ __zentralShim.register = function (def) {
     // keep unresolvable transclusions visible as literal code instead of losing data.
     function portableMarkdownExportBody(note, notes = [], names = new Map(), folders = []) {
       const body = String(note?.body ?? ""), parts = splitMarkdownExportFrontMatter(body);
+      const usedFootnotes = new Set(), footnotes = [];
+      let footnoteAppendSafe = true;
+      mapMarkdownForExport(parts.body, (segment) => {
+        for (const match of segment.matchAll(/\[\^([^\]\s]{1,40})\]/g)) usedFootnotes.add(match[1].toLocaleLowerCase());
+        return segment;
+      }, undefined, ({ comment, fence }) => { footnoteAppendSafe = !comment && !fence; });
+      let footnoteNumber = 1;
       const literal = (text) => "`" + text.replace(/`/g, "") + "`";
       const hiddenSafe = mapMarkdownForExport(parts.body, (segment) => segment.replace(/%%[^%\n]+%%/g, (marker) => "<!-- " + marker.replace(/--/g, "-&#45;") + " -->"));
       const converted = mapMarkdownForExport(hiddenSafe, (segment) => {
@@ -11555,13 +11564,22 @@ __zentralShim.register = function (def) {
           const title = spec.parts.title + (spec.parts.heading ? " > " + spec.parts.heading : "");
           return buildNoteLink(hit.id, title, hit.heading);
         });
+        segment = segment.replace(/\^\[((?:[^\[\]\n]|\[[^\[\]\n]*\])+)\]/g, (_all, content) => {
+          if (!footnoteAppendSafe) return literal(_all);
+          let id;
+          do { id = "zn-inline-" + footnoteNumber++; } while (usedFootnotes.has(id));
+          usedFootnotes.add(id);
+          footnotes.push("[^" + id + "]: " + content);
+          return "[^" + id + "]";
+        });
         return segment;
       });
       const resolver = wikiResolver(notes, folders);
       const rewritten = mapMarkdownForExport(converted,
         (segment) => rewriteNoteLinks(expandWikiLinks(segment, resolver, { unresolved: "text", self: note }), names),
         (destination) => rewriteNoteLinks("]" + destination, names).slice(1));
-      return parts.prefix + rewritten;
+      const suffix = footnotes.length ? (rewritten.endsWith("\n\n") ? "" : rewritten.endsWith("\n") ? "\n" : "\n\n") + footnotes.join("\n") + "\n" : "";
+      return parts.prefix + rewritten + suffix;
     }
     // Freeze the scalar content used by the warning and file writers at the
     // same moment. Store records themselves are mutable across windows.
@@ -17852,7 +17870,7 @@ __zentralShim.register = function (def) {
         if (!warnings.size) { Promise.resolve(run({})).catch((error) => console.warn("[ZentralNotes] export failed", error)); return; }
         const cancel = chip("Cancel"), raw = chip("Keep raw syntax"), portable = chip("Convert to portable Markdown", true);
         openCard("Markdown export compatibility",
-          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, and subscript/superscript use HTML tags. Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
+          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, and subscript/superscript use HTML tags, and inline footnotes become numbered references when safe (otherwise literal text). Sizing, formatting and reminder scheduling may not transfer, and linked assets are not copied."),
           h("div", { class: "zn-dialog-actions" }, cancel, raw, portable));
         const choose = (markdownMode) => { closeDialog(); Promise.resolve(run({ markdownMode })).catch((error) => console.warn("[ZentralNotes] export failed", error)); };
         cancel.addEventListener("click", closeDialog);

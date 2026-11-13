@@ -119,3 +119,18 @@ const chemistryOut = convert({ id: 'note_a', body: chemistry }, [], new Map(), [
 assert.equal(chemistryOut, 'H<sub>2</sub>O and X<sup>2</sup>, `H~2~O`, and [link](https://example.test/X^2^)');
 assert.deepEqual(Array.from(scan('~~ordinary strikethrough~~ and [^footnote]')), [], 'strikethrough and footnote syntax are not mistaken for sub/superscript');
 assert.equal(convert({ id: 'note_a', body: 'H~2~O and X^2^' }, [], new Map(), []), 'H<sub>2</sub>O and X<sup>2</sup>');
+const footnotes = '# Notes\nExisting [^zn-inline-1].\n[^zn-inline-1]: Kept.\nInline ^[Footnote content] and ^[Another].\n`^[literal]`\n';
+assert.deepEqual(Array.from(scan(footnotes)), ['inline footnote']);
+const footOut = convert({ id: 'note_a', body: footnotes }, [], new Map(), []);
+assert.match(footOut, /Inline \[\^zn-inline-2\] and \[\^zn-inline-3\]/);
+assert.match(footOut, /\[\^zn-inline-2\]: Footnote content/);
+assert.match(footOut, /\[\^zn-inline-3\]: Another/);
+assert.match(footOut, /`\^\[literal\]`/); assert.match(footOut, /\[\^zn-inline-1\]: Kept\./);
+const unclosedTail = 'Intro ^[Important]\n```text\nunfinished\n';
+const safeTail = convert({ id: 'note_a', body: unclosedTail }, [], new Map(), []);
+assert.match(safeTail, /Intro `\^\[Important\]`/, 'an unclosed trailing fence prevents footnote definitions from being written inside code');
+assert.doesNotMatch(safeTail, /\[\^zn-inline-/);
+const unclosedComment = convert({ id: 'note_a', body: 'Intro ^[Important]\n<!-- unfinished' }, [], new Map(), []);
+assert.match(unclosedComment, /Intro `\^\[Important\]`/); assert.doesNotMatch(unclosedComment, /\[\^zn-inline-/);
+const caseCollision = convert({ id: 'note_a', body: '[^ZN-INLINE-1]: Existing\n\n^[New]' }, [], new Map(), []);
+assert.match(caseCollision, /\[\^zn-inline-2\]: New/, 'case-insensitive existing labels are not reused');
