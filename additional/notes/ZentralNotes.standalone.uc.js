@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.83
+// @version 3.3.84
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.83, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.84, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.83";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.84";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11443,6 +11443,12 @@ __zentralShim.register = function (def) {
     // comments. Comment state spans lines and fences inside a comment are inert.
     function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}) {
       const lines = String(text).split("\n"), result = [], codeRuns = indexMarkdownCodeRuns(lines);
+      const mathOptions = exportScriptOptions(readOptions);
+      const hasProtectedDollar = (line) => {
+        const protectedAt = exportProtectedPositions(line, mathOptions.literals);
+        for (let i = 0; i < line.length; i++) if (line[i] === "$" && protectedAt.has(i)) return true;
+        return false;
+      };
       // O01 only starts a block where the Notes parser actually recognizes it;
       // the same characters inside a running paragraph are ordinary text.
       const smallRows = new Set();
@@ -11512,9 +11518,14 @@ __zentralShim.register = function (def) {
             }
           }
         }
-        if (!comment && !fence && /^\s*\$\$\s*$/.test(line)) {
+        // The reader currently accepts block math in every mode; ignored
+        // literal delimiters still prevent it from becoming a math block.
+        if (!comment && !fence && /^\s*\$\$(.+?)\$\$\s*$/.test(line) && !hasProtectedDollar(line)) {
+          result.push(mapMath(line, true)); continue;
+        }
+        if (!comment && !fence && /^\s*\$\$\s*$/.test(line) && !hasProtectedDollar(line)) {
           let end = row + 1;
-          while (end < lines.length && end - row < 200 && !/^\s*\$\$\s*$/.test(lines[end])) end++;
+          while (end < lines.length && end - row < 200 && (!/^\s*\$\$\s*$/.test(lines[end]) || hasProtectedDollar(lines[end]))) end++;
           if (end < lines.length && end - row < 200) { result.push(mapMath(lines.slice(row, end + 1).join("\n"), true)); row = end; continue; }
         }
         if (!comment) {
@@ -11524,7 +11535,7 @@ __zentralShim.register = function (def) {
         // Keep source offsets intact for multiline code spans: consume just the
         // small-print prefix, then scan the rest of the original line normally.
         let smallPrefix = !comment && smallRows.has(row) && /^-#[ \t]+(?=\S)/.exec(line)?.[0] || "";
-        let separateSmall = false;
+        let separateSmall = false, protectedLine = null;
         let out = "", visible = smallPrefix, pos = smallPrefix.length;
         const flush = () => { if (visible) { out += fn(visible); visible = ""; } };
         const finishSmallPrint = () => {
@@ -11546,7 +11557,14 @@ __zentralShim.register = function (def) {
           if (line.startsWith("<!--", pos)) { flush(); comment = true; continue; }
           if (line[pos] === "$" && (pos === 0 || !/[\w$]/.test(line[pos - 1]))) {
             const math = /^(?:\$\$([^$\n]+?)\$\$|\$([^\s$](?:[^$\n]*?[^\s$])?)\$(?![\d$\w]))/.exec(line.slice(pos));
-            if (math) { flush(); out += mapMath(math[0], false); pos += math[0].length; continue; }
+            if (math) {
+              if (!protectedLine) protectedLine = exportProtectedPositions(line, mathOptions.literals);
+              const width = math[1] !== undefined ? 2 : 1;
+              const active = mathOptions.gate.on(width === 2 ? "I03" : "I01");
+              const end = pos + math[0].length;
+              const protectedDelimiter = Array.from({ length: width }, (_, n) => protectedLine.has(pos + n) || protectedLine.has(end - n - 1)).some(Boolean);
+              if (active && !protectedDelimiter) { flush(); out += mapMath(math[0], false); pos = end; continue; }
+            }
           }
           const spoilerOpen = line.startsWith(">!", pos) ? ">!" : line.startsWith("||", pos) ? "||" : "";
           if (spoilerOpen) {
@@ -11577,7 +11595,7 @@ __zentralShim.register = function (def) {
               if (endRow === row) { out += line.slice(pos, close + run.length); pos = close + run.length; continue; }
               out += line.slice(pos); finishSmallPrint(); result.push(out);
               for (let k = row + 1; k < endRow; k++) result.push(lines[k]);
-              row = endRow; line = lines[row]; out = line.slice(0, close + run.length); pos = close + run.length; continue;
+              row = endRow; line = lines[row]; protectedLine = null; out = line.slice(0, close + run.length); pos = close + run.length; continue;
             }
             visible += run; pos += run.length; continue;
           }
@@ -11702,10 +11720,10 @@ __zentralShim.register = function (def) {
       mapMarkdownForExport(parts.body, (segment) => {
         for (const match of segment.matchAll(/\[\^([^\]\s]{1,40})\]/g)) usedFootnotes.add(match[1].toLocaleLowerCase());
         return segment;
-      }, undefined, ({ comment, fence }) => { footnoteAppendSafe = !comment && !fence; });
+      }, undefined, ({ comment, fence }) => { footnoteAppendSafe = !comment && !fence; }, undefined, undefined, undefined, effectiveReadOptions);
       let footnoteNumber = 1;
       const literal = (text) => "`" + text.replace(/`/g, "") + "`";
-      const hiddenSafe = mapMarkdownForExport(parts.body, (segment) => segment.replace(/%%[^%\n]+%%/g, (marker) => "<!-- " + marker.replace(/--/g, "-&#45;") + " -->"));
+      const hiddenSafe = mapMarkdownForExport(parts.body, (segment) => segment.replace(/%%[^%\n]+%%/g, (marker) => "<!-- " + marker.replace(/--/g, "-&#45;") + " -->"), undefined, undefined, undefined, undefined, undefined, effectiveReadOptions);
       const converted = mapMarkdownForExport(hiddenSafe, (segment, context) => {
         if (context?.spoilerToken) {
           const spoiler = mapExportSpoilers(segment, scriptOptions, (_raw, content) => "<details><summary>Spoiler</summary>" + escHtml(content) + "</details>", context);
@@ -11758,7 +11776,7 @@ __zentralShim.register = function (def) {
       const resolver = wikiResolver(notes, folders);
       const rewritten = mapMarkdownForExport(converted,
         (segment) => rewriteNoteLinks(expandWikiLinks(segment, resolver, { unresolved: "text", self: note }), names),
-        (destination) => rewriteNoteLinks("]" + destination, names).slice(1));
+        (destination) => rewriteNoteLinks("]" + destination, names).slice(1), undefined, undefined, undefined, undefined, effectiveReadOptions);
       const suffix = footnotes.length ? (rewritten.endsWith("\n\n") ? "" : rewritten.endsWith("\n") ? "\n" : "\n\n") + footnotes.join("\n") + "\n" : "";
       return parts.prefix + rewritten + suffix;
     }
