@@ -1858,14 +1858,14 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-time-allday-cell.is-today { background: color-mix(in srgb, var(--zn-accent) 7%, transparent); }
 .zentral-notes-sheet .zn-cal-time-allday-cell .zn-cal-item { padding: 2px 3px; font-size: .66em; }
 .zentral-notes-sheet .zn-cal-time-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-gutter: stable; scrollbar-width: thin; }
-.zentral-notes-sheet .zn-cal-time-grid-row { min-height: calc(24 * 54px); align-items: stretch; grid-template-columns: 42px minmax(0, 1fr); }
+.zentral-notes-sheet .zn-cal-time-grid-row { min-height: calc(24 * var(--zn-cal-hour-height, 54px)); align-items: stretch; grid-template-columns: 42px minmax(0, 1fr); }
 .zentral-notes-sheet .zn-cal-hour-gutter { display: flex; flex-direction: column; padding-top: 2px; }
-.zentral-notes-sheet .zn-cal-hour-label { box-sizing: border-box; height: 54px; padding: 0 3px 0 0; transform: translateY(-.45em); color: var(--zn-muted); font-size: .62em; font-variant-numeric: tabular-nums; text-align: right; }
+.zentral-notes-sheet .zn-cal-hour-label { box-sizing: border-box; height: var(--zn-cal-hour-height, 54px); flex: 0 0 var(--zn-cal-hour-height, 54px); padding: 0 3px 0 0; transform: translateY(-.45em); color: var(--zn-muted); font-size: .62em; font-variant-numeric: tabular-nums; text-align: right; }
 .zentral-notes-sheet .zn-cal-hour-label:first-child { transform: none; }
 .zentral-notes-sheet .zn-cal-time-columns { grid-column: 2 / -1; display: grid; min-width: 0; width: 100%; }
 .zentral-notes-sheet .zn-cal-time-column { min-width: 0; border-left: 1px solid var(--zn-line); }
 .zentral-notes-sheet .zn-cal-time-column.is-today { background: color-mix(in srgb, var(--zn-accent) 5%, transparent); }
-.zentral-notes-sheet .zn-cal-time-track { position: relative; min-width: 0; background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(54px - 1px), var(--zn-line) calc(54px - 1px), var(--zn-line) 54px); }
+.zentral-notes-sheet .zn-cal-time-track { position: relative; min-width: 0; background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--zn-cal-hour-height, 54px) - 1px), var(--zn-line) calc(var(--zn-cal-hour-height, 54px) - 1px), var(--zn-line) var(--zn-cal-hour-height, 54px)); }
 .zentral-notes-sheet .zn-cal-time-hour-line { position: absolute; right: 0; left: 0; height: 1px; border-top: 1px solid color-mix(in srgb, var(--zn-line) 55%, transparent); pointer-events: none; }
 .zentral-notes-sheet .zn-cal-now-line { position: absolute; z-index: 5; left: 0; right: 0; height: 2px; background: #ff5b5b; pointer-events: none; }
 .zentral-notes-sheet .zn-cal-now-dot { position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: #ff5b5b; }
@@ -1923,6 +1923,31 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
   .zentral-notes-sheet .zn-cal-agenda-row { grid-template-columns: minmax(0, 1fr); gap: 1px; }
 }
 
+/* Density is independent from the narrow-month list fallback. Keep labels readable and
+   timed geometry in sync with the same hour-height variable used by the renderer. */
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-month-grid { grid-template-rows: repeat(6, minmax(52px, 1fr)); }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-month-cell { min-height: 52px; padding: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-month-mark { font-size: .63em; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-month-date { font-size: .8em; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-day-head strong { font-size: .88em; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-day-group { margin-bottom: 5px; padding: 5px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-day-items { gap: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-item:not(.zn-cal-time-event):not(.zn-cal-time-reminder) { padding: 3px 5px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-agenda-row { margin-bottom: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-month-grid { grid-template-rows: repeat(6, minmax(44px, 1fr)); gap: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-month-cell { min-height: 44px; gap: 1px; padding: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-month-mark { font-size: .61em; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-month-date { font-size: .78em; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-day-head strong { font-size: .84em; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-day-group { margin-bottom: 3px; padding: 3px 4px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-day-head { margin-bottom: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-all-day-strip { margin: 2px 0; padding: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-day-items { gap: 1px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-item:not(.zn-cal-time-event):not(.zn-cal-time-reminder) { gap: 2px 5px; padding: 2px 4px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-agenda-row { gap: 2px; margin-bottom: 1px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-agenda-date { padding: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-time-day-head { padding: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-time-allday-cell { min-height: 18px; padding: 1px; }
 .zentral-notes-sheet .zn-cal-month-cell.is-today { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--zn-accent) 60%, transparent); }
 
 /* Foreign front matter (T1.5): tags and aliases of other apps as a pill row above the read view */

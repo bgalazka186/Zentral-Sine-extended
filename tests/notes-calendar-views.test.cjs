@@ -19,6 +19,11 @@ for (const selector of ["zn-cal-time-head", "zn-cal-time-allday-row", "zn-cal-ti
 const dom = require("./helpers/fake-dom.cjs")();
 const { El, Ev, document, raf } = dom;
 const cal = require("../additional/notes/calendar/ZentralNotesCalendar.js");
+assert.equal(cal.cleanCalendarDensity("invalid"), "comfortable");
+assert.deepEqual(["comfortable", "compact", "extra-compact"].map(cal.calendarDensityHourHeight), [54, 44, 36]);
+assert.match(css, /data-density="compact"/);
+assert.match(css, /data-density="extra-compact"/);
+assert.match(css, /height:\s*var\(--zn-cal-hour-height/);
 const win = { __zentralNotesParts: { "notes-calendar": cal }, document, ZentralRuntime: { register() {} }, __zentralNotesTestSeam: {}, requestAnimationFrame: (fn) => raf.push(fn), cancelAnimationFrame() {}, setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {} };
 win.window = win;
 vm.runInNewContext(source, { window: win, document, Event: Ev, globalThis: { Services: {} }, ChromeUtils: {}, console, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, setTimeout, clearTimeout, queueMicrotask, navigator: { platform: "Linux" } });
@@ -105,6 +110,23 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(store.meta.calendarView, "day"); assert.equal(store.meta.calendarCursor, ymd);
   await chooseMenu(root, ".zn-calendar-view-select", "Month");
 
+  assert.equal(content.dataset.density, "comfortable");
+  await chooseMenu(root, ".zn-calendar-density-select", "Compact");
+  assert.equal(store.meta.calendarDensity, "compact");
+  assert.equal(content.dataset.density, "compact");
+  await chooseMenu(root, ".zn-calendar-view-select", "Week");
+  assert.equal(q(root, ".zn-cal-time-track").style.height, `${24 * 44}px`);
+  assert.equal(content.style.getPropertyValue("--zn-cal-hour-height"), "44px");
+  await chooseMenu(root, ".zn-calendar-density-select", "Extra compact");
+  assert.equal(q(root, ".zn-cal-time-track").style.height, `${24 * 36}px`);
+  await chooseMenu(root, ".zn-calendar-view-select", "Day");
+  assert.equal(q(root, ".zn-cal-time-track").style.height, `${24 * 36}px`);
+  await chooseMenu(root, ".zn-calendar-view-select", "Next days");
+  assert.equal(content.dataset.density, "extra-compact");
+  await chooseMenu(root, ".zn-calendar-view-select", "Agenda");
+  assert.equal(content.dataset.density, "extra-compact");
+  await chooseMenu(root, ".zn-calendar-density-select", "Comfortable");
+  await chooseMenu(root, ".zn-calendar-view-select", "Month");
   assert.equal(q(root, ".zn-calendar-view-select").dataset.value, "month");
   assert.equal(content.dataset.view, "month");
   assert.equal(root.querySelectorAll(".zn-cal-month-cell").length, 42, "month view renders six Monday-first weeks");
@@ -194,6 +216,10 @@ const chooseMenu = async (root, triggerSelector, label) => {
   await chooseMenu(root, ".zn-calendar-view-select", "Month");
   assert.equal(content.dataset.compact, "true", "narrow calendar uses compact list fallback");
   assert.ok(q(root, ".zn-cal-compact-list"), "compact month list is rendered instead of a squeezed 7-column grid");
+  await chooseMenu(root, ".zn-calendar-density-select", "Extra compact");
+  assert.ok(q(root, ".zn-cal-compact-list"), "density selection preserves the narrow-pane fallback");
+  assert.equal(content.dataset.density, "extra-compact");
+  await chooseMenu(root, ".zn-calendar-density-select", "Comfortable");
 
   // The calendar display zone is selected by the user and controls work/busy/Now wall-clock geometry.
   await chooseMenu(root, ".zn-calendar-tools", "Display time zone: Local");
@@ -243,6 +269,14 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.match(zoneTrack.querySelector(".zn-cal-off-hours")?.getAttribute("style") || "", /height:540px/, "10:00 work-hour start is positioned in Europe/Warsaw wall time");
   const zoneBusy = zoneTrack.querySelectorAll(".zn-cal-busy-range").find((span) => Math.abs(parseFloat(/top:([^;]+)/.exec(span.getAttribute("style") || "")?.[1]) - 11.5 * 54) < 1);
   assert.ok(zoneBusy, "busy-range shading starts at 11:30 in the selected display zone");
+  await chooseMenu(root, ".zn-calendar-density-select", "Extra compact");
+  const compactTrack = root.querySelectorAll(".zn-cal-time-track").find((track) => track.getAttribute("data-day") === zoneKey);
+  assert.equal(compactTrack.style.height, `${24 * 36}px`);
+  const compactBusy = compactTrack.querySelectorAll(".zn-cal-busy-range").find((span) => Math.abs(parseFloat(/top:([^;]+)/.exec(span.getAttribute("style") || "")?.[1]) - 11.5 * 36) < 1);
+  assert.ok(compactBusy, "busy shading stays aligned with the resized hour scale");
+  const compactEvent = compactTrack.querySelectorAll(".zn-cal-time-event").find((el) => el.textContent.includes("Display-zone busy"));
+  assert.equal(parseFloat(compactEvent.style.top), 11.5 * 36, "event and hour positions share the density scale");
+  await chooseMenu(root, ".zn-calendar-density-select", "Comfortable");
   const overlapButtons = root.querySelectorAll(".zn-cal-time-event").filter((el) => /Project review|Design review/.test(el.textContent));
   assert.equal(overlapButtons.length, 2, "both overlapping events render");
   assert.ok(overlapButtons.every((el) => el.style.width === "50%"), "overlapping events get side-by-side 50% lanes");
@@ -306,13 +340,20 @@ const chooseMenu = async (root, triggerSelector, label) => {
   await chooseMenu(root, ".zn-calendar-view-select", "Agenda");
 
   // Reopen a new sheet with the same store to verify view, filters and N-day setting are durable.
+  await chooseMenu(root, ".zn-calendar-density-select", "Extra compact");
   await store.flush();
   const restored = c.createStore({ io, notify() {}, windowId: "cal-views-reopen", getDir: async () => "/views", getMaxSaveMs: () => 1000, setTimer: setTimeout, clearTimer: clearTimeout });
   await restored.open();
   assert.equal(restored.meta.calendarView, "agenda");
+  assert.equal(restored.meta.calendarDensity, "extra-compact", "density survives store reopening");
   assert.equal(restored.meta.calendarDaysForward, 14);
   assert.equal(restored.meta.calendarFilterKind, "all");
   assert.equal(restored.meta.calendarDisplayZone, "Europe/Warsaw", "selected display zone persists after reopening the store");
   sheet.destroy(); await restored.close(); await store.close();
+  files.set("/bad-density/meta.json", { text: JSON.stringify({ calendarDensity: "gigantic" }), mtime: Date.now() });
+  const invalid = c.createStore({ io, notify() {}, windowId: "invalid-density", getDir: async () => "/bad-density", getMaxSaveMs: () => 1000, setTimer: setTimeout, clearTimer: clearTimeout });
+  await invalid.open();
+  assert.equal(invalid.meta.calendarDensity, "comfortable", "invalid stored density falls back safely");
+  await invalid.close();
   console.log("calendar views UI tests passed");
 })().catch((error) => { console.error("FAIL", error); process.exit(1); });

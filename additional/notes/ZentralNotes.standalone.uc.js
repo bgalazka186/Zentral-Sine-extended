@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.107
+// @version 3.3.108
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.107, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.108, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.107";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.108";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2712,6 +2712,9 @@ const __zentralEmbeddedLoader = (function () {
   // ---------- calendar view layout (roadmap T2.4a) ----------
   // Keep the orientation decision pure so the sheet can react to its actual available rectangle (not the
   // browser window alone), and the threshold behavior can be regression-tested without Gecko layout.
+  const CALENDAR_DENSITIES = Object.freeze(["comfortable", "compact", "extra-compact"]);
+  function cleanCalendarDensity(value) { return CALENDAR_DENSITIES.includes(value) ? value : "comfortable"; }
+  function calendarDensityHourHeight(value) { return ({ comfortable: 54, compact: 44, "extra-compact": 36 })[cleanCalendarDensity(value)]; }
   const CALENDAR_LAYOUT_MODES = Object.freeze(["auto", "lr", "tb"]);
   function cleanCalendarLayout(value) { return CALENDAR_LAYOUT_MODES.includes(value) ? value : "auto"; }
   function calendarLayoutFor(mode, width, height) {
@@ -3822,7 +3825,7 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -9808,7 +9811,7 @@ __zentralShim.register = function (def) {
       const backedUp = new Set();
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, cardDock: "", cardW: 0,
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
-        calendarView: "month", calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "",
+        calendarView: "month", calendarDensity: "comfortable", calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "",
         calendarAlertSettings: CALENDAR_PART ? CALENDAR_PART.cleanAlertSettings(null) : {}, calendarNoteAlertOverrides: {},
         calendarAgendaDefaults: {}, calendarNoteAgendaOverrides: {} };
       let meta = { ...DEFAULT_META };
@@ -9962,6 +9965,7 @@ __zentralShim.register = function (def) {
             if (meta.calendarTreeCollapsed && meta.calendarPaneCollapsed) meta.calendarTreeCollapsed = meta.calendarPaneCollapsed = false;
             meta.calendarTab = raw.calendarTab === "calendar" ? "calendar" : "tree";
             meta.calendarView = ["month", "upcoming", "agenda", "week", "day"].includes(raw.calendarView) ? raw.calendarView : "month";
+            meta.calendarDensity = CALENDAR_PART.cleanCalendarDensity(raw.calendarDensity);
             const daysForward = Number(raw.calendarDaysForward);
             meta.calendarDaysForward = [3, 7, 14, 30].includes(daysForward) ? daysForward : 7;
             meta.calendarFilterKind = ["all", "event", "reminder"].includes(raw.calendarFilterKind) ? raw.calendarFilterKind : "all";
@@ -14046,6 +14050,7 @@ __zentralShim.register = function (def) {
       // Zen can close a panel when a native <select> opens its platform popup. Calendar controls therefore use
       // the same accessible in-sheet menu as the rest of Notes; the selectors remain buttons, never native selects.
       const calendarViewSelect = h("button", { type: "button", class: "zn-chip zn-calendar-view-select", "aria-label": "Calendar view", "aria-haspopup": "menu" }, "Month");
+      const calendarDensitySelect = h("button", { type: "button", class: "zn-chip zn-calendar-density-select", "aria-label": "Calendar density", "aria-haspopup": "menu" }, "Comfortable");
       const calendarPrev = h("button", { type: "button", class: "zn-chip zn-calendar-nav", "aria-label": "Previous period", title: "Previous period" }, "‹");
       const calendarToday = h("button", { type: "button", class: "zn-chip zn-calendar-today", title: "Go to today" }, "Go to today");
       const calendarNext = h("button", { type: "button", class: "zn-chip zn-calendar-nav", "aria-label": "Next period", title: "Next period" }, "›");
@@ -14053,7 +14058,7 @@ __zentralShim.register = function (def) {
       const calendarKindSelect = h("button", { type: "button", class: "zn-chip zn-calendar-kind-filter", "aria-label": "Filter item type", "aria-haspopup": "menu" }, "All items");
       const calendarCategorySelect = h("button", { type: "button", class: "zn-chip zn-calendar-category-filter", "aria-label": "Filter category", "aria-haspopup": "menu" }, "All categories");
       const calendarToolsSelect = h("button", { type: "button", class: "zn-chip zn-calendar-tools", "aria-label": "Calendar tools", "aria-haspopup": "menu" }, "Tools");
-      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarPrev, calendarToday, calendarNext, calendarViewSelect, calendarDaysSelect, calendarKindSelect, calendarCategorySelect, calendarToolsSelect);
+      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarPrev, calendarToday, calendarNext, calendarViewSelect, calendarDensitySelect, calendarDaysSelect, calendarKindSelect, calendarCategorySelect, calendarToolsSelect);
       const calendarContent = h("div", { class: "zn-calendar-pane-content zn-calendar-view", role: "region", "aria-label": "Calendar items" });
       const calendarPane = h("section", { class: "zn-calendar-pane", "aria-label": "Calendar" }, calendarHeader, calendarControls, calendarContent);
       const allSplitter = h("div", { class: "zn-calendar-splitter", role: "separator", tabindex: "0", "aria-label": "Resize folder tree and calendar panes", "aria-orientation": "vertical", "aria-valuemin": "20", "aria-valuemax": "80", "aria-valuenow": "36" });
@@ -15743,8 +15748,8 @@ __zentralShim.register = function (def) {
         calendarContent.dataset.compact = "true";
         calendarContent.append(list);
       }
-      const CALENDAR_HOUR_PX = 54;
       function calendarTimeGridView(items, cursor, mode) {
+        const CALENDAR_HOUR_PX = CALENDAR_PART.calendarDensityHourHeight(store.meta.calendarDensity);
         const C = CALENDAR_PART, zone = calendarDisplayZone(), days = mode === "week" ? C.weekDays(cursor, 1) : [C.dayStart(cursor)];
         const firstBounds = C.zonedDayBounds(C.localDateKey(days[0]), zone) || [days[0], C.addDays(days[0], 1)];
         const lastDay = days[days.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.addDays(lastDay, 1)];
@@ -16281,6 +16286,10 @@ __zentralShim.register = function (def) {
         const items = calendarFilteredItems();
         calendarContent.replaceChildren();
         calendarContent.dataset.view = view;
+        const density = CALENDAR_PART.cleanCalendarDensity(store.meta.calendarDensity);
+        calendarContent.dataset.density = density;
+        calendarContent.style.setProperty("--zn-cal-hour-height", CALENDAR_PART.calendarDensityHourHeight(density) + "px");
+        calendarDensitySelect.textContent = ({ comfortable: "Comfortable", compact: "Compact", "extra-compact": "Extra compact" })[density];
         const rect = calendarPane.getBoundingClientRect?.();
         const width = Math.max(0, Number(calendarPane.clientWidth) || Number(rect?.width) || 0);
         const compact = view === "month" && width > 0 && width < 470;
@@ -16305,6 +16314,9 @@ __zentralShim.register = function (def) {
       listen(calendarViewSelect, "click", () => calendarChoiceMenu(calendarViewSelect,
         [{ value: "month", label: "Month" }, { value: "upcoming", label: "Next days" }, { value: "agenda", label: "Agenda" }, { value: "week", label: "Week" }, { value: "day", label: "Day" }],
         store.meta.calendarView || "month", (value) => { store.setMeta({ calendarView: value }); renderCalendar(); }));
+      listen(calendarDensitySelect, "click", () => calendarChoiceMenu(calendarDensitySelect,
+        [{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" }, { value: "extra-compact", label: "Extra compact" }],
+        CALENDAR_PART.cleanCalendarDensity(store.meta.calendarDensity), (value) => { store.setMeta({ calendarDensity: value }); renderCalendar(); }));
       listen(calendarPrev, "click", () => changeCalendarCursor(-1));
       listen(calendarNext, "click", () => changeCalendarCursor(1));
       listen(calendarToday, "click", () => { store.setMeta({ calendarCursor: calendarTodayKey() }); renderCalendar(); });
