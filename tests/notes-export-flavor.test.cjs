@@ -144,4 +144,60 @@ assert.equal(convert('x ||before <!-->secret--> after||', { flavor: 'mixed' }), 
 assert.deepEqual(scan('%%secret%%', { flavor: 'mixed', ignore: '%%' }), ['hidden comment'], 'percent is not an escapable ignore literal in the reader');
 assert.deepEqual(scan('%%secret%%', { flavor: 'mixed', ignore: 'A31' }), []);
 assert.equal(convert('%%secret%%', { flavor: 'mixed', ignore: 'A31' }), '%%secret%%');
+const tasks = '- [/] In progress\n- [i] Info\n';
+assert.deepEqual(scan(tasks, { flavor: 'mixed' }), ['extended task']);
+assert.equal(convert(tasks, { flavor: 'mixed' }), '- [ ] (In progress) In progress\n- [ ] (Information) Info\n');
+assert.deepEqual(scan(tasks, { flavor: 'github' }), []);
+assert.equal(convert(tasks, { flavor: 'github' }), tasks);
+assert.equal(convert(tasks, { flavor: 'reddit' }), tasks);
+assert.equal(convert(tasks, { flavor: 'mixed', ignore: 'E09' }), '- [/] In progress\n- [ ] (Information) Info\n');
+assert.equal(convert(tasks, { flavor: 'mixed', ignore: 'E10' }), '- [ ] (In progress) In progress\n- [i] Info\n');
+assert.equal(convert(tasks, { flavor: 'mixed', ignore: 'E08' }), tasks);
+assert.equal(convert(tasks, { flavor: 'mixed', ignore: '[/]' }), '- [/] In progress\n- [ ] (Information) Info\n');
+assert.equal(convert(tasks, { flavor: 'mixed' }, { flavor: 'github' }), tasks);
+const escapedTask = String.raw`- \[\/] Not a task`;
+assert.deepEqual(scan(escapedTask, { flavor: 'mixed' }), []);
+assert.equal(convert(escapedTask, { flavor: 'mixed' }), escapedTask);
+const alerts = '> [!warning] Careful\n> Body\n';
+assert.deepEqual(scan(alerts, { flavor: 'mixed' }), ['callout']);
+assert.deepEqual(scan(alerts, { flavor: 'reddit' }), []);
+assert.equal(convert(alerts, { flavor: 'reddit' }), alerts);
+assert.equal(convert(alerts, { flavor: 'mixed', ignore: 'F08' }), alerts);
+assert.equal(convert(alerts, { flavor: 'mixed', ignore: '>[!warning]' }), alerts);
+assert.match(convert(alerts, { flavor: 'github' }), /^> \*\*WARNING\*\* — Careful/);
+const unknownCallout = '> [!custom] Title\n> Body\n';
+assert.deepEqual(scan(unknownCallout, { flavor: 'mixed' }), ['callout']);
+assert.equal(convert(unknownCallout, { flavor: 'github' }), unknownCallout);
+const containerByFlavor = '::: warning Title\nText\n:::\n';
+assert.deepEqual(scan(containerByFlavor, { flavor: 'github' }), []);
+assert.equal(convert(containerByFlavor, { flavor: 'github' }), containerByFlavor);
+assert.equal(convert(containerByFlavor, { flavor: 'mixed', ignore: 'O04' }), containerByFlavor);
+assert.equal(convert(containerByFlavor, { flavor: 'mixed', ignore: 'F08' }), containerByFlavor);
+const unknownContainer = '::: custom Title\nText\n:::\n';
+assert.deepEqual(scan(unknownContainer, { flavor: 'mixed' }), ['callout']);
+assert.match(convert(unknownContainer, { flavor: 'mixed' }), /^> \*\*CUSTOM\*\* — Title\n> Text/);
+assert.equal(convert(unknownContainer, { flavor: 'mixed', ignore: 'F24' }), unknownContainer);
+assert.equal(convert(alerts, { flavor: 'mixed' }, { flavor: 'reddit' }), alerts, 'note mode controls callouts');
+assert.deepEqual(scan(unknownCallout, { flavor: 'mixed', ignore: 'F24' }), []);
+assert.deepEqual(scan('> [!warning] text', { flavor: 'mixed', ignore: '[' }), []);
+assert.equal(convert('> [!warning]- text', { flavor: 'mixed', ignore: '-' }), '> [!warning]- text', 'an ignored fold marker is not silently removed');
+assert.deepEqual(scan('::: warning Title\nBody\n:::', { flavor: 'mixed', ignore: 'O04' }), []);
+const noPart = { __zentralNotesTestSeam: {}, ZentralRuntime: { register() {} } }; noPart.window = noPart;
+vm.runInNewContext(fs.readFileSync(require.resolve("../additional/notes/ZentralNotes.uc.js"), "utf8"), { window: noPart, globalThis: { Services: {} }, ChromeUtils: {}, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, console });
+assert.deepEqual(Array.from(noPart.__zentralNotesTestSeam.core.markdownExportWarnings(containerByFlavor)), [], 'missing flavor module does not make unsupported containers active');
+assert.equal(noPart.__zentralNotesTestSeam.core.portableMarkdownExportBody({ id: 'n1', body: containerByFlavor }, [], new Map(), []), containerByFlavor);
+for (const flavor of ['mixed', 'mixed+github', 'mixed+reddit', 'github', 'reddit', 'obsidian']) {
+  for (const kind of ['note', 'warning', 'info', 'summary', 'bingo', 'poll', 'custom']) {
+    const options = { flavor }, quote = `> [!${kind}]\n> body`, box = `::: ${kind}\nbody\n:::`;
+    const quoteActive = !!c.parseBlocks(quote, false, options)[0]?.callout;
+    const boxActive = !!c.parseBlocks(box, false, options)[0]?.callout;
+    assert.equal(scan(quote, options).includes('callout'), quoteActive, `${flavor} quote ${kind} matches reader`);
+    assert.equal(scan(box, options).includes('callout'), boxActive, `${flavor} container ${kind} matches reader`);
+  }
+  for (const status of ['/', '?', 'i', '>']) {
+    const options = { flavor }, line = `- [${status}] item`;
+    const active = c.parseBlocks(line, false, options)[0]?.items?.[0]?.status === status;
+    assert.equal(scan(line, options).includes('extended task'), active, `${flavor} task ${status} matches reader`);
+  }
+}
 console.log('Markdown export flavor tests passed');

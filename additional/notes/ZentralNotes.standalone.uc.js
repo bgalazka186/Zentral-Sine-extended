@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.85
+// @version 3.3.86
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.85, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.86, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.85";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.86";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11438,7 +11438,6 @@ __zentralShim.register = function (def) {
         },
       };
     }
-    const EXPORT_CONTAINER_TYPES = new Set(["details", "note", "tip", "important", "warning", "caution", "info", "abstract", "summary", "tldr", "todo", "success", "check", "done", "question", "help", "faq", "failure", "fail", "missing", "danger", "error", "bug", "example", "quote", "cite", "hint", "attention", "bingo", "poll"]);
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
     function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}) {
@@ -11492,7 +11491,11 @@ __zentralShim.register = function (def) {
         let line = lines[row];
         if (!comment && !fence) {
           const head = /^:::\s*([A-Za-z][\w-]*)[ \t]*(.*)$/.exec(line);
-          if (head && EXPORT_CONTAINER_TYPES.has(head[1].toLowerCase())) {
+          const type = head?.[1].toLowerCase() === "details" ? "note" : head?.[1];
+          const protectedAt = head ? exportProtectedPositions(line, mathOptions.literals) : null;
+          const typeAt = head ? line.indexOf(head[1]) : -1;
+          const protectedType = head && Array.from({ length: head[1].length }, (_, i) => protectedAt.has(typeAt + i)).some(Boolean);
+          if (head && !protectedType && mathOptions.gate.on("O04") && FLAVORS_PART?.calloutKind(type, mathOptions.gate)) {
             // Bound speculative lookahead; ignore fences and HTML comments
             // while finding the closing line. Nested containers are ambiguous.
             let end = row + 1, innerFence = null, innerComment = false, ambiguous = false;
@@ -11677,6 +11680,26 @@ __zentralShim.register = function (def) {
         return convert(raw, discord || reddit);
       });
     }
+    function mapExportCallout(segment, options, convert) {
+      const match = /^(>[ \t]*)\[!([A-Za-z][\w-]{0,30})\]([+-]?)[ \t]*(.*)$/.exec(segment);
+      if (!match) return segment;
+      const kind = match[2];
+      const known = FLAVORS_PART ? FLAVORS_PART.calloutKind(kind, options.gate) : /^(note|tip|important|warning|caution|info)$/i.test(kind);
+      if (!known) return segment;
+      const protectedAt = exportProtectedPositions(segment, options.literals);
+      const headerEnd = match[1].length + 3 + kind.length + match[3].length;
+      for (let i = 0; i < headerEnd; i++) if (protectedAt.has(i)) return segment;
+      return convert(match[0], match[1], kind, match[4]);
+    }
+    function mapExportTask(segment, options, convert) {
+      const match = /^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/.exec(segment);
+      if (!match || !Object.hasOwn(TASK_STATUS_NAMES, match[2])) return segment;
+      const gate = options.gate, status = match[2], start = match[1].length;
+      if (!gate.on("E08") || !gate.on(TASK_ORIGINAL.has(status) ? "E09" : "E10")) return segment;
+      const protectedAt = exportProtectedPositions(segment, options.literals);
+      if (protectedAt.has(start) || protectedAt.has(start + 1) || protectedAt.has(start + 2)) return segment;
+      return convert(match[0], match[1], status) + segment.slice(match[0].length);
+    }
     function mapExportScripts(segment, options, convert) {
       const gate = options.gate;
       if (!gate.on("A09") && !gate.on("A13") && !gate.on("A15") && !gate.on("A17")) return segment;
@@ -11717,14 +11740,13 @@ __zentralShim.register = function (def) {
           found.add(calendar ? "calendar" : "hidden comment"); return "";
         });
         if (TOC_TOKEN_RE.test(visible)) found.add("toc");
-        if (/^\s*>\s*\[![A-Za-z][\w-]*\][+-]?/.test(visible)) found.add("callout");
+        mapExportCallout(visible, scriptOptions, (raw) => { found.add("callout"); return raw; });
         if (/!\[\[[^\]\n]+\]\]/.test(visible)) found.add("transclusion");
         mapExportFormatting(visible, scriptOptions, (raw) => { found.add("formatting"); return raw; });
         mapExportSpoilers(context?.spoilerToken ? segment : visible, scriptOptions, (raw) => { found.add("spoiler"); return raw; }, context);
         mapExportScripts(visible, scriptOptions, (raw, kind) => { found.add(kind === "strike" ? "single-tilde strike" : "subscript / superscript"); return raw; });
         mapExportInlineFootnotes(visible, scriptOptions, (raw, kind) => { found.add(kind === "footnote" ? "inline footnote" : "subscript / superscript"); return raw; });
-        const task = /^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/.exec(visible);
-        if (task && Object.hasOwn(TASK_STATUS_NAMES, task[2])) found.add("extended task");
+        mapExportTask(visible, scriptOptions, (raw) => { found.add("extended task"); return raw; });
         return segment;
       }, undefined, undefined, (math) => { found.add("math"); return math; }, (container) => {
         found.add("callout"); return container.open + "\n" + container.inner + "\n" + container.close;
@@ -11752,8 +11774,8 @@ __zentralShim.register = function (def) {
           if (spoiler !== segment) return spoiler;
         }
         if (TOC_TOKEN_RE.test(segment)) return tocBlock(body);
-        segment = segment.replace(/^(\s*>\s*)\[!([A-Za-z][\w-]*)\][+-]?[ \t]*(.*)$/, (_, quote, kind, title) => quote + "**" + kind.toUpperCase() + "**" + (title ? " — " + title : ""));
-        segment = segment.replace(/^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/, (whole, prefix, status) => Object.hasOwn(TASK_STATUS_NAMES, status) ? prefix + "[ ] (" + TASK_STATUS_NAMES[status] + ")" : whole);
+        segment = mapExportCallout(segment, scriptOptions, (_raw, quote, kind, title) => quote + "**" + kind.toUpperCase() + "**" + (title ? " — " + title : ""));
+        segment = mapExportTask(segment, scriptOptions, (_raw, prefix, status) => prefix + "[ ] (" + TASK_STATUS_NAMES[status] + ")");
         segment = mapExportFormatting(segment, scriptOptions, (_raw, content) => "**" + content + "**");
         segment = mapExportScripts(segment, scriptOptions, (_raw, kind, content) => kind === "strike" ? "~~" + content + "~~" : "<" + kind + ">" + escHtml(content) + "</" + kind + ">");
         segment = segment.replace(/!\[\[([^\]\n]+)\]\]/g, (raw, target) => {

@@ -1,6 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
-const window = { __zentralNotesTestSeam: {}, ZentralRuntime: { register() {} } }; window.window = window;
+const window = { __zentralNotesTestSeam: {}, __zentralNotesParts: { "notes-flavors": require("../additional/notes/flavors/ZentralNotesFlavors.js") }, ZentralRuntime: { register() {} } }; window.window = window;
 vm.runInNewContext(fs.readFileSync(require.resolve("../additional/notes/ZentralNotes.uc.js"), "utf8"), { window, globalThis: { Services: {} }, ChromeUtils: {}, URL, Date, JSON, Math, Promise, RegExp, Number, Map, Set, console });
 const scan = window.__zentralNotesTestSeam.core.markdownExportWarnings;
 assert.equal(typeof scan, "function");
