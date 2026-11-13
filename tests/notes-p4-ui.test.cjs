@@ -39,6 +39,32 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
   const menuItem = (label) => q(".zn-menu").querySelectorAll("button").find((b) => b.textContent.startsWith(label));
   const openMore = () => { if (q(".zn-menu")) click(byTitle("More")); click(byTitle("More")); };
 
+  await test("T3.4 sidebar subfolder action validates parent identity before saving", async () => {
+    const parentId = store.addFolder("Sidebar parent");
+    const parent = store.meta.folders.find((folder) => folder.id === parentId);
+    assert.equal(typeof sheet.newSubfolder, "function");
+    assert.equal(sheet.newSubfolder(parent.id, parent.uid), true);
+    const dialog = q(".zn-dialog"), input = dialog.querySelector("input");
+    input.value = "Child";
+    click(dialog.querySelectorAll("button").find((button) => button.textContent === "Save"));
+    assert.ok(store.meta.folders.some((folder) => folder.id === parent.id + "/child"));
+    assert.equal(sheet.newSubfolder(parent.id, parent.uid), true);
+    const staleDialog = q(".zn-dialog"), staleInput = staleDialog.querySelector("input");
+    staleInput.value = "Orphan";
+    store.removeFolder(parent.id, "toRoot");
+    click(staleDialog.querySelectorAll("button").find((button) => button.textContent === "Save"));
+    assert.ok(!store.meta.folders.some((folder) => folder.id === parent.id + "/orphan"), "a removed parent is not recreated implicitly");
+    assert.equal(sheet.newSubfolder(parent.id, parent.uid), false);
+    const replacementId = store.addFolder("Sidebar parent");
+    assert.equal(replacementId, parentId);
+    assert.equal(sheet.newSubfolder(replacementId, parent.uid), false, "a replacement folder with the same path is not the old folder");
+    assert.equal(sheet.newSubfolder("a/b/c/d", "stale"), false);
+    assert.equal(sheet.newSubfolder("", ""), true, "the all-notes root creates a top-level folder");
+    const rootDialog = q(".zn-dialog"); rootDialog.querySelector("input").value = "Top level child";
+    click(rootDialog.querySelectorAll("button").find((button) => button.textContent === "Save"));
+    assert.ok(store.meta.folders.some((folder) => folder.id === "top-level-child"));
+  });
+
   await test("B3.3.50-9 opening a headingless item in read mode reveals its source line", async () => {
     const body = "# Long note\n\nIntro\n- [ ] Reminder %%zn-item-id:abcd1%%\nAfter\n";
     const previousMode = store.meta.mode, n = store.create(body);

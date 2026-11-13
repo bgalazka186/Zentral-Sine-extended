@@ -17050,6 +17050,20 @@
         newNote: (folderId) => {
           if (isOpen && !destroyed) newNote(folderId);
         },
+        newSubfolder: (parentId = "", parentUid = "") => {
+          if (!isOpen || destroyed) return false;
+          const parent = parentId ? store.meta.folders.find((folder) => folder.id === parentId && folder.uid === parentUid) : null;
+          if (parentId && !parent || folderDepth(parentId) >= FOLDER_MAX_DEPTH) return false;
+          askFolderName("New subfolder", "", (name) => {
+            // A sidebar menu may outlive a move, deletion, or a different
+            // folder created at the old path. Resolve the stable uid again.
+            const current = parent ? store.meta.folders.find((folder) => folder.uid === parentUid) : null;
+            if (parent && !current) { flash("Parent folder no longer exists"); return; }
+            if (current && folderDepth(current.id) >= FOLDER_MAX_DEPTH) { flash("Cannot create folder (too deep)"); return; }
+            if (!store.addFolder(name, current?.id || "")) flash("Cannot create folder (too deep or folder limit reached)");
+          });
+          return true;
+        },
         quickCaptureToday: () => {
           if (isOpen && !destroyed) queueMicrotask(() => askQuickCapture(""));
         },
@@ -19167,6 +19181,24 @@
         item.setAttribute("zentral-notes-folder-own", "new");
         item.addEventListener("command", () => { store.create("", isRoot ? (zenMode() === "selected" ? TABBAR_FOLDER : "") : meta.id); });
         menu.append(item);
+        const menuMode = zenMode();
+        const parentId = isRoot ? (menuMode === "selected" ? TABBAR_FOLDER : "") : meta.id;
+        if (folderDepth(parentId) < FOLDER_MAX_DEPTH) {
+          const sub = document.createXULElement("menuitem");
+          sub.setAttribute("label", "New subfolder…");
+          sub.setAttribute("zentral-notes-folder-own", "subfolder");
+          const uid = meta?.uid || "";
+          sub.addEventListener("command", () => {
+            showNotes("").then((handle) => {
+              if (disposed || zen.dead || zenMode() === "off" || isRoot && zenMode() !== menuMode) return;
+              if (isRoot && parentId === TABBAR_FOLDER) store.ensureTabbarFolder();
+              const current = isRoot ? store.meta.folders.find((folder) => folder.id === parentId) : store.meta.folders.find((folder) => folder.uid === uid);
+              if (!isRoot && !current) return;
+              sheetOf(handle)?.newSubfolder?.(isRoot ? parentId : current.id, current?.uid || "");
+            }).catch(warn);
+          });
+          menu.append(sub);
+        }
       };
       const onTabMenuHidden = (ev) => {
         if (ev.target?.id === "tabContextMenu") { document.documentElement.removeAttribute("zentral-notes-ctx"); zenCtxTab = null; }
