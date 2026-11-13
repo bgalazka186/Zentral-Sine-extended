@@ -1,6 +1,6 @@
 # additional/video/content
 
-Owner and local file guide for Extended 3.3.50. Original Zentral reference: 1.1.0.
+Owner and local file guide for Extended 3.3.113. Original Zentral reference: 1.1.0.
 
 | File                        | Responsibility                                                                              |
 | --------------------------- | ------------------------------------------------------------------------------------------- |

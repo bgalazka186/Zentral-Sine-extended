@@ -763,6 +763,8 @@ test("T1.8 table of contents block: insert under the title or at the end, nested
   const tok = c.updateToc("# T\n\n[TOC]\n\n## A\n## B\n").body;
   assert.ok(tok.includes("## Table of Contents\n\n1. [A](#a)\n2. [B](#b)") && !/\[TOC\]/.test(tok));
   assert.ok(c.updateToc("```\n[TOC]\n```\n## A\n").body.includes("[TOC]"));
+  for (const marker of ["[[TOC]", "[TOC]]"]) assert.equal(c.updateToc(marker + "\n## A").changed, false, "unbalanced markers are not ToCs");
+  assert.ok(c.updateToc("# T\n[[TOC]]\n## A").body.includes("## Table of Contents"));
   // Two levels jump nests one step; a note without headings says so.
   assert.ok(c.tocList("## A\n#### Deep\n").includes("   1. [Deep](#deep)"));
   assert.ok(c.tocBlock("plain").includes("_No headings yet._"));

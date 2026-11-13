@@ -4901,9 +4901,98 @@
       if (!recurring && !calendarItem.start?.date) {
         actions.push({ id: "snooze-10", label: "Snooze 10 min", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, 10)) });
         actions.push({ id: "snooze-60", label: "Snooze 1 hour", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, 60)) });
+        actions.push({ id: "snooze-tomorrow", label: "Tomorrow", callback: guard(() => store.snoozeCalendarReminder(calendarItem.id, CALENDAR_PART.reminderSnoozeTomorrowMinutes(Date.now()))) });
       }
       actions.push({ id: "dismiss", label: "Dismiss", callback: guard(() => store.applyReminderLifecycle(calendarItem, "dismissed")) });
       return actions;
+    }
+    // One manual top-layer stack, with a single delegated listener. All strings
+    // come from textContent; the caller owns the scope and the teardown.
+    function createReminderAlertStack({ document, history, listen, warn = () => {} }) {
+      const cards = new Map();
+      let host = null, stopClick = null, stopped = false;
+      const html = (tag, cls, text) => {
+        const el = document.createElementNS("http://www.w3.org/1999/xhtml", tag);
+        if (cls) el.setAttribute("class", cls);
+        if (text !== undefined) el.textContent = String(text);
+        return el;
+      };
+      const close = (key) => {
+        const card = cards.get(key); if (!card) return;
+        cards.delete(key); card.node.remove();
+        if (!cards.size && host) {
+          try { host.hidePopover?.(); } catch (_) {}
+          host.hidden = true;
+        }
+      };
+      const onHistory = () => {
+        if (stopped) return;
+        for (const [key, card] of [...cards]) {
+          const records = history?.list?.({ itemId: card.identity.itemId, occurrenceId: card.identity.occurrenceId }) || [];
+          if (CALENDAR_PART.reminderAlertShouldClose(card.identity, records, card.seen)) close(key);
+        }
+      };
+      const offHistory = history?.on?.(onHistory);
+      function ensureHost() {
+        if (host) return host;
+        host = html("div", "zn-reminder-stack");
+        host.setAttribute("popover", "manual");
+        host.setAttribute("aria-label", "Reminder alerts");
+        host.setAttribute("role", "region");
+        host.hidden = true;
+        (document.body || document.documentElement).append(host);
+        stopClick = listen(host, "click", (event) => {
+          const button = event.target?.closest?.("button[data-action]");
+          const node = button?.closest?.(".zn-reminder-card");
+          const key = node?.getAttribute("data-key"), card = cards.get(key);
+          if (!card || !button) return;
+          event.preventDefault(); event.stopPropagation();
+          const action = button.getAttribute("data-action");
+          if (action === "close") { close(key); return; }
+          const callback = card.actions.get(action);
+          if (!callback) return;
+          try { if (callback() !== false) close(key); } catch (error) { warn(error); }
+        });
+        return host;
+      }
+      return {
+        show({ identity, title, stage, actions = [] }) {
+          if (stopped || !identity?.itemId || !identity?.occurrenceId) return false;
+          if (["done", "dismissed"].includes(history?.stateFor?.(identity.itemId, identity.occurrenceId))) return false;
+          const presentation = CALENDAR_PART.reminderAlertPresentation(stage);
+          const key = JSON.stringify([identity.itemId, identity.occurrenceId]);
+          const existing = cards.get(key);
+          if (existing && existing.rank > presentation.rank) return true;
+          if (existing) close(key);
+          const parent = ensureHost(), node = html("section", "zn-reminder-card");
+          node.setAttribute("data-key", key);
+          node.setAttribute("data-stage", presentation.stage);
+          node.setAttribute("role", presentation.stage === "followup" ? "alert" : "status");
+          node.append(html("div", "zn-reminder-stage", presentation.label));
+          node.append(html("div", "zn-reminder-title", title || "Untitled reminder"));
+          const row = html("div", "zn-reminder-actions"), callbacks = new Map();
+          for (const action of actions) {
+            if (!action?.id || typeof action.callback !== "function") continue;
+            const button = html("button", "", action.label);
+            button.setAttribute("type", "button"); button.setAttribute("data-action", action.id);
+            callbacks.set(action.id, action.callback); row.append(button);
+          }
+          const closeButton = html("button", "zn-reminder-close", "Close");
+          closeButton.setAttribute("type", "button"); closeButton.setAttribute("data-action", "close");
+          row.append(closeButton); node.append(row);
+          const records = history?.list?.({ itemId: identity.itemId, occurrenceId: identity.occurrenceId }) || [];
+          cards.set(key, { identity: { ...identity }, node, actions: callbacks, rank: presentation.rank, seen: new Set(records.map((record) => record.id)) });
+          parent.append(node); parent.hidden = false;
+          try { if (typeof parent.showPopover === "function") { if (!parent.matches(":popover-open")) parent.showPopover(); } else parent.removeAttribute("popover"); } catch (_) { parent.removeAttribute("popover"); }
+          return true;
+        },
+        destroy() {
+          if (stopped) return;
+          stopped = true; offHistory?.(); stopClick?.(); cards.clear();
+          try { host?.hidePopover?.(); } catch (_) {}
+          host?.remove(); host = null;
+        },
+      };
     }
     // One timer, armed for the next future reminder. `onDue(notes)` receives every overdue, unannounced
     // reminder as one batch AFTER the store has recorded them as announced (claim), so nothing repeats.
@@ -5340,7 +5429,7 @@
       const backedUp = new Set();
       const DEFAULT_META = { lastNoteId: "", size: "peek", mode: "edit", highlight: "yellow", syncScroll: true, pinned: true, dock: "", hideTrigger: "leave", hideOverlay: false, geo: {}, recent: [], folders: [], openIn: "", shareDock: 0, shareGap: 0, cardDock: "", cardW: 0,
         calendarLayout: "auto", calendarSplitLR: 0.36, calendarSplitTB: 0.42, calendarTreeCollapsed: false, calendarPaneCollapsed: false, calendarTab: "tree",
-        calendarView: "month", calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "",
+        calendarView: "month", calendarDensity: "comfortable", calendarSnap: 15, calendarDaysForward: 7, calendarFilterKind: "all", calendarFilterCategory: "", calendarCursor: "", calendarDisplayZone: "",
         calendarAlertSettings: CALENDAR_PART ? CALENDAR_PART.cleanAlertSettings(null) : {}, calendarNoteAlertOverrides: {},
         calendarAgendaDefaults: {}, calendarNoteAgendaOverrides: {} };
       let meta = { ...DEFAULT_META };
@@ -5355,7 +5444,7 @@
       // refresh ignore it). Items written as marked lists inside a note are rebuilt from the note text; a note in Trash or
       // with a missing file only HIDES its items (restoring it brings dragged times and calendar notes back); a note that is
       // deleted for good removes them. Every call is guarded: the calendar must never break saving a note.
-      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn }) : null;
+      const items = CALENDAR_PART ? CALENDAR_PART.createItemStore({ io, getDir: () => dir, now, setTimer, clearTimer, warn, onHistoryWrite: (historyDir) => { if (!closed) notify({ origin: windowId, kind: "reminder-history", dir: historyDir }); } }) : null;
       function syncItems(id, stabilize = false, sourceEdit = false) {
         if (!items) return;
         try {
@@ -5494,6 +5583,8 @@
             if (meta.calendarTreeCollapsed && meta.calendarPaneCollapsed) meta.calendarTreeCollapsed = meta.calendarPaneCollapsed = false;
             meta.calendarTab = raw.calendarTab === "calendar" ? "calendar" : "tree";
             meta.calendarView = ["month", "upcoming", "agenda", "week", "day"].includes(raw.calendarView) ? raw.calendarView : "month";
+            meta.calendarDensity = CALENDAR_PART.cleanCalendarDensity(raw.calendarDensity);
+            meta.calendarSnap = CALENDAR_PART.cleanCalendarSnap(raw.calendarSnap);
             const daysForward = Number(raw.calendarDaysForward);
             meta.calendarDaysForward = [3, 7, 14, 30].includes(daysForward) ? daysForward : 7;
             meta.calendarFilterKind = ["all", "event", "reminder"].includes(raw.calendarFilterKind) ? raw.calendarFilterKind : "all";
@@ -5774,7 +5865,7 @@
           if (cleanFolder(note.folder) !== DATE_FOLDER) continue;
           // Protect all user metadata and attachments, not just the fields understood by the pure predicate.
           if (note.remind || note.reminded || note.label || note.pinned || note.flavor || (note.color && note.color !== "none")) continue;
-          if (noteTags(note).length || assetRefs(note.body || "", note.id).length) continue;
+          if (noteTags(note).length || assetRefs(note.body || "", note.id).size) continue;
           if ((Array.isArray(note.files) && note.files.length) || (Array.isArray(note.attachments) && note.attachments.length)) continue;
           const key = dateOfNote(note);
           if (!key || key >= todayKey || protectedDates.has(key) || !CALENDAR_PART.isBlankDateNote(note, key)) continue;
@@ -6630,6 +6721,10 @@
             return;
           }
           if (!msg || msg.origin === windowId || !dir) return;
+          if (msg.kind === "reminder-history") {
+            if (msg.dir === dir) items?.history?.refresh?.().catch(warn);
+            return;
+          }
           if (typeof msg.id !== "string" || !/^[\w.-]+$/.test(msg.id)) return;
           reloadFromDisk(msg.id).catch(warn);
         },
@@ -6896,7 +6991,7 @@
     // headingsOf (ASCII, accents folded), so non-Latin headings may not match GitHub's own slugs.
     const TOC_TITLE = "Table of Contents";
     const TOC_HEAD_RE = /^ {0,3}##\s+table of contents\s*#*\s*$/i;
-    const TOC_TOKEN_RE = /^ {0,3}\[\[?TOC\]?\]\s*$/i;
+    const TOC_TOKEN_RE = /^ {0,3}(?:\[TOC\]|\[\[TOC\]\])[ \t\r]*$/i;
     const TOC_ITEM_RE = /^\s*(?:\d+[.)]|[-*+])\s+\[.*\]\(#[^)\s]*\)\s*$/;
     const isDivider = (l) => /^ {0,3}([-*_])(\s*\1){2,}\s*$/.test(l);
     // The list part only (no dividers, no heading): one line per heading, nested by level, real numbers.
@@ -6955,6 +7050,655 @@
         return { from, to };
       }
       return null;
+    }
+    // Isolate the front matter before scanning so code fences in YAML cannot
+    // affect Markdown parsing; preserve its original bytes and line endings.
+    function splitMarkdownExportFrontMatter(body) {
+      const text = String(body ?? ""), count = leadingFrontMatter(text)?.lines || 0;
+      if (!count) return { prefix: "", body: text };
+      let end = 0;
+      for (let i = 0; i < count; i++) {
+        const newline = text.indexOf("\n", end);
+        if (newline < 0) return { prefix: text, body: "" };
+        end = newline + 1;
+      }
+      return { prefix: text.slice(0, end), body: text.slice(end) };
+    }
+    // Index exact backtick runs by paragraph to avoid repeatedly scanning the
+    // rest of a large note when many code delimiters are unmatched.
+    function indexMarkdownCodeRuns(lines) {
+      const groups = [], byGroup = new Map();
+      let group = 0;
+      for (let row = 0; row < lines.length; row++) {
+        const line = String(lines[row] ?? "");
+        if (!line.trim() || nextMarkdownFence(line, null)) { groups.push(-1); group++; continue; }
+        groups.push(group);
+        for (const match of line.matchAll(/`+/g)) {
+          if (!byGroup.has(group)) byGroup.set(group, new Map());
+          const lengths = byGroup.get(group), length = match[0].length;
+          if (!lengths.has(length)) lengths.set(length, []);
+          lengths.get(length).push({ row, pos: match.index });
+        }
+      }
+      return {
+        next(row, length) {
+          const entries = byGroup.get(groups[row])?.get(length);
+          if (!entries) return null;
+          let low = 0, high = entries.length;
+          while (low < high) { const mid = (low + high) >>> 1; if (entries[mid].row <= row) low = mid + 1; else high = mid; }
+          return entries[low] || null;
+        },
+      };
+    }
+    // Apply transformations only outside fenced code, inline code and HTML
+    // comments. Comment state spans lines and fences inside a comment are inert.
+    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close, mapSmallPrint = (prefix) => prefix, readOptions = {}, onMathFence = () => {}, mapBlockId = (marker) => marker, onAmbiguousBlockId = () => {}, mapComment = (comment) => comment, onAmbiguousContainer = () => {}, onAmbiguousCallout = () => {}) {
+      const lines = String(text).split("\n"), result = [], codeRuns = indexMarkdownCodeRuns(lines);
+      const mathOptions = exportScriptOptions(readOptions);
+      const hasProtectedDollar = (line) => {
+        const protectedAt = exportProtectedPositions(line, mathOptions.literals);
+        for (let i = 0; i < line.length; i++) if (line[i] === "$" && protectedAt.has(i)) return true;
+        return false;
+      };
+      // O01 only starts a block where the Notes parser actually recognizes it;
+      // the same characters inside a running paragraph are ordinary text.
+      const smallRows = new Set(), mathFenceRows = new Set(), blockIdRows = new Map(), calloutRows = new Set();
+      const quoteHeader = /^((?:>[ \t]*)+)\[!([A-Za-z][\w-]{0,30})\]/;
+      const isMathFence = (line) => /^ {0,3}(?:`{3,}|~{3,})[ \t]*math(?:[ \t{]|$)/i.test(line || "");
+      const lineId = (row) => trailingBlockId((lines[row] || "").replace(/\r$/, ""));
+      if (lines.some((line) => /^-#[ \t]+\S/.test(line) || isMathFence(line) || trailingBlockId(line.replace(/\r$/, "")) || quoteHeader.test(line))) {
+        const blocks = parseBlocks(text, false, readOptions).filter((block) => Number.isInteger(block.src));
+        // Treat HTML comments as inert while locating callouts, matching the
+        // export scanner (a fence inside a comment must not swallow later rows).
+        if (lines.some((line) => quoteHeader.test(line))) {
+          const sanitized = text.replace(/<!--[\s\S]*?(?:-->|$)/g, (comment) => comment.replace(/[^\r\n]/g, " "));
+          const quoteBlocks = sanitized === text ? blocks : parseBlocks(sanitized, false, readOptions).filter((block) => Number.isInteger(block.src));
+          const quoteLines = sanitized === text ? lines : sanitized.split("\n");
+          quoteBlocks.forEach((block, index) => {
+            const end = quoteBlocks[index + 1]?.src ?? lines.length;
+            if (block.type === "quote" && /^>/.test(quoteLines[block.src])) {
+              const counts = new Map(), candidates = new Map();
+              const collectCallouts = (node, depth) => {
+                if (node?.type === "quote") {
+                  if (node.callout) {
+                    const key = depth + ":" + node.callout.kind;
+                    counts.set(key, (counts.get(key) || 0) + 1);
+                  }
+                  for (const child of node.blocks || []) collectCallouts(child, depth + 1);
+                } else for (const child of node?.blocks || []) collectCallouts(child, depth);
+              };
+              collectCallouts(block, 1);
+              let hasContainer = false;
+              for (let row = block.src; row < end; row++) {
+                if (/^>(?:[ \t]*>)*[ \t]*:::\s*[A-Za-z]/.test(quoteLines[row])) hasContainer = true;
+                const match = quoteHeader.exec(quoteLines[row]);
+                if (!match) continue;
+                const kind = FLAVORS_PART ? FLAVORS_PART.calloutKind(match[2], mathOptions.gate)?.kind : /^(note|tip|important|warning|caution|info)$/i.test(match[2]) ? match[2].toLowerCase() : "";
+                if (!kind) continue;
+                const key = (match[1].match(/>/g) || []).length + ":" + kind;
+                if (!candidates.has(key)) candidates.set(key, []);
+                candidates.get(key).push(row);
+              }
+              for (const [key, count] of counts) {
+                const rows = candidates.get(key) || [];
+                if (!hasContainer && rows.length === count) for (const row of rows) calloutRows.add(row);
+                else if (rows.length) onAmbiguousCallout();
+              }
+            }
+          });
+        }
+        blocks.forEach((block, index) => {
+          if (block.type === "p" && block.c?.length === 1 && block.c[0]?.t === "small") smallRows.add(block.src);
+          if (block.type === "math" && isMathFence(lines[block.src])) mathFenceRows.add(block.src);
+          const end = blocks[index + 1]?.src ?? lines.length;
+          let last = end - 1;
+          while (last >= block.src && !lines[last].trim()) last--;
+          if (block.blockId) {
+            if (lineId(last) === block.blockId) blockIdRows.set(last, block.blockId);
+            else onAmbiguousBlockId();
+          }
+          if (block.type === "list") for (const item of block.items || []) {
+            if (!item.blockId) continue;
+            if (Number.isInteger(item.line) && item.line >= 0 && lineId(item.line) === item.blockId) blockIdRows.set(item.line, item.blockId);
+            else if (lineId(last) === item.blockId) blockIdRows.set(last, item.blockId);
+            else onAmbiguousBlockId();
+          }
+          if (block.type === "quote") {
+            // Quote children normally have no writable source line. Match IDs
+            // back only when their source occurrences are unambiguous within
+            // this quote; duplicate example/heading markers remain untouched.
+            const counts = new Map(), candidates = new Map();
+            const collect = (node) => {
+              if (node?.blockId) counts.set(node.blockId, (counts.get(node.blockId) || 0) + 1);
+              for (const item of node?.items || []) if (item.blockId) counts.set(item.blockId, (counts.get(item.blockId) || 0) + 1);
+              for (const child of node?.blocks || []) collect(child);
+            };
+            collect(block);
+            for (let row = block.src; row < end; row++) {
+              if (!/^>/.test(lines[row])) continue;
+              const id = lineId(row);
+              if (id && counts.has(id)) {
+                if (!candidates.has(id)) candidates.set(id, []);
+                candidates.get(id).push(row);
+              }
+            }
+            for (const [id, count] of counts) {
+              const rows = candidates.get(id) || [];
+              if (rows.length === count) for (const row of rows) blockIdRows.set(row, id);
+              else onAmbiguousBlockId();
+            }
+          }
+        });
+      }
+      let fence = null, quoteFence = null, quoteFenceDepth = 0, comment = false, containerGuardEnd = -1;
+      // Find reader-style container closers once, including long containers.
+      const nextContainerClose = Array(lines.length);
+      let nextClose = -1;
+      for (let i = lines.length - 1; i >= 0; i--) {
+        nextContainerClose[i] = nextClose;
+        if (/^:::\s*$/.test(lines[i])) nextClose = i;
+      }
+      const findClose = (line, run, start) => {
+        let close = line.indexOf(run, start);
+        while (close >= 0 && (line[close - 1] === "`" || line[close + run.length] === "`")) close = line.indexOf(run, close + run.length);
+        return close;
+      };
+      const destinationEnd = (line, start) => {
+        let depth = 0, quote = "", angle = false;
+        for (let i = start; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === "\\") { i++; continue; }
+          if (quote) { if (ch === quote) quote = ""; continue; }
+          if (angle) { if (ch === ">") angle = false; continue; }
+          if (ch === "<") { angle = true; continue; }
+          if ((ch === '"' || ch === "'") && /\s/.test(line[i - 1] || "")) { quote = ch; continue; }
+          if (ch === "(") depth++;
+          if (ch === ")" && --depth === 0) return i + 1;
+        }
+        return -1;
+      };
+      const tagEnd = (line, start) => {
+        if (!/^<(?:\/?[A-Za-z][\w:-]*(?=[\s/>])|https?:\/\/|mailto:)/i.test(line.slice(start))) return -1;
+        let quote = "";
+        for (let i = start + 1; i < line.length; i++) {
+          const ch = line[i];
+          if (quote) { if (ch === quote) quote = ""; continue; }
+          if (ch === '"' || ch === "'") { quote = ch; continue; }
+          if (ch === ">") return i + 1;
+        }
+        return -1;
+      };
+      const exportLine = (row) => {
+        const original = lines[row], id = !comment && !fence && blockIdRows.get(row);
+        if (!id) return original;
+        const at = original.lastIndexOf("^" + id);
+        return at < 0 ? original : original.slice(0, at) + mapBlockId("^" + id, id) + original.slice(at + id.length + 1);
+      };
+      for (let row = 0; row < lines.length; row++) {
+        let line = exportLine(row);
+        if (!comment && !fence) {
+          // Fences may be nested in blockquotes. Their contents are examples,
+          // not live extensions, even when they contain additional > markers.
+          const quote = /^((?:>[ \t]?)+)(.*)$/.exec(line);
+          const depth = quote ? (quote[1].match(/>/g) || []).length : 0;
+          if (quoteFence && depth < quoteFenceDepth) { quoteFence = null; quoteFenceDepth = 0; }
+          if (quoteFence) {
+            let rest = line;
+            for (let d = 0; d < quoteFenceDepth; d++) rest = rest.replace(/^>[ \t]?/, "");
+            quoteFence = nextMarkdownFence(rest, quoteFence);
+            if (!quoteFence) quoteFenceDepth = 0;
+            result.push(line); continue;
+          }
+          if (quote) {
+            const opened = nextMarkdownFence(quote[2], null);
+            if (opened) {
+              if (isMathFence(quote[2])) {
+                const hasMath = (block) => block?.type === "math" || (block?.blocks || []).some(hasMath);
+                if (parseBlocks(line, false, readOptions).some(hasMath)) onMathFence(line);
+              }
+              quoteFence = opened; quoteFenceDepth = depth; result.push(line); continue;
+            }
+          }
+        }
+        if (!comment && !fence && row > containerGuardEnd) {
+          const head = /^:::\s*([A-Za-z][\w-]*)[ \t]*(.*)$/.exec(line);
+          const type = head?.[1].toLowerCase() === "details" ? "note" : head?.[1];
+          const protectedAt = head ? exportProtectedPositions(line, mathOptions.literals) : null;
+          const typeAt = head ? line.indexOf(head[1]) : -1;
+          const protectedType = head && Array.from({ length: head[1].length }, (_, i) => protectedAt.has(typeAt + i)).some(Boolean);
+          if (head && !protectedType && mathOptions.gate.on("O04") && FLAVORS_PART?.calloutKind(type, mathOptions.gate)) {
+            // Bound speculative lookahead; ignore fences and HTML comments
+            // while finding the closing line. Nested containers are ambiguous.
+            let end = row + 1, innerFence = null, innerComment = false, ambiguous = false;
+            for (; end < lines.length && end - row <= 2000; end++) {
+              const current = lines[end];
+              if (!innerComment) {
+                const was = !!innerFence, next = nextMarkdownFence(current, innerFence);
+                if (was || next) { innerFence = next; continue; }
+                if (/^:::\s*$/.test(current)) break;
+                if (/^:::\s*[A-Za-z]/.test(current)) { ambiguous = true; break; }
+              }
+              let pos = 0;
+              while (pos < current.length) {
+                const marker = innerComment ? "-->" : "<!--", at = current.indexOf(marker, pos);
+                if (at < 0) break;
+                innerComment = !innerComment; pos = at + marker.length;
+              }
+            }
+            if (!ambiguous && end < lines.length && end - row <= 2000 && nextContainerClose[row] === end) {
+              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer, mapSmallPrint, readOptions, onMathFence, mapBlockId, onAmbiguousBlockId, mapComment, onAmbiguousContainer, onAmbiguousCallout);
+              result.push(mapContainer({ open: line, inner, close: lines[end], kind: head[1], title: head[2].replace(/\s*:::\s*$/, "").trim() }));
+              row = end; continue;
+            }
+            if (nextContainerClose[row] >= 0) {
+              // The reader ends at the first bare closer, including in code or
+              // comments, and treats nested openings as text. Keep ambiguous
+              // delimiters raw instead of changing their scope.
+              containerGuardEnd = nextContainerClose[row];
+              onAmbiguousContainer();
+            }
+          }
+        }
+        // I05 first rewrites bracketed LaTeX to dollar block math. Ignore
+        // rules for dollars are applied after that rewrite by the reader.
+        if (!comment && !fence && mathOptions.gate.on("I05") && !hasProtectedDollar("$$")) {
+          if (/^\s*\\\[(.+)\\\]\s*$/.test(line)) { result.push(mapMath(line, true)); continue; }
+          if (/^\s*\\\[\s*$/.test(line)) {
+            let end = row + 1;
+            while (end < lines.length && end - row < 200 && !/^\s*\\\]\s*$/.test(lines[end])) end++;
+            if (end < lines.length && end - row < 200) { result.push(mapMath(lines.slice(row, end + 1).join("\n"), true)); row = end; continue; }
+          }
+        }
+        // The reader currently accepts block math in every mode; ignored
+        // literal delimiters still prevent it from becoming a math block.
+        if (!comment && !fence && /^\s*\$\$(.+?)\$\$\s*$/.test(line) && !hasProtectedDollar(line)) {
+          result.push(mapMath(line, true)); continue;
+        }
+        if (!comment && !fence && /^\s*\$\$\s*$/.test(line) && !hasProtectedDollar(line)) {
+          let end = row + 1;
+          while (end < lines.length && end - row < 200 && (!/^\s*\$\$\s*$/.test(lines[end]) || hasProtectedDollar(lines[end]))) end++;
+          if (end < lines.length && end - row < 200) { result.push(mapMath(lines.slice(row, end + 1).join("\n"), true)); row = end; continue; }
+        }
+        if (!comment) {
+          const wasFenced = !!fence, next = nextMarkdownFence(line, fence);
+          if (wasFenced || next) {
+            if (!wasFenced && next && mathFenceRows.has(row)) onMathFence(line);
+            fence = next; result.push(line); continue;
+          }
+        }
+        // Keep source offsets intact for multiline code spans: consume just the
+        // small-print prefix, then scan the rest of the original line normally.
+        let smallPrefix = !comment && smallRows.has(row) && /^-#[ \t]+(?=\S)/.exec(line)?.[0] || "";
+        let separateSmall = false, protectedLine = null;
+        let out = "", visible = smallPrefix, pos = smallPrefix.length;
+        const flush = () => { if (visible) { out += fn(visible, { readerCallout: calloutRows.has(row) }); visible = ""; } };
+        const finishSmallPrint = () => {
+          if (smallPrefix && out.startsWith(smallPrefix)) {
+            const rest = out.slice(smallPrefix.length);
+            const replacement = mapSmallPrint(smallPrefix, rest);
+            separateSmall = typeof replacement === "object" && !!replacement.separate;
+            if (separateSmall && result.length && result[result.length - 1] !== "") result.push("");
+            out = (separateSmall ? replacement.prefix : replacement) + rest;
+          }
+          smallPrefix = "";
+        };
+        while (pos < line.length) {
+          if (comment) {
+            const end = line.indexOf("-->", pos);
+            if (end < 0) { out += mapComment(line.slice(pos)); pos = line.length; continue; }
+            out += mapComment(line.slice(pos, end + 3)); pos = end + 3; comment = false; continue;
+          }
+          if (line.startsWith("<!--", pos)) { flush(); comment = true; continue; }
+          if (line.startsWith("\\(", pos) && (pos === 0 || line[pos - 1] !== "\\") && mathOptions.gate.on("I04") && mathOptions.gate.on("I01")) {
+            const latex = /^\\\((?=\S)([^\n]*?\S)\\\)/.exec(line.slice(pos));
+            if (latex && !latex[1].includes("$")) {
+              const ignored = exportProtectedPositions(line, mathOptions.literals, false), end = pos + latex[0].length;
+              if (![pos, pos + 1, end - 2, end - 1].some((i) => ignored.has(i))) {
+                flush(); out += mapMath(latex[0], false); pos = end; continue;
+              }
+            }
+          }
+          if (line[pos] === "$" && (pos === 0 || !/[\w$]/.test(line[pos - 1]))) {
+            const math = /^(?:\$\$([^$\n]+?)\$\$|\$([^\s$](?:[^$\n]*?[^\s$])?)\$(?![\d$\w]))/.exec(line.slice(pos));
+            if (math) {
+              if (!protectedLine) protectedLine = exportProtectedPositions(line, mathOptions.literals);
+              const width = math[1] !== undefined ? 2 : 1;
+              const active = mathOptions.gate.on(width === 2 ? "I03" : "I01");
+              const end = pos + math[0].length;
+              const protectedDelimiter = Array.from({ length: width }, (_, n) => protectedLine.has(pos + n) || protectedLine.has(end - n - 1)).some(Boolean);
+              if (active && !protectedDelimiter) { flush(); out += mapMath(math[0], false); pos = end; continue; }
+            }
+          }
+          const spoilerOpen = line.startsWith(">!", pos) ? ">!" : line.startsWith("||", pos) ? "||" : "";
+          if (spoilerOpen) {
+            const endToken = spoilerOpen === ">!" ? "!<" : "||", end = line.indexOf(endToken, pos + 2);
+            if (end >= 0) { flush(); out += fn(line.slice(pos, end + 2), { line, offset: pos, spoilerToken: true }); pos = end + 2; continue; }
+          }
+          if (line[pos] === "(" && pos > 0 && line[pos - 1] === "]") {
+            const end = destinationEnd(line, pos);
+            if (end > pos) { flush(); out += mapDestination(line.slice(pos, end)); pos = end; continue; }
+          }
+          if (line[pos] === "<") {
+            const end = tagEnd(line, pos);
+            if (end > pos) { flush(); out += line.slice(pos, end); pos = end; continue; }
+          }
+          const url = /[hHmM]/.test(line[pos]) ? /^(?:https?:\/\/|mailto:)[^\s<>"']+/i.exec(line.slice(pos)) : null;
+          if (url) { flush(); out += url[0]; pos += url[0].length; continue; }
+          if (line[pos] === "`") {
+            const run = /^`+/.exec(line.slice(pos))[0];
+            let close = findClose(line, run, pos + run.length), endRow = row;
+            // A code span may cross lines inside a paragraph, but never crosses
+            // a blank line or the start of a new fenced block.
+            if (close < 0) {
+              const next = codeRuns.next(row, run.length);
+              if (next) { close = next.pos; endRow = next.row; }
+            }
+            if (close >= 0) {
+              flush();
+              if (endRow === row) { out += line.slice(pos, close + run.length); pos = close + run.length; continue; }
+              out += line.slice(pos); finishSmallPrint(); result.push(out);
+              for (let k = row + 1; k < endRow; k++) result.push(lines[k]);
+              row = endRow; line = exportLine(row); protectedLine = null; out = line.slice(0, close + run.length); pos = close + run.length; continue;
+            }
+            visible += run; pos += run.length; continue;
+          }
+          visible += line[pos++];
+        }
+        flush(); finishSmallPrint(); result.push(out);
+        if (separateSmall && row + 1 < lines.length && lines[row + 1].trim()) result.push("");
+      }
+      onEnd({ comment, fence });
+      return result.join("\n");
+    }
+    // Match the reader's two competing interpretations of single tilde and
+    // Pandoc superscript. Ignored or escaped delimiters remain literal.
+    function exportScriptOptions(readOptions = {}) {
+      const ignored = parseIgnoreCached(readOptions.ignore);
+      return { gate: flavorGate(readOptions.flavor, { tilde: readOptions.tilde, ignore: ignored.ids }), literals: ignored.literals };
+    }
+    function exportProtectedPositions(segment, literals, includeEscapes = true) {
+      const protectedAt = new Set();
+      for (const re of ignoreRes(literals)) {
+        re.lastIndex = 0;
+        for (let match; (match = re.exec(segment));) {
+          for (let i = 0; i < match[0].length; i++) {
+            if (ESC_CHARS.includes(match[0][i])) protectedAt.add(match.index + i);
+          }
+        }
+      }
+      // Mirror parseInlineEsc: an odd run of backslashes escapes the next
+      // Markdown punctuation; an even run leaves that punctuation active.
+      if (includeEscapes) for (let i = 0; i < segment.length; i++) {
+        if (segment[i] === "\\" && i + 1 < segment.length && ESC_CHARS.includes(segment[i + 1])) {
+          protectedAt.add(++i);
+        }
+      }
+      return protectedAt;
+    }
+    // A spoiler must never reveal comments when its HTML is opened. Preserve
+    // comment payloads as comments, but sanitize comment-breaking sequences.
+    function escapeExportSpoiler(content) {
+      let out = "", pos = 0;
+      while (pos < content.length) {
+        const start = content.indexOf("<!--", pos);
+        if (start < 0) return out + escHtml(content.slice(pos));
+        out += escHtml(content.slice(pos, start));
+        const end = content.indexOf("-->", start + 4);
+        const inside = content.slice(start + 4, end < 0 ? content.length : end).replace(/--/g, "-&#45;").replace(/>/g, "&gt;");
+        out += "<!--" + inside + "-->";
+        if (end < 0) return out;
+        pos = end + 3;
+      }
+      return out;
+    }
+    // Calendar markers are structural metadata even when a Markdown flavor
+    // does not hide ordinary Obsidian comments.
+    function mapExportHidden(segment, options, convert) {
+      return segment.replace(/%%[^%\n]+%%/g, (marker) => {
+        const calendar = /^%%(?:calendar(?::[^%\n]*)?|zn-item-id:[\w-]+)%%$/i.test(marker);
+        return calendar || options.gate.on("A31") ? convert(marker, calendar) : marker;
+      });
+    }
+    function mapExportFormatting(segment, options, convert) {
+      const gate = options.gate, protectedAt = exportProtectedPositions(segment, options.literals);
+      return segment.replace(/==(?:\{(\w+|#[0-9a-f]{6})\})?([^\n=]+)==|\+\+(?=\S)([^+\n]+?)(?<=\S)\+\+/gi, (raw, color, mark, underline, offset) => {
+        const kind = underline !== undefined ? "A20" : color ? "A11" : "A10";
+        if (!gate.on(kind)) return raw;
+        for (const i of [offset, offset + 1, offset + raw.length - 2, offset + raw.length - 1]) if (protectedAt.has(i)) return raw;
+        return convert(raw, mark || underline);
+      });
+    }
+    function mapExportSpoilers(segment, options, convert, context = {}) {
+      const source = context.line ?? segment, base = context.offset || 0;
+      const gate = options.gate, protectedAt = exportProtectedPositions(source, options.literals);
+      return segment.replace(/\|\|([^|\n]+?)\|\||>!([^!\n]+?)!</g, (raw, discord, reddit, offset) => {
+        const start = base + offset, end = start + raw.length - 1;
+        if (!gate.on(discord !== undefined ? "A29" : "A27")) return raw;
+        if (reddit !== undefined && start === 0) return raw; // line-start > is a quote
+        if (discord !== undefined && (/[|\w]/.test(source[start - 1] || "") || /[|\w]/.test(source[end + 1] || ""))) return raw;
+        for (const i of [start, start + 1, end - 1, end]) if (protectedAt.has(i)) return raw;
+        return convert(raw, discord || reddit);
+      });
+    }
+    function mapExportWikilinks(segment, options, resolver, note) {
+      if (!options.gate.on("C01")) return segment;
+      const gate = options.gate, protectedAt = exportProtectedPositions(segment, options.literals);
+      const allow = { heading: gate.on("C03") && gate.on("C06"), self: gate.on("C04"), path: gate.on("C08") };
+      return segment.replace(WIKI_RE, (raw, target, _alias, offset) => {
+        for (let i = offset; i < offset + raw.length; i++) if (protectedAt.has(i)) return raw;
+        const parts = parseWikiTarget(target);
+        if ((parts.self && !allow.self) || (parts.heading && !parts.self && !allow.heading) || (parts.path.length && !allow.path)) return raw;
+        return expandWikiLinks(raw, resolver, { unresolved: "text", self: note, allow });
+      });
+    }
+    // Shared by warned and unwarned Markdown output. The caller handles front
+    // matter separately; URLs, attributes, examples and comments stay intact.
+    function rewriteMarkdownExportLinks(body, note, notes, names, folders, readOptions = {}) {
+      const effective = { ...readOptions, flavor: note?.flavor || readOptions.flavor };
+      const options = exportScriptOptions(effective), resolver = wikiResolver(notes, folders);
+      return mapMarkdownForExport(body,
+        (segment) => rewriteNoteLinks(mapExportWikilinks(segment, options, resolver, note), names),
+        (destination) => rewriteNoteLinks("]" + destination, names).slice(1), undefined, undefined, undefined, undefined, effective);
+    }
+    function mapExportToc(segment, options, convert) {
+      if (!TOC_TOKEN_RE.test(segment)) return segment;
+      const protectedAt = exportProtectedPositions(segment, options.literals);
+      for (let i = 0; i < segment.length; i++) if ((segment[i] === "[" || segment[i] === "]") && protectedAt.has(i)) return segment;
+      return convert(segment);
+    }
+    function mapExportEmbeds(segment, options, convert) {
+      const protectedAt = exportProtectedPositions(segment, options.literals);
+      return segment.replace(/!\[\[([^\[\]\n]{1,240})\]\]/g, (raw, target, offset) => {
+        for (let i = offset; i < offset + raw.length; i++) if (protectedAt.has(i)) return raw;
+        const spec = parseEmbedTarget(target);
+        return spec ? convert(raw, spec) : raw;
+      });
+    }
+    function mapExportCallout(segment, options, convert) {
+      const match = /^((?:>[ \t]*)+)\[!([A-Za-z][\w-]{0,30})\]([+-]?)[ \t]*(.*)$/.exec(segment);
+      if (!match) return segment;
+      const kind = match[2];
+      const known = FLAVORS_PART ? FLAVORS_PART.calloutKind(kind, options.gate) : /^(note|tip|important|warning|caution|info)$/i.test(kind);
+      if (!known) return segment;
+      const protectedAt = exportProtectedPositions(segment, options.literals);
+      const headerEnd = match[1].length + 3 + kind.length + match[3].length;
+      for (let i = 0; i < headerEnd; i++) if (protectedAt.has(i)) return segment;
+      return convert(match[0], match[1], kind, match[4]);
+    }
+    function mapExportTask(segment, options, convert) {
+      const match = /^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/.exec(segment);
+      if (!match || !Object.hasOwn(TASK_STATUS_NAMES, match[2])) return segment;
+      const gate = options.gate, status = match[2], start = match[1].length;
+      if (!gate.on("E08") || !gate.on(TASK_ORIGINAL.has(status) ? "E09" : "E10")) return segment;
+      const protectedAt = exportProtectedPositions(segment, options.literals);
+      if (protectedAt.has(start) || protectedAt.has(start + 1) || protectedAt.has(start + 2)) return segment;
+      return convert(match[0], match[1], status) + segment.slice(match[0].length);
+    }
+    function mapExportScripts(segment, options, convert) {
+      const gate = options.gate;
+      if (!gate.on("A09") && !gate.on("A13") && !gate.on("A15") && !gate.on("A17")) return segment;
+      const protectedAt = exportProtectedPositions(segment, options.literals);
+      return segment.replace(/(?<!~)~([^\s~]+)~(?!~)|\^(?!\[)([^\s^]+)\^|\^\(([^()\n]+)\)|\^(?!\[)([^\s^()]+)/g, (raw, sub, sup, group, word, offset) => {
+        const end = offset + raw.length - 1;
+        if (protectedAt.has(offset) || ((sub || sup) && protectedAt.has(end))) return raw;
+        if (group || word) {
+          // Escaped or ignored punctuation inside a Reddit expression can alter
+          // its parse; keep such ambiguous expressions unchanged.
+          for (let i = offset; i <= end; i++) if (protectedAt.has(i)) return raw;
+        }
+        const kind = sub ? (gate.on("A09") ? "strike" : gate.on("A13") ? "sub" : "") : sup ? (gate.on("A15") ? "sup" : "") : gate.on("A17") ? "sup" : "";
+        return kind ? convert(raw, kind, sub || sup || group || word) : raw;
+      });
+    }
+    function mapExportInlineFootnotes(segment, options, convert) {
+      const gate = options.gate;
+      if (!gate.on("J03") && !gate.on("A17")) return segment;
+      const protectedAt = exportProtectedPositions(segment, options.literals);
+      return segment.replace(/\^\[((?:[^\[\]\n]|\[[^\[\]\n]*\])+)\]/g, (raw, content, offset) => {
+        // The reader may reinterpret a token when an ignored or escaped symbol
+        // occurs inside it. Keep ambiguous syntax literal instead of guessing.
+        for (let i = offset; i < offset + raw.length; i++) if (protectedAt.has(i)) return raw;
+        const trimmed = content.trim();
+        if (gate.on("J03") && trimmed) return convert(raw, "footnote", trimmed);
+        if (gate.on("A17") && /^[^\s^()]+$/.test(content)) return convert(raw, "sup", "[" + content + "]");
+        return raw;
+      });
+    }
+    // Identify live Zentral extensions without interpreting examples inside code.
+    // This reports categories only; it does not modify or export the source.
+    function markdownExportWarnings(body, readOptions = {}) {
+      const found = new Set(), scriptOptions = exportScriptOptions(readOptions);
+      const content = splitMarkdownExportFrontMatter(body).body;
+      // Container syntax nested in a quote cannot safely be flattened here.
+      // Confirm a nested callout in the reader's AST before warning, so quoted
+      // examples inside fenced code do not trigger a false positive.
+      if (scriptOptions.gate.on("O04") && /^>(?:[ \t]*>)*[ \t]*:::\s*[A-Za-z]/m.test(content) && /^>(?:[ \t]*>)*[ \t]*:::[ \t\r]*$/m.test(content)) {
+        const lines = normalizeNewlines(content).split("\n");
+        const blocks = parseBlocks(content, false, readOptions).filter((block) => Number.isInteger(block.src));
+        const hasNestedCallout = (node) => (node?.blocks || []).some((child) => !!child.callout || hasNestedCallout(child));
+        blocks.forEach((block, index) => {
+          if (block.type !== "quote" || !hasNestedCallout(block)) return;
+          const end = blocks[index + 1]?.src ?? lines.length;
+          if (lines.slice(block.src, end).some((line) => /^>(?:[ \t]*>)*[ \t]*:::\s*[A-Za-z]/.test(line))) found.add("callout");
+        });
+      }
+      mapMarkdownForExport(content, (segment, context) => {
+        const visible = mapExportHidden(segment, scriptOptions, (_marker, calendar) => {
+          found.add(calendar ? "calendar" : "hidden comment"); return "";
+        });
+        mapExportToc(visible, scriptOptions, (raw) => { found.add("toc"); return raw; });
+        if (context?.readerCallout) mapExportCallout(visible, scriptOptions, (raw) => { found.add("callout"); return raw; });
+        mapExportEmbeds(visible, scriptOptions, (raw) => { found.add("transclusion"); return raw; });
+        mapExportFormatting(visible, scriptOptions, (raw) => { found.add("formatting"); return raw; });
+        mapExportSpoilers(context?.spoilerToken ? segment : visible, scriptOptions, (raw) => { found.add("spoiler"); return raw; }, context);
+        mapExportScripts(visible, scriptOptions, (raw, kind) => { found.add(kind === "strike" ? "single-tilde strike" : "subscript / superscript"); return raw; });
+        mapExportInlineFootnotes(visible, scriptOptions, (raw, kind) => { found.add(kind === "footnote" ? "inline footnote" : "subscript / superscript"); return raw; });
+        mapExportTask(visible, scriptOptions, (raw) => { found.add("extended task"); return raw; });
+        return segment;
+      }, undefined, undefined, (math) => { found.add("math"); return math; }, (container) => {
+        found.add("callout"); return container.open + "\n" + container.inner + "\n" + container.close;
+      }, (prefix) => { found.add("small print"); return prefix; }, readOptions, () => found.add("math"), (marker) => { found.add("block ID"); return "<!-- " + marker + " -->"; }, () => found.add("block ID"), undefined, () => found.add("callout"), () => found.add("callout"));
+      return [...found];
+    }
+    // Export is a copy: convert the documented extensions conservatively and
+    // keep unresolvable transclusions visible as literal code instead of losing data.
+    function portableMarkdownExportBody(note, notes = [], names = new Map(), folders = [], readOptions = {}) {
+      const body = String(note?.body ?? ""), parts = splitMarkdownExportFrontMatter(body);
+      const effectiveReadOptions = { ...readOptions, flavor: note?.flavor || readOptions.flavor };
+      const scriptOptions = exportScriptOptions(effectiveReadOptions);
+      const usedFootnotes = new Set(), footnotes = [];
+      let footnoteAppendSafe = true;
+      mapMarkdownForExport(parts.body, (segment) => {
+        for (const match of segment.matchAll(/\[\^([^\]\s]{1,40})\]/g)) usedFootnotes.add(match[1].toLocaleLowerCase());
+        return segment;
+      }, undefined, ({ comment, fence }) => { footnoteAppendSafe = !comment && !fence; }, undefined, undefined, undefined, effectiveReadOptions);
+      let footnoteNumber = 1;
+      const literal = (text) => "`" + text.replace(/`/g, "") + "`";
+      const hiddenSafe = mapMarkdownForExport(parts.body, (segment) => mapExportHidden(segment, scriptOptions, (marker) => "<!-- " + marker.replace(/--/g, "-&#45;") + " -->"), undefined, undefined, undefined, undefined, undefined, effectiveReadOptions);
+      let safeToc = null;
+      const exportToc = () => {
+        if (safeToc !== null) return safeToc;
+        // Headings hidden in comments must never reappear as public ToC labels.
+        // Reuse the code/comment scanner so fences inside comments stay inert.
+        const mask = (comment) => comment.replace(/[^\r]/g, " ");
+        const visible = mapMarkdownForExport(hiddenSafe, (segment, context) => {
+          if (!context?.spoilerToken) return segment;
+          const masked = mapExportSpoilers(segment, scriptOptions, () => "\u0000", context);
+          return masked.replace(/<!--[\s\S]*?(?:-->|$)/g, mask);
+        }, undefined, undefined, undefined, undefined, undefined, effectiveReadOptions, undefined, undefined, undefined, mask);
+        // A spoiler's heading slug would disclose its concealed text too, so
+        // omit that heading instead of generating an unsafe link or a bad one.
+        const tocInput = visible.split("\n").map((line) => line.includes("\u0000") && /^ {0,3}#{1,6}\s/.test(line) ? "" : line.replace(/\u0000/g, "Spoiler")).join("\n");
+        safeToc = tocBlock(parts.prefix + tocInput);
+        return safeToc;
+      };
+      const converted = mapMarkdownForExport(hiddenSafe, (segment, context) => {
+        if (context?.spoilerToken) {
+          const spoiler = mapExportSpoilers(segment, scriptOptions, (_raw, content) => "<details><summary>Spoiler</summary>" + escapeExportSpoiler(content) + "</details>", context);
+          if (spoiler !== segment) return spoiler;
+        }
+        const toc = mapExportToc(segment, scriptOptions, exportToc);
+        if (toc !== segment) return toc;
+        if (context?.readerCallout) segment = mapExportCallout(segment, scriptOptions, (_raw, quote, kind, title) => quote + "**" + kind.toUpperCase() + "**" + (title ? " — " + title : ""));
+        segment = mapExportTask(segment, scriptOptions, (_raw, prefix, status) => prefix + "[ ] (" + TASK_STATUS_NAMES[status] + ")");
+        segment = mapExportFormatting(segment, scriptOptions, (_raw, content) => "**" + content + "**");
+        segment = mapExportScripts(segment, scriptOptions, (_raw, kind, content) => kind === "strike" ? "~~" + content + "~~" : "<" + kind + ">" + escHtml(content) + "</" + kind + ">");
+        segment = mapExportEmbeds(segment, scriptOptions, (raw, spec) => {
+          if (spec.youtube) return "[YouTube video](https://www.youtube.com/watch?v=" + spec.youtube.id + ")";
+          if (spec.image || spec.videoAsset) {
+            const file = spec.image || spec.videoAsset;
+            if (!isAssetNoteId(note?.id)) return literal(raw);
+            const rel = assetRel(note.id, file);
+            return (spec.image ? "!" : "") + "[" + cleanLinkLabel(file) + "](" + rel + ")";
+          }
+          if (spec.blockId) return literal(raw); // portable Markdown has no standard block-id links
+          if (spec.parts.self && spec.parts.heading) return "[" + cleanLinkLabel(spec.parts.heading) + "](#" + headingSlug(spec.parts.heading) + ")";
+          const hit = resolveWikiTarget(notes, folders, spec.parts);
+          if (!hit?.id) return literal(raw);
+          const title = spec.parts.title + (spec.parts.heading ? " > " + spec.parts.heading : "");
+          return buildNoteLink(hit.id, title, hit.heading);
+        });
+        segment = mapExportInlineFootnotes(segment, scriptOptions, (raw, kind, content) => {
+          if (kind === "sup") return "<sup>" + escHtml(content) + "</sup>";
+          if (!footnoteAppendSafe) return literal(raw);
+          let id;
+          do { id = "zn-inline-" + footnoteNumber++; } while (usedFootnotes.has(id));
+          usedFootnotes.add(id);
+          footnotes.push("[^" + id + "]: " + content);
+          return "[^" + id + "]";
+        });
+        return segment;
+      }, undefined, undefined, (math, block) => {
+        const maxRun = (math.match(/`+/g) || []).reduce((max, run) => Math.max(max, run.length), 0);
+        const ticks = "`".repeat(Math.max(block ? 3 : 1, maxRun + 1));
+        return block ? ticks + "math\n" + math + "\n" + ticks : ticks + math + ticks;
+      }, ({ kind, title, inner }) => {
+        return "> **" + kind.toUpperCase() + "**" + (title ? " — " + title : "") + "\n" + inner.split("\n").map((line) => line ? "> " + line : ">").join("\n");
+      }, (_prefix, rest) => {
+        // The original text is parsed inline, not as a heading, list or HTML
+        // block. A zero-width entity prevents accidental block interpretation.
+        const prefix = /^(?:#{1,6}(?:[ \t]|$)|>|[-+*][ \t]+|\d{1,9}[.)][ \t]+|`{3,}|~{3,}|(?:[-*_][ \t]*){3,}$|\[[^\]\n]+\]:|<(?:!--|\/?[A-Za-z]))/.test(rest) ? "&#8203;" : "";
+        return { prefix, separate: true };
+      }, effectiveReadOptions, undefined, (marker) => "<!-- " + marker + " -->");
+      const rewritten = rewriteMarkdownExportLinks(converted, note, notes, names, folders, effectiveReadOptions);
+      const suffix = footnotes.length ? (rewritten.endsWith("\n\n") ? "" : rewritten.endsWith("\n") ? "\n" : "\n\n") + footnotes.join("\n") + "\n" : "";
+      return parts.prefix + rewritten + suffix;
+    }
+    // Freeze the scalar content used by the warning and file writers at the
+    // same moment. Store records themselves are mutable across windows.
+    function markdownExportSnapshot(notes) {
+      return (Array.isArray(notes) ? notes : []).filter(Boolean).map((note) => ({ ...note }));
+    }
+    function markdownExportBody(note, notes = [], names = new Map(), folders = [], mode = "", readOptions = {}) {
+      if (mode === "raw") return String(note?.body ?? "");
+      if (mode === "portable") return portableMarkdownExportBody(note, notes, names, folders, readOptions);
+      const parts = splitMarkdownExportFrontMatter(String(note?.body ?? ""));
+      return parts.prefix + rewriteMarkdownExportLinks(parts.body, note, notes, names, folders, readOptions);
+    }
+    // Export the stored note header as well as the selected body so IDs,
+    // reminder timestamps and foreign front matter survive Markdown export.
+    function markdownExportFile(note, notes = [], names = new Map(), folders = [], mode = "", readOptions = {}) {
+      return serializeNote({ ...note, body: markdownExportBody(note, notes, names, folders, mode, readOptions) });
     }
     // Rebuilds the block (or expands a [TOC] line). Returns { body, changed, found }.
     function updateToc(body) {
@@ -7453,6 +8197,171 @@
       if (m[1] === "note") return NOTE_ID_RE.test(v) && !v.includes("..") ? { kind: "note", id: v } : null;
       return cleanFolder(v) === v ? { kind: "new", folder: v } : null;
     }
+    // Only exact virtual-tab addresses count; never classify a normal tab by
+    // its title or by a previous entry in its navigation history.
+    function pseudoTabCleanupKind({ url = "", remembered = "", sessionUrl = "", notesMarked = false, agendaMarked = false } = {}, { notesEnabled = false, agendaEnabled = false } = {}) {
+      if (agendaMarked) return agendaEnabled ? "" : "agenda";
+      if (notesMarked) return notesEnabled ? "" : "notes";
+      for (const candidate of [url, remembered, sessionUrl]) {
+        const value = String(candidate || "");
+        if (/^about:blank#zn-agenda-[^\s]*$/.test(value)) return "agenda";
+        if (parseZenUrl(value)) return "notes";
+      }
+      return "";
+    }
+    function sweepRestoredPseudoTabs(tabs, { notesEnabled = false, agendaEnabled = false, getTabState, removeTab, warn = () => {} } = {}) {
+      let removed = 0;
+      for (const tab of tabs || []) {
+        try {
+          let url = tab.linkedBrowser?.currentURI?.spec || "", sessionUrl = "";
+          if ((!url || url === "about:blank") && (tab.pinned || tab.hasAttribute?.("pending")) && getTabState) {
+            try {
+              const state = JSON.parse(getTabState(tab));
+              const entries = Array.isArray(state.entries) ? state.entries : [];
+              const index = Number.isInteger(state.index) && state.index > 0 ? state.index - 1 : entries.length - 1;
+              sessionUrl = entries[index]?.url || "";
+            } catch (_) {}
+          }
+          const kind = pseudoTabCleanupKind({ url, sessionUrl, remembered: tab._zentralNotesUrl || "", notesMarked: tab.hasAttribute?.(NOTES_ATTR), agendaMarked: tab.hasAttribute?.(AGENDA_ATTR) }, { notesEnabled, agendaEnabled });
+          if (kind && typeof removeTab === "function") { removeTab(tab); removed++; }
+        } catch (error) { try { warn(error); } catch (_) {} }
+      }
+      return removed;
+    }
+    // ZenSessionManager.saveState consumes the window snapshots to build its
+    // sidebar/session and Sync projection. Clone only affected windows; do not
+    // mutate the browser's snapshot (which Firefox also writes separately).
+    function filterZenSidebarState(state) {
+      if (!state || !Array.isArray(state.windows)) return state;
+      const isPseudo = (tab) => {
+        if (!tab || typeof tab !== "object") return false;
+        const entries = Array.isArray(tab.entries) ? tab.entries : [];
+        const index = Number.isInteger(tab.index) && tab.index > 0 ? tab.index - 1 : entries.length - 1;
+        const current = entries[index]?.url || "";
+        const initial = (!current || current === "about:blank") ? tab._zenPinnedInitialState?.entry?.url || "" : "";
+        return !!pseudoTabCleanupKind({ url: current, sessionUrl: initial }, {});
+      };
+      const managed = (id) => typeof id === "string" && (id === NOTES_ZEN_ROOT_ID || id.startsWith(NOTES_ZEN_SUB_PREFIX) || id === AGENDA_ROOT_ID || id.startsWith("zentral-notes-agenda-day-"));
+      const parents = new Map(), used = new Set(), removedTabIds = new Set(), liveTabIds = new Set();
+      for (const win of state.windows) {
+        for (const folder of (Array.isArray(win?.folders) ? win.folders : [])) if (folder?.id) {
+          if (!parents.has(folder.id)) parents.set(folder.id, folder.parentId || "");
+          if (!managed(folder.id)) used.add(folder.id);
+        }
+        for (const tab of (Array.isArray(win?.tabs) ? win.tabs : [])) {
+          if (!tab) continue;
+          if (isPseudo(tab)) { if (tab.zenSyncId) removedTabIds.add(tab.zenSyncId); }
+          else { if (tab.groupId) used.add(tab.groupId); if (tab.zenSyncId) liveTabIds.add(tab.zenSyncId); }
+        }
+      }
+      // Preserve a managed folder whenever a normal tab or a foreign folder in
+      // any window needs it, including all managed ancestors.
+      for (const id of [...used]) {
+        let next = parents.get(id), remaining = parents.size + 1;
+        while (next && remaining-- > 0 && !used.has(next)) { used.add(next); next = parents.get(next); }
+      }
+      for (const id of liveTabIds) removedTabIds.delete(id);
+      const removedFolders = new Set([...parents.keys()].filter((id) => managed(id) && !used.has(id)));
+      let changed = false;
+      const windows = state.windows.map((win) => {
+        if (!win || typeof win !== "object") return win;
+        let copy = win;
+        if (Array.isArray(win.tabs)) {
+          const tabs = win.tabs.filter((tab) => !isPseudo(tab));
+          if (tabs.length !== win.tabs.length) { copy = { ...copy, tabs }; changed = true; }
+        }
+        if (Array.isArray(win.folders)) {
+          let foldersChanged = false;
+          const folders = [];
+          for (const folder of win.folders) {
+            if (removedFolders.has(folder?.id)) { foldersChanged = true; continue; }
+            let next = folder;
+            if (Array.isArray(folder?.emptyTabIds)) {
+              const ids = folder.emptyTabIds.filter((id) => !removedTabIds.has(id));
+              if (ids.length !== folder.emptyTabIds.length) { next = { ...next, emptyTabIds: ids }; foldersChanged = true; }
+            }
+            const prev = folder?.prevSiblingInfo;
+            if ((prev?.type === "tab" && removedTabIds.has(prev.id)) || (prev?.type === "group" && removedFolders.has(prev.id))) {
+              next = { ...next, prevSiblingInfo: { type: "start", id: null } }; foldersChanged = true;
+            }
+            folders.push(next);
+          }
+          if (foldersChanged) { copy = { ...copy, folders }; changed = true; }
+        }
+        // Zen also copies native group metadata independently of its folders.
+        // Drop only groups whose corresponding managed folder was proven unused.
+        if (Array.isArray(win.groups)) {
+          const groups = win.groups.filter((group) => !removedFolders.has(group?.id));
+          if (groups.length !== win.groups.length) { copy = { ...copy, groups }; changed = true; }
+        }
+        return copy;
+      });
+      return changed ? { ...state, windows } : state;
+    }
+    // The Zen session manager is a process-wide singleton shared by windows.
+    // Reference count its reversible wrapper; never overwrite newer wrappers.
+    const ZEN_SIDEBAR_SHIELD = Symbol.for("zentral-notes/zen-sidebar-shield/v1");
+    function acquireZenSidebarShield(target, warn = () => {}) {
+      if (!target || (typeof target !== "object" && typeof target !== "function")) return null;
+      try {
+        let record = Object.getOwnPropertyDescriptor(target, ZEN_SIDEBAR_SHIELD)?.value;
+        if (record) {
+          if (!record.active || Object.getOwnPropertyDescriptor(target, "saveState")?.value !== record.wrapper) return null;
+          record.users++;
+        } else {
+          const own = Object.getOwnPropertyDescriptor(target, "saveState");
+          let owner = target, desc = own;
+          while (!desc && (owner = Object.getPrototypeOf(owner))) desc = Object.getOwnPropertyDescriptor(owner, "saveState");
+          if (!desc || typeof desc.value !== "function" || (own && !own.configurable)) return null;
+          record = { active: true, users: 1, own, wrapper: null };
+          const original = desc.value;
+          record.wrapper = function (state, ...args) {
+            let next = state;
+            if (record.active) {
+              try { next = filterZenSidebarState(state); } catch (error) { try { warn(error); } catch (_) {} }
+            }
+            return Reflect.apply(original, this, [next, ...args]);
+          };
+          Object.defineProperty(target, ZEN_SIDEBAR_SHIELD, { value: record, configurable: true });
+          try { Object.defineProperty(target, "saveState", { value: record.wrapper, writable: true, configurable: true, enumerable: desc.enumerable }); }
+          catch (error) { delete target[ZEN_SIDEBAR_SHIELD]; throw error; }
+        }
+        let released = false;
+        const release = () => {
+          if (released) return;
+          released = true;
+          if (--record.users > 0) return;
+          record.active = false;
+          if (Object.getOwnPropertyDescriptor(target, "saveState")?.value === record.wrapper) {
+            if (record.own) Object.defineProperty(target, "saveState", record.own);
+            else delete target.saveState;
+          }
+          if (Object.getOwnPropertyDescriptor(target, ZEN_SIDEBAR_SHIELD)?.value === record) delete target[ZEN_SIDEBAR_SHIELD];
+        };
+        release.isCurrent = () => record.active && Object.getOwnPropertyDescriptor(target, "saveState")?.value === record.wrapper;
+        return release;
+      } catch (error) { try { warn(error); } catch (_) {} return null; }
+    }
+    function restoredPseudoFolderKind(folder) {
+      if (!folder || folder.localName !== "zen-folder") return "";
+      const id = String(folder.id || "");
+      if (id === AGENDA_ROOT_ID || id.startsWith("zentral-notes-agenda-day-") || folder.hasAttribute?.("bgalazka-notes-agenda-folder") || folder.hasAttribute?.("bgalazka-notes-agenda-day")) return "agenda";
+      if (id === NOTES_ZEN_ROOT_ID || id.startsWith(NOTES_ZEN_SUB_PREFIX) || folder.hasAttribute?.("bgalazka-notes-folder") || folder.hasAttribute?.("bgalazka-notes-subfolder")) return "notes";
+      return "";
+    }
+    // A disabled projection may have acquired real user tabs or folders. In
+    // that case release only our markers, never delete the user's contents.
+    function retireRestoredPseudoFolder(folder, kind) {
+      if (restoredPseudoFolderKind(folder) !== kind) return false;
+      const descendants = [...(folder.querySelectorAll?.("zen-folder") || [])];
+      const foreign = [...(folder.querySelectorAll?.("tab") || [])].length > 0 || descendants.some((child) => restoredPseudoFolderKind(child) !== kind);
+      if (!foreign) { try { folder.delete?.(); return true; } catch (_) { return false; } }
+      for (const el of [folder, ...descendants].filter((child) => restoredPseudoFolderKind(child) === kind)) {
+        for (const attr of ["bgalazka-notes-folder", "bgalazka-notes-subfolder", "bgalazka-notes-label", "bgalazka-notes-parent", "bgalazka-notes-color", "bgalazka-notes-icon", "bgalazka-notes-parts", "bgalazka-notes-parts-opacity", "bgalazka-notes-agenda-folder", "bgalazka-notes-agenda-day", "bgalazka-notes-agenda-key", "bgalazka-notes-agenda-count", "bgalazka-notes-agenda-label"]) el.removeAttribute(attr);
+        if (el.id) el.id = "zentral-released-" + el.id;
+      }
+      return true;
+    }
     // Tree -> flat ordered entries. mode "all": everything; "selected": only the tabbar folder's content, whose direct
     // children sit right inside the Zen NOTES folder (parent ""); "off": nothing. Parents always come before children.
     function projectZen(notes, folders, mode = "all", order = "folders-first") {
@@ -7833,6 +8742,12 @@
       };
     }
 
+    function agendaWindowForItem(item, store) {
+      const category = item?.x?.category ? store.items?.category?.(item.x.category) : null;
+      const notePolicy = item?.x?.noteId ? store.meta?.calendarNoteAgendaOverrides?.[item.x.noteId] : null;
+      return CALENDAR_PART.resolveAgendaWindow(item, category?.agenda, notePolicy, store.meta?.calendarAgendaDefaults);
+    }
+
     if (window.__zentralNotesTestSeam) {
       window.__zentralNotesTestSeam.core = {
         flavorGate, cleanFlavor, prepareLines, decodeEntities, validYmd, FLAVORS_PART, SHORTCUTS_PART, CALENDAR_PART,
@@ -7854,19 +8769,19 @@
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
+        indexMarkdownCodeRuns, markdownExportWarnings, portableMarkdownExportBody, markdownExportSnapshot, markdownExportBody, markdownExportFile, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
         FIND_MAX_MATCHES, FIND_MAX_QUERY, sniffImageMime, checkAssetBytes, assetFileName, parseAssetLink, buildAssetLink, buildAssetImage,
         insertAssetImage, assetImageAt, restyleAssetImage, assetRefs, assetIntegrityReport, isAssetNoteId, ASSET_MAX_BYTES, ASSET_VIDEO_MAX_BYTES, ASSET_FILE_MAX_BYTES, ASSET_MAX_PER_NOTE, ASSET_MIME, VIDEO_EXT_MIME, cleanAssetFileName, uniqueAssetFileName, parseFileAssetLink, droppedAssetMarkup, insertDroppedAssetLinks, droppedFiles,
         cleanRemind, ceilStep, dueReminders, nextReminderAt, reminderDelay, reminderPresets, parseRemindInput, remindPreview, remindDateText, remindTimeText,
-        createReminderScheduler, createReminderAlertActions, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
+        createReminderScheduler, createReminderAlertActions, createReminderAlertStack, REMIND_STEP_MS, SNOOZE_CHOICES, MAX_TIMER_MS,
         headingSlug, headingsOf, cleanAnchor, noteLinkParts, headingOffset, tocBlock, tocList, findToc, updateToc, insertToc, insertFootnote, nextFootnoteLabel, mentionRe, hasMention, linkFirstMention, collectRefs, attachTrailingBlockId, nextMarkdownFence, TASK_BOX_CHARS, TASK_BOX_TOKEN,
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_FOLDER_LABEL, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         DATE_TITLE_RE, dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
         HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, BACKUP_DIR, BACKUP_HOURS, backupEntryName, parseBackupName, backupPlan, backupLeft, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
-        orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, projectZen,
+        orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, pseudoTabCleanupKind, sweepRestoredPseudoTabs, filterZenSidebarState, acquireZenSidebarShield, restoredPseudoFolderKind, retireRestoredPseudoFolder, projectZen,
         utf8Bytes, createPerfSampler, createZenFolder,
       };
     }
@@ -8541,6 +9456,16 @@
     // ======================================================================
     // Sheet: one editor view; many can exist, all bound to the same store
     // ======================================================================
+    // Find the complete source line for a calendar item without changing Markdown.
+    function itemMarkerLineRange(body, itemId) {
+      const id = String(itemId || "").replace(/[^\w-]/g, "");
+      if (!id) return null;
+      const text = String(body || ""), markerAt = text.indexOf(`%%zn-item-id:${id}%%`);
+      if (markerAt < 0) return null;
+      const start = text.lastIndexOf("\n", markerAt - 1) + 1, end = text.indexOf("\n", markerAt);
+      return { start, end: end < 0 ? text.length : end };
+    }
+
     function createSheet({ store, adapter, env, ensureStore }) {
       const token = {};
       const cleanups = [];
@@ -8744,14 +9669,17 @@
       // Zen can close a panel when a native <select> opens its platform popup. Calendar controls therefore use
       // the same accessible in-sheet menu as the rest of Notes; the selectors remain buttons, never native selects.
       const calendarViewSelect = h("button", { type: "button", class: "zn-chip zn-calendar-view-select", "aria-label": "Calendar view", "aria-haspopup": "menu" }, "Month");
+      const calendarDensitySelect = h("button", { type: "button", class: "zn-chip zn-calendar-density-select", "aria-label": "Calendar density", "aria-haspopup": "menu" }, "Comfortable");
+      const calendarSnapSelect = h("button", { type: "button", class: "zn-chip zn-calendar-snap-select", "aria-label": "Calendar drag snap", "aria-haspopup": "menu" }, "Snap 15 min");
       const calendarPrev = h("button", { type: "button", class: "zn-chip zn-calendar-nav", "aria-label": "Previous period", title: "Previous period" }, "‹");
       const calendarToday = h("button", { type: "button", class: "zn-chip zn-calendar-today", title: "Go to today" }, "Go to today");
       const calendarNext = h("button", { type: "button", class: "zn-chip zn-calendar-nav", "aria-label": "Next period", title: "Next period" }, "›");
       const calendarDaysSelect = h("button", { type: "button", class: "zn-chip zn-calendar-days-select", "aria-label": "Number of days forward", "aria-haspopup": "menu" }, "7 days");
       const calendarKindSelect = h("button", { type: "button", class: "zn-chip zn-calendar-kind-filter", "aria-label": "Filter item type", "aria-haspopup": "menu" }, "All items");
       const calendarCategorySelect = h("button", { type: "button", class: "zn-chip zn-calendar-category-filter", "aria-label": "Filter category", "aria-haspopup": "menu" }, "All categories");
+      const calendarUndoMove = h("button", { type: "button", class: "zn-chip zn-calendar-undo-move", "aria-label": "Undo last calendar change", hidden: "true" }, "Undo change");
       const calendarToolsSelect = h("button", { type: "button", class: "zn-chip zn-calendar-tools", "aria-label": "Calendar tools", "aria-haspopup": "menu" }, "Tools");
-      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarPrev, calendarToday, calendarNext, calendarViewSelect, calendarDaysSelect, calendarKindSelect, calendarCategorySelect, calendarToolsSelect);
+      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarPrev, calendarToday, calendarNext, calendarViewSelect, calendarDensitySelect, calendarSnapSelect, calendarDaysSelect, calendarKindSelect, calendarCategorySelect, calendarUndoMove, calendarToolsSelect);
       const calendarContent = h("div", { class: "zn-calendar-pane-content zn-calendar-view", role: "region", "aria-label": "Calendar items" });
       const calendarPane = h("section", { class: "zn-calendar-pane", "aria-label": "Calendar" }, calendarHeader, calendarControls, calendarContent);
       const allSplitter = h("div", { class: "zn-calendar-splitter", role: "separator", tabindex: "0", "aria-label": "Resize folder tree and calendar panes", "aria-orientation": "vertical", "aria-valuemin": "20", "aria-valuemax": "80", "aria-valuenow": "36" });
@@ -9374,14 +10302,11 @@
           } else goHeading(hit.slug);
           return true;
         }
-        const marker = itemId ? `%%zn-item-id:${String(itemId).replace(/[^\w-]/g, "")}%%` : "";
-        const body = String(target.body || "");
-        const markerAt = marker ? body.indexOf(marker) : -1;
-        if (markerAt >= 0 && mode === "edit") {
-          const lineStart = body.lastIndexOf("\n", markerAt - 1) + 1;
-          const lineEnd = body.indexOf("\n", markerAt);
+        const range = itemMarkerLineRange(target.body, itemId);
+        if (range) {
+          if (mode === "read") setMode("split");
           ta.focus({ preventScroll: true });
-          ta.setSelectionRange(lineStart, lineEnd < 0 ? body.length : lineEnd);
+          revealSourceMatch(range);
         } else if (wanted) goHeading(wanted);
         return true;
       }
@@ -10246,20 +11171,42 @@
           { heading: true, label: calendarDayLabel(day, { year: true }) },
           { icon: "calendar", label: "Open Day view", action: chooseView },
           { icon: "bell", label: "New reminder…", action: () => askCalendarComposer({ date: key, kind: "reminder", linkCurrent: false }) },
+          { icon: "bell", label: "New all-day reminder…", action: () => askCalendarComposer({ date: key, kind: "reminder", allDay: true, linkCurrent: false }) },
           { icon: "calendar-plus", label: "New event…", action: () => askCalendarComposer({ date: key, kind: "event", linkCurrent: false }) },
+          { icon: "calendar-plus", label: "New all-day event…", action: () => askCalendarComposer({ date: key, kind: "event", allDay: true, linkCurrent: false }) },
+          { icon: "note", label: "Open or create date note", action: () => openDay(day, key, true) },
+          { sep: true },
+          ...[[-1, "Previous day"], [1, "Next day"]].map(([offset, label]) => ({ icon: "calendar", label, action: () => { store.setMeta({ calendarCursor: CALENDAR_PART.localDateKey(CALENDAR_PART.addDays(day, offset)), calendarView: "day" }); renderCalendar(); } })),
         ]);
+      }
+      function bindCalendarDayContext(anchor, day) {
+        anchor.addEventListener("contextmenu", (event) => showCalendarDayMenu(event, day, anchor));
+        anchor.addEventListener("keydown", (event) => {
+          if (event.target !== anchor || !(event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) return;
+          event.preventDefault(); event.stopPropagation(); showCalendarDayMenu(null, day, anchor);
+        });
       }
       function calendarItemMenuRows(item) {
         const reminder = CALENDAR_PART.isReminder(item), history = reminderHistoryStore();
         const lifecycle = reminder ? reminderLifecycleState(item) : "pending";
         const historyWritable = !!history && !history.storageState().writeBlocked;
-        const model = CALENDAR_PART.calendarItemMenuModel(item, { state: lifecycle, historyWritable });
+        const agendaVisible = agendaWindowForItem(item, store).enabled;
+        const model = CALENDAR_PART.calendarItemMenuModel(item, { state: lifecycle, historyWritable, agendaVisible, agendaWritable: !!currentCalendarItem(item) });
         const date = new Date(CALENDAR_PART.itemRange(item)[0]);
         const nextMonday = (8 - date.getDay()) % 7 || 7;
         const commands = {
           open: () => { const latest = currentCalendarItem(item); if (latest) openCalendarItem(latest); },
           edit: () => { const latest = currentCalendarItem(item); if (latest) askCalendarComposer({ item: latest }); },
           "change-time": () => { const latest = currentCalendarOccurrence(item); if (latest) askCalendarItemReschedule(latest); },
+          "agenda-visibility": () => {
+            const current = currentCalendarItem(item);
+            if (!current) return flash("That calendar item is no longer available");
+            const enabled = !agendaVisible;
+            if (agendaWindowForItem(current, store).enabled === enabled) return;
+            const policy = { ...CALENDAR_PART.cleanAgendaWindow(current.x?.agendaWindow), enabled };
+            if (!store.items.upsert({ ...current, x: { ...current.x, agendaWindow: policy } })) return flash("Could not update Agenda visibility");
+            renderCalendar(); flash(enabled ? "Shown in Zen Agenda" : "Hidden from Zen Agenda");
+          },
           convert: () => convertCalendarItem(item),
           duplicate: () => duplicateCalendarItem(item),
           delete: () => askDeleteCalendarItem(item),
@@ -10305,7 +11252,10 @@
         button.addEventListener("pointerleave", () => hideCalendarHoverCard(button));
         button.addEventListener("focus", () => showCalendarHoverCard(item, button));
         button.addEventListener("blur", () => hideCalendarHoverCard(button));
-        button.addEventListener("click", () => openCalendarItem(item));
+        button.addEventListener("click", (event) => {
+          if (button._znSuppressDragClick) { button._znSuppressDragClick = false; event.preventDefault(); event.stopPropagation(); return; }
+          openCalendarItem(item);
+        });
         button.setAttribute("aria-haspopup", "menu");
         button.addEventListener("contextmenu", (event) => showCalendarItemMenu(event, item, button));
         button.addEventListener("keydown", (event) => {
@@ -10318,8 +11268,8 @@
       }
       function calendarDayGroup(day, dayItems, { selected = false, compact = false } = {}) {
         const isToday = CALENDAR_PART.localDateKey(day) === CALENDAR_PART.localDateKey(nowMs());
-        const section = h("section", { class: "zn-cal-day-group" + (selected ? " is-selected" : "") + (isToday ? " is-today" : "") });
-        section.addEventListener("contextmenu", (event) => showCalendarDayMenu(event, day, section));
+        const section = h("section", { class: "zn-cal-day-group" + (selected ? " is-selected" : "") + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": calendarDayLabel(day, { year: true }) });
+        bindCalendarDayContext(section, day);
         const head = h("div", { class: "zn-cal-day-head" }, h("strong", {}, calendarDayLabel(day, { year: true })), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, "Today")] : []), h("span", {}, `${dayItems.length} item${dayItems.length === 1 ? "" : "s"}`));
         section.append(head);
         const allDay = dayItems.filter((item) => CALENDAR_PART.isAllDay(item));
@@ -10360,9 +11310,10 @@
         for (const week of grid) for (const day of week) {
           const inMonth = new Date(day).getMonth() === month;
           const dayItems = CALENDAR_PART.itemsInRange(expanded, day, CALENDAR_PART.addDays(day, 1));
-          const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", "data-day": CALENDAR_PART.ymd(new Date(day)) });
+          const cell = h("div", { class: "zn-cal-month-cell" + (inMonth ? "" : " is-out") + (day === today ? " is-today" : "") + (day === selected ? " is-selected" : ""), role: "gridcell", tabindex: "0", "aria-label": "Calendar day " + calendarDayLabel(day, { year: true }), "data-day": CALENDAR_PART.ymd(new Date(day)) });
+          const openDayView = () => { store.setMeta({ calendarCursor: CALENDAR_PART.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); };
           const dayButton = h("button", { type: "button", class: "zn-cal-month-date", "aria-label": "Open Day view for " + calendarDayLabel(day, { year: true }), "aria-pressed": day === selected ? "true" : "false" }, String(new Date(day).getDate()));
-          dayButton.addEventListener("click", (event) => { event.stopPropagation(); store.setMeta({ calendarCursor: CALENDAR_PART.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
+          dayButton.addEventListener("click", (event) => { event.stopPropagation(); openDayView(); });
           cell.append(dayButton);
           const allDay = dayItems.filter((item) => CALENDAR_PART.isAllDay(item));
           const timed = dayItems.filter((item) => !CALENDAR_PART.isAllDay(item));
@@ -10371,7 +11322,7 @@
             const reminder = CALENDAR_PART.isReminder(item), lifecycle = reminder ? reminderLifecycleState(item) : "";
             const mark = h("button", { type: "button", class: "zn-cal-month-mark" + (reminder ? " is-reminder is-" + lifecycle : " is-event"), title: [item.summary, reminder ? "Reminder: " + lifecycle : "", item.x?.calNote].filter(Boolean).join(" — "), "aria-haspopup": "menu" }, item.summary || "Untitled");
             const color = calendarItemColor(item); if (color) mark.style.setProperty("--zn-cal-item-color", color);
-            mark.addEventListener("click", () => openCalendarItem(item));
+            mark.addEventListener("click", (event) => { event.stopPropagation(); openCalendarItem(item); });
             mark.addEventListener("contextmenu", (event) => showCalendarItemMenu(event, item, mark));
             mark.addEventListener("keydown", (event) => {
               if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
@@ -10384,7 +11335,11 @@
           if (dayItems.length > 2) mini.append(h("span", { class: "zn-cal-month-more" }, `+${dayItems.length - 2} more`));
           if (allDay.length) cell.append(h("span", { class: "zn-cal-month-allday", "aria-label": `${allDay.length} all-day item${allDay.length === 1 ? "" : "s"}` }, "All day"));
           if (timed.some((item) => CALENDAR_PART.isReminder(item))) cell.append(h("span", { class: "zn-cal-month-reminder-dot", "aria-label": "Reminder" }, "●"));
-          cell.addEventListener("contextmenu", (event) => showCalendarDayMenu(event, day, cell));
+          cell.addEventListener("click", (event) => { if (!event.target?.closest?.("button, a, input, select, textarea")) openDayView(); });
+          bindCalendarDayContext(cell, day);
+          cell.addEventListener("keydown", (event) => {
+            if (event.target === cell && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); event.stopPropagation(); openDayView(); }
+          });
           cell.append(mini); cells.append(cell);
         }
         monthWrap.append(dows, cells);
@@ -10404,7 +11359,7 @@
       }
       function calendarAgendaView(items, cursor) {
         const end = CALENDAR_PART.addDays(cursor, 90);
-        const expanded = CALENDAR_PART.expandRange(items, cursor, end).slice(0, 160);
+        const expanded = CALENDAR_PART.agendaPendingItems(CALENDAR_PART.expandRange(items, cursor, end), reminderLifecycleState).slice(0, 160);
         calendarPeriod.textContent = `Agenda · 90 days from ${calendarDayLabel(cursor, { year: true })}`;
         const list = h("div", { class: "zn-cal-agenda-list" });
         if (!expanded.length) list.append(h("p", { class: "zn-cal-empty-day" }, "No upcoming calendar items"));
@@ -10417,8 +11372,146 @@
         calendarContent.dataset.compact = "true";
         calendarContent.append(list);
       }
-      const CALENDAR_HOUR_PX = 54;
+      // One captured pointer gesture per sheet. A calendar re-render, view change,
+      // Escape, pointer cancellation, panel close or teardown discards the preview.
+      let calendarDrag = null, calendarMoveUndo = null, calendarDragClickTimer = 0, calendarSuppressedClick = null;
+      function releaseCalendarSuppressedClick(event) {
+        const pending = calendarSuppressedClick;
+        if (!pending || (event?.pointerId !== undefined && event.pointerId !== pending.pointerId)) return;
+        calendarSuppressedClick = null;
+        window.clearTimeout(calendarDragClickTimer);
+        calendarDragClickTimer = window.setTimeout(() => { calendarDragClickTimer = 0; pending.button._znSuppressDragClick = false; }, 0);
+      }
+      function cancelCalendarDrag() {
+        const g = calendarDrag;
+        calendarDrag = null;
+        if (!g) return;
+        g.preview?.remove();
+        if (g.active) { g.button._znSuppressDragClick = true; calendarSuppressedClick = { button: g.button, pointerId: g.pointerId }; }
+        g.button.classList.remove("is-dragging");
+        try { if (g.button.hasPointerCapture?.(g.pointerId)) g.button.releasePointerCapture(g.pointerId); } catch (_) {}
+      }
+      function calendarDragPoint(g, event) {
+        if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return null;
+        const clip = g.scroll.getBoundingClientRect();
+        if (event.clientX < clip.left || event.clientX >= clip.right || event.clientY < clip.top || event.clientY >= clip.bottom) return null;
+        for (const track of g.columns.querySelectorAll(g.allDay ? ".zn-cal-time-allday-cell" : ".zn-cal-time-track")) {
+          const rect = track.getBoundingClientRect();
+          if (event.clientX < rect.left || event.clientX >= rect.right || event.clientY < rect.top || event.clientY >= rect.bottom) continue;
+          const minute = g.allDay ? 0 : Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / g.hourHeight));
+          return { track, day: track.getAttribute("data-day"), minute };
+        }
+        return null;
+      }
+      function updateCalendarDrag(event) {
+        const g = calendarDrag;
+        if (!g || (event.pointerId !== undefined && event.pointerId !== g.pointerId)) return;
+        if (!g.active && Math.hypot(event.clientX - g.x, event.clientY - g.y) < 5) return;
+        g.active = true;
+        g.button.classList.add("is-dragging");
+        const point = calendarDragPoint(g, event);
+        const placement = point && (g.create ? { date: point.day, minute: point.minute } : g.allDay ? { date: point.day } : g.edge ? CALENDAR_PART.calendarResizePlacement(g.before, g.edge, g.originDay, g.originMinute, point.day, point.minute, g.zone, g.snap) : CALENDAR_PART.calendarMovePlacement(g.before, g.originDay, g.originMinute, point.day, point.minute, g.zone, g.snap));
+        g.placement = placement;
+        if (!placement) { g.preview?.remove(); g.preview = null; return; }
+        if (!g.preview) g.preview = h("div", { class: "zn-cal-drag-preview", "aria-hidden": "true" });
+        if (g.preview.parentElement !== point.track) point.track.append(g.preview);
+        g.preview.style.top = g.allDay ? "0px" : Math.max(0, point.minute / 60 * g.hourHeight) + "px";
+        const shownMinute = Math.min(1440, Math.round((placement.minute || 0) / g.snap) * g.snap);
+        g.preview.textContent = g.allDay ? placement.date + " · all day" : placement.date + " " + String(Math.floor(shownMinute / 60)).padStart(2, "0") + ":" + String(shownMinute % 60).padStart(2, "0");
+        event.preventDefault();
+      }
+      function commitCalendarDrag(event) {
+        const g = calendarDrag;
+        if (!g || (event.pointerId !== undefined && event.pointerId !== g.pointerId)) return;
+        if (g.active) updateCalendarDrag(event);
+        const placement = g.active ? g.placement : null;
+        cancelCalendarDrag();
+        // Native click follows pointerup in this task; clear suppression afterwards.
+        releaseCalendarSuppressedClick(event);
+        if (!placement) return;
+        if (g.create) {
+          const range = CALENDAR_PART.calendarDraftRange(g.originDay, g.originMinute, placement.date, placement.minute, g.zone, g.snap);
+          if (!range) return flash("Select a valid non-empty calendar time range");
+          queueMicrotask(() => { if (isOpen && !destroyed) askCalendarComposer({ date: range.startDate, startTime: range.startTime, endDate: range.endDate, endTime: range.endTime, tz: g.zone, kind: "event", linkCurrent: false }); });
+          return;
+        }
+        applyCalendarPlacement(g, placement);
+      }
+      function applyCalendarPlacement(g, placement) {
+        const current = store.items.get(g.before.id);
+        if (!current || current.rev !== g.before.rev || current.etag !== g.before.etag) return flash("Calendar item changed during the drag; nothing was moved");
+        const next = g.allDay ? CALENDAR_PART.calendarMoveAllDayReminder(current, g.originDay, placement.date, nowMs()) : g.edge ? CALENDAR_PART.calendarResizeTimedEvent(current, g.edge, placement, g.zone, g.snap, nowMs()) : CALENDAR_PART.calendarMoveTimedItem(current, placement, g.zone, nowMs());
+        if (!next) return flash("That calendar move is unavailable");
+        if (JSON.stringify(next.start) === JSON.stringify(current.start) && JSON.stringify(next.end) === JSON.stringify(current.end)) return;
+        const before = { start: current.start, end: current.end, moved: current.x?.moved };
+        const saved = store.items.upsert(next);
+        if (!saved) return flash("Could not move the calendar item; check storage and reminder history");
+        if (saved.x?.src === "list") { try { store.syncItemScheduleToNote(saved, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
+        const latest = store.items.get(saved.id);
+        const linked = latest?.x?.src === "list" && latest.x.noteId ? store.get(latest.x.noteId) : null;
+        const identity = latest && CALENDAR_PART.isReminder(latest) ? CALENDAR_PART.reminderIdentity(latest) : null;
+        const historyHead = identity ? store.items.history?.list({ itemId: identity.itemId, occurrenceId: identity.occurrenceId, limit: 1 })[0]?.id || "" : "";
+        calendarMoveUndo = latest ? { id: latest.id, rev: latest.rev, etag: latest.etag, before, noteId: linked?.id || "", noteBody: linked?.body || "", identity, historyHead } : null;
+        renderCalendar(); flash(g.edge ? "Calendar item resized" : "Calendar item moved");
+      }
+      function undoCalendarMove() {
+        const undo = calendarMoveUndo;
+        if (!undo) return;
+        const current = store.items.get(undo.id), note = undo.noteId ? store.get(undo.noteId) : null;
+        const head = undo.identity ? store.items.history?.list({ itemId: undo.identity.itemId, occurrenceId: undo.identity.occurrenceId, limit: 1 })[0]?.id || "" : "";
+        if (!current || current.rev !== undo.rev || current.etag !== undo.etag || (undo.noteId && (!note || note.body !== undo.noteBody)) || head !== undo.historyHead) {
+          calendarMoveUndo = null; renderCalendar(); return flash("Cannot undo: the item, source note or reminder history changed");
+        }
+        const restored = store.items.upsert({ ...current, start: undo.before.start, end: undo.before.end, x: { ...current.x, moved: undo.before.moved } });
+        if (!restored) return flash("Could not undo the calendar move");
+        calendarMoveUndo = null;
+        if (restored.x?.src === "list") { try { store.syncItemScheduleToNote(restored, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
+        renderCalendar(); flash("Calendar change undone");
+      }
+      listen(calendarUndoMove, "click", undoCalendarMove);
+      listen(root, "pointermove", updateCalendarDrag);
+      listen(root, "pointerup", (event) => { commitCalendarDrag(event); releaseCalendarSuppressedClick(event); });
+      listen(window, "pointerup", releaseCalendarSuppressedClick, true);
+      listen(root, "pointercancel", (event) => { if (calendarDrag && (event.pointerId === undefined || event.pointerId === calendarDrag.pointerId)) cancelCalendarDrag(); releaseCalendarSuppressedClick(event); });
+      cleanups.push(() => { cancelCalendarDrag(); window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null; });
+      function bindCalendarDrag(button, item, { track, columns, scroll, dayKey, hourHeight, zone, allDay = false, edge = "" }) {
+        const reminder = CALENDAR_PART.isReminder(item);
+        const writable = !reminder || (!!store.items.history && !store.items.history.storageState().writeBlocked);
+        if (!writable || item.x?.series || (item.recurrence || []).length || item.x?.src === "note") return;
+        button.classList.add("is-movable");
+        if (!edge) button.title += " — Drag to move; use the context menu for keyboard time changes";
+        button.addEventListener("pointerdown", (event) => {
+          if ((event.button !== undefined && event.button !== 0) || calendarDrag || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
+          button._znSuppressDragClick = false;
+          const current = currentCalendarItem(item);
+          if (!current || current.rev !== item.rev || current.etag !== item.etag) return;
+          const rect = track.getBoundingClientRect();
+          calendarDrag = { button, pointerId: event.pointerId, x: event.clientX, y: event.clientY, before: current, originDay: dayKey,
+            originMinute: allDay ? 0 : Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / hourHeight)),
+            hourHeight, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, allDay, edge, active: false, placement: null, preview: null };
+          try {
+            if (typeof button.setPointerCapture !== "function") { cancelCalendarDrag(); return; }
+            button.setPointerCapture(event.pointerId);
+          } catch (_) { cancelCalendarDrag(); }
+        });
+        button.addEventListener("lostpointercapture", (event) => { if (calendarDrag?.button === button && calendarDrag.pointerId === event.pointerId) cancelCalendarDrag(); });
+      }
+      function bindCalendarCreate(track, columns, scroll, dayKey, hourHeight, zone) {
+        track.addEventListener("pointerdown", (event) => {
+          if (event.target !== track || (event.button !== undefined && event.button !== 0) || calendarDrag || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
+          const rect = track.getBoundingClientRect();
+          calendarDrag = { button: track, pointerId: event.pointerId, x: event.clientX, y: event.clientY, create: true,
+            originDay: dayKey, originMinute: Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / hourHeight)),
+            hourHeight, snap: CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap), columns, scroll, zone, active: false, placement: null, preview: null };
+          try {
+            if (typeof track.setPointerCapture !== "function") { cancelCalendarDrag(); return; }
+            track.setPointerCapture(event.pointerId);
+          } catch (_) { cancelCalendarDrag(); }
+        });
+        track.addEventListener("lostpointercapture", (event) => { if (calendarDrag?.button === track && calendarDrag.pointerId === event.pointerId) cancelCalendarDrag(); });
+      }
       function calendarTimeGridView(items, cursor, mode) {
+        const CALENDAR_HOUR_PX = CALENDAR_PART.calendarDensityHourHeight(store.meta.calendarDensity);
         const C = CALENDAR_PART, zone = calendarDisplayZone(), days = mode === "week" ? C.weekDays(cursor, 1) : [C.dayStart(cursor)];
         const firstBounds = C.zonedDayBounds(C.localDateKey(days[0]), zone) || [days[0], C.addDays(days[0], 1)];
         const lastDay = days[days.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.addDays(lastDay, 1)];
@@ -10436,7 +11529,7 @@
           const isToday = C.localDateKey(day) === todayKey;
           const dayHead = h("button", { type: "button", class: "zn-cal-time-day-head" + (isToday ? " is-today" : ""), "aria-label": calendarDayLabel(day, { year: true }) + (isToday ? ", Today" : "") }, h("strong", {}, new Date(day).toLocaleDateString(undefined, { weekday: mode === "week" ? "short" : "long" })), h("span", {}, displayDateKey(CALENDAR_PART.localDateKey(day))), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, "Today")] : []));
           dayHead.addEventListener("click", () => { store.setMeta({ calendarCursor: C.ymd(new Date(day)), calendarView: "day" }); renderCalendar(); });
-          dayHead.addEventListener("contextmenu", (event) => showCalendarDayMenu(event, day, dayHead));
+          bindCalendarDayContext(dayHead, day);
           header.append(dayHead);
         }
         const allDayRow = h("div", { class: "zn-cal-time-allday-row", "aria-label": "All-day events and reminders" });
@@ -10444,9 +11537,13 @@
         allDayRow.append(h("span", { class: "zn-cal-time-all-label" }, "All day"));
         for (const day of days) {
           const isToday = C.localDateKey(day) === todayKey;
-          const cell = h("div", { class: "zn-cal-time-allday-cell" + (isToday ? " is-today" : ""), "data-day": C.ymd(new Date(day)) });
-          cell.addEventListener("contextmenu", (event) => showCalendarDayMenu(event, day, cell));
-          for (const item of C.allDayOf(expanded, day)) cell.append(calendarItemButton(item, true));
+          const cell = h("div", { class: "zn-cal-time-allday-cell" + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": "All-day items for " + fmt(day), "data-day": C.ymd(new Date(day)) });
+          bindCalendarDayContext(cell, day);
+          for (const item of C.allDayOf(expanded, day)) {
+            const button = calendarItemButton(item, true);
+            if (C.isReminder(item)) bindCalendarDrag(button, item, { track: cell, columns: allDayRow, scroll: allDayRow, dayKey: C.localDateKey(day), hourHeight: CALENDAR_HOUR_PX, zone, allDay: true });
+            cell.append(button);
+          }
           allDayRow.append(cell);
         }
         const scroll = h("div", { class: "zn-cal-time-scroll", tabindex: "0", "aria-label": "24-hour timeline" });
@@ -10463,8 +11560,9 @@
           const dayKey = C.localDateKey(day);
           const bounds = C.zonedDayBounds(dayKey, zone) || [day, C.addDays(day, 1)];
           const isToday = dayKey === todayKey;
-          const track = h("div", { class: "zn-cal-time-track", "data-day": C.ymd(new Date(day)) });
-          track.addEventListener("contextmenu", (event) => showCalendarDayMenu(event, day, track));
+          const track = h("div", { class: "zn-cal-time-track", tabindex: "0", "aria-label": "Timeline for " + fmt(day), "data-day": C.ymd(new Date(day)) });
+          bindCalendarDayContext(track, day);
+          bindCalendarCreate(track, columns, scroll, dayKey, CALENDAR_HOUR_PX, zone);
           track.style.height = (24 * CALENDAR_HOUR_PX) + "px";
           for (let hour = 0; hour < 24; hour++) {
             track.append(h("span", { class: "zn-cal-time-hour-line", style: `top:${hour * CALENDAR_HOUR_PX}px` }));
@@ -10515,7 +11613,31 @@
             const startLabel = C.clockIn(Math.max(itemStart, bounds[0]), zone);
             const endLabel = reminder ? "reminder" : C.clockIn(Math.min(itemEnd, bounds[1]), zone);
             button.setAttribute("aria-label", `${original.summary}, ${startLabel}${reminder ? " reminder" : " to " + endLabel}, lane ${entry.lane + 1} of ${entry.lanes}`);
+            bindCalendarDrag(button, original, { track, columns, scroll, dayKey, hourHeight: CALENDAR_HOUR_PX, zone });
             track.append(button);
+            if (!reminder && !original.x?.series && !(original.recurrence || []).length && original.x?.src !== "note") {
+              for (const edge of ["start", "end"]) {
+                if (edge === "start" ? itemStart < bounds[0] || itemStart >= bounds[1] : itemEnd <= bounds[0] || itemEnd > bounds[1]) continue;
+                const handle = h("button", { type: "button", class: "zn-cal-resize-handle is-" + edge,
+                  "aria-label": "Resize " + edge + " of " + (original.summary || "event") + "; use up and down arrows",
+                  "data-item-id": original.id, "data-edge": edge, title: "Drag or use Up/Down to resize " + edge });
+                handle.style.top = (top + (edge === "end" ? height : 0) - 4) + "px";
+                handle.style.left = button.style.left; handle.style.width = button.style.width;
+                bindCalendarDrag(handle, original, { track, columns, scroll, dayKey, hourHeight: CALENDAR_HOUR_PX, zone, edge });
+                handle.addEventListener("keydown", (event) => {
+                  if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+                  event.preventDefault(); event.stopPropagation();
+                  const current = currentCalendarItem(original);
+                  if (!current || current.rev !== original.rev || current.etag !== original.etag) return flash("Calendar item changed; reopen it to resize");
+                  const snap = C.cleanCalendarSnap(store.meta.calendarSnap), delta = event.key === "ArrowUp" ? -snap : snap;
+                  const placement = C.calendarResizePlacement(current, edge, dayKey, 720, dayKey, 720 + delta, zone, snap);
+                  if (!placement) return;
+                  applyCalendarPlacement({ before: current, edge, zone, snap }, placement);
+                  Array.from(calendarContent.querySelectorAll(".zn-cal-resize-handle")).find((node) => node.getAttribute("data-item-id") === current.id && node.getAttribute("data-edge") === edge)?.focus({ preventScroll: true });
+                });
+                track.append(handle);
+              }
+            }
           }
           columns.append(h("div", { class: "zn-cal-time-column" + (isToday ? " is-today" : "") }, track));
         }
@@ -10947,6 +12069,8 @@
       }
       function renderCalendar() {
         if (!CALENDAR_PART || !calendarContent) return;
+        cancelCalendarDrag();
+        calendarUndoMove.hidden = !calendarMoveUndo;
         syncCalendarFilterOptions();
         hideCalendarHoverCard();
         const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
@@ -10955,6 +12079,12 @@
         const items = calendarFilteredItems();
         calendarContent.replaceChildren();
         calendarContent.dataset.view = view;
+        const density = CALENDAR_PART.cleanCalendarDensity(store.meta.calendarDensity);
+        calendarContent.dataset.density = density;
+        calendarContent.style.setProperty("--zn-cal-hour-height", CALENDAR_PART.calendarDensityHourHeight(density) + "px");
+        calendarDensitySelect.textContent = ({ comfortable: "Comfortable", compact: "Compact", "extra-compact": "Extra compact" })[density];
+        calendarSnapSelect.textContent = "Snap " + CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap) + " min";
+        calendarSnapSelect.hidden = view !== "week" && view !== "day";
         const rect = calendarPane.getBoundingClientRect?.();
         const width = Math.max(0, Number(calendarPane.clientWidth) || Number(rect?.width) || 0);
         const compact = view === "month" && width > 0 && width < 470;
@@ -10979,6 +12109,12 @@
       listen(calendarViewSelect, "click", () => calendarChoiceMenu(calendarViewSelect,
         [{ value: "month", label: "Month" }, { value: "upcoming", label: "Next days" }, { value: "agenda", label: "Agenda" }, { value: "week", label: "Week" }, { value: "day", label: "Day" }],
         store.meta.calendarView || "month", (value) => { store.setMeta({ calendarView: value }); renderCalendar(); }));
+      listen(calendarDensitySelect, "click", () => calendarChoiceMenu(calendarDensitySelect,
+        [{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" }, { value: "extra-compact", label: "Extra compact" }],
+        CALENDAR_PART.cleanCalendarDensity(store.meta.calendarDensity), (value) => { store.setMeta({ calendarDensity: value }); renderCalendar(); }));
+      listen(calendarSnapSelect, "click", () => calendarChoiceMenu(calendarSnapSelect,
+        CALENDAR_PART.CALENDAR_SNAP_STEPS.map((step) => ({ value: String(step), label: step + " minutes" })),
+        String(CALENDAR_PART.cleanCalendarSnap(store.meta.calendarSnap)), (value) => { store.setMeta({ calendarSnap: CALENDAR_PART.cleanCalendarSnap(value) }); renderCalendar(); }));
       listen(calendarPrev, "click", () => changeCalendarCursor(-1));
       listen(calendarNext, "click", () => changeCalendarCursor(1));
       listen(calendarToday, "click", () => { store.setMeta({ calendarCursor: calendarTodayKey() }); renderCalendar(); });
@@ -11629,20 +12765,21 @@
           if (icon && !cleanFolderIcon(icon)) {
             f.input.dataset.bad = "true";
             f.input.focus?.();
-            return;
+            return false;
           }
-          // The shared Simple/Detailed mode is written only when the person applies.
-          setFolderMode(editMode);
           const out = editMode === "simple" ? edgeOnly() : parts;
-          if (save) save(color, icon, out, opacity);
-          else store.setFolderStyle(node.id, { color, icon, parts: out, opacity });
+          if (save && save(color, icon, out, opacity) === false) { status.textContent = "Folder no longer exists."; return false; }
+          if (!save) store.setFolderStyle(node.id, { color, icon, parts: out, opacity });
+          // The shared Simple/Detailed mode is written only after a successful apply.
+          setFolderMode(editMode);
           scheduleList();
           if (closeAfter) closeDialog();
           else status.textContent = "Applied.";
+          return true;
         };
         apply.addEventListener("click", () => commit(false));
         ok.addEventListener("click", () => commit(true));
-        reset.addEventListener("click", () => { color = ""; parts = {}; opacity = {}; syncAll(); commit(false); status.textContent = "Reset."; });
+        reset.addEventListener("click", () => { color = ""; parts = {}; opacity = {}; syncAll(); if (commit(false)) status.textContent = "Reset."; });
         cancel.addEventListener("click", closeDialog);
       }
       // The NOTES root folder in the Zen sidebar uses the same per-layer schema.
@@ -12082,7 +13219,12 @@
         if (!trashed.length) return;
         return askReminderImpact(trashed, { permanent: true, bulk: true, title: "Empty Trash permanently?", actionLabel: "Empty Trash", run: () => store.emptyTrash().then(() => after?.()) });
       }
-      function askFolderDelete(node) {
+      function askFolderDelete(node, resolve = () => node) {
+        const currentFolder = () => {
+          const current = resolve();
+          if (!current) flash("Folder no longer exists");
+          return current;
+        };
         const toRoot = chip("Notes to top level", true);
         const toTrash = chip("Notes to trash");
         const cancel = chip("Cancel");
@@ -12090,16 +13232,27 @@
         cancel.addEventListener("click", closeDialog);
         toRoot.addEventListener("click", () => {
           closeDialog();
-          store.removeFolder(node.id, "toRoot");
+          const current = currentFolder();
+          if (current) store.removeFolder(current.id, "toRoot");
         });
         toTrash.addEventListener("click", () => {
-          const fid = cleanFolder(node.id);
-          const affected = store.list().filter((n) => cleanFolder(n.folder) && inFolder(cleanFolder(n.folder), fid));
+          const current = currentFolder();
+          if (!current) { closeDialog(); return; }
+          const fid = cleanFolder(current.id);
+          const folderNotes = () => store.list().filter((n) => cleanFolder(n.folder) && inFolder(cleanFolder(n.folder), fid));
+          const affected = folderNotes();
+          const fingerprint = (notes) => JSON.stringify(notes.map((n) => [n.id, noteReminderCount(n)]).sort((a, b) => a[0].localeCompare(b[0])));
+          const reviewed = fingerprint(affected);
           askReminderImpact(affected, {
             bulk: true,
             title: "Move folder notes to Trash?",
             actionLabel: "Move notes to Trash",
-            run: () => store.removeFolder(node.id, "toTrash"),
+            run: () => {
+              const latest = currentFolder();
+              if (!latest) return;
+              if (latest.id !== fid || fingerprint(folderNotes()) !== reviewed) { flash("Folder contents changed; please review again"); return; }
+              store.removeFolder(fid, "toTrash");
+            },
           });
         });
         cancel.focus?.({ preventScroll: true });
@@ -13047,6 +14200,29 @@
         ok.focus({ preventScroll: true });
       }
 
+      // Markdown can carry Zentral-only syntax. Ask before changing it or
+      // passing it through; no file picker is opened when the user cancels.
+      function askMarkdownExport(notes, run, extraWarnings = []) {
+        const warnings = new Set(extraWarnings);
+        // Freeze the same reader settings used for review and file writing.
+        const markdownReadOpts = { ...(env.readOpts?.() || {}) };
+        for (const entry of notes) {
+          const options = { ...markdownReadOpts, flavor: entry?.flavor || markdownReadOpts.flavor };
+          for (const name of markdownExportWarnings(entry?.body, options)) warnings.add(name);
+          if (entry?.remind) warnings.add("reminder metadata");
+        }
+        if (!warnings.size) { Promise.resolve(run({ markdownReadOpts })).catch((error) => console.warn("[ZentralNotes] export failed", error)); return; }
+        const cancel = chip("Cancel"), raw = chip("Keep raw syntax"), portable = chip("Convert to portable Markdown", true);
+        openCard("Markdown export compatibility",
+          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Extended task states become labelled unchecked tasks, highlights become bold, spoilers use HTML details, subscript/superscript use HTML tags, single-tilde strike uses double tildes, inline footnotes become numbered references when safe (otherwise literal text), math becomes literal code, block IDs become comments, and small print becomes ordinary text. Block-level links may not transfer; spoiler headings are omitted from the generated table of contents. Ignored, disabled or ambiguous syntax may remain as written. Sizing, formatting and reminder scheduling may not transfer. Folder exports flatten the folder structure; linked assets and notes outside the selection are not copied."),
+          h("div", { class: "zn-dialog-actions" }, cancel, raw, portable));
+        const choose = (markdownMode) => { closeDialog(); Promise.resolve(run({ markdownMode, markdownReadOpts })).catch((error) => console.warn("[ZentralNotes] export failed", error)); };
+        cancel.addEventListener("click", closeDialog);
+        raw.addEventListener("click", () => choose("raw"));
+        portable.addEventListener("click", () => choose("portable"));
+        cancel.focus({ preventScroll: true });
+      }
+
       // ---- small dialogs: link, table, quick settings, shortcuts ---------------------------------------
       function openCard(label, ...kids) {
         closeMenu();
@@ -13293,8 +14469,8 @@
       function displayDateKey(key) {
         return CALENDAR_PART?.formatDateKey?.(key, dateDisplayFormat()) || String(key || "");
       }
-      function openDay(ms, ymd) {
-        if (getPref(PREF.AGENDA_ENABLED, false)) { openAgendaDay(ymd); return; }
+      function openDay(ms, ymd, forceDateNote = false) {
+        if (!forceDateNote && getPref(PREF.AGENDA_ENABLED, false)) { openAgendaDay(ymd); return; }
         if (dateMode() === "single") {
           let j = store.list().find(isJournal);
           if (!j) j = store.create("# " + JOURNAL_TITLE + "\n", "");
@@ -14364,13 +15540,13 @@
         // button (table of contents, quick settings, search, split view) stays out of here, or sits one step down.
         const items = [
           { icon: "save", label: "Import & export", group: [
-            { icon: "save", label: "Save as Markdown\u2026", action: () => env.exportNote(n, "md") },
+            { icon: "save", label: "Save as Markdown\u2026", action: () => { const [snapshot] = markdownExportSnapshot([n]); askMarkdownExport([snapshot], (options) => env.exportNote(snapshot, "md", options)); } },
             { icon: "save", label: "Export as HTML\u2026", action: () => askExport("html", () => env.exportNote(n, "html")) },
             { icon: "save", label: "Export as plain text\u2026", action: () => askExport("txt", () => env.exportNote(n, "txt")) },
             { icon: "save", label: "Print / save as PDF\u2026", action: () => askExport("pdf", () => env.printNote(n)) },
             { sep: true },
-            { icon: "save", label: "Export all notes\u2026", action: () => env.exportAll(store.list()) },
-            { icon: "save", label: "Export all as zip\u2026", action: () => askExport("zip", async () => { const k = await env.exportZip(store.list()); if (k) flash(`Zipped ${k} notes`); }) },
+            { icon: "save", label: "Export all notes\u2026", action: () => { const list = markdownExportSnapshot(store.list()); askMarkdownExport(list, (options) => env.exportAll(list, options)); } },
+            { icon: "save", label: "Export all as zip\u2026", action: () => { const list = markdownExportSnapshot(store.list()); askMarkdownExport(list, (options) => askExport("zip", async () => { const k = await env.exportZip(list, options); if (k) flash(`Zipped ${k} notes`); })); } },
             { icon: "folder", label: "Import .md folder\u2026", action: async () => { const k = await env.importFolder(store); flash(k ? `Imported ${k} notes` : "Nothing imported"); if (view === "list") scheduleList(); } },
             { sep: true },
             { icon: "paperclip", label: "Check attached files…", action: () => queueMicrotask(askAssetIntegrity) },
@@ -15186,6 +16362,7 @@
         const mod = e.ctrlKey || e.metaKey;
         const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
         if (key === "Escape") {
+          if (calendarDrag) { cancelCalendarDrag(); e.preventDefault(); return; }
           if (armed.length && !dialog && !menu) disarm();
           else if (dialog) closeDialog();
           else if (menu) closeMenu();
@@ -15256,6 +16433,10 @@
         if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) renderCalendar();
       });
       if (offCalendarItems) cleanups.push(offCalendarItems);
+      const offCalendarHistory = store.items?.history?.on?.(() => {
+        if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) renderCalendar();
+      });
+      if (offCalendarHistory) cleanups.push(offCalendarHistory);
 
       // ---- layout ------------------------------------------------------------------
       function layout() {
@@ -16018,6 +17199,9 @@
       function close() {
         if (!isOpen) return;
         isOpen = false;
+        cancelCalendarDrag();
+        window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null;
+        calendarMoveUndo = null;
         collapsed = false;
         unwatchParentPanelHidden();
         delete root.dataset.collapsed;
@@ -16109,6 +17293,47 @@
         newNote: (folderId) => {
           if (isOpen && !destroyed) newNote(folderId);
         },
+        newSubfolder: (parentId = "", parentUid = "") => {
+          if (!isOpen || destroyed) return false;
+          const parent = parentId ? store.meta.folders.find((folder) => folder.id === parentId && folder.uid === parentUid) : null;
+          if (parentId && !parent || folderDepth(parentId) >= FOLDER_MAX_DEPTH) return false;
+          askFolderName("New subfolder", "", (name) => {
+            // A sidebar menu may outlive a move, deletion, or a different
+            // folder created at the old path. Resolve the stable uid again.
+            const current = parent ? store.meta.folders.find((folder) => folder.uid === parentUid) : null;
+            if (parent && !current) { flash("Parent folder no longer exists"); return; }
+            if (current && folderDepth(current.id) >= FOLDER_MAX_DEPTH) { flash("Cannot create folder (too deep)"); return; }
+            if (!store.addFolder(name, current?.id || "")) flash("Cannot create folder (too deep or folder limit reached)");
+          });
+          return true;
+        },
+        sidebarFolderStyle: (id = "", uid = "") => {
+          if (!isOpen || destroyed) return false;
+          if (!id) { askRootStyle(); return true; }
+          const folder = store.meta.folders.find((entry) => entry.id === id && entry.uid === uid);
+          if (!folder) return false;
+          askFolderStyle(folder, (color, icon, parts, opacity) => {
+            const current = store.meta.folders.find((entry) => entry.uid === uid);
+            return !!current && store.setFolderStyle(current.id, { color, icon, parts, opacity });
+          });
+          return true;
+        },
+        sidebarFolderDelete: (id = "", uid = "") => {
+          if (!isOpen || destroyed || !id) return false;
+          const folder = store.meta.folders.find((entry) => entry.id === id && entry.uid === uid);
+          if (!folder) return false;
+          askFolderDelete(folder, () => store.meta.folders.find((entry) => entry.uid === uid) || null);
+          return true;
+        },
+        sidebarFolderExport: (id = "", uid = "") => {
+          if (!isOpen || destroyed) return false;
+          const folder = id ? store.meta.folders.find((entry) => entry.id === id && entry.uid === uid) : null;
+          if (id && !folder) return false;
+          const list = markdownExportSnapshot(store.list().filter((note) => !id || inFolder(cleanFolder(note.folder), id)));
+          if (!list.length) { flash("No notes in this folder to export"); return false; }
+          askMarkdownExport(list, (options) => env.exportAll(list, { ...options, pickerTitle: "Export folder notes" }), ["folder structure and linked assets"]);
+          return true;
+        },
         quickCaptureToday: () => {
           if (isOpen && !destroyed) queueMicrotask(() => askQuickCapture(""));
         },
@@ -16118,6 +17343,27 @@
           const wanted = startMode(getPref(PREF.DEFAULT_VIEW, "last"), store.meta.mode);
           if (wanted !== store.meta.mode) store.setMeta({ mode: wanted });
           return openNoteByIdAndHeading(id, heading, itemId);
+        },
+        runAgendaItemAction: (identity, command) => {
+          if (!isOpen || destroyed || !CALENDAR_PART?.resolveAgendaOccurrence || !store.items) return false;
+          const item = CALENDAR_PART.resolveAgendaOccurrence(store.items.list(), identity);
+          if (!item) { flash("That calendar item is no longer available"); return false; }
+          const find = (rows) => {
+            for (const row of rows) {
+              if (row?.command === command && typeof row.run === "function") return row;
+              if (row?.group) { const nested = find(row.group); if (nested) return nested; }
+            }
+            return null;
+          };
+          const action = find(calendarItemMenuRows(item));
+          if (!action) return false;
+          action.run();
+          return true;
+        },
+        newAgendaDayItem: (key, kind) => {
+          if (!isOpen || destroyed || !CALENDAR_PART?.parseYmd?.(key) || !["reminder", "event"].includes(kind) || !store.items) return false;
+          askCalendarComposer({ date: key, kind, linkCurrent: false });
+          return true;
         },
         openCalendarDay: (key) => {
           if (!isOpen || destroyed) return false;
@@ -16761,11 +18007,33 @@
           : IOUtils.setPermissions(p, 0o600, false),
     };
 
-    function start() {
+    function start({ lifecycle } = {}) {
       const cleanups = [];
       const onCleanup = (fn) => cleanups.push(fn);
       let disposed = false;
       const warn = (error) => console.warn("[ZentralNotes]", error);
+      // Zen's public session manager builds both its sidebar file and the Sync
+      // projection from saveState(). Firefox's separate session file is NOT
+      // covered here; keep the remaining isolation work explicit in the roadmap.
+      let zenSessionManager = null;
+      try { zenSessionManager = ChromeUtils.importESModule?.("resource:///modules/zen/ZenSessionManager.sys.mjs")?.ZenSessionStore || null; } catch (_) {}
+      if (zenSessionManager && lifecycle?.watchNative) {
+        const binding = lifecycle.watchNative({
+          name: "notes-zen-sidebar-session-shield", enabled: () => true,
+          resolve: () => zenSessionManager, events: ["activate"],
+          attach(target, child) {
+            const release = acquireZenSidebarShield(target, warn);
+            if (!release) throw new Error("Zen sidebar session hook is unavailable or already replaced");
+            child.own(release);
+            return { isCurrent: release.isCurrent };
+          },
+        });
+        onCleanup(() => binding.destroy());
+      } else if (zenSessionManager) {
+        const release = acquireZenSidebarShield(zenSessionManager, warn);
+        if (release) onCleanup(release);
+      }
+
       const prefBool = (k, d) => {
         try {
           return Services.prefs.getBoolPref(k, d);
@@ -16933,12 +18201,13 @@
       };
       const withNewline = (t) => (t.endsWith("\n") ? t : t + "\n");
       const allNotesForExport = () => store.list().concat(store.list({ trashed: true }));
-      async function exportNote(n, format = "md") {
+      const markdownBody = (note, all, names, mode, options) => markdownExportFile(note, all, names, store.meta.folders, mode, options);
+      async function exportNote(n, format = "md", { markdownMode = "", markdownReadOpts = readOpts() } = {}) {
         const info = EXPORT_FORMATS[format] || EXPORT_FORMATS.md;
         const file = await pick(Ci.nsIFilePicker.modeSave, "Save note", safeFileName(titleOf(n.body), "note") + "." + info.ext, format);
         if (!file) return;
         try {
-          const body = exportBody(n, allNotesForExport(), new Map(), store.meta.folders);
+          const body = format === "md" ? markdownBody(n, allNotesForExport(), new Map(), markdownMode, markdownReadOpts) : exportBody(n, allNotesForExport(), new Map(), store.meta.folders);
           const text = format === "html" ? exportHtml(body, readOpts()) : format === "txt" ? exportText(body, readOpts()) : withNewline(body);
           await IOUtils.writeUTF8(file.path, text);
         } catch (error) {
@@ -16979,8 +18248,8 @@
           return true;
         } catch (error) { warn(error); return false; }
       }
-      async function exportAll(list) {
-        const folder = await pick(Ci.nsIFilePicker.modeGetFolder, "Export all notes to a folder");
+      async function exportAll(list, { markdownMode = "", markdownReadOpts = readOpts(), pickerTitle = "Export all notes to a folder" } = {}) {
+        const folder = await pick(Ci.nsIFilePicker.modeGetFolder, pickerTitle);
         if (!folder) return;
         const names = uniqueFileNames(list);
         const byId = new Map(list.map((x, i) => [x.id, names[i]]));
@@ -16988,13 +18257,13 @@
         for (let i = 0; i < list.length; i++) {
           try {
             // An existing file is never overwritten by an export.
-            await IOUtils.writeUTF8(PathUtils.join(folder.path, names[i]), withNewline(exportBody(list[i], everything, byId, store.meta.folders)), { mode: "create" });
+            await IOUtils.writeUTF8(PathUtils.join(folder.path, names[i]), withNewline(markdownBody(list[i], everything, byId, markdownMode, markdownReadOpts)), { mode: "create" });
           } catch (error) {
             warn(error);
           }
         }
       }
-      async function exportZip(list) {
+      async function exportZip(list, { markdownMode = "", markdownReadOpts = readOpts() } = {}) {
         const live = list.filter((n) => !n.trashed);
         if (!live.length) return 0;
         const file = await pick(Ci.nsIFilePicker.modeSave, "Save all notes as zip", "zentral-notes.zip", "zip");
@@ -17007,7 +18276,7 @@
           zw.open(file, 0x04 | 0x08 | 0x20); // read/write, create, truncate
           const enc = new TextEncoder();
           for (let i = 0; i < live.length; i++) {
-            const bytes = enc.encode(withNewline(exportBody(live[i], everything, byId, store.meta.folders)));
+            const bytes = enc.encode(withNewline(markdownBody(live[i], everything, byId, markdownMode, markdownReadOpts)));
             let bin = "";
             for (let j = 0; j < bytes.length; j += 8192) bin += String.fromCharCode(...bytes.subarray(j, j + 8192));
             const stream = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(Ci.nsIStringInputStream);
@@ -17136,16 +18405,30 @@
           const tomorrowText = snapshot.tomorrowPreview.replace(/^## Tomorrow\n/, "").replace(/\n/g, " · ");
           const label = ("Day plan · Today: " + todayText + " · " + snapshot.tomorrowPreview.split("\n")[0] + ": " + tomorrowText).slice(0, 900);
           const box = window.gBrowser.getNotificationBox();
-          box.appendNotification("zentral-notes-day-plan", { label, priority: box.PRIORITY_INFO_LOW }, [
-            { label: "Open today", callback: () => openCalendarDayFromHost(snapshot.today.key) },
-            { label: "Tomorrow", callback: () => openCalendarDayFromHost(snapshot.tomorrow.key) },
-          ]);
+          const claim = CALENDAR_PART.claimDayPlan(snapshot, Services.prefs);
+          if (!claim) return;
+          try {
+            const shown = box.appendNotification("zentral-notes-day-plan", { label, priority: box.PRIORITY_INFO_LOW }, [
+              { label: "Open today", callback: () => openCalendarDayFromHost(snapshot.today.key) },
+              { label: "Tomorrow", callback: () => openCalendarDayFromHost(snapshot.tomorrow.key) },
+            ]);
+            if (shown && typeof shown.then === "function") Promise.resolve(shown).catch((error) => { claim.rollback(); warn(error); });
+          } catch (error) { claim.rollback(); throw error; }
         } catch (error) { warn(error); }
       }
+      const alertStack = createReminderAlertStack({
+        document, history: store.items?.history, warn,
+        listen(target, type, fn) {
+          if (lifecycle?.listen) return lifecycle.listen(target, type, fn);
+          target.addEventListener(type, fn);
+          return () => target.removeEventListener(type, fn);
+        },
+      });
+      if (lifecycle?.own) lifecycle.own(() => alertStack.destroy());
+      onCleanup(() => alertStack.destroy());
       function showReminders(list) {
         if (disposed) return;
-        const visible = list.slice(0, 15);
-        const sounds = new Map();
+        const visible = list.slice(0, 15), sounds = new Map();
         for (const entry of visible) {
           const item = entry.__calendarReminder ? entry.__calendarItem : { x: { noteId: entry.id } };
           const stage = entry.__stage || "followup";
@@ -17156,26 +18439,12 @@
         }
         for (const { stage, policy } of sounds.values()) playReminderSound(stage, policy);
         for (const n of visible) {
-          const calendarItem = n.__calendarReminder ? n.__calendarItem : null;
-          const stage = n.__stage || "followup";
-          // Tier 1 and 2 are transient sound cues. Tier 3 is the persistent action banner.
-          if (calendarItem && stage !== "followup") continue;
-          const title = calendarItem?.summary || titleOf(n.body) || "Untitled note";
-          const noteId = calendarItem?.x?.noteId || n.id;
-          let shown = false;
+          const item = n.__calendarReminder ? n.__calendarItem : null;
+          const identity = item ? CALENDAR_PART.reminderIdentity(item) : { itemId: "note-reminder:" + n.id, occurrenceId: "note-reminder:" + n.id };
+          const actions = createReminderAlertActions({ store, note: n, openNote: openReminderNote, showNotes, warn });
           try {
-            const box = window.gBrowser.getNotificationBox();
-            const actions = createReminderAlertActions({ store, note: n, openNote: openReminderNote, showNotes, warn })
-              .map(({ label, callback }) => ({ label, callback }));
-            box.appendNotification("zentral-notes-reminder-" + n.id, { label: "Reminder: " + title, priority: box.PRIORITY_INFO_HIGH }, actions);
-            shown = true;
-          } catch (error) {
-            warn(error);
-          }
-          if (!shown) {
-            if (calendarItem && noteId) openReminderNote(noteId, { heading: calendarItem.x?.heading || "", itemId: calendarItem.id });
-            else if (!calendarItem) openReminderNote(n.id);
-          }
+            alertStack.show({ identity, title: item?.summary || titleOf(n.body) || "Untitled note", stage: n.__stage || "followup", actions });
+          } catch (error) { warn(error); }
         }
       }
       const reminders = createReminderScheduler({
@@ -17596,6 +18865,26 @@
           if (first) host.insertBefore(root, first);
         }
       }
+      // Some Zen versions delete a folder as soon as its last tab is removed.
+      // Remember that behavior separately for the root and days, then recreate
+      // the folder with a clearly labelled seed on this and subsequent attempts.
+      const agendaKeepSeed = { root: false, day: false };
+      function agendaSettleSeed(seed, folderEl, kind) {
+        if (!seed) return true;
+        if (agendaKeepSeed[kind]) {
+          seed.setAttribute("bgalazka-notes-agenda-fallback-seed", "true");
+          seed.setAttribute("label", kind === "root" ? "Agenda" : "Agenda items");
+          seed.setAttribute("bgalazka-notes-label", kind === "root" ? "Agenda" : "Agenda items");
+          return true;
+        }
+        zenRemoveTab(seed);
+        if (folderEl?.isConnected === false) {
+          agendaKeepSeed[kind] = true;
+          warn("Zen Agenda folder: keeping a labelled seed because empty folders are removed");
+          return false;
+        }
+        return true;
+      }
       function agendaEnsureRoot(position) {
         if (!window.gBrowser || !window.gZenFolders?.createFolder) return false;
         let root = agendaRootEl();
@@ -17609,7 +18898,7 @@
           root.id = AGENDA_ROOT_ID;
           root.setAttribute("bgalazka-notes-agenda-folder", "true");
           root.setAttribute("label", "Agenda");
-          seed.hidden = true; seed.setAttribute("aria-hidden", "true"); seed.setAttribute("label", "");
+          if (!agendaSettleSeed(seed, root, "root")) return agendaEnsureRoot(position);
         }
         agendaPlaceRoot(root, position);
         return true;
@@ -17639,7 +18928,7 @@
           folder.id = "zentral-notes-agenda-day-" + date;
           folder.setAttribute("bgalazka-notes-agenda-day", date);
           folder.setAttribute("bgalazka-notes-agenda-key", entry.key);
-          seed.hidden = true; seed.setAttribute("aria-hidden", "true"); seed.setAttribute("label", "");
+          if (!agendaSettleSeed(seed, folder, "day")) return agendaMakeDay(entry);
         }
         return true;
       }
@@ -17652,13 +18941,6 @@
         list() {
           const root = agendaRootEl(); if (!root) return [];
           const out = [];
-          for (const folder of root.querySelectorAll?.("zen-folder") || []) {
-            const date = folder.getAttribute("bgalazka-notes-agenda-day") || (folder.id.startsWith("zentral-notes-agenda-day-") ? folder.id.slice("zentral-notes-agenda-day-".length) : "");
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-            folder.setAttribute("bgalazka-notes-agenda-day", date);
-            folder.setAttribute("bgalazka-notes-agenda-key", "day:" + date);
-            out.push({ key: "day:" + date, kind: "day", parent: "" });
-          }
           for (const tab of document.querySelectorAll?.("tab") || []) {
             const url = tab.getAttribute?.(AGENDA_ATTR) ? "" : (tab.linkedBrowser?.currentURI?.spec || tab._zentralNotesUrl || "");
             if (!root.contains(tab) && (tab.hasAttribute?.(AGENDA_ATTR) || /^about:blank#zn-agenda-/.test(url))) zenRemoveTab(tab);
@@ -17667,13 +18949,36 @@
             let key = tab.getAttribute(AGENDA_ATTR) || "";
             const url = tab.linkedBrowser?.currentURI?.spec || tab._zentralNotesUrl || "";
             if (!key && /^about:blank#zn-agenda-/.test(url)) { try { key = decodeURIComponent(url.slice("about:blank#zn-agenda-".length)); tab.setAttribute(AGENDA_ATTR, key); } catch (_) {} }
-            if (!key || key.startsWith("seed:")) continue;
+            if (!key) continue;
+            if (key.startsWith("seed:")) {
+              const kind = key === "seed:root" ? "root" : "day";
+              const folder = tab.closest?.("zen-folder");
+              const validFallback = agendaKeepSeed[kind] && tab.getAttribute("bgalazka-notes-agenda-fallback-seed") === "true" &&
+                (kind === "root" ? folder === root : folder === agendaDayEl("day:" + key.slice(5)));
+              if (!validFallback) {
+                zenRemoveTab(tab);
+                if (folder?.isConnected === false) agendaKeepSeed[kind] = true;
+              }
+              continue;
+            }
+            if (!root.contains(tab)) continue;
             out.push({ key, kind: "item", parent: "day:" + (tab.getAttribute("bgalazka-notes-agenda-day") || "") });
+          }
+          if (root.isConnected === false) return [];
+          for (const folder of root.querySelectorAll?.("zen-folder") || []) {
+            const date = folder.getAttribute("bgalazka-notes-agenda-day") || (folder.id.startsWith("zentral-notes-agenda-day-") ? folder.id.slice("zentral-notes-agenda-day-".length) : "");
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+            folder.setAttribute("bgalazka-notes-agenda-day", date);
+            folder.setAttribute("bgalazka-notes-agenda-key", "day:" + date);
+            out.push({ key: "day:" + date, kind: "day", parent: "" });
           }
           return out;
         },
         add(entry) {
-          if (entry.kind === "day") return agendaMakeDay(entry);
+          if (entry.kind === "day") {
+            if (!agendaRootEl() && !agendaEnsureRoot(agendaPosition())) return false;
+            return agendaMakeDay(entry);
+          }
           const folder = agendaDayEl(entry.parent); if (!folder) return false;
           const tab = agendaNewTab(entry.key);
           if (!zenPlace(tab, folder)) { zenRemoveTab(tab); return false; }
@@ -17697,6 +19002,9 @@
           tab.setAttribute("bgalazka-notes-agenda-day", entry.parent.replace(/^day:/, ""));
           tab.setAttribute("bgalazka-notes-agenda-item-id", entry.itemId || "");
           tab.setAttribute("bgalazka-notes-agenda-occurrence-id", entry.occurrenceId || "");
+          tab.setAttribute("bgalazka-notes-agenda-record-id", entry.recordId || "");
+          tab.setAttribute("bgalazka-notes-agenda-start", String(entry.start));
+          tab.setAttribute("bgalazka-notes-agenda-end", String(entry.end));
           tab.setAttribute("bgalazka-notes-agenda-note-id", entry.noteId || "");
           tab.setAttribute("bgalazka-notes-agenda-heading", entry.heading || "");
           if (entry.ended) tab.setAttribute("bgalazka-notes-agenda-ended", "true"); else tab.removeAttribute("bgalazka-notes-agenda-ended");
@@ -17760,14 +19068,119 @@
         ensureStore().then(() => { if (!disposed) agendaController.schedule(); }).catch(warn);
       };
       const agendaItemUnsub = store.items?.on?.((ev) => {
-        if (["change", "remove", "category", "reset", "recovery"].includes(ev.type) && agendaEnabled()) agendaController.schedule();
+        if (CALENDAR_PART?.agendaItemEventAffectsProjection(ev) && agendaEnabled()) agendaController.schedule();
+      });
+      const agendaHistoryUnsub = store.items?.history?.on?.(() => {
+        if (!disposed && agendaEnabled()) agendaController.schedule();
       });
       const agendaNoteUnsub = store.on((ev) => {
         if (["change", "tree", "remove", "reset"].includes(ev.type) && agendaEnabled()) agendaController.schedule();
       });
-      onCleanup(() => { agendaItemUnsub?.(); agendaNoteUnsub?.(); });
+      onCleanup(() => { agendaItemUnsub?.(); agendaHistoryUnsub?.(); agendaNoteUnsub?.(); });
       const agendaBoot = window.setTimeout(agendaSoon, 6500);
       onCleanup(() => window.clearTimeout(agendaBoot));
+      // Resolve XUL labels and shadow-retargeted folder menu triggers without
+      // relying on their display text or on a single Zen DOM version.
+      function zenMenuFolder(menu, event) {
+        const find = (node) => {
+          try {
+            const closest = node?.closest?.("zen-folder");
+            if (closest) return closest;
+            if (node?.group?.localName === "zen-folder") return node.group;
+            for (let current = node; current && current !== menu; current = current.parentNode || current.host)
+              if (current.localName === "zen-folder") return current;
+          } catch (_) {}
+          return null;
+        };
+        for (const node of [menu.triggerNode, event.originalTarget, event.explicitOriginalTarget, menu.anchorNode]) {
+          const folder = find(node);
+          if (folder) return folder;
+        }
+        return null;
+      }
+      function onAgendaFolderMenuShowing(event) {
+        const menu = event.target;
+        if (menu?.id !== "zenFolderActions") return;
+        document.documentElement.removeAttribute("zentral-agenda-folder-ctx");
+        for (const own of [...menu.querySelectorAll?.("[zentral-agenda-folder-own]") || []]) own.remove();
+        const folder = zenMenuFolder(menu, event), root = agendaRootEl();
+        if (!agendaEnabled() || !folder || !root || (folder !== root && !root.contains?.(folder))) return;
+        const date = folder.getAttribute?.("bgalazka-notes-agenda-day") || "";
+        if (folder !== root && (!CALENDAR_PART?.parseYmd?.(date) || agendaDayEl("day:" + date) !== folder)) return;
+        document.documentElement.setAttribute("zentral-agenda-folder-ctx", "true");
+        if (folder === root) return;
+        for (const [id, label] of [["day", "Open Day view"], ["reminder", "Create reminder for this day…"], ["event", "Create event for this day…"]]) {
+          const item = document.createXULElement("menuitem");
+          item.setAttribute("label", label);
+          item.setAttribute("zentral-agenda-folder-own", id);
+          item.addEventListener("command", () => {
+            if (disposed || !agendaEnabled() || agendaDayEl("day:" + date) !== folder) return;
+            if (id === "day") { openCalendarDayFromHost(date); return; }
+            showNotes("").then((handle) => {
+              if (disposed || !agendaEnabled() || agendaDayEl("day:" + date) !== folder) return;
+              sheetOf(handle)?.newAgendaDayItem?.(date, id);
+            }).catch(warn);
+          });
+          menu.append(item);
+        }
+      }
+      function onAgendaFolderMenuHidden(event) {
+        if (event.target?.id === "zenFolderActions") document.documentElement.removeAttribute("zentral-agenda-folder-ctx");
+        if (event.target?.id === "tabContextMenu") document.documentElement.removeAttribute("zentral-agenda-ctx");
+      }
+      function onAgendaTabMenuShowing(event) {
+        const menu = event.target;
+        if (menu?.id !== "tabContextMenu") return;
+        document.documentElement.removeAttribute("zentral-agenda-ctx");
+        for (const own of [...menu.querySelectorAll?.("[zentral-agenda-own]") || []]) own.remove();
+        const tab = window.TabContextMenu?.contextTab, root = agendaRootEl();
+        if (!agendaEnabled() || !tab?.hasAttribute?.(AGENDA_ATTR) || !root?.contains?.(tab)) return;
+        document.documentElement.setAttribute("zentral-agenda-ctx", "item");
+        const key = agendaTabKey(tab);
+        const snapshot = () => ({
+          itemId: tab.getAttribute("bgalazka-notes-agenda-item-id") || "",
+          occurrenceId: tab.getAttribute("bgalazka-notes-agenda-occurrence-id") || "",
+          recordId: tab.getAttribute("bgalazka-notes-agenda-record-id") || "",
+          start: Number(tab.getAttribute("bgalazka-notes-agenda-start")),
+          end: Number(tab.getAttribute("bgalazka-notes-agenda-end")),
+        });
+        const identity = snapshot();
+        const item = key.startsWith("item:") && CALENDAR_PART?.resolveAgendaOccurrence?.(store.items?.list?.() || [], identity);
+        const history = store.items?.history, historyId = item && CALENDAR_PART.reminderIdentity(item);
+        const state = historyId ? history?.stateFor?.(historyId.itemId, historyId.occurrenceId) || "pending" : "pending";
+        const writable = !!history && !history.storageState().writeBlocked;
+        const model = item ? CALENDAR_PART.calendarItemMenuModel(item, { state, historyWritable: writable, agendaVisible: agendaWindowForItem(item, store).enabled }) : [];
+        const addRows = (parent, rows, top = false) => {
+          for (const row of rows) {
+            if (row.sep) { const separator = document.createXULElement("menuseparator"); if (top) separator.setAttribute("zentral-agenda-own", "separator"); parent.append(separator); continue; }
+            if (row.group) {
+              const group = document.createXULElement("menu"), popup = document.createXULElement("menupopup");
+              group.setAttribute("label", row.label); if (top) group.setAttribute("zentral-agenda-own", row.id || "group");
+              addRows(popup, row.group); group.append(popup); parent.append(group); continue;
+            }
+            const action = document.createXULElement("menuitem");
+            action.setAttribute("label", row.label || "");
+            if (top) action.setAttribute("zentral-agenda-own", row.id || "heading");
+            if (row.heading || !row.enabled) action.setAttribute("disabled", "true");
+            if (row.reason) action.setAttribute("tooltiptext", row.reason);
+            if (!row.heading && row.enabled) action.addEventListener("command", () => {
+              if (disposed || !agendaEnabled() || tab.isConnected === false || !agendaRootEl()?.contains?.(tab) || agendaTabKey(tab) !== key || JSON.stringify(snapshot()) !== JSON.stringify(identity)) return;
+              showNotes("").then((handle) => {
+                if (disposed || !agendaEnabled() || tab.isConnected === false || !agendaRootEl()?.contains?.(tab) || agendaTabKey(tab) !== key || JSON.stringify(snapshot()) !== JSON.stringify(identity)) return;
+                sheetOf(handle)?.runAgendaItemAction?.(identity, row.command);
+              }).catch(warn);
+            });
+            parent.append(action);
+          }
+        };
+        if (model.length) addRows(menu, model, true);
+        else {
+          const unavailable = document.createXULElement("menuitem");
+          unavailable.setAttribute("zentral-agenda-own", "unavailable");
+          unavailable.setAttribute("label", "Agenda item no longer available");
+          unavailable.setAttribute("disabled", "true"); menu.append(unavailable);
+        }
+      }
       let agendaBound = false;
       function bindAgenda(on) {
         if (on === agendaBound) return;
@@ -17775,8 +19188,17 @@
         const act = on ? "addEventListener" : "removeEventListener";
         window[act]("mousedown", onAgendaMouse, true);
         window[act]("TabSelect", onAgendaSelect, true);
+        window[act]("popupshowing", onAgendaFolderMenuShowing, true);
+        window[act]("popupshowing", onAgendaTabMenuShowing, true);
+        window[act]("popuphidden", onAgendaFolderMenuHidden, true);
+        if (!on) {
+          document.documentElement.removeAttribute("zentral-agenda-folder-ctx");
+          document.documentElement.removeAttribute("zentral-agenda-ctx");
+          document.querySelectorAll?.("[zentral-agenda-folder-own],[zentral-agenda-own]").forEach((item) => item.remove());
+        }
         for (const ty of ["TabClose", "TabUnpinned", "TabPinned", "TabMove", "SSTabRestored"]) window[act](ty, onAgendaTabEvent, true);
       }
+      onCleanup(() => bindAgenda(false));
       function agendaTabKey(tab) {
         let key = tab?.getAttribute?.(AGENDA_ATTR) || "";
         if (!key) {
@@ -17985,6 +19407,39 @@
       onCleanup(() => {
         try { Services.prefs.removeObserver(COLORFUL_FOLDER_PREF, colorfulFolderPrefObserver); } catch (_) {}
       });
+      // Unconditional startup/restore sweep: even disabled projections can leave
+      // restored virtual tabs. Never inspect historical entries of normal tabs.
+      function cleanRestoredPseudoTabs(tabs) {
+        return sweepRestoredPseudoTabs(tabs, {
+          notesEnabled: zenMode() !== "off", agendaEnabled: agendaEnabled(),
+          getTabState: window.SessionStore?.getTabState ? (tab) => window.SessionStore.getTabState(tab) : null,
+          removeTab: zenRemoveTab, warn,
+        });
+      }
+      function cleanDisabledPseudoFolders() {
+        const folders = [...(document.querySelectorAll?.("zen-folder") || [])];
+        for (const folder of folders) {
+          const kind = restoredPseudoFolderKind(folder);
+          if (!kind || (kind === "notes" ? zenMode() !== "off" : agendaEnabled())) continue;
+          const ancestor = folder.parentElement?.closest?.("zen-folder");
+          if (ancestor && restoredPseudoFolderKind(ancestor) === kind) continue;
+          retireRestoredPseudoFolder(folder, kind);
+        }
+      }
+      cleanRestoredPseudoTabs([...(document.querySelectorAll?.("tab") || [])]);
+      cleanDisabledPseudoFolders();
+      const onPseudoTabRestored = (event) => {
+        if (disposed || event.target?.localName !== "tab") return;
+        cleanRestoredPseudoTabs([event.target]);
+        cleanDisabledPseudoFolders();
+      };
+      if (lifecycle?.listen) {
+        const offPseudoRestore = lifecycle.listen(window, "SSTabRestored", onPseudoTabRestored, true);
+        onCleanup(offPseudoRestore);
+      } else {
+        window.addEventListener("SSTabRestored", onPseudoTabRestored, true);
+        onCleanup(() => window.removeEventListener("SSTabRestored", onPseudoTabRestored, true));
+      }
       const zenBoot = window.setTimeout(zenSoon, 6000);
       onCleanup(() => window.clearTimeout(zenBoot));
       // A click (or Enter) on one of our tabs opens the note instead of selecting the tab. Capture phase, our tabs only;
@@ -18114,26 +19569,83 @@
       const onFolderMenuShowing = (ev) => {
         const menu = ev.target;
         if (menu?.id !== "zenFolderActions") return;
+        document.documentElement.removeAttribute("zentral-notes-folder-ctx");
         for (const own of [...menu.querySelectorAll?.("[zentral-notes-folder-own]") || []]) own.remove();
-        let folder = null;
-        for (const node of [menu.triggerNode, ev.originalTarget, menu.anchorNode]) {
-          folder = node?.closest?.("zen-folder") || null;
-          if (folder) break;
-        }
+        const folder = zenMenuFolder(menu, ev);
         if (!folder) return;
         const isRoot = folder === zenRootEl() || folder.id === NOTES_ZEN_ROOT_ID || folder.hasAttribute?.("bgalazka-notes-folder");
         const key = isRoot ? "" : folder.getAttribute?.("bgalazka-notes-subfolder") || notesKeyFromId(folder.id);
         if (!isRoot && !key) return;
         const meta = isRoot ? null : store.meta?.folders?.find((item) => key === "f:" + item.uid || key === "f:" + item.id);
         if (!isRoot && !meta) return;
+        document.documentElement.setAttribute("zentral-notes-folder-ctx", "true");
         const item = document.createXULElement("menuitem");
         item.setAttribute("label", "New note in this folder");
         item.setAttribute("zentral-notes-folder-own", "new");
         item.addEventListener("command", () => { store.create("", isRoot ? (zenMode() === "selected" ? TABBAR_FOLDER : "") : meta.id); });
         menu.append(item);
+        const menuMode = zenMode();
+        const parentId = isRoot ? (menuMode === "selected" ? TABBAR_FOLDER : "") : meta.id;
+        if (folderDepth(parentId) < FOLDER_MAX_DEPTH) {
+          const sub = document.createXULElement("menuitem");
+          sub.setAttribute("label", "New subfolder…");
+          sub.setAttribute("zentral-notes-folder-own", "subfolder");
+          const uid = meta?.uid || "";
+          sub.addEventListener("command", () => {
+            showNotes("").then((handle) => {
+              if (disposed || zen.dead || zenMode() === "off" || isRoot && zenMode() !== menuMode) return;
+              if (isRoot && parentId === TABBAR_FOLDER) store.ensureTabbarFolder();
+              const current = isRoot ? store.meta.folders.find((folder) => folder.id === parentId) : store.meta.folders.find((folder) => folder.uid === uid);
+              if (!isRoot && !current) return;
+              sheetOf(handle)?.newSubfolder?.(isRoot ? parentId : current.id, current?.uid || "");
+            }).catch(warn);
+          });
+          menu.append(sub);
+        }
+        const style = document.createXULElement("menuitem");
+        style.setAttribute("label", "Change color and icon…");
+        style.setAttribute("zentral-notes-folder-own", "style");
+        const styleUid = meta?.uid || "";
+        style.addEventListener("command", () => {
+          showNotes("").then((handle) => {
+            if (disposed || zen.dead || zenMode() === "off") return;
+            const current = isRoot ? null : store.meta.folders.find((folder) => folder.uid === styleUid);
+            if (!isRoot && !current) return;
+            sheetOf(handle)?.sidebarFolderStyle?.(current?.id || "", current?.uid || "");
+          }).catch(warn);
+        });
+        menu.append(style);
+        const exportItem = document.createXULElement("menuitem");
+        exportItem.setAttribute("label", "Export folder…");
+        exportItem.setAttribute("zentral-notes-folder-own", "export");
+        const exportUid = meta?.uid || "";
+        exportItem.addEventListener("command", () => {
+          showNotes("").then((handle) => {
+            if (disposed || zen.dead || zenMode() === "off" || isRoot && zenMode() !== menuMode) return;
+            const current = isRoot ? store.meta.folders.find((folder) => folder.id === parentId) : store.meta.folders.find((folder) => folder.uid === exportUid);
+            if ((!isRoot || parentId) && !current) return;
+            sheetOf(handle)?.sidebarFolderExport?.(current?.id || "", current?.uid || "");
+          }).catch(warn);
+        });
+        menu.append(exportItem);
+        if (!isRoot) {
+          const remove = document.createXULElement("menuitem");
+          remove.setAttribute("label", "Delete folder…");
+          remove.setAttribute("zentral-notes-folder-own", "delete");
+          const uid = meta.uid;
+          remove.addEventListener("command", () => {
+            showNotes("").then((handle) => {
+              if (disposed || zen.dead || zenMode() === "off") return;
+              const current = store.meta.folders.find((folder) => folder.uid === uid);
+              if (current) sheetOf(handle)?.sidebarFolderDelete?.(current.id, uid);
+            }).catch(warn);
+          });
+          menu.append(remove);
+        }
       };
       const onTabMenuHidden = (ev) => {
         if (ev.target?.id === "tabContextMenu") { document.documentElement.removeAttribute("zentral-notes-ctx"); zenCtxTab = null; }
+        if (ev.target?.id === "zenFolderActions") document.documentElement.removeAttribute("zentral-notes-folder-ctx");
       };
       // Idle cost: the listeners below exist only while the experiment is on (mode != off).
       let zenBound = false;
@@ -18151,6 +19663,7 @@
         window[act]("popuphidden", onTabMenuHidden, true);
         if (!on) {
           document.documentElement.removeAttribute("zentral-notes-ctx");
+          document.documentElement.removeAttribute("zentral-notes-folder-ctx");
           document.querySelectorAll?.("[zentral-notes-own],[zentral-notes-folder-own]").forEach((n) => n.remove());
         }
       }

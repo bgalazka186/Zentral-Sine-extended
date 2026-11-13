@@ -280,6 +280,18 @@ const BODY = "# Plan\n\n## Shifts\n%%calendar: Work%%\n- 2026-11-12 06:00-14:00 
     await assert.rejects(items.flush(), /protected/);
   });
 
+  await test("B3.3.50-7 attachment references protect generated date notes independently of the calendar predicate", async () => {
+    const io = fakeIO(), st = mk(io); await st.open();
+    const withAsset = st.create("# 2026-11-09 Monday\n\n![photo](assets/note_a/picture.png)", "daily");
+    const empty = st.create("# 2026-11-10 Tuesday\n\n", "daily");
+    const original = cal.isBlankDateNote;
+    cal.isBlankDateNote = () => true; // Isolate the store's own defensive guard.
+    try {
+      assert.deepEqual(Array.from(st.purgeBlankDateNotes()), [empty.id]);
+      assert.equal(st.get(withAsset.id).trashed, 0);
+    } finally { cal.isBlankDateNote = original; }
+  });
+
   await test("T2.16 startup sweep trashes only untouched generated Daily notes and retains the note for restore", async () => {
     const io = fakeIO(), st = mk(io); await st.open();
     const candidate = st.create("# 2026-11-10 Tuesday\n\n", "daily");

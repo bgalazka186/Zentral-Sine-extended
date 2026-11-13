@@ -55,14 +55,14 @@ const boxes = (body) => body.split("\n").filter((l) => /^- /.test(l)).map((l) =>
     assert.equal(cal.setListCheckbox(b, "abcd3", true).found, false, "extended states are not a done/pending box");
   });
 
-  await test("alert actions: calendar reminder = Open, Done, Snooze 10, Snooze 60, Dismiss and each reaches the store", async () => {
+  await test("alert actions: calendar reminder = Open, Done, Snooze 10, Snooze 60, Tomorrow, Dismiss and each reaches the store", async () => {
     const calls = [];
     const store = { applyReminderLifecycle: (i, a) => calls.push(["life", i.id, a]), snoozeCalendarReminder: (id, m) => calls.push(["snooze", id, m]), snoozeReminder() {}, setReminder() {} };
     const item = { id: "it1", summary: "Call", start: { dateTime: "2026-11-13T17:00:00.000Z" }, x: { noteId: "nn", heading: "Agenda" } };
     const actions = c.createReminderAlertActions({ store, note: { __calendarReminder: true, __calendarItem: item }, openNote: (...a) => calls.push(["open", ...a]) });
-    assert.deepEqual(plain(actions.map((a) => a.id)), ["open", "done", "snooze-10", "snooze-60", "dismiss"]);
+    assert.deepEqual(plain(actions.map((a) => a.id)), ["open", "done", "snooze-10", "snooze-60", "snooze-tomorrow", "dismiss"]);
     actions.forEach((a) => a.callback());
-    assert.deepEqual(plain(calls), [["open", "nn", { heading: "Agenda", itemId: "it1" }], ["life", "it1", "done"], ["snooze", "it1", 10], ["snooze", "it1", 60], ["life", "it1", "dismissed"]]);
+    assert.deepEqual(plain(calls), [["open", "nn", { heading: "Agenda", itemId: "it1" }], ["life", "it1", "done"], ["snooze", "it1", 10], ["snooze", "it1", 60], ["snooze", "it1", cal.reminderSnoozeTomorrowMinutes(Date.now())], ["life", "it1", "dismissed"]]);
   });
 
   await test("alert actions: recurring and all-day reminders offer no snooze; note-less item opens the panel; legacy keeps its three buttons", () => {

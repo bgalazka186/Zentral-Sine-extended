@@ -1389,6 +1389,31 @@
 /* Zen sidebar experiment: while the right-click target is one of our note tabs, every native item is hidden (never removed). */
 :root[zentral-notes-ctx="item"] #tabContextMenu > :not([zentral-notes-own]) { display: none !important; }
 
+/* Native Zen folder operations would mutate only virtual sidebar projections.
+   Hide those specific actions while a Notes folder menu is open; preserve
+   unrelated extensions' items and never mutate native menu state. */
+:root[zentral-notes-folder-ctx="true"] #zenFolderActions > :is(
+  #context_zenFolderRename, #context_zenFolderUnpack, #context_zenFolderUnloadAll,
+  #context_zenFolderNewSubfolder, #context_zenFolderDelete, #context_zenFolderToSpace,
+  #context_zenFolderChangeIcon, #context_zenShareFolder, #context_zenChangeFolderSpace
+) { display: none !important; }
+:root[zentral-notes-folder-ctx="true"] #zenFolderActions > :is(
+  #context_zenFolderChangeIcon, #context_zenFolderNewSubfolder, #context_zenShareFolder
+) + menuseparator { display: none !important; }
+
+/* Agenda day folders are virtual projections too. Keep other mods' items. */
+:root[zentral-agenda-folder-ctx="true"] #zenFolderActions > :is(
+  #context_zenFolderRename, #context_zenFolderUnpack, #context_zenFolderUnloadAll,
+  #context_zenFolderNewSubfolder, #context_zenFolderDelete, #context_zenFolderToSpace,
+  #context_zenFolderChangeIcon, #context_zenShareFolder, #context_zenChangeFolderSpace
+) { display: none !important; }
+:root[zentral-agenda-folder-ctx="true"] #zenFolderActions > :is(
+  #context_zenFolderChangeIcon, #context_zenFolderNewSubfolder, #context_zenShareFolder
+) + menuseparator { display: none !important; }
+
+/* Agenda pseudo-tabs cannot use native tab operations; show their owned menu. */
+:root[zentral-agenda-ctx="item"] #tabContextMenu > :not([zentral-agenda-own]) { display: none !important; }
+
 /* Reminder dialog: live "Will ring at ..." line (Cycle F #15) */
 .zentral-notes-sheet .zn-remind-preview { margin: 4px 2px 8px; font-size: 0.9em; opacity: 0.85; }
 .zentral-notes-sheet .zn-remind-preview[data-bad="true"] { color: #ff6b6b; opacity: 1; }
@@ -1778,6 +1803,7 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-calendar-view-select { min-width: 90px; }
 .zentral-notes-sheet .zn-calendar-kind-filter,
 .zentral-notes-sheet .zn-calendar-category-filter { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.zentral-notes-sheet .zn-calendar-snap-select[hidden],
 .zentral-notes-sheet .zn-calendar-days-select[hidden] { display: none !important; }
 .zentral-notes-sheet .zn-calendar-pane-content { flex: 1 1 auto; display: block; min-height: 0; overflow: auto; padding: 8px; text-align: left; scrollbar-width: thin; }
 .zentral-notes-sheet .zn-cal-month-wrap { display: flex; flex-direction: column; min-height: 0; }
@@ -1818,27 +1844,29 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-time-head,
 .zentral-notes-sheet .zn-cal-time-allday-row,
 .zentral-notes-sheet .zn-cal-time-grid-row { display: grid; min-width: 0; }
-.zentral-notes-sheet .zn-cal-time-head { flex: 0 0 auto; align-items: stretch; }
+/* Equal native gutters align headers and all-day cells with the scrolling timeline,
+   whether scrollbars are classic or overlay and whether all-day items overflow. */
+.zentral-notes-sheet .zn-cal-time-head { flex: 0 0 auto; align-items: stretch; overflow: hidden; scrollbar-gutter: stable; scrollbar-width: thin; }
 .zentral-notes-sheet .zn-cal-time-corner { border-bottom: 1px solid var(--zn-line); }
 .zentral-notes-sheet .zn-cal-time-day-head { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 2px; border: 0; border-bottom: 1px solid var(--zn-line); background: transparent; color: var(--zn-text); font: inherit; cursor: pointer; }
 .zentral-notes-sheet .zn-cal-time-day-head.is-today { border-bottom: 2px solid var(--zn-accent); background: color-mix(in srgb, var(--zn-accent) 12%, transparent); }
 .zentral-notes-sheet .zn-cal-time-day-head.is-today strong { color: var(--zn-accent); }
 .zentral-notes-sheet .zn-cal-time-day-head strong { font-size: .78em; }
 .zentral-notes-sheet .zn-cal-time-day-head > span { color: var(--zn-muted); font-size: .7em; }
-.zentral-notes-sheet .zn-cal-time-allday-row { flex: 0 0 auto; align-items: stretch; max-height: 112px; overflow: auto; border-bottom: 1px solid var(--zn-line); }
+.zentral-notes-sheet .zn-cal-time-allday-row { flex: 0 0 auto; align-items: stretch; max-height: 112px; overflow: auto; scrollbar-gutter: stable; scrollbar-width: thin; border-bottom: 1px solid var(--zn-line); }
 .zentral-notes-sheet .zn-cal-time-all-label { align-self: start; padding: 5px 2px 2px 0; color: var(--zn-muted); font-size: .63em; }
 .zentral-notes-sheet .zn-cal-time-allday-cell { display: flex; min-width: 0; min-height: 22px; flex-direction: column; gap: 2px; padding: 2px; border-left: 1px solid var(--zn-line); }
 .zentral-notes-sheet .zn-cal-time-allday-cell.is-today { background: color-mix(in srgb, var(--zn-accent) 7%, transparent); }
 .zentral-notes-sheet .zn-cal-time-allday-cell .zn-cal-item { padding: 2px 3px; font-size: .66em; }
-.zentral-notes-sheet .zn-cal-time-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-width: thin; }
-.zentral-notes-sheet .zn-cal-time-grid-row { min-height: calc(24 * 54px); align-items: stretch; grid-template-columns: 42px minmax(0, 1fr); }
+.zentral-notes-sheet .zn-cal-time-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-gutter: stable; scrollbar-width: thin; }
+.zentral-notes-sheet .zn-cal-time-grid-row { min-height: calc(24 * var(--zn-cal-hour-height, 54px)); align-items: stretch; grid-template-columns: 42px minmax(0, 1fr); }
 .zentral-notes-sheet .zn-cal-hour-gutter { display: flex; flex-direction: column; padding-top: 2px; }
-.zentral-notes-sheet .zn-cal-hour-label { box-sizing: border-box; height: 54px; padding: 0 3px 0 0; transform: translateY(-.45em); color: var(--zn-muted); font-size: .62em; font-variant-numeric: tabular-nums; text-align: right; }
+.zentral-notes-sheet .zn-cal-hour-label { box-sizing: border-box; height: var(--zn-cal-hour-height, 54px); flex: 0 0 var(--zn-cal-hour-height, 54px); padding: 0 3px 0 0; transform: translateY(-.45em); color: var(--zn-muted); font-size: .62em; font-variant-numeric: tabular-nums; text-align: right; }
 .zentral-notes-sheet .zn-cal-hour-label:first-child { transform: none; }
 .zentral-notes-sheet .zn-cal-time-columns { grid-column: 2 / -1; display: grid; min-width: 0; width: 100%; }
 .zentral-notes-sheet .zn-cal-time-column { min-width: 0; border-left: 1px solid var(--zn-line); }
 .zentral-notes-sheet .zn-cal-time-column.is-today { background: color-mix(in srgb, var(--zn-accent) 5%, transparent); }
-.zentral-notes-sheet .zn-cal-time-track { position: relative; min-width: 0; background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(54px - 1px), var(--zn-line) calc(54px - 1px), var(--zn-line) 54px); }
+.zentral-notes-sheet .zn-cal-time-track { position: relative; min-width: 0; background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--zn-cal-hour-height, 54px) - 1px), var(--zn-line) calc(var(--zn-cal-hour-height, 54px) - 1px), var(--zn-line) var(--zn-cal-hour-height, 54px)); }
 .zentral-notes-sheet .zn-cal-time-hour-line { position: absolute; right: 0; left: 0; height: 1px; border-top: 1px solid color-mix(in srgb, var(--zn-line) 55%, transparent); pointer-events: none; }
 .zentral-notes-sheet .zn-cal-now-line { position: absolute; z-index: 5; left: 0; right: 0; height: 2px; background: #ff5b5b; pointer-events: none; }
 .zentral-notes-sheet .zn-cal-now-dot { position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: #ff5b5b; }
@@ -1896,6 +1924,31 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
   .zentral-notes-sheet .zn-cal-agenda-row { grid-template-columns: minmax(0, 1fr); gap: 1px; }
 }
 
+/* Density is independent from the narrow-month list fallback. Keep labels readable and
+   timed geometry in sync with the same hour-height variable used by the renderer. */
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-month-grid { grid-template-rows: repeat(6, minmax(52px, 1fr)); }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-month-cell { min-height: 52px; padding: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-month-mark { font-size: .63em; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-month-date { font-size: .8em; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-day-head strong { font-size: .88em; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-day-group { margin-bottom: 5px; padding: 5px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-day-items { gap: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-item:not(.zn-cal-time-event):not(.zn-cal-time-reminder) { padding: 3px 5px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="compact"] .zn-cal-agenda-row { margin-bottom: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-month-grid { grid-template-rows: repeat(6, minmax(44px, 1fr)); gap: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-month-cell { min-height: 44px; gap: 1px; padding: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-month-mark { font-size: .61em; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-month-date { font-size: .78em; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-day-head strong { font-size: .84em; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-day-group { margin-bottom: 3px; padding: 3px 4px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-day-head { margin-bottom: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-all-day-strip { margin: 2px 0; padding: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-day-items { gap: 1px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-item:not(.zn-cal-time-event):not(.zn-cal-time-reminder) { gap: 2px 5px; padding: 2px 4px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-agenda-row { gap: 2px; margin-bottom: 1px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-agenda-date { padding: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-time-day-head { padding: 2px; }
+.zentral-notes-sheet .zn-calendar-view[data-density="extra-compact"] .zn-cal-time-allday-cell { min-height: 18px; padding: 1px; }
 .zentral-notes-sheet .zn-cal-month-cell.is-today { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--zn-accent) 60%, transparent); }
 
 /* Foreign front matter (T1.5): tags and aliases of other apps as a pill row above the read view */
@@ -2011,3 +2064,76 @@ tab[bgalazka-notes-agenda-ended="true"] { opacity: .45; }
 .zn-file-asset-link { display: inline-flex; align-items: center; gap: .35em; color: var(--zn-link, var(--zen-primary-color)); text-decoration: underline; text-underline-offset: .15em; cursor: pointer; overflow-wrap: anywhere; }
 .zn-file-asset-link:hover { text-decoration-thickness: 2px; }
 .zn-editor.zn-file-drop-target { outline: 2px dashed var(--zn-accent, var(--zen-primary-color)); outline-offset: -3px; background: color-mix(in srgb, var(--zn-accent, var(--zen-primary-color)) 7%, transparent); }
+
+/* B3.3.50-4: one manual top-layer stack; actions wrap instead of clipping. */
+.zn-reminder-stack {
+  position: fixed;
+  inset: 12px 12px auto auto;
+  margin: 0;
+  padding: 0;
+  width: min(380px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  border: 0;
+  background: transparent;
+  color: #f7f7fc;
+  z-index: 2147483646;
+  font: menu;
+}
+.zn-reminder-stack[hidden] { display: none !important; }
+.zn-reminder-stack:has(.zn-reminder-card[data-stage="followup"]) {
+  right: 50%;
+  transform: translateX(50%);
+  width: min(480px, calc(100vw - 24px));
+}
+.zn-reminder-card {
+  box-sizing: border-box;
+  margin: 0 0 8px;
+  padding: 12px;
+  border: 1px solid #8395b8;
+  border-radius: 10px;
+  background: #222936;
+  box-shadow: 0 6px 22px #0008;
+  overflow-wrap: anywhere;
+}
+.zn-reminder-card[data-stage="pre"] { background: rgb(34 41 54 / 92%); border-color: #8395b8; }
+.zn-reminder-card[data-stage="due"] { background: #25354b; border: 2px solid #9bbcf0; }
+.zn-reminder-card[data-stage="followup"] {
+  padding: 16px;
+  background: #3c2632;
+  border: 3px solid #ffb7a8;
+  animation: zn-reminder-calm-accent 3s ease-in-out infinite alternate;
+}
+@keyframes zn-reminder-calm-accent { from { border-color: #ffb7a8; } to { border-color: #ffdea8; } }
+@media (prefers-reduced-motion: reduce) { .zn-reminder-card[data-stage="followup"] { animation: none; } }
+.zn-reminder-stage { font-weight: 700; font-size: .85em; margin-bottom: 4px; }
+.zn-reminder-title { font-weight: 600; line-height: 1.35; }
+.zn-reminder-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.zn-reminder-actions button {
+  flex: 0 1 auto;
+  max-width: 100%;
+  padding: 5px 9px;
+  border: 1px solid #aebbd0;
+  border-radius: 6px;
+  background: #34445c;
+  color: #fff;
+  font: inherit;
+  white-space: normal;
+  cursor: pointer;
+}
+.zn-reminder-actions button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.zn-reminder-actions button:hover { background: #4b6283; }
+
+/* Keyboard entry points for calendar day context menus. */
+.zentral-notes-sheet :is(.zn-cal-month-cell, .zn-cal-day-group, .zn-cal-time-allday-cell, .zn-cal-time-track):focus-visible { outline: 2px solid var(--zn-accent); outline-offset: -2px; }
+
+/* Calendar drag previews never intercept pointer input or hide event controls. */
+.zentral-notes-sheet .zn-calendar-undo-move[hidden] { display: none !important; }
+.zentral-notes-sheet :is(.zn-cal-time-event, .zn-cal-time-reminder, .zn-cal-time-allday-cell .zn-cal-item).is-movable { cursor: grab; touch-action: none; }
+.zentral-notes-sheet :is(.zn-cal-time-event, .zn-cal-time-reminder, .zn-cal-time-allday-cell .zn-cal-item).is-dragging { cursor: grabbing; opacity: .55; }
+.zentral-notes-sheet .zn-cal-drag-preview { position: absolute; z-index: 6; left: 0; right: 0; padding: 2px 4px; border-top: 2px solid var(--zn-accent); background: var(--zn-surface); color: var(--zn-text); font-size: .7em; pointer-events: none; }
+.zentral-notes-sheet .zn-cal-time-allday-cell { position: relative; }
+
+.zentral-notes-sheet .zn-cal-resize-handle { position: absolute; z-index: 4; box-sizing: border-box; height: 8px; min-width: 0; padding: 0; border: 0; border-radius: 3px; background: transparent; cursor: ns-resize; touch-action: none; }
+.zentral-notes-sheet .zn-cal-resize-handle:hover, .zentral-notes-sheet .zn-cal-resize-handle:focus-visible { background: var(--zn-accent); outline: 2px solid var(--zn-accent); outline-offset: 1px; }

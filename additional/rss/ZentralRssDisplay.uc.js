@@ -67,6 +67,13 @@
       if (window.gBrowserInit?.delayedStartupFinished) run();
     }
   }
+  // A reader binding belongs to exactly one native tab strip.
+  function readerBindingAction(enabled, current, next) {
+    if (!enabled || !next) return current ? "unbind" : "keep";
+    if (!current) return "bind";
+    return current === next ? "keep" : "replace";
+  }
+  if (window.__zentralRssTestSeam) window.__zentralRssTestSeam.readerBindingAction = readerBindingAction;
   (function () {
     function start({ lifecycle } = {}) {
       const cleanups = [];
@@ -212,7 +219,7 @@
         showTimer = null,
         showTab = null,
         lastXY = null,
-        readerBound = false;
+        readerContainer = null;
       const itemTab = (el) => {
         const tab = el?.closest?.("tab, .tabbrowser-tab");
         if (!tab) return null;
@@ -698,28 +705,42 @@
         hideCard();
       };
       const onContainerLeave = () => hideCard(hideDelay());
+      function unbindReader() {
+        const container = readerContainer;
+        if (!container) return;
+        readerContainer = null;
+        container.removeEventListener("mouseover", onOver);
+        container.removeEventListener("mousemove", onMove);
+        container.removeEventListener("auxclick", onAux, true);
+        container.removeEventListener("mouseleave", onContainerLeave);
+        window.removeEventListener("popupshowing", onPopup, true);
+        window.removeEventListener("keydown", onKeyDown);
+      }
+      function resetReaderCard() {
+        cancelShow();
+        cancelHide();
+        if (card) { card.hidden = true; dropCard(card); }
+        cardTab = null;
+        lastXY = null;
+      }
+      registerCleanup(() => { unbindReader(); resetReaderCard(); });
       function syncReader() {
-        const container = window.gBrowser?.tabContainer;
-        // Appearance preferences reach the card through the same refresh path
-        // as the folder state, so a change applies without a restart.
+        const container = window.gBrowser?.tabContainer || null;
         applyCardStyle();
-        if (readerOn() && container && !readerBound) {
-          readerBound = true;
+        const action = readerBindingAction(readerOn(), readerContainer, container);
+        if (action === "unbind" || action === "replace") {
+          unbindReader();
+          resetReaderCard();
+        }
+        if (action === "bind" || action === "replace") {
+          readerContainer = container;
           container.addEventListener("mouseover", onOver);
           container.addEventListener("mousemove", onMove);
           container.addEventListener("auxclick", onAux, true);
           container.addEventListener("mouseleave", onContainerLeave);
           window.addEventListener("popupshowing", onPopup, true);
           window.addEventListener("keydown", onKeyDown);
-          registerCleanup(() => {
-            container.removeEventListener("mouseover", onOver);
-            container.removeEventListener("mousemove", onMove);
-            container.removeEventListener("auxclick", onAux, true);
-            container.removeEventListener("mouseleave", onContainerLeave);
-            window.removeEventListener("popupshowing", onPopup, true);
-            window.removeEventListener("keydown", onKeyDown);
-          });
-        } else if (!readerOn()) hideCard();
+        }
       }
       function syncRssFolderDisplay() {
         if (disposed) return;

@@ -85,6 +85,29 @@ test("Day-Plan snapshot separates local Today and Tomorrow, filters completed it
   assert.match(plan.tomorrowPreview, /^## Tomorrow\n- 08:15 · Dentist$/);
 });
 
+test("day plan claim is synchronous, local-day scoped and recoverable on display failure", () => {
+  const values = new Map(), prefs = { getStringPref: (key, fallback) => values.get(key) ?? fallback, setStringPref: (key, value) => values.set(key, value), clearUserPref: (key) => values.delete(key) };
+  const plan = { today: { key: "2026-11-13", count: 1 }, tomorrow: { count: 0 } };
+  const empty = { today: { key: "2026-11-13", count: 0 }, tomorrow: { count: 0 } };
+  assert.equal(C.claimDayPlan(empty, prefs), null, "empty plans do not claim the day");
+  const first = C.claimDayPlan(plan, prefs); assert.ok(first);
+  assert.equal(C.claimDayPlan(plan, prefs), null, "two windows sharing a profile cannot both claim the day");
+  first.rollback(); assert.ok(C.claimDayPlan(plan, prefs), "failed display permits retry");
+  assert.equal(C.claimDayPlan(plan, prefs), null, "claim remains shared across newly constructed callers");
+  const next = C.claimDayPlan({ today: { key: "2026-11-14", count: 0 }, tomorrow: { count: 1 } }, prefs); assert.ok(next);
+  first.rollback(); assert.equal(C.claimDayPlan({ today: { key: "2026-11-14", count: 1 }, tomorrow: { count: 0 } }, prefs), null, "old rollback never erases a later day's claim");
+  assert.equal(C.claimDayPlan({ today: { key: "not-a-date", count: 1 }, tomorrow: { count: 0 } }, prefs), null);
+  assert.equal(C.claimDayPlan(plan, { getStringPref() { return ""; }, setStringPref() { throw new Error("locked"); } }), null, "fail closed when persistence is unavailable");
+});
+
+test("day plan host claims before appending and rolls back sync and async display failures", () => {
+  const code = require("node:fs").readFileSync(require.resolve("../additional/notes/ZentralNotes.uc.js"), "utf8");
+  const host = code.slice(code.indexOf("function showDayPlan()"), code.indexOf("const alertStack =", code.indexOf("function showDayPlan()")));
+  assert.match(host, /claimDayPlan\(snapshot, Services\.prefs\)[\s\S]*?if \(!claim\) return;[\s\S]*?box\.appendNotification/);
+  assert.match(host, /Promise\.resolve\(shown\)\.catch\(\(error\) => \{ claim\.rollback\(\)/);
+  assert.match(host, /catch \(error\) \{ claim\.rollback\(\); throw error;/);
+});
+
 test("quiet hours are OFF by default and overnight windows use the selected start weekday", () => {
   assert.equal(C.cleanAlertSettings(null).quietHours.enabled, false);
   const settings = { quietHours: { enabled: true, start: "22:00", end: "07:00", days: [5] } };

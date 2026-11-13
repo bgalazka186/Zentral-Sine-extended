@@ -619,6 +619,95 @@
     const stamp = typeof now === "function" ? now() : Number(now);
     return cleanItem({ ...copy, etag: "", updated: iso(Number.isFinite(stamp) ? stamp : Date.now()) }, 0);
   }
+  const CALENDAR_SNAP_STEPS = Object.freeze([5, 10, 15, 30, 60]);
+  function cleanCalendarSnap(value) { const n = Number(value); return CALENDAR_SNAP_STEPS.includes(n) ? n : 15; }
+  // Convert a grid gesture into a civil target without touching storage or repeatedly
+  // resolving a time zone while the pointer moves. The grabbed segment may be a
+  // clipped continuation of a multi-day event, so the delta is relative to the
+  // pointer's original day, not the event's first visible day.
+  function calendarMovePlacement(item, originKey, originMinute, targetKey, targetMinute, zone = "", snapMin = 15) {
+    const origin = parseYmd(originKey), target = parseYmd(targetKey), start = item?.start?.dateTime ? Date.parse(item.start.dateTime) : NaN;
+    if (!origin || !target || !Number.isFinite(start) || !Number.isFinite(originMinute) || !Number.isFinite(targetMinute)
+        || originMinute < 0 || originMinute > 1440 || targetMinute < 0 || targetMinute > 1440 || (zone && !cleanZone(zone))) return null;
+    const parts = zoneParts(start, zone);
+    if (!parts) return null;
+    const dayIndex = (d) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY_MS;
+    const step = cleanCalendarSnap(snapMin);
+    const minutes = Math.round((parts.hour * 60 + parts.minute + (dayIndex(target) - dayIndex(origin)) * 1440 + targetMinute - originMinute) / step) * step;
+    const wall = new Date(Date.UTC(parts.year, parts.month - 1, parts.day) + minutes * MIN);
+    const date = String(wall.getUTCFullYear()).padStart(4, "0") + "-" + p2(wall.getUTCMonth() + 1) + "-" + p2(wall.getUTCDate());
+    if (!parseYmd(date)) return null;
+    return { date, minute: wall.getUTCHours() * 60 + wall.getUTCMinutes() };
+  }
+  // Moving an expanded recurring occurrence requires a scope chooser; legacy note
+  // reminders and all-day items use separate paths and are never accepted here.
+  function calendarMoveTimedItem(item, placement, zone = "", now = Date.now()) {
+    if (!item?.x || !item?.start || isAllDay(item) || !item.start?.dateTime || (!isReminder(item) && !item.end?.dateTime) || item.x?.src === "note"
+        || item.x?.series || (item.recurrence || []).length || !parseYmd(placement?.date)
+        || !Number.isInteger(placement?.minute) || placement.minute < 0 || placement.minute >= 1440 || (zone && !cleanZone(zone))) return null;
+    const [start, end] = itemRange(item);
+    if (!Number.isFinite(start) || (!isReminder(item) && !(end > start))) return null;
+    const clock = p2(Math.floor(placement.minute / 60)) + ":" + p2(placement.minute % 60);
+    const target = zonedDateTimeToMs(placement.date, clock, zone);
+    if (!Number.isFinite(target)) return null;
+    const stamp = typeof now === "function" ? now() : Number(now);
+    return cleanItem({ ...item, start: { dateTime: iso(target) }, end: isReminder(item) ? undefined : { dateTime: iso(target + end - start) },
+      x: { ...item.x, moved: item.x?.src === "list" ? "1" : item.x?.moved }, etag: "", updated: iso(Number.isFinite(stamp) ? stamp : Date.now()) }, 0);
+  }
+  function calendarMoveAllDayReminder(item, originKey, targetKey, now = Date.now()) {
+    const origin = parseYmd(originKey), target = parseYmd(targetKey), start = parseYmd(item?.start?.date);
+    if (!item?.x || !item?.start || !isReminder(item) || !isAllDay(item) || !origin || !target || !start || item.x?.src === "note"
+        || item.x?.series || (item.recurrence || []).length) return null;
+    const offset = localDayOrdinal(target.getTime()) - localDayOrdinal(origin.getTime());
+    const result = ymd(new Date(addDays(start.getTime(), offset)));
+    if (!parseYmd(result)) return null;
+    const stamp = typeof now === "function" ? now() : Number(now);
+    return cleanItem({ ...item, start: { date: result }, end: undefined,
+      x: { ...item.x, moved: item.x?.src === "list" ? "1" : item.x?.moved }, etag: "", updated: iso(Number.isFinite(stamp) ? stamp : Date.now()) }, 0);
+  }
+  function calendarMoveTimedEvent(item, placement, zone = "", now = Date.now()) {
+    return !item?.x || isReminder(item) ? null : calendarMoveTimedItem(item, placement, zone, now);
+  }
+  // The drag-create range is civil-time based and direction independent. Only
+  // produce composer fields after both endpoints resolve to real instants.
+  function calendarDraftRange(originKey, originMinute, targetKey, targetMinute, zone = "", snapMin = 15) {
+    const origin = parseYmd(originKey), target = parseYmd(targetKey);
+    if (!origin || !target || !Number.isFinite(originMinute) || !Number.isFinite(targetMinute)
+        || originMinute < 0 || originMinute > 1440 || targetMinute < 0 || targetMinute > 1440 || (zone && !cleanZone(zone))) return null;
+    const step = cleanCalendarSnap(snapMin);
+    const wall = (day, minute) => Date.UTC(day.getFullYear(), day.getMonth(), day.getDate()) + Math.round(minute / step) * step * MIN;
+    const a = wall(origin, originMinute), b = wall(target, targetMinute);
+    if (a === b) return null;
+    const resolve = (stamp) => {
+      const day = new Date(stamp), key = String(day.getUTCFullYear()).padStart(4, "0") + "-" + p2(day.getUTCMonth() + 1) + "-" + p2(day.getUTCDate());
+      const clock = p2(day.getUTCHours()) + ":" + p2(day.getUTCMinutes());
+      return parseYmd(key) ? zonedDateTimeToMs(key, clock, zone) : null;
+    };
+    const start = resolve(Math.min(a, b)), end = resolve(Math.max(a, b));
+    if (!Number.isFinite(start) || !Number.isFinite(end) || !(end > start)) return null;
+    return { startDate: zonedDateKey(start, zone), startTime: clockIn(start, zone), endDate: zonedDateKey(end, zone), endTime: clockIn(end, zone) };
+  }
+  function calendarResizePlacement(item, edge, originKey, originMinute, targetKey, targetMinute, zone = "", snapMin = 15) {
+    if (!item?.x || !item?.start?.dateTime || !item?.end?.dateTime || isReminder(item) || !["start", "end"].includes(edge)
+        || item.x?.src === "note" || item.x?.series || (item.recurrence || []).length) return null;
+    return calendarMovePlacement({ start: item[edge] }, originKey, originMinute, targetKey, targetMinute, zone, snapMin);
+  }
+  function calendarResizeTimedEvent(item, edge, placement, zone = "", snapMin = 15, now = Date.now()) {
+    if (!item?.x || !item?.start?.dateTime || !item?.end?.dateTime || isReminder(item) || !["start", "end"].includes(edge)
+        || item.x?.src === "note" || item.x?.series || (item.recurrence || []).length || !parseYmd(placement?.date)
+        || !Number.isInteger(placement?.minute) || placement.minute < 0 || placement.minute >= 1440 || (zone && !cleanZone(zone))) return null;
+    const [start, end] = itemRange(item);
+    if (!Number.isFinite(start) || !(end > start)) return null;
+    const clock = p2(Math.floor(placement.minute / 60)) + ":" + p2(placement.minute % 60);
+    const target = zonedDateTimeToMs(placement.date, clock, zone);
+    if (!Number.isFinite(target)) return null;
+    const step = cleanCalendarSnap(snapMin) * MIN;
+    const newStart = edge === "start" ? Math.min(target, end - step) : start;
+    const newEnd = edge === "end" ? Math.max(target, start + step) : end;
+    const stamp = typeof now === "function" ? now() : Number(now);
+    return cleanItem({ ...item, start: { dateTime: iso(newStart) }, end: { dateTime: iso(newEnd) },
+      x: { ...item.x, moved: item.x?.src === "list" ? "1" : item.x?.moved }, etag: "", updated: iso(Number.isFinite(stamp) ? stamp : Date.now()) }, 0);
+  }
   // Move one edge of an event ("start" or "end"); never shorter than one snap step. Reminders have no end.
   function resizeItem(it, edge, deltaMs, snapMin = 15, now = Date.now()) {
     if (isReminder(it) || isAllDay(it) || !it.end) return it;
@@ -1035,6 +1124,26 @@
       action, stage: ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "", at,
     };
   }
+  // Display and cross-window retirement rules for occurrence-scoped reminder cards.
+  function reminderAlertPresentation(stage) {
+    const value = ["pre", "due", "followup"].includes(stage) ? stage : "followup";
+    return { stage: value, rank: value === "pre" ? 1 : value === "due" ? 2 : 3,
+      label: value === "pre" ? "Coming up" : value === "due" ? "Due now" : "Reminder overdue" };
+  }
+  function reminderSnoozeTomorrowMinutes(at) {
+    const stamp = Number(at);
+    if (!Number.isFinite(stamp)) return 0;
+    const date = new Date(stamp);
+    date.setDate(date.getDate() + 1);
+    const minutes = Math.round((date.getTime() - stamp) / 60000);
+    return Number.isFinite(minutes) && minutes > 0 ? minutes : 0;
+  }
+  function reminderAlertShouldClose(identity, records, seen = new Set()) {
+    if (!identity?.itemId || !identity?.occurrenceId) return false;
+    return (records || []).some((record) => record && !seen.has(record.id) &&
+      record.itemId === identity.itemId && record.occurrenceId === identity.occurrenceId &&
+      ["done", "dismissed", "snoozed", "rescheduled"].includes(record.action));
+  }
   function reminderStateAfter(action, current = "pending") {
     if (action === "done") return "done";
     if (action === "dismissed") return "dismissed";
@@ -1060,8 +1169,10 @@
     if (!itemId) return null;
     return { itemId, occurrenceId: String(kept || item.id || itemId), noteId, legacyNote: false };
   }
-  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400 }) {
+  function createReminderHistoryStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 400, onWrite = () => {} }) {
     const records = [];
+    const listeners = new Set();
+    const emit = (event) => { for (const fn of [...listeners]) { try { fn(event); } catch (error) { safeWarn(error); } } };
     const lifecycle = new Map();
     let nextSeq = 1;
     let dirty = false, timer = null, chain = Promise.resolve(), writeBlocked = false, retryCount = 0;
@@ -1090,6 +1201,7 @@
       const task = chain.catch(() => {}).then(async () => {
         try {
           await io.writeUTF8(io.join(dir, REMINDER_HISTORY_FILE), text, { tmpPath: io.join(dir, REMINDER_HISTORY_FILE + ".tmp") });
+          try { onWrite(dir); } catch (error) { safeWarn(error); }
           retryCount = 0;
           if (["unopened", "missing", "recovery-pending"].includes(storage.state)) storage = { ...storage, state: "ready", error: "" };
           if (dirty && timer === null && !writeBlocked) scheduleTimer();
@@ -1150,6 +1262,7 @@
         return state();
       },
       storageState: state,
+      on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
       append(raw) {
         if (writeBlocked) return null;
         const record = cleanReminderHistoryRecord({ ...raw, seq: nextSeq, at: raw?.at ?? now() }, now());
@@ -1157,6 +1270,7 @@
         nextSeq = Math.max(nextSeq + 1, record.seq + 1);
         // Immutable append: duplicate records are allowed because repeated transitions are meaningful.
         records.push(record); indexTransition(record); schedule();
+        emit({ kind: "append", action: record.action });
         return { ...record, start: record.start ? { ...record.start } : null };
       },
       // Merge records another window wrote since we last read the file (matched by record id; nothing is dropped or
@@ -1176,7 +1290,7 @@
           record.seq = nextSeq++;
           records.push(record); indexTransition(record); added++;
         }
-        if (added) dirty = true;
+        if (added) { dirty = true; emit({ kind: "refresh", count: added }); }
         return added;
       },
       // Cross-window "alert exactly once per saved schedule": re-read the shared file, skip when ANY window already
@@ -1210,9 +1324,9 @@
     };
   }
 
-  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600 }) {
+  function createItemStore({ io, getDir, now = () => Date.now(), setTimer, clearTimer, warn = () => {}, delayMs = 600, onHistoryWrite = () => {} }) {
     const items = new Map();
-    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs });
+    const history = createReminderHistoryStore({ io, getDir, now, setTimer, clearTimer, warn, delayMs, onWrite: onHistoryWrite });
     const categoryDefs = new Map();
     const hidden = new Set(); // noteIds whose items stay stored but are not shown (note in Trash, or its file is missing)
     const listeners = new Set();
@@ -1476,6 +1590,9 @@
   // ---------- calendar view layout (roadmap T2.4a) ----------
   // Keep the orientation decision pure so the sheet can react to its actual available rectangle (not the
   // browser window alone), and the threshold behavior can be regression-tested without Gecko layout.
+  const CALENDAR_DENSITIES = Object.freeze(["comfortable", "compact", "extra-compact"]);
+  function cleanCalendarDensity(value) { return CALENDAR_DENSITIES.includes(value) ? value : "comfortable"; }
+  function calendarDensityHourHeight(value) { return ({ comfortable: 54, compact: 44, "extra-compact": 36 })[cleanCalendarDensity(value)]; }
   const CALENDAR_LAYOUT_MODES = Object.freeze(["auto", "lr", "tb"]);
   function cleanCalendarLayout(value) { return CALENDAR_LAYOUT_MODES.includes(value) ? value : "auto"; }
   function calendarLayoutFor(mode, width, height) {
@@ -2047,7 +2164,11 @@
     }
   }
   // Agenda window: today .. today+days-1 (default 4 days = T..T+3). Counts live items per local day (recurrences expanded); `isDone(item)` is supplied by the reminder lifecycle (T2.7a), the item model has no done flag yet.
-  const AGENDA_LABELS = Object.freeze(["Today", "Tomorrow", "Day 2", "Day 3"]);
+  const AGENDA_LABELS = Object.freeze(["Today", "Tomorrow"]);
+  function agendaDayLabel(offset, day, locale = undefined) {
+    if (offset === 0 || offset === 1) return AGENDA_LABELS[offset];
+    return new Date(day).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
+  }
   // Agenda visibility is independent of reminder alerts, snooze and recurrence state.
   // Each layer is sparse: an omitted field inherits from the next layer.
   function cleanAgendaWindow(raw) {
@@ -2127,7 +2248,7 @@
     for (let i = 0; i < n; i++) {
       const from = addDays(base, i), to = addDays(base, i + 1);
       const list = expandRange(items, from, to).filter((it) => !isDone(it));
-      out.push({ offset: i, key: localDateKey(from), label: AGENDA_LABELS[i] || "Day " + i, from, to, count: list.length, items: list });
+      out.push({ offset: i, key: localDateKey(from), label: agendaDayLabel(i, from), from, to, count: list.length, items: list });
     }
     return out;
   }
@@ -2149,6 +2270,31 @@
       tomorrow: { ...tomorrow, lines: tomorrow.items.map(line) },
       tomorrowPreview: "## Tomorrow\n" + (tomorrow.items.length ? tomorrow.items.map(line).join("\n") : "- Nothing scheduled"),
     };
+  }
+  // Synchronous preference operations are shared by all browser windows. Keep
+  // this claim independent of the async note/meta writers and calendar history.
+  const DAY_PLAN_CLAIM_PREF = "zen.workspace.zentral.notes." + "last_day_plan_date";
+  function dayPlanNeedsClaim(snapshot, lastKey) {
+    const key = snapshot?.today?.key;
+    return typeof key === "string" && !!parseYmd(key) && key !== lastKey && (Number(snapshot?.today?.count) > 0 || Number(snapshot?.tomorrow?.count) > 0);
+  }
+  function claimDayPlan(snapshot, prefs) {
+    const key = snapshot?.today?.key;
+    try {
+      const previous = prefs.getStringPref(DAY_PLAN_CLAIM_PREF, "");
+      if (!dayPlanNeedsClaim(snapshot, previous)) return null;
+      prefs.setStringPref(DAY_PLAN_CLAIM_PREF, key);
+      let active = true;
+      return { rollback() {
+        if (!active) return;
+        active = false;
+        try {
+          if (prefs.getStringPref(DAY_PLAN_CLAIM_PREF, "") !== key) return;
+          if (previous) prefs.setStringPref(DAY_PLAN_CLAIM_PREF, previous);
+          else prefs.clearUserPref(DAY_PLAN_CLAIM_PREF);
+        } catch (_) {}
+      } };
+    } catch (_) { return null; }
   }
   // Projection for the virtual Zen Agenda folder. Keys are occurrence-scoped, not
   // display strings or formatted dates, so duplicate summaries remain independent.
@@ -2178,7 +2324,7 @@
     const candidateTo = fastDefault ? windowEnd : addDays(windowEnd, maxLead);
     const buckets = Array.from({ length: n }, (_, offset) => {
       const from = addDays(base, offset), to = addDays(base, offset + 1);
-      return { offset, key: localDateKey(from), label: AGENDA_LABELS[offset] || "Day " + offset, from, to, count: 0, items: [] };
+      return { offset, key: localDateKey(from), label: agendaDayLabel(offset, from), from, to, count: 0, items: [] };
     });
     let candidates;
     if (fastDefault) {
@@ -2230,6 +2376,7 @@
           key: "item:" + identity.itemId + ":" + identity.occurrenceId,
           itemId: identity.itemId,
           occurrenceId: identity.occurrenceId,
+          recordId: String(item.x?.series || item.id),
           noteId: item.x?.noteId || identity.noteId || "",
           heading: item.x?.heading || "",
           label,
@@ -2243,6 +2390,21 @@
         };
       }),
     }));
+  }
+  // Only days with at least one visible item get a Zen Agenda folder. Empty
+  // days (count === 0) are omitted so no empty Tomorrow / Day N folders are
+  // created, and a day that becomes empty is removed on the next run.
+  // Item-store listeners receive (kind, id); older event-object callers are
+  // accepted too so the same projection policy applies across integrations.
+  function agendaItemEventAffectsProjection(event) {
+    const kind = typeof event === "string" ? event : event?.type;
+    return ["change", "remove", "category", "reset", "recovery"].includes(kind);
+  }
+  function agendaPendingItems(items, stateFor = () => "pending") {
+    return (items || []).filter((item) => !["done", "dismissed"].includes(stateFor(item)));
+  }
+  function agendaVisibleDays(projection) {
+    return (projection || []).filter((day) => day && day.count > 0);
   }
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
@@ -2273,8 +2435,8 @@
       try {
         if (!getEnabled()) { api.removeAll?.(); last = []; clearScheduled(); return []; }
         sourceItems = getItems?.() || [];
-        const projection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow);
-        if (!projection.some((day) => day.count > 0)) {
+        const projection = agendaVisibleDays(agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow));
+        if (!projection.length) {
           api.removeAll?.(); last = projection; scheduleBoundary(sourceItems); return projection;
         }
         if (api.ensureRoot?.(getPosition() === "below" ? "below" : "above") === false) { scheduleBoundary(sourceItems); return last; }
@@ -2318,9 +2480,35 @@
       destroy() { dead = true; clearScheduled(); try { api.removeAll?.(); } catch (error) { safeWarn(error); } },
     };
   }
+  // Resolve a projected sidebar identity against current records, not against
+  // a stale tab label. Recurring identities refer to the expanded occurrence;
+  // the displayed start/end bounds keep lookup local even for old series.
+  function resolveAgendaOccurrence(items, identity = {}) {
+    const itemId = String(identity.itemId || ""), occurrenceId = String(identity.occurrenceId || ""), recordId = String(identity.recordId || "");
+    if (!itemId || !occurrenceId || !recordId || !Array.isArray(items)) return null;
+    for (const item of items) {
+      if (!item || item.id !== recordId || !live(item)) continue;
+      const key = reminderIdentity(item);
+      if (!key || key.itemId !== itemId) continue;
+      if (!(item.recurrence || []).length || item.x?.series) {
+        if (key.occurrenceId === occurrenceId) return item;
+        continue;
+      }
+      const start = Number(identity.start), end = Number(identity.end);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) continue;
+      const from = start - 2 * 86400000, to = Math.max(start + 1, end) + 2 * 86400000;
+      const occurrence = expandItem(item, from, to).find((candidate) => {
+        const id = reminderIdentity(candidate);
+        return id?.itemId === itemId && id.occurrenceId === occurrenceId;
+      });
+      if (occurrence) return occurrence;
+    }
+    return null;
+  }
+
   // Per-target context menu model for calendar rows. This stays pure so every calendar surface can
   // render the same capabilities and reasons without duplicating lifecycle/source rules.
-  function calendarItemMenuModel(item, { state = "pending", historyWritable = false } = {}) {
+  function calendarItemMenuModel(item, { state = "pending", historyWritable = false, agendaVisible, agendaWritable = true } = {}) {
     if (!item || typeof item !== "object" || !String(item.id || "")) return [];
     const reminder = isReminder(item);
     const source = ["list", "note", "manual"].includes(item.x?.src) ? item.x.src : "manual";
@@ -2337,6 +2525,8 @@
       action("duplicate", "Duplicate as independent item"),
       action("delete", "Delete item…", manual, "Remove this item from its source note instead of deleting only its calendar copy"),
     ];
+    if (typeof agendaVisible === "boolean") rows.splice(4, 0,
+      action("agenda-visibility", agendaWritable ? (agendaVisible ? "Hide in Zen Agenda" : "Show in Zen Agenda") + (recurring ? " (series)" : "") : "Zen Agenda visibility unavailable", agendaWritable, "This legacy note reminder is not stored as an Agenda item"));
     if (reminder) {
       const writable = !!historyWritable;
       rows.push(
@@ -2513,7 +2703,7 @@
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaBuckets, dayPlanSnapshot, agendaZenProjection, createZenAgenda, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);
