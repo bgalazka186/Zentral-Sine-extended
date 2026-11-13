@@ -77,7 +77,7 @@ when the ordering rules below are broken.
 Ordering inside one component. Listed by file; values only matter relative to siblings.
 
 <details>
-<summary>64 local z-index declarations</summary>
+<summary>65 local z-index declarations</summary>
 
 | File | Line | z-index | Selector / code |
 | --- | ---: | ---: | --- |
@@ -96,6 +96,7 @@ Ordering inside one component. Listed by file; values only matter relative to si
 | additional/notes/ZentralNotes.css | 1875 | 0 | `.zentral-notes-sheet .zn-cal-off-hours` |
 | additional/notes/ZentralNotes.css | 1877 | 1 | `.zentral-notes-sheet .zn-cal-busy-range` |
 | additional/notes/ZentralNotes.css | 1903 | 70 | `.zentral-notes-sheet .zn-cal-hover-card` |
+| additional/notes/ZentralNotes.css | 2134 | 6 | `.zentral-notes-sheet .zn-cal-drag-preview` |
 | additional/video/controllers/ZentralVideoSidebar.js | 213 | 5 | `"position:absolute;inset:0;z-index:5;background:var(--zl-video-canvas,` |
 | additional/video/ZentralVideoPreview.css | 132 | 3 | `#zentral-video-preview .zentral-video-preview-subtitles` |
 | additional/video/ZentralVideoPreview.css | 301 | 2 | `#zentral-video-preview canvas` |

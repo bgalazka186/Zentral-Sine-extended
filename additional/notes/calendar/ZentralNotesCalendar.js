@@ -619,6 +619,39 @@
     const stamp = typeof now === "function" ? now() : Number(now);
     return cleanItem({ ...copy, etag: "", updated: iso(Number.isFinite(stamp) ? stamp : Date.now()) }, 0);
   }
+  // Convert a grid gesture into a civil target without touching storage or repeatedly
+  // resolving a time zone while the pointer moves. The grabbed segment may be a
+  // clipped continuation of a multi-day event, so the delta is relative to the
+  // pointer's original day, not the event's first visible day.
+  function calendarMovePlacement(item, originKey, originMinute, targetKey, targetMinute, zone = "", snapMin = 15) {
+    const origin = parseYmd(originKey), target = parseYmd(targetKey), start = item?.start?.dateTime ? Date.parse(item.start.dateTime) : NaN;
+    if (!origin || !target || !Number.isFinite(start) || !Number.isFinite(originMinute) || !Number.isFinite(targetMinute)
+        || originMinute < 0 || originMinute > 1440 || targetMinute < 0 || targetMinute > 1440 || (zone && !cleanZone(zone))) return null;
+    const parts = zoneParts(start, zone);
+    if (!parts) return null;
+    const dayIndex = (d) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY_MS;
+    const step = Math.max(1, Math.min(1440, Math.round(Number(snapMin) || 15)));
+    const minutes = Math.round((parts.hour * 60 + parts.minute + (dayIndex(target) - dayIndex(origin)) * 1440 + targetMinute - originMinute) / step) * step;
+    const wall = new Date(Date.UTC(parts.year, parts.month - 1, parts.day) + minutes * MIN);
+    const date = String(wall.getUTCFullYear()).padStart(4, "0") + "-" + p2(wall.getUTCMonth() + 1) + "-" + p2(wall.getUTCDate());
+    if (!parseYmd(date)) return null;
+    return { date, minute: wall.getUTCHours() * 60 + wall.getUTCMinutes() };
+  }
+  // Moving an expanded recurring occurrence requires a scope chooser; legacy note
+  // reminders and all-day items use separate paths and are never accepted here.
+  function calendarMoveTimedEvent(item, placement, zone = "", now = Date.now()) {
+    if (!item || isReminder(item) || isAllDay(item) || !item.start?.dateTime || !item.end?.dateTime || item.x?.src === "note"
+        || item.x?.series || (item.recurrence || []).length || !parseYmd(placement?.date)
+        || !Number.isInteger(placement?.minute) || placement.minute < 0 || placement.minute >= 1440 || (zone && !cleanZone(zone))) return null;
+    const [start, end] = itemRange(item);
+    if (!(Number.isFinite(start) && end > start)) return null;
+    const clock = p2(Math.floor(placement.minute / 60)) + ":" + p2(placement.minute % 60);
+    const target = zonedDateTimeToMs(placement.date, clock, zone);
+    if (!Number.isFinite(target)) return null;
+    const stamp = typeof now === "function" ? now() : Number(now);
+    return cleanItem({ ...item, start: { dateTime: iso(target) }, end: { dateTime: iso(target + end - start) },
+      x: { ...item.x, moved: item.x?.src === "list" ? "1" : item.x?.moved }, etag: "", updated: iso(Number.isFinite(stamp) ? stamp : Date.now()) }, 0);
+  }
   // Move one edge of an event ("start" or "end"); never shorter than one snap step. Reminders have no end.
   function resizeItem(it, edge, deltaMs, snapMin = 15, now = Date.now()) {
     if (isReminder(it) || isAllDay(it) || !it.end) return it;
@@ -2614,7 +2647,7 @@
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, calendarMovePlacement, calendarMoveTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.ZentralModuleLoader?.define) window.ZentralModuleLoader.define("notes-calendar", () => api);

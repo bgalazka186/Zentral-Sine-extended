@@ -9675,8 +9675,9 @@
       const calendarDaysSelect = h("button", { type: "button", class: "zn-chip zn-calendar-days-select", "aria-label": "Number of days forward", "aria-haspopup": "menu" }, "7 days");
       const calendarKindSelect = h("button", { type: "button", class: "zn-chip zn-calendar-kind-filter", "aria-label": "Filter item type", "aria-haspopup": "menu" }, "All items");
       const calendarCategorySelect = h("button", { type: "button", class: "zn-chip zn-calendar-category-filter", "aria-label": "Filter category", "aria-haspopup": "menu" }, "All categories");
+      const calendarUndoMove = h("button", { type: "button", class: "zn-chip zn-calendar-undo-move", "aria-label": "Undo last calendar move", hidden: "true" }, "Undo move");
       const calendarToolsSelect = h("button", { type: "button", class: "zn-chip zn-calendar-tools", "aria-label": "Calendar tools", "aria-haspopup": "menu" }, "Tools");
-      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarPrev, calendarToday, calendarNext, calendarViewSelect, calendarDensitySelect, calendarDaysSelect, calendarKindSelect, calendarCategorySelect, calendarToolsSelect);
+      const calendarControls = h("div", { class: "zn-calendar-controls" }, calendarPrev, calendarToday, calendarNext, calendarViewSelect, calendarDensitySelect, calendarDaysSelect, calendarKindSelect, calendarCategorySelect, calendarUndoMove, calendarToolsSelect);
       const calendarContent = h("div", { class: "zn-calendar-pane-content zn-calendar-view", role: "region", "aria-label": "Calendar items" });
       const calendarPane = h("section", { class: "zn-calendar-pane", "aria-label": "Calendar" }, calendarHeader, calendarControls, calendarContent);
       const allSplitter = h("div", { class: "zn-calendar-splitter", role: "separator", tabindex: "0", "aria-label": "Resize folder tree and calendar panes", "aria-orientation": "vertical", "aria-valuemin": "20", "aria-valuemax": "80", "aria-valuenow": "36" });
@@ -11249,7 +11250,10 @@
         button.addEventListener("pointerleave", () => hideCalendarHoverCard(button));
         button.addEventListener("focus", () => showCalendarHoverCard(item, button));
         button.addEventListener("blur", () => hideCalendarHoverCard(button));
-        button.addEventListener("click", () => openCalendarItem(item));
+        button.addEventListener("click", (event) => {
+          if (button._znSuppressDragClick) { button._znSuppressDragClick = false; event.preventDefault(); event.stopPropagation(); return; }
+          openCalendarItem(item);
+        });
         button.setAttribute("aria-haspopup", "menu");
         button.addEventListener("contextmenu", (event) => showCalendarItemMenu(event, item, button));
         button.addEventListener("keydown", (event) => {
@@ -11366,6 +11370,95 @@
         calendarContent.dataset.compact = "true";
         calendarContent.append(list);
       }
+      // One captured pointer gesture per sheet. A calendar re-render, view change,
+      // Escape, pointer cancellation, panel close or teardown discards the preview.
+      let calendarDrag = null, calendarMoveUndo = null, calendarDragClickTimer = 0, calendarSuppressedClick = null;
+      function releaseCalendarSuppressedClick(event) {
+        const pending = calendarSuppressedClick;
+        if (!pending || (event?.pointerId !== undefined && event.pointerId !== pending.pointerId)) return;
+        calendarSuppressedClick = null;
+        window.clearTimeout(calendarDragClickTimer);
+        calendarDragClickTimer = window.setTimeout(() => { calendarDragClickTimer = 0; pending.button._znSuppressDragClick = false; }, 0);
+      }
+      function cancelCalendarDrag() {
+        const g = calendarDrag;
+        calendarDrag = null;
+        if (!g) return;
+        g.preview?.remove();
+        if (g.active) { g.button._znSuppressDragClick = true; calendarSuppressedClick = { button: g.button, pointerId: g.pointerId }; }
+        g.button.classList.remove("is-dragging");
+        try { if (g.button.hasPointerCapture?.(g.pointerId)) g.button.releasePointerCapture(g.pointerId); } catch (_) {}
+      }
+      function calendarDragPoint(g, event) {
+        if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return null;
+        const clip = g.scroll.getBoundingClientRect();
+        if (event.clientX < clip.left || event.clientX >= clip.right || event.clientY < clip.top || event.clientY >= clip.bottom) return null;
+        for (const track of g.columns.querySelectorAll(".zn-cal-time-track")) {
+          const rect = track.getBoundingClientRect();
+          if (event.clientX < rect.left || event.clientX >= rect.right || event.clientY < rect.top || event.clientY >= rect.bottom) continue;
+          const minute = Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / g.hourHeight));
+          return { track, day: track.getAttribute("data-day"), minute };
+        }
+        return null;
+      }
+      function updateCalendarDrag(event) {
+        const g = calendarDrag;
+        if (!g || (event.pointerId !== undefined && event.pointerId !== g.pointerId)) return;
+        if (!g.active && Math.hypot(event.clientX - g.x, event.clientY - g.y) < 5) return;
+        g.active = true;
+        g.button.classList.add("is-dragging");
+        const point = calendarDragPoint(g, event);
+        const placement = point && CALENDAR_PART.calendarMovePlacement(g.before, g.originDay, g.originMinute, point.day, point.minute, g.zone, 15);
+        g.placement = placement;
+        if (!placement) { g.preview?.remove(); g.preview = null; return; }
+        if (!g.preview) g.preview = h("div", { class: "zn-cal-drag-preview", "aria-hidden": "true" });
+        if (g.preview.parentElement !== point.track) point.track.append(g.preview);
+        g.preview.style.top = Math.max(0, point.minute / 60 * g.hourHeight) + "px";
+        g.preview.textContent = placement.date + " " + String(Math.floor(placement.minute / 60)).padStart(2, "0") + ":" + String(placement.minute % 60).padStart(2, "0");
+        event.preventDefault();
+      }
+      function commitCalendarDrag(event) {
+        const g = calendarDrag;
+        if (!g || (event.pointerId !== undefined && event.pointerId !== g.pointerId)) return;
+        if (g.active) updateCalendarDrag(event);
+        const placement = g.active ? g.placement : null;
+        cancelCalendarDrag();
+        // Native click follows pointerup in this task; clear suppression afterwards.
+        releaseCalendarSuppressedClick(event);
+        if (!placement) return;
+        const current = store.items.get(g.before.id);
+        if (!current || current.rev !== g.before.rev || current.etag !== g.before.etag) return flash("Calendar item changed during the drag; nothing was moved");
+        const next = CALENDAR_PART.calendarMoveTimedEvent(current, placement, g.zone, nowMs());
+        if (!next) return flash("That calendar move is unavailable");
+        if (next.start.dateTime === current.start.dateTime && next.end.dateTime === current.end.dateTime) return;
+        const before = { start: current.start, end: current.end, moved: current.x?.moved };
+        const saved = store.items.upsert(next);
+        if (!saved) return flash("Calendar item changed during the drag; nothing was moved");
+        if (saved.x?.src === "list") { try { store.syncItemScheduleToNote(saved, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
+        const latest = store.items.get(saved.id);
+        const linked = latest?.x?.src === "list" && latest.x.noteId ? store.get(latest.x.noteId) : null;
+        calendarMoveUndo = latest ? { id: latest.id, rev: latest.rev, etag: latest.etag, before, noteId: linked?.id || "", noteBody: linked?.body || "" } : null;
+        renderCalendar(); flash("Calendar item moved");
+      }
+      function undoCalendarMove() {
+        const undo = calendarMoveUndo;
+        if (!undo) return;
+        const current = store.items.get(undo.id), note = undo.noteId ? store.get(undo.noteId) : null;
+        if (!current || current.rev !== undo.rev || current.etag !== undo.etag || (undo.noteId && (!note || note.body !== undo.noteBody))) {
+          calendarMoveUndo = null; renderCalendar(); return flash("Cannot undo: the item or its source note changed");
+        }
+        const restored = store.items.upsert({ ...current, start: undo.before.start, end: undo.before.end, x: { ...current.x, moved: undo.before.moved } });
+        if (!restored) return flash("Could not undo the calendar move");
+        calendarMoveUndo = null;
+        if (restored.x?.src === "list") { try { store.syncItemScheduleToNote(restored, { fmt: dateDisplayFormat() }); } catch (error) { warn(error); } }
+        renderCalendar(); flash("Calendar move undone");
+      }
+      listen(calendarUndoMove, "click", undoCalendarMove);
+      listen(root, "pointermove", updateCalendarDrag);
+      listen(root, "pointerup", (event) => { commitCalendarDrag(event); releaseCalendarSuppressedClick(event); });
+      listen(window, "pointerup", releaseCalendarSuppressedClick, true);
+      listen(root, "pointercancel", (event) => { if (calendarDrag && (event.pointerId === undefined || event.pointerId === calendarDrag.pointerId)) cancelCalendarDrag(); releaseCalendarSuppressedClick(event); });
+      cleanups.push(() => { cancelCalendarDrag(); window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null; });
       function calendarTimeGridView(items, cursor, mode) {
         const CALENDAR_HOUR_PX = CALENDAR_PART.calendarDensityHourHeight(store.meta.calendarDensity);
         const C = CALENDAR_PART, zone = calendarDisplayZone(), days = mode === "week" ? C.weekDays(cursor, 1) : [C.dayStart(cursor)];
@@ -11464,6 +11557,25 @@
             const startLabel = C.clockIn(Math.max(itemStart, bounds[0]), zone);
             const endLabel = reminder ? "reminder" : C.clockIn(Math.min(itemEnd, bounds[1]), zone);
             button.setAttribute("aria-label", `${original.summary}, ${startLabel}${reminder ? " reminder" : " to " + endLabel}, lane ${entry.lane + 1} of ${entry.lanes}`);
+            if (!reminder && !original.x?.series && !(original.recurrence || []).length && original.x?.src !== "note") {
+              button.classList.add("is-movable");
+              button.title += " — Drag to move; use the context menu for keyboard time changes";
+              button.addEventListener("pointerdown", (event) => {
+                if ((event.button !== undefined && event.button !== 0) || calendarDrag || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
+                button._znSuppressDragClick = false;
+                const current = currentCalendarItem(original);
+                if (!current || current.rev !== original.rev || current.etag !== original.etag) return;
+                const rect = track.getBoundingClientRect();
+                calendarDrag = { button, pointerId: event.pointerId, x: event.clientX, y: event.clientY, before: current, originDay: dayKey,
+                  originMinute: Math.max(0, Math.min(1440, (event.clientY - rect.top) * 60 / CALENDAR_HOUR_PX)),
+                  hourHeight: CALENDAR_HOUR_PX, columns, scroll, zone, active: false, placement: null, preview: null };
+                try {
+                  if (typeof button.setPointerCapture !== "function") { cancelCalendarDrag(); return; }
+                  button.setPointerCapture(event.pointerId);
+                } catch (_) { cancelCalendarDrag(); }
+              });
+              button.addEventListener("lostpointercapture", (event) => { if (calendarDrag?.button === button && calendarDrag.pointerId === event.pointerId) cancelCalendarDrag(); });
+            }
             track.append(button);
           }
           columns.append(h("div", { class: "zn-cal-time-column" + (isToday ? " is-today" : "") }, track));
@@ -11896,6 +12008,8 @@
       }
       function renderCalendar() {
         if (!CALENDAR_PART || !calendarContent) return;
+        cancelCalendarDrag();
+        calendarUndoMove.hidden = !calendarMoveUndo;
         syncCalendarFilterOptions();
         hideCalendarHoverCard();
         const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
@@ -16182,6 +16296,7 @@
         const mod = e.ctrlKey || e.metaKey;
         const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
         if (key === "Escape") {
+          if (calendarDrag) { cancelCalendarDrag(); e.preventDefault(); return; }
           if (armed.length && !dialog && !menu) disarm();
           else if (dialog) closeDialog();
           else if (menu) closeMenu();
@@ -17018,6 +17133,9 @@
       function close() {
         if (!isOpen) return;
         isOpen = false;
+        cancelCalendarDrag();
+        window.clearTimeout(calendarDragClickTimer); calendarDragClickTimer = 0; calendarSuppressedClick = null;
+        calendarMoveUndo = null;
         collapsed = false;
         unwatchParentPanelHidden();
         delete root.dataset.collapsed;
