@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.87
+// @version 3.3.88
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.87, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.88, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.87";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.88";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11680,6 +11680,26 @@ __zentralShim.register = function (def) {
         return convert(raw, discord || reddit);
       });
     }
+    function mapExportWikilinks(segment, options, resolver, note) {
+      if (!options.gate.on("C01")) return segment;
+      const gate = options.gate, protectedAt = exportProtectedPositions(segment, options.literals);
+      const allow = { heading: gate.on("C03") && gate.on("C06"), self: gate.on("C04"), path: gate.on("C08") };
+      return segment.replace(WIKI_RE, (raw, target, _alias, offset) => {
+        for (let i = offset; i < offset + raw.length; i++) if (protectedAt.has(i)) return raw;
+        const parts = parseWikiTarget(target);
+        if ((parts.self && !allow.self) || (parts.heading && !parts.self && !allow.heading) || (parts.path.length && !allow.path)) return raw;
+        return expandWikiLinks(raw, resolver, { unresolved: "text", self: note, allow });
+      });
+    }
+    // Shared by warned and unwarned Markdown output. The caller handles front
+    // matter separately; URLs, attributes, examples and comments stay intact.
+    function rewriteMarkdownExportLinks(body, note, notes, names, folders, readOptions = {}) {
+      const effective = { ...readOptions, flavor: note?.flavor || readOptions.flavor };
+      const options = exportScriptOptions(effective), resolver = wikiResolver(notes, folders);
+      return mapMarkdownForExport(body,
+        (segment) => rewriteNoteLinks(mapExportWikilinks(segment, options, resolver, note), names),
+        (destination) => rewriteNoteLinks("]" + destination, names).slice(1), undefined, undefined, undefined, undefined, effective);
+    }
     function mapExportToc(segment, options, convert) {
       if (!TOC_TOKEN_RE.test(segment)) return segment;
       const protectedAt = exportProtectedPositions(segment, options.literals);
@@ -11830,10 +11850,7 @@ __zentralShim.register = function (def) {
         const prefix = /^(?:#{1,6}(?:[ \t]|$)|>|[-+*][ \t]+|\d{1,9}[.)][ \t]+|`{3,}|~{3,}|(?:[-*_][ \t]*){3,}$|\[[^\]\n]+\]:|<(?:!--|\/?[A-Za-z]))/.test(rest) ? "&#8203;" : "";
         return { prefix, separate: true };
       }, effectiveReadOptions);
-      const resolver = wikiResolver(notes, folders);
-      const rewritten = mapMarkdownForExport(converted,
-        (segment) => rewriteNoteLinks(expandWikiLinks(segment, resolver, { unresolved: "text", self: note }), names),
-        (destination) => rewriteNoteLinks("]" + destination, names).slice(1), undefined, undefined, undefined, undefined, effectiveReadOptions);
+      const rewritten = rewriteMarkdownExportLinks(converted, note, notes, names, folders, effectiveReadOptions);
       const suffix = footnotes.length ? (rewritten.endsWith("\n\n") ? "" : rewritten.endsWith("\n") ? "\n" : "\n\n") + footnotes.join("\n") + "\n" : "";
       return parts.prefix + rewritten + suffix;
     }
@@ -11845,7 +11862,8 @@ __zentralShim.register = function (def) {
     function markdownExportBody(note, notes = [], names = new Map(), folders = [], mode = "", readOptions = {}) {
       if (mode === "raw") return String(note?.body ?? "");
       if (mode === "portable") return portableMarkdownExportBody(note, notes, names, folders, readOptions);
-      return exportBody(note, notes, names, folders);
+      const parts = splitMarkdownExportFrontMatter(String(note?.body ?? ""));
+      return parts.prefix + rewriteMarkdownExportLinks(parts.body, note, notes, names, folders, readOptions);
     }
     // Export the stored note header as well as the selected body so IDs,
     // reminder timestamps and foreign front matter survive Markdown export.
