@@ -7088,9 +7088,10 @@
         },
       };
     }
+    const EXPORT_CONTAINER_TYPES = new Set(["details", "note", "tip", "important", "warning", "caution", "info", "abstract", "summary", "tldr", "todo", "success", "check", "done", "question", "help", "faq", "failure", "fail", "missing", "danger", "error", "bug", "example", "quote", "cite", "hint", "attention", "bingo", "poll"]);
     // Apply transformations only outside fenced code, inline code and HTML
     // comments. Comment state spans lines and fences inside a comment are inert.
-    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw) {
+    function mapMarkdownForExport(text, fn, mapDestination = (destination) => destination, onEnd = () => {}, mapMath = (raw) => raw, mapContainer = ({ open, inner, close }) => open + "\n" + inner + "\n" + close) {
       const lines = String(text).split("\n"), result = [], codeRuns = indexMarkdownCodeRuns(lines);
       let fence = null, comment = false;
       const findClose = (line, run, start) => {
@@ -7125,6 +7126,34 @@
       };
       for (let row = 0; row < lines.length; row++) {
         let line = lines[row];
+        if (!comment && !fence) {
+          const head = /^:::\s*([A-Za-z][\w-]*)[ \t]*(.*)$/.exec(line);
+          if (head && EXPORT_CONTAINER_TYPES.has(head[1].toLowerCase())) {
+            // Bound speculative lookahead; ignore fences and HTML comments
+            // while finding the closing line. Nested containers are ambiguous.
+            let end = row + 1, innerFence = null, innerComment = false, ambiguous = false;
+            for (; end < lines.length && end - row <= 2000; end++) {
+              const current = lines[end];
+              if (!innerComment) {
+                const was = !!innerFence, next = nextMarkdownFence(current, innerFence);
+                if (was || next) { innerFence = next; continue; }
+                if (/^:::\s*$/.test(current)) break;
+                if (/^:::\s*[A-Za-z]/.test(current)) { ambiguous = true; break; }
+              }
+              let pos = 0;
+              while (pos < current.length) {
+                const marker = innerComment ? "-->" : "<!--", at = current.indexOf(marker, pos);
+                if (at < 0) break;
+                innerComment = !innerComment; pos = at + marker.length;
+              }
+            }
+            if (!ambiguous && end < lines.length && end - row <= 2000) {
+              const inner = mapMarkdownForExport(lines.slice(row + 1, end).join("\n"), fn, mapDestination, undefined, mapMath, mapContainer);
+              result.push(mapContainer({ open: line, inner, close: lines[end], kind: head[1], title: head[2].replace(/\s*:::\s*$/, "").trim() }));
+              row = end; continue;
+            }
+          }
+        }
         if (!comment && !fence && /^\s*\$\$\s*$/.test(line)) {
           let end = row + 1;
           while (end < lines.length && end - row < 200 && !/^\s*\$\$\s*$/.test(lines[end])) end++;
@@ -7208,7 +7237,9 @@
         const task = /^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/.exec(visible);
         if (task && Object.hasOwn(TASK_STATUS_NAMES, task[2])) found.add("extended task");
         return segment;
-      }, undefined, undefined, (math) => { found.add("math"); return math; });
+      }, undefined, undefined, (math) => { found.add("math"); return math; }, (container) => {
+        found.add("callout"); return container.open + "\n" + container.inner + "\n" + container.close;
+      });
       return [...found];
     }
     // Export is a copy: convert the documented extensions conservatively and
@@ -7261,6 +7292,8 @@
         const maxRun = (math.match(/`+/g) || []).reduce((max, run) => Math.max(max, run.length), 0);
         const ticks = "`".repeat(Math.max(block ? 3 : 1, maxRun + 1));
         return block ? ticks + "math\n" + math + "\n" + ticks : ticks + math + ticks;
+      }, ({ kind, title, inner }) => {
+        return "> **" + kind.toUpperCase() + "**" + (title ? " — " + title : "") + "\n" + inner.split("\n").map((line) => line ? "> " + line : ">").join("\n");
       });
       const resolver = wikiResolver(notes, folders);
       const rewritten = mapMarkdownForExport(converted,
