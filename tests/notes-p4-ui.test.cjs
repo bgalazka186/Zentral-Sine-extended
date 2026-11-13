@@ -23,7 +23,7 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
   const store = c.createStore({ io, getHistory: () => ({ on: true, keep: 5, minutes: 1, capKB: 512, warnMB: 100 }), notify() {}, windowId: "t", getDir: async () => "/n", getMaxSaveMs: () => 5000, setTimer: setTimeout, clearTimer: clearTimeout });
   const calls = [];
   const prefs = new Map();
-  const env = { openLink: (u) => calls.push(["link", u]), copyText() {}, exportNote() {}, exportAll() {}, revealFolder() {}, getPref: (k, d) => (prefs.has(k) ? prefs.get(k) : d), setPref: (k, v) => prefs.set(k, v) };
+  const env = { openLink: (u) => calls.push(["link", u]), copyText() {}, exportNote: (...args) => calls.push(["exportNote", ...args]), exportAll: (...args) => calls.push(["exportAll", ...args]), exportZip: (...args) => { calls.push(["exportZip", ...args]); return 0; }, revealFolder() {}, getPref: (k, d) => (prefs.has(k) ? prefs.get(k) : d), setPref: (k, v) => prefs.set(k, v) };
   const host = new El("div");
   const adapter = { position: "fixed", host, attach: (r) => host.appendChild(r), getArea: () => ({ left: 0, top: 0, width: 400, height: 600, anchor: "top" }), watch: () => () => {}, setActive() {}, rewatch() {} };
   const sheet = c.createSheet({ store, adapter, env, ensureStore: () => store.open() });
@@ -55,6 +55,35 @@ const n = (id, body, extra = {}) => ({ id, body, updated: 1000, trashed: 0, ...e
       const before = store.meta.mode;
       sheet.openNoteById(n.id, "", "absent"); assert.equal(store.meta.mode, "read", "missing marker keeps requested read mode");
     } finally { prefs.delete("zen.workspace.zentral.notes.default_view"); store.setMeta({ mode: previousMode }); }
+  });
+
+  await test("T1.18 Markdown export offers cancel, raw, or portable for syntax that needs conversion", async () => {
+    const note = store.create("# Export warning\n\n[TOC]\n\n## Heading\n> [!NOTE] Notice\n> Body\n");
+    sheet.openNoteById(note.id); await flushRaf();
+    const openExport = async (label) => { openMore(); click(menuItem("Import & export")); click(menuItem(label)); await flushRaf(); };
+    const choice = (text) => q(".zn-dialog").querySelectorAll("button").find((button) => button.textContent === text);
+    calls.length = 0;
+    await openExport("Save as Markdown");
+    assert.ok(q(".zn-dialog"), "warning appears before file picker");
+    assert.ok(q(".zn-dialog").textContent.includes("callout"));
+    click(choice("Cancel")); assert.equal(calls.length, 0, "cancel never exports");
+    await openExport("Save as Markdown"); click(choice("Keep raw syntax"));
+    assert.equal(calls.at(-1)[0], "exportNote"); assert.equal(calls.at(-1)[3].markdownMode, "raw");
+    await openExport("Save as Markdown"); click(choice("Convert to portable Markdown"));
+    assert.equal(calls.at(-1)[3].markdownMode, "portable");
+    await openExport("Export all notes"); click(choice("Convert to portable Markdown"));
+    assert.equal(calls.at(-1)[0], "exportAll"); assert.equal(calls.at(-1)[2].markdownMode, "portable");
+    await openExport("Export all as zip"); click(choice("Keep raw syntax"));
+    assert.ok(q(".zn-dialog"), "zip retains its existing export confirmation");
+    click(q(".zn-dialog").querySelectorAll("button").find((button) => button.textContent.startsWith("Choose where")));
+    await flushRaf(); assert.equal(calls.at(-1)[0], "exportZip"); assert.equal(calls.at(-1)[2].markdownMode, "raw");
+    const plain = store.create("# Plain export\n\nOrdinary Markdown.");
+    sheet.openNoteById(plain.id); await flushRaf(); calls.length = 0;
+    await openExport("Save as Markdown");
+    assert.equal(q(".zn-dialog"), null, "plain Markdown goes directly to the existing file picker");
+    assert.equal(calls.at(-1)[0], "exportNote");
+    assert.equal(calls.at(-1)[1].id, plain.id);
+    assert.equal(note.body.includes("[TOC]"), true, "export choices do not modify the source note");
   });
 
   await test("[[ completion: strip appears while typing, Arrow+Enter picks, the link is inserted and the strip closes", async () => {

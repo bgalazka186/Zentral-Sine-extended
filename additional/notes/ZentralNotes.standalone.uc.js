@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.65
+// @version 3.3.66
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.65, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.66, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.65";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.66";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11399,18 +11399,103 @@ __zentralShim.register = function (def) {
       }
       return null;
     }
+    // Isolate the front matter before scanning so code fences in YAML cannot
+    // affect Markdown parsing; preserve its original bytes and line endings.
+    function splitMarkdownExportFrontMatter(body) {
+      const text = String(body ?? ""), count = leadingFrontMatter(text)?.lines || 0;
+      if (!count) return { prefix: "", body: text };
+      let end = 0;
+      for (let i = 0; i < count; i++) {
+        const newline = text.indexOf("\n", end);
+        if (newline < 0) return { prefix: text, body: "" };
+        end = newline + 1;
+      }
+      return { prefix: text.slice(0, end), body: text.slice(end) };
+    }
+    // Apply transformations only outside fenced code, inline code and HTML
+    // comments. Comment state spans lines and fences inside a comment are inert.
+    function mapMarkdownForExport(text, fn) {
+      let fence = null, comment = false;
+      return String(text).split("\n").map((line) => {
+        if (!comment) {
+          const wasFenced = !!fence, next = nextMarkdownFence(line, fence);
+          if (wasFenced || next) { fence = next; return line; }
+        }
+        let out = "", visible = "", pos = 0;
+        const flush = () => { if (visible) { out += fn(visible); visible = ""; } };
+        while (pos < line.length) {
+          if (comment) {
+            const end = line.indexOf("-->", pos);
+            if (end < 0) { out += line.slice(pos); pos = line.length; continue; }
+            out += line.slice(pos, end + 3); pos = end + 3; comment = false; continue;
+          }
+          if (line.startsWith("<!--", pos)) { flush(); comment = true; continue; }
+          if (line[pos] === "`") {
+            const run = /^`+/.exec(line.slice(pos))[0], close = line.indexOf(run, pos + run.length);
+            if (close >= 0 && line[close + run.length] !== "`") {
+              flush(); out += line.slice(pos, close + run.length); pos = close + run.length; continue;
+            }
+          }
+          visible += line[pos++];
+        }
+        flush();
+        return out;
+      }).join("\n");
+    }
     // Identify live Zentral extensions without interpreting examples inside code.
     // This reports categories only; it does not modify or export the source.
     function markdownExportWarnings(body) {
       const found = new Set();
-      mapOutsideCode(String(body ?? ""), (segment) => {
-        if (TOC_TOKEN_RE.test(segment)) found.add("toc");
-        if (/^\s*>\s*\[![A-Za-z][\w-]*\][+-]?/.test(segment)) found.add("callout");
-        if (/!\[\[[^\]\n]+\]\]/.test(segment)) found.add("transclusion");
-        if (/%%(?:calendar(?::[^%\n]*)?|zn-item-id:[\w-]+)%%/i.test(segment)) found.add("calendar");
+      const content = splitMarkdownExportFrontMatter(body).body;
+      mapMarkdownForExport(content, (segment) => {
+        const visible = segment.replace(/%%[^%\n]+%%/g, (marker) => {
+          if (/^%%(?:calendar(?::[^%\n]*)?|zn-item-id:[\w-]+)%%$/i.test(marker)) found.add("calendar");
+          else found.add("hidden comment");
+          return "";
+        });
+        if (TOC_TOKEN_RE.test(visible)) found.add("toc");
+        if (/^\s*>\s*\[![A-Za-z][\w-]*\][+-]?/.test(visible)) found.add("callout");
+        if (/!\[\[[^\]\n]+\]\]/.test(visible)) found.add("transclusion");
         return segment;
       });
       return [...found];
+    }
+    // Export is a copy: convert the documented extensions conservatively and
+    // keep unresolvable transclusions visible as literal code instead of losing data.
+    function portableMarkdownExportBody(note, notes = [], names = new Map(), folders = []) {
+      const body = String(note?.body ?? ""), parts = splitMarkdownExportFrontMatter(body);
+      const literal = (text) => "`" + text.replace(/`/g, "") + "`";
+      const hiddenSafe = mapMarkdownForExport(parts.body, (segment) => segment.replace(/%%[^%\n]+%%/g, (marker) => "<!-- " + marker.replace(/--/g, "-&#45;") + " -->"));
+      const converted = mapMarkdownForExport(hiddenSafe, (segment) => {
+        if (TOC_TOKEN_RE.test(segment)) return tocBlock(body);
+        segment = segment.replace(/^(\s*>\s*)\[!([A-Za-z][\w-]*)\][+-]?[ \t]*(.*)$/, (_, quote, kind, title) => quote + "**" + kind.toUpperCase() + "**" + (title ? " — " + title : ""));
+        segment = segment.replace(/!\[\[([^\]\n]+)\]\]/g, (raw, target) => {
+          const spec = parseEmbedTarget(target);
+          if (!spec) return literal(raw);
+          if (spec.youtube) return "[YouTube video](https://www.youtube.com/watch?v=" + spec.youtube.id + ")";
+          if (spec.image || spec.videoAsset) {
+            const file = spec.image || spec.videoAsset;
+            if (!isAssetNoteId(note?.id)) return literal(raw);
+            const rel = assetRel(note.id, file);
+            return (spec.image ? "!" : "") + "[" + cleanLinkLabel(file) + "](" + rel + ")";
+          }
+          if (spec.blockId) return literal(raw); // portable Markdown has no standard block-id links
+          if (spec.parts.self && spec.parts.heading) return "[" + cleanLinkLabel(spec.parts.heading) + "](#" + headingSlug(spec.parts.heading) + ")";
+          const hit = resolveWikiTarget(notes, folders, spec.parts);
+          if (!hit?.id) return literal(raw);
+          const title = spec.parts.title + (spec.parts.heading ? " > " + spec.parts.heading : "");
+          return buildNoteLink(hit.id, title, hit.heading);
+        });
+        return segment;
+      });
+      const resolver = wikiResolver(notes, folders);
+      const rewritten = mapMarkdownForExport(converted, (segment) => rewriteNoteLinks(expandWikiLinks(segment, resolver, { unresolved: "text", self: note }), names));
+      return parts.prefix + rewritten;
+    }
+    function markdownExportBody(note, notes = [], names = new Map(), folders = [], mode = "") {
+      if (mode === "raw") return String(note?.body ?? "");
+      if (mode === "portable") return portableMarkdownExportBody(note, notes, names, folders);
+      return exportBody(note, notes, names, folders);
     }
     // Rebuilds the block (or expands a [TOC] line). Returns { body, changed, found }.
     function updateToc(body) {
@@ -12475,7 +12560,7 @@ __zentralShim.register = function (def) {
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
         FOLDER_SEG_RE, FOLDER_MAX_DEPTH, MAX_FOLDERS, cleanFolder, parentOfFolder, sortNotes, buildTree, cleanFolders, slugFolder,
-        markdownExportWarnings, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
+        markdownExportWarnings, portableMarkdownExportBody, markdownExportBody, itemMarkerLineRange, allFolderIds, moveNote, addFolderMeta, patchFolderMeta, deleteFolder, reparentFolder, treeRows, TREE_ORDERS, cleanTreeOrder, DEFAULT_VIEWS, cleanDefaultView, startMode, fitDialog,
         lookOverrides, LOOK_NUM_PREFS, hexToHsl, hslToHex, cssColorToHex, SETTINGS_TABS, WRITING_OPTIONS, QUICK_IDS, LOOK_VARS, LOOK_FONTS, LOOK_PREFS, buildCapture, insertCapture, captureFragmentUrl, findInbox,
         CAPTURE_STYLES, CAPTURE_TARGETS, CAPTURE_DEFAULTS, cleanCaptureText,
         foldText, normalizeFindQuery, findMatches, highlightSegments, findInRuns, searchOtherNotes, stepMatchIndex, firstMatchFrom, lineOfOffset, revealScroll,
@@ -17675,6 +17760,26 @@ __zentralShim.register = function (def) {
         ok.focus({ preventScroll: true });
       }
 
+      // Markdown can carry Zentral-only syntax. Ask before changing it or
+      // passing it through; no file picker is opened when the user cancels.
+      function askMarkdownExport(notes, run) {
+        const warnings = new Set();
+        for (const entry of notes) {
+          for (const name of markdownExportWarnings(entry?.body)) warnings.add(name);
+          if (entry?.remind) warnings.add("reminder metadata");
+        }
+        if (!warnings.size) { Promise.resolve(run({})).catch((error) => console.warn("[ZentralNotes] export failed", error)); return; }
+        const cancel = chip("Cancel"), raw = chip("Keep raw syntax"), portable = chip("Convert to portable Markdown", true);
+        openCard("Markdown export compatibility",
+          h("p", {}, "This export contains: " + [...warnings].join(", ") + ". Portable conversion replaces callouts and embeds with ordinary Markdown and keeps hidden comments and calendar markers as HTML comments. Embedded note content becomes links; unknown targets stay literal. Sizing and reminder scheduling may not transfer, and linked assets are not copied."),
+          h("div", { class: "zn-dialog-actions" }, cancel, raw, portable));
+        const choose = (markdownMode) => { closeDialog(); Promise.resolve(run({ markdownMode })).catch((error) => console.warn("[ZentralNotes] export failed", error)); };
+        cancel.addEventListener("click", closeDialog);
+        raw.addEventListener("click", () => choose("raw"));
+        portable.addEventListener("click", () => choose("portable"));
+        cancel.focus({ preventScroll: true });
+      }
+
       // ---- small dialogs: link, table, quick settings, shortcuts ---------------------------------------
       function openCard(label, ...kids) {
         closeMenu();
@@ -18992,13 +19097,13 @@ __zentralShim.register = function (def) {
         // button (table of contents, quick settings, search, split view) stays out of here, or sits one step down.
         const items = [
           { icon: "save", label: "Import & export", group: [
-            { icon: "save", label: "Save as Markdown\u2026", action: () => env.exportNote(n, "md") },
+            { icon: "save", label: "Save as Markdown\u2026", action: () => askMarkdownExport([n], (options) => env.exportNote(n, "md", options)) },
             { icon: "save", label: "Export as HTML\u2026", action: () => askExport("html", () => env.exportNote(n, "html")) },
             { icon: "save", label: "Export as plain text\u2026", action: () => askExport("txt", () => env.exportNote(n, "txt")) },
             { icon: "save", label: "Print / save as PDF\u2026", action: () => askExport("pdf", () => env.printNote(n)) },
             { sep: true },
-            { icon: "save", label: "Export all notes\u2026", action: () => env.exportAll(store.list()) },
-            { icon: "save", label: "Export all as zip\u2026", action: () => askExport("zip", async () => { const k = await env.exportZip(store.list()); if (k) flash(`Zipped ${k} notes`); }) },
+            { icon: "save", label: "Export all notes\u2026", action: () => { const list = store.list(); askMarkdownExport(list, (options) => env.exportAll(list, options)); } },
+            { icon: "save", label: "Export all as zip\u2026", action: () => { const list = store.list(); askMarkdownExport(list, (options) => askExport("zip", async () => { const k = await env.exportZip(list, options); if (k) flash(`Zipped ${k} notes`); })); } },
             { icon: "folder", label: "Import .md folder\u2026", action: async () => { const k = await env.importFolder(store); flash(k ? `Imported ${k} notes` : "Nothing imported"); if (view === "list") scheduleList(); } },
             { sep: true },
             { icon: "paperclip", label: "Check attached files…", action: () => queueMicrotask(askAssetIntegrity) },
@@ -21587,12 +21692,13 @@ __zentralShim.register = function (def) {
       };
       const withNewline = (t) => (t.endsWith("\n") ? t : t + "\n");
       const allNotesForExport = () => store.list().concat(store.list({ trashed: true }));
-      async function exportNote(n, format = "md") {
+      const markdownBody = (note, all, names, mode) => markdownExportBody(note, all, names, store.meta.folders, mode);
+      async function exportNote(n, format = "md", { markdownMode = "" } = {}) {
         const info = EXPORT_FORMATS[format] || EXPORT_FORMATS.md;
         const file = await pick(Ci.nsIFilePicker.modeSave, "Save note", safeFileName(titleOf(n.body), "note") + "." + info.ext, format);
         if (!file) return;
         try {
-          const body = exportBody(n, allNotesForExport(), new Map(), store.meta.folders);
+          const body = format === "md" ? markdownBody(n, allNotesForExport(), new Map(), markdownMode) : exportBody(n, allNotesForExport(), new Map(), store.meta.folders);
           const text = format === "html" ? exportHtml(body, readOpts()) : format === "txt" ? exportText(body, readOpts()) : withNewline(body);
           await IOUtils.writeUTF8(file.path, text);
         } catch (error) {
@@ -21633,7 +21739,7 @@ __zentralShim.register = function (def) {
           return true;
         } catch (error) { warn(error); return false; }
       }
-      async function exportAll(list) {
+      async function exportAll(list, { markdownMode = "" } = {}) {
         const folder = await pick(Ci.nsIFilePicker.modeGetFolder, "Export all notes to a folder");
         if (!folder) return;
         const names = uniqueFileNames(list);
@@ -21642,13 +21748,13 @@ __zentralShim.register = function (def) {
         for (let i = 0; i < list.length; i++) {
           try {
             // An existing file is never overwritten by an export.
-            await IOUtils.writeUTF8(PathUtils.join(folder.path, names[i]), withNewline(exportBody(list[i], everything, byId, store.meta.folders)), { mode: "create" });
+            await IOUtils.writeUTF8(PathUtils.join(folder.path, names[i]), withNewline(markdownBody(list[i], everything, byId, markdownMode)), { mode: "create" });
           } catch (error) {
             warn(error);
           }
         }
       }
-      async function exportZip(list) {
+      async function exportZip(list, { markdownMode = "" } = {}) {
         const live = list.filter((n) => !n.trashed);
         if (!live.length) return 0;
         const file = await pick(Ci.nsIFilePicker.modeSave, "Save all notes as zip", "zentral-notes.zip", "zip");
@@ -21661,7 +21767,7 @@ __zentralShim.register = function (def) {
           zw.open(file, 0x04 | 0x08 | 0x20); // read/write, create, truncate
           const enc = new TextEncoder();
           for (let i = 0; i < live.length; i++) {
-            const bytes = enc.encode(withNewline(exportBody(live[i], everything, byId, store.meta.folders)));
+            const bytes = enc.encode(withNewline(markdownBody(live[i], everything, byId, markdownMode)));
             let bin = "";
             for (let j = 0; j < bytes.length; j += 8192) bin += String.fromCharCode(...bytes.subarray(j, j + 8192));
             const stream = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(Ci.nsIStringInputStream);
