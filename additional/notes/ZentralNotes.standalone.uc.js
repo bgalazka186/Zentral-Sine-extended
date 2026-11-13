@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.55
+// @version 3.3.56
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.55, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.56, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.55";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.56";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -11871,6 +11871,57 @@ __zentralShim.register = function (def) {
       if (m[1] === "note") return NOTE_ID_RE.test(v) && !v.includes("..") ? { kind: "note", id: v } : null;
       return cleanFolder(v) === v ? { kind: "new", folder: v } : null;
     }
+    // Only exact virtual-tab addresses count; never classify a normal tab by
+    // its title or by a previous entry in its navigation history.
+    function pseudoTabCleanupKind({ url = "", remembered = "", sessionUrl = "", notesMarked = false, agendaMarked = false } = {}, { notesEnabled = false, agendaEnabled = false } = {}) {
+      if (agendaMarked) return agendaEnabled ? "" : "agenda";
+      if (notesMarked) return notesEnabled ? "" : "notes";
+      for (const candidate of [url, remembered, sessionUrl]) {
+        const value = String(candidate || "");
+        if (/^about:blank#zn-agenda-[^\s]*$/.test(value)) return "agenda";
+        if (parseZenUrl(value)) return "notes";
+      }
+      return "";
+    }
+    function sweepRestoredPseudoTabs(tabs, { notesEnabled = false, agendaEnabled = false, getTabState, removeTab, warn = () => {} } = {}) {
+      let removed = 0;
+      for (const tab of tabs || []) {
+        try {
+          let url = tab.linkedBrowser?.currentURI?.spec || "", sessionUrl = "";
+          if ((!url || url === "about:blank") && (tab.pinned || tab.hasAttribute?.("pending")) && getTabState) {
+            try {
+              const state = JSON.parse(getTabState(tab));
+              const entries = Array.isArray(state.entries) ? state.entries : [];
+              const index = Number.isInteger(state.index) && state.index > 0 ? state.index - 1 : entries.length - 1;
+              sessionUrl = entries[index]?.url || "";
+            } catch (_) {}
+          }
+          const kind = pseudoTabCleanupKind({ url, sessionUrl, remembered: tab._zentralNotesUrl || "", notesMarked: tab.hasAttribute?.(NOTES_ATTR), agendaMarked: tab.hasAttribute?.(AGENDA_ATTR) }, { notesEnabled, agendaEnabled });
+          if (kind && typeof removeTab === "function") { removeTab(tab); removed++; }
+        } catch (error) { try { warn(error); } catch (_) {} }
+      }
+      return removed;
+    }
+    function restoredPseudoFolderKind(folder) {
+      if (!folder || folder.localName !== "zen-folder") return "";
+      const id = String(folder.id || "");
+      if (id === AGENDA_ROOT_ID || id.startsWith("zentral-notes-agenda-day-") || folder.hasAttribute?.("bgalazka-notes-agenda-folder") || folder.hasAttribute?.("bgalazka-notes-agenda-day")) return "agenda";
+      if (id === NOTES_ZEN_ROOT_ID || id.startsWith(NOTES_ZEN_SUB_PREFIX) || folder.hasAttribute?.("bgalazka-notes-folder") || folder.hasAttribute?.("bgalazka-notes-subfolder")) return "notes";
+      return "";
+    }
+    // A disabled projection may have acquired real user tabs or folders. In
+    // that case release only our markers, never delete the user's contents.
+    function retireRestoredPseudoFolder(folder, kind) {
+      if (restoredPseudoFolderKind(folder) !== kind) return false;
+      const descendants = [...(folder.querySelectorAll?.("zen-folder") || [])];
+      const foreign = [...(folder.querySelectorAll?.("tab") || [])].length > 0 || descendants.some((child) => restoredPseudoFolderKind(child) !== kind);
+      if (!foreign) { try { folder.delete?.(); return true; } catch (_) { return false; } }
+      for (const el of [folder, ...descendants].filter((child) => restoredPseudoFolderKind(child) === kind)) {
+        for (const attr of ["bgalazka-notes-folder", "bgalazka-notes-subfolder", "bgalazka-notes-label", "bgalazka-notes-parent", "bgalazka-notes-color", "bgalazka-notes-icon", "bgalazka-notes-parts", "bgalazka-notes-parts-opacity", "bgalazka-notes-agenda-folder", "bgalazka-notes-agenda-day", "bgalazka-notes-agenda-key", "bgalazka-notes-agenda-count", "bgalazka-notes-agenda-label"]) el.removeAttribute(attr);
+        if (el.id) el.id = "zentral-released-" + el.id;
+      }
+      return true;
+    }
     // Tree -> flat ordered entries. mode "all": everything; "selected": only the tabbar folder's content, whose direct
     // children sit right inside the Zen NOTES folder (parent ""); "off": nothing. Parents always come before children.
     function projectZen(notes, folders, mode = "all", order = "folders-first") {
@@ -12284,7 +12335,7 @@ __zentralShim.register = function (def) {
         hubDescription, hubLines, bareNoteLink, DATE_FOLDER, DATE_FOLDER_LABEL, DATE_KINDS, DATE_MODES, cleanDateMode, ymdOf, parseYmd, shiftDays, nextWorkDay, dateTarget, dateHeading, dateNoteBody,
         DATE_TITLE_RE, dateOfNote, findDateNote, listDateNotes, JOURNAL_TITLE, isJournal, journalDays, journalSection,
         HISTORY_DIR, HISTORY_DEFAULTS, HISTORY_RANGE, BACKUP_DIR, BACKUP_HOURS, backupEntryName, parseBackupName, backupPlan, backupLeft, historyOptions, historyStamp, historyFileName, parseHistoryName, shouldSnapshot, pruneHistory, historyWarning,
-        orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, projectZen,
+        orderPlan, childSequence, wikiTrigger, wikiComplete, TABBAR_FOLDER, TABBAR_LABEL, ZEN_MODES, cleanZenMode, ZEN_MAX_ENTRIES, zenNoteUrl, zenNewUrl, parseZenUrl, pseudoTabCleanupKind, sweepRestoredPseudoTabs, restoredPseudoFolderKind, retireRestoredPseudoFolder, projectZen,
         utf8Bytes, createPerfSampler, createZenFolder,
       };
     }
@@ -22441,6 +22492,39 @@ __zentralShim.register = function (def) {
       onCleanup(() => {
         try { Services.prefs.removeObserver(COLORFUL_FOLDER_PREF, colorfulFolderPrefObserver); } catch (_) {}
       });
+      // Unconditional startup/restore sweep: even disabled projections can leave
+      // restored virtual tabs. Never inspect historical entries of normal tabs.
+      function cleanRestoredPseudoTabs(tabs) {
+        return sweepRestoredPseudoTabs(tabs, {
+          notesEnabled: zenMode() !== "off", agendaEnabled: agendaEnabled(),
+          getTabState: window.SessionStore?.getTabState ? (tab) => window.SessionStore.getTabState(tab) : null,
+          removeTab: zenRemoveTab, warn,
+        });
+      }
+      function cleanDisabledPseudoFolders() {
+        const folders = [...(document.querySelectorAll?.("zen-folder") || [])];
+        for (const folder of folders) {
+          const kind = restoredPseudoFolderKind(folder);
+          if (!kind || (kind === "notes" ? zenMode() !== "off" : agendaEnabled())) continue;
+          const ancestor = folder.parentElement?.closest?.("zen-folder");
+          if (ancestor && restoredPseudoFolderKind(ancestor) === kind) continue;
+          retireRestoredPseudoFolder(folder, kind);
+        }
+      }
+      cleanRestoredPseudoTabs([...(document.querySelectorAll?.("tab") || [])]);
+      cleanDisabledPseudoFolders();
+      const onPseudoTabRestored = (event) => {
+        if (disposed || event.target?.localName !== "tab") return;
+        cleanRestoredPseudoTabs([event.target]);
+        cleanDisabledPseudoFolders();
+      };
+      if (lifecycle?.listen) {
+        const offPseudoRestore = lifecycle.listen(window, "SSTabRestored", onPseudoTabRestored, true);
+        onCleanup(offPseudoRestore);
+      } else {
+        window.addEventListener("SSTabRestored", onPseudoTabRestored, true);
+        onCleanup(() => window.removeEventListener("SSTabRestored", onPseudoTabRestored, true));
+      }
       const zenBoot = window.setTimeout(zenSoon, 6000);
       onCleanup(() => window.clearTimeout(zenBoot));
       // A click (or Enter) on one of our tabs opens the note instead of selecting the tab. Capture phase, our tabs only;
