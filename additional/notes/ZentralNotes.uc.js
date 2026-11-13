@@ -17796,7 +17796,7 @@
         ensureStore().then(() => { if (!disposed) agendaController.schedule(); }).catch(warn);
       };
       const agendaItemUnsub = store.items?.on?.((ev) => {
-        if (["change", "remove", "category", "reset", "recovery"].includes(ev.type) && agendaEnabled()) agendaController.schedule();
+        if (CALENDAR_PART?.agendaItemEventAffectsProjection(ev) && agendaEnabled()) agendaController.schedule();
       });
       const agendaNoteUnsub = store.on((ev) => {
         if (["change", "tree", "remove", "reset"].includes(ev.type) && agendaEnabled()) agendaController.schedule();
