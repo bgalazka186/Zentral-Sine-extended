@@ -7201,7 +7201,7 @@
           const spoilerOpen = line.startsWith(">!", pos) ? ">!" : line.startsWith("||", pos) ? "||" : "";
           if (spoilerOpen) {
             const endToken = spoilerOpen === ">!" ? "!<" : "||", end = line.indexOf(endToken, pos + 2);
-            if (end >= 0) { flush(); out += fn(line.slice(pos, end + 2)); pos = end + 2; continue; }
+            if (end >= 0) { flush(); out += fn(line.slice(pos, end + 2), { line, offset: pos, spoilerToken: true }); pos = end + 2; continue; }
           }
           if (line[pos] === "(" && pos > 0 && line[pos - 1] === "]") {
             const end = destinationEnd(line, pos);
@@ -7264,6 +7264,27 @@
       }
       return protectedAt;
     }
+    function mapExportFormatting(segment, options, convert) {
+      const gate = options.gate, protectedAt = exportProtectedPositions(segment, options.literals);
+      return segment.replace(/==(?:\{(\w+|#[0-9a-f]{6})\})?([^\n=]+)==|\+\+(?=\S)([^+\n]+?)(?<=\S)\+\+/gi, (raw, color, mark, underline, offset) => {
+        const kind = underline !== undefined ? "A20" : color ? "A11" : "A10";
+        if (!gate.on(kind)) return raw;
+        for (const i of [offset, offset + 1, offset + raw.length - 2, offset + raw.length - 1]) if (protectedAt.has(i)) return raw;
+        return convert(raw, mark || underline);
+      });
+    }
+    function mapExportSpoilers(segment, options, convert, context = {}) {
+      const source = context.line ?? segment, base = context.offset || 0;
+      const gate = options.gate, protectedAt = exportProtectedPositions(source, options.literals);
+      return segment.replace(/\|\|([^|\n]+?)\|\||>!([^!\n]+?)!</g, (raw, discord, reddit, offset) => {
+        const start = base + offset, end = start + raw.length - 1;
+        if (!gate.on(discord !== undefined ? "A29" : "A27")) return raw;
+        if (reddit !== undefined && start === 0) return raw; // line-start > is a quote
+        if (discord !== undefined && (/[|\w]/.test(source[start - 1] || "") || /[|\w]/.test(source[end + 1] || ""))) return raw;
+        for (const i of [start, start + 1, end - 1, end]) if (protectedAt.has(i)) return raw;
+        return convert(raw, discord || reddit);
+      });
+    }
     function mapExportScripts(segment, options, convert) {
       const gate = options.gate;
       if (!gate.on("A09") && !gate.on("A13") && !gate.on("A15") && !gate.on("A17")) return segment;
@@ -7299,7 +7320,7 @@
     function markdownExportWarnings(body, readOptions = {}) {
       const found = new Set(), scriptOptions = exportScriptOptions(readOptions);
       const content = splitMarkdownExportFrontMatter(body).body;
-      mapMarkdownForExport(content, (segment) => {
+      mapMarkdownForExport(content, (segment, context) => {
         const visible = segment.replace(/%%[^%\n]+%%/g, (marker) => {
           if (/^%%(?:calendar(?::[^%\n]*)?|zn-item-id:[\w-]+)%%$/i.test(marker)) found.add("calendar");
           else found.add("hidden comment");
@@ -7308,8 +7329,8 @@
         if (TOC_TOKEN_RE.test(visible)) found.add("toc");
         if (/^\s*>\s*\[![A-Za-z][\w-]*\][+-]?/.test(visible)) found.add("callout");
         if (/!\[\[[^\]\n]+\]\]/.test(visible)) found.add("transclusion");
-        if (/==(?:\{(?:\w+|#[0-9a-f]{6})\})?[^\n=]+==|\+\+[^+\n]+\+\+/i.test(visible)) found.add("formatting");
-        if (/\|\|[^|\n]+\|\||>![^!\n]+!</.test(visible)) found.add("spoiler");
+        mapExportFormatting(visible, scriptOptions, (raw) => { found.add("formatting"); return raw; });
+        mapExportSpoilers(visible, scriptOptions, (raw) => { found.add("spoiler"); return raw; }, context);
         mapExportScripts(visible, scriptOptions, (raw, kind) => { found.add(kind === "strike" ? "single-tilde strike" : "subscript / superscript"); return raw; });
         mapExportInlineFootnotes(visible, scriptOptions, (raw, kind) => { found.add(kind === "footnote" ? "inline footnote" : "subscript / superscript"); return raw; });
         const task = /^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/.exec(visible);
@@ -7335,12 +7356,15 @@
       let footnoteNumber = 1;
       const literal = (text) => "`" + text.replace(/`/g, "") + "`";
       const hiddenSafe = mapMarkdownForExport(parts.body, (segment) => segment.replace(/%%[^%\n]+%%/g, (marker) => "<!-- " + marker.replace(/--/g, "-&#45;") + " -->"));
-      const converted = mapMarkdownForExport(hiddenSafe, (segment) => {
+      const converted = mapMarkdownForExport(hiddenSafe, (segment, context) => {
+        if (context?.spoilerToken) {
+          const spoiler = mapExportSpoilers(segment, scriptOptions, (_raw, content) => "<details><summary>Spoiler</summary>" + escHtml(content) + "</details>", context);
+          if (spoiler !== segment) return spoiler;
+        }
         if (TOC_TOKEN_RE.test(segment)) return tocBlock(body);
         segment = segment.replace(/^(\s*>\s*)\[!([A-Za-z][\w-]*)\][+-]?[ \t]*(.*)$/, (_, quote, kind, title) => quote + "**" + kind.toUpperCase() + "**" + (title ? " — " + title : ""));
         segment = segment.replace(/^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([^\]])\](?=\s|$)/, (whole, prefix, status) => Object.hasOwn(TASK_STATUS_NAMES, status) ? prefix + "[ ] (" + TASK_STATUS_NAMES[status] + ")" : whole);
-        segment = segment.replace(/==(?:\{(?:\w+|#[0-9a-f]{6})\})?([^\n=]+)==|\+\+([^+\n]+)\+\+/gi, (_all, mark, underline) => "**" + (mark || underline) + "**");
-        segment = segment.replace(/\|\|([^|\n]+)\|\||>!([^!\n]+)!</g, (_all, discord, reddit) => "<details><summary>Spoiler</summary>" + escHtml(discord || reddit) + "</details>");
+        segment = mapExportFormatting(segment, scriptOptions, (_raw, content) => "**" + content + "**");
         segment = mapExportScripts(segment, scriptOptions, (_raw, kind, content) => kind === "strike" ? "~~" + content + "~~" : "<" + kind + ">" + escHtml(content) + "</" + kind + ">");
         segment = segment.replace(/!\[\[([^\]\n]+)\]\]/g, (raw, target) => {
           const spec = parseEmbedTarget(target);

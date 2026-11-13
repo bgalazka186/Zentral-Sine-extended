@@ -58,7 +58,7 @@ assert.match(extOut, /\*\*Highlight\*\* and \*\*underline\*\*/);
 assert.match(extOut, /<details><summary>Spoiler<\/summary>private spoiler<\/details>/);
 assert.match(extOut, /- \[ \] \(In progress\) Work in progress/);
 assert.match(extOut, /- \[x\] Completed/); assert.match(extOut, /`==literal==`/);
-const extra = '>!<script>alert(1)</script>!<\n- [?] Needs review\n- [q] Unknown status\n';
+const extra = 'Text >!<script>alert(1)</script>!<\n- [?] Needs review\n- [q] Unknown status\n';
 const extraOut = convert({ id: 'note_a', body: extra }, [], new Map(), []);
 assert.match(extraOut, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/, 'raw spoiler text is escaped in generated HTML');
 assert.match(extraOut, /- \[ \] \(Question\) Needs review/);
