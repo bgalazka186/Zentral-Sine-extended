@@ -487,6 +487,7 @@
       },
     };
     if (end) item.end = end;
+    if (typeof raw.created === "string" && Number.isFinite(Date.parse(raw.created))) item.created = iso(Date.parse(raw.created));
     item.etag = typeof raw.etag === "string" && raw.etag ? raw.etag : etagOf(item);
     return item;
   }
@@ -726,6 +727,7 @@
     for (const [k, v] of Object.entries(it.x)) if (v !== "" && v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) priv["zentral_" + k] = ["notify", "recurrenceExceptions", "agendaWindow"].includes(k) ? JSON.stringify(v) : String(v);
     const out = { id: it.id, summary: it.summary, description: it.description, status: it.status, start: it.start, updated: it.updated, extendedProperties: { private: priv } };
     out.end = it.end || it.start;
+    if (it.created) out.created = it.created;
     if (it.recurrence.length) out.recurrence = it.recurrence;
     if (it.reminders.overrides.length) out.reminders = { useDefault: false, overrides: it.reminders.overrides };
     return out;
@@ -740,7 +742,7 @@
     }
     const sameEnd = g.end && JSON.stringify(g.end) === JSON.stringify(g.start);
     return cleanItem({ id: g.id, summary: g.summary, description: g.description, status: g.status, start: g.start, end: sameEnd ? undefined : g.end,
-      updated: g.updated, recurrence: g.recurrence, reminders: g.reminders, x: { ...x, kind: x.kind || (sameEnd ? "reminder" : "event") } }, 0);
+      created: g.created, updated: g.updated, recurrence: g.recurrence, reminders: g.reminders, x: { ...x, kind: x.kind || (sameEnd ? "reminder" : "event") } }, 0);
   }
 
 
@@ -1106,7 +1108,7 @@
   // Reminder lifecycle is intentionally separate from Google Calendar's `status` field. Records are
   // immutable snapshots in their own versioned file; history is retained indefinitely (no silent pruning).
   const REMINDER_HISTORY_FILE = "reminder-history.json";
-  const REMINDER_HISTORY_ACTIONS = Object.freeze(["alerted", "done", "dismissed", "reopened", "snoozed", "rescheduled"]);
+  const REMINDER_HISTORY_ACTIONS = Object.freeze(["alerted", "skipped", "done", "dismissed", "reopened", "snoozed", "rescheduled"]);
   function cleanReminderHistoryRecord(raw, fallbackAt = 0) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
     const action = REMINDER_HISTORY_ACTIONS.includes(raw.action) ? raw.action : "";
@@ -1122,6 +1124,7 @@
       itemId, occurrenceId, noteId: String(raw.noteId || "").slice(0, 120),
       summary: String(raw.summary || "").slice(0, MAX_TEXT), start: start ? { ...start } : null,
       action, stage: ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "", at,
+      ...(raw.coalesced === true ? { coalesced: true } : {}),
     };
   }
   // Display and cross-window retirement rules for occurrence-scoped reminder cards.
@@ -1303,9 +1306,9 @@
         try { await this.refresh(); } catch (error) { safeWarn(error); }
         const same = (a, b) => (a?.date || "") === (b?.date || "") && (a?.dateTime || "") === (b?.dateTime || "");
         const requestedStage = ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "";
-        const duplicate = records.some((record) => record.action === "alerted" && record.itemId === raw.itemId && record.occurrenceId === raw.occurrenceId && same(record.start, raw.start) && (record.stage === requestedStage || (!record.stage && requestedStage === "due")));
+        const duplicate = records.some((record) => ["alerted", "skipped"].includes(record.action) && record.itemId === raw.itemId && record.occurrenceId === raw.occurrenceId && same(record.start, raw.start) && (record.stage === requestedStage || (!record.stage && requestedStage === "due")));
         if (duplicate) return null;
-        const record = this.append({ ...raw, action: "alerted" });
+        const record = this.append({ ...raw, action: raw.action === "skipped" ? "skipped" : "alerted" });
         if (!record) return null;
         try { await writeNow(); } catch (error) { safeWarn(error); }
         return record;
@@ -1376,6 +1379,20 @@
       return task;
     }
     if (perf?.wrapAsync) writeNow = perf.wrapAsync("calendar.write", writeNow);
+    function skipPastAtCreation(item, stamp) {
+      if (!isReminder(item) && !(item.reminders?.overrides || []).length) return;
+      if (!(itemRange(item)[0] < stamp)) return;
+      const occurrences = item.recurrence.length ? expandRange([item], stamp - 2 * DAY_MS, stamp + 1) : [item];
+      for (const occurrence of occurrences) {
+        const identity = reminderIdentity(occurrence);
+        if (!identity || !(itemRange(occurrence)[0] < stamp)) continue;
+        const category = occurrence.x.category ? categoryDefs.get(categoryKey(occurrence.x.category)) || DEFAULT_CATEGORIES.find((c) => categoryKey(c.name) === categoryKey(occurrence.x.category)) : null;
+        for (const stage of reminderStagePlan(occurrence, category?.notify, stamp)) {
+          if (stage.at >= stamp) continue;
+          history.append({ ...identity, summary: occurrence.summary, start: occurrence.start, action: "skipped", stage: stage.stage, at: stamp });
+        }
+      }
+    }
     return {
       async open() {
         try { await history.open(); } catch (error) { safeWarn(error); }
@@ -1501,8 +1518,10 @@
           if (lwwPick(old, it) !== it) return null;
           it.rev = Math.min(Number.MAX_SAFE_INTEGER, Math.max(old.rev || 0, it.rev || 0) + 1);
         } else {
-          it.rev = Math.max(1, it.rev || 0);
+          it.rev = 1;
+          it.created = iso(stamp);
         }
+        if (old) { if (old.created) it.created = old.created; else delete it.created; }
         it.updated = iso(stamp);
         it.etag = etagOf(it);
         if (old && JSON.stringify(old) === JSON.stringify(it)) return old;
@@ -1518,6 +1537,7 @@
             if (!record) return null; // Never accept a lifecycle transition that cannot be recorded safely.
           }
         }
+        if (!old) skipPastAtCreation(it, stamp);
         items.set(it.id, it); schedule(); emit("change", it.id);
         return it;
       },
@@ -1538,6 +1558,7 @@
         const had = [...items.values()].filter((it) => it.x.noteId === noteId && it.x.src === "list");
         if (!had.length && !/%%\s*calendar/i.test(String(body || ""))) return false;
         const fresh = extractNoteItems(body, noteId, now());
+        const checkedLines = sourceEdit ? listCheckboxStates(body, now()) : null;
         const exact = new Map(had.map((it) => [it.id, it]));
         const byLegacy = new Map();
         for (const it of had) {
@@ -1576,6 +1597,11 @@
             next = winner;
             next.etag = etagOf(next);
             if (old.id === next.id) retainedOld.add(old.id);
+          }
+          if (old?.created) next.created = old.created;
+          if (!old && sourceEdit) {
+            next.created = iso(now());
+            if (!checkedLines?.get(next.x.key)) skipPastAtCreation(next, now());
           }
           if (!old || JSON.stringify(old) !== JSON.stringify(next)) { items.set(next.id, next); changed = true; emit("change", next.id); }
         }

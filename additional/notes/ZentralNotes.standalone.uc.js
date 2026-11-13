@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.116
+// @version 3.3.117
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.116, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.117, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.116";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.117";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -1698,6 +1698,7 @@ const __zentralEmbeddedLoader = (function () {
       },
     };
     if (end) item.end = end;
+    if (typeof raw.created === "string" && Number.isFinite(Date.parse(raw.created))) item.created = iso(Date.parse(raw.created));
     item.etag = typeof raw.etag === "string" && raw.etag ? raw.etag : etagOf(item);
     return item;
   }
@@ -1937,6 +1938,7 @@ const __zentralEmbeddedLoader = (function () {
     for (const [k, v] of Object.entries(it.x)) if (v !== "" && v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) priv["zentral_" + k] = ["notify", "recurrenceExceptions", "agendaWindow"].includes(k) ? JSON.stringify(v) : String(v);
     const out = { id: it.id, summary: it.summary, description: it.description, status: it.status, start: it.start, updated: it.updated, extendedProperties: { private: priv } };
     out.end = it.end || it.start;
+    if (it.created) out.created = it.created;
     if (it.recurrence.length) out.recurrence = it.recurrence;
     if (it.reminders.overrides.length) out.reminders = { useDefault: false, overrides: it.reminders.overrides };
     return out;
@@ -1951,7 +1953,7 @@ const __zentralEmbeddedLoader = (function () {
     }
     const sameEnd = g.end && JSON.stringify(g.end) === JSON.stringify(g.start);
     return cleanItem({ id: g.id, summary: g.summary, description: g.description, status: g.status, start: g.start, end: sameEnd ? undefined : g.end,
-      updated: g.updated, recurrence: g.recurrence, reminders: g.reminders, x: { ...x, kind: x.kind || (sameEnd ? "reminder" : "event") } }, 0);
+      created: g.created, updated: g.updated, recurrence: g.recurrence, reminders: g.reminders, x: { ...x, kind: x.kind || (sameEnd ? "reminder" : "event") } }, 0);
   }
 
 
@@ -2317,7 +2319,7 @@ const __zentralEmbeddedLoader = (function () {
   // Reminder lifecycle is intentionally separate from Google Calendar's `status` field. Records are
   // immutable snapshots in their own versioned file; history is retained indefinitely (no silent pruning).
   const REMINDER_HISTORY_FILE = "reminder-history.json";
-  const REMINDER_HISTORY_ACTIONS = Object.freeze(["alerted", "done", "dismissed", "reopened", "snoozed", "rescheduled"]);
+  const REMINDER_HISTORY_ACTIONS = Object.freeze(["alerted", "skipped", "done", "dismissed", "reopened", "snoozed", "rescheduled"]);
   function cleanReminderHistoryRecord(raw, fallbackAt = 0) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
     const action = REMINDER_HISTORY_ACTIONS.includes(raw.action) ? raw.action : "";
@@ -2333,6 +2335,7 @@ const __zentralEmbeddedLoader = (function () {
       itemId, occurrenceId, noteId: String(raw.noteId || "").slice(0, 120),
       summary: String(raw.summary || "").slice(0, MAX_TEXT), start: start ? { ...start } : null,
       action, stage: ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "", at,
+      ...(raw.coalesced === true ? { coalesced: true } : {}),
     };
   }
   // Display and cross-window retirement rules for occurrence-scoped reminder cards.
@@ -2514,9 +2517,9 @@ const __zentralEmbeddedLoader = (function () {
         try { await this.refresh(); } catch (error) { safeWarn(error); }
         const same = (a, b) => (a?.date || "") === (b?.date || "") && (a?.dateTime || "") === (b?.dateTime || "");
         const requestedStage = ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "";
-        const duplicate = records.some((record) => record.action === "alerted" && record.itemId === raw.itemId && record.occurrenceId === raw.occurrenceId && same(record.start, raw.start) && (record.stage === requestedStage || (!record.stage && requestedStage === "due")));
+        const duplicate = records.some((record) => ["alerted", "skipped"].includes(record.action) && record.itemId === raw.itemId && record.occurrenceId === raw.occurrenceId && same(record.start, raw.start) && (record.stage === requestedStage || (!record.stage && requestedStage === "due")));
         if (duplicate) return null;
-        const record = this.append({ ...raw, action: "alerted" });
+        const record = this.append({ ...raw, action: raw.action === "skipped" ? "skipped" : "alerted" });
         if (!record) return null;
         try { await writeNow(); } catch (error) { safeWarn(error); }
         return record;
@@ -2587,6 +2590,20 @@ const __zentralEmbeddedLoader = (function () {
       return task;
     }
     if (perf?.wrapAsync) writeNow = perf.wrapAsync("calendar.write", writeNow);
+    function skipPastAtCreation(item, stamp) {
+      if (!isReminder(item) && !(item.reminders?.overrides || []).length) return;
+      if (!(itemRange(item)[0] < stamp)) return;
+      const occurrences = item.recurrence.length ? expandRange([item], stamp - 2 * DAY_MS, stamp + 1) : [item];
+      for (const occurrence of occurrences) {
+        const identity = reminderIdentity(occurrence);
+        if (!identity || !(itemRange(occurrence)[0] < stamp)) continue;
+        const category = occurrence.x.category ? categoryDefs.get(categoryKey(occurrence.x.category)) || DEFAULT_CATEGORIES.find((c) => categoryKey(c.name) === categoryKey(occurrence.x.category)) : null;
+        for (const stage of reminderStagePlan(occurrence, category?.notify, stamp)) {
+          if (stage.at >= stamp) continue;
+          history.append({ ...identity, summary: occurrence.summary, start: occurrence.start, action: "skipped", stage: stage.stage, at: stamp });
+        }
+      }
+    }
     return {
       async open() {
         try { await history.open(); } catch (error) { safeWarn(error); }
@@ -2712,8 +2729,10 @@ const __zentralEmbeddedLoader = (function () {
           if (lwwPick(old, it) !== it) return null;
           it.rev = Math.min(Number.MAX_SAFE_INTEGER, Math.max(old.rev || 0, it.rev || 0) + 1);
         } else {
-          it.rev = Math.max(1, it.rev || 0);
+          it.rev = 1;
+          it.created = iso(stamp);
         }
+        if (old) { if (old.created) it.created = old.created; else delete it.created; }
         it.updated = iso(stamp);
         it.etag = etagOf(it);
         if (old && JSON.stringify(old) === JSON.stringify(it)) return old;
@@ -2729,6 +2748,7 @@ const __zentralEmbeddedLoader = (function () {
             if (!record) return null; // Never accept a lifecycle transition that cannot be recorded safely.
           }
         }
+        if (!old) skipPastAtCreation(it, stamp);
         items.set(it.id, it); schedule(); emit("change", it.id);
         return it;
       },
@@ -2749,6 +2769,7 @@ const __zentralEmbeddedLoader = (function () {
         const had = [...items.values()].filter((it) => it.x.noteId === noteId && it.x.src === "list");
         if (!had.length && !/%%\s*calendar/i.test(String(body || ""))) return false;
         const fresh = extractNoteItems(body, noteId, now());
+        const checkedLines = sourceEdit ? listCheckboxStates(body, now()) : null;
         const exact = new Map(had.map((it) => [it.id, it]));
         const byLegacy = new Map();
         for (const it of had) {
@@ -2787,6 +2808,11 @@ const __zentralEmbeddedLoader = (function () {
             next = winner;
             next.etag = etagOf(next);
             if (old.id === next.id) retainedOld.add(old.id);
+          }
+          if (old?.created) next.created = old.created;
+          if (!old && sourceEdit) {
+            next.created = iso(now());
+            if (!checkedLines?.get(next.x.key)) skipPastAtCreation(next, now());
           }
           if (!old || JSON.stringify(old) !== JSON.stringify(next)) { items.set(next.id, next); changed = true; emit("change", next.id); }
         }
@@ -9518,23 +9544,26 @@ __zentralShim.register = function (def) {
           const category = itemStore.category?.(item.x?.category);
           const stages = CALENDAR_PART.reminderStagePlan(item, category?.notify, at);
           if (!stages.length) continue;
-          // Every stage is independently claimed for this saved schedule. A snooze or
-          // reschedule changes `start`, making the new schedule eligible for all stages.
+          // Claim one highest overdue stage per occurrence. Lower overdue stages are
+          // persisted silently so a later pass or another window cannot play them.
           const priorAlerts = history?.list?.({ itemId: identity.itemId, occurrenceId: identity.occurrenceId }) || [];
+          const alreadyClaimed = (stage) => priorAlerts.some((record) => ["alerted", "skipped"].includes(record.action) && (record.stage === stage.stage || (!record.stage && stage.stage === "due")) && record.start?.date === item.start?.date && record.start?.dateTime === item.start?.dateTime);
+          const dueStages = stages.filter((stage) => stage.stage && stage.at > 0 && stage.at <= at);
+          const top = dueStages.at(-1);
+          const created = Date.parse(item.created || ""), startAt = CALENDAR_PART.itemRange(item)[0];
           for (const stage of stages) {
-            const already = priorAlerts.some((record) => record.action === "alerted" && record.stage === stage.stage && record.start?.date === item.start?.date && record.start?.dateTime === item.start?.dateTime);
-            if (already || (!stage.stage || stage.at <= 0)) continue;
-            if (stage.at <= at) due.push({
-              ...item,
-              id: "calendar-reminder:" + identity.itemId + ":" + identity.occurrenceId + ":" + stage.stage,
-              body: item.x?.noteId ? (store.get(item.x.noteId)?.body || "") : "",
-              __calendarReminder: true,
-              __calendarItem: item,
-              __historyIdentity: identity,
-              __scheduledStart: item.start,
-              __stage: stage.stage,
-            });
-            else if (!next || stage.at < next) next = stage.at;
+            if (alreadyClaimed(stage) || !stage.stage || stage.at <= 0) continue;
+            if (stage.at <= at) {
+              const skipped = Number.isFinite(created) && startAt < created && stage.at < created;
+              const coalesced = !skipped && (stage !== top || alreadyClaimed(top));
+              due.push({
+                ...item,
+                id: "calendar-reminder:" + identity.itemId + ":" + identity.occurrenceId + ":" + stage.stage,
+                body: item.x?.noteId ? (store.get(item.x.noteId)?.body || "") : "",
+                __calendarReminder: true, __calendarItem: item, __historyIdentity: identity, __scheduledStart: item.start,
+                __stage: stage.stage, __skipped: skipped, __coalesced: coalesced,
+              });
+            } else if (!next || stage.at < next) next = stage.at;
           }
         }
         if (hasRecurring) {
@@ -9563,11 +9592,11 @@ __zentralShim.register = function (def) {
               if (destroyed) return;
               const identity = item.__historyIdentity;
               const history = store.items?.history;
-              const entry = { itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.__scheduledStart, stage: item.__stage, at: nowAt };
+              const entry = { itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.__scheduledStart, stage: item.__stage, at: nowAt, action: item.__skipped ? "skipped" : "alerted", coalesced: item.__coalesced };
               // claimAlert re-reads the shared history first so a second window does not show the same banner.
               let record = null;
-              try { record = history?.claimAlert ? await history.claimAlert(entry) : history?.append?.({ ...entry, action: "alerted" }); } catch (_) { record = null; }
-              if (record) fired.push(item);
+              try { record = history?.claimAlert ? await history.claimAlert(entry) : history?.append?.(entry); } catch (_) { record = null; }
+              if (record && !item.__skipped && !item.__coalesced) fired.push(item);
             }
             if (calendar.due.length && store.items?.history?.flush) {
               try { await store.items.history.flush(); } catch (_) { /* retain dirty history; notification remains best-effort */ }
@@ -10519,7 +10548,7 @@ __zentralShim.register = function (def) {
           const note = { id, body, created: t, updated: t, touched: false, color: "none", label: "", folder: cleanFolder(folder), pinned: false, trashed: 0, remind: 0, reminded: 0, _onDisk: false, _mtime: t };
           notes.set(id, note);
           if (body) markDirty(id);
-          if (body) syncItems(id, true);
+          if (body) syncItems(id, true, true);
           emit("change", id, { created: true });
           return { note, created: true };
         },
@@ -10545,7 +10574,7 @@ __zentralShim.register = function (def) {
           };
           notes.set(id, note);
           if (body) markDirty(id);
-          if (body) syncItems(id, true);
+          if (body) syncItems(id, true, true);
           emit("change", id, { created: true });
           return note;
         },

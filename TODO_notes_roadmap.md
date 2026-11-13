@@ -72,7 +72,6 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 
 | Order | ID | Status | Impact | Effort | Depends on | Task |
 | --: | :-- | :-- | :-- | :-- | :-- | :-- |
-| 5 | `H1.5` | `OPEN` | High | S-M | none (OW-08 reuses it) | Do not alert all missed stages at once; coalesce due stages (owner bug: copying a played reminder plays every notification at once) |
 | 6 | `H1.2` | `OPEN` | High | S-M | F0.2 optional | Reminder history: merge before write (cross-window lost update) |
 | 7 | `H1.3` | `OPEN` | High | S | H1.2 | Reminder history: salvage instead of blocking everything on one bad record |
 | 8 | `H1.4` | `OPEN` | Low-Med | S | H1.2 | Reminder history: do not mark dirty after a pure merge |
@@ -173,19 +172,6 @@ _Nothing below can be proven without these. They change no behaviour._
 ## Phase 1 — Stop loops and data loss
 
 _Defects that can churn the sidebar forever, lose Done/Dismiss state or spam alerts. Highest risk per line of code._
-
-#### `H1.5` — Do not alert all missed stages at once; coalesce due stages (owner bug: copying a played reminder plays every notification at once)
-**Status:** `OPEN` · **Impact:** High · **Effort:** S-M · **Depends on:** none (OW-08 reuses it) · **Source:** Owner 2026-11-14 bug + code reading
-
-**Problem:** Owner report: copying a reminder that already played makes the copy play all of its notifications at once. `calendarCandidates` (`ZentralNotes.uc.js` ~line 5002) builds the stage plan per occurrence and pushes EVERY stage with `stage.at <= now` into `due` when no `alerted` record exists for that identity and schedule. A duplicate gets a new identity (no history) and an old start, so pre, due and followup stages are all in the past and all fire in the same pass. The same happens after sleep/long closure, or when a reminder is created with a past time.
-
-**Plan (do in this order):**
-1. Rule: per occurrence and pass, fire only the highest due stage (`followup` > `due` > `pre`) and write `alerted` records for the lower stages too (action `alerted`, flag `coalesced: true`) so they never fire later.
-2. Rule: a duplicate or newly created item whose stage times are already past at creation time gets those stages marked as skipped immediately (history record with action `skipped`), unless the new start is in the future.
-3. Keep behaviour unchanged for stages that become due normally on time.
-4. Make the duplicate action reset lifecycle state (a copy of a Done reminder starts as pending but must not inherit alert records).
-
-**Tests / done when:** Scenarios: copy of an alerted reminder; create a reminder 10 minutes in the past; 2-hour sleep with three stages due; normal on-time pre/due/followup still fire separately.
 
 #### `H1.2` — Reminder history: merge before write (cross-window lost update)
 **Status:** `OPEN` · **Impact:** High · **Effort:** S-M · **Depends on:** F0.2 optional · **Source:** Audit R2 R1
@@ -1198,13 +1184,13 @@ Use a disposable Zen profile and back up the profile and Sync data first. Do not
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.116, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.117, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.116.** `F0.1`–`F0.3` and `H1.1` are DONE and archived. The fan-out idempotence gates are enforced and pass in the fake Zen harness; live Zen is unavailable.
+State: **3.3.117.** `F0.1`–`F0.3`, `H1.1` and `H1.5` are DONE and archived. The fan-out idempotence gates are enforced and pass in the fake Zen harness; live Zen is unavailable.
 
-Completed this session: imported the new instructions, active roadmap and legacy archive. Added a production-host fake Zen harness with structural-operation recording, event dispatch, seed fallback, menus, foreign/dragged-out tabs, disable/re-enable, Notes and two isolated windows over shared persisted input. H1.1 makes per-day keys unique, migrates old keys, uses the real parent, suppresses self-generated events and backs off repeated reconciliation; overnight, leadDays=2 and three-day all-day projections perform zero structural operations on unchanged follow-up runs. F0.2 measured production-shape 500/2000 projection 31d at 428/1915 ms, scheduler at 2308/10776 ms, expansion 90d at 742/3188 ms and 45000 history queries at 967 ms; CI ceilings retain headroom. After H1.1: 31d projection 385/3124 ms, 90d expansion 704/3317 ms, scheduler 2829/11066 ms, history 976 ms; timing fluctuates. F0.3 adds debug-only async write, bytes, Agenda, scheduler and calendar-render sampling.
+Completed this session: imported the new instructions, active roadmap and legacy archive. Added a production-host fake Zen harness with structural-operation recording, event dispatch, seed fallback, menus, foreign/dragged-out tabs, disable/re-enable, Notes and two isolated windows over shared persisted input. H1.1 makes per-day keys unique, migrates old keys, uses the real parent, suppresses self-generated events and backs off repeated reconciliation; overnight, leadDays=2 and three-day all-day projections perform zero structural operations on unchanged follow-up runs. F0.2 measured production-shape 500/2000 projection 31d at 428/1915 ms, scheduler at 2308/10776 ms, expansion 90d at 742/3188 ms and 45000 history queries at 967 ms; CI ceilings retain headroom. After H1.1: 31d projection 385/3124 ms, 90d expansion 704/3317 ms, scheduler 2829/11066 ms, history 976 ms; timing fluctuates. F0.3 adds debug-only async write, bytes, Agenda, scheduler and calendar-render sampling. H1.5 coalesces missed reminder stages and records skipped stages for newly-created past reminders and independent copies; live notification verification remains pending.
 
 Standing owner rules for chunks: no conversational filler; output production-ready code and test suites; process tasks strictly in order (implementation, edge cases, unit tests per task); stop cleanly before output limits so the zip is complete; deliver a zip of only changed files (no `.git`).
 
@@ -1212,4 +1198,4 @@ Known debts / owner requirements: Earlier roadmap DONE claims for `T2.5a–d` we
 
 Calendar density supports persisted Comfortable, Compact and Extra compact in all five views; timeline hour geometry and shading use a shared scale, while narrow Month keeps its list fallback. Live density readability and interaction checks are pending. Calendar/Agenda item menus share a per-item Zen Agenda visibility toggle; it preserves sparse lead/tail overrides, acts on the recurring series, and makes the legacy read-only note-reminder limitation explicit. Calendar remains available to restore an item hidden from the sidebar. Live Zen menu and projection checks remain open.
 
-Next action: implement `H1.5`, then `H1.2`–`H1.4` in order. Live Zen remains unavailable in the sandbox.
+Next action: implement `H1.2`–`H1.4` in order. Live Zen remains unavailable in the sandbox.

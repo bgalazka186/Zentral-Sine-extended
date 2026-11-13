@@ -5025,23 +5025,26 @@
           const category = itemStore.category?.(item.x?.category);
           const stages = CALENDAR_PART.reminderStagePlan(item, category?.notify, at);
           if (!stages.length) continue;
-          // Every stage is independently claimed for this saved schedule. A snooze or
-          // reschedule changes `start`, making the new schedule eligible for all stages.
+          // Claim one highest overdue stage per occurrence. Lower overdue stages are
+          // persisted silently so a later pass or another window cannot play them.
           const priorAlerts = history?.list?.({ itemId: identity.itemId, occurrenceId: identity.occurrenceId }) || [];
+          const alreadyClaimed = (stage) => priorAlerts.some((record) => ["alerted", "skipped"].includes(record.action) && (record.stage === stage.stage || (!record.stage && stage.stage === "due")) && record.start?.date === item.start?.date && record.start?.dateTime === item.start?.dateTime);
+          const dueStages = stages.filter((stage) => stage.stage && stage.at > 0 && stage.at <= at);
+          const top = dueStages.at(-1);
+          const created = Date.parse(item.created || ""), startAt = CALENDAR_PART.itemRange(item)[0];
           for (const stage of stages) {
-            const already = priorAlerts.some((record) => record.action === "alerted" && record.stage === stage.stage && record.start?.date === item.start?.date && record.start?.dateTime === item.start?.dateTime);
-            if (already || (!stage.stage || stage.at <= 0)) continue;
-            if (stage.at <= at) due.push({
-              ...item,
-              id: "calendar-reminder:" + identity.itemId + ":" + identity.occurrenceId + ":" + stage.stage,
-              body: item.x?.noteId ? (store.get(item.x.noteId)?.body || "") : "",
-              __calendarReminder: true,
-              __calendarItem: item,
-              __historyIdentity: identity,
-              __scheduledStart: item.start,
-              __stage: stage.stage,
-            });
-            else if (!next || stage.at < next) next = stage.at;
+            if (alreadyClaimed(stage) || !stage.stage || stage.at <= 0) continue;
+            if (stage.at <= at) {
+              const skipped = Number.isFinite(created) && startAt < created && stage.at < created;
+              const coalesced = !skipped && (stage !== top || alreadyClaimed(top));
+              due.push({
+                ...item,
+                id: "calendar-reminder:" + identity.itemId + ":" + identity.occurrenceId + ":" + stage.stage,
+                body: item.x?.noteId ? (store.get(item.x.noteId)?.body || "") : "",
+                __calendarReminder: true, __calendarItem: item, __historyIdentity: identity, __scheduledStart: item.start,
+                __stage: stage.stage, __skipped: skipped, __coalesced: coalesced,
+              });
+            } else if (!next || stage.at < next) next = stage.at;
           }
         }
         if (hasRecurring) {
@@ -5070,11 +5073,11 @@
               if (destroyed) return;
               const identity = item.__historyIdentity;
               const history = store.items?.history;
-              const entry = { itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.__scheduledStart, stage: item.__stage, at: nowAt };
+              const entry = { itemId: identity.itemId, occurrenceId: identity.occurrenceId, noteId: identity.noteId, summary: item.summary, start: item.__scheduledStart, stage: item.__stage, at: nowAt, action: item.__skipped ? "skipped" : "alerted", coalesced: item.__coalesced };
               // claimAlert re-reads the shared history first so a second window does not show the same banner.
               let record = null;
-              try { record = history?.claimAlert ? await history.claimAlert(entry) : history?.append?.({ ...entry, action: "alerted" }); } catch (_) { record = null; }
-              if (record) fired.push(item);
+              try { record = history?.claimAlert ? await history.claimAlert(entry) : history?.append?.(entry); } catch (_) { record = null; }
+              if (record && !item.__skipped && !item.__coalesced) fired.push(item);
             }
             if (calendar.due.length && store.items?.history?.flush) {
               try { await store.items.history.flush(); } catch (_) { /* retain dirty history; notification remains best-effort */ }
@@ -6026,7 +6029,7 @@
           const note = { id, body, created: t, updated: t, touched: false, color: "none", label: "", folder: cleanFolder(folder), pinned: false, trashed: 0, remind: 0, reminded: 0, _onDisk: false, _mtime: t };
           notes.set(id, note);
           if (body) markDirty(id);
-          if (body) syncItems(id, true);
+          if (body) syncItems(id, true, true);
           emit("change", id, { created: true });
           return { note, created: true };
         },
@@ -6052,7 +6055,7 @@
           };
           notes.set(id, note);
           if (body) markDirty(id);
-          if (body) syncItems(id, true);
+          if (body) syncItems(id, true, true);
           emit("change", id, { created: true });
           return note;
         },

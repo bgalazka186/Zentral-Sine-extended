@@ -211,11 +211,14 @@ const openRowMenu = (root, itemId, key = "contextmenu") => {
   assert.equal(store.items.get("menu-manual-event").end, undefined, "reminder conversion removes the event end");
 
   openRowMenu(root, "menu-manual-event");
+  store.items.history.append({ itemId: "menu-manual-event", action: "done", at: Date.now() });
   menuItem(root, "Duplicate as independent item").click(); await flush();
   const copy = store.items.list().find((item) => item.summary === "Standalone review (copy)");
   assert.ok(copy, "duplicate action stores a separate item");
   assert.equal(copy.x.src, "manual");
   assert.equal(copy.x.noteId, "", "duplicate is independent of the source note");
+  assert.equal(store.items.history.stateFor(copy.id), "pending", "a copy never inherits Done");
+  assert.notEqual(copy.id, "menu-manual-event");
 
   openRowMenu(root, copy.id);
   menuItem(root, "Delete item…").click(); await flush();

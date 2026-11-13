@@ -209,3 +209,20 @@ Enforce the F0.1 known-failing idempotence test in this chunk.
 **Tests / done when:** Regression: two-day event, `leadDays=2` reminder, all-day 3-day event: 1st `runNow` adds N tabs, 2nd and 3rd perform zero operations. Keys unique across the whole projection (not only inside one day).
 
 Projection keys include the local day, old undated virtual tabs migrate, real parent folders are inspected, self-generated synchronous tab events are ignored and three repeated mutation runs invoke a five-second back-off reset by store changes. F0.1 overnight, leadDays=2 and three-day all-day assertions are enforced and pass twice after initial projection; live Zen remains unverified.
+
+## H1.5 — Completed reminder stage coalescing (3.3.117)
+
+#### `H1.5` — Do not alert all missed stages at once; coalesce due stages (owner bug: copying a played reminder plays every notification at once)
+**Status:** `DONE` · **Impact:** High · **Effort:** S-M · **Depends on:** none (OW-08 reuses it) · **Source:** Owner 2026-11-14 bug + code reading
+
+**Problem:** Owner report: copying a reminder that already played makes the copy play all of its notifications at once. `calendarCandidates` (`ZentralNotes.uc.js` ~line 5002) builds the stage plan per occurrence and pushes EVERY stage with `stage.at <= now` into `due` when no `alerted` record exists for that identity and schedule. A duplicate gets a new identity (no history) and an old start, so pre, due and followup stages are all in the past and all fire in the same pass. The same happens after sleep/long closure, or when a reminder is created with a past time.
+
+**Plan (do in this order):**
+1. Rule: per occurrence and pass, fire only the highest due stage (`followup` > `due` > `pre`) and write `alerted` records for the lower stages too (action `alerted`, flag `coalesced: true`) so they never fire later.
+2. Rule: a duplicate or newly created item whose stage times are already past at creation time gets those stages marked as skipped immediately (history record with action `skipped`), unless the new start is in the future.
+3. Keep behaviour unchanged for stages that become due normally on time.
+4. Make the duplicate action reset lifecycle state (a copy of a Done reminder starts as pending but must not inherit alert records).
+
+**Tests / done when:** Scenarios: copy of an alerted reminder; create a reminder 10 minutes in the past; 2-hour sleep with three stages due; normal on-time pre/due/followup still fire separately.
+
+Overdue stages coalesce into the highest outstanding alert; lower stages are persisted with coalesced=true. New past manual and source-list reminders record skipped stages, including copies; legacy items retain catch-up behavior. Creation timestamps survive storage and Google-shaped conversion. Done state is not inherited by independent copies. Live notification/audio verification remains open; cross-window read-to-write races remain H1.2.
