@@ -272,3 +272,19 @@ Valid records survive malformed or duplicate entries; later at/seq wins. The ori
 
 **Tests / done when:** Two instances: A appends, B refreshes: B performs no write.
 The history store tracks unsaved local record objects independently of remote merges and in-flight snapshots. Refresh-only merges do not write, while records added during I/O remain dirty and reopening cannot discard pending local work.
+
+## PF2.1 — Completed history indexes (3.3.121)
+
+#### `PF2.1` — History store: indexes instead of linear scans
+**Status:** `DONE` · **Impact:** High · **Effort:** S-M · **Depends on:** F0.2, H1.2 · **Source:** Audit R2 P1
+
+**Problem:** `calendarCandidates` calls `history.list({itemId, occurrenceId})` for every expanded occurrence in the -2/+90 day window; `list()` filters ALL records and sorts. `claimAlert` also scans `records.some(...)`. Cost grows as occurrences x records (benchmark: 1.4 s at 5000 records, 9.3 s at 20000 for one pass).
+
+**Plan (do in this order):**
+1. Maintain `Map<identityKey, record[]>` and a `Set` of alerted `identity|stage|start` keys, updated in `append`, `refresh`, `open`.
+2. Make `list()` use the index when `itemId`/`occurrenceId` are given; keep the public return shape (copies).
+3. Make `claimAlert` duplicate check O(1).
+
+**Tests / done when:** Same behaviour tests as before plus the F0.2 budget for 20000 records.
+
+Indexes are updated on append, merge, open and salvage, preserving copy/filter/sort and legacy/skipped-stage semantics. 20k-record/45k identity lookups improved from 7552 ms to 155 ms; 500/2000 scheduler baseline improved from 2366/10579 ms to 1029/4097 ms. Corresponding CI ceilings were tightened; true concurrent cross-window writes remain unlocked.

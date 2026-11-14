@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.120
+// @version 3.3.121
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.120, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.121, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.120";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.121";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2397,6 +2397,22 @@ const __zentralEmbeddedLoader = (function () {
       const key = lifecycleKey(record.itemId, record.occurrenceId), old = lifecycle.get(key);
       if (!old || record.at > old.at || (record.at === old.at && record.seq > old.seq)) lifecycle.set(key, record);
     };
+    // These indexes contain references to immutable internal records; public
+    // list() still returns defensive copies in the original sort order.
+    const byIdentity = new Map(), claimedStages = new Set();
+    const identityIndexKey = (itemId, occurrenceId) => JSON.stringify([itemId, occurrenceId]);
+    const alertIndexKey = (itemId, occurrenceId, stage, start) => JSON.stringify([itemId, occurrenceId, stage, start?.date || "", start?.dateTime || ""]);
+    const indexRecord = (record) => {
+      indexTransition(record);
+      const key = identityIndexKey(record.itemId, record.occurrenceId);
+      if (!byIdentity.has(key)) byIdentity.set(key, []);
+      byIdentity.get(key).push(record);
+      if (["alerted", "skipped"].includes(record.action)) {
+        claimedStages.add(alertIndexKey(record.itemId, record.occurrenceId, record.stage, record.start));
+        if (!record.stage) claimedStages.add(alertIndexKey(record.itemId, record.occurrenceId, "due", record.start));
+      }
+    };
+    const clearIndexes = () => { lifecycle.clear(); byIdentity.clear(); claimedStages.clear(); };
     let storage = { state: "unopened", error: "", backupPath: "" }, protectedText = null;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     const state = () => ({ ...storage, dirty: dirty || unsaved.size > 0, writeBlocked, retryCount, count: records.length });
@@ -2470,7 +2486,7 @@ const __zentralEmbeddedLoader = (function () {
       let added = 0;
       for (const record of clean) {
         if (!record || known.has(record.id)) continue;
-        known.add(record.id); record.seq = nextSeq++; records.push(record); indexTransition(record); added++;
+        known.add(record.id); record.seq = nextSeq++; records.push(record); indexRecord(record); added++;
       }
       if (added) emit({ kind: "refresh", count: added });
       return added;
@@ -2529,7 +2545,7 @@ const __zentralEmbeddedLoader = (function () {
           let exists = !missing;
           if (typeof io.exists === "function") { try { exists = await io.exists(file); } catch (_) { exists = true; } }
           if (!exists || missing) {
-            records.length = 0; lifecycle.clear(); nextSeq = 1; dirty = false; writeBlocked = false; retryCount = 0;
+            records.length = 0; clearIndexes(); nextSeq = 1; dirty = false; writeBlocked = false; retryCount = 0;
             storage = { state: "missing", error: "", backupPath: "" };
           } else {
             writeBlocked = true; storage = { state: "unreadable", error: String(error?.message || error), backupPath: "" }; safeWarn(error);
@@ -2546,8 +2562,8 @@ const __zentralEmbeddedLoader = (function () {
             ({ backupPath, rejectedPath } = await preserveRejected(dir, file, String(text), rejected));
             await io.writeUTF8(file, JSON.stringify({ v: 1, records: clean }), { tmpPath: file + ".tmp" });
           }
-          records.splice(0, records.length, ...clean); lifecycle.clear();
-          for (const record of records) indexTransition(record);
+          records.splice(0, records.length, ...clean); clearIndexes();
+          for (const record of records) indexRecord(record);
           nextSeq = records.reduce((max, record) => Math.max(max, record.seq), 0) + 1;
         } catch (error) {
           if (!backupPath) { try { backupPath = await backupHistory(dir, text); } catch (backupError) { safeWarn(backupError); } }
@@ -2582,7 +2598,7 @@ const __zentralEmbeddedLoader = (function () {
         if (!record) return null;
         nextSeq = Math.max(nextSeq + 1, record.seq + 1);
         // Immutable append: duplicate records are allowed because repeated transitions are meaningful.
-        records.push(record); unsaved.add(record); indexTransition(record); schedule();
+        records.push(record); unsaved.add(record); indexRecord(record); schedule();
         emit({ kind: "append", action: record.action });
         return { ...record, start: record.start ? { ...record.start } : null };
       },
@@ -2599,9 +2615,8 @@ const __zentralEmbeddedLoader = (function () {
       async claimAlert(raw) {
         if (writeBlocked) return null;
         try { await this.refresh(); } catch (error) { safeWarn(error); }
-        const same = (a, b) => (a?.date || "") === (b?.date || "") && (a?.dateTime || "") === (b?.dateTime || "");
         const requestedStage = ["pre", "due", "followup"].includes(raw.stage) ? raw.stage : "";
-        const duplicate = records.some((record) => ["alerted", "skipped"].includes(record.action) && record.itemId === raw.itemId && record.occurrenceId === raw.occurrenceId && same(record.start, raw.start) && (record.stage === requestedStage || (!record.stage && requestedStage === "due")));
+        const duplicate = claimedStages.has(alertIndexKey(raw.itemId, raw.occurrenceId, requestedStage, raw.start));
         if (duplicate) return null;
         const record = this.append({ ...raw, action: raw.action === "skipped" ? "skipped" : "alerted" });
         if (!record) return null;
@@ -2609,7 +2624,8 @@ const __zentralEmbeddedLoader = (function () {
         return record;
       },
       list({ itemId = "", occurrenceId = "", noteId = "", limit = 0, offset = 0 } = {}) {
-        let out = records.filter((record) => (!itemId || record.itemId === itemId) && (!occurrenceId || record.occurrenceId === occurrenceId) && (!noteId || record.noteId === noteId));
+        const candidates = itemId && occurrenceId ? (byIdentity.get(identityIndexKey(itemId, occurrenceId)) || []) : records;
+        let out = candidates.filter((record) => (!itemId || record.itemId === itemId) && (!occurrenceId || record.occurrenceId === occurrenceId) && (!noteId || record.noteId === noteId));
         out = out.slice().sort((a, b) => b.at - a.at || b.seq - a.seq);
         const max = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Math.min(10000, Math.floor(Number(limit))) : 0;
         const skip = Number.isFinite(Number(offset)) ? Math.max(0, Math.min(out.length, Math.floor(Number(offset)))) : 0;
