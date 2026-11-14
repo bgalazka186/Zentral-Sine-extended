@@ -49,6 +49,7 @@ const test = require("node:test");
 function sharedIO() {
   const files = new Map();
   return {
+    files,
     join: (...p) => p.join("/"),
     readUTF8: async p => { if (!files.has(p)) { const e = new Error("not found"); e.code = "ENOENT"; throw e; } return files.get(p); },
     writeUTF8: async (p, text) => { files.set(p, text); },
@@ -75,4 +76,47 @@ test("simultaneous windows claim a reminder stage only once", { todo: "UI4.7: cl
   const entry = { itemId: "item", occurrenceId: "occ", stage: "due", start: { dateTime: new Date(now).toISOString() }, at: now };
   const claims = await Promise.all([a.claimAlert(entry), b.claimAlert(entry)]);
   assert.equal(claims.filter(Boolean).length, 1);
+});
+test("Done versus a stale edit notifies the losing window", { todo: "UI4.7: dirty note writes do not report lost concurrent edits" }, async () => {
+  const files = new Map(), a = await host(files, "done-a");
+  const start = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+  const note = a.seam.store.create(`# Concurrent\n\n## Agenda\n%%calendar%%\n- [ ] ${start} 09:00 Original %%zn-item-id:conflict1%%\n`);
+  a.seam.store.stabilizeItems(note.id); await a.seam.store.flush();
+  const b = await host(files, "edit-b"), eventsA = [], eventsB = []; let reopened;
+  try {
+  a.seam.store.on(e => eventsA.push(e)); b.seam.store.on(e => eventsB.push(e));
+  const item = a.seam.store.items.list({ noteId: note.id })[0]; assert.ok(item);
+  b.seam.store.update(note.id, b.seam.store.get(note.id).body.replace("Original", "Edited in B"));
+  assert.ok(a.seam.store.applyReminderLifecycle(item, "done")); await a.seam.store.flush();
+  b.seam.store.onRemoteMessage(JSON.stringify({ origin: "done-a", id: note.id }));
+  await Promise.resolve(); await b.seam.store.flush();
+  a.seam.store.onRemoteMessage(JSON.stringify({ origin: "edit-b", id: note.id }));
+  await new Promise(resolve => setImmediate(resolve));
+  reopened = await host(files, "reopened");
+  assert.match(reopened.seam.store.get(note.id).body, /Edited in B/, "the last saved edit is retained");
+  assert.ok([...eventsA, ...eventsB].some(e => /conflict|lost/i.test(String(e.type))), "the window losing a concurrent update receives a conflict notification");
+  } finally { if (reopened) await reopened.destroy(); await a.destroy(); await b.destroy(); }
+});
+
+// There is currently no category rename/delete store operation. Simulate an
+// externally removed/replaced definition on disk, not a UI operation.
+test("used category falls back safely after its stored definition is removed or renamed", async () => {
+  const io = sharedIO(), now = 1700000000000;
+  const options = { io, getDir: () => "/notes", now: () => now, setTimer: () => 1, clearTimer() {} };
+  const original = C.createItemStore(options); await original.open();
+  original.upsertCategory({ name: "Projects", color: "#123456", agenda: { enabled: false, leadDays: 4 }, notify: { due: { sound: "silent" } } });
+  original.upsert(C.makeItem({ id: "project", summary: "Project", start: { dateTime: new Date(now + 86400000).toISOString() }, x: { category: "Projects", kind: "event", src: "manual" } }, now));
+  await original.flush();
+  const disk = JSON.parse(io.files.get("/notes/" + C.ITEMS_FILE));
+  for (const categories of [[], [{ ...disk.categories[0], name: "Renamed" }]]) {
+    io.files.set("/notes/" + C.ITEMS_FILE, JSON.stringify({ ...disk, categories }));
+    const reopened = C.createItemStore(options); await reopened.open();
+    const item = reopened.get("project"), category = reopened.category(item.x.category);
+    assert.ok(category, "a used orphan name still resolves to safe defaults");
+    assert.equal(category.color, "#7d8da8");
+    assert.equal(C.resolveAgendaWindow(item, category.agenda).enabled, true);
+    const alert = C.resolveAlertPolicy(item, category.notify, null, null, "due", now);
+    assert.equal(typeof alert.sound, "string"); assert.equal(typeof alert.play, "boolean");
+    assert.equal(C.resolveItemColor("none", category.color), "#7d8da8");
+  }
 });
