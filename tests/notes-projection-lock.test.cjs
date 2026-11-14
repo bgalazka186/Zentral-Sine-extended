@@ -86,8 +86,13 @@ const transfer = moved => ({
     otherNotesFolder.addTabs([noteTab]);
     h.emit("TabMove", noteTab);
     h.seam.zen.runNow();
+    // A misplaced tab is retired immediately and recreated by the scheduled
+    // reconciliation pass, matching Zen's async move/TabMove event ordering.
+    h.fireTimer(0);
+    await Promise.resolve();
     notesRoot = root(h, "bgalazka-notes-folder");
     noteTab = tab(notesRoot, NOTES_MARK, "n:" + note.id);
+    notesFolder = notesRoot.querySelectorAll("zen-folder").find(f => f.getAttribute("bgalazka-notes-subfolder") === nestedKey);
     assert.ok(noteTab && noteTab.closest("zen-folder") === notesFolder, "a note tab moved to a different NOTES folder is rebuilt at its model parent");
   }
 
