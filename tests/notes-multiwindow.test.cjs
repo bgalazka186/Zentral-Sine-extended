@@ -1,6 +1,6 @@
 "use strict";
-// UI4.7 partial: serialized claims, calendar merges and restored mirrored notes.
-// Note-file Done versus stale-edit conflict notification remains TODO.
+// UI4.7 partial: serialized claims, calendar merges, note-conflict recovery and restored mirrors.
+// Fake-host acceptance coverage passes; real Zen/external-writer coordination remains unverified.
 const assert = require("node:assert/strict");
 const { createFakeZen } = require("./helpers/fake-zen-browser.cjs");
 const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");

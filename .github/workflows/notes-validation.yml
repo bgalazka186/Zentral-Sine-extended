@@ -22,19 +22,12 @@ jobs:
         run: |
           node tools/build-standalone.cjs --bump
           node tools/build-preferences.cjs
+          node tools/build-z-map.cjs
           node tools/build-standalone.cjs --check
       - name: Run the UI4.7 multi-window regression first
         run: node tests/notes-multiwindow.test.cjs
       - name: Run regression suite
-        shell: bash
-        run: |
-          set -euo pipefail
-          for test_file in tests/*.test.cjs; do
-            echo "::group::${test_file}"
-            node "${test_file}"
-            echo "::endgroup::"
-          done
-          node tests/standalone.test.cjs
+        run: node tests/run-all.cjs
       - name: Check patch formatting
         run: git diff --check
       - name: Commit generated standalone files

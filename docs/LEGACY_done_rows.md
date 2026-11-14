@@ -713,3 +713,10 @@ Background item, note, history, layout and refresh work is coalesced while a dra
 ## OW-23 — Recommended Notes theme accent (3.3.150)
 
 Owner request: make the Recommended theme's default accent brighter and distinct from its lines and borders. The theme now uses coordinated light/dark blue accents rather than Zen's potentially black primary colour; the selected Month date uses contrasting text with the default palette. Explicit accent overrides and the line/border setting remain independent. `tests/notes-recommended-theme.test.cjs` checks palette contrast and override rules. Real Zen/Gecko rendering and unusual custom popup colours remain unverified.
+
+
+## Foundation (DONE rows)
+
+| Track ID | Status | Item | Verification |
+| :-- | :-- | :-- | :-- |
+| `F0.4` | `DONE` | Aggregate test runner | `tests/run-all.cjs` discovers every `*.test.cjs`, runs ordinary tests with four workers and perf-named tests serially, propagates child failures as exit 1, and reports Node TODO cases. `tests/run-all.test.cjs` creates a temporary failing test plus a TODO fixture and verifies both exit-code propagation and the TODO summary. The release instructions and CI workflow call the runner. |
