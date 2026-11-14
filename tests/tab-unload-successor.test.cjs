@@ -37,6 +37,7 @@ async function run(tabsFor, targetAttrs = {}, targetUrl = "https://target.test/"
   const tabs = tabsFor(target);
   win.gBrowser = {
     tabs, selectedTab: target,
+    addTrustedTab(url) { const t = makeTab("new", {}, url); tabs.push(t); return t; },
     async explicitUnloadTabs(list) { unloaded.push(...list); },
   };
   win.ZentralRuntime = { register(def) { win.__def = def; } };
@@ -59,7 +60,7 @@ async function run(tabsFor, targetAttrs = {}, targetUrl = "https://target.test/"
   return { win, target, unloaded, events };
 }
 (async () => {
-  const note = makeTab("note", { "bgalazka-notes-item": "n:abc" });
+  const note = makeTab("note", { "bgalazka-notes-item": "n:abc" }, "about:blank#zn-note:abc");
   const web = makeTab("web");
   const a = await run((target) => [target, note, web]);
   assert.equal(a.win.gBrowser.selectedTab, web, "successor is the ordinary tab, not the Notes entry");
@@ -67,7 +68,7 @@ async function run(tabsFor, targetAttrs = {}, targetUrl = "https://target.test/"
 
   // Only Notes entries are left: no ordinary successor, a new tab is made instead of selecting a Notes entry.
   const created = [];
-  const b = await run((target) => [target, makeTab("note2", { "bgalazka-notes-item": "n:x" })]);
+  const b = await run((target) => [target, makeTab("note2", { "bgalazka-notes-item": "n:x" }, "about:blank#zn-note:x")]);
   assert.notEqual(b.win.gBrowser.selectedTab.attrs?.["bgalazka-notes-item"], "n:x");
   void created;
 
