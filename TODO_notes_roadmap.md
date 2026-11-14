@@ -72,7 +72,6 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 
 | Order | ID | Status | Impact | Effort | Depends on | Task |
 | --: | :-- | :-- | :-- | :-- | :-- | :-- |
-| 16 | `TM3.2` | `OPEN` | Med | S | TM3.1 | Re-evaluate 'ended' (fade) when an event ends |
 | 17 | `TM3.3` | `OPEN` | Med-High | M | H1.1 | Overdue bucket in the Agenda (reminders disappear at midnight) |
 | 18 | `TM3.4` | `OPEN` | Med | M | H1.5, TM3.1 | Missed-reminders digest after sleep or long closure |
 | 19 | `TM3.5` | `OPEN` | Med-High | M | F0.2 | Time edge-case test pack (DST, zones, duplicates, moved occurrences, parsers) |
@@ -176,17 +175,6 @@ _Scheduler, projection and recurrence costs measured in `F0.2`. `PF2.1` before `
 ## Phase 3 — Time correctness
 
 _Stale 'Today', late alerts after sleep, overdue and missed reminders. Builds one shared tick service first._
-
-#### `TM3.2` — Re-evaluate 'ended' (fade) when an event ends
-**Status:** `OPEN` · **Impact:** Med · **Effort:** S · **Depends on:** TM3.1 · **Source:** Audit R1 A2 (confirmed)
-
-**Problem:** `ended` is computed once per projection run; `nextAgendaVisibilityBoundary` only returns local midnight, so an event ending at 11:00 is not faded until some other event triggers a run.
-
-**Plan (do in this order):**
-1. In `nextAgendaVisibilityBoundary` also return the earliest `end` greater than now among visible timed events of today (and, if the owner wants reminders to fade, the start time).
-2. Respect the per-item window (`range.to`).
-
-**Tests / done when:** Fake clock: event 10:00-11:00 flips to ended at 11:00 without any store event.
 
 #### `TM3.3` — Overdue bucket in the Agenda (reminders disappear at midnight)
 **Status:** `OPEN` · **Impact:** Med-High · **Effort:** M · **Depends on:** H1.1 · **Source:** Audit R1 A3 (confirmed)
@@ -1055,13 +1043,13 @@ Use a disposable Zen profile and back up the profile and Sync data first. Do not
 
 ---
 
-## NEXT SESSION HANDOFF (version 3.3.127, edit in place, keep it short)
+## NEXT SESSION HANDOFF (version 3.3.128, edit in place, keep it short)
 
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and the version here in place. Move finished rows to `docs/LEGACY_done_rows.md`.**
 
-State: **3.3.127.** `F0.1`–`F0.3`, `H1.1`, `H1.5`, `H1.2`–`H1.4`, `PF2.1`–`PF2.6` and `TM3.1` are DONE and archived. The fan-out idempotence gates are enforced and pass in the fake Zen harness; live Zen is unavailable.
+State: **3.3.128.** `F0.1`–`F0.3`, `H1.1`, `H1.5`, `H1.2`–`H1.4`, `PF2.1`–`PF2.6` and `TM3.1`–`TM3.2` are DONE and archived. The fan-out idempotence gates are enforced and pass in the fake Zen harness; live Zen is unavailable.
 
-Completed this session: imported the new instructions, active roadmap and legacy archive. Added a production-host fake Zen harness with structural-operation recording, event dispatch, seed fallback, menus, foreign/dragged-out tabs, disable/re-enable, Notes and two isolated windows over shared persisted input. H1.1 makes per-day keys unique, migrates old keys, uses the real parent, suppresses self-generated events and backs off repeated reconciliation; overnight, leadDays=2 and three-day all-day projections perform zero structural operations on unchanged follow-up runs. F0.2 measured production-shape 500/2000 projection 31d at 428/1915 ms, scheduler at 2308/10776 ms, expansion 90d at 742/3188 ms and 45000 history queries at 967 ms; CI ceilings retain headroom. After H1.2: 31d projection 476/1811 ms, 90d expansion 708/3275 ms, scheduler 2366/10579 ms, history 1031 ms; timing fluctuates. F0.3 adds debug-only async write, bytes, Agenda, scheduler and calendar-render sampling. H1.5 coalesces missed reminder stages and records skipped stages for newly-created past reminders and independent copies; live notification verification remains pending. H1.2 merges stale-window history immediately before writes and protects unreadable/damaged files; simultaneous uncoordinated cross-window reads/writes remain a race. H1.3 preserves valid history and rejected raw records with backups, protects unreadable/unknown files and offers guarded explicit recovery in the sheet; live Zen recovery UI remains unverified. H1.4 tracks local unsaved records across I/O and no longer writes after pure refreshes. PF2.1 indexes history identities and claims: 20k-record/45k lookup baseline 7552→155 ms; 500/2000 scheduler 2366/10579→1029/4097 ms (timing varies). PF2.2 cached 500/2000 scheduler passes measured 454/2089 ms versus 969/4774 ms for their initial pass; the initial 2000 pass was slower than the pre-cache 4097 ms baseline. PF2.3 reuses master policies within a reconciliation, not across runs (policy revision counters are unavailable); production 4-day 500/2000 74/192 ms and 31-day 364/1665 ms including boundary scheduling, timings variable. PF2.4 recurrence expansion uses bounded rule caching, exception indexing and isolated in-memory copies; 90-day 500/2000 629/2488 ms versus 752/3143 ms pre-change. PF2.6 filters unrelated note changes while retaining linked, tree and reset notifications. PF2.5 pages Agenda over 90 days and patches Week/Day reminder-history updates or affected day columns; active-drag background protection remains UI4.6. TM3.1 provides one tick queue for Agenda/reminder deadlines, wake, focus, visible-state, clock drift, zone changes and day rollover; live Zen wake validation remains pending.
+Completed this session: imported the new instructions, active roadmap and legacy archive. Added a production-host fake Zen harness with structural-operation recording, event dispatch, seed fallback, menus, foreign/dragged-out tabs, disable/re-enable, Notes and two isolated windows over shared persisted input. H1.1 makes per-day keys unique, migrates old keys, uses the real parent, suppresses self-generated events and backs off repeated reconciliation; overnight, leadDays=2 and three-day all-day projections perform zero structural operations on unchanged follow-up runs. F0.2 measured production-shape 500/2000 projection 31d at 428/1915 ms, scheduler at 2308/10776 ms, expansion 90d at 742/3188 ms and 45000 history queries at 967 ms; CI ceilings retain headroom. After H1.2: 31d projection 476/1811 ms, 90d expansion 708/3275 ms, scheduler 2366/10579 ms, history 1031 ms; timing fluctuates. F0.3 adds debug-only async write, bytes, Agenda, scheduler and calendar-render sampling. H1.5 coalesces missed reminder stages and records skipped stages for newly-created past reminders and independent copies; live notification verification remains pending. H1.2 merges stale-window history immediately before writes and protects unreadable/damaged files; simultaneous uncoordinated cross-window reads/writes remain a race. H1.3 preserves valid history and rejected raw records with backups, protects unreadable/unknown files and offers guarded explicit recovery in the sheet; live Zen recovery UI remains unverified. H1.4 tracks local unsaved records across I/O and no longer writes after pure refreshes. PF2.1 indexes history identities and claims: 20k-record/45k lookup baseline 7552→155 ms; 500/2000 scheduler 2366/10579→1029/4097 ms (timing varies). PF2.2 cached 500/2000 scheduler passes measured 454/2089 ms versus 969/4774 ms for their initial pass; the initial 2000 pass was slower than the pre-cache 4097 ms baseline. PF2.3 reuses master policies within a reconciliation, not across runs (policy revision counters are unavailable); production 4-day 500/2000 74/192 ms and 31-day 364/1665 ms including boundary scheduling, timings variable. PF2.4 recurrence expansion uses bounded rule caching, exception indexing and isolated in-memory copies; 90-day 500/2000 629/2488 ms versus 752/3143 ms pre-change. PF2.6 filters unrelated note changes while retaining linked, tree and reset notifications. PF2.5 pages Agenda over 90 days and patches Week/Day reminder-history updates or affected day columns; active-drag background protection remains UI4.6. TM3.1 provides one tick queue for Agenda/reminder deadlines, wake, focus, visible-state, clock drift, zone changes and day rollover; live Zen wake validation remains pending. TM3.2 re-evaluates visible timed Agenda entries at their ends, including recurring/overnight events, using the existing projection.
 
 Standing owner rules for chunks: no conversational filler; output production-ready code and test suites; process tasks strictly in order (implementation, edge cases, unit tests per task); stop cleanly before output limits so the zip is complete; deliver a zip of only changed files (no `.git`).
 
@@ -1069,4 +1057,4 @@ Known debts / owner requirements: Earlier roadmap DONE claims for `T2.5a–d` we
 
 Calendar density supports persisted Comfortable, Compact and Extra compact in all five views; timeline hour geometry and shading use a shared scale, while narrow Month keeps its list fallback. Live density readability and interaction checks are pending. Calendar/Agenda item menus share a per-item Zen Agenda visibility toggle; it preserves sparse lead/tail overrides, acts on the recurring series, and makes the legacy read-only note-reminder limitation explicit. Calendar remains available to restore an item hidden from the sidebar. Live Zen menu and projection checks remain open.
 
-Next action: implement `TM3.2`, then continue the Master Order. Live Zen remains unavailable in the sandbox.
+Next action: implement `TM3.3`, then continue the Master Order. Live Zen remains unavailable in the sandbox.

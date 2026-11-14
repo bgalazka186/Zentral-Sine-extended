@@ -385,3 +385,18 @@ Agenda initially expands 28 civil days (one page plus lookahead), appends 14-day
 **Tests / done when:** Fake clock tests: sleep jump over a reminder time alerts once on wake; day rollover updates Today; time-zone change re-labels buckets.
 
 One per-window priority queue owns the Agenda and reminder scheduler timers plus a one-minute drift check. Wake observer, focus and visible-document checks re-evaluate date, zone and wall-vs-monotonic clock drift; a local day change emits one dayRollover event. On re-evaluation, open calendar sheets, initialized scheduler and Agenda refresh; pre-store wake cannot clear restored Agenda tabs. Queue deadlines remain cancelable and owners/observers are disposed. Fake-clock tests cover wake alert exactly once, day and timezone relabeling, clock jumps, cancellation and teardown; fake-Zen host exercises wake/focus/visibility wiring. Live Zen sleep, wake and timezone validation remains pending; alert stack retains its own UI timers.
+
+## TM3.2 — Completed timed-event end refresh (3.3.128)
+
+#### `TM3.2` — Re-evaluate 'ended' (fade) when an event ends
+**Status:** `DONE` · **Impact:** Med · **Effort:** S · **Depends on:** TM3.1 · **Source:** Audit R1 A2 (confirmed)
+
+**Problem:** `ended` is computed once per projection run; `nextAgendaVisibilityBoundary` only returns local midnight, so an event ending at 11:00 is not faded until some other event triggers a run.
+
+**Plan (do in this order):**
+1. In `nextAgendaVisibilityBoundary` also return the earliest `end` greater than now among visible timed events of today (and, if the owner wants reminders to fade, the start time).
+2. Respect the per-item window (`range.to`).
+
+**Tests / done when:** Fake clock: event 10:00-11:00 flips to ended at 11:00 without any store event.
+
+Agenda boundary scheduling considers the earliest visible timed occurrence end today, including overnight and recurring events, reusing the already computed projection rather than expanding again on the production controller path. Hidden events, reminders and all-day items do not introduce intraday timers. Fake-clock controller test verifies end styling flips without store events and the next boundary advances to midnight. Live Zen styling remains unverified.

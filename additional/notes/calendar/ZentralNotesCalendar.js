@@ -2397,7 +2397,7 @@
   // day can change a visible bucket, or when a far-future window first enters its horizon.
   // Recurring series are re-evaluated daily because their next occurrence is generated
   // from the recurrence rule rather than stored as a separate item.
-  function nextAgendaVisibilityBoundary(items, now, days = 4, getWindow = null, policies = null) {
+  function nextAgendaVisibilityBoundary(items, now, days = 4, getWindow = null, policies = null, projection = null) {
     const stamp = Number(now);
     if (!Number.isFinite(stamp)) return null;
     const today = dayStart(stamp), count = Math.max(1, Math.min(31, Math.floor(Number(days)) || 4));
@@ -2411,6 +2411,15 @@
       if (!range || range.to <= today) continue;
       const boundary = range.from < horizon ? tomorrow : addDays(range.from, -(count - 1));
       if (boundary > stamp) next = Math.min(next, boundary);
+    }
+    // Projection already resolves recurrence moves, visibility policies and
+    // multi-day fan-out. Reuse it in the controller; standalone callers build
+    // it only when timed events exist, never for reminder-only workloads.
+    if (!projection && (items || []).some((item) => item?.x && item.start && !isReminder(item) && !isAllDay(item)))
+      projection = agendaZenProjection(items, stamp, count, () => false, getWindow, policies);
+    const todayKey = localDateKey(today);
+    for (const bucket of projection || []) if (bucket.date === todayKey) {
+      for (const item of bucket.items || []) if (!item.reminder && !item.allDay && item.end > stamp && item.end <= tomorrow) next = Math.min(next, item.end);
     }
     return Number.isFinite(next) ? next : null;
   }
@@ -2599,8 +2608,8 @@
       timer = null;
       timerAt = Infinity;
     }
-    function scheduleBoundary(items, policies) {
-      const due = nextAgendaVisibilityBoundary(items, now(), getDays(), getWindow, policies);
+    function scheduleBoundary(items, policies, projection) {
+      const due = nextAgendaVisibilityBoundary(items, now(), getDays(), getWindow, policies, projection);
       if (due === null) clearScheduled(); else armAt(due);
     }
     function runNow() {
@@ -2610,17 +2619,18 @@
       if (blockedUntil && stamp < blockedUntil) return last;
       if (blockedUntil) { blockedUntil = 0; consecutiveChanges = 0; }
       busy = true;
-      let sourceItems = [], policies = null, operations = 0;
+      let sourceItems = [], policies = null, fullProjection = null, operations = 0;
       const revision = api.mutationCount?.() || 0;
       try {
         if (!getEnabled()) { api.removeAll?.(); last = []; clearScheduled(); return []; }
         sourceItems = getItems?.() || [];
         policies = getWindowIsMasterPolicy ? prepareAgendaWindows(sourceItems, getWindow) : null;
-        const projection = agendaVisibleDays(agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies));
+        fullProjection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies);
+        const projection = agendaVisibleDays(fullProjection);
         if (!projection.length) {
-          api.removeAll?.(); last = projection; scheduleBoundary(sourceItems, policies); return projection;
+          api.removeAll?.(); last = projection; scheduleBoundary(sourceItems, policies, fullProjection); return projection;
         }
-        if (api.ensureRoot?.(getPosition() === "below" ? "below" : "above") === false) { scheduleBoundary(sourceItems, policies); return last; }
+        if (api.ensureRoot?.(getPosition() === "below" ? "below" : "above") === false) { scheduleBoundary(sourceItems, policies, fullProjection); return last; }
         const desired = [];
         for (const day of projection) {
           desired.push({ key: day.key, kind: "day", label: day.label, date: day.date, count: day.count, parent: "" });
@@ -2642,7 +2652,7 @@
         for (const day of desired.filter((entry) => entry.kind === "day"))
           api.reorder?.(day.key, desired.filter((entry) => entry.kind === "item" && entry.parent === day.key).map((entry) => entry.key));
         last = projection;
-        scheduleBoundary(sourceItems, policies);
+        scheduleBoundary(sourceItems, policies, fullProjection);
         if (operations || (api.mutationCount?.() || 0) !== revision) consecutiveChanges++;
         else consecutiveChanges = 0;
         if (consecutiveChanges >= 3) {
@@ -2653,7 +2663,7 @@
         return projection;
       } catch (error) {
         safeWarn(error);
-        try { scheduleBoundary(sourceItems, policies); } catch (scheduleError) { safeWarn(scheduleError); }
+        try { scheduleBoundary(sourceItems, policies, fullProjection); } catch (scheduleError) { safeWarn(scheduleError); }
         return last;
       } finally { busy = false; }
     }
