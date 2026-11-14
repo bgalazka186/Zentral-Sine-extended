@@ -4,6 +4,28 @@ const { createFakeZen } = require("./helpers/fake-zen-browser.cjs");
 const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
 const AGENDA = "zen.workspace.zentral.notes.agenda_folder", NOTES = "zen.workspace.zentral.notes.zen_folder";
 const root = (space, attr) => space.querySelector(`zen-folder[${attr}]`);
+function nodeListWithoutArrayHelpers(nodes) {
+  // Native NodeList is iterable and indexable, but it does not inherit Array
+  // methods such as filter/map/some. The shared-workspace fake normally returns
+  // Arrays, so opt into this browser-shaped collection for the regression.
+  const list = {
+    length: nodes.length,
+    item(index) { return nodes[index] ?? null; },
+    forEach(callback, thisArg) {
+      nodes.forEach((node, index) => callback.call(thisArg, node, index, list));
+    },
+    [Symbol.iterator]: function* () { yield* nodes; },
+  };
+  nodes.forEach((node, index) => Object.defineProperty(list, index, { value: node, enumerable: true }));
+  return list;
+}
+function useNodeListQuerySelectorAll(element) {
+  const querySelectorAll = element.querySelectorAll;
+  element.querySelectorAll = function (selector) {
+    return nodeListWithoutArrayHelpers(querySelectorAll.call(this, selector));
+  };
+  return () => { element.querySelectorAll = querySelectorAll; };
+}
 (async () => {
   const h = createFakeZen({ prefs: { [AGENDA]: true, [NOTES]: "all" } }), a = h.sidebar.ws, b = h.addWorkspace("space-b").element;
   const plan = h.window.__zentralNotesTestSeam.core.sharedProjectionPlan;
@@ -11,20 +33,42 @@ const root = (space, attr) => space.querySelector(`zen-folder[${attr}]`);
   assert.equal(plan({ active: "a", targetReady: true, alreadyThere: true }), "stay");
   assert.equal(plan({ active: "", targetReady: true }), "wait");
   assert.equal(plan({ active: "b", targetReady: false }), "wait");
-  await h.seam.ensureStore(); h.fireTimer(6000); h.fireTimer(6500); await Promise.resolve();
+  await h.seam.ensureStore();
   const note = h.seam.store.create("Shared note");
   const start = C.addDays(C.dayStart(Date.now()), 1) + 12 * 3600000;
   h.seam.store.items.upsert(C.makeItem({ id: "shared", summary: "Shared reminder", start: { dateTime: new Date(start).toISOString() }, x: { src: "manual", kind: "reminder" } }));
   h.seam.zen.runNow(); h.seam.agendaController.runNow();
   const notesA = root(a, "bgalazka-notes-folder"), agendaA = root(a, "bgalazka-notes-agenda-folder"); assert.ok(notesA && agendaA);
+  // The initial store reset happens before the delayed 6s/6.5s boot callbacks.
+  // It must bind pseudo-tab handlers independently of workspace projection sync.
+  const noteTab = notesA.querySelector("tab[bgalazka-notes-item]");
+  const agendaTab = h.document.querySelectorAll("tab[bgalazka-notes-agenda-item]").find(t => t.getAttribute("bgalazka-notes-agenda-record-id") === "shared");
+  assert.ok(noteTab && agendaTab, "both pseudo-tab projections exist before their delayed boot callbacks");
+  let noteActivations = 0, agendaActivations = 0;
+  h.window.__zentralNotesTestSeam.onZenActivate = () => { noteActivations++; };
+  h.window.__zentralNotesTestSeam.onAgendaActivate = () => { agendaActivations++; };
+  h.emit("mousedown", noteTab, { button: 0 });
+  for (const type of ["mousedown", "mouseup", "click"]) h.emit(type, agendaTab, { button: 0, clientX: 20, clientY: 20 });
+  assert.equal(noteActivations, 1, "store reset binds NOTES click handling before zenBoot");
+  assert.equal(agendaActivations, 1, "store reset binds Agenda click handling before agendaBoot");
+  // Later boot calls remain safe and idempotent.
+  h.fireTimer(6000); h.fireTimer(6500); await Promise.resolve();
   const foreign = h.window.gBrowser.addTab("https://user.test/"); notesA.addTabs([foreign]);
   const foreignFolder = h.sidebar.folder("Foreign", { parent: notesA.querySelector(":scope > .tab-group-container") });
   const nested = h.window.gBrowser.addTab("https://nested.test/"); foreignFolder.addTab(nested);
   const agendaForeign = h.window.gBrowser.addTab("https://agenda-user.test/"); agendaA.querySelector("zen-folder[bgalazka-notes-agenda-day]").addTabs([agendaForeign]);
-  const noteTab = notesA.querySelector("tab[bgalazka-notes-item]");
   h.window.gZenWorkspaces.lastSelectedWorkspaceTabs = { [a.id]: noteTab, untouched: foreign };
   let schedules = 0; const original = h.seam.zen.schedule; h.seam.zen.schedule = (...args) => { schedules++; return original(...args); };
-  await h.switchWorkspace("space-b"); await Promise.resolve(); assert.ok(schedules > 0, "native workspace change schedules projection refresh");
+  const restoreNotesQuery = useNodeListQuerySelectorAll(notesA);
+  const restoreAgendaQuery = useNodeListQuerySelectorAll(agendaA);
+  try {
+    assert.equal(typeof notesA.querySelectorAll("zen-folder").filter, "undefined");
+    assert.equal(typeof agendaA.querySelectorAll("tab").filter, "undefined");
+    await h.switchWorkspace("space-b");
+  } finally {
+    restoreNotesQuery(); restoreAgendaQuery();
+  }
+  await Promise.resolve(); assert.ok(schedules > 0, "native workspace change schedules projection refresh");
   h.seam.zen.schedule = original; h.seam.zen.runNow(); h.seam.agendaController.runNow();
   assert.ok(root(b, "bgalazka-notes-folder") && root(b, "bgalazka-notes-agenda-folder"), "both shared projections follow the active space");
   assert.ok(!root(a, "bgalazka-notes-folder") && !root(a, "bgalazka-notes-agenda-folder"));

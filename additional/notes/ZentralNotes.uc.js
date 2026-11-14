@@ -19967,7 +19967,7 @@
           // some Zen versions auto-delete a folder when its last child leaves.
           if (plan === "move" && root.parentElement?.closest?.("zen-folder")) { complete = false; continue; }
           if (plan === "move" && !evacuateProjectionForeign(root, root, ownFolder, ownTab)) { complete = false; continue; }
-          const nodes = [root, ...(root.querySelectorAll?.("zen-folder") || []).filter(ownFolder), ...(root.querySelectorAll?.("tab") || []).filter(ownTab)];
+          const nodes = [root, ...[...(root.querySelectorAll?.("zen-folder") || [])].filter(ownFolder), ...[...(root.querySelectorAll?.("tab") || [])].filter(ownTab)];
           const previous = nodes.map(node => [node, node.getAttribute("zen-workspace-id")]);
           const parent = root.parentElement, next = root.nextSibling;
           try {
@@ -20160,8 +20160,8 @@
       onCleanup(() => agendaController.destroy());
       const agendaSoon = (skipWorkspaceSync = false) => {
         if (disposed) return;
-        if (skipWorkspaceSync !== true) syncSharedWorkspace();
         bindAgenda(agendaEnabled());
+        if (skipWorkspaceSync !== true) syncSharedWorkspace();
         agendaController.invalidate?.();
         if (!agendaEnabled()) { agendaController.runNow(); return; }
         ensureStore().then(() => { if (!disposed && agendaEnabled()) agendaController.schedule(); }).catch(warn);
@@ -20184,7 +20184,7 @@
           (noteReminder || (store.items?.list?.({ noteId: ev.id, includeHidden: true }) || []).length > 0);
         // When permanent removal already dropped the last item, the item
         // store's own remove event schedules the same reconciliation.
-        if (structural || linked) { agendaController.invalidate?.(); agendaController.schedule(); }
+        if (structural || linked) { bindAgenda(true); agendaController.invalidate?.(); agendaController.schedule(); }
       });
       onCleanup(() => { agendaItemUnsub?.(); agendaHistoryUnsub?.(); agendaNoteUnsub?.(); });
       const agendaBoot = window.setTimeout(agendaSoon, 6500);
@@ -20884,9 +20884,9 @@
       onCleanup(() => zen.destroy());
       const zenSoon = (skipWorkspaceSync = false) => {
         if (disposed || zenMode() === "off") return;
-        if (skipWorkspaceSync !== true) syncSharedWorkspace();
         if (zen.dead) zen = makeZen(); // toggling the preference revives it after a kill
         bindZen(true);
+        if (skipWorkspaceSync !== true) syncSharedWorkspace();
         ensureStore().then(() => { if (disposed || zenMode() === "off") return; zen.schedule(); if (agendaEnabled()) agendaController.schedule(); }).catch(warn);
       };
       let watchedWorkspaceManager = null, workspaceNativeBound = false, workspaceFallbackTimer = 0, lastWorkspaceId = "";
@@ -20944,7 +20944,7 @@
       });
       const zenUnsub = store.on((ev) => {
         if (ev.type === "change" || ev.type === "tree" || ev.type === "remove" || ev.type === "reset") {
-          if (zenMode() !== "off" && !zen.dead) zen.schedule();
+          if (zenMode() !== "off" && !zen.dead) { bindZen(true); zen.schedule(); }
           // Color/style edits also redraw every open Notes folder tree and the
           // Colorful Folders settings list. This is deliberately a notification
           // only; Notes remains the sole writer for its projected folders.
