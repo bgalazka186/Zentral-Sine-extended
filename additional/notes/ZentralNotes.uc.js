@@ -20428,7 +20428,12 @@
         const movedFolder = ["FolderGrouped", "FolderUngrouped"].includes(ev.type) &&
           (tab === root || agendaOwnedDay(tab) || root?.contains?.(tab));
         const movedIntoAgenda = ["TabMove", "FolderGrouped", "FolderUngrouped"].includes(ev.type) && root?.contains?.(tab);
-        if (movedIntoAgenda || movedFolder || agendaTabKey(tab) || (ev.type === "SSTabRestored" && /#zn-agenda-/.test(tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || ""))) agendaController.schedule(400);
+        if (movedIntoAgenda || movedFolder || agendaTabKey(tab) || (ev.type === "SSTabRestored" && /#zn-agenda-/.test(tab?._zentralNotesUrl || tab?.linkedBrowser?.currentURI?.spec || ""))) {
+          // A new native move is fresh external state, not a retry from the prior
+          // reconciliation. Release the previous backoff and repair this move.
+          agendaController.invalidate();
+          agendaController.schedule(400);
+        }
       }
 
       // A narrow, versioned bridge lets Colorful Folders edit Notes-owned Zen
