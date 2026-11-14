@@ -102,7 +102,7 @@ Impact and effort: S = under one session slice, M = one session, L = several ses
 | 29 | `T2.4c4` | `PARTIAL` | Med-High | M | — | Time-zone and DST correctness in time grid |
 | 30 | `T2.5` | `PARTIAL` | Med-High | M | — | Drag, resize and create items in the calendar |
 | 31 | `T2.6` | `OPEN` | Med | S-M | — | Big Picture popup for the calendar |
-| 32 | `OW-18` | `OPEN` | High | L | ST7.1, UI4.7 | [new] Choose shared or separate Notes and Agenda per space |
+| 32 | `OW-18` | `PARTIAL` | High | L | ST7.1, UI4.7 | Choose shared or separate Notes and Agenda per space |
 | 33 | `SB6.1` | `OPEN` | Med-High | M | H1.1, F0.1 | Keep Agenda tab labels, favicons and type icons stable (with T2.8b) |
 | 34 | `T2.8b` | `OPEN` | Med | S | none | Favicons and item-type icons on Zen Agenda pseudo-tabs |
 | 35 | `T3.4` | `PARTIAL` | Med-High | S-M | — | Context menu on Notes & Agenda folders/pseudo-tabs in Zen tab bar |
