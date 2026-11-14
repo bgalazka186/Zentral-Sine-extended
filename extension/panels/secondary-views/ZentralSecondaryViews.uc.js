@@ -338,16 +338,18 @@
       // A cold startup or a freshly-created second browser can report transient zero/stale
       // chrome heights before the flex layout settles. A swap happened to force another fit; do
       // the same bounded follow-up automatically so Notes' gap grips work on the first open.
-      let secondaryFitFrame = null;
-      let secondaryFitTimer = null;
+      // var, not let: a startup restore can request a pair before this line has run, and a let would then
+      // throw from its temporal dead zone. A hoisted undefined is harmless to cancelAnimationFrame / clearTimeout.
+      var secondaryFitFrame = null;
+      var secondaryFitTimer = null;
       function scheduleSecondaryGeometryFit() {
         if (state.mode !== "triple" || !state.second?.isConnected) return;
-        if (secondaryFitFrame !== null) cancelAnimationFrame(secondaryFitFrame);
+        if (secondaryFitFrame != null) cancelAnimationFrame(secondaryFitFrame);
         secondaryFitFrame = requestAnimationFrame(() => {
           secondaryFitFrame = null;
           fitSecondaryBrowsers();
         });
-        if (secondaryFitTimer !== null) ctx.clearTimeout(secondaryFitTimer);
+        if (secondaryFitTimer != null) ctx.clearTimeout(secondaryFitTimer);
         secondaryFitTimer = ctx.setTimeout(() => {
           secondaryFitTimer = null;
           fitSecondaryBrowsers();

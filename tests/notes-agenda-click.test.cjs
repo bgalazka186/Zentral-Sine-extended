@@ -17,6 +17,12 @@ const PREF = "zen.workspace.zentral.notes.agenda_folder", MARK = "bgalazka-notes
   // Native selection can occur on mousedown: it must not trigger early opening.
   h.window.gBrowser.selectedTab = tab; h.emit("TabSelect", tab, { detail: { previousTab: other } }); h.fireTimer(0); await Promise.resolve();
   assert.equal(opens, 0, "native selection during pointer gesture must not open on press");
+  assert.equal(h.window.gBrowser.selectedTab, other, "native selection of the Agenda tab is handed straight back to the site that was open");
+  // The site being left is a pinned, unloaded tab (no \"safe content\" candidate exists): still never a blank page.
+  other.setAttribute("pinned", "true"); other.setAttribute("pending", "true"); h.window.gBrowser.selectedTab = other; h.emit("TabSelect", other, {});
+  ev("mousedown", tab); h.window.gBrowser.selectedTab = tab; h.emit("TabSelect", tab, { detail: { previousTab: null } }); h.fireTimer(0);
+  assert.equal(h.window.gBrowser.selectedTab, other, "pointer origin wins even when it is a pinned or unloaded tab");
+  other.removeAttribute("pinned"); other.removeAttribute("pending"); ev("mouseup", tab); h.fireTimer(0);
   ev("mousemove", tab, { clientX: 45 }); ev("mouseup", other, { clientX: 45 }); ev("click", other, { clientX: 45 }); await Promise.resolve();
   assert.equal(opens, 0, "drag and release elsewhere cancel activation");
   ev("mousedown", tab); ev("mouseup", tab); ev("click", tab); await Promise.resolve(); await Promise.resolve();

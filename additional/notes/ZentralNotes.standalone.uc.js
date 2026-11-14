@@ -21668,6 +21668,7 @@ __zentralShim.register = function (def) {
             // Remembered per kind of slot, as a share of the pages (so it survives a window resize).
             const patch = { [g.slot === "gap" ? "shareGap" : "shareDock"]: Math.round(g.share * 1000) / 1000, size: "peek" };
             store.setMeta(patch);
+            Promise.resolve(store.flush?.()).catch((error) => console.warn("[ZentralNotes]", error));
             applyState();
             layout();
           }
@@ -25401,6 +25402,37 @@ __zentralShim.register = function (def) {
         if (key === "more:overdue") return CALENDAR_PART?.localDateKey?.(Date.now()) || "";
         return "";
       }
+      // The blank about:blank#zn-* placeholder must never stay on screen: whenever one of our placeholders is
+      // selected (native mousedown selection, a link-created tab, keyboard) the selection goes straight back to the
+      // site the user was on. lastRealTab is that site, tracked on every ordinary selection.
+      let lastRealTab = null;
+      const isPlaceholderTab = (tab) => !!tab && (tab.hasAttribute?.(NOTES_ATTR) || tab.hasAttribute?.(AGENDA_ATTR) ||
+        internalPseudoTabs.has(tab) || (() => { try { return /^about:blank#zn-/.test(pseudoUrlForTab(tab) || ""); } catch (_) { return false; } })());
+      // Any real, shown tab qualifies, unloaded / pinned / Essential ones included: the user was on it a moment ago,
+      // so returning there is not a guess. Only closed, hidden, placeholder or empty-space tabs are refused.
+      const isReturnTab = (tab) => !!tab && tab.localName === "tab" && tab.isConnected !== false && !tab.closing && !tab.hidden &&
+        !tab.hasAttribute?.("zen-empty-tab") && !isPlaceholderTab(tab) && !inOtherWorkspace(tab);
+      // Selecting a tab of another Zen space would switch spaces: never a valid way back.
+      function inOtherWorkspace(tab) {
+        const active = activeAgendaWorkspace(), own = active ? agendaTabWorkspace(tab) : "";
+        return !!(active && own && own !== active);
+      }
+      const rememberRealTab = (tab) => { if (isReturnTab(tab)) lastRealTab = tab; };
+      try { rememberRealTab(window.gBrowser?.selectedTab); } catch (_) {}
+      // order: preferred candidates (pointer origin, previous tab), the last real tab, then any shown real tab
+      function returnTabFor(...preferred) {
+        for (const candidate of [...preferred, lastRealTab]) if (isReturnTab(candidate)) return candidate;
+        try { return [...(window.gBrowser?.visibleTabs || window.gBrowser?.tabs || [])].find(isReturnTab) || null; } catch (_) { return null; }
+      }
+      function leavePlaceholder(tab, ...preferred) {
+        try {
+          if (window.gBrowser?.selectedTab !== tab) return false;
+          const back = returnTabFor(...preferred);
+          if (!back) return false;
+          window.gBrowser.selectedTab = back;
+          return true;
+        } catch (error) { warn(error); return false; }
+      }
       function routePseudoTab(tab, forceExternalNavigation = false) {
         if (!tab || tab.isConnected === false || pseudoTabCreationDepth || internalPseudoTabs.has(tab)) return false;
         if (routedPseudoTabs.has(tab)) return true;
@@ -25427,9 +25459,16 @@ __zentralShim.register = function (def) {
         }
 
         routedPseudoTabs.add(tab);
-        // Close the transient about:blank tab before any async store or UI work.
+        // Close the transient about:blank tab before any async store or UI work, and put the user back on the site
+        // they were on: closing the selected tab would otherwise let the browser pick a neighbour (or leave a blank page).
+        let wasSelected = false, owner = null;
+        try { wasSelected = window.gBrowser.selectedTab === tab; owner = tab.owner || null; } catch (_) {}
         try { window.gBrowser.removeTab(tab, { animate: false }); }
         catch (_) { try { tab.remove?.(); } catch (_) {} }
+        if (wasSelected) {
+          const back = returnTabFor(owner);
+          if (back) try { window.gBrowser.selectedTab = back; } catch (_) {}
+        }
         if (noteTarget?.kind === "note") {
           window.__zentralNotesTestSeam?.onPseudoNavigation?.({ kind: "note", noteId: noteTarget.id });
           ensureStore().then(() => {
@@ -25462,16 +25501,99 @@ __zentralShim.register = function (def) {
         }
         return true;
       }
+      // TabOpen can precede the final currentURI in Zen. Retry a newly-opened blank tab briefly so
+      // link-created zn-* URLs are still routed after the browser finishes its first location change.
+      // The external-navigation marker survives TabAttrModified while Zen is moving the tab into a folder.
+      const pendingPseudoTabRoutes = new WeakMap();
+      const pendingExternalPseudoTabs = new WeakSet();
+      const pseudoTabRouteTimers = new Set();
+      function cancelPseudoTabRoute(tab) {
+        const pending = pendingPseudoTabRoutes.get(tab);
+        if (pending?.timer) {
+          window.clearTimeout(pending.timer);
+          pseudoTabRouteTimers.delete(pending.timer);
+        }
+        pendingPseudoTabRoutes.delete(tab);
+        pendingExternalPseudoTabs.delete(tab);
+      }
+      function schedulePseudoTabRoute(tab, forceExternalNavigation = false) {
+        if (!tab || pendingPseudoTabRoutes.has(tab)) return;
+        const pending = { timer: 0, index: 0 };
+        const delays = [50, 150, 350, 700];
+        const finish = () => {
+          if (pending.timer) {
+            window.clearTimeout(pending.timer);
+            pseudoTabRouteTimers.delete(pending.timer);
+            pending.timer = 0;
+          }
+          pendingPseudoTabRoutes.delete(tab);
+          pendingExternalPseudoTabs.delete(tab);
+        };
+        const check = () => {
+          if (pending.timer) {
+            pseudoTabRouteTimers.delete(pending.timer);
+            pending.timer = 0;
+          }
+          if (disposed || tab.isConnected === false ||
+              tab.hasAttribute?.(NOTES_ATTR) || tab.hasAttribute?.(AGENDA_ATTR)) {
+            finish();
+            return;
+          }
+          if (routePseudoTab(tab, forceExternalNavigation)) {
+            finish();
+            return;
+          }
+          if (pending.index >= delays.length) {
+            finish();
+            return;
+          }
+          pending.timer = window.setTimeout(check, delays[pending.index++]);
+          pseudoTabRouteTimers.add(pending.timer);
+        };
+        pendingPseudoTabRoutes.set(tab, pending);
+        pending.timer = window.setTimeout(check, delays[pending.index++]);
+        pseudoTabRouteTimers.add(pending.timer);
+      }
+      const onPseudoTabClosed = (event) => cancelPseudoTabRoute(event?.target);
       const onPseudoTabNavigation = (event) => {
         if (disposed || pseudoTabCreationDepth) return;
         const tab = event?.target?.localName === "tab" ? event.target : pseudoEventClosest(event, "tab");
+        if (event?.type === "TabSelect") rememberRealTab(tab);
         if (!tab || internalPseudoTabs.has(tab)) return;
-        routePseudoTab(tab, event?.type === "TabOpen");
+        if (tab.hasAttribute?.(NOTES_ATTR)) {
+          if (event?.type === "TabSelect") zenEnsureIcon(tab);
+          else if (event?.type === "TabOpen" || event?.type === "SSTabRestored") {
+            zenEnsureIcon(tab);
+            zenIconRetry(tab);
+          }
+        }
+        if (event?.type === "TabOpen" &&
+            !tab.hasAttribute?.(NOTES_ATTR) && !tab.hasAttribute?.(AGENDA_ATTR)) {
+          pendingExternalPseudoTabs.add(tab);
+        }
+        const forceExternalNavigation =
+          event?.type === "TabOpen" || pendingExternalPseudoTabs.has(tab);
+        const routed = routePseudoTab(tab, forceExternalNavigation);
+        if (routed) cancelPseudoTabRoute(tab);
+        else if (forceExternalNavigation &&
+                 !tab.hasAttribute?.(NOTES_ATTR) && !tab.hasAttribute?.(AGENDA_ATTR)) {
+          const url = tab.linkedBrowser?.currentURI?.spec || "";
+          if (!url || url === "about:blank" || /^about:blank#zn-/.test(url))
+            schedulePseudoTabRoute(tab, true);
+        }
       };
       const PSEUDO_TAB_EVENTS = ["TabOpen", "TabAttrModified", "SSTabRestored", "TabSelect"];
       const pseudoEventTargets = [...new Set([window, window.gBrowser?.tabContainer].filter(Boolean))];
       for (const target of pseudoEventTargets) for (const type of PSEUDO_TAB_EVENTS) target.addEventListener(type, onPseudoTabNavigation, true);
-      onCleanup(() => { for (const target of pseudoEventTargets) for (const type of PSEUDO_TAB_EVENTS) target.removeEventListener(type, onPseudoTabNavigation, true); });
+      window.addEventListener("TabClose", onPseudoTabClosed, true);
+      onCleanup(() => {
+        for (const target of pseudoEventTargets)
+          for (const type of PSEUDO_TAB_EVENTS)
+            target.removeEventListener(type, onPseudoTabNavigation, true);
+        window.removeEventListener("TabClose", onPseudoTabClosed, true);
+        for (const timer of pseudoTabRouteTimers) window.clearTimeout(timer);
+        pseudoTabRouteTimers.clear();
+      });
       function activateAgendaTab(tab) {
         window.__zentralNotesTestSeam?.onAgendaActivate?.(tab);
         const key = agendaTabKey(tab);
@@ -25506,7 +25628,8 @@ __zentralShim.register = function (def) {
         if (ev.type === "mousedown") {
           clearAgendaPress();
           if (owned && (ev.button === 0 || ev.button === 1) && !ev.target?.closest?.(".tab-close-button, .tab-reset-button, .tab-icon-overlay"))
-            agendaPress = { tab, button: ev.button, x: ev.clientX, y: ev.clientY, modified: !!modified, moved: false, released: false };
+            agendaPress = { tab, button: ev.button, x: ev.clientX, y: ev.clientY, modified: !!modified, moved: false, released: false,
+              origin: (() => { try { return window.gBrowser.selectedTab; } catch (_) { return null; } })() };
           if (owned && ev.button === 1 && !modified) { ev.preventDefault(); ev.stopImmediatePropagation(); }
           return; // Do not block primary-button drags or native modifiers.
         }
@@ -25593,21 +25716,35 @@ __zentralShim.register = function (def) {
         const tab = ev.target;
         if (routePseudoTab(tab)) return;
         const workspace = activeAgendaWorkspace();
-        if (!workspace) return; // Never guess which space owns a candidate.
+        if (!workspace) { // Never guess which space owns a candidate, but never strand the blank placeholder either.
+          if (agendaTabKey(tab) && agendaRootEl()?.contains?.(tab)) {
+            const prev = ev.detail?.previousTab, origin = agendaPress?.tab === tab ? agendaPress.origin : null;
+            window.clearTimeout(agendaSelectTimer);
+            agendaSelectTimer = window.setTimeout(() => { agendaSelectTimer = 0; leavePlaceholder(tab, origin, prev); }, 0);
+          }
+          return;
+        }
         const tabs = new Set(window.gBrowser?.tabs || []);
         if (agendaSafeContentTab(tab, workspace, tabs)) { agendaLastContent.set(workspace, tab); return; }
         if (!tab || !agendaTabKey(tab)) return;
         const prev = ev.detail?.previousTab;
+        const origin = agendaPress?.tab === tab ? agendaPress.origin : null;
         window.clearTimeout(agendaSelectTimer);
         agendaSelectTimer = window.setTimeout(() => {
           agendaSelectTimer = 0;
           try {
-            if (disposed || !agendaEnabled() || activeAgendaWorkspace() !== workspace || window.gBrowser.selectedTab !== tab || tab.isConnected !== true) return;
-            const currentTabs = [...window.gBrowser.tabs], currentSet = new Set(currentTabs);
-            const safe = (candidate) => agendaSafeContentTab(candidate, workspace, currentSet);
-            const back = safe(prev) ? prev : safe(agendaLastContent.get(workspace)) ? agendaLastContent.get(workspace) : currentTabs.find(safe);
-            if (back) { agendaLastContent.set(workspace, back); window.gBrowser.selectedTab = back; }
-            // Without a proven loaded same-space tab, leave the selection alone.
+            if (disposed || !agendaEnabled() || window.gBrowser.selectedTab !== tab || tab.isConnected !== true) return;
+            if (activeAgendaWorkspace() !== workspace) return; // the space changed meanwhile: the deferred choice is void
+            {
+              const currentTabs = [...window.gBrowser.tabs], currentSet = new Set(currentTabs);
+              const safe = (candidate) => agendaSafeContentTab(candidate, workspace, currentSet);
+              // The tab under the pointer a moment ago is where the user was: it wins over any guess.
+              const back = safe(origin) ? origin : safe(prev) ? prev : safe(agendaLastContent.get(workspace)) ? agendaLastContent.get(workspace) : currentTabs.find(safe);
+              if (back) { agendaLastContent.set(workspace, back); window.gBrowser.selectedTab = back; return; }
+            }
+            // No loaded same-space tab qualified (the user was on a pinned, Essential or unloaded tab, or Zen has not
+            // reported the space): still never leave the blank placeholder on screen. Return to the site they came from.
+            leavePlaceholder(tab, origin, prev);
           } catch (error) { warn(error); }
         }, 0);
       }
@@ -25901,8 +26038,10 @@ __zentralShim.register = function (def) {
         const folder = p.folder || (zenMode() === "selected" ? TABBAR_FOLDER : "");
         return showNotes("").then((h) => sheetOf(h)?.newNote?.(folder)).catch(warn);
       }
+      // zen.dead (the controller's kill switch) stops the projection from touching the sidebar, but the placeholder tabs
+      // it left behind are still ours: they must keep opening their note and must never show a blank page.
       const onZenMouse = (ev) => {
-        if (disposed || zen.dead || zenMode() === "off" || (ev.button !== 0 && ev.button !== 1)) return;
+        if (disposed || zenMode() === "off" || (ev.button !== 0 && ev.button !== 1)) return;
         let tab = pseudoEventClosest(ev, "tab");
         if (tab && routePseudoTab(tab)) { ev.preventDefault?.(); ev.stopImmediatePropagation?.(); return; }
         // Ownership survives a native move out of NOTES and a session restore
@@ -25960,7 +26099,7 @@ __zentralShim.register = function (def) {
       onCleanup(() => window.clearTimeout(zenSelectTimer));
       const onZenSelect = (ev) => {
         const tab = ev.target;
-        if (disposed || zen.dead || zenMode() === "off") return;
+        if (disposed || zenMode() === "off") return;
         if (routePseudoTab(tab)) return;
         // Misplaced marked tabs and restored pseudo-URLs are still our inert
         // placeholders. Bounce selection before about:blank can become a page,

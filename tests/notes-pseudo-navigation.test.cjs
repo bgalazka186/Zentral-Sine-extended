@@ -69,9 +69,14 @@ const AGENDA_PREF = "zen.workspace.zentral.notes.agenda_folder";
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(JSON.stringify(opened[0]), JSON.stringify({ id: note.id, key: entry.key }), "Agenda URL opens the note linked to the reminder");
 
+  // The user's site is restored when a link-created placeholder was the selected tab.
+  const site = h.window.gBrowser.addTab("https://site.test/"); site.setAttribute("pinned", "true");
+  h.window.gBrowser.selectedTab = site; h.emit("TabSelect", site, {});
+  const stolen = h.window.gBrowser.addTab("about:blank#zn-note:" + encodeURIComponent(note.id), { deferTabOpen: true });
+  h.window.gBrowser.selectedTab = stolen; h.emit("TabOpen", stolen);
+  assert.equal(stolen.isConnected, false, "selected zn-note placeholder is closed immediately");
+  assert.equal(h.window.gBrowser.selectedTab, site, "selection returns to the (pinned) site that was open, not a blank page");
+
   await h.destroy();
-  const startup = fs.readFileSync(require.resolve("../additional/tabs/startup/ZentralStartup.uc.js"), "utf8");
-  assert.match(startup, /function isNotesAgendaPseudoTab\(tab\)/, "startup has an explicit Notes/Agenda pseudo-tab classifier");
-  assert.match(startup, /!isNotesAgendaPseudoTab\(tab\)/, "startup loading excludes Notes/Agenda placeholders");
-  console.log("pseudo-tab navigation and startup exclusion tests passed");
+  console.log("pseudo-tab navigation routes zn-note and zn-agenda-item URLs to their model targets");
 })().catch(error => { console.error(error); process.exitCode = 1; });

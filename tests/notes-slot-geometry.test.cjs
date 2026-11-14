@@ -549,7 +549,7 @@ function cssTests() {
   });
 
   await test("source guards: a released Notes slot flushes its remembered height immediately", () => {
-    assert.match(source, /store\.setMeta\(patch\);\s*Promise\.resolve\(store\.flush\?\.\(\)\)\.catch\(warn\);/,
+    assert.match(source, /store\.setMeta\(patch\);\s*Promise\.resolve\(store\.flush\?\.\(\)\)\.catch\(\(error\) => console\.warn\(/,
       "the new share is durable as soon as the resize gesture is released");
   });
 
@@ -558,6 +558,7 @@ function cssTests() {
     assert.match(sv, /--zentral-notes-gap-up[\s\S]{0,100}gapNow - upNow/, "swapPair mirrors the gap's upper part");
     assert.match(sv, /zentral-triple-swapped/, "swapPair tells Notes");
     assert.match(sv, /function scheduleSecondaryGeometryFit/, "Triple View has a bounded delayed geometry settle");
+    assert.match(sv, /var secondaryFitFrame = null;\s*var secondaryFitTimer = null;/, "fit state is hoisted so an early startup call cannot hit a temporal dead zone");
     assert.match(sv, /scheduleSecondaryGeometryFit\(\);/, "the settle runs after slot changes and browser creation");
     assert.match(sv, /if \(was && notesGap\(\) === 0 && state\.mode === "triple"\)[\s\S]{0,180}tripleShareAfterNotes/, "closing Notes commits the middle of the band");
     assert.ok(/state\.notesOpen = gap > 0 \? \{ top, gap, total: usable \+ gap \}/.test(sv), "the open band is recorded on every fit");
