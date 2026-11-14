@@ -110,8 +110,10 @@ test("unlinkBroken keeps the words, only outside code", () => {
 test("Zen safeguards: every Zen-side handler is scoped to our own tabs; teardown exists", () => {
   const js = fs.readFileSync(path.join(__dirname, "../additional/notes/ZentralNotes.uc.js"), "utf8");
   assert.match(js, /const isOurTab = /);
-  assert.match(js, /if \(!tab \|\| !isOurTab\(tab\)\) return;/, "mouse handler");
-  assert.match(js, /if \(!isOurTab\(tab\)\) \{[^}]*return;\s*\}\s*const prev = ev\.detail\?\.previousTab;/, "TabSelect handler");
+  assert.match(js, /if \(!tab \|\| !\(tab\.hasAttribute\?\.\(NOTES_ATTR\) \|\| zenLooksOurs\(tab\)\)\) return;/, "mouse handler recognizes moved and restored pseudo-tabs");
+  assert.match(js, /if \(!isOurTab\(tab\) && \(tab\?\.hasAttribute\?\.\(NOTES_ATTR\) \|\| zenLooksOurs\(tab\)\)\)/, "TabSelect handler handles misplaced pseudo-tabs");
+  assert.match(js, /if \(!isOurTab\(tab\)\) return;/, "ordinary tabs remain unaffected");
+  assert.match(js, /zen\.schedule\(0\)/, "misplaced pseudo-tabs request immediate reconciliation");
   assert.match(js, /window\.setTimeout\(\(\) => \{\s*zenSelectTimer = 0;/, "re-selection is deferred, never inside TabSelect");
   assert.match(js, /if \(zenMode\(\) === "off"\) zenTeardown\(\);/);
   assert.match(js, /document\.querySelectorAll\?\.\("tab\[" \+ NOTES_ATTR \+ "\]"\)/, "removeAll sweeps marked tabs anywhere");
