@@ -1168,6 +1168,9 @@
     "zen.workspace.zentral.notes.agenda_folder",
     "zen.workspace.zentral.notes.agenda_position",
     "zen.workspace.zentral.notes.agenda_days",
+    "zen.workspace.zentral.notes.agenda_overdue",
+    "zen.workspace.zentral.notes.agenda_overdue_days",
+    "zen.workspace.zentral.notes.agenda_overdue_cap",
     {
       "type": "text",
       "label": "**Notes appearance · Size & shape**",

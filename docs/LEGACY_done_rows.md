@@ -400,3 +400,19 @@ One per-window priority queue owns the Agenda and reminder scheduler timers plus
 **Tests / done when:** Fake clock: event 10:00-11:00 flips to ended at 11:00 without any store event.
 
 Agenda boundary scheduling considers the earliest visible timed occurrence end today, including overnight and recurring events, reusing the already computed projection rather than expanding again on the production controller path. Hidden events, reminders and all-day items do not introduce intraday timers. Fake-clock controller test verifies end styling flips without store events and the next boundary advances to midnight. Live Zen styling remains unverified.
+
+## TM3.3 — Completed overdue Agenda bucket (3.3.129)
+
+#### `TM3.3` — Overdue bucket in the Agenda (reminders disappear at midnight)
+**Status:** `DONE` · **Impact:** Med-High · **Effort:** M · **Depends on:** H1.1 · **Source:** Audit R1 A3 (confirmed)
+
+**Problem:** A reminder from yesterday that is neither Done nor Dismissed is in no bucket (the projection only covers today and later; `tailDays` defaults to 0), so unfinished reminders silently vanish from the sidebar at midnight.
+
+**Plan (do in this order):**
+1. Optional setting 'Show overdue' (default ON): an `Overdue` day node above Today with a cap (default 10, then '+N more' opening Day view), listing pending reminders whose start is before today and within N days back (default 7).
+2. Done/Dismiss remove them; Snooze moves them. Events are never listed as overdue.
+3. Sidebar label and count pill follow the existing day-node rules; hidden when empty.
+
+**Tests / done when:** Projection tests for overdue ordering/cap/window; DOM test for the extra root child (F0.1).
+
+Optional default-on Overdue folder shows pending, policy-visible reminders from the prior 7 civil days, oldest first, capped at 10; look-back and cap are configurable. A +N more pseudo-tab opens the first hidden reminder day, and the folder count includes all results. Supports recurring occurrence lifecycle, snooze, ordinary calendar items and legacy note-front-matter reminders, including their menu actions and removal events; keys stay day-scoped and repeated reconciliation is idempotent. Overdue-only buckets schedule midnight expiry. Fake Zen tests cover ordering, cap, actions, preferences and navigation. Baseline 7-day overdue expansion 500/2000 daily series 32/108 ms; budget 500/2000 ms. Live Zen UI unverified.

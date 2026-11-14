@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.128
+// @version 3.3.129
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.128, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.129, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.128";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.129";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -3691,8 +3691,31 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Projection for the virtual Zen Agenda folder. Keys are occurrence-scoped, not
   // display strings or formatted dates, so duplicate summaries remain independent.
-  function agendaZenProjection(items, now, days = 4, isDone = () => false, getWindow = null, policies = null) {
+  function agendaZenItem(item, bucketKey, now) {
     const clock = (ms) => { const d = new Date(ms); return p2(d.getHours()) + ":" + p2(d.getMinutes()); };
+    const [start, end] = itemRange(item);
+    const summary = String(item.summary || "Untitled").replace(/[\r\n]+/g, " ").trim();
+    const label = isAllDay(item) ? "All day · " + summary : (isReminder(item) ? clock(start) : clock(start) + "–" + clock(end)) + "  " + summary;
+    const identity = reminderIdentity(item) || { itemId: item.id, occurrenceId: String(item.x?.recurrenceId || item.id), noteId: item.x?.noteId || "" };
+    const details = [item.description, item.x?.calNote, item.x?.sourceNoteTitle ? "Source note: " + item.x.sourceNoteTitle : "", item.x?.heading ? "Heading: " + item.x.heading : "", item.x?.category ? "Category: " + item.x.category : "", item.x?.tz ? "Time zone: " + item.x.tz : ""].filter(Boolean).join("\n");
+    return {
+      key: "item:" + identity.itemId + ":" + identity.occurrenceId + "@" + bucketKey,
+      itemId: identity.itemId,
+      occurrenceId: identity.occurrenceId,
+      recordId: String(item.x?.series || item.id),
+      noteId: item.x?.noteId || identity.noteId || "",
+      heading: item.x?.heading || "",
+      label,
+      summary,
+      details,
+      start,
+      end,
+      allDay: isAllDay(item),
+      reminder: isReminder(item),
+      ended: !isReminder(item) && end > start && end <= Number(now),
+    };
+  }
+  function agendaZenProjection(items, now, days = 4, isDone = () => false, getWindow = null, policies = null) {
     // Expand the complete local window once, then fan overlapping multi-day events into
     // each day bucket. Calling expandRange once per day is needlessly O(days * items).
     const sourceItems = items || [];
@@ -3759,30 +3782,26 @@ const __zentralEmbeddedLoader = (function () {
       date: bucket.key,
       label: bucket.label,
       count: bucket.count,
-      items: bucket.items.map((item) => {
-        const [start, end] = itemRange(item);
-        const summary = String(item.summary || "Untitled").replace(/[\r\n]+/g, " ").trim();
-        const label = isAllDay(item) ? "All day · " + summary : (isReminder(item) ? clock(start) : clock(start) + "–" + clock(end)) + "  " + summary;
-        const identity = reminderIdentity(item) || { itemId: item.id, occurrenceId: String(item.x?.recurrenceId || item.id), noteId: item.x?.noteId || "" };
-        const details = [item.description, item.x?.calNote, item.x?.sourceNoteTitle ? "Source note: " + item.x.sourceNoteTitle : "", item.x?.heading ? "Heading: " + item.x.heading : "", item.x?.category ? "Category: " + item.x.category : "", item.x?.tz ? "Time zone: " + item.x.tz : ""].filter(Boolean).join("\n");
-        return {
-          key: "item:" + identity.itemId + ":" + identity.occurrenceId + "@" + bucket.key,
-          itemId: identity.itemId,
-          occurrenceId: identity.occurrenceId,
-          recordId: String(item.x?.series || item.id),
-          noteId: item.x?.noteId || identity.noteId || "",
-          heading: item.x?.heading || "",
-          label,
-          summary,
-          details,
-          start,
-          end,
-          allDay: isAllDay(item),
-          reminder: isReminder(item),
-          ended: !isReminder(item) && end > start && end <= Number(now),
-        };
-      }),
+      items: bucket.items.map((item) => agendaZenItem(item, bucket.key, now)),
     }));
+  }
+  // Separate, occurrence-scoped overdue bucket. Civil-day look-back excludes
+  // today even for a past time today; item visibility and lifecycle still apply.
+  function agendaOverdueProjection(items, now, { enabled = true, days = 7, cap = 10, isDone = () => false, getWindow = null, policies = null } = {}) {
+    if (!enabled || !Number.isFinite(Number(now))) return null;
+    const countDays = Math.max(1, Math.min(31, Math.floor(Number(days)) || 7));
+    const limit = Math.max(1, Math.min(100, Math.floor(Number(cap)) || 10));
+    const today = dayStart(Number(now)), from = addDays(today, -countDays);
+    const masters = (items || []).filter((item) => item?.x && item.start && isReminder(item) && preparedAgendaWindow(item, getWindow, policies).enabled);
+    const overdue = expandRange(masters, from, today).filter((item) => !isDone(item));
+    if (!overdue.length) return null;
+    const shown = overdue.slice(0, limit).map((item) => {
+      const entry = agendaZenItem(item, "overdue", now);
+      entry.openDate = localDateKey(itemRange(item)[0]);
+      return entry;
+    });
+    if (overdue.length > limit) shown.push({ key: "more:overdue", label: "+" + (overdue.length - limit) + " more", summary: "Open more overdue reminders", openDate: localDateKey(itemRange(overdue[limit])[0]) });
+    return { key: "day:overdue", date: "overdue", label: "Overdue", count: overdue.length, items: shown };
   }
   // Only days with at least one visible item get a Zen Agenda folder. Empty
   // days (count === 0) are omitted so no empty Tomorrow / Day N folders are
@@ -3801,7 +3820,7 @@ const __zentralEmbeddedLoader = (function () {
   }
   // Coalesced, store-change-driven controller for the virtual Zen Agenda folder. The host
   // supplies DOM/Zen operations through `api`; this controller owns no browser globals.
-  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
+  function createZenAgenda({ api, perf = null, getItems, getDays = () => 4, getEnabled = () => true, getPosition = () => "above", now = () => Date.now(), isDone = () => false, getWindow = null, getWindowIsMasterPolicy = false, getOverdue = () => ({ enabled: false }), setTimer = setTimeout, clearTimer = clearTimeout, warn = () => {} } = {}) {
     let dead = false, timer = null, timerAt = Infinity, last = [], busy = false, consecutiveChanges = 0, blockedUntil = 0;
     const safeWarn = (error) => { try { warn(error); } catch (_) {} };
     function armAt(due) {
@@ -3819,8 +3838,9 @@ const __zentralEmbeddedLoader = (function () {
       timer = null;
       timerAt = Infinity;
     }
-    function scheduleBoundary(items, policies, projection) {
-      const due = nextAgendaVisibilityBoundary(items, now(), getDays(), getWindow, policies, projection);
+    function scheduleBoundary(items, policies, projection, overdue) {
+      let due = nextAgendaVisibilityBoundary(items, now(), getDays(), getWindow, policies, projection);
+      if (overdue) { const tomorrow = addDays(dayStart(now()), 1); if (due === null || tomorrow < due) due = tomorrow; }
       if (due === null) clearScheduled(); else armAt(due);
     }
     function runNow() {
@@ -3830,18 +3850,19 @@ const __zentralEmbeddedLoader = (function () {
       if (blockedUntil && stamp < blockedUntil) return last;
       if (blockedUntil) { blockedUntil = 0; consecutiveChanges = 0; }
       busy = true;
-      let sourceItems = [], policies = null, fullProjection = null, operations = 0;
+      let sourceItems = [], policies = null, fullProjection = null, overdue = null, operations = 0;
       const revision = api.mutationCount?.() || 0;
       try {
         if (!getEnabled()) { api.removeAll?.(); last = []; clearScheduled(); return []; }
         sourceItems = getItems?.() || [];
         policies = getWindowIsMasterPolicy ? prepareAgendaWindows(sourceItems, getWindow) : null;
         fullProjection = agendaZenProjection(sourceItems, now(), getDays(), isDone, getWindow, policies);
-        const projection = agendaVisibleDays(fullProjection);
+        overdue = agendaOverdueProjection(sourceItems, now(), { ...getOverdue(), isDone, getWindow, policies });
+        const projection = [...(overdue ? [overdue] : []), ...agendaVisibleDays(fullProjection)];
         if (!projection.length) {
-          api.removeAll?.(); last = projection; scheduleBoundary(sourceItems, policies, fullProjection); return projection;
+          api.removeAll?.(); last = projection; scheduleBoundary(sourceItems, policies, fullProjection, overdue); return projection;
         }
-        if (api.ensureRoot?.(getPosition() === "below" ? "below" : "above") === false) { scheduleBoundary(sourceItems, policies, fullProjection); return last; }
+        if (api.ensureRoot?.(getPosition() === "below" ? "below" : "above") === false) { scheduleBoundary(sourceItems, policies, fullProjection, overdue); return last; }
         const desired = [];
         for (const day of projection) {
           desired.push({ key: day.key, kind: "day", label: day.label, date: day.date, count: day.count, parent: "" });
@@ -3863,7 +3884,7 @@ const __zentralEmbeddedLoader = (function () {
         for (const day of desired.filter((entry) => entry.kind === "day"))
           api.reorder?.(day.key, desired.filter((entry) => entry.kind === "item" && entry.parent === day.key).map((entry) => entry.key));
         last = projection;
-        scheduleBoundary(sourceItems, policies, fullProjection);
+        scheduleBoundary(sourceItems, policies, fullProjection, overdue);
         if (operations || (api.mutationCount?.() || 0) !== revision) consecutiveChanges++;
         else consecutiveChanges = 0;
         if (consecutiveChanges >= 3) {
@@ -3874,7 +3895,7 @@ const __zentralEmbeddedLoader = (function () {
         return projection;
       } catch (error) {
         safeWarn(error);
-        try { scheduleBoundary(sourceItems, policies, fullProjection); } catch (scheduleError) { safeWarn(scheduleError); }
+        try { scheduleBoundary(sourceItems, policies, fullProjection, overdue); } catch (scheduleError) { safeWarn(scheduleError); }
         return last;
       } finally { busy = false; }
     }
@@ -4117,7 +4138,7 @@ const __zentralEmbeddedLoader = (function () {
   const api = {
     KINDS, ymd, parseYmd, dayStart, addDays, parseDateText, inlineDateTokens, ignoredDateTokens, stripDateIgnoreMarks, ensureNoteItemIds, parseClock, parseTimeRange, parseLine, makeItem, cleanItem, itemFromLine,
     cleanCategoryName, cleanCategoryNotify, cleanNotifyOverrides, cleanCategory, DEFAULT_CATEGORY_NOTIFY, DEFAULT_CATEGORIES, SOUND_LEVELS, DEFAULT_ALERT_SETTINGS, cleanAlertSettings, cleanNoteAlertOverrides, cleanAgendaWindow, cleanNoteAgendaOverrides, resolveAgendaWindow, prepareAgendaWindows, agendaVisibilityRange, nextAgendaVisibilityBoundary, AGENDA_WINDOW_MAX_DAYS, quietHoursActive, resolveAlertPolicy, adaptiveReminderLeadMinutes, reminderStagePlan, calendarSectionAt, setCalendarSectionCategory,
-    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
+    itemRange, isReminder, isAllDay, itemsInRange, extractNoteItems, ensureAgendaHeading, agendaMirrorLine, insertAgendaLine, findAgendaLine, removeAgendaLine, mirroredItem, isRecurringItem, rewriteLineSchedule, setListLineSchedule, noteLineItemId, listCheckboxStates, setListCheckbox, itemsFromNoteReminders, createReminderHistoryStore, REMINDER_HISTORY_FILE, REMINDER_HISTORY_ACTIONS, reminderAlertPresentation, reminderSnoozeTomorrowMinutes, reminderAlertShouldClose, reminderStateAfter, reminderIdentity, createItemStore, ITEMS_FILE, CALENDAR_DENSITIES, cleanCalendarDensity, calendarDensityHourHeight, CALENDAR_LAYOUT_MODES, cleanCalendarLayout, calendarLayoutFor, cleanCalendarShare, allDayOf, parseRule, expandItem, expandRange, cleanRecurrenceExceptions, validOccurrenceIdentity, occurrenceMoveRecord, moveOccurrence, cancelOccurrence, clearOccurrenceException, DEFAULT_WORK, cleanWork, workRange, freeSlots, cleanZone, zoneParts, zonedDateKey, zonedDayBounds, zonedMinuteOfDay, clockIn, weekText, pickerMonth, stepMonth, pickerKey, monthGrid, weekDays, daysForward, DATE_FORMATS, DEFAULT_DATE_FORMAT, cleanDateFormat, localDateKey, formatDateKey, dateNoteTitle, parseDateKeyText, AGENDA_LABELS, agendaDayLabel, agendaBuckets, dayPlanSnapshot, dayPlanNeedsClaim, claimDayPlan, agendaZenProjection, agendaOverdueProjection, agendaVisibleDays, agendaPendingItems, agendaItemEventAffectsProjection, createZenAgenda, resolveAgendaOccurrence, calendarItemMenuModel, resolveItemColor, titleFromDateText, composeCalendarItem, snoozeDays, zonedDateTimeToMs, snoozedItemStart, isBlankDateNote, lwwPick, layoutDay, busyRanges, upcoming, moveItem, CALENDAR_SNAP_STEPS, cleanCalendarSnap, calendarMovePlacement, calendarMoveTimedItem, calendarMoveTimedEvent, calendarMoveAllDayReminder, calendarDraftRange, calendarResizePlacement, calendarResizeTimedEvent, resizeItem, toGoogle, fromGoogle,
   };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (typeof window !== "undefined" && window.__zentralNotesLoader?.define) window.__zentralNotesLoader.define("notes-calendar", () => api);
@@ -4874,6 +4895,9 @@ __zentralShim.register = function (def) {
       AGENDA_ENABLED: "zen.workspace.zentral.notes.agenda_folder",
       AGENDA_POSITION: "zen.workspace.zentral.notes.agenda_position",
       AGENDA_DAYS: "zen.workspace.zentral.notes.agenda_days",
+      AGENDA_OVERDUE: "zen.workspace.zentral.notes.agenda_overdue",
+      AGENDA_OVERDUE_DAYS: "zen.workspace.zentral.notes.agenda_overdue_days",
+      AGENDA_OVERDUE_CAP: "zen.workspace.zentral.notes.agenda_overdue_cap",
       CAPTURE_FORMAT: "zen.workspace.zentral.notes.quick_capture_format",
       DEBUG_PERF: "zen.workspace.zentral.notes.debug_perf",
     });
@@ -9036,6 +9060,9 @@ __zentralShim.register = function (def) {
           { id: "agendaEnabled", label: "Show a live Agenda folder in Zen's Pinned tabs", pref: PREF.AGENDA_ENABLED, kind: "bool", def: false },
           { id: "agendaPosition", label: "Place Agenda relative to NOTES", pref: PREF.AGENDA_POSITION, kind: "choice", def: "above", choices: [["above", "Above NOTES"], ["below", "Below NOTES"]] },
           S("agendaDays", "Agenda shows Today + next N days", PREF.AGENDA_DAYS, 1, 31, "days", 4),
+          { id: "agendaOverdue", label: "Show overdue reminders in the Agenda", pref: PREF.AGENDA_OVERDUE, kind: "bool", def: true },
+          S("agendaOverdueDays", "Overdue look-back", PREF.AGENDA_OVERDUE_DAYS, 1, 31, "days", 7),
+          S("agendaOverdueCap", "Overdue items shown before More", PREF.AGENDA_OVERDUE_CAP, 1, 100, "items", 10),
           { kind: "heading", label: "Diagnostics" },
           { id: "perf", label: "Sample layout / drag timings (read __zentralNotesPerf.report())", pref: PREF.DEBUG_PERF, kind: "bool", def: false },
         ],
@@ -22281,7 +22308,7 @@ __zentralShim.register = function (def) {
         },
         runAgendaItemAction: (identity, command) => {
           if (!isOpen || destroyed || !CALENDAR_PART?.resolveAgendaOccurrence || !store.items) return false;
-          const item = CALENDAR_PART.resolveAgendaOccurrence(store.items.list(), identity);
+          const item = CALENDAR_PART.resolveAgendaOccurrence(calendarPickerItems(), identity);
           if (!item) { flash("That calendar item is no longer available"); return false; }
           const find = (rows) => {
             for (const row of rows) {
@@ -23784,7 +23811,7 @@ __zentralShim.register = function (def) {
       };
       const agendaDayEl = (key) => {
         const date = String(key || "").replace(/^day:/, "");
-        const root = agendaRootEl(); if (!root || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+        const root = agendaRootEl(); if (!root || (date !== "overdue" && !/^\d{4}-\d{2}-\d{2}$/.test(date))) return null;
         let el = [...(root.querySelectorAll?.("zen-folder") || [])].find((folder) => folder.getAttribute("bgalazka-notes-agenda-day") === date || folder.id === "zentral-notes-agenda-day-" + date) || null;
         if (el && !el.hasAttribute("bgalazka-notes-agenda-day")) { el.setAttribute("bgalazka-notes-agenda-day", date); el.setAttribute("bgalazka-notes-agenda-key", "day:" + date); }
         return el;
@@ -23917,7 +23944,7 @@ __zentralShim.register = function (def) {
           if (root.isConnected === false) return [];
           for (const folder of root.querySelectorAll?.("zen-folder") || []) {
             const date = folder.getAttribute("bgalazka-notes-agenda-day") || (folder.id.startsWith("zentral-notes-agenda-day-") ? folder.id.slice("zentral-notes-agenda-day-".length) : "");
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+            if (date !== "overdue" && !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
             folder.setAttribute("bgalazka-notes-agenda-day", date);
             folder.setAttribute("bgalazka-notes-agenda-key", "day:" + date);
             out.push({ key: "day:" + date, kind: "day", parent: "" });
@@ -23927,7 +23954,9 @@ __zentralShim.register = function (def) {
         add(entry) {
           if (entry.kind === "day") {
             if (!agendaRootEl() && !agendaEnsureRoot(agendaPosition())) return false;
-            return agendaMakeDay(entry);
+            const made = agendaMakeDay(entry);
+            if (made) this.update(entry);
+            return made;
           }
           const folder = agendaDayEl(entry.parent); if (!folder) return false;
           const tab = agendaNewTab(entry.key);
@@ -23949,7 +23978,7 @@ __zentralShim.register = function (def) {
           tab.setAttribute("bgalazka-notes-label", entry.label);
           tab.setAttribute("tooltiptext", entry.tooltip || entry.summary || "");
           tab.setAttribute("title", entry.tooltip || entry.summary || "");
-          tab.setAttribute("bgalazka-notes-agenda-day", entry.parent.replace(/^day:/, ""));
+          tab.setAttribute("bgalazka-notes-agenda-day", entry.openDate || entry.parent.replace(/^day:/, ""));
           tab.setAttribute("bgalazka-notes-agenda-item-id", entry.itemId || "");
           tab.setAttribute("bgalazka-notes-agenda-occurrence-id", entry.occurrenceId || "");
           tab.setAttribute("bgalazka-notes-agenda-record-id", entry.recordId || "");
@@ -23987,13 +24016,23 @@ __zentralShim.register = function (def) {
           agendaRetireFolder(root);
         },
       };
+      const agendaLegacyIds = new Set();
+      const agendaItems = () => {
+        const unique = new Map();
+        const stored = store.items?.list?.() || [];
+        const legacy = CALENDAR_PART?.itemsFromNoteReminders?.(store.list({ trashed: false }), titleOf) || [];
+        agendaLegacyIds.clear(); for (const item of legacy) if (item.x?.noteId) agendaLegacyIds.add(item.x.noteId);
+        for (const item of [...stored, ...legacy]) {
+          const note = item.x?.noteId ? store.get(item.x.noteId) : null;
+          unique.set(item.id, { ...item, x: { ...(item.x || {}), sourceNoteTitle: note && !note.trashed ? titleOf(note.body) : "" } });
+        }
+        return [...unique.values()];
+      };
       const agendaController = CALENDAR_PART?.createZenAgenda ? CALENDAR_PART.createZenAgenda({
         api: agendaApi, perf: PERF,
-        getItems: () => (store.items?.list?.() || []).map((item) => {
-          const note = item.x?.noteId ? store.get(item.x.noteId) : null;
-          return { ...item, x: { ...(item.x || {}), sourceNoteTitle: note && !note.trashed ? titleOf(note.body) : "" } };
-        }),
+        getItems: agendaItems,
         getDays: agendaDays,
+        getOverdue: () => ({ enabled: prefBool(PREF.AGENDA_OVERDUE, true), days: Math.max(1, Math.min(31, prefInt(PREF.AGENDA_OVERDUE_DAYS, 7))), cap: Math.max(1, Math.min(100, prefInt(PREF.AGENDA_OVERDUE_CAP, 10))) }),
         getEnabled: agendaEnabled,
         getPosition: agendaPosition,
         now: () => Date.now(),
@@ -24030,8 +24069,11 @@ __zentralShim.register = function (def) {
         const structural = ev.type === "tree" || ev.type === "reset";
         // Hidden linked items matter too: trash/restore and remote deletion
         // change the title and visibility of their Agenda entries.
+        const noteReminder = ev.id && (ev.reminder || store.get(ev.id)?.remind > 0 || agendaLegacyIds.has(ev.id));
+        if (ev.id && ev.type === "change" && store.get(ev.id)?.remind > 0) agendaLegacyIds.add(ev.id);
+        else if (ev.id && ev.type === "remove") agendaLegacyIds.delete(ev.id);
         const linked = ["change", "remove"].includes(ev.type) && ev.id &&
-          (store.items?.list?.({ noteId: ev.id, includeHidden: true }) || []).length > 0;
+          (noteReminder || (store.items?.list?.({ noteId: ev.id, includeHidden: true }) || []).length > 0);
         // When permanent removal already dropped the last item, the item
         // store's own remove event schedules the same reconciliation.
         if (structural || linked) { agendaController.invalidate?.(); agendaController.schedule(); }
@@ -24105,11 +24147,11 @@ __zentralShim.register = function (def) {
           end: Number(tab.getAttribute("bgalazka-notes-agenda-end")),
         });
         const identity = snapshot();
-        const item = key.startsWith("item:") && CALENDAR_PART?.resolveAgendaOccurrence?.(store.items?.list?.() || [], identity);
+        const item = key.startsWith("item:") && CALENDAR_PART?.resolveAgendaOccurrence?.(agendaItems(), identity);
         const history = store.items?.history, historyId = item && CALENDAR_PART.reminderIdentity(item);
         const state = historyId ? history?.stateFor?.(historyId.itemId, historyId.occurrenceId) || "pending" : "pending";
         const writable = !!history && !history.storageState().writeBlocked;
-        const model = item ? CALENDAR_PART.calendarItemMenuModel(item, { state, historyWritable: writable, agendaVisible: agendaWindowForItem(item, store).enabled }) : [];
+        const model = item ? CALENDAR_PART.calendarItemMenuModel(item, { state, historyWritable: writable, agendaVisible: agendaWindowForItem(item, store).enabled, agendaWritable: item.x?.src !== "note" }) : [];
         const addRows = (parent, rows, top = false) => {
           for (const row of rows) {
             if (row.sep) { const separator = document.createXULElement("menuseparator"); if (top) separator.setAttribute("zentral-agenda-own", "separator"); parent.append(separator); continue; }
@@ -25307,7 +25349,7 @@ __zentralShim.register = function (def) {
             else zenSoon();
             agendaSoon();
           }
-          else if (name === PREF.AGENDA_ENABLED || name === PREF.AGENDA_POSITION || name === PREF.AGENDA_DAYS) agendaSoon();
+          else if (name === PREF.AGENDA_ENABLED || name === PREF.AGENDA_POSITION || name === PREF.AGENDA_DAYS || name === PREF.AGENDA_OVERDUE || name === PREF.AGENDA_OVERDUE_DAYS || name === PREF.AGENDA_OVERDUE_CAP) agendaSoon();
           else if (name === PREF.ZEN_ROOT_COLOR || name === PREF.ZEN_ROOT_ICON || name === PREF.ZEN_ROOT_PARTS || name === PREF.ZEN_ROOT_PART_OPACITY) {
             if (zenMode() !== "off") zenSoon(); // the NOTES folder is restyled at once
             window.dispatchEvent?.(new Event("zentral-notes-folder-style-changed"));

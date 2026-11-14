@@ -6,6 +6,7 @@ const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
 const { createFakeZen } = require("./helpers/fake-zen-browser.cjs");
 const BUDGET_MS = Object.freeze({
   projection4_500: 500, projection31_500: 2000, projection4_2000: 1000, projection31_2000: 7000,
+  overdue7_500: 500, overdue7_2000: 2000,
   expand28_500: 1200, expand28_2000: 5500, expand31_500: 1300, expand90_500: 4300, expand31_2000: 6200, expand90_2000: 16000,
   scheduler500: 6500, scheduler2000: 25000, schedulerCached500: 4000, schedulerCached2000: 15000, history45000: 500,
 });
@@ -36,6 +37,9 @@ const makeItems = (n) => Array.from({ length: n }, (_, i) => C.makeItem({
       const projection = measure(`projection${days}_${n}`, () => { const policies = C.prepareAgendaWindows(items, getWindow); const result = C.agendaZenProjection(items, now, days, isDone, getWindow, policies); C.nextAgendaVisibilityBoundary(items, now, days, getWindow, policies); return result; });
       assert.equal(projection.length, days); assert.ok(projection.some((day) => day.items.length));
     }
+    const overdueItems = items.map((item) => C.makeItem({ ...item, start: { dateTime: new Date(start - 14 * 86400000).toISOString() }, x: { ...item.x, recurrenceExceptions: [] } }, now));
+    const overdue = measure(`overdue7_${n}`, () => C.agendaOverdueProjection(overdueItems, now, { getWindow, isDone, cap: 10 }));
+    assert.ok(overdue && overdue.count >= n * 6 && overdue.items.length === 11, "bounded overdue window and cap");
     for (const days of [28, 31, 90]) {
       const expanded = measure(`expand${days}_${n}`, () => C.expandRange(items, C.dayStart(now), C.addDays(C.dayStart(now), days)));
       assert.ok(expanded.length > n * (days - 3));

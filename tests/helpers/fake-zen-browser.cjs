@@ -79,7 +79,7 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
     removeObserver(observer, topic) { observers.get(topic)?.delete(observer); },
     notifyObservers(subject, topic, data) { for (const observer of [...(observers.get(topic) || [])]) observer.observe(subject, topic, data); },
   };
-  const Services = { prefs: prefApi, obs, scriptSecurityManager: { getSystemPrincipal: () => ({}) }, wm: { getEnumerator: () => [] } };
+  const Services = { prefs: prefApi, obs, sound: { beep() {} }, scriptSecurityManager: { getSystemPrincipal: () => ({}) }, wm: { getEnumerator: () => [] } };
   const IOUtils = {
     makeDirectory: async () => {}, setPermissions: async () => {}, exists: async (p) => files.has(p),
     readUTF8: async (p) => { if (!files.has(p)) { const e = new Error("not found"); e.code = "ENOENT"; throw e; } return files.get(p); },
@@ -88,7 +88,8 @@ function createFakeZen({ prefs = {}, files = new Map(), id = "one", deleteEmptyF
   };
   const PathUtils = { profileDir: "/profile", tempDir: "/tmp", join: (...parts) => parts.join("/"), filename: (p) => p.split("/").pop() };
   class MutationObserver { observe() {} disconnect() {} }
-  vm.runInNewContext(source, { window: win, document, globalThis: { Services }, ChromeUtils: { importESModule: () => ({}) }, PathUtils, IOUtils, MutationObserver, Event: Ev,
+  class ResizeObserver { observe() {} unobserve() {} disconnect() {} }
+  vm.runInNewContext(source, { window: win, document, globalThis: { Services }, ChromeUtils: { importESModule: () => ({}) }, PathUtils, IOUtils, MutationObserver, ResizeObserver, Event: Ev,
     navigator: { platform: "Linux" }, console, URL, Date: FakeDate, JSON, Math, Promise, RegExp, Number, Map, Set, WeakMap, setTimeout, clearTimeout, queueMicrotask });
   if (!definition?.init) throw new Error("Notes registration missing");
   const destroy = definition.init();
