@@ -679,6 +679,20 @@
   padding: 12px;
   background: color-mix(in srgb, var(--zn-surface) 70%, transparent);
 }
+/* Calendar dialogs in a panel are their own top-layer surface, anchored to
+   the sheet. This avoids clipping by the panel and remote browser surfaces
+   without raising the whole sheet or covering the rest of the window. */
+.zentral-notes-sheet .zn-dialog[popover][data-calendar-layer="true"] {
+  position: fixed;
+  inset: auto;
+  box-sizing: border-box;
+  margin: 0;
+  border: 0;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  color: var(--zn-text);
+}
 .zentral-notes-sheet .zn-dialog-card {
   /* V4-QS: sized in em so it follows the sheet font; it may grow past the sheet (JS fitDialog) up to the window */
   box-sizing: border-box;
@@ -881,7 +895,8 @@
 /* hidden copy of the editor text, used to measure where each source line sits for linked scrolling */
 .zentral-notes-sheet .zn-mirror { position: absolute; top: 0; left: 0; visibility: hidden; pointer-events: none; overflow: hidden; height: 0; border-style: solid; border-color: transparent; }
 .zentral-notes-sheet .zn-dialog-card { overflow: auto; }
-.zentral-notes-sheet[data-dialog-spill="true"] { overflow: visible; }
+.zentral-notes-sheet[data-dialog-spill="true"],
+.zentral-notes-sheet[popover][data-dialog-spill="true"] { overflow: visible; }
 .zentral-notes-sheet .zn-dialog[data-spill="true"] .zn-dialog-card { position: absolute; }
 .zentral-notes-sheet .zn-field-row { display: grid; gap: 3px; margin: 8px 0; color: var(--zn-muted); font-size: 0.9em; }
 .zentral-notes-sheet .zn-field {

@@ -478,3 +478,16 @@ The note sync previously overwrote a calendar edit with the source section categ
 **Tests / done when:** One managed root after repeated empty/repopulate, restored duplicate and disable/re-enable; unchanged passes do zero structural operations and foreign tabs/folders survive. Verify native Zen behavior if it cannot be established by the harness.
 
 Marked or stable-ID restored roots are deduplicated before projection; empty/disabled cleanup handles every managed root and recognized restored pseudo-tab, without claiming ordinary folders merely named Agenda. Foreign tabs and folder subtrees are moved out intact before retirement, and an immovable subtree leaves its root and pseudo-tabs protected for a later retry. Fake Zen covers duplicate IDs, foreign contents, failed native moves, disable/re-enable, empty/repopulate and unchanged idempotence. Zen restoration that loses both the stable id and all managed markers cannot be safely identified by label alone; real Zen behavior remains unverified.
+
+## OW-14 — Completed Calendar panel dialog layering (3.3.134)
+
+#### `OW-14` — Calendar cards obscured or cut off by web content
+**Status:** `DONE` · **Impact:** High · **Effort:** M · **Depends on:** none · **Source:** Owner report
+
+**Problem:** Cards opened in Calendar within the Zentral panel can be obscured or clipped by the normal webpage.
+
+**Plan:** Trace stacking contexts, clipping and native browser surfaces for card/dialog placement; fix ownership and layering without covering unrelated browser controls or breaking standalone Notes and panel teardown.
+
+**Tests / done when:** Calendar cards remain fully visible and interactive in the Zentral panel, including near edges and with webpage content behind, and close/cleanup correctly. Cover stacking and containment regressions in automated tests and live Zen if needed.
+
+Panel-hosted Calendar cards use a separately anchored manual top-layer overlay, preserving the sheet’s own panel behavior and unrelated controls. Geometry refits on layout and content changes; closing, folding, suspension and teardown release the layer. If popovers are unavailable the card remains constrained and scrollable within the panel. Standalone spill specificity is corrected. Fake sheet tests cover viewport edges, resize, fallback and cleanup; real Zen browser-surface compositing and interaction remain to be checked.

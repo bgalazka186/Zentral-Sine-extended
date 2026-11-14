@@ -11295,7 +11295,7 @@
         const clock = allDay ? null : buildClockPicker({ value: selectedTime, onPick: (value) => { selectedTime = value; } });
         const summary = h("p", { class: "zn-empty" }, "The source note text is not rewritten. The reminder's scheduled wall-clock time is preserved unless you change it.");
         const save = chip("Snooze reminder", true), cancel = chip("Cancel");
-        openCard("Custom reminder snooze", summary, dateHost, ...(clock ? [clock] : []), h("div", { class: "zn-dialog-actions" }, cancel, save));
+        openCalendarCard("Custom reminder snooze", summary, dateHost, ...(clock ? [clock] : []), h("div", { class: "zn-dialog-actions" }, cancel, save));
         const submit = () => {
           const day = dateField.input.value.trim();
           if (!CALENDAR_PART.parseYmd(day)) { dateField.input.dataset.bad = "true"; dateField.input.focus(); return; }
@@ -11353,7 +11353,7 @@
         const note = h("p", { class: "zn-empty" }, allDay
           ? "The item stays all-day. Multi-day event length is preserved."
           : "The item's wall-clock time and duration are preserved in its saved time zone.");
-        openCard(recurring ? "Change recurring occurrence time" : "Change calendar item time", note, dateHost, ...(clock ? [clock] : []), ...(scopeRow ? [scopeRow] : []), h("div", { class: "zn-dialog-actions" }, cancel, save));
+        openCalendarCard(recurring ? "Change recurring occurrence time" : "Change calendar item time", note, dateHost, ...(clock ? [clock] : []), ...(scopeRow ? [scopeRow] : []), h("div", { class: "zn-dialog-actions" }, cancel, save));
         const submit = () => {
           const key = dateField.input.value.trim(), parsed = C.parseYmd(key);
           if (!parsed) { dateField.input.dataset.bad = "true"; dateField.input.focus(); return; }
@@ -11426,7 +11426,7 @@
         if (!current) return flash("That calendar item is no longer available");
         if (current.x?.src !== "manual") return flash("Remove this item from its source note instead");
         const cancel = chip("Cancel"), remove = chip("Delete item", true);
-        openCard("Delete calendar item?", h("p", { class: "zn-empty" }, `Delete “${current.summary || "Untitled item"}”? This removes the independent calendar item and cannot be undone.`), h("div", { class: "zn-dialog-actions" }, cancel, remove));
+        openCalendarCard("Delete calendar item?", h("p", { class: "zn-empty" }, `Delete “${current.summary || "Untitled item"}”? This removes the independent calendar item and cannot be undone.`), h("div", { class: "zn-dialog-actions" }, cancel, remove));
         remove.addEventListener("click", () => {
           const latest = currentCalendarItem(current);
           if (!latest || latest.x?.src !== "manual") { closeDialog(); return flash("That calendar item is no longer available"); }
@@ -12146,11 +12146,12 @@
         const cancel = chip("Cancel");
         const actions = h("div", { class: "zn-dialog-actions" }, cancel, save);
         const intro = h("p", { class: "zn-empty" }, "The title is independent from the linked note. Calendar notes stay with this item; a full-day reminder has no end time.");
-        const card = openCard(original ? "Edit calendar item" : "Create calendar item", intro, title.row, kindRow, allDayRow,
+        const card = openCalendarCard(original ? "Edit calendar item" : "Create calendar item", intro, title.row, kindRow, allDayRow,
           startDateHost, endDateHost, startTimeHost, endTimeHost, clockPick, clockHost,
           noteRow, noteAlertRow, agendaWindowSection, categoryRow, colorRow, descriptionRow, calNoteRow, zoneField.row,
           recurrenceBox, notifySection, preview, status, actions);
         card.classList.add("zn-cal-compose-card");
+        if (dialog?.dataset.calendarLayer === "true") scheduleFit();
 
         const updateKindRows = () => {
           const reminder = kind.value === "reminder", fullDay = allDay.checked;
@@ -12339,7 +12340,7 @@
           const cancel = chip("Cancel");
           create.addEventListener("click", () => { closeDialog(); askCalendarComposer({ kind: "reminder", allDay: false, date: selectedDate, summary: usefulTitle, noteId, heading, linkCurrent: false }); });
           cancel.addEventListener("click", closeDialog);
-          return openCard("Choose the reminder to edit", h("p", { class: "zn-empty" }, `${matches.length} reminders already exist for ${displayDateKey(selectedDate)}. Choose one to edit, or deliberately create another.`), choices, h("div", { class: "zn-dialog-actions" }, cancel, create));
+          return openCalendarCard("Choose the reminder to edit", h("p", { class: "zn-empty" }, `${matches.length} reminders already exist for ${displayDateKey(selectedDate)}. Choose one to edit, or deliberately create another.`), choices, h("div", { class: "zn-dialog-actions" }, cancel, create));
         }
         askCalendarComposer({ kind: "reminder", allDay: false, date: selectedDate || undefined, summary: usefulTitle, noteId, heading, linkCurrent: false });
       }
@@ -12371,7 +12372,7 @@
         reset.addEventListener("click", () => submit(""));
         cancel.addEventListener("click", closeDialog);
         zone.input.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); submit(zone.input.value); } });
-        openCard("Calendar display time zone", zone.row, status, h("div", { class: "zn-dialog-actions" }, cancel, reset, save));
+        openCalendarCard("Calendar display time zone", zone.row, status, h("div", { class: "zn-dialog-actions" }, cancel, reset, save));
         zone.input.focus({ preventScroll: true });
       }
       function askCalendarFreeSlots() {
@@ -12390,7 +12391,7 @@
           h("label", { class: "zn-field-row" }, h("span", {}, "Minimum duration (minutes)"), duration),
           h("label", { class: "zn-field-row zn-cal-free-check" }, workOnly, h("span", {}, "Only within working hours")),
           h("label", { class: "zn-field-row zn-cal-free-check" }, allDayBusy, h("span", {}, "Treat all-day events as busy")));
-        openCard("When am I free?", from.row, through.row, options, results, h("div", { class: "zn-dialog-actions" }, cancel, find));
+        openCalendarCard("When am I free?", from.row, through.row, options, results, h("div", { class: "zn-dialog-actions" }, cancel, find));
         const run = () => {
           const fromDay = C.parseYmd(from.input.value), throughDay = C.parseYmd(through.input.value), min = Number(duration.value);
           const fromDate = fromDay ? new Date(fromDay) : null, throughDate = throughDay ? new Date(throughDay) : null;
@@ -12564,7 +12565,7 @@
         const note = h("p", { class: "zn-hist-note" }, "History is append-only and stored separately from calendar.json. Entries are retained until the profile data is removed; snoozing and rescheduling do not mark a reminder complete.");
         const close = chip("Close", true);
         close.addEventListener("click", closeDialog);
-        openCard("Reminder history", rows, note, h("div", { class: "zn-dialog-actions" }, close));
+        openCalendarCard("Reminder history", rows, note, h("div", { class: "zn-dialog-actions" }, close));
       }
       listen(calendarToolsSelect, "click", () => showMenu(calendarToolsSelect, [
         { heading: true, label: "Create" },
@@ -13284,7 +13285,7 @@
           h("p", { class: "zn-empty" }, "These are category defaults. Linked notes and individual items can override Agenda visibility. Global Agenda defaults are in Calendar Tools."),
           h("div", { class: "zn-dialog-actions" }, cancel, ok),
         ];
-        openCard(old ? "Category defaults" : "New calendar category", ...contents);
+        openCalendarCard(old ? "Category defaults" : "New calendar category", ...contents);
         const submit = () => {
           const name = old?.name || CALENDAR_PART.cleanCategoryName(nameField?.input.value);
           if (!name) { if (nameField) { nameField.input.dataset.bad = "true"; nameField.input.focus(); } return; }
@@ -13389,7 +13390,7 @@
         if (!store || !CALENDAR_PART) return;
         const editor = buildAgendaWindowEditor(store.meta.calendarAgendaDefaults, { inherit: false });
         const ok = chip("Save Agenda defaults", true), cancel = chip("Cancel");
-        openCard("Zen Agenda visibility defaults", editor.element,
+        openCalendarCard("Zen Agenda visibility defaults", editor.element,
           h("p", { class: "zn-empty" }, "These values apply when an item, linked note, or category does not set its own value. Offsets use local calendar days; all-day event end dates are exclusive."),
           h("div", { class: "zn-dialog-actions" }, cancel, ok));
         ok.addEventListener("click", () => {
@@ -13405,7 +13406,7 @@
         const all = store.meta.calendarNoteAgendaOverrides || {};
         const editor = buildAgendaWindowEditor(all[noteId] || {}, { inherit: true });
         const ok = chip("Save note Agenda defaults", true), clear = chip("Use inherited defaults"), cancel = chip("Cancel");
-        openCard("Zen Agenda · " + (titleOf(target.body) || "Note"), editor.element,
+        openCalendarCard("Zen Agenda · " + (titleOf(target.body) || "Note"), editor.element,
           h("p", { class: "zn-empty" }, "These visibility rules apply to calendar items linked to this note unless an individual item overrides them. They do not change alert due times, snooze, or recurrence."),
           h("div", { class: "zn-dialog-actions" }, cancel, clear, ok));
         ok.addEventListener("click", () => {
@@ -13436,7 +13437,7 @@
         const soundEditor = buildAlertSoundEditor(current, { inherit: false });
         const status = h("p", { class: "zn-empty", role: "status", "aria-live": "polite" }, "Quiet hours are off by default. During an enabled window, only sounds listed for that stage can bypass quiet mode. Visual alerts and due times are unchanged.");
         const ok = chip("Save alert settings", true), cancel = chip("Cancel");
-        openCard("Reminder sounds and quiet hours",
+        openCalendarCard("Reminder sounds and quiet hours",
           h("label", { class: "zn-field-row" }, enabled, h("span", {}, "Enable quiet hours")),
           h("div", { class: "zn-field-row" }, h("label", {}, h("span", {}, "Start"), start), h("label", {}, h("span", {}, "End"), end)),
           h("div", { class: "zn-cal-alert-days" }, ...days.map((d) => d.node)),
@@ -13461,7 +13462,7 @@
         const current = all[noteId] || {};
         const editor = buildAlertSoundEditor(current, { inherit: true });
         const ok = chip("Save note defaults", true), clear = chip("Use inherited defaults"), cancel = chip("Cancel");
-        openCard("Reminder sounds · " + (titleOf(target.body) || "Note"), editor.element,
+        openCalendarCard("Reminder sounds · " + (titleOf(target.body) || "Note"), editor.element,
           h("p", { class: "zn-empty" }, "These sound and quiet-hour bypass rules apply to reminders linked to this note unless an individual reminder overrides them."),
           h("div", { class: "zn-dialog-actions" }, cancel, clear, ok));
         ok.addEventListener("click", () => {
@@ -14275,6 +14276,8 @@
         window.cancelAnimationFrame(rafFit);
         rafFit = 0;
         delete root.dataset.dialogSpill;
+        try { if (dialog.hasAttribute("popover")) dialog.hidePopover?.(); } catch (_) {}
+        dialog.removeAttribute("popover");
         dialog.remove();
         dialog = null;
       }
@@ -14293,6 +14296,11 @@
         const doc = (root.ownerDocument || document).documentElement || {};
         const viewport = { width: doc.clientWidth || window.innerWidth || 0, height: doc.clientHeight || window.innerHeight || 0 };
         for (const k of FIT_PROPS) card.style[k] = "";
+        const sr = root.getBoundingClientRect();
+        if (dialog.dataset.calendarLayer === "true") {
+          dialog.style.left = Math.round(sr.left) + "px"; dialog.style.top = Math.round(sr.top) + "px";
+          dialog.style.width = Math.max(0, Math.round(sr.width)) + "px"; dialog.style.height = Math.max(0, Math.round(sr.height)) + "px";
+        }
         delete dialog.dataset.spill;
         delete root.dataset.dialogSpill;
         // The folder style card is a child of a clipped Notes panel. Do not use the
@@ -14303,9 +14311,10 @@
         if (viewport.width > 0)
           card.style.maxWidth = "min(34em, " + Math.max(120, viewport.width - 12) + "px)";
         const size = { width: Math.max(card.offsetWidth || 0, card.scrollWidth || 0), height: Math.max(card.offsetHeight || 0, card.scrollHeight || 0) };
-        const sr = root.getBoundingClientRect();
         const sheet = { left: sr.left, top: sr.top, width: sr.width, height: sr.height };
-        const fit = viewport.width > 0 ? fitDialog({ sheet, viewport, size }) : { spill: false };
+        // If the platform cannot raise the dialog, keep it within the panel
+        // rather than allowing an invisible spill behind a browser surface.
+        const fit = viewport.width > 0 && dialog.dataset.calendarConstrained !== "true" ? fitDialog({ sheet, viewport, size }) : { spill: false };
         card.style.maxWidth = "";
         if (fit.spill) {
           dialog.dataset.spill = "true";
@@ -14628,6 +14637,24 @@
             cardRO.observe(card);
           }
         } catch (_) {}
+        return card;
+      }
+      function openCalendarCard(label, ...kids) {
+        const card = openCard(label, ...kids);
+        if (adapter.position !== "absolute" || !dialog) return card;
+        let raised = false;
+        try {
+          if (typeof dialog.showPopover === "function") {
+            dialog.setAttribute("popover", "manual");
+            dialog.dataset.calendarLayer = "true";
+            dialog.showPopover(); raised = true;
+          }
+        } catch (_) {}
+        if (!raised) {
+          dialog.removeAttribute("popover"); delete dialog.dataset.calendarLayer;
+          dialog.dataset.calendarConstrained = "true";
+        }
+        fitCard();
         return card;
       }
       const chip = (label, on = false) => h("button", { type: "button", class: "zn-chip" + (on ? " is-on" : "") }, label);
@@ -16857,6 +16884,7 @@
         if (adapter.suspended?.()) {
           if (gesture) cancelGesture();
           root.dataset.suspended = "true";
+          if (dialog?.dataset.calendarLayer === "true") closeDialog();
           root.style.visibility = "hidden";
           root.style.pointerEvents = "none";
           root.dataset.slot = "";
@@ -16920,6 +16948,7 @@
         placeReveal();
         applyPush(left, w);
         placePill(left, top, w, hgt);
+        if (dialog?.dataset.calendarLayer === "true") scheduleFit();
         // Autohide just switched on (or the card was just docked): start counting down to folding away.
         if (adapter.cardMode && hoverMode() && !graceTimer) armGrace();
       }
