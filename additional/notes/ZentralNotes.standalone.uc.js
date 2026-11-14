@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name Zentral Notes
 // @include chrome://browser/content/browser.xhtml
-// @version 3.3.125
+// @version 3.3.126
 // ==/UserScript==
 (function () {
   "use strict";
@@ -25,10 +25,10 @@
  *   1. If window.ZentralRuntime exists, this bundle does nothing.
  *   2. Otherwise each feature is published in window.__zentralStandalone[id];
  *      the full runtime disposes it before activating the same feature id.
- * Placeholders replaced by the build: 3.3.125, the numeric-preference list and
+ * Placeholders replaced by the build: 3.3.126, the numeric-preference list and
  * service (copied from loader/ZentralRuntime.js like the sidebar and scope functions).
  */
-const __ZENTRAL_STANDALONE_VERSION__ = "3.3.125";
+const __ZENTRAL_STANDALONE_VERSION__ = "3.3.126";
 const __zentralShim = (function () {
   const Services =
     globalThis.Services ||
@@ -2484,11 +2484,13 @@ const __zentralEmbeddedLoader = (function () {
       }
       const known = new Set(records.map((record) => record.id));
       let added = 0;
+      const changed = new Map();
       for (const record of clean) {
         if (!record || known.has(record.id)) continue;
         known.add(record.id); record.seq = nextSeq++; records.push(record); indexRecord(record); added++;
+        changed.set(identityIndexKey(record.itemId, record.occurrenceId), { itemId: record.itemId, occurrenceId: record.occurrenceId });
       }
-      if (added) emit({ kind: "refresh", count: added });
+      if (added) emit({ kind: "refresh", count: added, identities: [...changed.values()] });
       return added;
     }
     function writeNow() {
@@ -2599,7 +2601,7 @@ const __zentralEmbeddedLoader = (function () {
         nextSeq = Math.max(nextSeq + 1, record.seq + 1);
         // Immutable append: duplicate records are allowed because repeated transitions are meaningful.
         records.push(record); unsaved.add(record); indexRecord(record); schedule();
-        emit({ kind: "append", action: record.action });
+        emit({ kind: "append", action: record.action, itemId: record.itemId, occurrenceId: record.occurrenceId });
         return { ...record, start: record.start ? { ...record.start } : null };
       },
       // Merge records another window wrote since we last read the file (matched by record id; nothing is dropped or
@@ -15966,6 +15968,22 @@ __zentralShim.register = function (def) {
         const safeAnchor = anchor?.nodeType === 1 && anchor.isConnected === false ? null : anchor;
         showMenu(safeAnchor || (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY) ? pointAnchor(event) : root), calendarItemMenuRows(latest));
       }
+      const calendarReminderNodes = new Map();
+      const calendarHistoryKey = (id) => JSON.stringify([id.itemId, id.occurrenceId]);
+      function patchCalendarReminder(event) {
+        if (!event?.itemId || !event?.occurrenceId) return false;
+        const nodes = calendarReminderNodes.get(calendarHistoryKey(event));
+        if (!nodes) return true; // The changed occurrence is outside the current view.
+        for (const { button, item } of nodes) {
+          const state = reminderLifecycleState(item);
+          for (const old of ["pending", "done", "dismissed"]) button.classList.remove("is-" + old);
+          button.classList.add("is-" + state);
+          button.setAttribute("title", String(button.getAttribute("title") || "").replace(/Reminder: (?:pending|done|dismissed)/, "Reminder: " + state));
+          const aria = String(button.getAttribute("aria-label") || "");
+          button.setAttribute("aria-label", /\. State: (?:pending|done|dismissed)/.test(aria) ? aria.replace(/\. State: (?:pending|done|dismissed)/, ". State: " + state) : aria.replace(/, state: (?:pending|done|dismissed)$/, "") + ", state: " + state);
+        }
+        return true;
+      }
       function calendarItemButton(item, compact = false) {
         const reminder = CALENDAR_PART.isReminder(item);
         const lifecycle = reminder ? reminderLifecycleState(item) : "";
@@ -15975,6 +15993,16 @@ __zentralShim.register = function (def) {
           title: [item.summary, reminder ? "Reminder: " + lifecycle : "", item.x?.calNote].filter(Boolean).join(" — "),
           "aria-label": `${reminder ? "Reminder" : "Event"}: ${item.summary}${reminder ? ". State: " + lifecycle : ""}${item.x?.calNote ? ". Calendar note: " + item.x.calNote : ""}`,
         });
+        if (reminder) {
+          const identity = reminderLifecycleIdentity(item);
+          if (identity) {
+            const key = calendarHistoryKey(identity);
+            if (!calendarReminderNodes.has(key)) calendarReminderNodes.set(key, []);
+            calendarReminderNodes.get(key).push({ button, item });
+            button._znCalendarItem = item;
+            button.setAttribute("data-item-key", key);
+          }
+        }
         const color = calendarItemColor(item);
         if (color) button.style.setProperty("--zn-cal-item-color", color);
         button.append(h("span", { class: "zn-cal-item-time" }, calendarItemTime(item)), h("span", { class: "zn-cal-item-title" }, item.summary || "Untitled item"));
@@ -16089,21 +16117,45 @@ __zentralShim.register = function (def) {
         calendarContent.dataset.compact = "true";
         calendarContent.append(list);
       }
+      let calendarAgendaPage = null;
       function calendarAgendaView(items, cursor) {
-        const end = CALENDAR_PART.addDays(cursor, 90);
-        const expanded = CALENDAR_PART.agendaPendingItems(CALENDAR_PART.expandRange(items, cursor, end), reminderLifecycleState).slice(0, 160);
-        calendarPeriod.textContent = `Agenda · 90 days from ${calendarDayLabel(cursor, { year: true })}`;
         const list = h("div", { class: "zn-cal-agenda-list" });
-        if (!expanded.length) list.append(h("p", { class: "zn-cal-empty-day" }, "No upcoming calendar items"));
+        const more = h("button", { type: "button", class: "zn-cal-agenda-more zn-chip" }, "Load more days");
+        calendarAgendaPage = { items, cursor, offset: 0, count: 0, seen: new Set(), list, more };
+        calendarPeriod.textContent = `Agenda · 90 days from ${calendarDayLabel(cursor, { year: true })}`;
+        calendarContent.dataset.compact = "true";
+        calendarContent.append(list, more);
+        more.addEventListener("click", loadCalendarAgendaPage);
+        loadCalendarAgendaPage();
+      }
+      function loadCalendarAgendaPage() {
+        const page = calendarAgendaPage;
+        if (!page || page.offset >= 90 || page.count >= 160) return;
+        // The first page includes one page of lookahead; subsequent requests
+        // extend by one page. Civil-day bounds preserve DST semantics.
+        const limit = Math.min(90, page.offset + (page.offset ? 14 : 28));
+        const from = CALENDAR_PART.addDays(page.cursor, page.offset), to = CALENDAR_PART.addDays(page.cursor, limit);
+        const expanded = CALENDAR_PART.agendaPendingItems(CALENDAR_PART.expandRange(page.items, from, to), reminderLifecycleState);
         for (const item of expanded) {
+          const key = JSON.stringify([item.x?.series || item.id, item.x?.recurrenceId || item.id]);
+          if (page.seen.has(key)) continue;
+          page.seen.add(key);
+          if (page.count >= 160) break;
           const itemDay = CALENDAR_PART.itemRange(item)[0];
           const isToday = CALENDAR_PART.localDateKey(itemDay) === calendarTodayKey();
           const row = h("div", { class: "zn-cal-agenda-row" + (isToday ? " is-today" : "") }, h("span", { class: "zn-cal-agenda-date" }, calendarDayLabel(itemDay, { year: true }), ...(isToday ? [h("span", { class: "zn-cal-today-badge" }, "Today")] : [])), calendarItemButton(item, true));
-          list.append(row);
+          page.list.append(row); page.count++;
         }
-        calendarContent.dataset.compact = "true";
-        calendarContent.append(list);
+        page.offset = limit;
+        if (page.offset >= 90 || page.count >= 160) {
+          page.more.remove();
+          if (!page.count) page.list.append(h("p", { class: "zn-cal-empty-day" }, "No upcoming calendar items"));
+        }
       }
+      listen(calendarContent, "scroll", () => {
+        if (!calendarAgendaPage || !calendarContent.clientHeight) return;
+        if (calendarContent.scrollTop + calendarContent.clientHeight >= calendarContent.scrollHeight - 100) loadCalendarAgendaPage();
+      });
       // One captured pointer gesture per sheet. A calendar re-render, view change,
       // Escape, pointer cancellation, panel close or teardown discards the preview.
       let calendarDrag = null, calendarMoveUndo = null, calendarDragClickTimer = 0, calendarSuppressedClick = null;
@@ -16242,11 +16294,12 @@ __zentralShim.register = function (def) {
         });
         track.addEventListener("lostpointercapture", (event) => { if (calendarDrag?.button === track && calendarDrag.pointerId === event.pointerId) cancelCalendarDrag(); });
       }
-      function calendarTimeGridView(items, cursor, mode) {
+      function calendarTimeGridView(items, cursor, mode, patch = null) {
         const CALENDAR_HOUR_PX = CALENDAR_PART.calendarDensityHourHeight(store.meta.calendarDensity);
         const C = CALENDAR_PART, zone = calendarDisplayZone(), days = mode === "week" ? C.weekDays(cursor, 1) : [C.dayStart(cursor)];
-        const firstBounds = C.zonedDayBounds(C.localDateKey(days[0]), zone) || [days[0], C.addDays(days[0], 1)];
-        const lastDay = days[days.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.addDays(lastDay, 1)];
+        const workDays = patch ? days.filter((day) => patch.days.has(C.localDateKey(day))) : days;
+        const firstDay = workDays[0], firstBounds = C.zonedDayBounds(C.localDateKey(firstDay), zone) || [firstDay, C.addDays(firstDay, 1)];
+        const lastDay = workDays[workDays.length - 1], lastBounds = C.zonedDayBounds(C.localDateKey(lastDay), zone) || [lastDay, C.addDays(lastDay, 1)];
         const from = firstBounds[0], until = lastBounds[1];
         const expanded = C.expandRange(items, from, until);
         const fmt = (day) => calendarDayLabel(day, { weekday: mode === "week" ? "short" : "long", year: true });
@@ -16266,14 +16319,15 @@ __zentralShim.register = function (def) {
         }
         const allDayRow = h("div", { class: "zn-cal-time-allday-row", "aria-label": "All-day events and reminders" });
         allDayRow.style.gridTemplateColumns = cols;
+        const dragAllDayRow = patch?.allDayRow || allDayRow;
         allDayRow.append(h("span", { class: "zn-cal-time-all-label" }, "All day"));
-        for (const day of days) {
+        for (const day of workDays) {
           const isToday = C.localDateKey(day) === todayKey;
           const cell = h("div", { class: "zn-cal-time-allday-cell" + (isToday ? " is-today" : ""), tabindex: "0", "aria-label": "All-day items for " + fmt(day), "data-day": C.ymd(new Date(day)) });
           bindCalendarDayContext(cell, day);
           for (const item of C.allDayOf(expanded, day)) {
             const button = calendarItemButton(item, true);
-            if (C.isReminder(item)) bindCalendarDrag(button, item, { track: cell, columns: allDayRow, scroll: allDayRow, dayKey: C.localDateKey(day), hourHeight: CALENDAR_HOUR_PX, zone, allDay: true });
+            if (C.isReminder(item)) bindCalendarDrag(button, item, { track: cell, columns: dragAllDayRow, scroll: dragAllDayRow, dayKey: C.localDateKey(day), hourHeight: CALENDAR_HOUR_PX, zone, allDay: true });
             cell.append(button);
           }
           allDayRow.append(cell);
@@ -16286,15 +16340,16 @@ __zentralShim.register = function (def) {
         for (let hour = 0; hour < 24; hour++) hours.append(h("span", { class: "zn-cal-hour-label" }, String(hour).padStart(2, "0") + ":00"));
         gridRow.append(hours);
         const columns = h("div", { class: "zn-cal-time-columns" });
+        const dragColumns = patch?.columns || columns, dragScroll = patch?.scroll || scroll;
         columns.style.gridTemplateColumns = `repeat(${days.length}, minmax(0, 1fr))`;
         const work = C.cleanWork(store.meta.calendarWork || C.DEFAULT_WORK);
-        for (const day of days) {
+        for (const day of workDays) {
           const dayKey = C.localDateKey(day);
           const bounds = C.zonedDayBounds(dayKey, zone) || [day, C.addDays(day, 1)];
           const isToday = dayKey === todayKey;
           const track = h("div", { class: "zn-cal-time-track", tabindex: "0", "aria-label": "Timeline for " + fmt(day), "data-day": C.ymd(new Date(day)) });
           bindCalendarDayContext(track, day);
-          bindCalendarCreate(track, columns, scroll, dayKey, CALENDAR_HOUR_PX, zone);
+          bindCalendarCreate(track, dragColumns, dragScroll, dayKey, CALENDAR_HOUR_PX, zone);
           track.style.height = (24 * CALENDAR_HOUR_PX) + "px";
           for (let hour = 0; hour < 24; hour++) {
             track.append(h("span", { class: "zn-cal-time-hour-line", style: `top:${hour * CALENDAR_HOUR_PX}px` }));
@@ -16345,7 +16400,7 @@ __zentralShim.register = function (def) {
             const startLabel = C.clockIn(Math.max(itemStart, bounds[0]), zone);
             const endLabel = reminder ? "reminder" : C.clockIn(Math.min(itemEnd, bounds[1]), zone);
             button.setAttribute("aria-label", `${original.summary}, ${startLabel}${reminder ? " reminder" : " to " + endLabel}, lane ${entry.lane + 1} of ${entry.lanes}`);
-            bindCalendarDrag(button, original, { track, columns, scroll, dayKey, hourHeight: CALENDAR_HOUR_PX, zone });
+            bindCalendarDrag(button, original, { track, columns: dragColumns, scroll: dragScroll, dayKey, hourHeight: CALENDAR_HOUR_PX, zone });
             track.append(button);
             if (!reminder && !original.x?.series && !(original.recurrence || []).length && original.x?.src !== "note") {
               for (const edge of ["start", "end"]) {
@@ -16355,7 +16410,7 @@ __zentralShim.register = function (def) {
                   "data-item-id": original.id, "data-edge": edge, title: "Drag or use Up/Down to resize " + edge });
                 handle.style.top = (top + (edge === "end" ? height : 0) - 4) + "px";
                 handle.style.left = button.style.left; handle.style.width = button.style.width;
-                bindCalendarDrag(handle, original, { track, columns, scroll, dayKey, hourHeight: CALENDAR_HOUR_PX, zone, edge });
+                bindCalendarDrag(handle, original, { track, columns: dragColumns, scroll: dragScroll, dayKey, hourHeight: CALENDAR_HOUR_PX, zone, edge });
                 handle.addEventListener("keydown", (event) => {
                   if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
                   event.preventDefault(); event.stopPropagation();
@@ -16377,7 +16432,23 @@ __zentralShim.register = function (def) {
         scroll.append(gridRow);
         root.append(header, allDayRow, scroll);
         calendarContent.dataset.compact = "false";
-        calendarContent.append(root);
+        if (patch) {
+          const oldCells = patch.allDayRow.querySelectorAll(".zn-cal-time-allday-cell"), newCells = allDayRow.querySelectorAll(".zn-cal-time-allday-cell");
+          const oldColumns = patch.columns.querySelectorAll(".zn-cal-time-column"), newColumns = columns.querySelectorAll(".zn-cal-time-column");
+          for (let i = 0; i < days.length; i++) if (patch.days.has(C.localDateKey(days[i]))) {
+            const dayKey = C.localDateKey(days[i]);
+            const newCell = Array.from(newCells).find((cell) => cell.getAttribute("data-day") === dayKey);
+            const newColumn = Array.from(newColumns).find((column) => column.querySelector(".zn-cal-time-track")?.getAttribute("data-day") === dayKey);
+            if (newCell && newColumn) { oldCells[i]?.replaceWith(newCell); oldColumns[i]?.replaceWith(newColumn); }
+          }
+          calendarReminderNodes.clear();
+          for (const button of calendarContent.querySelectorAll("[data-item-key]")) {
+            const key = button.getAttribute("data-item-key"), item = button._znCalendarItem;
+            if (!item) continue;
+            if (!calendarReminderNodes.has(key)) calendarReminderNodes.set(key, []);
+            calendarReminderNodes.get(key).push({ button, item });
+          }
+        } else calendarContent.append(root);
       }
       function askCalendarComposer(options = {}) {
         const C = CALENDAR_PART;
@@ -16799,16 +16870,45 @@ __zentralShim.register = function (def) {
         run();
         from.input.focus({ preventScroll: true });
       }
+      let calendarRenderedItems = new Map();
+      function patchCalendarItem(kind, id) {
+        const C = CALENDAR_PART, mode = store.meta.calendarView;
+        if (!id || !["change", "remove"].includes(kind) || !["day", "week"].includes(mode) || calendarDrag) return false;
+        const oldItem = calendarRenderedItems.get(id), current = calendarFilteredItems();
+        const newItem = current.find((item) => item.id === id);
+        // A note-id removal may refer to several hidden items, not a master id.
+        if (!oldItem && !newItem) return false;
+        const cursor = C.parseYmd(store.meta.calendarCursor)?.getTime() || calendarTodayDay();
+        const days = mode === "week" ? C.weekDays(cursor, 1) : [C.dayStart(cursor)], zone = calendarDisplayZone();
+        const bounds = days.map((day) => C.zonedDayBounds(C.localDateKey(day), zone) || [day, C.addDays(day, 1)]);
+        const changed = new Set();
+        for (const master of [oldItem, newItem]) if (master) {
+          for (const occurrence of C.expandRange([master], bounds[0][0], bounds[bounds.length - 1][1])) {
+            const [start, end] = C.itemRange(occurrence);
+            for (let i = 0; i < days.length; i++) if (C.isAllDay(occurrence) ? C.allDayOf([occurrence], days[i]).length : C.isReminder(occurrence) ? start >= bounds[i][0] && start < bounds[i][1] : start < bounds[i][1] && end > bounds[i][0]) changed.add(C.localDateKey(days[i]));
+          }
+        }
+        const allDayRow = calendarContent.querySelector(".zn-cal-time-allday-row"), columns = calendarContent.querySelector(".zn-cal-time-columns"), scroll = calendarContent.querySelector(".zn-cal-time-scroll");
+        if (!allDayRow || !columns || !scroll) return false;
+        syncCalendarFilterOptions();
+        // Geometry is shared by overlapping entries, so rebuild only affected
+        // day columns, keeping other columns and the scroll element intact.
+        if (changed.size) calendarTimeGridView(current, cursor, mode, { allDayRow, columns, scroll, days: changed });
+        calendarRenderedItems = new Map(current.map((item) => [item.id, item]));
+        return true;
+      }
       function renderCalendar() {
         if (!CALENDAR_PART || !calendarContent) return;
         cancelCalendarDrag();
         calendarUndoMove.hidden = !calendarMoveUndo;
         syncCalendarFilterOptions();
         hideCalendarHoverCard();
+        calendarAgendaPage = null; calendarReminderNodes.clear();
         const view = ["month", "upcoming", "agenda", "week", "day"].includes(store.meta.calendarView) ? store.meta.calendarView : "month";
         const storedCursor = CALENDAR_PART.parseYmd(store.meta.calendarCursor);
         const cursor = storedCursor ? storedCursor.getTime() : calendarTodayDay();
         const items = calendarFilteredItems();
+        calendarRenderedItems = new Map(items.map((item) => [item.id, item]));
         calendarContent.replaceChildren();
         calendarContent.dataset.view = view;
         const density = CALENDAR_PART.cleanCalendarDensity(store.meta.calendarDensity);
@@ -21161,8 +21261,8 @@ __zentralShim.register = function (def) {
           if (view === "list") scheduleList();
         }
       });
-      const offCalendarItems = store.items?.on?.(() => {
-        if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) renderCalendar();
+      const offCalendarItems = store.items?.on?.((kind, id) => {
+        if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden && !patchCalendarItem(kind, id)) renderCalendar();
       });
       if (offCalendarItems) cleanups.push(offCalendarItems);
       const offCalendarHistory = store.items?.history?.on?.((event) => {
@@ -21170,7 +21270,17 @@ __zentralShim.register = function (def) {
           if (dialog) flash("Reminder history is protected. Reopen Notes to review recovery.");
           else showHistoryRecovery();
         }
-        if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) renderCalendar();
+        if (isOpen && !destroyed && view === "list" && filter === "all" && !calendarPane.hidden) {
+          const mode = store.meta.calendarView;
+          if (mode === "day" || mode === "week") {
+            if (event?.kind === "append" && patchCalendarReminder(event)) return;
+            if (event?.kind === "refresh" && Array.isArray(event.identities)) {
+              for (const identity of event.identities) patchCalendarReminder(identity);
+              return;
+            }
+          }
+          renderCalendar();
+        }
       });
       if (offCalendarHistory) cleanups.push(offCalendarHistory);
 

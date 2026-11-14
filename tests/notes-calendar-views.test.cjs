@@ -91,6 +91,68 @@ const chooseMenu = async (root, triggerSelector, label) => {
   assert.equal(sheet.newAgendaDayItem(tomorrowYmd, "wrong"), false);
   root.all().find((el) => el.title === "All notes").click(); await flushRaf();
 
+  // PF2.5: background history must update the affected reminder without
+  // rebuilding the active timeline or disturbing a separate interaction.
+  const bg = store.items.upsert({ id: "background-history", summary: "Background reminder", start: { dateTime: new Date(day + 10 * 3600000).toISOString() }, x: { kind: "reminder", src: "manual" } });
+  const far = store.items.upsert({ id: "distant-agenda", summary: "Distant Agenda entry", start: { dateTime: new Date(cal.addDays(day, 70) + 36000000).toISOString() }, x: { kind: "reminder", src: "manual" } });
+  const spanning = store.items.upsert({ id: "spanning-page", summary: "Spans agenda pages", start: { date: cal.localDateKey(cal.addDays(day, 27)) }, end: { date: cal.localDateKey(cal.addDays(day, 31)) }, x: { kind: "event", src: "manual" } });
+  for (const mode of ["Day", "Week"]) {
+    await chooseMenu(root, ".zn-calendar-view-select", mode);
+    const timeline = q(root, ".zn-cal-time-scroll"), item = root.querySelectorAll(".zn-cal-item").find((el) => el.textContent.includes("Background reminder"));
+    assert.ok(item); timeline.scrollTop = 219; item.focus();
+    const hoverBefore = q(root, ".zn-cal-hover-card"); assert.ok(hoverBefore);
+    const stamp = Date.now();
+    assert.ok(store.items.history.append({ itemId: bg.id, occurrenceId: bg.id, action: "done", at: stamp }));
+    assert.ok(q(root, ".zn-cal-time-scroll") === timeline, "background history keeps the same scroll container");
+    assert.equal(timeline.scrollTop, 219); assert.equal(document.activeElement, item);
+    assert.equal(q(root, ".zn-cal-hover-card"), hoverBefore, "background history keeps hover open");
+    assert.ok(item.classList.contains("is-done"), "affected reminder is updated in place");
+    assert.ok(store.items.history.append({ itemId: bg.id, occurrenceId: bg.id, action: "reopened", at: stamp + 1 }));
+    assert.ok(item.classList.contains("is-pending"));
+    if (mode === "Day") {
+      await store.items.history.flush();
+      const remote = cal.createReminderHistoryStore({ io, getDir: () => "/views", setTimer: () => 1, clearTimer() {} });
+      await remote.open();
+      assert.ok(remote.append({ itemId: bg.id, occurrenceId: bg.id, action: "done", at: stamp + 2 })); await remote.flush();
+      await store.items.history.refresh();
+      assert.ok(q(root, ".zn-cal-time-scroll") === timeline, "remote history refresh preserves the timeline");
+      assert.ok(item.classList.contains("is-done")); assert.equal(document.activeElement, item);
+      assert.ok(store.items.history.append({ itemId: bg.id, occurrenceId: bg.id, action: "reopened", at: stamp + 3 }));
+    }
+  }
+  // A change on another day must patch its column, not replace an unrelated
+  // focused/hovered item or its scroll container.
+  await chooseMenu(root, ".zn-calendar-view-select", "Week");
+  const stableScroll = q(root, ".zn-cal-time-scroll"), stableButton = root.querySelectorAll(".zn-cal-item").find((el) => el.textContent.includes("Background reminder"));
+  stableScroll.scrollTop = 123; stableButton.focus(); const stableHover = q(root, ".zn-cal-hover-card");
+  const otherDay = cal.addDays(day, new Date(day).getDay() === 0 ? -1 : 1);
+  const tomorrowItem = store.items.upsert({ id: "background-other-day", summary: "Other day item", start: { dateTime: new Date(otherDay + 10 * 3600000).toISOString() }, x: { kind: "reminder", src: "manual" } });
+  assert.ok(q(root, ".zn-cal-time-scroll") === stableScroll, "item event does not replace timeline");
+  assert.equal(stableScroll.scrollTop, 123); assert.equal(document.activeElement, stableButton); assert.equal(q(root, ".zn-cal-hover-card"), stableHover);
+  assert.ok(root.querySelectorAll(".zn-cal-item").some((el) => el.textContent.includes("Other day item")));
+  store.items.upsert({ ...tomorrowItem, summary: "Updated other day" });
+  assert.ok(root.querySelectorAll(".zn-cal-item").some((el) => el.textContent.includes("Updated other day")), "changed column uses the new item");
+  assert.ok(q(root, ".zn-cal-time-scroll") === stableScroll); assert.equal(document.activeElement, stableButton);
+  store.items.remove(tomorrowItem.id);
+  assert.ok(!root.querySelectorAll(".zn-cal-item").some((el) => el.textContent.includes("Updated other day")));
+  const expandOriginal = cal.expandRange, widths = [];
+  cal.expandRange = (items, from, to) => { widths.push((to - from) / 86400000); return expandOriginal(items, from, to); };
+  try {
+    await chooseMenu(root, ".zn-calendar-view-select", "Agenda");
+    assert.ok(widths.length && Math.max(...widths) < 90, "Agenda does not expand the full 90 days initially");
+    assert.ok(!root.querySelectorAll(".zn-cal-item").some((el) => el.textContent.includes("Distant Agenda entry")));
+    content.clientHeight = 300; content.scrollHeight = 1000; content.scrollTop = 700;
+    const beforeScroll = widths.length; content.dispatchEvent(new Ev("scroll"));
+    assert.ok(widths.length > beforeScroll, "scrolling near the end loads another page");
+    let loadMore = q(root, ".zn-cal-agenda-more"), pages = 0;
+    while (loadMore && pages++ < 10) { loadMore.click(); loadMore = q(root, ".zn-cal-agenda-more"); }
+    assert.ok(root.querySelectorAll(".zn-cal-item").some((el) => el.textContent.includes("Distant Agenda entry")), "later pages reach distant entries");
+    assert.equal(root.querySelectorAll(".zn-cal-item").filter((el) => el.textContent.includes("Spans agenda pages")).length, 1, "multi-day items are not duplicated across pages");
+    assert.ok(Math.max(...widths) < 90);
+  } finally { cal.expandRange = expandOriginal; }
+  store.items.remove(bg.id); store.items.remove(far.id); store.items.remove(spanning.id);
+  await chooseMenu(root, ".zn-calendar-view-select", "Month");
+
   let monthCell = root.querySelectorAll(".zn-cal-month-cell").find((cell) => cell.getAttribute("data-day") === tomorrowYmd);
   assert.ok(monthCell, "tomorrow is in the month grid");
   monthCell.dispatchEvent(new Ev("click", { bubbles: true }));

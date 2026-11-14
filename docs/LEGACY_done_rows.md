@@ -353,3 +353,18 @@ Bounded rule LRU accounts for timezone-sensitive UNTIL and returns defensive cop
 **Tests / done when:** Note edits without calendar items do not call `schedule` (spy).
 
 The real coordinator checks for linked items, including hidden ones, before scheduling note changes; permanent removal also emits the item-store removal event. Tree and reset remain unconditional. Fake-Zen integration spies verify unrelated edits/trash are ignored and linked title, trash/restore and tree events still schedule.
+
+## PF2.5 — Completed paged Agenda and targeted calendar updates (3.3.126)
+
+#### `PF2.5` — Calendar views: lazy per-day expansion and no full rebuild for background events
+**Status:** `DONE` · **Impact:** Med-High · **Effort:** M · **Depends on:** PF2.4 · **Source:** Audit R2 P3/E2
+
+**Problem:** `renderCalendar()` clears `calendarContent` with `replaceChildren()` and rebuilds from `calendarFilteredItems()` on every change; Agenda view expands 90 days up front.
+
+**Plan (do in this order):**
+1. Expand only the visible range plus one page of lookahead; extend on scroll.
+2. For history/store events that touch a few items, patch the affected nodes instead of rebuilding (keep a `data-item-key` map).
+3. Keep rebuild for view/cursor/density/filter changes.
+
+**Tests / done when:** UI regression for Week/Day: scroll offset, hover card and focus survive a background history event.
+Agenda initially expands 28 civil days (one page plus lookahead), appends 14-day pages on scroll or accessible Load more, retains the 90-day/160-item bounds and deduplicates overlapping multi-day events. Week/Day history append and cross-window refresh patch affected reminder nodes in place; item changes rebuild only affected day columns to recalculate overlap geometry and retain other columns and the scroll container. Tests exercise local/remote history, focus, hover, scroll, add/change/remove and paging. The initial 28-day recurrence benchmark measured 107/548 ms for 500/2000 items versus 356/1480 ms for 90 days on this run; new CI ceilings include margin. Full view rebuilds remain for broad/reset/category changes and a background item change during an active drag still cancels the gesture; interaction-safe handling is tracked by UI4.6. Live Zen UI remains unverified.

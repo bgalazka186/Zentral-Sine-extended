@@ -1273,11 +1273,13 @@
       }
       const known = new Set(records.map((record) => record.id));
       let added = 0;
+      const changed = new Map();
       for (const record of clean) {
         if (!record || known.has(record.id)) continue;
         known.add(record.id); record.seq = nextSeq++; records.push(record); indexRecord(record); added++;
+        changed.set(identityIndexKey(record.itemId, record.occurrenceId), { itemId: record.itemId, occurrenceId: record.occurrenceId });
       }
-      if (added) emit({ kind: "refresh", count: added });
+      if (added) emit({ kind: "refresh", count: added, identities: [...changed.values()] });
       return added;
     }
     function writeNow() {
@@ -1388,7 +1390,7 @@
         nextSeq = Math.max(nextSeq + 1, record.seq + 1);
         // Immutable append: duplicate records are allowed because repeated transitions are meaningful.
         records.push(record); unsaved.add(record); indexRecord(record); schedule();
-        emit({ kind: "append", action: record.action });
+        emit({ kind: "append", action: record.action, itemId: record.itemId, occurrenceId: record.occurrenceId });
         return { ...record, start: record.start ? { ...record.start } : null };
       },
       // Merge records another window wrote since we last read the file (matched by record id; nothing is dropped or
