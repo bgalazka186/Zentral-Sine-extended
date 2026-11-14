@@ -607,3 +607,18 @@ Plain primary clicks open only on release within four pixels; press itself is no
 **Tests / done when:** TabSelect without a prior pointer intent: selection returns, `activateAgendaTab` not called.
 
 All TabSelect events bounce without opening; explicit unmodified Enter or Space on the owned pseudo-tab activates directly, with default key action suppressed and repeat ignored. This direct-intent approach avoids a stale timer/flag opening a later programmatic selection. Pointer activation from UI4.1 remains unchanged. Fake Zen tests cover silent cycling, both keys, modifiers, repeat, foreign tabs and disable; native Zen keyboard event order remains unverified. Safe same-workspace bounce target selection is still UI4.3.
+
+## UI4.3 — Completed workspace-safe Agenda bounce (3.3.142)
+
+#### `UI4.3` — Choose the bounce-back tab safely
+**Status:** `DONE` · **Impact:** Med · **Effort:** S · **Depends on:** UI4.2 · **Source:** Audit R1 B3
+
+**Problem:** When `previousTab` is missing the bounce picks the first non-hidden non-Agenda tab: possibly an Essential or a tab from another workspace (workspace switch), or a discarded tab that then reloads. A Notes pseudo-tab can also be the previous tab.
+
+**Plan (do in this order):**
+1. Prefer, in order: previous tab if connected, not discarded, not a pseudo-tab, same workspace; last focused content tab of the active workspace; any loaded tab of the active workspace.
+2. Never select a tab of another workspace.
+
+**Tests / done when:** Harness with two workspaces and a discarded tab.
+
+Agenda TabSelect prefers a valid prior tab, then the last focused valid content tab for this space, then another loaded local content tab. It rejects pseudo-tabs, Essentials, empty, hidden, pending, discarded, closing, detached, unknown-workspace and other-workspace tabs; no proven safe candidate means no forced selection. Deferred callbacks revalidate active space and tab state and are canceled on disable/destroy. Zen upstream uses `zen-workspace-id` as its tab membership field; a containing workspace/section is a fallback when the tab has no ID. Fake Zen covers two spaces, invalidated and unloaded targets, absent candidates, race with workspace and selection changes, and unknown ownership. Live Zen switching remains unverified.

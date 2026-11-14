@@ -19932,6 +19932,7 @@
         if (!on) {
           agendaTitleCard.hide();
           clearAgendaPress();
+          window.clearTimeout(agendaSelectTimer); agendaSelectTimer = 0; agendaLastContent.clear();
           document.documentElement.removeAttribute("zentral-agenda-folder-ctx");
           document.documentElement.removeAttribute("zentral-agenda-ctx");
           document.querySelectorAll?.("[zentral-agenda-folder-own],[zentral-agenda-own]").forEach((item) => item.remove());
@@ -20008,18 +20009,47 @@
         if (!ev.repeat) activateAgendaTab(tab);
       }
       let agendaSelectTimer = 0;
-      onCleanup(() => window.clearTimeout(agendaSelectTimer));
+      const agendaLastContent = new Map();
+      const activeAgendaWorkspace = () => {
+        try { const id = window.gZenWorkspaces?.activeWorkspace; return typeof id === "string" ? id : ""; } catch (_) { return ""; }
+      };
+      // Explicit tab ownership is authoritative in Zen; the containing section
+      // is a conservative fallback for hosts that have not assigned it yet.
+      function agendaTabWorkspace(tab) {
+        const own = tab?.getAttribute?.("zen-workspace-id");
+        if (own) return own;
+        const section = tab?.closest?.("[zen-workspace-id]");
+        const id = section?.getAttribute?.("zen-workspace-id");
+        if (id) return id;
+        return tab?.closest?.("zen-workspace")?.id || "";
+      }
+      function agendaSafeContentTab(tab, workspace, tabs) {
+        if (!workspace || !tab || tab.localName !== "tab" || tab.isConnected !== true || tab.hidden || tab.closing || tab.discarded) return false;
+        if (tab.hasAttribute?.("pending") || tab.hasAttribute?.("discarded") || tab.hasAttribute?.("zen-essential") || tab.hasAttribute?.("zen-empty-tab") || tab.hasAttribute?.(AGENDA_ATTR) || tab.hasAttribute?.(NOTES_ATTR)) return false;
+        let url;
+        try { url = tab._zentralNotesUrl || tab.linkedBrowser?.currentURI?.spec || ""; } catch (_) { return false; }
+        if (/^about:blank#zn-/i.test(url)) return false;
+        return agendaTabWorkspace(tab) === workspace && tabs.has(tab);
+      }
+      onCleanup(() => { window.clearTimeout(agendaSelectTimer); agendaLastContent.clear(); });
       function onAgendaSelect(ev) {
-        const tab = ev.target;
-        if (disposed || !agendaEnabled() || !tab || !agendaTabKey(tab) || !agendaRootEl()?.contains?.(tab)) return;
+        if (disposed || !agendaEnabled()) return;
+        const tab = ev.target, workspace = activeAgendaWorkspace();
+        if (!workspace) return; // Never guess which space owns a candidate.
+        const tabs = new Set(window.gBrowser?.tabs || []);
+        if (agendaSafeContentTab(tab, workspace, tabs)) { agendaLastContent.set(workspace, tab); return; }
+        if (!tab || !agendaTabKey(tab) || !agendaRootEl()?.contains?.(tab)) return;
         const prev = ev.detail?.previousTab;
         window.clearTimeout(agendaSelectTimer);
         agendaSelectTimer = window.setTimeout(() => {
           agendaSelectTimer = 0;
           try {
-            if (disposed || window.gBrowser.selectedTab !== tab) return;
-            const back = prev && prev.isConnected && !agendaTabKey(prev) ? prev : [...window.gBrowser.tabs].find((t) => !agendaTabKey(t) && !t.hidden);
-            if (back) window.gBrowser.selectedTab = back;
+            if (disposed || !agendaEnabled() || activeAgendaWorkspace() !== workspace || window.gBrowser.selectedTab !== tab || tab.isConnected !== true || !agendaRootEl()?.contains?.(tab)) return;
+            const currentTabs = [...window.gBrowser.tabs], currentSet = new Set(currentTabs);
+            const safe = (candidate) => agendaSafeContentTab(candidate, workspace, currentSet);
+            const back = safe(prev) ? prev : safe(agendaLastContent.get(workspace)) ? agendaLastContent.get(workspace) : currentTabs.find(safe);
+            if (back) { agendaLastContent.set(workspace, back); window.gBrowser.selectedTab = back; }
+            // Without a proven loaded same-space tab, leave the selection alone.
           } catch (error) { warn(error); }
         }, 0);
       }
