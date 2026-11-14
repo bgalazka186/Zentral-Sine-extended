@@ -19,6 +19,29 @@ const PREF = "zen.workspace.zentral.notes.agenda_folder", MARK = "bgalazka-notes
   const blocked = (type, target) => { const dt = transfer(), event = h.emit(type, target, { dataTransfer: dt }); assert.equal(event.defaultPrevented, true); assert.equal(event.immediateStopped, true); return dt; };
   blocked("dragstart", agenda); blocked("dragstart", day.querySelector(".tab-group-label"));
   assert.equal(blocked("dragover", agenda).dropEffect, "none"); assert.equal(blocked("drop", day).dropEffect, "none");
+  assert.equal(blocked("dragover", root).dropEffect, "none", "dropping directly on the Agenda folder header is blocked");
+  assert.equal(blocked("drop", root).dropEffect, "none", "the Agenda root itself is a protected drop target");
+  // A moved or restored pseudo-tab must still activate as an Agenda item.
+  let activated = 0;
+  h.window.__zentralNotesTestSeam.onAgendaActivate = () => activated++;
+  const agendaHome = agenda.parentElement;
+  h.sidebar.pinned.append(agenda);
+  const clickAgenda = () => {
+    h.emit("mousedown", agenda, { button: 0, clientX: 20, clientY: 20 });
+    h.emit("mouseup", agenda, { button: 0, clientX: 20, clientY: 20 });
+    return h.emit("click", agenda, { button: 0, clientX: 20, clientY: 20 });
+  };
+  assert.equal(clickAgenda().defaultPrevented, true, "misplaced Agenda tabs suppress native navigation");
+  assert.equal(activated, 1, "misplaced Agenda tab activates its item");
+  agenda.removeAttribute(MARK);
+  assert.equal(clickAgenda().defaultPrevented, true, "Agenda pseudo-URL is recognized after its marker is lost");
+  assert.equal(activated, 2, "lost-marker Agenda tab still activates");
+  const keyEvent = h.emit("keydown", agenda, { key: "Enter" });
+  assert.equal(keyEvent.defaultPrevented, true, "keyboard activation also suppresses native selection");
+  assert.equal(activated, 3, "the restored keyboard target activates");
+  agendaHome.append(agenda);
+  delete h.window.__zentralNotesTestSeam.onAgendaActivate;
+
   assert.equal(h.emit("dragstart", foreign, { dataTransfer: transfer() }).defaultPrevented, false, "foreign drag outside Agenda is untouched");
   assert.equal(h.emit("drop", foreign, { dataTransfer: transfer() }).defaultPrevented, false, "foreign drop outside Agenda is untouched");
   foreign.multiselected = true; h.window.gBrowser.selectedTabs = [foreign, agenda]; blocked("dragstart", foreign); foreign.multiselected = false;

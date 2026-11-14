@@ -42,6 +42,25 @@ const transfer = moved => ({
   let dayFolders = agendaRoot.querySelectorAll("zen-folder[bgalazka-notes-agenda-day]");
   assert.ok(noteTab && notesFolder && agendaTab && dayFolders.length >= 2);
 
+  // Fake Notes tabs are inert pointers everywhere, not just while inside NOTES.
+  const openedNotes = [];
+  h.window.__zentralNotesTestSeam.onZenOpenNote = id => openedNotes.push(id);
+  h.sidebar.pinned.append(noteTab);
+  const movedClick = h.emit("mousedown", noteTab, { button: 0 });
+  assert.equal(movedClick.defaultPrevented, true, "a misplaced Notes placeholder cannot navigate to about:blank");
+  await Promise.resolve();
+  assert.deepEqual(openedNotes, [note.id], "a moved marked tab still opens its model note");
+  notesFolder.addTabs([noteTab]);
+
+  const restoredUrl = "about:blank#zn-note:" + encodeURIComponent(note.id);
+  const restoredCopy = h.window.gBrowser.addTab(restoredUrl);
+  const restoredClick = h.emit("mousedown", restoredCopy, { button: 0 });
+  assert.equal(restoredClick.defaultPrevented, true, "a restored pseudo-URL without its marker is still intercepted");
+  await Promise.resolve();
+  assert.deepEqual(openedNotes, [note.id, note.id], "the restored pseudo-URL resolves to its note id");
+  h.window.gBrowser.removeTab(restoredCopy);
+  delete h.window.__zentralNotesTestSeam.onZenOpenNote;
+
   const blocked = (type, target, moved = null) => {
     const event = h.emit(type, target, { dataTransfer: transfer(moved) });
     assert.equal(event.defaultPrevented, true, type + " must be cancelled");
